@@ -6,8 +6,8 @@ import type { MessageComposerMiddlewareValueState } from './types';
 export const createCompositionDataCleanupMiddleware = (composer: MessageComposer) => ({
   id: 'stream-io/message-composer-middleware/data-cleanup',
   compose: ({
-    input,
-    nextHandler,
+    state,
+    next,
   }: MiddlewareHandlerParams<MessageComposerMiddlewareValueState>) => {
     const common = {
       type: composer.editedMessage?.type ?? 'regular',
@@ -17,26 +17,23 @@ export const createCompositionDataCleanupMiddleware = (composer: MessageComposer
       ? toUpdatedMessagePayload(composer.editedMessage)
       : undefined;
 
-    return nextHandler({
-      ...input,
-      state: {
-        ...input.state,
-        localMessage: formatMessage({
-          ...composer.editedMessage,
-          ...input.state.localMessage,
-          ...common,
-          user: composer.client.user,
-        }),
-        message: {
-          ...editedMessagePayloadToBeSent,
-          ...input.state.message,
-          ...common,
-        },
-        sendOptions:
-          composer.editedMessage && input.state.sendOptions?.skip_enrich_url
-            ? { skip_enrich_url: input.state.sendOptions?.skip_enrich_url }
-            : input.state.sendOptions,
+    return next({
+      ...state,
+      localMessage: formatMessage({
+        ...composer.editedMessage,
+        ...state.localMessage,
+        ...common,
+        user: composer.client.user,
+      }),
+      message: {
+        ...editedMessagePayloadToBeSent,
+        ...state.message,
+        ...common,
       },
+      sendOptions:
+        composer.editedMessage && state.sendOptions?.skip_enrich_url
+          ? { skip_enrich_url: state.sendOptions?.skip_enrich_url }
+          : state.sendOptions,
     });
   },
 });

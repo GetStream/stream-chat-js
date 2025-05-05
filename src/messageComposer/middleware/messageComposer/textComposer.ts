@@ -8,10 +8,11 @@ import type { MiddlewareHandlerParams } from '../../../middleware';
 export const createTextComposerCompositionMiddleware = (composer: MessageComposer) => ({
   id: 'stream-io/message-composer-middleware/text-composition',
   compose: ({
-    input,
-    nextHandler,
+    state,
+    next,
+    forward,
   }: MiddlewareHandlerParams<MessageComposerMiddlewareValueState>) => {
-    if (!composer.textComposer) return nextHandler(input);
+    if (!composer.textComposer) return forward();
     const { mentionedUsers, text } = composer.textComposer;
     // Instead of checking if a user is still mentioned every time the text changes,
     // just filter out non-mentioned users before submit, which is cheaper
@@ -25,22 +26,19 @@ export const createTextComposerCompositionMiddleware = (composer: MessageCompose
     );
 
     // prevent introducing text and mentioned_users array into the payload sent to the server
-    if (!text && mentioned_users.length === 0) return nextHandler(input);
+    if (!text && mentioned_users.length === 0) return forward();
 
-    return nextHandler({
-      ...input,
-      state: {
-        ...input.state,
-        localMessage: {
-          ...input.state.localMessage,
-          mentioned_users,
-          text,
-        },
-        message: {
-          ...input.state.message,
-          mentioned_users: mentioned_users.map((u) => u.id),
-          text,
-        },
+    return next({
+      ...state,
+      localMessage: {
+        ...state.localMessage,
+        mentioned_users,
+        text,
+      },
+      message: {
+        ...state.message,
+        mentioned_users: mentioned_users.map((u) => u.id),
+        text,
       },
     });
   },
@@ -51,10 +49,11 @@ export const createDraftTextComposerCompositionMiddleware = (
 ) => ({
   id: 'stream-io/message-composer-middleware/draft-text-composition',
   compose: ({
-    input,
-    nextHandler,
+    state,
+    next,
+    forward,
   }: MiddlewareHandlerParams<MessageDraftComposerMiddlewareValueState>) => {
-    if (!composer.textComposer) return nextHandler(input);
+    if (!composer.textComposer) return forward();
     const { maxLengthOnSend } = composer.config.text ?? {};
     const { mentionedUsers, text: inputText } = composer.textComposer;
     // Instead of checking if a user is still mentioned every time the text changes,
@@ -76,15 +75,12 @@ export const createDraftTextComposerCompositionMiddleware = (
         ? inputText.slice(0, maxLengthOnSend)
         : inputText;
 
-    return nextHandler({
-      ...input,
-      state: {
-        ...input.state,
-        draft: {
-          ...input.state.draft,
-          mentioned_users: mentioned_users?.map((u) => u.id),
-          text,
-        },
+    return next({
+      ...state,
+      draft: {
+        ...state.draft,
+        mentioned_users: mentioned_users?.map((u) => u.id),
+        text,
       },
     });
   },

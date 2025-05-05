@@ -1,12 +1,12 @@
 import type {
   PollComposerFieldErrors,
   PollComposerState,
-  PollComposerStateMiddlewareValueState,
+  PollComposerStateChangeMiddlewareValue,
   TargetedPollOptionTextUpdate,
 } from './types';
 import { generateUUIDv4 } from '../../../utils';
-import type { Middleware } from '../../../middleware';
-import type { MiddlewareHandlerParams } from '../../../middleware';
+import type { MiddlewareHandler, MiddlewareHandlerParams } from '../../../middleware';
+
 export const VALID_MAX_VOTES_VALUE_REGEX = /^([2-9]|10)$/;
 
 export const MAX_POLL_OPTIONS = 100 as const;
@@ -153,12 +153,18 @@ export type PollComposerStateMiddlewareFactoryOptions = {
   };
 };
 
+export type PollComposerStateMiddleware = {
+  id: string;
+  handleFieldChange: MiddlewareHandler<PollComposerStateChangeMiddlewareValue>;
+  handleFieldBlur: MiddlewareHandler<PollComposerStateChangeMiddlewareValue>;
+};
+
 export const createPollComposerStateMiddleware = ({
   processors: customProcessors,
   validators: customValidators,
-}: PollComposerStateMiddlewareFactoryOptions = {}): Middleware<PollComposerStateMiddlewareValueState> => {
+}: PollComposerStateMiddlewareFactoryOptions = {}): PollComposerStateMiddleware => {
   const universalHandler = (
-    state: PollComposerStateMiddlewareValueState,
+    state: PollComposerStateChangeMiddlewareValue,
     validators: Partial<
       Record<keyof PollComposerState['data'], PollStateChangeValidator>
     >,
@@ -214,13 +220,12 @@ export const createPollComposerStateMiddleware = ({
   return {
     id: 'stream-io/poll-composer-state-processing',
     handleFieldChange: ({
-      input,
-      nextHandler,
-    }: MiddlewareHandlerParams<PollComposerStateMiddlewareValueState>) => {
-      if (!input.state.targetFields) return nextHandler(input);
-      const {
-        state: { previousState },
-      } = input;
+      state,
+      next,
+      forward,
+    }: MiddlewareHandlerParams<PollComposerStateChangeMiddlewareValue>) => {
+      if (!state.targetFields) return forward();
+      const { previousState } = state;
       const finalValidators = {
         ...pollStateChangeValidators,
         ...defaultPollFieldChangeEventValidators,
@@ -232,52 +237,45 @@ export const createPollComposerStateMiddleware = ({
       };
 
       const { newData, newErrors } = universalHandler(
-        input.state,
+        state,
         finalValidators,
         finalProcessors,
       );
 
-      return nextHandler({
-        ...input,
-        state: {
-          ...input.state,
-          nextState: {
-            ...previousState,
-            data: { ...previousState.data, ...newData },
-            errors: { ...previousState.errors, ...newErrors },
-          },
+      return next({
+        ...state,
+        nextState: {
+          ...previousState,
+          data: { ...previousState.data, ...newData },
+          errors: { ...previousState.errors, ...newErrors },
         },
       });
     },
     handleFieldBlur: ({
-      input,
-      nextHandler,
-    }: MiddlewareHandlerParams<PollComposerStateMiddlewareValueState>) => {
-      if (!input.state.targetFields) return nextHandler(input);
+      state,
+      next,
+      forward,
+    }: MiddlewareHandlerParams<PollComposerStateChangeMiddlewareValue>) => {
+      if (!state.targetFields) return forward();
 
-      const {
-        state: { previousState },
-      } = input;
+      const { previousState } = state;
       const finalValidators = {
         ...pollStateChangeValidators,
         ...defaultPollFieldBlurEventValidators,
         ...customValidators?.handleFieldBlur,
       };
       const { newData, newErrors } = universalHandler(
-        input.state,
+        state,
         finalValidators,
         customProcessors?.handleFieldBlur,
       );
 
-      return nextHandler({
-        ...input,
-        state: {
-          ...input.state,
-          nextState: {
-            ...previousState,
-            data: { ...previousState.data, ...newData },
-            errors: { ...previousState.errors, ...newErrors },
-          },
+      return next({
+        ...state,
+        nextState: {
+          ...previousState,
+          data: { ...previousState.data, ...newData },
+          errors: { ...previousState.errors, ...newErrors },
         },
       });
     },

@@ -1,4 +1,3 @@
-import type { TokenizationPayload } from './textMiddlewareUtils';
 import {
   getTokenizedSuggestionDisplayName,
   getTriggerCharWithToken,
@@ -7,10 +6,7 @@ import {
 import type { SearchSourceOptions } from '../../../search_controller';
 import { BaseSearchSource } from '../../../search_controller';
 import { mergeWith } from '../../../utils/mergeWith';
-import type {
-  TextComposerMiddlewareOptions,
-  TextComposerMiddlewareParams,
-} from './types';
+import type { TextComposerMiddlewareOptions, UserSuggestion } from './types';
 import type { StreamChat } from '../../../client';
 import type {
   MemberFilters,
@@ -22,9 +18,8 @@ import type {
 } from '../../../types';
 import type { Channel } from '../../../channel';
 import { MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY } from '../../../constants';
-import type { TextComposerSuggestion } from '../../types';
-
-export type UserSuggestion = TextComposerSuggestion<UserResponse & TokenizationPayload>;
+import type { MiddlewareHandler } from '../../../middleware';
+import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
 
 // todo: the map is too small - Slavic letters with diacritics are missing for example
 export const accentsMap: { [key: string]: string } = {
@@ -326,14 +321,22 @@ const userSuggestionToUserResponse = (suggestion: UserSuggestion): UserResponse 
  * @returns
  */
 
+export type MentionsMiddleware = {
+  id: string;
+  onChange: MiddlewareHandler<TextComposerMiddlewareExecutorState<UserSuggestion>>;
+  onSuggestionItemSelect: MiddlewareHandler<
+    TextComposerMiddlewareExecutorState<UserSuggestion>
+  >;
+};
+
 export const createMentionsMiddleware = (
   channel: Channel,
   options?: Partial<TextComposerMiddlewareOptions> & {
     searchSource?: MentionsSearchSource;
   },
-) => {
+): MentionsMiddleware => {
   const finalOptions = mergeWith(DEFAULT_OPTIONS, options ?? {});
-  let searchSource;
+  let searchSource: MentionsSearchSource;
   if (options?.searchSource) {
     searchSource = options.searchSource;
     searchSource.resetState();
@@ -343,9 +346,8 @@ export const createMentionsMiddleware = (
   searchSource.activate();
   return {
     id: 'stream-io/text-composer/mentions-middleware',
-    onChange: ({ input, nextHandler }: TextComposerMiddlewareParams<UserSuggestion>) => {
-      const { state } = input;
-      if (!state.selection) return nextHandler(input);
+    onChange: ({ state, next, complete, forward }) => {
+      if (!state.selection) return forward();
 
       const triggerWithToken = getTriggerCharWithToken({
         trigger: finalOptions.trigger,
@@ -363,54 +365,44 @@ export const createMentionsMiddleware = (
         !triggerWithToken || triggerWithToken.length < finalOptions.minChars;
 
       if (triggerWasRemoved) {
-        const hasStaleSuggestions =
-          input.state.suggestions?.trigger === finalOptions.trigger;
-        const newInput = { ...input };
+        const hasStaleSuggestions = state.suggestions?.trigger === finalOptions.trigger;
+        const newState = { ...state };
         if (hasStaleSuggestions) {
-          delete newInput.state.suggestions;
+          delete newState.suggestions;
           // todo: how to remove mentioned users on deleting the text
         }
-        return nextHandler(newInput);
+        return next(newState);
       }
 
-      searchSource.config.textComposerText = input.state.text;
+      searchSource.config.textComposerText = state.text;
 
-      return Promise.resolve({
-        state: {
-          ...state,
-          suggestions: {
-            query: triggerWithToken.slice(1),
-            searchSource,
-            trigger: finalOptions.trigger,
-          },
+      return complete({
+        ...state,
+        suggestions: {
+          query: triggerWithToken.slice(1),
+          searchSource,
+          trigger: finalOptions.trigger,
         },
-        status: 'complete', // Stop other middleware from processing '@' character
       });
     },
-    onSuggestionItemSelect: ({
-      input,
-      nextHandler,
-      selectedSuggestion,
-    }: TextComposerMiddlewareParams<UserSuggestion>) => {
-      const { state } = input;
+    onSuggestionItemSelect: ({ state, complete, forward }) => {
+      const { selectedSuggestion } = state.change;
       if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
-        return nextHandler(input);
+        return forward();
 
       searchSource.resetStateAndActivate();
-      return Promise.resolve({
-        state: {
-          ...state,
-          ...insertItemWithTrigger({
-            insertText: `@${selectedSuggestion.name || selectedSuggestion.id} `,
-            selection: state.selection,
-            text: state.text,
-            trigger: finalOptions.trigger,
-          }),
-          mentionedUsers: state.mentionedUsers.concat(
-            userSuggestionToUserResponse(selectedSuggestion),
-          ),
-          suggestions: undefined, // Clear suggestions after selection
-        },
+      return complete({
+        ...state,
+        ...insertItemWithTrigger({
+          insertText: `@${selectedSuggestion.name || selectedSuggestion.id} `,
+          selection: state.selection,
+          text: state.text,
+          trigger: finalOptions.trigger,
+        }),
+        mentionedUsers: state.mentionedUsers.concat(
+          userSuggestionToUserResponse(selectedSuggestion),
+        ),
+        suggestions: undefined, // Clear suggestions after selection
       });
     },
   };

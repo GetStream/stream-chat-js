@@ -8,24 +8,22 @@ import type {
 export const createCustomDataCompositionMiddleware = (composer: MessageComposer) => ({
   id: 'stream-io/message-composer-middleware/custom-data',
   compose: ({
-    input,
-    nextHandler,
+    state,
+    next,
+    forward,
   }: MiddlewareHandlerParams<MessageComposerMiddlewareValueState>) => {
     const data = composer.customDataManager.customMessageData;
-    if (!data) return nextHandler(input);
+    if (!data) return forward();
 
-    return nextHandler({
-      ...input,
-      state: {
-        ...input.state,
-        localMessage: {
-          ...input.state.localMessage,
-          ...data,
-        },
-        message: {
-          ...input.state.message,
-          ...data,
-        },
+    return next({
+      ...state,
+      localMessage: {
+        ...state.localMessage,
+        ...data,
+      },
+      message: {
+        ...state.message,
+        ...data,
       },
     });
   },
@@ -36,20 +34,18 @@ export const createDraftCustomDataCompositionMiddleware = (
 ) => ({
   id: 'stream-io/message-composer-middleware/draft-custom-data',
   compose: ({
-    input,
-    nextHandler,
+    state,
+    next,
+    forward,
   }: MiddlewareHandlerParams<MessageDraftComposerMiddlewareValueState>) => {
     const data = composer.customDataManager.customMessageData;
-    if (!data) return nextHandler(input);
+    if (!data) return forward();
 
-    return nextHandler({
-      ...input,
-      state: {
-        ...input.state,
-        draft: {
-          ...input.state.draft,
-          ...data,
-        },
+    return next({
+      ...state,
+      draft: {
+        ...state.draft,
+        ...data,
       },
     });
   },

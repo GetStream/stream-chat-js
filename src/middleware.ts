@@ -13,39 +13,51 @@ export type InsertPosition =
 
 export type MiddlewareStatus = 'complete' | 'discard';
 
-export type MiddlewareValue<TState> = {
-  state: TState;
+export type MiddlewareExecutionResult<TValue> = {
+  state: TValue;
   status?: MiddlewareStatus;
 };
 
-export type MiddlewareHandlerParams<TState> = {
-  input: MiddlewareValue<TState>;
-  nextHandler: (input: MiddlewareValue<TState>) => Promise<MiddlewareValue<TState>>;
+export type ExecuteParams<TValue> = {
+  eventName: string;
+  initialValue: TValue;
 };
-export type MiddlewareHandler<TState> = (
-  params: MiddlewareHandlerParams<TState>,
-) => Promise<MiddlewareValue<TState>>;
 
-export type Middleware<TState> = {
+export type MiddlewareHandlerParams<TValue> = {
+  state: TValue;
+  next: (state: TValue) => Promise<MiddlewareExecutionResult<TValue>>;
+  complete: (state: TValue) => Promise<MiddlewareExecutionResult<TValue>>;
+  discard: () => Promise<MiddlewareExecutionResult<TValue>>;
+  forward: () => Promise<MiddlewareExecutionResult<TValue>>;
+};
+
+export type MiddlewareHandler<TValue> = (
+  params: MiddlewareHandlerParams<TValue>,
+) => Promise<MiddlewareExecutionResult<TValue>>;
+
+export type MiddlewareHandlers<TValue> = {
+  [key: string]: MiddlewareHandler<TValue>;
+};
+
+export type Middleware<TValue> = MiddlewareHandlers<TValue> & {
   id: string;
-  [key: string]: string | MiddlewareHandler<TState>;
 };
 
-export class MiddlewareExecutor<TState> {
-  private id: string;
-  private middleware: Middleware<TState>[] = [];
+export class MiddlewareExecutor<TValue> {
+  readonly id: string;
+  private middleware: Middleware<TValue>[] = [];
 
   constructor() {
     this.id = generateUUIDv4();
   }
 
-  use(middleware: Middleware<TState> | Middleware<TState>[]) {
+  use(middleware: Middleware<TValue> | Middleware<TValue>[]) {
     this.middleware = this.middleware.concat(middleware);
     return this;
   }
 
   // todo: document how to re-arrange the order of middleware using replace
-  replace(middleware: Middleware<TState>[]) {
+  replace(middleware: Middleware<TValue>[]) {
     const newMiddleware = [...this.middleware];
     middleware.forEach((upserted) => {
       const existingIndex = this.middleware.findIndex(
@@ -66,7 +78,7 @@ export class MiddlewareExecutor<TState> {
     position,
     unique,
   }: {
-    middleware: Middleware<TState>[];
+    middleware: Middleware<TValue>[];
     position: InsertPosition;
     unique?: boolean;
   }) {
@@ -88,20 +100,20 @@ export class MiddlewareExecutor<TState> {
   setOrder(order: string[]) {
     this.middleware = order
       .map((id) => this.middleware.find((middleware) => middleware.id === id))
-      .filter(Boolean) as Middleware<TState>[];
+      .filter(Boolean) as Middleware<TValue>[];
   }
 
-  protected async executeMiddlewareChain(
-    eventName: string,
-    initialInput: MiddlewareValue<TState>,
-    extraParams: Record<string, unknown> = {},
-  ): Promise<MiddlewareValue<TState>> {
+  protected async executeMiddlewareChain({
+    eventName,
+    initialValue,
+  }: ExecuteParams<TValue>): Promise<MiddlewareExecutionResult<TValue>> {
     let index = -1;
 
     const execute = async (
       i: number,
-      input: MiddlewareValue<TState>,
-    ): Promise<MiddlewareValue<TState>> => {
+      state: TValue,
+      status?: MiddlewareStatus,
+    ): Promise<MiddlewareExecutionResult<TValue>> => {
       if (i <= index) {
         throw new Error('next() called multiple times');
       }
@@ -110,27 +122,35 @@ export class MiddlewareExecutor<TState> {
 
       const returnFromChain =
         i === this.middleware.length ||
-        (input.status && ['complete', 'discard'].includes(input.status));
-      if (returnFromChain) return input;
+        (status && ['complete', 'discard'].includes(status));
+      if (returnFromChain) return { state, status };
 
       const middleware = this.middleware[i];
       const handler = middleware[eventName];
 
-      if (!handler || typeof handler === 'string') {
-        return execute(i + 1, input);
+      if (!handler) {
+        return execute(i + 1, state, status);
       }
 
+      const next = (adjustedState: TValue) => execute(i + 1, adjustedState);
+      const complete = (adjustedState: TValue) =>
+        execute(i + 1, adjustedState, 'complete');
+      const discard = () => execute(i + 1, state, 'discard');
+      const forward = () => execute(i + 1, state);
+
       return await handler({
-        input,
-        nextHandler: (nextInput: MiddlewareValue<TState>) => execute(i + 1, nextInput),
-        ...extraParams,
+        state,
+        next,
+        complete,
+        discard,
+        forward,
       });
     };
 
     const result = await withCancellation(
       `middleware-execution-${this.id}-${eventName}`,
       async (abortSignal) => {
-        const result = await execute(0, initialInput);
+        const result = await execute(0, initialValue);
         if (abortSignal.aborted) {
           return 'canceled';
         }
@@ -138,13 +158,16 @@ export class MiddlewareExecutor<TState> {
       },
     );
 
-    return result === 'canceled' ? { ...initialInput, status: 'discard' } : result;
+    return result === 'canceled' ? { state: initialValue, status: 'discard' } : result;
   }
 
-  async execute(
-    eventName: string,
-    initialInput: MiddlewareValue<TState>,
-  ): Promise<MiddlewareValue<TState>> {
-    return await this.executeMiddlewareChain(eventName, initialInput);
+  async execute({
+    eventName,
+    initialValue: initialState,
+  }: ExecuteParams<TValue>): Promise<MiddlewareExecutionResult<TValue>> {
+    return await this.executeMiddlewareChain({
+      eventName,
+      initialValue: initialState,
+    });
   }
 }

@@ -1,12 +1,10 @@
 import { TextComposerMiddlewareExecutor } from './middleware';
 import { StateStore } from '../store';
 import { logChatPromiseExecution } from '../utils';
-import type {
-  Suggestions,
-  TextComposerState,
-  TextComposerSuggestion,
-  TextSelection,
-} from './types';
+import type { TextComposerSuggestion } from './middleware/textComposer/types';
+import type { TextSelection } from './middleware/textComposer/types';
+import type { TextComposerState } from './middleware/textComposer/types';
+import type { Suggestions } from './middleware/textComposer/types';
 import type { MessageComposer } from './messageComposer';
 import type { DraftMessage, LocalMessage, UserResponse } from '../types';
 
@@ -259,11 +257,14 @@ export class TextComposer {
     text: string;
   }) => {
     if (!this.enabled) return;
-    const output = await this.middlewareExecutor.execute('onChange', {
-      state: {
+    const output = await this.middlewareExecutor.execute({
+      eventName: 'onChange',
+      initialValue: {
         ...this.state.getLatestValue(),
-        text,
-        selection,
+        change: {
+          text,
+          selection,
+        },
       },
     });
     if (output.status === 'discard') return;
@@ -280,13 +281,15 @@ export class TextComposer {
   // todo: document how to register own middleware handler to simulate onSelectUser prop
   handleSelect = async (target: TextComposerSuggestion<unknown>) => {
     if (!this.enabled) return;
-    const output = await this.middlewareExecutor.execute(
-      'onSuggestionItemSelect',
-      {
-        state: this.state.getLatestValue(),
+    const output = await this.middlewareExecutor.execute({
+      eventName: 'onSuggestionItemSelect',
+      initialValue: {
+        ...this.state.getLatestValue(),
+        change: {
+          selectedSuggestion: target,
+        },
       },
-      target,
-    );
+    });
     if (output?.status === 'discard') return;
     this.state.next(output.state);
   };

@@ -1,5 +1,4 @@
-import type { Attachment, FileUploadConfig, UserResponse } from '../types';
-import type { SearchSource } from '../search_controller';
+import type { Attachment, FileUploadConfig } from '../types';
 
 export type LocalAttachment = AnyLocalAttachment | LocalUploadAttachment;
 
@@ -141,24 +140,4 @@ export type FileReference = Pick<File, 'name' | 'size' | 'type'> & {
 
   // This is specially needed for video in camera roll
   thumb_url?: string;
-};
-
-type Id = string;
-export type MentionedUserMap = Map<Id, UserResponse>;
-export type TextSelection = { end: number; start: number };
-export type TextComposerSuggestion<T = unknown> = T & {
-  id: string;
-};
-
-export type Suggestions = {
-  query: string;
-  searchSource: SearchSource<TextComposerSuggestion>; // we do not want to limit the use of SearchSources
-  trigger: string;
-};
-
-export type TextComposerState = {
-  mentionedUsers: UserResponse[];
-  selection: TextSelection;
-  text: string;
-  suggestions?: Suggestions;
 };

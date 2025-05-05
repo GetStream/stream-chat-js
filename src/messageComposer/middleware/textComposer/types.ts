@@ -1,36 +1,54 @@
-import type { TextComposerState, TextComposerSuggestion } from '../../types';
-import type { MiddlewareValue } from '../../../middleware';
 import type { MessageComposer } from '../../messageComposer';
+import type { CommandResponse, UserResponse } from '../../../types';
+import type { TokenizationPayload } from './textMiddlewareUtils';
+import type { SearchSource } from '../../../search_controller';
+import type { CustomSuggestion } from '../../types.custom';
+
+export type TextComposerSuggestion<T = unknown> = T & {
+  id: string;
+};
+
+export type BaseSuggestion = {
+  id: string;
+};
+
+export type CommandSuggestion = BaseSuggestion & CommandResponse;
+export type UserSuggestion = BaseSuggestion & UserResponse & TokenizationPayload;
+export type CustomValidSuggestion = BaseSuggestion & CustomSuggestion;
+export type Suggestion = CommandSuggestion | UserSuggestion | CustomValidSuggestion;
+
+export type TextComposerMetadataByMiddlewareHandler<
+  TSuggestion extends Suggestion = Suggestion,
+> = {
+  onChange: {
+    selection: TextSelection;
+    text: string;
+  };
+  onSuggestionItemSelect: {
+    selectedSuggestion: TSuggestion;
+  };
+};
 
 export type TextComposerMiddlewareOptions = {
   minChars: number;
   trigger: string;
 };
 
-export type TextComposerMiddlewareValue = MiddlewareValue<TextComposerState>;
-
-export type TextComposerMiddlewareParams<T = unknown> = {
-  input: TextComposerMiddlewareValue;
-  nextHandler: (
-    input: TextComposerMiddlewareValue,
-  ) => Promise<TextComposerMiddlewareValue>;
-  selectedSuggestion?: TextComposerSuggestion<T>;
-};
-
-export type TextComposerMiddlewareHandler = (
-  params: TextComposerMiddlewareParams,
-) => Promise<TextComposerMiddlewareValue>;
-
-export type CustomTextComposerMiddleware = {
-  [key: string]: string | TextComposerMiddlewareHandler;
-};
-
-export type TextComposerMiddleware = CustomTextComposerMiddleware & {
-  id: string;
-  onChange?: string | TextComposerMiddlewareHandler;
-  onSuggestionItemSelect?: string | TextComposerMiddlewareHandler;
-};
-
 export type TextComposerMiddlewareExecutorOptions = {
   composer: MessageComposer;
+};
+
+export type Suggestions<T extends Suggestion = Suggestion> = {
+  query: string;
+  searchSource: SearchSource<T>;
+  trigger: string;
+};
+
+export type TextSelection = { end: number; start: number };
+
+export type TextComposerState<T extends Suggestion = Suggestion> = {
+  mentionedUsers: UserResponse[];
+  selection: TextSelection;
+  text: string;
+  suggestions?: Suggestions<T>;
 };

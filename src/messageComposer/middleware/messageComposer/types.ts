@@ -1,4 +1,4 @@
-import type { MiddlewareValue } from '../../../middleware';
+import type { MiddlewareExecutionResult } from '../../../middleware';
 import type {
   DraftMessagePayload,
   LocalMessage,
@@ -15,7 +15,7 @@ export type MessageComposerMiddlewareValueState = {
 };
 
 export type MessageComposerMiddlewareValue =
-  MiddlewareValue<MessageComposerMiddlewareValueState>;
+  MiddlewareExecutionResult<MessageComposerMiddlewareValueState>;
 
 export type MessageComposerMiddlewareExecutorOptions = {
   composer: MessageComposer;

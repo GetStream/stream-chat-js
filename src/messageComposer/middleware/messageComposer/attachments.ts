@@ -16,11 +16,13 @@ const localAttachmentToAttachment = (localAttachment: LocalAttachment) => {
 export const createAttachmentsCompositionMiddleware = (composer: MessageComposer) => ({
   id: 'stream-io/message-composer-middleware/attachments',
   compose: ({
-    input,
-    nextHandler,
+    state,
+    next,
+    discard,
+    forward,
   }: MiddlewareHandlerParams<MessageComposerMiddlewareValueState>) => {
     const { attachmentManager } = composer;
-    if (!attachmentManager) return nextHandler(input);
+    if (!attachmentManager) return forward();
 
     if (attachmentManager.uploadsInProgressCount > 0) {
       composer.client.notifications.addWarning({
@@ -30,28 +32,25 @@ export const createAttachmentsCompositionMiddleware = (composer: MessageComposer
           context: { composer },
         },
       });
-      return nextHandler({ ...input, status: 'discard' });
+      return discard();
     }
 
-    const attachments = (input.state.message.attachments ?? []).concat(
+    const attachments = (state.message.attachments ?? []).concat(
       attachmentManager.successfulUploads.map(localAttachmentToAttachment),
     );
 
     // prevent introducing attachments array into the payload sent to the server
-    if (!attachments.length) return nextHandler(input);
+    if (!attachments.length) return forward();
 
-    return nextHandler({
-      ...input,
-      state: {
-        ...input.state,
-        localMessage: {
-          ...input.state.localMessage,
-          attachments,
-        },
-        message: {
-          ...input.state.message,
-          attachments,
-        },
+    return next({
+      ...state,
+      localMessage: {
+        ...state.localMessage,
+        attachments,
+      },
+      message: {
+        ...state.message,
+        attachments,
       },
     });
   },
@@ -62,27 +61,25 @@ export const createDraftAttachmentsCompositionMiddleware = (
 ) => ({
   id: 'stream-io/message-composer-middleware/draft-attachments',
   compose: ({
-    input,
-    nextHandler,
+    state,
+    next,
+    forward,
   }: MiddlewareHandlerParams<MessageDraftComposerMiddlewareValueState>) => {
     const { attachmentManager } = composer;
-    if (!attachmentManager) return nextHandler(input);
+    if (!attachmentManager) return forward();
 
     const successfulUploads = attachmentManager.successfulUploads;
     const attachments = successfulUploads.length
-      ? (input.state.draft.attachments ?? []).concat(
+      ? (state.draft.attachments ?? []).concat(
           successfulUploads.map(localAttachmentToAttachment),
         )
       : undefined;
 
-    return nextHandler({
-      ...input,
-      state: {
-        ...input.state,
-        draft: {
-          ...input.state.draft,
-          attachments,
-        },
+    return next({
+      ...state,
+      draft: {
+        ...state.draft,
+        attachments,
       },
     });
   },

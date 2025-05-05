@@ -1,16 +1,12 @@
-import { getTriggerCharWithToken, insertItemWithTrigger } from './textMiddlewareUtils';
-import { BaseSearchSource } from '../../../search_controller';
-import { mergeWith } from '../../../utils/mergeWith';
-import type {
-  TextComposerMiddlewareOptions,
-  TextComposerMiddlewareParams,
-} from './types';
-import type { SearchSourceOptions } from '../../../search_controller';
-import type { CommandResponse } from '../../../types';
 import type { Channel } from '../../../channel';
-import type { TextComposerSuggestion } from '../../types';
-
-export type CommandSuggestion = TextComposerSuggestion<CommandResponse>;
+import type { MiddlewareHandler } from '../../../middleware';
+import type { SearchSourceOptions } from '../../../search_controller';
+import { BaseSearchSource } from '../../../search_controller';
+import type { CommandResponse } from '../../../types';
+import { mergeWith } from '../../../utils/mergeWith';
+import type { CommandSuggestion, TextComposerMiddlewareOptions } from './types';
+import { getTriggerCharWithToken, insertItemWithTrigger } from './textMiddlewareUtils';
+import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
 
 export class CommandSearchSource extends BaseSearchSource<CommandSuggestion> {
   readonly type = 'commands';
@@ -96,12 +92,20 @@ export class CommandSearchSource extends BaseSearchSource<CommandSuggestion> {
 
 const DEFAULT_OPTIONS: TextComposerMiddlewareOptions = { minChars: 1, trigger: '/' };
 
+export type CommandsMiddleware = {
+  id: string;
+  onChange: MiddlewareHandler<TextComposerMiddlewareExecutorState<CommandSuggestion>>;
+  onSuggestionItemSelect: MiddlewareHandler<
+    TextComposerMiddlewareExecutorState<CommandSuggestion>
+  >;
+};
+
 export const createCommandsMiddleware = (
   channel: Channel,
   options?: Partial<TextComposerMiddlewareOptions> & {
     searchSource?: CommandSearchSource;
   },
-) => {
+): CommandsMiddleware => {
   const finalOptions = mergeWith(DEFAULT_OPTIONS, options ?? {});
   let searchSource = new CommandSearchSource(channel);
   if (options?.searchSource) {
@@ -112,16 +116,9 @@ export const createCommandsMiddleware = (
 
   return {
     id: 'stream-io/text-composer/commands-middleware',
-    onChange: ({
-      input,
-      nextHandler,
-    }: TextComposerMiddlewareParams<CommandSuggestion>) => {
-      const { state } = input;
-      if (!state.selection) return nextHandler(input);
-
-      // const firstCharIsNotCommandTrigger =
-      //   state.text.length === 0 || state.text[0] !== finalOptions.trigger;
-      // if (firstCharIsNotCommandTrigger) return nextHandler(input);
+    onChange: ({ state, next, complete, forward }) => {
+      const { change } = state; // todo: change state.text for change.text
+      if (!change?.selection) return forward();
 
       const triggerWithToken = getTriggerCharWithToken({
         trigger: finalOptions.trigger,
@@ -141,48 +138,38 @@ export const createCommandsMiddleware = (
         !triggerWithToken || triggerWithToken.length < finalOptions.minChars;
 
       if (triggerWasRemoved) {
-        const hasStaleSuggestions =
-          input.state.suggestions?.trigger === finalOptions.trigger;
-        const newInput = { ...input };
+        const hasStaleSuggestions = state.suggestions?.trigger === finalOptions.trigger;
+        const newState = { ...state };
         if (hasStaleSuggestions) {
-          delete newInput.state.suggestions;
+          delete newState.suggestions;
         }
-        return nextHandler(newInput);
+        return next(newState);
       }
 
-      return Promise.resolve({
-        state: {
-          ...state,
-          suggestions: {
-            query: triggerWithToken.slice(1),
-            searchSource,
-            trigger: finalOptions.trigger,
-          },
+      return complete({
+        ...state,
+        suggestions: {
+          query: triggerWithToken.slice(1),
+          searchSource,
+          trigger: finalOptions.trigger,
         },
-        stop: true, // Stop other middleware from processing '/' character
       });
     },
-    onSuggestionItemSelect: ({
-      input,
-      nextHandler,
-      selectedSuggestion,
-    }: TextComposerMiddlewareParams<CommandSuggestion>) => {
-      const { state } = input;
+    onSuggestionItemSelect: ({ state, complete, forward }) => {
+      const { selectedSuggestion } = state.change;
       if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
-        return nextHandler(input);
+        return forward();
 
       searchSource.resetStateAndActivate();
-      return Promise.resolve({
-        state: {
-          ...state,
-          ...insertItemWithTrigger({
-            insertText: `/${selectedSuggestion.name} `,
-            selection: state.selection,
-            text: state.text,
-            trigger: finalOptions.trigger,
-          }),
-          suggestions: undefined, // Clear suggestions after selection
-        },
+      return complete({
+        ...state,
+        ...insertItemWithTrigger({
+          insertText: `/${selectedSuggestion.name} `,
+          selection: state.selection,
+          text: state.text,
+          trigger: finalOptions.trigger,
+        }),
+        suggestions: undefined, // Clear suggestions after selection
       });
     },
   };

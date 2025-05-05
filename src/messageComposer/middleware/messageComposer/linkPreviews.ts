@@ -10,11 +10,12 @@ import type {
 export const createLinkPreviewsCompositionMiddleware = (composer: MessageComposer) => ({
   id: 'stream-io/message-composer-middleware/link-previews',
   compose: ({
-    input,
-    nextHandler,
+    state,
+    next,
+    forward,
   }: MiddlewareHandlerParams<MessageComposerMiddlewareValueState>) => {
     const { linkPreviewsManager } = composer;
-    if (!linkPreviewsManager) return nextHandler(input);
+    if (!linkPreviewsManager) return forward();
 
     linkPreviewsManager.cancelURLEnrichment();
     const someLinkPreviewsLoading = linkPreviewsManager.loadingPreviews.length > 0;
@@ -26,34 +27,31 @@ export const createLinkPreviewsCompositionMiddleware = (composer: MessageCompose
             LinkPreviewsManager.getPreviewData(preview),
           );
 
-    const attachments: Attachment[] = (input.state.message.attachments ?? []).concat(
+    const attachments: Attachment[] = (state.message.attachments ?? []).concat(
       linkPreviews,
     );
 
     // prevent introducing attachments array into the payload sent to the server
-    if (!attachments.length) return nextHandler(input);
+    if (!attachments.length) return forward();
 
-    const sendOptions = { ...input.state.sendOptions };
+    const sendOptions = { ...state.sendOptions };
     const skip_enrich_url =
       (!someLinkPreviewsLoading && linkPreviews.length > 0) || someLinkPreviewsDismissed;
     if (skip_enrich_url) {
       sendOptions.skip_enrich_url = true;
     }
 
-    return nextHandler({
-      ...input,
-      state: {
-        ...input.state,
-        message: {
-          ...input.state.message,
-          attachments,
-        },
-        localMessage: {
-          ...input.state.localMessage,
-          attachments,
-        },
-        sendOptions,
+    return next({
+      ...state,
+      message: {
+        ...state.message,
+        attachments,
       },
+      localMessage: {
+        ...state.localMessage,
+        attachments,
+      },
+      sendOptions,
     });
   },
 });
@@ -63,27 +61,25 @@ export const createDraftLinkPreviewsCompositionMiddleware = (
 ) => ({
   id: 'stream-io/message-composer-middleware/draft-link-previews',
   compose: ({
-    input,
-    nextHandler,
+    state,
+    next,
+    forward,
   }: MiddlewareHandlerParams<MessageDraftComposerMiddlewareValueState>) => {
     const { linkPreviewsManager } = composer;
-    if (!linkPreviewsManager) return nextHandler(input);
+    if (!linkPreviewsManager) return forward();
 
     linkPreviewsManager.cancelURLEnrichment();
     const linkPreviews = linkPreviewsManager.loadedPreviews.map((preview) =>
       LinkPreviewsManager.getPreviewData(preview),
     );
 
-    if (!linkPreviews.length) return nextHandler(input);
+    if (!linkPreviews.length) return forward();
 
-    return nextHandler({
-      ...input,
-      state: {
-        ...input.state,
-        draft: {
-          ...input.state.draft,
-          attachments: (input.state.draft.attachments ?? []).concat(linkPreviews),
-        },
+    return next({
+      ...state,
+      draft: {
+        ...state.draft,
+        attachments: (state.draft.attachments ?? []).concat(linkPreviews),
       },
     });
   },

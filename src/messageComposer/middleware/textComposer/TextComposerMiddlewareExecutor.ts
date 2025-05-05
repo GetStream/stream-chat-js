@@ -1,31 +1,46 @@
 import { createCommandsMiddleware } from './commands';
 import { createMentionsMiddleware } from './mentions';
 import { createTextComposerPreValidationMiddleware } from './validation';
+import type { ExecuteParams, MiddlewareExecutionResult } from '../../../middleware';
 import { MiddlewareExecutor } from '../../../middleware';
 import { withCancellation } from '../../../utils/concurrency';
 import type {
-  TextComposerMiddleware,
+  Suggestion,
   TextComposerMiddlewareExecutorOptions,
-  TextComposerMiddlewareValue,
+  TextComposerState,
+  TextSelection,
 } from './types';
-import type { TextComposerState, TextComposerSuggestion } from '../../types';
 
-export class TextComposerMiddlewareExecutor extends MiddlewareExecutor<TextComposerState> {
+export type TextComposerMiddlewareExecutorState<T extends Suggestion = Suggestion> =
+  TextComposerState<T> & {
+    change: {
+      selectedSuggestion?: T;
+      selection?: TextSelection;
+      text?: string;
+    };
+  };
+
+export class TextComposerMiddlewareExecutor<
+  T extends Suggestion = Suggestion,
+> extends MiddlewareExecutor<TextComposerMiddlewareExecutorState<T>> {
   constructor({ composer }: TextComposerMiddlewareExecutorOptions) {
     super();
     this.use([
       createTextComposerPreValidationMiddleware(composer),
       createMentionsMiddleware(composer.channel),
       createCommandsMiddleware(composer.channel),
-    ] as TextComposerMiddleware[]);
+    ]);
   }
-  async execute(
-    eventName: string,
-    initialInput: TextComposerMiddlewareValue,
-    selectedSuggestion?: TextComposerSuggestion,
-  ): Promise<TextComposerMiddlewareValue> {
-    const result = await this.executeMiddlewareChain(eventName, initialInput, {
-      selectedSuggestion,
+
+  async execute({
+    eventName,
+    initialValue: initialState,
+  }: ExecuteParams<TextComposerMiddlewareExecutorState<T>>): Promise<
+    MiddlewareExecutionResult<TextComposerMiddlewareExecutorState<T>>
+  > {
+    const result = await this.executeMiddlewareChain({
+      eventName,
+      initialValue: initialState,
     });
 
     if (result && result.state.suggestions) {

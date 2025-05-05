@@ -9,24 +9,25 @@ import type { MiddlewareHandlerParams } from '../../../middleware';
 export const createCompositionValidationMiddleware = (composer: MessageComposer) => ({
   id: 'stream-io/message-composer-middleware/data-validation',
   compose: async ({
-    input,
-    nextHandler,
+    state,
+    discard,
+    forward,
   }: MiddlewareHandlerParams<MessageComposerMiddlewareValueState>) => {
     const { maxLengthOnSend } = composer.config.text ?? {};
-    const inputText = input.state.message.text ?? '';
+    const inputText = state.message.text ?? '';
     const isEmptyMessage =
       textIsEmpty(inputText) &&
-      !input.state.message.attachments?.length &&
-      !input.state.message.poll_id;
+      !state.message.attachments?.length &&
+      !state.message.poll_id;
 
     const hasExceededMaxLength =
       typeof maxLengthOnSend === 'number' && inputText.length > maxLengthOnSend;
 
     if (isEmptyMessage || !composer.lastChangeOriginIsLocal || hasExceededMaxLength) {
-      return await nextHandler({ ...input, status: 'discard' });
+      return await discard();
     }
 
-    return await nextHandler(input);
+    return await forward();
   },
 });
 
@@ -35,21 +36,22 @@ export const createDraftCompositionValidationMiddleware = (
 ) => ({
   id: 'stream-io/message-composer-middleware/draft-data-validation',
   compose: async ({
-    input,
-    nextHandler,
+    state,
+    discard,
+    forward,
   }: MiddlewareHandlerParams<MessageDraftComposerMiddlewareValueState>) => {
     const hasData =
-      !textIsEmpty(input.state.draft.text ?? '') ||
-      input.state.draft.attachments?.length ||
-      input.state.draft.poll_id ||
-      input.state.draft.quoted_message_id;
+      !textIsEmpty(state.draft.text ?? '') ||
+      state.draft.attachments?.length ||
+      state.draft.poll_id ||
+      state.draft.quoted_message_id;
 
     const shouldCreateDraft = composer.lastChangeOriginIsLocal && hasData;
 
     if (!shouldCreateDraft) {
-      return await nextHandler({ ...input, status: 'discard' });
+      return await discard();
     }
 
-    return await nextHandler(input);
+    return await forward();
   },
 });

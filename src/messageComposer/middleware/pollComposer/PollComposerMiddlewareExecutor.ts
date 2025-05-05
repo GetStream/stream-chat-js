@@ -3,7 +3,7 @@ import { createPollComposerStateMiddleware } from './state';
 import { createPollCompositionValidationMiddleware } from './composition';
 import type {
   PollComposerCompositionMiddlewareValueState,
-  PollComposerStateMiddlewareValueState,
+  PollComposerStateChangeMiddlewareValue,
 } from './types';
 import type { MessageComposer } from '../../messageComposer';
 
@@ -18,7 +18,7 @@ export class PollComposerCompositionMiddlewareExecutor extends MiddlewareExecuto
   }
 }
 
-export class PollComposerStateMiddlewareExecutor extends MiddlewareExecutor<PollComposerStateMiddlewareValueState> {
+export class PollComposerStateMiddlewareExecutor extends MiddlewareExecutor<PollComposerStateChangeMiddlewareValue> {
   constructor() {
     super();
     this.use([createPollComposerStateMiddleware()]);
