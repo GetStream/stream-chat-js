@@ -18,7 +18,7 @@ import type {
 } from '../../../types';
 import type { Channel } from '../../../channel';
 import { MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY } from '../../../constants';
-import type { MiddlewareHandler } from '../../../middleware';
+import type { Middleware } from '../../../middleware';
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
 
 // todo: the map is too small - Slavic letters with diacritics are missing for example
@@ -321,13 +321,10 @@ const userSuggestionToUserResponse = (suggestion: UserSuggestion): UserResponse 
  * @returns
  */
 
-export type MentionsMiddleware = {
-  id: string;
-  onChange: MiddlewareHandler<TextComposerMiddlewareExecutorState<UserSuggestion>>;
-  onSuggestionItemSelect: MiddlewareHandler<
-    TextComposerMiddlewareExecutorState<UserSuggestion>
-  >;
-};
+export type MentionsMiddleware = Middleware<
+  TextComposerMiddlewareExecutorState<UserSuggestion>,
+  'onChange' | 'onSuggestionItemSelect'
+>;
 
 export const createMentionsMiddleware = (
   channel: Channel,
@@ -346,64 +343,65 @@ export const createMentionsMiddleware = (
   searchSource.activate();
   return {
     id: 'stream-io/text-composer/mentions-middleware',
-    onChange: ({ state, next, complete, forward }) => {
-      if (!state.selection) return forward();
+    handlers: {
+      onChange: ({ state, next, complete, forward }) => {
+        if (!state.selection) return forward();
 
-      const triggerWithToken = getTriggerCharWithToken({
-        trigger: finalOptions.trigger,
-        text: state.text.slice(0, state.selection.end),
-      });
+        const triggerWithToken = getTriggerCharWithToken({
+          trigger: finalOptions.trigger,
+          text: state.text.slice(0, state.selection.end),
+        });
 
-      const newSearchTriggered =
-        triggerWithToken && triggerWithToken.length === finalOptions.minChars;
+        const newSearchTriggered =
+          triggerWithToken && triggerWithToken.length === finalOptions.minChars;
 
-      if (newSearchTriggered) {
-        searchSource.resetStateAndActivate();
-      }
-
-      const triggerWasRemoved =
-        !triggerWithToken || triggerWithToken.length < finalOptions.minChars;
-
-      if (triggerWasRemoved) {
-        const hasStaleSuggestions = state.suggestions?.trigger === finalOptions.trigger;
-        const newState = { ...state };
-        if (hasStaleSuggestions) {
-          delete newState.suggestions;
-          // todo: how to remove mentioned users on deleting the text
+        if (newSearchTriggered) {
+          searchSource.resetStateAndActivate();
         }
-        return next(newState);
-      }
 
-      searchSource.config.textComposerText = state.text;
+        const triggerWasRemoved =
+          !triggerWithToken || triggerWithToken.length < finalOptions.minChars;
 
-      return complete({
-        ...state,
-        suggestions: {
-          query: triggerWithToken.slice(1),
-          searchSource,
-          trigger: finalOptions.trigger,
-        },
-      });
-    },
-    onSuggestionItemSelect: ({ state, complete, forward }) => {
-      const { selectedSuggestion } = state.change;
-      if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
-        return forward();
+        if (triggerWasRemoved) {
+          const hasStaleSuggestions = state.suggestions?.trigger === finalOptions.trigger;
+          const newState = { ...state };
+          if (hasStaleSuggestions) {
+            delete newState.suggestions;
+          }
+          return next(newState);
+        }
 
-      searchSource.resetStateAndActivate();
-      return complete({
-        ...state,
-        ...insertItemWithTrigger({
-          insertText: `@${selectedSuggestion.name || selectedSuggestion.id} `,
-          selection: state.selection,
-          text: state.text,
-          trigger: finalOptions.trigger,
-        }),
-        mentionedUsers: state.mentionedUsers.concat(
-          userSuggestionToUserResponse(selectedSuggestion),
-        ),
-        suggestions: undefined, // Clear suggestions after selection
-      });
+        searchSource.config.textComposerText = state.text;
+
+        return complete({
+          ...state,
+          suggestions: {
+            query: triggerWithToken.slice(1),
+            searchSource,
+            trigger: finalOptions.trigger,
+          },
+        });
+      },
+      onSuggestionItemSelect: ({ state, complete, forward }) => {
+        const { selectedSuggestion } = state.change ?? {};
+        if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
+          return forward();
+
+        searchSource.resetStateAndActivate();
+        return complete({
+          ...state,
+          ...insertItemWithTrigger({
+            insertText: `@${selectedSuggestion.name || selectedSuggestion.id} `,
+            selection: state.selection,
+            text: state.text,
+            trigger: finalOptions.trigger,
+          }),
+          mentionedUsers: state.mentionedUsers.concat(
+            userSuggestionToUserResponse(selectedSuggestion),
+          ),
+          suggestions: undefined,
+        });
+      },
     },
   };
 };

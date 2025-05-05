@@ -540,7 +540,10 @@ describe('MessageComposer', () => {
 
       const result = await messageComposer.compose();
 
-      expect(spyExecute).toHaveBeenCalledWith('compose', expect.any(Object));
+      expect(spyExecute).toHaveBeenCalledWith({
+        eventName: 'compose',
+        initialValue: expect.any(Object),
+      });
       expect(result).toEqual(mockResult.state);
     });
 
@@ -559,7 +562,10 @@ describe('MessageComposer', () => {
 
       const result = await messageComposer.compose();
 
-      expect(spyExecute).toHaveBeenCalledWith('compose', expect.any(Object));
+      expect(spyExecute).toHaveBeenCalledWith({
+        eventName: 'compose',
+        initialValue: expect.any(Object),
+      });
       expect(result).toBeUndefined();
     });
 
@@ -583,7 +589,10 @@ describe('MessageComposer', () => {
 
       const result = await messageComposer.composeDraft();
 
-      expect(spyExecute).toHaveBeenCalledWith('compose', expect.any(Object));
+      expect(spyExecute).toHaveBeenCalledWith({
+        eventName: 'compose',
+        initialValue: expect.any(Object),
+      });
       expect(result).toEqual(mockResult.state);
     });
 
@@ -602,7 +611,10 @@ describe('MessageComposer', () => {
 
       const result = await messageComposer.composeDraft();
 
-      expect(spyExecute).toHaveBeenCalledWith('compose', expect.any(Object));
+      expect(spyExecute).toHaveBeenCalledWith({
+        eventName: 'compose',
+        initialValue: expect.any(Object),
+      });
       expect(result).toBeUndefined();
     });
 

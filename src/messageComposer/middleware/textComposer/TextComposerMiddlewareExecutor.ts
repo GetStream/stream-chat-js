@@ -1,34 +1,49 @@
 import { createCommandsMiddleware } from './commands';
 import { createMentionsMiddleware } from './mentions';
 import { createTextComposerPreValidationMiddleware } from './validation';
-import type { ExecuteParams, MiddlewareExecutionResult } from '../../../middleware';
+import type {
+  ExecuteParams,
+  MiddlewareExecutionResult,
+  MiddlewareHandler,
+} from '../../../middleware';
 import { MiddlewareExecutor } from '../../../middleware';
 import { withCancellation } from '../../../utils/concurrency';
 import type {
   Suggestion,
   TextComposerMiddlewareExecutorOptions,
   TextComposerState,
-  TextSelection,
 } from './types';
 
 export type TextComposerMiddlewareExecutorState<T extends Suggestion = Suggestion> =
   TextComposerState<T> & {
-    change: {
+    change?: {
       selectedSuggestion?: T;
-      selection?: TextSelection;
-      text?: string;
     };
   };
 
+export type TextComposerHandlerNames = 'onChange' | 'onSuggestionItemSelect';
+
+export type TextComposerMiddleware<T extends Suggestion = Suggestion> = {
+  id: string;
+  handlers: {
+    [K in TextComposerHandlerNames]: MiddlewareHandler<
+      TextComposerMiddlewareExecutorState<T>
+    >;
+  };
+};
+
 export class TextComposerMiddlewareExecutor<
   T extends Suggestion = Suggestion,
-> extends MiddlewareExecutor<TextComposerMiddlewareExecutorState<T>> {
+> extends MiddlewareExecutor<
+  TextComposerMiddlewareExecutorState<T>,
+  TextComposerHandlerNames
+> {
   constructor({ composer }: TextComposerMiddlewareExecutorOptions) {
     super();
     this.use([
-      createTextComposerPreValidationMiddleware(composer),
-      createMentionsMiddleware(composer.channel),
-      createCommandsMiddleware(composer.channel),
+      createTextComposerPreValidationMiddleware(composer) as TextComposerMiddleware<T>,
+      createMentionsMiddleware(composer.channel) as TextComposerMiddleware<T>,
+      createCommandsMiddleware(composer.channel) as TextComposerMiddleware<T>,
     ]);
   }
 

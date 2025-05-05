@@ -11,14 +11,20 @@ export type PollComposerMiddlewareExecutorOptions = {
   composer: MessageComposer;
 };
 
-export class PollComposerCompositionMiddlewareExecutor extends MiddlewareExecutor<PollComposerCompositionMiddlewareValueState> {
+export class PollComposerCompositionMiddlewareExecutor extends MiddlewareExecutor<
+  PollComposerCompositionMiddlewareValueState,
+  'compose'
+> {
   constructor({ composer }: PollComposerMiddlewareExecutorOptions) {
     super();
     this.use([createPollCompositionValidationMiddleware(composer)]);
   }
 }
 
-export class PollComposerStateMiddlewareExecutor extends MiddlewareExecutor<PollComposerStateChangeMiddlewareValue> {
+export class PollComposerStateMiddlewareExecutor extends MiddlewareExecutor<
+  PollComposerStateChangeMiddlewareValue,
+  'handleFieldChange' | 'handleFieldBlur'
+> {
   constructor() {
     super();
     this.use([createPollComposerStateMiddleware()]);

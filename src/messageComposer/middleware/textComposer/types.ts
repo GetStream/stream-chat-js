@@ -2,7 +2,7 @@ import type { MessageComposer } from '../../messageComposer';
 import type { CommandResponse, UserResponse } from '../../../types';
 import type { TokenizationPayload } from './textMiddlewareUtils';
 import type { SearchSource } from '../../../search_controller';
-import type { CustomSuggestion } from '../../types.custom';
+import type { CustomTextComposerSuggestion } from '../../types.custom';
 
 export type TextComposerSuggestion<T = unknown> = T & {
   id: string;
@@ -14,7 +14,7 @@ export type BaseSuggestion = {
 
 export type CommandSuggestion = BaseSuggestion & CommandResponse;
 export type UserSuggestion = BaseSuggestion & UserResponse & TokenizationPayload;
-export type CustomValidSuggestion = BaseSuggestion & CustomSuggestion;
+export type CustomValidSuggestion = BaseSuggestion & CustomTextComposerSuggestion;
 export type Suggestion = CommandSuggestion | UserSuggestion | CustomValidSuggestion;
 
 export type TextComposerMetadataByMiddlewareHandler<

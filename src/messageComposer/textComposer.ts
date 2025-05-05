@@ -261,10 +261,8 @@ export class TextComposer {
       eventName: 'onChange',
       initialValue: {
         ...this.state.getLatestValue(),
-        change: {
-          text,
-          selection,
-        },
+        text,
+        selection,
       },
     });
     if (output.status === 'discard') return;

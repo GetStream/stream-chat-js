@@ -1,21 +1,23 @@
-import type { MiddlewareHandler, MiddlewareHandlerParams } from '../../../middleware';
+import type { Middleware, MiddlewareHandlerParams } from '../../../middleware';
 import type { MessageComposer } from '../../messageComposer';
 import type { PollComposerCompositionMiddlewareValueState } from './types';
 
-export type PollCompositionValidationMiddleware = {
-  id: string;
-  compose: MiddlewareHandler<PollComposerCompositionMiddlewareValueState>;
-};
+export type PollCompositionValidationMiddleware = Middleware<
+  PollComposerCompositionMiddlewareValueState,
+  'compose'
+>;
 
 export const createPollCompositionValidationMiddleware = (
   composer: MessageComposer,
 ): PollCompositionValidationMiddleware => ({
   id: 'stream-io/poll-composer-composition',
-  compose: ({
-    discard,
-    forward,
-  }: MiddlewareHandlerParams<PollComposerCompositionMiddlewareValueState>) => {
-    if (composer.pollComposer.canCreatePoll) return forward();
-    return discard();
+  handlers: {
+    compose: ({
+      discard,
+      forward,
+    }: MiddlewareHandlerParams<PollComposerCompositionMiddlewareValueState>) => {
+      if (composer.pollComposer.canCreatePoll) return forward();
+      return discard();
+    },
   },
 });

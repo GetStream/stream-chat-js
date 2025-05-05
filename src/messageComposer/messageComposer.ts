@@ -563,8 +563,9 @@ export class MessageComposer {
   compose = async (): Promise<MessageComposerMiddlewareValue['state'] | undefined> => {
     const created_at = this.editedMessage?.created_at ?? new Date();
     const text = '';
-    const result = await this.compositionMiddlewareExecutor.execute('compose', {
-      state: {
+    const result = await this.compositionMiddlewareExecutor.execute({
+      eventName: 'compose',
+      initialValue: {
         message: {
           id: this.id,
           parent_id: this.threadId ?? undefined,
@@ -594,14 +595,12 @@ export class MessageComposer {
   };
 
   composeDraft = async () => {
-    const { state, status } = await this.draftCompositionMiddlewareExecutor.execute(
-      'compose',
-      {
-        state: {
-          draft: { id: this.id, parent_id: this.threadId ?? undefined, text: '' },
-        },
+    const { state, status } = await this.draftCompositionMiddlewareExecutor.execute({
+      eventName: 'compose',
+      initialValue: {
+        draft: { id: this.id, parent_id: this.threadId ?? undefined, text: '' },
       },
-    );
+    });
     if (status === 'discard') return;
     return state;
   };

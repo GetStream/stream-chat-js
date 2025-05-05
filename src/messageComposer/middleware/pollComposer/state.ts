@@ -1,11 +1,11 @@
+import type { Middleware, MiddlewareHandlerParams } from '../../../middleware';
+import { generateUUIDv4 } from '../../../utils';
 import type {
   PollComposerFieldErrors,
   PollComposerState,
   PollComposerStateChangeMiddlewareValue,
   TargetedPollOptionTextUpdate,
 } from './types';
-import { generateUUIDv4 } from '../../../utils';
-import type { MiddlewareHandler, MiddlewareHandlerParams } from '../../../middleware';
 
 export const VALID_MAX_VOTES_VALUE_REGEX = /^([2-9]|10)$/;
 
@@ -153,11 +153,10 @@ export type PollComposerStateMiddlewareFactoryOptions = {
   };
 };
 
-export type PollComposerStateMiddleware = {
-  id: string;
-  handleFieldChange: MiddlewareHandler<PollComposerStateChangeMiddlewareValue>;
-  handleFieldBlur: MiddlewareHandler<PollComposerStateChangeMiddlewareValue>;
-};
+export type PollComposerStateMiddleware = Middleware<
+  PollComposerStateChangeMiddlewareValue,
+  'handleFieldChange' | 'handleFieldBlur'
+>;
 
 export const createPollComposerStateMiddleware = ({
   processors: customProcessors,
@@ -219,65 +218,67 @@ export const createPollComposerStateMiddleware = ({
 
   return {
     id: 'stream-io/poll-composer-state-processing',
-    handleFieldChange: ({
-      state,
-      next,
-      forward,
-    }: MiddlewareHandlerParams<PollComposerStateChangeMiddlewareValue>) => {
-      if (!state.targetFields) return forward();
-      const { previousState } = state;
-      const finalValidators = {
-        ...pollStateChangeValidators,
-        ...defaultPollFieldChangeEventValidators,
-        ...customValidators?.handleFieldChange,
-      };
-      const finalProcessors = {
-        ...pollCompositionStateProcessors,
-        ...customProcessors?.handleFieldChange,
-      };
-
-      const { newData, newErrors } = universalHandler(
+    handlers: {
+      handleFieldChange: ({
         state,
-        finalValidators,
-        finalProcessors,
-      );
+        next,
+        forward,
+      }: MiddlewareHandlerParams<PollComposerStateChangeMiddlewareValue>) => {
+        if (!state.targetFields) return forward();
+        const { previousState } = state;
+        const finalValidators = {
+          ...pollStateChangeValidators,
+          ...defaultPollFieldChangeEventValidators,
+          ...customValidators?.handleFieldChange,
+        };
+        const finalProcessors = {
+          ...pollCompositionStateProcessors,
+          ...customProcessors?.handleFieldChange,
+        };
 
-      return next({
-        ...state,
-        nextState: {
-          ...previousState,
-          data: { ...previousState.data, ...newData },
-          errors: { ...previousState.errors, ...newErrors },
-        },
-      });
-    },
-    handleFieldBlur: ({
-      state,
-      next,
-      forward,
-    }: MiddlewareHandlerParams<PollComposerStateChangeMiddlewareValue>) => {
-      if (!state.targetFields) return forward();
+        const { newData, newErrors } = universalHandler(
+          state,
+          finalValidators,
+          finalProcessors,
+        );
 
-      const { previousState } = state;
-      const finalValidators = {
-        ...pollStateChangeValidators,
-        ...defaultPollFieldBlurEventValidators,
-        ...customValidators?.handleFieldBlur,
-      };
-      const { newData, newErrors } = universalHandler(
+        return next({
+          ...state,
+          nextState: {
+            ...previousState,
+            data: { ...previousState.data, ...newData },
+            errors: { ...previousState.errors, ...newErrors },
+          },
+        });
+      },
+      handleFieldBlur: ({
         state,
-        finalValidators,
-        customProcessors?.handleFieldBlur,
-      );
+        next,
+        forward,
+      }: MiddlewareHandlerParams<PollComposerStateChangeMiddlewareValue>) => {
+        if (!state.targetFields) return forward();
 
-      return next({
-        ...state,
-        nextState: {
-          ...previousState,
-          data: { ...previousState.data, ...newData },
-          errors: { ...previousState.errors, ...newErrors },
-        },
-      });
+        const { previousState } = state;
+        const finalValidators = {
+          ...pollStateChangeValidators,
+          ...defaultPollFieldBlurEventValidators,
+          ...customValidators?.handleFieldBlur,
+        };
+        const { newData, newErrors } = universalHandler(
+          state,
+          finalValidators,
+          customProcessors?.handleFieldBlur,
+        );
+
+        return next({
+          ...state,
+          nextState: {
+            ...previousState,
+            data: { ...previousState.data, ...newData },
+            errors: { ...previousState.errors, ...newErrors },
+          },
+        });
+      },
     },
   };
 };

@@ -3,14 +3,32 @@ import { createPollCompositionValidationMiddleware } from '../../../../../src/me
 import { MessageComposer } from '../../../../../src/messageComposer/messageComposer';
 import { PollComposer } from '../../../../../src/messageComposer/pollComposer';
 import { VotingVisibility } from '../../../../../src/types';
-import type { Middleware } from '../../../../../src/middleware';
+import type { Middleware, MiddlewareStatus } from '../../../../../src/middleware';
 import type { PollComposerCompositionMiddlewareValueState } from '../../../../../src/messageComposer/middleware/pollComposer/types';
 import type { MiddlewareHandler } from '../../../../../src/middleware';
+
+const setupHandlerParams = (
+  initialState: PollComposerCompositionMiddlewareValueState,
+) => {
+  return {
+    state: initialState,
+    next: async (state: PollComposerCompositionMiddlewareValueState) => ({ state }),
+    complete: async (state: PollComposerCompositionMiddlewareValueState) => ({
+      state,
+      status: 'complete' as MiddlewareStatus,
+    }),
+    discard: async () => ({ state: initialState, status: 'discard' as MiddlewareStatus }),
+    forward: async () => ({ state: initialState }),
+  };
+};
 
 describe('PollComposerCompositionMiddleware', () => {
   let messageComposer: MessageComposer;
   let pollComposer: PollComposer;
-  let validationMiddleware: Middleware<PollComposerCompositionMiddlewareValueState>;
+  let validationMiddleware: Middleware<
+    PollComposerCompositionMiddlewareValueState,
+    'compose'
+  >;
 
   beforeEach(() => {
     messageComposer = {
@@ -45,21 +63,16 @@ describe('PollComposerCompositionMiddleware', () => {
     // Mock the canCreatePoll getter
     vi.spyOn(pollComposer, 'canCreatePoll', 'get').mockReturnValue(true);
 
-    const result = await (
-      validationMiddleware.compose as MiddlewareHandler<PollComposerCompositionMiddlewareValueState>
-    )({
-      input: {
-        state: {
-          data: {
-            ...pollComposer.state.getLatestValue().data,
-            max_votes_allowed: undefined,
-            options: [{ text: 'Option 1' }],
-          },
-          errors: {},
+    const result = await validationMiddleware.handlers.compose(
+      setupHandlerParams({
+        data: {
+          ...pollComposer.state.getLatestValue().data,
+          max_votes_allowed: undefined,
+          options: [{ text: 'Option 1' }],
         },
-      },
-      nextHandler: vi.fn().mockImplementation((input) => Promise.resolve(input)),
-    });
+        errors: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
   });
@@ -85,21 +98,16 @@ describe('PollComposerCompositionMiddleware', () => {
     // Mock the canCreatePoll getter
     vi.spyOn(pollComposer, 'canCreatePoll', 'get').mockReturnValue(false);
 
-    const result = await (
-      validationMiddleware.compose as MiddlewareHandler<PollComposerCompositionMiddlewareValueState>
-    )({
-      input: {
-        state: {
-          data: {
-            ...pollComposer.state.getLatestValue().data,
-            max_votes_allowed: undefined,
-            options: [{ text: 'Option 1' }],
-          },
-          errors: {},
+    const result = await validationMiddleware.handlers.compose(
+      setupHandlerParams({
+        data: {
+          ...pollComposer.state.getLatestValue().data,
+          max_votes_allowed: undefined,
+          options: [{ text: 'Option 1' }],
         },
-      },
-      nextHandler: vi.fn().mockImplementation((input) => Promise.resolve(input)),
-    });
+        errors: {},
+      }),
+    );
 
     expect(result.status).toBe('discard');
   });

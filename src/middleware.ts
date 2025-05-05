@@ -35,29 +35,30 @@ export type MiddlewareHandler<TValue> = (
   params: MiddlewareHandlerParams<TValue>,
 ) => Promise<MiddlewareExecutionResult<TValue>>;
 
-export type MiddlewareHandlers<TValue> = {
-  [key: string]: MiddlewareHandler<TValue>;
+export type MiddlewareHandlers<TValue, THandlers extends string> = {
+  [K in THandlers]: MiddlewareHandler<TValue>;
 };
 
-export type Middleware<TValue> = MiddlewareHandlers<TValue> & {
+export type Middleware<TValue, THandlers extends string> = {
   id: string;
+  handlers: MiddlewareHandlers<TValue, THandlers>;
 };
 
-export class MiddlewareExecutor<TValue> {
+export class MiddlewareExecutor<TValue, THandlers extends string> {
   readonly id: string;
-  private middleware: Middleware<TValue>[] = [];
+  private middleware: Middleware<TValue, THandlers>[] = [];
 
   constructor() {
     this.id = generateUUIDv4();
   }
 
-  use(middleware: Middleware<TValue> | Middleware<TValue>[]) {
+  use(middleware: Middleware<TValue, THandlers> | Middleware<TValue, THandlers>[]) {
     this.middleware = this.middleware.concat(middleware);
     return this;
   }
 
   // todo: document how to re-arrange the order of middleware using replace
-  replace(middleware: Middleware<TValue>[]) {
+  replace(middleware: Middleware<TValue, THandlers>[]) {
     const newMiddleware = [...this.middleware];
     middleware.forEach((upserted) => {
       const existingIndex = this.middleware.findIndex(
@@ -78,7 +79,7 @@ export class MiddlewareExecutor<TValue> {
     position,
     unique,
   }: {
-    middleware: Middleware<TValue>[];
+    middleware: Middleware<TValue, THandlers>[];
     position: InsertPosition;
     unique?: boolean;
   }) {
@@ -100,7 +101,7 @@ export class MiddlewareExecutor<TValue> {
   setOrder(order: string[]) {
     this.middleware = order
       .map((id) => this.middleware.find((middleware) => middleware.id === id))
-      .filter(Boolean) as Middleware<TValue>[];
+      .filter(Boolean) as Middleware<TValue, THandlers>[];
   }
 
   protected async executeMiddlewareChain({
@@ -126,7 +127,7 @@ export class MiddlewareExecutor<TValue> {
       if (returnFromChain) return { state, status };
 
       const middleware = this.middleware[i];
-      const handler = middleware[eventName];
+      const handler = middleware.handlers[eventName as THandlers];
 
       if (!handler) {
         return execute(i + 1, state, status);

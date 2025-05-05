@@ -1,19 +1,44 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { createCompositionValidationMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/compositionValidation';
-import { MessageComposer } from '../../../../../src/messageComposer/messageComposer';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Channel } from '../../../../../src/channel';
 import { StreamChat } from '../../../../../src/client';
+import { MessageComposer } from '../../../../../src/messageComposer/messageComposer';
 import {
-  LocalImageAttachment,
+  createCompositionValidationMiddleware,
+  createDraftCompositionValidationMiddleware,
+} from '../../../../../src/messageComposer/middleware/messageComposer/compositionValidation';
+import {
   AttachmentLoadingState,
+  LocalImageAttachment,
 } from '../../../../../src/messageComposer/types';
-import {
-  LinkPreview,
-  LinkPreviewStatus,
-  LinkPreviewMap,
-} from '../../../../../src/messageComposer/linkPreviewsManager';
-import { MessageComposerMiddlewareValue } from '../../../../../src/messageComposer/middleware/messageComposer/types';
-import { createDraftCompositionValidationMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/compositionValidation';
+import { MiddlewareStatus } from '../../../../../src/middleware';
+import { MessageComposerMiddlewareState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
+import { MessageDraftComposerMiddlewareValueState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
+
+const setup = (initialState: MessageComposerMiddlewareState) => {
+  return {
+    state: initialState,
+    next: async (state: MessageComposerMiddlewareState) => ({ state }),
+    complete: async (state: MessageComposerMiddlewareState) => ({
+      state,
+      status: 'complete' as MiddlewareStatus,
+    }),
+    discard: async () => ({ state: initialState, status: 'discard' as MiddlewareStatus }),
+    forward: async () => ({ state: initialState }),
+  };
+};
+
+const setupDraft = (initialState: MessageDraftComposerMiddlewareValueState) => {
+  return {
+    state: initialState,
+    next: async (state: MessageDraftComposerMiddlewareValueState) => ({ state }),
+    complete: async (state: MessageDraftComposerMiddlewareValueState) => ({
+      state,
+      status: 'complete' as MiddlewareStatus,
+    }),
+    discard: async () => ({ state: initialState, status: 'discard' as MiddlewareStatus }),
+    forward: async () => ({ state: initialState }),
+  };
+};
 
 describe('MessageComposerValidationMiddleware', () => {
   let channel: Channel;
@@ -107,34 +132,31 @@ describe('MessageComposerValidationMiddleware', () => {
   });
 
   it('should validate empty message', async () => {
-    const result = await validationMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: '',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await validationMiddleware.handlers.compose(
+      setup({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBe('discard');
   });
@@ -142,35 +164,32 @@ describe('MessageComposerValidationMiddleware', () => {
   it('should validate message with text', async () => {
     vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue('Hello world');
 
-    const result = await validationMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            text: 'Hello world',
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: 'Hello world',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await validationMiddleware.handlers.compose(
+      setup({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          text: 'Hello world',
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: 'Hello world',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
   });
@@ -192,35 +211,32 @@ describe('MessageComposerValidationMiddleware', () => {
       'get',
     ).mockReturnValue([attachment]);
 
-    const result = await validationMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            attachments: [attachment],
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [attachment],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: '',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await validationMiddleware.handlers.compose(
+      setup({
+        message: {
+          id: 'test-id',
+          attachments: [attachment],
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [attachment],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
   });
@@ -231,9 +247,9 @@ describe('MessageComposerValidationMiddleware', () => {
       { id: 'user1', name: 'User One' },
     ]);
 
-    const result = await validationMiddleware.compose({
-      input: {
-        state: {
+    const result = await validationMiddleware.handlers.compose(
+      setup({
+        message: {
           message: {
             id: 'test-id',
             mentioned_users: ['user1'],
@@ -258,17 +274,16 @@ describe('MessageComposerValidationMiddleware', () => {
           },
           sendOptions: {},
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined;
   });
 
   it('should validate message with poll', async () => {
-    const result = await validationMiddleware.compose({
-      input: {
-        state: {
+    const result = await validationMiddleware.handlers.compose(
+      setup({
+        message: {
           message: {
             id: 'test-id',
             parent_id: undefined,
@@ -293,9 +308,8 @@ describe('MessageComposerValidationMiddleware', () => {
           },
           sendOptions: {},
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined;
   });
@@ -303,35 +317,32 @@ describe('MessageComposerValidationMiddleware', () => {
   it('should validate message with last origin change', async () => {
     vi.spyOn(messageComposer, 'lastChangeOriginIsLocal', 'get').mockReturnValue(false);
 
-    const result = await validationMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            text: 'Hello world',
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: 'Hello world',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await validationMiddleware.handlers.compose(
+      setup({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          text: 'Hello world',
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: 'Hello world',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBe('discard');
   });
@@ -429,84 +440,69 @@ describe('DraftCompositionValidationMiddleware', () => {
   });
 
   it('should discard empty draft', async () => {
-    const result = await validationMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            text: '',
-          },
+    const result = await validationMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          text: '',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBe('discard');
   });
 
   it('should validate draft with text', async () => {
-    const result = await validationMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            text: 'Hello world',
-          },
+    const result = await validationMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          text: 'Hello world',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
   });
 
   it('should validate draft with attachments', async () => {
-    const result = await validationMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            text: '',
-            attachments: [
-              {
-                type: 'image',
-                image_url: 'https://example.com/image.jpg',
-              },
-            ],
-          },
+    const result = await validationMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          text: '',
+          attachments: [
+            {
+              type: 'image',
+              image_url: 'https://example.com/image.jpg',
+            },
+          ],
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
   });
 
   it('should validate draft with poll', async () => {
-    const result = await validationMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            text: '',
-            poll_id: 'poll-123',
-          },
+    const result = await validationMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          text: '',
+          poll_id: 'poll-123',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
   });
 
   it('should validate draft with quoted message', async () => {
-    const result = await validationMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            text: '',
-            quoted_message_id: 'msg-123',
-          },
+    const result = await validationMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          text: '',
+          quoted_message_id: 'msg-123',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
   });
@@ -514,16 +510,13 @@ describe('DraftCompositionValidationMiddleware', () => {
   it('should discard draft when last change origin is not local', async () => {
     vi.spyOn(messageComposer, 'lastChangeOriginIsLocal', 'get').mockReturnValue(false);
 
-    const result = await validationMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            text: 'Hello world',
-          },
+    const result = await validationMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          text: 'Hello world',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBe('discard');
   });

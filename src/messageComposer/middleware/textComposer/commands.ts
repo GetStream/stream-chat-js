@@ -1,5 +1,5 @@
 import type { Channel } from '../../../channel';
-import type { MiddlewareHandler } from '../../../middleware';
+import type { Middleware } from '../../../middleware';
 import type { SearchSourceOptions } from '../../../search_controller';
 import { BaseSearchSource } from '../../../search_controller';
 import type { CommandResponse } from '../../../types';
@@ -92,13 +92,10 @@ export class CommandSearchSource extends BaseSearchSource<CommandSuggestion> {
 
 const DEFAULT_OPTIONS: TextComposerMiddlewareOptions = { minChars: 1, trigger: '/' };
 
-export type CommandsMiddleware = {
-  id: string;
-  onChange: MiddlewareHandler<TextComposerMiddlewareExecutorState<CommandSuggestion>>;
-  onSuggestionItemSelect: MiddlewareHandler<
-    TextComposerMiddlewareExecutorState<CommandSuggestion>
-  >;
-};
+export type CommandsMiddleware = Middleware<
+  TextComposerMiddlewareExecutorState<CommandSuggestion>,
+  'onChange' | 'onSuggestionItemSelect'
+>;
 
 export const createCommandsMiddleware = (
   channel: Channel,
@@ -116,61 +113,62 @@ export const createCommandsMiddleware = (
 
   return {
     id: 'stream-io/text-composer/commands-middleware',
-    onChange: ({ state, next, complete, forward }) => {
-      const { change } = state; // todo: change state.text for change.text
-      if (!change?.selection) return forward();
+    handlers: {
+      onChange: ({ state, next, complete, forward }) => {
+        if (!state.selection) return forward();
 
-      const triggerWithToken = getTriggerCharWithToken({
-        trigger: finalOptions.trigger,
-        text: state.text.slice(0, state.selection.end),
-        acceptTrailingSpaces: false,
-        isCommand: true,
-      });
+        const triggerWithToken = getTriggerCharWithToken({
+          trigger: finalOptions.trigger,
+          text: state.text.slice(0, state.selection.end),
+          acceptTrailingSpaces: false,
+          isCommand: true,
+        });
 
-      const newSearchTriggerred =
-        triggerWithToken && triggerWithToken.length === finalOptions.minChars;
+        const newSearchTriggerred =
+          triggerWithToken && triggerWithToken.length === finalOptions.minChars;
 
-      if (newSearchTriggerred) {
-        searchSource.resetStateAndActivate();
-      }
-
-      const triggerWasRemoved =
-        !triggerWithToken || triggerWithToken.length < finalOptions.minChars;
-
-      if (triggerWasRemoved) {
-        const hasStaleSuggestions = state.suggestions?.trigger === finalOptions.trigger;
-        const newState = { ...state };
-        if (hasStaleSuggestions) {
-          delete newState.suggestions;
+        if (newSearchTriggerred) {
+          searchSource.resetStateAndActivate();
         }
-        return next(newState);
-      }
 
-      return complete({
-        ...state,
-        suggestions: {
-          query: triggerWithToken.slice(1),
-          searchSource,
-          trigger: finalOptions.trigger,
-        },
-      });
-    },
-    onSuggestionItemSelect: ({ state, complete, forward }) => {
-      const { selectedSuggestion } = state.change;
-      if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
-        return forward();
+        const triggerWasRemoved =
+          !triggerWithToken || triggerWithToken.length < finalOptions.minChars;
 
-      searchSource.resetStateAndActivate();
-      return complete({
-        ...state,
-        ...insertItemWithTrigger({
-          insertText: `/${selectedSuggestion.name} `,
-          selection: state.selection,
-          text: state.text,
-          trigger: finalOptions.trigger,
-        }),
-        suggestions: undefined, // Clear suggestions after selection
-      });
+        if (triggerWasRemoved) {
+          const hasStaleSuggestions = state.suggestions?.trigger === finalOptions.trigger;
+          const newState = { ...state };
+          if (hasStaleSuggestions) {
+            delete newState.suggestions;
+          }
+          return next(newState);
+        }
+
+        return complete({
+          ...state,
+          suggestions: {
+            query: triggerWithToken.slice(1),
+            searchSource,
+            trigger: finalOptions.trigger,
+          },
+        });
+      },
+      onSuggestionItemSelect: ({ state, complete, forward }) => {
+        const { selectedSuggestion } = state.change ?? {};
+        if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
+          return forward();
+
+        searchSource.resetStateAndActivate();
+        return complete({
+          ...state,
+          ...insertItemWithTrigger({
+            insertText: `/${selectedSuggestion.name} `,
+            selection: state.selection,
+            text: state.text,
+            trigger: finalOptions.trigger,
+          }),
+          suggestions: undefined,
+        });
+      },
     },
   };
 };
