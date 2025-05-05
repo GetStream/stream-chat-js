@@ -515,6 +515,54 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     return [];
   };
 
+  public handleChannelTruncatedEvent = async ({
+    event,
+    flush = true,
+  }: {
+    event: Event;
+    flush?: boolean;
+  }) => {
+    const { channel } = event;
+    const ownUser = this.client.user;
+    if (channel && ownUser) {
+      const { cid, truncated_at } = channel;
+      // FIXME: This does not correctly update reads. Will fix later.
+      const truncateQueries = await this.deleteMessagesForChannel({
+        cid,
+        truncated_at,
+        flush,
+      });
+
+      const userId = ownUser.id;
+      const activeChannel = this.client.activeChannels[cid];
+      const ownReads = activeChannel.state.read[userId];
+
+      let unreadCount = 0;
+
+      if (truncated_at) {
+        const truncatedAt = new Date(truncated_at);
+        unreadCount = activeChannel.countUnread(truncatedAt);
+      }
+
+      const upsertReadQueries = await this.upsertReads({
+        cid,
+        flush,
+        reads: [
+          {
+            last_read: ownReads.last_read.toString() as string,
+            last_read_message_id: ownReads.last_read_message_id,
+            unread_messages: unreadCount,
+            user: ownUser,
+          },
+        ],
+      });
+
+      return [...truncateQueries, ...upsertReadQueries];
+    }
+
+    return [];
+  };
+
   public queueTask = async ({ task }: { task: PendingTask }) => {
     let response;
     try {
@@ -794,11 +842,7 @@ export class OfflineDBSyncManager {
     }
 
     if (type === 'channel.truncated' && channel) {
-      return await this.offlineDb.deleteMessagesForChannel({
-        cid: channel.cid,
-        truncated_at: channel.truncated_at,
-        flush,
-      });
+      return await this.offlineDb.handleChannelTruncatedEvent({ event, flush });
     }
 
     return [];

@@ -1821,11 +1821,14 @@ export class Channel {
             if (truncatedAt > +createdAt)
               channelState.removePinnedMessage({ id } as MessageResponse);
           });
+          channelState.unreadCount = this.countUnread(
+            new Date(event.channel.truncated_at),
+          );
         } else {
           channelState.clearMessages();
+          channelState.unreadCount = 0;
         }
 
-        channelState.unreadCount = 0;
         // system messages don't increment unread counts
         if (event.message) {
           channelState.addMessageSorted(event.message);
@@ -1834,13 +1837,8 @@ export class Channel {
           }
         }
 
-        if (event.channel) {
-          // FIXME: This does not correctly update reads. Will fix later.
-          this.getClient().offlineDb?.deleteMessagesForChannel({
-            cid: event.channel.cid,
-            truncated_at: event.channel.truncated_at,
-          });
-        }
+        this.getClient().offlineDb?.handleChannelTruncatedEvent({ event });
+
         break;
       case 'member.added':
       case 'member.updated': {
