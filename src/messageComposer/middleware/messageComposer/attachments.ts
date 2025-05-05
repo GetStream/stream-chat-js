@@ -3,7 +3,7 @@ import type { Attachment } from '../../../types';
 import type { MessageComposer } from '../../messageComposer';
 import type { LocalAttachment } from '../../types';
 import type {
-  MessageComposerMiddlewareValueState,
+  MessageComposerMiddlewareState,
   MessageCompositionMiddleware,
   MessageDraftComposerMiddlewareValueState,
   MessageDraftCompositionMiddleware,
@@ -25,7 +25,7 @@ export const createAttachmentsCompositionMiddleware = (
       next,
       discard,
       forward,
-    }: MiddlewareHandlerParams<MessageComposerMiddlewareValueState>) => {
+    }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
       const { attachmentManager } = composer;
       if (!attachmentManager) return forward();
 

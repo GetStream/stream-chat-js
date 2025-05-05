@@ -1,5 +1,5 @@
 import type {
-  MessageComposerMiddlewareValueState,
+  MessageComposerMiddlewareState,
   MessageCompositionMiddleware,
   MessageDraftComposerMiddlewareValueState,
   MessageDraftCompositionMiddleware,
@@ -16,7 +16,7 @@ export const createMessageComposerStateCompositionMiddleware = (
     compose: ({
       state,
       next,
-    }: MiddlewareHandlerParams<MessageComposerMiddlewareValueState>) => {
+    }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
       const payload: Pick<LocalMessage, 'poll_id' | 'quoted_message_id'> = {};
       if (composer.quotedMessage) {
         payload.quoted_message_id = composer.quotedMessage.id;

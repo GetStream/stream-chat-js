@@ -101,7 +101,7 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
     this.client = channel.getClient();
     this.channel = channel;
     this.config = { mentionAllAppUsers, textComposerText };
-    // todo: how to propagate useMentionsTransliteration to change dynamically the setting? const { default: transliterate } = await import('@stream-io/transliterate');
+
     if (transliterate) {
       this.transliterate = transliterate;
     }

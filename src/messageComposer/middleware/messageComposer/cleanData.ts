@@ -2,7 +2,7 @@ import type { MiddlewareHandlerParams } from '../../../middleware';
 import { formatMessage, toUpdatedMessagePayload } from '../../../utils';
 import type { MessageComposer } from '../../messageComposer';
 import type {
-  MessageComposerMiddlewareValueState,
+  MessageComposerMiddlewareState,
   MessageCompositionMiddleware,
 } from './types';
 
@@ -14,7 +14,7 @@ export const createCompositionDataCleanupMiddleware = (
     compose: ({
       state,
       next,
-    }: MiddlewareHandlerParams<MessageComposerMiddlewareValueState>) => {
+    }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
       const common = {
         type: composer.editedMessage?.type ?? 'regular',
       };

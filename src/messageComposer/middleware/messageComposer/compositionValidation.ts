@@ -1,6 +1,6 @@
 import { textIsEmpty } from '../../textComposer';
 import type {
-  MessageComposerMiddlewareValueState,
+  MessageComposerMiddlewareState,
   MessageCompositionMiddleware,
   MessageDraftComposerMiddlewareValueState,
   MessageDraftCompositionMiddleware,
@@ -17,7 +17,7 @@ export const createCompositionValidationMiddleware = (
       state,
       discard,
       forward,
-    }: MiddlewareHandlerParams<MessageComposerMiddlewareValueState>) => {
+    }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
       const { maxLengthOnSend } = composer.config.text ?? {};
       const inputText = state.message.text ?? '';
       const isEmptyMessage =

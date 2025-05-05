@@ -1,7 +1,7 @@
 import type { MiddlewareHandlerParams } from '../../../middleware';
 import type { MessageComposer } from '../../messageComposer';
 import type {
-  MessageComposerMiddlewareValueState,
+  MessageComposerMiddlewareState,
   MessageCompositionMiddleware,
   MessageDraftComposerMiddlewareValueState,
   MessageDraftCompositionMiddleware,
@@ -16,7 +16,7 @@ export const createCustomDataCompositionMiddleware = (
       state,
       next,
       forward,
-    }: MiddlewareHandlerParams<MessageComposerMiddlewareValueState>) => {
+    }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
       const data = composer.customDataManager.customMessageData;
       if (!data) return forward();
 

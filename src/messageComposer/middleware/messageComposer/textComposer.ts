@@ -1,5 +1,5 @@
 import type {
-  MessageComposerMiddlewareValueState,
+  MessageComposerMiddlewareState,
   MessageCompositionMiddleware,
   MessageDraftComposerMiddlewareValueState,
   MessageDraftCompositionMiddleware,
@@ -16,7 +16,7 @@ export const createTextComposerCompositionMiddleware = (
       state,
       next,
       forward,
-    }: MiddlewareHandlerParams<MessageComposerMiddlewareValueState>) => {
+    }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
       if (!composer.textComposer) return forward();
       const { mentionedUsers, text } = composer.textComposer;
       // Instead of checking if a user is still mentioned every time the text changes,

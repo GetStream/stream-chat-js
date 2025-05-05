@@ -22,7 +22,7 @@ import {
 import { createCompositionDataCleanupMiddleware } from './cleanData';
 import type {
   MessageComposerMiddlewareExecutorOptions,
-  MessageComposerMiddlewareValueState,
+  MessageComposerMiddlewareState,
   MessageDraftComposerMiddlewareExecutorOptions,
   MessageDraftComposerMiddlewareValueState,
 } from './types';
@@ -32,7 +32,7 @@ import {
 } from './customData';
 
 export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<
-  MessageComposerMiddlewareValueState,
+  MessageComposerMiddlewareState,
   'compose'
 > {
   constructor({ composer }: MessageComposerMiddlewareExecutorOptions) {

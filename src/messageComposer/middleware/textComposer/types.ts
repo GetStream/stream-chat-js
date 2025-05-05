@@ -17,18 +17,6 @@ export type UserSuggestion = BaseSuggestion & UserResponse & TokenizationPayload
 export type CustomValidSuggestion = BaseSuggestion & CustomTextComposerSuggestion;
 export type Suggestion = CommandSuggestion | UserSuggestion | CustomValidSuggestion;
 
-export type TextComposerMetadataByMiddlewareHandler<
-  TSuggestion extends Suggestion = Suggestion,
-> = {
-  onChange: {
-    selection: TextSelection;
-    text: string;
-  };
-  onSuggestionItemSelect: {
-    selectedSuggestion: TSuggestion;
-  };
-};
-
 export type TextComposerMiddlewareOptions = {
   minChars: number;
   trigger: string;

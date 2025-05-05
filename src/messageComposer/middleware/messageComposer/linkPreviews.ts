@@ -3,7 +3,7 @@ import type { MiddlewareHandlerParams } from '../../../middleware';
 import type { Attachment } from '../../../types';
 import type { MessageComposer } from '../../messageComposer';
 import type {
-  MessageComposerMiddlewareValueState,
+  MessageComposerMiddlewareState,
   MessageCompositionMiddleware,
   MessageDraftComposerMiddlewareValueState,
   MessageDraftCompositionMiddleware,
@@ -18,7 +18,7 @@ export const createLinkPreviewsCompositionMiddleware = (
       state,
       next,
       forward,
-    }: MiddlewareHandlerParams<MessageComposerMiddlewareValueState>) => {
+    }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
       const { linkPreviewsManager } = composer;
       if (!linkPreviewsManager) return forward();
 
