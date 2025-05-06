@@ -18,7 +18,7 @@ export interface ILinkPreviewsManager {
 }
 
 export enum LinkPreviewStatus {
-  /** Link preview has been dismissed using MessageInputContextValue.dismissLinkPreview **/
+  /** Link preview has been dismissed using **/
   DISMISSED = 'dismissed',
   /** Link preview could not be loaded, the enrichment request has failed. **/
   FAILED = 'failed',
@@ -165,6 +165,7 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
   }
 
   set enabled(enabled: LinkPreviewsManagerConfig['enabled']) {
+    if (enabled === this.enabled) return;
     this.composer.updateConfig({ linkPreviews: { enabled } });
   }
 

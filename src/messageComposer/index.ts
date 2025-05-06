@@ -9,3 +9,4 @@ export * from './middleware';
 export * from './pollComposer';
 export * from './textComposer';
 export * from './types';
+export type { CustomTextComposerSuggestion } from './types.custom';

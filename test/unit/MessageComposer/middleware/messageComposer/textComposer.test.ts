@@ -4,6 +4,37 @@ import { StreamChat } from '../../../../../src/client';
 import { MessageComposer } from '../../../../../src/messageComposer/messageComposer';
 import { createTextComposerCompositionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/textComposer';
 import { createDraftTextComposerCompositionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/textComposer';
+import {
+  MessageComposerMiddlewareState,
+  MessageDraftComposerMiddlewareValueState,
+  MiddlewareStatus,
+} from '../../../../../src';
+
+const setup = (initialState: MessageComposerMiddlewareState) => {
+  return {
+    state: initialState,
+    next: async (state: MessageComposerMiddlewareState) => ({ state }),
+    complete: async (state: MessageComposerMiddlewareState) => ({
+      state,
+      status: 'complete' as MiddlewareStatus,
+    }),
+    discard: async () => ({ state: initialState, status: 'discard' as MiddlewareStatus }),
+    forward: async () => ({ state: initialState }),
+  };
+};
+
+const setupDraft = (initialState: MessageDraftComposerMiddlewareValueState) => {
+  return {
+    state: initialState,
+    next: async (state: MessageDraftComposerMiddlewareValueState) => ({ state }),
+    complete: async (state: MessageDraftComposerMiddlewareValueState) => ({
+      state,
+      status: 'complete' as MiddlewareStatus,
+    }),
+    discard: async () => ({ state: initialState, status: 'discard' as MiddlewareStatus }),
+    forward: async () => ({ state: initialState }),
+  };
+};
 
 describe('TextComposerMiddleware', () => {
   let channel: Channel;
@@ -97,34 +128,31 @@ describe('TextComposerMiddleware', () => {
   });
 
   it('should handle empty message', async () => {
-    const result = await textComposerMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: '',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await textComposerMiddleware.handlers.compose(
+      setup({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
     expect(result.state.message.text).toBeUndefined;
@@ -133,35 +161,31 @@ describe('TextComposerMiddleware', () => {
 
   it('should handle message with text', async () => {
     vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue('Hello world');
-
-    const result = await textComposerMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: '',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await textComposerMiddleware.handlers.compose(
+      setup({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
     expect(result.state.message.text).toBe('Hello world');
@@ -177,35 +201,32 @@ describe('TextComposerMiddleware', () => {
       { id: 'user2', name: 'User 2' },
     ]);
 
-    const result = await textComposerMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-            mentioned_users: [] as string[],
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [] as Array<{ id: string; name: string }>,
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: '',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await textComposerMiddleware.handlers.compose(
+      setup({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
+          mentioned_users: [] as string[],
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [] as Array<{ id: string; name: string }>,
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
     expect(result.state.message.text).toBe('@user1 @user2');
@@ -224,35 +245,32 @@ describe('TextComposerMiddleware', () => {
       { id: 'user2', name: 'User 2' },
     ]);
 
-    const result = await textComposerMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-            mentioned_users: [] as string[],
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [] as Array<{ id: string; name: string }>,
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: '',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await textComposerMiddleware.handlers.compose(
+      setup({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
+          mentioned_users: [] as string[],
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [] as Array<{ id: string; name: string }>,
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
     expect(result.state.message.text).toBe('@user1');
@@ -266,34 +284,31 @@ describe('TextComposerMiddleware', () => {
   it('should handle message with commands', async () => {
     vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue('/giphy hello');
 
-    const result = await textComposerMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: '',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await textComposerMiddleware.handlers.compose(
+      setup({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
     expect(result.state.message.text).toBe('/giphy hello');
@@ -303,34 +318,31 @@ describe('TextComposerMiddleware', () => {
   it('should handle message with emoji', async () => {
     vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue('Hello 👋');
 
-    const result = await textComposerMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: '',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await textComposerMiddleware.handlers.compose(
+      setup({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
     expect(result.state.message.text).toBe('Hello 👋');
@@ -433,18 +445,15 @@ describe('DraftTextComposerMiddleware', () => {
   });
 
   it('should handle empty draft', async () => {
-    const result = await draftTextComposerMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            id: 'test-id',
-            parent_id: undefined,
-            text: '',
-          },
+    const result = await draftTextComposerMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          id: 'test-id',
+          parent_id: undefined,
+          text: '',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.text).toBe('');
@@ -454,18 +463,15 @@ describe('DraftTextComposerMiddleware', () => {
   it('should handle draft with text', async () => {
     vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue('Hello world');
 
-    const result = await draftTextComposerMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            id: 'test-id',
-            parent_id: undefined,
-            text: '',
-          },
+    const result = await draftTextComposerMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          id: 'test-id',
+          parent_id: undefined,
+          text: '',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.text).toBe('Hello world');
@@ -481,18 +487,15 @@ describe('DraftTextComposerMiddleware', () => {
       { id: 'user2', name: 'User 2' },
     ]);
 
-    const result = await draftTextComposerMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            id: 'test-id',
-            parent_id: undefined,
-            text: '',
-          },
+    const result = await draftTextComposerMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          id: 'test-id',
+          parent_id: undefined,
+          text: '',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.text).toBe('@user1 @user2');
@@ -506,18 +509,15 @@ describe('DraftTextComposerMiddleware', () => {
       { id: 'user2', name: 'User 2' },
     ]);
 
-    const result = await draftTextComposerMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            id: 'test-id',
-            parent_id: undefined,
-            text: '',
-          },
+    const result = await draftTextComposerMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          id: 'test-id',
+          parent_id: undefined,
+          text: '',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.text).toBe('@user1');
@@ -528,18 +528,15 @@ describe('DraftTextComposerMiddleware', () => {
     vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue('Hello world');
     vi.spyOn(messageComposer.textComposer, 'mentionedUsers', 'get').mockReturnValue([]);
 
-    const result = await draftTextComposerMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            id: 'test-id',
-            parent_id: undefined,
-            text: '',
-          },
+    const result = await draftTextComposerMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          id: 'test-id',
+          parent_id: undefined,
+          text: '',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.text).toBe('Hello world');
@@ -552,24 +549,21 @@ describe('DraftTextComposerMiddleware', () => {
       { id: 'user1', name: 'User 1' },
     ]);
 
-    const result = await draftTextComposerMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            id: 'test-id',
-            parent_id: undefined,
-            text: '',
-            attachments: [
-              {
-                type: 'image',
-                image_url: 'https://example.com/image.jpg',
-              },
-            ],
-          },
+    const result = await draftTextComposerMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          id: 'test-id',
+          parent_id: undefined,
+          text: '',
+          attachments: [
+            {
+              type: 'image',
+              image_url: 'https://example.com/image.jpg',
+            },
+          ],
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.text).toBe('Hello world');
@@ -581,18 +575,15 @@ describe('DraftTextComposerMiddleware', () => {
   it('should handle when textComposer is not available', async () => {
     messageComposer.textComposer = undefined as any;
 
-    const result = await draftTextComposerMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            id: 'test-id',
-            parent_id: undefined,
-            text: '',
-          },
+    const result = await draftTextComposerMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          id: 'test-id',
+          parent_id: undefined,
+          text: '',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.text).toBe('');

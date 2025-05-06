@@ -8,6 +8,35 @@ import {
   LocalImageAttachment,
 } from '../../../../../src/messageComposer/types';
 import { createDraftAttachmentsCompositionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/attachments';
+import { MessageDraftComposerMiddlewareValueState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
+import { MessageComposerMiddlewareState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
+import { MiddlewareStatus } from '../../../../../src/middleware';
+
+const setup = (initialState: MessageComposerMiddlewareState) => {
+  return {
+    state: initialState,
+    next: async (state: MessageComposerMiddlewareState) => ({ state }),
+    complete: async (state: MessageComposerMiddlewareState) => ({
+      state,
+      status: 'complete' as MiddlewareStatus,
+    }),
+    discard: async () => ({ state: initialState, status: 'discard' as MiddlewareStatus }),
+    forward: async () => ({ state: initialState }),
+  };
+};
+
+const setupDraft = (initialState: MessageDraftComposerMiddlewareValueState) => {
+  return {
+    state: initialState,
+    next: async (state: MessageDraftComposerMiddlewareValueState) => ({ state }),
+    complete: async (state: MessageDraftComposerMiddlewareValueState) => ({
+      state,
+      status: 'complete' as MiddlewareStatus,
+    }),
+    discard: async () => ({ state: initialState, status: 'discard' as MiddlewareStatus }),
+    forward: async () => ({ state: initialState }),
+  };
+};
 
 describe('AttachmentsMiddleware', () => {
   let channel: Channel;
@@ -104,34 +133,31 @@ describe('AttachmentsMiddleware', () => {
   });
 
   it('should handle message without attachments', async () => {
-    const result = await attachmentsMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: '',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await attachmentsMiddleware.handlers.compose(
+      setup({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
     expect(result.state.message.attachments ?? []).toHaveLength(0);
@@ -155,34 +181,31 @@ describe('AttachmentsMiddleware', () => {
       'get',
     ).mockReturnValue([attachment]);
 
-    const result = await attachmentsMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [attachment],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: '',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await attachmentsMiddleware.handlers.compose(
+      setup({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [attachment],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
     expect(result.state.message.attachments ?? []).toHaveLength(1);
@@ -219,34 +242,31 @@ describe('AttachmentsMiddleware', () => {
       'get',
     ).mockReturnValue(attachments);
 
-    const result = await attachmentsMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments,
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: '',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await attachmentsMiddleware.handlers.compose(
+      setup({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments,
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
     expect(result.state.message.attachments ?? []).toHaveLength(2);
@@ -277,34 +297,31 @@ describe('AttachmentsMiddleware', () => {
       'get',
     ).mockReturnValue([]);
 
-    const result = await attachmentsMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [attachment],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: '',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await attachmentsMiddleware.handlers.compose(
+      setup({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [attachment],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
     expect(result.state.message.attachments ?? []).toHaveLength(0);
@@ -328,34 +345,31 @@ describe('AttachmentsMiddleware', () => {
       'get',
     ).mockReturnValue([]);
 
-    const result = await attachmentsMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [attachment],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: '',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await attachmentsMiddleware.handlers.compose(
+      setup({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [attachment],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
     expect(result.state.message.attachments ?? []).toHaveLength(0);
@@ -406,16 +420,13 @@ describe('DraftAttachmentsMiddleware', () => {
   });
 
   it('should handle draft without attachments', async () => {
-    const result = await draftAttachmentsMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            text: '',
-          },
+    const result = await draftAttachmentsMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          text: '',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.attachments).toBeUndefined();
@@ -438,17 +449,14 @@ describe('DraftAttachmentsMiddleware', () => {
       'get',
     ).mockReturnValue([attachment]);
 
-    const result = await draftAttachmentsMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            text: '',
-            attachments: [],
-          },
+    const result = await draftAttachmentsMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          text: '',
+          attachments: [],
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.attachments).toHaveLength(1);
@@ -481,17 +489,14 @@ describe('DraftAttachmentsMiddleware', () => {
       'get',
     ).mockReturnValue([newAttachment]);
 
-    const result = await draftAttachmentsMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            text: '',
-            attachments: [existingAttachment],
-          },
+    const result = await draftAttachmentsMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          text: '',
+          attachments: [existingAttachment],
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.attachments).toHaveLength(2);
@@ -505,16 +510,13 @@ describe('DraftAttachmentsMiddleware', () => {
     draftAttachmentsMiddleware =
       createDraftAttachmentsCompositionMiddleware(messageComposer);
 
-    const result = await draftAttachmentsMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            text: '',
-          },
+    const result = await draftAttachmentsMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          text: '',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.attachments).toBeUndefined();

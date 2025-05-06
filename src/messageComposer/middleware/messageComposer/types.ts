@@ -1,4 +1,4 @@
-import type { MiddlewareValue } from '../../../middleware';
+import type { Middleware, MiddlewareExecutionResult } from '../../../middleware';
 import type {
   DraftMessagePayload,
   LocalMessage,
@@ -8,14 +8,14 @@ import type {
 } from '../../../types';
 import type { MessageComposer } from '../../messageComposer';
 
-export type MessageComposerMiddlewareValueState = {
+export type MessageComposerMiddlewareState = {
   message: Message | UpdatedMessage;
   localMessage: LocalMessage;
   sendOptions: SendMessageOptions;
 };
 
 export type MessageComposerMiddlewareValue =
-  MiddlewareValue<MessageComposerMiddlewareValueState>;
+  MiddlewareExecutionResult<MessageComposerMiddlewareState>;
 
 export type MessageComposerMiddlewareExecutorOptions = {
   composer: MessageComposer;
@@ -28,3 +28,13 @@ export type MessageDraftComposerMiddlewareValueState = {
 export type MessageDraftComposerMiddlewareExecutorOptions = {
   composer: MessageComposer;
 };
+
+export type MessageCompositionMiddleware = Middleware<
+  MessageComposerMiddlewareState,
+  'compose'
+>;
+
+export type MessageDraftCompositionMiddleware = Middleware<
+  MessageDraftComposerMiddlewareValueState,
+  'compose'
+>;

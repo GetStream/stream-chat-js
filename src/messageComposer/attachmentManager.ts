@@ -105,9 +105,14 @@ export class AttachmentManager {
     this.composer.updateConfig({ attachments: { fileUploadFilter } });
   }
 
+  get maxNumberOfFilesPerMessage() {
+    return this.config.maxNumberOfFilesPerMessage;
+  }
+
   set maxNumberOfFilesPerMessage(
     maxNumberOfFilesPerMessage: AttachmentManagerConfig['maxNumberOfFilesPerMessage'],
   ) {
+    if (maxNumberOfFilesPerMessage === this.maxNumberOfFilesPerMessage) return;
     this.composer.updateConfig({ attachments: { maxNumberOfFilesPerMessage } });
   }
 

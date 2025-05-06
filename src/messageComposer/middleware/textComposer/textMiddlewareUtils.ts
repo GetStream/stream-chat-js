@@ -1,4 +1,4 @@
-import type { TextSelection } from '../../types';
+import type { TextSelection } from './types';
 
 export const getTriggerCharWithToken = ({
   trigger,

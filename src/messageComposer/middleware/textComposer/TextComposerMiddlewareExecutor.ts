@@ -1,31 +1,61 @@
 import { createCommandsMiddleware } from './commands';
 import { createMentionsMiddleware } from './mentions';
 import { createTextComposerPreValidationMiddleware } from './validation';
+import type {
+  ExecuteParams,
+  MiddlewareExecutionResult,
+  MiddlewareHandler,
+} from '../../../middleware';
 import { MiddlewareExecutor } from '../../../middleware';
 import { withCancellation } from '../../../utils/concurrency';
 import type {
-  TextComposerMiddleware,
+  Suggestion,
   TextComposerMiddlewareExecutorOptions,
-  TextComposerMiddlewareValue,
+  TextComposerState,
 } from './types';
-import type { TextComposerState, TextComposerSuggestion } from '../../types';
 
-export class TextComposerMiddlewareExecutor extends MiddlewareExecutor<TextComposerState> {
+export type TextComposerMiddlewareExecutorState<T extends Suggestion = Suggestion> =
+  TextComposerState<T> & {
+    change?: {
+      selectedSuggestion?: T;
+    };
+  };
+
+export type TextComposerHandlerNames = 'onChange' | 'onSuggestionItemSelect';
+
+export type TextComposerMiddleware<T extends Suggestion = Suggestion> = {
+  id: string;
+  handlers: {
+    [K in TextComposerHandlerNames]: MiddlewareHandler<
+      TextComposerMiddlewareExecutorState<T>
+    >;
+  };
+};
+
+export class TextComposerMiddlewareExecutor<
+  T extends Suggestion = Suggestion,
+> extends MiddlewareExecutor<
+  TextComposerMiddlewareExecutorState<T>,
+  TextComposerHandlerNames
+> {
   constructor({ composer }: TextComposerMiddlewareExecutorOptions) {
     super();
     this.use([
-      createTextComposerPreValidationMiddleware(composer),
-      createMentionsMiddleware(composer.channel),
-      createCommandsMiddleware(composer.channel),
-    ] as TextComposerMiddleware[]);
+      createTextComposerPreValidationMiddleware(composer) as TextComposerMiddleware<T>,
+      createMentionsMiddleware(composer.channel) as TextComposerMiddleware<T>,
+      createCommandsMiddleware(composer.channel) as TextComposerMiddleware<T>,
+    ]);
   }
-  async execute(
-    eventName: string,
-    initialInput: TextComposerMiddlewareValue,
-    selectedSuggestion?: TextComposerSuggestion,
-  ): Promise<TextComposerMiddlewareValue> {
-    const result = await this.executeMiddlewareChain(eventName, initialInput, {
-      selectedSuggestion,
+
+  async execute({
+    eventName,
+    initialValue: initialState,
+  }: ExecuteParams<TextComposerMiddlewareExecutorState<T>>): Promise<
+    MiddlewareExecutionResult<TextComposerMiddlewareExecutorState<T>>
+  > {
+    const result = await this.executeMiddlewareChain({
+      eventName,
+      initialValue: initialState,
     });
 
     if (result && result.state.suggestions) {

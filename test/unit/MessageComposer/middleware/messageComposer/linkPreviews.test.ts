@@ -14,6 +14,9 @@ import {
   DraftResponse,
   LinkPreviewsManagerConfig,
   LocalMessage,
+  MessageComposerMiddlewareState,
+  MessageDraftComposerMiddlewareValueState,
+  MiddlewareStatus,
 } from '../../../../../src';
 
 const enrichURLReturnValue = {
@@ -28,6 +31,34 @@ const enrichURLReturnValue = {
   title_link: 'https://example.com',
   type: 'article',
   duration: '100',
+};
+
+const setupHandlerParams = (initialState: MessageComposerMiddlewareState) => {
+  return {
+    state: initialState,
+    next: async (state: MessageComposerMiddlewareState) => ({ state }),
+    complete: async (state: MessageComposerMiddlewareState) => ({
+      state,
+      status: 'complete' as MiddlewareStatus,
+    }),
+    discard: async () => ({ state: initialState, status: 'discard' as MiddlewareStatus }),
+    forward: async () => ({ state: initialState }),
+  };
+};
+
+const setupHandlerParamsDraft = (
+  initialState: MessageDraftComposerMiddlewareValueState,
+) => {
+  return {
+    state: initialState,
+    next: async (state: MessageDraftComposerMiddlewareValueState) => ({ state }),
+    complete: async (state: MessageDraftComposerMiddlewareValueState) => ({
+      state,
+      status: 'complete' as MiddlewareStatus,
+    }),
+    discard: async () => ({ state: initialState, status: 'discard' as MiddlewareStatus }),
+    forward: async () => ({ state: initialState }),
+  };
 };
 
 const setup = ({
@@ -62,34 +93,31 @@ const setup = ({
 describe('LinkPreviewsMiddleware', () => {
   it('should keep message attachments empty if not link previews are available', async () => {
     const { linkPreviewsMiddleware } = setup();
-    const result = await linkPreviewsMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: '',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await linkPreviewsMiddleware.handlers.compose(
+      setupHandlerParams({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
     expect(result.state.message.attachments ?? []).toHaveLength(0);
@@ -119,34 +147,31 @@ describe('LinkPreviewsMiddleware', () => {
       ]),
     });
 
-    const result = await linkPreviewsMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: 'https://example.com',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await linkPreviewsMiddleware.handlers.compose(
+      setupHandlerParams({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: 'https://example.com',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
     expect(result.state.message.attachments ?? []).toHaveLength(1);
@@ -179,34 +204,31 @@ describe('LinkPreviewsMiddleware', () => {
       ]),
     });
 
-    const result = await linkPreviewsMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: 'https://example.com',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await linkPreviewsMiddleware.handlers.compose(
+      setupHandlerParams({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: 'https://example.com',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
     expect(result.state.message.attachments ?? []).toHaveLength(0);
@@ -237,34 +259,31 @@ describe('LinkPreviewsMiddleware', () => {
     });
 
     // Set up the previews in the manager
-    const result = await linkPreviewsMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: 'https://example.com',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await linkPreviewsMiddleware.handlers.compose(
+      setupHandlerParams({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: 'https://example.com',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
     expect(result.state.message.attachments ?? []).toHaveLength(0);
@@ -294,34 +313,31 @@ describe('LinkPreviewsMiddleware', () => {
       ]),
     });
 
-    const result = await linkPreviewsMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: 'https://example.com',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await linkPreviewsMiddleware.handlers.compose(
+      setupHandlerParams({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: 'https://example.com',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
     expect(result.state.message.attachments ?? []).toHaveLength(0);
@@ -383,34 +399,31 @@ describe('LinkPreviewsMiddleware', () => {
       ]),
     });
 
-    const result = await linkPreviewsMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: 'https://example1.com https://example2.com https://example3.com',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await linkPreviewsMiddleware.handlers.compose(
+      setupHandlerParams({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: 'https://example1.com https://example2.com https://example3.com',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
     expect(result.state.message.attachments ?? []).toHaveLength(2);
@@ -459,34 +472,31 @@ describe('LinkPreviewsMiddleware', () => {
       ]),
     });
 
-    const result = await linkPreviewsMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: 'https://example1.com https://example2.com',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await linkPreviewsMiddleware.handlers.compose(
+      setupHandlerParams({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: 'https://example1.com https://example2.com',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
     expect(result.state.message.attachments ?? []).toHaveLength(0); // will be added server-side
@@ -517,45 +527,42 @@ describe('LinkPreviewsMiddleware', () => {
       ]),
     });
 
-    const result = await linkPreviewsMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            attachments: [
-              {
-                type: 'image',
-                image_url: 'https://example.com/image.jpg',
-              },
-            ],
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [
-              {
-                type: 'image',
-                image_url: 'https://example.com/image.jpg',
-              },
-            ],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: 'https://example.com',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await linkPreviewsMiddleware.handlers.compose(
+      setupHandlerParams({
+        message: {
+          attachments: [
+            {
+              type: 'image',
+              image_url: 'https://example.com/image.jpg',
+            },
+          ],
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [
+            {
+              type: 'image',
+              image_url: 'https://example.com/image.jpg',
+            },
+          ],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: 'https://example.com',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.status).toBeUndefined;
     expect(result.state.message.attachments ?? []).toHaveLength(2);
@@ -599,16 +606,13 @@ const setupForDraft = ({
 describe('DraftLinkPreviewsMiddleware', () => {
   it('should handle draft without link previews', async () => {
     const { linkPreviewsMiddleware } = setupForDraft();
-    const result = await linkPreviewsMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            text: '',
-          },
+    const result = await linkPreviewsMiddleware.handlers.compose(
+      setupHandlerParamsDraft({
+        draft: {
+          text: '',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.attachments).toBeUndefined();
@@ -636,16 +640,13 @@ describe('DraftLinkPreviewsMiddleware', () => {
       'get',
     ).mockReturnValue([linkPreview]);
 
-    const result = await linkPreviewsMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            text: '',
-          },
+    const result = await linkPreviewsMiddleware.handlers.compose(
+      setupHandlerParamsDraft({
+        draft: {
+          text: '',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.attachments).toHaveLength(1);
@@ -681,17 +682,14 @@ describe('DraftLinkPreviewsMiddleware', () => {
       'get',
     ).mockReturnValue([linkPreview]);
 
-    const result = await linkPreviewsMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            text: '',
-            attachments: [existingAttachment],
-          },
+    const result = await linkPreviewsMiddleware.handlers.compose(
+      setupHandlerParamsDraft({
+        draft: {
+          text: '',
+          attachments: [existingAttachment],
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.attachments).toHaveLength(2);
@@ -706,16 +704,13 @@ describe('DraftLinkPreviewsMiddleware', () => {
     const linkPreviewsMiddlewareWithUndefinedManager =
       createDraftLinkPreviewsCompositionMiddleware(messageComposer);
 
-    const result = await linkPreviewsMiddlewareWithUndefinedManager.compose({
-      input: {
-        state: {
-          draft: {
-            text: '',
-          },
+    const result = await linkPreviewsMiddlewareWithUndefinedManager.handlers.compose(
+      setupHandlerParamsDraft({
+        draft: {
+          text: '',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.attachments).toBeUndefined();
@@ -726,16 +721,13 @@ describe('DraftLinkPreviewsMiddleware', () => {
     const cancelURLEnrichment = vi.fn();
     messageComposer.linkPreviewsManager.cancelURLEnrichment = cancelURLEnrichment;
 
-    await linkPreviewsMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            text: '',
-          },
+    await linkPreviewsMiddleware.handlers.compose(
+      setupHandlerParamsDraft({
+        draft: {
+          text: '',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(cancelURLEnrichment).toHaveBeenCalled();
   });

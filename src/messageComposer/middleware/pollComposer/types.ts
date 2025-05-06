@@ -1,4 +1,4 @@
-import type { MiddlewareValue } from '../../../middleware';
+import type { MiddlewareExecutionResult } from '../../../middleware';
 import type { CreatePollData, VotingVisibility } from '../../../types';
 
 export type PollComposerOption = {
@@ -6,12 +6,14 @@ export type PollComposerOption = {
   text: string;
 };
 
+export type TargetedPollOptionTextUpdate = {
+  index: number;
+  text: string;
+};
+
 export type PollComposerOptionUpdate =
   | PollComposerOption[]
-  | {
-      index: number;
-      text: string;
-    };
+  | TargetedPollOptionTextUpdate;
 
 export type UpdateFieldsData = Partial<Omit<PollComposerState['data'], 'options'>> & {
   options?: PollComposerOptionUpdate;
@@ -48,9 +50,9 @@ export type PollComposerCompositionMiddlewareValueState = {
 };
 
 export type PollComposerCompositionMiddlewareValue =
-  MiddlewareValue<PollComposerCompositionMiddlewareValueState>;
+  MiddlewareExecutionResult<PollComposerCompositionMiddlewareValueState>;
 
-export type PollComposerStateMiddlewareValueState = {
+export type PollComposerStateChangeMiddlewareValue = {
   nextState: PollComposerState;
   previousState: PollComposerState;
   targetFields: Partial<{
@@ -61,4 +63,4 @@ export type PollComposerStateMiddlewareValueState = {
 };
 
 export type PollComposerStateMiddlewareValue =
-  MiddlewareValue<PollComposerStateMiddlewareValueState>;
+  MiddlewareExecutionResult<PollComposerStateChangeMiddlewareValue>;

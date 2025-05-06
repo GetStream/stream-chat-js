@@ -3,8 +3,10 @@ import type { Attachment } from '../../../types';
 import type { MessageComposer } from '../../messageComposer';
 import type { LocalAttachment } from '../../types';
 import type {
-  MessageComposerMiddlewareValueState,
+  MessageComposerMiddlewareState,
+  MessageCompositionMiddleware,
   MessageDraftComposerMiddlewareValueState,
+  MessageDraftCompositionMiddleware,
 } from './types';
 
 const localAttachmentToAttachment = (localAttachment: LocalAttachment) => {
@@ -13,77 +15,80 @@ const localAttachmentToAttachment = (localAttachment: LocalAttachment) => {
   return attachment as Attachment;
 };
 
-export const createAttachmentsCompositionMiddleware = (composer: MessageComposer) => ({
+export const createAttachmentsCompositionMiddleware = (
+  composer: MessageComposer,
+): MessageCompositionMiddleware => ({
   id: 'stream-io/message-composer-middleware/attachments',
-  compose: ({
-    input,
-    nextHandler,
-  }: MiddlewareHandlerParams<MessageComposerMiddlewareValueState>) => {
-    const { attachmentManager } = composer;
-    if (!attachmentManager) return nextHandler(input);
+  handlers: {
+    compose: ({
+      state,
+      next,
+      discard,
+      forward,
+    }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
+      const { attachmentManager } = composer;
+      if (!attachmentManager) return forward();
 
-    if (attachmentManager.uploadsInProgressCount > 0) {
-      composer.client.notifications.addWarning({
-        message: 'Wait until all attachments have uploaded',
-        origin: {
-          emitter: 'MessageComposer',
-          context: { composer },
-        },
-      });
-      return nextHandler({ ...input, status: 'discard' });
-    }
+      if (attachmentManager.uploadsInProgressCount > 0) {
+        composer.client.notifications.addWarning({
+          message: 'Wait until all attachments have uploaded',
+          origin: {
+            emitter: 'MessageComposer',
+            context: { composer },
+          },
+        });
+        return discard();
+      }
 
-    const attachments = (input.state.message.attachments ?? []).concat(
-      attachmentManager.successfulUploads.map(localAttachmentToAttachment),
-    );
+      const attachments = (state.message.attachments ?? []).concat(
+        attachmentManager.successfulUploads.map(localAttachmentToAttachment),
+      );
 
-    // prevent introducing attachments array into the payload sent to the server
-    if (!attachments.length) return nextHandler(input);
+      // prevent introducing attachments array into the payload sent to the server
+      if (!attachments.length) return forward();
 
-    return nextHandler({
-      ...input,
-      state: {
-        ...input.state,
+      return next({
+        ...state,
         localMessage: {
-          ...input.state.localMessage,
+          ...state.localMessage,
           attachments,
         },
         message: {
-          ...input.state.message,
+          ...state.message,
           attachments,
         },
-      },
-    });
+      });
+    },
   },
 });
 
 export const createDraftAttachmentsCompositionMiddleware = (
   composer: MessageComposer,
-) => ({
+): MessageDraftCompositionMiddleware => ({
   id: 'stream-io/message-composer-middleware/draft-attachments',
-  compose: ({
-    input,
-    nextHandler,
-  }: MiddlewareHandlerParams<MessageDraftComposerMiddlewareValueState>) => {
-    const { attachmentManager } = composer;
-    if (!attachmentManager) return nextHandler(input);
+  handlers: {
+    compose: ({
+      state,
+      next,
+      forward,
+    }: MiddlewareHandlerParams<MessageDraftComposerMiddlewareValueState>) => {
+      const { attachmentManager } = composer;
+      if (!attachmentManager) return forward();
 
-    const successfulUploads = attachmentManager.successfulUploads;
-    const attachments = successfulUploads.length
-      ? (input.state.draft.attachments ?? []).concat(
-          successfulUploads.map(localAttachmentToAttachment),
-        )
-      : undefined;
+      const successfulUploads = attachmentManager.successfulUploads;
+      const attachments = successfulUploads.length
+        ? (state.draft.attachments ?? []).concat(
+            successfulUploads.map(localAttachmentToAttachment),
+          )
+        : undefined;
 
-    return nextHandler({
-      ...input,
-      state: {
-        ...input.state,
+      return next({
+        ...state,
         draft: {
-          ...input.state.draft,
+          ...state.draft,
           attachments,
         },
-      },
-    });
+      });
+    },
   },
 });

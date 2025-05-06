@@ -22,7 +22,7 @@ import {
 import { createCompositionDataCleanupMiddleware } from './cleanData';
 import type {
   MessageComposerMiddlewareExecutorOptions,
-  MessageComposerMiddlewareValueState,
+  MessageComposerMiddlewareState,
   MessageDraftComposerMiddlewareExecutorOptions,
   MessageDraftComposerMiddlewareValueState,
 } from './types';
@@ -31,7 +31,10 @@ import {
   createDraftCustomDataCompositionMiddleware,
 } from './customData';
 
-export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<MessageComposerMiddlewareValueState> {
+export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<
+  MessageComposerMiddlewareState,
+  'compose'
+> {
   constructor({ composer }: MessageComposerMiddlewareExecutorOptions) {
     super();
     // todo: document how to add custom data to a composed message using middleware
@@ -48,7 +51,10 @@ export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<Messag
   }
 }
 
-export class MessageDraftComposerMiddlewareExecutor extends MiddlewareExecutor<MessageDraftComposerMiddlewareValueState> {
+export class MessageDraftComposerMiddlewareExecutor extends MiddlewareExecutor<
+  MessageDraftComposerMiddlewareValueState,
+  'compose'
+> {
   constructor({ composer }: MessageDraftComposerMiddlewareExecutorOptions) {
     super();
     // todo: document how to add custom data to a composed message using middleware

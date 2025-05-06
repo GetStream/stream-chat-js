@@ -269,7 +269,10 @@ describe('PollComposer', () => {
 
       await pollComposer.updateFields(updateData);
 
-      expect(spy).toHaveBeenCalledWith('handleFieldChange', expect.any(Object));
+      expect(spy).toHaveBeenCalledWith({
+        eventName: 'handleFieldChange',
+        initialValue: expect.any(Object),
+      });
     });
 
     it('should not update state if middleware returns discard status', async () => {
@@ -298,7 +301,10 @@ describe('PollComposer', () => {
 
       await pollComposer.handleFieldBlur('name');
 
-      expect(spy).toHaveBeenCalledWith('handleFieldBlur', expect.any(Object));
+      expect(spy).toHaveBeenCalledWith({
+        eventName: 'handleFieldBlur',
+        initialValue: expect.any(Object),
+      });
     });
 
     it('should not update state if middleware returns discard status', async () => {
@@ -326,7 +332,10 @@ describe('PollComposer', () => {
 
       const result = await pollComposer.compose();
 
-      expect(spy).toHaveBeenCalledWith('compose', expect.any(Object));
+      expect(spy).toHaveBeenCalledWith({
+        eventName: 'compose',
+        initialValue: expect.any(Object),
+      });
       expect(result).toBeDefined();
       if (result) {
         expect(result.data.name).toBe('Test Poll');

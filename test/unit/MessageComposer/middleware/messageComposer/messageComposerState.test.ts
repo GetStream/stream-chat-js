@@ -5,6 +5,37 @@ import { Channel } from '../../../../../src/channel';
 import { StreamChat } from '../../../../../src/client';
 import { LocalMessage } from '../../../../../src/types';
 import { createDraftMessageComposerStateCompositionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/messageComposerState';
+import { MessageComposerMiddlewareState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
+import { MiddlewareStatus } from '../../../../../src/middleware';
+import { MessageDraftComposerMiddlewareValueState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
+
+const setupHandlerParams = (initialState: MessageComposerMiddlewareState) => {
+  return {
+    state: initialState,
+    next: async (state: MessageComposerMiddlewareState) => ({ state }),
+    complete: async (state: MessageComposerMiddlewareState) => ({
+      state,
+      status: 'complete' as MiddlewareStatus,
+    }),
+    discard: async () => ({ state: initialState, status: 'discard' as MiddlewareStatus }),
+    forward: async () => ({ state: initialState }),
+  };
+};
+
+const setupHandlerParamsDraft = (
+  initialState: MessageDraftComposerMiddlewareValueState,
+) => {
+  return {
+    state: initialState,
+    next: async (state: MessageDraftComposerMiddlewareValueState) => ({ state }),
+    complete: async (state: MessageDraftComposerMiddlewareValueState) => ({
+      state,
+      status: 'complete' as MiddlewareStatus,
+    }),
+    discard: async () => ({ state: initialState, status: 'discard' as MiddlewareStatus }),
+    forward: async () => ({ state: initialState }),
+  };
+};
 
 describe('MessageComposerStateMiddleware', () => {
   let channel: Channel;
@@ -38,34 +69,31 @@ describe('MessageComposerStateMiddleware', () => {
     vi.spyOn(messageComposer, 'quotedMessage', 'get').mockReturnValue(null);
     vi.spyOn(messageComposer, 'pollId', 'get').mockReturnValue(null);
 
-    const result = await messageComposerStateMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: '',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await messageComposerStateMiddleware.handlers.compose(
+      setupHandlerParams({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.state.message.quoted_message_id).toBeUndefined();
     expect(result.state.message.poll_id).toBeUndefined();
@@ -96,34 +124,31 @@ describe('MessageComposerStateMiddleware', () => {
     vi.spyOn(messageComposer, 'quotedMessage', 'get').mockReturnValue(quotedMessage);
     vi.spyOn(messageComposer, 'pollId', 'get').mockReturnValue(null);
 
-    const result = await messageComposerStateMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: '',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await messageComposerStateMiddleware.handlers.compose(
+      setupHandlerParams({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.state.message.quoted_message_id).toBe('quoted-message-id');
     expect(result.state.localMessage.quoted_message_id).toBe('quoted-message-id');
@@ -135,34 +160,31 @@ describe('MessageComposerStateMiddleware', () => {
     vi.spyOn(messageComposer, 'quotedMessage', 'get').mockReturnValue(null);
     vi.spyOn(messageComposer, 'pollId', 'get').mockReturnValue('poll-id-123');
 
-    const result = await messageComposerStateMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: '',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await messageComposerStateMiddleware.handlers.compose(
+      setupHandlerParams({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.state.message.poll_id).toBe('poll-id-123');
     expect(result.state.localMessage.poll_id).toBe('poll-id-123');
@@ -190,34 +212,31 @@ describe('MessageComposerStateMiddleware', () => {
     vi.spyOn(messageComposer, 'quotedMessage', 'get').mockReturnValue(quotedMessage);
     vi.spyOn(messageComposer, 'pollId', 'get').mockReturnValue('poll-id-123');
 
-    const result = await messageComposerStateMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: '',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await messageComposerStateMiddleware.handlers.compose(
+      setupHandlerParams({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     expect(result.state.message.quoted_message_id).toBe('quoted-message-id');
     expect(result.state.message.poll_id).toBe('poll-id-123');
@@ -248,35 +267,32 @@ describe('MessageComposerStateMiddleware', () => {
     vi.spyOn(messageComposer, 'quotedMessage', 'get').mockReturnValue(quotedMessage);
     vi.spyOn(messageComposer, 'pollId', 'get').mockReturnValue('poll-id-123');
 
-    const result = await messageComposerStateMiddleware.compose({
-      input: {
-        state: {
-          message: {
-            id: 'test-id',
-            parent_id: undefined,
-            type: 'regular',
-            text: 'Original message text',
-          },
-          localMessage: {
-            attachments: [],
-            created_at: new Date(),
-            deleted_at: null,
-            error: undefined,
-            id: 'test-id',
-            mentioned_users: [],
-            parent_id: undefined,
-            pinned_at: null,
-            reaction_groups: null,
-            status: 'sending',
-            text: 'Original local message text',
-            type: 'regular',
-            updated_at: new Date(),
-          },
-          sendOptions: {},
+    const result = await messageComposerStateMiddleware.handlers.compose(
+      setupHandlerParams({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
+          text: 'Original message text',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: 'Original local message text',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
 
     // Verify that the original properties are preserved
     expect(result.state.message.text).toBe('Original message text');
@@ -326,16 +342,13 @@ describe('DraftMessageComposerStateMiddleware', () => {
   });
 
   it('should handle draft without quoted message or poll', async () => {
-    const result = await messageComposerStateMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            text: '',
-          },
+    const result = await messageComposerStateMiddleware.handlers.compose(
+      setupHandlerParamsDraft({
+        draft: {
+          text: '',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.quoted_message_id).toBeUndefined();
@@ -355,16 +368,13 @@ describe('DraftMessageComposerStateMiddleware', () => {
 
     vi.spyOn(messageComposer, 'quotedMessage', 'get').mockReturnValue(quotedMessage);
 
-    const result = await messageComposerStateMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            text: '',
-          },
+    const result = await messageComposerStateMiddleware.handlers.compose(
+      setupHandlerParamsDraft({
+        draft: {
+          text: '',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.quoted_message_id).toBe('quoted-message-id');
@@ -374,16 +384,13 @@ describe('DraftMessageComposerStateMiddleware', () => {
   it('should handle draft with poll', async () => {
     vi.spyOn(messageComposer, 'pollId', 'get').mockReturnValue('poll-id-123');
 
-    const result = await messageComposerStateMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            text: '',
-          },
+    const result = await messageComposerStateMiddleware.handlers.compose(
+      setupHandlerParamsDraft({
+        draft: {
+          text: '',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.quoted_message_id).toBeUndefined();
@@ -404,16 +411,13 @@ describe('DraftMessageComposerStateMiddleware', () => {
     vi.spyOn(messageComposer, 'quotedMessage', 'get').mockReturnValue(quotedMessage);
     vi.spyOn(messageComposer, 'pollId', 'get').mockReturnValue('poll-id-123');
 
-    const result = await messageComposerStateMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            text: '',
-          },
+    const result = await messageComposerStateMiddleware.handlers.compose(
+      setupHandlerParamsDraft({
+        draft: {
+          text: '',
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.quoted_message_id).toBe('quoted-message-id');
@@ -434,22 +438,19 @@ describe('DraftMessageComposerStateMiddleware', () => {
     vi.spyOn(messageComposer, 'quotedMessage', 'get').mockReturnValue(quotedMessage);
     vi.spyOn(messageComposer, 'pollId', 'get').mockReturnValue('poll-id-123');
 
-    const result = await messageComposerStateMiddleware.compose({
-      input: {
-        state: {
-          draft: {
-            text: 'Original draft text',
-            attachments: [
-              {
-                type: 'image',
-                image_url: 'https://example.com/image.jpg',
-              },
-            ],
-          },
+    const result = await messageComposerStateMiddleware.handlers.compose(
+      setupHandlerParamsDraft({
+        draft: {
+          text: 'Original draft text',
+          attachments: [
+            {
+              type: 'image',
+              image_url: 'https://example.com/image.jpg',
+            },
+          ],
         },
-      },
-      nextHandler: async (input) => input,
-    });
+      }),
+    );
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.text).toBe('Original draft text');
