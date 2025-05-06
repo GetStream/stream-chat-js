@@ -1,16 +1,12 @@
-import { getTriggerCharWithToken, insertItemWithTrigger } from './textMiddlewareUtils';
-import { BaseSearchSource } from '../../../search_controller';
-import { mergeWith } from '../../../utils/mergeWith';
-import type {
-  TextComposerMiddlewareOptions,
-  TextComposerMiddlewareParams,
-} from './types';
-import type { SearchSourceOptions } from '../../../search_controller';
-import type { CommandResponse } from '../../../types';
 import type { Channel } from '../../../channel';
-import type { TextComposerSuggestion } from '../../types';
-
-export type CommandSuggestion = TextComposerSuggestion<CommandResponse>;
+import type { Middleware } from '../../../middleware';
+import type { SearchSourceOptions } from '../../../search_controller';
+import { BaseSearchSource } from '../../../search_controller';
+import type { CommandResponse } from '../../../types';
+import { mergeWith } from '../../../utils/mergeWith';
+import type { CommandSuggestion, TextComposerMiddlewareOptions } from './types';
+import { getTriggerCharWithToken, insertItemWithTrigger } from './textMiddlewareUtils';
+import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
 
 export class CommandSearchSource extends BaseSearchSource<CommandSuggestion> {
   readonly type = 'commands';
@@ -96,12 +92,17 @@ export class CommandSearchSource extends BaseSearchSource<CommandSuggestion> {
 
 const DEFAULT_OPTIONS: TextComposerMiddlewareOptions = { minChars: 1, trigger: '/' };
 
+export type CommandsMiddleware = Middleware<
+  TextComposerMiddlewareExecutorState<CommandSuggestion>,
+  'onChange' | 'onSuggestionItemSelect'
+>;
+
 export const createCommandsMiddleware = (
   channel: Channel,
   options?: Partial<TextComposerMiddlewareOptions> & {
     searchSource?: CommandSearchSource;
   },
-) => {
+): CommandsMiddleware => {
   const finalOptions = mergeWith(DEFAULT_OPTIONS, options ?? {});
   let searchSource = new CommandSearchSource(channel);
   if (options?.searchSource) {
@@ -112,68 +113,52 @@ export const createCommandsMiddleware = (
 
   return {
     id: 'stream-io/text-composer/commands-middleware',
-    onChange: ({
-      input,
-      nextHandler,
-    }: TextComposerMiddlewareParams<CommandSuggestion>) => {
-      const { state } = input;
-      if (!state.selection) return nextHandler(input);
+    handlers: {
+      onChange: ({ state, next, complete, forward }) => {
+        if (!state.selection) return forward();
 
-      // const firstCharIsNotCommandTrigger =
-      //   state.text.length === 0 || state.text[0] !== finalOptions.trigger;
-      // if (firstCharIsNotCommandTrigger) return nextHandler(input);
+        const triggerWithToken = getTriggerCharWithToken({
+          trigger: finalOptions.trigger,
+          text: state.text.slice(0, state.selection.end),
+          acceptTrailingSpaces: false,
+          isCommand: true,
+        });
 
-      const triggerWithToken = getTriggerCharWithToken({
-        trigger: finalOptions.trigger,
-        text: state.text.slice(0, state.selection.end),
-        acceptTrailingSpaces: false,
-        isCommand: true,
-      });
+        const newSearchTriggerred =
+          triggerWithToken && triggerWithToken.length === finalOptions.minChars;
 
-      const newSearchTriggerred =
-        triggerWithToken && triggerWithToken.length === finalOptions.minChars;
-
-      if (newSearchTriggerred) {
-        searchSource.resetStateAndActivate();
-      }
-
-      const triggerWasRemoved =
-        !triggerWithToken || triggerWithToken.length < finalOptions.minChars;
-
-      if (triggerWasRemoved) {
-        const hasStaleSuggestions =
-          input.state.suggestions?.trigger === finalOptions.trigger;
-        const newInput = { ...input };
-        if (hasStaleSuggestions) {
-          delete newInput.state.suggestions;
+        if (newSearchTriggerred) {
+          searchSource.resetStateAndActivate();
         }
-        return nextHandler(newInput);
-      }
 
-      return Promise.resolve({
-        state: {
+        const triggerWasRemoved =
+          !triggerWithToken || triggerWithToken.length < finalOptions.minChars;
+
+        if (triggerWasRemoved) {
+          const hasStaleSuggestions = state.suggestions?.trigger === finalOptions.trigger;
+          const newState = { ...state };
+          if (hasStaleSuggestions) {
+            delete newState.suggestions;
+          }
+          return next(newState);
+        }
+
+        return complete({
           ...state,
           suggestions: {
             query: triggerWithToken.slice(1),
             searchSource,
             trigger: finalOptions.trigger,
           },
-        },
-        stop: true, // Stop other middleware from processing '/' character
-      });
-    },
-    onSuggestionItemSelect: ({
-      input,
-      nextHandler,
-      selectedSuggestion,
-    }: TextComposerMiddlewareParams<CommandSuggestion>) => {
-      const { state } = input;
-      if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
-        return nextHandler(input);
+        });
+      },
+      onSuggestionItemSelect: ({ state, complete, forward }) => {
+        const { selectedSuggestion } = state.change ?? {};
+        if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
+          return forward();
 
-      searchSource.resetStateAndActivate();
-      return Promise.resolve({
-        state: {
+        searchSource.resetStateAndActivate();
+        return complete({
           ...state,
           ...insertItemWithTrigger({
             insertText: `/${selectedSuggestion.name} `,
@@ -181,9 +166,9 @@ export const createCommandsMiddleware = (
             text: state.text,
             trigger: finalOptions.trigger,
           }),
-          suggestions: undefined, // Clear suggestions after selection
-        },
-      });
+          suggestions: undefined,
+        });
+      },
     },
   };
 };

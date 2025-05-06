@@ -18,7 +18,7 @@ export interface ILinkPreviewsManager {
 }
 
 export enum LinkPreviewStatus {
-  /** Link preview has been dismissed using MessageInputContextValue.dismissLinkPreview **/
+  /** Link preview has been dismissed using **/
   DISMISSED = 'dismissed',
   /** Link preview could not be loaded, the enrichment request has failed. **/
   FAILED = 'failed',

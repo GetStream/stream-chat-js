@@ -6,8 +6,7 @@ import {
   MessageComposer,
 } from '../../../../../src/messageComposer/messageComposer';
 import { createMentionsMiddleware } from '../../../../../src/messageComposer/middleware/textComposer/mentions';
-import { TextComposer } from '../../../../../src/messageComposer/textComposer';
-import type { TextComposerSuggestion } from '../../../../../src/messageComposer/types';
+import type { TextComposerSuggestion } from '../../../../../src/messageComposer/';
 import type {
   CommandResponse,
   DraftResponse,
@@ -63,6 +62,12 @@ const setup = ({
   return { client, channel, messageComposer };
 };
 
+const initialValue = {
+  text: '',
+  selection: { start: 0, end: 0 },
+  mentionedUsers: [],
+};
+
 describe('TextComposerMiddlewareExecutor', () => {
   it('should initialize with default middleware', () => {
     const {
@@ -79,11 +84,12 @@ describe('TextComposerMiddlewareExecutor', () => {
     const {
       messageComposer: { textComposer },
     } = setup();
-    let result = await textComposer.middlewareExecutor.execute('onChange', {
-      state: {
+    let result = await textComposer.middlewareExecutor.execute({
+      eventName: 'onChange',
+      initialValue: {
+        ...initialValue,
         text: '@jo',
         selection: { start: 3, end: 3 },
-        mentionedUsers: [],
       },
     });
 
@@ -91,11 +97,12 @@ describe('TextComposerMiddlewareExecutor', () => {
     expect(result.state.suggestions?.trigger).toBe('@');
     expect(result.state.suggestions?.query).toBe('jo');
 
-    result = await textComposer.middlewareExecutor.execute('onChange', {
-      state: {
+    result = await textComposer.middlewareExecutor.execute({
+      eventName: 'onChange',
+      initialValue: {
+        ...initialValue,
         text: 'abcde@ho',
         selection: { start: 8, end: 8 },
-        mentionedUsers: [],
       },
     });
 
@@ -103,21 +110,23 @@ describe('TextComposerMiddlewareExecutor', () => {
     expect(result.state.suggestions?.trigger).toBe('@');
     expect(result.state.suggestions?.query).toBe('ho');
 
-    result = await textComposer.middlewareExecutor.execute('onChange', {
-      state: {
+    result = await textComposer.middlewareExecutor.execute({
+      eventName: 'onChange',
+      initialValue: {
+        ...initialValue,
         text: 'abcde@ho',
         selection: { start: 5, end: 5 }, // selection is not where the trigger is
-        mentionedUsers: [],
       },
     });
 
     expect(result.state.suggestions).toBeUndefined();
 
-    result = await textComposer.middlewareExecutor.execute('onChange', {
-      state: {
+    result = await textComposer.middlewareExecutor.execute({
+      eventName: 'onChange',
+      initialValue: {
+        ...initialValue,
         text: 'abcde@ho',
         selection: { start: 6, end: 6 }, // selection is where the trigger is but not at the end
-        mentionedUsers: [],
       },
     });
 
@@ -130,11 +139,12 @@ describe('TextComposerMiddlewareExecutor', () => {
     const {
       messageComposer: { textComposer },
     } = setup();
-    let result = await textComposer.middlewareExecutor.execute('onChange', {
-      state: {
+    let result = await textComposer.middlewareExecutor.execute({
+      eventName: 'onChange',
+      initialValue: {
+        ...initialValue,
         text: '/ban',
         selection: { start: 4, end: 4 },
-        mentionedUsers: [],
       },
     });
 
@@ -142,11 +152,14 @@ describe('TextComposerMiddlewareExecutor', () => {
     expect(result.state.suggestions?.trigger).toBe('/');
     expect(result.state.suggestions?.query).toBe('ban');
 
-    result = await textComposer.middlewareExecutor.execute('onChange', {
-      state: {
-        text: '/ban /ban',
-        selection: { start: 9, end: 9 },
-        mentionedUsers: [],
+    result = await textComposer.middlewareExecutor.execute({
+      eventName: 'onChange',
+      initialValue: {
+        ...initialValue,
+        change: {
+          text: '/ban /ban',
+          selection: { start: 9, end: 9 },
+        },
       },
     });
 
@@ -205,6 +218,7 @@ describe('TextComposerMiddlewareExecutor', () => {
         throw new Error('Search failed');
       }),
       activate: vi.fn(),
+      resetinitialValue: vi.fn(),
       resetState: vi.fn(),
       resetStateAndActivate: vi.fn(),
       config: {},
@@ -216,11 +230,12 @@ describe('TextComposerMiddlewareExecutor', () => {
       }),
     ] as TextComposerMiddleware[]);
 
-    const result = await textComposer.middlewareExecutor.execute('onChange', {
-      state: {
+    const result = await textComposer.middlewareExecutor.execute({
+      eventName: 'onChange',
+      initialValue: {
+        ...initialValue,
         text: '@jo',
         selection: { start: 3, end: 3 },
-        mentionedUsers: [],
       },
     });
 
@@ -233,11 +248,12 @@ describe('TextComposerMiddlewareExecutor', () => {
       const {
         messageComposer: { textComposer },
       } = setup();
-      const result = await textComposer.middlewareExecutor.execute('onChange', {
-        state: {
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
           text: '/test',
           selection: { start: 0, end: 0 },
-          mentionedUsers: [],
         },
       });
 
@@ -252,11 +268,12 @@ describe('TextComposerMiddlewareExecutor', () => {
       const {
         messageComposer: { textComposer },
       } = setup();
-      const result = await textComposer.middlewareExecutor.execute('onChange', {
-        state: {
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
           text: 'test',
           selection: { start: 0, end: 4 },
-          mentionedUsers: [],
         },
       });
 
@@ -271,11 +288,12 @@ describe('TextComposerMiddlewareExecutor', () => {
       const {
         messageComposer: { textComposer },
       } = setup();
-      const result = await textComposer.middlewareExecutor.execute('onChange', {
-        state: {
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
           text: '/test',
           selection: { start: 0, end: 5 },
-          mentionedUsers: [],
         },
       });
 
@@ -288,11 +306,12 @@ describe('TextComposerMiddlewareExecutor', () => {
       const {
         messageComposer: { textComposer },
       } = setup();
-      const result = await textComposer.middlewareExecutor.execute('onChange', {
-        state: {
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
           text: '/',
           selection: { start: 0, end: 1 },
-          mentionedUsers: [],
         },
       });
 
@@ -305,11 +324,12 @@ describe('TextComposerMiddlewareExecutor', () => {
       const {
         messageComposer: { textComposer },
       } = setup();
-      const result = await textComposer.middlewareExecutor.execute('onChange', {
-        state: {
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
           text: 'test',
           selection: { start: 0, end: 4 },
-          mentionedUsers: [],
           suggestions: {
             trigger: '/',
             query: 'test',
@@ -327,11 +347,12 @@ describe('TextComposerMiddlewareExecutor', () => {
       const {
         messageComposer: { textComposer },
       } = setup();
-      const result = await textComposer.middlewareExecutor.execute('onChange', {
-        state: {
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
           text: '@test',
           selection: { start: 0, end: 0 },
-          mentionedUsers: [],
         },
       });
 
@@ -346,11 +367,12 @@ describe('TextComposerMiddlewareExecutor', () => {
       const {
         messageComposer: { textComposer },
       } = setup();
-      const result = await textComposer.middlewareExecutor.execute('onChange', {
-        state: {
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
           text: '@test',
           selection: { start: 0, end: 5 },
-          mentionedUsers: [],
         },
       });
 
@@ -363,11 +385,12 @@ describe('TextComposerMiddlewareExecutor', () => {
       const {
         messageComposer: { textComposer },
       } = setup();
-      const result = await textComposer.middlewareExecutor.execute('onChange', {
-        state: {
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
           text: '@',
           selection: { start: 0, end: 1 },
-          mentionedUsers: [],
         },
       });
 
@@ -380,11 +403,12 @@ describe('TextComposerMiddlewareExecutor', () => {
       const {
         messageComposer: { textComposer },
       } = setup();
-      const result = await textComposer.middlewareExecutor.execute('onChange', {
-        state: {
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
           text: 'test',
           selection: { start: 0, end: 4 },
-          mentionedUsers: [],
           suggestions: {
             trigger: '@',
             query: 'test',
@@ -402,11 +426,12 @@ describe('TextComposerMiddlewareExecutor', () => {
     const {
       messageComposer: { textComposer },
     } = setup();
-    let result = await textComposer.middlewareExecutor.execute('onChange', {
-      state: {
+    let result = await textComposer.middlewareExecutor.execute({
+      eventName: 'onChange',
+      initialValue: {
+        ...initialValue,
         text: '/ban',
         selection: { start: 4, end: 4 },
-        mentionedUsers: [],
       },
     });
 
@@ -415,11 +440,12 @@ describe('TextComposerMiddlewareExecutor', () => {
     expect(result.state.suggestions?.query).toBe('ban');
 
     // Then test a mention after the command
-    result = await textComposer.middlewareExecutor.execute('onChange', {
-      state: {
+    result = await textComposer.middlewareExecutor.execute({
+      eventName: 'onChange',
+      initialValue: {
+        ...initialValue,
         text: '/ban @jo',
         selection: { start: 9, end: 9 },
-        mentionedUsers: [],
       },
     });
 
@@ -428,22 +454,24 @@ describe('TextComposerMiddlewareExecutor', () => {
     expect(result.state.suggestions?.query).toBe('jo');
 
     // Test a command in the middle of text - should not trigger command suggestions
-    result = await textComposer.middlewareExecutor.execute('onChange', {
-      state: {
+    result = await textComposer.middlewareExecutor.execute({
+      eventName: 'onChange',
+      initialValue: {
+        ...initialValue,
         text: 'hello /ban',
         selection: { start: 11, end: 11 },
-        mentionedUsers: [],
       },
     });
 
     expect(result.state.suggestions).toBeUndefined();
 
     // Test a mention followed by a command
-    result = await textComposer.middlewareExecutor.execute('onChange', {
-      state: {
+    result = await textComposer.middlewareExecutor.execute({
+      eventName: 'onChange',
+      initialValue: {
+        ...initialValue,
         text: '@jo /ban',
         selection: { start: 8, end: 8 },
-        mentionedUsers: [],
       },
     });
 
@@ -462,11 +490,12 @@ describe('TextComposerMiddlewareExecutor', () => {
       textComposer.maxLengthOnEdit = 10;
 
       // Test with text exceeding max length
-      const result = await textComposer.middlewareExecutor.execute('onChange', {
-        state: {
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
           text: 'Hello World This Is Too Long',
           selection: { start: 30, end: 30 },
-          mentionedUsers: [],
         },
       });
 
@@ -482,11 +511,12 @@ describe('TextComposerMiddlewareExecutor', () => {
       textComposer.maxLengthOnEdit = 20;
 
       // Test with text under max length
-      const result = await textComposer.middlewareExecutor.execute('onChange', {
-        state: {
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
           text: 'Hello World',
           selection: { start: 11, end: 11 },
-          mentionedUsers: [],
         },
       });
 
@@ -502,11 +532,12 @@ describe('TextComposerMiddlewareExecutor', () => {
       textComposer.maxLengthOnEdit = 0;
 
       // Test with any text
-      const result = await textComposer.middlewareExecutor.execute('onChange', {
-        state: {
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
           text: 'Hello World',
           selection: { start: 11, end: 11 },
-          mentionedUsers: [],
         },
       });
 

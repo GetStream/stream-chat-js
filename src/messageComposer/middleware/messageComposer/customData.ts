@@ -1,56 +1,60 @@
 import type { MiddlewareHandlerParams } from '../../../middleware';
 import type { MessageComposer } from '../../messageComposer';
 import type {
-  MessageComposerMiddlewareValueState,
+  MessageComposerMiddlewareState,
+  MessageCompositionMiddleware,
   MessageDraftComposerMiddlewareValueState,
+  MessageDraftCompositionMiddleware,
 } from './types';
 
-export const createCustomDataCompositionMiddleware = (composer: MessageComposer) => ({
+export const createCustomDataCompositionMiddleware = (
+  composer: MessageComposer,
+): MessageCompositionMiddleware => ({
   id: 'stream-io/message-composer-middleware/custom-data',
-  compose: ({
-    input,
-    nextHandler,
-  }: MiddlewareHandlerParams<MessageComposerMiddlewareValueState>) => {
-    const data = composer.customDataManager.customMessageData;
-    if (!data) return nextHandler(input);
+  handlers: {
+    compose: ({
+      state,
+      next,
+      forward,
+    }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
+      const data = composer.customDataManager.customMessageData;
+      if (!data) return forward();
 
-    return nextHandler({
-      ...input,
-      state: {
-        ...input.state,
+      return next({
+        ...state,
         localMessage: {
-          ...input.state.localMessage,
+          ...state.localMessage,
           ...data,
         },
         message: {
-          ...input.state.message,
+          ...state.message,
           ...data,
         },
-      },
-    });
+      });
+    },
   },
 });
 
 export const createDraftCustomDataCompositionMiddleware = (
   composer: MessageComposer,
-) => ({
+): MessageDraftCompositionMiddleware => ({
   id: 'stream-io/message-composer-middleware/draft-custom-data',
-  compose: ({
-    input,
-    nextHandler,
-  }: MiddlewareHandlerParams<MessageDraftComposerMiddlewareValueState>) => {
-    const data = composer.customDataManager.customMessageData;
-    if (!data) return nextHandler(input);
+  handlers: {
+    compose: ({
+      state,
+      next,
+      forward,
+    }: MiddlewareHandlerParams<MessageDraftComposerMiddlewareValueState>) => {
+      const data = composer.customDataManager.customMessageData;
+      if (!data) return forward();
 
-    return nextHandler({
-      ...input,
-      state: {
-        ...input.state,
+      return next({
+        ...state,
         draft: {
-          ...input.state.draft,
+          ...state.draft,
           ...data,
         },
-      },
-    });
+      });
+    },
   },
 });

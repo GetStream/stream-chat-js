@@ -1,12 +1,12 @@
+import type { Middleware, MiddlewareHandlerParams } from '../../../middleware';
+import { generateUUIDv4 } from '../../../utils';
 import type {
   PollComposerFieldErrors,
   PollComposerState,
-  PollComposerStateMiddlewareValueState,
+  PollComposerStateChangeMiddlewareValue,
   TargetedPollOptionTextUpdate,
 } from './types';
-import { generateUUIDv4 } from '../../../utils';
-import type { Middleware } from '../../../middleware';
-import type { MiddlewareHandlerParams } from '../../../middleware';
+
 export const VALID_MAX_VOTES_VALUE_REGEX = /^([2-9]|10)$/;
 
 export const MAX_POLL_OPTIONS = 100 as const;
@@ -153,12 +153,17 @@ export type PollComposerStateMiddlewareFactoryOptions = {
   };
 };
 
+export type PollComposerStateMiddleware = Middleware<
+  PollComposerStateChangeMiddlewareValue,
+  'handleFieldChange' | 'handleFieldBlur'
+>;
+
 export const createPollComposerStateMiddleware = ({
   processors: customProcessors,
   validators: customValidators,
-}: PollComposerStateMiddlewareFactoryOptions = {}): Middleware<PollComposerStateMiddlewareValueState> => {
+}: PollComposerStateMiddlewareFactoryOptions = {}): PollComposerStateMiddleware => {
   const universalHandler = (
-    state: PollComposerStateMiddlewareValueState,
+    state: PollComposerStateChangeMiddlewareValue,
     validators: Partial<
       Record<keyof PollComposerState['data'], PollStateChangeValidator>
     >,
@@ -213,73 +218,67 @@ export const createPollComposerStateMiddleware = ({
 
   return {
     id: 'stream-io/poll-composer-state-processing',
-    handleFieldChange: ({
-      input,
-      nextHandler,
-    }: MiddlewareHandlerParams<PollComposerStateMiddlewareValueState>) => {
-      if (!input.state.targetFields) return nextHandler(input);
-      const {
-        state: { previousState },
-      } = input;
-      const finalValidators = {
-        ...pollStateChangeValidators,
-        ...defaultPollFieldChangeEventValidators,
-        ...customValidators?.handleFieldChange,
-      };
-      const finalProcessors = {
-        ...pollCompositionStateProcessors,
-        ...customProcessors?.handleFieldChange,
-      };
+    handlers: {
+      handleFieldChange: ({
+        state,
+        next,
+        forward,
+      }: MiddlewareHandlerParams<PollComposerStateChangeMiddlewareValue>) => {
+        if (!state.targetFields) return forward();
+        const { previousState } = state;
+        const finalValidators = {
+          ...pollStateChangeValidators,
+          ...defaultPollFieldChangeEventValidators,
+          ...customValidators?.handleFieldChange,
+        };
+        const finalProcessors = {
+          ...pollCompositionStateProcessors,
+          ...customProcessors?.handleFieldChange,
+        };
 
-      const { newData, newErrors } = universalHandler(
-        input.state,
-        finalValidators,
-        finalProcessors,
-      );
+        const { newData, newErrors } = universalHandler(
+          state,
+          finalValidators,
+          finalProcessors,
+        );
 
-      return nextHandler({
-        ...input,
-        state: {
-          ...input.state,
+        return next({
+          ...state,
           nextState: {
             ...previousState,
             data: { ...previousState.data, ...newData },
             errors: { ...previousState.errors, ...newErrors },
           },
-        },
-      });
-    },
-    handleFieldBlur: ({
-      input,
-      nextHandler,
-    }: MiddlewareHandlerParams<PollComposerStateMiddlewareValueState>) => {
-      if (!input.state.targetFields) return nextHandler(input);
+        });
+      },
+      handleFieldBlur: ({
+        state,
+        next,
+        forward,
+      }: MiddlewareHandlerParams<PollComposerStateChangeMiddlewareValue>) => {
+        if (!state.targetFields) return forward();
 
-      const {
-        state: { previousState },
-      } = input;
-      const finalValidators = {
-        ...pollStateChangeValidators,
-        ...defaultPollFieldBlurEventValidators,
-        ...customValidators?.handleFieldBlur,
-      };
-      const { newData, newErrors } = universalHandler(
-        input.state,
-        finalValidators,
-        customProcessors?.handleFieldBlur,
-      );
+        const { previousState } = state;
+        const finalValidators = {
+          ...pollStateChangeValidators,
+          ...defaultPollFieldBlurEventValidators,
+          ...customValidators?.handleFieldBlur,
+        };
+        const { newData, newErrors } = universalHandler(
+          state,
+          finalValidators,
+          customProcessors?.handleFieldBlur,
+        );
 
-      return nextHandler({
-        ...input,
-        state: {
-          ...input.state,
+        return next({
+          ...state,
           nextState: {
             ...previousState,
             data: { ...previousState.data, ...newData },
             errors: { ...previousState.errors, ...newErrors },
           },
-        },
-      });
+        });
+      },
     },
   };
 };

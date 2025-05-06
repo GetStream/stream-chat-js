@@ -7,9 +7,35 @@ import {
   createDraftCustomDataCompositionMiddleware,
 } from '../../../../../src/messageComposer/middleware/messageComposer/customData';
 import type {
-  MessageComposerMiddlewareValueState,
+  MessageComposerMiddlewareState,
   MessageDraftComposerMiddlewareValueState,
 } from '../../../../../src/messageComposer/middleware/messageComposer/types';
+
+const setup = (initialState: MessageComposerMiddlewareState) => {
+  return {
+    state: initialState,
+    next: async (state: MessageComposerMiddlewareState) => ({ state }),
+    complete: async (state: MessageComposerMiddlewareState) => ({
+      state,
+      status: 'complete' as MiddlewareStatus,
+    }),
+    discard: async () => ({ state: initialState, status: 'discard' as MiddlewareStatus }),
+    forward: async () => ({ state: initialState }),
+  };
+};
+
+const setupDraft = (initialState: MessageDraftComposerMiddlewareValueState) => {
+  return {
+    state: initialState,
+    next: async (state: MessageDraftComposerMiddlewareValueState) => ({ state }),
+    complete: async (state: MessageDraftComposerMiddlewareValueState) => ({
+      state,
+      status: 'complete' as MiddlewareStatus,
+    }),
+    discard: async () => ({ state: initialState, status: 'discard' as MiddlewareStatus }),
+    forward: async () => ({ state: initialState }),
+  };
+};
 
 describe('Custom Data Middleware', () => {
   let channel: Channel;
@@ -31,7 +57,7 @@ describe('Custom Data Middleware', () => {
       const data = { key: 'value' };
       composer.customDataManager.setMessageData(data);
       const middleware = createCustomDataCompositionMiddleware(composer);
-      const state: MessageComposerMiddlewareValueState = {
+      const state: MessageComposerMiddlewareState = {
         message: { id: '1', type: 'regular' },
         localMessage: {
           id: '1',
@@ -49,10 +75,7 @@ describe('Custom Data Middleware', () => {
         sendOptions: {},
       };
 
-      const result = await middleware.compose({
-        input: { state },
-        nextHandler: async (input) => input,
-      });
+      const result = await middleware.handlers.compose(setup(state));
 
       expect(result.state.message).toEqual(expect.objectContaining(data));
       expect(result.state.localMessage).toEqual(expect.objectContaining(data));
@@ -60,7 +83,7 @@ describe('Custom Data Middleware', () => {
 
     it('should add empty custom data if no data is set', async () => {
       const middleware = createCustomDataCompositionMiddleware(composer);
-      const state: MessageComposerMiddlewareValueState = {
+      const state: MessageComposerMiddlewareState = {
         message: { id: '1', type: 'regular' },
         localMessage: {
           id: '1',
@@ -78,10 +101,7 @@ describe('Custom Data Middleware', () => {
         sendOptions: {},
       };
 
-      const result = await middleware.compose({
-        input: { state },
-        nextHandler: async (input) => input,
-      });
+      const result = await middleware.handlers.compose(setup(state));
 
       expect(result.state.message).toEqual(state.message);
       expect(result.state.localMessage).toEqual(state.localMessage);
@@ -101,10 +121,7 @@ describe('Custom Data Middleware', () => {
         },
       };
 
-      const result = await middleware.compose({
-        input: { state },
-        nextHandler: async (input) => input,
-      });
+      const result = await middleware.handlers.compose(setupDraft(state));
 
       expect(result.state.draft).toEqual(expect.objectContaining(data));
     });
@@ -115,10 +132,7 @@ describe('Custom Data Middleware', () => {
         draft: { id: '1', text: '', type: 'regular' },
       };
 
-      const result = await middleware.compose({
-        input: { state },
-        nextHandler: async (input) => input,
-      });
+      const result = await middleware.handlers.compose(setupDraft(state));
 
       expect(result.state.draft).toEqual(state.draft);
     });

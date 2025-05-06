@@ -103,24 +103,23 @@ export class PollComposer {
   };
 
   updateFields = async (data: UpdateFieldsData) => {
-    const { state, status } = await this.stateMiddlewareExecutor.execute(
-      'handleFieldChange',
-      {
-        state: {
-          nextState: { ...this.state.getLatestValue() },
-          previousState: { ...this.state.getLatestValue() },
-          targetFields: data,
-        },
+    const { state, status } = await this.stateMiddlewareExecutor.execute({
+      eventName: 'handleFieldChange',
+      initialValue: {
+        nextState: { ...this.state.getLatestValue() },
+        previousState: { ...this.state.getLatestValue() },
+        targetFields: data,
       },
-    );
+    });
 
     if (status === 'discard') return;
     this.state.next(state.nextState);
   };
 
   handleFieldBlur = async (field: keyof PollComposerState['data']) => {
-    const result = await this.stateMiddlewareExecutor.execute('handleFieldBlur', {
-      state: {
+    const result = await this.stateMiddlewareExecutor.execute({
+      eventName: 'handleFieldBlur',
+      initialValue: {
         nextState: { ...this.state.getLatestValue() },
         previousState: { ...this.state.getLatestValue() },
         targetFields: { [field]: this.state.getLatestValue().data[field] },
@@ -133,8 +132,9 @@ export class PollComposer {
 
   compose = async () => {
     const { data, errors } = this.state.getLatestValue();
-    const result = await this.compositionMiddlewareExecutor.execute('compose', {
-      state: {
+    const result = await this.compositionMiddlewareExecutor.execute({
+      eventName: 'compose',
+      initialValue: {
         data: {
           ...data,
           max_votes_allowed: data.max_votes_allowed
