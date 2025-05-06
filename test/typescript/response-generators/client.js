@@ -173,7 +173,11 @@ async function syncTeam() {
 	await utils.createMultiTenancyUsers([user1], [team]);
 	const client = await utils.getMultiTenancyTestClientForUser(user1);
 	const channelId = uuidv4();
-	const channel = await utils.createTestMultiTenancyChannelForUser(channelId, user1, team);
+	const channel = await utils.createTestMultiTenancyChannelForUser(
+		channelId,
+		user1,
+		team,
+	);
 	await channel.sendMessage({
 		text: 'New Event?',
 		user: { id: user1 },
@@ -184,7 +188,8 @@ async function syncTeam() {
 async function updateAppSettings() {
 	const authClient = await utils.getTestClient(true);
 	return await authClient.updateAppSettings({
-		custom_action_handler_url: 'https://example.com/webhooks/stream/custom-commands?type={type}',
+		custom_action_handler_url:
+			'https://example.com/webhooks/stream/custom-commands?type={type}',
 		enforce_unique_usernames: 'no',
 	});
 }
