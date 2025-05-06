@@ -1464,6 +1464,8 @@ export type Event = CustomEventData & {
   user?: UserResponse;
   user_id?: string;
   watcher_count?: number;
+  channel_last_message_at?: string;
+  app?: Record<string, unknown>; // TODO: further specify type
 };
 
 export type UserCustomEvent = CustomEventData & {
@@ -2346,6 +2348,8 @@ export type ChannelData = CustomChannelData &
     created_by: UserResponse | null;
     created_by_id: UserResponse['id'];
     members: string[] | Array<NewMemberPayload>;
+    blocklist_behavior: AutomodBehavior;
+    automod: Automod;
   }>;
 
 export type ChannelMute = {
