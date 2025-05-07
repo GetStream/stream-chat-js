@@ -66,6 +66,7 @@ import {
   GetDraftResponse,
   DraftMessagePayload,
   LiveLocation,
+  UpdateLiveLocationOptions
 } from './types';
 import { Role } from './permissions';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
@@ -1422,8 +1423,12 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
    *
    * @returns {Promise<APIResponse>} The server response
    */
-  async updateLiveLocation(liveLocation: LiveLocation) {
-    return await this.getClient().put<LiveLocation>(this._channelURL() + '/live_location', {
+  async updateLiveLocation(liveLocation: LiveLocation, options?: UpdateLiveLocationOptions) {
+    let queryString = '';
+    if (options?.user_id) {
+      queryString = `?user_id=${options.user_id}`
+    }
+    return await this.getClient().put<LiveLocation>(this._channelURL() + `/live_location${queryString}`, {
       message_id: liveLocation.message_id,
       longitude: liveLocation.longitude,
       latitude: liveLocation.latitude,

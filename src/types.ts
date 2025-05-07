@@ -3939,6 +3939,10 @@ export type LiveLocation<StreamChatGenerics extends ExtendableGenerics = Default
   user_id?: string;
 };
 
+export type UpdateLiveLocationOptions = {
+  user_id?: string;
+};
+
 export type ThreadSort = ThreadSortBase | Array<ThreadSortBase>;
 
 export type ThreadSortBase = {
