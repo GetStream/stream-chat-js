@@ -208,15 +208,13 @@ describe('TextComposerMiddlewareExecutor', () => {
     expect(textComposer.suggestions).toBeUndefined();
   });
 
-  it('should handle search errors and cancellations', async () => {
+  it('should not be impacted by errors triggered by search source query', async () => {
     const {
       channel,
       messageComposer: { textComposer },
     } = setup();
     const mockSearchSource = {
-      search: vi.fn().mockImplementation(() => {
-        throw new Error('Search failed');
-      }),
+      search: vi.fn().mockRejectedValue(new Error('Search failed')),
       activate: vi.fn(),
       resetinitialValue: vi.fn(),
       resetState: vi.fn(),
@@ -240,7 +238,7 @@ describe('TextComposerMiddlewareExecutor', () => {
     });
 
     expect(mockSearchSource.search).toHaveBeenCalled();
-    expect(result.state.suggestions).toBeUndefined();
+    expect(result.state.suggestions).toBeDefined();
   });
 
   describe('commands middleware', () => {
