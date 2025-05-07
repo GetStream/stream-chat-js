@@ -268,9 +268,6 @@ export class ChannelManager {
 
     const queryChannelsRequest = async (retryCount = 0) => {
       try {
-        if (retryCount <= 2) {
-          throw new Error('Failing intentionally');
-        }
         const channels = await this.client.queryChannels(
           filters,
           sort,
@@ -332,46 +329,42 @@ export class ChannelManager {
         error: undefined,
       }));
 
-      if (
-        this.client.offlineDb?.getChannelsForQuery &&
-        this.client.user?.id &&
-        !initialized
-      ) {
-        const channelsFromDB = await this.client.offlineDb.getChannelsForQuery({
-          userId: this.client.user.id,
-          filters,
-          sort,
-        });
-
-        console.log('CHANNELS FROM DB PRE: ', channelsFromDB);
-
-        if (channelsFromDB) {
-          console.log('GOT CHANNELS FROM DB !', initialized, isLoading);
-          const offlineChannels = this.client.hydrateActiveChannels(channelsFromDB, {
-            offlineMode: true,
-            skipInitialization: [], // passing empty array will clear out the existing messages from channel state, this removes the possibility of duplicate messages
+      if (this.client.offlineDb?.getChannelsForQuery && this.client.user?.id) {
+        if (!initialized) {
+          const channelsFromDB = await this.client.offlineDb.getChannelsForQuery({
+            userId: this.client.user.id,
+            filters,
+            sort,
           });
 
-          this.state.partialNext({ channels: offlineChannels });
+          console.log('CHANNELS FROM DB PRE: ', channelsFromDB);
 
-          console.log('IS IT SYNCED: ', this.client.offlineDb.syncManager.syncStatus);
+          if (channelsFromDB) {
+            console.log('GOT CHANNELS FROM DB !', initialized, isLoading);
+            const offlineChannels = this.client.hydrateActiveChannels(channelsFromDB, {
+              offlineMode: true,
+              skipInitialization: [], // passing empty array will clear out the existing messages from channel state, this removes the possibility of duplicate messages
+            });
 
-          if (!this.client.offlineDb.syncManager.syncStatus) {
-            this.client.offlineDb.syncManager.scheduleSyncStatusChangeCallback(
-              async (syncStatus) => {
-                console.log('WILL TRY NOW VAL: ', syncStatus);
-                if (syncStatus) {
-                  await queryChannelsRequest();
-                }
-              },
-            );
-            return;
+            this.state.partialNext({ channels: offlineChannels });
           }
         }
-        await queryChannelsRequest();
-      } else {
-        await queryChannelsRequest();
+        console.log('IS IT SYNCED: ', this.client.offlineDb.syncManager.syncStatus);
+
+        if (!this.client.offlineDb.syncManager.syncStatus) {
+          this.client.offlineDb.syncManager.scheduleSyncStatusChangeCallback(
+            async (syncStatus) => {
+              console.log('WILL TRY NOW VAL: ', syncStatus);
+              if (syncStatus) {
+                await queryChannelsRequest();
+              }
+            },
+          );
+          return;
+        }
+        // await queryChannelsRequest();
       }
+      await queryChannelsRequest();
     } catch (error) {
       this.client.logger('error', (error as Error).message);
       this.state.next((currentState) => ({
