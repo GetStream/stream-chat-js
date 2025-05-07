@@ -3923,7 +3923,11 @@ export type DraftMessage<StreamChatGenerics extends ExtendableGenerics = Default
   type?: MessageLabel;
 };
 
-export type LiveLocation<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = StreamChatGenerics['liveLocationType'] & {
+export type LiveLocationsAPIResponse = APIResponse & {
+  live_locations: LiveLocation[];
+};
+
+export type LiveLocation<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   channel_cid?: string;
   created_at?: string;
   created_by_device_id: string;

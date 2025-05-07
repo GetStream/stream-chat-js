@@ -219,6 +219,7 @@ import {
   DraftSort,
   Pager,
   LiveLocation,
+  LiveLocationsAPIResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -2306,7 +2307,7 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns {Promise<APIResponse>} The server response
    */
   async getUserLiveLocations(userId: string) {
-    return await this.get<LiveLocation>(this.baseURL + `/users/${encodeURIComponent(userId)}/live_locations`);
+    return await this.get<LiveLocationsAPIResponse>(this.baseURL + `/users/${encodeURIComponent(userId)}/live_locations`);
   }
 
   /** muteUser - mutes a user
