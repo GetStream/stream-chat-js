@@ -2874,10 +2874,10 @@ export class StreamChat {
       throw Error('Please specify the message.id when calling updateMessage');
     }
 
-    // should be without user object
+    // should not include user object
     const payload = toUpdatedMessagePayload(message);
 
-    // override user_id
+    // add user_id (if exists)
     if (typeof partialUserOrUserId === 'string') {
       payload.user_id = partialUserOrUserId;
     } else if (typeof partialUserOrUserId?.id === 'string') {

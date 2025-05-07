@@ -384,7 +384,6 @@ export const toUpdatedMessagePayload = (
     mentioned_users: message.mentioned_users?.map((user) =>
       typeof user === 'string' ? user : user.id,
     ),
-    user_id: message.user?.id ?? message.user_id,
   };
 };
 
