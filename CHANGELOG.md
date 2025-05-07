@@ -1,3 +1,9 @@
+## [9.0.1](https://github.com/GetStream/stream-chat-js/compare/v9.0.0...v9.0.1) (2025-05-07)
+
+### Bug Fixes
+
+* add user to RESERVED_UPDATED_MESSAGE_FIELDS ([#1526](https://github.com/GetStream/stream-chat-js/issues/1526)) ([63b6b82](https://github.com/GetStream/stream-chat-js/commit/63b6b82cf888c0e903ba97afa4a7e3f16640cd7b))
+
 ## [9.0.0](https://github.com/GetStream/stream-chat-js/compare/v8.60.0...v9.0.0) (2025-05-06)
 
 ### ⚠ BREAKING CHANGES
