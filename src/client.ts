@@ -2860,28 +2860,28 @@ export class StreamChat {
    * updateMessage - Update the given message
    *
    * @param {Omit<MessageResponse, 'mentioned_users'> & { mentioned_users?: string[] }} message object, id needs to be specified
-   * @param {string | { id: string }} [userId]
+   * @param {string | { id: string }} [partialUserOrUserId]
    * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
    *
    * @return {{ message: LocalMessage | MessageResponse }} Response that includes the message
    */
   async updateMessage(
     message: LocalMessage | Partial<MessageResponse>,
-    userId?: string | { id: string },
+    partialUserOrUserId?: string | { id: string },
     options?: UpdateMessageOptions,
   ) {
     if (!message.id) {
-      throw Error('Please specify the message id when calling updateMessage');
+      throw Error('Please specify the message.id when calling updateMessage');
     }
+
+    // should be without user object
     const payload = toUpdatedMessagePayload(message);
-    if (userId != null) {
-      if (isString(userId)) {
-        payload.user_id = userId;
-      } else {
-        payload.user = {
-          id: userId.id,
-        };
-      }
+
+    // override user_id
+    if (typeof partialUserOrUserId === 'string') {
+      payload.user_id = partialUserOrUserId;
+    } else if (typeof partialUserOrUserId?.id === 'string') {
+      payload.user_id = partialUserOrUserId.id;
     }
 
     return await this.post<UpdateMessageAPIResponse>(
@@ -2909,16 +2909,21 @@ export class StreamChat {
   async partialUpdateMessage(
     id: string,
     partialMessageObject: PartialMessageUpdate,
-    userId?: string | { id: string },
+    partialUserOrUserId?: string | { id: string },
     options?: UpdateMessageOptions,
   ) {
     if (!id) {
-      throw Error('Please specify the message id when calling partialUpdateMessage');
+      throw Error('Please specify the message.id when calling partialUpdateMessage');
     }
-    let user = userId;
-    if (userId != null && isString(userId)) {
-      user = { id: userId };
+
+    let user: { id: string } | undefined = undefined;
+
+    if (typeof partialUserOrUserId === 'string') {
+      user = { id: partialUserOrUserId };
+    } else if (typeof partialUserOrUserId?.id === 'string') {
+      user = { id: partialUserOrUserId.id };
     }
+
     return await this.put<UpdateMessageAPIResponse>(
       this.baseURL + `/messages/${encodeURIComponent(id)}`,
       {
