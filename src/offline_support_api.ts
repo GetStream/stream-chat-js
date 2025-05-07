@@ -626,6 +626,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
           // Error code 17 - missing own_capabilities to execute the task
           // ignore
         } else {
+          // executing the pending tasks has failed, so keep it in the queue
           continue;
         }
       }
@@ -704,6 +705,7 @@ export class OfflineDBSyncManager {
   public syncStatus = false;
   public connectionChangedListener: { unsubscribe: () => void } | null = null;
   private syncStatusListeners: Array<(status: boolean) => void> = [];
+  private scheduledSyncStatusCallbacks: Array<(status: boolean) => void> = [];
   private client: StreamChat;
   private offlineDb: AbstractOfflineDB;
 
@@ -730,8 +732,8 @@ export class OfflineDBSyncManager {
       // Otherwise wait for `connection.changed` event.
       if (this.client.user?.id && this.client.wsConnection?.isHealthy) {
         await this.syncAndExecutePendingTasks();
-        this.syncStatus = true;
-        this.syncStatusListeners.forEach((l) => l(true));
+        await this.invokeSyncStatusListeners(true);
+        console.log('INITIAL SYNC DONE !');
       }
 
       // If a listener has already been registered, unsubscribe from it so
@@ -748,11 +750,10 @@ export class OfflineDBSyncManager {
         async (event) => {
           if (event.online) {
             await this.syncAndExecutePendingTasks();
-            this.syncStatus = true;
-            this.syncStatusListeners.forEach((l) => l(true));
+            console.log('SUBSEQUENT SYNC DONE !');
+            await this.invokeSyncStatusListeners(true);
           } else {
-            this.syncStatus = false;
-            this.syncStatusListeners.forEach((l) => l(false));
+            await this.invokeSyncStatusListeners(false);
           }
         },
       );
@@ -777,6 +778,24 @@ export class OfflineDBSyncManager {
         );
       },
     };
+  };
+
+  public scheduleSyncStatusChangeCallback = (
+    callback: (status: boolean) => Promise<void>,
+  ) => {
+    this.scheduledSyncStatusCallbacks.push(callback);
+  };
+
+  private invokeSyncStatusListeners = async (status: boolean) => {
+    this.syncStatus = status;
+    this.syncStatusListeners.forEach((l) => l(status));
+
+    console.log('WILL TRY LISTENERS', this.scheduledSyncStatusCallbacks.length);
+    const promises = this.scheduledSyncStatusCallbacks.map((cb) => cb(status));
+    await Promise.all(promises);
+    console.log('DONE LISTENERS !');
+
+    this.scheduledSyncStatusCallbacks = [];
   };
 
   private handleEventToSyncDB = async (event: Event, flush?: boolean) => {
@@ -858,7 +877,7 @@ export class OfflineDBSyncManager {
       return;
     }
 
-    console.log('MIDWAY SKIDMARK :D');
+    console.log('MIDWAY MARK :D');
 
     // TODO: We should not need our own user ID in the API, it can be inferred
     const lastSyncedAt = await this.offlineDb.getLastSyncedAt({

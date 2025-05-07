@@ -1788,7 +1788,11 @@ export class Channel {
           }
 
           if (!isThreadMessage) {
-            this.getClient().offlineDb?.handleNewMessage({ event });
+            console.log('DID STUFF AND NOW HANDLING EVENT !');
+            this.getClient()
+              .offlineDb?.handleNewMessage({ event })
+              .then(() => console.log('SUCCESS IN NEW MESSAGE !'))
+              .catch((err) => console.log('ERROR: ', err));
           }
         }
         break;

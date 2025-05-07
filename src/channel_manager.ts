@@ -21,6 +21,12 @@ import {
   uniqBy,
 } from './utils';
 
+// TODO: Move this somewhere fancier
+const waitSeconds = (seconds: number) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, seconds * 1000);
+  });
+
 export type ChannelManagerPagination = {
   filters: ChannelFilters;
   hasNext: boolean;
@@ -40,6 +46,7 @@ export type ChannelManagerState = {
    */
   initialized: boolean;
   pagination: ChannelManagerPagination;
+  error: Error | undefined;
 };
 
 export type ChannelSetterParameterType = ValueOrPatch<ChannelManagerState['channels']>;
@@ -172,6 +179,7 @@ export class ChannelManager {
         options: DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS,
       },
       initialized: false,
+      error: undefined,
     });
     this.setEventHandlerOverrides(eventHandlerOverrides);
     this.setOptions(options);
@@ -246,13 +254,68 @@ export class ChannelManager {
       ...options,
     };
     const {
-      pagination: { isLoading },
+      pagination: { isLoading, filters: filtersFromState },
       initialized,
     } = this.state.getLatestValue();
 
-    if (isLoading && !this.options.abortInFlightQuery) {
+    if (
+      isLoading &&
+      !this.options.abortInFlightQuery &&
+      JSON.stringify(filtersFromState) === JSON.stringify(filters)
+    ) {
       return;
     }
+
+    const queryChannelsRequest = async (retryCount = 0) => {
+      try {
+        if (retryCount <= 2) {
+          throw new Error('Failing intentionally');
+        }
+        const channels = await this.client.queryChannels(
+          filters,
+          sort,
+          options,
+          stateOptions,
+        );
+        console.log('CHANNELS QUERIED !');
+        const newOffset = offset + (channels?.length ?? 0);
+        const newOptions = { ...options, offset: newOffset };
+        const { pagination } = this.state.getLatestValue();
+
+        this.state.partialNext({
+          channels,
+          pagination: {
+            ...pagination,
+            hasNext: (channels?.length ?? 0) >= limit,
+            isLoading: false,
+            options: newOptions,
+          },
+          initialized: true,
+        });
+        await this.client.offlineDb?.upsertCidsForQuery?.({
+          cids: channels.map((channel) => channel.cid),
+          filters: pagination.filters,
+          sort: pagination.sort,
+        });
+      } catch (err) {
+        // TODO: Maybe make this configurable ?
+        await waitSeconds(2);
+
+        // TODO: Extract this as a constant
+        if (retryCount === 3) {
+          console.warn(err);
+
+          const wrappedError = new Error(
+            `Maximum number of retries reached in queryChannels. Last error message is: ${err}`,
+          );
+
+          this.state.partialNext({ error: wrappedError });
+          return;
+        }
+
+        return queryChannelsRequest(retryCount + 1);
+      }
+    };
 
     try {
       this.stateOptions = stateOptions;
@@ -266,6 +329,7 @@ export class ChannelManager {
           sort,
           options,
         },
+        error: undefined,
       }));
 
       if (
@@ -279,7 +343,10 @@ export class ChannelManager {
           sort,
         });
 
+        console.log('CHANNELS FROM DB PRE: ', channelsFromDB);
+
         if (channelsFromDB) {
+          console.log('GOT CHANNELS FROM DB !', initialized, isLoading);
           const offlineChannels = this.client.hydrateActiveChannels(channelsFromDB, {
             offlineMode: true,
             skipInitialization: [], // passing empty array will clear out the existing messages from channel state, this removes the possibility of duplicate messages
@@ -287,37 +354,24 @@ export class ChannelManager {
 
           this.state.partialNext({ channels: offlineChannels });
 
+          console.log('IS IT SYNCED: ', this.client.offlineDb.syncManager.syncStatus);
+
           if (!this.client.offlineDb.syncManager.syncStatus) {
+            this.client.offlineDb.syncManager.scheduleSyncStatusChangeCallback(
+              async (syncStatus) => {
+                console.log('WILL TRY NOW VAL: ', syncStatus);
+                if (syncStatus) {
+                  await queryChannelsRequest();
+                }
+              },
+            );
             return;
           }
         }
+        await queryChannelsRequest();
+      } else {
+        await queryChannelsRequest();
       }
-
-      const channels = await this.client.queryChannels(
-        filters,
-        sort,
-        options,
-        stateOptions,
-      );
-      const newOffset = offset + (channels?.length ?? 0);
-      const newOptions = { ...options, offset: newOffset };
-      const { pagination } = this.state.getLatestValue();
-
-      this.state.partialNext({
-        channels,
-        pagination: {
-          ...pagination,
-          hasNext: (channels?.length ?? 0) >= limit,
-          isLoading: false,
-          options: newOptions,
-        },
-        initialized: true,
-      });
-      await this.client.offlineDb?.upsertCidsForQuery?.({
-        cids: channels.map((channel) => channel.cid),
-        filters: pagination.filters,
-        sort: pagination.sort,
-      });
     } catch (error) {
       this.client.logger('error', (error as Error).message);
       this.state.next((currentState) => ({
