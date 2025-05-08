@@ -675,6 +675,14 @@ export class StreamChat {
     await Promise.all([
       this.wsConnection?.disconnect(timeout),
       this.wsFallback?.disconnect(timeout),
+      ...(this.offlineDb && this.userID
+        ? [
+            this.offlineDb.upsertUserSyncStatus({
+              userId: this.userID,
+              lastSyncedAt: new Date().toString(),
+            }),
+          ]
+        : []),
     ]);
     return Promise.resolve();
   };
