@@ -3931,9 +3931,9 @@ export type LiveLocation<StreamChatGenerics extends ExtendableGenerics = Default
   channel_cid?: string;
   created_at?: string;
   created_by_device_id: string;
-  end_at: string;
-  latitude: number;
-  longitude: number;
+  end_at?: string;
+  latitude?: number;
+  longitude?: number;
   message_id: string;
   updated_at?: string;
   user_id?: string;

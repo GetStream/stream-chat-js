@@ -1417,27 +1417,6 @@ export class Channel<StreamChatGenerics extends ExtendableGenerics = DefaultGene
   }
 
   /**
-   * updateLiveLocation - Updates a live location
-   *
-   * @param liveLocation LiveLocation The live location data to update
-   *
-   * @returns {Promise<APIResponse>} The server response
-   */
-  async updateLiveLocation(liveLocation: LiveLocation, options?: UpdateLiveLocationOptions) {
-    let queryString = '';
-    if (options?.user_id) {
-      queryString = `?user_id=${options.user_id}`
-    }
-    return await this.getClient().put<LiveLocation>(this._channelURL() + `/live_location${queryString}`, {
-      message_id: liveLocation.message_id,
-      longitude: liveLocation.longitude,
-      latitude: liveLocation.latitude,
-      created_by_device_id: liveLocation.created_by_device_id,
-      end_at: liveLocation.end_at,
-    });
-  }
-
-  /**
    * on - Listen to events on this channel.
    *
    * channel.on('message.new', event => {console.log("my new message", event, channel.state.messages)})
