@@ -1210,3 +1210,19 @@ export const isDate = (value: unknown): value is Date => !!(value as Date).getTi
 
 export const isLocalMessage = (message: unknown): message is LocalMessage =>
   isDate((message as LocalMessage).created_at);
+
+export const runSynchronously = <T>(
+  callback: Promise<T>,
+  options?: {
+    context?: string;
+    onSuccessCallback?: (res: T) => void | Promise<void>;
+    onErrorCallback?: (error: Error) => void | Promise<void>;
+  },
+) => {
+  const { context, onSuccessCallback = () => undefined, onErrorCallback } = options ?? {};
+  const defaultOnError = (error: Error) => {
+    console.log(`An error has occurred in context ${context}: ${error}`);
+  };
+  const onError = onErrorCallback ?? defaultOnError;
+  callback.then(onSuccessCallback).catch(onError);
+};

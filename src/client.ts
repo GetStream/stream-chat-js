@@ -487,7 +487,6 @@ export class StreamChat {
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
-    // this.offlineDb = new DefaultOfflineDB({ client: this });
   }
 
   /**
@@ -850,7 +849,10 @@ export class StreamChat {
     const appSettings = await this.appSettingsPromise;
 
     if (userId) {
-      this.offlineDb?.upsertAppSettings({ appSettings, userId });
+      this.offlineDb?.executeQuerySafely(
+        (db) => db.upsertAppSettings({ appSettings, userId }),
+        { method: 'upsertAppSettings' },
+      );
     }
 
     return appSettings;
@@ -1463,7 +1465,8 @@ export class StreamChat {
     }
 
     if (event.channel && event.type === 'notification.message_new') {
-      this._addChannelConfig(event.channel);
+      const { channel } = event;
+      this._addChannelConfig(channel);
       // Note: It is a bit counter-intuitive that we do not touch the messages in the
       //       offline DB when receiving notification.message_new, however we do this
       //       because we anyway cannot get the messages for a channel until we run
@@ -1471,15 +1474,23 @@ export class StreamChat {
       //       receiving the event we only upsert the channel data and we leave the
       //       rest of the entities to be updated whenever we actually start watching
       //       or we at least query.
-      this.offlineDb?.upsertChannelData({ channel: event.channel });
+      this.offlineDb?.executeQuerySafely((db) => db.upsertChannelData({ channel }), {
+        method: 'upsertChannelData',
+      });
     }
 
     if (event.channel && event.type === 'notification.added_to_channel') {
-      this.offlineDb?.upsertChannelData({ channel: event.channel });
+      const { channel } = event;
+      this.offlineDb?.executeQuerySafely((db) => db.upsertChannelData({ channel }), {
+        method: 'upsertChannelData',
+      });
     }
 
     if (event.cid && event.type === 'notification.removed_from_channel') {
-      this.offlineDb?.deleteChannel({ cid: event.cid });
+      const { cid } = event;
+      this.offlineDb?.executeQuerySafely((db) => db.deleteChannel({ cid }), {
+        method: 'upsertChannelData',
+      });
     }
 
     if (event.type === 'notification.channel_mutes_updated' && event.me?.channel_mutes) {
@@ -1498,7 +1509,10 @@ export class StreamChat {
             (this.activeChannels[activeChannelKey].state.unreadCount = 0),
         );
       } else {
-        this.offlineDb?.handleRead({ event, unreadMessages: 0 });
+        this.offlineDb?.executeQuerySafely(
+          (db) => db.handleRead({ event, unreadMessages: 0 }),
+          { method: 'upsertChannelData' },
+        );
       }
     }
 
@@ -1507,15 +1521,18 @@ export class StreamChat {
         event.type === 'notification.channel_deleted') &&
       event.cid
     ) {
-      client.state.deleteAllChannelReference(event.cid);
+      const { cid } = event;
+      client.state.deleteAllChannelReference(cid);
       this.activeChannels[event.cid]?._disconnect();
 
       postListenerCallbacks.push(() => {
-        if (!event.cid) return;
+        if (!cid) return;
 
-        delete this.activeChannels[event.cid];
+        delete this.activeChannels[cid];
       });
-      this.offlineDb?.deleteChannel({ cid: event.cid });
+      this.offlineDb?.executeQuerySafely((db) => db.deleteChannel({ cid }), {
+        method: 'upsertChannelData',
+      });
     }
 
     return postListenerCallbacks;
@@ -3003,18 +3020,25 @@ export class StreamChat {
   }
 
   async deleteMessage(messageID: string, hardDelete?: boolean) {
-    if (this.offlineDb) {
-      if (hardDelete) {
-        await this.offlineDb.hardDeleteMessage({ id: messageID });
-      } else {
-        await this.offlineDb.softDeleteMessage({ id: messageID });
+    try {
+      if (this.offlineDb) {
+        if (hardDelete) {
+          await this.offlineDb.hardDeleteMessage({ id: messageID });
+        } else {
+          await this.offlineDb.softDeleteMessage({ id: messageID });
+        }
+        return await this.offlineDb.queueTask({
+          task: {
+            messageId: messageID,
+            payload: [messageID, hardDelete],
+            type: 'delete-message',
+          },
+        });
       }
-      return await this.offlineDb.queueTask({
-        task: {
-          messageId: messageID,
-          payload: [messageID, hardDelete],
-          type: 'delete-message',
-        },
+    } catch (error) {
+      this.logger('error', `offlineDb:deleteMessage`, {
+        tags: ['channel', 'offlineDb'],
+        error,
       });
     }
 

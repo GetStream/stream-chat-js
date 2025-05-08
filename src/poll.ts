@@ -129,14 +129,10 @@ export class Poll {
   };
 
   private upsertOfflineDb = () => {
-    this.client.offlineDb
-      ?.upsertPoll({ poll: mapPollStateToResponse(this) })
-      .catch((e) => {
-        console.log(
-          'An error has occurred while updating the poll in the offline DB. ',
-          e,
-        );
-      });
+    this.client.offlineDb?.executeQuerySafely(
+      (db) => db.upsertPoll({ poll: mapPollStateToResponse(this) }),
+      { method: 'upsertPoll' },
+    );
   };
 
   public reinitializeState = (poll: PollInitOptions['poll']) => {

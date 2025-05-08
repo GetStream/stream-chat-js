@@ -216,11 +216,15 @@ export class ChannelManager {
       channels,
       pagination: { filters, sort },
     } = this.state.getLatestValue();
-    this.client.offlineDb?.upsertCidsForQuery?.({
-      cids: channels.map((channel) => channel.cid),
-      filters,
-      sort,
-    });
+    this.client.offlineDb?.executeQuerySafely(
+      (db) =>
+        db.upsertCidsForQuery({
+          cids: channels.map((channel) => channel.cid),
+          filters,
+          sort,
+        }),
+      { method: 'upsertCidsForQuery' },
+    );
   };
 
   public setEventHandlerOverrides = (
@@ -289,11 +293,15 @@ export class ChannelManager {
           },
           initialized: true,
         });
-        await this.client.offlineDb?.upsertCidsForQuery?.({
-          cids: channels.map((channel) => channel.cid),
-          filters: pagination.filters,
-          sort: pagination.sort,
-        });
+        this.client.offlineDb?.executeQuerySafely(
+          (db) =>
+            db.upsertCidsForQuery({
+              cids: channels.map((channel) => channel.cid),
+              filters: pagination.filters,
+              sort: pagination.sort,
+            }),
+          { method: 'upsertCidsForQuery' },
+        );
       } catch (err) {
         // TODO: Maybe make this configurable ?
         await waitSeconds(2);

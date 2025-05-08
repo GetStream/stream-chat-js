@@ -18,6 +18,8 @@ import type {
 import type { AxiosError } from 'axios';
 import type { StreamChat } from './client';
 import type { Channel } from './channel';
+import { StateStore } from './store';
+import { runSynchronously } from './utils';
 
 // TODO: Find a clever way to pass this in a different manner
 export type PreparedBatchQueries =
@@ -188,15 +190,26 @@ export interface OfflineDBApi {
   softDeleteMessage: (options: DeleteMessageType) => Promise<ExecuteBatchQueriesType>;
   resetDB: () => Promise<unknown>;
   channelExists: (options: ChannelExistsType) => Promise<boolean>;
+  initializeDB: () => Promise<boolean>;
 }
+
+export type OfflineDBState = {
+  initialized: boolean;
+  userId?: string;
+};
 
 export abstract class AbstractOfflineDB implements OfflineDBApi {
   private client: StreamChat;
   public syncManager: OfflineDBSyncManager;
+  public state: StateStore<OfflineDBState>;
 
   constructor({ client }: { client: StreamChat }) {
     this.client = client;
     this.syncManager = new OfflineDBSyncManager({ client, offlineDb: this });
+    this.state = new StateStore<OfflineDBState>({
+      initialized: false,
+      userId: this.client.userID,
+    });
   }
 
   abstract insertReaction: OfflineDBApi['insertReaction'];
@@ -258,6 +271,36 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   abstract resetDB: OfflineDBApi['resetDB'];
 
   abstract channelExists: OfflineDBApi['channelExists'];
+
+  abstract initializeDB: OfflineDBApi['initializeDB'];
+
+  public init = async (userId: string) => {
+    try {
+      const { userId: userIdFromState, initialized: isDbInitialized } =
+        this.state.getLatestValue();
+      if (userId !== userIdFromState || !isDbInitialized) {
+        this.state.partialNext({ initialized: false, userId: undefined });
+        const initialized = await this.initializeDB();
+        if (initialized) {
+          await this.syncManager.init();
+          this.state.partialNext({ initialized: true, userId: this.client.userID });
+        }
+      }
+    } catch (error) {
+      console.log('Error Initializing DB:', error);
+    }
+  };
+
+  public executeQuerySafely = <T>(
+    queryCallback: (db: AbstractOfflineDB) => Promise<T>,
+    { method }: { method: string },
+  ) => {
+    const { initialized } = this.state.getLatestValue();
+    if (!initialized) {
+      return;
+    }
+    runSynchronously(queryCallback(this), { context: `OfflineDB(${method})` });
+  };
 
   public queriesWithChannelGuard = async (
     {
