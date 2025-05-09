@@ -307,7 +307,7 @@ export class ChannelManager {
         await waitSeconds(2);
 
         // TODO: Extract this as a constant
-        if (retryCount === 3) {
+        if (retryCount >= 3) {
           console.warn(err);
 
           const wrappedError = new Error(
@@ -360,6 +360,7 @@ export class ChannelManager {
         console.log('IS IT SYNCED: ', this.client.offlineDb.syncManager.syncStatus);
 
         if (!this.client.offlineDb.syncManager.syncStatus) {
+          // FIXME: Should only schedule for true syncStatus, not otherwise
           this.client.offlineDb.syncManager.scheduleSyncStatusChangeCallback(
             async (syncStatus) => {
               console.log('WILL TRY NOW VAL: ', syncStatus);

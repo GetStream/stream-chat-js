@@ -138,6 +138,11 @@ export type DeleteMemberType = {
   flush?: boolean;
 };
 
+export type DropPendingTasksType = {
+  messageId: string;
+  flush?: boolean;
+};
+
 export type DeleteMessageType = { id: string; flush?: boolean };
 
 export type DeleteChannelType = { cid: string; flush?: boolean };
@@ -187,6 +192,7 @@ export interface OfflineDBApi {
   deleteMessagesForChannel: (
     options: DeleteMessagesForChannelType,
   ) => Promise<ExecuteBatchQueriesType>;
+  dropPendingTasks: (options: DropPendingTasksType) => Promise<ExecuteBatchQueriesType>;
   hardDeleteMessage: (options: DeleteMessageType) => Promise<ExecuteBatchQueriesType>;
   softDeleteMessage: (options: DeleteMessageType) => Promise<ExecuteBatchQueriesType>;
   resetDB: () => Promise<unknown>;
@@ -264,6 +270,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   abstract deleteChannel: OfflineDBApi['deleteChannel'];
 
   abstract deleteMessagesForChannel: OfflineDBApi['deleteMessagesForChannel'];
+
+  abstract dropPendingTasks: OfflineDBApi['dropPendingTasks'];
 
   abstract hardDeleteMessage: OfflineDBApi['hardDeleteMessage'];
 
@@ -439,6 +447,38 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     }
 
     return [];
+  };
+
+  /**
+   * TODO: Write docs. Here and in all other places in the API.
+   * This method is used for removing a message that has already failed from the
+   * state as well as the DB. We want to drop all pending tasks as well as finally
+   * hard delete the message from the DB.
+   * @param messageId
+   * @param flush
+   */
+  public handleRemoveMessage = async ({
+    messageId,
+    flush = true,
+  }: {
+    messageId: string;
+    flush?: boolean;
+  }) => {
+    const dropPendingTasksQueries = await this.dropPendingTasks({
+      messageId,
+      flush: false,
+    });
+    const hardDeleteMessageQueries = await this.hardDeleteMessage({
+      id: messageId,
+      flush: false,
+    });
+    const queries = [...dropPendingTasksQueries, ...hardDeleteMessageQueries];
+
+    if (flush) {
+      await this.executeSqlBatch(queries);
+    }
+
+    return queries;
   };
 
   public handleRead = async ({
@@ -690,22 +730,6 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       }
 
       await this.deletePendingTask({
-        id: task.id,
-      });
-    }
-  };
-
-  // FIXME: This should be a single DELETE query with a condition, no reason
-  //        to potentially run many queries.
-  public dropPendingTasks = async (conditions: { messageId: string }) => {
-    const tasks = await this.getPendingTasks(conditions);
-
-    for (const task of tasks) {
-      if (!task.id) {
-        continue;
-      }
-
-      await this.deletePendingTask?.({
         id: task.id,
       });
     }
