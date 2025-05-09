@@ -1743,8 +1743,9 @@ export class StreamChat {
    * @param {ChannelOptions} [options] Options object
    * @param {ChannelStateOptions} [stateOptions] State options object. These options will only be used for state management and won't be sent in the request.
    * - stateOptions.skipInitialization - Skips the initialization of the state for the channels matching the ids in the list.
+   * - stateOptions.skipHydration - Skips returning the channels as instances of the Channel class and rather returns the raw query response.
    *
-   * @return {Promise<{ channels: Array<ChannelAPIResponse>}> } search channels response
+   * @return {Promise<Array<ChannelAPIResponse> | Array<Channel>> } search channels response
    */
   async queryChannels(
     filterConditions: ChannelFilters,
@@ -1784,6 +1785,10 @@ export class StreamChat {
         isLatestMessageSet: true,
       },
     });
+
+    if (stateOptions?.skipHydration) {
+      return data.channels;
+    }
 
     return this.hydrateActiveChannels(data.channels, stateOptions, options);
   }
