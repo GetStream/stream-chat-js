@@ -40,7 +40,7 @@ const setupDraft = (initialState: MessageDraftComposerMiddlewareValueState) => {
   };
 };
 
-describe('MessageComposerValidationMiddleware', () => {
+describe('stream-io/message-composer-middleware/data-validation', () => {
   let channel: Channel;
   let client: StreamChat;
   let messageComposer: MessageComposer;
@@ -348,7 +348,7 @@ describe('MessageComposerValidationMiddleware', () => {
   });
 });
 
-describe('DraftCompositionValidationMiddleware', () => {
+describe('stream-io/message-composer-middleware/draft-data-validation', () => {
   let channel: Channel;
   let client: StreamChat;
   let messageComposer: MessageComposer;

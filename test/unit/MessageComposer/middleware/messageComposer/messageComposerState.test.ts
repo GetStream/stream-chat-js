@@ -37,7 +37,7 @@ const setupHandlerParamsDraft = (
   };
 };
 
-describe('MessageComposerStateMiddleware', () => {
+describe('stream-io/message-composer-middleware/own-state', () => {
   let channel: Channel;
   let client: StreamChat;
   let messageComposer: MessageComposer;
@@ -307,7 +307,7 @@ describe('MessageComposerStateMiddleware', () => {
   });
 });
 
-describe('DraftMessageComposerStateMiddleware', () => {
+describe('stream-io/message-composer-middleware/draft-own-state', () => {
   let channel: Channel;
   let client: StreamChat;
   let messageComposer: MessageComposer;

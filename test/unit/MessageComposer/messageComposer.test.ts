@@ -192,7 +192,8 @@ describe('MessageComposer', () => {
 
       const { messageComposer } = setup({ composition: draftMessage });
 
-      expect(messageComposer.draftId).toBe('test-draft-id');
+      expect(messageComposer.draftId).toBe(draftMessage.message.id);
+      expect(messageComposer.id).not.toBe(draftMessage.message.id);
     });
   });
 
@@ -718,6 +719,7 @@ describe('MessageComposer', () => {
 
       expect(spyCompose).toHaveBeenCalled();
       expect(spyCreatePoll).toHaveBeenCalledWith(mockPoll);
+      expect(messageComposer.pollComposer.initState).toHaveBeenCalled();
       expect(messageComposer.state.getLatestValue().pollId).toBe('test-poll-id');
     });
 
