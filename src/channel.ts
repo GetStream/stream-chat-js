@@ -191,7 +191,7 @@ export class Channel {
    *
    * @return {Promise<SendMessageAPIResponse>} The Server Response
    */
-  async sendMessage(message: Message, options?: SendMessageOptions) {
+  async _sendMessage(message: Message, options?: SendMessageOptions) {
     return await this.getClient().post<SendMessageAPIResponse>(
       this._channelURL() + '/message',
       {
@@ -199,6 +199,33 @@ export class Channel {
         ...options,
       },
     );
+  }
+
+  async sendMessage(message: Message, options?: SendMessageOptions) {
+    console.log('TO SEND: ', message);
+    try {
+      const offlineDb = this.getClient().offlineDb;
+      if (offlineDb) {
+        const messageId = message.id;
+        if (messageId) {
+          return (await offlineDb.queueTask({
+            task: {
+              channelId: this.id as string,
+              channelType: this.type,
+              messageId,
+              payload: [message, options],
+              type: 'send-message',
+            },
+          })) as SendMessageAPIResponse;
+        }
+      }
+    } catch (error) {
+      this._client.logger('error', `offlineDb:send-message`, {
+        tags: ['channel', 'offlineDb'],
+        error,
+      });
+    }
+    return await this._sendMessage(message, options);
   }
 
   sendFile(

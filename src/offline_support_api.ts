@@ -8,6 +8,7 @@ import type {
   ChannelSort,
   Event,
   LocalMessage,
+  Message,
   MessageResponse,
   PollResponse,
   ReactionFilters,
@@ -623,7 +624,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     return response;
   };
 
-  private executeTask = async ({ task }: { task: PendingTask }) => {
+  private executeTask = async (
+    { task }: { task: PendingTask },
+    isPendingTask = false,
+  ) => {
     if (task.type === 'delete-message') {
       return await this.client._deleteMessage(...task.payload);
     }
@@ -632,6 +636,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
     if (channelType && channelId) {
       const channel = this.client.channel(channelType, channelId);
+      // TODO: Think about this a bit better. Do we really need to watch or is it okay if we don't ?
       if (!channel.initialized) {
         await channel.watch();
       }
@@ -643,6 +648,14 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       if (task.type === 'delete-reaction') {
         return await channel._deleteReaction(...task.payload);
       }
+
+      if (task.type === 'send-message') {
+        const newMessage = await channel._sendMessage(...task.payload);
+        if (isPendingTask) {
+          channel.state.addMessageSorted(newMessage.message, true);
+        }
+        return newMessage;
+      }
     }
 
     throw new Error('Invalid task type');
@@ -651,15 +664,17 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   public executePendingTasks = async () => {
     const queue = await this.getPendingTasks();
     for (const task of queue) {
-      console.log('[OFFLINE]: ', task);
       if (!task.id) {
         continue;
       }
 
       try {
-        await this.executeTask({
-          task,
-        });
+        await this.executeTask(
+          {
+            task,
+          },
+          true,
+        );
       } catch (e) {
         const error = e as AxiosError<APIErrorResponse>;
         if (error?.response?.data?.code === 4) {
@@ -701,6 +716,7 @@ export type PendingTaskTypes = {
   deleteMessage: 'delete-message';
   deleteReaction: 'delete-reaction';
   sendReaction: 'send-reaction';
+  sendMessage: 'send-message';
 };
 
 // TODO: Please rethink the definition of PendingTasks as it seems awkward
@@ -722,7 +738,15 @@ export type PendingTask = {
       payload: Parameters<Channel['deleteReaction']>;
       type: PendingTaskTypes['deleteReaction'];
     }
+  | {
+      payload: Parameters<Channel['sendMessage']>;
+      type: PendingTaskTypes['sendMessage'];
+    }
 );
+
+export type PendingTaskExtraData = {
+  message?: Message;
+};
 
 /**
  * DBSyncManager has the responsibility to sync the channel states
