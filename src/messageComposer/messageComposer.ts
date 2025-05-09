@@ -544,17 +544,24 @@ export class MessageComposer extends WithSubscriptions {
     });
 
   private subscribeMessageComposerConfigStateChanged = () =>
-    this.configState.subscribeWithSelector(
-      ({ text }) => [text] as const,
-      ([currentText]) => {
-        if (this.textComposer.text === '' && currentText.defaultValue) {
-          this.textComposer.insertText({
-            text: currentText.defaultValue,
-            selection: { start: 0, end: 0 },
-          });
-        }
-      },
-    );
+    this.configState.subscribe((nextValue, previousValue) => {
+      const { text } = nextValue;
+      if (this.textComposer.text === '' && text.defaultValue) {
+        this.textComposer.insertText({
+          text: text.defaultValue,
+          selection: { start: 0, end: 0 },
+        });
+      }
+
+      if (!previousValue?.drafts.enabled && nextValue.drafts.enabled) {
+        this.addUnsubscribeFunction(this.subscribeDraftUpdated(), 'draft.updated');
+        this.addUnsubscribeFunction(this.subscribeDraftDeleted(), 'draft.deleted');
+      }
+      if (previousValue?.drafts.enabled && !nextValue.drafts.enabled) {
+        this.unregisterSubscriptionsByKey('draft.updated');
+        this.unregisterSubscriptionsByKey('draft.deleted');
+      }
+    });
 
   setQuotedMessage = (quotedMessage: LocalMessage | null) => {
     this.state.partialNext({ quotedMessage });

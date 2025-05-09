@@ -41,17 +41,16 @@ export type AttachmentManagerConfig = {
   /** Function that allows to customize the upload request. */
   doUploadRequest?: UploadRequestFn;
 };
-export type LinkPreviewConfig = {
-  /** Custom function to react to link preview dismissal */
-  onLinkPreviewDismissed?: (linkPreview: LinkPreview) => void;
-};
-export type LinkPreviewsManagerConfig = LinkPreviewConfig & {
+
+export type LinkPreviewsManagerConfig = {
   /** Number of milliseconds to debounce firing the URL enrichment queries when typing. The default value is 1500(ms). */
   debounceURLEnrichmentMs: number;
   /** Allows for toggling the URL enrichment and link previews in `MessageInput`. By default, the feature is disabled. */
   enabled: boolean;
   /** Custom function to identify URLs in a string and request OG data */
   findURLFn: (text: string) => string[];
+  /** Custom function to react to link preview dismissal */
+  onLinkPreviewDismissed?: (linkPreview: LinkPreview) => void;
 };
 
 export type MessageComposerConfig = {
