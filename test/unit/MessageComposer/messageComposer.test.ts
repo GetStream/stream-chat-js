@@ -1053,5 +1053,23 @@ describe('MessageComposer', () => {
         spy.mockRestore();
       });
     });
+
+    it('should toggle the registration of draft WS event subscriptions when drafts are disabled / enabled', () => {
+      const { messageComposer } = setup({
+        config: { drafts: { enabled: false } },
+      });
+      messageComposer.registerSubscriptions();
+
+      // @ts-expect-error - we are testing private properties
+      expect(messageComposer.unSubscribeFunctionsMap.size).toBe(0);
+
+      messageComposer.updateConfig({ drafts: { enabled: true } });
+      // @ts-expect-error - we are testing private properties
+      expect(messageComposer.unSubscribeFunctionsMap.size).toBe(2);
+
+      messageComposer.updateConfig({ drafts: { enabled: false } });
+      // @ts-expect-error - we are testing private properties
+      expect(messageComposer.unSubscribeFunctionsMap.size).toBe(0);
+    });
   });
 });
