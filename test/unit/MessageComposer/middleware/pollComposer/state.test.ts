@@ -96,7 +96,9 @@ describe('PollComposerStateMiddleware', () => {
         }),
       );
 
-      expect(result.state.nextState.errors.max_votes_allowed).toBeDefined();
+      expect(result.state.nextState.errors.max_votes_allowed).toBe(
+        'Enforce unique vote is enabled',
+      );
       expect(result.state.nextState.data.max_votes_allowed).toBe('5');
       expect(result.status).toBeUndefined;
     });
@@ -275,6 +277,32 @@ describe('PollComposerStateMiddleware', () => {
       expect(result.state.nextState.errors.options).toEqual({ x: 'failed option X' });
       expect(result.status).toBeUndefined;
     });
+
+    it('should override internally generated errors with injected errors', async () => {
+      const stateMiddleware = setup();
+      const result = await stateMiddleware.handlers.handleFieldChange(
+        setupHandlerParams({
+          nextState: {
+            ...getInitialState(),
+            data: { ...getInitialState().data, enforce_unique_vote: false },
+          },
+          previousState: {
+            ...getInitialState(),
+            data: { ...getInitialState().data, enforce_unique_vote: false },
+          },
+          targetFields: { max_votes_allowed: '5' }, // Valid value (between 2 and 10)
+          injectedFieldErrors: {
+            max_votes_allowed: 'Injected error message',
+          },
+        }),
+      );
+
+      expect(result.state.nextState.errors.max_votes_allowed).toBe(
+        'Injected error message',
+      );
+      expect(result.state.nextState.data.max_votes_allowed).toBe('5');
+      expect(result.status).toBeUndefined;
+    });
   });
 
   describe('handleFieldBlur', () => {
@@ -406,5 +434,31 @@ describe('PollComposerStateMiddleware', () => {
       expect(result.state.nextState.errors.options).toEqual({ x: 'failed option X' });
       expect(result.status).toBeUndefined;
     });
+  });
+
+  it('should override internally generated errors with injected errors', async () => {
+    const stateMiddleware = setup();
+    const result = await stateMiddleware.handlers.handleFieldBlur(
+      setupHandlerParams({
+        nextState: {
+          ...getInitialState(),
+          data: { ...getInitialState().data, enforce_unique_vote: false },
+        },
+        previousState: {
+          ...getInitialState(),
+          data: { ...getInitialState().data, enforce_unique_vote: false },
+        },
+        targetFields: { max_votes_allowed: '5' }, // Valid value (between 2 and 10)
+        injectedFieldErrors: {
+          max_votes_allowed: 'Injected error message',
+        },
+      }),
+    );
+
+    expect(result.state.nextState.errors.max_votes_allowed).toBe(
+      'Injected error message',
+    );
+    expect(result.state.nextState.data.max_votes_allowed).toBe('5');
+    expect(result.status).toBeUndefined;
   });
 });

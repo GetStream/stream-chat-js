@@ -31,6 +31,10 @@ export const pollStateChangeValidators: Partial<
   max_votes_allowed: ({ data, value }) => {
     if (data.enforce_unique_vote && value)
       return { max_votes_allowed: 'Enforce unique vote is enabled' };
+    const numericMatch = value.match(/^[0-9]+$/);
+    if (!numericMatch && value) {
+      return { max_votes_allowed: 'Only numbers are allowed' };
+    }
     if (value?.length > 1 && !value.match(VALID_MAX_VOTES_VALUE_REGEX))
       return { max_votes_allowed: 'Type a number from 2 to 10' };
     return { max_votes_allowed: undefined };
@@ -225,7 +229,7 @@ export const createPollComposerStateMiddleware = ({
         forward,
       }: MiddlewareHandlerParams<PollComposerStateChangeMiddlewareValue>) => {
         if (!state.targetFields) return forward();
-        const { previousState } = state;
+        const { previousState, injectedFieldErrors } = state;
         const finalValidators = {
           ...pollStateChangeValidators,
           ...defaultPollFieldChangeEventValidators,
@@ -247,7 +251,7 @@ export const createPollComposerStateMiddleware = ({
           nextState: {
             ...previousState,
             data: { ...previousState.data, ...newData },
-            errors: { ...previousState.errors, ...newErrors },
+            errors: { ...previousState.errors, ...newErrors, ...injectedFieldErrors },
           },
         });
       },
@@ -275,7 +279,11 @@ export const createPollComposerStateMiddleware = ({
           nextState: {
             ...previousState,
             data: { ...previousState.data, ...newData },
-            errors: { ...previousState.errors, ...newErrors },
+            errors: {
+              ...previousState.errors,
+              ...newErrors,
+              ...state.injectedFieldErrors,
+            },
           },
         });
       },

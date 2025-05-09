@@ -7,7 +7,11 @@ import { StateStore } from '../store';
 import { VotingVisibility } from '../types';
 import { generateUUIDv4 } from '../utils';
 import type { MessageComposer } from './messageComposer';
-import type { PollComposerState, UpdateFieldsData } from './middleware/pollComposer';
+import type {
+  PollComposerFieldErrors,
+  PollComposerState,
+  UpdateFieldsData,
+} from './middleware/pollComposer';
 
 export type PollComposerOptions = {
   composer: MessageComposer;
@@ -102,13 +106,23 @@ export class PollComposer {
     this.state.next(this.initialState);
   };
 
-  updateFields = async (data: UpdateFieldsData) => {
+  /**
+   * Updates specified fields and generates relevant errors
+   * @param data
+   * @param injectedFieldErrors - errors produced externally that will take precedence over the errors generated in the middleware chaing
+   */
+  // FIXME: change method params to a single object with the next major release
+  updateFields = async (
+    data: UpdateFieldsData,
+    injectedFieldErrors?: PollComposerFieldErrors,
+  ) => {
     const { state, status } = await this.stateMiddlewareExecutor.execute({
       eventName: 'handleFieldChange',
       initialValue: {
         nextState: { ...this.state.getLatestValue() },
         previousState: { ...this.state.getLatestValue() },
         targetFields: data,
+        injectedFieldErrors,
       },
     });
 
