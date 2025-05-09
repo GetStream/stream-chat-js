@@ -1,3 +1,14 @@
+## [9.1.0](https://github.com/GetStream/stream-chat-js/compare/v9.0.1...v9.1.0) (2025-05-09)
+
+### Bug Fixes
+
+* exclude other data from poll messages and refresh poll composer state on poll creation ([#1528](https://github.com/GetStream/stream-chat-js/issues/1528)) ([2389ff4](https://github.com/GetStream/stream-chat-js/commit/2389ff475d420987cfb607fb31a1b4e4de6a024d))
+* prevent awaiting suggestion search results in TextComposerMiddlewareExecutor ([#1525](https://github.com/GetStream/stream-chat-js/issues/1525)) ([bf607d3](https://github.com/GetStream/stream-chat-js/commit/bf607d3756cdfa677badbfa8de1d8c69d20daf74))
+
+### Features
+
+* allow to inject errors to during PollComposer field updates ([#1527](https://github.com/GetStream/stream-chat-js/issues/1527)) ([81d9bb1](https://github.com/GetStream/stream-chat-js/commit/81d9bb1cdef538c481fd9951f13fa60108cb8828))
+
 ## [9.0.1](https://github.com/GetStream/stream-chat-js/compare/v9.0.0...v9.0.1) (2025-05-07)
 
 ### Bug Fixes
