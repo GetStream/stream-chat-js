@@ -881,12 +881,12 @@ export class OfflineDBSyncManager {
     this.syncStatus = status;
     this.syncStatusListeners.forEach((l) => l(status));
 
-    console.log('WILL TRY LISTENERS', this.scheduledSyncStatusCallbacks.length);
-    const promises = this.scheduledSyncStatusCallbacks.map((cb) => cb(status));
-    await Promise.all(promises);
-    console.log('DONE LISTENERS !');
+    if (status) {
+      const promises = this.scheduledSyncStatusCallbacks.map((cb) => cb(status));
+      await Promise.all(promises);
 
-    this.scheduledSyncStatusCallbacks = [];
+      this.scheduledSyncStatusCallbacks = [];
+    }
   };
 
   private handleEventToSyncDB = async (event: Event, flush?: boolean) => {

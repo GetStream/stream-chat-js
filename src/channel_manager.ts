@@ -361,14 +361,10 @@ export class ChannelManager {
 
         if (!this.client.offlineDb.syncManager.syncStatus) {
           // FIXME: Should only schedule for true syncStatus, not otherwise
-          this.client.offlineDb.syncManager.scheduleSyncStatusChangeCallback(
-            async (syncStatus) => {
-              console.log('WILL TRY NOW VAL: ', syncStatus);
-              if (syncStatus) {
-                await queryChannelsRequest();
-              }
-            },
-          );
+          this.client.offlineDb.syncManager.scheduleSyncStatusChangeCallback(async () => {
+            console.log('WILL TRY NOW RUNNING SCHEDULED NOW !');
+            await queryChannelsRequest();
+          });
           return;
         }
         // await queryChannelsRequest();
