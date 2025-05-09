@@ -1735,23 +1735,19 @@ export class StreamChat {
   }
 
   /**
-   * queryChannels - Query channels
+   * queryChannelsRequest - Queries channels and returns the raw response
    *
    * @param {ChannelFilters} filterConditions object MongoDB style filters
    * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
    * @param {ChannelOptions} [options] Options object
-   * @param {ChannelStateOptions} [stateOptions] State options object. These options will only be used for state management and won't be sent in the request.
-   * - stateOptions.skipInitialization - Skips the initialization of the state for the channels matching the ids in the list.
-   * - stateOptions.skipHydration - Skips returning the channels as instances of the Channel class and rather returns the raw query response.
    *
-   * @return {Promise<Array<ChannelAPIResponse> | Array<Channel>> } search channels response
+   * @return {Promise<Array<ChannelAPIResponse>>} search channels response
    */
-  async queryChannels(
+  async queryChannelsRequest(
     filterConditions: ChannelFilters,
     sort: ChannelSort = [],
     options: ChannelOptions = {},
-    stateOptions: ChannelStateOptions = {},
   ) {
     const defaultOptions: ChannelOptions = {
       state: true,
@@ -1778,19 +1774,39 @@ export class StreamChat {
       payload,
     );
 
+    return data.channels;
+  }
+
+  /**
+   * queryChannels - Query channels
+   *
+   * @param {ChannelFilters} filterConditions object MongoDB style filters
+   * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
+   * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
+   * @param {ChannelOptions} [options] Options object
+   * @param {ChannelStateOptions} [stateOptions] State options object. These options will only be used for state management and won't be sent in the request.
+   * - stateOptions.skipInitialization - Skips the initialization of the state for the channels matching the ids in the list.
+   * - stateOptions.skipHydration - Skips returning the channels as instances of the Channel class and rather returns the raw query response.
+   *
+   * @return {Promise<Array<Channel>>} search channels response
+   */
+  async queryChannels(
+    filterConditions: ChannelFilters,
+    sort: ChannelSort = [],
+    options: ChannelOptions = {},
+    stateOptions: ChannelStateOptions = {},
+  ) {
+    const channels = await this.queryChannelsRequest(filterConditions, sort, options);
+
     this.dispatchEvent({
       type: 'channels.queried',
       queriedChannels: {
-        channels: data.channels,
+        channels,
         isLatestMessageSet: true,
       },
     });
 
-    if (stateOptions?.skipHydration) {
-      return data.channels;
-    }
-
-    return this.hydrateActiveChannels(data.channels, stateOptions, options);
+    return this.hydrateActiveChannels(channels, stateOptions, options);
   }
 
   /**

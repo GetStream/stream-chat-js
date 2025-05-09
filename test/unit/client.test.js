@@ -667,7 +667,7 @@ describe('StreamChat.queryChannels', async () => {
 		mock.restore();
 	});
 
-	it('should return the channels response as Channel instances when stateOptions.skipHydration is false', async () => {
+	it('should return hydrated channels as Channel instances from queryChannels', async () => {
 		const client = await getClientWithUser();
 		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
 			...mockChannelQueryResponse,
@@ -687,7 +687,7 @@ describe('StreamChat.queryChannels', async () => {
 		postStub.restore();
 	});
 
-	it('should return the raw response when stateOptions.skipHydration is true', async () => {
+	it('should return the raw channels response from queryChannelsRequest', async () => {
 		const client = await getClientWithUser();
 		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
 			...mockChannelQueryResponse,
@@ -699,12 +699,7 @@ describe('StreamChat.queryChannels', async () => {
 		const postStub = sinon
 			.stub(client, 'post')
 			.returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
-		const queryChannelsResponse = await client.queryChannels(
-			{},
-			{},
-			{},
-			{ skipHydration: true },
-		);
+		const queryChannelsResponse = await client.queryChannelsRequest();
 		expect(queryChannelsResponse.length).to.be.equal(mockedChannelsQueryResponse.length);
 		expect(queryChannelsResponse).to.deep.equal(mockedChannelsQueryResponse);
 		postStub.restore();
