@@ -968,6 +968,7 @@ export type ChannelQueryOptions = {
 export type ChannelStateOptions = {
   offlineMode?: boolean;
   skipInitialization?: string[];
+  skipHydration?: boolean;
 };
 
 export type CreateChannelOptions = {
