@@ -159,8 +159,11 @@ export class StateStore<T extends Record<string, unknown>> {
  *
  * @template O The type of the original state store
  * @template M The type of the merged state store
+ *
+ * @experimental
+ * This class is experimental and may change in future versions.
  */
-class MergedStateStore<
+export class MergedStateStore<
   O extends Record<string, unknown>,
   M extends Record<string, unknown>,
 > extends StateStore<O & M> {
@@ -297,8 +300,7 @@ class MergedStateStore<
   }
 }
 
-// EXAMPLE:
-
+/** EXAMPLE:
 const Uninitialized = Symbol('uninitialized');
 
 const b = new StateStore<{
@@ -332,3 +334,4 @@ a.subscribe((ns) => console.log(ns));
 a.original.partialNext({ next: 'next' });
 a.original.partialNext({ next: null });
 a.original.partialNext({ next: Uninitialized });
+*/
