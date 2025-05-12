@@ -2713,7 +2713,7 @@ export type MessageBase = CustomMessageData & {
   type?: MessageLabel;
   user?: UserResponse | null;
   user_id?: string;
-  live_location?: LiveLocation<StreamChatGenerics>;
+  live_location?: LiveLocation;
 };
 
 export type MessageLabel =
@@ -3926,7 +3926,7 @@ export type LiveLocationsAPIResponse = APIResponse & {
   live_locations: LiveLocation[];
 };
 
-export type LiveLocation<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+export type LiveLocation = {
   channel_cid?: string;
   created_at?: string;
   created_by_device_id: string;

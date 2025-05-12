@@ -118,6 +118,8 @@ import type {
   ListCommandsResponse,
   ListImportsPaginationOptions,
   ListImportsResponse,
+  LiveLocation,
+  LiveLocationsAPIResponse,
   LocalMessage,
   Logger,
   MarkChannelsReadOptions,
@@ -2493,7 +2495,9 @@ export class StreamChat {
    * @returns {Promise<APIResponse>} The server response
    */
   async getUserLiveLocations(userId: string) {
-    return await this.get<LiveLocationsAPIResponse>(this.baseURL + `/users/${encodeURIComponent(userId)}/live_locations`);
+    return await this.get<LiveLocationsAPIResponse>(
+      this.baseURL + `/users/${encodeURIComponent(userId)}/live_locations`,
+    );
   }
 
   /** muteUser - mutes a user
@@ -4420,12 +4424,15 @@ export class StreamChat {
    * @returns {Promise<APIResponse>} The server response
    */
   async updateLiveLocation(liveLocation: LiveLocation) {
-    return await this.put<LiveLocation<StreamChatGenerics>>(this.baseURL + '/users/' + this.userID + '/live_location', {
-      message_id: liveLocation.message_id,
-      longitude: liveLocation.longitude,
-      latitude: liveLocation.latitude,
-      created_by_device_id: liveLocation.created_by_device_id,
-      end_at: liveLocation.end_at,
-    });
+    return await this.put<LiveLocation>(
+      this.baseURL + '/users/' + this.userID + '/live_location',
+      {
+        message_id: liveLocation.message_id,
+        longitude: liveLocation.longitude,
+        latitude: liveLocation.latitude,
+        created_by_device_id: liveLocation.created_by_device_id,
+        end_at: liveLocation.end_at,
+      },
+    );
   }
 }
