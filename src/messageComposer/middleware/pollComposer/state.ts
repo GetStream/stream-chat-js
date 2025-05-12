@@ -31,7 +31,7 @@ export const pollStateChangeValidators: Partial<
   max_votes_allowed: ({ data, value }) => {
     if (data.enforce_unique_vote && value)
       return { max_votes_allowed: 'Enforce unique vote is enabled' };
-    if (value?.length > 1 && !value.match(VALID_MAX_VOTES_VALUE_REGEX))
+    if (!value.match(VALID_MAX_VOTES_VALUE_REGEX))
       return { max_votes_allowed: 'Type a number from 2 to 10' };
     return { max_votes_allowed: undefined };
   },
