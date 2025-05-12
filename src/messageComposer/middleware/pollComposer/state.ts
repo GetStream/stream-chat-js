@@ -128,6 +128,7 @@ export const pollCompositionStateProcessors: Partial<
       ...optionListTail,
     ];
 
+    // Add new option if all the options are filled
     if (!newOptions.some((option) => !option.text.trim())) {
       newOptions.push({ id: generateUUIDv4(), text: '' });
     }
