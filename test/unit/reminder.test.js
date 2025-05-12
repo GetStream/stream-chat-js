@@ -1,6 +1,7 @@
 import { expect } from 'chai';
 import sinon from 'sinon';
 import { StreamChat } from '../../src';
+import { afterEach, beforeEach, describe, it } from 'vitest';
 
 const user1 = {
 	id: 'user1',
