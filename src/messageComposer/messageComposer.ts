@@ -546,18 +546,39 @@ export class MessageComposer extends WithSubscriptions {
       }
     });
 
-  private subscribeMessageComposerConfigStateChanged = () =>
-    this.configState.subscribeWithSelector(
-      ({ text }) => [text] as const,
-      ([currentText]) => {
-        if (this.textComposer.text === '' && currentText.defaultValue) {
+  private subscribeMessageComposerConfigStateChanged = () => {
+    let draftUnsubscribeFunctions: Unsubscribe[] | null;
+
+    const unsubscribe = this.configState.subscribeWithSelector(
+      (currentValue) => ({
+        textDefaultValue: currentValue.text.defaultValue,
+        draftsEnabled: currentValue.drafts.enabled,
+      }),
+      ({ textDefaultValue, draftsEnabled }) => {
+        if (this.textComposer.text === '' && textDefaultValue) {
           this.textComposer.insertText({
-            text: currentText.defaultValue,
+            text: textDefaultValue,
             selection: { start: 0, end: 0 },
           });
         }
+
+        if (draftsEnabled && !draftUnsubscribeFunctions) {
+          draftUnsubscribeFunctions = [
+            this.subscribeDraftUpdated(),
+            this.subscribeDraftDeleted(),
+          ];
+        } else if (!draftsEnabled && draftUnsubscribeFunctions) {
+          draftUnsubscribeFunctions.forEach((fn) => fn());
+          draftUnsubscribeFunctions = null;
+        }
       },
     );
+
+    return () => {
+      draftUnsubscribeFunctions?.forEach((unsubscribe) => unsubscribe());
+      unsubscribe();
+    };
+  };
 
   setQuotedMessage = (quotedMessage: LocalMessage | null) => {
     this.state.partialNext({ quotedMessage });
