@@ -13,104 +13,75 @@ import {
 import { MiddlewareStatus } from '../../../../../src/middleware';
 import { MessageComposerMiddlewareState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
 import { MessageDraftComposerMiddlewareValueState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
+import { LocalMessage } from '../../../../../src';
 
-const setup = (initialState: MessageComposerMiddlewareState) => {
-  return {
-    state: initialState,
-    next: async (state: MessageComposerMiddlewareState) => ({ state }),
-    complete: async (state: MessageComposerMiddlewareState) => ({
-      state,
-      status: 'complete' as MiddlewareStatus,
-    }),
-    discard: async () => ({ state: initialState, status: 'discard' as MiddlewareStatus }),
-    forward: async () => ({ state: initialState }),
+const setupMiddleware = (custom: { composer?: MessageComposer } = {}) => {
+  const client = {
+    userID: 'currentUser',
+    user: { id: 'currentUser' },
+  } as any;
+
+  const channel = {
+    getClient: vi.fn().mockReturnValue(client),
+    state: {
+      members: {},
+      watchers: {},
+    },
+    getConfig: vi.fn().mockReturnValue({ commands: [] }),
+  } as any;
+
+  const textComposer = {
+    get text() {
+      return '';
+    },
+    get mentionedUsers() {
+      return [];
+    },
   };
-};
 
-const setupDraft = (initialState: MessageDraftComposerMiddlewareValueState) => {
-  return {
-    state: initialState,
-    next: async (state: MessageDraftComposerMiddlewareValueState) => ({ state }),
-    complete: async (state: MessageDraftComposerMiddlewareValueState) => ({
-      state,
-      status: 'complete' as MiddlewareStatus,
-    }),
-    discard: async () => ({ state: initialState, status: 'discard' as MiddlewareStatus }),
-    forward: async () => ({ state: initialState }),
+  const attachmentManager = {
+    get uploadsInProgressCount() {
+      return 0;
+    },
+    get successfulUploads() {
+      return [];
+    },
   };
-};
 
-describe('stream-io/message-composer-middleware/data-validation', () => {
-  let channel: Channel;
-  let client: StreamChat;
-  let messageComposer: MessageComposer;
-  let validationMiddleware: ReturnType<typeof createCompositionValidationMiddleware>;
+  const linkPreviewsManager = {
+    state: {
+      getLatestValue: () => ({
+        previews: new Map(),
+      }),
+    },
+  };
 
-  beforeEach(() => {
-    client = {
-      userID: 'currentUser',
-      user: { id: 'currentUser' },
-    } as any;
+  const pollComposer = {
+    state: {
+      getLatestValue: () => ({
+        data: {
+          options: [],
+          name: '',
+          max_votes_allowed: '',
+          id: '',
+          user_id: '',
+          voting_visibility: 'public',
+          allow_answers: false,
+          allow_user_suggested_options: false,
+          description: '',
+          enforce_unique_vote: true,
+        },
+        errors: {},
+      }),
+    },
+    get canCreatePoll() {
+      return false;
+    },
+  };
 
-    channel = {
-      getClient: vi.fn().mockReturnValue(client),
-      state: {
-        members: {},
-        watchers: {},
-      },
-      getConfig: vi.fn().mockReturnValue({ commands: [] }),
-    } as any;
-
-    const textComposer = {
-      get text() {
-        return '';
-      },
-      get mentionedUsers() {
-        return [];
-      },
-    };
-
-    const attachmentManager = {
-      get uploadsInProgressCount() {
-        return 0;
-      },
-      get successfulUploads() {
-        return [];
-      },
-    };
-
-    const linkPreviewsManager = {
-      state: {
-        getLatestValue: () => ({
-          previews: new Map(),
-        }),
-      },
-    };
-
-    const pollComposer = {
-      state: {
-        getLatestValue: () => ({
-          data: {
-            options: [],
-            name: '',
-            max_votes_allowed: '',
-            id: '',
-            user_id: '',
-            voting_visibility: 'public',
-            allow_answers: false,
-            allow_user_suggested_options: false,
-            description: '',
-            enforce_unique_vote: true,
-          },
-          errors: {},
-        }),
-      },
-      get canCreatePoll() {
-        return false;
-      },
-    };
-
-    messageComposer = {
+  const messageComposer =
+    custom.composer ??
+    ({
       channel,
       config: {},
       threadId: undefined,
@@ -126,14 +97,47 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
       get quotedMessage() {
         return undefined;
       },
-    } as any;
+    } as any);
 
-    validationMiddleware = createCompositionValidationMiddleware(messageComposer);
-  });
+  return {
+    messageComposer,
+    validationMiddleware: createCompositionValidationMiddleware(messageComposer),
+  };
+};
 
+const setupMiddlewareInputs = (initialState: MessageComposerMiddlewareState) => {
+  return {
+    state: initialState,
+    next: async (state: MessageComposerMiddlewareState) => ({ state }),
+    complete: async (state: MessageComposerMiddlewareState) => ({
+      state,
+      status: 'complete' as MiddlewareStatus,
+    }),
+    discard: async () => ({ state: initialState, status: 'discard' as MiddlewareStatus }),
+    forward: async () => ({ state: initialState }),
+  };
+};
+
+const setupMiddlewareInputsDraft = (
+  initialState: MessageDraftComposerMiddlewareValueState,
+) => {
+  return {
+    state: initialState,
+    next: async (state: MessageDraftComposerMiddlewareValueState) => ({ state }),
+    complete: async (state: MessageDraftComposerMiddlewareValueState) => ({
+      state,
+      status: 'complete' as MiddlewareStatus,
+    }),
+    discard: async () => ({ state: initialState, status: 'discard' as MiddlewareStatus }),
+    forward: async () => ({ state: initialState }),
+  };
+};
+
+describe('stream-io/message-composer-middleware/data-validation', () => {
   it('should validate empty message', async () => {
+    const { validationMiddleware } = setupMiddleware();
     const result = await validationMiddleware.handlers.compose(
-      setup({
+      setupMiddlewareInputs({
         message: {
           id: 'test-id',
           parent_id: undefined,
@@ -162,10 +166,11 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
   });
 
   it('should validate message with text', async () => {
+    const { messageComposer, validationMiddleware } = setupMiddleware();
     vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue('Hello world');
 
     const result = await validationMiddleware.handlers.compose(
-      setup({
+      setupMiddlewareInputs({
         message: {
           id: 'test-id',
           parent_id: undefined,
@@ -195,6 +200,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
   });
 
   it('should validate message with attachments', async () => {
+    const { messageComposer, validationMiddleware } = setupMiddleware();
     const attachment: LocalImageAttachment = {
       type: 'image',
       image_url: 'https://example.com/image.jpg',
@@ -212,7 +218,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
     ).mockReturnValue([attachment]);
 
     const result = await validationMiddleware.handlers.compose(
-      setup({
+      setupMiddlewareInputs({
         message: {
           id: 'test-id',
           attachments: [attachment],
@@ -242,13 +248,14 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
   });
 
   it('should validate message with mentions', async () => {
+    const { messageComposer, validationMiddleware } = setupMiddleware();
     vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue('Hello @user1');
     vi.spyOn(messageComposer.textComposer, 'mentionedUsers', 'get').mockReturnValue([
       { id: 'user1', name: 'User One' },
     ]);
 
     const result = await validationMiddleware.handlers.compose(
-      setup({
+      setupMiddlewareInputs({
         message: {
           message: {
             id: 'test-id',
@@ -281,8 +288,9 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
   });
 
   it('should validate message with poll', async () => {
+    const { validationMiddleware } = setupMiddleware();
     const result = await validationMiddleware.handlers.compose(
-      setup({
+      setupMiddlewareInputs({
         message: {
           message: {
             id: 'test-id',
@@ -308,6 +316,78 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
           },
           sendOptions: {},
         },
+      }),
+    );
+
+    expect(result.status).toBeUndefined;
+  });
+
+  it('should discard composition for edited message without any local change', async () => {
+    const { messageComposer, validationMiddleware } = setupMiddleware();
+    const localMessage: LocalMessage = {
+      attachments: [],
+      created_at: new Date(),
+      deleted_at: null,
+      error: undefined,
+      id: 'test-id',
+      mentioned_users: [],
+      parent_id: undefined,
+      pinned_at: null,
+      reaction_groups: null,
+      status: 'sending',
+      text: 'Hello world',
+      type: 'regular',
+      updated_at: new Date(),
+    };
+    messageComposer.editedMessage = localMessage;
+    vi.spyOn(messageComposer, 'lastChangeOriginIsLocal', 'get').mockReturnValue(false);
+
+    const result = await validationMiddleware.handlers.compose(
+      setupMiddlewareInputs({
+        message: {
+          id: localMessage.id,
+          parent_id: localMessage.parent_id,
+          text: localMessage.text,
+          type: localMessage.type,
+        },
+        localMessage,
+        sendOptions: {},
+      }),
+    );
+
+    expect(result.status).toBe('discard');
+  });
+
+  it('should not discard composition for newly composed message initiated with draft', async () => {
+    const { messageComposer, validationMiddleware } = setupMiddleware();
+    const localMessage: LocalMessage = {
+      attachments: [],
+      created_at: new Date(),
+      deleted_at: null,
+      error: undefined,
+      id: 'test-id',
+      mentioned_users: [],
+      parent_id: undefined,
+      pinned_at: null,
+      reaction_groups: null,
+      status: 'sending',
+      text: 'Hello world',
+      type: 'regular',
+      updated_at: new Date(),
+    };
+    messageComposer.editedMessage = undefined;
+    vi.spyOn(messageComposer, 'lastChangeOriginIsLocal', 'get').mockReturnValue(false);
+
+    const result = await validationMiddleware.handlers.compose(
+      setupMiddlewareInputs({
+        message: {
+          id: localMessage.id,
+          parent_id: localMessage.parent_id,
+          text: localMessage.text,
+          type: localMessage.type,
+        },
+        localMessage,
+        sendOptions: {},
       }),
     );
 
@@ -408,7 +488,7 @@ describe('stream-io/message-composer-middleware/draft-data-validation', () => {
 
   it('should discard empty draft', async () => {
     const result = await validationMiddleware.handlers.compose(
-      setupDraft({
+      setupMiddlewareInputsDraft({
         draft: {
           text: '',
         },
@@ -420,7 +500,7 @@ describe('stream-io/message-composer-middleware/draft-data-validation', () => {
 
   it('should validate draft with text', async () => {
     const result = await validationMiddleware.handlers.compose(
-      setupDraft({
+      setupMiddlewareInputsDraft({
         draft: {
           text: 'Hello world',
         },
@@ -432,7 +512,7 @@ describe('stream-io/message-composer-middleware/draft-data-validation', () => {
 
   it('should validate draft with attachments', async () => {
     const result = await validationMiddleware.handlers.compose(
-      setupDraft({
+      setupMiddlewareInputsDraft({
         draft: {
           text: '',
           attachments: [
@@ -450,7 +530,7 @@ describe('stream-io/message-composer-middleware/draft-data-validation', () => {
 
   it('should validate draft with poll', async () => {
     const result = await validationMiddleware.handlers.compose(
-      setupDraft({
+      setupMiddlewareInputsDraft({
         draft: {
           text: '',
           poll_id: 'poll-123',
@@ -463,7 +543,7 @@ describe('stream-io/message-composer-middleware/draft-data-validation', () => {
 
   it('should validate draft with quoted message', async () => {
     const result = await validationMiddleware.handlers.compose(
-      setupDraft({
+      setupMiddlewareInputsDraft({
         draft: {
           text: '',
           quoted_message_id: 'msg-123',
@@ -478,7 +558,7 @@ describe('stream-io/message-composer-middleware/draft-data-validation', () => {
     vi.spyOn(messageComposer, 'lastChangeOriginIsLocal', 'get').mockReturnValue(false);
 
     const result = await validationMiddleware.handlers.compose(
-      setupDraft({
+      setupMiddlewareInputsDraft({
         draft: {
           text: 'Hello world',
         },
