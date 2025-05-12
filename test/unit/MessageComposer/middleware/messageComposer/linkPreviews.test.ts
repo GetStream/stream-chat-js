@@ -90,7 +90,7 @@ const setup = ({
   return { linkPreviewsMiddleware, messageComposer };
 };
 
-describe('LinkPreviewsMiddleware', () => {
+describe('stream-io/message-composer-middleware/link-previews', () => {
   it('should keep message attachments empty if not link previews are available', async () => {
     const { linkPreviewsMiddleware } = setup();
     const result = await linkPreviewsMiddleware.handlers.compose(
@@ -603,7 +603,7 @@ const setupForDraft = ({
 
   return { linkPreviewsMiddleware, mockClient, mockChannel, messageComposer };
 };
-describe('DraftLinkPreviewsMiddleware', () => {
+describe('stream-io/message-composer-middleware/draft-link-previews', () => {
   it('should handle draft without link previews', async () => {
     const { linkPreviewsMiddleware } = setupForDraft();
     const result = await linkPreviewsMiddleware.handlers.compose(

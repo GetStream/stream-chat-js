@@ -88,16 +88,18 @@ const initState = (
   const quotedMessage = composition.quoted_message;
   let message;
   let draftId = null;
+  let id = MessageComposer.generateId(); // do not use draft id for messsage id
   if (compositionIsDraftResponse(composition)) {
     message = composition.message;
     draftId = composition.message.id;
   } else {
     message = composition;
+    id = composition.id;
   }
 
   return {
     draftId,
-    id: message.id,
+    id,
     quotedMessage: quotedMessage
       ? formatMessage(quotedMessage as MessageResponseBase)
       : null,
@@ -318,6 +320,7 @@ export class MessageComposer {
     this.attachmentManager.initState({ message });
     this.linkPreviewsManager.initState({ message });
     this.textComposer.initState({ message });
+    this.pollComposer.initState();
     this.customDataManager.initState({ message });
     this.state.next(initState(composition));
     if (
@@ -543,11 +546,6 @@ export class MessageComposer {
   };
 
   clear = () => {
-    this.attachmentManager.initState();
-    this.linkPreviewsManager.initState();
-    this.textComposer.initState();
-    this.pollComposer.initState();
-    this.customDataManager.initState();
     this.initState();
   };
 
@@ -630,6 +628,7 @@ export class MessageComposer {
     try {
       const { poll } = await this.client.createPoll(composition.data);
       this.state.partialNext({ pollId: poll.id });
+      this.pollComposer.initState();
     } catch (error) {
       this.client.notifications.add({
         message: 'Failed to create the poll',

@@ -60,6 +60,7 @@ export type PollComposerStateChangeMiddlewareValue = {
       ? PollComposerOptionUpdate
       : PollComposerState['data'][K];
   }>;
+  injectedFieldErrors?: PollComposerFieldErrors;
 };
 
 export type PollComposerStateMiddlewareValue =

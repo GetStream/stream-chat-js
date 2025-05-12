@@ -10,6 +10,7 @@ import type {
   MessageComposerMiddlewareState,
   MessageDraftComposerMiddlewareValueState,
 } from '../../../../../src/messageComposer/middleware/messageComposer/types';
+import { MiddlewareStatus } from '../../../../../src';
 
 const setup = (initialState: MessageComposerMiddlewareState) => {
   return {
@@ -52,7 +53,7 @@ describe('Custom Data Middleware', () => {
     });
   });
 
-  describe('createCustomDataCompositionMiddleware', () => {
+  describe('stream-io/message-composer-middleware/custom-data', () => {
     it('should initialize with custom data', async () => {
       const data = { key: 'value' };
       composer.customDataManager.setMessageData(data);
@@ -108,7 +109,7 @@ describe('Custom Data Middleware', () => {
     });
   });
 
-  describe('createDraftCustomDataCompositionMiddleware', () => {
+  describe('stream-io/message-composer-middleware/draft-custom-data', () => {
     it('should initialize with custom data', async () => {
       const data = { key: 'value' };
       composer.customDataManager.setMessageData(data);

@@ -36,7 +36,7 @@ const setupDraft = (initialState: MessageDraftComposerMiddlewareValueState) => {
   };
 };
 
-describe('TextComposerMiddleware', () => {
+describe('stream-io/message-composer-middleware/text-composition', () => {
   let channel: Channel;
   let client: StreamChat;
   let messageComposer: MessageComposer;
@@ -350,7 +350,7 @@ describe('TextComposerMiddleware', () => {
   });
 });
 
-describe('DraftTextComposerMiddleware', () => {
+describe('stream-io/message-composer-middleware/draft-text-composition', () => {
   let channel: Channel;
   let client: StreamChat;
   let messageComposer: MessageComposer;

@@ -38,7 +38,7 @@ const setupDraft = (initialState: MessageDraftComposerMiddlewareValueState) => {
   };
 };
 
-describe('AttachmentsMiddleware', () => {
+describe('stream-io/message-composer-middleware/attachments', () => {
   let channel: Channel;
   let client: StreamChat;
   let messageComposer: MessageComposer;
@@ -377,7 +377,7 @@ describe('AttachmentsMiddleware', () => {
   });
 });
 
-describe('DraftAttachmentsMiddleware', () => {
+describe('stream-io/message-composer-middleware/draft-attachments', () => {
   let channel: Channel;
   let client: StreamChat;
   let messageComposer: MessageComposer;
