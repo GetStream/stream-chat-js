@@ -1,3 +1,9 @@
+## [9.1.1](https://github.com/GetStream/stream-chat-js/compare/v9.1.0...v9.1.1) (2025-05-12)
+
+### Bug Fixes
+
+* add optional raw queryChannels api response ([#1530](https://github.com/GetStream/stream-chat-js/issues/1530)) ([23eebf0](https://github.com/GetStream/stream-chat-js/commit/23eebf0702dfbf70f52b0aea7e5d2939de604ecf))
+
 ## [9.1.0](https://github.com/GetStream/stream-chat-js/compare/v9.0.1...v9.1.0) (2025-05-09)
 
 ### Bug Fixes
