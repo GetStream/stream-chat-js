@@ -116,23 +116,21 @@ export const pollCompositionStateProcessors: Partial<
     const { index, text } = value;
     const prevOptions = data.options || [];
 
-    const shouldAddEmptyOption =
-      prevOptions.length < MAX_POLL_OPTIONS &&
-      (!prevOptions || (prevOptions.slice(index + 1).length === 0 && !!text));
-
     const shouldRemoveOption =
       prevOptions && prevOptions.slice(index + 1).length > 0 && !text;
 
     const optionListHead = prevOptions.slice(0, index);
-    const optionListTail = shouldAddEmptyOption
-      ? [{ id: generateUUIDv4(), text: '' }]
-      : prevOptions.slice(index + 1);
+    const optionListTail = prevOptions.slice(index + 1);
 
     const newOptions = [
       ...optionListHead,
       ...(shouldRemoveOption ? [] : [{ ...prevOptions[index], text }]),
       ...optionListTail,
     ];
+
+    if (!newOptions.some((option) => !option.text.trim())) {
+      newOptions.push({ id: generateUUIDv4(), text: '' });
+    }
 
     return { options: newOptions };
   },
