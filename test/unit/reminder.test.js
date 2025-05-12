@@ -43,7 +43,9 @@ describe('Reminder', () => {
 			});
 
 			expect(postStub.calledOnce).to.be.true;
-			expect(postStub.firstCall.args[0]).to.equal(`${client.baseURL}/messages/message123/reminders`);
+			expect(postStub.firstCall.args[0]).to.equal(
+				`${client.baseURL}/messages/message123/reminders`,
+			);
 			expect(postStub.firstCall.args[1]).to.deep.equal({
 				remind_at: '2025-04-12T23:20:50.52Z',
 			});
@@ -71,7 +73,9 @@ describe('Reminder', () => {
 			});
 
 			expect(postStub.calledOnce).to.be.true;
-			expect(postStub.firstCall.args[0]).to.equal(`${client.baseURL}/messages/message123/reminders`);
+			expect(postStub.firstCall.args[0]).to.equal(
+				`${client.baseURL}/messages/message123/reminders`,
+			);
 			expect(postStub.firstCall.args[1]).to.deep.equal({
 				remind_at: null,
 			});
@@ -90,7 +94,9 @@ describe('Reminder', () => {
 			});
 
 			expect(postStub.calledOnce).to.be.true;
-			expect(postStub.firstCall.args[0]).to.equal(`${client.baseURL}/messages/message123/reminders`);
+			expect(postStub.firstCall.args[0]).to.equal(
+				`${client.baseURL}/messages/message123/reminders`,
+			);
 			expect(postStub.firstCall.args[1]).to.deep.equal({
 				remind_at: undefined,
 			});
@@ -111,7 +117,9 @@ describe('Reminder', () => {
 			});
 
 			expect(patchStub.calledOnce).to.be.true;
-			expect(patchStub.firstCall.args[0]).to.equal(`${client.baseURL}/messages/message123/reminders`);
+			expect(patchStub.firstCall.args[0]).to.equal(
+				`${client.baseURL}/messages/message123/reminders`,
+			);
 			expect(patchStub.firstCall.args[1]).to.deep.equal({
 				remind_at: '2025-05-12T23:20:50.52Z',
 			});
@@ -130,7 +138,9 @@ describe('Reminder', () => {
 			});
 
 			expect(patchStub.calledOnce).to.be.true;
-			expect(patchStub.firstCall.args[0]).to.equal(`${client.baseURL}/messages/message123/reminders`);
+			expect(patchStub.firstCall.args[0]).to.equal(
+				`${client.baseURL}/messages/message123/reminders`,
+			);
 			expect(patchStub.firstCall.args[1]).to.deep.equal({
 				remind_at: null,
 			});
@@ -149,7 +159,9 @@ describe('Reminder', () => {
 			});
 
 			expect(patchStub.calledOnce).to.be.true;
-			expect(patchStub.firstCall.args[0]).to.equal(`${client.baseURL}/messages/message123/reminders`);
+			expect(patchStub.firstCall.args[0]).to.equal(
+				`${client.baseURL}/messages/message123/reminders`,
+			);
 			expect(patchStub.firstCall.args[1]).to.deep.equal({
 				remind_at: undefined,
 			});
@@ -164,7 +176,9 @@ describe('Reminder', () => {
 			await client.deleteReminder('message123');
 
 			expect(deleteStub.calledOnce).to.be.true;
-			expect(deleteStub.firstCall.args[0]).to.equal(`${client.baseURL}/messages/message123/reminders`);
+			expect(deleteStub.firstCall.args[0]).to.equal(
+				`${client.baseURL}/messages/message123/reminders`,
+			);
 			expect(deleteStub.firstCall.args[1]).to.deep.equal({});
 		});
 
@@ -353,11 +367,15 @@ describe('Reminder', () => {
 				expect.fail('Expected createReminder to throw an error');
 			} catch (error) {
 				expect(error.code).to.equal(403);
-				expect(error.message).to.equal('User message reminders are not enabled for this channel');
+				expect(error.message).to.equal(
+					'User message reminders are not enabled for this channel',
+				);
 			}
 
 			expect(postStub.calledOnce).to.be.true;
-			expect(postStub.firstCall.args[0]).to.equal(`${client.baseURL}/messages/test-message/reminders`);
+			expect(postStub.firstCall.args[0]).to.equal(
+				`${client.baseURL}/messages/test-message/reminders`,
+			);
 		});
 
 		it('should successfully create a reminder after enabling user_message_reminders', async () => {
@@ -389,7 +407,9 @@ describe('Reminder', () => {
 			});
 
 			expect(postStub.calledOnce).to.be.true;
-			expect(postStub.firstCall.args[0]).to.equal(`${client.baseURL}/messages/test-message/reminders`);
+			expect(postStub.firstCall.args[0]).to.equal(
+				`${client.baseURL}/messages/test-message/reminders`,
+			);
 			expect(postStub.firstCall.args[1]).to.deep.equal({
 				remind_at: '2025-04-12T23:20:50.52Z',
 			});

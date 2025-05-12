@@ -3981,17 +3981,17 @@ export type ThreadFilters = QueryFilters<
   }
 >;
 
-export type ReminderResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  reminder: Reminder<StreamChatGenerics>;
+export type ReminderResponse = {
+  reminder: Reminder;
 };
 
-export type Reminder<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
+export type Reminder = {
   remind_at?: string;
   user_id: string;
-  user?: UserResponse<StreamChatGenerics>;
+  user?: UserResponse;
   channel_cid: string;
   message_id: string;
-  message?: MessageResponse<StreamChatGenerics>;
+  message?: MessageResponse;
   created_at: string;
   updated_at: string;
 };
@@ -4010,16 +4010,20 @@ export type QueryRemindersOptions = {
   filter_conditions?: {
     channel_cid?: string | { $in?: string[]; $eq?: string };
     message_id?: string | { $in?: string[]; $eq?: string };
-    remind_at?: string | { $eq?: string; $gt?: string; $lt?: string; $gte?: string; $lte?: string };
-    created_at?: string | { $eq?: string; $gt?: string; $lt?: string; $gte?: string; $lte?: string };
+    remind_at?:
+      | string
+      | { $eq?: string; $gt?: string; $lt?: string; $gte?: string; $lte?: string };
+    created_at?:
+      | string
+      | { $eq?: string; $gt?: string; $lt?: string; $gte?: string; $lte?: string };
     user_id?: string | { $in: string[] };
   };
   sort?: Array<{ field: string; direction: 1 | -1 }>;
   limit?: number;
 };
 
-export type QueryRemindersResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
-  reminders: Reminder<StreamChatGenerics>[];
+export type QueryRemindersResponse = {
+  reminders: Reminder[];
   prev?: string;
   next?: string;
 };

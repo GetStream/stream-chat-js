@@ -74,6 +74,7 @@ import type {
   CreatePollAPIResponse,
   CreatePollData,
   CreatePollOptionAPIResponse,
+  CreateReminderOptions,
   CustomPermissionOptions,
   DeactivateUsersOptions,
   DeleteChannelsResponse,
@@ -163,6 +164,8 @@ import type {
   QueryPollsResponse,
   QueryReactionsAPIResponse,
   QueryReactionsOptions,
+  QueryRemindersOptions,
+  QueryRemindersResponse,
   QuerySegmentsOptions,
   QuerySegmentTargetsFilter,
   QueryThreadsAPIResponse,
@@ -174,6 +177,7 @@ import type {
   ReactionSort,
   ReactivateUserOptions,
   ReactivateUsersOptions,
+  ReminderResponse,
   ReviewFlagReportOptions,
   ReviewFlagReportResponse,
   SdkIdentifier,
@@ -206,6 +210,7 @@ import type {
   UpdateMessageOptions,
   UpdatePollAPIResponse,
   UpdatePollOptionAPIResponse,
+  UpdateReminderOptions,
   UpdateSegmentData,
   UpsertPushPreferencesResponse,
   UserCustomEvent,
@@ -214,11 +219,6 @@ import type {
   UserResponse,
   UserSort,
   VoteSort,
-  CreateReminderOptions,
-  UpdateReminderOptions,
-  QueryRemindersOptions,
-  ReminderResponse,
-  QueryRemindersResponse,
 } from './types';
 import { ErrorFromResponse } from './types';
 import { InsightMetrics, postInsights } from './insights';
@@ -446,9 +446,9 @@ export class StreamChat {
      *
      * e.g.,
      * const client = new StreamChat('api_key', {}, {
-     * 		logger = (logLevel, message, extraData) => {
-     * 			console.log(message);
-     * 		}
+     *    logger = (logLevel, message, extraData) => {
+     *      console.log(message);
+     *    }
      * })
      *
      * extraData contains tags array attached to log message. Tags can have one/many of following values:
@@ -462,28 +462,28 @@ export class StreamChat {
      *
      * It may also contains some extra data, some examples have been mentioned below:
      * 1. {
-     * 		tags: ['api', 'api_request', 'client'],
-     * 		url: string,
-     * 		payload: object,
-     * 		config: object
+     *    tags: ['api', 'api_request', 'client'],
+     *    url: string,
+     *    payload: object,
+     *    config: object
      * }
      * 2. {
-     * 		tags: ['api', 'api_response', 'client'],
-     * 		url: string,
-     * 		response: object
+     *    tags: ['api', 'api_response', 'client'],
+     *    url: string,
+     *    response: object
      * }
      * 3. {
-     * 		tags: ['api', 'api_response', 'client'],
-     * 		url: string,
-     * 		error: object
+     *    tags: ['api', 'api_response', 'client'],
+     *    url: string,
+     *    error: object
      * }
      * 4. {
-     * 		tags: ['event', 'client'],
-     * 		event: object
+     *    tags: ['event', 'client'],
+     *    event: object
      * }
      * 5. {
-     * 		tags: ['channel'],
-     * 		channel: object
+     *    tags: ['channel'],
+     *    channel: object
      * }
      */
     this.logger = isFunction(inputOptions.logger) ? inputOptions.logger : () => null;
@@ -741,26 +741,26 @@ export class StreamChat {
    *
    * @param {AppSettings} options App settings.
    * IE: {
-      'apn_config': {
-        'auth_type': 'token',
-        'auth_key": fs.readFileSync(
-          './apn-push-auth-key.p8',
-          'utf-8',
-        ),
-        'key_id': 'keyid',
-        'team_id': 'teamid',
-        'notification_template": 'notification handlebars template',
-        'bundle_id': 'com.apple.your.app',
-        'development': true
-      },
-      'firebase_config': {
-        'server_key': 'server key from fcm',
-        'notification_template': 'notification handlebars template',
-        'data_template': 'data handlebars template',
-        'apn_template': 'apn notification handlebars template under v2'
-      },
-      'webhook_url': 'https://acme.com/my/awesome/webhook/'
-    }
+   'apn_config': {
+   'auth_type': 'token',
+   'auth_key": fs.readFileSync(
+   './apn-push-auth-key.p8',
+   'utf-8',
+   ),
+   'key_id': 'keyid',
+   'team_id': 'teamid',
+   'notification_template": 'notification handlebars template',
+   'bundle_id': 'com.apple.your.app',
+   'development': true
+   },
+   'firebase_config': {
+   'server_key': 'server key from fcm',
+   'notification_template': 'notification handlebars template',
+   'data_template': 'data handlebars template',
+   'apn_template': 'apn notification handlebars template under v2'
+   },
+   'webhook_url': 'https://acme.com/my/awesome/webhook/'
+   }
    */
   async updateAppSettings(options: AppSettings) {
     const apn_config = options.apn_config;
@@ -843,15 +843,15 @@ export class StreamChat {
    * @param {string} userID User ID. If user has no devices, it will error
    * @param {TestPushDataInput} [data] Overrides for push templates/message used
    *  IE: {
-        messageID: 'id-of-message', // will error if message does not exist
-        apnTemplate: '{}', // if app doesn't have apn configured it will error
-        firebaseTemplate: '{}', // if app doesn't have firebase configured it will error
-        firebaseDataTemplate: '{}', // if app doesn't have firebase configured it will error
-        skipDevices: true, // skip config/device checks and sending to real devices
-        pushProviderName: 'staging' // one of your configured push providers
-        pushProviderType: 'apn' // one of supported provider types
-      }
-  */
+   messageID: 'id-of-message', // will error if message does not exist
+   apnTemplate: '{}', // if app doesn't have apn configured it will error
+   firebaseTemplate: '{}', // if app doesn't have firebase configured it will error
+   firebaseDataTemplate: '{}', // if app doesn't have firebase configured it will error
+   skipDevices: true, // skip config/device checks and sending to real devices
+   pushProviderName: 'staging' // one of your configured push providers
+   pushProviderType: 'apn' // one of supported provider types
+   }
+   */
   async testPushSettings(userID: string, data: TestPushDataInput = {}) {
     return await this.post<CheckPushResponse>(this.baseURL + '/check_push', {
       user_id: userID,
@@ -872,10 +872,10 @@ export class StreamChat {
    *
    * @param {TestSQSDataInput} [data] Overrides SQS settings for testing if needed
    *  IE: {
-        sqs_key: 'auth_key',
-        sqs_secret: 'auth_secret',
-        sqs_url: 'url_to_queue',
-      }
+   sqs_key: 'auth_key',
+   sqs_secret: 'auth_secret',
+   sqs_url: 'url_to_queue',
+   }
    */
   async testSQSSettings(data: TestSQSDataInput = {}) {
     return await this.post<CheckSQSResponse>(this.baseURL + '/check_sqs', data);
@@ -886,10 +886,10 @@ export class StreamChat {
    *
    * @param {TestSNSDataInput} [data] Overrides SNS settings for testing if needed
    *  IE: {
-        sns_key: 'auth_key',
-        sns_secret: 'auth_secret',
-        sns_topic_arn: 'topic_to_publish_to',
-      }
+   sns_key: 'auth_key',
+   sns_secret: 'auth_secret',
+   sns_topic_arn: 'topic_to_publish_to',
+   }
    */
   async testSNSSettings(data: TestSNSDataInput = {}) {
     return await this.post<CheckSNSResponse>(this.baseURL + '/check_sns', data);
@@ -2472,6 +2472,7 @@ export class StreamChat {
       ...options,
     });
   }
+
   async blockUser(blockedUserID: string, user_id?: string) {
     return await this.post<BlockUserAPIResponse>(this.baseURL + '/users/block', {
       blocked_user_id: blockedUserID,
@@ -2484,12 +2485,14 @@ export class StreamChat {
       ...(user_id ? { user_id } : {}),
     });
   }
+
   async unBlockUser(blockedUserID: string, userID?: string) {
     return await this.post<APIResponse>(this.baseURL + '/users/unblock', {
       blocked_user_id: blockedUserID,
       ...(userID ? { user_id: userID } : {}),
     });
   }
+
   /** muteUser - mutes a user
    *
    * @param {string} targetID
@@ -2679,6 +2682,7 @@ export class StreamChat {
       ...options,
     });
   }
+
   // alias for backwards compatibility
   _unblockMessage = this.unblockMessage;
 
@@ -3618,6 +3622,7 @@ export class StreamChat {
       },
     );
   }
+
   /**
    * removeSegmentTargets - Remove targets from a segment
    *
@@ -3734,6 +3739,7 @@ export class StreamChat {
       stop_at: options?.stopAt,
     });
   }
+
   /**
    * queryCampaigns - Query Campaigns
    *
@@ -4413,11 +4419,8 @@ export class StreamChat {
    * @param {CreateReminderOptions} options The options for creating the reminder
    * @returns {Promise<ReminderResponse>}
    */
-  async createReminder<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-    messageId: string,
-    options: CreateReminderOptions = {},
-  ): Promise<ReminderResponse<StreamChatGenerics>> {
-    return await this.post<ReminderResponse<StreamChatGenerics>>(
+  async createReminder(messageId: string, options: CreateReminderOptions = {}) {
+    return await this.post<ReminderResponse>(
       `${this.baseURL}/messages/${messageId}/reminders`,
       options,
     );
@@ -4430,11 +4433,8 @@ export class StreamChat {
    * @param {UpdateReminderOptions} options The options for updating the reminder
    * @returns {Promise<ReminderResponse>}
    */
-  async updateReminder<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-    messageId: string,
-    options: UpdateReminderOptions = {},
-  ): Promise<ReminderResponse<StreamChatGenerics>> {
-    return await this.patch<ReminderResponse<StreamChatGenerics>>(
+  async updateReminder(messageId: string, options: UpdateReminderOptions = {}) {
+    return await this.patch<ReminderResponse>(
       `${this.baseURL}/messages/${messageId}/reminders`,
       options,
     );
@@ -4460,9 +4460,10 @@ export class StreamChat {
    * @param {QueryRemindersOptions} options The options for querying reminders
    * @returns {Promise<QueryRemindersResponse>}
    */
-  async queryReminders<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics>(
-    options: QueryRemindersOptions = {},
-  ): Promise<QueryRemindersResponse<StreamChatGenerics>> {
-    return await this.post<QueryRemindersResponse<StreamChatGenerics>>(`${this.baseURL}/reminders/query`, options);
+  async queryReminders(options: QueryRemindersOptions = {}) {
+    return await this.post<QueryRemindersResponse>(
+      `${this.baseURL}/reminders/query`,
+      options,
+    );
   }
 }
