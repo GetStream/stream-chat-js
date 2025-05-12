@@ -1,6 +1,6 @@
-import { expect } from 'chai';
 import sinon from 'sinon';
 import { v4 as uuidv4 } from 'uuid';
+import { describe, beforeEach, afterEach, it, expect } from 'vitest';
 
 import { generateMsg } from './test-utils/generateMessage';
 import { generateChannel } from './test-utils/generateChannel';
@@ -25,7 +25,12 @@ import {
   uniqBy,
 } from '../../src/utils';
 
-import type { ChannelFilters, ChannelSortBase, FormatMessageResponse, MessageResponse } from '../../src';
+import type {
+  ChannelFilters,
+  ChannelSortBase,
+  FormatMessageResponse,
+  MessageResponse,
+} from '../../src';
 import { StreamChat, Channel } from '../../src';
 
 describe('addToMessageList', () => {
@@ -33,7 +38,13 @@ describe('addToMessageList', () => {
   // messages with each created_at 10 seconds apart
   let messagesBefore: FormatMessageResponse[];
 
-  const getNewFormattedMessage = ({ timeOffset, id = uuidv4() }: { timeOffset: number; id?: string }) =>
+  const getNewFormattedMessage = ({
+    timeOffset,
+    id = uuidv4(),
+  }: {
+    timeOffset: number;
+    id?: string;
+  }) =>
     formatMessage(
       generateMsg({
         id,
@@ -43,7 +54,11 @@ describe('addToMessageList', () => {
 
   beforeEach(() => {
     messagesBefore = Array.from({ length: 5 }, (_, index) =>
-      formatMessage(generateMsg({ created_at: new Date(timestamp + index * 10 * 1000) }) as MessageResponse),
+      formatMessage(
+        generateMsg({
+          created_at: new Date(timestamp + index * 10 * 1000),
+        }) as MessageResponse,
+      ),
     );
   });
 
@@ -59,7 +74,10 @@ describe('addToMessageList', () => {
   });
 
   it('replaces the message which created_at changed to a server response created_at', () => {
-    const newMessage = getNewFormattedMessage({ timeOffset: 33 * 1000, id: messagesBefore[2].id });
+    const newMessage = getNewFormattedMessage({
+      timeOffset: 33 * 1000,
+      id: messagesBefore[2].id,
+    });
 
     expect(newMessage.id).to.equal(messagesBefore[2].id);
 
@@ -87,7 +105,13 @@ describe('addToMessageList', () => {
 
     const emptyMessagesBefore = [];
 
-    const messagesAfter = addToMessageList(emptyMessagesBefore, newMessage, false, 'created_at', false);
+    const messagesAfter = addToMessageList(
+      emptyMessagesBefore,
+      newMessage,
+      false,
+      'created_at',
+      false,
+    );
 
     expect(messagesAfter).to.have.length(0);
   });
@@ -105,7 +129,13 @@ describe('addToMessageList', () => {
   it("doesn't add a newest message to a message list if timestampChanged & addIfDoesNotExist are false", () => {
     const newMessage = getNewFormattedMessage({ timeOffset: 50 * 1000 });
 
-    const messagesAfter = addToMessageList(messagesBefore, newMessage, false, 'created_at', false);
+    const messagesAfter = addToMessageList(
+      messagesBefore,
+      newMessage,
+      false,
+      'created_at',
+      false,
+    );
 
     expect(messagesAfter).to.have.length(5);
     // FIXME: it'd be nice if the function returned old
@@ -114,13 +144,22 @@ describe('addToMessageList', () => {
   });
 
   it("updates an existing message that wasn't filtered due to changed timestamp (timestampChanged)", () => {
-    const newMessage = getNewFormattedMessage({ timeOffset: 30 * 1000, id: messagesBefore[4].id });
+    const newMessage = getNewFormattedMessage({
+      timeOffset: 30 * 1000,
+      id: messagesBefore[4].id,
+    });
 
     expect(messagesBefore[4].id).to.equal(newMessage.id);
     expect(messagesBefore[4].text).to.not.equal(newMessage.text);
     expect(messagesBefore[4]).to.not.equal(newMessage);
 
-    const messagesAfter = addToMessageList(messagesBefore, newMessage, false, 'created_at', false);
+    const messagesAfter = addToMessageList(
+      messagesBefore,
+      newMessage,
+      false,
+      'created_at',
+      false,
+    );
 
     expect(messagesAfter).to.have.length(5);
     expect(messagesAfter[4]).to.equal(newMessage);
@@ -131,28 +170,44 @@ describe('findIndexInSortedArray', () => {
   it('finds index in the middle of haystack (asc)', () => {
     const needle = 5;
     const haystack = [1, 2, 3, 4, 6, 7, 8, 9];
-    const index = findIndexInSortedArray({ needle, sortedArray: haystack, sortDirection: 'ascending' });
+    const index = findIndexInSortedArray({
+      needle,
+      sortedArray: haystack,
+      sortDirection: 'ascending',
+    });
     expect(index).to.eq(4);
   });
 
   it('finds index at the top of haystack (asc)', () => {
     const needle = 0;
     const haystack = [1, 2, 3, 4, 6, 7, 8, 9];
-    const index = findIndexInSortedArray({ needle, sortedArray: haystack, sortDirection: 'ascending' });
+    const index = findIndexInSortedArray({
+      needle,
+      sortedArray: haystack,
+      sortDirection: 'ascending',
+    });
     expect(index).to.eq(0);
   });
 
   it('finds index at the bottom of haystack (asc)', () => {
     const needle = 10;
     const haystack = [1, 2, 3, 4, 6, 7, 8, 9];
-    const index = findIndexInSortedArray({ needle, sortedArray: haystack, sortDirection: 'ascending' });
+    const index = findIndexInSortedArray({
+      needle,
+      sortedArray: haystack,
+      sortDirection: 'ascending',
+    });
     expect(index).to.eq(8);
   });
 
   it('in a haystack with duplicates, prefers index closer to the bottom (asc)', () => {
     const needle = 5;
     const haystack = [1, 5, 5, 5, 5, 5, 8, 9];
-    const index = findIndexInSortedArray({ needle, sortedArray: haystack, sortDirection: 'ascending' });
+    const index = findIndexInSortedArray({
+      needle,
+      sortedArray: haystack,
+      sortDirection: 'ascending',
+    });
     expect(index).to.eq(6);
   });
 
@@ -202,28 +257,44 @@ describe('findIndexInSortedArray', () => {
   it('finds index in the middle of haystack (desc)', () => {
     const needle = 5;
     const haystack = [9, 8, 7, 6, 4, 3, 2, 1];
-    const index = findIndexInSortedArray({ needle, sortedArray: haystack, sortDirection: 'descending' });
+    const index = findIndexInSortedArray({
+      needle,
+      sortedArray: haystack,
+      sortDirection: 'descending',
+    });
     expect(index).to.eq(4);
   });
 
   it('finds index at the top of haystack (desc)', () => {
     const needle = 10;
     const haystack = [9, 8, 7, 6, 4, 3, 2, 1];
-    const index = findIndexInSortedArray({ needle, sortedArray: haystack, sortDirection: 'descending' });
+    const index = findIndexInSortedArray({
+      needle,
+      sortedArray: haystack,
+      sortDirection: 'descending',
+    });
     expect(index).to.eq(0);
   });
 
   it('finds index at the bottom of haystack (desc)', () => {
     const needle = 0;
     const haystack = [9, 8, 7, 6, 4, 3, 2, 1];
-    const index = findIndexInSortedArray({ needle, sortedArray: haystack, sortDirection: 'descending' });
+    const index = findIndexInSortedArray({
+      needle,
+      sortedArray: haystack,
+      sortDirection: 'descending',
+    });
     expect(index).to.eq(8);
   });
 
   it('in a haystack with duplicates, prefers index closer to the top (desc)', () => {
     const needle = 5;
     const haystack = [9, 8, 5, 5, 5, 5, 5, 1];
-    const index = findIndexInSortedArray({ needle, sortedArray: haystack, sortDirection: 'descending' });
+    const index = findIndexInSortedArray({
+      needle,
+      sortedArray: haystack,
+      sortDirection: 'descending',
+    });
     expect(index).to.eq(2);
   });
 
@@ -280,13 +351,18 @@ describe('getAndWatchChannel', () => {
 
     client = await getClientWithUser();
 
-    const mockedMembers = [generateMember({ user: generateUser() }), generateMember({ user: generateUser() })];
+    const mockedMembers = [
+      generateMember({ user: generateUser() }),
+      generateMember({ user: generateUser() }),
+    ];
     const mockedChannelsQueryResponse = [
       ...Array.from({ length: 2 }, () => generateChannel()),
       generateChannel({ channel: { type: 'messaging' }, members: mockedMembers }),
     ];
     const mock = sandbox.mock(client);
-    mock.expects('post').returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
+    mock
+      .expects('post')
+      .returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
   });
 
   afterEach(() => {
@@ -295,14 +371,16 @@ describe('getAndWatchChannel', () => {
 
   it('should throw an error if neither channel nor type is provided', async () => {
     await client.queryChannels({});
-    await expect(getAndWatchChannel({ client, id: 'test-id', members: [] })).to.be.rejectedWith(
-      'Channel or channel type have to be provided to query a channel.',
-    );
+    await expect(
+      getAndWatchChannel({ client, id: 'test-id', members: [] }),
+    ).rejects.toThrow('Channel or channel type have to be provided to query a channel.');
   });
 
   it('should throw an error if neither channel ID nor members array is provided', async () => {
     await client.queryChannels({});
-    await expect(getAndWatchChannel({ client, type: 'test-type', id: undefined, members: [] })).to.be.rejectedWith(
+    await expect(
+      getAndWatchChannel({ client, type: 'test-type', id: undefined, members: [] }),
+    ).rejects.toThrow(
       'Channel ID or channel members array have to be provided to query a channel.',
     );
   });
@@ -399,7 +477,7 @@ describe('generateChannelTempCid', () => {
   });
 
   it('should return undefined if members is null', () => {
-    const result = generateChannelTempCid('messaging', (null as unknown) as string[]);
+    const result = generateChannelTempCid('messaging', null as unknown as string[]);
     expect(result).to.be.undefined;
   });
 
@@ -429,40 +507,53 @@ describe('Channel pinning and archiving utils', () => {
 
   describe('Channel pinning', () => {
     it('should return false if channel is null', () => {
-      expect(isChannelPinned((null as unknown) as Channel)).to.be.false;
+      expect(isChannelPinned(null as unknown as Channel)).to.be.false;
     });
 
     it('should return false if pinned_at is undefined', () => {
       const channelResponse = generateChannel({ membership: {} });
       client.hydrateActiveChannels([channelResponse]);
-      const channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
+      const channel = client.channel(
+        channelResponse.channel.type,
+        channelResponse.channel.id,
+      );
       expect(isChannelPinned(channel)).to.be.false;
     });
 
     it('should return true if pinned_at is set', () => {
-      const channelResponse = generateChannel({ membership: { pinned_at: '2024-02-04T12:00:00Z' } });
+      const channelResponse = generateChannel({
+        membership: { pinned_at: '2024-02-04T12:00:00Z' },
+      });
       client.hydrateActiveChannels([channelResponse]);
-      const channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
+      const channel = client.channel(
+        channelResponse.channel.type,
+        channelResponse.channel.id,
+      );
       expect(isChannelPinned(channel)).to.be.true;
     });
 
     describe('extractSortValue', () => {
       it('should return null if sort is undefined', () => {
-        expect(extractSortValue({ atIndex: 0, targetKey: 'pinned_at', sort: undefined })).to.be.null;
+        expect(extractSortValue({ atIndex: 0, targetKey: 'pinned_at', sort: undefined }))
+          .to.be.null;
       });
 
       it('should extract correct sort value from an array', () => {
-        const sort = ([{ pinned_at: -1 }, { created_at: 1 }] as unknown) as ChannelSortBase;
-        expect(extractSortValue({ atIndex: 0, targetKey: 'pinned_at', sort })).to.equal(-1);
+        const sort = [{ pinned_at: -1 }, { created_at: 1 }] as unknown as ChannelSortBase;
+        expect(extractSortValue({ atIndex: 0, targetKey: 'pinned_at', sort })).to.equal(
+          -1,
+        );
       });
 
       it('should extract correct sort value from an object', () => {
-        const sort = ({ pinned_at: 1 } as unknown) as ChannelSortBase;
-        expect(extractSortValue({ atIndex: 0, targetKey: 'pinned_at', sort })).to.equal(1);
+        const sort = { pinned_at: 1 } as unknown as ChannelSortBase;
+        expect(extractSortValue({ atIndex: 0, targetKey: 'pinned_at', sort })).to.equal(
+          1,
+        );
       });
 
       it('should return null if key does not match targetKey', () => {
-        const sort = ({ created_at: 1 } as unknown) as ChannelSortBase;
+        const sort = { created_at: 1 } as unknown as ChannelSortBase;
         expect(extractSortValue({ atIndex: 0, targetKey: 'pinned_at', sort })).to.be.null;
       });
     });
@@ -478,13 +569,13 @@ describe('Channel pinning and archiving utils', () => {
       });
 
       it('should return false if pinned_at is not first in sort', () => {
-        const sort = ([{ created_at: 1 }, { pinned_at: 1 }] as unknown) as ChannelSortBase;
+        const sort = [{ created_at: 1 }, { pinned_at: 1 }] as unknown as ChannelSortBase;
         expect(shouldConsiderPinnedChannels(sort)).to.be.false;
       });
 
       it('should return true if pinned_at is 1 or -1 at index 0', () => {
-        const sort1 = ([{ pinned_at: 1 }] as unknown) as ChannelSortBase;
-        const sort2 = ([{ pinned_at: -1 }] as unknown) as ChannelSortBase;
+        const sort1 = [{ pinned_at: 1 }] as unknown as ChannelSortBase;
+        const sort2 = [{ pinned_at: -1 }] as unknown as ChannelSortBase;
         expect(shouldConsiderPinnedChannels(sort1)).to.be.true;
         expect(shouldConsiderPinnedChannels(sort2)).to.be.true;
       });
@@ -492,21 +583,22 @@ describe('Channel pinning and archiving utils', () => {
 
     describe('findPinnedAtSortOrder', () => {
       it('should return null if sort is undefined', () => {
-        expect(findPinnedAtSortOrder({ sort: (null as unknown) as ChannelSortBase })).to.be.null;
+        expect(findPinnedAtSortOrder({ sort: null as unknown as ChannelSortBase })).to.be
+          .null;
       });
 
       it('should return null if pinned_at is not present', () => {
-        const sort = ([{ created_at: 1 }] as unknown) as ChannelSortBase;
+        const sort = [{ created_at: 1 }] as unknown as ChannelSortBase;
         expect(findPinnedAtSortOrder({ sort })).to.be.null;
       });
 
       it('should return pinned_at if found in an object', () => {
-        const sort = ({ pinned_at: -1 } as unknown) as ChannelSortBase;
+        const sort = { pinned_at: -1 } as unknown as ChannelSortBase;
         expect(findPinnedAtSortOrder({ sort })).to.equal(-1);
       });
 
       it('should return pinned_at if found in an array', () => {
-        const sort = ([{ pinned_at: 1 }] as unknown) as ChannelSortBase;
+        const sort = [{ pinned_at: 1 }] as unknown as ChannelSortBase;
         expect(findPinnedAtSortOrder({ sort })).to.equal(1);
       });
     });
@@ -517,9 +609,14 @@ describe('Channel pinning and archiving utils', () => {
       });
 
       it('should return null if no channels are pinned', () => {
-        const channelsResponse = [generateChannel({ membership: {} }), generateChannel({ membership: {} })];
+        const channelsResponse = [
+          generateChannel({ membership: {} }),
+          generateChannel({ membership: {} }),
+        ];
         client.hydrateActiveChannels(channelsResponse);
-        const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
+        const channels = channelsResponse.map((c) =>
+          client.channel(c.channel.type, c.channel.id),
+        );
         expect(findLastPinnedChannelIndex({ channels })).to.be.null;
       });
 
@@ -530,7 +627,9 @@ describe('Channel pinning and archiving utils', () => {
           generateChannel({ membership: {} }),
         ];
         client.hydrateActiveChannels(channelsResponse);
-        const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
+        const channels = channelsResponse.map((c) =>
+          client.channel(c.channel.type, c.channel.id),
+        );
 
         expect(findLastPinnedChannelIndex({ channels })).to.equal(1);
       });
@@ -539,25 +638,34 @@ describe('Channel pinning and archiving utils', () => {
 
   describe('Channel archiving', () => {
     it('should return false if channel is null', () => {
-      expect(isChannelArchived((null as unknown) as Channel)).to.be.false;
+      expect(isChannelArchived(null as unknown as Channel)).to.be.false;
     });
 
     it('should return false if archived_at is undefined', () => {
       const channelResponse = generateChannel({ membership: {} });
       client.hydrateActiveChannels([channelResponse]);
-      const channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
+      const channel = client.channel(
+        channelResponse.channel.type,
+        channelResponse.channel.id,
+      );
       expect(isChannelArchived(channel)).to.be.false;
     });
 
     it('should return true if archived_at is set', () => {
-      const channelResponse = generateChannel({ membership: { archived_at: '2024-02-04T12:00:00Z' } });
+      const channelResponse = generateChannel({
+        membership: { archived_at: '2024-02-04T12:00:00Z' },
+      });
       client.hydrateActiveChannels([channelResponse]);
-      const channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
+      const channel = client.channel(
+        channelResponse.channel.type,
+        channelResponse.channel.id,
+      );
       expect(isChannelArchived(channel)).to.be.true;
     });
 
     it('should return false if filters is null', () => {
-      expect(shouldConsiderArchivedChannels((null as unknown) as ChannelFilters)).to.be.false;
+      expect(shouldConsiderArchivedChannels(null as unknown as ChannelFilters)).to.be
+        .false;
     });
 
     it('should return false if filters.archived is missing', () => {
@@ -566,7 +674,7 @@ describe('Channel pinning and archiving utils', () => {
     });
 
     it('should return false if filters.archived is not a boolean', () => {
-      const mockFilters = ({ archived: 'yes' } as unknown) as ChannelFilters;
+      const mockFilters = { archived: 'yes' } as unknown as ChannelFilters;
       expect(shouldConsiderArchivedChannels(mockFilters)).to.be.false;
     });
 
@@ -592,7 +700,9 @@ describe('promoteChannel', () => {
   it('should return the original list if the channel is already at the top', () => {
     const channelsResponse = [generateChannel(), generateChannel()];
     client.hydrateActiveChannels(channelsResponse);
-    const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
+    const channels = channelsResponse.map((c) =>
+      client.channel(c.channel.type, c.channel.id),
+    );
     const result = promoteChannel({
       channels,
       channelToMove: channels[0],
@@ -609,7 +719,9 @@ describe('promoteChannel', () => {
       generateChannel({ membership: { pinned_at: '2024-02-04T12:01:00Z' } }),
     ];
     client.hydrateActiveChannels(channelsResponse);
-    const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
+    const channels = channelsResponse.map((c) =>
+      client.channel(c.channel.type, c.channel.id),
+    );
     const channelToMove = channels[1];
 
     const result = promoteChannel({
@@ -629,7 +741,9 @@ describe('promoteChannel', () => {
       generateChannel({ channel: { id: 'channel3' } }),
     ];
     client.hydrateActiveChannels(channelsResponse);
-    const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
+    const channels = channelsResponse.map((c) =>
+      client.channel(c.channel.type, c.channel.id),
+    );
     const channelToMove = channels[2];
 
     const result = promoteChannel({
@@ -649,7 +763,9 @@ describe('promoteChannel', () => {
       generateChannel({ channel: { id: 'channel3' } }),
     ];
     client.hydrateActiveChannels(channelsResponse);
-    const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
+    const channels = channelsResponse.map((c) =>
+      client.channel(c.channel.type, c.channel.id),
+    );
     const channelToMove = channels[2];
 
     const result = promoteChannel({
@@ -671,7 +787,9 @@ describe('promoteChannel', () => {
     ];
     const newChannel = generateChannel({ channel: { id: 'channel4' } });
     client.hydrateActiveChannels([...channelsResponse, newChannel]);
-    const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
+    const channels = channelsResponse.map((c) =>
+      client.channel(c.channel.type, c.channel.id),
+    );
     const channelToMove = client.channel(newChannel.channel.type, newChannel.channel.id);
 
     const result = promoteChannel({
@@ -680,7 +798,12 @@ describe('promoteChannel', () => {
       sort: {},
     });
 
-    expect(result.map((c) => c.id)).to.deep.equal(['channel4', 'channel1', 'channel2', 'channel3']);
+    expect(result.map((c) => c.id)).to.deep.equal([
+      'channel4',
+      'channel1',
+      'channel2',
+      'channel3',
+    ]);
     expect(result).to.not.equal(channels);
   });
 
@@ -692,7 +815,9 @@ describe('promoteChannel', () => {
     ];
     const newChannel = generateChannel({ channel: { id: 'channel4' } });
     client.hydrateActiveChannels([...channelsResponse, newChannel]);
-    const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
+    const channels = channelsResponse.map((c) =>
+      client.channel(c.channel.type, c.channel.id),
+    );
     const channelToMove = client.channel(newChannel.channel.type, newChannel.channel.id);
 
     const result = promoteChannel({
@@ -702,19 +827,32 @@ describe('promoteChannel', () => {
       channelToMoveIndexWithinChannels: -1,
     });
 
-    expect(result.map((c) => c.id)).to.deep.equal(['channel4', 'channel1', 'channel2', 'channel3']);
+    expect(result.map((c) => c.id)).to.deep.equal([
+      'channel4',
+      'channel1',
+      'channel2',
+      'channel3',
+    ]);
     expect(result).to.not.equal(channels);
   });
 
   it('should move the channel just below the last pinned channel if pinned channels are considered', () => {
     const channelsResponse = [
-      generateChannel({ channel: { id: 'pinned1' }, membership: { pinned_at: '2024-02-04T12:00:00Z' } }),
-      generateChannel({ channel: { id: 'pinned2' }, membership: { pinned_at: '2024-02-04T12:01:00Z' } }),
+      generateChannel({
+        channel: { id: 'pinned1' },
+        membership: { pinned_at: '2024-02-04T12:00:00Z' },
+      }),
+      generateChannel({
+        channel: { id: 'pinned2' },
+        membership: { pinned_at: '2024-02-04T12:01:00Z' },
+      }),
       generateChannel({ channel: { id: 'channel1' } }),
       generateChannel({ channel: { id: 'channel2' } }),
     ];
     client.hydrateActiveChannels(channelsResponse);
-    const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
+    const channels = channelsResponse.map((c) =>
+      client.channel(c.channel.type, c.channel.id),
+    );
     const channelToMove = channels[3];
 
     const result = promoteChannel({
@@ -723,19 +861,32 @@ describe('promoteChannel', () => {
       sort: [{ pinned_at: -1 }],
     });
 
-    expect(result.map((c) => c.id)).to.deep.equal(['pinned1', 'pinned2', 'channel2', 'channel1']);
+    expect(result.map((c) => c.id)).to.deep.equal([
+      'pinned1',
+      'pinned2',
+      'channel2',
+      'channel1',
+    ]);
     expect(result).to.not.equal(channels);
   });
 
   it('should move the channel to the top of the list if pinned channels exist but are not considered', () => {
     const channelsResponse = [
-      generateChannel({ channel: { id: 'pinned1' }, membership: { pinned_at: '2024-02-04T12:01:00Z' } }),
-      generateChannel({ channel: { id: 'pinned2' }, membership: { pinned_at: '2024-02-04T12:00:00Z' } }),
+      generateChannel({
+        channel: { id: 'pinned1' },
+        membership: { pinned_at: '2024-02-04T12:01:00Z' },
+      }),
+      generateChannel({
+        channel: { id: 'pinned2' },
+        membership: { pinned_at: '2024-02-04T12:00:00Z' },
+      }),
       generateChannel({ channel: { id: 'channel1' } }),
       generateChannel({ channel: { id: 'channel2' } }),
     ];
     client.hydrateActiveChannels(channelsResponse);
-    const channels = channelsResponse.map((c) => client.channel(c.channel.type, c.channel.id));
+    const channels = channelsResponse.map((c) =>
+      client.channel(c.channel.type, c.channel.id),
+    );
     const channelToMove = channels[2];
 
     const result = promoteChannel({
@@ -744,7 +895,12 @@ describe('promoteChannel', () => {
       sort: {},
     });
 
-    expect(result.map((c) => c.id)).to.deep.equal(['channel1', 'pinned1', 'pinned2', 'channel2']);
+    expect(result.map((c) => c.id)).to.deep.equal([
+      'channel1',
+      'pinned1',
+      'pinned2',
+      'channel2',
+    ]);
     expect(result).to.not.equal(channels);
   });
 });
@@ -799,7 +955,10 @@ describe('uniqBy', () => {
       { user: { id: 1, name: 'Alice' } },
     ];
     const result = uniqBy(array, 'user.id');
-    expect(result).to.deep.equal([{ user: { id: 1, name: 'Alice' } }, { user: { id: 2, name: 'Bob' } }]);
+    expect(result).to.deep.equal([
+      { user: { id: 1, name: 'Alice' } },
+      { user: { id: 2, name: 'Bob' } },
+    ]);
   });
 
   it('should work with primitive identities', () => {
@@ -814,7 +973,12 @@ describe('uniqBy', () => {
   it('should handle falsy values correctly', () => {
     const array = [{ id: 0 }, { id: false }, { id: null }, { id: undefined }, { id: 0 }];
     const result = uniqBy(array, 'id');
-    expect(result).to.deep.equal([{ id: 0 }, { id: false }, { id: null }, { id: undefined }]);
+    expect(result).to.deep.equal([
+      { id: 0 },
+      { id: false },
+      { id: null },
+      { id: undefined },
+    ]);
   });
 
   it('should work when all elements are identical', () => {
@@ -828,7 +992,12 @@ describe('uniqBy', () => {
 
   it('should handle mixed types correctly', () => {
     const array = [{ id: 1 }, { id: '1' }, { id: 1.0 }, { id: true }, { id: false }];
-    expect(uniqBy(array, 'id')).to.deep.equal([{ id: 1 }, { id: '1' }, { id: true }, { id: false }]);
+    expect(uniqBy(array, 'id')).to.deep.equal([
+      { id: 1 },
+      { id: '1' },
+      { id: true },
+      { id: false },
+    ]);
   });
 
   it('should handle undefined values in objects', () => {

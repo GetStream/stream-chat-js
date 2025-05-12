@@ -1,15 +1,14 @@
 import type { StreamChat } from './client';
 import type {
-  DefaultGenerics,
-  ExtendableGenerics,
-  Event,
-  ChannelOptions,
-  ChannelStateOptions,
   ChannelFilters,
+  ChannelOptions,
   ChannelSort,
+  ChannelStateOptions,
+  Event,
 } from './types';
-import { StateStore, ValueOrPatch, isPatch } from './store';
-import { Channel } from './channel';
+import type { ValueOrPatch } from './store';
+import { isPatch, StateStore } from './store';
+import type { Channel } from './channel';
 import {
   extractSortValue,
   findLastPinnedChannelIndex,
@@ -22,17 +21,17 @@ import {
   uniqBy,
 } from './utils';
 
-export type ChannelManagerPagination<SCG extends ExtendableGenerics = DefaultGenerics> = {
-  filters: ChannelFilters<SCG>;
+export type ChannelManagerPagination = {
+  filters: ChannelFilters;
   hasNext: boolean;
   isLoading: boolean;
   isLoadingNext: boolean;
   options: ChannelOptions;
-  sort: ChannelSort<SCG>;
+  sort: ChannelSort;
 };
 
-export type ChannelManagerState<SCG extends ExtendableGenerics = DefaultGenerics> = {
-  channels: Channel<SCG>[];
+export type ChannelManagerState = {
+  channels: Channel[];
   /**
    * This value will become true the first time queryChannels is successfully executed and
    * will remain false otherwise. It's used as a control property regarding whether the list
@@ -40,22 +39,18 @@ export type ChannelManagerState<SCG extends ExtendableGenerics = DefaultGenerics
    * this to prevent state.channels from being forced to be nullable.
    */
   initialized: boolean;
-  pagination: ChannelManagerPagination<SCG>;
+  pagination: ChannelManagerPagination;
 };
 
-export type ChannelSetterParameterType<SCG extends ExtendableGenerics = DefaultGenerics> = ValueOrPatch<
-  ChannelManagerState<SCG>['channels']
->;
-export type ChannelSetterType<SCG extends ExtendableGenerics = DefaultGenerics> = (
-  arg: ChannelSetterParameterType<SCG>,
-) => void;
+export type ChannelSetterParameterType = ValueOrPatch<ChannelManagerState['channels']>;
+export type ChannelSetterType = (arg: ChannelSetterParameterType) => void;
 
 export type GenericEventHandlerType<T extends unknown[]> = (
   ...args: T
 ) => void | (() => void) | ((...args: T) => Promise<void>) | Promise<void>;
-export type EventHandlerType<SCG extends ExtendableGenerics = DefaultGenerics> = GenericEventHandlerType<[Event<SCG>]>;
-export type EventHandlerOverrideType<SCG extends ExtendableGenerics = DefaultGenerics> = GenericEventHandlerType<
-  [ChannelSetterType<SCG>, Event<SCG>]
+export type EventHandlerType = GenericEventHandlerType<[Event]>;
+export type EventHandlerOverrideType = GenericEventHandlerType<
+  [ChannelSetterType, Event]
 >;
 
 export type ChannelManagerEventTypes =
@@ -82,8 +77,8 @@ export type ChannelManagerEventHandlerNames =
   | 'notificationNewMessageHandler'
   | 'notificationRemovedFromChannelHandler';
 
-export type ChannelManagerEventHandlerOverrides<SCG extends ExtendableGenerics = DefaultGenerics> = Partial<
-  Record<ChannelManagerEventHandlerNames, EventHandlerOverrideType<SCG>>
+export type ChannelManagerEventHandlerOverrides = Partial<
+  Record<ChannelManagerEventHandlerNames, EventHandlerOverrideType>
 >;
 
 export const channelManagerEventToHandlerMapping: {
@@ -147,12 +142,12 @@ export const DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS = {
  *
  * @internal
  */
-export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
-  public readonly state: StateStore<ChannelManagerState<SCG>>;
-  private client: StreamChat<SCG>;
+export class ChannelManager {
+  public readonly state: StateStore<ChannelManagerState>;
+  private client: StreamChat;
   private unsubscribeFunctions: Set<() => void> = new Set();
-  private eventHandlers: Map<string, EventHandlerType<SCG>> = new Map();
-  private eventHandlerOverrides: Map<string, EventHandlerOverrideType<SCG>> = new Map();
+  private eventHandlers: Map<string, EventHandlerType> = new Map();
+  private eventHandlerOverrides: Map<string, EventHandlerOverrideType> = new Map();
   private options: ChannelManagerOptions = {};
   private stateOptions: ChannelStateOptions = {};
 
@@ -161,12 +156,12 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     eventHandlerOverrides = {},
     options = {},
   }: {
-    client: StreamChat<SCG>;
-    eventHandlerOverrides?: ChannelManagerEventHandlerOverrides<SCG>;
+    client: StreamChat;
+    eventHandlerOverrides?: ChannelManagerEventHandlerOverrides;
     options?: ChannelManagerOptions;
   }) {
     this.client = client;
-    this.state = new StateStore<ChannelManagerState<SCG>>({
+    this.state = new StateStore<ChannelManagerState>({
       channels: [],
       pagination: {
         isLoading: false,
@@ -181,7 +176,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.setEventHandlerOverrides(eventHandlerOverrides);
     this.setOptions(options);
     this.eventHandlers = new Map(
-      Object.entries<EventHandlerType<SCG>>({
+      Object.entries<EventHandlerType>({
         channelDeletedHandler: this.channelDeletedHandler,
         channelHiddenHandler: this.channelHiddenHandler,
         channelVisibleHandler: this.channelVisibleHandler,
@@ -194,10 +189,12 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     );
   }
 
-  public setChannels = (valueOrFactory: ChannelSetterParameterType<SCG>) => {
+  public setChannels = (valueOrFactory: ChannelSetterParameterType) => {
     this.state.next((current) => {
       const { channels: currentChannels } = current;
-      const newChannels = isPatch(valueOrFactory) ? valueOrFactory(currentChannels) : valueOrFactory;
+      const newChannels = isPatch(valueOrFactory)
+        ? valueOrFactory(currentChannels)
+        : valueOrFactory;
 
       // If the references between the two values are the same, just return the
       // current state; otherwise trigger a state change.
@@ -208,16 +205,20 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     });
   };
 
-  public setEventHandlerOverrides = (eventHandlerOverrides: ChannelManagerEventHandlerOverrides<SCG> = {}) => {
+  public setEventHandlerOverrides = (
+    eventHandlerOverrides: ChannelManagerEventHandlerOverrides = {},
+  ) => {
     const truthyEventHandlerOverrides = Object.entries(eventHandlerOverrides).reduce<
-      Partial<ChannelManagerEventHandlerOverrides<SCG>>
+      Partial<ChannelManagerEventHandlerOverrides>
     >((acc, [key, value]) => {
       if (value) {
-        acc[key as keyof ChannelManagerEventHandlerOverrides<SCG>] = value;
+        acc[key as keyof ChannelManagerEventHandlerOverrides] = value;
       }
       return acc;
     }, {});
-    this.eventHandlerOverrides = new Map(Object.entries<EventHandlerOverrideType<SCG>>(truthyEventHandlerOverrides));
+    this.eventHandlerOverrides = new Map(
+      Object.entries<EventHandlerOverrideType>(truthyEventHandlerOverrides),
+    );
   };
 
   public setOptions = (options: ChannelManagerOptions = {}) => {
@@ -225,12 +226,15 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
   };
 
   public queryChannels = async (
-    filters: ChannelFilters<SCG>,
-    sort: ChannelSort<SCG> = [],
+    filters: ChannelFilters,
+    sort: ChannelSort = [],
     options: ChannelOptions = {},
     stateOptions: ChannelStateOptions = {},
   ) => {
-    const { offset, limit } = { ...DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS, ...options };
+    const { offset, limit } = {
+      ...DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS,
+      ...options,
+    };
     const {
       pagination: { isLoading },
     } = this.state.getLatestValue();
@@ -253,7 +257,12 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
         },
       }));
 
-      const channels = await this.client.queryChannels(filters, sort, options, stateOptions);
+      const channels = await this.client.queryChannels(
+        filters,
+        sort,
+        options,
+        stateOptions,
+      );
       const newOffset = offset + (channels?.length ?? 0);
       const newOptions = { ...options, offset: newOffset };
       const { pagination } = this.state.getLatestValue();
@@ -287,17 +296,25 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     }
 
     try {
-      const { offset, limit } = { ...DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS, ...options };
+      const { offset, limit } = {
+        ...DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS,
+        ...options,
+      };
       this.state.partialNext({
         pagination: { ...pagination, isLoading: false, isLoadingNext: true },
       });
-      const nextChannels = await this.client.queryChannels(filters, sort, options, this.stateOptions);
+      const nextChannels = await this.client.queryChannels(
+        filters,
+        sort,
+        options,
+        this.stateOptions,
+      );
       const { channels } = this.state.getLatestValue();
       const newOffset = offset + (nextChannels?.length ?? 0);
       const newOptions = { ...options, offset: newOffset };
 
       this.state.partialNext({
-        channels: uniqBy<Channel<SCG>>([...(channels || []), ...nextChannels], 'cid'),
+        channels: uniqBy<Channel>([...(channels || []), ...nextChannels], 'cid'),
         pagination: {
           ...pagination,
           hasNext: (nextChannels?.length ?? 0) >= limit,
@@ -316,10 +333,15 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     }
   };
 
-  private notificationAddedToChannelHandler = async (event: Event<SCG>) => {
+  private notificationAddedToChannelHandler = async (event: Event) => {
     const { id, type, members } = event?.channel ?? {};
 
-    if (!type || !this.options.allowNotLoadedChannelPromotionForEvent?.['notification.added_to_channel']) {
+    if (
+      !type ||
+      !this.options.allowNotLoadedChannelPromotionForEvent?.[
+        'notification.added_to_channel'
+      ]
+    ) {
       return;
     }
 
@@ -352,14 +374,16 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     );
   };
 
-  private channelDeletedHandler = (event: Event<SCG>) => {
+  private channelDeletedHandler = (event: Event) => {
     const { channels } = this.state.getLatestValue();
     if (!channels) {
       return;
     }
 
     const newChannels = [...channels];
-    const channelIndex = newChannels.findIndex((channel) => channel.cid === (event.cid || event.channel?.cid));
+    const channelIndex = newChannels.findIndex(
+      (channel) => channel.cid === (event.cid || event.channel?.cid),
+    );
 
     if (channelIndex < 0) {
       return;
@@ -371,7 +395,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private channelHiddenHandler = this.channelDeletedHandler;
 
-  private newMessageHandler = (event: Event<SCG>) => {
+  private newMessageHandler = (event: Event) => {
     const { pagination, channels } = this.state.getLatestValue();
     if (!channels) {
       return;
@@ -405,7 +429,8 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
       // list order is locked
       this.options.lockChannelOrder ||
       // target channel is not within the loaded list and loading from cache is disallowed
-      (!targetChannelExistsWithinList && !this.options.allowNotLoadedChannelPromotionForEvent?.['message.new'])
+      (!targetChannelExistsWithinList &&
+        !this.options.allowNotLoadedChannelPromotionForEvent?.['message.new'])
     ) {
       return;
     }
@@ -420,7 +445,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     );
   };
 
-  private notificationNewMessageHandler = async (event: Event<SCG>) => {
+  private notificationNewMessageHandler = async (event: Event) => {
     const { id, type } = event?.channel ?? {};
 
     if (!id || !type) {
@@ -457,7 +482,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     );
   };
 
-  private channelVisibleHandler = async (event: Event<SCG>) => {
+  private channelVisibleHandler = async (event: Event) => {
     const { channel_type: channelType, channel_id: channelId } = event;
 
     if (!channelType || !channelId) {
@@ -496,7 +521,7 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
 
   private notificationRemovedFromChannelHandler = this.channelDeletedHandler;
 
-  private memberUpdatedHandler = (event: Event<SCG>) => {
+  private memberUpdatedHandler = (event: Event) => {
     const { pagination, channels } = this.state.getLatestValue();
     const { filters, sort } = pagination;
     if (
@@ -514,7 +539,11 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     const considerArchivedChannels = shouldConsiderArchivedChannels(filters);
     const pinnedAtSort = extractSortValue({ atIndex: 0, sort, targetKey: 'pinned_at' });
 
-    if (!channels || (!considerPinnedChannels && !considerArchivedChannels) || this.options.lockChannelOrder) {
+    if (
+      !channels ||
+      (!considerPinnedChannels && !considerArchivedChannels) ||
+      this.options.lockChannelOrder
+    ) {
       return;
     }
 
@@ -549,7 +578,8 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     if (pinnedAtSort === 1 || (pinnedAtSort === -1 && !isTargetChannelPinned)) {
       lastPinnedChannelIndex = findLastPinnedChannelIndex({ channels: newChannels });
     }
-    const newTargetChannelIndex = typeof lastPinnedChannelIndex === 'number' ? lastPinnedChannelIndex + 1 : 0;
+    const newTargetChannelIndex =
+      typeof lastPinnedChannelIndex === 'number' ? lastPinnedChannelIndex + 1 : 0;
 
     // skip state update if the position of the channel does not change
     if (channels[newTargetChannelIndex] === targetChannel) {
@@ -560,8 +590,9 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     this.setChannels(newChannels);
   };
 
-  private subscriptionOrOverride = (event: Event<SCG>) => {
-    const handlerName = channelManagerEventToHandlerMapping[event.type as ChannelManagerEventTypes];
+  private subscriptionOrOverride = (event: Event) => {
+    const handlerName =
+      channelManagerEventToHandlerMapping[event.type as ChannelManagerEventTypes];
     const defaultEventHandler = this.eventHandlers.get(handlerName);
     const eventHandlerOverride = this.eventHandlerOverrides.get(handlerName);
     if (eventHandlerOverride && typeof eventHandlerOverride === 'function') {
@@ -581,7 +612,9 @@ export class ChannelManager<SCG extends ExtendableGenerics = DefaultGenerics> {
     }
 
     for (const eventType of Object.keys(channelManagerEventToHandlerMapping)) {
-      this.unsubscribeFunctions.add(this.client.on(eventType, this.subscriptionOrOverride).unsubscribe);
+      this.unsubscribeFunctions.add(
+        this.client.on(eventType, this.subscriptionOrOverride).unsubscribe,
+      );
     }
   };
 

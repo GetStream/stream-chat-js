@@ -1,21 +1,31 @@
 {
   "compilerOptions": {
-    "allowSyntheticDefaultImports": true,
-    "rootDir": "./src",
-    "baseUrl": "./src",
-    "esModuleInterop": true,
-    "moduleResolution": "node",
-    "lib": ["DOM", "ES6"],
-    "noEmitOnError": false,
+    "allowUnreachableCode": false,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitUseStrict": false,
+    "noStrictGenericChecks": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "noImplicitAny": true,
-    "preserveConstEnums": true,
-    "strict": true,
     "strictNullChecks": true,
+    "strict": true,
+    "allowSyntheticDefaultImports": true,
+
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowJs": true,
+    "skipLibCheck": true,
+    "noEmitOnError": true,
     "declaration": true,
-    "declarationMap": true,
-    "declarationDir": "./dist/types",
-    "module": "commonjs",
-    "target": "ES5"
+    "emitDeclarationOnly": true,
+    "outDir": "./dist/types",
+
+    "lib": ["ES2020", "DOM"],
+    "moduleResolution": "bundler",
+    "module": "Preserve",
+    "target": "ES2020"
   },
   "include": ["./src/**/*"]
 }
