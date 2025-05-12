@@ -33,6 +33,10 @@ export type EditingAuditState = {
   lastChange: LastComposerChange;
 };
 
+export type MessageComposerStateSnapshot = {
+  restore(): void;
+};
+
 export type LocalMessageWithLegacyThreadId = LocalMessage & { legacyThreadId?: string };
 export type CompositionContext = Channel | Thread | LocalMessageWithLegacyThreadId;
 
@@ -336,6 +340,26 @@ export class MessageComposer {
   initEditingAuditState = (
     composition?: DraftResponse | MessageResponse | LocalMessage,
   ) => initEditingAuditState(composition);
+
+  takeStateSnapshot = (): MessageComposerStateSnapshot => {
+    const textComposerState = this.textComposer.state.getLatestValue();
+    const attachmentManagerState = this.attachmentManager.state.getLatestValue();
+    const linkPreviewsManagerState = this.linkPreviewsManager.state.getLatestValue();
+    const pollComposerState = this.pollComposer.state.getLatestValue();
+    const customDataManagerState = this.customDataManager.state.getLatestValue();
+    const state = this.state.getLatestValue();
+
+    return {
+      restore: () => {
+        this.state.next(state);
+        this.textComposer.state.next(textComposerState);
+        this.attachmentManager.state.next(attachmentManagerState);
+        this.linkPreviewsManager.state.next(linkPreviewsManagerState);
+        this.pollComposer.state.next(pollComposerState);
+        this.customDataManager.state.next(customDataManagerState);
+      },
+    };
+  };
 
   private logStateUpdateTimestamp() {
     this.editingAuditState.partialNext({

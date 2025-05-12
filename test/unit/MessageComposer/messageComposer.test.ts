@@ -29,14 +29,14 @@ vi.mock('../../../src/utils', () => ({
   throttle: vi.fn().mockImplementation((fn) => fn),
 }));
 
-vi.mock('../../../src/messageComposer/attachmentManager', () => ({
-  AttachmentManager: vi.fn().mockImplementation(() => ({
-    state: new StateStore({ attachments: [] }),
-    initState: vi.fn(),
-    clear: vi.fn(),
-    attachments: [],
-  })),
-}));
+// vi.mock('../../../src/messageComposer/attachmentManager', () => ({
+//   AttachmentManager: vi.fn().mockImplementation(() => ({
+//     state: new StateStore({ attachments: [] }),
+//     initState: vi.fn(),
+//     clear: vi.fn(),
+//     attachments: [],
+//   })),
+// }));
 
 vi.mock('../../../src/messageComposer/pollComposer', () => ({
   PollComposer: vi.fn().mockImplementation(() => ({
@@ -404,6 +404,39 @@ describe('MessageComposer', () => {
         quotedMessage: null,
         draftId: null,
       });
+    });
+
+    it('should take state snapshot and restore it', () => {
+      const composition = {
+        id: 'test-message-id',
+        text: 'Hello world @xx',
+        attachments: [{ id: 'x' }],
+        mentioned_users: [{ id: 'xx', name: 'xx' }],
+      };
+
+      const { messageComposer } = setup({ composition });
+      const snapshot = messageComposer.takeStateSnapshot();
+      expect(messageComposer.textComposer.text).toBe(composition.text);
+      expect(messageComposer.textComposer.mentionedUsers).toEqual(
+        composition.mentioned_users,
+      );
+      expect(messageComposer.attachmentManager.attachments[0].id).toBe(
+        composition.attachments[0].id,
+      );
+      expect(messageComposer.attachmentManager.attachments).toHaveLength(1);
+      messageComposer.clear();
+      expect(messageComposer.textComposer.text).toBe('');
+      expect(messageComposer.textComposer.mentionedUsers).toEqual([]);
+      expect(messageComposer.attachmentManager.attachments).toEqual([]);
+      snapshot.restore();
+      expect(messageComposer.textComposer.text).toBe(composition.text);
+      expect(messageComposer.textComposer.mentionedUsers).toEqual(
+        composition.mentioned_users,
+      );
+      expect(messageComposer.attachmentManager.attachments[0].id).toBe(
+        composition.attachments[0].id,
+      );
+      expect(messageComposer.attachmentManager.attachments).toHaveLength(1);
     });
 
     it('should initialize editing audit state', () => {
