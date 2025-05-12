@@ -322,6 +322,7 @@ export type ChannelAPIResponse = {
   threads?: ThreadResponse[];
   watcher_count?: number;
   watchers?: UserResponse[];
+  active_live_locations?: LiveLocation[];
 };
 
 export type ChannelUpdateOptions = {
