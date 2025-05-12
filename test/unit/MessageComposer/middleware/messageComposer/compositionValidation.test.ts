@@ -313,39 +313,6 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
 
     expect(result.status).toBeUndefined;
   });
-
-  it('should validate message with last origin change', async () => {
-    vi.spyOn(messageComposer, 'lastChangeOriginIsLocal', 'get').mockReturnValue(false);
-
-    const result = await validationMiddleware.handlers.compose(
-      setup({
-        message: {
-          id: 'test-id',
-          parent_id: undefined,
-          text: 'Hello world',
-          type: 'regular',
-        },
-        localMessage: {
-          attachments: [],
-          created_at: new Date(),
-          deleted_at: null,
-          error: undefined,
-          id: 'test-id',
-          mentioned_users: [],
-          parent_id: undefined,
-          pinned_at: null,
-          reaction_groups: null,
-          status: 'sending',
-          text: 'Hello world',
-          type: 'regular',
-          updated_at: new Date(),
-        },
-        sendOptions: {},
-      }),
-    );
-
-    expect(result.status).toBe('discard');
-  });
 });
 
 describe('stream-io/message-composer-middleware/draft-data-validation', () => {
