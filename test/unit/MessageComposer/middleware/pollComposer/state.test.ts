@@ -209,38 +209,31 @@ describe('PollComposerStateMiddleware', () => {
     it('should reorder options and add a new empty option when the all the options are filled', async () => {
       const stateMiddleware = setup();
 
+      const reOrderedOptions = [
+        {
+          id: 'option-2',
+          text: '',
+        },
+        {
+          id: 'option-1',
+          text: 'Option 1',
+        },
+      ];
+
       const result = await stateMiddleware.handlers.handleFieldChange(
         setupHandlerParams({
           nextState: {
             ...getInitialState(),
             data: {
               ...getInitialState().data,
-              options: [
-                {
-                  id: 'option-2',
-                  text: '',
-                },
-                {
-                  id: 'option-1',
-                  text: 'Option 1',
-                },
-              ],
+              options: reOrderedOptions,
             },
           },
           previousState: {
             ...getInitialState(),
             data: {
               ...getInitialState().data,
-              options: [
-                {
-                  id: 'option-2',
-                  text: '',
-                },
-                {
-                  id: 'option-1',
-                  text: 'Option 1',
-                },
-              ],
+              options: reOrderedOptions,
             },
           },
           targetFields: {
