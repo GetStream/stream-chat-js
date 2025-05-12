@@ -189,29 +189,73 @@ describe('PollComposerStateMiddleware', () => {
           nextState: { ...getInitialState() },
           previousState: {
             ...getInitialState(),
+          },
+          targetFields: {
+            options: {
+              index: 0,
+              text: 'Option 1',
+            },
+          },
+        }),
+      );
+
+      expect(result.state.nextState.data.options.length).toBe(2);
+      expect(result.state.nextState.data.options[0].text).toBe('Option 1');
+      expect(result.state.nextState.data.options[1].text).toEqual('');
+
+      expect(result.status).toBeUndefined;
+    });
+
+    it('should reorder options and add a new empty option when the all the options are filled', async () => {
+      const stateMiddleware = setup();
+
+      const result = await stateMiddleware.handlers.handleFieldChange(
+        setupHandlerParams({
+          nextState: {
+            ...getInitialState(),
             data: {
               ...getInitialState().data,
               options: [
-                { id: 'option-1', text: 'Option 1' },
-                { id: 'option-2', text: '' },
-                { id: 'option-3', text: 'Option 3' },
+                {
+                  id: 'option-2',
+                  text: '',
+                },
+                {
+                  id: 'option-1',
+                  text: 'Option 1',
+                },
+              ],
+            },
+          },
+          previousState: {
+            ...getInitialState(),
+            data: {
+              ...getInitialState().data,
+              options: [
+                {
+                  id: 'option-2',
+                  text: '',
+                },
+                {
+                  id: 'option-1',
+                  text: 'Option 1',
+                },
               ],
             },
           },
           targetFields: {
             options: {
-              index: 1,
+              index: 0,
               text: 'Option 2',
             },
           },
         }),
       );
 
-      expect(result.state.nextState.data.options.length).toBe(4);
-      expect(result.state.nextState.data.options[0].text).toBe('Option 1');
-      expect(result.state.nextState.data.options[1].text).toBe('Option 2');
-      expect(result.state.nextState.data.options[2].text).toBe('Option 3');
-      expect(result.state.nextState.data.options[3].text).toEqual('');
+      expect(result.state.nextState.data.options.length).toBe(3);
+      expect(result.state.nextState.data.options[0].text).toBe('Option 2');
+      expect(result.state.nextState.data.options[1].text).toBe('Option 1');
+      expect(result.state.nextState.data.options[2].text).toEqual('');
       expect(result.status).toBeUndefined;
     });
 

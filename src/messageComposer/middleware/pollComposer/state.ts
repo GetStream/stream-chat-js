@@ -128,8 +128,11 @@ export const pollCompositionStateProcessors: Partial<
       ...optionListTail,
     ];
 
-    // Add new option if all the options are filled
-    if (!newOptions.some((option) => !option.text.trim())) {
+    const shouldAddNewOption =
+      prevOptions.length < MAX_POLL_OPTIONS &&
+      !newOptions.some((option) => !option.text.trim());
+
+    if (shouldAddNewOption) {
       newOptions.push({ id: generateUUIDv4(), text: '' });
     }
 
