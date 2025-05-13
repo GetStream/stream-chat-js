@@ -20,6 +20,7 @@ import {
   shouldConsiderPinnedChannels,
   uniqBy,
 } from './utils';
+import { generateUUIDv4 } from './utils';
 
 // TODO: Move this somewhere fancier
 const waitSeconds = (seconds: number) =>
@@ -157,6 +158,7 @@ export class ChannelManager {
   private eventHandlerOverrides: Map<string, EventHandlerOverrideType> = new Map();
   private options: ChannelManagerOptions = {};
   private stateOptions: ChannelStateOptions = {};
+  private id: string;
 
   constructor({
     client,
@@ -167,6 +169,7 @@ export class ChannelManager {
     eventHandlerOverrides?: ChannelManagerEventHandlerOverrides;
     options?: ChannelManagerOptions;
   }) {
+    this.id = `channel-manager-${generateUUIDv4()}`;
     this.client = client;
     this.state = new StateStore<ChannelManagerState>({
       channels: [],
@@ -360,11 +363,12 @@ export class ChannelManager {
         console.log('IS IT SYNCED: ', this.client.offlineDb.syncManager.syncStatus);
 
         if (!this.client.offlineDb.syncManager.syncStatus) {
-          // FIXME: Should only schedule for true syncStatus, not otherwise
-          this.client.offlineDb.syncManager.scheduleSyncStatusChangeCallback(async () => {
-            console.log('WILL TRY NOW RUNNING SCHEDULED NOW !');
-            await queryChannelsRequest();
-          });
+          this.client.offlineDb.syncManager.scheduleSyncStatusChangeCallback(
+            this.id,
+            async () => {
+              await queryChannelsRequest();
+            },
+          );
           return;
         }
         // await queryChannelsRequest();

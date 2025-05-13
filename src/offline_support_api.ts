@@ -799,7 +799,8 @@ export class OfflineDBSyncManager {
   public syncStatus = false;
   public connectionChangedListener: { unsubscribe: () => void } | null = null;
   private syncStatusListeners: Array<(status: boolean) => void> = [];
-  private scheduledSyncStatusCallbacks: Array<(status: boolean) => void> = [];
+  private scheduledSyncStatusCallbacks: Map<string | symbol, () => Promise<void>> =
+    new Map();
   private client: StreamChat;
   private offlineDb: AbstractOfflineDB;
 
@@ -875,9 +876,10 @@ export class OfflineDBSyncManager {
   };
 
   public scheduleSyncStatusChangeCallback = (
-    callback: (status: boolean) => Promise<void>,
+    tag: string | symbol,
+    callback: () => Promise<void>,
   ) => {
-    this.scheduledSyncStatusCallbacks.push(callback);
+    this.scheduledSyncStatusCallbacks.set(tag, callback);
   };
 
   private invokeSyncStatusListeners = async (status: boolean) => {
@@ -885,10 +887,12 @@ export class OfflineDBSyncManager {
     this.syncStatusListeners.forEach((l) => l(status));
 
     if (status) {
-      const promises = this.scheduledSyncStatusCallbacks.map((cb) => cb(status));
+      const promises = Array.from(this.scheduledSyncStatusCallbacks.values()).map((cb) =>
+        cb(),
+      );
       await Promise.all(promises);
 
-      this.scheduledSyncStatusCallbacks = [];
+      this.scheduledSyncStatusCallbacks.clear();
     }
   };
 
