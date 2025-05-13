@@ -206,7 +206,7 @@ describe('PollComposerStateMiddleware', () => {
       expect(result.status).toBeUndefined;
     });
 
-    it('should reorder options and add a new empty option when the all the options are filled', async () => {
+    it('should reorder options and add a new empty option when all the options are filled', async () => {
       const stateMiddleware = setup();
 
       const reOrderedOptions = [
