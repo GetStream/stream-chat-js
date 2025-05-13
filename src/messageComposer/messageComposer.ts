@@ -371,10 +371,6 @@ export class MessageComposer extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeCustomDataManagerStateChanged());
     this.addUnsubscribeFunction(this.subscribeMessageComposerStateChanged());
     this.addUnsubscribeFunction(this.subscribeMessageComposerConfigStateChanged());
-    if (this.config.drafts.enabled) {
-      this.addUnsubscribeFunction(this.subscribeDraftUpdated());
-      this.addUnsubscribeFunction(this.subscribeDraftDeleted());
-    }
 
     return this.unregisterSubscriptions;
   };
