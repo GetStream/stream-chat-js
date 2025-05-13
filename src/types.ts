@@ -129,6 +129,7 @@ export type AppSettingsAPIResponse = APIResponse & {
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
     enforce_unique_usernames?: 'no' | 'app' | 'team';
+    event_hooks?: Array<EventHook>;
     file_upload_config?: FileUploadConfig;
     geofences?: Array<{
       country_codes: Array<string>;
@@ -162,7 +163,6 @@ export type AppSettingsAPIResponse = APIResponse & {
     sqs_key?: string;
     sqs_secret?: string;
     sqs_url?: string;
-    event_hooks?: Array<EventHook>;
     suspended?: boolean;
     suspended_explanation?: string;
     user_search_disallowed_roles?: string[] | null;
@@ -2212,6 +2212,7 @@ export type AppSettings = {
   disable_auth_checks?: boolean;
   disable_permissions_checks?: boolean;
   enforce_unique_usernames?: 'no' | 'app' | 'team';
+  event_hooks?: Array<EventHook>;
   // all possible file mime types are https://www.iana.org/assignments/media-types/media-types.xhtml
   file_upload_config?: FileUploadConfig;
   firebase_config?: {
@@ -2243,7 +2244,6 @@ export type AppSettings = {
   sqs_key?: string;
   sqs_secret?: string;
   sqs_url?: string;
-  event_hooks?: Array<EventHook>;
   video_provider?: string;
   webhook_events?: Array<string> | null;
   webhook_url?: string;
