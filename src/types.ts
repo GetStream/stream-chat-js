@@ -2212,7 +2212,7 @@ export type AppSettings = {
   disable_auth_checks?: boolean;
   disable_permissions_checks?: boolean;
   enforce_unique_usernames?: 'no' | 'app' | 'team';
-  event_hooks?: Array<EventHook>;
+  event_hooks?: Array<EventHook> | null;
   // all possible file mime types are https://www.iana.org/assignments/media-types/media-types.xhtml
   file_upload_config?: FileUploadConfig;
   firebase_config?: {
