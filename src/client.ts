@@ -4420,12 +4420,13 @@ export class StreamChat {
    * updateLiveLocation - Updates a live location
    *
    * @param liveLocation LiveLocation The live location data to update
+   * @param userId string The user id
    *
    * @returns {Promise<APIResponse>} The server response
    */
-  async updateLiveLocation(liveLocation: LiveLocation) {
+  async updateLiveLocation(liveLocation: LiveLocation, userId: string) {
     return await this.put<LiveLocation>(
-      this.baseURL + '/users/' + this.userID + '/live_location',
+      this.baseURL + `/users/${encodeURIComponent(userId)}/live_location`,
       {
         message_id: liveLocation.message_id,
         longitude: liveLocation.longitude,
