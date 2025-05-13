@@ -322,7 +322,7 @@ export type ChannelAPIResponse = {
   threads?: ThreadResponse[];
   watcher_count?: number;
   watchers?: UserResponse[];
-  active_live_locations?: LiveLocation[];
+  active_live_locations?: UserLocation[];
 };
 
 export type ChannelUpdateOptions = {
@@ -1434,7 +1434,7 @@ export type Event = CustomEventData & {
   // creation date of a message with last_read_message_id, formatted as Date ISO string
   last_read_at?: string;
   last_read_message_id?: string;
-  live_location?: LiveLocation;
+  live_location?: UserLocation;
   mark_messages_deleted?: boolean;
   me?: OwnUserResponse;
   member?: ChannelMemberResponse;
@@ -2714,7 +2714,7 @@ export type MessageBase = CustomMessageData & {
   type?: MessageLabel;
   user?: UserResponse | null;
   user_id?: string;
-  live_location?: LiveLocation;
+  live_location?: UserLocation;
 };
 
 export type MessageLabel =
@@ -3923,11 +3923,11 @@ export type DraftMessage = {
   type?: MessageLabel;
 };
 
-export type LiveLocationsAPIResponse = APIResponse & {
-  live_locations: LiveLocation[];
+export type LocationsAPIResponse = APIResponse & {
+  live_locations: UserLocation[];
 };
 
-export type LiveLocation = {
+export type UserLocation = {
   channel_cid?: string;
   created_at?: string;
   created_by_device_id: string;
@@ -3939,7 +3939,7 @@ export type LiveLocation = {
   user_id?: string;
 };
 
-export type UpdateLiveLocationOptions = {
+export type UpdateLocationOptions = {
   user_id?: string;
 };
 

@@ -118,9 +118,8 @@ import type {
   ListCommandsResponse,
   ListImportsPaginationOptions,
   ListImportsResponse,
-  LiveLocation,
-  LiveLocationsAPIResponse,
   LocalMessage,
+  LocationsAPIResponse,
   Logger,
   MarkChannelsReadOptions,
   MessageFilters,
@@ -212,6 +211,7 @@ import type {
   UpsertPushPreferencesResponse,
   UserCustomEvent,
   UserFilters,
+  UserLocation,
   UserOptions,
   UserResponse,
   UserSort,
@@ -2488,16 +2488,13 @@ export class StreamChat {
     });
   }
 
-  /** getUserLiveLocations
-   *
-   * @param userId string The user id
+  /** getUserLocations
    *
    * @returns {Promise<APIResponse>} The server response
+   *
    */
-  async getUserLiveLocations(userId: string) {
-    return await this.get<LiveLocationsAPIResponse>(
-      this.baseURL + `/users/${encodeURIComponent(userId)}/live_locations`,
-    );
+  async getUserLocations() {
+    return await this.get<LocationsAPIResponse>(this.baseURL + `/users/locations`);
   }
 
   /** muteUser - mutes a user
@@ -4417,23 +4414,19 @@ export class StreamChat {
   };
 
   /**
-   * updateLiveLocation - Updates a live location
+   * updateLocation - Updates a location
    *
-   * @param liveLocation LiveLocation The live location data to update
-   * @param userId string The user id
+   * @param location UserLocation the location data to update
    *
    * @returns {Promise<APIResponse>} The server response
    */
-  async updateLiveLocation(liveLocation: LiveLocation, userId: string) {
-    return await this.put<LiveLocation>(
-      this.baseURL + `/users/${encodeURIComponent(userId)}/live_location`,
-      {
-        message_id: liveLocation.message_id,
-        longitude: liveLocation.longitude,
-        latitude: liveLocation.latitude,
-        created_by_device_id: liveLocation.created_by_device_id,
-        end_at: liveLocation.end_at,
-      },
-    );
+  async updateLocation(location: UserLocation) {
+    return await this.put<UserLocation>(this.baseURL + `/users/location`, {
+      message_id: location.message_id,
+      longitude: location.longitude,
+      latitude: location.latitude,
+      created_by_device_id: location.created_by_device_id,
+      end_at: location.end_at,
+    });
   }
 }
