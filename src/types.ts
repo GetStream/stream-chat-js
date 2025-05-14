@@ -2263,7 +2263,6 @@ export type Attachment = CustomAttachmentData & {
   author_name?: string;
   color?: string;
   duration?: number;
-  end_at?: string;
   fallback?: string;
   fields?: Field[];
   file_size?: number | string;
@@ -2271,8 +2270,6 @@ export type Attachment = CustomAttachmentData & {
   footer_icon?: string;
   giphy?: GiphyData;
   image_url?: string;
-  latitude?: number;
-  longitude?: number;
   mime_type?: string;
   og_scrape_url?: string;
   original_height?: number;
