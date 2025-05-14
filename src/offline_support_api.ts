@@ -30,70 +30,70 @@ export type PreparedBatchQueries =
 export type InsertReactionType = {
   message: MessageResponse | LocalMessage;
   reaction: ReactionResponse;
-  flush?: boolean;
+  execute?: boolean;
 };
 
 export type UpsertCidsForQueryType = {
   cids: string[];
   filters?: ChannelFilters;
-  flush?: boolean;
+  execute?: boolean;
   sort?: ChannelSort;
 };
 
 export type UpsertChannelsType = {
   channels: ChannelAPIResponse[];
-  flush?: boolean;
+  execute?: boolean;
   isLatestMessagesSet?: boolean;
 };
 
 export type UpsertAppSettingsType = {
   appSettings: AppSettingsAPIResponse;
   userId: string;
-  flush?: boolean;
+  execute?: boolean;
 };
 
 export type UpsertUserSyncStatusType = {
   userId: string;
   lastSyncedAt: string;
-  flush?: boolean;
+  execute?: boolean;
 };
 
 export type UpsertPollType = {
   poll: PollResponse;
-  flush?: boolean;
+  execute?: boolean;
 };
 
 export type UpsertChannelDataType = {
   channel: ChannelResponse;
-  flush?: boolean;
+  execute?: boolean;
 };
 
 export type UpsertReadsType = {
   cid: string;
   reads: ReadResponse[];
-  flush?: boolean;
+  execute?: boolean;
 };
 
 export type UpsertMessagesType = {
   messages: MessageResponse[];
-  flush?: boolean;
+  execute?: boolean;
 };
 
 export type UpsertMembersType = {
   cid: string;
   members: ChannelMemberResponse[];
-  flush?: boolean;
+  execute?: boolean;
 };
 
 export type UpdateReactionType = {
   message: MessageResponse | LocalMessage;
   reaction: ReactionResponse;
-  flush?: boolean;
+  execute?: boolean;
 };
 
 export type UpdateMessageType = {
   message: MessageResponse | LocalMessage;
-  flush?: boolean;
+  execute?: boolean;
 };
 
 export type GetChannelsType = {
@@ -129,28 +129,28 @@ export type DeletePendingTaskType = { id: number };
 export type DeleteReactionType = {
   reaction: ReactionResponse;
   message?: MessageResponse | LocalMessage;
-  flush?: boolean;
+  execute?: boolean;
 };
 
 export type DeleteMemberType = {
   cid: string;
   member: ChannelMemberResponse;
-  flush?: boolean;
+  execute?: boolean;
 };
 
 export type DropPendingTasksType = {
   messageId: string;
-  flush?: boolean;
+  execute?: boolean;
 };
 
-export type DeleteMessageType = { id: string; flush?: boolean };
+export type DeleteMessageType = { id: string; execute?: boolean };
 
-export type DeleteChannelType = { cid: string; flush?: boolean };
+export type DeleteChannelType = { cid: string; execute?: boolean };
 
 export type DeleteMessagesForChannelType = {
   cid: string;
   truncated_at?: string;
-  flush?: boolean;
+  execute?: boolean;
 };
 
 export type ChannelExistsType = { cid: string };
@@ -317,17 +317,17 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   public queriesWithChannelGuard = async (
     {
       event,
-      flush = true,
+      execute = true,
       forceUpdate = false,
-    }: { event: Event; flush?: boolean; forceUpdate?: boolean },
-    createQueries: (flushOverride?: boolean) => Promise<PreparedBatchQueries[]>,
+    }: { event: Event; execute?: boolean; forceUpdate?: boolean },
+    createQueries: (executeOverride?: boolean) => Promise<PreparedBatchQueries[]>,
   ) => {
     const channelFromEvent = event.channel;
     const cid = event.cid || channelFromEvent?.cid;
     const type = event.type;
 
     if (!cid) {
-      return await createQueries(flush);
+      return await createQueries(execute);
     }
     // We want to upsert the channel data if we either:
     // - Have forceUpdate set to true
@@ -349,12 +349,12 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       if (channelData) {
         const channelQuery = await this.upsertChannelData({
           channel: channelData,
-          flush: false,
+          execute: false,
         });
         if (channelQuery) {
           const createdQueries = await createQueries(false);
           const newQueries = [...channelQuery, ...createdQueries];
-          if (flush) {
+          if (execute) {
             await this.executeSqlBatch(newQueries);
           }
           return newQueries;
@@ -373,17 +373,17 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
         return [];
       }
     }
-    return createQueries(flush);
+    return createQueries(execute);
   };
 
   // TODO: Check why this isn't working properly for read state - something is not
   //       getting populated as it should :'(
   public handleNewMessage = async ({
     event,
-    flush = true,
+    execute = true,
   }: {
     event: Event;
-    flush?: boolean;
+    execute?: boolean;
   }) => {
     const client = this.client;
     const { cid, message, user } = event;
@@ -393,10 +393,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     }
 
     const finalQueries = await this.queriesWithChannelGuard(
-      { event, flush },
+      { event, execute },
       async () => {
         let queries = await this.upsertMessages({
-          flush: false,
+          execute: false,
           messages: [message],
         });
         if (cid && client.user && client.user.id !== user?.id) {
@@ -407,7 +407,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
             const unreadCount = channel.countUnread();
             const upsertReadsQueries = await this.upsertReads({
               cid,
-              flush: false,
+              execute: false,
               reads: [
                 {
                   last_read: ownReads.last_read.toString() as string,
@@ -424,7 +424,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       },
     );
 
-    if (flush) {
+    if (execute) {
       await this.executeSqlBatch(finalQueries);
     }
 
@@ -433,19 +433,19 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
   public handleDeleteMessage = async ({
     event,
-    flush = true,
+    execute = true,
   }: {
     event: Event;
-    flush?: boolean;
+    execute?: boolean;
   }) => {
     const { message, hard_delete = false } = event;
 
     if (message) {
       const deleteMethod = hard_delete ? this.hardDeleteMessage : this.softDeleteMessage;
       return await this.queriesWithChannelGuard(
-        { event, flush },
-        async (flushOverride) =>
-          await deleteMethod({ id: message.id, flush: flushOverride }),
+        { event, execute },
+        async (executeOverride) =>
+          await deleteMethod({ id: message.id, execute: executeOverride }),
       );
     }
 
@@ -458,26 +458,26 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * state as well as the DB. We want to drop all pending tasks as well as finally
    * hard delete the message from the DB.
    * @param messageId
-   * @param flush
+   * @param execute
    */
   public handleRemoveMessage = async ({
     messageId,
-    flush = true,
+    execute = true,
   }: {
     messageId: string;
-    flush?: boolean;
+    execute?: boolean;
   }) => {
     const dropPendingTasksQueries = await this.dropPendingTasks({
       messageId,
-      flush: false,
+      execute: false,
     });
     const hardDeleteMessageQueries = await this.hardDeleteMessage({
       id: messageId,
-      flush: false,
+      execute: false,
     });
     const queries = [...dropPendingTasksQueries, ...hardDeleteMessageQueries];
 
-    if (flush) {
+    if (execute) {
       await this.executeSqlBatch(queries);
     }
 
@@ -487,11 +487,11 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   public handleRead = async ({
     event,
     unreadMessages,
-    flush = true,
+    execute = true,
   }: {
     event: Event;
     unreadMessages?: number;
-    flush?: boolean;
+    execute?: boolean;
   }) => {
     const {
       received_at: last_read,
@@ -504,10 +504,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     const overriddenUnreadMessages = unreadMessages ?? unread_messages;
 
     if (user?.id && cid) {
-      return await this.queriesWithChannelGuard({ event, flush }, (flushOverride) =>
+      return await this.queriesWithChannelGuard({ event, execute }, (executeOverride) =>
         this.upsertReads({
           cid,
-          flush: flushOverride,
+          execute: executeOverride,
           reads: [
             {
               last_read: last_read as string,
@@ -525,10 +525,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
   public handleMemberEvent = async ({
     event,
-    flush = true,
+    execute = true,
   }: {
     event: Event;
-    flush?: boolean;
+    execute?: boolean;
   }) => {
     const { member, cid, type } = event;
 
@@ -537,16 +537,16 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       // TODO: Although this is more than fine for now, we should look into
       //       changing this to be an actual update to the DB instead.
       return await this.queriesWithChannelGuard(
-        { event, flush, forceUpdate: true },
-        async (flushOverride) => {
+        { event, execute, forceUpdate: true },
+        async (executeOverride) => {
           if (type === 'member.removed') {
-            return await this.deleteMember({ member, cid, flush: flushOverride });
+            return await this.deleteMember({ member, cid, execute: executeOverride });
           }
 
           return await this.upsertMembers({
             cid,
             members: [member],
-            flush: flushOverride,
+            execute: executeOverride,
           });
         },
       );
@@ -557,18 +557,18 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
   public handleMessageUpdatedEvent = async ({
     event,
-    flush = true,
+    execute = true,
   }: {
     event: Event;
-    flush?: boolean;
+    execute?: boolean;
   }) => {
     const { message } = event;
 
     if (message && !message.parent_id) {
       return await this.queriesWithChannelGuard(
-        { event, flush },
-        async (flushOverride) =>
-          await this.updateMessage({ message, flush: flushOverride }),
+        { event, execute },
+        async (executeOverride) =>
+          await this.updateMessage({ message, execute: executeOverride }),
       );
     }
 
@@ -580,14 +580,14 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * handler because event.channel.hidden does not arrive with the baseline event, so a
    * simple upsertion is not enough.
    * @param event
-   * @param flush
+   * @param execute
    */
   public handleChannelVisibilityEvent = async ({
     event,
-    flush = true,
+    execute = true,
   }: {
     event: Event;
-    flush?: boolean;
+    execute?: boolean;
   }) => {
     const { type, channel } = event;
 
@@ -595,7 +595,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       const hidden = type === 'channel.hidden';
       return await this.client.offlineDb?.upsertChannelData({
         channel: { ...channel, hidden },
-        flush,
+        execute,
       });
     }
 
@@ -604,10 +604,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
   public handleChannelTruncatedEvent = async ({
     event,
-    flush = true,
+    execute = true,
   }: {
     event: Event;
-    flush?: boolean;
+    execute?: boolean;
   }) => {
     const { channel } = event;
     const ownUser = this.client.user;
@@ -617,7 +617,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       const truncateQueries = await this.deleteMessagesForChannel({
         cid,
         truncated_at,
-        flush,
+        execute,
       });
 
       const userId = ownUser.id;
@@ -633,7 +633,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
       const upsertReadQueries = await this.upsertReads({
         cid,
-        flush,
+        execute,
         reads: [
           {
             last_read: ownReads.last_read.toString() as string,
@@ -895,32 +895,44 @@ export class OfflineDBSyncManager {
     }
   };
 
-  private handleEventToSyncDB = async (event: Event, flush?: boolean) => {
+  private handleEventToSyncDB = async (event: Event, execute?: boolean) => {
     const { type, channel, message, reaction } = event;
     console.log('SYNCING EVENT: ', event.type);
 
     if (message && reaction) {
       if (type === 'reaction.new') {
         return await this.offlineDb.queriesWithChannelGuard(
-          { event, flush },
-          (flushOverride) =>
-            this.offlineDb.insertReaction({ message, reaction, flush: flushOverride }),
+          { event, execute },
+          (executeOverride) =>
+            this.offlineDb.insertReaction({
+              message,
+              reaction,
+              execute: executeOverride,
+            }),
         );
       }
 
       if (type === 'reaction.updated') {
         return await this.offlineDb.queriesWithChannelGuard(
-          { event, flush },
-          (flushOverride) =>
-            this.offlineDb.updateReaction({ message, reaction, flush: flushOverride }),
+          { event, execute },
+          (executeOverride) =>
+            this.offlineDb.updateReaction({
+              message,
+              reaction,
+              execute: executeOverride,
+            }),
         );
       }
 
       if (type === 'reaction.deleted') {
         return await this.offlineDb.queriesWithChannelGuard(
-          { event, flush },
-          (flushOverride) =>
-            this.offlineDb?.deleteReaction({ message, reaction, flush: flushOverride }),
+          { event, execute },
+          (executeOverride) =>
+            this.offlineDb?.deleteReaction({
+              message,
+              reaction,
+              execute: executeOverride,
+            }),
         );
       }
     }
@@ -929,36 +941,36 @@ export class OfflineDBSyncManager {
       const { message } = event;
 
       if (message && (!message.parent_id || message.show_in_channel)) {
-        return await this.offlineDb.handleNewMessage({ event, flush });
+        return await this.offlineDb.handleNewMessage({ event, execute });
       }
     }
 
     if (type === 'message.deleted') {
-      return await this.offlineDb.handleDeleteMessage({ event, flush });
+      return await this.offlineDb.handleDeleteMessage({ event, execute });
     }
 
     if (type === 'message.updated') {
-      return this.offlineDb.handleMessageUpdatedEvent({ event, flush });
+      return this.offlineDb.handleMessageUpdatedEvent({ event, execute });
     }
 
     if (type.startsWith('member.')) {
-      return await this.offlineDb.handleMemberEvent({ event, flush });
+      return await this.offlineDb.handleMemberEvent({ event, execute });
     }
 
     if (type === 'channel.hidden' || type === 'channel.visible') {
-      return await this.offlineDb.handleChannelVisibilityEvent({ event, flush });
+      return await this.offlineDb.handleChannelVisibilityEvent({ event, execute });
     }
 
     if (type === 'channel.updated' && channel) {
-      return await this.offlineDb.upsertChannelData({ channel, flush });
+      return await this.offlineDb.upsertChannelData({ channel, execute });
     }
 
     if (type === 'channel.deleted' && channel) {
-      return await this.offlineDb.deleteChannel({ cid: channel.cid, flush });
+      return await this.offlineDb.deleteChannel({ cid: channel.cid, execute });
     }
 
     if (type === 'channel.truncated' && channel) {
-      return await this.offlineDb.handleChannelTruncatedEvent({ event, flush });
+      return await this.offlineDb.handleChannelTruncatedEvent({ event, execute });
     }
 
     return [];
