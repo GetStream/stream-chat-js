@@ -721,7 +721,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       } catch (e) {
         const error = e as AxiosError<APIErrorResponse>;
         if (error?.response?.data?.code === 4) {
-          // Error code 16 - message already exists
+          // Error code 4 - message already exists
           // ignore
         } else if (error?.response?.data?.code === 17) {
           // Error code 17 - missing own_capabilities to execute the task
@@ -845,7 +845,6 @@ export class OfflineDBSyncManager {
         async (event) => {
           if (event.online) {
             await this.syncAndExecutePendingTasks();
-            console.log('SUBSEQUENT SYNC DONE !');
             await this.invokeSyncStatusListeners(true);
           } else {
             await this.invokeSyncStatusListeners(false);
@@ -996,7 +995,7 @@ export class OfflineDBSyncManager {
       if (diff > 30) {
         // stream backend will send an error if we try to sync after 30 days.
         // In that case reset the entire DB and start fresh.
-        await this.offlineDb?.resetDB?.();
+        await this.offlineDb.resetDB();
       } else {
         try {
           console.log('ABOUT TO CALL SYNC API');
@@ -1009,7 +1008,6 @@ export class OfflineDBSyncManager {
           const queries = queriesArray.flat() as ExecuteBatchQueriesType;
 
           if (queries.length) {
-            // TODO: FIXME
             await this.offlineDb.executeSqlBatch(queries);
           }
         } catch (e) {

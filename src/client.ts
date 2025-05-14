@@ -1875,9 +1875,9 @@ export class StreamChat {
         isLatestMessageSet: true,
       },
     });
-    if (data.channels?.length && this.offlineDb?.upsertChannels) {
+    if (channels?.length && this.offlineDb?.upsertChannels) {
       await this.offlineDb.upsertChannels({
-        channels: data.channels,
+        channels,
         isLatestMessagesSet: true,
       });
     }
