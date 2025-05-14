@@ -1805,22 +1805,19 @@ export class StreamChat {
   }
 
   /**
-   * queryChannels - Query channels
+   * queryChannelsRequest - Queries channels and returns the raw response
    *
    * @param {ChannelFilters} filterConditions object MongoDB style filters
    * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
    * @param {ChannelOptions} [options] Options object
-   * @param {ChannelStateOptions} [stateOptions] State options object. These options will only be used for state management and won't be sent in the request.
-   * - stateOptions.skipInitialization - Skips the initialization of the state for the channels matching the ids in the list.
    *
-   * @return {Promise<{ channels: Array<ChannelAPIResponse>}> } search channels response
+   * @return {Promise<Array<ChannelAPIResponse>>} search channels response
    */
-  async queryChannels(
+  async queryChannelsRequest(
     filterConditions: ChannelFilters,
     sort: ChannelSort = [],
     options: ChannelOptions = {},
-    stateOptions: ChannelStateOptions = {},
   ) {
     const defaultOptions: ChannelOptions = {
       state: true,
@@ -1847,10 +1844,34 @@ export class StreamChat {
       payload,
     );
 
+    return data.channels;
+  }
+
+  /**
+   * queryChannels - Query channels
+   *
+   * @param {ChannelFilters} filterConditions object MongoDB style filters
+   * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
+   * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
+   * @param {ChannelOptions} [options] Options object
+   * @param {ChannelStateOptions} [stateOptions] State options object. These options will only be used for state management and won't be sent in the request.
+   * - stateOptions.skipInitialization - Skips the initialization of the state for the channels matching the ids in the list.
+   * - stateOptions.skipHydration - Skips returning the channels as instances of the Channel class and rather returns the raw query response.
+   *
+   * @return {Promise<Array<Channel>>} search channels response
+   */
+  async queryChannels(
+    filterConditions: ChannelFilters,
+    sort: ChannelSort = [],
+    options: ChannelOptions = {},
+    stateOptions: ChannelStateOptions = {},
+  ) {
+    const channels = await this.queryChannelsRequest(filterConditions, sort, options);
+
     this.dispatchEvent({
       type: 'channels.queried',
       queriedChannels: {
-        channels: data.channels,
+        channels,
         isLatestMessageSet: true,
       },
     });
@@ -1861,7 +1882,7 @@ export class StreamChat {
       });
     }
 
-    return this.hydrateActiveChannels(data.channels, stateOptions, options);
+    return this.hydrateActiveChannels(channels, stateOptions, options);
   }
 
   /**
@@ -2958,28 +2979,28 @@ export class StreamChat {
    * updateMessage - Update the given message
    *
    * @param {Omit<MessageResponse, 'mentioned_users'> & { mentioned_users?: string[] }} message object, id needs to be specified
-   * @param {string | { id: string }} [userId]
+   * @param {string | { id: string }} [partialUserOrUserId]
    * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
    *
    * @return {{ message: LocalMessage | MessageResponse }} Response that includes the message
    */
   async updateMessage(
     message: LocalMessage | Partial<MessageResponse>,
-    userId?: string | { id: string },
+    partialUserOrUserId?: string | { id: string },
     options?: UpdateMessageOptions,
   ) {
     if (!message.id) {
-      throw Error('Please specify the message id when calling updateMessage');
+      throw Error('Please specify the message.id when calling updateMessage');
     }
+
+    // should not include user object
     const payload = toUpdatedMessagePayload(message);
-    if (userId != null) {
-      if (isString(userId)) {
-        payload.user_id = userId;
-      } else {
-        payload.user = {
-          id: userId.id,
-        };
-      }
+
+    // add user_id (if exists)
+    if (typeof partialUserOrUserId === 'string') {
+      payload.user_id = partialUserOrUserId;
+    } else if (typeof partialUserOrUserId?.id === 'string') {
+      payload.user_id = partialUserOrUserId.id;
     }
 
     return await this.post<UpdateMessageAPIResponse>(
@@ -3007,16 +3028,21 @@ export class StreamChat {
   async partialUpdateMessage(
     id: string,
     partialMessageObject: PartialMessageUpdate,
-    userId?: string | { id: string },
+    partialUserOrUserId?: string | { id: string },
     options?: UpdateMessageOptions,
   ) {
     if (!id) {
-      throw Error('Please specify the message id when calling partialUpdateMessage');
+      throw Error('Please specify the message.id when calling partialUpdateMessage');
     }
-    let user = userId;
-    if (userId != null && isString(userId)) {
-      user = { id: userId };
+
+    let user: { id: string } | undefined = undefined;
+
+    if (typeof partialUserOrUserId === 'string') {
+      user = { id: partialUserOrUserId };
+    } else if (typeof partialUserOrUserId?.id === 'string') {
+      user = { id: partialUserOrUserId.id };
     }
+
     return await this.put<UpdateMessageAPIResponse>(
       this.baseURL + `/messages/${encodeURIComponent(id)}`,
       {

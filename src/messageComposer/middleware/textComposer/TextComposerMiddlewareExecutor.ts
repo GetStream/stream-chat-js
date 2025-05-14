@@ -1,15 +1,15 @@
 import { createCommandsMiddleware } from './commands';
 import { createMentionsMiddleware } from './mentions';
 import { createTextComposerPreValidationMiddleware } from './validation';
+import { MiddlewareExecutor } from '../../../middleware';
 import type {
   ExecuteParams,
   MiddlewareExecutionResult,
   MiddlewareHandler,
 } from '../../../middleware';
-import { MiddlewareExecutor } from '../../../middleware';
-import { withCancellation } from '../../../utils/concurrency';
 import type {
   Suggestion,
+  Suggestions,
   TextComposerMiddlewareExecutorOptions,
   TextComposerState,
 } from './types';
@@ -58,28 +58,14 @@ export class TextComposerMiddlewareExecutor<
       initialValue: initialState,
     });
 
-    if (result && result.state.suggestions) {
-      try {
-        const searchResult = await withCancellation(
-          'textComposer-suggestions-search',
-          async () => {
-            await result.state.suggestions?.searchSource.search(
-              result.state.suggestions?.query,
-            );
-          },
-        );
-        if (searchResult === 'canceled') return { ...result, status: 'discard' };
-      } catch (error) {
-        // Clear suggestions on search error
-        return {
-          ...result,
-          state: {
-            ...result.state,
-            suggestions: undefined,
-          },
-        };
-      }
-    }
+    const { query, searchSource } = result.state.suggestions ?? ({} as Suggestions);
+    /**
+     * Catching error just for sanity purposes.
+     * The BaseSearchSource.search() method returns debounced result.
+     * That means the result of the previous search call as the debounced call result is unknown at the moment.
+     * Custom search source implementation should handle errors meaningfully internally.
+     */
+    searchSource?.search(query)?.catch(console.error);
 
     return result;
   }

@@ -17,6 +17,7 @@ import type {
   CustomUserData,
 } from './custom_types';
 import type { NotificationManager } from './notifications';
+import type { RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
 
 /**
  * Utility Types
@@ -967,6 +968,7 @@ export type ChannelQueryOptions = {
 export type ChannelStateOptions = {
   offlineMode?: boolean;
   skipInitialization?: string[];
+  skipHydration?: boolean;
 };
 
 export type CreateChannelOptions = {
@@ -2950,23 +2952,7 @@ export type TranslationLanguages =
 
 export type TypingStartEvent = Event;
 
-export type ReservedUpdatedMessageFields =
-  | 'command'
-  | 'created_at'
-  | 'deleted_at'
-  | 'html'
-  | 'i18n'
-  | 'latest_reactions'
-  // the the original array of UserResponse object is converted to array of user ids and re-inserted before sending the update request
-  | 'mentioned_users'
-  | 'own_reactions'
-  | 'pinned_at'
-  | 'quoted_message'
-  | 'reaction_counts'
-  | 'reply_count'
-  | 'type'
-  | 'updated_at'
-  | '__html';
+export type ReservedUpdatedMessageFields = keyof typeof RESERVED_UPDATED_MESSAGE_FIELDS;
 
 export type UpdatedMessage = Omit<MessageResponse, ReservedUpdatedMessageFields> & {
   mentioned_users?: string[];

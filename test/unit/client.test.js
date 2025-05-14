@@ -10,6 +10,8 @@ import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse'
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
 
 import { describe, beforeEach, it, expect, beforeAll, afterAll } from 'vitest';
+import { Channel } from '../../src';
+import { ChannelAPIResponse } from '../../src';
 
 describe('StreamChat getInstance', () => {
 	beforeEach(() => {
@@ -663,6 +665,44 @@ describe('StreamChat.queryChannels', async () => {
 		expect(Object.keys(client.activeChannels).length).to.be.equal(0);
 		expect(Object.keys(client.configs).length).to.be.equal(0);
 		mock.restore();
+	});
+
+	it('should return hydrated channels as Channel instances from queryChannels', async () => {
+		const client = await getClientWithUser();
+		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
+			...mockChannelQueryResponse,
+			messages: Array.from(
+				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE },
+				generateMsg,
+			),
+		}));
+		const postStub = sinon
+			.stub(client, 'post')
+			.returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
+		const queryChannelsResponse = await client.queryChannels();
+		expect(queryChannelsResponse.length).to.be.equal(mockedChannelsQueryResponse.length);
+		queryChannelsResponse.forEach((item) => {
+			expect(item).to.be.instanceOf(Channel);
+		});
+		postStub.restore();
+	});
+
+	it('should return the raw channels response from queryChannelsRequest', async () => {
+		const client = await getClientWithUser();
+		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
+			...mockChannelQueryResponse,
+			messages: Array.from(
+				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE },
+				generateMsg,
+			),
+		}));
+		const postStub = sinon
+			.stub(client, 'post')
+			.returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
+		const queryChannelsResponse = await client.queryChannelsRequest();
+		expect(queryChannelsResponse.length).to.be.equal(mockedChannelsQueryResponse.length);
+		expect(queryChannelsResponse).to.deep.equal(mockedChannelsQueryResponse);
+		postStub.restore();
 	});
 
 	it('should not update pagination for queried message set', async () => {

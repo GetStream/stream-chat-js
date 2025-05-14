@@ -367,14 +367,14 @@ export const localMessageToNewMessagePayload = (localMessage: LocalMessage): Mes
 export const toUpdatedMessagePayload = (
   message: LocalMessage | Partial<MessageResponse>,
 ): UpdatedMessage => {
+  const reservedKeys = {
+    ...RESERVED_UPDATED_MESSAGE_FIELDS,
+    ...LOCAL_MESSAGE_FIELDS,
+  } as const;
+
   const messageFields = Object.fromEntries(
     Object.entries(message).filter(
-      ([key]) =>
-        ![...RESERVED_UPDATED_MESSAGE_FIELDS, ...LOCAL_MESSAGE_FIELDS].includes(
-          key as
-            | (typeof RESERVED_UPDATED_MESSAGE_FIELDS)[number]
-            | (typeof LOCAL_MESSAGE_FIELDS)[number],
-        ),
+      ([key]) => !reservedKeys[key as keyof typeof reservedKeys],
     ),
   ) as UpdatedMessage;
 
@@ -384,7 +384,6 @@ export const toUpdatedMessagePayload = (
     mentioned_users: message.mentioned_users?.map((user) =>
       typeof user === 'string' ? user : user.id,
     ),
-    user_id: message.user?.id ?? message.user_id,
   };
 };
 
