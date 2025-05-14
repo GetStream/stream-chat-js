@@ -939,6 +939,7 @@ export type BanUserOptions = UnBanUserOptions & {
   ip_ban?: boolean;
   reason?: string;
   timeout?: number;
+  delete_messages?: DeleteMessagesOptions;
 };
 
 export type ChannelOptions = {
@@ -3509,11 +3510,14 @@ export type CustomCheckFlag = {
   reason?: string;
 };
 
+export type DeleteMessagesOptions = 'soft' | 'hard';
+
 export type SubmitActionOptions = {
   ban?: {
     channel_ban_only?: boolean;
     reason?: string;
     timeout?: number;
+    delete_messages?: DeleteMessagesOptions;
   };
   delete_message?: {
     hard_delete?: boolean;
