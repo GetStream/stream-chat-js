@@ -174,14 +174,16 @@ export interface OfflineDBApi {
   upsertMembers: (options: UpsertMembersType) => Promise<ExecuteBatchQueriesType>;
   updateReaction: (options: UpdateReactionType) => Promise<ExecuteBatchQueriesType>;
   updateMessage: (options: UpdateMessageType) => Promise<ExecuteBatchQueriesType>;
-  getChannels: (options: GetChannelsType) => Promise<unknown>;
+  getChannels: (
+    options: GetChannelsType,
+  ) => Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>;
   getChannelsForQuery: (
     options: GetChannelsForQueryType,
   ) => Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>;
   getAllChannelCids: () => Promise<string[]>;
   getLastSyncedAt: (options: GetLastSyncedAtType) => Promise<string | undefined>;
-  getAppSettings: (options: GetAppSettingsType) => Promise<unknown>;
-  getReactions: (options: GetReactionsType) => Promise<unknown>;
+  getAppSettings: (options: GetAppSettingsType) => Promise<AppSettingsAPIResponse>;
+  getReactions: (options: GetReactionsType) => Promise<ReactionResponse[]>;
   executeSqlBatch: (queries: ExecuteBatchQueriesType) => Promise<unknown>;
   addPendingTask: (task: PendingTask) => Promise<() => Promise<void>>;
   getPendingTasks: (conditions?: GetPendingTasksType) => Promise<PendingTask[]>;
@@ -399,12 +401,15 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
           execute: false,
           messages: [message],
         });
+        console.log('WUT HAPPONZ', event, cid, client.user, client.user?.id, user?.id);
         if (cid && client.user && client.user.id !== user?.id) {
           const userId = client.user.id;
           const channel = client.activeChannels[cid];
+          console.log('CHANN0L: ', channel);
           if (channel) {
             const ownReads = channel.state.read[userId];
             const unreadCount = channel.countUnread();
+            console.log('UPSERTING WITH: ', ownReads, unreadCount);
             const upsertReadsQueries = await this.upsertReads({
               cid,
               execute: false,
@@ -701,7 +706,9 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       }
     }
 
-    throw new Error('Invalid task type');
+    throw new Error(
+      `Tried to execute invalid pending task type (${task.type}) while synchronizing the database.`,
+    );
   };
 
   public executePendingTasks = async () => {
@@ -1013,8 +1020,8 @@ export class OfflineDBSyncManager {
           console.log('ABOUT TO CALL SYNC API');
           const result = await this.client.sync(cids, lastSyncedAtDate.toISOString());
           console.log('CALLED SYNC API', result.events);
-          const queryPromises = result.events.map(
-            async (event) => await this.handleEventToSyncDB(event, false),
+          const queryPromises = result.events.map((event) =>
+            this.handleEventToSyncDB(event, false),
           );
           const queriesArray = await Promise.all(queryPromises);
           const queries = queriesArray.flat() as ExecuteBatchQueriesType;

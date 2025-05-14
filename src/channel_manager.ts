@@ -360,7 +360,6 @@ export class ChannelManager {
             this.state.partialNext({ channels: offlineChannels });
           }
         }
-        console.log('IS IT SYNCED: ', this.client.offlineDb.syncManager.syncStatus);
 
         if (!this.client.offlineDb.syncManager.syncStatus) {
           this.client.offlineDb.syncManager.scheduleSyncStatusChangeCallback(

@@ -675,15 +675,20 @@ export class StreamChat {
     await Promise.all([
       this.wsConnection?.disconnect(timeout),
       this.wsFallback?.disconnect(timeout),
-      ...(this.offlineDb && this.userID
-        ? [
-            this.offlineDb.upsertUserSyncStatus({
-              userId: this.userID,
-              lastSyncedAt: new Date().toString(),
-            }),
-          ]
-        : []),
     ]);
+
+    this.offlineDb?.executeQuerySafely(
+      async (db) => {
+        if (this.userID) {
+          await db.upsertUserSyncStatus({
+            userId: this.userID,
+            lastSyncedAt: new Date().toString(),
+          });
+        }
+      },
+      { method: 'upsertUserSyncStatus' },
+    );
+
     return Promise.resolve();
   };
 
@@ -1928,7 +1933,6 @@ export class StreamChat {
       }
     }
 
-    // TODO: Why is this here ? Looks not needed.
     // Make sure we wait for the connect promise if there is a pending one
     await this.wsPromise;
 
