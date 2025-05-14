@@ -482,7 +482,13 @@ export class AttachmentManager {
       (uploadedAttachment as LocalNotImageAttachment).thumb_url = response.thumb_url;
     }
 
-    this.upsertAttachments([uploadedAttachment]);
+    if (
+      this.attachments.some(
+        (att) => att.localMetadata.id === uploadedAttachment.localMetadata.id,
+      )
+    ) {
+      this.upsertAttachments([uploadedAttachment]);
+    }
 
     return uploadedAttachment;
   };
