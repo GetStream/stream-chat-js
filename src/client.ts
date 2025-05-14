@@ -119,7 +119,6 @@ import type {
   ListImportsPaginationOptions,
   ListImportsResponse,
   LocalMessage,
-  LocationsAPIResponse,
   Logger,
   MarkChannelsReadOptions,
   MessageFilters,
@@ -187,6 +186,9 @@ import type {
   SegmentTargetsResponse,
   SegmentType,
   SendFileAPIResponse,
+  SharedLocationRequest,
+  SharedLocationResponse,
+  SharedLocationsAPIResponse,
   SortParam,
   StreamChatOptions,
   SyncOptions,
@@ -211,7 +213,6 @@ import type {
   UpsertPushPreferencesResponse,
   UserCustomEvent,
   UserFilters,
-  UserLocation,
   UserOptions,
   UserResponse,
   UserSort,
@@ -2490,11 +2491,11 @@ export class StreamChat {
 
   /** getUserLocations
    *
-   * @returns {Promise<APIResponse>} The server response
+   * @returns {Promise<SharedLocationsAPIResponse>} The server response
    *
    */
   async getUserLocations() {
-    return await this.get<LocationsAPIResponse>(this.baseURL + `/users/locations`);
+    return await this.get<SharedLocationsAPIResponse>(this.baseURL + `/users/locations`);
   }
 
   /** muteUser - mutes a user
@@ -4420,13 +4421,10 @@ export class StreamChat {
    *
    * @returns {Promise<APIResponse>} The server response
    */
-  async updateLocation(location: UserLocation) {
-    return await this.put<UserLocation>(this.baseURL + `/users/location`, {
-      message_id: location.message_id,
-      longitude: location.longitude,
-      latitude: location.latitude,
-      created_by_device_id: location.created_by_device_id,
-      end_at: location.end_at,
-    });
+  async updateLocation(location: SharedLocationRequest) {
+    return await this.put<SharedLocationResponse>(
+      this.baseURL + `/users/location`,
+      location,
+    );
   }
 }
