@@ -686,6 +686,7 @@ export type MessageResponseBase = MessageBase & {
   reaction_scores?: { [key: string]: number } | null;
   reply_count?: number;
   shadowed?: boolean;
+  shared_location?: SharedLocationResponse;
   status?: string;
   thread_participants?: UserResponse[];
   updated_at?: string;
@@ -2693,6 +2694,7 @@ export type Logger = (
 export type Message = Partial<
   MessageBase & {
     mentioned_users: string[];
+    shared_location?: SharedLocationRequest;
   }
 >;
 
@@ -2714,7 +2716,6 @@ export type MessageBase = CustomMessageData & {
   type?: MessageLabel;
   user?: UserResponse | null;
   user_id?: string;
-  live_location?: SharedLocationResponse;
 };
 
 export type MessageLabel =
@@ -3937,7 +3938,6 @@ export type SharedLocationResponse = {
   message_id: string;
   updated_at: string;
   user_id: string;
-  is_static_location?: boolean;
 };
 
 export type SharedLocationRequest = {

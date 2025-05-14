@@ -2489,12 +2489,12 @@ export class StreamChat {
     });
   }
 
-  /** getUserLocations
+  /** getSharedLocations
    *
    * @returns {Promise<SharedLocationsAPIResponse>} The server response
    *
    */
-  async getUserLocations() {
+  async getSharedLocations() {
     return await this.get<SharedLocationsAPIResponse>(this.baseURL + `/users/locations`);
   }
 
