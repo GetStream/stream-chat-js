@@ -1,12 +1,12 @@
-import { StreamChat } from './client';
-import { CampaignData, DefaultGenerics, ExtendableGenerics, GetCampaignOptions } from './types';
+import type { StreamChat } from './client';
+import type { CampaignData, GetCampaignOptions } from './types';
 
-export class Campaign<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
+export class Campaign {
   id: string | null;
   data?: CampaignData;
-  client: StreamChat<StreamChatGenerics>;
+  client: StreamChat;
 
-  constructor(client: StreamChat<StreamChatGenerics>, id: string | null, data?: CampaignData) {
+  constructor(client: StreamChat, id: string | null, data?: CampaignData) {
     this.client = client;
     this.id = id;
     this.data = data;
@@ -21,8 +21,11 @@ export class Campaign<StreamChatGenerics extends ExtendableGenerics = DefaultGen
       sender_mode: this.data?.sender_mode,
       channel_template: this.data?.channel_template,
       create_channels: this.data?.create_channels,
+      show_channels: this.data?.show_channels,
       description: this.data?.description,
       name: this.data?.name,
+      skip_push: this.data?.skip_push,
+      skip_webhook: this.data?.skip_webhook,
       user_ids: this.data?.user_ids,
     };
 
@@ -47,7 +50,7 @@ export class Campaign<StreamChatGenerics extends ExtendableGenerics = DefaultGen
     return await this.client.startCampaign(this.id as string, options);
   }
 
-  async update(data: Partial<CampaignData>) {
+  update(data: Partial<CampaignData>) {
     this.verifyCampaignId();
 
     return this.client.updateCampaign(this.id as string, data);
@@ -59,13 +62,13 @@ export class Campaign<StreamChatGenerics extends ExtendableGenerics = DefaultGen
     return await this.client.deleteCampaign(this.id as string);
   }
 
-  async stop() {
+  stop() {
     this.verifyCampaignId();
 
     return this.client.stopCampaign(this.id as string);
   }
 
-  async get(options?: GetCampaignOptions) {
+  get(options?: GetCampaignOptions) {
     this.verifyCampaignId();
 
     return this.client.getCampaign(this.id as string, options);

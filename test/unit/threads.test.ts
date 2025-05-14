@@ -1,4 +1,3 @@
-import { expect } from 'chai';
 import { v4 as uuidv4 } from 'uuid';
 
 import { generateChannel } from './test-utils/generateChannel';
@@ -16,8 +15,13 @@ import {
   ThreadManager,
   ThreadResponse,
   THREAD_MANAGER_INITIAL_STATE,
+  ThreadFilters,
+  ThreadSort,
+  QueryThreadsOptions,
 } from '../../src';
 import { THREAD_RESPONSE_RESERVED_KEYS } from '../../src/thread';
+
+import { describe, it, beforeEach, expect, afterEach } from 'vitest';
 
 const TEST_USER_ID = 'observer';
 
@@ -59,7 +63,10 @@ describe('Threads 2.0', () => {
 
   describe('Thread', () => {
     it('initializes properly', () => {
-      const threadResponse = generateThreadResponse(channelResponse, parentMessageResponse);
+      const threadResponse = generateThreadResponse(
+        channelResponse,
+        parentMessageResponse,
+      );
       // mimic pre-cached channel with existing members
       channel._hydrateMembers({ members: [{ user: { id: TEST_USER_ID } }] });
       const thread = new Thread({ client, threadData: threadResponse });
@@ -96,7 +103,10 @@ describe('Threads 2.0', () => {
         });
 
         it('updates existing message', () => {
-          const message = generateMsg({ parent_id: parentMessageResponse.id, text: 'aaa' }) as MessageResponse;
+          const message = generateMsg({
+            parent_id: parentMessageResponse.id,
+            text: 'aaa',
+          }) as MessageResponse;
           const thread = createTestThread({ latest_replies: [message] });
           const udpatedMessage = { ...message, text: 'bbb' };
 
@@ -125,7 +135,9 @@ describe('Threads 2.0', () => {
             created_at: '2020-01-01T00:00:10Z',
           }) as MessageResponse;
 
-          const thread = createTestThread({ latest_replies: [optimisticMessage, message] });
+          const thread = createTestThread({
+            latest_replies: [optimisticMessage, message],
+          });
           const updatedMessage: MessageResponse = {
             ...optimisticMessage,
             text: 'ccc',
@@ -185,7 +197,10 @@ describe('Threads 2.0', () => {
           const thread = createTestThread();
           const message = generateMsg({ parent_id: thread.id }) as MessageResponse;
           const upsertReplyLocallyStub = sinon.stub(thread, 'upsertReplyLocally');
-          const updateParentMessageLocallyStub = sinon.stub(thread, 'updateParentMessageLocally');
+          const updateParentMessageLocallyStub = sinon.stub(
+            thread,
+            'updateParentMessageLocally',
+          );
 
           thread.updateParentMessageOrReplyLocally(message);
 
@@ -197,7 +212,10 @@ describe('Threads 2.0', () => {
           const thread = createTestThread();
           const message = generateMsg({ id: thread.id }) as MessageResponse;
           const upsertReplyLocallyStub = sinon.stub(thread, 'upsertReplyLocally');
-          const updateParentMessageLocallyStub = sinon.stub(thread, 'updateParentMessageLocally');
+          const updateParentMessageLocallyStub = sinon.stub(
+            thread,
+            'updateParentMessageLocally',
+          );
 
           thread.updateParentMessageOrReplyLocally(message);
 
@@ -209,7 +227,10 @@ describe('Threads 2.0', () => {
           const thread = createTestThread();
           const message = generateMsg() as MessageResponse;
           const upsertReplyLocallyStub = sinon.stub(thread, 'upsertReplyLocally');
-          const updateParentMessageLocallyStub = sinon.stub(thread, 'updateParentMessageLocally');
+          const updateParentMessageLocallyStub = sinon.stub(
+            thread,
+            'updateParentMessageLocally',
+          );
 
           thread.updateParentMessageOrReplyLocally(message);
 
@@ -221,7 +242,9 @@ describe('Threads 2.0', () => {
       describe('hydrateState', () => {
         it('prevents hydrating state from the instance with a different id', () => {
           const thread = createTestThread();
-          const otherThread = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
+          const otherThread = createTestThread({
+            parentMessageOverrides: { id: uuidv4() },
+          });
 
           expect(thread.id).to.not.equal(otherThread.id);
           expect(() => thread.hydrateState(otherThread)).to.throw();
@@ -245,7 +268,9 @@ describe('Threads 2.0', () => {
         it('retains failed replies after hydration', () => {
           const thread = createTestThread();
           const hydrationThread = createTestThread({
-            latest_replies: [generateMsg({ parent_id: parentMessageResponse.id }) as MessageResponse],
+            latest_replies: [
+              generateMsg({ parent_id: parentMessageResponse.id }) as MessageResponse,
+            ],
           });
 
           const failedMessage = generateMsg({
@@ -268,7 +293,10 @@ describe('Threads 2.0', () => {
           // five messages "created" second apart
           const messages = Array.from(
             { length: 5 },
-            (_, i) => generateMsg({ created_at: new Date(createdAt + 1000 * i).toISOString() }) as MessageResponse,
+            (_, i) =>
+              generateMsg({
+                created_at: new Date(createdAt + 1000 * i).toISOString(),
+              }) as MessageResponse,
           );
           const thread = createTestThread({ latest_replies: messages });
 
@@ -285,12 +313,16 @@ describe('Threads 2.0', () => {
           const stateAfter = thread.state.getLatestValue();
           expect(stateAfter.replies).to.not.equal(stateBefore.replies);
           expect(stateAfter.replies).to.have.lengthOf(4);
-          expect(stateAfter.replies.find((reply) => reply.id === messageToDelete.id)).to.be.undefined;
+          expect(stateAfter.replies.find((reply) => reply.id === messageToDelete.id)).to
+            .be.undefined;
         });
       });
 
       describe('markAsRead', () => {
-        let stubbedChannelMarkRead: sinon.SinonStub<Parameters<Channel['markRead']>, ReturnType<Channel['markRead']>>;
+        let stubbedChannelMarkRead: sinon.SinonStub<
+          Parameters<Channel['markRead']>,
+          ReturnType<Channel['markRead']>
+        >;
 
         beforeEach(() => {
           stubbedChannelMarkRead = sinon.stub(channel, 'markRead').resolves();
@@ -320,13 +352,17 @@ describe('Threads 2.0', () => {
 
           await thread.markAsRead();
 
-          expect(stubbedChannelMarkRead.calledOnceWith({ thread_id: thread.id })).to.be.true;
+          expect(stubbedChannelMarkRead.calledOnceWith({ thread_id: thread.id })).to.be
+            .true;
         });
       });
 
       describe('loadPage', () => {
         it('sets up pagination on initialization (all replies included in response)', () => {
-          const thread = createTestThread({ latest_replies: [generateMsg() as MessageResponse], reply_count: 1 });
+          const thread = createTestThread({
+            latest_replies: [generateMsg() as MessageResponse],
+            reply_count: 1,
+          });
           const state = thread.state.getLatestValue();
           expect(state.pagination.prevCursor).to.be.null;
           expect(state.pagination.nextCursor).to.be.null;
@@ -335,7 +371,10 @@ describe('Threads 2.0', () => {
         it('sets up pagination on initialization (not all replies included in response)', () => {
           const firstMessage = generateMsg() as MessageResponse;
           const lastMessage = generateMsg() as MessageResponse;
-          const thread = createTestThread({ latest_replies: [firstMessage, lastMessage], reply_count: 3 });
+          const thread = createTestThread({
+            latest_replies: [firstMessage, lastMessage],
+            reply_count: 3,
+          });
           const state = thread.state.getLatestValue();
           expect(state.pagination.prevCursor).not.to.be.null;
           expect(state.pagination.nextCursor).to.be.null;
@@ -391,7 +430,10 @@ describe('Threads 2.0', () => {
         it('forms correct request when loading next page', async () => {
           const firstMessage = generateMsg() as MessageResponse;
           const lastMessage = generateMsg() as MessageResponse;
-          const thread = createTestThread({ latest_replies: [firstMessage, lastMessage], reply_count: 3 });
+          const thread = createTestThread({
+            latest_replies: [firstMessage, lastMessage],
+            reply_count: 3,
+          });
           thread.state.next((current) => ({
             ...current,
             pagination: {
@@ -399,7 +441,9 @@ describe('Threads 2.0', () => {
               nextCursor: lastMessage.id,
             },
           }));
-          const queryRepliesStub = sinon.stub(thread, 'queryReplies').resolves({ messages: [], duration: '' });
+          const queryRepliesStub = sinon
+            .stub(thread, 'queryReplies')
+            .resolves({ messages: [], duration: '' });
 
           await thread.loadNextPage({ limit: 42 });
 
@@ -447,8 +491,13 @@ describe('Threads 2.0', () => {
         it('forms correct request when loading previous page', async () => {
           const firstMessage = generateMsg() as MessageResponse;
           const lastMessage = generateMsg() as MessageResponse;
-          const thread = createTestThread({ latest_replies: [firstMessage, lastMessage], reply_count: 3 });
-          const queryRepliesStub = sinon.stub(thread, 'queryReplies').resolves({ messages: [], duration: '' });
+          const thread = createTestThread({
+            latest_replies: [firstMessage, lastMessage],
+            reply_count: 3,
+          });
+          const queryRepliesStub = sinon
+            .stub(thread, 'queryReplies')
+            .resolves({ messages: [], duration: '' });
 
           await thread.loadPrevPage({ limit: 42 });
 
@@ -463,7 +512,10 @@ describe('Threads 2.0', () => {
         it('appends messages when loading next page', async () => {
           const initialMessages = [generateMsg(), generateMsg()] as MessageResponse[];
           const nextMessages = [generateMsg(), generateMsg()] as MessageResponse[];
-          const thread = createTestThread({ latest_replies: initialMessages, reply_count: 4 });
+          const thread = createTestThread({
+            latest_replies: initialMessages,
+            reply_count: 4,
+          });
           thread.state.next((current) => ({
             ...current,
             pagination: {
@@ -471,12 +523,16 @@ describe('Threads 2.0', () => {
               nextCursor: initialMessages[1].id,
             },
           }));
-          sinon.stub(thread, 'queryReplies').resolves({ messages: nextMessages, duration: '' });
+          sinon
+            .stub(thread, 'queryReplies')
+            .resolves({ messages: nextMessages, duration: '' });
 
           await thread.loadNextPage({ limit: 2 });
 
           const stateAfter = thread.state.getLatestValue();
-          const expectedMessageOrder = [...initialMessages, ...nextMessages].map(({ id }) => id).join(', ');
+          const expectedMessageOrder = [...initialMessages, ...nextMessages]
+            .map(({ id }) => id)
+            .join(', ');
           const actualMessageOrder = stateAfter.replies.map(({ id }) => id).join(', ');
           expect(actualMessageOrder).to.equal(expectedMessageOrder);
         });
@@ -484,13 +540,20 @@ describe('Threads 2.0', () => {
         it('prepends messages when loading previous page', async () => {
           const initialMessages = [generateMsg(), generateMsg()] as MessageResponse[];
           const prevMessages = [generateMsg(), generateMsg()] as MessageResponse[];
-          const thread = createTestThread({ latest_replies: initialMessages, reply_count: 4 });
-          sinon.stub(thread, 'queryReplies').resolves({ messages: prevMessages, duration: '' });
+          const thread = createTestThread({
+            latest_replies: initialMessages,
+            reply_count: 4,
+          });
+          sinon
+            .stub(thread, 'queryReplies')
+            .resolves({ messages: prevMessages, duration: '' });
 
           await thread.loadPrevPage({ limit: 2 });
 
           const stateAfter = thread.state.getLatestValue();
-          const expectedMessageOrder = [...prevMessages, ...initialMessages].map(({ id }) => id).join(', ');
+          const expectedMessageOrder = [...prevMessages, ...initialMessages]
+            .map(({ id }) => id)
+            .join(', ');
           const actualMessageOrder = stateAfter.replies.map(({ id }) => id).join(', ');
           expect(actualMessageOrder).to.equal(expectedMessageOrder);
         });
@@ -527,7 +590,10 @@ describe('Threads 2.0', () => {
 
         client.dispatchEvent({
           type: 'message.new',
-          message: generateMsg({ parent_id: thread.id, user: { id: 'bob' } }) as MessageResponse,
+          message: generateMsg({
+            parent_id: thread.id,
+            user: { id: 'bob' },
+          }) as MessageResponse,
           user: { id: 'bob' },
         });
         clock.runAll();
@@ -545,7 +611,9 @@ describe('Threads 2.0', () => {
         const stateBefore = thread.state.getLatestValue();
         const stubbedGetThread = sinon
           .stub(client, 'getThread')
-          .resolves(createTestThread({ latest_replies: [generateMsg() as MessageResponse] }));
+          .resolves(
+            createTestThread({ latest_replies: [generateMsg() as MessageResponse] }),
+          );
 
         thread.state.partialNext({ isStateStale: true });
 
@@ -572,7 +640,9 @@ describe('Threads 2.0', () => {
 
           client.dispatchEvent({
             type: 'thread.updated',
-            thread: generateThreadResponse(channelResponse, generateMsg(), { title: 'B' }),
+            thread: generateThreadResponse(channelResponse, generateMsg(), {
+              title: 'B',
+            }),
           });
 
           const stateAfter = thread.state.getLatestValue();
@@ -588,9 +658,13 @@ describe('Threads 2.0', () => {
 
           client.dispatchEvent({
             type: 'thread.updated',
-            thread: generateThreadResponse(channelResponse, generateMsg({ id: parentMessageResponse.id }), {
-              title: 'B',
-            }),
+            thread: generateThreadResponse(
+              channelResponse,
+              generateMsg({ id: parentMessageResponse.id }),
+              {
+                title: 'B',
+              },
+            ),
           });
 
           const stateAfter = thread.state.getLatestValue();
@@ -606,20 +680,28 @@ describe('Threads 2.0', () => {
 
           const stateBefore = thread.state.getLatestValue();
 
-          expect(stateBefore.custom).to.not.have.keys(Object.keys(THREAD_RESPONSE_RESERVED_KEYS));
+          expect(stateBefore.custom).to.not.have.keys(
+            Object.keys(THREAD_RESPONSE_RESERVED_KEYS),
+          );
           expect(stateBefore.custom).to.have.keys([customKey1, customKey2]);
           expect(stateBefore.custom[customKey1]).to.equal(1);
 
           client.dispatchEvent({
             type: 'thread.updated',
-            thread: generateThreadResponse(channelResponse, generateMsg({ id: parentMessageResponse.id }), {
-              [customKey1]: 2,
-            }),
+            thread: generateThreadResponse(
+              channelResponse,
+              generateMsg({ id: parentMessageResponse.id }),
+              {
+                [customKey1]: 2,
+              },
+            ),
           });
 
           const stateAfter = thread.state.getLatestValue();
 
-          expect(stateAfter.custom).to.not.have.keys(Object.keys(THREAD_RESPONSE_RESERVED_KEYS));
+          expect(stateAfter.custom).to.not.have.keys(
+            Object.keys(THREAD_RESPONSE_RESERVED_KEYS),
+          );
           expect(stateAfter.custom).to.not.have.property(customKey2);
           expect(stateAfter.custom[customKey1]).to.equal(2);
         });
@@ -684,7 +766,10 @@ describe('Threads 2.0', () => {
           client.dispatchEvent({
             type: 'message.read',
             user: { id: 'bob' },
-            thread: generateThreadResponse(channelResponse, generateMsg()) as ThreadResponse,
+            thread: generateThreadResponse(
+              channelResponse,
+              generateMsg(),
+            ) as ThreadResponse,
           });
 
           const stateAfter = thread.state.getLatestValue();
@@ -721,7 +806,9 @@ describe('Threads 2.0', () => {
 
           const stateAfter = thread.state.getLatestValue();
           expect(stateAfter.read['bob']?.unreadMessageCount).to.equal(0);
-          expect(stateAfter.read['bob']?.lastReadAt.toISOString()).to.equal(createdAt.toISOString());
+          expect(stateAfter.read['bob']?.lastReadAt.toISOString()).to.equal(
+            createdAt.toISOString(),
+          );
 
           thread.unregisterSubscriptions();
         });
@@ -775,7 +862,10 @@ describe('Threads 2.0', () => {
           });
           thread.registerSubscriptions();
 
-          const newMessage = generateMsg({ parent_id: thread.id, user: { id: 'bob' } }) as MessageResponse;
+          const newMessage = generateMsg({
+            parent_id: thread.id,
+            user: { id: 'bob' },
+          }) as MessageResponse;
           client.dispatchEvent({
             type: 'message.new',
             message: newMessage,
@@ -784,7 +874,8 @@ describe('Threads 2.0', () => {
 
           const stateAfter = thread.state.getLatestValue();
           expect(stateAfter.replies).to.have.length(1);
-          expect(stateAfter.replies.find((reply) => reply.id === newMessage.id)).not.to.be.undefined;
+          expect(stateAfter.replies.find((reply) => reply.id === newMessage.id)).not.to.be
+            .undefined;
           expect(thread.ownUnreadCount).to.equal(1);
 
           thread.unregisterSubscriptions();
@@ -903,7 +994,8 @@ describe('Threads 2.0', () => {
 
           const stateAfter = thread.state.getLatestValue();
           expect(stateAfter.replies).to.have.lengthOf(4);
-          expect(stateAfter.replies.find((reply) => reply.id === messageToDelete.id)).to.be.undefined;
+          expect(stateAfter.replies.find((reply) => reply.id === messageToDelete.id)).to
+            .be.undefined;
 
           thread.unregisterSubscriptions();
         });
@@ -929,7 +1021,11 @@ describe('Threads 2.0', () => {
           const deletedAt = new Date();
           client.dispatchEvent({
             type: 'message.deleted',
-            message: { ...messageToDelete, type: 'deleted', deleted_at: deletedAt.toISOString() },
+            message: {
+              ...messageToDelete,
+              type: 'deleted',
+              deleted_at: deletedAt.toISOString(),
+            },
           });
 
           const stateAfter = thread.state.getLatestValue();
@@ -937,7 +1033,9 @@ describe('Threads 2.0', () => {
           expect(stateAfter.replies[2].id).to.equal(messageToDelete.id);
           expect(stateAfter.replies[2]).to.not.equal(messageToDelete);
           expect(stateAfter.replies[2].deleted_at).to.be.a('date');
-          expect(stateAfter.replies[2].deleted_at!.toISOString()).to.equal(deletedAt.toISOString());
+          expect(stateAfter.replies[2].deleted_at!.toISOString()).to.equal(
+            deletedAt.toISOString(),
+          );
           expect(stateAfter.replies[2].type).to.equal('deleted');
 
           thread.unregisterSubscriptions();
@@ -965,15 +1063,27 @@ describe('Threads 2.0', () => {
           expect(stateAfter.deletedAt).to.be.a('date');
           expect(stateAfter.deletedAt!.toISOString()).to.equal(parentMessage.deleted_at);
           expect(stateAfter.parentMessage.deleted_at).to.be.a('date');
-          expect(stateAfter.parentMessage.deleted_at!.toISOString()).to.equal(parentMessage.deleted_at);
+          expect(stateAfter.parentMessage.deleted_at!.toISOString()).to.equal(
+            parentMessage.deleted_at,
+          );
         });
       });
 
       describe('Events: message.updated, reaction.new, reaction.deleted', () => {
-        (['message.updated', 'reaction.new', 'reaction.deleted', 'reaction.updated'] as const).forEach((eventType) => {
+        (
+          [
+            'message.updated',
+            'reaction.new',
+            'reaction.deleted',
+            'reaction.updated',
+          ] as const
+        ).forEach((eventType) => {
           it(`updates reply or parent message on "${eventType}"`, () => {
             const thread = createTestThread();
-            const updateParentMessageOrReplyLocallySpy = sinon.spy(thread, 'updateParentMessageOrReplyLocally');
+            const updateParentMessageOrReplyLocallySpy = sinon.spy(
+              thread,
+              'updateParentMessageOrReplyLocally',
+            );
             thread.registerSubscriptions();
 
             client.dispatchEvent({
@@ -1009,7 +1119,9 @@ describe('Threads 2.0', () => {
         expect(threadManager.state.getLatestValue().threads).to.have.lengthOf(2);
         expect(threadManager.state.getLatestValue().unseenThreadIds).to.have.lengthOf(2);
         threadManager.resetState();
-        expect(threadManager.state.getLatestValue()).to.be.deep.equal(THREAD_MANAGER_INITIAL_STATE);
+        expect(threadManager.state.getLatestValue()).to.be.deep.equal(
+          THREAD_MANAGER_INITIAL_STATE,
+        );
       });
     });
 
@@ -1027,7 +1139,9 @@ describe('Threads 2.0', () => {
       await clientWithUser.disconnectUser();
 
       expect(clientWithUser.threads.state.getLatestValue().threads).to.have.lengthOf(0);
-      expect(clientWithUser.threads.state.getLatestValue().unseenThreadIds).to.have.lengthOf(0);
+      expect(
+        clientWithUser.threads.state.getLatestValue().unseenThreadIds,
+      ).to.have.lengthOf(0);
     });
 
     describe('Subscription and Event Handlers', () => {
@@ -1040,12 +1154,14 @@ describe('Threads 2.0', () => {
         sinon.restore();
       });
 
-      ([
-        ['health.check', 2],
-        ['notification.mark_read', 1],
-        ['notification.thread_message_new', 8],
-        ['notification.channel_deleted', 11],
-      ] as const).forEach(([eventType, expectedUnreadCount]) => {
+      (
+        [
+          ['health.check', 2],
+          ['notification.mark_read', 1],
+          ['notification.thread_message_new', 8],
+          ['notification.channel_deleted', 11],
+        ] as const
+      ).forEach(([eventType, expectedUnreadCount]) => {
         it(`updates unread thread count on "${eventType}"`, () => {
           client.dispatchEvent({
             type: eventType,
@@ -1099,7 +1215,9 @@ describe('Threads 2.0', () => {
             message: generateMsg({ parent_id: uuidv4() }) as MessageResponse,
           });
 
-          expect(threadManager.state.getLatestValue().unseenThreadIds).to.have.lengthOf(1);
+          expect(threadManager.state.getLatestValue().unseenThreadIds).to.have.lengthOf(
+            1,
+          );
         });
 
         it('deduplicates unseen threads', () => {
@@ -1118,7 +1236,9 @@ describe('Threads 2.0', () => {
             message: generateMsg({ parent_id: parentMessageId }) as MessageResponse,
           });
 
-          expect(threadManager.state.getLatestValue().unseenThreadIds).to.have.lengthOf(1);
+          expect(threadManager.state.getLatestValue().unseenThreadIds).to.have.lengthOf(
+            1,
+          );
         });
 
         it('tracks thread order becoming stale', () => {
@@ -1184,9 +1304,12 @@ describe('Threads 2.0', () => {
           const unregisterSubscriptionsSpy = sinon.spy(thread, 'unregisterSubscriptions');
           return [thread, registerSubscriptionsSpy, unregisterSubscriptionsSpy] as const;
         };
-        const [thread1, registerThread1, unregisterThread1] = createTestThreadAndSpySubscriptions();
-        const [thread2, registerThread2, unregisterThread2] = createTestThreadAndSpySubscriptions();
-        const [thread3, registerThread3, unregisterThread3] = createTestThreadAndSpySubscriptions();
+        const [thread1, registerThread1, unregisterThread1] =
+          createTestThreadAndSpySubscriptions();
+        const [thread2, registerThread2, unregisterThread2] =
+          createTestThreadAndSpySubscriptions();
+        const [thread3, registerThread3, unregisterThread3] =
+          createTestThreadAndSpySubscriptions();
 
         threadManager.state.partialNext({
           threads: [thread1, thread2],
@@ -1269,7 +1392,7 @@ describe('Threads 2.0', () => {
             unseenThreadIds: [],
           });
           await threadManager.reload();
-          expect(stubbedQueryThreads.calledWithMatch({ limit: 25 })).to.be.true;
+          expect(stubbedQueryThreads.firstCall.calledWithMatch({ limit: 25 })).to.be.true;
         });
 
         it('skips reload if there were no updates since the latest reload', async () => {
@@ -1324,9 +1447,16 @@ describe('Threads 2.0', () => {
         });
 
         it('reuses existing thread instances', async () => {
-          const existingThread = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
-          const newThread = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
-          threadManager.state.partialNext({ threads: [existingThread], unseenThreadIds: [newThread.id] });
+          const existingThread = createTestThread({
+            parentMessageOverrides: { id: uuidv4() },
+          });
+          const newThread = createTestThread({
+            parentMessageOverrides: { id: uuidv4() },
+          });
+          threadManager.state.partialNext({
+            threads: [existingThread],
+            unseenThreadIds: [newThread.id],
+          });
           stubbedQueryThreads.resolves({
             threads: [newThread, existingThread],
             next: undefined,
@@ -1344,7 +1474,9 @@ describe('Threads 2.0', () => {
           const existingThread = createTestThread();
           existingThread.state.partialNext({ isStateStale: true });
           const newThread = createTestThread({
-            thread_participants: [{ user_id: 'u1' }] as ThreadResponse['thread_participants'],
+            thread_participants: [
+              { user_id: 'u1' },
+            ] as ThreadResponse['thread_participants'],
           });
           threadManager.state.partialNext({
             threads: [existingThread],
@@ -1365,9 +1497,15 @@ describe('Threads 2.0', () => {
         });
 
         it('reorders threads according to the response order', async () => {
-          const existingThread = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
-          const newThread1 = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
-          const newThread2 = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
+          const existingThread = createTestThread({
+            parentMessageOverrides: { id: uuidv4() },
+          });
+          const newThread1 = createTestThread({
+            parentMessageOverrides: { id: uuidv4() },
+          });
+          const newThread2 = createTestThread({
+            parentMessageOverrides: { id: uuidv4() },
+          });
           threadManager.state.partialNext({
             threads: [existingThread],
             unseenThreadIds: [newThread1.id, newThread2.id],
@@ -1464,8 +1602,12 @@ describe('Threads 2.0', () => {
         });
 
         it('updates thread list and pagination', async () => {
-          const existingThread = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
-          const newThread = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
+          const existingThread = createTestThread({
+            parentMessageOverrides: { id: uuidv4() },
+          });
+          const newThread = createTestThread({
+            parentMessageOverrides: { id: uuidv4() },
+          });
           threadManager.state.next((current) => ({
             ...current,
             threads: [existingThread],
@@ -1486,6 +1628,89 @@ describe('Threads 2.0', () => {
           expect(threads).to.have.lengthOf(2);
           expect(threads[1]).to.equal(newThread);
           expect(pagination.nextCursor).to.equal('cursor2');
+        });
+      });
+
+      describe('queryThreads', () => {
+        it('forms correct request with default parameters', async () => {
+          await threadManager.queryThreads();
+
+          expect(
+            stubbedQueryThreads.calledWithMatch({
+              limit: 25,
+              participant_limit: 10,
+              reply_limit: 10,
+              watch: true,
+            }),
+          ).to.be.true;
+        });
+
+        it('applies filter parameters correctly', async () => {
+          const filter: ThreadFilters = {
+            created_at: { $gt: '2024-01-01T00:00:00Z' },
+          };
+
+          await threadManager.queryThreads({ filter });
+
+          expect(
+            stubbedQueryThreads.calledWithMatch({
+              limit: 25,
+              participant_limit: 10,
+              reply_limit: 10,
+              watch: true,
+              filter,
+            }),
+          ).to.be.true;
+        });
+
+        it('applies sort parameters correctly', async () => {
+          const sort: ThreadSort = [{ created_at: -1 }, { last_message_at: 1 }];
+
+          await threadManager.queryThreads({ sort });
+
+          expect(
+            stubbedQueryThreads.calledWithMatch({
+              limit: 25,
+              participant_limit: 10,
+              reply_limit: 10,
+              watch: true,
+              sort,
+            }),
+          ).to.be.true;
+        });
+
+        it('applies both filter and sort parameters correctly', async () => {
+          const filter: ThreadFilters = {
+            created_by_user_id: { $eq: 'user1' },
+            updated_at: { $gte: '2024-01-01T00:00:00Z' },
+          };
+          const sort: ThreadSort = [{ last_message_at: -1 }];
+
+          await threadManager.queryThreads({ filter, sort });
+
+          expect(
+            stubbedQueryThreads.calledWithMatch({
+              limit: 25,
+              participant_limit: 10,
+              reply_limit: 10,
+              watch: true,
+              filter,
+              sort,
+            }),
+          ).to.be.true;
+        });
+
+        it('handles empty filter and sort parameters', async () => {
+          await threadManager.queryThreads({});
+
+          expect(
+            stubbedQueryThreads.calledWithMatch({
+              limit: 25,
+              participant_limit: 10,
+              reply_limit: 10,
+              watch: true,
+            }),
+          ).to.be.true;
         });
       });
     });

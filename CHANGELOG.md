@@ -1,6 +1,267 @@
+## [9.1.1](https://github.com/GetStream/stream-chat-js/compare/v9.1.0...v9.1.1) (2025-05-12)
+
+### Bug Fixes
+
+* add optional raw queryChannels api response ([#1530](https://github.com/GetStream/stream-chat-js/issues/1530)) ([23eebf0](https://github.com/GetStream/stream-chat-js/commit/23eebf0702dfbf70f52b0aea7e5d2939de604ecf))
+
+## [9.1.0](https://github.com/GetStream/stream-chat-js/compare/v9.0.1...v9.1.0) (2025-05-09)
+
+### Bug Fixes
+
+* exclude other data from poll messages and refresh poll composer state on poll creation ([#1528](https://github.com/GetStream/stream-chat-js/issues/1528)) ([2389ff4](https://github.com/GetStream/stream-chat-js/commit/2389ff475d420987cfb607fb31a1b4e4de6a024d))
+* prevent awaiting suggestion search results in TextComposerMiddlewareExecutor ([#1525](https://github.com/GetStream/stream-chat-js/issues/1525)) ([bf607d3](https://github.com/GetStream/stream-chat-js/commit/bf607d3756cdfa677badbfa8de1d8c69d20daf74))
+
+### Features
+
+* allow to inject errors to during PollComposer field updates ([#1527](https://github.com/GetStream/stream-chat-js/issues/1527)) ([81d9bb1](https://github.com/GetStream/stream-chat-js/commit/81d9bb1cdef538c481fd9951f13fa60108cb8828))
+
+## [9.0.1](https://github.com/GetStream/stream-chat-js/compare/v9.0.0...v9.0.1) (2025-05-07)
+
+### Bug Fixes
+
+* add user to RESERVED_UPDATED_MESSAGE_FIELDS ([#1526](https://github.com/GetStream/stream-chat-js/issues/1526)) ([63b6b82](https://github.com/GetStream/stream-chat-js/commit/63b6b82cf888c0e903ba97afa4a7e3f16640cd7b))
+
+## [9.0.0](https://github.com/GetStream/stream-chat-js/compare/v8.60.0...v9.0.0) (2025-05-06)
+
+### ⚠ BREAKING CHANGES
+
+* Replacement of FormatMessageResponse with LocalMessage
+type
+* `ErrorFromResponse` class constructor now requires
+second parameter (`status`, `response` and optionally `code`)
+* dropped jsDelivr bundle (#1468)
+* dropped `StreamChatGenerics`, use `Custom<Entity>Data` to extend your
+types
+* type `InviteOptions` has been renamed to `UpdateChannelOptions`
+* type `UpdateChannelOptions` has been renamed to
+`UpdateChannelTypeRequest`
+* type `ThreadResponseCustomData` has been renamed to `CustomThreadData`
+* type `MarkAllReadOptions` has been deleted in favour of type
+`MarkChannelsReadOptions`
+* type `QueryFilter` no longer supports `$ne` and `$nin` operators
+* type `ChannelMembership` has been deleted in favour of type
+`ChannelMemberResponse`
+* function `formatMessage` (`utils.ts`) no longer returns `__html`
+property in the formatted message output
+
+### Bug Fixes
+
+* [REACT-344] remove Agora & 100ms integrations ([#1519](https://github.com/GetStream/stream-chat-js/issues/1519)) ([16cd81a](https://github.com/GetStream/stream-chat-js/commit/16cd81a06c3f3daf4f6955d3c7f353283400031e))
+* add image property to UserResponse type ([#1486](https://github.com/GetStream/stream-chat-js/issues/1486)) ([2a57b7f](https://github.com/GetStream/stream-chat-js/commit/2a57b7f965e6b422d32990321a464519485fec1d))
+* adjust ChannelResponse, ChannelData & PollResponse ([#1493](https://github.com/GetStream/stream-chat-js/issues/1493)) ([39091c7](https://github.com/GetStream/stream-chat-js/commit/39091c7ee9b5a601809aca9773b87b3c95181709))
+* adjust ErrorFromResponse error class ([#1491](https://github.com/GetStream/stream-chat-js/issues/1491)) ([ff32bd2](https://github.com/GetStream/stream-chat-js/commit/ff32bd26c90c85b2e6200a65ba7dd7852952517f))
+* increase package.json[engines.node] version ([6764bad](https://github.com/GetStream/stream-chat-js/commit/6764bad05990f113b66c311bed2967faaac4e11f))
+* multiple module augmentation fails in Angular ([#1488](https://github.com/GetStream/stream-chat-js/issues/1488)) ([7f8a9a0](https://github.com/GetStream/stream-chat-js/commit/7f8a9a08ca14b3c26e1515ab1a9d80f7287570ee))
+* omit name from CustomChannelData for ChannelFilters ([#1494](https://github.com/GetStream/stream-chat-js/issues/1494)) ([d7030c2](https://github.com/GetStream/stream-chat-js/commit/d7030c2957013f213de30a49bb70a47008be2d87))
+* **qa:** adjust Event & ChannelData types ([#1524](https://github.com/GetStream/stream-chat-js/issues/1524)) ([f1d73fd](https://github.com/GetStream/stream-chat-js/commit/f1d73fd12c86ccf307fab47c51d39c71bad66370))
+* remove message composer bugs ([#1521](https://github.com/GetStream/stream-chat-js/issues/1521)) ([8b324eb](https://github.com/GetStream/stream-chat-js/commit/8b324ebf01c99f6c55219da9d210bb24689f2819))
+* replace StreamChatGenerics with module augmentation ([#1458](https://github.com/GetStream/stream-chat-js/issues/1458)) ([feb97da](https://github.com/GetStream/stream-chat-js/commit/feb97da08a5c4fa325156517111bb58402a1f7b8))
+
+### Features
+
+* add missing configuration parameters for AttachmentManager and TextComposer ([#1520](https://github.com/GetStream/stream-chat-js/issues/1520)) ([44902e7](https://github.com/GetStream/stream-chat-js/commit/44902e76596a271e098e545e08764e7569ca1c0e))
+* disable link previews in message composer ([02cd9a8](https://github.com/GetStream/stream-chat-js/commit/02cd9a8d8a2a3acc31631edcdea2c9cf9f5afb53))
+* improve MessageComposer ergonomics ([2c0c639](https://github.com/GetStream/stream-chat-js/commit/2c0c639b6539fe82e6bc39d9a35a2905d33287c6))
+* make MessageComposer middleware executors public ([9aae032](https://github.com/GetStream/stream-chat-js/commit/9aae032edbdf45bc7d7bf5c25695e7246b8d1821))
+* message composer ([#1495](https://github.com/GetStream/stream-chat-js/issues/1495)) ([0c07524](https://github.com/GetStream/stream-chat-js/commit/0c07524f6551e9257b229b262b4d1e03ab44561b)), closes [stream-chat-react#2669](https://github.com/GetStream/stream-chat-react/issues/2669)
+* middleware handler API improvement ([#1523](https://github.com/GetStream/stream-chat-js/issues/1523)) ([9d8992d](https://github.com/GetStream/stream-chat-js/commit/9d8992dbd0735fb78ef663f25bc58c97a526fb18))
+
+## [9.0.0-rc.16](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.15...v9.0.0-rc.16) (2025-05-02)
+
+### Bug Fixes
+
+* remove message composer bugs ([#1521](https://github.com/GetStream/stream-chat-js/issues/1521)) ([8b324eb](https://github.com/GetStream/stream-chat-js/commit/8b324ebf01c99f6c55219da9d210bb24689f2819))
+
+## [9.0.0-rc.15](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.14...v9.0.0-rc.15) (2025-04-30)
+
+### Features
+
+* improve MessageComposer ergonomics ([2c0c639](https://github.com/GetStream/stream-chat-js/commit/2c0c639b6539fe82e6bc39d9a35a2905d33287c6))
+
+## [9.0.0-rc.14](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.13...v9.0.0-rc.14) (2025-04-29)
+
+### Features
+
+* make MessageComposer middleware executors public ([9aae032](https://github.com/GetStream/stream-chat-js/commit/9aae032edbdf45bc7d7bf5c25695e7246b8d1821))
+
+## [9.0.0-rc.13](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.12...v9.0.0-rc.13) (2025-04-28)
+
+### Features
+
+* disable link previews in message composer ([02cd9a8](https://github.com/GetStream/stream-chat-js/commit/02cd9a8d8a2a3acc31631edcdea2c9cf9f5afb53))
+
+## [9.0.0-rc.12](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.11...v9.0.0-rc.12) (2025-04-28)
+
+### Features
+
+* add missing configuration parameters for AttachmentManager and TextComposer ([#1520](https://github.com/GetStream/stream-chat-js/issues/1520)) ([44902e7](https://github.com/GetStream/stream-chat-js/commit/44902e76596a271e098e545e08764e7569ca1c0e))
+
+## [9.0.0-rc.11](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.10...v9.0.0-rc.11) (2025-04-28)
+
+### ⚠ BREAKING CHANGES
+
+* Replacement of FormatMessageResponse with LocalMessage
+type
+
+### Bug Fixes
+
+* [REACT-344] remove Agora & 100ms integrations ([#1519](https://github.com/GetStream/stream-chat-js/issues/1519)) ([16cd81a](https://github.com/GetStream/stream-chat-js/commit/16cd81a06c3f3daf4f6955d3c7f353283400031e))
+* [REACT-350] make archived_at & pinned_at nullable ([#1515](https://github.com/GetStream/stream-chat-js/issues/1515)) ([318825a](https://github.com/GetStream/stream-chat-js/commit/318825a335342c2e32d19469f736df95feb87bee))
+* [REACT-353] unify pinned_at & archived_at nullish values ([#1516](https://github.com/GetStream/stream-chat-js/issues/1516)) ([a840226](https://github.com/GetStream/stream-chat-js/commit/a8402268fabe1826e74e383afd9962bd6ab6376f)), closes [#1515](https://github.com/GetStream/stream-chat-js/issues/1515)
+
+### Features
+
+* [CHA-794] Add sort and filter param to queryThreads ([#1511](https://github.com/GetStream/stream-chat-js/issues/1511)) ([ea7fe99](https://github.com/GetStream/stream-chat-js/commit/ea7fe999aa6d7609fa58e4808b067a8457cf187f))
+* [CHA-855] - Refactoring partial update member ([#1517](https://github.com/GetStream/stream-chat-js/issues/1517)) ([e4f7e68](https://github.com/GetStream/stream-chat-js/commit/e4f7e68298e0959309aa592ce778f6cbbbcc4ab0))
+* message composer ([#1495](https://github.com/GetStream/stream-chat-js/issues/1495)) ([0c07524](https://github.com/GetStream/stream-chat-js/commit/0c07524f6551e9257b229b262b4d1e03ab44561b)), closes [stream-chat-react#2669](https://github.com/GetStream/stream-chat-react/issues/2669)
+
+## [9.0.0-rc.10](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.9...v9.0.0-rc.10) (2025-04-09)
+
+### Bug Fixes
+
+* [CHA-826] normalize queryDrafts sort ([#1509](https://github.com/GetStream/stream-chat-js/issues/1509)) ([6df96c3](https://github.com/GetStream/stream-chat-js/commit/6df96c3d171d11891985307a71728063cacac73f))
+* add event fields on creating campaign ([#1512](https://github.com/GetStream/stream-chat-js/issues/1512)) ([6c76d6d](https://github.com/GetStream/stream-chat-js/commit/6c76d6db1f33ae14bee546bbf952317a8a144c43))
+
+### Features
+
+* [CHA-660] - Team based roles ([#1499](https://github.com/GetStream/stream-chat-js/issues/1499)) ([dd62cff](https://github.com/GetStream/stream-chat-js/commit/dd62cff38e03678fb04222563e0dae75916ccadb))
+* add show_channels flag to campaigns ([#1513](https://github.com/GetStream/stream-chat-js/issues/1513)) ([5344d2c](https://github.com/GetStream/stream-chat-js/commit/5344d2c6db205063c4e1c73f449e31c6ed6197c5))
+* user profile check endpoint ([#1503](https://github.com/GetStream/stream-chat-js/issues/1503)) ([8114c22](https://github.com/GetStream/stream-chat-js/commit/8114c223b2a6650a89790e64a236d1a03cf64c3b))
+
+### Chores
+
+* **deps:** upgrade @babel/runtime to v7.27.0 ([#1508](https://github.com/GetStream/stream-chat-js/issues/1508)) ([eb29626](https://github.com/GetStream/stream-chat-js/commit/eb296263d258101c310eb1c0f44ca3fc2ced627c)), closes [#1502](https://github.com/GetStream/stream-chat-js/issues/1502)
+
+## [9.0.0-rc.9](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.8...v9.0.0-rc.9) (2025-03-25)
+
+### Bug Fixes
+
+* provide a way for a suffix to be added to wsUrl ([#1497](https://github.com/GetStream/stream-chat-js/issues/1497)) ([d14d0ff](https://github.com/GetStream/stream-chat-js/commit/d14d0ff1df942ab8ef4493c8ad7feb7601b951f2))
+* use URLSearchParams when building WS url ([#1498](https://github.com/GetStream/stream-chat-js/issues/1498)) ([9413433](https://github.com/GetStream/stream-chat-js/commit/9413433c8544b8dfa96a878847fe94954935d529))
+
+### Features
+
+* [CHA-375] add draft messages api ([#1490](https://github.com/GetStream/stream-chat-js/issues/1490)) ([3a7f732](https://github.com/GetStream/stream-chat-js/commit/3a7f7327cb23bdf8578f9cffa885bcd1594f1cde))
+
+## [9.0.0-rc.8](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.7...v9.0.0-rc.8) (2025-03-12)
+
+### Bug Fixes
+
+* adjust ChannelResponse, ChannelData & PollResponse ([#1493](https://github.com/GetStream/stream-chat-js/issues/1493)) ([39091c7](https://github.com/GetStream/stream-chat-js/commit/39091c7ee9b5a601809aca9773b87b3c95181709))
+* omit name from CustomChannelData for ChannelFilters ([#1494](https://github.com/GetStream/stream-chat-js/issues/1494)) ([d7030c2](https://github.com/GetStream/stream-chat-js/commit/d7030c2957013f213de30a49bb70a47008be2d87))
+
+## [9.0.0-rc.7](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.6...v9.0.0-rc.7) (2025-03-11)
+
+### ⚠ BREAKING CHANGES
+
+* `ErrorFromResponse` class constructor now requires
+second parameter (`status`, `response` and optionally `code`)
+
+### Bug Fixes
+
+* adjust ErrorFromResponse error class ([#1491](https://github.com/GetStream/stream-chat-js/issues/1491)) ([ff32bd2](https://github.com/GetStream/stream-chat-js/commit/ff32bd26c90c85b2e6200a65ba7dd7852952517f))
+
+## [9.0.0-rc.6](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.5...v9.0.0-rc.6) (2025-03-06)
+
+### Bug Fixes
+
+* add image property to UserResponse type ([#1486](https://github.com/GetStream/stream-chat-js/issues/1486)) ([2a57b7f](https://github.com/GetStream/stream-chat-js/commit/2a57b7f965e6b422d32990321a464519485fec1d))
+
+## [9.0.0-rc.5](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.4...v9.0.0-rc.5) (2025-03-05)
+
+### Bug Fixes
+
+* multiple module augmentation fails in Angular ([#1488](https://github.com/GetStream/stream-chat-js/issues/1488)) ([7f8a9a0](https://github.com/GetStream/stream-chat-js/commit/7f8a9a08ca14b3c26e1515ab1a9d80f7287570ee))
+
+## [9.0.0-rc.4](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.3...v9.0.0-rc.4) (2025-03-05)
+
+### Bug Fixes
+
+* add extra user agent fields resolvable by react native ([#1477](https://github.com/GetStream/stream-chat-js/issues/1477)) ([4232150](https://github.com/GetStream/stream-chat-js/commit/42321500096491252211b57e3d238cfe920a0777))
+* add missing env variable in rollup config ([#1480](https://github.com/GetStream/stream-chat-js/issues/1480)) ([a935e9e](https://github.com/GetStream/stream-chat-js/commit/a935e9e79232da0df9d951119f48891da59d6281))
+* properly encode user agent on WS connection ([#1482](https://github.com/GetStream/stream-chat-js/issues/1482)) ([58b538b](https://github.com/GetStream/stream-chat-js/commit/58b538b5380000cfcf2abeb369b5ef6a0acf3913))
+* remove pinned_at from the updateMessage api ([#1484](https://github.com/GetStream/stream-chat-js/issues/1484)) ([7b73cac](https://github.com/GetStream/stream-chat-js/commit/7b73cac6ab3c3c0812f1605024f3d73fad189cca))
+
+## [9.0.0-rc.3](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.2...v9.0.0-rc.3) (2025-02-27)
+
+### Bug Fixes
+
+* export promoteChannel ([#1474](https://github.com/GetStream/stream-chat-js/issues/1474)) ([f2ba914](https://github.com/GetStream/stream-chat-js/commit/f2ba9141fc5375e00706d653dc96f122896631f9))
+
+## [9.0.0-rc.2](https://github.com/GetStream/stream-chat-js/compare/v9.0.0-rc.1...v9.0.0-rc.2) (2025-02-27)
+
+### Bug Fixes
+
+* increase package.json[engines.node] version ([6764bad](https://github.com/GetStream/stream-chat-js/commit/6764bad05990f113b66c311bed2967faaac4e11f))
+
+## [9.0.0-rc.1](https://github.com/GetStream/stream-chat-js/compare/v8.57.1...v9.0.0-rc.1) (2025-02-27)
+
+### ⚠ BREAKING CHANGES
+
+* dropped jsDelivr bundle (#1468)
+* dropped `StreamChatGenerics`, use `Custom<Entity>Data` to extend your
+types
+* type `InviteOptions` has been renamed to `UpdateChannelOptions`
+* type `UpdateChannelOptions` has been renamed to
+`UpdateChannelTypeRequest`
+* type `ThreadResponseCustomData` has been renamed to `CustomThreadData`
+* type `MarkAllReadOptions` has been deleted in favour of type
+`MarkChannelsReadOptions`
+* type `QueryFilter` no longer supports `$ne` and `$nin` operators
+* type `ChannelMembership` has been deleted in favour of type
+`ChannelMemberResponse`
+* function `formatMessage` (`utils.ts`) no longer returns `__html`
+property in the formatted message output
+
+### Bug Fixes
+
+* replace StreamChatGenerics with module augmentation ([#1458](https://github.com/GetStream/stream-chat-js/issues/1458)) ([feb97da](https://github.com/GetStream/stream-chat-js/commit/feb97da08a5c4fa325156517111bb58402a1f7b8))
+
 # Changelog
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
+
+## [8.60.0](https://github.com/GetStream/stream-chat-js/compare/v8.59.0...v8.60.0) (2025-04-17)
+
+
+### Features
+
+* [CHA-794] Add sort and filter param to queryThreads ([#1511](https://github.com/GetStream/stream-chat-js/issues/1511)) ([ea7fe99](https://github.com/GetStream/stream-chat-js/commit/ea7fe999aa6d7609fa58e4808b067a8457cf187f))
+* [CHA-855] - Refactoring partial update member ([#1517](https://github.com/GetStream/stream-chat-js/issues/1517)) ([e4f7e68](https://github.com/GetStream/stream-chat-js/commit/e4f7e68298e0959309aa592ce778f6cbbbcc4ab0))
+
+
+### Bug Fixes
+
+* [REACT-350] make archived_at & pinned_at nullable ([#1515](https://github.com/GetStream/stream-chat-js/issues/1515)) ([318825a](https://github.com/GetStream/stream-chat-js/commit/318825a335342c2e32d19469f736df95feb87bee))
+* [REACT-353] unify pinned_at & archived_at nullish values ([#1516](https://github.com/GetStream/stream-chat-js/issues/1516)) ([a840226](https://github.com/GetStream/stream-chat-js/commit/a8402268fabe1826e74e383afd9962bd6ab6376f)), closes [#1515](https://github.com/GetStream/stream-chat-js/issues/1515)
+
+## [8.59.0](https://github.com/GetStream/stream-chat-js/compare/v8.58.0...v8.59.0) (2025-04-08)
+
+
+### Features
+
+* [CHA-660] - Team based roles ([#1499](https://github.com/GetStream/stream-chat-js/issues/1499)) ([dd62cff](https://github.com/GetStream/stream-chat-js/commit/dd62cff38e03678fb04222563e0dae75916ccadb))
+* add show_channels flag to campaigns ([#1513](https://github.com/GetStream/stream-chat-js/issues/1513)) ([5344d2c](https://github.com/GetStream/stream-chat-js/commit/5344d2c6db205063c4e1c73f449e31c6ed6197c5))
+
+
+### Bug Fixes
+
+* [CHA-826] normalize queryDrafts sort ([#1509](https://github.com/GetStream/stream-chat-js/issues/1509)) ([6df96c3](https://github.com/GetStream/stream-chat-js/commit/6df96c3d171d11891985307a71728063cacac73f))
+* add event fields on creating campaign ([#1512](https://github.com/GetStream/stream-chat-js/issues/1512)) ([6c76d6d](https://github.com/GetStream/stream-chat-js/commit/6c76d6db1f33ae14bee546bbf952317a8a144c43))
+
+## [8.58.0](https://github.com/GetStream/stream-chat-js/compare/v8.57.6...v8.58.0) (2025-04-01)
+
+
+### Features
+
+* [CHA-375] add draft messages api ([#1490](https://github.com/GetStream/stream-chat-js/issues/1490)) ([3a7f732](https://github.com/GetStream/stream-chat-js/commit/3a7f7327cb23bdf8578f9cffa885bcd1594f1cde))
+* user profile check endpoint ([#1503](https://github.com/GetStream/stream-chat-js/issues/1503)) ([8114c22](https://github.com/GetStream/stream-chat-js/commit/8114c223b2a6650a89790e64a236d1a03cf64c3b))
+
+
+### Bug Fixes
+
+* provide a way for a suffix to be added to wsUrl ([#1497](https://github.com/GetStream/stream-chat-js/issues/1497)) ([d14d0ff](https://github.com/GetStream/stream-chat-js/commit/d14d0ff1df942ab8ef4493c8ad7feb7601b951f2))
+* use URLSearchParams when building WS url ([#1498](https://github.com/GetStream/stream-chat-js/issues/1498)) ([9413433](https://github.com/GetStream/stream-chat-js/commit/9413433c8544b8dfa96a878847fe94954935d529))
 
 ### [8.57.6](https://github.com/GetStream/stream-chat-js/compare/v8.57.5...v8.57.6) (2025-03-03)
 
@@ -60,10 +321,6 @@ All notable changes to this project will be documented in this file. See [standa
 * expand campaign stats ([#1470](https://github.com/GetStream/stream-chat-js/issues/1470)) ([cc6404c](https://github.com/GetStream/stream-chat-js/commit/cc6404c8e8687754aed23b62133a737f1f6ad535))
 * support campaign user pagination ([#1462](https://github.com/GetStream/stream-chat-js/issues/1462)) ([c629018](https://github.com/GetStream/stream-chat-js/commit/c629018df77b8a956b4cf533b0c2bbeb701a03c8))
 * support new X-Stream-Client format ([#1469](https://github.com/GetStream/stream-chat-js/issues/1469)) ([fdb875b](https://github.com/GetStream/stream-chat-js/commit/fdb875b53b9ec38dc81a3afc5c00f3bc561ef06a))
-
-# Changelog
-
-All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
 ### [8.56.1](https://github.com/GetStream/stream-chat-js/compare/v8.56.0...v8.56.1) (2025-02-13)
 

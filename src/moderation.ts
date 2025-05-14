@@ -1,40 +1,40 @@
-import {
+import type {
   APIResponse,
-  ModerationConfig,
-  DefaultGenerics,
-  ExtendableGenerics,
+  CustomCheckFlag,
   GetConfigResponse,
+  GetUserModerationReportOptions,
   GetUserModerationReportResponse,
+  ModerationConfig,
+  ModerationFlagOptions,
+  ModerationMuteOptions,
   MuteUserResponse,
+  Pager,
+  QueryConfigsResponse,
+  QueryModerationConfigsFilters,
+  QueryModerationConfigsSort,
+  RequireAtLeastOne,
   ReviewQueueFilters,
+  ReviewQueueItem,
   ReviewQueuePaginationOptions,
   ReviewQueueResponse,
   ReviewQueueSort,
-  UpsertConfigResponse,
-  ModerationFlagOptions,
-  ModerationMuteOptions,
-  GetUserModerationReportOptions,
   SubmitActionOptions,
-  QueryModerationConfigsFilters,
-  QueryModerationConfigsSort,
-  Pager,
-  CustomCheckFlag,
-  ReviewQueueItem,
-  QueryConfigsResponse,
+  UpsertConfigResponse,
 } from './types';
-import { StreamChat } from './client';
+import type { StreamChat } from './client';
 import { normalizeQuerySort } from './utils';
 
 export const MODERATION_ENTITY_TYPES = {
   user: 'stream:user',
   message: 'stream:chat:v1:message',
+  userprofile: 'stream:v1:user_profile',
 };
 
 // Moderation class provides all the endpoints related to moderation v2.
-export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
-  client: StreamChat<StreamChatGenerics>;
+export class Moderation {
+  client: StreamChat;
 
-  constructor(client: StreamChat<StreamChatGenerics>) {
+  constructor(client: StreamChat) {
     this.client = client;
   }
 
@@ -48,7 +48,7 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {Object} options.custom Additional data to be stored with the flag
    * @returns
    */
-  async flagUser(flaggedUserID: string, reason: string, options: ModerationFlagOptions = {}) {
+  flagUser(flaggedUserID: string, reason: string, options: ModerationFlagOptions = {}) {
     return this.flag(MODERATION_ENTITY_TYPES.user, flaggedUserID, '', reason, options);
   }
 
@@ -62,7 +62,7 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {Object} options.custom Additional data to be stored with the flag
    * @returns
    */
-  async flagMessage(messageID: string, reason: string, options: ModerationFlagOptions = {}) {
+  flagMessage(messageID: string, reason: string, options: ModerationFlagOptions = {}) {
     return this.flag(MODERATION_ENTITY_TYPES.message, messageID, '', reason, options);
   }
 
@@ -86,13 +86,16 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
     reason: string,
     options: ModerationFlagOptions = {},
   ) {
-    return await this.client.post<{ item_id: string } & APIResponse>(this.client.baseURL + '/api/v2/moderation/flag', {
-      entity_type: entityType,
-      entity_id: entityId,
-      entity_creator_id: entityCreatorID,
-      reason,
-      ...options,
-    });
+    return await this.client.post<{ item_id: string } & APIResponse>(
+      this.client.baseURL + '/api/v2/moderation/flag',
+      {
+        entity_type: entityType,
+        entity_id: entityId,
+        entity_creator_id: entityCreatorID,
+        reason,
+        ...options,
+      },
+    );
   }
 
   /**
@@ -104,7 +107,7 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns
    */
   async muteUser(targetID: string, options: ModerationMuteOptions = {}) {
-    return await this.client.post<MuteUserResponse<StreamChatGenerics> & APIResponse>(
+    return await this.client.post<MuteUserResponse & APIResponse>(
       this.client.baseURL + '/api/v2/moderation/mute',
       {
         target_ids: [targetID],
@@ -143,8 +146,11 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {boolean} options.include_user_blocks Include user blocks
    * @param {boolean} options.include_user_mutes Include user mutes
    */
-  async getUserModerationReport(userID: string, options: GetUserModerationReportOptions = {}) {
-    return await this.client.get<GetUserModerationReportResponse<StreamChatGenerics>>(
+  async getUserModerationReport(
+    userID: string,
+    options: GetUserModerationReportOptions = {},
+  ) {
+    return await this.client.get<GetUserModerationReportResponse>(
       this.client.baseURL + `/api/v2/moderation/user_report`,
       {
         user_id: userID,
@@ -164,11 +170,14 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
     sort: ReviewQueueSort = [],
     options: ReviewQueuePaginationOptions = {},
   ) {
-    return await this.client.post<ReviewQueueResponse>(this.client.baseURL + '/api/v2/moderation/review_queue', {
-      filter: filterConditions,
-      sort: normalizeQuerySort(sort),
-      ...options,
-    });
+    return await this.client.post<ReviewQueueResponse>(
+      this.client.baseURL + '/api/v2/moderation/review_queue',
+      {
+        filter: filterConditions,
+        sort: normalizeQuerySort(sort),
+        ...options,
+      },
+    );
   }
 
   /**
@@ -176,7 +185,10 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {Object} config Moderation config to be upserted
    */
   async upsertConfig(config: ModerationConfig) {
-    return await this.client.post<UpsertConfigResponse>(this.client.baseURL + '/api/v2/moderation/config', config);
+    return await this.client.post<UpsertConfigResponse>(
+      this.client.baseURL + '/api/v2/moderation/config',
+      config,
+    );
   }
 
   /**
@@ -184,11 +196,17 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @param {string} key Key for which moderation config is to be fetched
    */
   async getConfig(key: string, data?: { team?: string }) {
-    return await this.client.get<GetConfigResponse>(this.client.baseURL + '/api/v2/moderation/config/' + key, data);
+    return await this.client.get<GetConfigResponse>(
+      this.client.baseURL + '/api/v2/moderation/config/' + key,
+      data,
+    );
   }
 
   async deleteConfig(key: string, data?: { team?: string }) {
-    return await this.client.delete(this.client.baseURL + '/api/v2/moderation/config/' + key, data);
+    return await this.client.delete(
+      this.client.baseURL + '/api/v2/moderation/config/' + key,
+      data,
+    );
   }
 
   /**
@@ -202,14 +220,21 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
     sort: QueryModerationConfigsSort,
     options: Pager = {},
   ) {
-    return await this.client.post<QueryConfigsResponse>(this.client.baseURL + '/api/v2/moderation/configs', {
-      filter: filterConditions,
-      sort,
-      ...options,
-    });
+    return await this.client.post<QueryConfigsResponse>(
+      this.client.baseURL + '/api/v2/moderation/configs',
+      {
+        filter: filterConditions,
+        sort,
+        ...options,
+      },
+    );
   }
 
-  async submitAction(actionType: string, itemID: string, options: SubmitActionOptions = {}) {
+  async submitAction(
+    actionType: string,
+    itemID: string,
+    options: SubmitActionOptions = {},
+  ) {
     return await this.client.post<{ item_id: string } & APIResponse>(
       this.client.baseURL + '/api/v2/moderation/submit_action',
       {
@@ -247,6 +272,7 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
     configKey: string,
     options?: {
       force_sync?: boolean;
+      test_mode?: boolean;
     },
   ) {
     return await this.client.post(this.client.baseURL + `/api/v2/moderation/check`, {
@@ -257,6 +283,60 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
       config_key: configKey,
       options,
     });
+  }
+
+  /**
+   * Experimental: Check user profile
+   *
+   * Warning: This is an experimental feature and the API is subject to change.
+   *
+   * This function is used to check a user profile for moderation.
+   * This will not create any review queue items for the user profile.
+   * You can just use this to check whether to allow a certain user profile to be created or not.
+   *
+   * Example:
+   *
+   * ```ts
+   * const res = await client.moderation.checkUserProfile(userId, { username: "fuck_boy_001", image: "https://example.com/profile.jpg" });
+   * if (res.recommended_action === "remove") {
+   *   // Block the user profile from being created
+   * } else {
+   *   // Allow the user profile to be created
+   * }
+   * ```
+   *
+   * @param userId
+   * @param profile.username
+   * @param profile.image
+   * @returns
+   */
+  async checkUserProfile(
+    userId: string,
+    profile: RequireAtLeastOne<{ image?: string; username?: string }>,
+  ) {
+    if (!profile.username && !profile.image) {
+      throw new Error('Either username or image must be provided');
+    }
+
+    const moderationPayload: { images?: string[]; texts?: string[] } = {};
+    if (profile.username) {
+      moderationPayload.texts = [profile.username];
+    }
+    if (profile.image) {
+      moderationPayload.images = [profile.image];
+    }
+
+    return await this.check(
+      MODERATION_ENTITY_TYPES.userprofile,
+      userId,
+      userId,
+      moderationPayload,
+      'user_profile:default',
+      {
+        force_sync: true,
+        test_mode: true,
+      },
+    );
   }
 
   /**
@@ -282,16 +362,15 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
     },
     flags: CustomCheckFlag[],
   ) {
-    return await this.client.post<{ id: string; item: ReviewQueueItem; status: string } & APIResponse>(
-      this.client.baseURL + `/api/v2/moderation/custom_check`,
-      {
-        entity_type: entityType,
-        entity_id: entityID,
-        entity_creator_id: entityCreatorID,
-        moderation_payload: moderationPayload,
-        flags,
-      },
-    );
+    return await this.client.post<
+      { id: string; item: ReviewQueueItem; status: string } & APIResponse
+    >(this.client.baseURL + `/api/v2/moderation/custom_check`, {
+      entity_type: entityType,
+      entity_id: entityID,
+      entity_creator_id: entityCreatorID,
+      moderation_payload: moderationPayload,
+      flags,
+    });
   }
 
   /**
@@ -301,6 +380,12 @@ export class Moderation<StreamChatGenerics extends ExtendableGenerics = DefaultG
    * @returns
    */
   async addCustomMessageFlags(messageID: string, flags: CustomCheckFlag[]) {
-    return await this.addCustomFlags(MODERATION_ENTITY_TYPES.message, messageID, '', {}, flags);
+    return await this.addCustomFlags(
+      MODERATION_ENTITY_TYPES.message,
+      messageID,
+      '',
+      {},
+      flags,
+    );
   }
 }

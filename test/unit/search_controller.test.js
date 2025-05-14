@@ -1,4 +1,3 @@
-import { expect } from 'chai';
 import sinon from 'sinon';
 import {
 	BaseSearchSource,
@@ -9,6 +8,8 @@ import {
 } from '../../src/search_controller';
 import { generateUser } from './test-utils/generateUser';
 import { generateChannel } from './test-utils/generateChannel';
+
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 describe('SearchController', () => {
 	let searchController;
@@ -328,10 +329,12 @@ describe('BaseSearchSource and implementations', () => {
 
 			beforeEach(() => {
 				// Stub executeQuery on the prototype before creating the instance to avoid effect of binding in constructor
-				executeQueryStub = sinon.stub(BaseSearchSource.prototype, 'executeQuery').resolves({
-					items,
-					next: null,
-				});
+				executeQueryStub = sinon
+					.stub(BaseSearchSource.prototype, 'executeQuery')
+					.resolves({
+						items,
+						next: null,
+					});
 
 				searchSource = new TestSearchSource();
 			});
