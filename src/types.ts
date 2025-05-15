@@ -3220,6 +3220,7 @@ export class ErrorFromResponse<T> extends Error {
   public code: number | null;
   public status: number;
   public response: AxiosResponse<T>;
+  public name = 'ErrorFromResponse';
 
   constructor(
     message: string,
@@ -3237,6 +3238,29 @@ export class ErrorFromResponse<T> extends Error {
     this.code = code;
     this.response = response;
     this.status = status;
+  }
+
+  // Vitest helper (serialized errors are too large to read)
+  // https://github.com/vitest-dev/vitest/blob/v3.1.3/packages/utils/src/error.ts#L60-L62
+  toJSON() {
+    const extra = [
+      ['status', this.status],
+      ['code', this.code],
+    ] as const;
+
+    const joinable = [];
+
+    for (const [key, value] of extra) {
+      if (typeof value !== 'undefined' && value !== null) {
+        joinable.push(`${key}: ${value}`);
+      }
+    }
+
+    return {
+      message: `(${joinable.join(', ')}) - ${this.message}`,
+      stack: this.stack,
+      name: this.name,
+    };
   }
 }
 
