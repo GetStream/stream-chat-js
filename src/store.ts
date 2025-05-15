@@ -3,16 +3,40 @@ export type ValueOrPatch<T> = T | Patch<T>;
 export type Handler<T> = (nextValue: T, previousValue: T | undefined) => void;
 export type Unsubscribe = () => void;
 
+export type Unregister = Unsubscribe;
+export type Modifier<T> = Handler<T>;
+
 export const isPatch = <T>(value: ValueOrPatch<T>): value is Patch<T> =>
   typeof value === 'function';
 
+// eslint-disable-next-line @typescript-eslint/no-empty-function
+const noop = () => {};
+
 export class StateStore<T extends Record<string, unknown>> {
-  private handlerSet = new Set<Handler<T>>();
+  protected handlers = new Set<Handler<T>>();
+  protected modifiers = new Set<Handler<T>>();
 
-  constructor(private value: T) {}
+  constructor(protected value: T) {}
 
-  public next = (newValueOrPatch: ValueOrPatch<T>): void => {
-    // newValue (or patch output) should never be mutated previous value
+  /**
+   * Allows merging two stores only if their keys differ otherwise there's no way to ensure the data type stability.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  public merge<Q extends StateStore<any>>(
+    stateStore: Q extends StateStore<infer L>
+      ? Extract<keyof T, keyof L> extends never
+        ? Q
+        : never
+      : never,
+  ) {
+    return new MergedStateStore<T, Q extends StateStore<infer L> ? L : never>({
+      original: this,
+      merged: stateStore,
+    });
+  }
+
+  public next(newValueOrPatch: ValueOrPatch<T>): void {
+    // newValue (or patch output) should never be a mutated previous value
     const newValue = isPatch(newValueOrPatch)
       ? newValueOrPatch(this.value)
       : newValueOrPatch;
@@ -20,24 +44,28 @@ export class StateStore<T extends Record<string, unknown>> {
     // do not notify subscribers if the value hasn't changed
     if (newValue === this.value) return;
 
+    this.modifiers.forEach((modifier) => modifier(newValue, this.value));
+
     const oldValue = this.value;
     this.value = newValue;
 
-    this.handlerSet.forEach((handler) => handler(this.value, oldValue));
-  };
+    this.handlers.forEach((handler) => handler(this.value, oldValue));
+  }
 
   public partialNext = (partial: Partial<T>): void =>
     this.next((current) => ({ ...current, ...partial }));
 
-  public getLatestValue = (): T => this.value;
+  public getLatestValue(): T {
+    return this.value;
+  }
 
-  public subscribe = (handler: Handler<T>): Unsubscribe => {
+  public subscribe(handler: Handler<T>): Unsubscribe {
     handler(this.value, undefined);
-    this.handlerSet.add(handler);
+    this.handlers.add(handler);
     return () => {
-      this.handlerSet.delete(handler);
+      this.handlers.delete(handler);
     };
-  };
+  }
 
   public subscribeWithSelector = <
     O extends Readonly<Record<string, unknown>> | Readonly<unknown[]>,
@@ -69,4 +97,236 @@ export class StateStore<T extends Record<string, unknown>> {
 
     return this.subscribe(wrappedHandler);
   };
+
+  /**
+   * Registers a modifier function that will be called before the state is updated.
+   *
+   * Modifiers are invoked with the new and previous values whenever `next` or `partialNext`
+   * is called, allowing you to mutate or react to the new value before it is set. Modifiers run in the
+   * order they were registered.
+   *
+   * @example
+   * ```ts
+   * const store = new StateStore<{ count: number; isMaxValue: bool; }>({ count: 0, isMaxValue: false });
+   *
+   * store.registerModifier((nextValue, prevValue) => {
+   *   if (nextValue.count > 10) {
+   *     nextValue.count = 10; // Clamp the value to a maximum of 10
+   *   }
+   *
+   *   if (nextValue.count === 10) {
+   *     nextValue.isMaxValue = true; // Set isMaxValue to true if count is 10
+   *   } else {
+   *     nextValue.isMaxValue = false; // Reset isMaxValue otherwise
+   *   }
+   * });
+   *
+   * store.partialNext({ count: 15 });
+   *
+   * store.getLatestValue(); // { count: 10, isMaxValue: true }
+   *
+   * store.partialNext({ count: 5 });
+   *
+   * store.getLatestValue(); // { count: 5, isMaxValue: false }
+   * ```
+   *
+   * @param modifier - The function to be called with the next and previous values before the state is updated.
+   * @returns An `Unregister` function that removes the modifier when called.
+   */
+  public registerModifier(modifier: Modifier<T>): Unregister {
+    this.modifiers.add(modifier);
+
+    return () => {
+      this.modifiers.delete(modifier);
+    };
+  }
 }
+
+/**
+ * Represents a merged state store that combines two separate state stores into one.
+ *
+ * The MergedStateStore allows combining two stores with non-overlapping keys.
+ * It extends StateStore with the combined type of both source stores.
+ * Changes to either the original or merged store will propagate to the combined store.
+ *
+ * Note: Direct mutations (next, partialNext, registerModifier) are disabled on the merged store.
+ * You should instead call these methods on the original or merged stores.
+ *
+ * @template O The type of the original state store
+ * @template M The type of the merged state store
+ *
+ * @experimental
+ * This class is experimental and may change in future versions.
+ */
+export class MergedStateStore<
+  O extends Record<string, unknown>,
+  M extends Record<string, unknown>,
+> extends StateStore<O & M> {
+  public readonly original: StateStore<O>;
+  public readonly merged: StateStore<M>;
+  private cachedOriginalValue: O;
+  private cachedMergedValue: M;
+
+  constructor({ original, merged }: { original: StateStore<O>; merged: StateStore<M> }) {
+    const originalValue = original.getLatestValue();
+    const mergedValue = merged.getLatestValue();
+
+    super({
+      ...originalValue,
+      ...mergedValue,
+    });
+
+    this.cachedOriginalValue = originalValue;
+    this.cachedMergedValue = mergedValue;
+
+    this.original = original;
+    this.merged = merged;
+  }
+
+  /**
+   * Subscribes to changes in the merged state store.
+   *
+   * This method extends the base subscribe functionality to handle the merged nature of this store:
+   * 1. The first subscriber triggers registration of helper subscribers that listen to both source stores
+   * 2. Changes from either source store are propagated to this merged store
+   * 3. Source store values are cached to prevent unnecessary updates
+   *
+   * When the first subscriber is added, the method sets up listeners on both original and merged stores.
+   * These listeners update the combined store value whenever either source store changes.
+   * All subscriptions (helpers and the actual handler) are tracked so they can be properly cleaned up.
+   *
+   * @param handler - The callback function that will be executed when the state changes
+   * @returns An unsubscribe function that, when called, removes the subscription and any helper subscriptions
+   */
+  public subscribe(handler: Handler<O & M>) {
+    const unsubscribeFunctions: Unsubscribe[] = [];
+
+    // first subscriber will also register helpers which listen to changes of the
+    // "original" and "merged" stores, combined outputs will be emitted through super.next
+    // whenever cached values do not equal (always apart from the initial subscription)
+    // since the actual handler subscription is registered after helpers, the actual
+    // handler will run only once
+    if (!this.handlers.size) {
+      const base = (nextValue: O | M) => {
+        super.next((currentValue) => ({
+          ...currentValue,
+          ...nextValue,
+        }));
+      };
+
+      unsubscribeFunctions.push(
+        this.original.subscribe((nextValue) => {
+          if (nextValue === this.cachedOriginalValue) return;
+          this.cachedOriginalValue = nextValue;
+          base(nextValue);
+        }),
+        this.merged.subscribe((nextValue) => {
+          if (nextValue === this.cachedMergedValue) return;
+          this.cachedMergedValue = nextValue;
+          base(nextValue);
+        }),
+      );
+    }
+
+    unsubscribeFunctions.push(super.subscribe(handler));
+
+    return () => {
+      unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
+    };
+  }
+
+  /**
+   * Retrieves the latest combined state from both original and merged stores.
+   *
+   * This method extends the base getLatestValue functionality to ensure the merged store
+   * remains in sync with its source stores even when there are no active subscribers.
+   *
+   * When there are no handlers registered, the method:
+   * 1. Fetches the latest values from both source stores
+   * 2. Compares them with the cached values to detect changes
+   * 3. If changes are detected, updates the internal value and caches
+   *    the new source values to maintain consistency
+   *
+   * This approach ensures that calling getLatestValue() always returns the most
+   * up-to-date combined state, even if the merged store hasn't been actively
+   * receiving updates through subscriptions.
+   *
+   * @returns The latest combined state from both original and merged stores
+   */
+  public getLatestValue() {
+    // if there are no handlers registered to MergedStore then the local value might be out-of-sync
+    // pull latest and compare against cached - if they differ, cache latest and produce new combined
+    if (!this.handlers.size) {
+      const originalValue = this.original.getLatestValue();
+      const mergedValue = this.merged.getLatestValue();
+
+      if (
+        originalValue !== this.cachedOriginalValue ||
+        mergedValue !== this.cachedMergedValue
+      ) {
+        this.value = {
+          ...originalValue,
+          ...mergedValue,
+        };
+        this.cachedMergedValue = mergedValue;
+        this.cachedOriginalValue = originalValue;
+      }
+    }
+
+    return super.getLatestValue();
+  }
+
+  // override original methods and "disable" them
+  public next = () => {
+    console.warn(
+      `${MergedStateStore.name}.next is disabled, call original.next or merged.next instead`,
+    );
+  };
+  public partialNext = () => {
+    console.warn(
+      `${MergedStateStore.name}.partialNext is disabled, call original.partialNext or merged.partialNext instead`,
+    );
+  };
+  public registerModifier() {
+    console.warn(
+      `${MergedStateStore.name}.registerModifier is disabled, call original.registerModifier or merged.registerModifier instead`,
+    );
+    return noop;
+  }
+}
+
+/** EXAMPLE:
+const Uninitialized = Symbol('uninitialized');
+
+const b = new StateStore<{
+  previous: string | null | symbol;
+  hasPrevious: boolean | symbol;
+}>({
+  previous: Uninitialized,
+  hasPrevious: Uninitialized,
+});
+
+const a = new StateStore<{
+  hasNext: boolean | symbol;
+  next: string | null | symbol;
+}>({
+  next: Uninitialized,
+  hasNext: Uninitialized,
+}).merge(b);
+
+a.original.registerModifier((nextValue) => {
+  if (typeof nextValue.next === 'string') {
+    nextValue.hasNext = true;
+  } else if (nextValue.next === Uninitialized) {
+    nextValue.hasNext = Uninitialized;
+  } else {
+    nextValue.hasNext = false;
+  }
+});
+
+a.subscribe((ns) => console.log(ns));
+
+a.original.partialNext({ next: 'next' });
+a.original.partialNext({ next: null });
+a.original.partialNext({ next: Uninitialized });
+*/
