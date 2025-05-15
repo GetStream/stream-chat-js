@@ -32,6 +32,7 @@ import {
 } from './utils';
 
 import type {
+  ActiveLiveLocationsAPIResponse,
   APIErrorResponse,
   APIResponse,
   AppSettings,
@@ -188,7 +189,6 @@ import type {
   SendFileAPIResponse,
   SharedLocationRequest,
   SharedLocationResponse,
-  SharedLocationsAPIResponse,
   SortParam,
   StreamChatOptions,
   SyncOptions,
@@ -2491,11 +2491,13 @@ export class StreamChat {
 
   /** getSharedLocations
    *
-   * @returns {Promise<SharedLocationsAPIResponse>} The server response
+   * @returns {Promise<ActiveLiveLocationsAPIResponse>} The server response
    *
    */
   async getSharedLocations() {
-    return await this.get<SharedLocationsAPIResponse>(this.baseURL + `/users/locations`);
+    return await this.get<ActiveLiveLocationsAPIResponse>(
+      this.baseURL + `/users/locations`,
+    );
   }
 
   /** muteUser - mutes a user

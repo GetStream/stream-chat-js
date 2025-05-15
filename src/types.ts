@@ -3925,8 +3925,8 @@ export type DraftMessage = {
   type?: MessageLabel;
 };
 
-export type SharedLocationsAPIResponse = APIResponse & {
-  live_locations: SharedLocationResponse[];
+export type ActiveLiveLocationsAPIResponse = APIResponse & {
+  active_live_locations: SharedLocationResponse[];
 };
 
 export type SharedLocationResponse = {
