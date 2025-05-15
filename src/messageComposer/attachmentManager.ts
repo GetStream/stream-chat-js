@@ -448,7 +448,11 @@ export class AttachmentManager {
         },
       };
 
-      this.upsertAttachments([failedAttachment]);
+      const isAttachmentPresent =
+        this.getAttachmentIndex(failedAttachment.localMetadata.id) !== -1;
+      if (isAttachmentPresent) {
+        this.upsertAttachments([failedAttachment]);
+      }
       return failedAttachment;
     }
 
@@ -482,7 +486,12 @@ export class AttachmentManager {
       (uploadedAttachment as LocalNotImageAttachment).thumb_url = response.thumb_url;
     }
 
-    this.upsertAttachments([uploadedAttachment]);
+    const isAttachmentPresent =
+      this.getAttachmentIndex(uploadedAttachment.localMetadata.id) !== -1;
+
+    if (isAttachmentPresent) {
+      this.upsertAttachments([uploadedAttachment]);
+    }
 
     return uploadedAttachment;
   };
