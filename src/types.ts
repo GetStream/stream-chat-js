@@ -2270,6 +2270,8 @@ export type Attachment = CustomAttachmentData & {
   footer_icon?: string;
   giphy?: GiphyData;
   image_url?: string;
+  latitude?: number;
+  longitude?: number;
   mime_type?: string;
   og_scrape_url?: string;
   original_height?: number;
