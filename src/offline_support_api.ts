@@ -182,8 +182,8 @@ export interface OfflineDBApi {
   ) => Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>;
   getAllChannelCids: () => Promise<string[]>;
   getLastSyncedAt: (options: GetLastSyncedAtType) => Promise<string | undefined>;
-  getAppSettings: (options: GetAppSettingsType) => Promise<AppSettingsAPIResponse>;
-  getReactions: (options: GetReactionsType) => Promise<ReactionResponse[]>;
+  getAppSettings: (options: GetAppSettingsType) => Promise<AppSettingsAPIResponse | null>;
+  getReactions: (options: GetReactionsType) => Promise<ReactionResponse[] | null>;
   executeSqlBatch: (queries: ExecuteBatchQueriesType) => Promise<unknown>;
   addPendingTask: (task: PendingTask) => Promise<() => Promise<void>>;
   getPendingTasks: (conditions?: GetPendingTasksType) => Promise<PendingTask[]>;
