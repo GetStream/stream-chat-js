@@ -287,20 +287,24 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
   public init = async (userId: string) => {
     try {
-      if (!this.isInitialized(userId)) {
-        this.state.partialNext({ initialized: false, userId: undefined });
+      if (!this.shouldInitialize(userId)) {
+        // Note: We need this to return as changing the API is a breaking change.
+        // This will change in the next major release.
         const initialized = await this.initializeDB();
         if (initialized) {
           await this.syncManager.init();
           this.state.partialNext({ initialized: true, userId });
+        } else {
+          this.state.partialNext({ initialized: false });
         }
       }
     } catch (error) {
+      this.state.partialNext({ initialized: false, userId: undefined });
       console.log('Error Initializing DB:', error);
     }
   };
 
-  public isInitialized(userId: string): boolean {
+  public shouldInitialize(userId: string): boolean {
     const { userId: userIdFromState, initialized } = this.state.getLatestValue();
     return userId === userIdFromState && initialized;
   }
