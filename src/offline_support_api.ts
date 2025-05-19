@@ -401,15 +401,12 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
           execute: false,
           messages: [message],
         });
-        console.log('WUT HAPPONZ', event, cid, client.user, client.user?.id, user?.id);
         if (cid && client.user && client.user.id !== user?.id) {
           const userId = client.user.id;
           const channel = client.activeChannels[cid];
-          console.log('CHANN0L: ', channel);
           if (channel) {
             const ownReads = channel.state.read[userId];
             const unreadCount = channel.countUnread();
-            console.log('UPSERTING WITH: ', ownReads, unreadCount);
             const upsertReadsQueries = await this.upsertReads({
               cid,
               execute: false,
