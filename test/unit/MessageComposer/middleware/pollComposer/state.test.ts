@@ -182,12 +182,14 @@ describe('PollComposerStateMiddleware', () => {
       expect(result.status).toBeUndefined;
     });
 
-    it('should add a new empty option when the last option is filled', async () => {
+    it('should add a new empty option when the all the options are filled', async () => {
       const stateMiddleware = setup();
       const result = await stateMiddleware.handlers.handleFieldChange(
         setupHandlerParams({
           nextState: { ...getInitialState() },
-          previousState: { ...getInitialState() },
+          previousState: {
+            ...getInitialState(),
+          },
           targetFields: {
             options: {
               index: 0,
@@ -199,7 +201,54 @@ describe('PollComposerStateMiddleware', () => {
 
       expect(result.state.nextState.data.options.length).toBe(2);
       expect(result.state.nextState.data.options[0].text).toBe('Option 1');
-      expect(result.state.nextState.data.options[1].text).toBe('');
+      expect(result.state.nextState.data.options[1].text).toEqual('');
+
+      expect(result.status).toBeUndefined;
+    });
+
+    it('should reorder options and add a new empty option when all the options are filled', async () => {
+      const stateMiddleware = setup();
+
+      const reOrderedOptions = [
+        {
+          id: 'option-2',
+          text: '',
+        },
+        {
+          id: 'option-1',
+          text: 'Option 1',
+        },
+      ];
+
+      const result = await stateMiddleware.handlers.handleFieldChange(
+        setupHandlerParams({
+          nextState: {
+            ...getInitialState(),
+            data: {
+              ...getInitialState().data,
+              options: reOrderedOptions,
+            },
+          },
+          previousState: {
+            ...getInitialState(),
+            data: {
+              ...getInitialState().data,
+              options: reOrderedOptions,
+            },
+          },
+          targetFields: {
+            options: {
+              index: 0,
+              text: 'Option 2',
+            },
+          },
+        }),
+      );
+
+      expect(result.state.nextState.data.options.length).toBe(3);
+      expect(result.state.nextState.data.options[0].text).toBe('Option 2');
+      expect(result.state.nextState.data.options[1].text).toBe('Option 1');
+      expect(result.state.nextState.data.options[2].text).toEqual('');
       expect(result.status).toBeUndefined;
     });
 
