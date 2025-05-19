@@ -20,7 +20,7 @@ import type { AxiosError } from 'axios';
 import type { StreamChat } from './client';
 import type { Channel } from './channel';
 import { StateStore } from './store';
-import { runSynchronously } from './utils';
+import { runDetached } from './utils';
 
 // TODO: Find a clever way to pass this in a different manner
 export type PreparedBatchQueries =
@@ -313,7 +313,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     if (!initialized) {
       return;
     }
-    runSynchronously(queryCallback(this), { context: `OfflineDB(${method})` });
+    runDetached(queryCallback(this), { context: `OfflineDB(${method})` });
   };
 
   public queriesWithChannelGuard = async (
