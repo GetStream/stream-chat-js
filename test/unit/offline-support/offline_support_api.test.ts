@@ -4,6 +4,8 @@ import {
   ChannelAPIResponse,
   ChannelManager,
   StreamChat,
+  Event,
+  Channel,
 } from '../../../src';
 
 // import { generateChannel } from './test-utils/generateChannel';
@@ -257,6 +259,206 @@ describe('OfflineSupportApi', () => {
 
       expect(queryCallback).not.toHaveBeenCalled();
       expect(runDetachedSpy).not.toHaveBeenCalled();
+    });
+
+    describe('queriesWithChannelGuard', () => {
+      let createQueries: ReturnType<typeof vi.fn>;
+
+      beforeEach(() => {
+        createQueries = vi.fn(async () => [{ sql: 'MOCK_QUERY', args: [] }]);
+      });
+
+      it('returns createQueries result when no cid is present', async () => {
+        const event: Event = { type: 'message.new' };
+        const result = await offlineDb.queriesWithChannelGuard({ event }, createQueries);
+
+        expect(createQueries).toHaveBeenCalledWith(true);
+        expect(result).toEqual([{ sql: 'MOCK_QUERY', args: [] }]);
+      });
+
+      it('upserts channel data when channel does not exist and channel data is present in the event', async () => {
+        const event: Event = {
+          type: 'message.new',
+          cid: 'channel:123',
+          channel: { id: '123', type: 'messaging' } as any,
+        };
+
+        offlineDb.channelExists.mockResolvedValue(false);
+        offlineDb.upsertChannelData.mockResolvedValue([{ sql: 'UPSERT', args: [] }]);
+        const clientChannelSpy = vi.spyOn(client, 'channel');
+
+        const result = await offlineDb.queriesWithChannelGuard({ event }, createQueries);
+
+        expect(offlineDb.channelExists).toHaveBeenCalledWith({ cid: 'channel:123' });
+        expect(offlineDb.upsertChannelData).toHaveBeenCalledWith({
+          channel: event.channel,
+          execute: false,
+        });
+        expect(clientChannelSpy).not.toHaveBeenCalled();
+        expect(offlineDb.executeSqlBatch).toHaveBeenCalledWith([
+          { sql: 'UPSERT', args: [] },
+          { sql: 'MOCK_QUERY', args: [] },
+        ]);
+        expect(result).toEqual([
+          { sql: 'UPSERT', args: [] },
+          { sql: 'MOCK_QUERY', args: [] },
+        ]);
+      });
+
+      it('uses client.channel when channel data is not present in event', async () => {
+        const mockChannelData = { id: '123', type: 'messaging' };
+        const mockChannel = {
+          initialized: true,
+          disconnected: false,
+          data: mockChannelData,
+        };
+
+        const clientChannelSpy = vi
+          .spyOn(client, 'channel')
+          .mockReturnValue(mockChannel as unknown as Channel);
+
+        const event: Event = {
+          type: 'message.new',
+          cid: 'channel:123',
+          channel_type: 'messaging',
+          channel_id: '123',
+        };
+
+        offlineDb.channelExists.mockResolvedValue(false);
+        offlineDb.upsertChannelData.mockResolvedValue([{ sql: 'UPSERT', args: [] }]);
+
+        const result = await offlineDb.queriesWithChannelGuard({ event }, createQueries);
+
+        expect(clientChannelSpy).toHaveBeenCalledWith('messaging', '123');
+        expect(offlineDb.upsertChannelData).toHaveBeenCalledWith({
+          channel: mockChannelData,
+          execute: false,
+        });
+        expect(offlineDb.executeSqlBatch).toHaveBeenCalledWith([
+          { sql: 'UPSERT', args: [] },
+          { sql: 'MOCK_QUERY', args: [] },
+        ]);
+        expect(result).toEqual([
+          { sql: 'UPSERT', args: [] },
+          { sql: 'MOCK_QUERY', args: [] },
+        ]);
+      });
+
+      it('returns empty array and logs warning when channel data is missing', async () => {
+        const event: Event = {
+          type: 'message.new',
+          cid: 'channel:123',
+          channel_type: 'messaging',
+          channel_id: '123',
+        };
+
+        offlineDb.channelExists.mockResolvedValue(false);
+
+        const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        const result = await offlineDb.queriesWithChannelGuard({ event }, createQueries);
+
+        // TODO: testing against warning logs seems silly, please rethink this
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+          'Received message.new event for a non initialized channel that is not in DB, skipping event',
+          { event },
+        );
+        expect(result).toEqual([]);
+
+        consoleWarnSpy.mockRestore();
+      });
+
+      it('returns createQueries result directly when channel exists and forceUpdate is false', async () => {
+        const event: Event = {
+          type: 'message.new',
+          cid: 'channel:123',
+        };
+
+        offlineDb.channelExists.mockResolvedValue(true);
+
+        const result = await offlineDb.queriesWithChannelGuard({ event }, createQueries);
+
+        expect(offlineDb.channelExists).toHaveBeenCalledWith({ cid: 'channel:123' });
+        expect(createQueries).toHaveBeenCalledWith(true);
+        expect(result).toEqual([{ sql: 'MOCK_QUERY', args: [] }]);
+      });
+
+      it('does not execute queries when execute is false', async () => {
+        const event: Event = {
+          type: 'message.new',
+          cid: 'channel:123',
+          channel: { id: '123', type: 'messaging' } as any,
+        };
+
+        offlineDb.channelExists.mockResolvedValue(false);
+        offlineDb.upsertChannelData.mockResolvedValue([{ sql: 'UPSERT', args: [] }]);
+
+        const result = await offlineDb.queriesWithChannelGuard(
+          { event, execute: false },
+          createQueries,
+        );
+
+        expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+        expect(result).toEqual([
+          { sql: 'UPSERT', args: [] },
+          { sql: 'MOCK_QUERY', args: [] },
+        ]);
+      });
+
+      it('should reject if channelExists throws', async () => {
+        offlineDb.channelExists.mockRejectedValue(new Error('DB failure'));
+        const event: Event = {
+          type: 'message.new',
+          cid: 'channel:123',
+          channel_type: 'messaging',
+          channel_id: '123',
+        };
+
+        await expect(
+          offlineDb.queriesWithChannelGuard({ event }, createQueries),
+        ).rejects.toThrow('DB failure');
+      });
+
+      it('should reject if upsertChannelData throws when channelExists returns false', async () => {
+        offlineDb.channelExists.mockResolvedValue(false);
+        offlineDb.upsertChannelData.mockRejectedValue(new Error('Upsert failed'));
+
+        const event: Event = {
+          type: 'message.new',
+          cid: 'channel:123',
+          channel_type: 'messaging',
+          channel_id: '123',
+        };
+
+        const mockChannelData = { id: '123', type: 'messaging' };
+        const mockChannel = {
+          initialized: true,
+          disconnected: false,
+          data: mockChannelData,
+        };
+
+        vi.spyOn(client, 'channel').mockReturnValue(mockChannel as unknown as Channel);
+
+        await expect(
+          offlineDb.queriesWithChannelGuard({ event }, createQueries),
+        ).rejects.toThrow('Upsert failed');
+      });
+
+      it('should reject if createQueries throws', async () => {
+        offlineDb.channelExists.mockResolvedValue(true);
+        createQueries.mockRejectedValue(new Error('Query generation failed'));
+
+        const event: Event = {
+          type: 'message.new',
+          cid: 'channel:123',
+          channel_type: 'messaging',
+          channel_id: '123',
+        };
+
+        await expect(
+          offlineDb.queriesWithChannelGuard({ event }, createQueries),
+        ).rejects.toThrow('Query generation failed');
+      });
     });
   });
 });

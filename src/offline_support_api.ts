@@ -379,7 +379,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
         return [];
       }
     }
-    return createQueries(execute);
+    return await createQueries(execute);
   };
 
   // TODO: Check why this isn't working properly for read state - something is not
