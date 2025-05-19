@@ -182,32 +182,53 @@ export class AttachmentManager {
         attachment.localMetadata.id && localId === attachment.localMetadata?.id,
     );
 
-  upsertAttachments = (attachmentsToUpsert: LocalAttachment[]) => {
-    if (!attachmentsToUpsert.length) return;
+  private prepareAttachmentUpdate = (attachmentToUpdate: LocalAttachment) => {
     const stateAttachments = this.attachments;
     const attachments = [...this.attachments];
-    attachmentsToUpsert.forEach((upsertedAttachment) => {
-      const attachmentIndex = this.getAttachmentIndex(
-        upsertedAttachment.localMetadata.id,
-      );
+    const attachmentIndex = this.getAttachmentIndex(attachmentToUpdate.localMetadata.id);
+    if (attachmentIndex === -1) return null;
+    const merged = mergeWithDiff<LocalAttachment>(
+      stateAttachments[attachmentIndex] ?? {},
+      attachmentToUpdate,
+    );
+    const updatesOnMerge = merged.diff && Object.keys(merged.diff.children).length;
+    if (updatesOnMerge) {
+      const localAttachment = ensureIsLocalAttachment(merged.result);
+      if (localAttachment) {
+        attachments.splice(attachmentIndex, 1, localAttachment);
+        return attachments;
+      }
+    }
+    return null;
+  };
 
-      if (attachmentIndex === -1) {
-        const localAttachment = ensureIsLocalAttachment(upsertedAttachment);
-        if (localAttachment) attachments.push(localAttachment);
+  updateAttachment = (attachmentToUpdate: LocalAttachment) => {
+    const updatedAttachments = this.prepareAttachmentUpdate(attachmentToUpdate);
+    if (updatedAttachments) {
+      this.state.partialNext({ attachments: updatedAttachments });
+    }
+  };
+
+  upsertAttachments = (attachmentsToUpsert: LocalAttachment[]) => {
+    if (!attachmentsToUpsert.length) return;
+    let attachments = [...this.attachments];
+    let hasUpdates = false;
+    attachmentsToUpsert.forEach((attachment) => {
+      const updatedAttachments = this.prepareAttachmentUpdate(attachment);
+      if (updatedAttachments) {
+        attachments = updatedAttachments;
+        hasUpdates = true;
       } else {
-        const merged = mergeWithDiff<LocalAttachment>(
-          stateAttachments[attachmentIndex] ?? {},
-          upsertedAttachment,
-        );
-        const updatesOnMerge = merged.diff && Object.keys(merged.diff.children).length;
-        if (updatesOnMerge) {
-          const localAttachment = ensureIsLocalAttachment(merged.result);
-          if (localAttachment) attachments.splice(attachmentIndex, 1, localAttachment);
+        const localAttachment = ensureIsLocalAttachment(attachment);
+        if (localAttachment) {
+          attachments.push(localAttachment);
+          hasUpdates = true;
         }
       }
     });
-
-    this.state.partialNext({ attachments });
+    if (hasUpdates) {
+      this.state.partialNext({ attachments });
+    }
   };
 
   removeAttachments = (localAttachmentIds: string[]) => {
@@ -448,11 +469,7 @@ export class AttachmentManager {
         },
       };
 
-      const isAttachmentPresent =
-        this.getAttachmentIndex(failedAttachment.localMetadata.id) !== -1;
-      if (isAttachmentPresent) {
-        this.upsertAttachments([failedAttachment]);
-      }
+      this.updateAttachment(failedAttachment);
       return failedAttachment;
     }
 
@@ -486,12 +503,7 @@ export class AttachmentManager {
       (uploadedAttachment as LocalNotImageAttachment).thumb_url = response.thumb_url;
     }
 
-    const isAttachmentPresent =
-      this.getAttachmentIndex(uploadedAttachment.localMetadata.id) !== -1;
-
-    if (isAttachmentPresent) {
-      this.upsertAttachments([uploadedAttachment]);
-    }
+    this.updateAttachment(uploadedAttachment);
 
     return uploadedAttachment;
   };
