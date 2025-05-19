@@ -202,7 +202,6 @@ export class Channel {
   }
 
   async sendMessage(message: Message, options?: SendMessageOptions) {
-    console.log('TO SEND: ', message);
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
@@ -1838,12 +1837,10 @@ export class Channel {
             channelState.unreadCount = channelState.unreadCount + 1;
           }
 
-          if (!isThreadMessage) {
-            this.getClient().offlineDb?.executeQuerySafely(
-              (db) => db.handleNewMessage({ event }),
-              { method: 'handleNewMessage' },
-            );
-          }
+          this.getClient().offlineDb?.executeQuerySafely(
+            (db) => db.handleNewMessage({ event }),
+            { method: 'handleNewMessage' },
+          );
         }
         break;
       case 'message.updated':
@@ -2013,9 +2010,8 @@ export class Channel {
           event.message = channelState.addReaction(reaction, message) as MessageResponse;
           this.getClient().offlineDb?.executeQuerySafely(
             (db) =>
-              db.insertReaction({
-                message,
-                reaction,
+              db.handleReactionEvent({
+                event,
               }),
             { method: 'insertReaction' },
           );
@@ -2027,9 +2023,8 @@ export class Channel {
           event.message = channelState.removeReaction(reaction, message);
           this.getClient().offlineDb?.executeQuerySafely(
             (db) =>
-              db.deleteReaction({
-                message,
-                reaction,
+              db.handleReactionEvent({
+                event,
               }),
             { method: 'deleteReaction' },
           );
@@ -2046,9 +2041,8 @@ export class Channel {
           ) as MessageResponse;
           this.getClient().offlineDb?.executeQuerySafely(
             (db) =>
-              db.updateReaction({
-                message,
-                reaction,
+              db.handleReactionEvent({
+                event,
               }),
             { method: 'updateReaction' },
           );

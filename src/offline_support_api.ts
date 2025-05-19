@@ -390,7 +390,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     const client = this.client;
     const { cid, message, user } = event;
 
-    if (!message) {
+    if (!message || (message.parent_id && !message.show_in_channel)) {
       return [];
     }
 
@@ -652,6 +652,41 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     return [];
   };
 
+  public handleReactionEvent = async ({
+    event,
+    execute = true,
+  }: {
+    event: Event;
+    execute?: boolean;
+  }) => {
+    const { type, message, reaction } = event;
+
+    if (!(message && reaction)) {
+      return [];
+    }
+
+    const getReactionMethod = (type: Event['type']) => {
+      switch (type) {
+        case 'reaction.new':
+          return this.insertReaction;
+        case 'reaction.deleted':
+          return this.deleteReaction;
+        case 'reaction.updated':
+          return this.updateReaction;
+        default:
+          throw new Error(
+            `You are trying to handle a non-reaction event (${type}) through the reaction DB api.`,
+          );
+      }
+    };
+
+    const reactionMethod = getReactionMethod(type);
+
+    return await this.queriesWithChannelGuard({ event, execute }, (executeOverride) =>
+      reactionMethod({ message, reaction, execute: executeOverride }),
+    );
+  };
+
   public queueTask = async ({ task }: { task: PendingTask }) => {
     let response;
     try {
@@ -900,53 +935,15 @@ export class OfflineDBSyncManager {
   };
 
   private handleEventToSyncDB = async (event: Event, execute?: boolean) => {
-    const { type, channel, message, reaction } = event;
+    const { type, channel } = event;
     console.log('SYNCING EVENT: ', event.type);
 
-    if (message && reaction) {
-      if (type === 'reaction.new') {
-        return await this.offlineDb.queriesWithChannelGuard(
-          { event, execute },
-          (executeOverride) =>
-            this.offlineDb.insertReaction({
-              message,
-              reaction,
-              execute: executeOverride,
-            }),
-        );
-      }
-
-      if (type === 'reaction.updated') {
-        return await this.offlineDb.queriesWithChannelGuard(
-          { event, execute },
-          (executeOverride) =>
-            this.offlineDb.updateReaction({
-              message,
-              reaction,
-              execute: executeOverride,
-            }),
-        );
-      }
-
-      if (type === 'reaction.deleted') {
-        return await this.offlineDb.queriesWithChannelGuard(
-          { event, execute },
-          (executeOverride) =>
-            this.offlineDb?.deleteReaction({
-              message,
-              reaction,
-              execute: executeOverride,
-            }),
-        );
-      }
+    if (type.startsWith('reaction')) {
+      return await this.offlineDb.handleReactionEvent({ event, execute });
     }
 
     if (type === 'message.new') {
-      const { message } = event;
-
-      if (message && (!message.parent_id || message.show_in_channel)) {
-        return await this.offlineDb.handleNewMessage({ event, execute });
-      }
+      return await this.offlineDb.handleNewMessage({ event, execute });
     }
 
     if (type === 'message.deleted') {
@@ -973,7 +970,7 @@ export class OfflineDBSyncManager {
       return await this.offlineDb.deleteChannel({ cid: channel.cid, execute });
     }
 
-    if (type === 'channel.truncated' && channel) {
+    if (type === 'channel.truncated') {
       return await this.offlineDb.handleChannelTruncatedEvent({ event, execute });
     }
 
