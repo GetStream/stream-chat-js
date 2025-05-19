@@ -8,7 +8,7 @@ import {
 
 // import { generateChannel } from './test-utils/generateChannel';
 import { getClientWithUser } from '../test-utils/getClient';
-// import * as utils from '../../src/utils';
+import * as utils from '../../../src/utils';
 
 export class MockOfflineDB extends AbstractOfflineDB {
   constructor({ client }: { client: StreamChat }) {
@@ -218,6 +218,45 @@ describe('OfflineSupportApi', () => {
 
         expect(client.offlineDb!.shouldInitialize('user123')).toBe(false);
       });
+    });
+  });
+
+  describe('queries and query utilities', () => {
+    let offlineDb: MockOfflineDB;
+
+    beforeEach(async () => {
+      offlineDb = new MockOfflineDB({ client });
+      vi.spyOn(offlineDb!, 'initializeDB').mockResolvedValue(true);
+      await offlineDb.init(client.userID as unknown as string);
+    });
+
+    afterEach(() => {
+      vi.resetAllMocks();
+    });
+
+    it('calls runDetached when initialized is true', async () => {
+      const queryCallback = vi.fn().mockResolvedValue('result');
+      const runDetachedSpy = vi.spyOn(utils, 'runDetached');
+
+      offlineDb.executeQuerySafely(queryCallback, { method: 'testMethod' });
+
+      expect(queryCallback).toHaveBeenCalledWith(offlineDb);
+      expect(runDetachedSpy).toHaveBeenCalledTimes(1);
+      expect(runDetachedSpy).toHaveBeenCalledWith(expect.any(Promise), {
+        context: 'OfflineDB(testMethod)',
+      });
+    });
+
+    it('does not call runDetached when initialized is false', async () => {
+      const queryCallback = vi.fn().mockResolvedValue('result');
+      const runDetachedSpy = vi.spyOn(utils, 'runDetached');
+
+      offlineDb.state.partialNext({ initialized: false });
+
+      offlineDb.executeQuerySafely(queryCallback, { method: 'testMethod' });
+
+      expect(queryCallback).not.toHaveBeenCalled();
+      expect(runDetachedSpy).not.toHaveBeenCalled();
     });
   });
 });
