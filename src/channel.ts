@@ -1922,7 +1922,7 @@ export class Channel {
           this.getClient().offlineDb?.executeQuerySafely(
             (db) =>
               db.handleMemberEvent({
-                event: { ...event, member: memberCopy },
+                event,
               }),
             { method: 'handleMemberEvent' },
           );
