@@ -1762,11 +1762,6 @@ export class Channel {
           if (event.user?.id === this.getClient().user?.id) {
             channelState.unreadCount = 0;
           }
-
-          this.getClient().offlineDb?.executeQuerySafely(
-            (db) => db.handleRead({ event, unreadMessages: 0 }),
-            { method: 'handleRead' },
-          );
         }
         break;
       case 'user.watching.start':
@@ -1785,11 +1780,6 @@ export class Channel {
           this._extendEventWithOwnReactions(event);
           if (event.hard_delete) channelState.removeMessage(event.message);
           else channelState.addMessageSorted(event.message, false, false);
-
-          this.getClient().offlineDb?.executeQuerySafely(
-            (db) => db.handleDeleteMessage({ event }),
-            { method: 'handleDeleteMessage' },
-          );
 
           channelState.removeQuotedMessageReferences(event.message);
 
@@ -1836,11 +1826,6 @@ export class Channel {
           if (this._countMessageAsUnread(event.message)) {
             channelState.unreadCount = channelState.unreadCount + 1;
           }
-
-          this.getClient().offlineDb?.executeQuerySafely(
-            (db) => db.handleNewMessage({ event }),
-            { method: 'handleNewMessage' },
-          );
         }
         break;
       case 'message.updated':
@@ -1854,10 +1839,6 @@ export class Channel {
           } else {
             channelState.removePinnedMessage(event.message);
           }
-          this.getClient().offlineDb?.executeQuerySafely(
-            (db) => db.handleMessageUpdatedEvent({ event }),
-            { method: 'handleMessageUpdatedEvent' },
-          );
         }
         break;
       case 'channel.truncated':
@@ -1891,11 +1872,6 @@ export class Channel {
           }
         }
 
-        this.getClient().offlineDb?.executeQuerySafely(
-          (db) => db.handleChannelTruncatedEvent({ event }),
-          { method: 'handleChannelTruncatedEvent' },
-        );
-
         break;
       case 'member.added':
       case 'member.updated': {
@@ -1919,13 +1895,6 @@ export class Channel {
           if (channel.data?.member_count && event.type === 'member.added') {
             channel.data.member_count += 1;
           }
-          this.getClient().offlineDb?.executeQuerySafely(
-            (db) =>
-              db.handleMemberEvent({
-                event,
-              }),
-            { method: 'handleMemberEvent' },
-          );
         }
 
         const currentUserId = this.getClient().userID;
@@ -1952,14 +1921,6 @@ export class Channel {
             channel.data.member_count = Math.max(channel.data.member_count - 1, 0);
           }
 
-          this.getClient().offlineDb?.executeQuerySafely(
-            (db) =>
-              db.handleMemberEvent({
-                event,
-              }),
-            { method: 'handleMemberEvent' },
-          );
-
           // TODO?: unset membership
         }
         break;
@@ -1978,9 +1939,6 @@ export class Channel {
         };
 
         channelState.unreadCount = unreadCount;
-        this.getClient().offlineDb?.executeQuerySafely((db) => db.handleRead({ event }), {
-          method: 'handleRead',
-        });
         break;
       }
       case 'channel.updated':
@@ -1998,36 +1956,18 @@ export class Channel {
               event.channel?.own_capabilities ?? channel.data?.own_capabilities,
           };
           channel.data = newChannelData;
-          this.getClient().offlineDb?.executeQuerySafely(
-            (db) => db.upsertChannelData({ channel: newChannelData }),
-            { method: 'upsertChannelData' },
-          );
         }
         break;
       case 'reaction.new':
         if (event.message && event.reaction) {
           const { message, reaction } = event;
           event.message = channelState.addReaction(reaction, message) as MessageResponse;
-          this.getClient().offlineDb?.executeQuerySafely(
-            (db) =>
-              db.handleReactionEvent({
-                event,
-              }),
-            { method: 'insertReaction' },
-          );
         }
         break;
       case 'reaction.deleted':
         if (event.message && event.reaction) {
           const { message, reaction } = event;
           event.message = channelState.removeReaction(reaction, message);
-          this.getClient().offlineDb?.executeQuerySafely(
-            (db) =>
-              db.handleReactionEvent({
-                event,
-              }),
-            { method: 'deleteReaction' },
-          );
         }
         break;
       case 'reaction.updated':
@@ -2039,13 +1979,6 @@ export class Channel {
             message,
             true,
           ) as MessageResponse;
-          this.getClient().offlineDb?.executeQuerySafely(
-            (db) =>
-              db.handleReactionEvent({
-                event,
-              }),
-            { method: 'updateReaction' },
-          );
         }
         break;
       case 'channel.hidden':
@@ -2053,18 +1986,10 @@ export class Channel {
         if (event.clear_history) {
           channelState.clearMessages();
         }
-        this.getClient().offlineDb?.executeQuerySafely(
-          (db) => db.handleChannelVisibilityEvent({ event }),
-          { method: 'handleChannelVisibilityEvent' },
-        );
         break;
       case 'channel.visible':
         channel.data = { ...channel.data, hidden: false };
         this.getClient().offlineDb?.handleChannelVisibilityEvent({ event });
-        this.getClient().offlineDb?.executeQuerySafely(
-          (db) => db.handleChannelVisibilityEvent({ event }),
-          { method: 'handleChannelVisibilityEvent' },
-        );
         break;
       case 'user.banned':
         if (!event.user?.id) break;

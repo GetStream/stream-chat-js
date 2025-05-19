@@ -687,6 +687,79 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     );
   };
 
+  public handleEvent = async ({
+    event,
+    execute = true,
+  }: {
+    event: Event;
+    execute?: boolean;
+  }) => {
+    const { type, channel } = event;
+
+    if (type.startsWith('reaction')) {
+      return await this.handleReactionEvent({ event, execute });
+    }
+
+    if (type === 'message.new') {
+      return await this.handleNewMessage({ event, execute });
+    }
+
+    if (type === 'message.deleted') {
+      return await this.handleDeleteMessage({ event, execute });
+    }
+
+    if (type === 'message.updated' || type === 'message.undeleted') {
+      return this.handleMessageUpdatedEvent({ event, execute });
+    }
+
+    if (type === 'message.read' || type === 'notification.mark_read') {
+      return this.handleRead({ event, unreadMessages: 0, execute });
+    }
+
+    if (type === 'notification.mark_unread') {
+      return this.handleRead({ event, execute });
+    }
+
+    if (type.startsWith('member.')) {
+      return await this.handleMemberEvent({ event, execute });
+    }
+
+    if (type === 'channel.hidden' || type === 'channel.visible') {
+      return await this.handleChannelVisibilityEvent({ event, execute });
+    }
+
+    // Note: It is a bit counter-intuitive that we do not touch the messages in the
+    //       offline DB when receiving notification.message_new, however we do this
+    //       because we anyway cannot get the messages for a channel until we run
+    //       either channel.watch() or channel.query(...) to get them. So, when
+    //       receiving the event we only upsert the channel data and we leave the
+    //       rest of the entities to be updated whenever we actually start watching
+    //       or we at least query.
+    if (
+      (type === 'channel.updated' ||
+        type === 'notification.message_new' ||
+        type === 'notification.added_to_channel') &&
+      channel
+    ) {
+      return await this.upsertChannelData({ channel, execute });
+    }
+
+    if (
+      (type === 'channel.deleted' ||
+        type === 'notification.channel_deleted' ||
+        type === 'notification.removed_from_channel') &&
+      channel
+    ) {
+      return await this.deleteChannel({ cid: channel.cid, execute });
+    }
+
+    if (type === 'channel.truncated') {
+      return await this.handleChannelTruncatedEvent({ event, execute });
+    }
+
+    return [];
+  };
+
   public queueTask = async ({ task }: { task: PendingTask }) => {
     let response;
     try {
@@ -935,46 +1008,8 @@ export class OfflineDBSyncManager {
   };
 
   private handleEventToSyncDB = async (event: Event, execute?: boolean) => {
-    const { type, channel } = event;
     console.log('SYNCING EVENT: ', event.type);
-
-    if (type.startsWith('reaction')) {
-      return await this.offlineDb.handleReactionEvent({ event, execute });
-    }
-
-    if (type === 'message.new') {
-      return await this.offlineDb.handleNewMessage({ event, execute });
-    }
-
-    if (type === 'message.deleted') {
-      return await this.offlineDb.handleDeleteMessage({ event, execute });
-    }
-
-    if (type === 'message.updated') {
-      return this.offlineDb.handleMessageUpdatedEvent({ event, execute });
-    }
-
-    if (type.startsWith('member.')) {
-      return await this.offlineDb.handleMemberEvent({ event, execute });
-    }
-
-    if (type === 'channel.hidden' || type === 'channel.visible') {
-      return await this.offlineDb.handleChannelVisibilityEvent({ event, execute });
-    }
-
-    if (type === 'channel.updated' && channel) {
-      return await this.offlineDb.upsertChannelData({ channel, execute });
-    }
-
-    if (type === 'channel.deleted' && channel) {
-      return await this.offlineDb.deleteChannel({ cid: channel.cid, execute });
-    }
-
-    if (type === 'channel.truncated') {
-      return await this.offlineDb.handleChannelTruncatedEvent({ event, execute });
-    }
-
-    return [];
+    return await this.offlineDb.handleEvent({ event, execute });
   };
 
   private sync = async () => {
