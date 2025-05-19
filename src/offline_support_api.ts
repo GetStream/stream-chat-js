@@ -615,7 +615,6 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     const ownUser = this.client.user;
     if (channel && ownUser) {
       const { cid, truncated_at } = channel;
-      // FIXME: This does not correctly update reads. Will fix later.
       const truncateQueries = await this.deleteMessagesForChannel({
         cid,
         truncated_at,
