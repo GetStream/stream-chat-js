@@ -465,23 +465,22 @@ describe('OfflineSupportApi', () => {
     });
 
     describe('ws event handlers', () => {
+      const baseEvent: Event = {
+        type: 'message.new',
+        cid: 'messaging:channel123',
+        message: {
+          id: 'msg-1',
+          text: 'Hello!',
+        } as unknown as MessageResponse,
+        user: { id: 'user-b' },
+      };
       let queriesWithChannelGuardSpy: MockInstance<
         typeof offlineDb.queriesWithChannelGuard
       >;
-      let baseEvent: Event;
       let channelResponse: ChannelAPIResponse;
       let readResponse: ReadResponse;
 
       beforeEach(() => {
-        baseEvent = {
-          type: 'message.new',
-          cid: 'messaging:channel123',
-          message: {
-            id: 'msg-1',
-            text: 'Hello!',
-          } as unknown as MessageResponse,
-          user: { id: 'user-b' },
-        };
         queriesWithChannelGuardSpy = vi.spyOn(offlineDb, 'queriesWithChannelGuard');
         vi.spyOn(offlineDb, 'channelExists').mockResolvedValue(true);
         readResponse = generateReadResponse({ user: client.user });
@@ -607,6 +606,88 @@ describe('OfflineSupportApi', () => {
           await expect(offlineDb.handleNewMessage({ event: baseEvent })).rejects.toThrow(
             'guard failed',
           );
+        });
+      });
+
+      describe('handleDeleteMessage', () => {
+        const deletedEvent: Event = {
+          ...baseEvent,
+          type: 'message.deleted',
+        };
+
+        beforeEach(() => {
+          vi.clearAllMocks();
+
+          offlineDb.softDeleteMessage.mockResolvedValue([['DELETE soft']]);
+          offlineDb.hardDeleteMessage.mockResolvedValue([['DELETE hard']]);
+          offlineDb.executeSqlBatch.mockResolvedValue(undefined);
+        });
+
+        it('soft deletes a message by default and executes SQL batch', async () => {
+          const result = await offlineDb.handleDeleteMessage({ event: deletedEvent });
+
+          expect(offlineDb.softDeleteMessage).toHaveBeenCalledWith({
+            id: deletedEvent.message?.id,
+            execute: true,
+          });
+          expect(offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
+          expect(result).toEqual([['DELETE soft']]);
+        });
+
+        it('hard deletes a message when `hard_delete` is true', async () => {
+          const eventWithHardDelete = { ...deletedEvent, hard_delete: true };
+          const result = await offlineDb.handleDeleteMessage({
+            event: eventWithHardDelete,
+          });
+
+          expect(offlineDb.hardDeleteMessage).toHaveBeenCalledWith({
+            id: deletedEvent.message?.id,
+            execute: true,
+          });
+          expect(offlineDb.softDeleteMessage).not.toHaveBeenCalled();
+          expect(result).toEqual([['DELETE hard']]);
+        });
+
+        it('returns an empty array if no message is present on the event', async () => {
+          const result = await offlineDb.handleDeleteMessage({
+            event: { type: 'message.deleted' },
+          });
+
+          expect(result).toEqual([]);
+          expect(offlineDb.softDeleteMessage).not.toHaveBeenCalled();
+          expect(offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
+          expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+        });
+
+        it('does not execute the queries if execute is false', async () => {
+          const result = await offlineDb.handleDeleteMessage({
+            event: deletedEvent,
+            execute: false,
+          });
+
+          expect(offlineDb.softDeleteMessage).toHaveBeenCalledWith({
+            id: deletedEvent.message?.id,
+            execute: false,
+          });
+          expect(result).toEqual([['DELETE soft']]);
+        });
+
+        it('handles errors gracefully from softDeleteMessage', async () => {
+          offlineDb.softDeleteMessage.mockRejectedValue(new Error('soft delete failed'));
+
+          await expect(
+            offlineDb.handleDeleteMessage({ event: baseEvent }),
+          ).rejects.toThrow('soft delete failed');
+        });
+
+        it('handles errors gracefully from hardDeleteMessage', async () => {
+          offlineDb.hardDeleteMessage.mockRejectedValue(new Error('hard delete failed'));
+
+          await expect(
+            offlineDb.handleDeleteMessage({
+              event: { ...baseEvent, hard_delete: true },
+            }),
+          ).rejects.toThrow('hard delete failed');
         });
       });
     });
