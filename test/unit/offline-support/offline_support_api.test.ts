@@ -620,7 +620,10 @@ describe('OfflineSupportApi', () => {
 
           offlineDb.softDeleteMessage.mockResolvedValue([['DELETE soft']]);
           offlineDb.hardDeleteMessage.mockResolvedValue([['DELETE hard']]);
-          offlineDb.executeSqlBatch.mockResolvedValue(undefined);
+        });
+
+        afterEach(() => {
+          vi.resetAllMocks();
         });
 
         it('soft deletes a message by default and executes SQL batch', async () => {
@@ -688,6 +691,72 @@ describe('OfflineSupportApi', () => {
               event: { ...baseEvent, hard_delete: true },
             }),
           ).rejects.toThrow('hard delete failed');
+        });
+      });
+
+      describe('handleRemoveMessage', () => {
+        const messageId = 'message-123';
+
+        beforeEach(() => {
+          offlineDb.dropPendingTasks.mockResolvedValue([['DROP pending tasks']]);
+          offlineDb.hardDeleteMessage.mockResolvedValue([['DELETE hard']]);
+          offlineDb.executeSqlBatch.mockResolvedValue(undefined);
+        });
+
+        afterEach(() => {
+          vi.resetAllMocks();
+        });
+
+        it('drops pending tasks and hard deletes the message, executing the queries', async () => {
+          const result = await offlineDb.handleRemoveMessage({ messageId });
+
+          expect(offlineDb.dropPendingTasks).toHaveBeenCalledWith({
+            messageId,
+            execute: false,
+          });
+          expect(offlineDb.hardDeleteMessage).toHaveBeenCalledWith({
+            id: messageId,
+            execute: false,
+          });
+          expect(offlineDb.executeSqlBatch).toHaveBeenCalledWith([
+            ['DROP pending tasks'],
+            ['DELETE hard'],
+          ]);
+          expect(result).toEqual([['DROP pending tasks'], ['DELETE hard']]);
+        });
+
+        it('returns queries without executing them when execute is false', async () => {
+          const result = await offlineDb.handleRemoveMessage({
+            messageId,
+            execute: false,
+          });
+
+          expect(offlineDb.dropPendingTasks).toHaveBeenCalledWith({
+            messageId,
+            execute: false,
+          });
+          expect(offlineDb.hardDeleteMessage).toHaveBeenCalledWith({
+            id: messageId,
+            execute: false,
+          });
+          expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+          expect(result).toEqual([['DROP pending tasks'], ['DELETE hard']]);
+        });
+
+        it('handles errors from dropPendingTasks gracefully', async () => {
+          offlineDb.dropPendingTasks.mockRejectedValue(new Error('drop failed'));
+
+          await expect(offlineDb.handleRemoveMessage({ messageId })).rejects.toThrow(
+            'drop failed',
+          );
+        });
+
+        it('handles errors from hardDeleteMessage gracefully', async () => {
+          offlineDb.hardDeleteMessage.mockRejectedValue(new Error('hard delete failed'));
+
+          await expect(offlineDb.handleRemoveMessage({ messageId })).rejects.toThrow(
+            'hard delete failed',
+          );
         });
       });
     });
