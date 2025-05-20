@@ -2170,5 +2170,128 @@ describe('OfflineDBSyncManager', () => {
         expect(executePendingTasksSpy).toHaveBeenCalled();
       });
     });
+
+    describe('sync', () => {
+      let getAllChannelCidsSpy: MockInstance;
+      let getLastSyncedAtSpy: MockInstance;
+      let resetDBSpy: MockInstance;
+      let syncApiSpy: MockInstance;
+      let handleEventSpy: MockInstance;
+      let executeSqlBatchSpy: MockInstance;
+      let upsertUserSyncStatusSpy: MockInstance;
+
+      const userId = 'test-user';
+
+      beforeEach(() => {
+        // @ts-ignore
+        syncManager.client.user = { id: userId } as any;
+
+        getAllChannelCidsSpy = vi
+          .spyOn(offlineDb, 'getAllChannelCids')
+          .mockResolvedValue(['channel-1']);
+
+        getLastSyncedAtSpy = vi
+          .spyOn(offlineDb, 'getLastSyncedAt')
+          .mockResolvedValue(new Date().toString());
+
+        resetDBSpy = vi.spyOn(offlineDb, 'resetDB').mockResolvedValue(undefined);
+
+        syncApiSpy = vi
+          .spyOn(client, 'sync')
+          .mockResolvedValue({ events: [] as Event[], duration: '1' });
+
+        handleEventSpy = vi.spyOn(offlineDb, 'handleEvent').mockResolvedValue([]);
+
+        executeSqlBatchSpy = vi
+          .spyOn(offlineDb, 'executeSqlBatch')
+          .mockResolvedValue(undefined);
+
+        upsertUserSyncStatusSpy = vi
+          .spyOn(offlineDb, 'upsertUserSyncStatus')
+          .mockResolvedValue(undefined);
+      });
+
+      it('does nothing if client user is not set', async () => {
+        // @ts-ignore
+        syncManager.client.user = undefined;
+
+        await (syncManager as any).sync();
+
+        expect(getAllChannelCidsSpy).not.toHaveBeenCalled();
+      });
+
+      it('does nothing if no channels are found', async () => {
+        getAllChannelCidsSpy.mockResolvedValueOnce([]);
+
+        await (syncManager as any).sync();
+
+        expect(getLastSyncedAtSpy).not.toHaveBeenCalled();
+      });
+
+      it('resets DB if last sync was more than 30 days ago', async () => {
+        const oldDate = new Date();
+        oldDate.setDate(oldDate.getDate() - 31);
+        getLastSyncedAtSpy.mockResolvedValueOnce(oldDate.toString());
+
+        await (syncManager as any).sync();
+
+        expect(resetDBSpy).toHaveBeenCalled();
+        expect(upsertUserSyncStatusSpy).toHaveBeenCalledWith({
+          userId,
+          lastSyncedAt: expect.any(String),
+        });
+      });
+
+      it('calls sync API and handles events when last sync is within 30 days', async () => {
+        const recentDate = new Date();
+        recentDate.setDate(recentDate.getDate() - 10);
+        getLastSyncedAtSpy.mockResolvedValueOnce(recentDate.toString());
+
+        const mockEvents = [{ type: 'message.new' }, { type: 'reaction.new' }];
+        syncApiSpy.mockResolvedValueOnce({ events: mockEvents });
+
+        handleEventSpy.mockResolvedValueOnce(['query1']);
+        handleEventSpy.mockResolvedValueOnce(['query2']);
+
+        await (syncManager as any).sync();
+
+        expect(syncApiSpy).toHaveBeenCalledWith(
+          ['channel-1'],
+          expect.stringMatching(
+            /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/, // ISO8601 regex, YYYY-MM-DDTHH:mm:ss.sssZ
+          ),
+        );
+        expect(handleEventSpy).toHaveBeenCalledTimes(mockEvents.length);
+        expect(executeSqlBatchSpy).toHaveBeenCalledWith(['query1', 'query2']);
+        expect(upsertUserSyncStatusSpy).toHaveBeenCalled();
+      });
+
+      it('resets DB if sync API throws an error', async () => {
+        const recentDate = new Date();
+        recentDate.setDate(recentDate.getDate() - 10);
+        getLastSyncedAtSpy.mockResolvedValueOnce(recentDate.toString());
+
+        syncApiSpy.mockRejectedValueOnce(new Error('Sync failed'));
+
+        await (syncManager as any).sync();
+
+        expect(resetDBSpy).toHaveBeenCalled();
+        expect(upsertUserSyncStatusSpy).toHaveBeenCalled();
+      });
+
+      it('does not call executeSqlBatch if no queries are returned', async () => {
+        const recentDate = new Date();
+        recentDate.setDate(recentDate.getDate() - 5);
+        getLastSyncedAtSpy.mockResolvedValueOnce(recentDate.toString());
+
+        syncApiSpy.mockResolvedValueOnce({ events: [{ type: 'event' }] });
+        handleEventSpy.mockResolvedValueOnce([]);
+
+        await (syncManager as any).sync();
+
+        expect(executeSqlBatchSpy).not.toHaveBeenCalled();
+        expect(upsertUserSyncStatusSpy).toHaveBeenCalled();
+      });
+    });
   });
 });
