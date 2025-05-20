@@ -945,7 +945,6 @@ export class OfflineDBSyncManager {
       if (this.client.user?.id && this.client.wsConnection?.isHealthy) {
         await this.syncAndExecutePendingTasks();
         await this.invokeSyncStatusListeners(true);
-        console.log('INITIAL SYNC DONE !');
       }
 
       // If a listener has already been registered, unsubscribe from it so

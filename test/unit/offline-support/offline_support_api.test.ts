@@ -12,6 +12,8 @@ import {
   ChannelResponse,
   PendingTask,
   APIErrorResponse,
+  OfflineDBSyncManager,
+  StableWSConnection,
 } from '../../../src';
 
 import { generateChannel } from '../test-utils/generateChannel';
@@ -1873,6 +1875,122 @@ describe('OfflineSupportApi', () => {
           expect(deletePendingTaskSpy).toHaveBeenCalledWith({ id: 1 });
         });
       });
+    });
+  });
+});
+
+describe('OfflineDBSyncManager', () => {
+  let client: StreamChat;
+  let offlineDb: MockOfflineDB;
+  let syncManager: OfflineDBSyncManager;
+  let syncAndExecutePendingTasksSpy: MockInstance;
+  let invokeSyncStatusListenersSpy: MockInstance;
+
+  beforeEach(async () => {
+    client = await getClientWithUser();
+    client.wsConnection = { isHealthy: false } as StableWSConnection;
+    offlineDb = new MockOfflineDB({ client });
+    client.setOfflineDBApi(offlineDb);
+    syncManager = new OfflineDBSyncManager({ client, offlineDb });
+
+    syncAndExecutePendingTasksSpy = vi.spyOn(
+      syncManager as any,
+      'syncAndExecutePendingTasks',
+    );
+    invokeSyncStatusListenersSpy = vi.spyOn(
+      syncManager as any,
+      'invokeSyncStatusListeners',
+    );
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  describe('initialization', () => {
+    beforeEach(() => {
+      syncAndExecutePendingTasksSpy.mockImplementation(vi.fn());
+      invokeSyncStatusListenersSpy.mockImplementation(vi.fn());
+    });
+
+    afterEach(() => {
+      vi.resetAllMocks();
+    });
+
+    it('calls sync and sets sync status if already connected', async () => {
+      client.wsConnection = { isHealthy: true } as StableWSConnection;
+
+      await syncManager.init();
+
+      expect(syncAndExecutePendingTasksSpy).toHaveBeenCalled();
+      expect(invokeSyncStatusListenersSpy).toHaveBeenCalledWith(true);
+    });
+
+    it('does not call sync if client.user is undefined', async () => {
+      // @ts-ignore
+      syncManager.client.user = undefined;
+
+      await syncManager.init();
+
+      expect(syncAndExecutePendingTasksSpy).not.toHaveBeenCalled();
+      expect(invokeSyncStatusListenersSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not call sync if the ws connection is not healthy', async () => {
+      // @ts-ignore
+      syncManager.client.wsConnection = { isHealthy: false };
+
+      await syncManager.init();
+
+      expect(syncAndExecutePendingTasksSpy).not.toHaveBeenCalled();
+      expect(invokeSyncStatusListenersSpy).not.toHaveBeenCalled();
+    });
+
+    it('unsubscribes previous listener if already present', async () => {
+      const unsubscribeFn = vi.fn();
+      syncManager.connectionChangedListener = { unsubscribe: unsubscribeFn };
+
+      await syncManager.init();
+
+      expect(unsubscribeFn).toHaveBeenCalled();
+    });
+
+    it('calls sync when connection.changed triggers online=true', async () => {
+      client.wsConnection = { isHealthy: true } as StableWSConnection;
+
+      await syncManager.init();
+
+      client.dispatchEvent({
+        type: 'connection.changed',
+        online: true,
+      });
+
+      expect(syncAndExecutePendingTasksSpy).toHaveBeenCalledTimes(2);
+      expect(invokeSyncStatusListenersSpy).toHaveBeenCalledWith(true);
+    });
+
+    it('sets sync status to false on connection.changed with online=false', async () => {
+      await syncManager.init();
+
+      client.dispatchEvent({
+        type: 'connection.changed',
+        online: false,
+      });
+
+      expect(syncAndExecutePendingTasksSpy).not.toHaveBeenCalled();
+      expect(invokeSyncStatusListenersSpy).toHaveBeenCalledWith(false);
+    });
+
+    it('handles errors in init gracefully', async () => {
+      client.wsConnection = { isHealthy: true } as StableWSConnection;
+
+      const error = new Error('Sync failed');
+      syncAndExecutePendingTasksSpy.mockRejectedValueOnce(error);
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      await syncManager.init();
+
+      expect(consoleSpy).toHaveBeenCalledWith('Error in DBSyncManager.init: ', error);
     });
   });
 });
