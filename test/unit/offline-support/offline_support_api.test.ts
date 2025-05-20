@@ -1705,6 +1705,105 @@ describe('OfflineSupportApi', () => {
           expect(shouldSkipSpy).toHaveBeenCalledWith(error);
         });
       });
+
+      describe('executeTask', () => {
+        let executeTask: (
+          args: { task: PendingTask },
+          isPendingTask?: boolean,
+        ) => Promise<any>;
+        let mockChannel: Channel;
+        let _deleteMessageSpy: MockInstance;
+        let clientChannelSpy: MockInstance;
+
+        beforeEach(() => {
+          // Extract the private method
+          executeTask = (offlineDb as any)['executeTask'].bind(offlineDb);
+
+          mockChannel = {
+            initialized: true,
+            watch: vi.fn(),
+            _sendMessage: vi.fn(),
+            _sendReaction: vi.fn(),
+            _deleteReaction: vi.fn(),
+            state: { addMessageSorted: vi.fn() },
+          } as unknown as Channel;
+
+          _deleteMessageSpy = vi
+            .spyOn(client, '_deleteMessage')
+            .mockImplementation(vi.fn());
+          clientChannelSpy = vi.spyOn(client, 'channel').mockReturnValue(mockChannel);
+        });
+
+        afterEach(() => {
+          vi.resetAllMocks();
+        });
+
+        it('should call _deleteMessage for delete-message task', async () => {
+          const task = generatePendingTask('delete-message') as PendingTask;
+
+          await executeTask({ task });
+
+          expect(_deleteMessageSpy).toHaveBeenCalledWith(...task.payload);
+        });
+
+        it('should call _sendReaction for send-reaction task', async () => {
+          const task = generatePendingTask('send-reaction') as PendingTask;
+
+          await executeTask({ task });
+
+          expect(clientChannelSpy).toHaveBeenCalledWith(task.channelType, task.channelId);
+          expect(mockChannel._sendReaction).toHaveBeenCalledWith(...task.payload);
+        });
+
+        it('should call _deleteReaction for delete-reaction task', async () => {
+          const task = generatePendingTask('delete-reaction') as PendingTask;
+
+          await executeTask({ task });
+
+          expect(mockChannel._deleteReaction).toHaveBeenCalledWith(...task.payload);
+        });
+
+        it('should call _sendMessage and addMessageSorted if isPendingTask is true', async () => {
+          const task = generatePendingTask('send-message') as PendingTask;
+
+          const messageResponse = { message: { id: 'msg1', text: 'hello' } };
+          // no idea why this complains, the test works just fine
+          // @ts-ignore
+          mockChannel._sendMessage.mockResolvedValue(messageResponse);
+
+          await executeTask({ task }, true);
+
+          expect(mockChannel._sendMessage).toHaveBeenCalledWith(...task.payload);
+          expect(mockChannel.state.addMessageSorted).toHaveBeenCalledWith(
+            messageResponse.message,
+            true,
+          );
+        });
+
+        it('should watch channel if not initialized', async () => {
+          mockChannel.initialized = false;
+
+          const task = generatePendingTask('send-reaction') as PendingTask;
+
+          await executeTask({ task });
+
+          expect(mockChannel.watch).toHaveBeenCalled();
+        });
+
+        it('should throw error for unknown task type', async () => {
+          const task = {
+            type: 'unknown-task-type',
+            payload: [],
+            channelId: 'cid',
+            channelType: 'messaging',
+          };
+
+          // @ts-ignore
+          await expect(executeTask({ task })).rejects.toThrow(
+            /Tried to execute invalid pending task type/,
+          );
+        });
+      });
     });
   });
 });
