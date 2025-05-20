@@ -2062,5 +2062,71 @@ describe('OfflineDBSyncManager', () => {
         expect(syncManager['scheduledSyncStatusCallbacks'].get(tag)).toBe(callback);
       });
     });
+
+    describe('invokeSyncStatusListeners', () => {
+      it('updates syncStatus and notifies all listeners', async () => {
+        const listener1 = vi.fn();
+        const listener2 = vi.fn();
+
+        syncManager.onSyncStatusChange(listener1);
+        syncManager.onSyncStatusChange(listener2);
+
+        await (syncManager as any).invokeSyncStatusListeners(true);
+
+        expect(listener1).toHaveBeenCalledWith(true);
+        expect(listener2).toHaveBeenCalledWith(true);
+        expect(syncManager['syncStatus']).toBe(true);
+      });
+
+      it('does not call scheduled callbacks, but calls listeners if status is false', async () => {
+        const scheduledCallback = vi.fn().mockResolvedValue(undefined);
+        const listener1 = vi.fn();
+        const listener2 = vi.fn();
+
+        syncManager.onSyncStatusChange(listener1);
+        syncManager.onSyncStatusChange(listener2);
+        syncManager.scheduleSyncStatusChangeCallback('tag1', scheduledCallback);
+
+        await (syncManager as any).invokeSyncStatusListeners(false);
+
+        expect(scheduledCallback).not.toHaveBeenCalled();
+        expect(listener1).toHaveBeenCalledWith(false);
+        expect(listener2).toHaveBeenCalledWith(false);
+        expect(syncManager['scheduledSyncStatusCallbacks'].size).toBe(1);
+      });
+
+      it('calls all scheduled callbacks and clears them if status is true', async () => {
+        const callback1 = vi.fn().mockResolvedValue(undefined);
+        const callback2 = vi.fn().mockResolvedValue(undefined);
+
+        syncManager.scheduleSyncStatusChangeCallback('cb1', callback1);
+        syncManager.scheduleSyncStatusChangeCallback('cb2', callback2);
+
+        await (syncManager as any).invokeSyncStatusListeners(true);
+
+        expect(callback1).toHaveBeenCalled();
+        expect(callback2).toHaveBeenCalled();
+        expect(syncManager['scheduledSyncStatusCallbacks'].size).toBe(0);
+      });
+
+      it('awaits all scheduled callback promises', async () => {
+        const order: string[] = [];
+        const callback1 = vi.fn().mockImplementation(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          order.push('cb1');
+        });
+        const callback2 = vi.fn().mockImplementation(async () => {
+          order.push('cb2');
+        });
+
+        syncManager.scheduleSyncStatusChangeCallback('cb1', callback1);
+        syncManager.scheduleSyncStatusChangeCallback('cb2', callback2);
+
+        await (syncManager as any).invokeSyncStatusListeners(true);
+
+        expect(order).toContain('cb1');
+        expect(order).toContain('cb2');
+      });
+    });
   });
 });
