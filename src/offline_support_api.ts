@@ -622,7 +622,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       const truncateQueries = await this.deleteMessagesForChannel({
         cid,
         truncated_at,
-        execute,
+        execute: false,
       });
 
       const userId = ownUser.id;
@@ -638,7 +638,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
       const upsertReadQueries = await this.upsertReads({
         cid,
-        execute,
+        execute: false,
         reads: [
           {
             last_read: ownReads.last_read.toString() as string,
@@ -649,7 +649,13 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
         ],
       });
 
-      return [...truncateQueries, ...upsertReadQueries];
+      const finalQueries = [...truncateQueries, ...upsertReadQueries];
+
+      if (execute) {
+        await this.executeSqlBatch(finalQueries);
+      }
+
+      return finalQueries;
     }
 
     return [];

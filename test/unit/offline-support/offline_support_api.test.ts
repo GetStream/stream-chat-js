@@ -1210,6 +1210,179 @@ describe('OfflineSupportApi', () => {
           ).rejects.toThrow(error);
         });
       });
+
+      describe('handleChannelTruncatedEvent', () => {
+        const truncatedEvent: Event = {
+          ...baseEvent,
+          channel: {
+            cid: 'messaging:to-truncate',
+            truncated_at: '2025-05-20T10:00:00Z',
+          } as ChannelResponse,
+        };
+
+        const lastReadDate = new Date('2025-05-19T09:00:00Z');
+        const lastReadMessageId = 'msg789';
+        const unreadMessagesCount = 5;
+
+        beforeEach(() => {
+          offlineDb.deleteMessagesForChannel.mockResolvedValue([
+            'DELETE * FROM messages',
+          ]);
+          offlineDb.upsertReads.mockResolvedValue(['UPDATE * IN reads']);
+
+          readResponse = generateReadResponse({
+            user: client.user,
+            last_read: lastReadDate,
+            last_read_message_id: lastReadMessageId,
+            unread_messages: unreadMessagesCount,
+          });
+          channelResponse = generateChannel({
+            channel: { id: 'to-truncate', type: 'messaging' },
+            read: [readResponse],
+          } as ChannelAPIResponse);
+          client.hydrateActiveChannels([channelResponse]);
+        });
+
+        afterEach(() => {
+          vi.clearAllMocks();
+        });
+
+        it('returns empty array if event.channel or client.user is missing', async () => {
+          const eventNoChannel = { ...truncatedEvent, channel: undefined };
+          const resultNoChannel = await offlineDb.handleChannelTruncatedEvent({
+            event: eventNoChannel,
+          });
+          expect(resultNoChannel).toEqual([]);
+          expect(offlineDb.deleteMessagesForChannel).not.toHaveBeenCalled();
+          expect(offlineDb.upsertReads).not.toHaveBeenCalled();
+          expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+
+          // @ts-ignore
+          offlineDb.client.user = undefined;
+          const resultNoUser = await offlineDb.handleChannelTruncatedEvent({
+            event: truncatedEvent,
+          });
+          expect(resultNoUser).toEqual([]);
+          expect(offlineDb.deleteMessagesForChannel).not.toHaveBeenCalled();
+
+          expect(offlineDb.upsertReads).not.toHaveBeenCalled();
+          expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+        });
+
+        it('calls deleteMessagesForChannel and upsertReads with correct arguments and returns combined queries', async () => {
+          const countUnreadSpy = vi
+            .spyOn(client.activeChannels[truncatedEvent.channel!.cid], 'countUnread')
+            .mockReturnValue(2);
+
+          const result = await offlineDb.handleChannelTruncatedEvent({
+            event: truncatedEvent,
+            execute: true,
+          });
+
+          expect(offlineDb.deleteMessagesForChannel).toHaveBeenCalledWith({
+            cid: truncatedEvent.channel!.cid,
+            truncated_at: truncatedEvent.channel!.truncated_at,
+            execute: false,
+          });
+
+          expect(countUnreadSpy).toHaveBeenCalled();
+          expect(countUnreadSpy).toHaveBeenCalledWith(
+            new Date(truncatedEvent.channel!.truncated_at as unknown as string),
+          );
+
+          expect(offlineDb.upsertReads).toHaveBeenCalledWith({
+            cid: truncatedEvent.channel!.cid,
+            execute: false,
+            reads: [
+              {
+                last_read: lastReadDate.toString(),
+                last_read_message_id: lastReadMessageId,
+                unread_messages: 2,
+                user: client.user,
+              },
+            ],
+          });
+
+          expect(offlineDb.executeSqlBatch).toHaveBeenCalledWith([
+            'DELETE * FROM messages',
+            'UPDATE * IN reads',
+          ]);
+          expect(result).toEqual(['DELETE * FROM messages', 'UPDATE * IN reads']);
+        });
+
+        it('passes execute=false correctly to deleteMessagesForChannel and upsertReads', async () => {
+          await offlineDb.handleChannelTruncatedEvent({
+            event: truncatedEvent,
+            execute: false,
+          });
+
+          expect(offlineDb.deleteMessagesForChannel).toHaveBeenCalledWith({
+            cid: truncatedEvent.channel!.cid,
+            truncated_at: truncatedEvent.channel!.truncated_at,
+            execute: false,
+          });
+          expect(offlineDb.upsertReads).toHaveBeenCalledWith({
+            cid: truncatedEvent.channel!.cid,
+            execute: false,
+            reads: [
+              {
+                last_read: lastReadDate.toString(),
+                last_read_message_id: lastReadMessageId,
+                unread_messages: 0,
+                user: client.user,
+              },
+            ],
+          });
+          expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+        });
+
+        it('handles missing truncated_at gracefully with unread count 0', async () => {
+          const countUnreadSpy = vi.spyOn(
+            client.activeChannels[truncatedEvent.channel!.cid],
+            'countUnread',
+          );
+          const channelWithoutTruncatedAt = truncatedEvent.channel!;
+          delete channelWithoutTruncatedAt.truncated_at;
+
+          const eventNoTruncatedAt = {
+            ...truncatedEvent,
+            channel: {
+              ...truncatedEvent.channel,
+              truncated_at: undefined,
+            } as ChannelResponse,
+          };
+          const result = await offlineDb.handleChannelTruncatedEvent({
+            event: eventNoTruncatedAt,
+          });
+
+          expect(offlineDb.deleteMessagesForChannel).toHaveBeenCalledWith({
+            cid: truncatedEvent.channel!.cid,
+            execute: false,
+          });
+
+          // countUnread should NOT be called if truncated_at is missing
+          expect(countUnreadSpy).not.toHaveBeenCalled();
+
+          expect(offlineDb.upsertReads).toHaveBeenCalledWith({
+            cid: truncatedEvent.channel!.cid,
+            execute: false,
+            reads: [
+              {
+                last_read: lastReadDate.toString(),
+                last_read_message_id: lastReadMessageId,
+                unread_messages: 0,
+                user: client.user,
+              },
+            ],
+          });
+
+          expect(offlineDb.executeSqlBatch).toHaveBeenCalledWith([
+            'DELETE * FROM messages',
+            'UPDATE * IN reads',
+          ]);
+          expect(result).toEqual(['DELETE * FROM messages', 'UPDATE * IN reads']);
+        });
+      });
     });
   });
 });
