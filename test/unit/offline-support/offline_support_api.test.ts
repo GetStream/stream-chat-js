@@ -1383,6 +1383,99 @@ describe('OfflineSupportApi', () => {
           expect(result).toEqual(['DELETE * FROM messages', 'UPDATE * IN reads']);
         });
       });
+
+      describe('handleReactionEvent', () => {
+        const reaction = { type: 'like' };
+
+        const baseReactionEvent: Event = {
+          ...baseEvent,
+          reaction,
+        } as Event;
+
+        beforeEach(() => {
+          offlineDb.insertReaction.mockResolvedValue(['INSERT INTO reactions']);
+          offlineDb.deleteReaction.mockResolvedValue(['DELETE FROM reactions']);
+          offlineDb.updateReaction.mockResolvedValue(['UPDATE reactions']);
+        });
+
+        it('returns empty array if message or reaction is missing', async () => {
+          const noMessageEvent = { ...baseReactionEvent, message: undefined };
+          const result1 = await offlineDb.handleReactionEvent({ event: noMessageEvent });
+          expect(result1).toEqual([]);
+          expect(offlineDb.queriesWithChannelGuard).not.toHaveBeenCalled();
+
+          const noReactionEvent = { ...baseReactionEvent, reaction: undefined };
+          const result2 = await offlineDb.handleReactionEvent({ event: noReactionEvent });
+          expect(result2).toEqual([]);
+          expect(offlineDb.queriesWithChannelGuard).not.toHaveBeenCalled();
+        });
+
+        it.each([
+          ['reaction.new', 'insertReaction', ['INSERT INTO reactions']],
+          ['reaction.deleted', 'deleteReaction', ['DELETE FROM reactions']],
+          ['reaction.updated', 'updateReaction', ['UPDATE reactions']],
+        ])(
+          'calls correct method for event %s and returns its queries when execute is true',
+          async (type, methodName, expectedQueries) => {
+            const localReactionEvent = { ...baseReactionEvent, type } as Event;
+
+            const result = await offlineDb.handleReactionEvent({
+              event: localReactionEvent,
+              execute: true,
+            });
+
+            expect(offlineDb.queriesWithChannelGuard).toHaveBeenCalledWith(
+              { event: localReactionEvent, execute: true },
+              expect.any(Function),
+            );
+
+            expect(offlineDb[methodName as keyof typeof offlineDb]).toHaveBeenCalledWith({
+              message: localReactionEvent.message,
+              reaction,
+              execute: true,
+            });
+
+            expect(result).toEqual(expectedQueries);
+          },
+        );
+
+        it.each([
+          ['reaction.new', 'insertReaction', ['INSERT INTO reactions']],
+          ['reaction.deleted', 'deleteReaction', ['DELETE FROM reactions']],
+          ['reaction.updated', 'updateReaction', ['UPDATE reactions']],
+        ])(
+          'calls correct method for event %s and returns its queries when execute is false',
+          async (type, methodName, expectedQueries) => {
+            const localReactionEvent = { ...baseReactionEvent, type } as Event;
+
+            const result = await offlineDb.handleReactionEvent({
+              event: localReactionEvent,
+              execute: false,
+            });
+
+            expect(offlineDb.queriesWithChannelGuard).toHaveBeenCalledWith(
+              { event: localReactionEvent, execute: false },
+              expect.any(Function),
+            );
+
+            expect(offlineDb[methodName as keyof typeof offlineDb]).toHaveBeenCalledWith({
+              message: localReactionEvent.message,
+              reaction,
+              execute: false,
+            });
+
+            expect(result).toEqual(expectedQueries);
+          },
+        );
+
+        it('throws if event type is not a reaction event', async () => {
+          const invalidEvent = { ...baseReactionEvent, type: 'channel.hidden' } as Event;
+
+          await expect(
+            offlineDb.handleReactionEvent({ event: invalidEvent }),
+          ).rejects.toThrow(/non-reaction event/);
+        });
+      });
     });
   });
 });
