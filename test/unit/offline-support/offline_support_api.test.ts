@@ -1476,6 +1476,138 @@ describe('OfflineSupportApi', () => {
           ).rejects.toThrow(/non-reaction event/);
         });
       });
+
+      describe('handleEvent', () => {
+        const dummyEvent = {
+          type: '',
+          channel: { cid: 'channel-123' },
+        } as unknown as Event;
+
+        beforeEach(() => {
+          offlineDb.handleReactionEvent = vi.fn().mockResolvedValue(['reaction']);
+          offlineDb.handleNewMessage = vi.fn().mockResolvedValue(['new-message']);
+          offlineDb.handleDeleteMessage = vi.fn().mockResolvedValue(['delete-message']);
+          offlineDb.handleMessageUpdatedEvent = vi
+            .fn()
+            .mockResolvedValue(['update-message']);
+          offlineDb.handleRead = vi.fn().mockResolvedValue(['read']);
+          offlineDb.handleMemberEvent = vi.fn().mockResolvedValue(['member']);
+          offlineDb.handleChannelVisibilityEvent = vi
+            .fn()
+            .mockResolvedValue(['channel-visibility']);
+          offlineDb.handleChannelTruncatedEvent = vi
+            .fn()
+            .mockResolvedValue(['truncate-channel']);
+          offlineDb.upsertChannelData.mockResolvedValue(['upsert-channel']);
+          offlineDb.deleteChannel.mockResolvedValue(['delete-channel']);
+        });
+
+        afterEach(() => {
+          vi.resetAllMocks();
+        });
+
+        it.each([
+          ['reaction.new', 'handleReactionEvent', 'reaction'],
+          ['reaction.deleted', 'handleReactionEvent', 'reaction'],
+          ['reaction.updated', 'handleReactionEvent', 'reaction'],
+          ['message.new', 'handleNewMessage', 'new-message'],
+          ['message.deleted', 'handleDeleteMessage', 'delete-message'],
+          ['message.updated', 'handleMessageUpdatedEvent', 'update-message'],
+          ['message.undeleted', 'handleMessageUpdatedEvent', 'update-message'],
+          ['message.read', 'handleRead', 'read'],
+          ['notification.mark_read', 'handleRead', 'read'],
+          ['notification.mark_unread', 'handleRead', 'read'],
+          ['member.added', 'handleMemberEvent', 'member'],
+          ['member.removed', 'handleMemberEvent', 'member'],
+          ['member.updated', 'handleMemberEvent', 'member'],
+          ['channel.hidden', 'handleChannelVisibilityEvent', 'channel-visibility'],
+          ['channel.visible', 'handleChannelVisibilityEvent', 'channel-visibility'],
+          ['channel.updated', 'upsertChannelData', 'upsert-channel'],
+          ['notification.message_new', 'upsertChannelData', 'upsert-channel'],
+          ['notification.added_to_channel', 'upsertChannelData', 'upsert-channel'],
+          ['channel.deleted', 'deleteChannel', 'delete-channel'],
+          ['notification.channel_deleted', 'deleteChannel', 'delete-channel'],
+          ['notification.removed_from_channel', 'deleteChannel', 'delete-channel'],
+          ['channel.truncated', 'handleChannelTruncatedEvent', 'truncate-channel'],
+        ])(
+          'handles event type %s by calling %s',
+          async (type, method, expectedResult) => {
+            const event = { ...dummyEvent, type } as Event;
+
+            const result = await offlineDb.handleEvent({ event });
+
+            let queryInput: Record<string, unknown> = { event, execute: true };
+
+            if (['message.read', 'notification.mark_read'].includes(type)) {
+              queryInput.unreadMessages = 0;
+            }
+
+            if (
+              [
+                'channel.updated',
+                'notification.message_new',
+                'notification.added_to_channel',
+              ].includes(type)
+            ) {
+              queryInput = { channel: event.channel!, execute: true };
+            }
+
+            if (
+              [
+                'channel.deleted',
+                'notification.channel_deleted',
+                'notification.removed_from_channel',
+              ].includes(type)
+            ) {
+              queryInput = { cid: event.channel!.cid, execute: true };
+            }
+
+            expect(result).toEqual([expectedResult]);
+            expect(offlineDb[method as keyof typeof offlineDb]).toHaveBeenCalledWith(
+              queryInput,
+            );
+          },
+        );
+
+        it('passes execute=false correctly to delegated method', async () => {
+          const event = { ...dummyEvent, type: 'reaction.new' } as Event;
+          await offlineDb.handleEvent({ event, execute: false });
+
+          expect(offlineDb.handleReactionEvent).toHaveBeenCalledWith({
+            event,
+            execute: false,
+          });
+        });
+
+        it('returns empty query array if event type is unhandled', async () => {
+          // @ts-ignore
+          const event = { type: 'unknown.event' } as Event;
+          const result = await offlineDb.handleEvent({ event });
+          expect(result).toEqual([]);
+        });
+
+        it.each([
+          ['channel.updated'],
+          ['notification.message_new'],
+          ['notification.added_to_channel'],
+        ])('does not call upsertChannelData if channel is missing', async (type) => {
+          const event = { type, channel: undefined } as unknown as Event;
+          const result = await offlineDb.handleEvent({ event });
+          expect(result).toEqual([]);
+          expect(offlineDb.upsertChannelData).not.toHaveBeenCalled();
+        });
+
+        it.each([
+          ['channel.deleted'],
+          ['notification.channel_deleted'],
+          ['notification.removed_from_channel'],
+        ])('does not call deleteChannel if channel is missing', async (type) => {
+          const event = { type, channel: undefined } as unknown as Event;
+          const result = await offlineDb.handleEvent({ event });
+          expect(result).toEqual([]);
+          expect(offlineDb.deleteChannel).not.toHaveBeenCalled();
+        });
+      });
     });
   });
 });
