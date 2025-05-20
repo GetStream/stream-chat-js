@@ -2030,5 +2030,37 @@ describe('OfflineDBSyncManager', () => {
         expect(syncManager['syncStatusListeners']).toContain(listener2);
       });
     });
+
+    describe('scheduleSyncStatusChangeCallback', () => {
+      it('adds the callback to scheduledSyncStatusCallbacks with the given tag', () => {
+        const tag = 'testTag';
+        const callback = vi.fn().mockResolvedValue(undefined);
+
+        syncManager.scheduleSyncStatusChangeCallback(tag, callback);
+
+        expect(syncManager['scheduledSyncStatusCallbacks'].get(tag)).toBe(callback);
+      });
+
+      it('overwrites an existing callback with the same tag', () => {
+        const tag = 'duplicateTag';
+        const callback1 = vi.fn().mockResolvedValue(undefined);
+        const callback2 = vi.fn().mockResolvedValue(undefined);
+
+        syncManager.scheduleSyncStatusChangeCallback(tag, callback1);
+        syncManager.scheduleSyncStatusChangeCallback(tag, callback2);
+
+        expect(syncManager['scheduledSyncStatusCallbacks'].get(tag)).toBe(callback2);
+        expect(syncManager['scheduledSyncStatusCallbacks'].get(tag)).not.toBe(callback1);
+      });
+
+      it('works with symbol tags as well', () => {
+        const tag = Symbol('symbolTag');
+        const callback = vi.fn().mockResolvedValue(undefined);
+
+        syncManager.scheduleSyncStatusChangeCallback(tag, callback);
+
+        expect(syncManager['scheduledSyncStatusCallbacks'].get(tag)).toBe(callback);
+      });
+    });
   });
 });
