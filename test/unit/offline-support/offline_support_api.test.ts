@@ -1993,4 +1993,42 @@ describe('OfflineDBSyncManager', () => {
       expect(consoleSpy).toHaveBeenCalledWith('Error in DBSyncManager.init: ', error);
     });
   });
+
+  describe('sync status listeners and callbacks', () => {
+    describe('onSyncStatusChange', () => {
+      it('adds a listener to syncStatusListeners', () => {
+        const listener = vi.fn();
+        expect(syncManager['syncStatusListeners']).toHaveLength(0);
+
+        const subscription = syncManager.onSyncStatusChange(listener);
+
+        expect(syncManager['syncStatusListeners']).toContain(listener);
+        expect(typeof subscription.unsubscribe).toBe('function');
+      });
+
+      it('removes the listener when unsubscribe is called', () => {
+        const listener = vi.fn();
+        const subscription = syncManager.onSyncStatusChange(listener);
+
+        expect(syncManager['syncStatusListeners']).toContain(listener);
+
+        subscription.unsubscribe();
+
+        expect(syncManager['syncStatusListeners']).not.toContain(listener);
+      });
+
+      it('does not affect other listeners when one is unsubscribed', () => {
+        const listener1 = vi.fn();
+        const listener2 = vi.fn();
+
+        const sub1 = syncManager.onSyncStatusChange(listener1);
+        syncManager.onSyncStatusChange(listener2);
+
+        sub1.unsubscribe();
+
+        expect(syncManager['syncStatusListeners']).not.toContain(listener1);
+        expect(syncManager['syncStatusListeners']).toContain(listener2);
+      });
+    });
+  });
 });
