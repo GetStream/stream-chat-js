@@ -1138,6 +1138,78 @@ describe('OfflineSupportApi', () => {
           );
         });
       });
+
+      describe('handleChannelVisibilityEvent', () => {
+        const channelHiddenEvent: Event = {
+          ...baseEvent,
+          type: 'channel.hidden',
+          channel: { id: 'channel123', type: 'messaging' } as ChannelResponse,
+        };
+        const channelVisibleEvent: Event = {
+          ...channelHiddenEvent,
+          type: 'channel.visible',
+        };
+
+        beforeEach(() => {
+          offlineDb.upsertChannelData.mockResolvedValue(['UPDATE * IN channels']);
+        });
+
+        it('returns empty query array if event.channel is missing', async () => {
+          const hiddenEventMissingChannel = { ...channelHiddenEvent, channel: undefined };
+          const result1 = await offlineDb.handleChannelVisibilityEvent({
+            event: hiddenEventMissingChannel,
+          });
+
+          expect(result1).toEqual([]);
+          expect(offlineDb.upsertChannelData).not.toHaveBeenCalled();
+
+          const visibleEventMissingChannel = {
+            ...channelVisibleEvent,
+            channel: undefined,
+          };
+          const result2 = await offlineDb.handleChannelVisibilityEvent({
+            event: visibleEventMissingChannel,
+          });
+
+          expect(result2).toEqual([]);
+          expect(offlineDb.upsertChannelData).not.toHaveBeenCalled();
+        });
+
+        it('calls upsertChannelData with hidden: true on channel.hidden events', async () => {
+          const result = await offlineDb.handleChannelVisibilityEvent({
+            event: channelHiddenEvent,
+            execute: true,
+          });
+          expect(offlineDb.upsertChannelData).toHaveBeenCalledWith({
+            channel: { ...channelHiddenEvent.channel, hidden: true },
+            execute: true,
+          });
+          expect(result).toEqual(['UPDATE * IN channels']);
+        });
+
+        it('calls upsertChannelData with hidden false when type is not "channel.hidden"', async () => {
+          const result = await offlineDb.handleChannelVisibilityEvent({
+            event: channelVisibleEvent,
+            execute: false,
+          });
+          expect(offlineDb.upsertChannelData).toHaveBeenCalledWith({
+            channel: { ...channelVisibleEvent.channel, hidden: false },
+            execute: false,
+          });
+          expect(result).toEqual(['UPDATE * IN channels']);
+        });
+
+        it('throws if upsertChannelData rejects', async () => {
+          const error = new Error('upsertChannelData error');
+          offlineDb.upsertChannelData.mockRejectedValue(error);
+
+          await expect(
+            offlineDb.handleChannelVisibilityEvent({
+              event: channelHiddenEvent,
+            }),
+          ).rejects.toThrow(error);
+        });
+      });
     });
   });
 });

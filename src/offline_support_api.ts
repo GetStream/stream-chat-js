@@ -599,7 +599,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
     if (channel && type) {
       const hidden = type === 'channel.hidden';
-      return await this.client.offlineDb?.upsertChannelData({
+      return await this.upsertChannelData({
         channel: { ...channel, hidden },
         execute,
       });
