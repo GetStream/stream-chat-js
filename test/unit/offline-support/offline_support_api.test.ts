@@ -1,13 +1,4 @@
-import {
-  describe,
-  expect,
-  it,
-  beforeEach,
-  afterEach,
-  vi,
-  MockInstance,
-  Mock,
-} from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi, MockInstance } from 'vitest';
 import {
   AbstractOfflineDB,
   ChannelAPIResponse,
@@ -1802,6 +1793,84 @@ describe('OfflineSupportApi', () => {
           await expect(executeTask({ task })).rejects.toThrow(
             /Tried to execute invalid pending task type/,
           );
+        });
+      });
+
+      describe('executePendingTasks', () => {
+        let getPendingTasksSpy: MockInstance;
+        let executeTaskSpy: MockInstance;
+        let shouldSkipSpy: MockInstance;
+        let deletePendingTaskSpy: MockInstance;
+
+        const task1 = generatePendingTask('send-message', 1) as PendingTask;
+        const task2 = generatePendingTask('send-reaction', 2) as PendingTask;
+        const skippableError = {
+          isAxiosError: true,
+          response: { data: { code: 4 } },
+        } as AxiosError<APIErrorResponse>;
+
+        beforeEach(() => {
+          getPendingTasksSpy = vi
+            .spyOn(offlineDb, 'getPendingTasks')
+            .mockResolvedValue([task1, task2]);
+          executeTaskSpy = vi
+            .spyOn(offlineDb as any, 'executeTask')
+            .mockResolvedValue(undefined);
+          shouldSkipSpy = vi.spyOn(offlineDb as any, 'shouldSkipQueueingTask');
+          deletePendingTaskSpy = vi.spyOn(offlineDb, 'deletePendingTask');
+        });
+
+        afterEach(() => {
+          vi.resetAllMocks();
+        });
+
+        it('should execute all tasks and delete them if successful', async () => {
+          await offlineDb.executePendingTasks();
+
+          expect(getPendingTasksSpy).toHaveBeenCalled();
+          expect(executeTaskSpy).toHaveBeenCalledTimes(2);
+          expect(executeTaskSpy).toHaveBeenCalledWith({ task: task1 }, true);
+          expect(executeTaskSpy).toHaveBeenCalledWith({ task: task2 }, true);
+
+          expect(deletePendingTaskSpy).toHaveBeenCalledTimes(2);
+          expect(deletePendingTaskSpy).toHaveBeenCalledWith({ id: 1 });
+          expect(deletePendingTaskSpy).toHaveBeenCalledWith({ id: 2 });
+        });
+
+        it('should not delete the task if error is non-skippable', async () => {
+          executeTaskSpy.mockRejectedValueOnce({
+            isAxiosError: true,
+            response: { data: { code: 999 } },
+          });
+          shouldSkipSpy.mockReturnValueOnce(false);
+
+          await offlineDb.executePendingTasks();
+
+          expect(deletePendingTaskSpy).toHaveBeenCalledTimes(1); // only task2 was deleted
+          expect(deletePendingTaskSpy).toHaveBeenCalledWith({ id: 2 });
+        });
+
+        it('should delete the task if error is skippable', async () => {
+          executeTaskSpy.mockRejectedValueOnce(skippableError);
+          shouldSkipSpy.mockReturnValueOnce(true);
+
+          await offlineDb.executePendingTasks();
+
+          expect(deletePendingTaskSpy).toHaveBeenCalledTimes(2);
+          expect(deletePendingTaskSpy).toHaveBeenCalledWith({ id: 1 });
+          expect(deletePendingTaskSpy).toHaveBeenCalledWith({ id: 2 });
+        });
+
+        it('should skip tasks with no id', async () => {
+          const taskWithoutId = generatePendingTask('delete-reaction', 1, {
+            id: undefined,
+          }) as PendingTask;
+          getPendingTasksSpy.mockResolvedValueOnce([taskWithoutId, task1]);
+
+          await offlineDb.executePendingTasks();
+
+          expect(executeTaskSpy).toHaveBeenCalledTimes(1); // only task1 executed
+          expect(deletePendingTaskSpy).toHaveBeenCalledWith({ id: 1 });
         });
       });
     });
