@@ -1049,6 +1049,95 @@ describe('OfflineSupportApi', () => {
           );
         });
       });
+
+      describe('handleMessageUpdatedEvent', () => {
+        let messageUpdatedEvent: Event;
+        let eventWithThreadReply: Event;
+
+        beforeEach(() => {
+          messageUpdatedEvent = { ...baseEvent, type: 'message.updated' };
+          eventWithThreadReply = {
+            ...baseEvent,
+            message: { ...baseEvent.message, parent_id: 'parent1' } as MessageResponse,
+          };
+        });
+
+        afterEach(() => {
+          vi.resetAllMocks();
+        });
+
+        it('returns empty query array if no message is present', async () => {
+          const faultyEvent = { ...baseEvent, message: undefined };
+          const result = await offlineDb.handleMessageUpdatedEvent({
+            event: faultyEvent,
+          });
+          expect(queriesWithChannelGuardSpy).not.toHaveBeenCalled();
+          expect(result).toEqual([]);
+        });
+
+        it('returns empty query array if message is a thread reply', async () => {
+          const result = await offlineDb.handleMessageUpdatedEvent({
+            event: eventWithThreadReply,
+          });
+          expect(queriesWithChannelGuardSpy).not.toHaveBeenCalled();
+          expect(result).toEqual([]);
+        });
+
+        it('calls updateMessage inside queriesWithChannelGuard when message exists without parent_id', async () => {
+          offlineDb.updateMessage.mockResolvedValue(['UPDATE * IN messages']);
+
+          const result = await offlineDb.handleMessageUpdatedEvent({
+            event: messageUpdatedEvent,
+            execute: false,
+          });
+
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: messageUpdatedEvent, execute: false },
+            expect.any(Function),
+          );
+
+          expect(offlineDb.updateMessage).toHaveBeenCalledWith({
+            message: messageUpdatedEvent.message,
+            execute: false,
+          });
+
+          expect(result).toEqual(['UPDATE * IN messages']);
+        });
+
+        it('calls updateMessage and executeSqlBatch if execute is true', async () => {
+          offlineDb.updateMessage.mockResolvedValue(['UPDATE * IN messages']);
+
+          const result = await offlineDb.handleMessageUpdatedEvent({
+            event: messageUpdatedEvent,
+            execute: true,
+          });
+
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: messageUpdatedEvent, execute: true },
+            expect.any(Function),
+          );
+
+          expect(offlineDb.updateMessage).toHaveBeenCalledWith({
+            message: messageUpdatedEvent.message,
+            execute: true,
+          });
+
+          expect(result).toEqual(['UPDATE * IN messages']);
+        });
+
+        it('throws if updateMessage rejects', async () => {
+          const error = new Error('updateMessage error');
+          offlineDb.updateMessage.mockRejectedValue(error);
+
+          await expect(
+            offlineDb.handleMessageUpdatedEvent({ event: messageUpdatedEvent }),
+          ).rejects.toThrow(error);
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: messageUpdatedEvent, execute: true },
+            expect.any(Function),
+          );
+        });
+      });
     });
   });
 });
