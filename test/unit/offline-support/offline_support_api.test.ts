@@ -1,4 +1,13 @@
-import { describe, expect, it, beforeEach, afterEach, vi, MockInstance } from 'vitest';
+import {
+  describe,
+  expect,
+  it,
+  beforeEach,
+  afterEach,
+  vi,
+  MockInstance,
+  Mock,
+} from 'vitest';
 import {
   AbstractOfflineDB,
   ChannelAPIResponse,
@@ -10,12 +19,16 @@ import {
   ReadResponse,
   ChannelMemberResponse,
   ChannelResponse,
+  PendingTask,
+  APIErrorResponse,
 } from '../../../src';
 
 import { generateChannel } from '../test-utils/generateChannel';
 import { generateReadResponse } from '../test-utils/generateReadResponse';
+import { generatePendingTask } from '../test-utils/generatePendingTask';
 import { getClientWithUser } from '../test-utils/getClient';
 import * as utils from '../../../src/utils';
+import { AxiosError } from 'axios';
 
 export class MockOfflineDB extends AbstractOfflineDB {
   constructor({ client }: { client: StreamChat }) {
@@ -1606,6 +1619,90 @@ describe('OfflineSupportApi', () => {
           const result = await offlineDb.handleEvent({ event });
           expect(result).toEqual([]);
           expect(offlineDb.deleteChannel).not.toHaveBeenCalled();
+        });
+      });
+    });
+
+    describe('queueing and execution of pending tasks', () => {
+      it('shouldSkipQueueingTask', () => {
+        const shouldSkipQueueingTask = (offlineDb as any)['shouldSkipQueueingTask'].bind(
+          offlineDb,
+        );
+
+        expect(
+          shouldSkipQueueingTask({ response: { data: { code: 4 } } } as AxiosError),
+        ).toBe(true);
+
+        expect(
+          shouldSkipQueueingTask({ response: { data: { code: 17 } } } as AxiosError),
+        ).toBe(true);
+
+        expect(
+          shouldSkipQueueingTask({ response: { data: { code: 999 } } } as AxiosError),
+        ).toBe(false);
+
+        expect(shouldSkipQueueingTask({} as AxiosError)).toBe(false);
+      });
+
+      describe('queueTask', () => {
+        let executeTaskSpy: MockInstance;
+        let shouldSkipSpy: MockInstance;
+        let addPendingTaskSpy: MockInstance;
+        let mockResponse: { ok: boolean };
+
+        const task = generatePendingTask('send-message') as PendingTask;
+
+        beforeEach(() => {
+          mockResponse = { ok: true };
+          executeTaskSpy = vi
+            .spyOn(offlineDb as any, 'executeTask')
+            .mockResolvedValue(mockResponse);
+          shouldSkipSpy = vi.spyOn(offlineDb as any, 'shouldSkipQueueingTask');
+          addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+        });
+
+        afterEach(() => {
+          vi.resetAllMocks();
+        });
+
+        it('should execute the task and return its result if successful', async () => {
+          const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+
+          const result = await offlineDb.queueTask({ task });
+
+          expect(result).toEqual(mockResponse);
+          expect(executeTaskSpy).toHaveBeenCalledWith({ task });
+          expect(addPendingTaskSpy).not.toHaveBeenCalled();
+        });
+
+        it('should add task and rethrow if executeTask throws non-skippable error', async () => {
+          const error = {
+            isAxiosError: true,
+            response: { data: { code: 999 } },
+          } as AxiosError<APIErrorResponse>;
+
+          shouldSkipSpy.mockReturnValue(false);
+          executeTaskSpy.mockRejectedValue(error);
+
+          await expect(offlineDb.queueTask({ task })).rejects.toEqual(error);
+
+          expect(addPendingTaskSpy).toHaveBeenCalledWith(task);
+          expect(shouldSkipSpy).toHaveBeenCalledWith(error);
+        });
+
+        it('should not add task if error is skippable', async () => {
+          const error = {
+            isAxiosError: true,
+            response: { data: { code: 4 } },
+          } as AxiosError<APIErrorResponse>;
+
+          shouldSkipSpy.mockReturnValue(true);
+          executeTaskSpy.mockRejectedValue(error);
+
+          await expect(offlineDb.queueTask({ task })).resolves.toBeUndefined();
+
+          expect(addPendingTaskSpy).not.toHaveBeenCalled();
+          expect(shouldSkipSpy).toHaveBeenCalledWith(error);
         });
       });
     });

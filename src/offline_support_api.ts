@@ -774,10 +774,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     try {
       response = await this.executeTask({ task });
     } catch (e) {
-      if ((e as AxiosError<APIErrorResponse>)?.response?.data?.code === 4) {
-        // Error code 16 - message already exists
-        // ignore
-      } else {
+      if (!this.shouldSkipQueueingTask(e as AxiosError<APIErrorResponse>)) {
         await this.addPendingTask(task);
         throw e;
       }
@@ -785,6 +782,11 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
     return response;
   };
+
+  // Error code 4 - bad request data
+  // Error code 17 - missing own_capabilities to execute the task
+  private shouldSkipQueueingTask = (error: AxiosError<APIErrorResponse>) =>
+    error?.response?.data?.code === 4 || error?.response?.data?.code === 17;
 
   private executeTask = async (
     { task }: { task: PendingTask },
@@ -841,14 +843,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
         );
       } catch (e) {
         const error = e as AxiosError<APIErrorResponse>;
-        if (error?.response?.data?.code === 4) {
-          // Error code 4 - message already exists
-          // ignore
-        } else if (error?.response?.data?.code === 17) {
-          // Error code 17 - missing own_capabilities to execute the task
-          // ignore
-        } else {
-          // executing the pending tasks has failed, so keep it in the queue
+        if (!this.shouldSkipQueueingTask(error)) {
+          // executing the pending task has failed, so keep it in the queue
           continue;
         }
       }
