@@ -1011,11 +1011,6 @@ export class OfflineDBSyncManager {
     }
   };
 
-  private handleEventToSyncDB = async (event: Event, execute?: boolean) => {
-    console.log('SYNCING EVENT: ', event.type);
-    return await this.offlineDb.handleEvent({ event, execute });
-  };
-
   private sync = async () => {
     if (!this.client?.user) {
       return;
@@ -1054,7 +1049,7 @@ export class OfflineDBSyncManager {
           const result = await this.client.sync(cids, lastSyncedAtDate.toISOString());
           console.log('CALLED SYNC API', result.events);
           const queryPromises = result.events.map((event) =>
-            this.handleEventToSyncDB(event, false),
+            this.offlineDb.handleEvent({ event, execute: false }),
           );
           const queriesArray = await Promise.all(queryPromises);
           const queries = queriesArray.flat() as ExecuteBatchQueriesType;

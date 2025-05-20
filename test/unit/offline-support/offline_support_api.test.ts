@@ -2128,5 +2128,47 @@ describe('OfflineDBSyncManager', () => {
         expect(order).toContain('cb2');
       });
     });
+
+    describe('syncAndExecutePendingTasks', () => {
+      let executePendingTasksSpy: MockInstance;
+      let syncSpy: MockInstance;
+
+      beforeEach(() => {
+        executePendingTasksSpy = vi
+          .spyOn(offlineDb, 'executePendingTasks')
+          .mockResolvedValue(undefined);
+        syncSpy = vi.spyOn(syncManager as any, 'sync').mockResolvedValue(undefined);
+      });
+
+      it('executes pending tasks and then performs sync', async () => {
+        await (syncManager as any).syncAndExecutePendingTasks();
+
+        expect(executePendingTasksSpy).toHaveBeenCalled();
+        expect(syncSpy).toHaveBeenCalled();
+        expect(executePendingTasksSpy.mock.invocationCallOrder[0]).toBeLessThan(
+          syncSpy.mock.invocationCallOrder[0],
+        );
+      });
+
+      it('throws if executePendingTasks fails', async () => {
+        const error = new Error('Failed to execute pending tasks');
+        executePendingTasksSpy.mockRejectedValueOnce(error);
+
+        await expect((syncManager as any).syncAndExecutePendingTasks()).rejects.toThrow(
+          error,
+        );
+        expect(syncSpy).not.toHaveBeenCalled();
+      });
+
+      it('throws if sync fails', async () => {
+        const error = new Error('Sync failed');
+        syncSpy.mockRejectedValueOnce(error);
+
+        await expect((syncManager as any).syncAndExecutePendingTasks()).rejects.toThrow(
+          error,
+        );
+        expect(executePendingTasksSpy).toHaveBeenCalled();
+      });
+    });
   });
 });
