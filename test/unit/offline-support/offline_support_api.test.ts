@@ -8,6 +8,8 @@ import {
   Channel,
   MessageResponse,
   ReadResponse,
+  ChannelMemberResponse,
+  ChannelResponse,
 } from '../../../src';
 
 import { generateChannel } from '../test-utils/generateChannel';
@@ -57,23 +59,11 @@ export class MockOfflineDB extends AbstractOfflineDB {
 describe('OfflineSupportApi', () => {
   let client: StreamChat;
   let channelManager: ChannelManager;
-  let channelsResponse: ChannelAPIResponse[];
 
   beforeEach(async () => {
     client = await getClientWithUser();
     channelManager = client.createChannelManager({});
     channelManager.registerSubscriptions();
-
-    // channelsResponse = [
-    //   generateChannel({ channel: { id: 'channel1' } }),
-    //   generateChannel({ channel: { id: 'channel2' } }),
-    //   generateChannel({ channel: { id: 'channel3' } }),
-    // ];
-    // client.hydrateActiveChannels(channelsResponse);
-    // const channels = channelsResponse.map((c) =>
-    //   client.channel(c.channel.type, c.channel.id),
-    // );
-    // channelManager.state.partialNext({ channels, initialized: true });
   });
 
   afterEach(() => {
@@ -927,6 +917,135 @@ describe('OfflineSupportApi', () => {
 
           await expect(offlineDb.handleRead({ event: baseEvent })).rejects.toThrow(
             'Upserting reads failed.',
+          );
+        });
+      });
+
+      describe('handleMemberEvent', () => {
+        const memberAddedEvent: Event = {
+          member: { id: 'member1' } as ChannelMemberResponse,
+          cid: 'messaging:channel123',
+          type: 'member.added',
+          channel: { id: 'channel123', type: 'messaging' } as ChannelResponse,
+        };
+
+        const memberRemovedEvent: Event = {
+          ...memberAddedEvent,
+          type: 'member.removed',
+        };
+
+        beforeEach(() => {
+          // to make it easier for queriesWithChannelGuard to run
+          offlineDb.upsertChannelData.mockResolvedValue([]);
+        });
+
+        afterEach(() => {
+          vi.resetAllMocks();
+        });
+
+        it('returns empty query array if no member or cid exist', async () => {
+          const noMemberEvent = { ...memberAddedEvent, member: undefined };
+          expect(await offlineDb.handleMemberEvent({ event: noMemberEvent })).toEqual([]);
+
+          const noCidEvent = { ...memberAddedEvent, cid: undefined };
+          expect(await offlineDb.handleMemberEvent({ event: noCidEvent })).toEqual([]);
+        });
+
+        it('calls upsertMembers inside queriesWithChannelGuard for member.added event', async () => {
+          offlineDb.upsertMembers.mockResolvedValue(['INSERT INTO members']);
+
+          const result = await offlineDb.handleMemberEvent({
+            event: memberAddedEvent,
+            execute: false,
+          });
+
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: memberAddedEvent, execute: false, forceUpdate: true },
+            expect.any(Function),
+          );
+
+          expect(offlineDb.upsertMembers).toHaveBeenCalledWith({
+            cid: memberAddedEvent.cid,
+            members: [memberAddedEvent.member],
+            execute: false,
+          });
+
+          expect(result).toEqual(['INSERT INTO members']);
+        });
+
+        it('calls upsertMembers inside queriesWithChannelGuard for member.updated event', async () => {
+          const memberUpdatedEvent: Event = {
+            ...memberAddedEvent,
+            type: 'member.updated',
+          };
+          offlineDb.upsertMembers.mockResolvedValue(['UPDATE members']);
+
+          const result = await offlineDb.handleMemberEvent({
+            event: memberUpdatedEvent,
+            execute: false,
+          });
+
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: memberUpdatedEvent, execute: false, forceUpdate: true },
+            expect.any(Function),
+          );
+
+          expect(offlineDb.upsertMembers).toHaveBeenCalledWith({
+            cid: memberUpdatedEvent.cid,
+            members: [memberUpdatedEvent.member],
+            execute: false,
+          });
+
+          expect(result).toEqual(['UPDATE members']);
+        });
+
+        it('calls deleteMember inside queriesWithChannelGuard for member.removed event', async () => {
+          offlineDb.deleteMember.mockResolvedValue(['DELETE * FROM members']);
+
+          const result = await offlineDb.handleMemberEvent({
+            event: memberRemovedEvent,
+            execute: false,
+          });
+
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: memberRemovedEvent, execute: false, forceUpdate: true },
+            expect.any(Function),
+          );
+
+          expect(offlineDb.deleteMember).toHaveBeenCalledWith({
+            member: memberRemovedEvent.member,
+            cid: memberRemovedEvent.cid,
+            execute: false,
+          });
+
+          expect(result).toEqual(['DELETE * FROM members']);
+        });
+
+        it('passes execute = true and calls executeSqlBatch if execute is true', async () => {
+          offlineDb.upsertMembers.mockResolvedValue(['INSERT INTO members']);
+
+          const result = await offlineDb.handleMemberEvent({
+            event: memberAddedEvent,
+            execute: true,
+          });
+
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: memberAddedEvent, execute: true, forceUpdate: true },
+            expect.any(Function),
+          );
+          expect(result).toEqual(['INSERT INTO members']);
+        });
+
+        it('throws if upsertMembers rejects', async () => {
+          const error = new Error('upsertMembers error');
+          offlineDb.upsertMembers.mockRejectedValue(error);
+
+          await expect(
+            offlineDb.handleMemberEvent({ event: memberAddedEvent }),
+          ).rejects.toThrow(error);
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: memberAddedEvent, execute: true, forceUpdate: true },
+            expect.any(Function),
           );
         });
       });
