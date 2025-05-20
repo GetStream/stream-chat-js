@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi, MockInstance } from 'vitest';
 import {
   AbstractOfflineDB,
   ChannelAPIResponse,
@@ -6,9 +6,12 @@ import {
   StreamChat,
   Event,
   Channel,
+  MessageResponse,
+  ReadResponse,
 } from '../../../src';
 
-// import { generateChannel } from './test-utils/generateChannel';
+import { generateChannel } from '../test-utils/generateChannel';
+import { generateReadResponse } from '../test-utils/generateReadResponse';
 import { getClientWithUser } from '../test-utils/getClient';
 import * as utils from '../../../src/utils';
 
@@ -450,7 +453,7 @@ describe('OfflineSupportApi', () => {
 
         const event: Event = {
           type: 'message.new',
-          cid: 'channel:123',
+          cid: 'messaging:123',
           channel_type: 'messaging',
           channel_id: '123',
         };
@@ -458,6 +461,153 @@ describe('OfflineSupportApi', () => {
         await expect(
           offlineDb.queriesWithChannelGuard({ event }, createQueries),
         ).rejects.toThrow('Query generation failed');
+      });
+    });
+
+    describe('ws event handlers', () => {
+      let queriesWithChannelGuardSpy: MockInstance<
+        typeof offlineDb.queriesWithChannelGuard
+      >;
+      let baseEvent: Event;
+      let channelResponse: ChannelAPIResponse;
+      let readResponse: ReadResponse;
+
+      beforeEach(() => {
+        baseEvent = {
+          type: 'message.new',
+          cid: 'messaging:channel123',
+          message: {
+            id: 'msg-1',
+            text: 'Hello!',
+          } as unknown as MessageResponse,
+          user: { id: 'user-b' },
+        };
+        queriesWithChannelGuardSpy = vi.spyOn(offlineDb, 'queriesWithChannelGuard');
+        vi.spyOn(offlineDb, 'channelExists').mockResolvedValue(true);
+        readResponse = generateReadResponse({ user: client.user });
+        channelResponse = generateChannel({
+          channel: { id: 'channel123', type: 'messaging' },
+          read: [readResponse],
+        } as ChannelAPIResponse);
+        client.hydrateActiveChannels([channelResponse]);
+
+        // to make sure queriesWithChannelGuard always passes
+        offlineDb.channelExists.mockResolvedValue(true);
+      });
+
+      afterEach(() => {
+        vi.resetAllMocks();
+      });
+      describe('handleNewMessage', () => {
+        const mockUpsertMessagesQueries = [
+          'INSERT INTO messages',
+          'INSERT INTO messages',
+        ];
+        const mockUpsertReadsQueries = ['INSERT INTO reads', 'DELETE * FROM reads'];
+        const mockQueries = [...mockUpsertMessagesQueries, ...mockUpsertReadsQueries];
+
+        beforeEach(() => {
+          offlineDb.upsertMessages.mockResolvedValue(mockUpsertMessagesQueries);
+          offlineDb.upsertReads.mockResolvedValue(mockUpsertReadsQueries);
+        });
+
+        it('should return empty array if message is missing', async () => {
+          const result = await offlineDb.handleNewMessage({
+            event: { ...baseEvent, message: undefined },
+          });
+          expect(result).toEqual([]);
+          expect(queriesWithChannelGuardSpy).not.toHaveBeenCalled();
+        });
+
+        it('should return empty array if message is a thread reply and not shown in channel', async () => {
+          const result = await offlineDb.handleNewMessage({
+            event: {
+              ...baseEvent,
+              message: {
+                ...baseEvent.message!,
+                parent_id: 'msg-parent',
+                show_in_channel: false,
+              },
+            },
+          });
+          expect(result).toEqual([]);
+          expect(queriesWithChannelGuardSpy).not.toHaveBeenCalled();
+        });
+
+        it('should call all queries and executeSqlBatch when execute is true', async () => {
+          const result = await offlineDb.handleNewMessage({
+            event: baseEvent,
+            execute: true,
+          });
+
+          expect(offlineDb.upsertMessages).toHaveBeenCalledWith({
+            execute: false,
+            messages: [baseEvent.message],
+          });
+          expect(offlineDb.upsertReads).toHaveBeenCalledWith({
+            cid: baseEvent.cid,
+            execute: false,
+            reads: [readResponse],
+          });
+          expect(offlineDb.executeSqlBatch).toHaveBeenCalledWith(mockQueries);
+          expect(result).toEqual(mockQueries);
+        });
+
+        it('should not call upsertReads if event.user is the same as client user', async () => {
+          const eventWithSameUser = { ...baseEvent, user: client.user };
+
+          const result = await offlineDb.handleNewMessage({
+            event: eventWithSameUser,
+            execute: false,
+          });
+
+          expect(offlineDb.upsertMessages).toHaveBeenCalled();
+          expect(offlineDb.upsertReads).not.toHaveBeenCalled();
+          expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+          expect(result).toEqual(mockUpsertMessagesQueries);
+        });
+
+        it('should not call upsertReads event.cid does not exist in client.activeChannels', async () => {
+          const eventWithSameUser = { ...baseEvent, cid: 'channel321' };
+
+          const result = await offlineDb.handleNewMessage({
+            event: eventWithSameUser,
+            execute: false,
+          });
+
+          expect(offlineDb.upsertMessages).toHaveBeenCalled();
+          expect(offlineDb.upsertReads).not.toHaveBeenCalled();
+          expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+          expect(result).toEqual(mockUpsertMessagesQueries);
+        });
+
+        it('should not call executeSqlBatch if execute is false', async () => {
+          const result = await offlineDb.handleNewMessage({
+            event: baseEvent,
+            execute: false,
+          });
+
+          expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+          expect(result).toEqual(mockQueries);
+        });
+
+        it('should propagate error if upsertMessages throws', async () => {
+          offlineDb.upsertMessages.mockRejectedValue(
+            new Error('Upserting messages has failed'),
+          );
+
+          await expect(offlineDb.handleNewMessage({ event: baseEvent })).rejects.toThrow(
+            'Upserting messages has failed',
+          );
+        });
+
+        it('should propagate error if queriesWithChannelGuard throws', async () => {
+          queriesWithChannelGuardSpy.mockRejectedValue(new Error('guard failed'));
+
+          await expect(offlineDb.handleNewMessage({ event: baseEvent })).rejects.toThrow(
+            'guard failed',
+          );
+        });
       });
     });
   });

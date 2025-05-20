@@ -416,7 +416,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
               execute: false,
               reads: [
                 {
-                  last_read: ownReads.last_read.toString() as string,
+                  last_read: ownReads.last_read.toISOString() as string,
                   last_read_message_id: ownReads.last_read_message_id,
                   unread_messages: unreadCount,
                   user: client.user,
