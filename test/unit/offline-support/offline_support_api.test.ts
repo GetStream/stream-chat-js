@@ -549,6 +549,10 @@ describe('OfflineSupportApi', () => {
             reads: [readResponse],
           });
           expect(offlineDb.executeSqlBatch).toHaveBeenCalledWith(mockQueries);
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: baseEvent, execute: true },
+            expect.any(Function),
+          );
           expect(result).toEqual(mockQueries);
         });
 
@@ -563,20 +567,28 @@ describe('OfflineSupportApi', () => {
           expect(offlineDb.upsertMessages).toHaveBeenCalled();
           expect(offlineDb.upsertReads).not.toHaveBeenCalled();
           expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: eventWithSameUser, execute: false },
+            expect.any(Function),
+          );
           expect(result).toEqual(mockUpsertMessagesQueries);
         });
 
         it('should not call upsertReads event.cid does not exist in client.activeChannels', async () => {
-          const eventWithSameUser = { ...baseEvent, cid: 'channel321' };
+          const eventWithDifferentCid = { ...baseEvent, cid: 'channel321' };
 
           const result = await offlineDb.handleNewMessage({
-            event: eventWithSameUser,
+            event: eventWithDifferentCid,
             execute: false,
           });
 
           expect(offlineDb.upsertMessages).toHaveBeenCalled();
           expect(offlineDb.upsertReads).not.toHaveBeenCalled();
           expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: eventWithDifferentCid, execute: false },
+            expect.any(Function),
+          );
           expect(result).toEqual(mockUpsertMessagesQueries);
         });
 
@@ -587,6 +599,10 @@ describe('OfflineSupportApi', () => {
           });
 
           expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: baseEvent, execute: false },
+            expect.any(Function),
+          );
           expect(result).toEqual(mockQueries);
         });
 
@@ -598,6 +614,10 @@ describe('OfflineSupportApi', () => {
           await expect(offlineDb.handleNewMessage({ event: baseEvent })).rejects.toThrow(
             'Upserting messages has failed',
           );
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: baseEvent, execute: true },
+            expect.any(Function),
+          );
         });
 
         it('should propagate error if queriesWithChannelGuard throws', async () => {
@@ -605,6 +625,10 @@ describe('OfflineSupportApi', () => {
 
           await expect(offlineDb.handleNewMessage({ event: baseEvent })).rejects.toThrow(
             'guard failed',
+          );
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: baseEvent, execute: true },
+            expect.any(Function),
           );
         });
       });
@@ -635,6 +659,10 @@ describe('OfflineSupportApi', () => {
           });
           expect(offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
           expect(result).toEqual([['DELETE soft']]);
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: deletedEvent, execute: true },
+            expect.any(Function),
+          );
         });
 
         it('hard deletes a message when `hard_delete` is true', async () => {
@@ -649,6 +677,10 @@ describe('OfflineSupportApi', () => {
           });
           expect(offlineDb.softDeleteMessage).not.toHaveBeenCalled();
           expect(result).toEqual([['DELETE hard']]);
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: eventWithHardDelete, execute: true },
+            expect.any(Function),
+          );
         });
 
         it('returns an empty array if no message is present on the event', async () => {
@@ -659,7 +691,7 @@ describe('OfflineSupportApi', () => {
           expect(result).toEqual([]);
           expect(offlineDb.softDeleteMessage).not.toHaveBeenCalled();
           expect(offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
-          expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+          expect(queriesWithChannelGuardSpy).not.toHaveBeenCalled();
         });
 
         it('does not execute the queries if execute is false', async () => {
@@ -673,24 +705,37 @@ describe('OfflineSupportApi', () => {
             execute: false,
           });
           expect(result).toEqual([['DELETE soft']]);
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: deletedEvent, execute: false },
+            expect.any(Function),
+          );
         });
 
         it('handles errors gracefully from softDeleteMessage', async () => {
           offlineDb.softDeleteMessage.mockRejectedValue(new Error('soft delete failed'));
 
           await expect(
-            offlineDb.handleDeleteMessage({ event: baseEvent }),
+            offlineDb.handleDeleteMessage({ event: deletedEvent }),
           ).rejects.toThrow('soft delete failed');
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: deletedEvent, execute: true },
+            expect.any(Function),
+          );
         });
 
         it('handles errors gracefully from hardDeleteMessage', async () => {
+          const eventWithHardDelete = { ...deletedEvent, hard_delete: true };
           offlineDb.hardDeleteMessage.mockRejectedValue(new Error('hard delete failed'));
 
           await expect(
             offlineDb.handleDeleteMessage({
-              event: { ...baseEvent, hard_delete: true },
+              event: eventWithHardDelete,
             }),
           ).rejects.toThrow('hard delete failed');
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: eventWithHardDelete, execute: true },
+            expect.any(Function),
+          );
         });
       });
 
@@ -756,6 +801,132 @@ describe('OfflineSupportApi', () => {
 
           await expect(offlineDb.handleRemoveMessage({ messageId })).rejects.toThrow(
             'hard delete failed',
+          );
+        });
+      });
+
+      describe('handleRead', () => {
+        let readEvent: Event;
+
+        beforeEach(() => {
+          readEvent = {
+            ...baseEvent,
+            cid: 'channel-123',
+            user: { id: 'user-1', name: 'Alice' },
+            last_read_message_id: 'msg-987',
+            received_at: '2023-01-01T00:00:00Z',
+            unread_messages: 3,
+          };
+          offlineDb.upsertReads.mockResolvedValue([['UPSERT read']]);
+        });
+
+        afterEach(() => {
+          vi.resetAllMocks();
+        });
+
+        it('inserts read with provided unreadMessages override and executes the batch', async () => {
+          const result = await offlineDb.handleRead({
+            event: readEvent,
+            unreadMessages: 5,
+          });
+
+          expect(offlineDb.upsertReads).toHaveBeenCalledWith({
+            cid: readEvent.cid,
+            execute: true,
+            reads: [
+              {
+                last_read: readEvent.received_at,
+                last_read_message_id: readEvent.last_read_message_id,
+                unread_messages: 5,
+                user: readEvent.user,
+              },
+            ],
+          });
+
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: readEvent, execute: true },
+            expect.any(Function),
+          );
+          expect(result).toEqual([['UPSERT read']]);
+        });
+
+        it('inserts read using event.unread_messages when no override is provided', async () => {
+          const result = await offlineDb.handleRead({
+            event: readEvent,
+          });
+
+          expect(offlineDb.upsertReads).toHaveBeenCalledWith({
+            cid: readEvent.cid,
+            execute: true,
+            reads: [
+              {
+                last_read: readEvent.received_at,
+                last_read_message_id: readEvent.last_read_message_id,
+                unread_messages: readEvent.unread_messages,
+                user: readEvent.user,
+              },
+            ],
+          });
+
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: readEvent, execute: true },
+            expect.any(Function),
+          );
+          expect(result).toEqual([['UPSERT read']]);
+        });
+
+        it('skips execution if execute is false', async () => {
+          const result = await offlineDb.handleRead({
+            event: readEvent,
+            execute: false,
+          });
+
+          expect(offlineDb.upsertReads).toHaveBeenCalledWith({
+            cid: readEvent.cid,
+            execute: false,
+            reads: [
+              {
+                last_read: readEvent.received_at,
+                last_read_message_id: readEvent.last_read_message_id,
+                unread_messages: readEvent.unread_messages,
+                user: readEvent.user,
+              },
+            ],
+          });
+
+          expect(queriesWithChannelGuardSpy).toHaveBeenCalledWith(
+            { event: readEvent, execute: false },
+            expect.any(Function),
+          );
+          expect(result).toEqual([['UPSERT read']]);
+        });
+
+        it('returns empty array if user is missing', async () => {
+          const result = await offlineDb.handleRead({
+            event: { ...readEvent, user: undefined },
+          });
+
+          expect(result).toEqual([]);
+          expect(offlineDb.upsertReads).not.toHaveBeenCalled();
+          expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+          expect(queriesWithChannelGuardSpy).not.toHaveBeenCalled();
+        });
+
+        it('returns empty array if cid is missing', async () => {
+          const result = await offlineDb.handleRead({
+            event: { ...readEvent, cid: undefined },
+          });
+
+          expect(result).toEqual([]);
+          expect(offlineDb.upsertReads).not.toHaveBeenCalled();
+          expect(queriesWithChannelGuardSpy).not.toHaveBeenCalled();
+        });
+
+        it('handles errors from upsertReads', async () => {
+          offlineDb.upsertReads.mockRejectedValue(new Error('Upserting reads failed.'));
+
+          await expect(offlineDb.handleRead({ event: baseEvent })).rejects.toThrow(
+            'Upserting reads failed.',
           );
         });
       });
