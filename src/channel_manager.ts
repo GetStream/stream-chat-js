@@ -19,14 +19,9 @@ import {
   shouldConsiderArchivedChannels,
   shouldConsiderPinnedChannels,
   uniqBy,
+  waitSeconds,
 } from './utils';
 import { generateUUIDv4 } from './utils';
-
-// TODO: Move this somewhere fancier
-const waitSeconds = (seconds: number) =>
-  new Promise((resolve) => {
-    setTimeout(resolve, seconds * 1000);
-  });
 
 export type ChannelManagerPagination = {
   filters: ChannelFilters;

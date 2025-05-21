@@ -24,6 +24,7 @@ import {
   promoteChannel,
   uniqBy,
   runDetached,
+  waitSeconds,
 } from '../../src/utils';
 
 import type {
@@ -1133,5 +1134,40 @@ describe('runDetached', () => {
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(onErrorCallback).toHaveBeenCalledWith(error);
+  });
+});
+
+describe('waitSeconds', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('resolves after the specified number of seconds', async () => {
+    const waitPromise = waitSeconds(2);
+
+    // Advance time by 2 seconds
+    vi.advanceTimersByTime(2000);
+
+    await expect(waitPromise).resolves.toBeUndefined();
+  });
+
+  it('does not resolve before the time has passed', async () => {
+    const waitPromise = waitSeconds(3);
+
+    let resolved = false;
+    waitPromise.then(() => {
+      resolved = true;
+    });
+
+    vi.advanceTimersByTime(2000);
+    expect(resolved).toBe(false);
+
+    vi.advanceTimersByTime(1000);
+    await waitPromise;
+    expect(resolved).toBe(true);
   });
 });

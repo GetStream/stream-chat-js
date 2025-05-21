@@ -1210,6 +1210,11 @@ export const isDate = (value: unknown): value is Date => !!(value as Date).getTi
 export const isLocalMessage = (message: unknown): message is LocalMessage =>
   isDate((message as LocalMessage).created_at);
 
+export const waitSeconds = (seconds: number) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, seconds * 1000);
+  });
+
 export const runDetached = <T>(
   callback: Promise<T>,
   options?: {
