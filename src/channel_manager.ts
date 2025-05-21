@@ -84,6 +84,11 @@ export type ChannelManagerEventHandlerOverrides = Partial<
   Record<ChannelManagerEventHandlerNames, EventHandlerOverrideType>
 >;
 
+export type QueryChannelsRequestPayload = Pick<
+  ChannelManagerPagination,
+  'filters' | 'sort' | 'options'
+> & { stateOptions: ChannelStateOptions };
+
 export const channelManagerEventToHandlerMapping: {
   [key in ChannelManagerEventTypes]: ChannelManagerEventHandlerNames;
 } = {
@@ -245,16 +250,73 @@ export class ChannelManager {
     this.options = { ...DEFAULT_CHANNEL_MANAGER_OPTIONS, ...options };
   };
 
+  private queryChannelsRequest = async (
+    payload: QueryChannelsRequestPayload,
+    retryCount = 0,
+  ): Promise<void> => {
+    const { filters, sort, options, stateOptions } = payload;
+    const { offset, limit } = {
+      ...DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS,
+      ...options,
+    };
+    try {
+      const channels = await this.client.queryChannels(
+        filters,
+        sort,
+        options,
+        stateOptions,
+      );
+      console.log('CHANNELS QUERIED !');
+      const newOffset = offset + (channels?.length ?? 0);
+      const newOptions = { ...options, offset: newOffset };
+      const { pagination } = this.state.getLatestValue();
+
+      this.state.partialNext({
+        channels,
+        pagination: {
+          ...pagination,
+          hasNext: (channels?.length ?? 0) >= limit,
+          isLoading: false,
+          options: newOptions,
+        },
+        initialized: true,
+        error: undefined,
+      });
+      this.client.offlineDb?.executeQuerySafely(
+        (db) =>
+          db.upsertCidsForQuery({
+            cids: channels.map((channel) => channel.cid),
+            filters: pagination.filters,
+            sort: pagination.sort,
+          }),
+        { method: 'upsertCidsForQuery' },
+      );
+    } catch (err) {
+      // TODO: Extract this as a constant
+      if (retryCount >= 2) {
+        console.warn(err);
+
+        const wrappedError = new Error(
+          `Maximum number of retries reached in queryChannels. Last error message is: ${err}`,
+        );
+
+        this.state.partialNext({ error: wrappedError });
+        return;
+      }
+
+      // TODO: Maybe make this configurable ?
+      await waitSeconds(2);
+
+      return this.queryChannelsRequest(payload, retryCount + 1);
+    }
+  };
+
   public queryChannels = async (
     filters: ChannelFilters,
     sort: ChannelSort = [],
     options: ChannelOptions = {},
     stateOptions: ChannelStateOptions = {},
   ) => {
-    const { offset, limit } = {
-      ...DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS,
-      ...options,
-    };
     const {
       pagination: { isLoading, filters: filtersFromState },
       initialized,
@@ -268,57 +330,7 @@ export class ChannelManager {
       return;
     }
 
-    const queryChannelsRequest = async (retryCount = 0) => {
-      try {
-        const channels = await this.client.queryChannels(
-          filters,
-          sort,
-          options,
-          stateOptions,
-        );
-        console.log('CHANNELS QUERIED !');
-        const newOffset = offset + (channels?.length ?? 0);
-        const newOptions = { ...options, offset: newOffset };
-        const { pagination } = this.state.getLatestValue();
-
-        this.state.partialNext({
-          channels,
-          pagination: {
-            ...pagination,
-            hasNext: (channels?.length ?? 0) >= limit,
-            isLoading: false,
-            options: newOptions,
-          },
-          initialized: true,
-        });
-        this.client.offlineDb?.executeQuerySafely(
-          (db) =>
-            db.upsertCidsForQuery({
-              cids: channels.map((channel) => channel.cid),
-              filters: pagination.filters,
-              sort: pagination.sort,
-            }),
-          { method: 'upsertCidsForQuery' },
-        );
-      } catch (err) {
-        // TODO: Maybe make this configurable ?
-        await waitSeconds(2);
-
-        // TODO: Extract this as a constant
-        if (retryCount >= 3) {
-          console.warn(err);
-
-          const wrappedError = new Error(
-            `Maximum number of retries reached in queryChannels. Last error message is: ${err}`,
-          );
-
-          this.state.partialNext({ error: wrappedError });
-          return;
-        }
-
-        return queryChannelsRequest(retryCount + 1);
-      }
-    };
+    const queryChannelsRequestPayload = { filters, sort, options, stateOptions };
 
     try {
       this.stateOptions = stateOptions;
@@ -360,14 +372,13 @@ export class ChannelManager {
           this.client.offlineDb.syncManager.scheduleSyncStatusChangeCallback(
             this.id,
             async () => {
-              await queryChannelsRequest();
+              await this.queryChannelsRequest(queryChannelsRequestPayload);
             },
           );
           return;
         }
-        // await queryChannelsRequest();
       }
-      await queryChannelsRequest();
+      await this.queryChannelsRequest(queryChannelsRequestPayload);
     } catch (error) {
       this.client.logger('error', (error as Error).message);
       this.state.next((currentState) => ({

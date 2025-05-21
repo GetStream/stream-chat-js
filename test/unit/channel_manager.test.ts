@@ -434,6 +434,10 @@ describe('ChannelManager', () => {
     });
 
     describe('queryChannels', () => {
+      // describe('with OfflineDB', () => {
+      //
+      // })
+
       it('should not query if pagination.isLoading is true', async () => {
         channelManager.state.next((prevState) => ({
           ...prevState,
@@ -501,6 +505,157 @@ describe('ChannelManager', () => {
         expect(clientQueryChannelsStub.calledOnce).to.be.true;
         expect(stateChangeSpy.calledOnce).to.be.true;
         expect(stateChangeSpy.args[0][0]).to.deep.equal({ initialized: true });
+      });
+
+      describe('queryChannelsRequest', () => {
+        it('should properly update the options after queryChannelsRequest', async () => {
+          const stateChangeSpy = sinon.spy();
+          channelManager.state.subscribeWithSelector(
+            (nextValue) => ({ pagination: nextValue.pagination }),
+            stateChangeSpy,
+          );
+          stateChangeSpy.resetHistory();
+
+          await channelManager['queryChannelsRequest']({
+            filters: { filterA: true },
+            sort: { asc: 1 },
+            options: { limit: 10, offset: 0 },
+          });
+
+          const { channels } = channelManager.state.getLatestValue();
+
+          expect(clientQueryChannelsStub.calledOnce).to.be.true;
+          expect(
+            clientQueryChannelsStub.calledWith(
+              { filterA: true },
+              { asc: 1 },
+              { limit: 10, offset: 0 },
+            ),
+          );
+          expect(stateChangeSpy.callCount).to.equal(1);
+          expect(stateChangeSpy.args[0][0]).to.deep.equal({
+            pagination: {
+              filters: {},
+              hasNext: true,
+              isLoading: false,
+              isLoadingNext: false,
+              options: { limit: 10, offset: 10 },
+              sort: {},
+            },
+          });
+          expect(channels.length).to.equal(10);
+        });
+
+        it('should properly update hasNext and offset after queryChannelsRequest if the first returned page is less than the limit', async () => {
+          clientQueryChannelsStub.callsFake(() => mockChannelPages[2]);
+          await channelManager['queryChannelsRequest']({
+            filters: { filterA: true },
+            sort: { asc: 1 },
+            options: { limit: 10, offset: 0 },
+          });
+
+          const {
+            channels,
+            pagination: {
+              hasNext,
+              options: { offset },
+            },
+          } = channelManager.state.getLatestValue();
+
+          expect(clientQueryChannelsStub.calledOnce).to.be.true;
+          expect(channels.length).to.equal(5);
+          expect(offset).to.equal(5);
+          expect(hasNext).to.be.false;
+        });
+
+        it('retries up to 3 times when queryChannels fails', async () => {
+          clientQueryChannelsStub.rejects(new Error('fail'));
+          const waitSecondsSpy = vi.spyOn(utils, 'waitSeconds');
+          const stateChangeSpy = sinon.spy();
+          channelManager.state.subscribeWithSelector(
+            (nextValue) => ({ error: nextValue.error }),
+            stateChangeSpy,
+          );
+          stateChangeSpy.resetHistory();
+
+          await channelManager['queryChannelsRequest']({
+            filters: { filterA: true },
+            sort: { asc: 1 },
+            options: { limit: 10, offset: 0 },
+          });
+
+          const { channels, initialized } = channelManager.state.getLatestValue();
+
+          expect(clientQueryChannelsStub.callCount).to.equal(3); // initial + 2 retries
+          expect(waitSecondsSpy).toHaveBeenCalledTimes(2);
+          expect(stateChangeSpy.callCount).to.equal(1);
+          expect(stateChangeSpy.args[0][0]).to.deep.equal({
+            error: new Error(
+              'Maximum number of retries reached in queryChannels. Last error message is: Error: fail',
+            ),
+          });
+          expect(channels.length).to.equal(0);
+          expect(initialized).to.be.false;
+        });
+
+        it('does not retry more than 3 times', async () => {
+          clientQueryChannelsStub.rejects(new Error('fail'));
+          const waitSecondsSpy = vi.spyOn(utils, 'waitSeconds');
+          const stateChangeSpy = sinon.spy();
+          channelManager.state.subscribeWithSelector(
+            (nextValue) => ({ error: nextValue.error }),
+            stateChangeSpy,
+          );
+          stateChangeSpy.resetHistory();
+
+          await channelManager['queryChannelsRequest'](
+            {
+              filters: { filterA: true },
+              sort: { asc: 1 },
+              options: { limit: 10, offset: 0 },
+            },
+            3,
+          );
+
+          const { channels, initialized } = channelManager.state.getLatestValue();
+
+          expect(clientQueryChannelsStub.callCount).to.equal(1);
+          expect(waitSecondsSpy).toHaveBeenCalledTimes(0);
+          expect(stateChangeSpy.callCount).to.equal(1);
+          expect(stateChangeSpy.args[0][0]).to.deep.equal({
+            error: new Error(
+              'Maximum number of retries reached in queryChannels. Last error message is: Error: fail',
+            ),
+          });
+          expect(channels.length).to.equal(0);
+          expect(initialized).to.be.false;
+        });
+
+        it('retries once and succeeds on second try', async () => {
+          clientQueryChannelsStub.onFirstCall().rejects(new Error('flaky'));
+          const waitSecondsSpy = vi.spyOn(utils, 'waitSeconds');
+          const stateChangeSpy = sinon.spy();
+          channelManager.state.subscribeWithSelector(
+            (nextValue) => ({ error: nextValue.error, channels: nextValue.channels }),
+            stateChangeSpy,
+          );
+          stateChangeSpy.resetHistory();
+
+          await channelManager['queryChannelsRequest']({
+            filters: { filterA: true },
+            sort: { asc: 1 },
+            options: { limit: 10, offset: 0 },
+          });
+
+          const { channels, initialized } = channelManager.state.getLatestValue();
+
+          expect(clientQueryChannelsStub.callCount).to.equal(2);
+          expect(waitSecondsSpy).toHaveBeenCalledTimes(1);
+          expect(stateChangeSpy.callCount).to.equal(1);
+          expect(stateChangeSpy.args[0][0].channels.length).to.equal(10);
+          expect(channels.length).to.equal(10);
+          expect(initialized).to.be.true;
+        });
       });
 
       it('should properly set the new pagination parameters and update the offset after the query', async () => {
