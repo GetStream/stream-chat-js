@@ -368,13 +368,10 @@ export class ChannelManager {
           }
         }
 
-        console.log('SEEHERE', !this.client.offlineDb.syncManager.syncStatus);
-
         if (!this.client.offlineDb.syncManager.syncStatus) {
           this.client.offlineDb.syncManager.scheduleSyncStatusChangeCallback(
             this.id,
             async () => {
-              console.log('DID THIS');
               await this.queryChannelsRequest(queryChannelsRequestPayload);
             },
           );
