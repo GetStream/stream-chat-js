@@ -851,24 +851,8 @@ export class StreamChat {
    * getAppSettings - retrieves application settings
    */
   async getAppSettings() {
-    const userId = this.userID as string;
-    if (!this.wsConnection?.isHealthy && this.offlineDb && userId) {
-      this.appSettingsPromise = this.offlineDb?.getAppSettings({
-        userId,
-      }) as Promise<AppSettingsAPIResponse>;
-      return await this.appSettingsPromise;
-    }
     this.appSettingsPromise = this.get<AppSettingsAPIResponse>(this.baseURL + '/app');
-    const appSettings = await this.appSettingsPromise;
-
-    if (userId) {
-      this.offlineDb?.executeQuerySafely(
-        (db) => db.upsertAppSettings({ appSettings, userId }),
-        { method: 'upsertAppSettings' },
-      );
-    }
-
-    return appSettings;
+    return await this.appSettingsPromise;
   }
 
   /**
