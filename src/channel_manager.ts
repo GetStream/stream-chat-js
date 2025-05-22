@@ -266,7 +266,6 @@ export class ChannelManager {
         options,
         stateOptions,
       );
-      console.log('CHANNELS QUERIED !');
       const newOffset = offset + (channels?.length ?? 0);
       const newOptions = { ...options, offset: newOffset };
       const { pagination } = this.state.getLatestValue();
@@ -355,10 +354,7 @@ export class ChannelManager {
             sort,
           });
 
-          console.log('CHANNELS FROM DB PRE: ', channelsFromDB);
-
           if (channelsFromDB) {
-            console.log('GOT CHANNELS FROM DB !', initialized, isLoading);
             const offlineChannels = this.client.hydrateActiveChannels(channelsFromDB, {
               offlineMode: true,
               skipInitialization: [], // passing empty array will clear out the existing messages from channel state, this removes the possibility of duplicate messages
