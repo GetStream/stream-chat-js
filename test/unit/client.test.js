@@ -1019,6 +1019,55 @@ describe('message deletion', () => {
 	});
 });
 
+describe('dispatchEvent: offlineDb.executeQuerySafely', () => {
+	let client;
+	let executeQuerySafelySpy;
+
+	beforeEach(async () => {
+		client = await getClientWithUser({ id: 'user-abc' });
+		const offlineDb = new MockOfflineDB({ client });
+		await offlineDb.init(client.userID);
+		client.setOfflineDBApi(offlineDb);
+
+		executeQuerySafelySpy = vi.spyOn(offlineDb, 'executeQuerySafely');
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('should call executeQuerySafely with correct event', () => {
+		const testEvent = {
+			type: 'message.new',
+			cid: 'messaging:test',
+		};
+
+		vi.spyOn(client.offlineDb, 'handleEvent').mockResolvedValue({});
+
+		client.dispatchEvent(testEvent);
+
+		expect(executeQuerySafelySpy).toHaveBeenCalledTimes(1);
+		expect(executeQuerySafelySpy).toHaveBeenCalledWith(expect.any(Function), {
+			method: 'handleEvent;message.new',
+		});
+
+		// Verify the inner function calls db.handleEvent correctly
+		const fn = executeQuerySafelySpy.mock.calls[0][0];
+		fn(client.offlineDb);
+
+		expect(client.offlineDb.handleEvent).toHaveBeenCalledWith({ event: testEvent });
+	});
+
+	it('should work normally if client.offlineDb is not set', () => {
+		client.offlineDb = undefined;
+
+		const event = { type: 'user.updated' };
+
+		expect(() => client.dispatchEvent(event)).not.toThrow();
+		expect(executeQuerySafelySpy).not.toHaveBeenCalled();
+	});
+});
+
 describe('X-Stream-Client header', () => {
 	let client;
 
