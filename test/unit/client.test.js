@@ -9,9 +9,19 @@ import { StableWSConnection } from '../../src/connection';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
 
-import { describe, beforeEach, it, expect, beforeAll, afterAll } from 'vitest';
+import {
+	describe,
+	beforeEach,
+	it,
+	expect,
+	beforeAll,
+	afterEach,
+	afterAll,
+	vi,
+} from 'vitest';
 import { Channel } from '../../src';
-import { ChannelAPIResponse } from '../../src';
+import { normalizeQuerySort } from '../../src/utils';
+import { MockOfflineDB } from './offline-support/MockOfflineDB';
 
 describe('StreamChat getInstance', () => {
 	beforeEach(() => {
@@ -747,6 +757,137 @@ describe('StreamChat.queryChannels', async () => {
 			});
 		});
 		mock.restore();
+	});
+});
+
+describe('StreamChat.queryReactions', () => {
+	let client;
+	let dispatchSpy;
+	let postStub;
+	const messageId = 'msg-1';
+	const filter = { type: { $in: ['like', 'love'] } };
+	const sort = [{ created_at: -1 }];
+	const options = { limit: 50 };
+
+	const offlineReactions = [
+		{ type: 'like', user_id: 'user-1', message_id: messageId },
+		{ type: 'love', user_id: 'user-2', message_id: messageId },
+	];
+
+	const postResponse = {
+		reactions: [
+			{ type: 'like', user_id: 'user-1', message_id: messageId },
+			{ type: 'love', user_id: 'user-2', message_id: messageId },
+		],
+	};
+
+	beforeEach(async () => {
+		client = await getClientWithUser();
+		const offlineDb = new MockOfflineDB({ client });
+
+		client.setOfflineDBApi(offlineDb);
+		await client.offlineDb.init(client.userID);
+
+		dispatchSpy = vi.spyOn(client, 'dispatchEvent');
+		postStub = vi.spyOn(client, 'post').mockResolvedValueOnce(postResponse);
+		client.offlineDb.getReactions.mockResolvedValue(offlineReactions);
+	});
+
+	afterEach(() => {
+		vi.resetAllMocks();
+	});
+
+	it('should query reactions from offlineDb and dispatch offline_reactions.queried event', async () => {
+		const result = await client.queryReactions(messageId, filter, sort, options);
+
+		expect(client.offlineDb.getReactions).toHaveBeenCalledWith({
+			messageId,
+			filters: filter,
+			sort,
+			limit: options.limit,
+		});
+
+		expect(dispatchSpy).toHaveBeenCalledTimes(1);
+		// dispatchEvent enriches the event with some extra data which
+		// makes testing inconvenient.
+		const dispatchSpyCallArguments = dispatchSpy.mock.calls[0];
+		delete dispatchSpyCallArguments[0].received_at;
+		expect(dispatchSpyCallArguments).toStrictEqual([
+			{
+				type: 'offline_reactions.queried',
+				offlineReactions,
+			},
+		]);
+
+		expect(postStub).toHaveBeenCalledTimes(1);
+		expect(postStub).toHaveBeenCalledWith(
+			`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reactions`,
+			{
+				filter,
+				sort: normalizeQuerySort(sort),
+				limit: 50,
+			},
+		);
+
+		expect(result).to.eql(postResponse);
+	});
+
+	it('should skip querying offlineDb if options.next is true', async () => {
+		await client.queryReactions(messageId, filter, sort, { next: true, limit: 20 });
+
+		expect(client.offlineDb.getReactions).not.toHaveBeenCalled();
+
+		expect(postStub).toHaveBeenCalledWith(
+			`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reactions`,
+			{
+				filter,
+				sort: normalizeQuerySort(sort),
+				next: true,
+				limit: 20,
+			},
+		);
+	});
+
+	it('should not dispatch event if offlineDb returns null', async () => {
+		client.offlineDb.getReactions.mockResolvedValue(null);
+
+		await client.queryReactions(messageId, filter, sort, options);
+
+		expect(client.offlineDb.getReactions).toHaveBeenCalledTimes(1);
+		expect(dispatchSpy).not.toHaveBeenCalled();
+		expect(postStub).toHaveBeenCalledWith(
+			`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reactions`,
+			{
+				filter,
+				sort: normalizeQuerySort(sort),
+				limit: 50,
+			},
+		);
+	});
+
+	it('should log a warning if offlineDb.getReactions throws', async () => {
+		client.offlineDb.getReactions.mockRejectedValue(new Error('DB error'));
+		const loggerSpy = vi.fn();
+		client.logger = loggerSpy;
+
+		await client.queryReactions(messageId, filter, sort, options);
+
+		expect(loggerSpy).toHaveBeenCalledWith(
+			'warn',
+			'An error has occurred while querying offline reactions',
+			expect.objectContaining({
+				error: expect.any(Error),
+			}),
+		);
+		expect(dispatchSpy).not.toHaveBeenCalled();
+		expect(postStub).toHaveBeenCalledWith(
+			`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reactions`,
+			{
+				filter,
+				sort: normalizeQuerySort(sort),
+				limit: 50,
+			},
+		);
 	});
 });
 
