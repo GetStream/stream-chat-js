@@ -11,6 +11,8 @@ export const VALID_MAX_VOTES_VALUE_REGEX = /^([2-9]|10)$/;
 
 export const MAX_POLL_OPTIONS = 100 as const;
 
+const textFieldIsEmpty = (text: string) => !text.trim();
+
 export type PollStateValidationOutput = Partial<
   Omit<Record<keyof PollComposerState['data'], string>, 'options'> & {
     options?: Record<string, string>;
@@ -74,8 +76,19 @@ export const defaultPollFieldBlurEventValidators: Partial<
     return { max_votes_allowed: undefined };
   },
   name: ({ value }) => {
-    if (!value) return { name: 'Name is required' };
+    if (textFieldIsEmpty(value)) return { name: 'Question is required' };
     return { name: undefined };
+  },
+  options: (params) => {
+    const defaultResult = pollStateChangeValidators.options?.(params);
+    const errors = defaultResult?.options ?? {};
+    params.value.forEach((option: { id: string; text: string }, index: number) => {
+      const isTheLastOption = index === params.value.length - 1;
+      if (textFieldIsEmpty(option.text) && !isTheLastOption) {
+        errors[option.id] = 'Option is empty';
+      }
+    });
+    return Object.keys(errors).length > 0 ? { options: errors } : { options: undefined };
   },
 };
 
@@ -116,23 +129,25 @@ export const pollCompositionStateProcessors: Partial<
     const { index, text } = value;
     const prevOptions = data.options || [];
 
-    const shouldAddEmptyOption =
-      prevOptions.length < MAX_POLL_OPTIONS &&
-      (!prevOptions || (prevOptions.slice(index + 1).length === 0 && !!text));
-
     const shouldRemoveOption =
       prevOptions && prevOptions.slice(index + 1).length > 0 && !text;
 
     const optionListHead = prevOptions.slice(0, index);
-    const optionListTail = shouldAddEmptyOption
-      ? [{ id: generateUUIDv4(), text: '' }]
-      : prevOptions.slice(index + 1);
+    const optionListTail = prevOptions.slice(index + 1);
 
     const newOptions = [
       ...optionListHead,
       ...(shouldRemoveOption ? [] : [{ ...prevOptions[index], text }]),
       ...optionListTail,
     ];
+
+    const shouldAddNewOption =
+      prevOptions.length < MAX_POLL_OPTIONS &&
+      !newOptions.some((option) => !option.text.trim());
+
+    if (shouldAddNewOption) {
+      newOptions.push({ id: generateUUIDv4(), text: '' });
+    }
 
     return { options: newOptions };
   },
@@ -166,15 +181,19 @@ export const createPollComposerStateMiddleware = ({
   processors: customProcessors,
   validators: customValidators,
 }: PollComposerStateMiddlewareFactoryOptions = {}): PollComposerStateMiddleware => {
-  const universalHandler = (
-    state: PollComposerStateChangeMiddlewareValue,
+  const universalHandler = ({
+    state,
+    validators,
+    processors,
+  }: {
+    state: PollComposerStateChangeMiddlewareValue;
     validators: Partial<
       Record<keyof PollComposerState['data'], PollStateChangeValidator>
-    >,
+    >;
     processors?: Partial<
       Record<keyof PollComposerState['data'], PollCompositionStateProcessor>
-    >,
-  ) => {
+    >;
+  }) => {
     const { previousState, targetFields } = state;
 
     let newData: Partial<PollComposerState['data']>;
@@ -208,9 +227,9 @@ export const createPollComposerStateMiddleware = ({
       const validator = validators[key as keyof PollComposerState['data']];
       if (validator) {
         const error = validator({
+          currentError: previousState.errors[key as keyof PollComposerState['data']],
           data: previousState.data,
           value: newData[key as keyof PollComposerState['data']],
-          currentError: previousState.errors[key as keyof PollComposerState['data']],
         });
         acc = { ...acc, ...error };
       }
@@ -230,21 +249,19 @@ export const createPollComposerStateMiddleware = ({
       }: MiddlewareHandlerParams<PollComposerStateChangeMiddlewareValue>) => {
         if (!state.targetFields) return forward();
         const { previousState, injectedFieldErrors } = state;
-        const finalValidators = {
-          ...pollStateChangeValidators,
-          ...defaultPollFieldChangeEventValidators,
-          ...customValidators?.handleFieldChange,
-        };
-        const finalProcessors = {
-          ...pollCompositionStateProcessors,
-          ...customProcessors?.handleFieldChange,
-        };
 
-        const { newData, newErrors } = universalHandler(
+        const { newData, newErrors } = universalHandler({
+          processors: {
+            ...pollCompositionStateProcessors,
+            ...customProcessors?.handleFieldChange,
+          },
           state,
-          finalValidators,
-          finalProcessors,
-        );
+          validators: {
+            ...pollStateChangeValidators,
+            ...defaultPollFieldChangeEventValidators,
+            ...customValidators?.handleFieldChange,
+          },
+        });
 
         return next({
           ...state,
@@ -263,16 +280,15 @@ export const createPollComposerStateMiddleware = ({
         if (!state.targetFields) return forward();
 
         const { previousState } = state;
-        const finalValidators = {
-          ...pollStateChangeValidators,
-          ...defaultPollFieldBlurEventValidators,
-          ...customValidators?.handleFieldBlur,
-        };
-        const { newData, newErrors } = universalHandler(
+        const { newData, newErrors } = universalHandler({
+          processors: customProcessors?.handleFieldBlur,
           state,
-          finalValidators,
-          customProcessors?.handleFieldBlur,
-        );
+          validators: {
+            ...pollStateChangeValidators,
+            ...defaultPollFieldBlurEventValidators,
+            ...customValidators?.handleFieldBlur,
+          },
+        });
 
         return next({
           ...state,
