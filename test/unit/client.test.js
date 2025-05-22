@@ -891,6 +891,89 @@ describe('StreamChat.queryReactions', () => {
 	});
 });
 
+describe('deleteMessage', () => {
+	const messageId = 'msg-123';
+
+	let client;
+	let loggerSpy;
+	let _deleteMessageSpy;
+	let queueTaskSpy;
+
+	beforeEach(async () => {
+		client = await getClientWithUser();
+		const offlineDb = new MockOfflineDB({ client });
+
+		client.setOfflineDBApi(offlineDb);
+		await client.offlineDb.init(client.userID);
+
+		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
+		_deleteMessageSpy = vi.spyOn(client, '_deleteMessage').mockResolvedValue({});
+		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
+	});
+
+	afterEach(() => {
+		vi.resetAllMocks();
+	});
+
+	it('should soft delete the message and queue task if hardDelete is false', async () => {
+		await client.deleteMessage(messageId, false);
+
+		expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledTimes(1);
+		expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledWith({ id: messageId });
+		expect(client.offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
+		expect(queueTaskSpy).toHaveBeenCalledTimes(1);
+
+		const taskArg = queueTaskSpy.mock.calls[0][0];
+		expect(taskArg).to.deep.equal({
+			task: {
+				messageId,
+				payload: [messageId, false],
+				type: 'delete-message',
+			},
+		});
+		expect(_deleteMessageSpy).not.toHaveBeenCalled();
+	});
+
+	it('should hard delete the message and queue task if hardDelete is true', async () => {
+		await client.deleteMessage(messageId, true);
+
+		expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledTimes(1);
+		expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledWith({ id: messageId });
+		expect(client.offlineDb.softDeleteMessage).not.toHaveBeenCalled();
+		expect(queueTaskSpy).toHaveBeenCalledTimes(1);
+
+		const taskArg = queueTaskSpy.mock.calls[0][0];
+		expect(taskArg).to.deep.equal({
+			task: {
+				messageId,
+				payload: [messageId, true],
+				type: 'delete-message',
+			},
+		});
+		expect(_deleteMessageSpy).not.toHaveBeenCalled();
+	});
+
+	it('should fall back to _deleteMessage if offlineDb is not set', async () => {
+		client.offlineDb = undefined;
+
+		await client.deleteMessage(messageId, true);
+
+		expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
+		expect(_deleteMessageSpy).toHaveBeenCalledWith(messageId, true);
+	});
+
+	it('should log and fall back to _deleteMessage if offline delete throws', async () => {
+		client.offlineDb.softDeleteMessage.mockRejectedValue(new Error('Offline failure'));
+
+		await client.deleteMessage(messageId, false);
+
+		expect(loggerSpy).toHaveBeenCalledTimes(1);
+		expect(queueTaskSpy).not.toHaveBeenCalled();
+		expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
+		expect(_deleteMessageSpy).toHaveBeenCalledWith(messageId, false);
+	});
+});
+
 describe('X-Stream-Client header', () => {
 	let client;
 
