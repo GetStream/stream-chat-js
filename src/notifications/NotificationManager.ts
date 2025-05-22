@@ -6,13 +6,8 @@ import type {
   NotificationManagerConfig,
   NotificationState,
 } from './types';
-
-const DURATIONS: NotificationManagerConfig['durations'] = {
-  error: 10000,
-  warning: 5000,
-  info: 3000,
-  success: 3000,
-} as const;
+import { mergeWith } from '../utils/mergeWith';
+import { DEFAULT_NOTIFICATION_MANAGER_CONFIG } from './configuration';
 
 export class NotificationManager {
   store: StateStore<NotificationState>;
@@ -21,10 +16,7 @@ export class NotificationManager {
 
   constructor(config: Partial<NotificationManagerConfig> = {}) {
     this.store = new StateStore<NotificationState>({ notifications: [] });
-    this.config = {
-      ...config,
-      durations: config.durations || DURATIONS,
-    };
+    this.config = mergeWith(DEFAULT_NOTIFICATION_MANAGER_CONFIG, config);
   }
 
   get notifications() {
@@ -50,15 +42,17 @@ export class NotificationManager {
   add({ message, origin, options = {} }: AddNotificationPayload): string {
     const id = generateUUIDv4();
     const now = Date.now();
+    const severity = options.severity || 'info';
+    const duration = options.duration ?? this.config.durations[severity];
 
     const notification: Notification = {
       id,
       message,
       origin,
-      severity: options.severity || 'info',
+      code: options?.code,
+      severity,
       createdAt: now,
-      expiresAt: options.duration ? now + options.duration : undefined,
-      autoClose: options.autoClose ?? true,
+      expiresAt: now + duration,
       actions: options.actions,
       metadata: options.metadata,
     };
@@ -67,7 +61,7 @@ export class NotificationManager {
       notifications: [...this.store.getLatestValue().notifications, notification],
     });
 
-    if (notification.autoClose && notification.expiresAt) {
+    if (notification.expiresAt) {
       const timeout = setTimeout(() => {
         this.remove(id);
       }, options.duration || this.config.durations[notification.severity]);

@@ -405,8 +405,17 @@ export class AttachmentManager {
     if (localAttachment.localMetadata.uploadState === 'blocked') {
       this.upsertAttachments([localAttachment]);
       this.client.notifications.addError({
-        message: 'Error uploading attachment',
-        origin: { emitter: 'AttachmentManager', context: { attachment } },
+        message: `The attachment upload was blocked`,
+        origin: {
+          emitter: 'AttachmentManager',
+          context: { attachment, blockedAttachment: localAttachment },
+        },
+        options: {
+          code: 'attachment.upload.blocked',
+          metadata: {
+            reason: localAttachment.localMetadata.uploadPermissionCheck?.reason,
+          },
+        },
       });
       return localAttachment;
     }
@@ -425,21 +434,7 @@ export class AttachmentManager {
     try {
       response = await this.doUploadRequest(localAttachment.localMetadata.file);
     } catch (error) {
-      let finalError: Error = {
-        message: 'Error uploading attachment',
-        name: 'Error',
-      };
-      if (typeof (error as Error).message === 'string') {
-        finalError = error as Error;
-      } else if (typeof error === 'object') {
-        finalError = Object.assign(finalError, error);
-      }
-
-      this.client.notifications.addError({
-        message: finalError.message,
-        origin: { emitter: 'AttachmentManager', context: { attachment } },
-      });
-
+      const reason = (error as Error).message ?? 'unknown error';
       const failedAttachment: LocalUploadAttachment = {
         ...attachment,
         localMetadata: {
@@ -447,6 +442,15 @@ export class AttachmentManager {
           uploadState: 'failed',
         },
       };
+
+      this.client.notifications.addError({
+        message: 'Error uploading attachment',
+        origin: {
+          emitter: 'AttachmentManager',
+          context: { attachment, failedAttachment },
+        },
+        options: { code: 'attachment.upload.failed', metadata: { reason } },
+      });
 
       this.upsertAttachments([failedAttachment]);
       return failedAttachment;

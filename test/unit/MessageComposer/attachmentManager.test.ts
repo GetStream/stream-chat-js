@@ -844,10 +844,17 @@ describe('AttachmentManager', () => {
 
       expect(attachmentManager.failedUploadsCount).toBe(1);
       expect(mockClient.notifications.addError).toHaveBeenCalledWith({
-        message: 'Upload failed',
+        message: 'Error uploading attachment',
         origin: {
           emitter: 'AttachmentManager',
-          context: { attachment: expect.any(Object) },
+          context: {
+            attachment: expect.any(Object),
+            failedAttachment: expect.any(Object),
+          },
+        },
+        options: {
+          code: 'attachment.upload.failed',
+          metadata: { reason: 'Upload failed' },
         },
       });
     });
@@ -877,10 +884,17 @@ describe('AttachmentManager', () => {
 
       // Verify notification was added
       expect(mockClient.notifications.addError).toHaveBeenCalledWith({
-        message: 'Error uploading attachment',
+        message: 'The attachment upload was blocked',
         origin: {
           emitter: 'AttachmentManager',
-          context: { attachment: blockedAttachment },
+          context: {
+            attachment: blockedAttachment,
+            blockedAttachment: expect.any(Object),
+          },
+        },
+        options: {
+          code: 'attachment.upload.blocked',
+          metadata: { reason: 'size_limit' },
         },
       });
     });
