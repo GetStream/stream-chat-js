@@ -1,3 +1,13 @@
+## [9.2.0-offline-support-beta.2](https://github.com/GetStream/stream-chat-js/compare/v9.2.0-offline-support-beta.1...v9.2.0-offline-support-beta.2) (2025-05-22)
+
+### Bug Fixes
+
+* revett app settings changes in respect to singular queries logic ([867cc66](https://github.com/GetStream/stream-chat-js/commit/867cc66791c486451cf3f1714b46b17b7fa1c19b))
+
+### Refactors
+
+* general code cleanup (Threads/Polls/MessageComposer) ([#1522](https://github.com/GetStream/stream-chat-js/issues/1522)) ([e4db506](https://github.com/GetStream/stream-chat-js/commit/e4db506d648fba4d84d727eda2c14f85db37f702))
+
 ## [9.2.0-offline-support-beta.1](https://github.com/GetStream/stream-chat-js/compare/v9.1.1...v9.2.0-offline-support-beta.1) (2025-05-22)
 
 ### Bug Fixes
