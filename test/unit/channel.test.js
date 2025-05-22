@@ -11,9 +11,9 @@ import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse'
 
 import { ChannelState, StreamChat } from '../../src';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
-import { generateMessageDraft } from './test-utils/generateMessageDraft';
+import { MockOfflineDB } from './offline-support/MockOfflineDB';
 
-import { describe, beforeEach, it, expect } from 'vitest';
+import { describe, beforeEach, afterEach, it, expect, vi } from 'vitest';
 
 describe('Channel count unread', function () {
 	let lastRead;
@@ -1442,5 +1442,130 @@ describe('Channel.query', async () => {
 			hasPrev: false,
 		});
 		mock.restore();
+	});
+});
+
+describe('send reaction flow', () => {
+	const messageId = 'msg-456';
+	const reaction = { type: 'love' };
+	const options = { enforce_unique: true, skip_push: true };
+
+	let client;
+	let channel;
+	let loggerSpy;
+	let queueTaskSpy;
+	let postSpy;
+
+	beforeEach(async () => {
+		client = await getClientWithUser();
+		const offlineDb = new MockOfflineDB({ client });
+
+		client.setOfflineDBApi(offlineDb);
+		await client.offlineDb.init(client.userID);
+
+		channel = client.channel('messaging', 'test');
+
+		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
+		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
+		postSpy = vi.spyOn(client, 'post').mockResolvedValue({});
+	});
+
+	afterEach(() => {
+		vi.resetAllMocks();
+	});
+
+	describe('sendReaction', () => {
+		beforeEach(() => {
+			vi.spyOn(channel, '_sendReaction').mockResolvedValue({});
+		});
+
+		afterEach(() => {
+			vi.resetAllMocks();
+		});
+
+		it('throws if messageID is missing', async () => {
+			await expect(channel.sendReaction('', reaction)).rejects.toThrow(
+				'Message id is missing',
+			);
+		});
+
+		it('throws if reaction is missing or empty', async () => {
+			await expect(channel.sendReaction(messageId, {})).rejects.toThrow(
+				'Reaction object is missing',
+			);
+		});
+
+		it('queues task if offlineDb exists', async () => {
+			await channel.sendReaction(messageId, reaction, options);
+
+			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
+
+			const taskArg = queueTaskSpy.mock.calls[0][0];
+			expect(taskArg).to.deep.equal({
+				task: {
+					channelId: 'test',
+					channelType: 'messaging',
+					messageId,
+					payload: [messageId, reaction, options],
+					type: 'send-reaction',
+				},
+			});
+
+			expect(channel._sendReaction).not.toHaveBeenCalled();
+		});
+
+		it('falls back to _sendReaction if offlineDb throws', async () => {
+			client.offlineDb.queueTask.mockRejectedValue(new Error('Offline failure'));
+
+			await channel.sendReaction(messageId, reaction, options);
+
+			expect(loggerSpy).toHaveBeenCalledTimes(1);
+			expect(channel._sendReaction).toHaveBeenCalledTimes(1);
+			expect(channel._sendReaction).toHaveBeenCalledWith(messageId, reaction, options);
+		});
+
+		it('falls back to _sendReaction if offlineDb is undefined', async () => {
+			client.offlineDb = undefined;
+
+			await channel.sendReaction(messageId, reaction, options);
+
+			expect(channel._sendReaction).toHaveBeenCalledTimes(1);
+			expect(channel._sendReaction).toHaveBeenCalledWith(messageId, reaction, options);
+		});
+	});
+
+	describe('_sendReaction', () => {
+		it('throws if messageID is missing', async () => {
+			await expect(channel._sendReaction('', reaction)).rejects.toThrow(
+				'Message id is missing',
+			);
+		});
+
+		it('throws if reaction is missing or empty', async () => {
+			await expect(channel._sendReaction(messageId, {})).rejects.toThrow(
+				'Reaction object is missing',
+			);
+		});
+
+		it('posts to correct URL with reaction and options', async () => {
+			await channel._sendReaction(messageId, reaction, options);
+
+			expect(postSpy).toHaveBeenCalledTimes(1);
+			expect(postSpy).toHaveBeenCalledWith(
+				`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reaction`,
+				{
+					reaction,
+					...options,
+				},
+			);
+		});
+
+		it('returns the response from post', async () => {
+			postSpy.mockResolvedValue({ message: 'ok' });
+
+			const result = await channel._sendReaction(messageId, reaction);
+
+			expect(result).toEqual({ message: 'ok' });
+		});
 	});
 });

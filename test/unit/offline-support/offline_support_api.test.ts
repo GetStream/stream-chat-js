@@ -1662,18 +1662,11 @@ describe('OfflineSupportApi', () => {
       });
 
       describe('executeTask', () => {
-        let executeTask: (
-          args: { task: PendingTask },
-          isPendingTask?: boolean,
-        ) => Promise<any>;
         let mockChannel: Channel;
         let _deleteMessageSpy: MockInstance;
         let clientChannelSpy: MockInstance;
 
         beforeEach(() => {
-          // Extract the private method
-          executeTask = (offlineDb as any)['executeTask'].bind(offlineDb);
-
           mockChannel = {
             initialized: true,
             watch: vi.fn(),
@@ -1696,7 +1689,7 @@ describe('OfflineSupportApi', () => {
         it('should call _deleteMessage for delete-message task', async () => {
           const task = generatePendingTask('delete-message') as PendingTask;
 
-          await executeTask({ task });
+          await offlineDb['executeTask']({ task });
 
           expect(_deleteMessageSpy).toHaveBeenCalledWith(...task.payload);
         });
@@ -1704,7 +1697,7 @@ describe('OfflineSupportApi', () => {
         it('should call _sendReaction for send-reaction task', async () => {
           const task = generatePendingTask('send-reaction') as PendingTask;
 
-          await executeTask({ task });
+          await offlineDb['executeTask']({ task });
 
           expect(clientChannelSpy).toHaveBeenCalledWith(task.channelType, task.channelId);
           expect(mockChannel._sendReaction).toHaveBeenCalledWith(...task.payload);
@@ -1713,7 +1706,7 @@ describe('OfflineSupportApi', () => {
         it('should call _deleteReaction for delete-reaction task', async () => {
           const task = generatePendingTask('delete-reaction') as PendingTask;
 
-          await executeTask({ task });
+          await offlineDb['executeTask']({ task });
 
           expect(mockChannel._deleteReaction).toHaveBeenCalledWith(...task.payload);
         });
@@ -1726,7 +1719,7 @@ describe('OfflineSupportApi', () => {
           // @ts-ignore
           mockChannel._sendMessage.mockResolvedValue(messageResponse);
 
-          await executeTask({ task }, true);
+          await offlineDb['executeTask']({ task }, true);
 
           expect(mockChannel._sendMessage).toHaveBeenCalledWith(...task.payload);
           expect(mockChannel.state.addMessageSorted).toHaveBeenCalledWith(
@@ -1740,7 +1733,7 @@ describe('OfflineSupportApi', () => {
 
           const task = generatePendingTask('send-reaction') as PendingTask;
 
-          await executeTask({ task });
+          await offlineDb['executeTask']({ task });
 
           expect(mockChannel.watch).toHaveBeenCalled();
         });
@@ -1754,7 +1747,7 @@ describe('OfflineSupportApi', () => {
           };
 
           // @ts-ignore
-          await expect(executeTask({ task })).rejects.toThrow(
+          await expect(offlineDb['executeTask']({ task })).rejects.toThrow(
             /Tried to execute invalid pending task type/,
           );
         });
