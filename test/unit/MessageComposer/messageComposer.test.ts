@@ -1056,5 +1056,43 @@ describe('MessageComposer', () => {
         spy.mockRestore();
       });
     });
+
+    it('should toggle the registration of draft WS event subscriptions when drafts are disabled / enabled', () => {
+      const { messageComposer } = setup({
+        config: { drafts: { enabled: false } },
+      });
+
+      const unsubscribeDraftUpdated = vi.fn();
+      const unsubscribeDraftDeleted = vi.fn();
+
+      // @ts-expect-error - we are testing private properties
+      const subscribeDraftUpdatedSpy = vi
+        .spyOn(messageComposer, 'subscribeDraftUpdated')
+        .mockImplementation(() => unsubscribeDraftUpdated);
+      // @ts-expect-error - we are testing private properties
+      const subscribeDraftDeletedSpy = vi
+        .spyOn(messageComposer, 'subscribeDraftDeleted')
+        .mockImplementation(() => unsubscribeDraftDeleted);
+
+      messageComposer.registerSubscriptions();
+
+      expect(subscribeDraftUpdatedSpy).not.toHaveBeenCalled();
+      expect(subscribeDraftDeletedSpy).not.toHaveBeenCalled();
+
+      messageComposer.updateConfig({ drafts: { enabled: true } });
+
+      expect(subscribeDraftUpdatedSpy).toHaveBeenCalledTimes(1);
+      expect(subscribeDraftDeletedSpy).toHaveBeenCalledTimes(1);
+
+      subscribeDraftUpdatedSpy.mockClear();
+      subscribeDraftDeletedSpy.mockClear();
+
+      messageComposer.updateConfig({ drafts: { enabled: false } });
+
+      expect(unsubscribeDraftUpdated).toHaveBeenCalledTimes(1);
+      expect(unsubscribeDraftDeleted).toHaveBeenCalledTimes(1);
+      expect(subscribeDraftUpdatedSpy).not.toHaveBeenCalled();
+      expect(subscribeDraftDeletedSpy).not.toHaveBeenCalled();
+    });
   });
 });
