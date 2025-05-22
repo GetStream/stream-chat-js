@@ -1723,3 +1723,122 @@ describe('delete reaction flow', () => {
 		});
 	});
 });
+
+describe('message sending flow', () => {
+	let client;
+	let channel;
+	let loggerSpy;
+	let queueTaskSpy;
+	let postSpy;
+
+	const message = {
+		id: 'msg-123',
+		text: 'Hello world',
+		user: { id: 'user-abc' },
+	};
+
+	const options = {
+		pending: true,
+		skip_push: true,
+		pending_message_metadata: { source: 'local' },
+	};
+
+	beforeEach(async () => {
+		client = await getClientWithUser({ id: 'user-abc' });
+		const offlineDb = new MockOfflineDB({ client });
+
+		client.setOfflineDBApi(offlineDb);
+		await client.offlineDb.init(client.userID);
+
+		channel = client.channel('messaging', 'test');
+
+		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
+		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
+		postSpy = vi.spyOn(client, 'post').mockResolvedValue({});
+	});
+
+	afterEach(() => {
+		vi.resetAllMocks();
+	});
+
+	describe('sendMessage', () => {
+		beforeEach(() => {
+			vi.spyOn(channel, '_sendMessage').mockResolvedValue({});
+		});
+
+		afterEach(() => {
+			vi.resetAllMocks();
+		});
+
+		it('queues task if offlineDb exists and message has ID', async () => {
+			const result = await channel.sendMessage(message, options);
+
+			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
+			expect(queueTaskSpy).toHaveBeenCalledWith({
+				task: {
+					channelId: 'test',
+					channelType: 'messaging',
+					messageId: 'msg-123',
+					payload: [message, options],
+					type: 'send-message',
+				},
+			});
+
+			expect(result).toEqual({});
+			expect(channel._sendMessage).not.toHaveBeenCalled();
+		});
+
+		it('falls back to _sendMessage if offlineDb is missing', async () => {
+			client.offlineDb = undefined;
+
+			const result = await channel.sendMessage(message, options);
+
+			expect(channel._sendMessage).toHaveBeenCalledTimes(1);
+			expect(channel._sendMessage).toHaveBeenCalledWith(message, options);
+			expect(result).toEqual({});
+		});
+
+		it('falls back to _sendMessage if message.id is missing', async () => {
+			const msg = { ...message, id: undefined };
+
+			await channel.sendMessage(msg, options);
+
+			expect(channel._sendMessage).toHaveBeenCalledWith(msg, options);
+		});
+
+		it('falls back to _sendMessage if offlineDb throws', async () => {
+			queueTaskSpy.mockRejectedValue(new Error('Queue failed'));
+
+			const result = await channel.sendMessage(message, options);
+
+			expect(loggerSpy).toHaveBeenCalledTimes(1);
+			expect(channel._sendMessage).toHaveBeenCalledWith(message, options);
+			expect(result).toEqual({});
+		});
+	});
+
+	describe('_sendMessage', () => {
+		it('posts the message to the correct endpoint with options', async () => {
+			const expectedUrl = `${client.baseURL}/channels/messaging/test/message`;
+
+			const result = await channel._sendMessage(message, options);
+
+			expect(postSpy).toHaveBeenCalledTimes(1);
+			expect(postSpy).toHaveBeenCalledWith(expectedUrl, {
+				message,
+				...options,
+			});
+
+			expect(result).toEqual({});
+		});
+
+		it('works without options', async () => {
+			await channel._sendMessage(message);
+
+			expect(postSpy).toHaveBeenCalledWith(
+				`${client.baseURL}/channels/messaging/test/message`,
+				{ message },
+			);
+		});
+	});
+});
