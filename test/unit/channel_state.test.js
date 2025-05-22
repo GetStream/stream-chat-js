@@ -9,7 +9,7 @@ import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
 import { ChannelState, StreamChat, Channel } from '../../src';
 import { DEFAULT_MESSAGE_SET_PAGINATION } from '../../src/constants';
 
-import { describe, beforeEach, it, expect } from 'vitest';
+import { vi, describe, beforeEach, afterEach, it, expect } from 'vitest';
 
 describe('ChannelState addMessagesSorted', function () {
 	it('empty state add single messages', async function () {
@@ -726,6 +726,216 @@ describe('ChannelState reactions', () => {
 		);
 		expect(newMessage.own_reactions.length).to.be.eq(1);
 		expect(newMessage.own_reactions[0].user_id).to.be.eq('observer');
+	});
+
+	describe('_addReactionToState', () => {
+		let addOwnReactionToMessageSpy;
+		let reaction;
+		let userID;
+		let baseMessage;
+
+		beforeEach(() => {
+			userID = state._channel.getClient().userID;
+			baseMessage = {
+				id: 'msg-1',
+				own_reactions: [],
+				latest_reactions: [],
+				reaction_groups: {},
+			};
+
+			reaction = {
+				message_id: baseMessage.id,
+				type: 'like',
+				user_id: userID,
+				score: 2,
+				created_at: new Date(),
+			};
+
+			addOwnReactionToMessageSpy = vi.spyOn(state, '_addOwnReactionToMessage');
+		});
+
+		afterEach(() => {
+			vi.resetAllMocks();
+		});
+
+		it('should create a new reaction group if none exist', () => {
+			const messageWithReaction = { ...baseMessage, reaction_groups: undefined };
+			const result = state._addReactionToState(messageWithReaction, reaction);
+
+			expect(result.reaction_groups).to.deep.equal({
+				like: {
+					count: 1,
+					sum_scores: 2,
+					first_reaction_at: reaction.created_at,
+					last_reaction_at: reaction.created_at,
+				},
+			});
+		});
+
+		it('should update existing reaction group', () => {
+			const existing = {
+				count: 1,
+				sum_scores: 1,
+				first_reaction_at: new Date(Date.now() - 5000),
+				last_reaction_at: new Date(Date.now() - 5000),
+			};
+			const messageWithReaction = {
+				...baseMessage,
+				reaction_groups: { like: { ...existing } },
+			};
+
+			const result = state._addReactionToState(messageWithReaction, reaction);
+
+			expect(result.reaction_groups.like.count).to.equal(2);
+			expect(result.reaction_groups.like.sum_scores).to.equal(3);
+			expect(result.reaction_groups.like.last_reaction_at).to.equal(reaction.created_at);
+		});
+
+		it('should remove previous own reactions from reaction_groups if enforce_unique is true', () => {
+			const oldReactions = [
+				{
+					type: 'clap',
+					user_id: userID,
+					score: 1,
+				},
+				{
+					type: 'wow',
+					user_id: userID,
+					score: 2,
+				},
+			];
+
+			const messageWithReaction = {
+				...baseMessage,
+				own_reactions: oldReactions,
+				reaction_groups: {
+					clap: {
+						count: 1,
+						sum_scores: 1,
+					},
+					wow: {
+						count: 1,
+						sum_scores: 2,
+					},
+				},
+			};
+
+			const result = state._addReactionToState(messageWithReaction, reaction, true);
+
+			expect(result.reaction_groups.clap).to.be.undefined;
+			expect(result.reaction_groups.wow).to.be.undefined;
+			expect(result.reaction_groups.like.count).to.equal(1);
+		});
+
+		it('should preserve other users’ reactions when enforce_unique is true', () => {
+			const newOwnReaction = {
+				...reaction,
+				type: 'wow',
+			};
+			const messageWithReaction = {
+				...baseMessage,
+				own_reactions: [
+					{ type: 'like', user_id: userID, score: 1 },
+					{ type: 'clap', user_id: userID, score: 1 },
+				],
+				latest_reactions: [
+					{ type: 'like', user_id: userID, score: 1 },
+					{ type: 'clap', user_id: userID, score: 1 },
+					{ type: 'clap', user_id: 'other-user', score: 1 },
+				],
+				reaction_groups: {
+					like: { count: 1, sum_scores: 1 },
+					clap: { count: 2, sum_scores: 2 },
+				},
+			};
+
+			const result = state._addReactionToState(messageWithReaction, newOwnReaction, true);
+
+			Object.keys(result.reaction_groups).forEach((key) => {
+				delete result.reaction_groups[key].first_reaction_at;
+				delete result.reaction_groups[key].last_reaction_at;
+			});
+
+			expect(result.reaction_groups).to.deep.equal({
+				clap: {
+					count: 1,
+					sum_scores: 1,
+				},
+				wow: {
+					count: 1,
+					sum_scores: 2,
+				},
+			});
+			expect(result.latest_reactions).to.deep.equal([
+				{ type: 'clap', user_id: 'other-user', score: 1 },
+				newOwnReaction,
+			]);
+			expect(result.own_reactions).to.deep.equal([newOwnReaction]);
+		});
+
+		it('should correctly update own_reactions with the new reaction', () => {
+			const oldOwnReactions = [{ type: 'clap', user_id: userID, score: 1 }];
+			const messageWithReaction = {
+				...baseMessage,
+				own_reactions: oldOwnReactions,
+				reaction_groups: {
+					clap: { count: 1, sum_scores: 1 },
+				},
+			};
+			const result1 = state._addReactionToState(messageWithReaction, reaction);
+
+			expect(addOwnReactionToMessageSpy).toHaveBeenCalledTimes(1);
+			expect(result1.own_reactions).to.deep.equal([...oldOwnReactions, reaction]);
+
+			vi.clearAllMocks();
+
+			const newerReaction = { ...reaction, type: 'wow' };
+			const result2 = state._addReactionToState(result1, newerReaction, true);
+
+			expect(addOwnReactionToMessageSpy).toHaveBeenCalledTimes(1);
+			expect(result2.own_reactions).to.deep.equal([newerReaction]);
+		});
+
+		it('should overwrite own reaction in latest_reactions if enforce_unique is true', () => {
+			const oldReaction = {
+				type: 'clap',
+				user_id: userID,
+			};
+
+			const messageWithReaction = {
+				...baseMessage,
+				latest_reactions: [oldReaction],
+			};
+
+			const result = state._addReactionToState(messageWithReaction, reaction, true);
+
+			expect(result.latest_reactions).to.deep.equal([reaction]);
+		});
+
+		it('should append to latest_reactions if enforce_unique is false', () => {
+			const messageWithReaction = {
+				...baseMessage,
+				latest_reactions: [],
+			};
+
+			const result = state._addReactionToState(messageWithReaction, reaction, false);
+
+			expect(result.latest_reactions.length).to.equal(1);
+			expect(result.latest_reactions[0]).to.deep.equal(reaction);
+		});
+
+		it('should handle empty own_reactions and latest_reactions gracefully', () => {
+			const messageWithReaction = {
+				...baseMessage,
+				own_reactions: undefined,
+				latest_reactions: undefined,
+			};
+
+			const result = state._addReactionToState(messageWithReaction, reaction, true);
+
+			expect(result.own_reactions).to.deep.equal([reaction]);
+			expect(result.latest_reactions).to.deep.equal([reaction]);
+		});
 	});
 });
 

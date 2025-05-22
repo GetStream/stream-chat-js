@@ -324,72 +324,79 @@ export class ChannelState {
       }
 
       if (messageFromState) {
-        if (!messageFromState.reaction_groups) {
-          messageFromState.reaction_groups = {};
-        }
-
-        // 1. Firstly, get rid of all of our own reactions from the reaction_groups
-        //    if enforce_unique is enabled.
-        if (enforce_unique) {
-          for (const ownReaction of messageFromState.own_reactions ?? []) {
-            const oldOwnReactionTypeData =
-              messageFromState.reaction_groups[ownReaction.type];
-            messageFromState.reaction_groups[ownReaction.type] = {
-              ...oldOwnReactionTypeData,
-              count: oldOwnReactionTypeData.count - 1,
-              sum_scores: oldOwnReactionTypeData.sum_scores - (ownReaction.score ?? 1),
-            };
-            // If there are no reactions left in this group, simply remove it.
-            if (messageFromState.reaction_groups[ownReaction.type].count < 1) {
-              delete messageFromState.reaction_groups[ownReaction.type];
-            }
-          }
-        }
-
-        const newReactionGroups = messageFromState.reaction_groups;
-        const oldReactionTypeData = newReactionGroups[reaction.type];
-        const score = reaction.score ?? 1;
-
-        // 2. Next, update the reaction_groups with the new reaction.
-        messageFromState.reaction_groups[reaction.type] = oldReactionTypeData
-          ? {
-              ...oldReactionTypeData,
-              count: oldReactionTypeData.count + 1,
-              sum_scores: oldReactionTypeData.sum_scores + score,
-              last_reaction_at: reaction.created_at,
-            }
-          : {
-              count: 1,
-              first_reaction_at: reaction.created_at,
-              last_reaction_at: reaction.created_at,
-              sum_scores: score,
-            };
-
-        // 3. Update the own_reactions with the new reaction.
-        messageFromState.own_reactions = this._addOwnReactionToMessage(
-          msg.own_reactions,
-          reaction,
-          enforce_unique,
-        );
-
-        // 4. Finally, update the latest_reactions with the new reaction,
-        //    while respecting enforce_unique.
-        const userId = this._channel.getClient().userID;
-        messageFromState.latest_reactions = enforce_unique
-          ? [
-              ...(messageFromState.latest_reactions || []).filter(
-                (r) => r.user_id !== userId,
-              ),
-              reaction,
-            ]
-          : [...(messageFromState.latest_reactions || []), reaction];
-
-        return messageFromState;
+        return this._addReactionToState(messageFromState, reaction, enforce_unique);
       }
 
       return msg;
     });
     return messageWithReaction ?? messageFromState;
+  }
+
+  _addReactionToState(
+    messageFromState: LocalMessage,
+    reaction: ReactionResponse,
+    enforce_unique?: boolean,
+  ) {
+    if (!messageFromState.reaction_groups) {
+      messageFromState.reaction_groups = {};
+    }
+
+    // 1. Firstly, get rid of all of our own reactions from the reaction_groups
+    //    if enforce_unique is enabled.
+    if (enforce_unique) {
+      for (const ownReaction of messageFromState.own_reactions ?? []) {
+        const oldOwnReactionTypeData = messageFromState.reaction_groups[ownReaction.type];
+        messageFromState.reaction_groups[ownReaction.type] = {
+          ...oldOwnReactionTypeData,
+          count: oldOwnReactionTypeData.count - 1,
+          sum_scores: oldOwnReactionTypeData.sum_scores - (ownReaction.score ?? 1),
+        };
+        // If there are no reactions left in this group, simply remove it.
+        if (messageFromState.reaction_groups[ownReaction.type].count < 1) {
+          delete messageFromState.reaction_groups[ownReaction.type];
+        }
+      }
+    }
+
+    const newReactionGroups = messageFromState.reaction_groups;
+    const oldReactionTypeData = newReactionGroups[reaction.type];
+    const score = reaction.score ?? 1;
+
+    // 2. Next, update the reaction_groups with the new reaction.
+    messageFromState.reaction_groups[reaction.type] = oldReactionTypeData
+      ? {
+          ...oldReactionTypeData,
+          count: oldReactionTypeData.count + 1,
+          sum_scores: oldReactionTypeData.sum_scores + score,
+          last_reaction_at: reaction.created_at,
+        }
+      : {
+          count: 1,
+          first_reaction_at: reaction.created_at,
+          last_reaction_at: reaction.created_at,
+          sum_scores: score,
+        };
+
+    // 3. Update the own_reactions with the new reaction.
+    messageFromState.own_reactions = this._addOwnReactionToMessage(
+      messageFromState.own_reactions,
+      reaction,
+      enforce_unique,
+    );
+
+    // 4. Finally, update the latest_reactions with the new reaction,
+    //    while respecting enforce_unique.
+    const userId = this._channel.getClient().userID;
+    messageFromState.latest_reactions = enforce_unique
+      ? [
+          ...(messageFromState.latest_reactions || []).filter(
+            (r) => r.user_id !== userId,
+          ),
+          reaction,
+        ]
+      : [...(messageFromState.latest_reactions || []), reaction];
+
+    return messageFromState;
   }
 
   _addOwnReactionToMessage(
