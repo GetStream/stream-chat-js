@@ -46,25 +46,30 @@ export class StateStore<T extends Record<string, unknown>> {
     handler: Handler<O>,
   ) => {
     // begin with undefined to reduce amount of selector calls
-    let selectedValues: O | undefined;
+    let previouslySelectedValues: O | undefined;
 
     const wrappedHandler: Handler<T> = (nextValue) => {
       const newlySelectedValues = selector(nextValue);
 
-      let hasUpdatedValues = !selectedValues;
+      let hasUpdatedValues = typeof previouslySelectedValues === 'undefined';
 
-      for (const key in selectedValues) {
-        if (selectedValues[key] === newlySelectedValues[key]) continue;
+      for (const key in previouslySelectedValues) {
+        if (previouslySelectedValues[key] === newlySelectedValues[key]) continue;
         hasUpdatedValues = true;
         break;
       }
 
       if (!hasUpdatedValues) return;
 
-      const oldSelectedValues = selectedValues;
-      selectedValues = newlySelectedValues;
+      // save a copy of previouslySelectedValues before running
+      // handler - if previouslySelectedValues are set to
+      // newlySelectedValues after the handler call, there's a chance
+      // that it'll never get set as handler can throw and flow might
+      // go out of sync
+      const previouslySelectedValuesCopy = previouslySelectedValues;
+      previouslySelectedValues = newlySelectedValues;
 
-      handler(newlySelectedValues, oldSelectedValues);
+      handler(newlySelectedValues, previouslySelectedValuesCopy);
     };
 
     return this.subscribe(wrappedHandler);
