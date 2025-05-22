@@ -17,6 +17,7 @@ import * as utils from '../../src/utils';
 
 import { describe, beforeEach, afterEach, expect, it, vi, MockInstance } from 'vitest';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
+import { DEFAULT_QUERY_CHANNELS_RETRY_COUNT } from '../../src/constants';
 
 describe('ChannelManager', () => {
   let client: StreamChat;
@@ -740,8 +741,12 @@ describe('ChannelManager', () => {
 
           const { channels, initialized } = channelManager.state.getLatestValue();
 
-          expect(clientQueryChannelsStub.callCount).to.equal(3); // initial + 2 retries
-          expect(waitSecondsSpy).toHaveBeenCalledTimes(2);
+          expect(clientQueryChannelsStub.callCount).to.equal(
+            DEFAULT_QUERY_CHANNELS_RETRY_COUNT + 1,
+          ); // // initial + however many retried are configured
+          expect(waitSecondsSpy).toHaveBeenCalledTimes(
+            DEFAULT_QUERY_CHANNELS_RETRY_COUNT,
+          );
           expect(stateChangeSpy.callCount).to.equal(1);
           expect(stateChangeSpy.args[0][0]).to.deep.equal({
             error: new Error(

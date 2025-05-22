@@ -22,6 +22,10 @@ import {
   waitSeconds,
 } from './utils';
 import { generateUUIDv4 } from './utils';
+import {
+  DEFAULT_QUERY_CHANNELS_RETRY_COUNT,
+  DEFAULT_QUERY_CHANNELS_SECONDS_BETWEEN_RETRIES,
+} from './constants';
 
 export type ChannelManagerPagination = {
   filters: ChannelFilters;
@@ -291,8 +295,7 @@ export class ChannelManager {
         { method: 'upsertCidsForQuery' },
       );
     } catch (err) {
-      // TODO: Extract this as a constant
-      if (retryCount >= 2) {
+      if (retryCount >= DEFAULT_QUERY_CHANNELS_RETRY_COUNT) {
         console.warn(err);
 
         const wrappedError = new Error(
@@ -303,8 +306,7 @@ export class ChannelManager {
         return;
       }
 
-      // TODO: Maybe make this configurable ?
-      await waitSeconds(2);
+      await waitSeconds(DEFAULT_QUERY_CHANNELS_SECONDS_BETWEEN_RETRIES);
 
       return this.queryChannelsRequest(payload, retryCount + 1);
     }
