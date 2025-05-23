@@ -588,7 +588,7 @@ describe('AttachmentManager', () => {
       });
     });
 
-    it('should check for file extension config if its a FileReference type', async () => {
+    it("should block files with allowed file extension config if it's a FileReference type", async () => {
       const file: FileReference = {
         name: 'test.gif',
         type: 'image/gif',
@@ -602,6 +602,31 @@ describe('AttachmentManager', () => {
       expect(result).toEqual({
         uploadBlocked: true,
         reason: 'allowed_file_extensions',
+      });
+    });
+
+    it("should block files with blocked file extension config if it's a FileReference type", async () => {
+      const file: FileReference = {
+        name: 'test.pdf',
+        type: 'application/pdf',
+        size: 0,
+        uri: 'test-uri',
+      };
+      const {
+        messageComposer: { attachmentManager },
+      } = setup({
+        appSettings: {
+          ...defaultAppSettings.app,
+          file_upload_config: {
+            ...defaultAppSettings.app.file_upload_config,
+            blocked_file_extensions: ['pdf'],
+          },
+        },
+      });
+      const result = await attachmentManager.getUploadConfigCheck(file);
+      expect(result).toEqual({
+        uploadBlocked: true,
+        reason: 'blocked_file_extensions',
       });
     });
 
@@ -810,6 +835,28 @@ describe('AttachmentManager', () => {
       const largeContent = new ArrayBuffer(2000);
       const file = new File([largeContent], 'test.txt', { type: 'text/plain' });
       const result = await attachmentManager.getUploadConfigCheck(file);
+      expect(result).toEqual({
+        uploadBlocked: true,
+        reason: 'size_limit',
+      });
+    });
+
+    it('should check for file size config for Blob type', async () => {
+      // Add size here to test the size limit
+      const largeContent = new ArrayBuffer(2000);
+      const blob = new Blob([largeContent], { type: 'image/jpeg' });
+      const {
+        messageComposer: { attachmentManager },
+      } = setup({
+        appSettings: {
+          ...defaultAppSettings.app,
+          image_upload_config: {
+            ...defaultAppSettings.app.image_upload_config,
+            size_limit: 1000,
+          },
+        },
+      });
+      const result = await attachmentManager.getUploadConfigCheck(blob);
       expect(result).toEqual({
         uploadBlocked: true,
         reason: 'size_limit',
