@@ -154,7 +154,9 @@ export class PollComposer {
           max_votes_allowed: data.max_votes_allowed
             ? parseInt(data.max_votes_allowed)
             : undefined,
-          options: data.options?.filter((o) => o.text).map((o) => ({ text: o.text })),
+          options: data.options
+            ?.filter((o) => o.text.trim())
+            .map((o) => ({ text: o.text })),
         },
         errors,
       },

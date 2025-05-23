@@ -19,6 +19,7 @@ import type { Channel } from './channel';
 import type { StreamChat } from './client';
 import type { CustomThreadData } from './custom_types';
 import { MessageComposer } from './messageComposer';
+import { WithSubscriptions } from './utils/WithSubscriptions';
 
 type QueryRepliesOptions = {
   sort?: { created_at: AscDesc }[];
@@ -108,13 +109,12 @@ const constructCustomDataObject = <T extends ThreadResponse>(threadData: T) => {
   return custom;
 };
 
-export class Thread {
+export class Thread extends WithSubscriptions {
   public readonly state: StateStore<ThreadState>;
   public readonly id: string;
   public readonly messageComposer: MessageComposer;
 
   private client: StreamChat;
-  private unsubscribeFunctions: Set<() => void> = new Set();
   private failedRepliesMap: Map<string, LocalMessage> = new Map();
 
   constructor({
@@ -124,6 +124,8 @@ export class Thread {
     client: StreamChat;
     threadData: ThreadResponse;
   }) {
+    super();
+
     const channel = client.channel(threadData.channel.type, threadData.channel.id, {
       // @ts-expect-error name is a "custom" property
       name: threadData.channel.name,
@@ -259,19 +261,19 @@ export class Thread {
   };
 
   public registerSubscriptions = () => {
-    if (this.unsubscribeFunctions.size) {
+    if (this.hasSubscriptions) {
       // Thread is already listening for events and changes
       return;
     }
 
-    this.unsubscribeFunctions.add(this.subscribeThreadUpdated());
-    this.unsubscribeFunctions.add(this.subscribeMarkActiveThreadRead());
-    this.unsubscribeFunctions.add(this.subscribeReloadActiveStaleThread());
-    this.unsubscribeFunctions.add(this.subscribeMarkThreadStale());
-    this.unsubscribeFunctions.add(this.subscribeNewReplies());
-    this.unsubscribeFunctions.add(this.subscribeRepliesRead());
-    this.unsubscribeFunctions.add(this.subscribeMessageDeleted());
-    this.unsubscribeFunctions.add(this.subscribeMessageUpdated());
+    this.addUnsubscribeFunction(this.subscribeThreadUpdated());
+    this.addUnsubscribeFunction(this.subscribeMarkActiveThreadRead());
+    this.addUnsubscribeFunction(this.subscribeReloadActiveStaleThread());
+    this.addUnsubscribeFunction(this.subscribeMarkThreadStale());
+    this.addUnsubscribeFunction(this.subscribeNewReplies());
+    this.addUnsubscribeFunction(this.subscribeRepliesRead());
+    this.addUnsubscribeFunction(this.subscribeMessageDeleted());
+    this.addUnsubscribeFunction(this.subscribeMessageUpdated());
   };
 
   private subscribeThreadUpdated = () =>
@@ -446,9 +448,9 @@ export class Thread {
   };
 
   public unregisterSubscriptions = () => {
-    this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
-    this.unsubscribeFunctions.clear();
+    const symbol = super.unregisterSubscriptions();
     this.state.partialNext({ isStateStale: true });
+    return symbol;
   };
 
   public deleteReplyLocally = ({ message }: { message: MessageResponse }) => {

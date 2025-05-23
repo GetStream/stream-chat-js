@@ -71,10 +71,35 @@ const initState = ({
 export class AttachmentManager {
   readonly state: StateStore<AttachmentManagerState>;
   readonly composer: MessageComposer;
+  private attachmentsByIdGetterCache: {
+    attachmentsById: Record<string, LocalAttachment>;
+    attachments: LocalAttachment[];
+  };
 
   constructor({ composer, message }: AttachmentManagerOptions) {
     this.composer = composer;
     this.state = new StateStore<AttachmentManagerState>(initState({ message }));
+    this.attachmentsByIdGetterCache = { attachmentsById: {}, attachments: [] };
+  }
+
+  get attachmentsById() {
+    const { attachments } = this.state.getLatestValue();
+
+    if (attachments !== this.attachmentsByIdGetterCache.attachments) {
+      this.attachmentsByIdGetterCache.attachments = attachments;
+      this.attachmentsByIdGetterCache.attachmentsById = attachments.reduce<
+        Record<string, LocalAttachment>
+      >((newAttachmentsById, attachment) => {
+        // should never happen but does not hurt to check
+        if (!attachment.localMetadata.id) return newAttachmentsById;
+
+        newAttachmentsById[attachment.localMetadata.id] ??= attachment;
+
+        return newAttachmentsById;
+      }, {});
+    }
+
+    return this.attachmentsByIdGetterCache.attachmentsById;
   }
 
   get client() {
@@ -176,19 +201,21 @@ export class AttachmentManager {
     this.state.next(initState({ message }));
   };
 
-  getAttachmentIndex = (localId: string) =>
-    this.attachments.findIndex(
-      (attachment) =>
-        attachment.localMetadata.id && localId === attachment.localMetadata?.id,
-    );
+  getAttachmentIndex = (localId: string) => {
+    const attachmentsById = this.attachmentsById;
+
+    return this.attachments.indexOf(attachmentsById[localId]);
+  };
 
   private prepareAttachmentUpdate = (attachmentToUpdate: LocalAttachment) => {
     const stateAttachments = this.attachments;
     const attachments = [...this.attachments];
     const attachmentIndex = this.getAttachmentIndex(attachmentToUpdate.localMetadata.id);
     if (attachmentIndex === -1) return null;
+    // do not re-organize newAttachments array otherwise indexing would no longer work
+    // replace in place only with the attachments with the same id's
     const merged = mergeWithDiff<LocalAttachment>(
-      stateAttachments[attachmentIndex] ?? {},
+      stateAttachments[attachmentIndex],
       attachmentToUpdate,
     );
     const updatesOnMerge = merged.diff && Object.keys(merged.diff.children).length;
@@ -234,7 +261,7 @@ export class AttachmentManager {
   removeAttachments = (localAttachmentIds: string[]) => {
     this.state.partialNext({
       attachments: this.attachments.filter(
-        (att) => !localAttachmentIds.includes(att.localMetadata?.id),
+        (attachment) => !localAttachmentIds.includes(attachment.localMetadata?.id),
       ),
     });
   };
