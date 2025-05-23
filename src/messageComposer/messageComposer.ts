@@ -372,7 +372,7 @@ export class MessageComposer extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeMessageComposerStateChanged());
     this.addUnsubscribeFunction(this.subscribeMessageComposerConfigStateChanged());
 
-    return this.unregisterSubscriptions;
+    return this.unregisterSubscriptions.bind(this);
   };
 
   private subscribeMessageUpdated = () => {
