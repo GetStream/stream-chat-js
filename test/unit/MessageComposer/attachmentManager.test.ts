@@ -7,6 +7,7 @@ import {
   AttachmentManagerConfig,
   DraftMessage,
   DraftResponse,
+  FileReference,
   LocalMessage,
   MessageComposer,
   StreamChat,
@@ -575,6 +576,35 @@ describe('AttachmentManager', () => {
   });
 
   describe('getUploadConfigCheck', () => {
+    it('should not check for file extension config if its a Blob type', async () => {
+      const blob = new Blob([''], { type: 'image/gif' });
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
+      const result = await attachmentManager.getUploadConfigCheck(blob);
+      expect(result).not.toEqual({
+        uploadBlocked: false,
+        reason: 'allowed_file_extensions',
+      });
+    });
+
+    it('should check for file extension config if its a FileReference type', async () => {
+      const file: FileReference = {
+        name: 'test.gif',
+        type: 'image/gif',
+        size: 0,
+        uri: 'test-uri',
+      };
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
+      const result = await attachmentManager.getUploadConfigCheck(file);
+      expect(result).toEqual({
+        uploadBlocked: true,
+        reason: 'allowed_file_extensions',
+      });
+    });
+
     it('should block files with disallowed extensions', async () => {
       const file = new File([''], 'test.gif', { type: 'image/gif' });
       const {

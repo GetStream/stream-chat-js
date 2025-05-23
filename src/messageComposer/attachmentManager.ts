@@ -292,7 +292,7 @@ export class AttachmentManager {
     const sizeLimit = size_limit || DEFAULT_UPLOAD_SIZE_LIMIT_BYTES;
     const mimeType = fileLike.type;
 
-    if (isFile(fileLike)) {
+    if (isFile(fileLike) || isFileReference(fileLike)) {
       if (
         allowed_file_extensions?.length &&
         !allowed_file_extensions.some((ext) =>
