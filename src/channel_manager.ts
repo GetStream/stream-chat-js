@@ -20,6 +20,7 @@ import {
   shouldConsiderPinnedChannels,
   uniqBy,
 } from './utils';
+import { WithSubscriptions } from './utils/WithSubscriptions';
 
 export type ChannelManagerPagination = {
   filters: ChannelFilters;
@@ -142,10 +143,9 @@ export const DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS = {
  *
  * @internal
  */
-export class ChannelManager {
+export class ChannelManager extends WithSubscriptions {
   public readonly state: StateStore<ChannelManagerState>;
   private client: StreamChat;
-  private unsubscribeFunctions: Set<() => void> = new Set();
   private eventHandlers: Map<string, EventHandlerType> = new Map();
   private eventHandlerOverrides: Map<string, EventHandlerOverrideType> = new Map();
   private options: ChannelManagerOptions = {};
@@ -160,6 +160,8 @@ export class ChannelManager {
     eventHandlerOverrides?: ChannelManagerEventHandlerOverrides;
     options?: ChannelManagerOptions;
   }) {
+    super();
+
     this.client = client;
     this.state = new StateStore<ChannelManagerState>({
       channels: [],
@@ -606,20 +608,15 @@ export class ChannelManager {
   };
 
   public registerSubscriptions = () => {
-    if (this.unsubscribeFunctions.size) {
+    if (this.hasSubscriptions) {
       // Already listening for events and changes
       return;
     }
 
     for (const eventType of Object.keys(channelManagerEventToHandlerMapping)) {
-      this.unsubscribeFunctions.add(
+      this.addUnsubscribeFunction(
         this.client.on(eventType, this.subscriptionOrOverride).unsubscribe,
       );
     }
-  };
-
-  public unregisterSubscriptions = () => {
-    this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
-    this.unsubscribeFunctions.clear();
   };
 }

@@ -384,13 +384,43 @@ describe('PollComposerStateMiddleware', () => {
     });
 
     describe('options validation', () => {
-      it('should validate empty options on blur', async () => {
+      it('should not validate empty options on blur', async () => {
         const stateMiddleware = setup();
         const result = await stateMiddleware.handlers.handleFieldBlur(
           setupHandlerParams({
             nextState: { ...getInitialState() },
             previousState: { ...getInitialState() },
-            targetFields: { options: [{ id: 'option-id', text: '' }] },
+            targetFields: {
+              options: [
+                { id: 'option-id1', text: '' },
+                { id: 'option-id2', text: '' },
+              ],
+            },
+          }),
+        );
+
+        expect(result.state.nextState.errors.options).toBeDefined();
+        expect(Object.keys(result.state.nextState.errors.options!)).toHaveLength(2);
+        expect(result.state.nextState.errors.options!['option-id1']).toBe(
+          'Option is empty',
+        );
+        expect(result.state.nextState.errors.options!['option-id2']).toBe(
+          'Option already exists',
+        );
+      });
+
+      it('should validate last empty option on blur', async () => {
+        const stateMiddleware = setup();
+        const result = await stateMiddleware.handlers.handleFieldBlur(
+          setupHandlerParams({
+            nextState: { ...getInitialState() },
+            previousState: { ...getInitialState() },
+            targetFields: {
+              options: [
+                { id: 'option-id1', text: 'A' },
+                { id: 'option-id2', text: '' },
+              ],
+            },
           }),
         );
 
