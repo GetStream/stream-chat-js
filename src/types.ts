@@ -111,6 +111,7 @@ export type AppSettingsAPIResponse = APIResponse & {
         updated_at?: string;
         uploads?: boolean;
         url_enrichment?: boolean;
+        user_message_reminders?: boolean;
       }
     >;
     reminders_interval: number;
@@ -1002,6 +1003,7 @@ export type CreateChannelOptions = {
   typing_events?: boolean;
   uploads?: boolean;
   url_enrichment?: boolean;
+  user_message_reminders?: boolean;
 };
 
 export type CreateCommandOptions = {
@@ -2338,6 +2340,7 @@ export type ChannelConfigFields = {
   typing_events?: boolean;
   uploads?: boolean;
   url_enrichment?: boolean;
+  user_message_reminders?: boolean; // Feature flag for user message reminders
 };
 
 export type ChannelConfigWithInfo = ChannelConfigFields &
@@ -4005,3 +4008,50 @@ export type ThreadFilters = QueryFilters<
       | PrimitiveFilter<ThreadResponse['last_message_at']>;
   }
 >;
+
+export type ReminderResponse = {
+  reminder: Reminder;
+};
+
+export type Reminder = {
+  remind_at?: string;
+  user_id: string;
+  user?: UserResponse;
+  channel_cid: string;
+  message_id: string;
+  message?: MessageResponse;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreateReminderOptions = {
+  remind_at?: string;
+  user_id?: string;
+};
+
+export type UpdateReminderOptions = {
+  remind_at?: string;
+  user_id?: string;
+};
+
+export type QueryRemindersOptions = {
+  filter_conditions?: {
+    channel_cid?: string | { $in?: string[]; $eq?: string };
+    message_id?: string | { $in?: string[]; $eq?: string };
+    remind_at?:
+      | string
+      | { $eq?: string; $gt?: string; $lt?: string; $gte?: string; $lte?: string };
+    created_at?:
+      | string
+      | { $eq?: string; $gt?: string; $lt?: string; $gte?: string; $lte?: string };
+    user_id?: string | { $in: string[] };
+  };
+  sort?: Array<{ field: string; direction: 1 | -1 }>;
+  limit?: number;
+};
+
+export type QueryRemindersResponse = {
+  reminders: Reminder[];
+  prev?: string;
+  next?: string;
+};
