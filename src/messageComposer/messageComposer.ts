@@ -668,11 +668,17 @@ export class MessageComposer extends WithSubscriptions {
       this.state.partialNext({ pollId: poll.id });
       this.pollComposer.initState();
     } catch (error) {
-      this.client.notifications.add({
+      this.client.notifications.addError({
         message: 'Failed to create the poll',
         origin: {
           emitter: 'MessageComposer',
           context: { composer: this },
+        },
+        options: {
+          code: 'poll.creation.failed',
+          metadata: {
+            reason: (error as Error).message,
+          },
         },
       });
       throw error;
