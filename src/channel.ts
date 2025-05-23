@@ -1875,6 +1875,43 @@ export class Channel {
           user: { ...(channelState.members[event.user.id]?.user || {}), ...event.user },
         };
         break;
+      case 'user.messages.deleted':
+        if (!event.user?.id) break;
+        
+        // Handle message deletion for banned user
+        const isHardDelete = event.delete_messages === 'hard';
+        
+        // Get all message sets to process
+        channelState.messageSets.forEach((messageSet, messageSetIndex) => {
+          // Find all messages from the banned user
+          const userMessages = messageSet.messages.filter(
+            (message) => message.user?.id === event.user?.id
+          );
+          
+          // Process each message
+          userMessages.forEach((message) => {
+            if (isHardDelete) {
+              // Hard delete: completely remove the message
+              channelState.removeMessage({ id: message.id, messageSetIndex });
+            } else {
+              // Soft delete: mark as deleted but keep in state
+              const updatedMessage = { 
+                ...message, 
+                deleted_at: event.created_at ? new Date(event.created_at) : new Date() 
+              };
+              channelState.addMessageSorted(updatedMessage, false, false);
+              
+              // Remove from pinned if needed
+              if (message.pinned) {
+                channelState.removePinnedMessage({ id: message.id } as MessageResponse);
+              }
+              
+              // Remove quoted message references
+              channelState.removeQuotedMessageReferences({ id: message.id } as MessageResponse);
+            }
+          });
+        });
+        break;
       default:
     }
 
