@@ -127,6 +127,13 @@ export class Poll {
     };
   };
 
+  private upsertOfflineDb = () => {
+    this.client.offlineDb?.executeQuerySafely(
+      (db) => db.upsertPoll({ poll: mapPollStateToResponse(this) }),
+      { method: 'upsertPoll' },
+    );
+  };
+
   public reinitializeState = (poll: PollInitOptions['poll']) => {
     this.state.partialNext(this.getInitialStateFromPollResponse(poll));
   };
@@ -142,6 +149,7 @@ export class Poll {
     const { id, ...pollData } = extractPollData(event.poll);
     // @ts-expect-error type mismatch
     this.state.partialNext({ ...pollData, lastActivityAt: new Date(event.created_at) });
+    this.upsertOfflineDb();
   };
 
   public handlePollClosed = (event: Event) => {
@@ -151,6 +159,7 @@ export class Poll {
       is_closed: true,
       lastActivityAt: new Date(event.created_at),
     });
+    this.upsertOfflineDb();
   };
 
   public handleVoteCasted = (event: Event) => {
@@ -186,6 +195,7 @@ export class Poll {
       ownVotesByOptionId,
       maxVotedOptionIds,
     });
+    this.upsertOfflineDb();
   };
 
   public handleVoteChanged = (event: Event) => {
@@ -245,6 +255,7 @@ export class Poll {
       ownVotesByOptionId,
       maxVotedOptionIds,
     });
+    this.upsertOfflineDb();
   };
 
   public handleVoteRemoved = (event: Event) => {
@@ -278,6 +289,7 @@ export class Poll {
       ownVotesByOptionId,
       maxVotedOptionIds,
     });
+    this.upsertOfflineDb();
   };
 
   query = async (id: string) => {
@@ -394,6 +406,28 @@ export function extractPollData(pollResponse: PollResponse): PollData {
     name: pollResponse.name,
     options: pollResponse.options,
     voting_visibility: pollResponse.voting_visibility,
+  };
+}
+
+export function mapPollStateToResponse(poll: Poll): PollResponse {
+  const {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    lastActivityAt,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    maxVotedOptionIds,
+    ownVotesByOptionId,
+    ownAnswer,
+    ...restState
+  } = poll.data;
+  const ownVotes = [
+    ...Object.values(ownVotesByOptionId),
+    ...(ownAnswer ? [ownAnswer] : []),
+  ].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+
+  return {
+    ...restState,
+    own_votes: ownVotes,
+    id: poll.id,
   };
 }
 

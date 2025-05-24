@@ -1331,6 +1331,10 @@ export type StreamChatOptions = AxiosRequestConfig & {
    * that also relies on WS events will break these functionalities, so please use carefully.
    */
   disableCache?: boolean;
+  /**
+   * When enabled, message and thread reply drafts will be stored on the Stream server. This allows drafts to persist across devices and sessions.
+   */
+  drafts?: boolean;
   enableInsights?: boolean;
   /** experimental feature, please contact support if you want this feature enabled for you */
   enableWSFallback?: boolean;
@@ -1449,6 +1453,7 @@ export type Event = CustomEventData & {
     channels: ChannelAPIResponse[];
     isLatestMessageSet?: boolean;
   };
+  offlineReactions?: ReactionResponse[];
   reaction?: ReactionResponse;
   received_at?: string | Date;
   shadow?: boolean;

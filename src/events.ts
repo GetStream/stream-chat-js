@@ -58,6 +58,7 @@ export const EVENT_MAP = {
 
   // local events
   'channels.queried': true,
+  'offline_reactions.queried': true,
   'connection.changed': true,
   'connection.recovered': true,
   'transport.changed': true,
