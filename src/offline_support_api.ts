@@ -1391,10 +1391,6 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
     if (channelType && channelId) {
       const channel = this.client.channel(channelType, channelId);
-      // TODO: Think about this a bit better. Do we really need to watch or is it okay if we don't ?
-      if (!channel.initialized) {
-        await channel.watch();
-      }
 
       if (task.type === 'send-reaction') {
         return await channel._sendReaction(...task.payload);
@@ -1405,9 +1401,16 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       }
 
       if (task.type === 'send-message') {
-        const newMessage = await channel._sendMessage(...task.payload);
+        const newMessageResponse = await channel._sendMessage(...task.payload);
+        const newMessage = newMessageResponse?.message;
         if (isPendingTask) {
-          channel.state.addMessageSorted(newMessage.message, true);
+          if (newMessage?.parent_id) {
+            this.client.threads.threadsById[newMessage.parent_id]?.upsertReplyLocally({
+              message: newMessage,
+              timestampChanged: true,
+            });
+          }
+          channel.state.addMessageSorted(newMessage, true);
         }
         return newMessage;
       }

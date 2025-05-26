@@ -1740,16 +1740,6 @@ describe('OfflineSupportApi', () => {
           );
         });
 
-        it('should watch channel if not initialized', async () => {
-          mockChannel.initialized = false;
-
-          const task = generatePendingTask('send-reaction') as PendingTask;
-
-          await offlineDb['executeTask']({ task });
-
-          expect(mockChannel.watch).toHaveBeenCalled();
-        });
-
         it('should throw error for unknown task type', async () => {
           const task = {
             type: 'unknown-task-type',
