@@ -12,11 +12,6 @@
     {
       "name": "rc",
       "prerelease": true
-    },
-    {
-      "name": "feat/offline-support-rework",
-      "channel": "beta",
-      "prerelease": "offline-support-beta"
     }
   ],
   "plugins": [
