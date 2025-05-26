@@ -581,7 +581,6 @@ export class ChannelState {
         );
         if (msgIndex !== -1) {
           const upMsg = updateFunc(this.messageSets[messageSetIndex].messages[msgIndex]);
-          console.log('FOUND THIS: ', upMsg);
           this.messageSets[messageSetIndex].messages[msgIndex] = upMsg;
         }
       }
