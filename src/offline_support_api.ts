@@ -1342,6 +1342,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   public queueTask = async ({ task }: { task: PendingTask }) => {
     let response;
     try {
+      if (!this.client.wsConnection?.isHealthy) {
+        await this.addPendingTask(task);
+        return;
+      }
       response = await this.executeTask({ task });
     } catch (e) {
       if (!this.shouldSkipQueueingTask(e as AxiosError<APIErrorResponse>)) {
@@ -1632,7 +1636,7 @@ export class OfflineDBSyncManager {
       const diff = Math.floor(
         (nowDate.getTime() - lastSyncedAtDate.getTime()) / (1000 * 60 * 60 * 24),
       );
-      console.log('DIFF: ', diff);
+
       if (diff > 30) {
         // stream backend will send an error if we try to sync after 30 days.
         // In that case reset the entire DB and start fresh.

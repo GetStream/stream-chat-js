@@ -1123,7 +1123,7 @@ export class Channel {
     if (this.lastKeyStroke) {
       const now = new Date();
       const diff = now.getTime() - this.lastKeyStroke.getTime();
-      if (diff > 1000 && this.isTyping) {
+      if (diff > 1000 && this.isTyping && this.getClient().wsConnection?.isHealthy) {
         logChatPromiseExecution(this.stopTyping(), 'stop typing event');
       }
     }

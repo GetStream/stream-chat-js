@@ -1614,6 +1614,7 @@ describe('OfflineSupportApi', () => {
             .mockResolvedValue(mockResponse);
           shouldSkipSpy = vi.spyOn(offlineDb as any, 'shouldSkipQueueingTask');
           addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+          client.wsConnection = { isHealthy: true } as StableWSConnection;
         });
 
         afterEach(() => {
@@ -1628,6 +1629,17 @@ describe('OfflineSupportApi', () => {
           expect(result).toEqual(mockResponse);
           expect(executeTaskSpy).toHaveBeenCalledWith({ task });
           expect(addPendingTaskSpy).not.toHaveBeenCalled();
+        });
+
+        it('should add the task as pending immediately and not try to execute if we are offline', async () => {
+          client.wsConnection = { isHealthy: false } as StableWSConnection;
+          const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+
+          const result = await offlineDb.queueTask({ task });
+
+          expect(result).toBeUndefined();
+          expect(executeTaskSpy).not.toHaveBeenCalled();
+          expect(addPendingTaskSpy).toHaveBeenCalledWith(task);
         });
 
         it('should add task and rethrow if executeTask throws non-skippable error', async () => {
