@@ -1,3 +1,13 @@
+## [9.2.0-offline-support-beta.3](https://github.com/GetStream/stream-chat-js/compare/v9.2.0-offline-support-beta.2...v9.2.0-offline-support-beta.3) (2025-05-26)
+
+### Bug Fixes
+
+* handle queueing purely offline events while connection still not marked as failed ([39c6848](https://github.com/GetStream/stream-chat-js/commit/39c6848928cd26496349e2870fc902f89aa4cefd))
+* not needed watching and some race conditions ([75f4345](https://github.com/GetStream/stream-chat-js/commit/75f43457ba12f1b904927d2e67723553f08123db))
+* reaction event enrichment but not state update ([110431e](https://github.com/GetStream/stream-chat-js/commit/110431ea20867c3cc5284abc3e5d8ef9e6176e10))
+* take optionality into account ([5720a61](https://github.com/GetStream/stream-chat-js/commit/5720a61217789f0b67d4118b7534f2457b8d4206))
+* upsert attachmemts only when attachment exist and handle FileList for react native ([#1539](https://github.com/GetStream/stream-chat-js/issues/1539)) ([a7f0e02](https://github.com/GetStream/stream-chat-js/commit/a7f0e023d543d688ceb8d74562fcea9c9f752f35))
+
 ## [9.2.0-offline-support-beta.2](https://github.com/GetStream/stream-chat-js/compare/v9.2.0-offline-support-beta.1...v9.2.0-offline-support-beta.2) (2025-05-22)
 
 ### Bug Fixes
