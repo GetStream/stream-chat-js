@@ -503,6 +503,57 @@ describe('AttachmentManager', () => {
     });
   });
 
+  describe('updateAttachment', () => {
+    it('should update an attachment by id', () => {
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
+
+      const newAttachments = [
+        { localMetadata: { id: 'test-id-1' }, type: 'image' },
+        { localMetadata: { id: 'test-id-2' }, type: 'video' },
+      ];
+
+      attachmentManager.upsertAttachments(newAttachments);
+
+      const updatedAttachment = {
+        id: 'test-id-1',
+        localMetadata: { id: 'test-id-1' },
+        type: 'audio',
+      };
+
+      attachmentManager.updateAttachment(updatedAttachment);
+
+      expect(attachmentManager.attachments).toEqual([
+        updatedAttachment,
+        newAttachments[1],
+      ]);
+    });
+
+    it('should not update an attachment if id is not found', () => {
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
+
+      const newAttachments = [
+        { localMetadata: { id: 'test-id-1' }, type: 'image' },
+        { localMetadata: { id: 'test-id-2' }, type: 'video' },
+      ];
+
+      attachmentManager.upsertAttachments(newAttachments);
+
+      const updatedAttachment = {
+        id: 'non-existent-id',
+        localMetadata: { id: 'non-existent-id' },
+        type: 'audio',
+      };
+
+      attachmentManager.updateAttachment(updatedAttachment);
+
+      expect(attachmentManager.attachments).toEqual(newAttachments);
+    });
+  });
+
   describe('removeAttachments', () => {
     it('should remove attachments by id', () => {
       const {
