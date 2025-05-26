@@ -315,12 +315,26 @@ export class ChannelState {
 
     this._updateMessage(updateData, (msg) => {
       if (messageWithReaction) {
+        const updatedMessage = { ...messageWithReaction };
+        // This part will remove own_reactions from what is essentially
+        // a copy of event.message; we do not want to return that as someone
+        // else reaction would remove our own_reactions needlessly. This
+        // only happens when we are not the sender of the reaction. We need
+        // the variable itself so that the event can be properly enriched
+        // later on.
         messageWithReaction.own_reactions = this._addOwnReactionToMessage(
           msg.own_reactions,
           reaction,
           enforce_unique,
         );
-        return this.formatMessage(messageWithReaction);
+        // Whenever we are the ones sending the reaction, the helper enriches
+        // own_reactions as normal so we can use that, otherwise we fallback
+        // to whatever state we had.
+        updatedMessage.own_reactions =
+          this._channel.getClient().userID === reaction.user_id
+            ? messageWithReaction.own_reactions
+            : msg.own_reactions;
+        return this.formatMessage(updatedMessage);
       }
 
       if (messageFromState) {
@@ -404,9 +418,7 @@ export class ChannelState {
     reaction: ReactionResponse,
     enforce_unique?: boolean,
   ) {
-    if (this._channel.getClient().userID !== reaction.user_id) {
-      return ownReactions;
-    }
+    console.log('CTR1');
     if (enforce_unique) {
       ownReactions = [];
     } else {
@@ -414,8 +426,9 @@ export class ChannelState {
     }
 
     ownReactions = ownReactions || [];
-
-    ownReactions.push(reaction);
+    if (this._channel.getClient().userID === reaction.user_id) {
+      ownReactions.push(reaction);
+    }
 
     return ownReactions;
   }
@@ -568,9 +581,9 @@ export class ChannelState {
           (msg) => msg.id === message.id,
         );
         if (msgIndex !== -1) {
-          this.messageSets[messageSetIndex].messages[msgIndex] = updateFunc(
-            this.messageSets[messageSetIndex].messages[msgIndex],
-          );
+          const upMsg = updateFunc(this.messageSets[messageSetIndex].messages[msgIndex]);
+          console.log('FOUND THIS: ', upMsg);
+          this.messageSets[messageSetIndex].messages[msgIndex] = upMsg;
         }
       }
     }
