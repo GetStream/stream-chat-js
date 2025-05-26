@@ -1053,7 +1053,7 @@ export class Channel {
   }
 
   _isTypingIndicatorsEnabled(): boolean {
-    if (!this.getConfig()?.typing_events) {
+    if (!this.getConfig()?.typing_events || !this.getClient().wsConnection?.isHealthy) {
       return false;
     }
     return this.getClient().user?.privacy_settings?.typing_indicators?.enabled ?? true;
@@ -1123,7 +1123,7 @@ export class Channel {
     if (this.lastKeyStroke) {
       const now = new Date();
       const diff = now.getTime() - this.lastKeyStroke.getTime();
-      if (diff > 1000 && this.isTyping && this.getClient().wsConnection?.isHealthy) {
+      if (diff > 1000 && this.isTyping) {
         logChatPromiseExecution(this.stopTyping(), 'stop typing event');
       }
     }

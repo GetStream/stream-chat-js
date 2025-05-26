@@ -1403,7 +1403,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       if (task.type === 'send-message') {
         const newMessageResponse = await channel._sendMessage(...task.payload);
         const newMessage = newMessageResponse?.message;
-        if (isPendingTask) {
+        if (isPendingTask && newMessage) {
           if (newMessage?.parent_id) {
             this.client.threads.threadsById[newMessage.parent_id]?.upsertReplyLocally({
               message: newMessage,
@@ -1412,7 +1412,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
           }
           channel.state.addMessageSorted(newMessage, true);
         }
-        return newMessage;
+        return newMessageResponse;
       }
     }
 
