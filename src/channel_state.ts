@@ -418,7 +418,6 @@ export class ChannelState {
     reaction: ReactionResponse,
     enforce_unique?: boolean,
   ) {
-    console.log('CTR1');
     if (enforce_unique) {
       ownReactions = [];
     } else {
