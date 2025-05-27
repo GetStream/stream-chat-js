@@ -89,7 +89,7 @@ export type ChannelManagerEventHandlerOverrides = Partial<
   Record<ChannelManagerEventHandlerNames, EventHandlerOverrideType>
 >;
 
-export type QueryChannelsRequestPayload = Pick<
+export type ExecuteChannelsQueryPayload = Pick<
   ChannelManagerPagination,
   'filters' | 'sort' | 'options'
 > & { stateOptions: ChannelStateOptions };
@@ -256,8 +256,8 @@ export class ChannelManager extends WithSubscriptions {
     this.options = { ...DEFAULT_CHANNEL_MANAGER_OPTIONS, ...options };
   };
 
-  private queryChannelsRequest = async (
-    payload: QueryChannelsRequestPayload,
+  private executeChannelsQuery = async (
+    payload: ExecuteChannelsQueryPayload,
     retryCount = 0,
   ): Promise<void> => {
     const { filters, sort, options, stateOptions } = payload;
@@ -310,7 +310,7 @@ export class ChannelManager extends WithSubscriptions {
 
       await waitSeconds(DEFAULT_QUERY_CHANNELS_SECONDS_BETWEEN_RETRIES);
 
-      return this.queryChannelsRequest(payload, retryCount + 1);
+      return this.executeChannelsQuery(payload, retryCount + 1);
     }
   };
 
@@ -333,7 +333,7 @@ export class ChannelManager extends WithSubscriptions {
       return;
     }
 
-    const queryChannelsRequestPayload = { filters, sort, options, stateOptions };
+    const executeChannelsQueryPayload = { filters, sort, options, stateOptions };
 
     try {
       this.stateOptions = stateOptions;
@@ -372,13 +372,13 @@ export class ChannelManager extends WithSubscriptions {
           this.client.offlineDb.syncManager.scheduleSyncStatusChangeCallback(
             this.id,
             async () => {
-              await this.queryChannelsRequest(queryChannelsRequestPayload);
+              await this.executeChannelsQuery(executeChannelsQueryPayload);
             },
           );
           return;
         }
       }
-      await this.queryChannelsRequest(queryChannelsRequestPayload);
+      await this.executeChannelsQuery(executeChannelsQueryPayload);
     } catch (error) {
       this.client.logger('error', (error as Error).message);
       this.state.next((currentState) => ({

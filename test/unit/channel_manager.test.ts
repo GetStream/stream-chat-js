@@ -438,7 +438,7 @@ describe('ChannelManager', () => {
     describe('queryChannels', () => {
       describe('with OfflineDB', () => {
         let hydrateActiveChannelsSpy: sinon.SinonSpy;
-        let queryChannelsRequestSpy: sinon.SinonSpy;
+        let executeChannelsQuerySpy: sinon.SinonSpy;
         let scheduleSyncStatusCallbackSpy: sinon.SinonSpy;
 
         beforeEach(async () => {
@@ -449,9 +449,9 @@ describe('ChannelManager', () => {
           ).mockResolvedValue(mockChannelPages[0]);
 
           hydrateActiveChannelsSpy = sinon.stub(client, 'hydrateActiveChannels');
-          queryChannelsRequestSpy = sinon.stub(
+          executeChannelsQuerySpy = sinon.stub(
             channelManager as any,
-            'queryChannelsRequest',
+            'executeChannelsQuery',
           );
           scheduleSyncStatusCallbackSpy = sinon.spy(
             client.offlineDb!.syncManager,
@@ -492,7 +492,7 @@ describe('ChannelManager', () => {
           ).toBe(true);
 
           expect(stateChangeSpy.calledOnceWithExactly(channels));
-          expect(queryChannelsRequestSpy.called).to.be.false;
+          expect(executeChannelsQuerySpy.called).to.be.false;
           expect(scheduleSyncStatusCallbackSpy.called).to.be.true;
         });
 
@@ -510,7 +510,7 @@ describe('ChannelManager', () => {
           expect(client.offlineDb!.getChannelsForQuery).not.toHaveBeenCalled();
           expect(hydrateActiveChannelsSpy.called).to.be.false;
           expect(stateChangeSpy.called).to.be.false;
-          expect(queryChannelsRequestSpy.called).to.be.false;
+          expect(executeChannelsQuerySpy.called).to.be.false;
           expect(scheduleSyncStatusCallbackSpy.called).to.be.true;
         });
 
@@ -524,7 +524,7 @@ describe('ChannelManager', () => {
 
           await channelManager.queryChannels({ filterA: true }, { asc: 1 });
 
-          expect(queryChannelsRequestSpy.called).to.be.false;
+          expect(executeChannelsQuerySpy.called).to.be.false;
           expect(scheduleSyncStatusCallbackSpy.calledOnce).toBe(true);
 
           const [id, callback] = scheduleSyncStatusCallbackSpy.firstCall.args;
@@ -535,7 +535,7 @@ describe('ChannelManager', () => {
           await callback();
 
           expect(
-            queryChannelsRequestSpy.calledOnceWithExactly({
+            executeChannelsQuerySpy.calledOnceWithExactly({
               filters: { filterA: true },
               sort: { asc: 1 },
               options: {},
@@ -570,7 +570,7 @@ describe('ChannelManager', () => {
           expect(hydrateActiveChannelsSpy.called).to.be.true;
           expect(stateChangeSpy.called).to.be.true;
           expect(scheduleSyncStatusCallbackSpy.called).to.be.false;
-          expect(queryChannelsRequestSpy.calledOnce).to.be.true;
+          expect(executeChannelsQuerySpy.calledOnce).to.be.true;
         });
 
         it('continues with normal queryChannels flow if client.user is missing', async () => {
@@ -589,7 +589,7 @@ describe('ChannelManager', () => {
           expect(hydrateActiveChannelsSpy.called).to.be.false;
           expect(stateChangeSpy.called).to.be.false;
           expect(scheduleSyncStatusCallbackSpy.called).to.be.false;
-          expect(queryChannelsRequestSpy.calledOnce).to.be.true;
+          expect(executeChannelsQuerySpy.calledOnce).to.be.true;
         });
       });
 
@@ -662,8 +662,8 @@ describe('ChannelManager', () => {
         expect(stateChangeSpy.args[0][0]).to.deep.equal({ initialized: true });
       });
 
-      describe('queryChannelsRequest', () => {
-        it('should properly update the options after queryChannelsRequest', async () => {
+      describe('executeChannelsQuery', () => {
+        it('should properly update the options after executeChannelsQuery', async () => {
           const stateChangeSpy = sinon.spy();
           channelManager.state.subscribeWithSelector(
             (nextValue) => ({ pagination: nextValue.pagination }),
@@ -671,7 +671,7 @@ describe('ChannelManager', () => {
           );
           stateChangeSpy.resetHistory();
 
-          await channelManager['queryChannelsRequest']({
+          await channelManager['executeChannelsQuery']({
             filters: { filterA: true },
             sort: { asc: 1 },
             options: { limit: 10, offset: 0 },
@@ -701,9 +701,9 @@ describe('ChannelManager', () => {
           expect(channels.length).to.equal(10);
         });
 
-        it('should properly update hasNext and offset after queryChannelsRequest if the first returned page is less than the limit', async () => {
+        it('should properly update hasNext and offset after executeChannelsQuery if the first returned page is less than the limit', async () => {
           clientQueryChannelsStub.callsFake(() => mockChannelPages[2]);
-          await channelManager['queryChannelsRequest']({
+          await channelManager['executeChannelsQuery']({
             filters: { filterA: true },
             sort: { asc: 1 },
             options: { limit: 10, offset: 0 },
@@ -733,7 +733,7 @@ describe('ChannelManager', () => {
           );
           stateChangeSpy.resetHistory();
 
-          await channelManager['queryChannelsRequest']({
+          await channelManager['executeChannelsQuery']({
             filters: { filterA: true },
             sort: { asc: 1 },
             options: { limit: 10, offset: 0 },
@@ -767,7 +767,7 @@ describe('ChannelManager', () => {
           );
           stateChangeSpy.resetHistory();
 
-          await channelManager['queryChannelsRequest'](
+          await channelManager['executeChannelsQuery'](
             {
               filters: { filterA: true },
               sort: { asc: 1 },
@@ -800,7 +800,7 @@ describe('ChannelManager', () => {
           );
           stateChangeSpy.resetHistory();
 
-          await channelManager['queryChannelsRequest']({
+          await channelManager['executeChannelsQuery']({
             filters: { filterA: true },
             sort: { asc: 1 },
             options: { limit: 10, offset: 0 },
