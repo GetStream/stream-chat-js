@@ -18,13 +18,13 @@ import {
   promoteChannel,
   shouldConsiderArchivedChannels,
   shouldConsiderPinnedChannels,
+  sleep,
   uniqBy,
-  waitSeconds,
 } from './utils';
 import { generateUUIDv4 } from './utils';
 import {
+  DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES,
   DEFAULT_QUERY_CHANNELS_RETRY_COUNT,
-  DEFAULT_QUERY_CHANNELS_SECONDS_BETWEEN_RETRIES,
 } from './constants';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 
@@ -308,7 +308,7 @@ export class ChannelManager extends WithSubscriptions {
         return;
       }
 
-      await waitSeconds(DEFAULT_QUERY_CHANNELS_SECONDS_BETWEEN_RETRIES);
+      await sleep(DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES);
 
       return this.executeChannelsQuery(payload, retryCount + 1);
     }

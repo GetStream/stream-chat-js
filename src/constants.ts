@@ -28,4 +28,4 @@ export const RESERVED_UPDATED_MESSAGE_FIELDS = {
 } as const;
 export const LOCAL_MESSAGE_FIELDS = { error: true } as const;
 export const DEFAULT_QUERY_CHANNELS_RETRY_COUNT = 3;
-export const DEFAULT_QUERY_CHANNELS_SECONDS_BETWEEN_RETRIES = 1;
+export const DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES = 1000; // 1 second

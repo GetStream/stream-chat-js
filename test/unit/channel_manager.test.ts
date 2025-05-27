@@ -725,7 +725,7 @@ describe('ChannelManager', () => {
 
         it('retries up to 3 times when queryChannels fails', async () => {
           clientQueryChannelsStub.rejects(new Error('fail'));
-          const waitSecondsSpy = vi.spyOn(utils, 'waitSeconds');
+          const sleepSpy = vi.spyOn(utils, 'sleep');
           const stateChangeSpy = sinon.spy();
           channelManager.state.subscribeWithSelector(
             (nextValue) => ({ error: nextValue.error }),
@@ -744,9 +744,7 @@ describe('ChannelManager', () => {
           expect(clientQueryChannelsStub.callCount).to.equal(
             DEFAULT_QUERY_CHANNELS_RETRY_COUNT + 1,
           ); // // initial + however many retried are configured
-          expect(waitSecondsSpy).toHaveBeenCalledTimes(
-            DEFAULT_QUERY_CHANNELS_RETRY_COUNT,
-          );
+          expect(sleepSpy).toHaveBeenCalledTimes(DEFAULT_QUERY_CHANNELS_RETRY_COUNT);
           expect(stateChangeSpy.callCount).to.equal(1);
           expect(stateChangeSpy.args[0][0]).to.deep.equal({
             error: new Error(
@@ -759,7 +757,7 @@ describe('ChannelManager', () => {
 
         it('does not retry more than 3 times', async () => {
           clientQueryChannelsStub.rejects(new Error('fail'));
-          const waitSecondsSpy = vi.spyOn(utils, 'waitSeconds');
+          const sleepSpy = vi.spyOn(utils, 'sleep');
           const stateChangeSpy = sinon.spy();
           channelManager.state.subscribeWithSelector(
             (nextValue) => ({ error: nextValue.error }),
@@ -779,7 +777,7 @@ describe('ChannelManager', () => {
           const { channels, initialized } = channelManager.state.getLatestValue();
 
           expect(clientQueryChannelsStub.callCount).to.equal(1);
-          expect(waitSecondsSpy).toHaveBeenCalledTimes(0);
+          expect(sleepSpy).toHaveBeenCalledTimes(0);
           expect(stateChangeSpy.callCount).to.equal(1);
           expect(stateChangeSpy.args[0][0]).to.deep.equal({
             error: new Error(
@@ -792,7 +790,7 @@ describe('ChannelManager', () => {
 
         it('retries once and succeeds on second try', async () => {
           clientQueryChannelsStub.onFirstCall().rejects(new Error('flaky'));
-          const waitSecondsSpy = vi.spyOn(utils, 'waitSeconds');
+          const sleepSpy = vi.spyOn(utils, 'sleep');
           const stateChangeSpy = sinon.spy();
           channelManager.state.subscribeWithSelector(
             (nextValue) => ({ error: nextValue.error, channels: nextValue.channels }),
@@ -809,7 +807,7 @@ describe('ChannelManager', () => {
           const { channels, initialized } = channelManager.state.getLatestValue();
 
           expect(clientQueryChannelsStub.callCount).to.equal(2);
-          expect(waitSecondsSpy).toHaveBeenCalledTimes(1);
+          expect(sleepSpy).toHaveBeenCalledTimes(1);
           expect(stateChangeSpy.callCount).to.equal(1);
           expect(stateChangeSpy.args[0][0].channels.length).to.equal(10);
           expect(channels.length).to.equal(10);

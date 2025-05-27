@@ -25,6 +25,7 @@ import {
   uniqBy,
   runDetached,
   waitSeconds,
+  sleep,
 } from '../../src/utils';
 
 import type {
@@ -1137,7 +1138,7 @@ describe('runDetached', () => {
   });
 });
 
-describe('waitSeconds', () => {
+describe('sleep', () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -1147,7 +1148,7 @@ describe('waitSeconds', () => {
   });
 
   it('resolves after the specified number of seconds', async () => {
-    const waitPromise = waitSeconds(2);
+    const waitPromise = sleep(2000);
 
     // Advance time by 2 seconds
     vi.advanceTimersByTime(2000);
@@ -1156,7 +1157,7 @@ describe('waitSeconds', () => {
   });
 
   it('does not resolve before the time has passed', async () => {
-    const waitPromise = waitSeconds(3);
+    const waitPromise = sleep(3000);
 
     let resolved = false;
     waitPromise.then(() => {
