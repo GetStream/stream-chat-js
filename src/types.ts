@@ -2543,7 +2543,7 @@ export type EndpointName =
   | 'CreateChannelType'
   | 'DeleteChannel'
   | 'DeleteChannels'
-  | 'DeleteChannelType'
+  | 'DBDeleteChannelType'
   | 'GetChannelType'
   | 'ListChannelTypes'
   | 'ListDevices'

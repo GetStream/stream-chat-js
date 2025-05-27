@@ -2800,7 +2800,7 @@ export class StreamChat {
     );
   }
 
-  deleteChannelType(channelType: string) {
+  DBDeleteChannelType(channelType: string) {
     return this.delete<APIResponse>(
       this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`,
     );

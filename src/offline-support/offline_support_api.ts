@@ -4,7 +4,7 @@ import type {
   OfflineDBApi,
   OfflineDBState,
   PendingTask,
-  PreparedBatchQueries,
+  PrepareBatchDBQueries,
 } from './types';
 import type { StreamChat } from '../client';
 import type { AxiosError } from 'axios';
@@ -44,8 +44,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * - The users table with any users associated
    * Will return the prepared queries for delayed execution (even if they are
    * already executed).
-   * @param {InsertReactionType} options
-   * @returns {Promise<ExecuteBatchQueriesType>}
+   * @param {DBInsertReactionType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
    */
   abstract insertReaction: OfflineDBApi['insertReaction'];
 
@@ -55,8 +55,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * Will write to only the table containing the cids.
    * Will return the prepared queries for delayed execution (even if they are
    * already executed).
-   * @param {UpsertCidsForQueryType} options
-   * @returns {Promise<ExecuteBatchQueriesType>}
+   * @param {DBUpsertCidsForQueryType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
    */
   abstract upsertCidsForQuery: OfflineDBApi['upsertCidsForQuery'];
 
@@ -75,8 +75,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * - The reads table for each user
    * Will return the prepared queries for delayed execution (even if they are
    * already executed).
-   * @param {UpsertChannelsType} options
-   * @returns {Promise<ExecuteBatchQueriesType>}
+   * @param {DBUpsertChannelsType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
    */
   abstract upsertChannels: OfflineDBApi['upsertChannels'];
 
@@ -86,8 +86,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * Will only write to the sync status table.
    * Will return the prepared queries for delayed execution (even if they are
    * already executed).
-   * @param {UpsertUserSyncStatusType} options
-   * @returns {Promise<ExecuteBatchQueriesType>}
+   * @param {DBUpsertUserSyncStatusType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
    */
   abstract upsertUserSyncStatus: OfflineDBApi['upsertUserSyncStatus'];
 
@@ -98,8 +98,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * Will only write to the respective app settings table.
    * Will return the prepared queries for delayed execution (even if they are
    * already executed).
-   * @param {UpsertAppSettingsType} options
-   * @returns {Promise<ExecuteBatchQueriesType>}
+   * @param {DBUpsertAppSettingsType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
    */
   abstract upsertAppSettings: OfflineDBApi['upsertAppSettings'];
 
@@ -110,8 +110,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * associated due to how the poll state works.
    * Will return the prepared queries for delayed execution (even if they are
    * already executed).
-   * @param {UpsertPollType} options
-   * @returns {Promise<ExecuteBatchQueriesType>}
+   * @param {DBUpsertPollType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
    */
   abstract upsertPoll: OfflineDBApi['upsertPoll'];
 
@@ -121,8 +121,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * Will only write to the channels table.
    * Will return the prepared queries for delayed execution (even if they are
    * already executed).
-   * @param {UpsertChannelDataType} options
-   * @returns {Promise<ExecuteBatchQueriesType>}
+   * @param {DBUpsertChannelDataType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
    */
   abstract upsertChannelData: OfflineDBApi['upsertChannelData'];
 
@@ -134,8 +134,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * - The users table for each user associated with a read
    * Will return the prepared queries for delayed execution (even if they are
    * already executed).
-   * @param {UpsertReadsType} options
-   * @returns {Promise<ExecuteBatchQueriesType>}
+   * @param {DBUpsertReadsType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
    */
   abstract upsertReads: OfflineDBApi['upsertReads'];
 
@@ -150,8 +150,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * - The users table
    * Will return the prepared queries for delayed execution (even if they are
    * already executed).
-   * @param {UpsertMessagesType} options
-   * @returns {Promise<ExecuteBatchQueriesType>}
+   * @param {DBUpsertMessagesType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
    */
   abstract upsertMessages: OfflineDBApi['upsertMessages'];
 
@@ -163,8 +163,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * - The members table
    * Will return the prepared queries for delayed execution (even if they are
    * already executed).
-   * @param {UpsertMembersType} options
-   * @returns {Promise<ExecuteBatchQueriesType>}
+   * @param {DBUpsertMembersType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
    */
   abstract upsertMembers: OfflineDBApi['upsertMembers'];
 
@@ -176,8 +176,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * Will write to the reactions table.
    * Will return the prepared queries for delayed execution (even if they are
    * already executed).
-   * @param {UpdateReactionType} options
-   * @returns {Promise<ExecuteBatchQueriesType>}
+   * @param {DBUpdateReactionType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
    */
   abstract updateReaction: OfflineDBApi['updateReaction'];
 
@@ -188,8 +188,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * Will write to the messages table.
    * Will return the prepared queries for delayed execution (even if they are
    * already executed).
-   * @param {UpdateMessageType} options
-   * @returns {Promise<ExecuteBatchQueriesType>}
+   * @param {DBUpdateMessageType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
    */
   abstract updateMessage: OfflineDBApi['updateMessage'];
 
@@ -199,7 +199,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * with them in a single ChannelAPIResponse. The implementation itself is responsible
    * for aggregating and serialization of all of the data. Should return as close to
    * the server side ChannelAPIResponse as possible.
-   * @param {GetChannelsType} options
+   * @param {DBGetChannelsType} options
    * @returns {Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>}
    */
   abstract getChannels: OfflineDBApi['getChannels'];
@@ -210,7 +210,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * hash as a query and aggregates all data associated with them in a single ChannelAPIResponse.
    * The implementation itself is responsible for aggregating and serialization of all of the data.
    * Should return as close to the server side ChannelAPIResponse as possible.
-   * @param {GetChannelsForQueryType} options
+   * @param {DBGetChannelsForQueryType} options
    * @returns {Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>}
    */
   abstract getChannelsForQuery: OfflineDBApi['getChannelsForQuery'];
@@ -226,7 +226,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   /**
    * @abstract
    * Fetches the timestamp of the last sync of the DB.
-   * @param {GetLastSyncedAtType} options
+   * @param {DBGetLastSyncedAtType} options
    * @returns {Promise<string | undefined>}
    */
   abstract getLastSyncedAt: OfflineDBApi['getLastSyncedAt'];
@@ -235,7 +235,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * @abstract
    * Fetches all pending tasks from the DB. It will return them in an
    * ordered fashion by the time they were created.
-   * @param {GetPendingTasksType} [conditions]
+   * @param {DBGetPendingTasksType} [conditions]
    * @returns {Promise<PendingTask[]>}
    */
   abstract getPendingTasks: OfflineDBApi['getPendingTasks'];
@@ -246,7 +246,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * only while offline and opening the application, as we only update the
    * app settings whenever they are fetched again so it has the potential to
    * be stale.
-   * @param {GetAppSettingsType} options
+   * @param {DBGetAppSettingsType} options
    * @returns {Promise<AppSettingsAPIResponse | null>}
    */
   abstract getAppSettings: OfflineDBApi['getAppSettings'];
@@ -255,7 +255,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * @abstract
    * Fetches reactions from the DB for a given filter & sort hash and
    * for a given message ID.
-   * @param {GetReactionsType} options
+   * @param {DBGetReactionsType} options
    * @returns {Promise<ReactionResponse[] | null>}
    */
   abstract getReactions: OfflineDBApi['getReactions'];
@@ -264,7 +264,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * @abstract
    * Executes multiple queries in a batched fashion. It will also be done
    * within a transaction.
-   * @param {ExecuteBatchQueriesType} queries
+   * @param {ExecuteBatchDBQueriesType} queries
    * @returns {Promise<unknown>}
    */
   abstract executeSqlBatch: OfflineDBApi['executeSqlBatch'];
@@ -285,8 +285,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * Deletes a pending task from the DB, given its ID.
    * Will return the prepared queries for delayed execution (even if they are
    * already executed).
-   * @param {DeletePendingTaskType} options
-   * @returns {Promise<ExecuteBatchQueriesType>}
+   * @param {DBDeletePendingTaskType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
    */
   abstract deletePendingTask: OfflineDBApi['deletePendingTask'];
 
@@ -296,8 +296,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * Will write to the reactions table removing the reaction.
    * Will return the prepared queries for delayed execution (even if they are
    * already executed).
-   * @param {DeleteReactionType} options
-   * @returns {Promise<ExecuteBatchQueriesType>}
+   * @param {DBDeleteReactionType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
    */
   abstract deleteReaction: OfflineDBApi['deleteReaction'];
 
@@ -307,8 +307,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * Will only write to the members table.
    * Will return the prepared queries for delayed execution (even if they are
    * already executed).
-   * @param {DeleteMemberType} options
-   * @returns {Promise<ExecuteBatchQueriesType>}
+   * @param {DBDeleteMemberType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
    */
   abstract deleteMember: OfflineDBApi['deleteMember'];
 
@@ -319,8 +319,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * a cascading fashion (messages, reactions, members etc.).
    * Will return the prepared queries for delayed execution (even if they are
    * already executed).
-   * @param {DeleteChannelType} options
-   * @returns {Promise<ExecuteBatchQueriesType>}
+   * @param {DBDeleteChannelType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
    */
   abstract deleteChannel: OfflineDBApi['deleteChannel'];
 
@@ -331,8 +331,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * tables in a cascading fashion (reactions, polls etc.).
    * Will return the prepared queries for delayed execution (even if they are
    * already executed).
-   * @param {DeleteMessagesForChannelType} options
-   * @returns {Promise<ExecuteBatchQueriesType>}
+   * @param {DBDeleteMessagesForChannelType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
    */
   abstract deleteMessagesForChannel: OfflineDBApi['deleteMessagesForChannel'];
 
@@ -342,8 +342,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * Will only update the pending tasks table.
    * Will return the prepared queries for delayed execution (even if they are
    * already executed).
-   * @param {DropPendingTasksType} options
-   * @returns {Promise<ExecuteBatchQueriesType>}
+   * @param {DBDropPendingTasksType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
    */
   abstract dropPendingTasks: OfflineDBApi['dropPendingTasks'];
 
@@ -354,8 +354,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * in a cascading fashion (reactions, polls etc.).
    * Will return the prepared queries for delayed execution (even if they are
    * already executed).
-   * @param {DeleteMessageType} options
-   * @returns {Promise<ExecuteBatchQueriesType>}
+   * @param {DBDeleteMessageType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
    */
   abstract hardDeleteMessage: OfflineDBApi['hardDeleteMessage'];
 
@@ -366,8 +366,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * as deleted and not removed from the DB.
    * Will return the prepared queries for delayed execution (even if they are
    * already executed).
-   * @param {DeleteMessageType} options
-   * @returns {Promise<ExecuteBatchQueriesType>}
+   * @param {DBDeleteMessageType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
    */
   abstract softDeleteMessage: OfflineDBApi['softDeleteMessage'];
 
@@ -383,7 +383,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * A utility query that checks whether a specific channel exists in the DB.
    * Technically the same as actually fetching that channel through other queries,
    * but much faster.
-   * @param {ChannelExistsType} options
+   * @param {DBChannelExistsType} options
    * @returns {Promise<boolean>}
    */
   abstract channelExists: OfflineDBApi['channelExists'];
@@ -473,7 +473,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       execute = true,
       forceUpdate = false,
     }: { event: Event; execute?: boolean; forceUpdate?: boolean },
-    createQueries: (executeOverride?: boolean) => Promise<PreparedBatchQueries[]>,
+    createQueries: (executeOverride?: boolean) => Promise<PrepareBatchDBQueries[]>,
   ) => {
     const channelFromEvent = event.channel;
     const cid = event.cid || channelFromEvent?.cid;

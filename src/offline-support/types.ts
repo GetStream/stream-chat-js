@@ -17,14 +17,14 @@ import type {
 import type { Channel } from '../channel';
 import type { StreamChat } from '../client';
 
-export type PreparedBatchQueries =
+export type PrepareBatchDBQueries =
   | [string]
   | [string, Array<unknown> | Array<Array<unknown>>];
 
 /**
  * Options to insert a reaction into a message.
  */
-export type InsertReactionType = {
+export type DBInsertReactionType = {
   /** Message to which the reaction is applied. */
   message: MessageResponse | LocalMessage;
   /** The reaction to insert. */
@@ -36,7 +36,7 @@ export type InsertReactionType = {
 /**
  * Options to upsert channel IDs associated with a query.
  */
-export type UpsertCidsForQueryType = {
+export type DBUpsertCidsForQueryType = {
   /** Array of channel IDs. */
   cids: string[];
   /** Optional filters for the channels. */
@@ -50,7 +50,7 @@ export type UpsertCidsForQueryType = {
 /**
  * Options to upsert multiple channels.
  */
-export type UpsertChannelsType = {
+export type DBUpsertChannelsType = {
   /** Array of channel API responses. */
   channels: ChannelAPIResponse[];
   /** Whether to immediately execute the operation. */
@@ -62,7 +62,7 @@ export type UpsertChannelsType = {
 /**
  * Options to upsert application settings for a user.
  */
-export type UpsertAppSettingsType = {
+export type DBUpsertAppSettingsType = {
   /** App settings data. */
   appSettings: AppSettingsAPIResponse;
   /** ID of the user the settings belong to. */
@@ -74,7 +74,7 @@ export type UpsertAppSettingsType = {
 /**
  * Sync status information for a user.
  */
-export type UpsertUserSyncStatusType = {
+export type DBUpsertUserSyncStatusType = {
   /** ID of the user. */
   userId: string;
   /** ISO timestamp of the last sync. */
@@ -86,7 +86,7 @@ export type UpsertUserSyncStatusType = {
 /**
  * Options to upsert a poll.
  */
-export type UpsertPollType = {
+export type DBUpsertPollType = {
   /** Poll data to be stored. */
   poll: PollResponse;
   /** Whether to immediately execute the operation. */
@@ -96,7 +96,7 @@ export type UpsertPollType = {
 /**
  * Options to upsert individual channel data.
  */
-export type UpsertChannelDataType = {
+export type DBUpsertChannelDataType = {
   /** Channel data. */
   channel: ChannelResponse;
   /** Whether to immediately execute the operation. */
@@ -106,7 +106,7 @@ export type UpsertChannelDataType = {
 /**
  * Options to upsert read statuses for a channel.
  */
-export type UpsertReadsType = {
+export type DBUpsertReadsType = {
   /** Channel ID. */
   cid: string;
   /** Array of read statuses. */
@@ -118,7 +118,7 @@ export type UpsertReadsType = {
 /**
  * Options to upsert multiple messages.
  */
-export type UpsertMessagesType = {
+export type DBUpsertMessagesType = {
   /** Array of message responses. */
   messages: MessageResponse[];
   /** Whether to immediately execute the operation. */
@@ -128,7 +128,7 @@ export type UpsertMessagesType = {
 /**
  * Options to upsert members in a channel.
  */
-export type UpsertMembersType = {
+export type DBUpsertMembersType = {
   /** Channel ID. */
   cid: string;
   /** Array of channel members. */
@@ -140,7 +140,7 @@ export type UpsertMembersType = {
 /**
  * Options to update a reaction.
  */
-export type UpdateReactionType = {
+export type DBUpdateReactionType = {
   /** Message associated with the reaction. */
   message: MessageResponse | LocalMessage;
   /** The updated reaction. */
@@ -152,7 +152,7 @@ export type UpdateReactionType = {
 /**
  * Options to update a message.
  */
-export type UpdateMessageType = {
+export type DBUpdateMessageType = {
   /** Message to update. */
   message: MessageResponse | LocalMessage;
   /** Whether to immediately execute the operation. */
@@ -162,7 +162,7 @@ export type UpdateMessageType = {
 /**
  * Options to get channels by their IDs.
  */
-export type GetChannelsType = {
+export type DBGetChannelsType = {
   /** Array of channel IDs. */
   cids: string[];
   /** ID of the user. */
@@ -172,7 +172,7 @@ export type GetChannelsType = {
 /**
  * Options to get channels based on filters.
  */
-export type GetChannelsForQueryType = {
+export type DBGetChannelsForQueryType = {
   /** ID of the user. */
   userId: string;
   /** Optional filters for channels. */
@@ -184,7 +184,7 @@ export type GetChannelsForQueryType = {
 /**
  * Get the last sync timestamp for a user.
  */
-export type GetLastSyncedAtType = {
+export type DBGetLastSyncedAtType = {
   /** ID of the user. */
   userId: string;
 };
@@ -192,7 +192,7 @@ export type GetLastSyncedAtType = {
 /**
  * Options to fetch pending tasks for a specific message.
  */
-export type GetPendingTasksType = {
+export type DBGetPendingTasksType = {
   /** Optional message ID to filter tasks. */
   messageId?: string;
 };
@@ -200,7 +200,7 @@ export type GetPendingTasksType = {
 /**
  * Get application settings for a user.
  */
-export type GetAppSettingsType = {
+export type DBGetAppSettingsType = {
   /** ID of the user. */
   userId: string;
 };
@@ -208,7 +208,7 @@ export type GetAppSettingsType = {
 /**
  * Options to retrieve reactions for a message.
  */
-export type GetReactionsType = {
+export type DBGetReactionsType = {
   /** ID of the message. */
   messageId: string;
   /** Optional filter to apply to reactions. */
@@ -222,7 +222,7 @@ export type GetReactionsType = {
 /**
  * Delete a pending task by ID.
  */
-export type DeletePendingTaskType = {
+export type DBDeletePendingTaskType = {
   /** ID of the pending task. */
   id: number;
 };
@@ -230,7 +230,7 @@ export type DeletePendingTaskType = {
 /**
  * Options to delete a reaction from a message.
  */
-export type DeleteReactionType = {
+export type DBDeleteReactionType = {
   /** The reaction to delete. */
   reaction: ReactionResponse;
   /** Optional message associated with the reaction. */
@@ -242,7 +242,7 @@ export type DeleteReactionType = {
 /**
  * Options to delete a channel member.
  */
-export type DeleteMemberType = {
+export type DBDeleteMemberType = {
   /** Channel ID. */
   cid: string;
   /** Member to remove. */
@@ -254,7 +254,7 @@ export type DeleteMemberType = {
 /**
  * Options to drop all pending tasks for a message.
  */
-export type DropPendingTasksType = {
+export type DBDropPendingTasksType = {
   /** ID of the message. */
   messageId: string;
   /** Whether to immediately execute the operation. */
@@ -264,7 +264,7 @@ export type DropPendingTasksType = {
 /**
  * Options to delete a message.
  */
-export type DeleteMessageType = {
+export type DBDeleteMessageType = {
   /** ID of the message. */
   id: string;
   /** Whether to immediately execute the operation. */
@@ -274,7 +274,7 @@ export type DeleteMessageType = {
 /**
  * Options to delete a channel.
  */
-export type DeleteChannelType = {
+export type DBDeleteChannelType = {
   /** Channel ID. */
   cid: string;
   /** Whether to immediately execute the operation. */
@@ -284,7 +284,7 @@ export type DeleteChannelType = {
 /**
  * Options to delete messages in a channel.
  */
-export type DeleteMessagesForChannelType = {
+export type DBDeleteMessagesForChannelType = {
   /** Channel ID. */
   cid: string;
   /** Timestamp before which messages are deleted. */
@@ -296,7 +296,7 @@ export type DeleteMessagesForChannelType = {
 /**
  * Check if a channel exists by ID.
  */
-export type ChannelExistsType = {
+export type DBChannelExistsType = {
   /** Channel ID. */
   cid: string;
 };
@@ -304,50 +304,60 @@ export type ChannelExistsType = {
 /**
  * Represents a list of batch SQL queries to be executed.
  */
-export type ExecuteBatchQueriesType = PreparedBatchQueries[];
+export type ExecuteBatchDBQueriesType = PrepareBatchDBQueries[];
 
 export interface OfflineDBApi {
-  insertReaction: (options: InsertReactionType) => Promise<ExecuteBatchQueriesType>;
+  insertReaction: (options: DBInsertReactionType) => Promise<ExecuteBatchDBQueriesType>;
   upsertCidsForQuery: (
-    options: UpsertCidsForQueryType,
-  ) => Promise<ExecuteBatchQueriesType>;
-  upsertChannels: (options: UpsertChannelsType) => Promise<ExecuteBatchQueriesType>;
+    options: DBUpsertCidsForQueryType,
+  ) => Promise<ExecuteBatchDBQueriesType>;
+  upsertChannels: (options: DBUpsertChannelsType) => Promise<ExecuteBatchDBQueriesType>;
   upsertUserSyncStatus: (
-    options: UpsertUserSyncStatusType,
-  ) => Promise<ExecuteBatchQueriesType>;
-  upsertAppSettings: (options: UpsertAppSettingsType) => Promise<ExecuteBatchQueriesType>;
-  upsertPoll: (options: UpsertPollType) => Promise<ExecuteBatchQueriesType>;
-  upsertChannelData: (options: UpsertChannelDataType) => Promise<ExecuteBatchQueriesType>;
-  upsertReads: (options: UpsertReadsType) => Promise<ExecuteBatchQueriesType>;
-  upsertMessages: (options: UpsertMessagesType) => Promise<ExecuteBatchQueriesType>;
-  upsertMembers: (options: UpsertMembersType) => Promise<ExecuteBatchQueriesType>;
-  updateReaction: (options: UpdateReactionType) => Promise<ExecuteBatchQueriesType>;
-  updateMessage: (options: UpdateMessageType) => Promise<ExecuteBatchQueriesType>;
+    options: DBUpsertUserSyncStatusType,
+  ) => Promise<ExecuteBatchDBQueriesType>;
+  upsertAppSettings: (
+    options: DBUpsertAppSettingsType,
+  ) => Promise<ExecuteBatchDBQueriesType>;
+  upsertPoll: (options: DBUpsertPollType) => Promise<ExecuteBatchDBQueriesType>;
+  upsertChannelData: (
+    options: DBUpsertChannelDataType,
+  ) => Promise<ExecuteBatchDBQueriesType>;
+  upsertReads: (options: DBUpsertReadsType) => Promise<ExecuteBatchDBQueriesType>;
+  upsertMessages: (options: DBUpsertMessagesType) => Promise<ExecuteBatchDBQueriesType>;
+  upsertMembers: (options: DBUpsertMembersType) => Promise<ExecuteBatchDBQueriesType>;
+  updateReaction: (options: DBUpdateReactionType) => Promise<ExecuteBatchDBQueriesType>;
+  updateMessage: (options: DBUpdateMessageType) => Promise<ExecuteBatchDBQueriesType>;
   getChannels: (
-    options: GetChannelsType,
+    options: DBGetChannelsType,
   ) => Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>;
   getChannelsForQuery: (
-    options: GetChannelsForQueryType,
+    options: DBGetChannelsForQueryType,
   ) => Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>;
   getAllChannelCids: () => Promise<string[]>;
-  getLastSyncedAt: (options: GetLastSyncedAtType) => Promise<string | undefined>;
-  getAppSettings: (options: GetAppSettingsType) => Promise<AppSettingsAPIResponse | null>;
-  getReactions: (options: GetReactionsType) => Promise<ReactionResponse[] | null>;
-  executeSqlBatch: (queries: ExecuteBatchQueriesType) => Promise<unknown>;
+  getLastSyncedAt: (options: DBGetLastSyncedAtType) => Promise<string | undefined>;
+  getAppSettings: (
+    options: DBGetAppSettingsType,
+  ) => Promise<AppSettingsAPIResponse | null>;
+  getReactions: (options: DBGetReactionsType) => Promise<ReactionResponse[] | null>;
+  executeSqlBatch: (queries: ExecuteBatchDBQueriesType) => Promise<unknown>;
   addPendingTask: (task: PendingTask) => Promise<() => Promise<void>>;
-  getPendingTasks: (conditions?: GetPendingTasksType) => Promise<PendingTask[]>;
-  deletePendingTask: (options: DeletePendingTaskType) => Promise<ExecuteBatchQueriesType>;
-  deleteReaction: (options: DeleteReactionType) => Promise<ExecuteBatchQueriesType>;
-  deleteMember: (options: DeleteMemberType) => Promise<ExecuteBatchQueriesType>;
-  deleteChannel: (options: DeleteChannelType) => Promise<ExecuteBatchQueriesType>;
+  getPendingTasks: (conditions?: DBGetPendingTasksType) => Promise<PendingTask[]>;
+  deletePendingTask: (
+    options: DBDeletePendingTaskType,
+  ) => Promise<ExecuteBatchDBQueriesType>;
+  deleteReaction: (options: DBDeleteReactionType) => Promise<ExecuteBatchDBQueriesType>;
+  deleteMember: (options: DBDeleteMemberType) => Promise<ExecuteBatchDBQueriesType>;
+  deleteChannel: (options: DBDeleteChannelType) => Promise<ExecuteBatchDBQueriesType>;
   deleteMessagesForChannel: (
-    options: DeleteMessagesForChannelType,
-  ) => Promise<ExecuteBatchQueriesType>;
-  dropPendingTasks: (options: DropPendingTasksType) => Promise<ExecuteBatchQueriesType>;
-  hardDeleteMessage: (options: DeleteMessageType) => Promise<ExecuteBatchQueriesType>;
-  softDeleteMessage: (options: DeleteMessageType) => Promise<ExecuteBatchQueriesType>;
+    options: DBDeleteMessagesForChannelType,
+  ) => Promise<ExecuteBatchDBQueriesType>;
+  dropPendingTasks: (
+    options: DBDropPendingTasksType,
+  ) => Promise<ExecuteBatchDBQueriesType>;
+  hardDeleteMessage: (options: DBDeleteMessageType) => Promise<ExecuteBatchDBQueriesType>;
+  softDeleteMessage: (options: DBDeleteMessageType) => Promise<ExecuteBatchDBQueriesType>;
   resetDB: () => Promise<unknown>;
-  channelExists: (options: ChannelExistsType) => Promise<boolean>;
+  channelExists: (options: DBChannelExistsType) => Promise<boolean>;
   initializeDB: () => Promise<boolean>;
 }
 

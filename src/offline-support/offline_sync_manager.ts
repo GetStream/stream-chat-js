@@ -1,4 +1,4 @@
-import type { ExecuteBatchQueriesType } from './types';
+import type { ExecuteBatchDBQueriesType } from './types';
 import type { StreamChat } from '../client';
 import type { AbstractOfflineDB } from './offline_support_api';
 
@@ -161,7 +161,7 @@ export class OfflineDBSyncManager {
             this.offlineDb.handleEvent({ event, execute: false }),
           );
           const queriesArray = await Promise.all(queryPromises);
-          const queries = queriesArray.flat() as ExecuteBatchQueriesType;
+          const queries = queriesArray.flat() as ExecuteBatchDBQueriesType;
 
           if (queries.length) {
             await this.offlineDb.executeSqlBatch(queries);
