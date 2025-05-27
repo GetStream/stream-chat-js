@@ -328,6 +328,8 @@ export class ChannelManager extends WithSubscriptions {
     if (
       isLoading &&
       !this.options.abortInFlightQuery &&
+      // TODO: Figure a proper way to either deeply compare these or
+      //       create hashes from each.
       JSON.stringify(filtersFromState) === JSON.stringify(filters)
     ) {
       return;
