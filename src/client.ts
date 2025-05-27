@@ -230,7 +230,7 @@ import { ChannelManager } from './channel_manager';
 import { NotificationManager } from './notifications';
 import { StateStore } from './store';
 import type { MessageComposer } from './messageComposer';
-import type { AbstractOfflineDB } from './offline_support_api';
+import type { AbstractOfflineDB } from './offline-support';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
