@@ -1211,10 +1211,10 @@ export const isLocalMessage = (message: unknown): message is LocalMessage =>
   isDate((message as LocalMessage).created_at);
 
 export const runDetached = <T>(
-  callback: Promise<T>,
+  callback: Promise<void | T>,
   options?: {
     context?: string;
-    onSuccessCallback?: (res: T) => void | Promise<void>;
+    onSuccessCallback?: (res: T | void) => void | Promise<void>;
     onErrorCallback?: (error: Error) => void | Promise<void>;
   },
 ) => {
@@ -1223,5 +1223,12 @@ export const runDetached = <T>(
     console.log(`An error has occurred in context ${context}: ${error}`);
   };
   const onError = onErrorCallback ?? defaultOnError;
-  callback.then(onSuccessCallback).catch(onError);
+
+  let promise = callback;
+
+  if (onSuccessCallback) {
+    promise = promise.then(onSuccessCallback);
+  }
+
+  promise.catch(onError);
 };
