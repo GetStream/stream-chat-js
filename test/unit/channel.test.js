@@ -1656,6 +1656,24 @@ describe('delete reaction flow', () => {
 			expect(channel._deleteReaction).not.toHaveBeenCalled();
 		});
 
+		it('skips calling offlineDb.deleteReaction if the message does not exist in the state, but still queues the task', async () => {
+			const unknownMessageId = 'some-unknown-message-id';
+			await channel.deleteReaction(unknownMessageId, reactionType);
+
+			expect(deleteReactionSpy).not.toHaveBeenCalled();
+			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
+			expect(queueTaskSpy).toHaveBeenCalledWith({
+				task: {
+					channelId: 'test',
+					channelType: 'messaging',
+					messageId: unknownMessageId,
+					payload: [unknownMessageId, reactionType],
+					type: 'delete-reaction',
+				},
+			});
+			expect(channel._deleteReaction).not.toHaveBeenCalled();
+		});
+
 		it('falls back to _deleteReaction if offlineDb throws', async () => {
 			deleteReactionSpy.mockRejectedValue(new Error('Offline failure'));
 

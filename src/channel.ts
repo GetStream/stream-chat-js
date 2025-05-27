@@ -490,10 +490,14 @@ export class Channel {
           type: reactionType,
           user_id: (this.getClient().userID as string) ?? user_id,
         };
-        await offlineDb.deleteReaction({
-          message,
-          reaction,
-        });
+
+        if (message) {
+          await offlineDb.deleteReaction({
+            message,
+            reaction,
+          });
+        }
+
         return await offlineDb.queueTask({
           task: {
             channelId: this.id as string,
