@@ -1,3 +1,23 @@
+## [9.2.0](https://github.com/GetStream/stream-chat-js/compare/v9.1.1...v9.2.0) (2025-05-27)
+
+### Bug Fixes
+
+* add new poll option only when all of the current options are filled ([#1532](https://github.com/GetStream/stream-chat-js/issues/1532)) ([86cd646](https://github.com/GetStream/stream-chat-js/commit/86cd64656df76179745236ef8b6758f79a399e60))
+* allow to compose non-empty message from draft without local edits ([#1533](https://github.com/GetStream/stream-chat-js/issues/1533)) ([a704fc3](https://github.com/GetStream/stream-chat-js/commit/a704fc37e441f4e38b769bce39aef98bc50dea4d))
+* prevent empty poll options and questions in composition ([#1541](https://github.com/GetStream/stream-chat-js/issues/1541)) ([b2e2702](https://github.com/GetStream/stream-chat-js/commit/b2e2702af1b3a838bd0f7cde2e932bae1f56d2ee))
+* respect attachment upload config for files of type FileReference ([#1545](https://github.com/GetStream/stream-chat-js/issues/1545)) ([5f4b551](https://github.com/GetStream/stream-chat-js/commit/5f4b551df7f9fa06205b57c76a569c15a656f923))
+* upsert attachmemts only when attachment exist and handle FileList for react native ([#1539](https://github.com/GetStream/stream-chat-js/issues/1539)) ([a7f0e02](https://github.com/GetStream/stream-chat-js/commit/a7f0e023d543d688ceb8d74562fcea9c9f752f35))
+
+### Features
+
+* [MOD-513]: Soft/Hard Delete Messages on Ban ([#1538](https://github.com/GetStream/stream-chat-js/issues/1538)) ([5fff918](https://github.com/GetStream/stream-chat-js/commit/5fff918f3682ed80b49f34d14397cedcc1b59bc0))
+* add toJSON to ErrorFromResponse class ([#1540](https://github.com/GetStream/stream-chat-js/issues/1540)) ([8f6948f](https://github.com/GetStream/stream-chat-js/commit/8f6948f124babcdb3b4d71d09788ea50ca5ff32d)), closes [GetStream/chat#8211](https://github.com/GetStream/chat/issues/8211)
+* offline support rework ([#1543](https://github.com/GetStream/stream-chat-js/issues/1543)) ([f84d0f3](https://github.com/GetStream/stream-chat-js/commit/f84d0f3d3b5e86f41de4d7710a727bbff472d514))
+
+### Refactors
+
+* general code cleanup (Threads/Polls/MessageComposer) ([#1522](https://github.com/GetStream/stream-chat-js/issues/1522)) ([e4db506](https://github.com/GetStream/stream-chat-js/commit/e4db506d648fba4d84d727eda2c14f85db37f702))
+
 ## [9.1.1](https://github.com/GetStream/stream-chat-js/compare/v9.1.0...v9.1.1) (2025-05-12)
 
 ### Bug Fixes
