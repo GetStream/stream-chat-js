@@ -14,6 +14,43 @@ import {
 } from '../../../src';
 import { AppSettings, AttachmentManager } from '../../../src';
 
+/**
+ * Utility to generate a  file
+ */
+const generateFile = ({
+  name,
+  size = 0,
+  type,
+}: {
+  name: string;
+  size?: number;
+  type: string;
+}) => {
+  return new File([new ArrayBuffer(size)], name, { type });
+};
+
+/**
+ * Utility to generate a FileReference
+ */
+const generateFileReference = ({
+  name,
+  size = 0,
+  type,
+  uri,
+}: {
+  name: string;
+  size?: number;
+  type: string;
+  uri: string;
+}) => {
+  return {
+    name,
+    size,
+    type,
+    uri,
+  } as FileReference;
+};
+
 // Add FileList mock
 vi.mock('../../../src/messageComposer/fileUtils', async (importOriginal) => {
   const original: object = await importOriginal();
@@ -576,25 +613,14 @@ describe('AttachmentManager', () => {
   });
 
   describe('getUploadConfigCheck', () => {
-    it('should not check for file extension config if its a Blob type', async () => {
-      const blob = new Blob([''], { type: 'image/gif' });
-      const {
-        messageComposer: { attachmentManager },
-      } = setup();
-      const result = await attachmentManager.getUploadConfigCheck(blob);
-      expect(result).not.toEqual({
-        uploadBlocked: false,
-        reason: 'allowed_file_extensions',
-      });
-    });
-
-    it("should block files with allowed file extension config if it's a FileReference type", async () => {
-      const file: FileReference = {
+    it.each([
+      generateFile({ name: 'test.gif', type: 'image/gif' }),
+      generateFileReference({
         name: 'test.gif',
         type: 'image/gif',
-        size: 0,
         uri: 'test-uri',
-      };
+      }),
+    ])('should block files with disallowed extensions', async (file) => {
       const {
         messageComposer: { attachmentManager },
       } = setup();
@@ -605,44 +631,14 @@ describe('AttachmentManager', () => {
       });
     });
 
-    it("should block files with blocked file extension config if it's a FileReference type", async () => {
-      const file: FileReference = {
-        name: 'test.pdf',
-        type: 'application/pdf',
-        size: 0,
+    it.each([
+      generateFile({ name: 'test.gif', type: 'image/gif' }),
+      generateFileReference({
+        name: 'test.gif',
+        type: 'image/gif',
         uri: 'test-uri',
-      };
-      const {
-        messageComposer: { attachmentManager },
-      } = setup({
-        appSettings: {
-          ...defaultAppSettings.app,
-          file_upload_config: {
-            ...defaultAppSettings.app.file_upload_config,
-            blocked_file_extensions: ['pdf'],
-          },
-        },
-      });
-      const result = await attachmentManager.getUploadConfigCheck(file);
-      expect(result).toEqual({
-        uploadBlocked: true,
-        reason: 'blocked_file_extensions',
-      });
-    });
-
-    it('should block files with disallowed extensions', async () => {
-      const file = new File([''], 'test.gif', { type: 'image/gif' });
-      const {
-        messageComposer: { attachmentManager },
-      } = setup();
-      const result = await attachmentManager.getUploadConfigCheck(file);
-      expect(result).toEqual({
-        uploadBlocked: true,
-        reason: 'allowed_file_extensions',
-      });
-    });
-
-    it('should block files with blocked extensions', async () => {
+      }),
+    ])('should block files with blocked extensions', async (file) => {
       const {
         messageComposer: { attachmentManager },
       } = setup({
@@ -657,7 +653,6 @@ describe('AttachmentManager', () => {
         },
       });
 
-      const file = new File([''], 'test.gif', { type: 'image/gif' });
       const result = await attachmentManager.getUploadConfigCheck(file);
       expect(result).toEqual({
         uploadBlocked: true,
@@ -665,8 +660,14 @@ describe('AttachmentManager', () => {
       });
     });
 
-    it('should block files with disallowed mime types', async () => {
-      const file = new File([''], 'test.jpg', { type: 'image/gif' });
+    it.each([
+      generateFile({ name: 'test.jpg', type: 'image/gif' }),
+      generateFileReference({
+        name: 'test.jpg',
+        type: 'image/gif',
+        uri: 'test-uri',
+      }),
+    ])('should block files with disallowed mime types', async (file) => {
       const {
         messageComposer: { attachmentManager },
       } = setup();
@@ -677,7 +678,14 @@ describe('AttachmentManager', () => {
       });
     });
 
-    it('should block files with blocked mime types', async () => {
+    it.each([
+      generateFile({ name: 'test.gif', type: 'image/gif' }),
+      generateFileReference({
+        name: 'test.gif',
+        type: 'image/gif',
+        uri: 'test-uri',
+      }),
+    ])('should block files with blocked mime types', async (file) => {
       const {
         messageComposer: { attachmentManager },
       } = setup({
@@ -692,7 +700,6 @@ describe('AttachmentManager', () => {
         },
       });
 
-      const file = new File([''], 'test.jpg', { type: 'image/gif' });
       const result = await attachmentManager.getUploadConfigCheck(file);
       expect(result).toEqual({
         uploadBlocked: true,
@@ -700,7 +707,15 @@ describe('AttachmentManager', () => {
       });
     });
 
-    it('should block files that exceed size limit', async () => {
+    it.each([
+      generateFile({ name: 'test.jpg', type: 'image/jpeg', size: 2000 }),
+      generateFileReference({
+        name: 'test.jpg',
+        type: 'image/jpeg',
+        size: 2000,
+        uri: 'test-uri',
+      }),
+    ])('should block files that exceed size limit', async (file) => {
       const smallSizeLimit = 1000;
       const {
         messageComposer: { attachmentManager },
@@ -718,8 +733,6 @@ describe('AttachmentManager', () => {
         },
       });
 
-      const largeContent = new ArrayBuffer(2000);
-      const file = new File([largeContent], 'test.jpg', { type: 'image/jpeg' });
       const result = await attachmentManager.getUploadConfigCheck(file);
       expect(result).toEqual({
         uploadBlocked: true,
@@ -727,7 +740,14 @@ describe('AttachmentManager', () => {
       });
     });
 
-    it('should block non-image files with disallowed extensions', async () => {
+    it.each([
+      generateFile({ name: 'test.exe', type: 'text/plain' }),
+      generateFileReference({
+        name: 'test.exe',
+        type: 'text/plain',
+        uri: 'test-uri',
+      }),
+    ])('should block non-image files with disallowed extensions', async (file) => {
       const {
         messageComposer: { attachmentManager },
       } = setup({
@@ -741,7 +761,6 @@ describe('AttachmentManager', () => {
         },
       });
 
-      const file = new File([''], 'test.exe', { type: 'text/plain' });
       const result = await attachmentManager.getUploadConfigCheck(file);
       expect(result).toEqual({
         uploadBlocked: true,
@@ -749,7 +768,14 @@ describe('AttachmentManager', () => {
       });
     });
 
-    it('should block non-image files with blocked extensions', async () => {
+    it.each([
+      generateFile({ name: 'test.exe', type: 'text/plain' }),
+      generateFileReference({
+        name: 'test.exe',
+        type: 'text/plain',
+        uri: 'test-uri',
+      }),
+    ])('should block non-image files with blocked extensions', async (file) => {
       const {
         messageComposer: { attachmentManager },
       } = setup({
@@ -764,7 +790,6 @@ describe('AttachmentManager', () => {
         },
       });
 
-      const file = new File([''], 'test.exe', { type: 'text/plain' });
       const result = await attachmentManager.getUploadConfigCheck(file);
       expect(result).toEqual({
         uploadBlocked: true,
@@ -772,7 +797,14 @@ describe('AttachmentManager', () => {
       });
     });
 
-    it('should block non-image files with disallowed mime types', async () => {
+    it.each([
+      generateFile({ name: 'test.txt', type: 'application/x-msdownload' }),
+      generateFileReference({
+        name: 'test.txt',
+        type: 'application/x-msdownload',
+        uri: 'test-uri',
+      }),
+    ])('should block non-image files with disallowed mime types', async (file) => {
       const {
         messageComposer: { attachmentManager },
       } = setup({
@@ -786,7 +818,6 @@ describe('AttachmentManager', () => {
         },
       });
 
-      const file = new File([''], 'test.txt', { type: 'application/x-msdownload' });
       const result = await attachmentManager.getUploadConfigCheck(file);
       expect(result).toEqual({
         uploadBlocked: true,
@@ -794,7 +825,14 @@ describe('AttachmentManager', () => {
       });
     });
 
-    it('should block non-image files with blocked mime types', async () => {
+    it.each([
+      generateFile({ name: 'test.txt', type: 'application/x-msdownload' }),
+      generateFileReference({
+        name: 'test.txt',
+        type: 'application/x-msdownload',
+        uri: 'test-uri',
+      }),
+    ])('should block non-image files with blocked mime types', async (file) => {
       const {
         messageComposer: { attachmentManager },
       } = setup({
@@ -809,7 +847,6 @@ describe('AttachmentManager', () => {
         },
       });
 
-      const file = new File([''], 'test.txt', { type: 'application/x-msdownload' });
       const result = await attachmentManager.getUploadConfigCheck(file);
       expect(result).toEqual({
         uploadBlocked: true,
@@ -817,7 +854,15 @@ describe('AttachmentManager', () => {
       });
     });
 
-    it('should block non-image files that exceed size limit', async () => {
+    it.each([
+      generateFile({ name: 'test.txt', size: 2000, type: 'text/plain' }),
+      generateFileReference({
+        name: 'test.txt',
+        type: 'text/plain',
+        size: 2000,
+        uri: 'test-uri',
+      }),
+    ])('should block non-image files that exceed size limit', async (file) => {
       const smallSizeLimit = 1000;
       const {
         messageComposer: { attachmentManager },
@@ -832,8 +877,6 @@ describe('AttachmentManager', () => {
         },
       });
 
-      const largeContent = new ArrayBuffer(2000);
-      const file = new File([largeContent], 'test.txt', { type: 'text/plain' });
       const result = await attachmentManager.getUploadConfigCheck(file);
       expect(result).toEqual({
         uploadBlocked: true,
@@ -863,45 +906,69 @@ describe('AttachmentManager', () => {
       });
     });
 
-    it('should handle case when upload config is missing', async () => {
+    it.each([
+      generateFile({ name: 'test.jpg', type: 'image/jpeg' }),
+      generateFileReference({
+        name: 'test.jpg',
+        type: 'image/jpeg',
+        uri: 'test-uri',
+      }),
+    ])('should handle case when upload config is missing', async (file) => {
       const {
         messageComposer: { attachmentManager },
       } = setup({ appSettings: {} });
-      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
       const result = await attachmentManager.getUploadConfigCheck(file);
       expect(result).toEqual({ uploadBlocked: false });
     });
 
-    it('should handle case when only some config options are provided', async () => {
-      const {
-        messageComposer: { attachmentManager },
-      } = setup({
-        appSettings: {
-          image_upload_config: {
-            allowed_file_extensions: ['jpg', 'png'],
-            size_limit: DEFAULT_UPLOAD_SIZE_LIMIT_BYTES,
-            blocked_file_extensions: ['gif'],
+    it.each([
+      {
+        blockedFile: generateFile({ name: 'test.gif', type: 'image/gif' }),
+        allowedFile: generateFile({ name: 'test.jpg', type: 'image/gif' }),
+      },
+      {
+        blockedFile: generateFileReference({
+          name: 'test.gif',
+          type: 'image/gif',
+          uri: 'test-uri',
+        }),
+        allowedFile: generateFileReference({
+          name: 'test.jpg',
+          type: 'image/gif',
+          uri: 'test-uri',
+        }),
+      },
+    ])(
+      'should handle case when only some config options are provided',
+      async ({ allowedFile, blockedFile }) => {
+        const {
+          messageComposer: { attachmentManager },
+        } = setup({
+          appSettings: {
+            image_upload_config: {
+              allowed_file_extensions: ['jpg', 'png'],
+              size_limit: DEFAULT_UPLOAD_SIZE_LIMIT_BYTES,
+              blocked_file_extensions: ['gif'],
+            },
+            file_upload_config: {
+              allowed_file_extensions: ['pdf', 'doc'],
+              size_limit: DEFAULT_UPLOAD_SIZE_LIMIT_BYTES,
+            },
           },
-          file_upload_config: {
-            allowed_file_extensions: ['pdf', 'doc'],
-            size_limit: DEFAULT_UPLOAD_SIZE_LIMIT_BYTES,
-          },
-        },
-      });
+        });
 
-      const blockedFile = new File([''], 'test.gif', { type: 'image/gif' });
-      const blockedResult = await attachmentManager.getUploadConfigCheck(blockedFile);
-      expect(blockedResult).toEqual({
-        uploadBlocked: true,
-        reason: 'allowed_file_extensions',
-      });
+        const blockedResult = await attachmentManager.getUploadConfigCheck(blockedFile);
+        expect(blockedResult).toEqual({
+          uploadBlocked: true,
+          reason: 'allowed_file_extensions',
+        });
 
-      // Test with a file that should be allowed by extension but blocked by mime type
-      // This should pass because allowed_mime_types is missing
-      const allowedFile = new File([''], 'test.jpg', { type: 'image/gif' });
-      const allowedResult = await attachmentManager.getUploadConfigCheck(allowedFile);
-      expect(allowedResult).toEqual({ uploadBlocked: false });
-    });
+        // Test with a file that should be allowed by extension but blocked by mime type
+        // This should pass because allowed_mime_types is missing
+        const allowedResult = await attachmentManager.getUploadConfigCheck(allowedFile);
+        expect(allowedResult).toEqual({ uploadBlocked: false });
+      },
+    );
 
     it('should handle edge cases', async () => {
       const {
