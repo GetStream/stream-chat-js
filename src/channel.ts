@@ -191,7 +191,7 @@ export class Channel {
    *
    * @return {Promise<SendMessageAPIResponse>} The Server Response
    */
-  async sendMessage(message: Message, options?: SendMessageOptions) {
+  async _sendMessage(message: Message, options?: SendMessageOptions) {
     return await this.getClient().post<SendMessageAPIResponse>(
       this._channelURL() + '/message',
       {
@@ -199,6 +199,32 @@ export class Channel {
         ...options,
       },
     );
+  }
+
+  async sendMessage(message: Message, options?: SendMessageOptions) {
+    try {
+      const offlineDb = this.getClient().offlineDb;
+      if (offlineDb) {
+        const messageId = message.id;
+        if (messageId) {
+          return (await offlineDb.queueTask({
+            task: {
+              channelId: this.id as string,
+              channelType: this.type,
+              messageId,
+              payload: [message, options],
+              type: 'send-message',
+            },
+          })) as SendMessageAPIResponse;
+        }
+      }
+    } catch (error) {
+      this._client.logger('error', `offlineDb:send-message`, {
+        tags: ['channel', 'offlineDb'],
+        error,
+      });
+    }
+    return await this._sendMessage(message, options);
   }
 
   sendFile(
@@ -380,6 +406,41 @@ export class Channel {
     );
   }
 
+  async sendReaction(
+    messageID: string,
+    reaction: Reaction,
+    options?: { enforce_unique?: boolean; skip_push?: boolean },
+  ): Promise<ReactionAPIResponse | undefined> {
+    if (!messageID) {
+      throw Error(`Message id is missing`);
+    }
+    if (!reaction || Object.keys(reaction).length === 0) {
+      throw Error(`Reaction object is missing`);
+    }
+
+    try {
+      const offlineDb = this.getClient().offlineDb;
+      if (offlineDb) {
+        return (await offlineDb.queueTask({
+          task: {
+            channelId: this.id as string,
+            channelType: this.type,
+            messageId: messageID,
+            payload: [messageID, reaction, options],
+            type: 'send-reaction',
+          },
+        })) as ReactionAPIResponse;
+      }
+    } catch (error) {
+      this._client.logger('error', `offlineDb:send-reaction`, {
+        tags: ['channel', 'offlineDb'],
+        error,
+      });
+    }
+
+    return this._sendReaction(messageID, reaction, options);
+  }
+
   /**
    * sendReaction - Send a reaction about a message
    *
@@ -389,17 +450,18 @@ export class Channel {
    *
    * @return {Promise<ReactionAPIResponse>} The Server Response
    */
-  async sendReaction(
+  async _sendReaction(
     messageID: string,
     reaction: Reaction,
     options?: { enforce_unique?: boolean; skip_push?: boolean },
-  ) {
+  ): Promise<ReactionAPIResponse | undefined> {
     if (!messageID) {
       throw Error(`Message id is missing`);
     }
     if (!reaction || Object.keys(reaction).length === 0) {
       throw Error(`Reaction object is missing`);
     }
+
     return await this.getClient().post<ReactionAPIResponse>(
       this.getClient().baseURL + `/messages/${encodeURIComponent(messageID)}/reaction`,
       {
@@ -407,6 +469,53 @@ export class Channel {
         ...options,
       },
     );
+  }
+
+  async deleteReaction(messageID: string, reactionType: string, user_id?: string) {
+    this._checkInitialized();
+    if (!reactionType || !messageID) {
+      throw Error(
+        'Deleting a reaction requires specifying both the message and reaction type',
+      );
+    }
+
+    try {
+      const offlineDb = this.getClient().offlineDb;
+      if (offlineDb) {
+        const message = this.state.messages.find(({ id }) => id === messageID);
+        const reaction = {
+          created_at: '',
+          updated_at: '',
+          message_id: messageID,
+          type: reactionType,
+          user_id: (this.getClient().userID as string) ?? user_id,
+        };
+
+        if (message) {
+          await offlineDb.deleteReaction({
+            message,
+            reaction,
+          });
+        }
+
+        return await offlineDb.queueTask({
+          task: {
+            channelId: this.id as string,
+            channelType: this.type,
+            messageId: messageID,
+            payload: [messageID, reactionType],
+            type: 'delete-reaction',
+          },
+        });
+      }
+    } catch (error) {
+      this._client.logger('error', `offlineDb:delete-reaction`, {
+        tags: ['channel', 'offlineDb'],
+        error,
+      });
+    }
+
+    return await this._deleteReaction(messageID, reactionType, user_id);
   }
 
   /**
@@ -418,7 +527,7 @@ export class Channel {
    *
    * @return {Promise<ReactionAPIResponse>} The Server Response
    */
-  deleteReaction(messageID: string, reactionType: string, user_id?: string) {
+  async _deleteReaction(messageID: string, reactionType: string, user_id?: string) {
     this._checkInitialized();
     if (!reactionType || !messageID) {
       throw Error(
@@ -433,10 +542,10 @@ export class Channel {
       )}`;
     //provided when server side request
     if (user_id) {
-      return this.getClient().delete<ReactionAPIResponse>(url, { user_id });
+      return await this.getClient().delete<ReactionAPIResponse>(url, { user_id });
     }
 
-    return this.getClient().delete<ReactionAPIResponse>(url, {});
+    return await this.getClient().delete<ReactionAPIResponse>(url, {});
   }
 
   /**
@@ -948,7 +1057,7 @@ export class Channel {
   }
 
   _isTypingIndicatorsEnabled(): boolean {
-    if (!this.getConfig()?.typing_events) {
+    if (!this.getConfig()?.typing_events || !this.getClient().wsConnection?.isHealthy) {
       return false;
     }
     return this.getClient().user?.privacy_settings?.typing_indicators?.enabled ?? true;
@@ -1384,6 +1493,14 @@ export class Channel {
         isLatestMessageSet: messageSet.isLatest,
       },
     });
+    this.getClient().offlineDb?.executeQuerySafely(
+      (db) =>
+        db.upsertChannels?.({
+          channels: [state],
+          isLatestMessagesSet: messageSet.isLatest,
+        }),
+      { method: 'upsertChannels' },
+    );
 
     return state;
   }
@@ -1685,6 +1802,7 @@ export class Channel {
           if (this.state.isUpToDate || isThreadMessage) {
             channelState.addMessageSorted(event.message, ownMessage);
           }
+
           if (event.message.pinned) {
             channelState.addPinnedMessage(event.message);
           }
@@ -1742,11 +1860,14 @@ export class Channel {
             if (truncatedAt > +createdAt)
               channelState.removePinnedMessage({ id } as MessageResponse);
           });
+          channelState.unreadCount = this.countUnread(
+            new Date(event.channel.truncated_at),
+          );
         } else {
           channelState.clearMessages();
+          channelState.unreadCount = 0;
         }
 
-        channelState.unreadCount = 0;
         // system messages don't increment unread counts
         if (event.message) {
           channelState.addMessageSorted(event.message);
@@ -1754,6 +1875,7 @@ export class Channel {
             channelState.addPinnedMessage(event.message);
           }
         }
+
         break;
       case 'member.added':
       case 'member.updated': {
@@ -1774,6 +1896,9 @@ export class Channel {
             ...channelState.members,
             [memberCopy.user.id]: memberCopy,
           };
+          if (channel.data?.member_count && event.type === 'member.added') {
+            channel.data.member_count += 1;
+          }
         }
 
         const currentUserId = this.getClient().userID;
@@ -1795,6 +1920,10 @@ export class Channel {
           delete newMembers[event.user.id];
 
           channelState.members = newMembers;
+
+          if (channel.data?.member_count) {
+            channel.data.member_count = Math.max(channel.data.member_count - 1, 0);
+          }
 
           // TODO?: unset membership
         }
@@ -1824,28 +1953,36 @@ export class Channel {
           if (isFrozenChanged) {
             this.query({ state: false, messages: { limit: 0 }, watchers: { limit: 0 } });
           }
-          channel.data = {
+          const newChannelData = {
             ...event.channel,
             hidden: event.channel?.hidden ?? channel.data?.hidden,
             own_capabilities:
               event.channel?.own_capabilities ?? channel.data?.own_capabilities,
           };
+          channel.data = newChannelData;
         }
         break;
       case 'reaction.new':
         if (event.message && event.reaction) {
-          event.message = channelState.addReaction(event.reaction, event.message);
+          const { message, reaction } = event;
+          event.message = channelState.addReaction(reaction, message) as MessageResponse;
         }
         break;
       case 'reaction.deleted':
-        if (event.reaction) {
-          event.message = channelState.removeReaction(event.reaction, event.message);
+        if (event.message && event.reaction) {
+          const { message, reaction } = event;
+          event.message = channelState.removeReaction(reaction, message);
         }
         break;
       case 'reaction.updated':
-        if (event.reaction) {
+        if (event.message && event.reaction) {
+          const { message, reaction } = event;
           // assuming reaction.updated is only called if enforce_unique is true
-          event.message = channelState.addReaction(event.reaction, event.message, true);
+          event.message = channelState.addReaction(
+            reaction,
+            message,
+            true,
+          ) as MessageResponse;
         }
         break;
       case 'channel.hidden':
@@ -1856,6 +1993,7 @@ export class Channel {
         break;
       case 'channel.visible':
         channel.data = { ...channel.data, hidden: false };
+        this.getClient().offlineDb?.handleChannelVisibilityEvent({ event });
         break;
       case 'user.banned':
         if (!event.user?.id) break;

@@ -1449,6 +1449,7 @@ export type Event = CustomEventData & {
     channels: ChannelAPIResponse[];
     isLatestMessageSet?: boolean;
   };
+  offlineReactions?: ReactionResponse[];
   reaction?: ReactionResponse;
   received_at?: string | Date;
   shadow?: boolean;
@@ -2538,7 +2539,7 @@ export type EndpointName =
   | 'CreateChannelType'
   | 'DeleteChannel'
   | 'DeleteChannels'
-  | 'DeleteChannelType'
+  | 'DBDeleteChannelType'
   | 'GetChannelType'
   | 'ListChannelTypes'
   | 'ListDevices'

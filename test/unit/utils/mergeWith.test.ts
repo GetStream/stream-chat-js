@@ -17,7 +17,6 @@ describe('mergeWith', () => {
     };
 
     const result = mergeWith(object, other);
-    console.log('result', result);
     expect(result).toEqual({
       a: [
         { b: 2, c: 3 },
