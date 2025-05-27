@@ -1478,14 +1478,12 @@ export class StreamChat {
       this.mutedUsers = event.me.mutes;
     }
 
-    if (event.type === 'notification.mark_read') {
-      if (event.unread_channels === 0) {
-        const activeChannelKeys = Object.keys(this.activeChannels);
-        activeChannelKeys.forEach(
-          (activeChannelKey) =>
-            (this.activeChannels[activeChannelKey].state.unreadCount = 0),
-        );
-      }
+    if (event.type === 'notification.mark_read' && event.unread_channels === 0) {
+      const activeChannelKeys = Object.keys(this.activeChannels);
+      activeChannelKeys.forEach(
+        (activeChannelKey) =>
+          (this.activeChannels[activeChannelKey].state.unreadCount = 0),
+      );
     }
 
     if (
