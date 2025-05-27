@@ -2233,7 +2233,7 @@ describe('OfflineDBSyncManager', () => {
         await (syncManager as any).sync();
 
         expect(resetDBSpy).toHaveBeenCalled();
-        expect(upsertUserSyncStatusSpy).toHaveBeenCalled();
+        expect(upsertUserSyncStatusSpy).not.toHaveBeenCalled();
       });
 
       it('does not call executeSqlBatch if no queries are returned', async () => {

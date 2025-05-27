@@ -130,32 +130,32 @@ export class OfflineDBSyncManager {
     if (!this.client?.user) {
       return;
     }
-    const cids = await this.offlineDb.getAllChannelCids();
-    // If there are no channels, then there is no need to sync.
-    if (cids.length === 0) {
-      return;
-    }
+    try {
+      const cids = await this.offlineDb.getAllChannelCids();
+      // If there are no channels, then there is no need to sync.
+      if (cids.length === 0) {
+        return;
+      }
 
-    // TODO: We should not need our own user ID in the API, it can be inferred
-    const lastSyncedAt = await this.offlineDb.getLastSyncedAt({
-      userId: this.client.user.id,
-    });
+      // TODO: We should not need our own user ID in the API, it can be inferred
+      const lastSyncedAt = await this.offlineDb.getLastSyncedAt({
+        userId: this.client.user.id,
+      });
 
-    if (lastSyncedAt) {
-      const lastSyncedAtDate = new Date(lastSyncedAt);
-      const nowDate = new Date();
+      if (lastSyncedAt) {
+        const lastSyncedAtDate = new Date(lastSyncedAt);
+        const nowDate = new Date();
 
-      // Calculate the difference in days
-      const diff = Math.floor(
-        (nowDate.getTime() - lastSyncedAtDate.getTime()) / (1000 * 60 * 60 * 24),
-      );
+        // Calculate the difference in days
+        const diff = Math.floor(
+          (nowDate.getTime() - lastSyncedAtDate.getTime()) / (1000 * 60 * 60 * 24),
+        );
 
-      if (diff > 30) {
-        // stream backend will send an error if we try to sync after 30 days.
-        // In that case reset the entire DB and start fresh.
-        await this.offlineDb.resetDB();
-      } else {
-        try {
+        if (diff > 30) {
+          // stream backend will send an error if we try to sync after 30 days.
+          // In that case reset the entire DB and start fresh.
+          await this.offlineDb.resetDB();
+        } else {
           const result = await this.client.sync(cids, lastSyncedAtDate.toISOString());
           const queryPromises = result.events.map((event) =>
             this.offlineDb.handleEvent({ event, execute: false }),
@@ -166,18 +166,18 @@ export class OfflineDBSyncManager {
           if (queries.length) {
             await this.offlineDb.executeSqlBatch(queries);
           }
-        } catch (e) {
-          console.log('An error has occurred while syncing the DB.', e);
-          // Error will be raised by the sync API if there are too many events.
-          // In that case reset the entire DB and start fresh.
-          await this.offlineDb.resetDB();
         }
       }
+      await this.offlineDb.upsertUserSyncStatus({
+        userId: this.client.user.id,
+        lastSyncedAt: new Date().toString(),
+      });
+    } catch (e) {
+      console.log('An error has occurred while syncing the DB.', e);
+      // Error will be raised by the sync API if there are too many events.
+      // In that case reset the entire DB and start fresh.
+      await this.offlineDb.resetDB();
     }
-    await this.offlineDb.upsertUserSyncStatus({
-      userId: this.client.user.id,
-      lastSyncedAt: new Date().toString(),
-    });
   };
 
   /**
