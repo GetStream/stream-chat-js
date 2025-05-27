@@ -777,7 +777,24 @@ export class StreamChat {
         'data_template': 'data handlebars template',
         'apn_template': 'apn notification handlebars template under v2'
       },
-      'webhook_url': 'https://acme.com/my/awesome/webhook/'
+      'webhook_url': 'https://acme.com/my/awesome/webhook/',
+      'event_hooks': [
+        {
+          'hook_type': 'webhook',
+          'enabled': true,
+          'event_types': ['message.new'],
+          'webhook_url': 'https://acme.com/my/awesome/webhook/'
+        },
+        {
+          'hook_type': 'sqs',
+          'enabled': true,
+          'event_types': ['message.new'],
+          'sqs_url': 'https://sqs.us-east-1.amazonaws.com/1234567890/my-queue',
+          'sqs_auth_type': 'key',
+          'sqs_key': 'my-access-key',
+          'sqs_secret': 'my-secret-key'
+        }
+      ]
     }
    */
   async updateAppSettings(options: AppSettings) {
