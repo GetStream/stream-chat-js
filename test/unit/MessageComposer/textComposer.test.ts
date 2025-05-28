@@ -104,6 +104,7 @@ describe('TextComposer', () => {
     it('should initialize with default config', () => {
       const { messageComposer } = setup();
       expect(messageComposer.textComposer.state.getLatestValue()).toEqual({
+        command: null,
         mentionedUsers: [],
         text: '',
         selection: { start: 0, end: 0 },
