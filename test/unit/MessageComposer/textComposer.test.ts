@@ -225,6 +225,7 @@ describe('TextComposer', () => {
         updated_at: new Date(),
       };
       const initialState = {
+        command: null,
         mentionedUsers: [],
         text: '',
         selection: { start: 0, end: 0 },
