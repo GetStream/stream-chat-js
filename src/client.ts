@@ -3036,13 +3036,15 @@ export class StreamChat {
         } else {
           await this.offlineDb.softDeleteMessage({ id: messageID });
         }
-        return await this.offlineDb.queueTask({
-          task: {
-            messageId: messageID,
-            payload: [messageID, hardDelete],
-            type: 'delete-message',
+        return await this.offlineDb.queueTask<APIResponse & { message: MessageResponse }>(
+          {
+            task: {
+              messageId: messageID,
+              payload: [messageID, hardDelete],
+              type: 'delete-message',
+            },
           },
-        });
+        );
       }
     } catch (error) {
       this.logger('error', `offlineDb:deleteMessage`, {
