@@ -1,5 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
-
 import { generateChannel } from './test-utils/generateChannel';
 import { generateMember } from './test-utils/generateMember';
 import { generateMsg } from './test-utils/generateMessage';
@@ -12,6 +10,7 @@ import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse'
 import { ChannelState, StreamChat } from '../../src';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
+import { generateUUIDv4 as uuidv4 } from '../../src/utils';
 
 import { describe, beforeEach, afterEach, it, expect, vi } from 'vitest';
 

@@ -1,9 +1,8 @@
-import { v4 as uuidv4 } from 'uuid';
-
 import { generateChannel } from './test-utils/generateChannel';
 import { generateMsg } from './test-utils/generateMessage';
 import { generateThreadResponse } from './test-utils/generateThreadResponse';
 import { getClientWithUser } from './test-utils/getClient';
+import { generateUUIDv4 as uuidv4 } from '../../src/utils';
 
 import sinon from 'sinon';
 import {
@@ -78,6 +77,7 @@ describe('Threads 2.0', () => {
 
       expect(thread.channel.state.members).to.have.keys([TEST_USER_ID]);
       expect(thread.id).to.equal(parentMessageResponse.id);
+      // @ts-expect-error `name` is a custom property
       expect(thread.channel.data?.name).to.equal(channelResponse.name);
     });
 
