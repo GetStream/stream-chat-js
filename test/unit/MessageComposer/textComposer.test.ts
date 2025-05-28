@@ -114,6 +114,7 @@ describe('TextComposer', () => {
       const defaultValue = 'XXX';
       const { messageComposer } = setup({ config: { defaultValue } });
       expect(messageComposer.textComposer.state.getLatestValue()).toEqual({
+        command: null,
         mentionedUsers: [],
         text: defaultValue,
         selection: { start: defaultValue.length, end: defaultValue.length },
