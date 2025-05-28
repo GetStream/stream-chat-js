@@ -14,6 +14,7 @@ import {
   APIErrorResponse,
   OfflineDBSyncManager,
   StableWSConnection,
+  OfflineError,
 } from '../../../src';
 
 import { generateChannel } from '../test-utils/generateChannel';
@@ -1635,7 +1636,14 @@ describe('OfflineSupportApi', () => {
           client.wsConnection = { isHealthy: false } as StableWSConnection;
           const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
 
-          const result = await offlineDb.queueTask({ task });
+          let result;
+          try {
+            result = await offlineDb.queueTask({ task });
+          } catch (e) {
+            expect((e as OfflineError).message).to.equal(
+              'Cannot execute task because the connection has been lost.',
+            );
+          }
 
           expect(result).toBeUndefined();
           expect(executeTaskSpy).not.toHaveBeenCalled();
@@ -1666,7 +1674,7 @@ describe('OfflineSupportApi', () => {
           shouldSkipSpy.mockReturnValue(true);
           executeTaskSpy.mockRejectedValue(error);
 
-          await expect(offlineDb.queueTask({ task })).resolves.toBeUndefined();
+          await expect(offlineDb.queueTask({ task })).rejects.toThrow();
 
           expect(addPendingTaskSpy).not.toHaveBeenCalled();
           expect(shouldSkipSpy).toHaveBeenCalledWith(error);

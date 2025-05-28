@@ -6,6 +6,7 @@ import type {
   PendingTask,
   PrepareBatchDBQueries,
 } from './types';
+import { OfflineError } from './types';
 import type { StreamChat } from '../client';
 import type { AxiosError } from 'axios';
 import { OfflineDBSyncManager } from './offline_sync_manager';
@@ -986,22 +987,24 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * It will return the response from the execution if it succeeded.
    * @param task - the pending task we want to execute
    */
-  public queueTask = async ({ task }: { task: PendingTask }) => {
-    let response;
-    try {
+  public queueTask = async <T>({ task }: { task: PendingTask }): Promise<T> => {
+    const attemptTaskExecution = async () => {
       if (!this.client.wsConnection?.isHealthy) {
-        await this.addPendingTask(task);
-        return;
+        throw new OfflineError(
+          'Cannot execute task because the connection has been lost.',
+          { type: 'connection:lost' },
+        );
       }
-      response = await this.executeTask({ task });
+      return (await this.executeTask({ task })) as T;
+    };
+    try {
+      return await attemptTaskExecution();
     } catch (e) {
       if (!this.shouldSkipQueueingTask(e as AxiosError<APIErrorResponse>)) {
         await this.addPendingTask(task);
-        throw e;
       }
+      throw e;
     }
-
-    return response;
   };
 
   /**

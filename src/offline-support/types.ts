@@ -6,7 +6,6 @@ import type {
   ChannelResponse,
   ChannelSort,
   LocalMessage,
-  Message,
   MessageResponse,
   PollResponse,
   ReactionFilters,
@@ -398,6 +397,31 @@ export type PendingTask = {
     }
 );
 
-export type PendingTaskExtraData = {
-  message?: Message;
-};
+export type OfflineErrorType = 'connection:lost';
+
+export class OfflineError extends Error {
+  public type: OfflineErrorType;
+  public name = 'OfflineError';
+
+  constructor(
+    message: string,
+    {
+      type,
+    }: {
+      type: OfflineError['type'];
+    },
+  ) {
+    super(message);
+    this.type = type;
+  }
+
+  // Vitest helper (serialized errors are too large to read)
+  // https://github.com/vitest-dev/vitest/blob/v3.1.3/packages/utils/src/error.ts#L60-L62
+  toJSON() {
+    return {
+      message: `${this.type} - ${this.message}`,
+      stack: this.stack,
+      name: this.name,
+    };
+  }
+}
