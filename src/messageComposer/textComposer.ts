@@ -37,6 +37,7 @@ const initState = ({
   if (!message) {
     const text = composer.config.text.defaultValue ?? '';
     return {
+      command: null,
       mentionedUsers: [],
       text,
       selection: { start: text.length, end: text.length },
@@ -118,6 +119,10 @@ export class TextComposer {
 
   // --- START STATE API ---
 
+  get command() {
+    return this.state.getLatestValue().command;
+  }
+
   get mentionedUsers() {
     return this.state.getLatestValue().mentionedUsers;
   }
@@ -144,6 +149,10 @@ export class TextComposer {
 
   setMentionedUsers(users: UserResponse[]) {
     this.state.partialNext({ mentionedUsers: users });
+  }
+
+  clearCommand() {
+    this.state.partialNext({ command: null });
   }
 
   upsertMentionedUser = (user: UserResponse) => {
