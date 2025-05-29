@@ -5,6 +5,7 @@ import type {
   ChannelMemberResponse,
   ChannelResponse,
   ChannelSort,
+  DraftResponse,
   LocalMessage,
   MessageResponse,
   PollResponse,
@@ -300,6 +301,23 @@ export type DBChannelExistsType = {
   cid: string;
 };
 
+export type DBUpsertDraftType = {
+  draft: DraftResponse;
+  execute?: boolean;
+};
+
+export type DBGetDraftType = {
+  cid: string;
+  currentUserId: string;
+  parent_id?: string;
+};
+
+export type DBDeleteDraftType = {
+  cid: string;
+  parent_id?: string;
+  execute?: boolean;
+};
+
 /**
  * Represents a list of batch SQL queries to be executed.
  */
@@ -317,6 +335,7 @@ export interface OfflineDBApi {
   upsertAppSettings: (
     options: DBUpsertAppSettingsType,
   ) => Promise<ExecuteBatchDBQueriesType>;
+  upsertDraft: (options: DBUpsertDraftType) => Promise<ExecuteBatchDBQueriesType>;
   upsertPoll: (options: DBUpsertPollType) => Promise<ExecuteBatchDBQueriesType>;
   upsertChannelData: (
     options: DBUpsertChannelDataType,
@@ -326,6 +345,8 @@ export interface OfflineDBApi {
   upsertMembers: (options: DBUpsertMembersType) => Promise<ExecuteBatchDBQueriesType>;
   updateReaction: (options: DBUpdateReactionType) => Promise<ExecuteBatchDBQueriesType>;
   updateMessage: (options: DBUpdateMessageType) => Promise<ExecuteBatchDBQueriesType>;
+  getDraft: (options: DBGetDraftType) => Promise<DraftResponse | null>;
+  deleteDraft: (options: DBDeleteDraftType) => Promise<ExecuteBatchDBQueriesType>;
   getChannels: (
     options: DBGetChannelsType,
   ) => Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>;
