@@ -35,6 +35,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     });
   }
 
+  abstract upsertDraft: OfflineDBApi['upsertDraft'];
+  abstract getDraft: OfflineDBApi['getDraft'];
+  abstract deleteDraft: OfflineDBApi['deleteDraft'];
+
   /**
    * @abstract
    * Inserts a reaction into the DB.
@@ -941,6 +945,21 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
     if (type === 'channel.hidden' || type === 'channel.visible') {
       return await this.handleChannelVisibilityEvent({ event, execute });
+    }
+
+    if (type === 'draft.updated') {
+      if (event.draft) {
+        return await this.upsertDraft({ draft: event.draft, execute });
+      }
+    }
+
+    if (type === 'draft.deleted') {
+      if (event.parent_id) {
+        return await this.deleteDraft({ cid: event.parent_id, execute });
+      }
+      if (event.channel_id) {
+        return await this.deleteDraft({ cid: event.channel_id, execute });
+      }
     }
 
     // Note: It is a bit counter-intuitive that we do not touch the messages in the
