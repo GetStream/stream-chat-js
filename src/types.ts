@@ -425,16 +425,36 @@ export type EventAPIResponse = APIResponse & {
 
 export type ExportChannelResponse = {
   task_id: string;
+  duration?: string;
 };
 
 export type ExportUsersResponse = {
   task_id: string;
 };
 
+export type ExportChannelsResult = {
+  path?: string;
+  s3_bucket_name?: string;
+  url?: string;
+};
+
+export type ExportChannelError = {
+  description?: string;
+  duration?: string;
+  stacktrace?: string;
+  status?: string;
+  task_id?: string;
+  type?: string;
+  version?: string;
+};
+
 export type ExportChannelStatusResponse = {
   created_at?: string;
-  error?: {};
-  result?: {};
+  duration?: string;
+  error?: ExportChannelError;
+  result?: ExportChannelsResult | null;
+  status?: string;
+  task_id?: string;
   updated_at?: string;
 };
 
