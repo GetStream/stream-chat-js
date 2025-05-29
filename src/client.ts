@@ -32,6 +32,7 @@ import {
 } from './utils';
 
 import type {
+  ActiveLiveLocationsAPIResponse,
   APIErrorResponse,
   APIResponse,
   AppSettings,
@@ -186,6 +187,8 @@ import type {
   SegmentTargetsResponse,
   SegmentType,
   SendFileAPIResponse,
+  SharedLocationRequest,
+  SharedLocationResponse,
   SortParam,
   StreamChatOptions,
   SyncOptions,
@@ -2558,6 +2561,18 @@ export class StreamChat {
       ...(userID ? { user_id: userID } : {}),
     });
   }
+
+  /** getSharedLocations
+   *
+   * @returns {Promise<ActiveLiveLocationsAPIResponse>} The server response
+   *
+   */
+  async getSharedLocations() {
+    return await this.get<ActiveLiveLocationsAPIResponse>(
+      this.baseURL + `/users/locations`,
+    );
+  }
+
   /** muteUser - mutes a user
    *
    * @param {string} targetID
@@ -4501,4 +4516,18 @@ export class StreamChat {
   ) => {
     this._messageComposerSetupState.partialNext({ setupFunction });
   };
+
+  /**
+   * updateLocation - Updates a location
+   *
+   * @param location UserLocation the location data to update
+   *
+   * @returns {Promise<APIResponse>} The server response
+   */
+  async updateLocation(location: SharedLocationRequest) {
+    return await this.put<SharedLocationResponse>(
+      this.baseURL + `/users/location`,
+      location,
+    );
+  }
 }
