@@ -1232,3 +1232,98 @@ export const runDetached = <T>(
 
   promise.catch(onError);
 };
+
+export const sortChannels = (array: Channel[], criteria: ChannelSort) => {
+  const temporaryCache: Record<string, ReturnType<typeof mapToSortable>> = {};
+
+  // format criteria to always be an iterable array
+  let arrayCriteria: ChannelSortBase[];
+  if (!Array.isArray(criteria)) {
+    const remappedCriteria: ChannelSortBase[] = [];
+    for (let key in criteria) {
+      const typeSafeKey = key as keyof ChannelSortBase;
+      remappedCriteria.push({ [typeSafeKey]: criteria[typeSafeKey] });
+    }
+    arrayCriteria = remappedCriteria;
+  } else {
+    arrayCriteria = criteria;
+  }
+
+  const getSortable = (c: Channel) => {
+    if (!temporaryCache[c.cid]) {
+      temporaryCache[c.cid] = mapToSortable(c);
+    }
+
+    return temporaryCache[c.cid];
+  };
+
+  const arrayCopy = [...array];
+
+  arrayCopy.sort((a, b) => {
+    for (const criterion of arrayCriteria) {
+      const [[key, order]] = Object.entries(criterion);
+
+      const typeSafeKey = key as keyof ChannelSortBase;
+      const sortableA = getSortable(a);
+      const sortableB = getSortable(b);
+
+      const aValue = sortableA[typeSafeKey];
+      const bValue = sortableB[typeSafeKey];
+
+      if (aValue === null || bValue === null) {
+        if (aValue === null && bValue !== null) return 1;
+        if (aValue !== null && bValue === null) return -1;
+
+        continue;
+      }
+
+      // ascending
+      if (order === 1) {
+        if (aValue > bValue) return 1;
+        if (aValue < bValue) return -1;
+      }
+
+      // descending
+      if (order === -1) {
+        if (aValue > bValue) return -1;
+        if (aValue < bValue) return 1;
+      }
+    }
+
+    return 0;
+  });
+
+  return arrayCopy;
+};
+
+/**
+ * Certain criteria properties rely on data which live across Channel.
+ * For example property `pinned_at` maps to `Channel.membership.pinned_at` that's
+ * why we need a simpler mapped object upon which we can apply criteria.
+ * Date objects are mapped to integers through `getTime`.
+ */
+const mapToSortable = (channel: Channel) => {
+  return {
+    pinned_at:
+      typeof channel.state.membership.pinned_at === 'string'
+        ? new Date(channel.state.membership.pinned_at).getTime()
+        : null,
+    created_at:
+      typeof channel.data?.created_at === 'string'
+        ? new Date(channel.data.created_at).getTime()
+        : null,
+    has_unread: channel.countUnread() > 0 ? 1 : 0,
+    last_message_at: channel.state.last_message_at?.getTime() ?? null,
+    updated_at:
+      typeof channel.data?.updated_at === 'string'
+        ? new Date(channel.data?.updated_at).getTime()
+        : null,
+    member_count: channel.data?.member_count ?? null,
+    unread_count: channel.countUnread(),
+    last_updated: null, // not sure what to map this one to
+  } satisfies Record<keyof ChannelSortBase, number | null>;
+};
+
+const mapToFilterable = (channel: Channel) => {
+  // TODO: https://github.com/GetStream/stream-video-js/blob/main/packages/react-sdk/src/utilities/filter.ts
+};
