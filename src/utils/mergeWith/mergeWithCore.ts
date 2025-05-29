@@ -438,7 +438,13 @@ export function createMergeCore<T extends object>(options: { trackDiff?: boolean
       return false;
     }
 
-    function createNewTarget(targetValue: unknown, srcValue: unknown): object {
+    function createNewTarget(targetValue: unknown, srcValue: object): object {
+      if (targetValue === null || typeof targetValue === 'undefined') {
+        return srcValue;
+      }
+      if (!Array.isArray(targetValue) && typeof targetValue !== 'object') {
+        return srcValue;
+      }
       if (targetValue && typeof targetValue === 'object') {
         // Check if it's a class instance (not a plain object)
         const isTargetClassInstance = isClassInstance(targetValue);

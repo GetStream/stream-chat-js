@@ -1,5 +1,5 @@
 import { StreamChat } from '../../../src';
-import { v4 as uuidv4 } from 'uuid';
+import { generateUUIDv4 as uuidv4 } from '../../../src/utils';
 
 export const getClientWithUser = (user) => {
 	const chatClient = new StreamChat('');
