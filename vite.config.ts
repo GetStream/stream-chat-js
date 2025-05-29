@@ -7,5 +7,6 @@ export default defineConfig({
     testTimeout: 20000,
     // not all errors have been handled so this is necessary (at least for the time being)
     dangerouslyIgnoreUnhandledErrors: true,
+    include: ['./test/unit/**/*.test.[jt]s'],
   },
 });

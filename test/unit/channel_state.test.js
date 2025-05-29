@@ -1,5 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
-
 import { generateChannel } from './test-utils/generateChannel';
 import { generateMsg } from './test-utils/generateMessage';
 import { generateUser } from './test-utils/generateUser';
@@ -8,6 +6,7 @@ import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
 
 import { ChannelState, StreamChat, Channel } from '../../src';
 import { DEFAULT_MESSAGE_SET_PAGINATION } from '../../src/constants';
+import { generateUUIDv4 as uuidv4 } from '../../src/utils';
 
 import { vi, describe, beforeEach, afterEach, it, expect } from 'vitest';
 

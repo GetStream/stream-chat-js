@@ -1,5 +1,4 @@
 import sinon from 'sinon';
-import { v4 as uuidv4 } from 'uuid';
 import { describe, beforeEach, afterEach, it, expect, vi } from 'vitest';
 
 import { generateMsg } from './test-utils/generateMessage';
@@ -7,6 +6,7 @@ import { generateChannel } from './test-utils/generateChannel';
 import { generateMember } from './test-utils/generateMember';
 import { generateUser } from './test-utils/generateUser';
 import { getClientWithUser } from './test-utils/getClient';
+import { generateUUIDv4 as uuidv4 } from '../../src/utils';
 
 import {
   getAndWatchChannel,
@@ -24,7 +24,6 @@ import {
   promoteChannel,
   uniqBy,
   runDetached,
-  waitSeconds,
   sleep,
 } from '../../src/utils';
 
