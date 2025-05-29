@@ -33,10 +33,10 @@ export type Notification = {
    * The identifier then can be recognized by notification consumers to act upon specific origin values.
    */
   origin: NotificationOrigin;
+  /** Optional code that can be used to group the notifications of the same type, e.g. attachment-upload-blocked. */
+  code?: string;
   /** Optional timestamp when notification should expire */
   expiresAt?: number;
-  /** Whether notification should automatically close after duration. Defaults to true */
-  autoClose?: boolean;
   /** Array of action buttons for the notification */
   actions?: NotificationAction[];
   /** Optional metadata to attach to the notification */
@@ -44,31 +44,29 @@ export type Notification = {
 };
 
 /** Configuration options when creating a notification */
-export type NotificationOptions = {
-  /** The severity level. Defaults to 'info' */
-  severity?: NotificationSeverity;
-  /** How long notification should display in milliseconds */
+export type NotificationOptions = Partial<
+  Pick<Notification, 'code' | 'severity' | 'actions' | 'metadata'>
+> & {
+  /** How long a notification should be displayed in milliseconds */
   duration?: number;
-  /** Whether notification should auto-close after duration. Defaults to true */
-  autoClose?: boolean;
-  /** Array of action buttons for the notification */
-  actions?: NotificationAction[];
-  /** Optional metadata to attach to the notification */
-  metadata?: Record<string, unknown>;
 };
 
-/** State shape for the notification store */
+/**
+ * State shape for the notification store
+ * @deprcated use NotificationManagerState
+ */
 export type NotificationState = {
   /** Array of current notification objects */
   notifications: Notification[];
 };
 
+/** State shape for the notification store */
+export type NotificationManagerState = NotificationState;
+
 export type NotificationManagerConfig = {
   durations: Record<NotificationSeverity, number>;
 };
 
-export type AddNotificationPayload = {
-  message: string;
-  origin: NotificationOrigin;
+export type AddNotificationPayload = Pick<Notification, 'message' | 'origin'> & {
   options?: NotificationOptions;
 };
