@@ -207,7 +207,7 @@ export class Channel {
       if (offlineDb) {
         const messageId = message.id;
         if (messageId) {
-          return (await offlineDb.queueTask({
+          return await offlineDb.queueTask<SendMessageAPIResponse>({
             task: {
               channelId: this.id as string,
               channelType: this.type,
@@ -215,7 +215,7 @@ export class Channel {
               payload: [message, options],
               type: 'send-message',
             },
-          })) as SendMessageAPIResponse;
+          });
         }
       }
     } catch (error) {
@@ -410,7 +410,7 @@ export class Channel {
     messageID: string,
     reaction: Reaction,
     options?: { enforce_unique?: boolean; skip_push?: boolean },
-  ): Promise<ReactionAPIResponse | undefined> {
+  ) {
     if (!messageID) {
       throw Error(`Message id is missing`);
     }
@@ -454,7 +454,7 @@ export class Channel {
     messageID: string,
     reaction: Reaction,
     options?: { enforce_unique?: boolean; skip_push?: boolean },
-  ): Promise<ReactionAPIResponse | undefined> {
+  ) {
     if (!messageID) {
       throw Error(`Message id is missing`);
     }
@@ -498,7 +498,7 @@ export class Channel {
           });
         }
 
-        return await offlineDb.queueTask({
+        return await offlineDb.queueTask<ReactionAPIResponse>({
           task: {
             channelId: this.id as string,
             channelType: this.type,

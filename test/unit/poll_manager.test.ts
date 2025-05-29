@@ -1,8 +1,7 @@
-import { v4 as uuidv4 } from 'uuid';
-
 import { generateChannel } from './test-utils/generateChannel';
 import { generateMsg } from './test-utils/generateMessage';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
+import { generateUUIDv4 as uuidv4 } from '../../src/utils';
 
 import sinon from 'sinon';
 import {
