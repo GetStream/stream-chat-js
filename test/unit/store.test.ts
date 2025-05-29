@@ -65,11 +65,11 @@ describe('StateStore', () => {
     expect(handler).toHaveBeenCalledWith({ count: 42 }, { count: 0 });
   });
 
-  it('should support registerModifier', () => {
+  it('should support addPreprocessor', () => {
     const handler = vi.fn();
     store.subscribe(handler);
 
-    store.registerModifier((next) => {
+    store.addPreprocessor((next) => {
       if (next.count > 5) next.count = 5;
     });
 
@@ -78,18 +78,18 @@ describe('StateStore', () => {
     expect(store.getLatestValue().count).toBe(5);
   });
 
-  it('should not call modifiers if value does not change', () => {
+  it('should not call preprocessors if value does not change', () => {
     const mod = vi.fn();
 
-    store.registerModifier(mod);
+    store.addPreprocessor(mod);
     store.next(store.getLatestValue());
 
     expect(mod).not.toHaveBeenCalled();
   });
 
-  it('should allow unregistering modifiers', () => {
+  it('should allow unregistering preprocessors', () => {
     const mod = vi.fn();
-    const unregister = store.registerModifier(mod);
+    const unregister = store.addPreprocessor(mod);
     unregister();
     store.partialNext({ count: 2 });
     expect(mod).not.toHaveBeenCalled();
@@ -135,14 +135,14 @@ describe('MergedStateStore', () => {
     expect(handler).toHaveBeenCalledWith({ a: 3, b: 'z' }, { a: 3, b: 'x' });
   });
 
-  it('should not allow direct mutation via next/partialNext/registerModifier', () => {
+  it('should not allow direct mutation via next/partialNext/addPreprocessor', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     // @ts-expect-error testing purposes
     merged.next({ a: 5, b: 'q' });
     // @ts-expect-error testing purposes
     merged.partialNext({ a: 5 });
     // @ts-expect-error testing purposes
-    merged.registerModifier(() => {});
+    merged.addPreprocessor(() => {});
     expect(warn).toHaveBeenCalledTimes(3);
     warn.mockRestore();
   });

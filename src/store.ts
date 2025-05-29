@@ -2,9 +2,9 @@ export type Patch<T> = (value: T) => T;
 export type ValueOrPatch<T> = T | Patch<T>;
 export type Handler<T> = (nextValue: T, previousValue: T | undefined) => void;
 export type Unsubscribe = () => void;
-
-export type Unregister = Unsubscribe;
-export type Modifier<T> = Handler<T>;
+// aliases
+export type RemovePreprocessor = Unsubscribe;
+export type Preprocessor<T> = Handler<T>;
 
 export const isPatch = <T>(value: ValueOrPatch<T>): value is Patch<T> =>
   typeof value === 'function';
@@ -14,12 +14,14 @@ const noop = () => {};
 
 export class StateStore<T extends Record<string, unknown>> {
   protected handlers = new Set<Handler<T>>();
-  protected modifiers = new Set<Handler<T>>();
+  protected preprocessors = new Set<Preprocessor<T>>();
 
   constructor(protected value: T) {}
 
   /**
    * Allows merging two stores only if their keys differ otherwise there's no way to ensure the data type stability.
+   * @experimental
+   * This method is experimental and may change in future versions.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   public merge<Q extends StateStore<any>>(
@@ -44,7 +46,7 @@ export class StateStore<T extends Record<string, unknown>> {
     // do not notify subscribers if the value hasn't changed
     if (newValue === this.value) return;
 
-    this.modifiers.forEach((modifier) => modifier(newValue, this.value));
+    this.preprocessors.forEach((preprocessor) => preprocessor(newValue, this.value));
 
     const oldValue = this.value;
     this.value = newValue;
@@ -104,17 +106,17 @@ export class StateStore<T extends Record<string, unknown>> {
   };
 
   /**
-   * Registers a modifier function that will be called before the state is updated.
+   * Registers a preprocessor function that will be called before the state is updated.
    *
-   * Modifiers are invoked with the new and previous values whenever `next` or `partialNext`
-   * is called, allowing you to mutate or react to the new value before it is set. Modifiers run in the
+   * Preprocessors are invoked with the new and previous values whenever `next` or `partialNext` methods
+   * are called, allowing you to mutate or react to the new value before it is set. Preprocessors run in the
    * order they were registered.
    *
    * @example
    * ```ts
    * const store = new StateStore<{ count: number; isMaxValue: bool; }>({ count: 0, isMaxValue: false });
    *
-   * store.registerModifier((nextValue, prevValue) => {
+   * store.addPreprocessor((nextValue, prevValue) => {
    *   if (nextValue.count > 10) {
    *     nextValue.count = 10; // Clamp the value to a maximum of 10
    *   }
@@ -135,14 +137,14 @@ export class StateStore<T extends Record<string, unknown>> {
    * store.getLatestValue(); // { count: 5, isMaxValue: false }
    * ```
    *
-   * @param modifier - The function to be called with the next and previous values before the state is updated.
-   * @returns An `Unregister` function that removes the modifier when called.
+   * @param preprocessor - The function to be called with the next and previous values before the state is updated.
+   * @returns A `RemovePreprocessor` function that removes the preprocessor when called.
    */
-  public registerModifier(modifier: Modifier<T>): Unregister {
-    this.modifiers.add(modifier);
+  public addPreprocessor(preprocessor: Preprocessor<T>): RemovePreprocessor {
+    this.preprocessors.add(preprocessor);
 
     return () => {
-      this.modifiers.delete(modifier);
+      this.preprocessors.delete(preprocessor);
     };
   }
 }
@@ -154,7 +156,7 @@ export class StateStore<T extends Record<string, unknown>> {
  * It extends StateStore with the combined type of both source stores.
  * Changes to either the original or merged store will propagate to the combined store.
  *
- * Note: Direct mutations (next, partialNext, registerModifier) are disabled on the merged store.
+ * Note: Direct mutations (next, partialNext, addPreprocessor) are disabled on the merged store.
  * You should instead call these methods on the original or merged stores.
  *
  * @template O The type of the original state store
@@ -292,46 +294,10 @@ export class MergedStateStore<
       `${MergedStateStore.name}.partialNext is disabled, call original.partialNext or merged.partialNext instead`,
     );
   };
-  public registerModifier() {
+  public addPreprocessor() {
     console.warn(
-      `${MergedStateStore.name}.registerModifier is disabled, call original.registerModifier or merged.registerModifier instead`,
+      `${MergedStateStore.name}.addPreprocessor is disabled, call original.addPreprocessor or merged.addPreprocessor instead`,
     );
     return noop;
   }
 }
-
-/** EXAMPLE:
-const Uninitialized = Symbol('uninitialized');
-
-const b = new StateStore<{
-  previous: string | null | symbol;
-  hasPrevious: boolean | symbol;
-}>({
-  previous: Uninitialized,
-  hasPrevious: Uninitialized,
-});
-
-const a = new StateStore<{
-  hasNext: boolean | symbol;
-  next: string | null | symbol;
-}>({
-  next: Uninitialized,
-  hasNext: Uninitialized,
-}).merge(b);
-
-a.original.registerModifier((nextValue) => {
-  if (typeof nextValue.next === 'string') {
-    nextValue.hasNext = true;
-  } else if (nextValue.next === Uninitialized) {
-    nextValue.hasNext = Uninitialized;
-  } else {
-    nextValue.hasNext = false;
-  }
-});
-
-a.subscribe((ns) => console.log(ns));
-
-a.original.partialNext({ next: 'next' });
-a.original.partialNext({ next: null });
-a.original.partialNext({ next: Uninitialized });
-*/
