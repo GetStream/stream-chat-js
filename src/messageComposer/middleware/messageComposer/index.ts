@@ -7,3 +7,4 @@ export * from './MessageComposerMiddlewareExecutor';
 export * from './messageComposerState';
 export * from './textComposer';
 export * from './types';
+export * from './commandInjection';
