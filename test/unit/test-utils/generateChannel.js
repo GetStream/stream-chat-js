@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { generateUUIDv4 as uuidv4 } from '../../../src/utils';
 
 export const generateChannel = (options = { channel: {} }) => {
 	const { channel: optionsChannel, config, ...optionsBesidesChannel } = options;
