@@ -318,6 +318,20 @@ describe('mergeWith', () => {
     expect(result.file.type).toBe('text/plain');
   });
 
+  it('should override the target scalar with source object', () => {
+    const source = { name: 'source.txt', content: 'source content' };
+    expect(mergeWith({ a: 1 }, { a: source }).a).toEqual(source);
+    expect(mergeWith({ a: '1' }, { a: source }).a).toEqual(source);
+    expect(mergeWith({ a: true }, { a: source }).a).toEqual(source);
+    expect(mergeWith({ a: false }, { a: source }).a).toEqual(source);
+  });
+
+  it('should override the target null or undefined with source object', () => {
+    const source = { name: 'source.txt', content: 'source content' };
+    expect(mergeWith({ a: null }, { a: source }).a).toEqual(source);
+    expect(mergeWith({ a: undefined }, { a: source }).a).toEqual(source);
+  });
+
   it('should use source class instance when target is a plain object', () => {
     // Create File instance and plain object
     const sourceFile = new File(['source content'], 'source.txt', { type: 'text/html' });

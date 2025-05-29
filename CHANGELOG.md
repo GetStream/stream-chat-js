@@ -1,3 +1,14 @@
+## [9.3.0](https://github.com/GetStream/stream-chat-js/compare/v9.2.0...v9.3.0) (2025-05-28)
+
+### Bug Fixes
+
+* broken api return values and types ([#1550](https://github.com/GetStream/stream-chat-js/issues/1550)) ([07a204c](https://github.com/GetStream/stream-chat-js/commit/07a204c0594d4417f91e34468366553485303a66))
+* override target scalar, null and undefined values with mergeWith ([#1549](https://github.com/GetStream/stream-chat-js/issues/1549)) ([ad3a328](https://github.com/GetStream/stream-chat-js/commit/ad3a3284d9070dd1ed4745a5b3628a8115bc8fc4))
+
+### Features
+
+* [CHA-858] Add event hooks to app settings ([#1537](https://github.com/GetStream/stream-chat-js/issues/1537)) ([4612572](https://github.com/GetStream/stream-chat-js/commit/4612572ac0c5ed71139780997e75c4d80dea9d64))
+
 ## [9.2.0](https://github.com/GetStream/stream-chat-js/compare/v9.1.1...v9.2.0) (2025-05-27)
 
 ### Bug Fixes
