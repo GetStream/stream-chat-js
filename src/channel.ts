@@ -1638,6 +1638,8 @@ export class Channel {
         },
       );
     }
+
+    return response;
   }
 
   /**
@@ -1668,6 +1670,8 @@ export class Channel {
         },
       );
     }
+
+    return response;
   }
 
   /**
