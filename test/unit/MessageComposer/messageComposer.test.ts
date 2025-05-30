@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   Channel,
   LocalMessage,
@@ -10,6 +10,7 @@ import { DeepPartial } from '../../../src/types.utility';
 import { MessageComposer } from '../../../src/messageComposer/messageComposer';
 import { StateStore } from '../../../src/store';
 import { DraftResponse, MessageResponse } from '../../../src/types';
+import { MockOfflineDB } from '../offline-support/MockOfflineDB';
 
 const generateUuidV4Output = 'test-uuid';
 // Mock dependencies
@@ -373,6 +374,66 @@ describe('MessageComposer', () => {
       });
       expect(messageComposer.compositionIsEmpty).toBe(false);
       spyTextComposerTextIsEmpty.mockRestore();
+    });
+  });
+
+  describe('offlineDB enabled', () => {
+    const offlineModeMessageComposerSetup = ({
+      composition,
+      compositionContext,
+      config,
+    }: {
+      composition?: LocalMessage | DraftResponse | MessageResponse | undefined;
+      compositionContext?: Channel | Thread | LocalMessage | undefined;
+      config?: DeepPartial<MessageComposerConfig>;
+    } = {}) => {
+      const mockClient = new StreamChat('test-api-key');
+      mockClient.user = user;
+      mockClient.userID = user.id;
+      mockClient.setOfflineDBApi(new MockOfflineDB({ client: mockClient }));
+      vi.spyOn(mockClient.offlineDb!, 'initializeDB').mockResolvedValue(false);
+      // Create a proper Channel instance with only the necessary attributes mocked
+      const mockChannel = new Channel(mockClient, 'messaging', 'test-channel-id', {
+        id: 'test-channel-id',
+        type: 'messaging',
+        cid: 'messaging:test-channel-id',
+      });
+
+      // Mock the getClient method
+      vi.spyOn(mockChannel, 'getClient').mockReturnValue(mockClient);
+
+      const messageComposer = new MessageComposer({
+        client: mockClient,
+        compositionContext: compositionContext || mockChannel,
+        composition,
+        config,
+      });
+
+      return { mockClient, mockChannel, messageComposer };
+    };
+
+    it('hasSendableData should return false if the composition is empty', () => {
+      const { messageComposer } = offlineModeMessageComposerSetup();
+
+      const spyCompositionIsEmpty = vi
+        .spyOn(messageComposer, 'compositionIsEmpty', 'get')
+        .mockReturnValue(true);
+
+      expect(messageComposer.client.offlineDb).toBeDefined();
+      expect(messageComposer.hasSendableData).toBe(false);
+      spyCompositionIsEmpty.mockRestore();
+    });
+
+    it('hasSendableData should return true if the composition is not empty', () => {
+      const { messageComposer } = offlineModeMessageComposerSetup();
+
+      const spyCompositionIsEmpty = vi
+        .spyOn(messageComposer, 'compositionIsEmpty', 'get')
+        .mockReturnValue(false);
+
+      expect(messageComposer.client.offlineDb).toBeDefined();
+      expect(messageComposer.hasSendableData).toBe(true);
+      spyCompositionIsEmpty.mockRestore();
     });
   });
 
