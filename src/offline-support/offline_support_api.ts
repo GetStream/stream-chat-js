@@ -36,10 +36,6 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     });
   }
 
-  abstract upsertDraft: OfflineDBApi['upsertDraft'];
-  abstract getDraft: OfflineDBApi['getDraft'];
-  abstract deleteDraft: OfflineDBApi['deleteDraft'];
-
   /**
    * @abstract
    * Inserts a reaction into the DB.
@@ -197,6 +193,35 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * @returns {Promise<ExecuteBatchDBQueriesType>}
    */
   abstract updateMessage: OfflineDBApi['updateMessage'];
+
+  /**
+   * @abstract
+   * Fetches the provided draft from the DB. Should return as close to
+   * the server side DraftResponse as possible.
+   * @param {DBGetDraftType} options
+   * @returns {Promise<DraftResponse | null>}
+   */
+  abstract getDraft: OfflineDBApi['getDraft'];
+  /**
+   * @abstract
+   * Upserts a draft in the DB.
+   * Will write to the draft table upserting the draft.
+   * Will return the prepared queries for delayed execution (even if they are
+   * already executed).
+   * @param {DBUpsertDraftType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
+   */
+  abstract upsertDraft: OfflineDBApi['upsertDraft'];
+  /**
+   * @abstract
+   * Deletes a draft from the DB.
+   * Will write to the draft table removing the draft.
+   * Will return the prepared queries for delayed execution (even if they are
+   * already executed).
+   * @param {DBDeleteDraftType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
+   */
+  abstract deleteDraft: OfflineDBApi['deleteDraft'];
 
   /**
    * @abstract
