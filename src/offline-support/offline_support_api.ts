@@ -980,12 +980,16 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     }
 
     if (type === 'draft.deleted') {
-      if (event.parent_id) {
-        return await this.deleteDraft({ cid: event.parent_id, execute });
+      if (!event.cid) return;
+
+      if (event.draft && event.draft.parent_id) {
+        return await this.deleteDraft({
+          cid: event.cid,
+          parent_id: event.draft.parent_id,
+          execute,
+        });
       }
-      if (event.channel_id) {
-        return await this.deleteDraft({ cid: event.channel_id, execute });
-      }
+      return await this.deleteDraft({ cid: event.cid, execute });
     }
 
     // Note: It is a bit counter-intuitive that we do not touch the messages in the
