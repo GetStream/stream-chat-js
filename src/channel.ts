@@ -1216,7 +1216,7 @@ export class Channel {
    */
   countUnread(lastRead?: Date | null) {
     if (!lastRead) return this.state.unreadCount;
-
+    // todo: prevent finding the latest message set on each iteration
     let count = 0;
     for (let i = 0; i < this.state.latestMessages.length; i += 1) {
       const message = this.state.latestMessages[i];
@@ -1352,6 +1352,7 @@ export class Channel {
     };
 
     this.getClient().polls.hydratePollCache(state.messages, true);
+    this.getClient().reminders.hydrateState(state.messages);
 
     if (state.draft) {
       this.messageComposer.initState({ composition: state.draft });
@@ -1664,6 +1665,10 @@ export class Channel {
         break;
       case 'message.deleted':
         if (event.message) {
+          if (event.message.reminder) {
+            this.getClient().reminders.removeFromState(event.message.id);
+          }
+
           this._extendEventWithOwnReactions(event);
           if (event.hard_delete) channelState.removeMessage(event.message);
           else channelState.addMessageSorted(event.message, false, false);
@@ -1717,6 +1722,11 @@ export class Channel {
       case 'message.updated':
       case 'message.undeleted':
         if (event.message) {
+          if (event.message.reminder && event.type === 'message.undeleted') {
+            // todo: not sure whether reminder specific event is emitted too and this can be ignored here
+            this.getClient().reminders.upsertToState({ data: event.message.reminder });
+          }
+
           this._extendEventWithOwnReactions(event);
           channelState.addMessageSorted(event.message, false, false);
           channelState._updateQuotedMessageReferences({ message: event.message });

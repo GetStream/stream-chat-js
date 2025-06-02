@@ -177,7 +177,7 @@ import type {
   ReactionSort,
   ReactivateUserOptions,
   ReactivateUsersOptions,
-  ReminderResponse,
+  ReminderAPIResponse,
   ReviewFlagReportOptions,
   ReviewFlagReportResponse,
   SdkIdentifier,
@@ -233,6 +233,7 @@ import type {
 } from './channel_manager';
 import { ChannelManager } from './channel_manager';
 import { NotificationManager } from './notifications';
+import { ReminderManager } from './reminders';
 import { StateStore } from './store';
 import type { MessageComposer } from './messageComposer';
 
@@ -268,9 +269,10 @@ export class StreamChat {
   activeChannels: {
     [key: string]: Channel;
   };
-  threads: ThreadManager;
-  polls: PollManager;
   notifications: NotificationManager;
+  polls: PollManager;
+  reminders: ReminderManager;
+  threads: ThreadManager;
   anonymous: boolean;
   persistUserOnConnectionFailure?: boolean;
   axiosInstance: AxiosInstance;
@@ -490,6 +492,7 @@ export class StreamChat {
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
+    this.reminders = new ReminderManager({ client: this });
   }
 
   /**
@@ -553,6 +556,12 @@ export class StreamChat {
     this.wsConnection?.connectionID || this.wsFallback?.connectionID;
 
   _hasConnectionID = () => Boolean(this._getConnectionID());
+
+  public setMessageComposerSetupFunction = (
+    setupFunction: MessageComposerSetupState['setupFunction'],
+  ) => {
+    this._messageComposerSetupState.partialNext({ setupFunction });
+  };
 
   /**
    * connectUser - Set the current user and open a WebSocket connection
@@ -1884,6 +1893,7 @@ export class StreamChat {
           }),
         };
         this.polls.hydratePollCache(channelState.messages, true);
+        this.reminders.hydrateState(channelState.messages);
       }
 
       if (channelState.draft) {
@@ -4406,21 +4416,14 @@ export class StreamChat {
     return await this.post<QueryDraftsResponse>(this.baseURL + '/drafts/query', payload);
   }
 
-  public setMessageComposerSetupFunction = (
-    setupFunction: MessageComposerSetupState['setupFunction'],
-  ) => {
-    this._messageComposerSetupState.partialNext({ setupFunction });
-  };
-
   /**
    * createReminder - Creates a reminder for a message
    *
-   * @param {string} messageId The ID of the message to create reminder for
    * @param {CreateReminderOptions} options The options for creating the reminder
-   * @returns {Promise<ReminderResponse>}
+   * @returns {Promise<ReminderAPIResponse>}
    */
-  async createReminder(messageId: string, options: CreateReminderOptions = {}) {
-    return await this.post<ReminderResponse>(
+  async createReminder({ messageId, ...options }: CreateReminderOptions) {
+    return await this.post<ReminderAPIResponse>(
       `${this.baseURL}/messages/${messageId}/reminders`,
       options,
     );
@@ -4429,12 +4432,11 @@ export class StreamChat {
   /**
    * updateReminder - Updates an existing reminder for a message
    *
-   * @param {string} messageId The ID of the message whose reminder to update
    * @param {UpdateReminderOptions} options The options for updating the reminder
-   * @returns {Promise<ReminderResponse>}
+   * @returns {Promise<ReminderAPIResponse>}
    */
-  async updateReminder(messageId: string, options: UpdateReminderOptions = {}) {
-    return await this.patch<ReminderResponse>(
+  async updateReminder({ messageId, ...options }: UpdateReminderOptions) {
+    return await this.patch<ReminderAPIResponse>(
       `${this.baseURL}/messages/${messageId}/reminders`,
       options,
     );
@@ -4460,10 +4462,11 @@ export class StreamChat {
    * @param {QueryRemindersOptions} options The options for querying reminders
    * @returns {Promise<QueryRemindersResponse>}
    */
-  async queryReminders(options: QueryRemindersOptions = {}) {
-    return await this.post<QueryRemindersResponse>(
-      `${this.baseURL}/reminders/query`,
-      options,
-    );
+  async queryReminders({ filter, sort, ...rest }: QueryRemindersOptions = {}) {
+    return await this.post<QueryRemindersResponse>(`${this.baseURL}/reminders/query`, {
+      filter_conditions: filter,
+      sort: sort && normalizeQuerySort(sort),
+      ...rest,
+    });
   }
 }

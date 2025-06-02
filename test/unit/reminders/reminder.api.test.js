@@ -1,7 +1,5 @@
-import { expect } from 'chai';
-import sinon from 'sinon';
-import { StreamChat } from '../../src';
-import { afterEach, beforeEach, describe, it } from 'vitest';
+import { StreamChat } from '../../../src';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const user1 = {
 	id: 'user1',
@@ -32,34 +30,35 @@ describe('Reminder', () => {
 	});
 
 	afterEach(() => {
-		sinon.restore();
+		vi.restoreAllMocks();
 	});
 
 	describe('createReminder', () => {
 		it('should create a reminder successfully', async () => {
-			const postStub = sinon.stub(client, 'post').resolves(reminderResponse);
+			const postSpy = vi.spyOn(client, 'post').mockResolvedValueOnce(reminderResponse);
 
-			const result = await client.createReminder('message123', {
+			const result = await client.createReminder({
+				messageId: 'message123',
 				remind_at: '2025-04-12T23:20:50.52Z',
 			});
 
-			expect(postStub.calledOnce).to.be.true;
-			expect(postStub.firstCall.args[0]).to.equal(
+			expect(postSpy).toHaveBeenCalledTimes(1);
+			expect(postSpy.mock.calls[0][0]).toBe(
 				`${client.baseURL}/messages/message123/reminders`,
 			);
-			expect(postStub.firstCall.args[1]).to.deep.equal({
+			expect(postSpy.mock.calls[0][1]).toEqual({
 				remind_at: '2025-04-12T23:20:50.52Z',
 			});
-			expect(result).to.deep.equal(reminderResponse);
+			expect(result).toEqual(reminderResponse);
 		});
 
 		it('should create a reminder without remind_at', async () => {
-			const postStub = sinon.stub(client, 'post').resolves(reminderResponse);
+			const postSpy = vi.spyOn(client, 'post').mockResolvedValueOnce(reminderResponse);
 
-			await client.createReminder('message123');
+			await client.createReminder({ messageId: 'message123' });
 
-			expect(postStub.calledOnce).to.be.true;
-			expect(postStub.firstCall.args[1]).to.deep.equal({});
+			expect(postSpy).toHaveBeenCalledTimes(1);
+			expect(postSpy.mock.calls[0][1]).toEqual({});
 		});
 
 		it('should create a reminder with null remind_at', async () => {
@@ -67,20 +66,23 @@ describe('Reminder', () => {
 				...reminderResponse,
 				remind_at: null,
 			};
-			const postStub = sinon.stub(client, 'post').resolves(reminderWithNullDate);
+			const postSpy = vi
+				.spyOn(client, 'post')
+				.mockResolvedValueOnce(reminderWithNullDate);
 
-			const result = await client.createReminder('message123', {
+			const result = await client.createReminder({
+				messageId: 'message123',
 				remind_at: null,
 			});
 
-			expect(postStub.calledOnce).to.be.true;
-			expect(postStub.firstCall.args[0]).to.equal(
+			expect(postSpy).toHaveBeenCalledTimes(1);
+			expect(postSpy.mock.calls[0][0]).toBe(
 				`${client.baseURL}/messages/message123/reminders`,
 			);
-			expect(postStub.firstCall.args[1]).to.deep.equal({
+			expect(postSpy.mock.calls[0][1]).toEqual({
 				remind_at: null,
 			});
-			expect(result).to.deep.equal(reminderWithNullDate);
+			expect(result).toEqual(reminderWithNullDate);
 		});
 
 		it('should create a reminder with undefined remind_at', async () => {
@@ -88,20 +90,21 @@ describe('Reminder', () => {
 				...reminderResponse,
 				remind_at: undefined,
 			};
-			const postStub = sinon.stub(client, 'post').resolves(reminderWithoutDate);
+			const postSpy = vi.spyOn(client, 'post').mockResolvedValueOnce(reminderWithoutDate);
 
-			const result = await client.createReminder('message123', {
+			const result = await client.createReminder({
+				messageId: 'message123',
 				remind_at: undefined,
 			});
 
-			expect(postStub.calledOnce).to.be.true;
-			expect(postStub.firstCall.args[0]).to.equal(
+			expect(postSpy).toHaveBeenCalledTimes(1);
+			expect(postSpy.mock.calls[0][0]).toBe(
 				`${client.baseURL}/messages/message123/reminders`,
 			);
-			expect(postStub.firstCall.args[1]).to.deep.equal({
+			expect(postSpy.mock.calls[0][1]).toEqual({
 				remind_at: undefined,
 			});
-			expect(result).to.deep.equal(reminderWithoutDate);
+			expect(result).toEqual(reminderWithoutDate);
 		});
 	});
 
@@ -111,20 +114,21 @@ describe('Reminder', () => {
 				...reminderResponse,
 				remind_at: '2025-05-12T23:20:50.52Z',
 			};
-			const patchStub = sinon.stub(client, 'patch').resolves(updatedReminder);
+			const patchStub = vi.spyOn(client, 'patch').mockResolvedValueOnce(updatedReminder);
 
-			const result = await client.updateReminder('message123', {
+			const result = await client.updateReminder({
+				messageId: 'message123',
 				remind_at: '2025-05-12T23:20:50.52Z',
 			});
 
-			expect(patchStub.calledOnce).to.be.true;
-			expect(patchStub.firstCall.args[0]).to.equal(
+			expect(patchStub).toHaveBeenCalledTimes(1);
+			expect(patchStub.mock.calls[0][0]).toBe(
 				`${client.baseURL}/messages/message123/reminders`,
 			);
-			expect(patchStub.firstCall.args[1]).to.deep.equal({
+			expect(patchStub.mock.calls[0][1]).toEqual({
 				remind_at: '2025-05-12T23:20:50.52Z',
 			});
-			expect(result).to.deep.equal(updatedReminder);
+			expect(result).toEqual(updatedReminder);
 		});
 
 		it('should update a reminder to remove remind_at', async () => {
@@ -132,20 +136,21 @@ describe('Reminder', () => {
 				...reminderResponse,
 				remind_at: null,
 			};
-			const patchStub = sinon.stub(client, 'patch').resolves(updatedReminder);
+			const patchStub = vi.spyOn(client, 'patch').mockResolvedValueOnce(updatedReminder);
 
-			const result = await client.updateReminder('message123', {
+			const result = await client.updateReminder({
+				messageId: 'message123',
 				remind_at: null,
 			});
 
-			expect(patchStub.calledOnce).to.be.true;
-			expect(patchStub.firstCall.args[0]).to.equal(
+			expect(patchStub).toHaveBeenCalledTimes(1);
+			expect(patchStub.mock.calls[0][0]).toBe(
 				`${client.baseURL}/messages/message123/reminders`,
 			);
-			expect(patchStub.firstCall.args[1]).to.deep.equal({
+			expect(patchStub.mock.calls[0][1]).toEqual({
 				remind_at: null,
 			});
-			expect(result).to.deep.equal(updatedReminder);
+			expect(result).toEqual(updatedReminder);
 		});
 
 		it('should update a reminder with undefined remind_at', async () => {
@@ -153,43 +158,44 @@ describe('Reminder', () => {
 				...reminderResponse,
 				remind_at: undefined,
 			};
-			const patchStub = sinon.stub(client, 'patch').resolves(updatedReminder);
+			const patchStub = vi.spyOn(client, 'patch').mockResolvedValueOnce(updatedReminder);
 
-			const result = await client.updateReminder('message123', {
+			const result = await client.updateReminder({
+				messageId: 'message123',
 				remind_at: undefined,
 			});
 
-			expect(patchStub.calledOnce).to.be.true;
-			expect(patchStub.firstCall.args[0]).to.equal(
+			expect(patchStub).toHaveBeenCalledTimes(1);
+			expect(patchStub.mock.calls[0][0]).toBe(
 				`${client.baseURL}/messages/message123/reminders`,
 			);
-			expect(patchStub.firstCall.args[1]).to.deep.equal({
+			expect(patchStub.mock.calls[0][1]).toEqual({
 				remind_at: undefined,
 			});
-			expect(result).to.deep.equal(updatedReminder);
+			expect(result).toEqual(updatedReminder);
 		});
 	});
 
 	describe('deleteReminder', () => {
 		it('should delete a reminder successfully', async () => {
-			const deleteStub = sinon.stub(client, 'delete').resolves({});
+			const deleteStub = vi.spyOn(client, 'delete').mockResolvedValueOnce({});
 
 			await client.deleteReminder('message123');
 
-			expect(deleteStub.calledOnce).to.be.true;
-			expect(deleteStub.firstCall.args[0]).to.equal(
+			expect(deleteStub).toHaveBeenCalledTimes(1);
+			expect(deleteStub.mock.calls[0][0]).toBe(
 				`${client.baseURL}/messages/message123/reminders`,
 			);
-			expect(deleteStub.firstCall.args[1]).to.deep.equal({});
+			expect(deleteStub.mock.calls[0][1]).toEqual({});
 		});
 
 		it('should delete a reminder with user_id', async () => {
-			const deleteStub = sinon.stub(client, 'delete').resolves({});
+			const deleteStub = vi.spyOn(client, 'delete').mockResolvedValueOnce({});
 
 			await client.deleteReminder('message123', 'user1');
 
-			expect(deleteStub.calledOnce).to.be.true;
-			expect(deleteStub.firstCall.args[1]).to.deep.equal({ user_id: 'user1' });
+			expect(deleteStub).toHaveBeenCalledTimes(1);
+			expect(deleteStub.mock.calls[0][1]).toEqual({ user_id: 'user1' });
 		});
 	});
 
@@ -199,20 +205,20 @@ describe('Reminder', () => {
 				reminders: [reminderResponse],
 				next: 'next_page_token',
 			};
-			const postStub = sinon.stub(client, 'post').resolves(queryResponse);
+			const postSpy = vi.spyOn(client, 'post').mockResolvedValueOnce(queryResponse);
 
 			const result = await client.queryReminders({
 				filter_conditions: {
 					channel_cid: 'messaging:123',
 					remind_at: { $gt: '2024-01-01T00:00:00.000Z' },
 				},
-				sort: [{ field: 'remind_at', direction: 1 }],
+				sort: [{ remind_at: 1 }],
 				limit: 10,
 			});
 
-			expect(postStub.calledOnce).to.be.true;
-			expect(postStub.firstCall.args[0]).to.equal(`${client.baseURL}/reminders/query`);
-			expect(postStub.firstCall.args[1]).to.deep.equal({
+			expect(postSpy).toHaveBeenCalledTimes(1);
+			expect(postSpy.mock.calls[0][0]).toBe(`${client.baseURL}/reminders/query`);
+			expect(postSpy.mock.calls[0][1]).toEqual({
 				filter_conditions: {
 					channel_cid: 'messaging:123',
 					remind_at: { $gt: '2024-01-01T00:00:00.000Z' },
@@ -220,24 +226,24 @@ describe('Reminder', () => {
 				sort: [{ field: 'remind_at', direction: 1 }],
 				limit: 10,
 			});
-			expect(result).to.deep.equal(queryResponse);
+			expect(result).toEqual(queryResponse);
 		});
 
 		it('should query reminders with empty options', async () => {
 			const queryResponse = { reminders: [] };
-			const postStub = sinon.stub(client, 'post').resolves(queryResponse);
+			const postSpy = vi.spyOn(client, 'post').mockResolvedValueOnce(queryResponse);
 
 			const result = await client.queryReminders();
 
-			expect(postStub.calledOnce).to.be.true;
-			expect(postStub.firstCall.args[1]).to.deep.equal({});
-			expect(result).to.deep.equal(queryResponse);
+			expect(postSpy).toHaveBeenCalledTimes(1);
+			expect(postSpy.mock.calls[0][1]).toEqual({});
+			expect(result).toEqual(queryResponse);
 		});
 	});
 
 	describe('Reminder Events', () => {
 		it('should handle reminder.created event', () => {
-			const eventHandler = sinon.spy();
+			const eventHandler = vi.fn();
 			client.on('reminder.created', eventHandler);
 
 			const reminderEvent = {
@@ -247,12 +253,12 @@ describe('Reminder', () => {
 
 			client.dispatchEvent(reminderEvent);
 
-			expect(eventHandler.calledOnce).to.be.true;
-			expect(eventHandler.firstCall.args[0]).to.deep.equal(reminderEvent);
+			expect(eventHandler).toHaveBeenCalledTimes(1);
+			expect(eventHandler.mock.calls[0][0]).toEqual(reminderEvent);
 		});
 
 		it('should handle reminder.updated event', () => {
-			const eventHandler = sinon.spy();
+			const eventHandler = vi.fn();
 			client.on('reminder.updated', eventHandler);
 
 			const reminderEvent = {
@@ -265,12 +271,12 @@ describe('Reminder', () => {
 
 			client.dispatchEvent(reminderEvent);
 
-			expect(eventHandler.calledOnce).to.be.true;
-			expect(eventHandler.firstCall.args[0]).to.deep.equal(reminderEvent);
+			expect(eventHandler).toHaveBeenCalledTimes(1);
+			expect(eventHandler.mock.calls[0][0]).toEqual(reminderEvent);
 		});
 
 		it('should handle reminder.deleted event', () => {
-			const eventHandler = sinon.spy();
+			const eventHandler = vi.fn();
 			client.on('reminder.deleted', eventHandler);
 
 			const reminderEvent = {
@@ -280,12 +286,12 @@ describe('Reminder', () => {
 
 			client.dispatchEvent(reminderEvent);
 
-			expect(eventHandler.calledOnce).to.be.true;
-			expect(eventHandler.firstCall.args[0]).to.deep.equal(reminderEvent);
+			expect(eventHandler).toHaveBeenCalledTimes(1);
+			expect(eventHandler.mock.calls[0][0]).toEqual(reminderEvent);
 		});
 
 		it('should handle notification.reminder_due event', () => {
-			const eventHandler = sinon.spy();
+			const eventHandler = vi.fn();
 			client.on('notification.reminder_due', eventHandler);
 
 			const reminderEvent = {
@@ -295,8 +301,8 @@ describe('Reminder', () => {
 
 			client.dispatchEvent(reminderEvent);
 
-			expect(eventHandler.calledOnce).to.be.true;
-			expect(eventHandler.firstCall.args[0]).to.deep.equal(reminderEvent);
+			expect(eventHandler).toHaveBeenCalledTimes(1);
+			expect(eventHandler.mock.calls[0][0]).toEqual(reminderEvent);
 		});
 	});
 
@@ -310,7 +316,7 @@ describe('Reminder', () => {
 			channelType = 'reminders-test-' + Math.random().toString(36).substring(2, 10);
 
 			// Create a new channel type
-			sinon.stub(client, 'createChannelType').resolves({
+			vi.spyOn(client, 'createChannelType').mockResolvedValueOnce({
 				name: channelType,
 				user_message_reminders: false, // Initially disabled
 			});
@@ -324,7 +330,7 @@ describe('Reminder', () => {
 			channel = client.channel(channelType, 'test-channel');
 
 			// Mock the channel.create method
-			sinon.stub(channel, 'create').resolves({
+			vi.spyOn(channel, 'create').mockResolvedValueOnce({
 				channel: {
 					id: 'test-channel',
 					type: channelType,
@@ -354,34 +360,35 @@ describe('Reminder', () => {
 
 		it('should fail to create a reminder when user_message_reminders is disabled', async () => {
 			// Mock the post method to simulate an error response
-			const postStub = sinon.stub(client, 'post').rejects({
+			const postSpy = vi.spyOn(client, 'post').mockRejectedValueOnce({
 				code: 403,
 				message: 'User message reminders are not enabled for this channel',
 				status: 403,
 			});
 
 			try {
-				await client.createReminder('test-message', {
+				await client.createReminder({
+					messageId: 'test-message',
 					remind_at: '2025-04-12T23:20:50.52Z',
 				});
 				// If we reach here, the test should fail
 				expect.fail('Expected createReminder to throw an error');
 			} catch (error) {
-				expect(error.code).to.equal(403);
-				expect(error.message).to.equal(
+				expect(error.code).toBe(403);
+				expect(error.message).toBe(
 					'User message reminders are not enabled for this channel',
 				);
 			}
 
-			expect(postStub.calledOnce).to.be.true;
-			expect(postStub.firstCall.args[0]).to.equal(
+			expect(postSpy).toHaveBeenCalledTimes(1);
+			expect(postSpy.mock.calls[0][0]).toBe(
 				`${client.baseURL}/messages/test-message/reminders`,
 			);
 		});
 
 		it('should successfully create a reminder after enabling user_message_reminders', async () => {
 			// Update the channel type to enable user_message_reminders
-			sinon.stub(client, 'updateChannelType').resolves({
+			vi.spyOn(client, 'updateChannelType').mockResolvedValueOnce({
 				name: channelType,
 				user_message_reminders: true, // Now enabled
 			});
@@ -398,23 +405,24 @@ describe('Reminder', () => {
 			};
 
 			// Mock the post method to simulate a successful response
-			const postStub = sinon.stub(client, 'post').resolves({
+			const postSpy = vi.spyOn(client, 'post').mockResolvedValueOnce({
 				...reminderResponse,
 				message_id: 'test-message',
 			});
 
-			const result = await client.createReminder('test-message', {
+			const result = await client.createReminder({
+				messageId: 'test-message',
 				remind_at: '2025-04-12T23:20:50.52Z',
 			});
 
-			expect(postStub.calledOnce).to.be.true;
-			expect(postStub.firstCall.args[0]).to.equal(
+			expect(postSpy).toHaveBeenCalledTimes(1);
+			expect(postSpy.mock.calls[0][0]).toBe(
 				`${client.baseURL}/messages/test-message/reminders`,
 			);
-			expect(postStub.firstCall.args[1]).to.deep.equal({
+			expect(postSpy.mock.calls[0][1]).toEqual({
 				remind_at: '2025-04-12T23:20:50.52Z',
 			});
-			expect(result.message_id).to.equal('test-message');
+			expect(result.message_id).toBe('test-message');
 		});
 	});
 });

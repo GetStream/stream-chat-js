@@ -1,7 +1,7 @@
 import type { MessageComposer } from '../../messageComposer';
 import type { CommandResponse, UserResponse } from '../../../types';
 import type { TokenizationPayload } from './textMiddlewareUtils';
-import type { SearchSource } from '../../../search_controller';
+import type { SearchSource } from '../../../search';
 import type { CustomTextComposerSuggestion } from '../../types.custom';
 
 export type TextComposerSuggestion<T = unknown> = T & {
