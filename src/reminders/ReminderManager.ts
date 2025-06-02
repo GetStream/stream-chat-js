@@ -159,6 +159,7 @@ export class ReminderManager extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeNotificationReminderDue());
     this.addUnsubscribeFunction(this.subscribeMessageDeleted());
     this.addUnsubscribeFunction(this.subscribeMessageUndeleted());
+    this.addUnsubscribeFunction(this.subscribePaginatorStateUpdated());
   };
 
   private subscribeReminderCreated = () =>
