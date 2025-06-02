@@ -9,9 +9,19 @@ import { StableWSConnection } from '../../src/connection';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
 
-import { describe, beforeEach, it, expect, beforeAll, afterAll } from 'vitest';
+import {
+	describe,
+	beforeEach,
+	it,
+	expect,
+	beforeAll,
+	afterEach,
+	afterAll,
+	vi,
+} from 'vitest';
 import { Channel } from '../../src';
-import { ChannelAPIResponse } from '../../src';
+import { normalizeQuerySort } from '../../src/utils';
+import { MockOfflineDB } from './offline-support/MockOfflineDB';
 
 describe('StreamChat getInstance', () => {
 	beforeEach(() => {
@@ -747,6 +757,314 @@ describe('StreamChat.queryChannels', async () => {
 			});
 		});
 		mock.restore();
+	});
+});
+
+describe('StreamChat.queryReactions', () => {
+	let client;
+	let dispatchSpy;
+	let postStub;
+	const messageId = 'msg-1';
+	const filter = { type: { $in: ['like', 'love'] } };
+	const sort = [{ created_at: -1 }];
+	const options = { limit: 50 };
+
+	const offlineReactions = [
+		{ type: 'like', user_id: 'user-1', message_id: messageId },
+		{ type: 'love', user_id: 'user-2', message_id: messageId },
+	];
+
+	const postResponse = {
+		reactions: [
+			{ type: 'like', user_id: 'user-1', message_id: messageId },
+			{ type: 'love', user_id: 'user-2', message_id: messageId },
+		],
+	};
+
+	beforeEach(async () => {
+		client = await getClientWithUser();
+		const offlineDb = new MockOfflineDB({ client });
+
+		client.setOfflineDBApi(offlineDb);
+		await client.offlineDb.init(client.userID);
+
+		dispatchSpy = vi.spyOn(client, 'dispatchEvent');
+		postStub = vi.spyOn(client, 'post').mockResolvedValueOnce(postResponse);
+		client.offlineDb.getReactions.mockResolvedValue(offlineReactions);
+	});
+
+	afterEach(() => {
+		vi.resetAllMocks();
+	});
+
+	it('should query reactions from offlineDb and dispatch offline_reactions.queried event', async () => {
+		const result = await client.queryReactions(messageId, filter, sort, options);
+
+		expect(client.offlineDb.getReactions).toHaveBeenCalledWith({
+			messageId,
+			filters: filter,
+			sort,
+			limit: options.limit,
+		});
+
+		expect(dispatchSpy).toHaveBeenCalledTimes(1);
+		// dispatchEvent enriches the event with some extra data which
+		// makes testing inconvenient.
+		const dispatchSpyCallArguments = dispatchSpy.mock.calls[0];
+		delete dispatchSpyCallArguments[0].received_at;
+		expect(dispatchSpyCallArguments).toStrictEqual([
+			{
+				type: 'offline_reactions.queried',
+				offlineReactions,
+			},
+		]);
+
+		expect(postStub).toHaveBeenCalledTimes(1);
+		expect(postStub).toHaveBeenCalledWith(
+			`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reactions`,
+			{
+				filter,
+				sort: normalizeQuerySort(sort),
+				limit: 50,
+			},
+		);
+
+		expect(result).to.eql(postResponse);
+	});
+
+	it('should skip querying offlineDb if options.next is true', async () => {
+		await client.queryReactions(messageId, filter, sort, { next: true, limit: 20 });
+
+		expect(client.offlineDb.getReactions).not.toHaveBeenCalled();
+
+		expect(postStub).toHaveBeenCalledWith(
+			`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reactions`,
+			{
+				filter,
+				sort: normalizeQuerySort(sort),
+				next: true,
+				limit: 20,
+			},
+		);
+	});
+
+	it('should not dispatch event if offlineDb returns null', async () => {
+		client.offlineDb.getReactions.mockResolvedValue(null);
+
+		await client.queryReactions(messageId, filter, sort, options);
+
+		expect(client.offlineDb.getReactions).toHaveBeenCalledTimes(1);
+		expect(dispatchSpy).not.toHaveBeenCalled();
+		expect(postStub).toHaveBeenCalledWith(
+			`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reactions`,
+			{
+				filter,
+				sort: normalizeQuerySort(sort),
+				limit: 50,
+			},
+		);
+	});
+
+	it('should log a warning if offlineDb.getReactions throws', async () => {
+		client.offlineDb.getReactions.mockRejectedValue(new Error('DB error'));
+		const loggerSpy = vi.fn();
+		client.logger = loggerSpy;
+
+		await client.queryReactions(messageId, filter, sort, options);
+
+		expect(loggerSpy).toHaveBeenCalledWith(
+			'warn',
+			'An error has occurred while querying offline reactions',
+			expect.objectContaining({
+				error: expect.any(Error),
+			}),
+		);
+		expect(dispatchSpy).not.toHaveBeenCalled();
+		expect(postStub).toHaveBeenCalledWith(
+			`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reactions`,
+			{
+				filter,
+				sort: normalizeQuerySort(sort),
+				limit: 50,
+			},
+		);
+	});
+});
+
+describe('message deletion', () => {
+	const messageId = 'msg-123';
+
+	let client;
+	let loggerSpy;
+	let queueTaskSpy;
+	let clientDeleteSpy;
+
+	beforeEach(async () => {
+		client = await getClientWithUser();
+		const offlineDb = new MockOfflineDB({ client });
+
+		client.setOfflineDBApi(offlineDb);
+		await client.offlineDb.init(client.userID);
+
+		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
+		clientDeleteSpy = vi.spyOn(client, 'delete').mockResolvedValue({});
+		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
+	});
+
+	afterEach(() => {
+		vi.resetAllMocks();
+	});
+
+	describe('deleteMessage', () => {
+		let _deleteMessageSpy;
+
+		beforeEach(() => {
+			_deleteMessageSpy = vi.spyOn(client, '_deleteMessage').mockResolvedValue({});
+		});
+
+		afterEach(() => {
+			vi.resetAllMocks();
+		});
+
+		it('should soft delete the message and queue task if hardDelete is false', async () => {
+			await client.deleteMessage(messageId, false);
+
+			expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledTimes(1);
+			expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledWith({ id: messageId });
+			expect(client.offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
+			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
+
+			const taskArg = queueTaskSpy.mock.calls[0][0];
+			expect(taskArg).to.deep.equal({
+				task: {
+					messageId,
+					payload: [messageId, false],
+					type: 'delete-message',
+				},
+			});
+			expect(_deleteMessageSpy).not.toHaveBeenCalled();
+		});
+
+		it('should hard delete the message and queue task if hardDelete is true', async () => {
+			await client.deleteMessage(messageId, true);
+
+			expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledTimes(1);
+			expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledWith({ id: messageId });
+			expect(client.offlineDb.softDeleteMessage).not.toHaveBeenCalled();
+			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
+
+			const taskArg = queueTaskSpy.mock.calls[0][0];
+			expect(taskArg).to.deep.equal({
+				task: {
+					messageId,
+					payload: [messageId, true],
+					type: 'delete-message',
+				},
+			});
+			expect(_deleteMessageSpy).not.toHaveBeenCalled();
+		});
+
+		it('should fall back to _deleteMessage if offlineDb is not set', async () => {
+			client.offlineDb = undefined;
+
+			await client.deleteMessage(messageId, true);
+
+			expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
+			expect(_deleteMessageSpy).toHaveBeenCalledWith(messageId, true);
+		});
+
+		it('should log and fall back to _deleteMessage if offline delete throws', async () => {
+			client.offlineDb.softDeleteMessage.mockRejectedValue(new Error('Offline failure'));
+
+			await client.deleteMessage(messageId, false);
+
+			expect(loggerSpy).toHaveBeenCalledTimes(1);
+			expect(queueTaskSpy).not.toHaveBeenCalled();
+			expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
+			expect(_deleteMessageSpy).toHaveBeenCalledWith(messageId, false);
+		});
+	});
+
+	describe('_deleteMessage', () => {
+		it('should call delete with correct URL and no params when hardDelete is false/undefined', async () => {
+			await client._deleteMessage(messageId);
+
+			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
+			expect(clientDeleteSpy).toHaveBeenCalledWith(
+				`${client.baseURL}/messages/${encodeURIComponent(messageId)}`,
+				{},
+			);
+		});
+
+		it('should call delete with hard=true param when hardDelete is true', async () => {
+			await client._deleteMessage(messageId, true);
+
+			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
+			expect(clientDeleteSpy).toHaveBeenCalledWith(
+				`${client.baseURL}/messages/${encodeURIComponent(messageId)}`,
+				{ hard: true },
+			);
+		});
+
+		it('should return the response from delete', async () => {
+			clientDeleteSpy.mockResolvedValue({
+				message: { id: messageId },
+			});
+			const result = await client._deleteMessage(messageId);
+
+			expect(result).toEqual({
+				message: { id: messageId },
+			});
+		});
+	});
+});
+
+describe('dispatchEvent: offlineDb.executeQuerySafely', () => {
+	let client;
+	let executeQuerySafelySpy;
+
+	beforeEach(async () => {
+		client = await getClientWithUser({ id: 'user-abc' });
+		const offlineDb = new MockOfflineDB({ client });
+		await offlineDb.init(client.userID);
+		client.setOfflineDBApi(offlineDb);
+
+		executeQuerySafelySpy = vi.spyOn(offlineDb, 'executeQuerySafely');
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('should call executeQuerySafely with correct event', () => {
+		const testEvent = {
+			type: 'message.new',
+			cid: 'messaging:test',
+		};
+
+		vi.spyOn(client.offlineDb, 'handleEvent').mockResolvedValue({});
+
+		client.dispatchEvent(testEvent);
+
+		expect(executeQuerySafelySpy).toHaveBeenCalledTimes(1);
+		expect(executeQuerySafelySpy).toHaveBeenCalledWith(expect.any(Function), {
+			method: 'handleEvent;message.new',
+		});
+
+		// Verify the inner function calls db.handleEvent correctly
+		const fn = executeQuerySafelySpy.mock.calls[0][0];
+		fn(client.offlineDb);
+
+		expect(client.offlineDb.handleEvent).toHaveBeenCalledWith({ event: testEvent });
+	});
+
+	it('should work normally if client.offlineDb is not set', () => {
+		client.offlineDb = undefined;
+
+		const event = { type: 'user.updated' };
+
+		expect(() => client.dispatchEvent(event)).not.toThrow();
+		expect(executeQuerySafelySpy).not.toHaveBeenCalled();
 	});
 });
 

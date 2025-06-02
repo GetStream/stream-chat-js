@@ -16,6 +16,8 @@ import { getClientWithUser } from './test-utils/getClient';
 import * as utils from '../../src/utils';
 
 import { describe, beforeEach, afterEach, expect, it, vi, MockInstance } from 'vitest';
+import { MockOfflineDB } from './offline-support/MockOfflineDB';
+import { DEFAULT_QUERY_CHANNELS_RETRY_COUNT } from '../../src/constants';
 
 describe('ChannelManager', () => {
   let client: StreamChat;
@@ -434,6 +436,163 @@ describe('ChannelManager', () => {
     });
 
     describe('queryChannels', () => {
+      describe('with OfflineDB', () => {
+        let hydrateActiveChannelsSpy: sinon.SinonSpy;
+        let executeChannelsQuerySpy: sinon.SinonSpy;
+        let scheduleSyncStatusCallbackSpy: sinon.SinonSpy;
+
+        beforeEach(async () => {
+          client.setOfflineDBApi(new MockOfflineDB({ client }));
+          await client.offlineDb!.init(client.userID as string);
+          (
+            client.offlineDb!.getChannelsForQuery as unknown as MockInstance
+          ).mockResolvedValue(mockChannelPages[0]);
+
+          hydrateActiveChannelsSpy = sinon.stub(client, 'hydrateActiveChannels');
+          executeChannelsQuerySpy = sinon.stub(
+            channelManager as any,
+            'executeChannelsQuery',
+          );
+          scheduleSyncStatusCallbackSpy = sinon.spy(
+            client.offlineDb!.syncManager,
+            'scheduleSyncStatusChangeCallback',
+          );
+
+          channelManager.state.partialNext({ initialized: false });
+        });
+
+        afterEach(() => {
+          sinon.restore();
+          sinon.reset();
+        });
+
+        it('hydrates channels from DB if not initialized and user ID is available', async () => {
+          const stateChangeSpy = sinon.spy();
+          channelManager.state.subscribeWithSelector(
+            (nextValue) => ({ channels: nextValue.channels }),
+            stateChangeSpy,
+          );
+          stateChangeSpy.resetHistory();
+
+          await channelManager.queryChannels({ filterA: true }, { asc: 1 });
+
+          const { channels } = channelManager.state.getLatestValue();
+
+          expect(client.offlineDb!.getChannelsForQuery).toHaveBeenCalledExactlyOnceWith({
+            userId: client.userID,
+            filters: { filterA: true },
+            sort: { asc: 1 },
+          });
+
+          expect(
+            hydrateActiveChannelsSpy.calledOnceWithExactly(mockChannelPages[0], {
+              offlineMode: true,
+              skipInitialization: [],
+            }),
+          ).toBe(true);
+
+          expect(stateChangeSpy.calledOnceWithExactly(channels));
+          expect(executeChannelsQuerySpy.called).to.be.false;
+          expect(scheduleSyncStatusCallbackSpy.called).to.be.true;
+        });
+
+        it('does NOT hydrate from DB if already initialized', async () => {
+          channelManager.state.partialNext({ initialized: true });
+          const stateChangeSpy = sinon.spy();
+          channelManager.state.subscribeWithSelector(
+            (nextValue) => ({ channels: nextValue.channels }),
+            stateChangeSpy,
+          );
+          stateChangeSpy.resetHistory();
+
+          await channelManager.queryChannels({ filterA: true }, { asc: 1 });
+
+          expect(client.offlineDb!.getChannelsForQuery).not.toHaveBeenCalled();
+          expect(hydrateActiveChannelsSpy.called).to.be.false;
+          expect(stateChangeSpy.called).to.be.false;
+          expect(executeChannelsQuerySpy.called).to.be.false;
+          expect(scheduleSyncStatusCallbackSpy.called).to.be.true;
+        });
+
+        it('schedules sync callback if syncStatus is false and invoke it when synced', async () => {
+          const stateChangeSpy = sinon.spy();
+          channelManager.state.subscribeWithSelector(
+            (nextValue) => ({ channels: nextValue.channels }),
+            stateChangeSpy,
+          );
+          stateChangeSpy.resetHistory();
+
+          await channelManager.queryChannels({ filterA: true }, { asc: 1 });
+
+          expect(executeChannelsQuerySpy.called).to.be.false;
+          expect(scheduleSyncStatusCallbackSpy.calledOnce).toBe(true);
+
+          const [id, callback] = scheduleSyncStatusCallbackSpy.firstCall.args;
+
+          expect(id).toBe((channelManager as any).id);
+          expect(typeof callback).toBe('function');
+
+          await callback();
+
+          expect(
+            executeChannelsQuerySpy.calledOnceWithExactly({
+              filters: { filterA: true },
+              sort: { asc: 1 },
+              options: {},
+              stateOptions: {},
+            }),
+          ).to.be.true;
+
+          const callbackSpy = sinon.spy(callback);
+          client.offlineDb!.syncManager['scheduledSyncStatusCallbacks'].set(
+            id,
+            callbackSpy,
+          );
+
+          await client.offlineDb!.syncManager['invokeSyncStatusListeners'](true);
+
+          expect(callbackSpy.called).to.be.true;
+        });
+
+        it('does NOT schedule sync callback if syncStatus is true', async () => {
+          client.offlineDb!.syncManager.syncStatus = true;
+
+          const stateChangeSpy = sinon.spy();
+          channelManager.state.subscribeWithSelector(
+            (nextValue) => ({ channels: nextValue.channels }),
+            stateChangeSpy,
+          );
+          stateChangeSpy.resetHistory();
+
+          await channelManager.queryChannels({ filterA: true }, { asc: 1 });
+
+          expect(client.offlineDb!.getChannelsForQuery).toHaveBeenCalled();
+          expect(hydrateActiveChannelsSpy.called).to.be.true;
+          expect(stateChangeSpy.called).to.be.true;
+          expect(scheduleSyncStatusCallbackSpy.called).to.be.false;
+          expect(executeChannelsQuerySpy.calledOnce).to.be.true;
+        });
+
+        it('continues with normal queryChannels flow if client.user is missing', async () => {
+          client.user = undefined;
+
+          const stateChangeSpy = sinon.spy();
+          channelManager.state.subscribeWithSelector(
+            (nextValue) => ({ channels: nextValue.channels }),
+            stateChangeSpy,
+          );
+          stateChangeSpy.resetHistory();
+
+          await channelManager.queryChannels({ filterA: true }, { asc: 1 });
+
+          expect(client.offlineDb!.getChannelsForQuery).not.toHaveBeenCalled();
+          expect(hydrateActiveChannelsSpy.called).to.be.false;
+          expect(stateChangeSpy.called).to.be.false;
+          expect(scheduleSyncStatusCallbackSpy.called).to.be.false;
+          expect(executeChannelsQuerySpy.calledOnce).to.be.true;
+        });
+      });
+
       it('should not query if pagination.isLoading is true', async () => {
         channelManager.state.next((prevState) => ({
           ...prevState,
@@ -501,6 +660,159 @@ describe('ChannelManager', () => {
         expect(clientQueryChannelsStub.calledOnce).to.be.true;
         expect(stateChangeSpy.calledOnce).to.be.true;
         expect(stateChangeSpy.args[0][0]).to.deep.equal({ initialized: true });
+      });
+
+      describe('executeChannelsQuery', () => {
+        it('should properly update the options after executeChannelsQuery', async () => {
+          const stateChangeSpy = sinon.spy();
+          channelManager.state.subscribeWithSelector(
+            (nextValue) => ({ pagination: nextValue.pagination }),
+            stateChangeSpy,
+          );
+          stateChangeSpy.resetHistory();
+
+          await channelManager['executeChannelsQuery']({
+            filters: { filterA: true },
+            sort: { asc: 1 },
+            options: { limit: 10, offset: 0 },
+          });
+
+          const { channels } = channelManager.state.getLatestValue();
+
+          expect(clientQueryChannelsStub.calledOnce).to.be.true;
+          expect(
+            clientQueryChannelsStub.calledWith(
+              { filterA: true },
+              { asc: 1 },
+              { limit: 10, offset: 0 },
+            ),
+          );
+          expect(stateChangeSpy.callCount).to.equal(1);
+          expect(stateChangeSpy.args[0][0]).to.deep.equal({
+            pagination: {
+              filters: {},
+              hasNext: true,
+              isLoading: false,
+              isLoadingNext: false,
+              options: { limit: 10, offset: 10 },
+              sort: {},
+            },
+          });
+          expect(channels.length).to.equal(10);
+        });
+
+        it('should properly update hasNext and offset after executeChannelsQuery if the first returned page is less than the limit', async () => {
+          clientQueryChannelsStub.callsFake(() => mockChannelPages[2]);
+          await channelManager['executeChannelsQuery']({
+            filters: { filterA: true },
+            sort: { asc: 1 },
+            options: { limit: 10, offset: 0 },
+          });
+
+          const {
+            channels,
+            pagination: {
+              hasNext,
+              options: { offset },
+            },
+          } = channelManager.state.getLatestValue();
+
+          expect(clientQueryChannelsStub.calledOnce).to.be.true;
+          expect(channels.length).to.equal(5);
+          expect(offset).to.equal(5);
+          expect(hasNext).to.be.false;
+        });
+
+        it('retries up to 3 times when queryChannels fails', async () => {
+          clientQueryChannelsStub.rejects(new Error('fail'));
+          const sleepSpy = vi.spyOn(utils, 'sleep');
+          const stateChangeSpy = sinon.spy();
+          channelManager.state.subscribeWithSelector(
+            (nextValue) => ({ error: nextValue.error }),
+            stateChangeSpy,
+          );
+          stateChangeSpy.resetHistory();
+
+          await channelManager['executeChannelsQuery']({
+            filters: { filterA: true },
+            sort: { asc: 1 },
+            options: { limit: 10, offset: 0 },
+          });
+
+          const { channels, initialized } = channelManager.state.getLatestValue();
+
+          expect(clientQueryChannelsStub.callCount).to.equal(
+            DEFAULT_QUERY_CHANNELS_RETRY_COUNT + 1,
+          ); // // initial + however many retried are configured
+          expect(sleepSpy).toHaveBeenCalledTimes(DEFAULT_QUERY_CHANNELS_RETRY_COUNT);
+          expect(stateChangeSpy.callCount).to.equal(1);
+          expect(stateChangeSpy.args[0][0]).to.deep.equal({
+            error: new Error(
+              'Maximum number of retries reached in queryChannels. Last error message is: Error: fail',
+            ),
+          });
+          expect(channels.length).to.equal(0);
+          expect(initialized).to.be.false;
+        });
+
+        it('does not retry more than 3 times', async () => {
+          clientQueryChannelsStub.rejects(new Error('fail'));
+          const sleepSpy = vi.spyOn(utils, 'sleep');
+          const stateChangeSpy = sinon.spy();
+          channelManager.state.subscribeWithSelector(
+            (nextValue) => ({ error: nextValue.error }),
+            stateChangeSpy,
+          );
+          stateChangeSpy.resetHistory();
+
+          await channelManager['executeChannelsQuery'](
+            {
+              filters: { filterA: true },
+              sort: { asc: 1 },
+              options: { limit: 10, offset: 0 },
+            },
+            3,
+          );
+
+          const { channels, initialized } = channelManager.state.getLatestValue();
+
+          expect(clientQueryChannelsStub.callCount).to.equal(1);
+          expect(sleepSpy).toHaveBeenCalledTimes(0);
+          expect(stateChangeSpy.callCount).to.equal(1);
+          expect(stateChangeSpy.args[0][0]).to.deep.equal({
+            error: new Error(
+              'Maximum number of retries reached in queryChannels. Last error message is: Error: fail',
+            ),
+          });
+          expect(channels.length).to.equal(0);
+          expect(initialized).to.be.false;
+        });
+
+        it('retries once and succeeds on second try', async () => {
+          clientQueryChannelsStub.onFirstCall().rejects(new Error('flaky'));
+          const sleepSpy = vi.spyOn(utils, 'sleep');
+          const stateChangeSpy = sinon.spy();
+          channelManager.state.subscribeWithSelector(
+            (nextValue) => ({ error: nextValue.error, channels: nextValue.channels }),
+            stateChangeSpy,
+          );
+          stateChangeSpy.resetHistory();
+
+          await channelManager['executeChannelsQuery']({
+            filters: { filterA: true },
+            sort: { asc: 1 },
+            options: { limit: 10, offset: 0 },
+          });
+
+          const { channels, initialized } = channelManager.state.getLatestValue();
+
+          expect(clientQueryChannelsStub.callCount).to.equal(2);
+          expect(sleepSpy).toHaveBeenCalledTimes(1);
+          expect(stateChangeSpy.callCount).to.equal(1);
+          expect(stateChangeSpy.args[0][0].channels.length).to.equal(10);
+          expect(channels.length).to.equal(10);
+          expect(initialized).to.be.true;
+        });
       });
 
       it('should properly set the new pagination parameters and update the offset after the query', async () => {
