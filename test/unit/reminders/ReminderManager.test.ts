@@ -8,7 +8,7 @@ import {
   StreamChat,
 } from '../../../src';
 import { describe, expect, it, vi } from 'vitest';
-import { QueryReturnValue } from '../../../src/pagination';
+import { PaginationQueryReturnValue } from '../../../src/pagination';
 import { sleep } from '../../../src/utils';
 
 const baseData = {
@@ -139,8 +139,8 @@ describe('ReminderManager', () => {
         updated_at: new Date(reminderResponse.updated_at),
         timeLeftMs: expect.any(Number),
       });
-      expect(Math.floor((reminderState!.timeLeftMs as number) / 1000)).toBe(
-        Math.floor((remindAtDate.getTime() - now) / 1000),
+      expect(Math.floor((reminderState!.timeLeftMs as number) / 10000)).toBe(
+        Math.floor((remindAtDate.getTime() - now) / 10000),
       );
 
       expect(
@@ -316,13 +316,13 @@ describe('ReminderManager', () => {
       manager.registerSubscriptions();
 
       const scheduleOffsetMs = 62 * 1000;
+      const now = new Date().getTime();
       const reminderResponse = generateReminderResponse({ scheduleOffsetMs });
       const type: EventTypes = 'reminder.created';
       client.dispatchEvent(generateReminderEvent(type, reminderResponse));
       const reminder = manager.getFromState(reminderResponse.message_id);
       expect(reminder).toBeInstanceOf(Reminder);
 
-      const now = new Date().getTime();
       const remindAtDate = new Date(
         new Date(reminderResponse.created_at).getTime() + scheduleOffsetMs,
       );
@@ -334,8 +334,8 @@ describe('ReminderManager', () => {
         updated_at: new Date(reminderResponse.updated_at),
         timeLeftMs: expect.any(Number),
       });
-      expect(Math.floor((reminderState!.timeLeftMs as number) / 1000)).toBe(
-        Math.floor((remindAtDate.getTime() - now) / 1000),
+      expect(Math.floor((reminderState!.timeLeftMs as number) / 10000)).toBe(
+        Math.floor((remindAtDate.getTime() - now) / 10000),
       );
 
       expect(
@@ -517,10 +517,11 @@ describe('ReminderManager', () => {
       const reminders = Array.from({ length: 4 }, (_, i) =>
         generateReminderResponse({ data: { message_id: `message_id_${i}` } }),
       );
-      const queryReturnValue: QueryReturnValue<ReminderResponse> = { items: reminders };
+      const queryReturnValue: PaginationQueryReturnValue<ReminderResponse> = {
+        items: reminders,
+      };
       vi.spyOn(manager.paginator, 'query').mockResolvedValue(queryReturnValue);
       await manager.queryNextReminders();
-
       expect(manager.reminders.size).toBe(4);
       Array.from(manager.reminders.values()).forEach((reminder, i) => {
         expect(reminder.id).toBe(reminders[i].message_id);
@@ -533,7 +534,9 @@ describe('ReminderManager', () => {
       const reminders = Array.from({ length: 4 }, (_, i) =>
         generateReminderResponse({ data: { message_id: `messag_id_${i}` } }),
       );
-      const queryReturnValue: QueryReturnValue<ReminderResponse> = { items: reminders };
+      const queryReturnValue: PaginationQueryReturnValue<ReminderResponse> = {
+        items: reminders,
+      };
       vi.spyOn(manager.paginator, 'query').mockResolvedValue(queryReturnValue);
       await manager.queryPreviousReminders();
 

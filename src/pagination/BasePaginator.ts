@@ -3,12 +3,12 @@ import { debounce, type DebouncedFunc } from '../utils';
 
 type PaginationDirection = 'next' | 'prev';
 type Cursor = { next: string | null; prev: string | null };
-export type QueryParams = { direction: PaginationDirection };
+export type PaginationQueryParams = { direction: PaginationDirection };
 export type PaginationQueryReturnValue<T> = { items: T[] } & {
   next?: string;
   prev?: string;
 };
-export type DebounceOptions = {
+export type PaginatorDebounceOptions = {
   debounceMs: number;
 };
 type DebouncedExecQueryFunction = DebouncedFunc<
@@ -34,7 +34,7 @@ export interface IPaginator<T = any> {
   nextDebounced(): void;
   prev(): Promise<void>;
   prevDebounced(): void;
-  query(params: QueryParams): Promise<PaginationQueryReturnValue<T>>;
+  query(params: PaginationQueryParams): Promise<PaginationQueryReturnValue<T>>;
   readonly hasNext: boolean;
   readonly hasPrev: boolean;
   readonly hasResults: boolean;
@@ -45,7 +45,7 @@ export interface IPaginator<T = any> {
   readonly cursor: Cursor | undefined;
   readonly offset: number | undefined;
   resetState(): void;
-  setDebounceOptions(options: DebounceOptions): void;
+  setDebounceOptions(options: PaginatorDebounceOptions): void;
   readonly state: StateStore<PaginatorState<T>>;
 }
 
@@ -116,11 +116,11 @@ export abstract class BasePaginator<T> implements IPaginator<T> {
     return this.state.getLatestValue().offset;
   }
 
-  abstract query(params: QueryParams): Promise<PaginationQueryReturnValue<T>>;
+  abstract query(params: PaginationQueryParams): Promise<PaginationQueryReturnValue<T>>;
 
   abstract filterQueryResults(items: T[]): T[] | Promise<T[]>;
 
-  setDebounceOptions = ({ debounceMs }: DebounceOptions) => {
+  setDebounceOptions = ({ debounceMs }: PaginatorDebounceOptions) => {
     this._executeQueryDebounced = debounce(this.executeQuery.bind(this), debounceMs);
   };
 

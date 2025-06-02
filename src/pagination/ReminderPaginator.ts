@@ -1,8 +1,8 @@
 import { BasePaginator } from './BasePaginator';
 import type {
+  PaginationQueryParams,
   PaginationQueryReturnValue,
   PaginatorOptions,
-  QueryParams,
 } from './BasePaginator';
 import type { ReminderFilters, ReminderResponse, ReminderSort } from '../types';
 import type { StreamChat } from '../client';
@@ -19,7 +19,7 @@ export class ReminderPaginator extends BasePaginator<ReminderResponse> {
 
   query = async ({
     direction,
-  }: QueryParams): Promise<PaginationQueryReturnValue<ReminderResponse>> => {
+  }: PaginationQueryParams): Promise<PaginationQueryReturnValue<ReminderResponse>> => {
     const cursor = this.cursor?.[direction];
     const {
       reminders: items,

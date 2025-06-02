@@ -2,7 +2,7 @@ import { StreamChat } from '../../../src';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   BasePaginator,
-  QueryParams,
+  PaginationQueryParams,
   PaginationQueryReturnValue,
   type PaginatorOptions,
   DEFAULT_PAGINATION_OPTIONS,
@@ -27,7 +27,7 @@ class Paginator extends BasePaginator<TestItem> {
   constructor(options: PaginatorOptions = {}) {
     super(options);
   }
-  query(params: QueryParams): Promise<PaginationQueryReturnValue<TestItem>> {
+  query(params: PaginationQueryParams): Promise<PaginationQueryReturnValue<TestItem>> {
     const promise = new Promise<PaginationQueryReturnValue<TestItem>>(
       (queryResolve, queryReject) => {
         this.queryResolve = queryResolve;
