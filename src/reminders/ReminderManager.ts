@@ -157,7 +157,8 @@ export class ReminderManager extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeReminderUpdated());
     this.addUnsubscribeFunction(this.subscribeReminderDeleted());
     this.addUnsubscribeFunction(this.subscribeNotificationReminderDue());
-    this.addUnsubscribeFunction(this.subscribePaginatorStateUpdated());
+    this.addUnsubscribeFunction(this.subscribeMessageDeleted());
+    this.addUnsubscribeFunction(this.subscribeMessageUndeleted());
   };
 
   private subscribeReminderCreated = () =>
@@ -178,6 +179,19 @@ export class ReminderManager extends WithSubscriptions {
     this.client.on('reminder.deleted', (event) => {
       if (!ReminderManager.isReminderWsEventPayload(event)) return;
       this.removeFromState(event.message_id);
+    }).unsubscribe;
+
+  private subscribeMessageDeleted = () =>
+    this.client.on('message.deleted', (event) => {
+      if (!event.message?.id) return;
+      this.removeFromState(event.message.id);
+    }).unsubscribe;
+
+  private subscribeMessageUndeleted = () =>
+    this.client.on('message.undeleted', (event) => {
+      if (!event.message?.reminder) return;
+      // todo: not sure whether reminder specific event is emitted too and this can be ignored here
+      this.upsertToState({ data: event.message.reminder });
     }).unsubscribe;
 
   private subscribeNotificationReminderDue = () =>
