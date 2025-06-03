@@ -230,28 +230,25 @@ describe('connection_fallback', () => {
 
 		it('should keep track of consecutive failures', async () => {
 			// ok-err-err-ok-ok...
-			const doAxiosRequest = sinon
-				.stub()
-				.onCall(0)
-				.resolves()
-				.onCall(1)
-				.rejects()
-				.onCall(2)
-				.rejects()
-				.resolves();
+			const doAxiosRequest = vi
+				.fn()
+				.mockResolvedValueOnce()
+				.mockRejectedValueOnce()
+				.mockRejectedValueOnce()
+				.mockResolvedValue();
 			const c = new WSConnectionFallback({ client: newClient({ doAxiosRequest }) });
 
-			expect(c.consecutiveFailures).to.be.eql(0);
+			expect(c.consecutiveFailures).toBe(0);
 			await c._req({});
-			expect(c.consecutiveFailures).to.be.eql(0);
-			await expect(c._req({})).to.throw;
-			expect(c.consecutiveFailures).to.be.eql(1);
-			await expect(c._req({})).to.throw;
-			expect(c.consecutiveFailures).to.be.eql(2);
+			expect(c.consecutiveFailures).toBe(0);
+			await expect(c._req({})).rejects.toThrow();
+			expect(c.consecutiveFailures).toBe(1);
+			await expect(c._req({})).rejects.toThrow();
+			expect(c.consecutiveFailures).toBe(2);
 			await c._req({});
-			expect(c.consecutiveFailures).to.be.eql(0);
+			expect(c.consecutiveFailures).toBe(0);
 			await c._req({});
-			expect(c.consecutiveFailures).to.be.eql(0);
+			expect(c.consecutiveFailures).toBe(0);
 		});
 
 		it('should not retry for non-retryable errors', async () => {

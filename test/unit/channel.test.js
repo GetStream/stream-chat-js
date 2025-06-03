@@ -726,14 +726,14 @@ describe('Channel _handleChannelEvent', function () {
 			type: 'channel.updated',
 		};
 		channel.data.frozen = false;
-		sinon.spy(channel, 'query');
+		const channelQuerySpy = vi.spyOn(channel, 'query');
 
 		channel._handleChannelEvent(event);
 		expect(channel.data.frozen).eq(true);
-		expect(channel.query.called).to.be.true;
+		expect(channelQuerySpy).toHaveBeenCalledTimes(1);
 
 		channel._handleChannelEvent(event);
-		expect(channel.query.calledOnce).to.be.true;
+		expect(channelQuerySpy).toHaveBeenCalledTimes(1);
 
 		// Make sure that we don't wipe out any data
 	});
