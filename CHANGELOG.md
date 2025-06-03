@@ -1,3 +1,13 @@
+## [9.4.0](https://github.com/GetStream/stream-chat-js/compare/v9.3.0...v9.4.0) (2025-06-03)
+
+### Bug Fixes
+
+* add status and code to object returned from ErrorFromResponse.toJSON ([#1552](https://github.com/GetStream/stream-chat-js/issues/1552)) ([9a7f616](https://github.com/GetStream/stream-chat-js/commit/9a7f61660bdf20dc679ad0b892c62378b90e2dd7))
+
+### Features
+
+* **StateStore:** state modifiers and store merging ([#1461](https://github.com/GetStream/stream-chat-js/issues/1461)) ([6887cd2](https://github.com/GetStream/stream-chat-js/commit/6887cd2672d6e26b0163208479b7fa9fdfe3cb7a))
+
 ## [9.3.0](https://github.com/GetStream/stream-chat-js/compare/v9.2.0...v9.3.0) (2025-05-28)
 
 ### Bug Fixes
