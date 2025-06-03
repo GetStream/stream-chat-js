@@ -1,4 +1,5 @@
 import { Reminder } from './Reminder';
+import type { ReminderTimerManagerConfig } from './ReminderTimerManager';
 import { ReminderTimerManager } from './ReminderTimerManager';
 import { StateStore } from '../store';
 import { ReminderPaginator } from '../pagination';
@@ -55,7 +56,9 @@ export type ReminderManagerConfig = {
 
 export type ReminderManagerOptions = {
   client: StreamChat;
-  config?: ReminderManagerConfig;
+  config?: ReminderManagerConfig & {
+    timers?: ReminderTimerManagerConfig;
+  };
 };
 
 export class ReminderManager extends WithSubscriptions {
@@ -74,7 +77,7 @@ export class ReminderManager extends WithSubscriptions {
     });
     this.state = new StateStore({ reminders: new Map<MessageId, Reminder>() });
     this.paginator = new ReminderPaginator(client);
-    this.timers = new ReminderTimerManager();
+    this.timers = new ReminderTimerManager({ config: config?.timers });
   }
 
   // Config API START //
