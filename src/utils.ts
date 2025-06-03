@@ -15,7 +15,6 @@ import type {
   MessageSet,
   OwnUserBase,
   OwnUserResponse,
-  PromoteChannelParams,
   QueryChannelAPIResponse,
   ReactionGroupResponse,
   UpdatedMessage,
@@ -1148,63 +1147,6 @@ export const findLastPinnedChannelIndex = ({ channels }: { channels: Channel[] }
   return lastPinnedChannelIndex;
 };
 
-/**
- * A utility used to move a channel towards the beginning of a list of channels (promote it to a higher position). It
- * considers pinned channels in the process if needed and makes sure to only update the list reference if the list
- * should actually change. It will try to move the channel as high as it can within the list.
- * @param channels - the list of channels we want to modify
- * @param channelToMove - the channel we want to promote
- * @param channelToMoveIndexWithinChannels - optionally, the index of the channel we want to move if we know it (will skip a manual check)
- * @param sort - the sort value used to check for pinned channels
- */
-export const promoteChannel = ({
-  channels,
-  channelToMove,
-  channelToMoveIndexWithinChannels,
-  sort,
-}: PromoteChannelParams) => {
-  // get index of channel to move up
-  const targetChannelIndex =
-    channelToMoveIndexWithinChannels ??
-    channels.findIndex((channel) => channel.cid === channelToMove.cid);
-
-  const targetChannelExistsWithinList = targetChannelIndex >= 0;
-  const targetChannelAlreadyAtTheTop = targetChannelIndex === 0;
-
-  // pinned channels should not move within the list based on recent activity, channels which
-  // receive messages and are not pinned should move upwards but only under the last pinned channel
-  // in the list
-  const considerPinnedChannels = shouldConsiderPinnedChannels(sort);
-  const isTargetChannelPinned = isChannelPinned(channelToMove);
-
-  if (targetChannelAlreadyAtTheTop || (considerPinnedChannels && isTargetChannelPinned)) {
-    return channels;
-  }
-
-  const newChannels = [...channels];
-
-  // target channel index is known, remove it from the list
-  if (targetChannelExistsWithinList) {
-    newChannels.splice(targetChannelIndex, 1);
-  }
-
-  // as position of pinned channels has to stay unchanged, we need to
-  // find last pinned channel in the list to move the target channel after
-  let lastPinnedChannelIndex: number | null = null;
-  if (considerPinnedChannels) {
-    lastPinnedChannelIndex = findLastPinnedChannelIndex({ channels: newChannels });
-  }
-
-  // re-insert it at the new place (to specific index if pinned channels are considered)
-  newChannels.splice(
-    typeof lastPinnedChannelIndex === 'number' ? lastPinnedChannelIndex + 1 : 0,
-    0,
-    channelToMove,
-  );
-
-  return newChannels;
-};
-
 export const isDate = (value: unknown): value is Date => !!(value as Date).getTime;
 
 export const isLocalMessage = (message: unknown): message is LocalMessage =>
@@ -1234,13 +1176,13 @@ export const runDetached = <T>(
 };
 
 export const sortChannels = (array: Channel[], criteria: ChannelSort) => {
-  const temporaryCache: Record<string, ReturnType<typeof mapToSortable>> = {};
+  const sortableChannelByConfId: Record<string, ReturnType<typeof mapToSortable>> = {};
 
   // format criteria to always be an iterable array
   let arrayCriteria: ChannelSortBase[];
   if (!Array.isArray(criteria)) {
     const remappedCriteria: ChannelSortBase[] = [];
-    for (let key in criteria) {
+    for (const key in criteria) {
       const typeSafeKey = key as keyof ChannelSortBase;
       remappedCriteria.push({ [typeSafeKey]: criteria[typeSafeKey] });
     }
@@ -1250,11 +1192,11 @@ export const sortChannels = (array: Channel[], criteria: ChannelSort) => {
   }
 
   const getSortable = (c: Channel) => {
-    if (!temporaryCache[c.cid]) {
-      temporaryCache[c.cid] = mapToSortable(c);
+    if (!sortableChannelByConfId[c.cid]) {
+      sortableChannelByConfId[c.cid] = mapToSortable(c);
     }
 
-    return temporaryCache[c.cid];
+    return sortableChannelByConfId[c.cid];
   };
 
   const arrayCopy = [...array];
@@ -1303,6 +1245,7 @@ export const sortChannels = (array: Channel[], criteria: ChannelSort) => {
  * Date objects are mapped to integers through `getTime`.
  */
 const mapToSortable = (channel: Channel) => {
+  const unreadCount = channel.countUnread();
   return {
     pinned_at:
       typeof channel.state.membership.pinned_at === 'string'
@@ -1312,16 +1255,17 @@ const mapToSortable = (channel: Channel) => {
       typeof channel.data?.created_at === 'string'
         ? new Date(channel.data.created_at).getTime()
         : null,
-    has_unread: channel.countUnread() > 0 ? 1 : 0,
+    has_unread: unreadCount > 0,
     last_message_at: channel.state.last_message_at?.getTime() ?? null,
     updated_at:
       typeof channel.data?.updated_at === 'string'
         ? new Date(channel.data?.updated_at).getTime()
         : null,
     member_count: channel.data?.member_count ?? null,
-    unread_count: channel.countUnread(),
+    unread_count: unreadCount,
     last_updated: null, // not sure what to map this one to
-  } satisfies Record<keyof ChannelSortBase, number | null>;
+    // TODO: figure out custom data \w normalization (isDate...)
+  } satisfies Record<keyof ChannelSortBase, number | boolean | null>;
 };
 
 const mapToFilterable = (channel: Channel) => {
