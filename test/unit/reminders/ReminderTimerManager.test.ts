@@ -25,7 +25,6 @@ describe('ReminderTimerManager', () => {
     const timerManager = new ReminderTimerManager();
     // @ts-expect-error accessing private property
     expect(timerManager.timers).toEqual(new Map());
-    // @ts-expect-error accessing private property
     expect(timerManager.config).toEqual(DEFAULT_REMINDER_TIMER_MANAGER_CONFIG);
   });
   it('initiates with custom config', () => {
@@ -35,7 +34,6 @@ describe('ReminderTimerManager', () => {
     const timerManager = new ReminderTimerManager({ config });
     // @ts-expect-error accessing private property
     expect(timerManager.timers).toEqual(new Map());
-    // @ts-expect-error accessing private property
     expect(timerManager.config).toEqual(config);
   });
   it('adds a reminder timer', () => {
@@ -105,7 +103,6 @@ describe('ReminderTimerManager', () => {
       .mockImplementationOnce(() => null);
     timerManager.add(reminder);
     expect(refreshTimeLeftSpy).not.toHaveBeenCalled();
-    // @ts-expect-error accessing private property
     await vi.advanceTimersByTimeAsync(
       timerManager.config.stopRefreshBoundaryMs + oneWeek + oneMinute,
     );

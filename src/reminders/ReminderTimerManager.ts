@@ -34,7 +34,7 @@ export const DEFAULT_REMINDER_TIMER_MANAGER_CONFIG: ReminderTimerManagerConfig =
 
 export class ReminderTimerManager {
   private timers: Map<MessageId, ReminderTimer> = new Map();
-  private config: ReminderTimerManagerConfig;
+  config: ReminderTimerManagerConfig;
 
   constructor({ config }: ReminderTimerManagerOptions = {}) {
     this.config = mergeWith(DEFAULT_REMINDER_TIMER_MANAGER_CONFIG, config ?? {});

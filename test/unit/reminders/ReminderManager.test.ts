@@ -62,7 +62,6 @@ describe('ReminderManager', () => {
         DEFAULT_REMINDER_MANAGER_CONFIG,
       );
       expect(manager.state.getLatestValue()).toEqual({ reminders: new Map() });
-      // @ts-expect-error accessing private property
       expect(manager.timers).toBeInstanceOf(ReminderTimerManager);
       // @ts-expect-error accessing private property
       expect(manager.timers.timers).toEqual(new Map());
@@ -76,7 +75,6 @@ describe('ReminderManager', () => {
       expect(manager.client).toBe(client);
       expect(manager.configState.getLatestValue()).toEqual(config);
       expect(manager.state.getLatestValue()).toEqual({ reminders: new Map() });
-      // @ts-expect-error accessing private property
       expect(manager.timers).toBeInstanceOf(ReminderTimerManager);
       // @ts-expect-error accessing private property
       expect(manager.timers.timers).toEqual(new Map());

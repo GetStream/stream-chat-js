@@ -63,10 +63,10 @@ export type ReminderManagerOptions = {
 
 export class ReminderManager extends WithSubscriptions {
   private client: StreamChat;
-  private timers: ReminderTimerManager;
   configState: StateStore<ReminderManagerConfig>;
   state: StateStore<ReminderManagerState>;
   paginator: ReminderPaginator;
+  timers: ReminderTimerManager;
 
   constructor({ client, config }: ReminderManagerOptions) {
     super();
