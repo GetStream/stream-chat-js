@@ -482,7 +482,7 @@ export class AttachmentManager {
     try {
       response = await this.doUploadRequest(localAttachment.localMetadata.file);
     } catch (error) {
-      const reason = error instanceOf Error ? error.message : 'unknown error';
+      const reason = error instanceof Error ? error.message : 'unknown error';
       const failedAttachment: LocalUploadAttachment = {
         ...attachment,
         localMetadata: {
