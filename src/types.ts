@@ -3261,7 +3261,9 @@ export class ErrorFromResponse<T> extends Error {
       message: `(${joinable.join(', ')}) - ${this.message}`,
       stack: this.stack,
       name: this.name,
-    };
+      code: this.code,
+      status: this.status,
+    } as const;
   }
 }
 
