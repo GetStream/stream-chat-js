@@ -6,7 +6,7 @@ import type { TextSelection } from './middleware/textComposer/types';
 import type { TextComposerState } from './middleware/textComposer/types';
 import type { Suggestions } from './middleware/textComposer/types';
 import type { MessageComposer } from './messageComposer';
-import type { DraftMessage, LocalMessage, UserResponse } from '../types';
+import type { CommandResponse, DraftMessage, LocalMessage, UserResponse } from '../types';
 
 export type TextComposerOptions = {
   composer: MessageComposer;
@@ -176,6 +176,11 @@ export class TextComposer {
     const mentionedUsers = [...this.mentionedUsers];
     mentionedUsers.splice(existingUserIndex, 1);
     this.state.partialNext({ mentionedUsers });
+  };
+
+  setCommand = (command: CommandResponse | null) => {
+    if (command === this.command) return;
+    this.state.partialNext({ command });
   };
 
   setText = (text: string) => {
