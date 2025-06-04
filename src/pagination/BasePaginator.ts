@@ -26,29 +26,6 @@ export type PaginatorState<T = any> = {
   offset?: number;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export interface IPaginator<T = any> {
-  cancelScheduledQuery(): void;
-  canExecuteQuery(direction: PaginationDirection): boolean;
-  next(): Promise<void>;
-  nextDebounced(): void;
-  prev(): Promise<void>;
-  prevDebounced(): void;
-  query(params: PaginationQueryParams): Promise<PaginationQueryReturnValue<T>>;
-  readonly hasNext: boolean;
-  readonly hasPrev: boolean;
-  readonly hasResults: boolean;
-  readonly initialState: PaginatorState<T>;
-  readonly isLoading: boolean;
-  readonly items: T[] | undefined;
-  readonly lastQueryError: Error | undefined;
-  readonly cursor: Cursor | undefined;
-  readonly offset: number | undefined;
-  resetState(): void;
-  setDebounceOptions(options: PaginatorDebounceOptions): void;
-  readonly state: StateStore<PaginatorState<T>>;
-}
-
 export type PaginatorOptions = {
   /** The number of milliseconds to debounce the search query. The default interval is 300ms. */
   debounceMs?: number;
@@ -59,7 +36,7 @@ export const DEFAULT_PAGINATION_OPTIONS: Required<PaginatorOptions> = {
   pageSize: 10,
 } as const;
 
-export abstract class BasePaginator<T> implements IPaginator<T> {
+export abstract class BasePaginator<T> {
   state: StateStore<PaginatorState<T>>;
   protected pageSize: number;
   protected _executeQueryDebounced!: DebouncedExecQueryFunction;
