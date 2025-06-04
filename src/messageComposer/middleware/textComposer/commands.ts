@@ -107,7 +107,6 @@ export const createCommandsMiddleware = (
     searchSource?: CommandSearchSource;
   },
 ): CommandsMiddleware => {
-  const commands = channel?.getConfig()?.commands ?? [];
   const finalOptions = mergeWith(DEFAULT_OPTIONS, options ?? {});
   let searchSource = new CommandSearchSource(channel);
   if (options?.searchSource) {
@@ -149,7 +148,7 @@ export const createCommandsMiddleware = (
         }
 
         const inputText = triggerWithToken?.toLowerCase().slice(1);
-        const matchedCommand = commands.find((command) => {
+        const matchedCommand = searchSource.items?.find((command) => {
           if (!command.name || !inputText) return false;
           return isTextMatched(inputText, command.name.toLowerCase());
         });
@@ -158,11 +157,7 @@ export const createCommandsMiddleware = (
           return next({
             ...state,
             command: matchedCommand,
-            suggestions: {
-              query: triggerWithToken.slice(1),
-              searchSource,
-              trigger: finalOptions.trigger,
-            },
+            suggestions: undefined,
           });
         }
 

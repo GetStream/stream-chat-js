@@ -38,7 +38,7 @@ export const createCommandInjectionMiddleware = (
       });
     },
   },
-  id: 'stream-io/message-composer-middleware/command-injection',
+  id: 'stream-io/message-composer-middleware/command-string-injection',
 });
 
 export const createDraftCommandInjectionMiddleware = (
@@ -68,5 +68,5 @@ export const createDraftCommandInjectionMiddleware = (
       });
     },
   },
-  id: 'stream-io/message-composer-middleware/draft-command-injection',
+  id: 'stream-io/message-composer-middleware/draft-command-string-injection',
 });

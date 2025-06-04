@@ -17,16 +17,18 @@ export const createApplyCommandSettingsMiddleware =
           return forward();
         }
 
-        const trigger = `/${command.name}`;
-        const newText = state.text.replace(new RegExp(`^${trigger}(\\s|$)`), '');
+        const triggerWithCommand = `/${command.name}`;
+        const newText = state.text.replace(
+          new RegExp(`^${triggerWithCommand}(\\s|$)`),
+          '',
+        );
 
         return complete({
           ...state,
           selection: {
-            end: state.selection.end - trigger.length,
-            start: state.selection.start - trigger.length,
+            end: state.selection.end - triggerWithCommand.length,
+            start: state.selection.start - triggerWithCommand.length,
           },
-          suggestions: undefined,
           text: newText,
         });
       },
@@ -37,16 +39,15 @@ export const createApplyCommandSettingsMiddleware =
           return forward();
         }
 
-        const trigger = `/${command?.name} `;
+        const triggerWithCommand = `/${command?.name} `;
 
-        const newText = state.text.slice(trigger.length);
+        const newText = state.text.slice(triggerWithCommand.length);
         return complete({
           ...state,
           selection: {
-            end: state.selection.end - trigger.length,
-            start: state.selection.start - trigger.length,
+            end: state.selection.end - triggerWithCommand.length,
+            start: state.selection.start - triggerWithCommand.length,
           },
-          suggestions: undefined,
           text: newText,
         });
       },
