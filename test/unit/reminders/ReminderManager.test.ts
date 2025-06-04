@@ -1,10 +1,11 @@
 import {
   DEFAULT_REMINDER_MANAGER_CONFIG,
+  DEFAULT_STOP_REFRESH_BOUNDARY_MS,
   EventTypes,
   Reminder,
   ReminderManager,
   ReminderResponse,
-  ReminderTimerManager,
+  ReminderTimer,
   StreamChat,
 } from '../../../src';
 import { describe, expect, it, vi } from 'vitest';
@@ -62,9 +63,6 @@ describe('ReminderManager', () => {
         DEFAULT_REMINDER_MANAGER_CONFIG,
       );
       expect(manager.state.getLatestValue()).toEqual({ reminders: new Map() });
-      expect(manager.timers).toBeInstanceOf(ReminderTimerManager);
-      // @ts-expect-error accessing private property
-      expect(manager.timers.timers).toEqual(new Map());
     });
 
     it('initiates with custom config', () => {
@@ -75,9 +73,6 @@ describe('ReminderManager', () => {
       expect(manager.client).toBe(client);
       expect(manager.configState.getLatestValue()).toEqual(config);
       expect(manager.state.getLatestValue()).toEqual({ reminders: new Map() });
-      expect(manager.timers).toBeInstanceOf(ReminderTimerManager);
-      // @ts-expect-error accessing private property
-      expect(manager.timers.timers).toEqual(new Map());
     });
   });
 
@@ -109,8 +104,6 @@ describe('ReminderManager', () => {
         updated_at: new Date(reminderResponse.updated_at),
         timeLeftMs: null,
       });
-      // @ts-expect-error accessing private property
-      expect(manager.timers.timers).toEqual(new Map());
     });
 
     it('adds new timed reminder', () => {
@@ -140,11 +133,6 @@ describe('ReminderManager', () => {
       expect(Math.floor((reminderState!.timeLeftMs as number) / 10000)).toBe(
         Math.floor((remindAtDate.getTime() - now) / 10000),
       );
-
-      expect(
-        // @ts-expect-error accessing private property
-        manager.timers.timers.get(reminderResponse.message_id),
-      ).toEqual({ timeout: expect.any(Object), reminder });
     });
 
     it('does not add new reminders if client cache is disabled', () => {
@@ -209,10 +197,6 @@ describe('ReminderManager', () => {
       manager.removeFromState(reminderResponse.message_id);
 
       expect(manager.reminders.size).toBe(0);
-      // @ts-expect-error accessing private property
-      Object.values(manager.timers.timers).forEach((intervalGroup) => {
-        expect(intervalGroup.reminders.size).toBe(0);
-      });
     });
 
     it('does nothing when removing a non-existent reminder', () => {
@@ -253,38 +237,9 @@ describe('ReminderManager', () => {
       expect(manager.reminders.size).toBe(2);
       expect(manager.getFromState('message-1')).toBeInstanceOf(Reminder);
       expect(manager.getFromState('message-2')).toBeInstanceOf(Reminder);
-      // @ts-expect-error accessing private property
-      expect(manager.timers.timers.size).toBe(2);
     });
   });
-  describe('timers API', () => {
-    it('clears timers', () => {
-      const client = new StreamChat('api-key');
-      const manager = new ReminderManager({ client });
-      const messages = [
-        {
-          id: 'message-1',
-          reminder: generateReminderResponse({
-            data: { message_id: 'message-1' },
-            scheduleOffsetMs: 12 * 1000,
-          }),
-          type: 'regular' as const,
-        },
-        {
-          id: 'message-2',
-          reminder: generateReminderResponse({
-            data: { message_id: 'message-2' },
-            scheduleOffsetMs: 22 * 1000,
-          }),
-          type: 'regular' as const,
-        },
-      ];
-      manager.hydrateState(messages);
-      manager.clearTimers();
-      // @ts-expect-error accessing private property
-      expect(manager.timers.timers.size).toBe(2);
-    });
-  });
+
   describe('WS event handling', () => {
     it('adds bookmark reminder to state from reminder.created event', () => {
       const client = new StreamChat('api-key');
@@ -304,8 +259,6 @@ describe('ReminderManager', () => {
         updated_at: new Date(reminderResponse.updated_at),
         timeLeftMs: null,
       });
-      // @ts-expect-error accessing private property
-      expect(manager.timers.timers).toEqual(new Map());
     });
 
     it('adds timed reminder to state from reminder.created event', () => {
@@ -335,12 +288,8 @@ describe('ReminderManager', () => {
       expect(Math.floor((reminderState!.timeLeftMs as number) / 10000)).toBe(
         Math.floor((remindAtDate.getTime() - now) / 10000),
       );
-
-      expect(
-        // @ts-expect-error accessing private property
-        manager.timers.timers.get(reminderResponse.message_id),
-      ).toEqual({ timeout: expect.any(Object), reminder });
     });
+
     it('updates reminder in state from reminder.created event', () => {
       const client = new StreamChat('api-key');
       const manager = new ReminderManager({ client });
@@ -375,10 +324,6 @@ describe('ReminderManager', () => {
       client.dispatchEvent(generateReminderEvent(type, reminderResponse));
 
       expect(manager.reminders.size).toBe(0);
-      // @ts-expect-error accessing private property
-      Object.values(manager.timers.timers).forEach((intervalGroup) => {
-        expect(intervalGroup.reminders.size).toBe(0);
-      });
     });
     it('ignores non-reminder WS events', () => {
       const client = new StreamChat('api-key');
@@ -543,56 +488,5 @@ describe('ReminderManager', () => {
         expect(reminder.id).toBe(reminders[i].message_id);
       });
     });
-  });
-});
-
-describe('Reminder', () => {
-  it('constructor sets up state for bookmark reminder', () => {
-    const data = generateReminderResponse();
-    const reminder = new Reminder({ data });
-    expect(reminder.state.getLatestValue()).toEqual({
-      ...data,
-      created_at: new Date(data.created_at),
-      remind_at: null,
-      updated_at: new Date(data.updated_at),
-      timeLeftMs: null,
-    });
-  });
-  it('constructor sets up state for timed reminder', () => {
-    const scheduleOffsetMs = 62 * 1000;
-    const data = generateReminderResponse({ scheduleOffsetMs });
-    const reminder = new Reminder({ data });
-    const now = new Date();
-    const remindAtDate = new Date(data.remind_at!);
-    const reminderState = reminder!.state.getLatestValue();
-    expect({
-      ...reminderState,
-      timeLeftMs: Math.round(reminderState.timeLeftMs! / 1000) * 1000,
-    }).toEqual({
-      ...data,
-      created_at: new Date(data.created_at),
-      remind_at: remindAtDate,
-      updated_at: new Date(data.updated_at),
-      timeLeftMs: scheduleOffsetMs,
-    });
-    expect(Math.floor((reminderState!.timeLeftMs as number) / 1000)).toBe(
-      Math.floor((remindAtDate.getTime() - now.getTime()) / 1000),
-    );
-  });
-  it('calculates time left in ms on state update', () => {
-    const scheduleOffsetMs = 62 * 1000;
-    const data = generateReminderResponse({ scheduleOffsetMs });
-    const reminder = new Reminder({ data });
-    reminder.setState({ ...data, remind_at: new Date().toISOString() });
-    expect(reminder.timeLeftMs).toBe(0);
-  });
-  it('refreshes time left if remind_at is set', async () => {
-    const scheduleOffsetMs = 62 * 1000;
-    const data = generateReminderResponse({ scheduleOffsetMs });
-    const reminder = new Reminder({ data });
-    expect(Math.round(reminder.timeLeftMs! / 1000) * 1000).toBe(scheduleOffsetMs);
-    await sleep(600);
-    reminder.refreshTimeLeft();
-    expect(Math.round(reminder.timeLeftMs! / 1000) * 1000).toBe(scheduleOffsetMs - 1000);
   });
 });

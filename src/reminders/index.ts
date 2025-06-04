@@ -1,3 +1,3 @@
 export * from './Reminder';
 export * from './ReminderManager';
-export * from './ReminderTimerManager';
+export * from './ReminderTimer';

@@ -1,4 +1,6 @@
+import { ReminderTimer } from './ReminderTimer';
 import { StateStore } from '../store';
+import type { ReminderTimerConfig } from './ReminderTimer';
 import type { MessageResponse, ReminderResponseBase, UserResponse } from '../types';
 
 export const timeLeftMs = (remindAt: number) => remindAt - new Date().getTime();
@@ -22,12 +24,16 @@ export type ReminderState = {
 
 export type ReminderOptions = {
   data: ReminderResponseBaseOrResponse;
+  config?: ReminderTimerConfig;
 };
 
 export class Reminder {
   state: StateStore<ReminderState>;
-  constructor({ data }: ReminderOptions) {
+  timer: ReminderTimer;
+  constructor({ data, config }: ReminderOptions) {
     this.state = new StateStore(Reminder.toStateValue(data));
+    this.timer = new ReminderTimer({ reminder: this, config });
+    this.initTimer();
   }
 
   static toStateValue = (data: ReminderResponseBaseOrResponse): ReminderState => ({
@@ -60,10 +66,24 @@ export class Reminder {
       }
       return newState;
     });
+
+    if (data.remind_at) {
+      this.initTimer();
+    } else if (!data.remind_at) {
+      this.clearTimer();
+    }
   };
 
   refreshTimeLeft = () => {
     if (!this.remindAt) return;
     this.state.partialNext({ timeLeftMs: timeLeftMs(this.remindAt.getTime()) });
+  };
+
+  initTimer = () => {
+    this.timer.init();
+  };
+
+  clearTimer = () => {
+    this.timer.clear();
   };
 }

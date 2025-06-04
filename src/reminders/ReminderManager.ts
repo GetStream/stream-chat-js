@@ -1,6 +1,4 @@
 import { Reminder } from './Reminder';
-import type { ReminderTimerManagerConfig } from './ReminderTimerManager';
-import { ReminderTimerManager } from './ReminderTimerManager';
 import { StateStore } from '../store';
 import { ReminderPaginator } from '../pagination';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
@@ -53,13 +51,12 @@ export type ReminderManagerState = {
 
 export type ReminderManagerConfig = {
   scheduledOffsetsMs: number[];
+  stopTimerRefreshBoundaryMs?: number;
 };
 
 export type ReminderManagerOptions = {
   client: StreamChat;
-  config?: ReminderManagerConfig & {
-    timers?: ReminderTimerManagerConfig;
-  };
+  config?: ReminderManagerConfig;
 };
 
 export class ReminderManager extends WithSubscriptions {
@@ -67,7 +64,6 @@ export class ReminderManager extends WithSubscriptions {
   configState: StateStore<ReminderManagerConfig>;
   state: StateStore<ReminderManagerState>;
   paginator: ReminderPaginator;
-  timers: ReminderTimerManager;
 
   constructor({ client, config }: ReminderManagerOptions) {
     super();
@@ -78,12 +74,15 @@ export class ReminderManager extends WithSubscriptions {
     });
     this.state = new StateStore({ reminders: new Map<MessageId, Reminder>() });
     this.paginator = new ReminderPaginator(client);
-    this.timers = new ReminderTimerManager({ config: config?.timers });
   }
 
   // Config API START //
   updateConfig(config: Partial<ReminderManagerConfig>) {
     this.configState.partialNext(config);
+  }
+
+  get stopTimerRefreshBoundaryMs() {
+    return this.configState.getLatestValue().stopTimerRefreshBoundaryMs;
   }
 
   get scheduledOffsetsMs() {
@@ -111,14 +110,15 @@ export class ReminderManager extends WithSubscriptions {
     }
     const cachedReminder = this.getFromState(data.message_id);
     if (!cachedReminder) {
-      const reminder = new Reminder({ data });
+      const reminder = new Reminder({
+        data,
+        config: { stopRefreshBoundaryMs: this.stopTimerRefreshBoundaryMs },
+      });
       this.state.partialNext({
         reminders: new Map(this.reminders.set(data.message_id, reminder)),
       });
-      this.timers.add(reminder);
     } else if (overwrite) {
       cachedReminder.setState(data);
-      this.timers.add(cachedReminder);
     }
     return cachedReminder;
   };
@@ -126,7 +126,7 @@ export class ReminderManager extends WithSubscriptions {
   removeFromState = (messageId: string) => {
     const cachedReminder = this.getFromState(messageId);
     if (!cachedReminder) return;
-    this.timers.remove(cachedReminder.id);
+    cachedReminder.clearTimer();
     const reminders = this.reminders;
     reminders.delete(messageId);
     this.state.partialNext({ reminders: new Map(reminders) });
@@ -143,11 +143,11 @@ export class ReminderManager extends WithSubscriptions {
 
   // Timers API START //
   initTimers = () => {
-    this.timers.addAll(Array.from(this.reminders.values()));
+    this.reminders.forEach((reminder) => reminder.initTimer());
   };
 
   clearTimers = () => {
-    this.timers.clearAll();
+    this.reminders.forEach((reminder) => reminder.clearTimer());
   };
   // Timers API END //
 
@@ -165,6 +165,7 @@ export class ReminderManager extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeMessageDeleted());
     this.addUnsubscribeFunction(this.subscribeMessageUndeleted());
     this.addUnsubscribeFunction(this.subscribePaginatorStateUpdated());
+    this.addUnsubscribeFunction(this.subscribeConfigStateUpdated());
   };
 
   private subscribeReminderCreated = () =>
@@ -210,6 +211,23 @@ export class ReminderManager extends WithSubscriptions {
         if (!items) return;
         for (const reminder of items) {
           this.upsertToState({ data: reminder });
+        }
+      },
+    );
+
+  private subscribeConfigStateUpdated = () =>
+    this.configState.subscribeWithSelector(
+      ({ stopTimerRefreshBoundaryMs }) => ({ stopTimerRefreshBoundaryMs }),
+      ({ stopTimerRefreshBoundaryMs }, previousValue) => {
+        if (
+          typeof stopTimerRefreshBoundaryMs === 'number' &&
+          stopTimerRefreshBoundaryMs !== previousValue?.stopTimerRefreshBoundaryMs
+        ) {
+          this.reminders.forEach((reminder: Reminder) => {
+            if (reminder.timer) {
+              reminder.timer.stopRefreshBoundaryMs = stopTimerRefreshBoundaryMs;
+            }
+          });
         }
       },
     );
