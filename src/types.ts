@@ -129,6 +129,7 @@ export type AppSettingsAPIResponse = APIResponse & {
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
     enforce_unique_usernames?: 'no' | 'app' | 'team';
+    event_hooks?: Array<EventHook>;
     file_upload_config?: FileUploadConfig;
     geofences?: Array<{
       country_codes: Array<string>;
@@ -1449,6 +1450,7 @@ export type Event = CustomEventData & {
     channels: ChannelAPIResponse[];
     isLatestMessageSet?: boolean;
   };
+  offlineReactions?: ReactionResponse[];
   reaction?: ReactionResponse;
   received_at?: string | Date;
   shadow?: boolean;
@@ -2212,6 +2214,7 @@ export type AppSettings = {
   disable_auth_checks?: boolean;
   disable_permissions_checks?: boolean;
   enforce_unique_usernames?: 'no' | 'app' | 'team';
+  event_hooks?: Array<EventHook> | null;
   // all possible file mime types are https://www.iana.org/assignments/media-types/media-types.xhtml
   file_upload_config?: FileUploadConfig;
   firebase_config?: {
@@ -2538,7 +2541,7 @@ export type EndpointName =
   | 'CreateChannelType'
   | 'DeleteChannel'
   | 'DeleteChannels'
-  | 'DeleteChannelType'
+  | 'DBDeleteChannelType'
   | 'GetChannelType'
   | 'ListChannelTypes'
   | 'ListDevices'
@@ -3258,7 +3261,9 @@ export class ErrorFromResponse<T> extends Error {
       message: `(${joinable.join(', ')}) - ${this.message}`,
       stack: this.stack,
       name: this.name,
-    };
+      code: this.code,
+      status: this.status,
+    } as const;
   }
 }
 
@@ -4005,3 +4010,27 @@ export type ThreadFilters = QueryFilters<
       | PrimitiveFilter<ThreadResponse['last_message_at']>;
   }
 >;
+
+export type HookType = 'webhook' | 'sqs' | 'sns';
+
+export type EventHook = {
+  id?: string;
+  hook_type?: HookType;
+  enabled?: boolean;
+  event_types?: Array<string>;
+  webhook_url?: string;
+  sqs_queue_url?: string;
+  sqs_region?: string;
+  sqs_auth_type?: string;
+  sqs_key?: string;
+  sqs_secret?: string;
+  sqs_role_arn?: string;
+  sns_topic_arn?: string;
+  sns_region?: string;
+  sns_auth_type?: string;
+  sns_key?: string;
+  sns_secret?: string;
+  sns_role_arn?: string;
+  created_at?: string;
+  updated_at?: string;
+};

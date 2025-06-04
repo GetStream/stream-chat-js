@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { generateUUIDv4 as uuidv4 } from '../../../src/utils';
 
 export const generateChannel = (options = { channel: {} }) => {
 	const { channel: optionsChannel, config, ...optionsBesidesChannel } = options;
@@ -12,6 +12,7 @@ export const generateChannel = (options = { channel: {} }) => {
 	return {
 		messages: [],
 		members: [],
+		pinned_messages: [],
 		...optionsBesidesChannel,
 		channel: {
 			id,
@@ -29,6 +30,7 @@ export const generateChannel = (options = { channel: {} }) => {
 				online: false,
 			},
 			frozen: false,
+			disabled: false,
 			config: {
 				created_at: '2020-04-24T11:36:43.859020368Z',
 				updated_at: '2020-04-24T11:36:43.859022903Z',

@@ -230,6 +230,7 @@ import { ChannelManager } from './channel_manager';
 import { NotificationManager } from './notifications';
 import { StateStore } from './store';
 import type { MessageComposer } from './messageComposer';
+import type { AbstractOfflineDB } from './offline-support';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -265,6 +266,7 @@ export class StreamChat {
   };
   threads: ThreadManager;
   polls: PollManager;
+  offlineDb?: AbstractOfflineDB;
   notifications: NotificationManager;
   anonymous: boolean;
   persistUserOnConnectionFailure?: boolean;
@@ -531,6 +533,14 @@ export class StreamChat {
     return StreamChat._instance as StreamChat;
   }
 
+  setOfflineDBApi(offlineDBInstance: AbstractOfflineDB) {
+    if (this.offlineDb) {
+      return;
+    }
+
+    this.offlineDb = offlineDBInstance;
+  }
+
   devToken(userID: string) {
     return DevToken(userID);
   }
@@ -666,6 +676,19 @@ export class StreamChat {
       this.wsConnection?.disconnect(timeout),
       this.wsFallback?.disconnect(timeout),
     ]);
+
+    this.offlineDb?.executeQuerySafely(
+      async (db) => {
+        if (this.userID) {
+          await db.upsertUserSyncStatus({
+            userId: this.userID,
+            lastSyncedAt: new Date().toString(),
+          });
+        }
+      },
+      { method: 'upsertUserSyncStatus' },
+    );
+
     return Promise.resolve();
   };
 
@@ -754,7 +777,24 @@ export class StreamChat {
         'data_template': 'data handlebars template',
         'apn_template': 'apn notification handlebars template under v2'
       },
-      'webhook_url': 'https://acme.com/my/awesome/webhook/'
+      'webhook_url': 'https://acme.com/my/awesome/webhook/',
+      'event_hooks': [
+        {
+          'hook_type': 'webhook',
+          'enabled': true,
+          'event_types': ['message.new'],
+          'webhook_url': 'https://acme.com/my/awesome/webhook/'
+        },
+        {
+          'hook_type': 'sqs',
+          'enabled': true,
+          'event_types': ['message.new'],
+          'sqs_url': 'https://sqs.us-east-1.amazonaws.com/1234567890/my-queue',
+          'sqs_auth_type': 'key',
+          'sqs_key': 'my-access-key',
+          'sqs_secret': 'my-secret-key'
+        }
+      ]
     }
    */
   async updateAppSettings(options: AppSettings) {
@@ -1260,6 +1300,10 @@ export class StreamChat {
     }
 
     postListenerCallbacks.forEach((c) => c());
+
+    this.offlineDb?.executeQuerySafely((db) => db.handleEvent({ event }), {
+      method: `handleEvent;${event.type}`,
+    });
   };
 
   handleEvent = (messageEvent: WebSocket.MessageEvent) => {
@@ -1439,7 +1483,8 @@ export class StreamChat {
     }
 
     if (event.channel && event.type === 'notification.message_new') {
-      this._addChannelConfig(event.channel);
+      const { channel } = event;
+      this._addChannelConfig(channel);
     }
 
     if (event.type === 'notification.channel_mutes_updated' && event.me?.channel_mutes) {
@@ -1463,13 +1508,14 @@ export class StreamChat {
         event.type === 'notification.channel_deleted') &&
       event.cid
     ) {
-      client.state.deleteAllChannelReference(event.cid);
+      const { cid } = event;
+      client.state.deleteAllChannelReference(cid);
       this.activeChannels[event.cid]?._disconnect();
 
       postListenerCallbacks.push(() => {
-        if (!event.cid) return;
+        if (!cid) return;
 
-        delete this.activeChannels[event.cid];
+        delete this.activeChannels[cid];
       });
     }
 
@@ -1805,6 +1851,12 @@ export class StreamChat {
         isLatestMessageSet: true,
       },
     });
+    if (channels?.length && this.offlineDb?.upsertChannels) {
+      await this.offlineDb.upsertChannels({
+        channels,
+        isLatestMessagesSet: true,
+      });
+    }
 
     return this.hydrateActiveChannels(channels, stateOptions, options);
   }
@@ -1824,15 +1876,36 @@ export class StreamChat {
     sort: ReactionSort = [],
     options: QueryReactionsOptions = {},
   ) {
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.wsPromise;
-
-    // Return a list of channels
     const payload = {
       filter,
       sort: normalizeQuerySort(sort),
       ...options,
     };
+
+    if (this.offlineDb?.getReactions && !options.next) {
+      try {
+        const reactionsFromDb = await this.offlineDb.getReactions({
+          messageId: messageID,
+          filters: filter,
+          sort,
+          limit: options.limit,
+        });
+
+        if (reactionsFromDb) {
+          this.dispatchEvent({
+            type: 'offline_reactions.queried',
+            offlineReactions: reactionsFromDb as ReactionResponse[],
+          });
+        }
+      } catch (e) {
+        this.logger('warn', 'An error has occurred while querying offline reactions', {
+          error: e,
+        });
+      }
+    }
+
+    // Make sure we wait for the connect promise if there is a pending one
+    await this.wsPromise;
 
     return await this.post<QueryReactionsAPIResponse>(
       this.baseURL + '/messages/' + encodeURIComponent(messageID) + '/reactions',
@@ -2744,7 +2817,7 @@ export class StreamChat {
     );
   }
 
-  deleteChannelType(channelType: string) {
+  DBDeleteChannelType(channelType: string) {
     return this.delete<APIResponse>(
       this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`,
     );
@@ -2956,6 +3029,34 @@ export class StreamChat {
   }
 
   async deleteMessage(messageID: string, hardDelete?: boolean) {
+    try {
+      if (this.offlineDb) {
+        if (hardDelete) {
+          await this.offlineDb.hardDeleteMessage({ id: messageID });
+        } else {
+          await this.offlineDb.softDeleteMessage({ id: messageID });
+        }
+        return await this.offlineDb.queueTask<APIResponse & { message: MessageResponse }>(
+          {
+            task: {
+              messageId: messageID,
+              payload: [messageID, hardDelete],
+              type: 'delete-message',
+            },
+          },
+        );
+      }
+    } catch (error) {
+      this.logger('error', `offlineDb:deleteMessage`, {
+        tags: ['channel', 'offlineDb'],
+        error,
+      });
+    }
+
+    return this._deleteMessage(messageID, hardDelete);
+  }
+
+  async _deleteMessage(messageID: string, hardDelete?: boolean) {
     let params = {};
     if (hardDelete) {
       params = { hard: true };

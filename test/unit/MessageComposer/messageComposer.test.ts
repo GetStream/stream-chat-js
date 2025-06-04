@@ -999,6 +999,7 @@ describe('MessageComposer', () => {
       it('should log state update timestamp when custom data changes', () => {
         const { messageComposer } = setup();
         const spy = vi.spyOn(messageComposer, 'logStateUpdateTimestamp');
+
         messageComposer.registerSubscriptions();
         messageComposer.customDataManager.state.next({
           data: {

@@ -10,7 +10,7 @@ async function createChannelType() {
 	});
 }
 
-async function deleteChannelType() {
+async function DBDeleteChannelType() {
 	const client = utils.getTestClient(true);
 	const newType = uuidv4();
 	await client.createChannelType({
@@ -18,7 +18,7 @@ async function deleteChannelType() {
 		commands: ['all'],
 	});
 
-	return await client.deleteChannelType(newType);
+	return await client.DBDeleteChannelType(newType);
 }
 
 async function getChannelType() {
@@ -35,7 +35,7 @@ async function listChannelTypes() {
 
 module.exports = {
 	createChannelType,
-	deleteChannelType,
+	DBDeleteChannelType,
 	getChannelType,
 	listChannelTypes,
 };

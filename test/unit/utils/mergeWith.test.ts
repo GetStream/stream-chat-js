@@ -17,7 +17,6 @@ describe('mergeWith', () => {
     };
 
     const result = mergeWith(object, other);
-    console.log('result', result);
     expect(result).toEqual({
       a: [
         { b: 2, c: 3 },
@@ -317,6 +316,20 @@ describe('mergeWith', () => {
     expect(result.file).toBe(targetFile);
     expect(result.file.name).toBe('target.txt');
     expect(result.file.type).toBe('text/plain');
+  });
+
+  it('should override the target scalar with source object', () => {
+    const source = { name: 'source.txt', content: 'source content' };
+    expect(mergeWith({ a: 1 }, { a: source }).a).toEqual(source);
+    expect(mergeWith({ a: '1' }, { a: source }).a).toEqual(source);
+    expect(mergeWith({ a: true }, { a: source }).a).toEqual(source);
+    expect(mergeWith({ a: false }, { a: source }).a).toEqual(source);
+  });
+
+  it('should override the target null or undefined with source object', () => {
+    const source = { name: 'source.txt', content: 'source content' };
+    expect(mergeWith({ a: null }, { a: source }).a).toEqual(source);
+    expect(mergeWith({ a: undefined }, { a: source }).a).toEqual(source);
   });
 
   it('should use source class instance when target is a plain object', () => {
