@@ -32,7 +32,7 @@ export const createApplyCommandSettingsMiddleware =
           text: newText,
         });
       },
-      onSuggestionItemSelect: ({ complete, forward, state }) => {
+      onSuggestionItemSelect: ({ next, forward, state }) => {
         const { command } = state;
 
         if (!command) {
@@ -42,7 +42,7 @@ export const createApplyCommandSettingsMiddleware =
         const triggerWithCommand = `/${command?.name} `;
 
         const newText = state.text.slice(triggerWithCommand.length);
-        return complete({
+        return next({
           ...state,
           selection: {
             end: state.selection.end - triggerWithCommand.length,

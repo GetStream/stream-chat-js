@@ -148,7 +148,9 @@ export const createCommandsMiddleware = (
         }
 
         const inputText = triggerWithToken?.toLowerCase().slice(1);
-        const matchedCommand = searchSource.items?.find((command) => {
+        const commands = searchSource.items;
+
+        const matchedCommand = commands?.find((command) => {
           if (!command.name || !inputText) return false;
           return isTextMatched(inputText, command.name.toLowerCase());
         });
