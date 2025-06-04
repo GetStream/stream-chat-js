@@ -55,6 +55,7 @@ export class NotificationManager {
       expiresAt: now + duration,
       actions: options.actions,
       metadata: options.metadata,
+      originalError: options.originalError,
     };
 
     this.store.partialNext({

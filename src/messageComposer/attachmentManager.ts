@@ -386,12 +386,11 @@ export class AttachmentManager {
       this.client.notifications.addError({
         message: 'File is required for upload attachment',
         origin: { emitter: 'AttachmentManager', context: { attachment } },
+        options: { code: 'attachment.validation.missing-file' },
       });
       return;
     }
 
-    // todo: document this
-    // the following is substitute for: if (noFiles && !isImage) return att
     if (!this.fileUploadFilter(attachment)) return;
 
     const newAttachment = await this.fileToLocalUploadAttachment(
@@ -497,7 +496,11 @@ export class AttachmentManager {
           emitter: 'AttachmentManager',
           context: { attachment, failedAttachment },
         },
-        options: { code: 'attachment.upload.failed', metadata: { reason } },
+        options: {
+          code: 'attachment.upload.failed',
+          metadata: { reason },
+          originalError: error instanceof Error ? error : undefined,
+        },
       });
 
       this.updateAttachment(failedAttachment);

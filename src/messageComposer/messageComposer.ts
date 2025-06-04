@@ -679,6 +679,7 @@ export class MessageComposer extends WithSubscriptions {
           metadata: {
             reason: (error as Error).message,
           },
+          originalError: error instanceof Error ? error : undefined,
         },
       });
       throw error;
