@@ -18,10 +18,7 @@ export const createApplyCommandSettingsMiddleware =
         }
 
         const triggerWithCommand = `/${command.name}`;
-        const newText = state.text.replace(
-          new RegExp(`^${triggerWithCommand}(\\s|$)`),
-          '',
-        );
+        const newText = state.text.replace(new RegExp(`^${triggerWithCommand}\\s*`), '');
 
         return complete({
           ...state,

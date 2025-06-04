@@ -15,7 +15,7 @@ export const getTriggerCharWithToken = ({
   const match = text.match(
     new RegExp(
       isCommand
-        ? `^[${trigger}]${triggerNorWhitespace}$`
+        ? `^[${trigger}]${triggerNorWhitespace}\\s*$`
         : acceptTrailingSpaces
           ? `(?!^|\\W)?[${trigger}]${triggerNorWhitespace}\\s?${triggerNorWhitespace}$`
           : `(?!^|\\W)?[${trigger}]${triggerNorWhitespace}$`,

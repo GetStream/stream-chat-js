@@ -107,6 +107,7 @@ export const createCommandsMiddleware = (
     searchSource?: CommandSearchSource;
   },
 ): CommandsMiddleware => {
+  const commands = channel?.getConfig()?.commands ?? [];
   const finalOptions = mergeWith(DEFAULT_OPTIONS, options ?? {});
   let searchSource = new CommandSearchSource(channel);
   if (options?.searchSource) {
@@ -148,7 +149,6 @@ export const createCommandsMiddleware = (
         }
 
         const inputText = triggerWithToken?.toLowerCase().slice(1);
-        const commands = searchSource.items;
 
         const matchedCommand = commands?.find((command) => {
           if (!command.name || !inputText) return false;
