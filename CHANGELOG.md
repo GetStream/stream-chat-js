@@ -1,3 +1,13 @@
+## [9.5.0](https://github.com/GetStream/stream-chat-js/compare/v9.4.0...v9.5.0) (2025-06-04)
+
+### Bug Fixes
+
+* attach original token provider error as cause to loadToken rejection ([#1553](https://github.com/GetStream/stream-chat-js/issues/1553)) ([09dfd0b](https://github.com/GetStream/stream-chat-js/commit/09dfd0b9ea569dfa93318e2d4d216af1d474c887))
+
+### Features
+
+* add reminders ([#1554](https://github.com/GetStream/stream-chat-js/issues/1554)) ([506cf4a](https://github.com/GetStream/stream-chat-js/commit/506cf4abb7b6e59e79f5dc19e24ad6a55ca2e942))
+
 ## [9.4.0](https://github.com/GetStream/stream-chat-js/compare/v9.3.0...v9.4.0) (2025-06-03)
 
 ### Bug Fixes
