@@ -906,6 +906,7 @@ describe('AttachmentManager', () => {
         options: {
           code: 'attachment.upload.failed',
           metadata: { reason: 'Upload failed' },
+          originalError: expect.any(Error),
         },
       });
     });
@@ -1022,6 +1023,9 @@ describe('AttachmentManager', () => {
 
       expect(mockClient.notifications.addError).toHaveBeenCalledWith({
         message: 'File is required for upload attachment',
+        options: {
+          code: 'attachment.validation.missing-file',
+        },
         origin: {
           emitter: 'AttachmentManager',
           context: {
@@ -1053,6 +1057,9 @@ describe('AttachmentManager', () => {
 
       expect(mockClient.notifications.addError).toHaveBeenCalledWith({
         message: 'File is required for upload attachment',
+        options: {
+          code: 'attachment.validation.missing-file',
+        },
         origin: {
           emitter: 'AttachmentManager',
           context: {

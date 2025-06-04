@@ -764,6 +764,7 @@ describe('MessageComposer', () => {
           metadata: {
             reason: 'Failed to create poll',
           },
+          originalError: expect.any(Error),
           severity: 'error',
         },
       });
