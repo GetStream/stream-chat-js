@@ -154,9 +154,6 @@ describe('TextComposerMiddlewareExecutor', () => {
       },
     });
 
-    expect(result.state.suggestions).toBeDefined();
-    expect(result.state.suggestions?.trigger).toBe('/');
-    expect(result.state.suggestions?.query).toBe('ban');
     expect(result.state.command).toBeDefined();
     expect(result.state.command?.name).toBe('ban');
 
@@ -305,9 +302,7 @@ describe('TextComposerMiddlewareExecutor', () => {
         },
       });
 
-      expect(result.state.suggestions).toBeDefined();
-      expect(result.state.suggestions?.trigger).toBe('/');
-      expect(result.state.suggestions?.query).toBe('ban');
+      expect(result.state.suggestions).not.toBeDefined();
       expect(result.state.command).toBeDefined();
       expect(result.state.command?.name).toBe('ban');
     });
@@ -444,10 +439,6 @@ describe('TextComposerMiddlewareExecutor', () => {
         selection: { start: 4, end: 4 },
       },
     });
-
-    expect(result.state.suggestions).toBeDefined();
-    expect(result.state.suggestions?.trigger).toBe('/');
-    expect(result.state.suggestions?.query).toBe('ban');
 
     // Then test a mention after the command
     result = await textComposer.middlewareExecutor.execute({

@@ -4,6 +4,7 @@ import { StreamChat } from '../../../../../src/client';
 import { MessageComposer } from '../../../../../src/messageComposer/messageComposer';
 import { createCommandInjectionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/commandInjection';
 import {
+  CommandResponse,
   createDraftCommandInjectionMiddleware,
   MessageComposerMiddlewareState,
   MessageDraftComposerMiddlewareValueState,
@@ -70,6 +71,7 @@ describe('stream-io/message-composer-middleware/command-injection', () => {
       get mentionedUsers() {
         return [];
       },
+      setCommand: (command: CommandResponse | null) => {},
     };
 
     const attachmentManager = {
@@ -239,6 +241,7 @@ describe('stream-io/message-composer-middleware/draft-command-injection', () => 
       get mentionedUsers() {
         return [];
       },
+      setCommand: (command: CommandResponse | null) => {},
     };
 
     const attachmentManager = {
