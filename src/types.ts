@@ -111,6 +111,7 @@ export type AppSettingsAPIResponse = APIResponse & {
         updated_at?: string;
         uploads?: boolean;
         url_enrichment?: boolean;
+        user_message_reminders?: boolean;
       }
     >;
     reminders_interval: number;
@@ -684,6 +685,7 @@ export type MessageResponseBase = MessageBase & {
   reaction_counts?: { [key: string]: number } | null;
   reaction_groups?: { [key: string]: ReactionGroupResponse } | null;
   reaction_scores?: { [key: string]: number } | null;
+  reminder?: ReminderResponseBase;
   reply_count?: number;
   shadowed?: boolean;
   status?: string;
@@ -1003,6 +1005,7 @@ export type CreateChannelOptions = {
   typing_events?: boolean;
   uploads?: boolean;
   url_enrichment?: boolean;
+  user_message_reminders?: boolean;
 };
 
 export type CreateCommandOptions = {
@@ -1453,6 +1456,7 @@ export type Event = CustomEventData & {
   offlineReactions?: ReactionResponse[];
   reaction?: ReactionResponse;
   received_at?: string | Date;
+  reminder?: ReminderResponse;
   shadow?: boolean;
   team?: string;
   thread?: ThreadResponse;
@@ -2341,6 +2345,7 @@ export type ChannelConfigFields = {
   typing_events?: boolean;
   uploads?: boolean;
   url_enrichment?: boolean;
+  user_message_reminders?: boolean; // Feature flag for user message reminders
 };
 
 export type ChannelConfigWithInfo = ChannelConfigFields &
@@ -4010,6 +4015,89 @@ export type ThreadFilters = QueryFilters<
       | PrimitiveFilter<ThreadResponse['last_message_at']>;
   }
 >;
+
+export type ReminderResponseBase = {
+  channel_cid: string;
+  created_at: string;
+  message_id: string;
+  updated_at: string;
+  user_id: string;
+  remind_at?: string;
+};
+
+export type ReminderResponse = ReminderResponseBase & {
+  user: UserResponse;
+  message: MessageResponse;
+};
+
+export type ReminderAPIResponse = APIResponse & {
+  reminder: ReminderResponse;
+};
+
+export type CreateReminderOptions = {
+  messageId: string;
+  remind_at?: string;
+  user_id?: string;
+};
+
+export type UpdateReminderOptions = CreateReminderOptions;
+
+export type ReminderFilters = QueryFilters<{
+  channel_cid?:
+    | RequireOnlyOne<
+        Pick<QueryFilter<ReminderResponseBase['channel_cid']>, '$eq' | '$in'>
+      >
+    | PrimitiveFilter<ReminderResponseBase['channel_cid']>;
+  created_at?:
+    | RequireOnlyOne<
+        Pick<
+          QueryFilter<ReminderResponseBase['created_at']>,
+          '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+        >
+      >
+    | PrimitiveFilter<ReminderResponseBase['created_at']>;
+  message_id?:
+    | RequireOnlyOne<Pick<QueryFilter<ReminderResponseBase['message_id']>, '$eq' | '$in'>>
+    | PrimitiveFilter<ReminderResponseBase['message_id']>;
+  remind_at?:
+    | RequireOnlyOne<
+        Pick<
+          QueryFilter<ReminderResponseBase['remind_at']>,
+          '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+        >
+      >
+    | PrimitiveFilter<ReminderResponseBase['remind_at']>;
+  user_id?:
+    | RequireOnlyOne<Pick<QueryFilter<ReminderResponseBase['user_id']>, '$eq' | '$in'>>
+    | PrimitiveFilter<ReminderResponseBase['user_id']>;
+}>;
+
+export type ReminderSort =
+  | Sort<
+      Pick<
+        ReminderResponseBase,
+        'channel_cid' | 'created_at' | 'remind_at' | 'updated_at'
+      >
+    >
+  | Array<
+      Sort<
+        Pick<
+          ReminderResponseBase,
+          'channel_cid' | 'created_at' | 'remind_at' | 'updated_at'
+        >
+      >
+    >;
+
+export type QueryRemindersOptions = Pager & {
+  filter?: ReminderFilters;
+  sort?: ReminderSort;
+};
+
+export type QueryRemindersResponse = {
+  reminders: ReminderResponse[];
+  prev?: string;
+  next?: string;
+};
 
 export type HookType = 'webhook' | 'sqs' | 'sns';
 
