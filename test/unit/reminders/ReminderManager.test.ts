@@ -443,7 +443,7 @@ describe('ReminderManager', () => {
       await manager.deleteReminder(messageId);
       expect(stateUpdateSpy).toHaveBeenCalledWith(messageId);
     });
-    describe('createOrUpdateReminder', () => {
+    describe('upsertReminder', () => {
       it('creates a reminder if not present in state', async () => {
         const client = new StreamChat('api-key');
         const manager = new ReminderManager({ client });
@@ -454,7 +454,7 @@ describe('ReminderManager', () => {
         const updateReminderSpy = vi
           .spyOn(manager, 'updateReminder')
           .mockResolvedValue(undefined);
-        await manager.createOrUpdateReminder(payload);
+        await manager.upsertReminder(payload);
         expect(createReminderSpy).toHaveBeenCalledWith(payload);
         expect(updateReminderSpy).not.toHaveBeenCalledWith(payload);
       });
@@ -470,7 +470,7 @@ describe('ReminderManager', () => {
         const updateReminderSpy = vi
           .spyOn(manager, 'updateReminder')
           .mockResolvedValue(undefined);
-        await manager.createOrUpdateReminder(payload);
+        await manager.upsertReminder(payload);
         expect(updateReminderSpy).toHaveBeenCalledWith(payload);
       });
       it('updates a reminder if present in state', async () => {
@@ -485,7 +485,7 @@ describe('ReminderManager', () => {
         const updateReminderSpy = vi
           .spyOn(manager, 'updateReminder')
           .mockResolvedValue(undefined);
-        await manager.createOrUpdateReminder(payload);
+        await manager.upsertReminder(payload);
         expect(createReminderSpy).not.toHaveBeenCalledWith(payload);
         expect(updateReminderSpy).toHaveBeenCalledWith(payload);
       });
@@ -501,7 +501,7 @@ describe('ReminderManager', () => {
         const updateReminderSpy = vi
           .spyOn(manager, 'updateReminder')
           .mockRejectedValue(new Error('reminder does not exist'));
-        await manager.createOrUpdateReminder(payload);
+        await manager.upsertReminder(payload);
         expect(createReminderSpy).toHaveBeenCalledWith(payload);
         expect(updateReminderSpy).toHaveBeenCalledWith(payload);
       });

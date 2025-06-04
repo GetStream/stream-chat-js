@@ -10,6 +10,7 @@ import type {
   CreateReminderOptions,
   Event,
   EventTypes,
+  LocalMessage,
   MessageResponse,
   ReminderResponse,
 } from '../types';
@@ -114,10 +115,10 @@ export class ReminderManager extends WithSubscriptions {
       this.state.partialNext({
         reminders: new Map(this.reminders.set(data.message_id, reminder)),
       });
-      this.timers.addAll([reminder]);
+      this.timers.add(reminder);
     } else if (overwrite) {
       cachedReminder.setState(data);
-      this.timers.addAll([cachedReminder]);
+      this.timers.add(cachedReminder);
     }
     return cachedReminder;
   };
@@ -131,7 +132,7 @@ export class ReminderManager extends WithSubscriptions {
     this.state.partialNext({ reminders: new Map(reminders) });
   };
 
-  hydrateState = (messages: MessageResponse[]) => {
+  hydrateState = (messages: MessageResponse[] | LocalMessage[]) => {
     messages.forEach(({ reminder }) => {
       if (reminder) {
         this.upsertToState({ data: reminder });
@@ -156,6 +157,7 @@ export class ReminderManager extends WithSubscriptions {
     (event.type.startsWith('reminder.') || event.type === 'notification.reminder_due');
 
   public registerSubscriptions = () => {
+    if (this.hasSubscriptions) return;
     this.addUnsubscribeFunction(this.subscribeReminderCreated());
     this.addUnsubscribeFunction(this.subscribeReminderUpdated());
     this.addUnsubscribeFunction(this.subscribeReminderDeleted());
@@ -214,7 +216,7 @@ export class ReminderManager extends WithSubscriptions {
   // WS event handling END //
 
   // API calls START //
-  createOrUpdateReminder = async (options: CreateReminderOptions) => {
+  upsertReminder = async (options: CreateReminderOptions) => {
     const { messageId } = options;
     if (this.getFromState(messageId)) {
       try {
