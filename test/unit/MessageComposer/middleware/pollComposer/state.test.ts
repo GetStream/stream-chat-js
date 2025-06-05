@@ -400,6 +400,27 @@ describe('PollComposerStateMiddleware', () => {
         );
 
         expect(result.state.nextState.errors.options).toBeDefined();
+        expect(Object.keys(result.state.nextState.errors.options!)).toHaveLength(1);
+        expect(result.state.nextState.errors.options!['option-id1']).toBe(
+          'Option is empty',
+        );
+      });
+      it('should not validate options with only white spaces on blur', async () => {
+        const stateMiddleware = setup();
+        const result = await stateMiddleware.handlers.handleFieldBlur(
+          setupHandlerParams({
+            nextState: { ...getInitialState() },
+            previousState: { ...getInitialState() },
+            targetFields: {
+              options: [
+                { id: 'option-id1', text: ' ' },
+                { id: 'option-id2', text: ' ' },
+              ],
+            },
+          }),
+        );
+
+        expect(result.state.nextState.errors.options).toBeDefined();
         expect(Object.keys(result.state.nextState.errors.options!)).toHaveLength(2);
         expect(result.state.nextState.errors.options!['option-id1']).toBe(
           'Option is empty',
