@@ -1,3 +1,10 @@
+## [9.5.1](https://github.com/GetStream/stream-chat-js/compare/v9.5.0...v9.5.1) (2025-06-05)
+
+### Bug Fixes
+
+* broken delete channel type api ([#1556](https://github.com/GetStream/stream-chat-js/issues/1556)) ([f5b0d9c](https://github.com/GetStream/stream-chat-js/commit/f5b0d9ca897445363f03254f29517b3ae42081ec))
+* prevent poll creation with options with white spaces only ([#1555](https://github.com/GetStream/stream-chat-js/issues/1555)) ([786de82](https://github.com/GetStream/stream-chat-js/commit/786de82751f439db6ae8be225653910f5f178b66))
+
 ## [9.5.0](https://github.com/GetStream/stream-chat-js/compare/v9.4.0...v9.5.0) (2025-06-04)
 
 ### Bug Fixes
