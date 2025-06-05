@@ -7,7 +7,7 @@ import {
 } from '../../../../../src/messageComposer/messageComposer';
 import type { DraftResponse, LocalMessage } from '../../../../../src/types';
 import { TextComposerMiddleware } from '../../../../../src';
-import { createApplyCommandSettingsMiddleware } from '../../../../../src/messageComposer/middleware/textComposer/applyCommandSettings';
+import { createCommandStringExtractionMiddleware } from '../../../../../src/messageComposer/middleware/textComposer/commandStringExtraction';
 
 // Mock dependencies
 
@@ -44,7 +44,7 @@ const setup = ({
     config: { text: config },
   });
   messageComposer.textComposer.middlewareExecutor.insert({
-    middleware: [createApplyCommandSettingsMiddleware() as TextComposerMiddleware],
+    middleware: [createCommandStringExtractionMiddleware() as TextComposerMiddleware],
     position: { after: 'stream-io/text-composer/commands-middleware' },
   });
   return { client, channel, messageComposer };

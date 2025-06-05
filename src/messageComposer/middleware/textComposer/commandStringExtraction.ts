@@ -8,7 +8,7 @@ export type ApplyCommandSettingsMiddleware = Middleware<
   'onChange' | 'onSuggestionItemSelect'
 >;
 
-export const createApplyCommandSettingsMiddleware =
+export const createCommandStringExtractionMiddleware =
   (): ApplyCommandSettingsMiddleware => ({
     handlers: {
       onChange: ({ complete, forward, state }) => {
