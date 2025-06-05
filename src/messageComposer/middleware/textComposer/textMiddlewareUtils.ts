@@ -15,7 +15,7 @@ export const getTriggerCharWithToken = ({
   const match = text.match(
     new RegExp(
       isCommand
-        ? `^[${trigger}]${triggerNorWhitespace}\\s*$`
+        ? `^[${trigger}]${triggerNorWhitespace}$`
         : acceptTrailingSpaces
           ? `(?!^|\\W)?[${trigger}]${triggerNorWhitespace}\\s?${triggerNorWhitespace}$`
           : `(?!^|\\W)?[${trigger}]${triggerNorWhitespace}$`,
@@ -137,7 +137,7 @@ export const getTokenizedSuggestionDisplayName = ({
 
 export const isTextMatched = (input: string, command: string): boolean => {
   try {
-    const regex = new RegExp(`^${escapeRegExp(command)}`, 'i');
+    const regex = new RegExp(`^${escapeRegExp(command)}\\s+`, 'i');
     return regex.test(input);
   } catch (error) {
     console.error('Error in validating with the regex:', error);

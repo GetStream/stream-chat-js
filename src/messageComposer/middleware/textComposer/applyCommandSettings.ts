@@ -1,5 +1,6 @@
 import type { Middleware } from '../../../middleware';
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
+import { escapeRegExp } from './textMiddlewareUtils';
 import type { CommandSuggestion } from './types';
 
 export type ApplyCommandSettingsMiddleware = Middleware<
@@ -18,7 +19,11 @@ export const createApplyCommandSettingsMiddleware =
         }
 
         const triggerWithCommand = `/${command.name}`;
-        const newText = state.text.replace(new RegExp(`^${triggerWithCommand}\\s*`), '');
+
+        const newText = state.text.replace(
+          new RegExp(`^${escapeRegExp(triggerWithCommand)}\\s*`),
+          '',
+        );
 
         return complete({
           ...state,

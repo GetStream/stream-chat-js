@@ -149,8 +149,8 @@ describe('TextComposerMiddlewareExecutor', () => {
       eventName: 'onChange',
       initialValue: {
         ...initialValue,
-        text: '/ban',
-        selection: { start: 4, end: 4 },
+        text: '/ban ',
+        selection: { start: 5, end: 5 },
       },
     });
 
@@ -297,8 +297,8 @@ describe('TextComposerMiddlewareExecutor', () => {
         eventName: 'onChange',
         initialValue: {
           ...initialValue,
-          text: '/ban',
-          selection: { start: 0, end: 4 },
+          text: '/ban ',
+          selection: { start: 0, end: 5 },
         },
       });
 

@@ -121,13 +121,29 @@ export const createCommandsMiddleware = (
     handlers: {
       onChange: ({ state, next, complete, forward }) => {
         if (!state.selection) return forward();
+        const finalText = state.text.slice(0, state.selection.end);
 
         const triggerWithToken = getTriggerCharWithToken({
           trigger: finalOptions.trigger,
-          text: state.text.slice(0, state.selection.end),
+          text: finalText,
           acceptTrailingSpaces: false,
           isCommand: true,
         });
+
+        const inputText = finalText?.toLowerCase().slice(1);
+
+        const matchedCommand = commands?.find((command) => {
+          if (!command.name || !inputText) return false;
+          return isTextMatched(inputText, command.name.toLowerCase());
+        });
+
+        if (matchedCommand) {
+          return next({
+            ...state,
+            command: matchedCommand,
+            suggestions: undefined,
+          });
+        }
 
         const newSearchTriggerred =
           triggerWithToken && triggerWithToken.length === finalOptions.minChars;
@@ -146,21 +162,6 @@ export const createCommandsMiddleware = (
             delete newState.suggestions;
           }
           return next(newState);
-        }
-
-        const inputText = triggerWithToken?.toLowerCase().slice(1);
-
-        const matchedCommand = commands?.find((command) => {
-          if (!command.name || !inputText) return false;
-          return isTextMatched(inputText, command.name.toLowerCase());
-        });
-
-        if (matchedCommand) {
-          return next({
-            ...state,
-            command: matchedCommand,
-            suggestions: undefined,
-          });
         }
 
         return complete({
