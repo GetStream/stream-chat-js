@@ -5,7 +5,11 @@ import { BaseSearchSource } from '../../../search';
 import type { CommandResponse } from '../../../types';
 import { mergeWith } from '../../../utils/mergeWith';
 import type { CommandSuggestion, TextComposerMiddlewareOptions } from './types';
-import { getTriggerCharWithToken, insertItemWithTrigger } from './textMiddlewareUtils';
+import {
+  getTriggerCharWithToken,
+  insertItemWithTrigger,
+  isTextMatched,
+} from './textMiddlewareUtils';
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
 
 export class CommandSearchSource extends BaseSearchSource<CommandSuggestion> {
@@ -103,6 +107,7 @@ export const createCommandsMiddleware = (
     searchSource?: CommandSearchSource;
   },
 ): CommandsMiddleware => {
+  const commands = channel?.getConfig()?.commands ?? [];
   const finalOptions = mergeWith(DEFAULT_OPTIONS, options ?? {});
   let searchSource = new CommandSearchSource(channel);
   if (options?.searchSource) {
@@ -116,13 +121,29 @@ export const createCommandsMiddleware = (
     handlers: {
       onChange: ({ state, next, complete, forward }) => {
         if (!state.selection) return forward();
+        const finalText = state.text.slice(0, state.selection.end);
 
         const triggerWithToken = getTriggerCharWithToken({
           trigger: finalOptions.trigger,
-          text: state.text.slice(0, state.selection.end),
+          text: finalText,
           acceptTrailingSpaces: false,
           isCommand: true,
         });
+
+        const inputText = finalText?.toLowerCase().slice(1);
+
+        const matchedCommand = commands?.find((command) => {
+          if (!command.name || !inputText) return false;
+          return isTextMatched(inputText, command.name.toLowerCase());
+        });
+
+        if (matchedCommand) {
+          return next({
+            ...state,
+            command: matchedCommand,
+            suggestions: undefined,
+          });
+        }
 
         const newSearchTriggerred =
           triggerWithToken && triggerWithToken.length === finalOptions.minChars;
@@ -145,6 +166,7 @@ export const createCommandsMiddleware = (
 
         return complete({
           ...state,
+          command: null,
           suggestions: {
             query: triggerWithToken.slice(1),
             searchSource,
@@ -152,13 +174,13 @@ export const createCommandsMiddleware = (
           },
         });
       },
-      onSuggestionItemSelect: ({ state, complete, forward }) => {
+      onSuggestionItemSelect: ({ state, next, forward }) => {
         const { selectedSuggestion } = state.change ?? {};
         if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
           return forward();
 
         searchSource.resetStateAndActivate();
-        return complete({
+        return next({
           ...state,
           ...insertItemWithTrigger({
             insertText: `/${selectedSuggestion.name} `,
@@ -166,6 +188,7 @@ export const createCommandsMiddleware = (
             text: state.text,
             trigger: finalOptions.trigger,
           }),
+          command: selectedSuggestion,
           suggestions: undefined,
         });
       },
