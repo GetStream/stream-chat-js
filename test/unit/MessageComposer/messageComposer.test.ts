@@ -760,7 +760,7 @@ describe('MessageComposer', () => {
           context: { composer: messageComposer },
         },
         options: {
-          code: 'poll.creation.failed',
+          code: 'api:poll:create:failed',
           metadata: {
             reason: 'Failed to create poll',
           },

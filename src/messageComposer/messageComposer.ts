@@ -675,7 +675,7 @@ export class MessageComposer extends WithSubscriptions {
           context: { composer: this },
         },
         options: {
-          code: 'poll.creation.failed',
+          code: 'api:poll:create:failed',
           metadata: {
             reason: (error as Error).message,
           },
