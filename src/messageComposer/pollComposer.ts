@@ -83,7 +83,8 @@ export class PollComposer {
 
   get canCreatePoll() {
     const { data, errors } = this.state.getLatestValue();
-    const hasAtLeastOneOption = data.options.filter((o) => !!o.text).length > 0;
+    const hasAtLeastOneNonEmptyOption =
+      data.options.filter((o) => !!o.text.trim()).length > 0;
     const hasName = !!data.name;
     const maxVotesAllowedNumber = parseInt(
       data.max_votes_allowed?.match(VALID_MAX_VOTES_VALUE_REGEX)?.[0] || '',
@@ -95,7 +96,7 @@ export class PollComposer {
         (2 <= maxVotesAllowedNumber || maxVotesAllowedNumber <= 10));
 
     return (
-      hasAtLeastOneOption &&
+      hasAtLeastOneNonEmptyOption &&
       hasName &&
       validMaxVotesAllowed &&
       Object.values(errors).filter((errorText) => !!errorText).length === 0
