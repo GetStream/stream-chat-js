@@ -12,8 +12,8 @@ export const createCommandInjectionMiddleware = (
 ): MessageCompositionMiddleware => ({
   handlers: {
     compose: ({
-      complete,
       forward,
+      next,
       state,
     }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
       const command = composer.textComposer.command;
@@ -25,7 +25,7 @@ export const createCommandInjectionMiddleware = (
       const injection = `/${command?.name}`;
       const enrichedText = `${injection} ${text}`;
 
-      return complete({
+      return next({
         ...state,
         localMessage: {
           ...state.localMessage,
@@ -38,7 +38,7 @@ export const createCommandInjectionMiddleware = (
       });
     },
   },
-  id: 'stream-io/message-composer-middleware/command-injection',
+  id: 'stream-io/message-composer-middleware/command-string-injection',
 });
 
 export const createDraftCommandInjectionMiddleware = (
@@ -47,8 +47,8 @@ export const createDraftCommandInjectionMiddleware = (
   handlers: {
     compose: ({
       forward,
+      next,
       state,
-      complete,
     }: MiddlewareHandlerParams<MessageDraftComposerMiddlewareValueState>) => {
       const command = composer.textComposer.command;
       if (!command) {
@@ -59,7 +59,7 @@ export const createDraftCommandInjectionMiddleware = (
       const injection = `/${command?.name}`;
       const enrichedText = `${injection} ${text}`;
 
-      return complete({
+      return next({
         ...state,
         draft: {
           ...state.draft,
@@ -68,5 +68,5 @@ export const createDraftCommandInjectionMiddleware = (
       });
     },
   },
-  id: 'stream-io/message-composer-middleware/draft-command-injection',
+  id: 'stream-io/message-composer-middleware/draft-command-string-injection',
 });

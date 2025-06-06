@@ -1,5 +1,5 @@
 export * from './commands';
-export * from './applyCommandSettings';
+export * from './commandStringExtraction';
 export * from './mentions';
 export * from './validation';
 export * from './TextComposerMiddlewareExecutor';

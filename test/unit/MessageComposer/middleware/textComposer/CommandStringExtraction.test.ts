@@ -7,7 +7,7 @@ import {
 } from '../../../../../src/messageComposer/messageComposer';
 import type { DraftResponse, LocalMessage } from '../../../../../src/types';
 import { TextComposerMiddleware } from '../../../../../src';
-import { createApplyCommandSettingsMiddleware } from '../../../../../src/messageComposer/middleware/textComposer/applyCommandSettings';
+import { createCommandStringExtractionMiddleware } from '../../../../../src/messageComposer/middleware/textComposer/commandStringExtraction';
 
 // Mock dependencies
 
@@ -44,7 +44,7 @@ const setup = ({
     config: { text: config },
   });
   messageComposer.textComposer.middlewareExecutor.insert({
-    middleware: [createApplyCommandSettingsMiddleware() as TextComposerMiddleware],
+    middleware: [createCommandStringExtractionMiddleware() as TextComposerMiddleware],
     position: { after: 'stream-io/text-composer/commands-middleware' },
   });
   return { client, channel, messageComposer };
@@ -69,21 +69,43 @@ describe('Apply Command Settings Middleware', () => {
     expect(middleware[3].id).toBe('stream-io/text-composer/apply-command-settings');
   });
 
-  it('should remove command trigger from text on onChange', async () => {
-    const {
-      messageComposer: { textComposer },
-    } = setup();
+  it.each([
+    {
+      inputText: '/ban user1',
+      inputSelection: { start: 10, end: 10 },
+      outputText: 'user1',
+      outputSelection: { start: 6, end: 6 },
+    },
+    {
+      inputText: '/mute user2',
+      inputSelection: { start: 11, end: 11 },
+      outputText: 'user2',
+      outputSelection: { start: 6, end: 6 },
+    },
+    {
+      inputText: '/banuser1',
+      inputSelection: { start: 9, end: 9 },
+      outputText: '/banuser1',
+      outputSelection: { start: 9, end: 9 },
+    },
+  ])(
+    'should remove command trigger from text on onChange',
+    async ({ inputText, inputSelection, outputText, outputSelection }) => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
 
-    const result = await textComposer.middlewareExecutor.execute({
-      eventName: 'onChange',
-      initialValue: {
-        ...initialValue,
-        text: '/ban',
-        selection: { start: 0, end: 4 },
-      },
-    });
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
+          text: inputText,
+          selection: inputSelection,
+        },
+      });
 
-    expect(result.state.text).toBe('');
-    expect(result.state.selection).toEqual({ start: -4, end: 0 });
-  });
+      expect(result.state.text).toBe(outputText);
+      expect(result.state.selection).toEqual(outputSelection);
+    },
+  );
 });

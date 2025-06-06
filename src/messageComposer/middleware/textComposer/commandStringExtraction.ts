@@ -1,5 +1,6 @@
 import type { Middleware } from '../../../middleware';
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
+import { escapeRegExp } from './textMiddlewareUtils';
 import type { CommandSuggestion } from './types';
 
 export type ApplyCommandSettingsMiddleware = Middleware<
@@ -7,7 +8,7 @@ export type ApplyCommandSettingsMiddleware = Middleware<
   'onChange' | 'onSuggestionItemSelect'
 >;
 
-export const createApplyCommandSettingsMiddleware =
+export const createCommandStringExtractionMiddleware =
   (): ApplyCommandSettingsMiddleware => ({
     handlers: {
       onChange: ({ complete, forward, state }) => {
@@ -17,36 +18,38 @@ export const createApplyCommandSettingsMiddleware =
           return forward();
         }
 
-        const trigger = `/${command.name}`;
-        const newText = state.text.replace(new RegExp(`^${trigger}(\\s|$)`), '');
+        const triggerWithCommand = `/${command.name}`;
+
+        const newText = state.text.replace(
+          new RegExp(`^${escapeRegExp(triggerWithCommand)}\\s*`),
+          '',
+        );
 
         return complete({
           ...state,
           selection: {
-            end: state.selection.end - trigger.length,
-            start: state.selection.start - trigger.length,
+            end: state.selection.end - triggerWithCommand.length,
+            start: state.selection.start - triggerWithCommand.length,
           },
-          suggestions: undefined,
           text: newText,
         });
       },
-      onSuggestionItemSelect: ({ complete, forward, state }) => {
+      onSuggestionItemSelect: ({ next, forward, state }) => {
         const { command } = state;
 
         if (!command) {
           return forward();
         }
 
-        const trigger = `/${command?.name} `;
+        const triggerWithCommand = `/${command?.name} `;
 
-        const newText = state.text.slice(trigger.length);
-        return complete({
+        const newText = state.text.slice(triggerWithCommand.length);
+        return next({
           ...state,
           selection: {
-            end: state.selection.end - trigger.length,
-            start: state.selection.start - trigger.length,
+            end: state.selection.end - triggerWithCommand.length,
+            start: state.selection.start - triggerWithCommand.length,
           },
-          suggestions: undefined,
           text: newText,
         });
       },

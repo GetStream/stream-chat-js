@@ -137,7 +137,7 @@ export const getTokenizedSuggestionDisplayName = ({
 
 export const isTextMatched = (input: string, command: string): boolean => {
   try {
-    const regex = new RegExp(`^${escapeRegExp(command)}`, 'i');
+    const regex = new RegExp(`^${escapeRegExp(command)}\\s+`, 'i');
     return regex.test(input);
   } catch (error) {
     console.error('Error in validating with the regex:', error);
