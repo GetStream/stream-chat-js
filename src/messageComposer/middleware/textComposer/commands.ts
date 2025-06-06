@@ -1,7 +1,7 @@
 import type { Channel } from '../../../channel';
 import type { Middleware } from '../../../middleware';
-import type { SearchSourceOptions } from '../../../search_controller';
-import { BaseSearchSource } from '../../../search_controller';
+import type { SearchSourceOptions } from '../../../search';
+import { BaseSearchSource } from '../../../search';
 import type { CommandResponse } from '../../../types';
 import { mergeWith } from '../../../utils/mergeWith';
 import type { CommandSuggestion, TextComposerMiddlewareOptions } from './types';

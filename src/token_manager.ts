@@ -126,7 +126,9 @@ export class TokenManager {
         try {
           this.token = await this.tokenProvider();
         } catch (e) {
-          return reject(new Error(`Call to tokenProvider failed with message: ${e}`));
+          return reject(
+            new Error(`Call to tokenProvider failed with message: ${e}`, { cause: e }),
+          );
         }
         resolve(this.token);
       }
