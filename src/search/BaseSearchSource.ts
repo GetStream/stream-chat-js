@@ -31,6 +31,7 @@ export interface SearchSource<T = any> {
   resetState(): void;
 
   search(text?: string): Promise<void> | undefined;
+  searchSync(text?: string): void;
 
   readonly searchQuery: string;
 
@@ -127,6 +128,10 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
 
   protected abstract filterQueryResults(items: T[]): T[] | Promise<T[]>;
 
+  protected abstract querySync(searchQuery: string): QueryReturnValue<T>;
+
+  protected abstract filterQueryResultsSync(items: T[]): T[];
+
   setDebounceOptions = ({ debounceMs }: DebounceOptions) => {
     this.searchDebounced = debounce(this.executeQuery.bind(this), debounceMs);
   };
@@ -209,6 +214,41 @@ export abstract class BaseSearchSource<T> implements SearchSource<T> {
       this.state.next(this.getStateAfterQuery(stateUpdate, hasNewSearchQuery));
     }
   }
+
+  executeQuerySync = (newSearchString?: string) => {
+    if (!this.canExecuteQuery(newSearchString)) return;
+    const hasNewSearchQuery = typeof newSearchString !== 'undefined';
+    const searchString = newSearchString ?? this.searchQuery;
+
+    if (hasNewSearchQuery) {
+      this.state.next(this.getStateBeforeFirstQuery(newSearchString ?? ''));
+    } else {
+      this.state.partialNext({ isLoading: true });
+    }
+
+    const stateUpdate: Partial<SearchSourceState<T>> = {};
+    try {
+      const results = this.querySync(searchString);
+      if (!results) return;
+      const { items, next } = results;
+
+      if (next || next === null) {
+        stateUpdate.next = next;
+        stateUpdate.hasNext = !!next;
+      } else {
+        stateUpdate.offset = (this.offset ?? 0) + items.length;
+        stateUpdate.hasNext = items.length === this.pageSize;
+      }
+
+      stateUpdate.items = this.filterQueryResultsSync(items);
+    } catch (e) {
+      stateUpdate.lastQueryError = e as Error;
+    } finally {
+      this.state.next(this.getStateAfterQuery(stateUpdate, hasNewSearchQuery));
+    }
+  };
+
+  searchSync = (searchQuery?: string) => this.executeQuerySync(searchQuery);
 
   search = (searchQuery?: string) => this.searchDebounced(searchQuery);
 
