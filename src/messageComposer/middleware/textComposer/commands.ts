@@ -128,11 +128,6 @@ export const createCommandsMiddleware = (
           isCommand: true,
         });
 
-        const inputText = triggerWithToken?.slice(1).toLowerCase() ?? '';
-        const commands = searchSource.query(inputText).items;
-
-        console.log(commands);
-
         const newSearchTriggerred =
           triggerWithToken && triggerWithToken.length === finalOptions.minChars;
 
