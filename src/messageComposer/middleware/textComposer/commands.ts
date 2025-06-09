@@ -1,14 +1,14 @@
 import type { Channel } from '../../../channel';
 import type { Middleware } from '../../../middleware';
 import type { SearchSourceOptions } from '../../../search';
-import { BaseSearchSource } from '../../../search';
+import { BaseSearchSourceSync } from '../../../search';
 import type { CommandResponse } from '../../../types';
 import { mergeWith } from '../../../utils/mergeWith';
 import type { CommandSuggestion, TextComposerMiddlewareOptions } from './types';
 import { getTriggerCharWithToken, insertItemWithTrigger } from './textMiddlewareUtils';
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
 
-export class CommandSearchSource extends BaseSearchSource<CommandSuggestion> {
+export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion> {
   readonly type = 'commands';
   private channel: Channel;
 
@@ -70,27 +70,13 @@ export class CommandSearchSource extends BaseSearchSource<CommandSuggestion> {
 
   query(searchQuery: string) {
     const commands = this.searchCommands(searchQuery);
-    return Promise.resolve({
-      items: commands.map((c) => ({ ...c, id: c.name })),
-      next: null,
-    });
-  }
-
-  protected filterQueryResults(
-    items: CommandSuggestion[],
-  ): CommandSuggestion[] | Promise<CommandSuggestion[]> {
-    return items;
-  }
-
-  querySync(searchQuery: string) {
-    const commands = this.searchCommands(searchQuery);
     return {
       items: commands.map((c) => ({ ...c, id: c.name })),
       next: null,
     };
   }
 
-  protected filterQueryResultsSync(items: CommandSuggestion[]) {
+  protected filterQueryResults(items: CommandSuggestion[]) {
     return items;
   }
 }
@@ -143,7 +129,8 @@ export const createCommandsMiddleware = (
         });
 
         const inputText = triggerWithToken?.slice(1).toLowerCase() ?? '';
-        const commands = searchSource.querySync(inputText).items;
+        const commands = searchSource.query(inputText).items;
+
         console.log(commands);
 
         const newSearchTriggerred =

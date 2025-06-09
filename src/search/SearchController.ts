@@ -122,14 +122,6 @@ export class SearchController {
     await Promise.all(searchedSources.map((source) => source.search(searchQuery)));
   };
 
-  searchSync = (searchQuery?: string) => {
-    const searchedSources = this.activeSources;
-    this.state.partialNext({
-      searchQuery,
-    });
-    searchedSources.map((source) => source.searchSync(searchQuery));
-  };
-
   cancelSearchQueries = () => {
     this.activeSources.forEach((s) => s.cancelScheduledQuery());
   };
