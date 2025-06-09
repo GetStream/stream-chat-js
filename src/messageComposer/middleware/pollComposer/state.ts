@@ -41,16 +41,15 @@ export const pollStateChangeValidators: Partial<
       return { max_votes_allowed: 'Type a number from 2 to 10' };
     return { max_votes_allowed: undefined };
   },
-  options: ({ value }) => {
+  options: ({ value: options }) => {
     const errors: Record<string, string> = {};
     const seenOptions = new Set<string>();
 
-    value.forEach((option: { id: string; text: string }) => {
-      const trimmedText = option.text.trim();
-      if (seenOptions.has(trimmedText)) {
+    options.forEach((option: { id: string; text: string }) => {
+      if (seenOptions.has(option.text) && option.text.length) {
         errors[option.id] = 'Option already exists';
       } else {
-        seenOptions.add(trimmedText);
+        seenOptions.add(option.text);
       }
     });
 

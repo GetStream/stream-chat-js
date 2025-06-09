@@ -3,8 +3,8 @@ import {
   getTriggerCharWithToken,
   insertItemWithTrigger,
 } from './textMiddlewareUtils';
-import type { SearchSourceOptions } from '../../../search_controller';
-import { BaseSearchSource } from '../../../search_controller';
+import type { SearchSourceOptions } from '../../../search';
+import { BaseSearchSource } from '../../../search';
 import { mergeWith } from '../../../utils/mergeWith';
 import type { TextComposerMiddlewareOptions, UserSuggestion } from './types';
 import type { StreamChat } from '../../../client';

@@ -1325,7 +1325,7 @@ export class Channel {
    */
   countUnread(lastRead?: Date | null) {
     if (!lastRead) return this.state.unreadCount;
-
+    // todo: prevent finding the latest message set on each iteration
     let count = 0;
     for (let i = 0; i < this.state.latestMessages.length; i += 1) {
       const message = this.state.latestMessages[i];
@@ -1461,6 +1461,7 @@ export class Channel {
     };
 
     this.getClient().polls.hydratePollCache(state.messages, true);
+    this.getClient().reminders.hydrateState(state.messages);
 
     if (state.draft) {
       this.messageComposer.initState({ composition: state.draft });
