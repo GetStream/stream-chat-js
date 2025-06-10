@@ -49,7 +49,13 @@ export class PollManager extends WithSubscriptions {
   public createPoll = async (poll: CreatePollData) => {
     const { poll: createdPoll } = await this.client.createPoll(poll);
 
-    return new Poll({ client: this.client, poll: createdPoll });
+    if (!createdPoll.vote_counts_by_option) {
+      createdPoll.vote_counts_by_option = {};
+    }
+
+    this.setOrOverwriteInCache(createdPoll);
+
+    return this.fromState(createdPoll.id);
   };
 
   public getPoll = async (id: string) => {

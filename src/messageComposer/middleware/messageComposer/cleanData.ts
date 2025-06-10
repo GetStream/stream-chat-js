@@ -29,7 +29,6 @@ export const createCompositionDataCleanupMiddleware = (
           ...composer.editedMessage,
           ...state.localMessage,
           ...common,
-          user: composer.client.user,
         }),
         message: {
           ...editedMessagePayloadToBeSent,
