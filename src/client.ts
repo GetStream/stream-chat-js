@@ -2585,7 +2585,7 @@ export class StreamChat {
    */
   async getSharedLocations() {
     return await this.get<ActiveLiveLocationsAPIResponse>(
-      this.baseURL + `/users/locations`,
+      this.baseURL + `/users/live_locations`,
     );
   }
 
@@ -4592,7 +4592,7 @@ export class StreamChat {
    */
   async updateLocation(location: SharedLocationRequest) {
     return await this.put<SharedLocationResponse>(
-      this.baseURL + `/users/location`,
+      this.baseURL + `/users/live_locations`,
       location,
     );
   }
