@@ -1448,8 +1448,13 @@ describe('OfflineSupportApi', () => {
 
       describe('handleEvent', () => {
         const dummyEvent = {
+          cid: 'channel-123',
           type: '',
           channel: { cid: 'channel-123' },
+          draft: {
+            message: { id: 'draft-123' },
+            parent_id: 'parent-123',
+          },
         } as unknown as Event;
 
         beforeEach(() => {
@@ -1469,6 +1474,8 @@ describe('OfflineSupportApi', () => {
             .mockResolvedValue(['truncate-channel']);
           offlineDb.upsertChannelData.mockResolvedValue(['upsert-channel']);
           offlineDb.deleteChannel.mockResolvedValue(['delete-channel']);
+          offlineDb.upsertDraft = vi.fn().mockResolvedValue(['upsert-draft']);
+          offlineDb.deleteDraft = vi.fn().mockResolvedValue(['delete-draft']);
         });
 
         afterEach(() => {
@@ -1492,6 +1499,8 @@ describe('OfflineSupportApi', () => {
           ['channel.hidden', 'handleChannelVisibilityEvent', 'channel-visibility'],
           ['channel.visible', 'handleChannelVisibilityEvent', 'channel-visibility'],
           ['channel.updated', 'upsertChannelData', 'upsert-channel'],
+          ['draft.updated', 'upsertDraft', 'upsert-draft'],
+          ['draft.deleted', 'deleteDraft', 'delete-draft'],
           ['notification.message_new', 'upsertChannelData', 'upsert-channel'],
           ['notification.added_to_channel', 'upsertChannelData', 'upsert-channel'],
           ['channel.deleted', 'deleteChannel', 'delete-channel'],
@@ -1509,6 +1518,18 @@ describe('OfflineSupportApi', () => {
 
             if (['message.read', 'notification.mark_read'].includes(type)) {
               queryInput.unreadMessages = 0;
+            }
+
+            if (['draft.updated'].includes(type)) {
+              queryInput = { draft: event.draft, execute: true };
+            }
+
+            if (['draft.deleted'].includes(type)) {
+              queryInput = {
+                cid: event.channel!.cid,
+                parent_id: event.draft?.parent_id,
+                execute: true,
+              };
             }
 
             if (
