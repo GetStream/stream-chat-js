@@ -1353,6 +1353,74 @@ describe('OfflineSupportApi', () => {
         });
       });
 
+      describe('handleDraftEvent', () => {
+        const draft = {
+          message: { id: 'message-123', text: 'Draft message', parent_id: 'parent-123' },
+          parent_id: 'parent-123',
+        };
+
+        const baseDraftEvent: Event = {
+          ...baseEvent,
+          draft,
+        } as Event;
+
+        beforeEach(() => {
+          offlineDb.deleteDraft.mockResolvedValue(['DELETE FROM drafts']);
+          offlineDb.upsertDraft.mockResolvedValue(['INSERT INTO drafts']);
+        });
+
+        it("should return empty array if event's draft is missing", async () => {
+          const noDraftEvent = { ...baseDraftEvent, draft: undefined };
+          const result = await offlineDb.handleDraftEvent({ event: noDraftEvent });
+          expect(result).toEqual([]);
+          expect(offlineDb.queriesWithChannelGuard).not.toHaveBeenCalled();
+        });
+
+        it("calls correct method for 'draft.updated' event", async () => {
+          const draftUpdatedEvent = { ...baseDraftEvent, type: 'draft.updated' } as Event;
+
+          const result = await offlineDb.handleDraftEvent({
+            event: draftUpdatedEvent,
+            execute: true,
+          });
+
+          expect(offlineDb['upsertDraft']).toHaveBeenCalledWith({
+            draft: draftUpdatedEvent.draft,
+            execute: true,
+          });
+
+          expect(result).toEqual(['INSERT INTO drafts']);
+        });
+
+        it("should return empty array if event's cid is missing for draft.deleted", async () => {
+          const noCidEvent = {
+            ...baseDraftEvent,
+            cid: undefined,
+            type: 'draft.deleted',
+          } as Event;
+          const result = await offlineDb.handleDraftEvent({ event: noCidEvent });
+          expect(result).toEqual([]);
+          expect(offlineDb.queriesWithChannelGuard).not.toHaveBeenCalled();
+        });
+
+        it("calls deleteDraft for 'draft.deleted' event", async () => {
+          const draftDeletedEvent = { ...baseDraftEvent, type: 'draft.deleted' } as Event;
+
+          const result = await offlineDb.handleDraftEvent({
+            event: draftDeletedEvent,
+            execute: true,
+          });
+
+          expect(offlineDb.deleteDraft).toHaveBeenCalledWith({
+            cid: draftDeletedEvent.cid,
+            parent_id: draftDeletedEvent.draft?.parent_id,
+            execute: true,
+          });
+
+          expect(result).toEqual(['DELETE FROM drafts']);
+        });
+      });
+
       describe('handleReactionEvent', () => {
         const reaction = { type: 'like' };
 
@@ -1474,8 +1542,7 @@ describe('OfflineSupportApi', () => {
             .mockResolvedValue(['truncate-channel']);
           offlineDb.upsertChannelData.mockResolvedValue(['upsert-channel']);
           offlineDb.deleteChannel.mockResolvedValue(['delete-channel']);
-          offlineDb.upsertDraft = vi.fn().mockResolvedValue(['upsert-draft']);
-          offlineDb.deleteDraft = vi.fn().mockResolvedValue(['delete-draft']);
+          offlineDb.handleDraftEvent = vi.fn().mockResolvedValue(['draft']);
         });
 
         afterEach(() => {
@@ -1499,8 +1566,8 @@ describe('OfflineSupportApi', () => {
           ['channel.hidden', 'handleChannelVisibilityEvent', 'channel-visibility'],
           ['channel.visible', 'handleChannelVisibilityEvent', 'channel-visibility'],
           ['channel.updated', 'upsertChannelData', 'upsert-channel'],
-          ['draft.updated', 'upsertDraft', 'upsert-draft'],
-          ['draft.deleted', 'deleteDraft', 'delete-draft'],
+          ['draft.updated', 'handleDraftEvent', 'draft'],
+          ['draft.deleted', 'handleDraftEvent', 'draft'],
           ['notification.message_new', 'upsertChannelData', 'upsert-channel'],
           ['notification.added_to_channel', 'upsertChannelData', 'upsert-channel'],
           ['channel.deleted', 'deleteChannel', 'delete-channel'],
@@ -1518,18 +1585,6 @@ describe('OfflineSupportApi', () => {
 
             if (['message.read', 'notification.mark_read'].includes(type)) {
               queryInput.unreadMessages = 0;
-            }
-
-            if (['draft.updated'].includes(type)) {
-              queryInput = { draft: event.draft, execute: true };
-            }
-
-            if (['draft.deleted'].includes(type)) {
-              queryInput = {
-                cid: event.channel!.cid,
-                parent_id: event.draft?.parent_id,
-                execute: true,
-              };
             }
 
             if (

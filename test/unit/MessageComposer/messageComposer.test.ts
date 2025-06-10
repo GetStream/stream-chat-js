@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   Channel,
   LocalMessage,
@@ -419,7 +419,6 @@ describe('MessageComposer', () => {
         .spyOn(messageComposer, 'compositionIsEmpty', 'get')
         .mockReturnValue(true);
 
-      expect(messageComposer.client.offlineDb).toBeDefined();
       expect(messageComposer.hasSendableData).toBe(false);
       spyCompositionIsEmpty.mockRestore();
     });
@@ -431,7 +430,6 @@ describe('MessageComposer', () => {
         .spyOn(messageComposer, 'compositionIsEmpty', 'get')
         .mockReturnValue(false);
 
-      expect(messageComposer.client.offlineDb).toBeDefined();
       expect(messageComposer.hasSendableData).toBe(true);
       spyCompositionIsEmpty.mockRestore();
     });

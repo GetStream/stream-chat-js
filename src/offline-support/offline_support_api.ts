@@ -926,6 +926,41 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
+   * A utility handler for all draft events:
+   * - draft.updated -> updateDraft
+   * - draft.deleted -> deleteDraft
+   * @param event - the WS event we are trying to process
+   * @param execute - whether to immediately execute the operation.
+   */
+  handleDraftEvent = async ({
+    event,
+    execute = true,
+  }: {
+    event: Event;
+    execute?: boolean;
+  }) => {
+    const { draft, type } = event;
+
+    if (!draft) return [];
+
+    if (type === 'draft.updated') {
+      return await this.upsertDraft({ draft, execute });
+    }
+
+    if (type === 'draft.deleted') {
+      if (!event.cid) return [];
+
+      return await this.deleteDraft({
+        cid: event.cid,
+        parent_id: draft.parent_id,
+        execute,
+      });
+    }
+
+    return [];
+  };
+
+  /**
    * A generic event handler that decides which DB API to invoke based on
    * event.type for all events we are currently handling. It is used to both
    * react on WS events as well as process the sync API events.
@@ -973,23 +1008,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       return await this.handleChannelVisibilityEvent({ event, execute });
     }
 
-    if (type === 'draft.updated') {
-      if (event.draft) {
-        return await this.upsertDraft({ draft: event.draft, execute });
-      }
-    }
-
-    if (type === 'draft.deleted') {
-      if (!event.cid) return;
-
-      if (event.draft && event.draft.parent_id) {
-        return await this.deleteDraft({
-          cid: event.cid,
-          parent_id: event.draft.parent_id,
-          execute,
-        });
-      }
-      return await this.deleteDraft({ cid: event.cid, execute });
+    if (type === 'draft.updated' || type === 'draft.deleted') {
+      return await this.handleDraftEvent({ event, execute });
     }
 
     // Note: It is a bit counter-intuitive that we do not touch the messages in the
