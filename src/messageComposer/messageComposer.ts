@@ -664,9 +664,8 @@ export class MessageComposer extends WithSubscriptions {
     const composition = await this.pollComposer.compose();
     if (!composition || !composition.data.id) return;
     try {
-      const { poll } = await this.client.createPoll(composition.data);
-      this.state.partialNext({ pollId: poll.id });
-      this.pollComposer.initState();
+      const poll = await this.client.polls.createPoll(composition.data);
+      this.state.partialNext({ pollId: poll?.id });
     } catch (error) {
       this.client.notifications.add({
         message: 'Failed to create the poll',

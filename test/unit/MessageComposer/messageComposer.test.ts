@@ -719,7 +719,7 @@ describe('MessageComposer', () => {
 
       expect(spyCompose).toHaveBeenCalled();
       expect(spyCreatePoll).toHaveBeenCalledWith(mockPoll);
-      expect(messageComposer.pollComposer.initState).toHaveBeenCalled();
+      expect(messageComposer.pollComposer.initState).not.toHaveBeenCalled();
       expect(messageComposer.state.getLatestValue().pollId).toBe('test-poll-id');
     });
 
