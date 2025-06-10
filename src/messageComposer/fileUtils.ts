@@ -16,7 +16,7 @@ export const isFileList = (obj: unknown): obj is FileList => {
   if (typeof obj !== 'object') return false;
 
   return (
-    (obj as object) instanceof FileList ||
+    (typeof FileList !== 'undefined' && (obj as object) instanceof FileList) ||
     ('item' in obj && 'length' in obj && !Array.isArray(obj))
   );
 };

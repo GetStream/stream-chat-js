@@ -18,8 +18,15 @@ import {
   promoteChannel,
   shouldConsiderArchivedChannels,
   shouldConsiderPinnedChannels,
+  sleep,
   uniqBy,
 } from './utils';
+import { generateUUIDv4 } from './utils';
+import {
+  DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES,
+  DEFAULT_QUERY_CHANNELS_RETRY_COUNT,
+} from './constants';
+import { WithSubscriptions } from './utils/WithSubscriptions';
 
 export type ChannelManagerPagination = {
   filters: ChannelFilters;
@@ -40,6 +47,7 @@ export type ChannelManagerState = {
    */
   initialized: boolean;
   pagination: ChannelManagerPagination;
+  error: Error | undefined;
 };
 
 export type ChannelSetterParameterType = ValueOrPatch<ChannelManagerState['channels']>;
@@ -80,6 +88,11 @@ export type ChannelManagerEventHandlerNames =
 export type ChannelManagerEventHandlerOverrides = Partial<
   Record<ChannelManagerEventHandlerNames, EventHandlerOverrideType>
 >;
+
+export type ExecuteChannelsQueryPayload = Pick<
+  ChannelManagerPagination,
+  'filters' | 'sort' | 'options'
+> & { stateOptions: ChannelStateOptions };
 
 export const channelManagerEventToHandlerMapping: {
   [key in ChannelManagerEventTypes]: ChannelManagerEventHandlerNames;
@@ -142,14 +155,14 @@ export const DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS = {
  *
  * @internal
  */
-export class ChannelManager {
+export class ChannelManager extends WithSubscriptions {
   public readonly state: StateStore<ChannelManagerState>;
   private client: StreamChat;
-  private unsubscribeFunctions: Set<() => void> = new Set();
   private eventHandlers: Map<string, EventHandlerType> = new Map();
   private eventHandlerOverrides: Map<string, EventHandlerOverrideType> = new Map();
   private options: ChannelManagerOptions = {};
   private stateOptions: ChannelStateOptions = {};
+  private id: string;
 
   constructor({
     client,
@@ -160,6 +173,9 @@ export class ChannelManager {
     eventHandlerOverrides?: ChannelManagerEventHandlerOverrides;
     options?: ChannelManagerOptions;
   }) {
+    super();
+
+    this.id = `channel-manager-${generateUUIDv4()}`;
     this.client = client;
     this.state = new StateStore<ChannelManagerState>({
       channels: [],
@@ -172,6 +188,7 @@ export class ChannelManager {
         options: DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS,
       },
       initialized: false,
+      error: undefined,
     });
     this.setEventHandlerOverrides(eventHandlerOverrides);
     this.setOptions(options);
@@ -201,8 +218,22 @@ export class ChannelManager {
       if (currentChannels === newChannels) {
         return current;
       }
+
       return { ...current, channels: newChannels };
     });
+    const {
+      channels,
+      pagination: { filters, sort },
+    } = this.state.getLatestValue();
+    this.client.offlineDb?.executeQuerySafely(
+      (db) =>
+        db.upsertCidsForQuery({
+          cids: channels.map((channel) => channel.cid),
+          filters,
+          sort,
+        }),
+      { method: 'upsertCidsForQuery' },
+    );
   };
 
   public setEventHandlerOverrides = (
@@ -225,38 +256,16 @@ export class ChannelManager {
     this.options = { ...DEFAULT_CHANNEL_MANAGER_OPTIONS, ...options };
   };
 
-  public queryChannels = async (
-    filters: ChannelFilters,
-    sort: ChannelSort = [],
-    options: ChannelOptions = {},
-    stateOptions: ChannelStateOptions = {},
-  ) => {
+  private executeChannelsQuery = async (
+    payload: ExecuteChannelsQueryPayload,
+    retryCount = 0,
+  ): Promise<void> => {
+    const { filters, sort, options, stateOptions } = payload;
     const { offset, limit } = {
       ...DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS,
       ...options,
     };
-    const {
-      pagination: { isLoading },
-    } = this.state.getLatestValue();
-
-    if (isLoading && !this.options.abortInFlightQuery) {
-      return;
-    }
-
     try {
-      this.stateOptions = stateOptions;
-      this.state.next((currentState) => ({
-        ...currentState,
-        pagination: {
-          ...currentState.pagination,
-          isLoading: true,
-          isLoadingNext: false,
-          filters,
-          sort,
-          options,
-        },
-      }));
-
       const channels = await this.client.queryChannels(
         filters,
         sort,
@@ -276,7 +285,102 @@ export class ChannelManager {
           options: newOptions,
         },
         initialized: true,
+        error: undefined,
       });
+      this.client.offlineDb?.executeQuerySafely(
+        (db) =>
+          db.upsertCidsForQuery({
+            cids: channels.map((channel) => channel.cid),
+            filters: pagination.filters,
+            sort: pagination.sort,
+          }),
+        { method: 'upsertCidsForQuery' },
+      );
+    } catch (err) {
+      if (retryCount >= DEFAULT_QUERY_CHANNELS_RETRY_COUNT) {
+        console.warn(err);
+
+        const wrappedError = new Error(
+          `Maximum number of retries reached in queryChannels. Last error message is: ${err}`,
+        );
+
+        this.state.partialNext({ error: wrappedError });
+        return;
+      }
+
+      await sleep(DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES);
+
+      return this.executeChannelsQuery(payload, retryCount + 1);
+    }
+  };
+
+  public queryChannels = async (
+    filters: ChannelFilters,
+    sort: ChannelSort = [],
+    options: ChannelOptions = {},
+    stateOptions: ChannelStateOptions = {},
+  ) => {
+    const {
+      pagination: { isLoading, filters: filtersFromState },
+      initialized,
+    } = this.state.getLatestValue();
+
+    if (
+      isLoading &&
+      !this.options.abortInFlightQuery &&
+      // TODO: Figure a proper way to either deeply compare these or
+      //       create hashes from each.
+      JSON.stringify(filtersFromState) === JSON.stringify(filters)
+    ) {
+      return;
+    }
+
+    const executeChannelsQueryPayload = { filters, sort, options, stateOptions };
+
+    try {
+      this.stateOptions = stateOptions;
+      this.state.next((currentState) => ({
+        ...currentState,
+        pagination: {
+          ...currentState.pagination,
+          isLoading: true,
+          isLoadingNext: false,
+          filters,
+          sort,
+          options,
+        },
+        error: undefined,
+      }));
+
+      if (this.client.offlineDb?.getChannelsForQuery && this.client.user?.id) {
+        if (!initialized) {
+          const channelsFromDB = await this.client.offlineDb.getChannelsForQuery({
+            userId: this.client.user.id,
+            filters,
+            sort,
+          });
+
+          if (channelsFromDB) {
+            const offlineChannels = this.client.hydrateActiveChannels(channelsFromDB, {
+              offlineMode: true,
+              skipInitialization: [], // passing empty array will clear out the existing messages from channel state, this removes the possibility of duplicate messages
+            });
+
+            this.state.partialNext({ channels: offlineChannels });
+          }
+        }
+
+        if (!this.client.offlineDb.syncManager.syncStatus) {
+          this.client.offlineDb.syncManager.scheduleSyncStatusChangeCallback(
+            this.id,
+            async () => {
+              await this.executeChannelsQuery(executeChannelsQueryPayload);
+            },
+          );
+          return;
+        }
+      }
+      await this.executeChannelsQuery(executeChannelsQueryPayload);
     } catch (error) {
       this.client.logger('error', (error as Error).message);
       this.state.next((currentState) => ({
@@ -606,20 +710,15 @@ export class ChannelManager {
   };
 
   public registerSubscriptions = () => {
-    if (this.unsubscribeFunctions.size) {
+    if (this.hasSubscriptions) {
       // Already listening for events and changes
       return;
     }
 
     for (const eventType of Object.keys(channelManagerEventToHandlerMapping)) {
-      this.unsubscribeFunctions.add(
+      this.addUnsubscribeFunction(
         this.client.on(eventType, this.subscriptionOrOverride).unsubscribe,
       );
     }
-  };
-
-  public unregisterSubscriptions = () => {
-    this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
-    this.unsubscribeFunctions.clear();
   };
 }

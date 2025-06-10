@@ -75,6 +75,7 @@ import type {
   CreatePollAPIResponse,
   CreatePollData,
   CreatePollOptionAPIResponse,
+  CreateReminderOptions,
   CustomPermissionOptions,
   DeactivateUsersOptions,
   DeleteChannelsResponse,
@@ -164,6 +165,8 @@ import type {
   QueryPollsResponse,
   QueryReactionsAPIResponse,
   QueryReactionsOptions,
+  QueryRemindersOptions,
+  QueryRemindersResponse,
   QuerySegmentsOptions,
   QuerySegmentTargetsFilter,
   QueryThreadsAPIResponse,
@@ -175,6 +178,7 @@ import type {
   ReactionSort,
   ReactivateUserOptions,
   ReactivateUsersOptions,
+  ReminderAPIResponse,
   ReviewFlagReportOptions,
   ReviewFlagReportResponse,
   SdkIdentifier,
@@ -209,6 +213,7 @@ import type {
   UpdateMessageOptions,
   UpdatePollAPIResponse,
   UpdatePollOptionAPIResponse,
+  UpdateReminderOptions,
   UpdateSegmentData,
   UpsertPushPreferencesResponse,
   UserCustomEvent,
@@ -231,8 +236,10 @@ import type {
 } from './channel_manager';
 import { ChannelManager } from './channel_manager';
 import { NotificationManager } from './notifications';
+import { ReminderManager } from './reminders';
 import { StateStore } from './store';
 import type { MessageComposer } from './messageComposer';
+import type { AbstractOfflineDB } from './offline-support';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -268,7 +275,9 @@ export class StreamChat {
   };
   threads: ThreadManager;
   polls: PollManager;
+  offlineDb?: AbstractOfflineDB;
   notifications: NotificationManager;
+  reminders: ReminderManager;
   anonymous: boolean;
   persistUserOnConnectionFailure?: boolean;
   axiosInstance: AxiosInstance;
@@ -444,9 +453,9 @@ export class StreamChat {
      *
      * e.g.,
      * const client = new StreamChat('api_key', {}, {
-     * 		logger = (logLevel, message, extraData) => {
-     * 			console.log(message);
-     * 		}
+     *    logger = (logLevel, message, extraData) => {
+     *      console.log(message);
+     *    }
      * })
      *
      * extraData contains tags array attached to log message. Tags can have one/many of following values:
@@ -460,34 +469,35 @@ export class StreamChat {
      *
      * It may also contains some extra data, some examples have been mentioned below:
      * 1. {
-     * 		tags: ['api', 'api_request', 'client'],
-     * 		url: string,
-     * 		payload: object,
-     * 		config: object
+     *    tags: ['api', 'api_request', 'client'],
+     *    url: string,
+     *    payload: object,
+     *    config: object
      * }
      * 2. {
-     * 		tags: ['api', 'api_response', 'client'],
-     * 		url: string,
-     * 		response: object
+     *    tags: ['api', 'api_response', 'client'],
+     *    url: string,
+     *    response: object
      * }
      * 3. {
-     * 		tags: ['api', 'api_response', 'client'],
-     * 		url: string,
-     * 		error: object
+     *    tags: ['api', 'api_response', 'client'],
+     *    url: string,
+     *    error: object
      * }
      * 4. {
-     * 		tags: ['event', 'client'],
-     * 		event: object
+     *    tags: ['event', 'client'],
+     *    event: object
      * }
      * 5. {
-     * 		tags: ['channel'],
-     * 		channel: object
+     *    tags: ['channel'],
+     *    channel: object
      * }
      */
     this.logger = isFunction(inputOptions.logger) ? inputOptions.logger : () => null;
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
+    this.reminders = new ReminderManager({ client: this });
   }
 
   /**
@@ -534,6 +544,14 @@ export class StreamChat {
     return StreamChat._instance as StreamChat;
   }
 
+  setOfflineDBApi(offlineDBInstance: AbstractOfflineDB) {
+    if (this.offlineDb) {
+      return;
+    }
+
+    this.offlineDb = offlineDBInstance;
+  }
+
   devToken(userID: string) {
     return DevToken(userID);
   }
@@ -551,6 +569,12 @@ export class StreamChat {
     this.wsConnection?.connectionID || this.wsFallback?.connectionID;
 
   _hasConnectionID = () => Boolean(this._getConnectionID());
+
+  public setMessageComposerSetupFunction = (
+    setupFunction: MessageComposerSetupState['setupFunction'],
+  ) => {
+    this._messageComposerSetupState.partialNext({ setupFunction });
+  };
 
   /**
    * connectUser - Set the current user and open a WebSocket connection
@@ -669,6 +693,19 @@ export class StreamChat {
       this.wsConnection?.disconnect(timeout),
       this.wsFallback?.disconnect(timeout),
     ]);
+
+    this.offlineDb?.executeQuerySafely(
+      async (db) => {
+        if (this.userID) {
+          await db.upsertUserSyncStatus({
+            userId: this.userID,
+            lastSyncedAt: new Date().toString(),
+          });
+        }
+      },
+      { method: 'upsertUserSyncStatus' },
+    );
+
     return Promise.resolve();
   };
 
@@ -757,7 +794,24 @@ export class StreamChat {
         'data_template': 'data handlebars template',
         'apn_template': 'apn notification handlebars template under v2'
       },
-      'webhook_url': 'https://acme.com/my/awesome/webhook/'
+      'webhook_url': 'https://acme.com/my/awesome/webhook/',
+      'event_hooks': [
+        {
+          'hook_type': 'webhook',
+          'enabled': true,
+          'event_types': ['message.new'],
+          'webhook_url': 'https://acme.com/my/awesome/webhook/'
+        },
+        {
+          'hook_type': 'sqs',
+          'enabled': true,
+          'event_types': ['message.new'],
+          'sqs_url': 'https://sqs.us-east-1.amazonaws.com/1234567890/my-queue',
+          'sqs_auth_type': 'key',
+          'sqs_key': 'my-access-key',
+          'sqs_secret': 'my-secret-key'
+        }
+      ]
     }
    */
   async updateAppSettings(options: AppSettings) {
@@ -841,15 +895,15 @@ export class StreamChat {
    * @param {string} userID User ID. If user has no devices, it will error
    * @param {TestPushDataInput} [data] Overrides for push templates/message used
    *  IE: {
-        messageID: 'id-of-message', // will error if message does not exist
-        apnTemplate: '{}', // if app doesn't have apn configured it will error
-        firebaseTemplate: '{}', // if app doesn't have firebase configured it will error
-        firebaseDataTemplate: '{}', // if app doesn't have firebase configured it will error
-        skipDevices: true, // skip config/device checks and sending to real devices
-        pushProviderName: 'staging' // one of your configured push providers
-        pushProviderType: 'apn' // one of supported provider types
-      }
-  */
+   messageID: 'id-of-message', // will error if message does not exist
+   apnTemplate: '{}', // if app doesn't have apn configured it will error
+   firebaseTemplate: '{}', // if app doesn't have firebase configured it will error
+   firebaseDataTemplate: '{}', // if app doesn't have firebase configured it will error
+   skipDevices: true, // skip config/device checks and sending to real devices
+   pushProviderName: 'staging' // one of your configured push providers
+   pushProviderType: 'apn' // one of supported provider types
+   }
+   */
   async testPushSettings(userID: string, data: TestPushDataInput = {}) {
     return await this.post<CheckPushResponse>(this.baseURL + '/check_push', {
       user_id: userID,
@@ -870,10 +924,10 @@ export class StreamChat {
    *
    * @param {TestSQSDataInput} [data] Overrides SQS settings for testing if needed
    *  IE: {
-        sqs_key: 'auth_key',
-        sqs_secret: 'auth_secret',
-        sqs_url: 'url_to_queue',
-      }
+   sqs_key: 'auth_key',
+   sqs_secret: 'auth_secret',
+   sqs_url: 'url_to_queue',
+   }
    */
   async testSQSSettings(data: TestSQSDataInput = {}) {
     return await this.post<CheckSQSResponse>(this.baseURL + '/check_sqs', data);
@@ -884,10 +938,10 @@ export class StreamChat {
    *
    * @param {TestSNSDataInput} [data] Overrides SNS settings for testing if needed
    *  IE: {
-        sns_key: 'auth_key',
-        sns_secret: 'auth_secret',
-        sns_topic_arn: 'topic_to_publish_to',
-      }
+   sns_key: 'auth_key',
+   sns_secret: 'auth_secret',
+   sns_topic_arn: 'topic_to_publish_to',
+   }
    */
   async testSNSSettings(data: TestSNSDataInput = {}) {
     return await this.post<CheckSNSResponse>(this.baseURL + '/check_sns', data);
@@ -1263,6 +1317,10 @@ export class StreamChat {
     }
 
     postListenerCallbacks.forEach((c) => c());
+
+    this.offlineDb?.executeQuerySafely((db) => db.handleEvent({ event }), {
+      method: `handleEvent;${event.type}`,
+    });
   };
 
   handleEvent = (messageEvent: WebSocket.MessageEvent) => {
@@ -1442,7 +1500,8 @@ export class StreamChat {
     }
 
     if (event.channel && event.type === 'notification.message_new') {
-      this._addChannelConfig(event.channel);
+      const { channel } = event;
+      this._addChannelConfig(channel);
     }
 
     if (event.type === 'notification.channel_mutes_updated' && event.me?.channel_mutes) {
@@ -1466,13 +1525,14 @@ export class StreamChat {
         event.type === 'notification.channel_deleted') &&
       event.cid
     ) {
-      client.state.deleteAllChannelReference(event.cid);
+      const { cid } = event;
+      client.state.deleteAllChannelReference(cid);
       this.activeChannels[event.cid]?._disconnect();
 
       postListenerCallbacks.push(() => {
-        if (!event.cid) return;
+        if (!cid) return;
 
-        delete this.activeChannels[event.cid];
+        delete this.activeChannels[cid];
       });
     }
 
@@ -1808,6 +1868,12 @@ export class StreamChat {
         isLatestMessageSet: true,
       },
     });
+    if (channels?.length && this.offlineDb?.upsertChannels) {
+      await this.offlineDb.upsertChannels({
+        channels,
+        isLatestMessagesSet: true,
+      });
+    }
 
     return this.hydrateActiveChannels(channels, stateOptions, options);
   }
@@ -1827,15 +1893,36 @@ export class StreamChat {
     sort: ReactionSort = [],
     options: QueryReactionsOptions = {},
   ) {
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.wsPromise;
-
-    // Return a list of channels
     const payload = {
       filter,
       sort: normalizeQuerySort(sort),
       ...options,
     };
+
+    if (this.offlineDb?.getReactions && !options.next) {
+      try {
+        const reactionsFromDb = await this.offlineDb.getReactions({
+          messageId: messageID,
+          filters: filter,
+          sort,
+          limit: options.limit,
+        });
+
+        if (reactionsFromDb) {
+          this.dispatchEvent({
+            type: 'offline_reactions.queried',
+            offlineReactions: reactionsFromDb as ReactionResponse[],
+          });
+        }
+      } catch (e) {
+        this.logger('warn', 'An error has occurred while querying offline reactions', {
+          error: e,
+        });
+      }
+    }
+
+    // Make sure we wait for the connect promise if there is a pending one
+    await this.wsPromise;
 
     return await this.post<QueryReactionsAPIResponse>(
       this.baseURL + '/messages/' + encodeURIComponent(messageID) + '/reactions',
@@ -1882,6 +1969,7 @@ export class StreamChat {
           }),
         };
         this.polls.hydratePollCache(channelState.messages, true);
+        this.reminders.hydrateState(channelState.messages);
       }
 
       if (channelState.draft) {
@@ -2482,6 +2570,7 @@ export class StreamChat {
       ...(user_id ? { user_id } : {}),
     });
   }
+
   async unBlockUser(blockedUserID: string, userID?: string) {
     return await this.post<APIResponse>(this.baseURL + '/users/unblock', {
       blocked_user_id: blockedUserID,
@@ -2689,6 +2778,7 @@ export class StreamChat {
       ...options,
     });
   }
+
   // alias for backwards compatibility
   _unblockMessage = this.unblockMessage;
 
@@ -2971,6 +3061,34 @@ export class StreamChat {
   }
 
   async deleteMessage(messageID: string, hardDelete?: boolean) {
+    try {
+      if (this.offlineDb) {
+        if (hardDelete) {
+          await this.offlineDb.hardDeleteMessage({ id: messageID });
+        } else {
+          await this.offlineDb.softDeleteMessage({ id: messageID });
+        }
+        return await this.offlineDb.queueTask<APIResponse & { message: MessageResponse }>(
+          {
+            task: {
+              messageId: messageID,
+              payload: [messageID, hardDelete],
+              type: 'delete-message',
+            },
+          },
+        );
+      }
+    } catch (error) {
+      this.logger('error', `offlineDb:deleteMessage`, {
+        tags: ['channel', 'offlineDb'],
+        error,
+      });
+    }
+
+    return this._deleteMessage(messageID, hardDelete);
+  }
+
+  async _deleteMessage(messageID: string, hardDelete?: boolean) {
     let params = {};
     if (hardDelete) {
       params = { hard: true };
@@ -3744,6 +3862,7 @@ export class StreamChat {
       stop_at: options?.stopAt,
     });
   }
+
   /**
    * queryCampaigns - Query Campaigns
    *
@@ -4410,11 +4529,59 @@ export class StreamChat {
     return await this.post<QueryDraftsResponse>(this.baseURL + '/drafts/query', payload);
   }
 
-  public setMessageComposerSetupFunction = (
-    setupFunction: MessageComposerSetupState['setupFunction'],
-  ) => {
-    this._messageComposerSetupState.partialNext({ setupFunction });
-  };
+  /**
+   * createReminder - Creates a reminder for a message
+   *
+   * @param {CreateReminderOptions} options The options for creating the reminder
+   * @returns {Promise<ReminderAPIResponse>}
+   */
+  async createReminder({ messageId, ...options }: CreateReminderOptions) {
+    return await this.post<ReminderAPIResponse>(
+      `${this.baseURL}/messages/${messageId}/reminders`,
+      options,
+    );
+  }
+
+  /**
+   * updateReminder - Updates an existing reminder for a message
+   *
+   * @param {UpdateReminderOptions} options The options for updating the reminder
+   * @returns {Promise<ReminderAPIResponse>}
+   */
+  async updateReminder({ messageId, ...options }: UpdateReminderOptions) {
+    return await this.patch<ReminderAPIResponse>(
+      `${this.baseURL}/messages/${messageId}/reminders`,
+      options,
+    );
+  }
+
+  /**
+   * deleteReminder - Deletes a reminder for a message
+   *
+   * @param {string} messageId The ID of the message whose reminder to delete
+   * @param {string} [userId] Optional user ID, required for server-side operations
+   * @returns {Promise<APIResponse>}
+   */
+  async deleteReminder(messageId: string, userId?: string): Promise<APIResponse> {
+    return await this.delete<APIResponse>(
+      `${this.baseURL}/messages/${messageId}/reminders`,
+      userId ? { user_id: userId } : {},
+    );
+  }
+
+  /**
+   * queryReminders - Queries reminders based on given filters
+   *
+   * @param {QueryRemindersOptions} options The options for querying reminders
+   * @returns {Promise<QueryRemindersResponse>}
+   */
+  async queryReminders({ filter, sort, ...rest }: QueryRemindersOptions = {}) {
+    return await this.post<QueryRemindersResponse>(`${this.baseURL}/reminders/query`, {
+      filter_conditions: filter,
+      sort: sort && normalizeQuerySort(sort),
+      ...rest,
+    });
+  }
 
   /**
    * updateLocation - Updates a location

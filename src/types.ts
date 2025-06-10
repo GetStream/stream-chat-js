@@ -111,6 +111,7 @@ export type AppSettingsAPIResponse = APIResponse & {
         updated_at?: string;
         uploads?: boolean;
         url_enrichment?: boolean;
+        user_message_reminders?: boolean;
       }
     >;
     reminders_interval: number;
@@ -129,6 +130,7 @@ export type AppSettingsAPIResponse = APIResponse & {
     disable_auth_checks?: boolean;
     disable_permissions_checks?: boolean;
     enforce_unique_usernames?: 'no' | 'app' | 'team';
+    event_hooks?: Array<EventHook>;
     file_upload_config?: FileUploadConfig;
     geofences?: Array<{
       country_codes: Array<string>;
@@ -684,6 +686,7 @@ export type MessageResponseBase = MessageBase & {
   reaction_counts?: { [key: string]: number } | null;
   reaction_groups?: { [key: string]: ReactionGroupResponse } | null;
   reaction_scores?: { [key: string]: number } | null;
+  reminder?: ReminderResponseBase;
   reply_count?: number;
   shadowed?: boolean;
   shared_location?: SharedLocationResponse;
@@ -1004,6 +1007,7 @@ export type CreateChannelOptions = {
   typing_events?: boolean;
   uploads?: boolean;
   url_enrichment?: boolean;
+  user_message_reminders?: boolean;
 };
 
 export type CreateCommandOptions = {
@@ -1452,8 +1456,10 @@ export type Event = CustomEventData & {
     channels: ChannelAPIResponse[];
     isLatestMessageSet?: boolean;
   };
+  offlineReactions?: ReactionResponse[];
   reaction?: ReactionResponse;
   received_at?: string | Date;
+  reminder?: ReminderResponse;
   shadow?: boolean;
   team?: string;
   thread?: ThreadResponse;
@@ -2215,6 +2221,7 @@ export type AppSettings = {
   disable_auth_checks?: boolean;
   disable_permissions_checks?: boolean;
   enforce_unique_usernames?: 'no' | 'app' | 'team';
+  event_hooks?: Array<EventHook> | null;
   // all possible file mime types are https://www.iana.org/assignments/media-types/media-types.xhtml
   file_upload_config?: FileUploadConfig;
   firebase_config?: {
@@ -2341,6 +2348,7 @@ export type ChannelConfigFields = {
   typing_events?: boolean;
   uploads?: boolean;
   url_enrichment?: boolean;
+  user_message_reminders?: boolean; // Feature flag for user message reminders
 };
 
 export type ChannelConfigWithInfo = ChannelConfigFields &
@@ -2541,7 +2549,7 @@ export type EndpointName =
   | 'CreateChannelType'
   | 'DeleteChannel'
   | 'DeleteChannels'
-  | 'DeleteChannelType'
+  | 'DBDeleteChannelType'
   | 'GetChannelType'
   | 'ListChannelTypes'
   | 'ListDevices'
@@ -3262,7 +3270,9 @@ export class ErrorFromResponse<T> extends Error {
       message: `(${joinable.join(', ')}) - ${this.message}`,
       stack: this.stack,
       name: this.name,
-    };
+      code: this.code,
+      status: this.status,
+    } as const;
   }
 }
 
@@ -4037,3 +4047,110 @@ export type ThreadFilters = QueryFilters<
       | PrimitiveFilter<ThreadResponse['last_message_at']>;
   }
 >;
+
+export type ReminderResponseBase = {
+  channel_cid: string;
+  created_at: string;
+  message_id: string;
+  updated_at: string;
+  user_id: string;
+  remind_at?: string;
+};
+
+export type ReminderResponse = ReminderResponseBase & {
+  user: UserResponse;
+  message: MessageResponse;
+};
+
+export type ReminderAPIResponse = APIResponse & {
+  reminder: ReminderResponse;
+};
+
+export type CreateReminderOptions = {
+  messageId: string;
+  remind_at?: string;
+  user_id?: string;
+};
+
+export type UpdateReminderOptions = CreateReminderOptions;
+
+export type ReminderFilters = QueryFilters<{
+  channel_cid?:
+    | RequireOnlyOne<
+        Pick<QueryFilter<ReminderResponseBase['channel_cid']>, '$eq' | '$in'>
+      >
+    | PrimitiveFilter<ReminderResponseBase['channel_cid']>;
+  created_at?:
+    | RequireOnlyOne<
+        Pick<
+          QueryFilter<ReminderResponseBase['created_at']>,
+          '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+        >
+      >
+    | PrimitiveFilter<ReminderResponseBase['created_at']>;
+  message_id?:
+    | RequireOnlyOne<Pick<QueryFilter<ReminderResponseBase['message_id']>, '$eq' | '$in'>>
+    | PrimitiveFilter<ReminderResponseBase['message_id']>;
+  remind_at?:
+    | RequireOnlyOne<
+        Pick<
+          QueryFilter<ReminderResponseBase['remind_at']>,
+          '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+        >
+      >
+    | PrimitiveFilter<ReminderResponseBase['remind_at']>;
+  user_id?:
+    | RequireOnlyOne<Pick<QueryFilter<ReminderResponseBase['user_id']>, '$eq' | '$in'>>
+    | PrimitiveFilter<ReminderResponseBase['user_id']>;
+}>;
+
+export type ReminderSort =
+  | Sort<
+      Pick<
+        ReminderResponseBase,
+        'channel_cid' | 'created_at' | 'remind_at' | 'updated_at'
+      >
+    >
+  | Array<
+      Sort<
+        Pick<
+          ReminderResponseBase,
+          'channel_cid' | 'created_at' | 'remind_at' | 'updated_at'
+        >
+      >
+    >;
+
+export type QueryRemindersOptions = Pager & {
+  filter?: ReminderFilters;
+  sort?: ReminderSort;
+};
+
+export type QueryRemindersResponse = {
+  reminders: ReminderResponse[];
+  prev?: string;
+  next?: string;
+};
+
+export type HookType = 'webhook' | 'sqs' | 'sns';
+
+export type EventHook = {
+  id?: string;
+  hook_type?: HookType;
+  enabled?: boolean;
+  event_types?: Array<string>;
+  webhook_url?: string;
+  sqs_queue_url?: string;
+  sqs_region?: string;
+  sqs_auth_type?: string;
+  sqs_key?: string;
+  sqs_secret?: string;
+  sqs_role_arn?: string;
+  sns_topic_arn?: string;
+  sns_region?: string;
+  sns_auth_type?: string;
+  sns_key?: string;
+  sns_secret?: string;
+  sns_role_arn?: string;
+  created_at?: string;
+  updated_at?: string;
+};

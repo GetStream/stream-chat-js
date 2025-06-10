@@ -58,8 +58,15 @@ export const EVENT_MAP = {
 
   // local events
   'channels.queried': true,
+  'offline_reactions.queried': true,
   'connection.changed': true,
   'connection.recovered': true,
   'transport.changed': true,
   'capabilities.changed': true,
+
+  // Reminder events
+  'reminder.created': true,
+  'reminder.updated': true,
+  'reminder.deleted': true,
+  'notification.reminder_due': true,
 };

@@ -5,7 +5,7 @@ import {
 	ChannelSearchSource,
 	MessageSearchSource,
 	SearchController,
-} from '../../src/search_controller';
+} from '../../src/search';
 import { generateUser } from './test-utils/generateUser';
 import { generateChannel } from './test-utils/generateChannel';
 

@@ -182,12 +182,14 @@ describe('PollComposerStateMiddleware', () => {
       expect(result.status).toBeUndefined;
     });
 
-    it('should add a new empty option when the last option is filled', async () => {
+    it('should add a new empty option when the all the options are filled', async () => {
       const stateMiddleware = setup();
       const result = await stateMiddleware.handlers.handleFieldChange(
         setupHandlerParams({
           nextState: { ...getInitialState() },
-          previousState: { ...getInitialState() },
+          previousState: {
+            ...getInitialState(),
+          },
           targetFields: {
             options: {
               index: 0,
@@ -199,7 +201,54 @@ describe('PollComposerStateMiddleware', () => {
 
       expect(result.state.nextState.data.options.length).toBe(2);
       expect(result.state.nextState.data.options[0].text).toBe('Option 1');
-      expect(result.state.nextState.data.options[1].text).toBe('');
+      expect(result.state.nextState.data.options[1].text).toEqual('');
+
+      expect(result.status).toBeUndefined;
+    });
+
+    it('should reorder options and add a new empty option when all the options are filled', async () => {
+      const stateMiddleware = setup();
+
+      const reOrderedOptions = [
+        {
+          id: 'option-2',
+          text: '',
+        },
+        {
+          id: 'option-1',
+          text: 'Option 1',
+        },
+      ];
+
+      const result = await stateMiddleware.handlers.handleFieldChange(
+        setupHandlerParams({
+          nextState: {
+            ...getInitialState(),
+            data: {
+              ...getInitialState().data,
+              options: reOrderedOptions,
+            },
+          },
+          previousState: {
+            ...getInitialState(),
+            data: {
+              ...getInitialState().data,
+              options: reOrderedOptions,
+            },
+          },
+          targetFields: {
+            options: {
+              index: 0,
+              text: 'Option 2',
+            },
+          },
+        }),
+      );
+
+      expect(result.state.nextState.data.options.length).toBe(3);
+      expect(result.state.nextState.data.options[0].text).toBe('Option 2');
+      expect(result.state.nextState.data.options[1].text).toBe('Option 1');
+      expect(result.state.nextState.data.options[2].text).toEqual('');
       expect(result.status).toBeUndefined;
     });
 
@@ -335,13 +384,64 @@ describe('PollComposerStateMiddleware', () => {
     });
 
     describe('options validation', () => {
-      it('should validate empty options on blur', async () => {
+      it('should not validate empty options on blur', async () => {
         const stateMiddleware = setup();
         const result = await stateMiddleware.handlers.handleFieldBlur(
           setupHandlerParams({
             nextState: { ...getInitialState() },
             previousState: { ...getInitialState() },
-            targetFields: { options: [{ id: 'option-id', text: '' }] },
+            targetFields: {
+              options: [
+                { id: 'option-id1', text: '' },
+                { id: 'option-id2', text: '' },
+              ],
+            },
+          }),
+        );
+
+        expect(result.state.nextState.errors.options).toBeDefined();
+        expect(Object.keys(result.state.nextState.errors.options!)).toHaveLength(1);
+        expect(result.state.nextState.errors.options!['option-id1']).toBe(
+          'Option is empty',
+        );
+      });
+      it('should not validate options with only white spaces on blur', async () => {
+        const stateMiddleware = setup();
+        const result = await stateMiddleware.handlers.handleFieldBlur(
+          setupHandlerParams({
+            nextState: { ...getInitialState() },
+            previousState: { ...getInitialState() },
+            targetFields: {
+              options: [
+                { id: 'option-id1', text: ' ' },
+                { id: 'option-id2', text: ' ' },
+              ],
+            },
+          }),
+        );
+
+        expect(result.state.nextState.errors.options).toBeDefined();
+        expect(Object.keys(result.state.nextState.errors.options!)).toHaveLength(2);
+        expect(result.state.nextState.errors.options!['option-id1']).toBe(
+          'Option is empty',
+        );
+        expect(result.state.nextState.errors.options!['option-id2']).toBe(
+          'Option already exists',
+        );
+      });
+
+      it('should validate last empty option on blur', async () => {
+        const stateMiddleware = setup();
+        const result = await stateMiddleware.handlers.handleFieldBlur(
+          setupHandlerParams({
+            nextState: { ...getInitialState() },
+            previousState: { ...getInitialState() },
+            targetFields: {
+              options: [
+                { id: 'option-id1', text: 'A' },
+                { id: 'option-id2', text: '' },
+              ],
+            },
           }),
         );
 

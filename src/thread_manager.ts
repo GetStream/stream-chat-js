@@ -4,6 +4,7 @@ import { throttle } from './utils';
 import type { StreamChat } from './client';
 import type { Thread } from './thread';
 import type { Event, OwnUserResponse, QueryThreadsOptions } from './types';
+import { WithSubscriptions } from './utils/WithSubscriptions';
 
 const DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION = 1000;
 const MAX_QUERY_THREADS_LIMIT = 25;
@@ -43,10 +44,9 @@ export type ThreadManagerPagination = {
   nextCursor: string | null;
 };
 
-export class ThreadManager {
+export class ThreadManager extends WithSubscriptions {
   public readonly state: StateStore<ThreadManagerState>;
   private client: StreamChat;
-  private unsubscribeFunctions: Set<() => void> = new Set();
   private threadsByIdGetterCache: {
     threads: ThreadManagerState['threads'];
     threadsById: Record<string, Thread | undefined>;
@@ -56,6 +56,8 @@ export class ThreadManager {
   // private threadCache: Record<string, Thread | undefined> = {};
 
   constructor({ client }: { client: StreamChat }) {
+    super();
+
     this.client = client;
     this.state = new StateStore<ThreadManagerState>(THREAD_MANAGER_INITIAL_STATE);
 
@@ -96,14 +98,14 @@ export class ThreadManager {
   };
 
   public registerSubscriptions = () => {
-    if (this.unsubscribeFunctions.size) return;
+    if (this.hasSubscriptions) return;
 
-    this.unsubscribeFunctions.add(this.subscribeUnreadThreadsCountChange());
-    this.unsubscribeFunctions.add(this.subscribeManageThreadSubscriptions());
-    this.unsubscribeFunctions.add(this.subscribeReloadOnActivation());
-    this.unsubscribeFunctions.add(this.subscribeNewReplies());
-    this.unsubscribeFunctions.add(this.subscribeRecoverAfterConnectionDrop());
-    this.unsubscribeFunctions.add(this.subscribeChannelDeleted());
+    this.addUnsubscribeFunction(this.subscribeUnreadThreadsCountChange());
+    this.addUnsubscribeFunction(this.subscribeManageThreadSubscriptions());
+    this.addUnsubscribeFunction(this.subscribeReloadOnActivation());
+    this.addUnsubscribeFunction(this.subscribeNewReplies());
+    this.addUnsubscribeFunction(this.subscribeRecoverAfterConnectionDrop());
+    this.addUnsubscribeFunction(this.subscribeChannelDeleted());
   };
 
   private subscribeUnreadThreadsCountChange = () => {
@@ -217,8 +219,7 @@ export class ThreadManager {
     this.state
       .getLatestValue()
       .threads.forEach((thread) => thread.unregisterSubscriptions());
-    this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
-    this.unsubscribeFunctions.clear();
+    return super.unregisterSubscriptions();
   };
 
   public reload = async ({ force = false } = {}) => {

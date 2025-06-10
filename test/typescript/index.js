@@ -94,14 +94,13 @@ const executables = [
 		imports: ['Channel', 'Unpacked'],
 		type: "Unpacked<ReturnType<Channel<{ attachmentType: {}; channelType: { description?: string; }; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: {}; pollType: {}; pollOptionType: {}; }>['delete']>>",
 	},
-	// TODO: Fix the error which results from deleteChannelType api call:
+	// TODO: Fix the error which results from deleteChannelType api call:Add commentMore actions
 	// `deleteChannelType failed with error:  { Error: StreamChat error code 16: DeleteChannelType failed with error: "bc0b09df-2cfd-4e80-93e7-1f0091e6a435 is not a defined channel type"`
 	// because of which build failure occurs.
 	// {
 	// 	f: rg.deleteChannelType,
 	// 	imports: ['StreamChat', 'Unpacked'],
 	// 	type: "Unpacked<ReturnType<StreamChat<{ attachmentType: {}; channelType: { description?: string; }; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: {}; }>['deleteChannelType']>>",
-	// },
 	{
 		f: rg.deleteCommand,
 		imports: ['StreamChat', 'Unpacked'],

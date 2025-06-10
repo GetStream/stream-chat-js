@@ -10,10 +10,12 @@ export * from './insights';
 export * from './messageComposer';
 export * from './middleware';
 export * from './moderation';
+export * from './pagination';
 export * from './permissions';
 export * from './poll';
 export * from './poll_manager';
-export * from './search_controller';
+export * from './reminders';
+export * from './search';
 export * from './segment';
 export * from './signing';
 export * from './store';
@@ -28,6 +30,7 @@ export * from './thread_manager';
 export * from './token_manager';
 export * from './types';
 export * from './channel_manager';
+export * from './offline-support';
 // Don't use * here, that can break module augmentation https://github.com/microsoft/TypeScript/issues/46617
 export type {
   CustomAttachmentData,

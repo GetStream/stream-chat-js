@@ -26,6 +26,10 @@ import type {
 import type { StreamChat } from '../client';
 import type { MessageComposerConfig } from './configuration/types';
 import type { DeepPartial } from '../types.utility';
+import type { Unsubscribe } from '../store';
+import { WithSubscriptions } from '../utils/WithSubscriptions';
+
+type UnregisterSubscriptions = Unsubscribe;
 
 export type LastComposerChange = { draftUpdate: number | null; stateUpdate: number };
 
@@ -109,7 +113,7 @@ const initState = (
 
 const noop = () => undefined;
 
-export class MessageComposer {
+export class MessageComposer extends WithSubscriptions {
   readonly channel: Channel;
   readonly state: StateStore<MessageComposerState>;
   readonly editingAuditState: StateStore<EditingAuditState>;
@@ -126,14 +130,14 @@ export class MessageComposer {
   customDataManager: CustomDataManager;
   // todo: mediaRecorder: MediaRecorderController;
 
-  private unsubscribeFunctions: Set<() => void> = new Set();
-
   constructor({
     composition,
     config,
     compositionContext,
     client,
   }: MessageComposerOptions) {
+    super();
+
     this.compositionContext = compositionContext;
 
     this.configState = new StateStore<MessageComposerConfig>(
@@ -342,6 +346,7 @@ export class MessageComposer {
       lastChange: { ...this.lastChange, stateUpdate: new Date().getTime() },
     });
   }
+
   private logDraftUpdateTimestamp() {
     if (!this.config.drafts.enabled) return;
     const timestamp = new Date().getTime();
@@ -350,34 +355,24 @@ export class MessageComposer {
     });
   }
 
-  public registerSubscriptions = () => {
-    if (this.unsubscribeFunctions.size) {
+  public registerSubscriptions = (): UnregisterSubscriptions => {
+    if (this.hasSubscriptions) {
       // Already listening for events and changes
       return noop;
     }
-    this.unsubscribeFunctions.add(this.subscribeMessageComposerSetupStateChange());
-    this.unsubscribeFunctions.add(this.subscribeMessageUpdated());
-    this.unsubscribeFunctions.add(this.subscribeMessageDeleted());
+    this.addUnsubscribeFunction(this.subscribeMessageComposerSetupStateChange());
+    this.addUnsubscribeFunction(this.subscribeMessageUpdated());
+    this.addUnsubscribeFunction(this.subscribeMessageDeleted());
 
-    this.unsubscribeFunctions.add(this.subscribeTextComposerStateChanged());
-    this.unsubscribeFunctions.add(this.subscribeAttachmentManagerStateChanged());
-    this.unsubscribeFunctions.add(this.subscribeLinkPreviewsManagerStateChanged());
-    this.unsubscribeFunctions.add(this.subscribePollComposerStateChanged());
-    this.unsubscribeFunctions.add(this.subscribeCustomDataManagerStateChanged());
-    this.unsubscribeFunctions.add(this.subscribeMessageComposerStateChanged());
-    this.unsubscribeFunctions.add(this.subscribeMessageComposerConfigStateChanged());
-    if (this.config.drafts.enabled) {
-      this.unsubscribeFunctions.add(this.subscribeDraftUpdated());
-      this.unsubscribeFunctions.add(this.subscribeDraftDeleted());
-    }
+    this.addUnsubscribeFunction(this.subscribeTextComposerStateChanged());
+    this.addUnsubscribeFunction(this.subscribeAttachmentManagerStateChanged());
+    this.addUnsubscribeFunction(this.subscribeLinkPreviewsManagerStateChanged());
+    this.addUnsubscribeFunction(this.subscribePollComposerStateChanged());
+    this.addUnsubscribeFunction(this.subscribeCustomDataManagerStateChanged());
+    this.addUnsubscribeFunction(this.subscribeMessageComposerStateChanged());
+    this.addUnsubscribeFunction(this.subscribeMessageComposerConfigStateChanged());
 
-    return this.unregisterSubscriptions;
-  };
-
-  // TODO: maybe make these private across the SDK
-  public unregisterSubscriptions = () => {
-    this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
-    this.unsubscribeFunctions.clear();
+    return this.unregisterSubscriptions.bind(this);
   };
 
   private subscribeMessageUpdated = () => {
@@ -452,38 +447,49 @@ export class MessageComposer {
         !draft ||
         !!draft.parent_id !== !!this.threadId ||
         draft.channel_cid !== this.channel.cid
-      )
+      ) {
         return;
+      }
 
       this.logDraftUpdateTimestamp();
+
       if (this.compositionIsEmpty) {
         return;
       }
+
       this.clear();
     }).unsubscribe;
 
   private subscribeTextComposerStateChanged = () =>
-    this.textComposer.state.subscribe((nextValue, previousValue) => {
-      if (previousValue && nextValue.text !== previousValue?.text) {
+    this.textComposer.state.subscribeWithSelector(
+      ({ text }) => [text] as const,
+      ([currentText], previousSelection) => {
+        // do not handle on initial subscription
+        if (typeof previousSelection === 'undefined') return;
+
         this.logStateUpdateTimestamp();
+
         if (this.compositionIsEmpty) {
           this.deleteDraft();
           return;
         }
-      }
-      if (!this.linkPreviewsManager.enabled || nextValue.text === previousValue?.text)
-        return;
-      if (!nextValue.text) {
-        this.linkPreviewsManager.clearPreviews();
-      } else {
-        this.linkPreviewsManager.findAndEnrichUrls(nextValue.text);
-      }
-    });
+
+        if (!this.linkPreviewsManager.enabled) return;
+
+        if (!currentText) {
+          this.linkPreviewsManager.clearPreviews();
+        } else {
+          this.linkPreviewsManager.findAndEnrichUrls(currentText);
+        }
+      },
+    );
 
   private subscribeAttachmentManagerStateChanged = () =>
-    this.attachmentManager.state.subscribe((nextValue, previousValue) => {
+    this.attachmentManager.state.subscribe((_, previousValue) => {
       if (typeof previousValue === 'undefined') return;
+
       this.logStateUpdateTimestamp();
+
       if (this.compositionIsEmpty) {
         this.deleteDraft();
         return;
@@ -491,9 +497,11 @@ export class MessageComposer {
     });
 
   private subscribeLinkPreviewsManagerStateChanged = () =>
-    this.linkPreviewsManager.state.subscribe((nextValue, previousValue) => {
+    this.linkPreviewsManager.state.subscribe((_, previousValue) => {
       if (typeof previousValue === 'undefined') return;
+
       this.logStateUpdateTimestamp();
+
       if (this.compositionIsEmpty) {
         this.deleteDraft();
         return;
@@ -501,9 +509,11 @@ export class MessageComposer {
     });
 
   private subscribePollComposerStateChanged = () =>
-    this.pollComposer.state.subscribe((nextValue, previousValue) => {
+    this.pollComposer.state.subscribe((_, previousValue) => {
       if (typeof previousValue === 'undefined') return;
+
       this.logStateUpdateTimestamp();
+
       if (this.compositionIsEmpty) {
         this.deleteDraft();
         return;
@@ -514,6 +524,7 @@ export class MessageComposer {
     this.customDataManager.state.subscribe((nextValue, previousValue) => {
       if (
         typeof previousValue !== 'undefined' &&
+        // FIXME: is this check really necessary?
         !this.customDataManager.isMessageDataEqual(nextValue, previousValue)
       ) {
         this.logStateUpdateTimestamp();
@@ -521,25 +532,49 @@ export class MessageComposer {
     });
 
   private subscribeMessageComposerStateChanged = () =>
-    this.state.subscribe((nextValue, previousValue) => {
+    this.state.subscribe((_, previousValue) => {
       if (typeof previousValue === 'undefined') return;
+
       this.logStateUpdateTimestamp();
+
       if (this.compositionIsEmpty) {
         this.deleteDraft();
-        return;
       }
     });
 
-  private subscribeMessageComposerConfigStateChanged = () =>
-    this.configState.subscribe((nextValue) => {
-      const { text } = nextValue;
-      if (this.textComposer.text === '' && text.defaultValue) {
-        this.textComposer.insertText({
-          text: text.defaultValue,
-          selection: { start: 0, end: 0 },
-        });
-      }
-    });
+  private subscribeMessageComposerConfigStateChanged = () => {
+    let draftUnsubscribeFunctions: Unsubscribe[] | null;
+
+    const unsubscribe = this.configState.subscribeWithSelector(
+      (currentValue) => ({
+        textDefaultValue: currentValue.text.defaultValue,
+        draftsEnabled: currentValue.drafts.enabled,
+      }),
+      ({ textDefaultValue, draftsEnabled }) => {
+        if (this.textComposer.text === '' && textDefaultValue) {
+          this.textComposer.insertText({
+            text: textDefaultValue,
+            selection: { start: 0, end: 0 },
+          });
+        }
+
+        if (draftsEnabled && !draftUnsubscribeFunctions) {
+          draftUnsubscribeFunctions = [
+            this.subscribeDraftUpdated(),
+            this.subscribeDraftDeleted(),
+          ];
+        } else if (!draftsEnabled && draftUnsubscribeFunctions) {
+          draftUnsubscribeFunctions.forEach((fn) => fn());
+          draftUnsubscribeFunctions = null;
+        }
+      },
+    );
+
+    return () => {
+      draftUnsubscribeFunctions?.forEach((unsubscribe) => unsubscribe());
+      unsubscribe();
+    };
+  };
 
   setQuotedMessage = (quotedMessage: LocalMessage | null) => {
     this.state.partialNext({ quotedMessage });
@@ -560,6 +595,7 @@ export class MessageComposer {
 
   compose = async (): Promise<MessageComposerMiddlewareValue['state'] | undefined> => {
     const created_at = this.editedMessage?.created_at ?? new Date();
+
     const text = '';
     const result = await this.compositionMiddlewareExecutor.execute({
       eventName: 'compose',
@@ -587,6 +623,7 @@ export class MessageComposer {
         sendOptions: {},
       },
     });
+
     if (result.status === 'discard') return;
 
     return result.state;
@@ -600,6 +637,7 @@ export class MessageComposer {
       },
     });
     if (status === 'discard') return;
+
     return state;
   };
 

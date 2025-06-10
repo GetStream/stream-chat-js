@@ -1,5 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
-
 import { generateChannel } from './test-utils/generateChannel';
 import { generateMember } from './test-utils/generateMember';
 import { generateMsg } from './test-utils/generateMessage';
@@ -11,9 +9,10 @@ import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse'
 
 import { ChannelState, StreamChat } from '../../src';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
-import { generateMessageDraft } from './test-utils/generateMessageDraft';
+import { MockOfflineDB } from './offline-support/MockOfflineDB';
+import { generateUUIDv4 as uuidv4 } from '../../src/utils';
 
-import { describe, beforeEach, it, expect } from 'vitest';
+import { describe, beforeEach, afterEach, it, expect, vi } from 'vitest';
 
 describe('Channel count unread', function () {
 	let lastRead;
@@ -727,14 +726,14 @@ describe('Channel _handleChannelEvent', function () {
 			type: 'channel.updated',
 		};
 		channel.data.frozen = false;
-		sinon.spy(channel, 'query');
+		const channelQuerySpy = vi.spyOn(channel, 'query');
 
 		channel._handleChannelEvent(event);
 		expect(channel.data.frozen).eq(true);
-		expect(channel.query.called).to.be.true;
+		expect(channelQuerySpy).toHaveBeenCalledTimes(1);
 
 		channel._handleChannelEvent(event);
-		expect(channel.query.calledOnce).to.be.true;
+		expect(channelQuerySpy).toHaveBeenCalledTimes(1);
 
 		// Make sure that we don't wipe out any data
 	});
@@ -1442,5 +1441,421 @@ describe('Channel.query', async () => {
 			hasPrev: false,
 		});
 		mock.restore();
+	});
+});
+
+describe('send reaction flow', () => {
+	const messageId = 'msg-456';
+	const reaction = { type: 'love' };
+	const options = { enforce_unique: true, skip_push: true };
+
+	let client;
+	let channel;
+	let loggerSpy;
+	let queueTaskSpy;
+	let postSpy;
+
+	beforeEach(async () => {
+		client = await getClientWithUser();
+		const offlineDb = new MockOfflineDB({ client });
+
+		client.setOfflineDBApi(offlineDb);
+		await client.offlineDb.init(client.userID);
+
+		channel = client.channel('messaging', 'test');
+
+		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
+		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
+		postSpy = vi.spyOn(client, 'post').mockResolvedValue({});
+	});
+
+	afterEach(() => {
+		vi.resetAllMocks();
+	});
+
+	describe('sendReaction', () => {
+		beforeEach(() => {
+			vi.spyOn(channel, '_sendReaction').mockResolvedValue({});
+		});
+
+		afterEach(() => {
+			vi.resetAllMocks();
+		});
+
+		it('throws if messageID is missing', async () => {
+			await expect(channel.sendReaction('', reaction)).rejects.toThrow(
+				'Message id is missing',
+			);
+		});
+
+		it('throws if reaction is missing or empty', async () => {
+			await expect(channel.sendReaction(messageId, {})).rejects.toThrow(
+				'Reaction object is missing',
+			);
+		});
+
+		it('queues task if offlineDb exists', async () => {
+			await channel.sendReaction(messageId, reaction, options);
+
+			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
+
+			const taskArg = queueTaskSpy.mock.calls[0][0];
+			expect(taskArg).to.deep.equal({
+				task: {
+					channelId: 'test',
+					channelType: 'messaging',
+					messageId,
+					payload: [messageId, reaction, options],
+					type: 'send-reaction',
+				},
+			});
+
+			expect(channel._sendReaction).not.toHaveBeenCalled();
+		});
+
+		it('falls back to _sendReaction if offlineDb throws', async () => {
+			client.offlineDb.queueTask.mockRejectedValue(new Error('Offline failure'));
+
+			await channel.sendReaction(messageId, reaction, options);
+
+			expect(loggerSpy).toHaveBeenCalledTimes(1);
+			expect(channel._sendReaction).toHaveBeenCalledTimes(1);
+			expect(channel._sendReaction).toHaveBeenCalledWith(messageId, reaction, options);
+		});
+
+		it('falls back to _sendReaction if offlineDb is undefined', async () => {
+			client.offlineDb = undefined;
+
+			await channel.sendReaction(messageId, reaction, options);
+
+			expect(channel._sendReaction).toHaveBeenCalledTimes(1);
+			expect(channel._sendReaction).toHaveBeenCalledWith(messageId, reaction, options);
+		});
+	});
+
+	describe('_sendReaction', () => {
+		it('throws if messageID is missing', async () => {
+			await expect(channel._sendReaction('', reaction)).rejects.toThrow(
+				'Message id is missing',
+			);
+		});
+
+		it('throws if reaction is missing or empty', async () => {
+			await expect(channel._sendReaction(messageId, {})).rejects.toThrow(
+				'Reaction object is missing',
+			);
+		});
+
+		it('posts to correct URL with reaction and options', async () => {
+			await channel._sendReaction(messageId, reaction, options);
+
+			expect(postSpy).toHaveBeenCalledTimes(1);
+			expect(postSpy).toHaveBeenCalledWith(
+				`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reaction`,
+				{
+					reaction,
+					...options,
+				},
+			);
+		});
+
+		it('returns the response from post', async () => {
+			postSpy.mockResolvedValue({ message: 'ok' });
+
+			const result = await channel._sendReaction(messageId, reaction);
+
+			expect(result).toEqual({ message: 'ok' });
+		});
+	});
+});
+
+describe('delete reaction flow', () => {
+	const messageId = 'msg-123';
+	const reactionType = 'love';
+	const user_id = 'user-abc';
+
+	let client;
+	let channel;
+	let loggerSpy;
+	let queueTaskSpy;
+	let deleteReactionSpy;
+	let deleteSpy;
+
+	beforeEach(async () => {
+		client = await getClientWithUser({ id: user_id });
+		const offlineDb = new MockOfflineDB({ client });
+
+		client.setOfflineDBApi(offlineDb);
+		await client.offlineDb.init(client.userID);
+
+		channel = client.channel('messaging', 'test');
+		// trick the channel into being initialized
+		channel.initialized = true;
+
+		// Add a fake message to state for reaction deletion optimistic update in the db
+		channel.state.messages.push({ id: messageId });
+
+		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
+		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
+		deleteReactionSpy = vi.spyOn(client.offlineDb, 'deleteReaction').mockResolvedValue();
+		deleteSpy = vi.spyOn(client, 'delete').mockResolvedValue({});
+	});
+
+	afterEach(() => {
+		vi.resetAllMocks();
+	});
+
+	describe('deleteReaction', () => {
+		beforeEach(() => {
+			vi.spyOn(channel, '_deleteReaction').mockResolvedValue({});
+		});
+
+		afterEach(() => {
+			vi.resetAllMocks();
+		});
+
+		it('throws if messageID or reactionType is missing', async () => {
+			await expect(channel.deleteReaction('', reactionType)).rejects.toThrow(
+				'Deleting a reaction requires specifying both the message and reaction type',
+			);
+			await expect(channel.deleteReaction(messageId, '')).rejects.toThrow(
+				'Deleting a reaction requires specifying both the message and reaction type',
+			);
+		});
+
+		it('calls offlineDb.deleteReaction and queues task if offlineDb exists', async () => {
+			await channel.deleteReaction(messageId, reactionType);
+
+			expect(deleteReactionSpy).toHaveBeenCalledTimes(1);
+			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
+
+			const expectedReaction = {
+				created_at: '',
+				updated_at: '',
+				message_id: messageId,
+				type: reactionType,
+				user_id: user_id,
+			};
+
+			expect(deleteReactionSpy).toHaveBeenCalledWith({
+				message: { id: messageId },
+				reaction: expectedReaction,
+			});
+
+			expect(queueTaskSpy).toHaveBeenCalledWith({
+				task: {
+					channelId: 'test',
+					channelType: 'messaging',
+					messageId,
+					payload: [messageId, reactionType],
+					type: 'delete-reaction',
+				},
+			});
+
+			expect(channel._deleteReaction).not.toHaveBeenCalled();
+		});
+
+		it('skips calling offlineDb.deleteReaction if the message does not exist in the state, but still queues the task', async () => {
+			const unknownMessageId = 'some-unknown-message-id';
+			await channel.deleteReaction(unknownMessageId, reactionType);
+
+			expect(deleteReactionSpy).not.toHaveBeenCalled();
+			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
+			expect(queueTaskSpy).toHaveBeenCalledWith({
+				task: {
+					channelId: 'test',
+					channelType: 'messaging',
+					messageId: unknownMessageId,
+					payload: [unknownMessageId, reactionType],
+					type: 'delete-reaction',
+				},
+			});
+			expect(channel._deleteReaction).not.toHaveBeenCalled();
+		});
+
+		it('falls back to _deleteReaction if offlineDb throws', async () => {
+			deleteReactionSpy.mockRejectedValue(new Error('Offline failure'));
+
+			await channel.deleteReaction(messageId, reactionType);
+
+			expect(loggerSpy).toHaveBeenCalledTimes(1);
+			expect(channel._deleteReaction).toHaveBeenCalledTimes(1);
+			expect(channel._deleteReaction).toHaveBeenCalledWith(
+				messageId,
+				reactionType,
+				undefined,
+			);
+		});
+
+		it('falls back to _deleteReaction if offlineDb is undefined', async () => {
+			client.offlineDb = undefined;
+
+			await channel.deleteReaction(messageId, reactionType);
+
+			expect(channel._deleteReaction).toHaveBeenCalledTimes(1);
+			expect(channel._deleteReaction).toHaveBeenCalledWith(
+				messageId,
+				reactionType,
+				undefined,
+			);
+		});
+	});
+
+	describe('_deleteReaction', () => {
+		it('throws if messageID or reactionType is missing', async () => {
+			await expect(channel._deleteReaction(undefined, reactionType)).rejects.toThrow(
+				'Deleting a reaction requires specifying both the message and reaction type',
+			);
+			await expect(channel._deleteReaction(messageId, undefined)).rejects.toThrow(
+				'Deleting a reaction requires specifying both the message and reaction type',
+			);
+		});
+
+		it('calls delete with user_id when provided', async () => {
+			await channel._deleteReaction(messageId, reactionType, user_id);
+
+			expect(deleteSpy).toHaveBeenCalledTimes(1);
+			expect(deleteSpy).toHaveBeenCalledWith(
+				`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reaction/${encodeURIComponent(reactionType)}`,
+				{ user_id },
+			);
+		});
+
+		it('calls delete with empty body if user_id is not provided', async () => {
+			await channel._deleteReaction(messageId, reactionType);
+
+			expect(deleteSpy).toHaveBeenCalledTimes(1);
+			expect(deleteSpy).toHaveBeenCalledWith(
+				`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reaction/${encodeURIComponent(reactionType)}`,
+				{},
+			);
+		});
+
+		it('returns the response from delete', async () => {
+			deleteSpy.mockResolvedValue({ success: true });
+
+			const result = await channel._deleteReaction(messageId, reactionType);
+
+			expect(result).toEqual({ success: true });
+		});
+	});
+});
+
+describe('message sending flow', () => {
+	let client;
+	let channel;
+	let loggerSpy;
+	let queueTaskSpy;
+	let postSpy;
+
+	const message = {
+		id: 'msg-123',
+		text: 'Hello world',
+		user: { id: 'user-abc' },
+	};
+
+	const options = {
+		pending: true,
+		skip_push: true,
+		pending_message_metadata: { source: 'local' },
+	};
+
+	beforeEach(async () => {
+		client = await getClientWithUser({ id: 'user-abc' });
+		const offlineDb = new MockOfflineDB({ client });
+
+		client.setOfflineDBApi(offlineDb);
+		await client.offlineDb.init(client.userID);
+
+		channel = client.channel('messaging', 'test');
+
+		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
+		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
+		postSpy = vi.spyOn(client, 'post').mockResolvedValue({});
+	});
+
+	afterEach(() => {
+		vi.resetAllMocks();
+	});
+
+	describe('sendMessage', () => {
+		beforeEach(() => {
+			vi.spyOn(channel, '_sendMessage').mockResolvedValue({});
+		});
+
+		afterEach(() => {
+			vi.resetAllMocks();
+		});
+
+		it('queues task if offlineDb exists and message has ID', async () => {
+			const result = await channel.sendMessage(message, options);
+
+			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
+			expect(queueTaskSpy).toHaveBeenCalledWith({
+				task: {
+					channelId: 'test',
+					channelType: 'messaging',
+					messageId: 'msg-123',
+					payload: [message, options],
+					type: 'send-message',
+				},
+			});
+
+			expect(result).toEqual({});
+			expect(channel._sendMessage).not.toHaveBeenCalled();
+		});
+
+		it('falls back to _sendMessage if offlineDb is missing', async () => {
+			client.offlineDb = undefined;
+
+			const result = await channel.sendMessage(message, options);
+
+			expect(channel._sendMessage).toHaveBeenCalledTimes(1);
+			expect(channel._sendMessage).toHaveBeenCalledWith(message, options);
+			expect(result).toEqual({});
+		});
+
+		it('falls back to _sendMessage if message.id is missing', async () => {
+			const msg = { ...message, id: undefined };
+
+			await channel.sendMessage(msg, options);
+
+			expect(channel._sendMessage).toHaveBeenCalledWith(msg, options);
+		});
+
+		it('falls back to _sendMessage if offlineDb throws', async () => {
+			queueTaskSpy.mockRejectedValue(new Error('Queue failed'));
+
+			const result = await channel.sendMessage(message, options);
+
+			expect(loggerSpy).toHaveBeenCalledTimes(1);
+			expect(channel._sendMessage).toHaveBeenCalledWith(message, options);
+			expect(result).toEqual({});
+		});
+	});
+
+	describe('_sendMessage', () => {
+		it('posts the message to the correct endpoint with options', async () => {
+			const expectedUrl = `${client.baseURL}/channels/messaging/test/message`;
+
+			const result = await channel._sendMessage(message, options);
+
+			expect(postSpy).toHaveBeenCalledTimes(1);
+			expect(postSpy).toHaveBeenCalledWith(expectedUrl, {
+				message,
+				...options,
+			});
+
+			expect(result).toEqual({});
+		});
+
+		it('works without options', async () => {
+			await channel._sendMessage(message);
+
+			expect(postSpy).toHaveBeenCalledWith(
+				`${client.baseURL}/channels/messaging/test/message`,
+				{ message },
+			);
+		});
 	});
 });
