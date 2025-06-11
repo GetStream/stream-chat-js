@@ -1620,14 +1620,12 @@ export class Channel {
    * @return {Promise<CreateDraftResponse>} Response containing the created draft
    */
   async createDraft(message: DraftMessagePayload) {
-    const response = await this.getClient().post<CreateDraftResponse>(
+    return await this.getClient().post<CreateDraftResponse>(
       this._channelURL() + '/draft',
       {
         message,
       },
     );
-    console.log(response);
-    return response;
   }
 
   /**
