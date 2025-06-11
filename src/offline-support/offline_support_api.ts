@@ -939,7 +939,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     event: Event;
     execute?: boolean;
   }) => {
-    const { draft, type } = event;
+    const { cid, draft, type } = event;
 
     if (!draft) return [];
 
@@ -951,10 +951,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     }
 
     if (type === 'draft.deleted') {
-      if (!event.cid) return [];
+      if (!cid) return [];
 
       return await this.deleteDraft({
-        cid: event.cid,
+        cid,
         parent_id: draft.parent_id,
         execute,
       });
