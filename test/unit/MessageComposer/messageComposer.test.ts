@@ -759,6 +759,14 @@ describe('MessageComposer', () => {
           emitter: 'MessageComposer',
           context: { composer: messageComposer },
         },
+        options: {
+          type: 'api:poll:create:failed',
+          metadata: {
+            reason: 'Failed to create poll',
+          },
+          originalError: expect.any(Error),
+          severity: 'error',
+        },
       });
     });
   });

@@ -386,12 +386,11 @@ export class AttachmentManager {
       this.client.notifications.addError({
         message: 'File is required for upload attachment',
         origin: { emitter: 'AttachmentManager', context: { attachment } },
+        options: { type: 'validation:attachment:file:missing' },
       });
       return;
     }
 
-    // todo: document this
-    // the following is substitute for: if (noFiles && !isImage) return att
     if (!this.fileUploadFilter(attachment)) return;
 
     const newAttachment = await this.fileToLocalUploadAttachment(
@@ -453,8 +452,17 @@ export class AttachmentManager {
     if (localAttachment.localMetadata.uploadState === 'blocked') {
       this.upsertAttachments([localAttachment]);
       this.client.notifications.addError({
-        message: 'Error uploading attachment',
-        origin: { emitter: 'AttachmentManager', context: { attachment } },
+        message: `The attachment upload was blocked`,
+        origin: {
+          emitter: 'AttachmentManager',
+          context: { attachment, blockedAttachment: localAttachment },
+        },
+        options: {
+          type: 'validation:attachment:upload:blocked',
+          metadata: {
+            reason: localAttachment.localMetadata.uploadPermissionCheck?.reason,
+          },
+        },
       });
       return localAttachment;
     }
@@ -473,21 +481,7 @@ export class AttachmentManager {
     try {
       response = await this.doUploadRequest(localAttachment.localMetadata.file);
     } catch (error) {
-      let finalError: Error = {
-        message: 'Error uploading attachment',
-        name: 'Error',
-      };
-      if (typeof (error as Error).message === 'string') {
-        finalError = error as Error;
-      } else if (typeof error === 'object') {
-        finalError = Object.assign(finalError, error);
-      }
-
-      this.client.notifications.addError({
-        message: finalError.message,
-        origin: { emitter: 'AttachmentManager', context: { attachment } },
-      });
-
+      const reason = error instanceof Error ? error.message : 'unknown error';
       const failedAttachment: LocalUploadAttachment = {
         ...attachment,
         localMetadata: {
@@ -495,6 +489,19 @@ export class AttachmentManager {
           uploadState: 'failed',
         },
       };
+
+      this.client.notifications.addError({
+        message: 'Error uploading attachment',
+        origin: {
+          emitter: 'AttachmentManager',
+          context: { attachment, failedAttachment },
+        },
+        options: {
+          type: 'api:attachment:upload:failed',
+          metadata: { reason },
+          originalError: error instanceof Error ? error : undefined,
+        },
+      });
 
       this.updateAttachment(failedAttachment);
       return failedAttachment;
