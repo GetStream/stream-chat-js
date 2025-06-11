@@ -386,7 +386,7 @@ export class AttachmentManager {
       this.client.notifications.addError({
         message: 'File is required for upload attachment',
         origin: { emitter: 'AttachmentManager', context: { attachment } },
-        options: { code: 'validation:attachment:file:missing' },
+        options: { type: 'validation:attachment:file:missing' },
       });
       return;
     }
@@ -458,7 +458,7 @@ export class AttachmentManager {
           context: { attachment, blockedAttachment: localAttachment },
         },
         options: {
-          code: 'validation:attachment:upload:blocked',
+          type: 'validation:attachment:upload:blocked',
           metadata: {
             reason: localAttachment.localMetadata.uploadPermissionCheck?.reason,
           },
@@ -497,7 +497,7 @@ export class AttachmentManager {
           context: { attachment, failedAttachment },
         },
         options: {
-          code: 'api:attachment:upload:failed',
+          type: 'api:attachment:upload:failed',
           metadata: { reason },
           originalError: error instanceof Error ? error : undefined,
         },

@@ -78,7 +78,7 @@ export type Notification = {
    *   'system:internal:error'            // Internal system error
    *   'system:resource:unavailable';     // System resource unavailable
    */
-  code?: string;
+  type?: string;
   /** Optional timestamp when notification should expire */
   expiresAt?: number;
   /** Optional metadata to attach to the notification */
@@ -89,7 +89,7 @@ export type Notification = {
 
 /** Configuration options when creating a notification */
 export type NotificationOptions = Partial<
-  Pick<Notification, 'code' | 'severity' | 'actions' | 'metadata' | 'originalError'>
+  Pick<Notification, 'type' | 'severity' | 'actions' | 'metadata' | 'originalError'>
 > & {
   /** How long a notification should be displayed in milliseconds */
   duration?: number;

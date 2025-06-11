@@ -1048,7 +1048,7 @@ describe('AttachmentManager', () => {
           },
         },
         options: {
-          code: 'api:attachment:upload:failed',
+          type: 'api:attachment:upload:failed',
           metadata: { reason: 'Upload failed' },
           originalError: expect.any(Error),
         },
@@ -1089,7 +1089,7 @@ describe('AttachmentManager', () => {
           },
         },
         options: {
-          code: 'validation:attachment:upload:blocked',
+          type: 'validation:attachment:upload:blocked',
           metadata: { reason: 'size_limit' },
         },
       });
@@ -1168,7 +1168,7 @@ describe('AttachmentManager', () => {
       expect(mockClient.notifications.addError).toHaveBeenCalledWith({
         message: 'File is required for upload attachment',
         options: {
-          code: 'validation:attachment:file:missing',
+          type: 'validation:attachment:file:missing',
         },
         origin: {
           emitter: 'AttachmentManager',
@@ -1202,7 +1202,7 @@ describe('AttachmentManager', () => {
       expect(mockClient.notifications.addError).toHaveBeenCalledWith({
         message: 'File is required for upload attachment',
         options: {
-          code: 'validation:attachment:file:missing',
+          type: 'validation:attachment:file:missing',
         },
         origin: {
           emitter: 'AttachmentManager',

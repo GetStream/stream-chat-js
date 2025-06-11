@@ -49,7 +49,7 @@ export class NotificationManager {
       id,
       message,
       origin,
-      code: options?.code,
+      type: options?.type,
       severity,
       createdAt: now,
       expiresAt: now + duration,
