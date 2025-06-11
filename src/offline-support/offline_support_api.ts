@@ -944,7 +944,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     if (!draft) return [];
 
     if (type === 'draft.updated') {
-      return await this.upsertDraft({ draft, execute });
+      return await this.upsertDraft({
+        draft,
+        execute,
+      });
     }
 
     if (type === 'draft.deleted') {

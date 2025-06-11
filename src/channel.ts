@@ -1626,19 +1626,7 @@ export class Channel {
         message,
       },
     );
-
-    if (response.draft) {
-      this.getClient().offlineDb?.executeQuerySafely(
-        (db) =>
-          db.upsertDraft?.({
-            draft: response.draft,
-          }),
-        {
-          method: 'upsertDraft',
-        },
-      );
-    }
-
+    console.log(response);
     return response;
   }
 
@@ -1651,27 +1639,9 @@ export class Channel {
    * @return {Promise<APIResponse>} API response
    */
   async deleteDraft({ parent_id }: { parent_id?: string } = {}) {
-    const response = await this.getClient().delete<APIResponse>(
-      this._channelURL() + '/draft',
-      {
-        parent_id,
-      },
-    );
-
-    if (response) {
-      this.getClient().offlineDb?.executeQuerySafely(
-        (db) =>
-          db.deleteDraft?.({
-            cid: this.cid,
-            parent_id,
-          }),
-        {
-          method: 'deleteDraft',
-        },
-      );
-    }
-
-    return response;
+    return await this.getClient().delete<APIResponse>(this._channelURL() + '/draft', {
+      parent_id,
+    });
   }
 
   /**
