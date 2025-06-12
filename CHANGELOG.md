@@ -1,3 +1,14 @@
+## [9.6.0](https://github.com/GetStream/stream-chat-js/compare/v9.5.1...v9.6.0) (2025-06-12)
+
+### Bug Fixes
+
+* improve attachment upload error notification data ([#1542](https://github.com/GetStream/stream-chat-js/issues/1542)) ([a55a394](https://github.com/GetStream/stream-chat-js/commit/a55a394bb95b3c096389db2da3ee33db46aabda2))
+* poll composer improvements ([#1560](https://github.com/GetStream/stream-chat-js/issues/1560)) ([b957e13](https://github.com/GetStream/stream-chat-js/commit/b957e1320fd3c8f6c64ee80b522ba39e11173c68))
+
+### Features
+
+* allow to send message with show_in_channel flag ([#1561](https://github.com/GetStream/stream-chat-js/issues/1561)) ([ae29f8b](https://github.com/GetStream/stream-chat-js/commit/ae29f8baa0880e6eb93a48c8686aee3685798023))
+
 ## [9.5.1](https://github.com/GetStream/stream-chat-js/compare/v9.5.0...v9.5.1) (2025-06-05)
 
 ### Bug Fixes
