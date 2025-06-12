@@ -42,9 +42,10 @@ export type CompositionContext = Channel | Thread | LocalMessageWithLegacyThread
 
 export type MessageComposerState = {
   id: string;
-  quotedMessage: LocalMessageBase | null;
-  pollId: string | null;
   draftId: string | null;
+  pollId: string | null;
+  quotedMessage: LocalMessageBase | null;
+  showReplyInChannel: boolean;
 };
 
 export type MessageComposerOptions = {
@@ -82,10 +83,11 @@ const initState = (
 ): MessageComposerState => {
   if (!composition) {
     return {
-      id: MessageComposer.generateId(),
-      quotedMessage: null,
-      pollId: null,
       draftId: null,
+      id: MessageComposer.generateId(),
+      pollId: null,
+      quotedMessage: null,
+      showReplyInChannel: false,
     };
   }
 
@@ -104,10 +106,11 @@ const initState = (
   return {
     draftId,
     id,
+    pollId: message.poll_id ?? null,
     quotedMessage: quotedMessage
       ? formatMessage(quotedMessage as MessageResponseBase)
       : null,
-    pollId: message.poll_id ?? null,
+    showReplyInChannel: false,
   };
 };
 
@@ -272,6 +275,10 @@ export class MessageComposer extends WithSubscriptions {
 
   get pollId() {
     return this.state.getLatestValue().pollId;
+  }
+
+  get showReplyInChannel() {
+    return this.state.getLatestValue().showReplyInChannel;
   }
 
   get hasSendableData() {
@@ -578,6 +585,10 @@ export class MessageComposer extends WithSubscriptions {
 
   setQuotedMessage = (quotedMessage: LocalMessage | null) => {
     this.state.partialNext({ quotedMessage });
+  };
+
+  toggleShowReplyInChannel = () => {
+    this.state.partialNext({ showReplyInChannel: !this.showReplyInChannel });
   };
 
   clear = () => {

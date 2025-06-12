@@ -385,6 +385,7 @@ describe('MessageComposer', () => {
         pollId: null,
         quotedMessage: null,
         draftId: null,
+        showReplyInChannel: false,
       });
     });
 
@@ -403,6 +404,7 @@ describe('MessageComposer', () => {
         pollId: null,
         quotedMessage: null,
         draftId: null,
+        showReplyInChannel: false,
       });
     });
 
@@ -459,6 +461,15 @@ describe('MessageComposer', () => {
       expect(messageComposer.state.getLatestValue().quotedMessage).toEqual(quotedMessage);
     });
 
+    it('should toggle showReplyInChannel value with toggleShowReplyInChannel', () => {
+      const { messageComposer } = setup();
+
+      messageComposer.toggleShowReplyInChannel();
+      expect(messageComposer.state.getLatestValue().showReplyInChannel).toBe(true);
+      messageComposer.toggleShowReplyInChannel();
+      expect(messageComposer.state.getLatestValue().showReplyInChannel).toBe(false);
+    });
+
     it('should clear state', () => {
       const { messageComposer } = setup();
       const spyAttachmentManager = vi.spyOn(
@@ -509,6 +520,7 @@ describe('MessageComposer', () => {
         pollId: 'test-poll-id',
         quotedMessage: null,
         draftId: null,
+        showReplyInChannel: false,
       });
     });
 
