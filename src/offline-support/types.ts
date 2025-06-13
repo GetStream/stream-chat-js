@@ -312,7 +312,7 @@ export type DBGetDraftType = {
   /** Channel ID for which to get the draft. */
   cid: string;
   /** ID of the user requesting the draft. */
-  currentUserId: string;
+  userId: string;
   /** Optional parent ID for the parent message in thread, if applicable. */
   parent_id?: string;
 };
