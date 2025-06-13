@@ -114,8 +114,6 @@ const initState = (
   };
 };
 
-const noop = () => undefined;
-
 export class MessageComposer extends WithSubscriptions {
   readonly channel: Channel;
   readonly state: StateStore<MessageComposerState>;
@@ -363,23 +361,23 @@ export class MessageComposer extends WithSubscriptions {
   }
 
   public registerSubscriptions = (): UnregisterSubscriptions => {
-    if (this.hasSubscriptions) {
-      // Already listening for events and changes
-      return noop;
+    if (!this.hasSubscriptions) {
+      this.addUnsubscribeFunction(this.subscribeMessageComposerSetupStateChange());
+      this.addUnsubscribeFunction(this.subscribeMessageUpdated());
+      this.addUnsubscribeFunction(this.subscribeMessageDeleted());
+
+      this.addUnsubscribeFunction(this.subscribeTextComposerStateChanged());
+      this.addUnsubscribeFunction(this.subscribeAttachmentManagerStateChanged());
+      this.addUnsubscribeFunction(this.subscribeLinkPreviewsManagerStateChanged());
+      this.addUnsubscribeFunction(this.subscribePollComposerStateChanged());
+      this.addUnsubscribeFunction(this.subscribeCustomDataManagerStateChanged());
+      this.addUnsubscribeFunction(this.subscribeMessageComposerStateChanged());
+      this.addUnsubscribeFunction(this.subscribeMessageComposerConfigStateChanged());
     }
-    this.addUnsubscribeFunction(this.subscribeMessageComposerSetupStateChange());
-    this.addUnsubscribeFunction(this.subscribeMessageUpdated());
-    this.addUnsubscribeFunction(this.subscribeMessageDeleted());
 
-    this.addUnsubscribeFunction(this.subscribeTextComposerStateChanged());
-    this.addUnsubscribeFunction(this.subscribeAttachmentManagerStateChanged());
-    this.addUnsubscribeFunction(this.subscribeLinkPreviewsManagerStateChanged());
-    this.addUnsubscribeFunction(this.subscribePollComposerStateChanged());
-    this.addUnsubscribeFunction(this.subscribeCustomDataManagerStateChanged());
-    this.addUnsubscribeFunction(this.subscribeMessageComposerStateChanged());
-    this.addUnsubscribeFunction(this.subscribeMessageComposerConfigStateChanged());
+    this.incrementRefCount();
 
-    return this.unregisterSubscriptions.bind(this);
+    return () => this.unregisterSubscriptions();
   };
 
   private subscribeMessageUpdated = () => {
