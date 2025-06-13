@@ -447,6 +447,28 @@ describe('MessageComposer', () => {
       expect(unsubscribeFunctions.size).toBe(0);
     });
 
+    it('should unregister subscriptions only if refCount drops to 1', () => {
+      const { messageComposer } = setup();
+
+      const spy = vi.spyOn(messageComposer, 'incrementRefCount');
+
+      const unsub1 = messageComposer.registerSubscriptions();
+      const unsub2 = messageComposer.registerSubscriptions();
+
+      expect(spy).toHaveBeenCalledTimes(2);
+      const lastResult = spy.mock.results.at(-1);
+
+      expect(lastResult?.value).toEqual(2);
+
+      unsub1();
+
+      expect(messageComposer.hasSubscriptions).toBe(true);
+
+      unsub2();
+
+      expect(messageComposer.hasSubscriptions).toBe(false);
+    });
+
     it('should set quoted message', () => {
       const { messageComposer } = setup();
       const quotedMessage = {
