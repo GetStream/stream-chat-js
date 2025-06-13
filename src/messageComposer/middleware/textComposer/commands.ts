@@ -31,7 +31,7 @@ export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion>
     };
   }
 
-  searchCommands = (searchQuery: string) => {
+  query(searchQuery: string) {
     const channelConfig = this.channel.getConfig();
     const commands = channelConfig?.commands || [];
     const selectedCommands: (CommandResponse & { name: string })[] = commands.filter(
@@ -65,13 +65,8 @@ export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion>
       return 0;
     });
 
-    return selectedCommands;
-  };
-
-  query(searchQuery: string) {
-    const commands = this.searchCommands(searchQuery);
     return {
-      items: commands.map((c) => ({ ...c, id: c.name })),
+      items: selectedCommands.map((c) => ({ ...c, id: c.name })),
       next: null,
     };
   }
