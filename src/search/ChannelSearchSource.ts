@@ -1,8 +1,8 @@
 import { BaseSearchSource } from './BaseSearchSource';
-import type { SearchSourceOptions } from './BaseSearchSource';
 import type { Channel } from '../channel';
 import type { StreamChat } from '../client';
 import type { ChannelFilters, ChannelOptions, ChannelSort } from '../types';
+import type { SearchSourceOptions } from './types';
 
 export class ChannelSearchSource extends BaseSearchSource<Channel> {
   readonly type = 'channels';

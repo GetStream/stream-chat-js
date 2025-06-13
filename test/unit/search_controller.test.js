@@ -1,10 +1,11 @@
 import sinon from 'sinon';
 import {
-	BaseSearchSource,
 	UserSearchSource,
 	ChannelSearchSource,
 	MessageSearchSource,
 	SearchController,
+	BaseSearchSourceSync,
+	BaseSearchSource,
 } from '../../src/search';
 import { generateUser } from './test-utils/generateUser';
 import { generateChannel } from './test-utils/generateChannel';
@@ -332,6 +333,168 @@ describe('BaseSearchSource and implementations', () => {
 				executeQueryStub = sinon
 					.stub(BaseSearchSource.prototype, 'executeQuery')
 					.resolves({
+						items,
+						next: null,
+					});
+
+				searchSource = new TestSearchSource();
+			});
+
+			afterEach(() => {
+				executeQueryStub?.restore();
+			});
+
+			it('performs the debounced search execution', async () => {
+				const clock = sinon.useFakeTimers();
+				searchSource.activate();
+
+				searchSource.search('new query');
+
+				clock.tick(defaultDebounceTimeMs);
+
+				sinon.assert.calledOnce(executeQueryStub);
+				sinon.assert.calledWith(executeQueryStub, 'new query');
+
+				clock.restore();
+			});
+
+			it('debounces multiple search calls', () => {
+				const clock = sinon.useFakeTimers({ shouldAdvanceTime: true });
+				searchSource.activate();
+
+				searchSource.search('query 1');
+
+				clock.tick(100);
+				sinon.assert.notCalled(executeQueryStub);
+
+				searchSource.search('query 2');
+				clock.tick(200);
+				sinon.assert.notCalled(executeQueryStub);
+
+				searchSource.search('query 3');
+				clock.tick(300);
+				sinon.assert.calledOnce(executeQueryStub);
+				sinon.assert.calledWith(executeQueryStub, 'query 3');
+
+				clock.restore();
+			});
+
+			it('overrides the default debounce interval', () => {
+				const clock = sinon.useFakeTimers({ shouldAdvanceTime: true });
+				searchSource.activate();
+				searchSource.setDebounceOptions({ debounceMs: 400 });
+
+				searchSource.search('query 1');
+
+				clock.tick(300);
+				sinon.assert.notCalled(executeQueryStub);
+
+				searchSource.search('query 2');
+				clock.tick(400);
+				sinon.assert.calledOnce(executeQueryStub);
+				sinon.assert.calledWith(executeQueryStub, 'query 2');
+
+				clock.restore();
+			});
+		});
+	});
+
+	describe('BaseSearchSourceSync', () => {
+		// Create a concrete implementation for testing abstract class
+		const items = [{ id: 'X' }];
+		class TestSearchSource extends BaseSearchSourceSync {
+			type = 'test';
+			constructor(options) {
+				super(options);
+			}
+			query(searchQuery) {
+				return { items };
+			}
+			filterQueryResults(items) {
+				return items;
+			}
+		}
+
+		let searchSource;
+
+		beforeEach(() => {
+			searchSource = new TestSearchSource();
+		});
+
+		it('initializes with default options', () => {
+			expect(searchSource.pageSize).to.equal(10);
+			expect(searchSource.searchQuery).to.equal('');
+			expect(searchSource.isActive).to.be.false;
+			expect(searchSource.isLoading).to.be.false;
+			expect(searchSource.hasNext).to.be.true;
+			expect(searchSource.items).to.be.undefined;
+			expect(searchSource.offset).to.be.eql(0);
+		});
+
+		it('initializes with custom options', () => {
+			searchSource = new TestSearchSource({ pageSize: 20 });
+			expect(searchSource.pageSize).to.equal(20);
+		});
+
+		describe('activate/deactivate', () => {
+			it('activates source', async () => {
+				searchSource.state.next({ searchQuery: 'test', isActive: false });
+
+				searchSource.activate();
+
+				expect(searchSource.isActive).to.be.true;
+			});
+
+			it('deactivates source', () => {
+				searchSource.state.next({ isActive: true });
+				searchSource.deactivate();
+				expect(searchSource.isActive).to.be.false;
+			});
+		});
+
+		describe('executeQuery', () => {
+			it('does not update the state neither execute the query if deactivated', async () => {
+				await searchSource.executeQuery('new query');
+				expect(searchSource.searchQuery).to.equal('');
+				expect(searchSource.isLoading).to.be.false;
+				expect(searchSource.isActive).to.be.false;
+				expect(searchSource.items).to.be.undefined;
+			});
+
+			it('resets state for new search query', async () => {
+				searchSource.activate();
+				await searchSource.executeQuery('new query');
+				expect(searchSource.searchQuery).to.equal('new query');
+				expect(searchSource.items).to.be.eql(items);
+			});
+
+			it('appends items for pagination', () => {
+				const existingItems = ['item1'];
+				searchSource.state.partialNext({
+					items: existingItems,
+					isActive: true,
+					searchQuery: 'test',
+				});
+
+				sinon.stub(searchSource, 'query').returns({
+					items: ['item2'],
+					next: null,
+				});
+
+				searchSource.executeQuery();
+				expect(searchSource.items).to.deep.equal(['item1', 'item2']);
+			});
+		});
+
+		describe('search debounce', () => {
+			const defaultDebounceTimeMs = 300;
+			let executeQueryStub;
+
+			beforeEach(() => {
+				// Stub executeQuery on the prototype before creating the instance to avoid effect of binding in constructor
+				executeQueryStub = sinon
+					.stub(BaseSearchSourceSync.prototype, 'executeQuery')
+					.returns({
 						items,
 						next: null,
 					});

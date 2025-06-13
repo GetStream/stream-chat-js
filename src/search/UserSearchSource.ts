@@ -1,7 +1,7 @@
 import { BaseSearchSource } from './BaseSearchSource';
-import type { SearchSourceOptions } from './BaseSearchSource';
 import type { StreamChat } from '../client';
 import type { UserFilters, UserOptions, UserResponse, UserSort } from '../types';
+import type { SearchSourceOptions } from './types';
 
 export class UserSearchSource extends BaseSearchSource<UserResponse> {
   readonly type = 'users';
