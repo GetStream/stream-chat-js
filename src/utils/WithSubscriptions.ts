@@ -11,7 +11,8 @@ export abstract class WithSubscriptions {
    * overriding `unregisterSubscriptions` call the base method and return
    * its unique symbol value.
    */
-  private static symbol = Symbol(WithSubscriptions.name);
+  protected static symbol = Symbol(WithSubscriptions.name);
+  private refCount = 0;
 
   public abstract registerSubscriptions(): void;
 
@@ -23,8 +24,15 @@ export abstract class WithSubscriptions {
     return this.unsubscribeFunctions.size > 0;
   }
 
-  public addUnsubscribeFunction(unsubscribeFunction: Unsubscribe) {
+  protected addUnsubscribeFunction(unsubscribeFunction: Unsubscribe) {
     this.unsubscribeFunctions.add(unsubscribeFunction);
+  }
+
+  /**
+   * Increments `refCount` by one and returns new value.
+   */
+  protected incrementRefCount() {
+    return ++this.refCount;
   }
 
   /**
@@ -43,8 +51,14 @@ export abstract class WithSubscriptions {
    * ```
    */
   public unregisterSubscriptions(): typeof WithSubscriptions.symbol {
+    if (this.refCount > 1) {
+      this.refCount--;
+      return WithSubscriptions.symbol;
+    }
+
     this.unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
     this.unsubscribeFunctions.clear();
+    this.refCount = 0;
 
     return WithSubscriptions.symbol;
   }

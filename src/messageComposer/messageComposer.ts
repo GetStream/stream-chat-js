@@ -42,9 +42,10 @@ export type CompositionContext = Channel | Thread | LocalMessageWithLegacyThread
 
 export type MessageComposerState = {
   id: string;
-  quotedMessage: LocalMessageBase | null;
-  pollId: string | null;
   draftId: string | null;
+  pollId: string | null;
+  quotedMessage: LocalMessageBase | null;
+  showReplyInChannel: boolean;
 };
 
 export type MessageComposerOptions = {
@@ -82,10 +83,11 @@ const initState = (
 ): MessageComposerState => {
   if (!composition) {
     return {
-      id: MessageComposer.generateId(),
-      quotedMessage: null,
-      pollId: null,
       draftId: null,
+      id: MessageComposer.generateId(),
+      pollId: null,
+      quotedMessage: null,
+      showReplyInChannel: false,
     };
   }
 
@@ -104,14 +106,13 @@ const initState = (
   return {
     draftId,
     id,
+    pollId: message.poll_id ?? null,
     quotedMessage: quotedMessage
       ? formatMessage(quotedMessage as MessageResponseBase)
       : null,
-    pollId: message.poll_id ?? null,
+    showReplyInChannel: false,
   };
 };
-
-const noop = () => undefined;
 
 export class MessageComposer extends WithSubscriptions {
   readonly channel: Channel;
@@ -274,6 +275,10 @@ export class MessageComposer extends WithSubscriptions {
     return this.state.getLatestValue().pollId;
   }
 
+  get showReplyInChannel() {
+    return this.state.getLatestValue().showReplyInChannel;
+  }
+
   get hasSendableData() {
     return !!(
       (!this.attachmentManager.uploadsInProgressCount &&
@@ -356,23 +361,23 @@ export class MessageComposer extends WithSubscriptions {
   }
 
   public registerSubscriptions = (): UnregisterSubscriptions => {
-    if (this.hasSubscriptions) {
-      // Already listening for events and changes
-      return noop;
+    if (!this.hasSubscriptions) {
+      this.addUnsubscribeFunction(this.subscribeMessageComposerSetupStateChange());
+      this.addUnsubscribeFunction(this.subscribeMessageUpdated());
+      this.addUnsubscribeFunction(this.subscribeMessageDeleted());
+
+      this.addUnsubscribeFunction(this.subscribeTextComposerStateChanged());
+      this.addUnsubscribeFunction(this.subscribeAttachmentManagerStateChanged());
+      this.addUnsubscribeFunction(this.subscribeLinkPreviewsManagerStateChanged());
+      this.addUnsubscribeFunction(this.subscribePollComposerStateChanged());
+      this.addUnsubscribeFunction(this.subscribeCustomDataManagerStateChanged());
+      this.addUnsubscribeFunction(this.subscribeMessageComposerStateChanged());
+      this.addUnsubscribeFunction(this.subscribeMessageComposerConfigStateChanged());
     }
-    this.addUnsubscribeFunction(this.subscribeMessageComposerSetupStateChange());
-    this.addUnsubscribeFunction(this.subscribeMessageUpdated());
-    this.addUnsubscribeFunction(this.subscribeMessageDeleted());
 
-    this.addUnsubscribeFunction(this.subscribeTextComposerStateChanged());
-    this.addUnsubscribeFunction(this.subscribeAttachmentManagerStateChanged());
-    this.addUnsubscribeFunction(this.subscribeLinkPreviewsManagerStateChanged());
-    this.addUnsubscribeFunction(this.subscribePollComposerStateChanged());
-    this.addUnsubscribeFunction(this.subscribeCustomDataManagerStateChanged());
-    this.addUnsubscribeFunction(this.subscribeMessageComposerStateChanged());
-    this.addUnsubscribeFunction(this.subscribeMessageComposerConfigStateChanged());
+    this.incrementRefCount();
 
-    return this.unregisterSubscriptions.bind(this);
+    return () => this.unregisterSubscriptions();
   };
 
   private subscribeMessageUpdated = () => {
@@ -580,6 +585,10 @@ export class MessageComposer extends WithSubscriptions {
     this.state.partialNext({ quotedMessage });
   };
 
+  toggleShowReplyInChannel = () => {
+    this.state.partialNext({ showReplyInChannel: !this.showReplyInChannel });
+  };
+
   clear = () => {
     this.initState();
   };
@@ -664,15 +673,21 @@ export class MessageComposer extends WithSubscriptions {
     const composition = await this.pollComposer.compose();
     if (!composition || !composition.data.id) return;
     try {
-      const { poll } = await this.client.createPoll(composition.data);
-      this.state.partialNext({ pollId: poll.id });
-      this.pollComposer.initState();
+      const poll = await this.client.polls.createPoll(composition.data);
+      this.state.partialNext({ pollId: poll?.id });
     } catch (error) {
-      this.client.notifications.add({
+      this.client.notifications.addError({
         message: 'Failed to create the poll',
         origin: {
           emitter: 'MessageComposer',
           context: { composer: this },
+        },
+        options: {
+          type: 'api:poll:create:failed',
+          metadata: {
+            reason: (error as Error).message,
+          },
+          originalError: error instanceof Error ? error : undefined,
         },
       });
       throw error;
