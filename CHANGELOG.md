@@ -1,3 +1,9 @@
+## [9.6.1](https://github.com/GetStream/stream-chat-js/compare/v9.6.0...v9.6.1) (2025-06-13)
+
+### Bug Fixes
+
+* use ref counting in WithSubscriptions abstract ([#1563](https://github.com/GetStream/stream-chat-js/issues/1563)) ([f31595b](https://github.com/GetStream/stream-chat-js/commit/f31595b8e1972cf023f6f0d1aac39584db8594e1))
+
 ## [9.6.0](https://github.com/GetStream/stream-chat-js/compare/v9.5.1...v9.6.0) (2025-06-12)
 
 ### Bug Fixes
