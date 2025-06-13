@@ -163,6 +163,34 @@ abstract class BaseSearchSourceBase<T> implements ISearchSource<T> {
     };
   }
 
+  protected prepareStateForQuery(newSearchString?: string) {
+    const hasNewSearchQuery = typeof newSearchString !== 'undefined';
+    const searchString = newSearchString ?? this.searchQuery;
+
+    if (hasNewSearchQuery) {
+      this.state.next(this.getStateBeforeFirstQuery(newSearchString ?? ''));
+    } else {
+      this.state.partialNext({ isLoading: true });
+    }
+
+    return { searchString, hasNewSearchQuery };
+  }
+
+  protected updatePaginationStateFromQuery(result: QueryReturnValue<T>) {
+    const { items, next } = result;
+
+    const stateUpdate: Partial<SearchSourceState<T>> = {};
+    if (next || next === null) {
+      stateUpdate.next = next;
+      stateUpdate.hasNext = !!next;
+    } else {
+      stateUpdate.offset = (this.offset ?? 0) + items.length;
+      stateUpdate.hasNext = items.length === this.pageSize;
+    }
+
+    return stateUpdate;
+  }
+
   resetState() {
     this.state.next(this.initialState);
   }
@@ -195,29 +223,17 @@ export abstract class BaseSearchSource<T>
 
   async executeQuery(newSearchString?: string) {
     if (!this.canExecuteQuery(newSearchString)) return;
-    const hasNewSearchQuery = typeof newSearchString !== 'undefined';
-    const searchString = newSearchString ?? this.searchQuery;
 
-    if (hasNewSearchQuery) {
-      this.state.next(this.getStateBeforeFirstQuery(newSearchString ?? ''));
-    } else {
-      this.state.partialNext({ isLoading: true });
-    }
+    const { hasNewSearchQuery, searchString } =
+      this.prepareStateForQuery(newSearchString);
 
-    const stateUpdate: Partial<SearchSourceState<T>> = {};
+    let stateUpdate: Partial<SearchSourceState<T>> = {};
     try {
       const results = await this.query(searchString);
       if (!results) return;
-      const { items, next } = results;
 
-      if (next || next === null) {
-        stateUpdate.next = next;
-        stateUpdate.hasNext = !!next;
-      } else {
-        stateUpdate.offset = (this.offset ?? 0) + items.length;
-        stateUpdate.hasNext = items.length === this.pageSize;
-      }
-
+      const { items } = results;
+      stateUpdate = this.updatePaginationStateFromQuery(results);
       stateUpdate.items = await this.filterQueryResults(items);
     } catch (e) {
       stateUpdate.lastQueryError = e as Error;
@@ -255,29 +271,17 @@ export abstract class BaseSearchSourceSync<T>
 
   executeQuery(newSearchString?: string) {
     if (!this.canExecuteQuery(newSearchString)) return;
-    const hasNewSearchQuery = typeof newSearchString !== 'undefined';
-    const searchString = newSearchString ?? this.searchQuery;
 
-    if (hasNewSearchQuery) {
-      this.state.next(this.getStateBeforeFirstQuery(newSearchString ?? ''));
-    } else {
-      this.state.partialNext({ isLoading: true });
-    }
+    const { hasNewSearchQuery, searchString } =
+      this.prepareStateForQuery(newSearchString);
 
-    const stateUpdate: Partial<SearchSourceState<T>> = {};
+    let stateUpdate: Partial<SearchSourceState<T>> = {};
     try {
       const results = this.query(searchString);
       if (!results) return;
-      const { items, next } = results;
 
-      if (next || next === null) {
-        stateUpdate.next = next;
-        stateUpdate.hasNext = !!next;
-      } else {
-        stateUpdate.offset = (this.offset ?? 0) + items.length;
-        stateUpdate.hasNext = items.length === this.pageSize;
-      }
-
+      const { items } = results;
+      stateUpdate = this.updatePaginationStateFromQuery(results);
       stateUpdate.items = this.filterQueryResults(items);
     } catch (e) {
       stateUpdate.lastQueryError = e as Error;
