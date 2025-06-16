@@ -385,6 +385,7 @@ describe('MessageComposer', () => {
         pollId: null,
         quotedMessage: null,
         draftId: null,
+        showReplyInChannel: false,
       });
     });
 
@@ -403,6 +404,7 @@ describe('MessageComposer', () => {
         pollId: null,
         quotedMessage: null,
         draftId: null,
+        showReplyInChannel: false,
       });
     });
 
@@ -445,6 +447,28 @@ describe('MessageComposer', () => {
       expect(unsubscribeFunctions.size).toBe(0);
     });
 
+    it('should unregister subscriptions only if refCount drops to 1', () => {
+      const { messageComposer } = setup();
+
+      const spy = vi.spyOn(messageComposer, 'incrementRefCount');
+
+      const unsub1 = messageComposer.registerSubscriptions();
+      const unsub2 = messageComposer.registerSubscriptions();
+
+      expect(spy).toHaveBeenCalledTimes(2);
+      const lastResult = spy.mock.results.at(-1);
+
+      expect(lastResult?.value).toEqual(2);
+
+      unsub1();
+
+      expect(messageComposer.hasSubscriptions).toBe(true);
+
+      unsub2();
+
+      expect(messageComposer.hasSubscriptions).toBe(false);
+    });
+
     it('should set quoted message', () => {
       const { messageComposer } = setup();
       const quotedMessage = {
@@ -457,6 +481,15 @@ describe('MessageComposer', () => {
 
       messageComposer.setQuotedMessage(quotedMessage);
       expect(messageComposer.state.getLatestValue().quotedMessage).toEqual(quotedMessage);
+    });
+
+    it('should toggle showReplyInChannel value with toggleShowReplyInChannel', () => {
+      const { messageComposer } = setup();
+
+      messageComposer.toggleShowReplyInChannel();
+      expect(messageComposer.state.getLatestValue().showReplyInChannel).toBe(true);
+      messageComposer.toggleShowReplyInChannel();
+      expect(messageComposer.state.getLatestValue().showReplyInChannel).toBe(false);
     });
 
     it('should clear state', () => {
@@ -509,6 +542,7 @@ describe('MessageComposer', () => {
         pollId: 'test-poll-id',
         quotedMessage: null,
         draftId: null,
+        showReplyInChannel: false,
       });
     });
 
