@@ -13,6 +13,9 @@ export class MockOfflineDB extends AbstractOfflineDB {
   upsertPoll = vi.fn();
   upsertChannelData = vi.fn();
   upsertReads = vi.fn();
+  getDraft = vi.fn();
+  upsertDraft = vi.fn();
+  deleteDraft = vi.fn();
   upsertMessages = vi.fn();
   upsertMembers = vi.fn();
   updateMessage = vi.fn();

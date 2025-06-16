@@ -5,6 +5,7 @@ import type {
   ChannelMemberResponse,
   ChannelResponse,
   ChannelSort,
+  DraftResponse,
   LocalMessage,
   MessageResponse,
   PollResponse,
@@ -300,6 +301,31 @@ export type DBChannelExistsType = {
   cid: string;
 };
 
+export type DBUpsertDraftType = {
+  /** Draft message to upsert. */
+  draft: DraftResponse;
+  /** Whether to immediately execute the operation. */
+  execute?: boolean;
+};
+
+export type DBGetDraftType = {
+  /** Channel ID for which to get the draft. */
+  cid: string;
+  /** ID of the user requesting the draft. */
+  userId: string;
+  /** Optional parent ID for the parent message in thread, if applicable. */
+  parent_id?: string;
+};
+
+export type DBDeleteDraftType = {
+  /** Channel ID for which to delete the draft. */
+  cid: string;
+  /** Optional parent ID for the parent message in thread, if applicable. */
+  parent_id?: string;
+  /** Whether to immediately execute the operation. */
+  execute?: boolean;
+};
+
 /**
  * Represents a list of batch SQL queries to be executed.
  */
@@ -317,6 +343,7 @@ export interface OfflineDBApi {
   upsertAppSettings: (
     options: DBUpsertAppSettingsType,
   ) => Promise<ExecuteBatchDBQueriesType>;
+  upsertDraft: (options: DBUpsertDraftType) => Promise<ExecuteBatchDBQueriesType>;
   upsertPoll: (options: DBUpsertPollType) => Promise<ExecuteBatchDBQueriesType>;
   upsertChannelData: (
     options: DBUpsertChannelDataType,
@@ -326,6 +353,7 @@ export interface OfflineDBApi {
   upsertMembers: (options: DBUpsertMembersType) => Promise<ExecuteBatchDBQueriesType>;
   updateReaction: (options: DBUpdateReactionType) => Promise<ExecuteBatchDBQueriesType>;
   updateMessage: (options: DBUpdateMessageType) => Promise<ExecuteBatchDBQueriesType>;
+  getDraft: (options: DBGetDraftType) => Promise<DraftResponse | null>;
   getChannels: (
     options: DBGetChannelsType,
   ) => Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>;
@@ -341,6 +369,7 @@ export interface OfflineDBApi {
   executeSqlBatch: (queries: ExecuteBatchDBQueriesType) => Promise<unknown>;
   addPendingTask: (task: PendingTask) => Promise<() => Promise<void>>;
   getPendingTasks: (conditions?: DBGetPendingTasksType) => Promise<PendingTask[]>;
+  deleteDraft: (options: DBDeleteDraftType) => Promise<ExecuteBatchDBQueriesType>;
   deletePendingTask: (
     options: DBDeletePendingTaskType,
   ) => Promise<ExecuteBatchDBQueriesType>;
