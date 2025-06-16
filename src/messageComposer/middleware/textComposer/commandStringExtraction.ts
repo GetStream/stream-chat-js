@@ -1,6 +1,6 @@
 import type { Middleware } from '../../../middleware';
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
-import { escapeRegExp } from './textMiddlewareUtils';
+import { stripTriggerFromText } from './textMiddlewareUtils';
 import type { CommandSuggestion } from './types';
 
 export type ApplyCommandSettingsMiddleware = Middleware<
@@ -20,10 +20,7 @@ export const createCommandStringExtractionMiddleware =
 
         const triggerWithCommand = `/${command.name}`;
 
-        const newText = state.text.replace(
-          new RegExp(`^${escapeRegExp(triggerWithCommand)}\\s*`),
-          '',
-        );
+        const newText = stripTriggerFromText(state.text, triggerWithCommand);
 
         return complete({
           ...state,

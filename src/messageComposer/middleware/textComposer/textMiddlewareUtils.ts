@@ -1,5 +1,10 @@
 import type { TextSelection } from './types';
 
+/**
+ * For commands, we want to match all patterns except:
+ * 1. Text not starting with trigger
+ * 2. Trigger in middle of text
+ */
 export const getTriggerCharWithToken = ({
   trigger,
   text,
@@ -11,11 +16,14 @@ export const getTriggerCharWithToken = ({
   isCommand?: boolean;
   acceptTrailingSpaces?: boolean;
 }) => {
+  // No trigger in between text
+  const notTrigger = `[^${trigger}]*`;
   const triggerNorWhitespace = `[^\\s${trigger}]*`;
+
   const match = text.match(
     new RegExp(
       isCommand
-        ? `^[${trigger}]${triggerNorWhitespace}$`
+        ? `^[${trigger}]${notTrigger}$`
         : acceptTrailingSpaces
           ? `(?!^|\\W)?[${trigger}]${triggerNorWhitespace}\\s?${triggerNorWhitespace}$`
           : `(?!^|\\W)?[${trigger}]${triggerNorWhitespace}$`,
@@ -23,7 +31,8 @@ export const getTriggerCharWithToken = ({
     ),
   );
 
-  return match && match[match.length - 1].trim();
+  const result = match && match[match.length - 1];
+  return isCommand ? result : result?.trim();
 };
 
 export const insertItemWithTrigger = ({
@@ -137,6 +146,7 @@ export const getTokenizedSuggestionDisplayName = ({
 
 export const isTextMatched = (input: string, command: string): boolean => {
   try {
+    // Create a regex to match the command at the start of the input with optional whitespace
     const regex = new RegExp(`^${escapeRegExp(command)}\\s+`, 'i');
     return regex.test(input);
   } catch (error) {
@@ -144,3 +154,22 @@ export const isTextMatched = (input: string, command: string): boolean => {
     return false;
   }
 };
+
+/**
+ * Extracts the first word from a given text.
+ * @param text - The input text from which to extract the first word.
+ * @returns The first word found in the text, or an empty string if no word is found.
+ */
+export const getFirstWordFromText = (text: string): string => {
+  const match = text.match(/^\s*(\S+)/);
+  return match ? match[1] : '';
+};
+
+/**
+ * Strips the trigger from the text.
+ * @param text - The input text from which to strip the trigger.
+ * @param trigger - The trigger string to be removed from the start of the text.
+ * @returns The text with the trigger removed from the start.
+ */
+export const stripTriggerFromText = (text: string, trigger: string) =>
+  text.replace(new RegExp(`^${escapeRegExp(trigger)}\\s*`), '');

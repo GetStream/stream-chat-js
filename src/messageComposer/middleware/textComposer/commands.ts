@@ -6,6 +6,7 @@ import type { CommandResponse } from '../../../types';
 import { mergeWith } from '../../../utils/mergeWith';
 import type { CommandSuggestion, TextComposerMiddlewareOptions } from './types';
 import {
+  getFirstWordFromText,
   getTriggerCharWithToken,
   insertItemWithTrigger,
   isTextMatched,
@@ -106,7 +107,6 @@ export const createCommandsMiddleware = (
     searchSource?: CommandSearchSource;
   },
 ): CommandsMiddleware => {
-  const commands = channel?.getConfig()?.commands ?? [];
   const finalOptions = mergeWith(DEFAULT_OPTIONS, options ?? {});
   let searchSource = new CommandSearchSource(channel);
   if (options?.searchSource) {
@@ -129,21 +129,6 @@ export const createCommandsMiddleware = (
           isCommand: true,
         });
 
-        const inputText = finalText?.toLowerCase().slice(1);
-
-        const matchedCommand = commands?.find((command) => {
-          if (!command.name || !inputText) return false;
-          return isTextMatched(inputText, command.name.toLowerCase());
-        });
-
-        if (matchedCommand) {
-          return next({
-            ...state,
-            command: matchedCommand,
-            suggestions: undefined,
-          });
-        }
-
         const newSearchTriggerred =
           triggerWithToken && triggerWithToken.length === finalOptions.minChars;
 
@@ -163,11 +148,29 @@ export const createCommandsMiddleware = (
           return next(newState);
         }
 
+        const query = triggerWithToken.slice(1);
+
+        const searchQuery = getFirstWordFromText(query);
+
+        const commands = searchSource?.query(searchQuery).items;
+
+        const matchedCommand = commands?.find((command) =>
+          isTextMatched(query.toLowerCase(), command.name.toLowerCase()),
+        );
+
+        if (matchedCommand) {
+          return next({
+            ...state,
+            command: matchedCommand,
+            suggestions: undefined,
+          });
+        }
+
         return complete({
           ...state,
           command: null,
           suggestions: {
-            query: triggerWithToken.slice(1),
+            query: searchQuery,
             searchSource,
             trigger: finalOptions.trigger,
           },
