@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   Channel,
   LocalMessage,
@@ -10,6 +10,7 @@ import { DeepPartial } from '../../../src/types.utility';
 import { MessageComposer } from '../../../src/messageComposer/messageComposer';
 import { StateStore } from '../../../src/store';
 import { DraftResponse, MessageResponse } from '../../../src/types';
+import { MockOfflineDB } from '../offline-support/MockOfflineDB';
 
 const generateUuidV4Output = 'test-uuid';
 // Mock dependencies
@@ -112,6 +113,40 @@ const setup = ({
   const mockClient = new StreamChat('test-api-key');
   mockClient.user = user;
   mockClient.userID = user.id;
+  // Create a proper Channel instance with only the necessary attributes mocked
+  const mockChannel = new Channel(mockClient, 'messaging', 'test-channel-id', {
+    id: 'test-channel-id',
+    type: 'messaging',
+    cid: 'messaging:test-channel-id',
+  });
+
+  // Mock the getClient method
+  vi.spyOn(mockChannel, 'getClient').mockReturnValue(mockClient);
+
+  const messageComposer = new MessageComposer({
+    client: mockClient,
+    compositionContext: compositionContext || mockChannel,
+    composition,
+    config,
+  });
+
+  return { mockClient, mockChannel, messageComposer };
+};
+
+const offlineModeMessageComposerSetup = ({
+  composition,
+  compositionContext,
+  config,
+}: {
+  composition?: LocalMessage | DraftResponse | MessageResponse | undefined;
+  compositionContext?: Channel | Thread | LocalMessage | undefined;
+  config?: DeepPartial<MessageComposerConfig>;
+} = {}) => {
+  const mockClient = new StreamChat('test-api-key');
+  mockClient.user = user;
+  mockClient.userID = user.id;
+  mockClient.setOfflineDBApi(new MockOfflineDB({ client: mockClient }));
+  vi.spyOn(mockClient.offlineDb!, 'initializeDB').mockResolvedValue(false);
   // Create a proper Channel instance with only the necessary attributes mocked
   const mockChannel = new Channel(mockClient, 'messaging', 'test-channel-id', {
     id: 'test-channel-id',
@@ -373,6 +408,30 @@ describe('MessageComposer', () => {
       });
       expect(messageComposer.compositionIsEmpty).toBe(false);
       spyTextComposerTextIsEmpty.mockRestore();
+    });
+  });
+
+  describe('offlineDB enabled', () => {
+    it('hasSendableData should return false if the composition is empty', () => {
+      const { messageComposer } = offlineModeMessageComposerSetup();
+
+      const spyCompositionIsEmpty = vi
+        .spyOn(messageComposer, 'compositionIsEmpty', 'get')
+        .mockReturnValue(true);
+
+      expect(messageComposer.hasSendableData).toBe(false);
+      spyCompositionIsEmpty.mockRestore();
+    });
+
+    it('hasSendableData should return true if the composition is not empty', () => {
+      const { messageComposer } = offlineModeMessageComposerSetup();
+
+      const spyCompositionIsEmpty = vi
+        .spyOn(messageComposer, 'compositionIsEmpty', 'get')
+        .mockReturnValue(false);
+
+      expect(messageComposer.hasSendableData).toBe(true);
+      spyCompositionIsEmpty.mockRestore();
     });
   });
 
@@ -800,6 +859,145 @@ describe('MessageComposer', () => {
           },
           originalError: expect.any(Error),
           severity: 'error',
+        },
+      });
+    });
+  });
+
+  describe('getDraft', () => {
+    const draftResponse: DraftResponse = {
+      channel_cid: 'messaging:test-channel-id',
+      message: {
+        id: 'test-message-id',
+        text: 'Test message',
+        attachments: [],
+        mentioned_users: [],
+      },
+      created_at: new Date().toISOString(),
+    };
+    it('should not create draft if edited message exists', async () => {
+      const editedMessage = {
+        id: 'edited-message-id',
+        type: 'regular',
+        text: 'Edited message',
+        attachments: [],
+        mentioned_users: [],
+      };
+
+      const { messageComposer } = offlineModeMessageComposerSetup({
+        composition: editedMessage,
+      });
+
+      const spyGetDraft = vi.spyOn(messageComposer.channel, 'getDraft');
+      await messageComposer.getDraft();
+
+      expect(messageComposer.client.offlineDb!.getDraft).not.toHaveBeenCalled();
+      expect(spyGetDraft).not.toHaveBeenCalled();
+    });
+
+    it("should return if draft config isn't enabled", async () => {
+      const { messageComposer } = offlineModeMessageComposerSetup({
+        config: { drafts: { enabled: false } },
+      });
+
+      const spyGetDraft = vi.spyOn(messageComposer.channel, 'getDraft');
+
+      await messageComposer.getDraft();
+
+      expect(messageComposer.client.offlineDb!.getDraft).not.toHaveBeenCalled();
+      expect(spyGetDraft).not.toHaveBeenCalled();
+    });
+
+    it('should rely on offline db if draft exists in offline DB', async () => {
+      const { messageComposer, mockChannel } = offlineModeMessageComposerSetup({
+        config: { drafts: { enabled: true } },
+      });
+
+      const initStateSpy = vi.spyOn(messageComposer, 'initState');
+      const spyGetDraftFromOfflineDB = vi.spyOn(
+        messageComposer.client.offlineDb!,
+        'getDraft',
+      );
+      spyGetDraftFromOfflineDB.mockResolvedValue(draftResponse);
+
+      const spyChannelGetDraft = vi.spyOn(mockChannel, 'getDraft');
+      spyChannelGetDraft.mockResolvedValue({
+        draft: draftResponse,
+        duration: '10',
+      });
+
+      await messageComposer.getDraft();
+
+      expect(spyGetDraftFromOfflineDB).toHaveBeenCalled();
+      expect(initStateSpy).toHaveBeenCalledWith({
+        composition: draftResponse,
+      });
+      expect(initStateSpy).toHaveBeenCalledTimes(2);
+      expect(spyChannelGetDraft).toHaveBeenCalled();
+      expect(messageComposer.state.getLatestValue().draftId).toBe('test-message-id');
+    });
+
+    it('should rely on http API if draft not found in offline DB', async () => {
+      const { messageComposer, mockChannel } = offlineModeMessageComposerSetup({
+        config: { drafts: { enabled: true } },
+      });
+
+      const initStateSpy = vi.spyOn(messageComposer, 'initState');
+      const spyGetDraftFromOfflineDB = vi.spyOn(
+        messageComposer.client.offlineDb!,
+        'getDraft',
+      );
+      spyGetDraftFromOfflineDB.mockResolvedValue(null);
+
+      const spyChannelGetDraft = vi.spyOn(mockChannel, 'getDraft');
+      spyChannelGetDraft.mockResolvedValue({
+        draft: draftResponse,
+        duration: '10',
+      });
+
+      await messageComposer.getDraft();
+
+      expect(spyGetDraftFromOfflineDB).toHaveBeenCalled();
+      expect(initStateSpy).toHaveBeenCalledWith({
+        composition: draftResponse,
+      });
+      expect(initStateSpy).toHaveBeenCalledTimes(1);
+      expect(spyChannelGetDraft).toHaveBeenCalled();
+      expect(messageComposer.state.getLatestValue().draftId).toBe('test-message-id');
+    });
+
+    it('should reach catch block if getDraft fails', async () => {
+      const { mockClient, messageComposer, mockChannel } =
+        offlineModeMessageComposerSetup({
+          config: { drafts: { enabled: true } },
+        });
+
+      const initStateSpy = vi.spyOn(messageComposer, 'initState');
+      const spyGetDraftFromOfflineDB = vi.spyOn(
+        messageComposer.client.offlineDb!,
+        'getDraft',
+      );
+      spyGetDraftFromOfflineDB.mockResolvedValue(draftResponse);
+
+      const spyChannelGetDraft = vi.spyOn(mockChannel, 'getDraft');
+      spyChannelGetDraft.mockRejectedValue(new Error('Failed to get draft'));
+
+      const spyAddNotification = vi.spyOn(mockClient.notifications, 'add');
+
+      await messageComposer.getDraft();
+
+      expect(spyGetDraftFromOfflineDB).toHaveBeenCalled();
+      expect(initStateSpy).toHaveBeenCalledWith({
+        composition: draftResponse,
+      });
+      expect(initStateSpy).toHaveBeenCalledTimes(1);
+      expect(spyChannelGetDraft).toHaveBeenCalled();
+      expect(messageComposer.state.getLatestValue().draftId).toBe('test-message-id');
+      expect(spyAddNotification).toHaveBeenCalledWith({
+        message: 'Failed to get the draft',
+        origin: {
+          emitter: 'MessageComposer',
+          context: { composer: messageComposer },
         },
       });
     });

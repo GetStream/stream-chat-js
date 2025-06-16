@@ -196,6 +196,35 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
   /**
    * @abstract
+   * Fetches the provided draft from the DB. Should return as close to
+   * the server side DraftResponse as possible.
+   * @param {DBGetDraftType} options
+   * @returns {Promise<DraftResponse | null>}
+   */
+  abstract getDraft: OfflineDBApi['getDraft'];
+  /**
+   * @abstract
+   * Upserts a draft in the DB.
+   * Will write to the draft table upserting the draft.
+   * Will return the prepared queries for delayed execution (even if they are
+   * already executed).
+   * @param {DBUpsertDraftType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
+   */
+  abstract upsertDraft: OfflineDBApi['upsertDraft'];
+  /**
+   * @abstract
+   * Deletes a draft from the DB.
+   * Will write to the draft table removing the draft.
+   * Will return the prepared queries for delayed execution (even if they are
+   * already executed).
+   * @param {DBDeleteDraftType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
+   */
+  abstract deleteDraft: OfflineDBApi['deleteDraft'];
+
+  /**
+   * @abstract
    * Fetches the provided channels from the DB and aggregates all data associated
    * with them in a single ChannelAPIResponse. The implementation itself is responsible
    * for aggregating and serialization of all of the data. Should return as close to
@@ -897,6 +926,44 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
+   * A utility handler for all draft events:
+   * - draft.updated -> updateDraft
+   * - draft.deleted -> deleteDraft
+   * @param event - the WS event we are trying to process
+   * @param execute - whether to immediately execute the operation.
+   */
+  handleDraftEvent = async ({
+    event,
+    execute = true,
+  }: {
+    event: Event;
+    execute?: boolean;
+  }) => {
+    const { cid, draft, type } = event;
+
+    if (!draft) return [];
+
+    if (type === 'draft.updated') {
+      return await this.upsertDraft({
+        draft,
+        execute,
+      });
+    }
+
+    if (type === 'draft.deleted') {
+      if (!cid) return [];
+
+      return await this.deleteDraft({
+        cid,
+        parent_id: draft.parent_id,
+        execute,
+      });
+    }
+
+    return [];
+  };
+
+  /**
    * A generic event handler that decides which DB API to invoke based on
    * event.type for all events we are currently handling. It is used to both
    * react on WS events as well as process the sync API events.
@@ -942,6 +1009,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
     if (type === 'channel.hidden' || type === 'channel.visible') {
       return await this.handleChannelVisibilityEvent({ event, execute });
+    }
+
+    if (type === 'draft.updated' || type === 'draft.deleted') {
+      return await this.handleDraftEvent({ event, execute });
     }
 
     // Note: It is a bit counter-intuitive that we do not touch the messages in the
