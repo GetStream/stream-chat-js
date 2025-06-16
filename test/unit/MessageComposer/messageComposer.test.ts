@@ -528,6 +528,48 @@ describe('MessageComposer', () => {
       expect(messageComposer.hasSubscriptions).toBe(false);
     });
 
+    it('should register draft subscriptions only once if done through registerSubscriptions', () => {
+      const { messageComposer } = setup({
+        config: { drafts: { enabled: true } },
+      });
+
+      const draftEventSubscriptionsSpy = vi.spyOn(
+        messageComposer,
+        'registerDraftEventSubscriptions',
+      );
+
+      messageComposer.registerSubscriptions();
+      messageComposer.registerSubscriptions();
+
+      expect(draftEventSubscriptionsSpy).toHaveBeenCalledOnce();
+    });
+
+    it('should allow multiple registrations of draft ws events if done through registerDraftEventSubscriptions', () => {
+      const { messageComposer } = setup({
+        config: { drafts: { enabled: true } },
+      });
+
+      const subscribeDraftUpdatedSpy = vi
+        // @ts-expect-error - we are testing private properties
+        .spyOn(messageComposer, 'subscribeDraftUpdated');
+      const subscribeDraftDeletedSpy = vi
+        // @ts-expect-error - we are testing private properties
+        .spyOn(messageComposer, 'subscribeDraftDeleted');
+
+      messageComposer.registerSubscriptions();
+
+      expect(subscribeDraftUpdatedSpy).toHaveBeenCalledOnce();
+      expect(subscribeDraftDeletedSpy).toHaveBeenCalledOnce();
+
+      subscribeDraftUpdatedSpy.mockClear();
+      subscribeDraftDeletedSpy.mockClear();
+
+      messageComposer.registerDraftEventSubscriptions();
+
+      expect(subscribeDraftUpdatedSpy).toHaveBeenCalledOnce();
+      expect(subscribeDraftDeletedSpy).toHaveBeenCalledOnce();
+    });
+
     it('should set quoted message', () => {
       const { messageComposer } = setup();
       const quotedMessage = {
@@ -1302,37 +1344,26 @@ describe('MessageComposer', () => {
         config: { drafts: { enabled: false } },
       });
 
-      const unsubscribeDraftUpdated = vi.fn();
-      const unsubscribeDraftDeleted = vi.fn();
+      const unsubscribeDraftEvents = vi.fn();
 
-      // @ts-expect-error - we are testing private properties
-      const subscribeDraftUpdatedSpy = vi
-        .spyOn(messageComposer, 'subscribeDraftUpdated')
-        .mockImplementation(() => unsubscribeDraftUpdated);
-      // @ts-expect-error - we are testing private properties
-      const subscribeDraftDeletedSpy = vi
-        .spyOn(messageComposer, 'subscribeDraftDeleted')
-        .mockImplementation(() => unsubscribeDraftDeleted);
+      const registerDraftEventSubscriptionsSpy = vi
+        .spyOn(messageComposer, 'registerDraftEventSubscriptions')
+        .mockImplementation(() => unsubscribeDraftEvents);
 
       messageComposer.registerSubscriptions();
 
-      expect(subscribeDraftUpdatedSpy).not.toHaveBeenCalled();
-      expect(subscribeDraftDeletedSpy).not.toHaveBeenCalled();
+      expect(registerDraftEventSubscriptionsSpy).not.toHaveBeenCalled();
 
       messageComposer.updateConfig({ drafts: { enabled: true } });
 
-      expect(subscribeDraftUpdatedSpy).toHaveBeenCalledTimes(1);
-      expect(subscribeDraftDeletedSpy).toHaveBeenCalledTimes(1);
+      expect(registerDraftEventSubscriptionsSpy).toHaveBeenCalledTimes(1);
 
-      subscribeDraftUpdatedSpy.mockClear();
-      subscribeDraftDeletedSpy.mockClear();
+      registerDraftEventSubscriptionsSpy.mockClear();
 
       messageComposer.updateConfig({ drafts: { enabled: false } });
 
-      expect(unsubscribeDraftUpdated).toHaveBeenCalledTimes(1);
-      expect(unsubscribeDraftDeleted).toHaveBeenCalledTimes(1);
-      expect(subscribeDraftUpdatedSpy).not.toHaveBeenCalled();
-      expect(subscribeDraftDeletedSpy).not.toHaveBeenCalled();
+      expect(unsubscribeDraftEvents).toHaveBeenCalledTimes(1);
+      expect(registerDraftEventSubscriptionsSpy).not.toHaveBeenCalled();
     });
   });
 });
