@@ -364,6 +364,16 @@ export class MessageComposer extends WithSubscriptions {
     });
   }
 
+  public registerDraftEventSubscriptions = () => {
+    const unsubscribeDraftUpdated = this.subscribeDraftUpdated();
+    const unsubscribeDraftDeleted = this.subscribeDraftDeleted();
+
+    return () => {
+      unsubscribeDraftUpdated();
+      unsubscribeDraftDeleted();
+    };
+  };
+
   public registerSubscriptions = (): UnregisterSubscriptions => {
     if (!this.hasSubscriptions) {
       this.addUnsubscribeFunction(this.subscribeMessageComposerSetupStateChange());
@@ -552,7 +562,7 @@ export class MessageComposer extends WithSubscriptions {
     });
 
   private subscribeMessageComposerConfigStateChanged = () => {
-    let draftUnsubscribeFunctions: Unsubscribe[] | null;
+    let draftUnsubscribeFunction: Unsubscribe | null;
 
     const unsubscribe = this.configState.subscribeWithSelector(
       (currentValue) => ({
@@ -567,20 +577,17 @@ export class MessageComposer extends WithSubscriptions {
           });
         }
 
-        if (draftsEnabled && !draftUnsubscribeFunctions) {
-          draftUnsubscribeFunctions = [
-            this.subscribeDraftUpdated(),
-            this.subscribeDraftDeleted(),
-          ];
-        } else if (!draftsEnabled && draftUnsubscribeFunctions) {
-          draftUnsubscribeFunctions.forEach((fn) => fn());
-          draftUnsubscribeFunctions = null;
+        if (draftsEnabled && !draftUnsubscribeFunction) {
+          draftUnsubscribeFunction = this.registerDraftEventSubscriptions();
+        } else if (!draftsEnabled && draftUnsubscribeFunction) {
+          draftUnsubscribeFunction();
+          draftUnsubscribeFunction = null;
         }
       },
     );
 
     return () => {
-      draftUnsubscribeFunctions?.forEach((unsubscribe) => unsubscribe());
+      draftUnsubscribeFunction?.();
       unsubscribe();
     };
   };
