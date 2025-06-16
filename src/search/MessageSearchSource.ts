@@ -1,5 +1,4 @@
 import { BaseSearchSource } from './BaseSearchSource';
-import type { SearchSourceOptions } from './BaseSearchSource';
 import type {
   ChannelFilters,
   ChannelOptions,
@@ -10,6 +9,7 @@ import type {
   SearchOptions,
 } from '../types';
 import type { StreamChat } from '../client';
+import type { SearchSourceOptions } from './types';
 
 export class MessageSearchSource extends BaseSearchSource<MessageResponse> {
   readonly type = 'messages';

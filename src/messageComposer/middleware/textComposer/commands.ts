@@ -1,14 +1,14 @@
 import type { Channel } from '../../../channel';
 import type { Middleware } from '../../../middleware';
 import type { SearchSourceOptions } from '../../../search';
-import { BaseSearchSource } from '../../../search';
+import { BaseSearchSourceSync } from '../../../search';
 import type { CommandResponse } from '../../../types';
 import { mergeWith } from '../../../utils/mergeWith';
 import type { CommandSuggestion, TextComposerMiddlewareOptions } from './types';
 import { getTriggerCharWithToken, insertItemWithTrigger } from './textMiddlewareUtils';
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
 
-export class CommandSearchSource extends BaseSearchSource<CommandSuggestion> {
+export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion> {
   readonly type = 'commands';
   private channel: Channel;
 
@@ -64,15 +64,14 @@ export class CommandSearchSource extends BaseSearchSource<CommandSuggestion> {
 
       return 0;
     });
-    return Promise.resolve({
+
+    return {
       items: selectedCommands.map((c) => ({ ...c, id: c.name })),
       next: null,
-    });
+    };
   }
 
-  protected filterQueryResults(
-    items: CommandSuggestion[],
-  ): CommandSuggestion[] | Promise<CommandSuggestion[]> {
+  protected filterQueryResults(items: CommandSuggestion[]) {
     return items;
   }
 }
