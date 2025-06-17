@@ -351,7 +351,6 @@ export class MessageComposer extends WithSubscriptions {
     if (this.channel.cid !== channelApiResponse.channel.cid) {
       return;
     }
-
     if (channelApiResponse.draft) {
       this.initState({ composition: channelApiResponse.draft });
     } else if (this.state.getLatestValue().draftId) {

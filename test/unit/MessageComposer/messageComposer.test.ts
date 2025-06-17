@@ -1,6 +1,8 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  AbstractOfflineDB,
   Channel,
+  ChannelAPIResponse,
   LocalMessage,
   MessageComposerConfig,
   StreamChat,
@@ -229,6 +231,86 @@ describe('MessageComposer', () => {
 
       expect(messageComposer.draftId).toBe(draftMessage.message.id);
       expect(messageComposer.id).not.toBe(draftMessage.message.id);
+    });
+  });
+
+  describe('initStateFromChannelResponse', () => {
+    let composer: MessageComposer;
+
+    beforeEach(() => {
+      composer = setup({
+        config: { drafts: { enabled: true } },
+      }).messageComposer;
+      composer.state.partialNext({ draftId: 'draft-abc' });
+      composer.client.setOfflineDBApi(new MockOfflineDB({ client: composer.client }));
+
+      vi.spyOn(composer, 'initState').mockImplementation(vi.fn());
+      vi.spyOn(composer, 'clear').mockImplementation(vi.fn());
+    });
+
+    it('does nothing if cids do not match', () => {
+      const response = {
+        channel: { cid: 'messaging:other' },
+      } as unknown as ChannelAPIResponse;
+
+      composer.initStateFromChannelResponse(response);
+
+      expect(composer.initState).not.toHaveBeenCalled();
+      expect(composer.clear).not.toHaveBeenCalled();
+      expect(composer.client.offlineDb!.deleteDraft).not.toHaveBeenCalled();
+    });
+
+    it('calls initState if response contains a draft', () => {
+      const draft = { text: 'draft message' };
+
+      const response = {
+        channel: { cid: composer.channel.cid },
+        draft,
+      } as unknown as ChannelAPIResponse;
+
+      composer.initStateFromChannelResponse(response);
+
+      expect(composer.initState).toHaveBeenCalledWith({ composition: draft });
+      expect(composer.clear).not.toHaveBeenCalled();
+      expect(composer.client.offlineDb!.deleteDraft).not.toHaveBeenCalled();
+    });
+
+    it('clears and deletes draft if no draft in response but draftId exists in state', () => {
+      const response = {
+        channel: { cid: composer.channel.cid },
+      } as unknown as ChannelAPIResponse;
+      const executeQuerySafelySpy = vi
+        .spyOn(composer.client.offlineDb!, 'executeQuerySafely')
+        .mockImplementation(vi.fn());
+
+      composer.initStateFromChannelResponse(response);
+
+      expect(composer.initState).not.toHaveBeenCalled();
+      expect(composer.clear).toHaveBeenCalled();
+      expect(executeQuerySafelySpy).toHaveBeenCalledOnce();
+
+      // simulate the db call
+      const queryFn = executeQuerySafelySpy.mock.calls[0][0];
+      const dbMock = { deleteDraft: vi.fn() } as unknown as AbstractOfflineDB;
+      queryFn(dbMock);
+      expect(dbMock.deleteDraft).toHaveBeenCalledWith({
+        cid: response.channel.cid,
+        parent_id: undefined,
+      });
+    });
+
+    it('does nothing if no draft and no draftId in state', () => {
+      composer.state.partialNext({ draftId: null });
+
+      const response = {
+        channel: { cid: composer.channel.cid },
+      } as unknown as ChannelAPIResponse;
+
+      composer.initStateFromChannelResponse(response);
+
+      expect(composer.initState).not.toHaveBeenCalled();
+      expect(composer.clear).not.toHaveBeenCalled();
+      expect(composer.client.offlineDb!.deleteDraft).not.toHaveBeenCalled();
     });
   });
 
