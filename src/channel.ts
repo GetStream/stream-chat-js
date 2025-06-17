@@ -406,6 +406,17 @@ export class Channel {
     );
   }
 
+  /**
+   * sendReaction - Sends a reaction to a message. If offline support is enabled, it will make sure
+   * that sending the reaction is queued up if it fails due to bad internet conditions and executed
+   * later.
+   *
+   * @param {string} messageID the message id
+   * @param {Reaction} reaction the reaction object for instance {type: 'love'}
+   * @param {{ enforce_unique?: boolean, skip_push?: boolean }} [options] Option object, {enforce_unique: true, skip_push: true} to override any existing reaction or skip sending push notifications
+   *
+   * @return {Promise<ReactionAPIResponse>} The Server Response
+   */
   async sendReaction(
     messageID: string,
     reaction: Reaction,
@@ -421,7 +432,7 @@ export class Channel {
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
-        return (await offlineDb.queueTask({
+        return await offlineDb.queueTask<ReactionAPIResponse>({
           task: {
             channelId: this.id as string,
             channelType: this.type,
@@ -429,7 +440,7 @@ export class Channel {
             payload: [messageID, reaction, options],
             type: 'send-reaction',
           },
-        })) as ReactionAPIResponse;
+        });
       }
     } catch (error) {
       this._client.logger('error', `offlineDb:send-reaction`, {
@@ -1613,19 +1624,50 @@ export class Channel {
   /**
    * createDraft - Creates or updates a draft message in a channel
    *
-   * @param {string} channelType The channel type
-   * @param {string} channelID The channel ID
    * @param {DraftMessagePayload} message The draft message to create or update
    *
    * @return {Promise<CreateDraftResponse>} Response containing the created draft
    */
-  async createDraft(message: DraftMessagePayload) {
+  async _createDraft(message: DraftMessagePayload) {
     return await this.getClient().post<CreateDraftResponse>(
       this._channelURL() + '/draft',
       {
         message,
       },
     );
+  }
+
+  /**
+   * createDraft - Creates or updates a draft message in a channel. If offline support is
+   * enabled, it will make sure that creating the draft is queued up if it fails due to
+   * bad internet conditions and executed later.
+   *
+   * @param {DraftMessagePayload} message The draft message to create or update
+   *
+   * @return {Promise<CreateDraftResponse>} Response containing the created draft
+   */
+  async createDraft(message: DraftMessagePayload) {
+    try {
+      const offlineDb = this.getClient().offlineDb;
+      if (offlineDb) {
+        return await offlineDb.queueTask<CreateDraftResponse>({
+          task: {
+            channelId: this.id as string,
+            channelType: this.type,
+            parentId: message.parent_id,
+            payload: [message],
+            type: 'create-draft',
+          },
+        });
+      }
+    } catch (error) {
+      this._client.logger('error', `offlineDb:create-draft`, {
+        tags: ['channel', 'offlineDb'],
+        error,
+      });
+    }
+
+    return this._createDraft(message);
   }
 
   /**

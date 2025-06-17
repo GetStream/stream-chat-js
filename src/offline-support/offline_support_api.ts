@@ -1121,6 +1121,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
         return await channel._deleteReaction(...task.payload);
       }
 
+      if (task.type === 'create-draft') {
+        return await channel._createDraft(...task.payload);
+      }
+
       if (task.type === 'send-message') {
         const newMessageResponse = await channel._sendMessage(...task.payload);
         const newMessage = newMessageResponse?.message;
