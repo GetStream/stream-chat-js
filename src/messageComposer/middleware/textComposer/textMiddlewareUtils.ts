@@ -144,11 +144,22 @@ export const getTokenizedSuggestionDisplayName = ({
   },
 });
 
-export const isTextMatched = (input: string, command: string): boolean => {
+/**
+ * Utility function to check if a given input text matches another text.
+ * @param input
+ * @param textToBeMatchedWith
+ * @returns
+ */
+export const startsWithTextAndSpace = (
+  input: string,
+  textToBeMatchedWith: string,
+): boolean => {
   try {
-    // Create a regex to match the command at the start of the input with optional whitespace
-    const regex = new RegExp(`^${escapeRegExp(command)}\\s+`, 'i');
-    return regex.test(input);
+    const regex = new RegExp(
+      `^${escapeRegExp(textToBeMatchedWith.toLowerCase())}\\s+`,
+      'i',
+    );
+    return regex.test(input.toLowerCase());
   } catch (error) {
     console.error('Error in validating with the regex:', error);
     return false;

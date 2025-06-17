@@ -9,7 +9,7 @@ import {
   getFirstWordFromText,
   getTriggerCharWithToken,
   insertItemWithTrigger,
-  isTextMatched,
+  startsWithTextAndSpace,
 } from './textMiddlewareUtils';
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
 
@@ -155,7 +155,7 @@ export const createCommandsMiddleware = (
         const commands = searchSource?.query(searchQuery).items;
 
         const matchedCommand = commands?.find((command) =>
-          isTextMatched(query.toLowerCase(), command.name.toLowerCase()),
+          startsWithTextAndSpace(query, command.name),
         );
 
         if (matchedCommand) {
