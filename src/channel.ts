@@ -1476,6 +1476,16 @@ export class Channel {
 
     if (state.draft) {
       this.messageComposer.initState({ composition: state.draft });
+    } else if (this.messageComposer.state.getLatestValue().draftId) {
+      this.messageComposer.clear();
+      this.getClient().offlineDb?.executeQuerySafely(
+        (db) =>
+          db.deleteDraft({
+            cid: this.cid,
+            parent_id: undefined, // makes sure that we don't delete thread drafts while upserting channels
+          }),
+        { method: 'deleteDraft' },
+      );
     }
 
     const areCapabilitiesChanged =
