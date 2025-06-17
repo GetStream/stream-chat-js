@@ -74,13 +74,13 @@ describe('Apply Command Settings Middleware', () => {
       inputText: '/ban user1',
       inputSelection: { start: 10, end: 10 },
       outputText: 'user1',
-      outputSelection: { start: 6, end: 6 },
+      outputSelection: { start: 5, end: 5 },
     },
     {
       inputText: '/mute user2',
       inputSelection: { start: 11, end: 11 },
       outputText: 'user2',
-      outputSelection: { start: 6, end: 6 },
+      outputSelection: { start: 5, end: 5 },
     },
     {
       inputText: '/banuser1',

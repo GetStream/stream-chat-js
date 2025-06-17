@@ -18,7 +18,7 @@ export const createCommandStringExtractionMiddleware =
           return forward();
         }
 
-        const triggerWithCommand = `/${command.name}`;
+        const triggerWithCommand = `/${command.name} `;
 
         const newText = stripTriggerFromText(state.text, triggerWithCommand);
 
