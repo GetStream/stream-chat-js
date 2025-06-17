@@ -1152,6 +1152,55 @@ describe('MessageComposer', () => {
 
         expect(messageComposer.state.getLatestValue().draftId).toBe('test-draft-id');
       });
+
+      it('should only update the corresponding threadComposer when draft.updated is fired with a parent_id', () => {
+        const { mockChannel, mockClient } = setup();
+        const mockThread1 = getThread(mockChannel, mockClient, 'test-thread-id1');
+        const mockThread2 = getThread(mockChannel, mockClient, 'test-thread-id2');
+        const { messageComposer: threadComposer1 } = setup({
+          config: { drafts: { enabled: true } },
+          compositionContext: mockThread1,
+        });
+        const { messageComposer: threadComposer2 } = setup({
+          config: { drafts: { enabled: true } },
+          compositionContext: mockThread2,
+        });
+
+        const draft1 = {
+          message: {
+            id: threadComposer1.id,
+          },
+          parent_id: 'test-thread-id1',
+          channel_cid: mockChannel.cid,
+        };
+        const draft2 = {
+          message: {
+            id: threadComposer2.id,
+          },
+          parent_id: 'test-thread-id2',
+          channel_cid: mockChannel.cid,
+        };
+
+        threadComposer1.initState({ composition: draft1 });
+        threadComposer2.initState({ composition: draft2 });
+
+        Object.defineProperty(threadComposer1.textComposer, 'textIsEmpty', {
+          get: () => false,
+        });
+        Object.defineProperty(threadComposer2.textComposer, 'textIsEmpty', {
+          get: () => false,
+        });
+
+        threadComposer1.registerSubscriptions();
+        threadComposer2.registerSubscriptions();
+
+        draft1.message.id = 'test-uuid-2';
+
+        mockClient.dispatchEvent({ type: 'draft.updated', draft: draft1 });
+
+        expect(threadComposer1.state.getLatestValue().draftId).to.equal('test-uuid-2');
+        expect(threadComposer2.state.getLatestValue().draftId).to.equal('test-uuid');
+      });
     });
 
     describe('subscribeDraftDeleted', () => {
@@ -1174,6 +1223,53 @@ describe('MessageComposer', () => {
         mockClient.dispatchEvent({ type: 'draft.deleted', draft });
 
         expect(messageComposer.state.getLatestValue().draftId).toBeNull();
+      });
+
+      it('should only update the corresponding threadComposer when draft.deleted is fired with a parent_id', () => {
+        const { mockChannel, mockClient } = setup();
+        const mockThread1 = getThread(mockChannel, mockClient, 'test-thread-id1');
+        const mockThread2 = getThread(mockChannel, mockClient, 'test-thread-id2');
+        const { messageComposer: threadComposer1 } = setup({
+          config: { drafts: { enabled: true } },
+          compositionContext: mockThread1,
+        });
+        const { messageComposer: threadComposer2 } = setup({
+          config: { drafts: { enabled: true } },
+          compositionContext: mockThread2,
+        });
+
+        const draft1 = {
+          message: {
+            id: threadComposer1.id,
+          },
+          parent_id: 'test-thread-id1',
+          channel_cid: mockChannel.cid,
+        };
+        const draft2 = {
+          message: {
+            id: threadComposer2.id,
+          },
+          parent_id: 'test-thread-id2',
+          channel_cid: mockChannel.cid,
+        };
+
+        threadComposer1.initState({ composition: draft1 });
+        threadComposer2.initState({ composition: draft2 });
+
+        Object.defineProperty(threadComposer1.textComposer, 'textIsEmpty', {
+          get: () => false,
+        });
+        Object.defineProperty(threadComposer2.textComposer, 'textIsEmpty', {
+          get: () => false,
+        });
+
+        threadComposer1.registerSubscriptions();
+        threadComposer2.registerSubscriptions();
+
+        mockClient.dispatchEvent({ type: 'draft.deleted', draft: draft1 });
+
+        expect(threadComposer1.state.getLatestValue().draftId).toBeNull();
+        expect(threadComposer2.state.getLatestValue().draftId).not.toBeNull();
       });
     });
 
