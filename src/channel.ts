@@ -1671,17 +1671,52 @@ export class Channel {
   }
 
   /**
-   * deleteDraft - Deletes a draft message from a channel
+   * deleteDraft - Deletes a draft message from a channel or a thread.
    *
    * @param {Object} options
    * @param {string} options.parent_id Optional parent message ID for drafts in threads
    *
    * @return {Promise<APIResponse>} API response
    */
-  async deleteDraft({ parent_id }: { parent_id?: string } = {}) {
+  async _deleteDraft({ parent_id }: { parent_id?: string } = {}) {
     return await this.getClient().delete<APIResponse>(this._channelURL() + '/draft', {
       parent_id,
     });
+  }
+
+  /**
+   * deleteDraft - Deletes a draft message from a channel or a thread. If offline support is
+   * enabled, it will make sure that deleting the draft is queued up if it fails due to
+   * bad internet conditions and executed later.
+   *
+   * @param {Object} options
+   * @param {string} options.parent_id Optional parent message ID for drafts in threads
+   *
+   * @return {Promise<APIResponse>} API response
+   */
+  async deleteDraft(options: { parent_id?: string } = {}) {
+    const { parent_id } = options;
+    try {
+      const offlineDb = this.getClient().offlineDb;
+      if (offlineDb) {
+        return await offlineDb.queueTask<APIResponse>({
+          task: {
+            channelId: this.id as string,
+            channelType: this.type,
+            parentId: parent_id,
+            payload: [options],
+            type: 'delete-draft',
+          },
+        });
+      }
+    } catch (error) {
+      this._client.logger('error', `offlineDb:delete-draft`, {
+        tags: ['channel', 'offlineDb'],
+        error,
+      });
+    }
+
+    return this._deleteDraft(options);
   }
 
   /**

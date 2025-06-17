@@ -453,6 +453,7 @@ export class MessageComposer extends WithSubscriptions {
       if (
         !draft ||
         !!draft.parent_id !== !!this.threadId ||
+        draft.parent_id !== this.threadId ||
         draft.channel_cid !== this.channel.cid
       )
         return;
@@ -465,6 +466,7 @@ export class MessageComposer extends WithSubscriptions {
       if (
         !draft ||
         !!draft.parent_id !== !!this.threadId ||
+        draft.parent_id !== this.threadId ||
         draft.channel_cid !== this.channel.cid
       ) {
         return;

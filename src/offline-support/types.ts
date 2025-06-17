@@ -400,6 +400,7 @@ export type PendingTaskTypes = {
   sendReaction: 'send-reaction';
   sendMessage: 'send-message';
   createDraft: 'create-draft';
+  deleteDraft: 'delete-draft';
 };
 
 // TODO: Please rethink the definition of PendingTasks as it seems awkward
@@ -429,6 +430,10 @@ export type PendingTask = {
   | {
       payload: Parameters<Channel['createDraft']>;
       type: PendingTaskTypes['createDraft'];
+    }
+  | {
+      payload: Parameters<Channel['deleteDraft']>;
+      type: PendingTaskTypes['deleteDraft'];
     }
 );
 
