@@ -10,7 +10,7 @@ import {
   MessageDraftComposerMiddlewareExecutor,
 } from './middleware';
 import { StateStore } from '../store';
-import { formatMessage, generateUUIDv4, isLocalMessage } from '../utils';
+import { formatMessage, generateUUIDv4, isLocalMessage, unformatMessage } from '../utils';
 import { mergeWith } from '../utils/mergeWith';
 import { Channel } from '../channel';
 import { Thread } from '../thread';
@@ -669,6 +669,25 @@ export class MessageComposer extends WithSubscriptions {
     if (!composition) return;
     const { draft } = composition;
     this.state.partialNext({ draftId: draft.id });
+    if (this.client.offlineDb) {
+      try {
+        const optimisticDraftResponse = {
+          channel_cid: this.channel.cid,
+          created_at: new Date().toISOString(),
+          message: draft as DraftMessage,
+          parent_id: draft.parent_id,
+          quoted_message: this.quotedMessage
+            ? unformatMessage(this.quotedMessage)
+            : undefined,
+        };
+        await this.client.offlineDb.upsertDraft({ draft: optimisticDraftResponse });
+      } catch (error) {
+        this.client.logger('error', `offlineDb:upsertDraft`, {
+          tags: ['channel', 'offlineDb'],
+          error,
+        });
+      }
+    }
     this.logDraftUpdateTimestamp();
     await this.channel.createDraft(draft);
   };
@@ -676,8 +695,22 @@ export class MessageComposer extends WithSubscriptions {
   deleteDraft = async () => {
     if (this.editedMessage || !this.config.drafts.enabled || !this.draftId) return;
     this.state.partialNext({ draftId: null }); // todo: should we clear the whole state?
+    const parentId = this.threadId ?? undefined;
+    if (this.client.offlineDb) {
+      try {
+        await this.client.offlineDb.deleteDraft({
+          cid: this.channel.cid,
+          parent_id: parentId,
+        });
+      } catch (error) {
+        this.client.logger('error', `offlineDb:deleteDraft`, {
+          tags: ['channel', 'offlineDb'],
+          error,
+        });
+      }
+    }
     this.logDraftUpdateTimestamp();
-    await this.channel.deleteDraft({ parent_id: this.threadId ?? undefined });
+    await this.channel.deleteDraft({ parent_id: parentId });
   };
 
   getDraft = async () => {

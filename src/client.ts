@@ -1971,6 +1971,16 @@ export class StreamChat {
 
       if (channelState.draft) {
         c.messageComposer.initState({ composition: channelState.draft });
+      } else if (c.messageComposer.state.getLatestValue().draftId) {
+        c.messageComposer.clear();
+        this.offlineDb?.executeQuerySafely(
+          (db) =>
+            db.deleteDraft({
+              cid: c.cid,
+              parent_id: undefined, // makes sure that we don't delete thread drafts while upserting channels
+            }),
+          { method: 'deleteDraft' },
+        );
       }
 
       channels.push(c);
