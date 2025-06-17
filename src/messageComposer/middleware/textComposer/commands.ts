@@ -170,7 +170,7 @@ export const createCommandsMiddleware = (
           ...state,
           command: null,
           suggestions: {
-            query: searchQuery,
+            query,
             searchSource,
             trigger: finalOptions.trigger,
           },
