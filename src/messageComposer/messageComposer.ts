@@ -280,6 +280,10 @@ export class MessageComposer extends WithSubscriptions {
   }
 
   get hasSendableData() {
+    // If the offline mode is enabled, we allow sending a message if the composition is not empty.
+    if (this.client.offlineDb) {
+      return !this.compositionIsEmpty;
+    }
     return !!(
       (!this.attachmentManager.uploadsInProgressCount &&
         (!this.textComposer.textIsEmpty ||
@@ -359,6 +363,16 @@ export class MessageComposer extends WithSubscriptions {
       lastChange: { draftUpdate: timestamp, stateUpdate: timestamp },
     });
   }
+
+  public registerDraftEventSubscriptions = () => {
+    const unsubscribeDraftUpdated = this.subscribeDraftUpdated();
+    const unsubscribeDraftDeleted = this.subscribeDraftDeleted();
+
+    return () => {
+      unsubscribeDraftUpdated();
+      unsubscribeDraftDeleted();
+    };
+  };
 
   public registerSubscriptions = (): UnregisterSubscriptions => {
     if (!this.hasSubscriptions) {
@@ -548,7 +562,7 @@ export class MessageComposer extends WithSubscriptions {
     });
 
   private subscribeMessageComposerConfigStateChanged = () => {
-    let draftUnsubscribeFunctions: Unsubscribe[] | null;
+    let draftUnsubscribeFunction: Unsubscribe | null;
 
     const unsubscribe = this.configState.subscribeWithSelector(
       (currentValue) => ({
@@ -563,20 +577,17 @@ export class MessageComposer extends WithSubscriptions {
           });
         }
 
-        if (draftsEnabled && !draftUnsubscribeFunctions) {
-          draftUnsubscribeFunctions = [
-            this.subscribeDraftUpdated(),
-            this.subscribeDraftDeleted(),
-          ];
-        } else if (!draftsEnabled && draftUnsubscribeFunctions) {
-          draftUnsubscribeFunctions.forEach((fn) => fn());
-          draftUnsubscribeFunctions = null;
+        if (draftsEnabled && !draftUnsubscribeFunction) {
+          draftUnsubscribeFunction = this.registerDraftEventSubscriptions();
+        } else if (!draftsEnabled && draftUnsubscribeFunction) {
+          draftUnsubscribeFunction();
+          draftUnsubscribeFunction = null;
         }
       },
     );
 
     return () => {
-      draftUnsubscribeFunctions?.forEach((unsubscribe) => unsubscribe());
+      draftUnsubscribeFunction?.();
       unsubscribe();
     };
   };
@@ -667,6 +678,48 @@ export class MessageComposer extends WithSubscriptions {
     this.state.partialNext({ draftId: null }); // todo: should we clear the whole state?
     this.logDraftUpdateTimestamp();
     await this.channel.deleteDraft({ parent_id: this.threadId ?? undefined });
+  };
+
+  getDraft = async () => {
+    if (this.editedMessage || !this.config.drafts.enabled || !this.client.userID) return;
+
+    const draftFromOfflineDB = await this.client.offlineDb?.getDraft({
+      cid: this.channel.cid,
+      userId: this.client.userID,
+      parent_id: this.threadId ?? undefined,
+    });
+
+    if (draftFromOfflineDB) {
+      this.initState({ composition: draftFromOfflineDB });
+    }
+
+    try {
+      const response = await this.channel.getDraft({
+        parent_id: this.threadId ?? undefined,
+      });
+
+      const { draft } = response;
+
+      if (!draft) return;
+
+      this.client.offlineDb?.executeQuerySafely(
+        (db) =>
+          db.upsertDraft({
+            draft,
+          }),
+        { method: 'upsertDraft' },
+      );
+
+      this.initState({ composition: draft });
+    } catch (error) {
+      this.client.notifications.add({
+        message: 'Failed to get the draft',
+        origin: {
+          emitter: 'MessageComposer',
+          context: { composer: this },
+        },
+      });
+    }
   };
 
   createPoll = async () => {
