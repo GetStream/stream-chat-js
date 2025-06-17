@@ -452,8 +452,7 @@ export class MessageComposer extends WithSubscriptions {
       const draft = event.draft as DraftResponse;
       if (
         !draft ||
-        !!draft.parent_id !== !!this.threadId ||
-        draft.parent_id !== this.threadId ||
+        (draft.parent_id ?? null) !== (this.threadId ?? null) ||
         draft.channel_cid !== this.channel.cid
       )
         return;
@@ -465,8 +464,7 @@ export class MessageComposer extends WithSubscriptions {
       const draft = event.draft as DraftResponse;
       if (
         !draft ||
-        !!draft.parent_id !== !!this.threadId ||
-        draft.parent_id !== this.threadId ||
+        (draft.parent_id ?? null) !== (this.threadId ?? null) ||
         draft.channel_cid !== this.channel.cid
       ) {
         return;
