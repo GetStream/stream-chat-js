@@ -4123,7 +4123,7 @@ export type EventHook = {
   // pending message config
   timeout_ms?: number;
   callback?: {
-    mode?: 'CALLBACK_MODE_NONE' | 'CALLBACK_MODE_REST' | 'CALLBACK_MODE_TWIRP';
+    mode: 'CALLBACK_MODE_NONE' | 'CALLBACK_MODE_REST' | 'CALLBACK_MODE_TWIRP';
   };
 
   created_at?: string;
