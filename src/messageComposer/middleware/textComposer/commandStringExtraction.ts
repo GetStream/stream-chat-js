@@ -51,5 +51,5 @@ export const createCommandStringExtractionMiddleware =
         });
       },
     },
-    id: 'stream-io/text-composer/apply-command-settings',
+    id: 'stream-io/text-composer/command-string-extraction',
   });

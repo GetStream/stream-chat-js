@@ -66,7 +66,7 @@ describe('Apply Command Settings Middleware', () => {
     expect(middleware[0].id).toBe('stream-io/text-composer/pre-validation-middleware');
     expect(middleware[1].id).toBe('stream-io/text-composer/mentions-middleware');
     expect(middleware[2].id).toBe('stream-io/text-composer/commands-middleware');
-    expect(middleware[3].id).toBe('stream-io/text-composer/apply-command-settings');
+    expect(middleware[3].id).toBe('stream-io/text-composer/command-string-extraction');
   });
 
   it.each([
