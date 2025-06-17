@@ -1474,19 +1474,7 @@ export class Channel {
     this.getClient().polls.hydratePollCache(state.messages, true);
     this.getClient().reminders.hydrateState(state.messages);
 
-    if (state.draft) {
-      this.messageComposer.initState({ composition: state.draft });
-    } else if (this.messageComposer.state.getLatestValue().draftId) {
-      this.messageComposer.clear();
-      this.getClient().offlineDb?.executeQuerySafely(
-        (db) =>
-          db.deleteDraft({
-            cid: this.cid,
-            parent_id: undefined, // makes sure that we don't delete thread drafts while upserting channels
-          }),
-        { method: 'deleteDraft' },
-      );
-    }
+    this.messageComposer.initStateFromChannelResponse(state);
 
     const areCapabilitiesChanged =
       [...(state.channel.own_capabilities || [])].sort().join() !==

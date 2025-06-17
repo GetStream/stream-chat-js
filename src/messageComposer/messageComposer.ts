@@ -15,6 +15,7 @@ import { mergeWith } from '../utils/mergeWith';
 import { Channel } from '../channel';
 import { Thread } from '../thread';
 import type {
+  ChannelAPIResponse,
   DraftMessage,
   DraftResponse,
   EventTypes,
@@ -343,6 +344,26 @@ export class MessageComposer extends WithSubscriptions {
       isLocalMessage(message)
     ) {
       this.editedMessage = message;
+    }
+  };
+
+  initStateFromChannelResponse = (channelApiResponse: ChannelAPIResponse) => {
+    if (this.channel.cid !== channelApiResponse.channel.cid) {
+      return;
+    }
+
+    if (channelApiResponse.draft) {
+      this.initState({ composition: channelApiResponse.draft });
+    } else if (this.state.getLatestValue().draftId) {
+      this.clear();
+      this.client.offlineDb?.executeQuerySafely(
+        (db) =>
+          db.deleteDraft({
+            cid: this.channel.cid,
+            parent_id: undefined, // makes sure that we don't delete thread drafts while upserting channels
+          }),
+        { method: 'deleteDraft' },
+      );
     }
   };
 
