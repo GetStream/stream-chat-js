@@ -331,6 +331,8 @@ export function formatMessage(
 }
 
 /**
+ * @private
+ *
  * Takes a LocalMessage, parses the dates back to strings,
  * and converts the message back to a MessageResponse.
  *
