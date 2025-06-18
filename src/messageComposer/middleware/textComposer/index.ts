@@ -1,3 +1,4 @@
+export * from './activeCommandGuard';
 export * from './commands';
 export * from './commandStringExtraction';
 export * from './mentions';

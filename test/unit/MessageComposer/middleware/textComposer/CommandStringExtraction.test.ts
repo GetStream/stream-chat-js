@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../../../src/client';
 import { TextComposerConfig } from '../../../../../src/messageComposer/configuration';
 import {
@@ -7,6 +7,7 @@ import {
 } from '../../../../../src/messageComposer/messageComposer';
 import type { DraftResponse, LocalMessage } from '../../../../../src/types';
 import { TextComposerMiddleware } from '../../../../../src';
+import { createActiveCommandGuardMiddleware } from '../../../../../src/messageComposer/middleware/textComposer/activeCommandGuard';
 import { createCommandStringExtractionMiddleware } from '../../../../../src/messageComposer/middleware/textComposer/commandStringExtraction';
 
 // Mock dependencies
@@ -44,6 +45,10 @@ const setup = ({
     config: { text: config },
   });
   messageComposer.textComposer.middlewareExecutor.insert({
+    middleware: [createActiveCommandGuardMiddleware() as TextComposerMiddleware],
+    position: { before: 'stream-io/text-composer/commands-middleware' },
+  });
+  messageComposer.textComposer.middlewareExecutor.insert({
     middleware: [createCommandStringExtractionMiddleware() as TextComposerMiddleware],
     position: { after: 'stream-io/text-composer/commands-middleware' },
   });
@@ -62,11 +67,12 @@ describe('Apply Command Settings Middleware', () => {
       messageComposer: { textComposer },
     } = setup();
     const middleware = textComposer.middlewareExecutor.middleware;
-    expect(middleware.length).toBe(4);
+    expect(middleware.length).toBe(5);
     expect(middleware[0].id).toBe('stream-io/text-composer/pre-validation-middleware');
     expect(middleware[1].id).toBe('stream-io/text-composer/mentions-middleware');
-    expect(middleware[2].id).toBe('stream-io/text-composer/commands-middleware');
-    expect(middleware[3].id).toBe('stream-io/text-composer/command-string-extraction');
+    expect(middleware[2].id).toBe('stream-io/text-composer/active-command-guard');
+    expect(middleware[3].id).toBe('stream-io/text-composer/commands-middleware');
+    expect(middleware[4].id).toBe('stream-io/text-composer/command-string-extraction');
   });
 
   it.each([
@@ -88,8 +94,14 @@ describe('Apply Command Settings Middleware', () => {
       outputText: '/banuser1',
       outputSelection: { start: 9, end: 9 },
     },
+    {
+      inputText: '/mute     user3',
+      inputSelection: { start: 15, end: 15 },
+      outputText: 'user3',
+      outputSelection: { start: 5, end: 5 },
+    },
   ])(
-    'should remove command trigger from text on onChange',
+    'should extract command from the text on onChange',
     async ({ inputText, inputSelection, outputText, outputSelection }) => {
       const {
         messageComposer: { textComposer },
@@ -108,4 +120,41 @@ describe('Apply Command Settings Middleware', () => {
       expect(result.state.selection).toEqual(outputSelection);
     },
   );
+
+  it('execute the active command guard middleware flow', async () => {
+    const {
+      messageComposer: { textComposer },
+    } = setup();
+
+    const result = await textComposer.middlewareExecutor.execute({
+      eventName: 'onChange',
+      initialValue: {
+        ...initialValue,
+        text: '/ban ',
+        selection: {
+          start: 5,
+          end: 5,
+        },
+      },
+    });
+
+    expect(result.state.text).toBe('');
+    expect(result.state.command?.name).toBe('ban');
+
+    const newResult = await textComposer.middlewareExecutor.execute({
+      eventName: 'onChange',
+      initialValue: {
+        ...result.state,
+        text: '/ban',
+        selection: {
+          start: 4,
+          end: 4,
+        },
+      },
+    });
+
+    expect(result.state.command?.name).toBe('ban');
+    expect(newResult.state.text).toBe('/ban');
+    expect(newResult.state.selection).toEqual({ start: 4, end: 4 });
+  });
 });

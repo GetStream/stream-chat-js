@@ -25,8 +25,8 @@ export const createCommandStringExtractionMiddleware =
         return complete({
           ...state,
           selection: {
-            end: state.selection.end - triggerWithCommand.length,
-            start: state.selection.start - triggerWithCommand.length,
+            end: newText.length,
+            start: newText.length,
           },
           text: newText,
         });
@@ -44,8 +44,8 @@ export const createCommandStringExtractionMiddleware =
         return next({
           ...state,
           selection: {
-            end: state.selection.end - triggerWithCommand.length,
-            start: state.selection.start - triggerWithCommand.length,
+            end: newText.length,
+            start: newText.length,
           },
           text: newText,
         });
