@@ -297,9 +297,9 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
 
 /**
  * Takes the message object, parses the dates, sets `__html`
- * and sets the status to `received` if missing; returns a new message object.
+ * and sets the status to `received` if missing; returns a new LocalMessage object.
  *
- * @param {MessageResponse} message `MessageResponse` object
+ * @param {LocalMessage} message `LocalMessage` object
  */
 export function formatMessage(
   message: MessageResponse | MessageResponseBase | LocalMessage,
@@ -331,8 +331,8 @@ export function formatMessage(
 }
 
 /**
- * Takes the message object, parses the dates, sets `__html`
- * and sets the status to `received` if missing; returns a new message object.
+ * Takes a LocalMessage, parses the dates back to strings,
+ * and converts the message back to a MessageResponse.
  *
  * @param {MessageResponse} message `MessageResponse` object
  */
