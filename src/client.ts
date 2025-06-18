@@ -1969,9 +1969,7 @@ export class StreamChat {
         this.reminders.hydrateState(channelState.messages);
       }
 
-      if (channelState.draft) {
-        c.messageComposer.initState({ composition: channelState.draft });
-      }
+      c.messageComposer.initStateFromChannelResponse(channelState);
 
       channels.push(c);
     }
@@ -4569,5 +4567,65 @@ export class StreamChat {
       sort: sort && normalizeQuerySort(sort),
       ...rest,
     });
+  }
+
+  /**
+   * uploadFile - Uploads a file to the configured storage (defaults to Stream CDN)
+   *
+   * @param {string|NodeJS.ReadableStream|Buffer|File} uri The file to upload
+   * @param {string} [name] The name of the file
+   * @param {string} [contentType] The content type of the file
+   * @param {UserResponse} [user] Optional user information
+   *
+   * @return {Promise<SendFileAPIResponse>} Response containing the file URL
+   */
+  uploadFile(
+    uri: string | NodeJS.ReadableStream | Buffer | File,
+    name?: string,
+    contentType?: string,
+    user?: UserResponse,
+  ) {
+    return this.sendFile(`${this.baseURL}/uploads/file`, uri, name, contentType, user);
+  }
+
+  /**
+   * uploadImage - Uploads an image to the configured storage (defaults to Stream CDN)
+   *
+   * @param {string|NodeJS.ReadableStream|File} uri The image to upload
+   * @param {string} [name] The name of the image
+   * @param {string} [contentType] The content type of the image
+   * @param {UserResponse} [user] Optional user information
+   *
+   * @return {Promise<SendFileAPIResponse>} Response containing the image URL
+   */
+  uploadImage(
+    uri: string | NodeJS.ReadableStream | File,
+    name?: string,
+    contentType?: string,
+    user?: UserResponse,
+  ) {
+    return this.sendFile(`${this.baseURL}/uploads/image`, uri, name, contentType, user);
+  }
+
+  /**
+   * deleteFile - Deletes a file from the configured storage
+   *
+   * @param {string} url The URL of the file to delete
+   *
+   * @return {Promise<APIResponse>} The server response
+   */
+  deleteFile(url: string) {
+    return this.delete<APIResponse>(`${this.baseURL}/uploads/file`, { url });
+  }
+
+  /**
+   * deleteImage - Deletes an image from the configured storage
+   *
+   * @param {string} url The URL of the image to delete
+   *
+   * @return {Promise<APIResponse>} The server response
+   */
+  deleteImage(url: string) {
+    return this.delete<APIResponse>(`${this.baseURL}/uploads/image`, { url });
   }
 }

@@ -1,6 +1,8 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  AbstractOfflineDB,
   Channel,
+  ChannelAPIResponse,
   LocalMessage,
   MessageComposerConfig,
   StreamChat,
@@ -229,6 +231,86 @@ describe('MessageComposer', () => {
 
       expect(messageComposer.draftId).toBe(draftMessage.message.id);
       expect(messageComposer.id).not.toBe(draftMessage.message.id);
+    });
+  });
+
+  describe('initStateFromChannelResponse', () => {
+    let composer: MessageComposer;
+
+    beforeEach(() => {
+      composer = setup({
+        config: { drafts: { enabled: true } },
+      }).messageComposer;
+      composer.state.partialNext({ draftId: 'draft-abc' });
+      composer.client.setOfflineDBApi(new MockOfflineDB({ client: composer.client }));
+
+      vi.spyOn(composer, 'initState').mockImplementation(vi.fn());
+      vi.spyOn(composer, 'clear').mockImplementation(vi.fn());
+    });
+
+    it('does nothing if cids do not match', () => {
+      const response = {
+        channel: { cid: 'messaging:other' },
+      } as unknown as ChannelAPIResponse;
+
+      composer.initStateFromChannelResponse(response);
+
+      expect(composer.initState).not.toHaveBeenCalled();
+      expect(composer.clear).not.toHaveBeenCalled();
+      expect(composer.client.offlineDb!.deleteDraft).not.toHaveBeenCalled();
+    });
+
+    it('calls initState if response contains a draft', () => {
+      const draft = { text: 'draft message' };
+
+      const response = {
+        channel: { cid: composer.channel.cid },
+        draft,
+      } as unknown as ChannelAPIResponse;
+
+      composer.initStateFromChannelResponse(response);
+
+      expect(composer.initState).toHaveBeenCalledWith({ composition: draft });
+      expect(composer.clear).not.toHaveBeenCalled();
+      expect(composer.client.offlineDb!.deleteDraft).not.toHaveBeenCalled();
+    });
+
+    it('clears and deletes draft if no draft in response but draftId exists in state', () => {
+      const response = {
+        channel: { cid: composer.channel.cid },
+      } as unknown as ChannelAPIResponse;
+      const executeQuerySafelySpy = vi
+        .spyOn(composer.client.offlineDb!, 'executeQuerySafely')
+        .mockImplementation(vi.fn());
+
+      composer.initStateFromChannelResponse(response);
+
+      expect(composer.initState).not.toHaveBeenCalled();
+      expect(composer.clear).toHaveBeenCalled();
+      expect(executeQuerySafelySpy).toHaveBeenCalledOnce();
+
+      // simulate the db call
+      const queryFn = executeQuerySafelySpy.mock.calls[0][0];
+      const dbMock = { deleteDraft: vi.fn() } as unknown as AbstractOfflineDB;
+      queryFn(dbMock);
+      expect(dbMock.deleteDraft).toHaveBeenCalledWith({
+        cid: response.channel.cid,
+        parent_id: undefined,
+      });
+    });
+
+    it('does nothing if no draft and no draftId in state', () => {
+      composer.state.partialNext({ draftId: null });
+
+      const response = {
+        channel: { cid: composer.channel.cid },
+      } as unknown as ChannelAPIResponse;
+
+      composer.initStateFromChannelResponse(response);
+
+      expect(composer.initState).not.toHaveBeenCalled();
+      expect(composer.clear).not.toHaveBeenCalled();
+      expect(composer.client.offlineDb!.deleteDraft).not.toHaveBeenCalled();
     });
   });
 
@@ -528,6 +610,48 @@ describe('MessageComposer', () => {
       expect(messageComposer.hasSubscriptions).toBe(false);
     });
 
+    it('should register draft subscriptions only once if done through registerSubscriptions', () => {
+      const { messageComposer } = setup({
+        config: { drafts: { enabled: true } },
+      });
+
+      const draftEventSubscriptionsSpy = vi.spyOn(
+        messageComposer,
+        'registerDraftEventSubscriptions',
+      );
+
+      messageComposer.registerSubscriptions();
+      messageComposer.registerSubscriptions();
+
+      expect(draftEventSubscriptionsSpy).toHaveBeenCalledOnce();
+    });
+
+    it('should allow multiple registrations of draft ws events if done through registerDraftEventSubscriptions', () => {
+      const { messageComposer } = setup({
+        config: { drafts: { enabled: true } },
+      });
+
+      const subscribeDraftUpdatedSpy = vi
+        // @ts-expect-error - we are testing private properties
+        .spyOn(messageComposer, 'subscribeDraftUpdated');
+      const subscribeDraftDeletedSpy = vi
+        // @ts-expect-error - we are testing private properties
+        .spyOn(messageComposer, 'subscribeDraftDeleted');
+
+      messageComposer.registerSubscriptions();
+
+      expect(subscribeDraftUpdatedSpy).toHaveBeenCalledOnce();
+      expect(subscribeDraftDeletedSpy).toHaveBeenCalledOnce();
+
+      subscribeDraftUpdatedSpy.mockClear();
+      subscribeDraftDeletedSpy.mockClear();
+
+      messageComposer.registerDraftEventSubscriptions();
+
+      expect(subscribeDraftUpdatedSpy).toHaveBeenCalledOnce();
+      expect(subscribeDraftDeletedSpy).toHaveBeenCalledOnce();
+    });
+
     it('should set quoted message', () => {
       const { messageComposer } = setup();
       const quotedMessage = {
@@ -757,6 +881,98 @@ describe('MessageComposer', () => {
       expect(spyComposeDraft).not.toHaveBeenCalled();
     });
 
+    it('optimistically updates draft in db if offline support is enabled', async () => {
+      const { messageComposer, mockChannel } = setup({
+        config: { drafts: { enabled: true } },
+      });
+      messageComposer.client.setOfflineDBApi(
+        new MockOfflineDB({ client: messageComposer.client }),
+      );
+      const mockDraft = {
+        id: 'test-draft-id',
+        text: 'Test draft',
+      };
+
+      const spyComposeDraft = vi
+        .spyOn(messageComposer, 'composeDraft')
+        .mockResolvedValue({ draft: mockDraft });
+      const spyCreateDraft = vi
+        .spyOn(mockChannel, 'createDraft')
+        .mockResolvedValue({ draft: mockDraft });
+      const spyUpsertDraft = vi
+        .spyOn(messageComposer.client.offlineDb!, 'upsertDraft')
+        .mockImplementation(vi.fn());
+
+      const spyLogDraftUpdateTimestamp = vi.spyOn(
+        messageComposer,
+        'logDraftUpdateTimestamp',
+      );
+
+      await messageComposer.createDraft();
+
+      expect(spyComposeDraft).toHaveBeenCalled();
+      expect(spyCreateDraft).toHaveBeenCalledWith(mockDraft);
+      expect(spyLogDraftUpdateTimestamp).toHaveBeenCalled();
+      expect(messageComposer.state.getLatestValue().draftId).toBe('test-draft-id');
+
+      expect(spyUpsertDraft).toHaveBeenCalledTimes(1);
+      const { draft } = spyUpsertDraft.mock.calls[0][0];
+      const { created_at, ...draftWithoutDate } = draft;
+      expect(draftWithoutDate).to.deep.equal({
+        channel_cid: messageComposer.channel.cid,
+        message: mockDraft,
+        parent_id: undefined,
+        quoted_message: undefined,
+      });
+    });
+
+    it('logs error if offlineDb.upsertDraft fails and proceeds with normal flow', async () => {
+      const { messageComposer, mockChannel } = setup({
+        config: { drafts: { enabled: true } },
+      });
+      messageComposer.client.setOfflineDBApi(
+        new MockOfflineDB({ client: messageComposer.client }),
+      );
+      const mockDraft = {
+        id: 'test-draft-id',
+        text: 'Test draft',
+      };
+
+      const spyComposeDraft = vi
+        .spyOn(messageComposer, 'composeDraft')
+        .mockResolvedValue({ draft: mockDraft });
+      const spyCreateDraft = vi
+        .spyOn(mockChannel, 'createDraft')
+        .mockResolvedValue({ draft: mockDraft });
+      const spyUpsertDraft = vi
+        .spyOn(messageComposer.client.offlineDb!, 'upsertDraft')
+        .mockRejectedValueOnce(new Error('offline insert failed'));
+      const spyLogger = vi
+        .spyOn(messageComposer.client, 'logger')
+        .mockImplementation(vi.fn());
+
+      const spyLogDraftUpdateTimestamp = vi.spyOn(
+        messageComposer,
+        'logDraftUpdateTimestamp',
+      );
+
+      await messageComposer.createDraft();
+
+      expect(spyComposeDraft).toHaveBeenCalled();
+      expect(spyCreateDraft).toHaveBeenCalledWith(mockDraft);
+      expect(spyLogDraftUpdateTimestamp).toHaveBeenCalled();
+      expect(messageComposer.state.getLatestValue().draftId).toBe('test-draft-id');
+
+      expect(spyUpsertDraft).toHaveBeenCalledTimes(1);
+      expect(spyLogger).toHaveBeenCalledWith(
+        'error',
+        'offlineDb:upsertDraft',
+        expect.objectContaining({
+          error: expect.any(Error),
+        }),
+      );
+    });
+
     it('should delete draft', async () => {
       const { messageComposer, mockChannel } = setup({
         config: { drafts: { enabled: true } },
@@ -768,6 +984,7 @@ describe('MessageComposer', () => {
         pollId: null,
         quotedMessage: null,
         draftId,
+        showReplyInChannel: false,
       });
 
       const spyChannelDeleteDraft = vi.spyOn(mockChannel, 'deleteDraft');
@@ -792,6 +1009,123 @@ describe('MessageComposer', () => {
       await messageComposer.deleteDraft();
 
       expect(spyChannelDeleteDraft).not.toHaveBeenCalled();
+    });
+
+    it('optimistically deletes draft in db if offline support is enabled', async () => {
+      const { messageComposer, mockChannel } = setup({
+        config: { drafts: { enabled: true } },
+      });
+      messageComposer.client.setOfflineDBApi(
+        new MockOfflineDB({ client: messageComposer.client }),
+      );
+      const draftId = 'test-draft-id';
+
+      messageComposer.state.next({
+        id: '',
+        pollId: null,
+        quotedMessage: null,
+        draftId,
+        showReplyInChannel: false,
+      });
+
+      const spyChannelDeleteDraft = vi
+        .spyOn(mockChannel, 'deleteDraft')
+        .mockResolvedValue({});
+      const spyDeleteDraftFromDB = vi
+        .spyOn(messageComposer.client.offlineDb!, 'deleteDraft')
+        .mockImplementation(vi.fn());
+
+      const spyLogDraftUpdateTimestamp = vi.spyOn(
+        messageComposer,
+        'logDraftUpdateTimestamp',
+      );
+
+      await messageComposer.deleteDraft();
+
+      expect(spyChannelDeleteDraft).toHaveBeenCalledWith({ parent_id: undefined });
+      expect(spyLogDraftUpdateTimestamp).toHaveBeenCalled();
+      expect(messageComposer.state.getLatestValue().draftId).toBeNull();
+
+      expect(spyDeleteDraftFromDB).toHaveBeenCalledWith({
+        cid: messageComposer.channel.cid,
+        parent_id: undefined,
+      });
+    });
+
+    it('uses threadId as parent_id in optimistic delete in the offline db if defined', async () => {
+      const { messageComposer, mockChannel } = setup({
+        config: { drafts: { enabled: true } },
+      });
+      messageComposer.client.setOfflineDBApi(
+        new MockOfflineDB({ client: messageComposer.client }),
+      );
+      const draftId = 'test-draft-id';
+
+      messageComposer.state.next({
+        id: '',
+        pollId: null,
+        quotedMessage: null,
+        draftId,
+        showReplyInChannel: false,
+      });
+
+      vi.spyOn(messageComposer, 'threadId', 'get').mockReturnValue('thread-123');
+      const spyChannelDeleteDraft = vi
+        .spyOn(mockChannel, 'deleteDraft')
+        .mockResolvedValue({});
+      const spyDeleteDraftFromDB = vi
+        .spyOn(messageComposer.client.offlineDb!, 'deleteDraft')
+        .mockImplementation(vi.fn());
+
+      await messageComposer.deleteDraft();
+
+      expect(spyChannelDeleteDraft).toHaveBeenCalledWith({
+        parent_id: 'thread-123',
+      });
+      expect(spyDeleteDraftFromDB).toHaveBeenCalledWith({
+        cid: messageComposer.channel.cid,
+        parent_id: 'thread-123',
+      });
+    });
+
+    it('logs error if offlineDb.deleteDraft throws but still calls online delete', async () => {
+      const { messageComposer, mockChannel } = setup({
+        config: { drafts: { enabled: true } },
+      });
+      messageComposer.client.setOfflineDBApi(
+        new MockOfflineDB({ client: messageComposer.client }),
+      );
+      const draftId = 'test-draft-id';
+
+      messageComposer.state.next({
+        id: '',
+        pollId: null,
+        quotedMessage: null,
+        draftId,
+        showReplyInChannel: false,
+      });
+
+      vi.spyOn(messageComposer, 'threadId', 'get').mockReturnValue('thread-123');
+      vi.spyOn(messageComposer.client.offlineDb!, 'deleteDraft').mockRejectedValueOnce(
+        new Error('Offline deletion failed'),
+      );
+      const spyChannelDeleteDraft = vi
+        .spyOn(mockChannel, 'deleteDraft')
+        .mockResolvedValue({});
+      const spyLogger = vi
+        .spyOn(messageComposer.client, 'logger')
+        .mockImplementation(vi.fn());
+
+      await messageComposer.deleteDraft();
+
+      expect(spyChannelDeleteDraft).toHaveBeenCalled();
+      expect(spyLogger).toHaveBeenCalledWith(
+        'error',
+        'offlineDb:deleteDraft',
+        expect.objectContaining({
+          error: expect.any(Error),
+        }),
+      );
     });
 
     it('should create a poll', async () => {
@@ -1110,6 +1444,55 @@ describe('MessageComposer', () => {
 
         expect(messageComposer.state.getLatestValue().draftId).toBe('test-draft-id');
       });
+
+      it('should only update the corresponding threadComposer when draft.updated is fired with a parent_id', () => {
+        const { mockChannel, mockClient } = setup();
+        const mockThread1 = getThread(mockChannel, mockClient, 'test-thread-id1');
+        const mockThread2 = getThread(mockChannel, mockClient, 'test-thread-id2');
+        const { messageComposer: threadComposer1 } = setup({
+          config: { drafts: { enabled: true } },
+          compositionContext: mockThread1,
+        });
+        const { messageComposer: threadComposer2 } = setup({
+          config: { drafts: { enabled: true } },
+          compositionContext: mockThread2,
+        });
+
+        const draft1 = {
+          message: {
+            id: threadComposer1.id,
+          },
+          parent_id: 'test-thread-id1',
+          channel_cid: mockChannel.cid,
+        };
+        const draft2 = {
+          message: {
+            id: threadComposer2.id,
+          },
+          parent_id: 'test-thread-id2',
+          channel_cid: mockChannel.cid,
+        };
+
+        threadComposer1.initState({ composition: draft1 });
+        threadComposer2.initState({ composition: draft2 });
+
+        Object.defineProperty(threadComposer1.textComposer, 'textIsEmpty', {
+          get: () => false,
+        });
+        Object.defineProperty(threadComposer2.textComposer, 'textIsEmpty', {
+          get: () => false,
+        });
+
+        threadComposer1.registerSubscriptions();
+        threadComposer2.registerSubscriptions();
+
+        draft1.message.id = 'test-uuid-2';
+
+        mockClient.dispatchEvent({ type: 'draft.updated', draft: draft1 });
+
+        expect(threadComposer1.state.getLatestValue().draftId).to.equal('test-uuid-2');
+        expect(threadComposer2.state.getLatestValue().draftId).to.equal('test-uuid');
+      });
     });
 
     describe('subscribeDraftDeleted', () => {
@@ -1132,6 +1515,53 @@ describe('MessageComposer', () => {
         mockClient.dispatchEvent({ type: 'draft.deleted', draft });
 
         expect(messageComposer.state.getLatestValue().draftId).toBeNull();
+      });
+
+      it('should only update the corresponding threadComposer when draft.deleted is fired with a parent_id', () => {
+        const { mockChannel, mockClient } = setup();
+        const mockThread1 = getThread(mockChannel, mockClient, 'test-thread-id1');
+        const mockThread2 = getThread(mockChannel, mockClient, 'test-thread-id2');
+        const { messageComposer: threadComposer1 } = setup({
+          config: { drafts: { enabled: true } },
+          compositionContext: mockThread1,
+        });
+        const { messageComposer: threadComposer2 } = setup({
+          config: { drafts: { enabled: true } },
+          compositionContext: mockThread2,
+        });
+
+        const draft1 = {
+          message: {
+            id: threadComposer1.id,
+          },
+          parent_id: 'test-thread-id1',
+          channel_cid: mockChannel.cid,
+        };
+        const draft2 = {
+          message: {
+            id: threadComposer2.id,
+          },
+          parent_id: 'test-thread-id2',
+          channel_cid: mockChannel.cid,
+        };
+
+        threadComposer1.initState({ composition: draft1 });
+        threadComposer2.initState({ composition: draft2 });
+
+        Object.defineProperty(threadComposer1.textComposer, 'textIsEmpty', {
+          get: () => false,
+        });
+        Object.defineProperty(threadComposer2.textComposer, 'textIsEmpty', {
+          get: () => false,
+        });
+
+        threadComposer1.registerSubscriptions();
+        threadComposer2.registerSubscriptions();
+
+        mockClient.dispatchEvent({ type: 'draft.deleted', draft: draft1 });
+
+        expect(threadComposer1.state.getLatestValue().draftId).toBeNull();
+        expect(threadComposer2.state.getLatestValue().draftId).not.toBeNull();
       });
     });
 
@@ -1302,37 +1732,26 @@ describe('MessageComposer', () => {
         config: { drafts: { enabled: false } },
       });
 
-      const unsubscribeDraftUpdated = vi.fn();
-      const unsubscribeDraftDeleted = vi.fn();
+      const unsubscribeDraftEvents = vi.fn();
 
-      // @ts-expect-error - we are testing private properties
-      const subscribeDraftUpdatedSpy = vi
-        .spyOn(messageComposer, 'subscribeDraftUpdated')
-        .mockImplementation(() => unsubscribeDraftUpdated);
-      // @ts-expect-error - we are testing private properties
-      const subscribeDraftDeletedSpy = vi
-        .spyOn(messageComposer, 'subscribeDraftDeleted')
-        .mockImplementation(() => unsubscribeDraftDeleted);
+      const registerDraftEventSubscriptionsSpy = vi
+        .spyOn(messageComposer, 'registerDraftEventSubscriptions')
+        .mockImplementation(() => unsubscribeDraftEvents);
 
       messageComposer.registerSubscriptions();
 
-      expect(subscribeDraftUpdatedSpy).not.toHaveBeenCalled();
-      expect(subscribeDraftDeletedSpy).not.toHaveBeenCalled();
+      expect(registerDraftEventSubscriptionsSpy).not.toHaveBeenCalled();
 
       messageComposer.updateConfig({ drafts: { enabled: true } });
 
-      expect(subscribeDraftUpdatedSpy).toHaveBeenCalledTimes(1);
-      expect(subscribeDraftDeletedSpy).toHaveBeenCalledTimes(1);
+      expect(registerDraftEventSubscriptionsSpy).toHaveBeenCalledTimes(1);
 
-      subscribeDraftUpdatedSpy.mockClear();
-      subscribeDraftDeletedSpy.mockClear();
+      registerDraftEventSubscriptionsSpy.mockClear();
 
       messageComposer.updateConfig({ drafts: { enabled: false } });
 
-      expect(unsubscribeDraftUpdated).toHaveBeenCalledTimes(1);
-      expect(unsubscribeDraftDeleted).toHaveBeenCalledTimes(1);
-      expect(subscribeDraftUpdatedSpy).not.toHaveBeenCalled();
-      expect(subscribeDraftDeletedSpy).not.toHaveBeenCalled();
+      expect(unsubscribeDraftEvents).toHaveBeenCalledTimes(1);
+      expect(registerDraftEventSubscriptionsSpy).not.toHaveBeenCalled();
     });
   });
 });

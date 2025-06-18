@@ -4099,7 +4099,7 @@ export type QueryRemindersResponse = {
   next?: string;
 };
 
-export type HookType = 'webhook' | 'sqs' | 'sns';
+export type HookType = 'webhook' | 'sqs' | 'sns' | 'pending_message';
 
 export type EventHook = {
   id?: string;
@@ -4119,6 +4119,13 @@ export type EventHook = {
   sns_key?: string;
   sns_secret?: string;
   sns_role_arn?: string;
+
+  // pending message config
+  timeout_ms?: number;
+  callback?: {
+    mode: 'CALLBACK_MODE_NONE' | 'CALLBACK_MODE_REST' | 'CALLBACK_MODE_TWIRP';
+  };
+
   created_at?: string;
   updated_at?: string;
 };

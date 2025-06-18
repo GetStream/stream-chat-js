@@ -10,11 +10,12 @@ import {
   MessageDraftComposerMiddlewareExecutor,
 } from './middleware';
 import { StateStore } from '../store';
-import { formatMessage, generateUUIDv4, isLocalMessage } from '../utils';
+import { formatMessage, generateUUIDv4, isLocalMessage, unformatMessage } from '../utils';
 import { mergeWith } from '../utils/mergeWith';
 import { Channel } from '../channel';
 import { Thread } from '../thread';
 import type {
+  ChannelAPIResponse,
   DraftMessage,
   DraftResponse,
   EventTypes,
@@ -346,6 +347,25 @@ export class MessageComposer extends WithSubscriptions {
     }
   };
 
+  initStateFromChannelResponse = (channelApiResponse: ChannelAPIResponse) => {
+    if (this.channel.cid !== channelApiResponse.channel.cid) {
+      return;
+    }
+    if (channelApiResponse.draft) {
+      this.initState({ composition: channelApiResponse.draft });
+    } else if (this.state.getLatestValue().draftId) {
+      this.clear();
+      this.client.offlineDb?.executeQuerySafely(
+        (db) =>
+          db.deleteDraft({
+            cid: this.channel.cid,
+            parent_id: undefined, // makes sure that we don't delete thread drafts while upserting channels
+          }),
+        { method: 'deleteDraft' },
+      );
+    }
+  };
+
   initEditingAuditState = (
     composition?: DraftResponse | MessageResponse | LocalMessage,
   ) => initEditingAuditState(composition);
@@ -363,6 +383,16 @@ export class MessageComposer extends WithSubscriptions {
       lastChange: { draftUpdate: timestamp, stateUpdate: timestamp },
     });
   }
+
+  public registerDraftEventSubscriptions = () => {
+    const unsubscribeDraftUpdated = this.subscribeDraftUpdated();
+    const unsubscribeDraftDeleted = this.subscribeDraftDeleted();
+
+    return () => {
+      unsubscribeDraftUpdated();
+      unsubscribeDraftDeleted();
+    };
+  };
 
   public registerSubscriptions = (): UnregisterSubscriptions => {
     if (!this.hasSubscriptions) {
@@ -442,7 +472,7 @@ export class MessageComposer extends WithSubscriptions {
       const draft = event.draft as DraftResponse;
       if (
         !draft ||
-        !!draft.parent_id !== !!this.threadId ||
+        (draft.parent_id ?? null) !== (this.threadId ?? null) ||
         draft.channel_cid !== this.channel.cid
       )
         return;
@@ -454,7 +484,7 @@ export class MessageComposer extends WithSubscriptions {
       const draft = event.draft as DraftResponse;
       if (
         !draft ||
-        !!draft.parent_id !== !!this.threadId ||
+        (draft.parent_id ?? null) !== (this.threadId ?? null) ||
         draft.channel_cid !== this.channel.cid
       ) {
         return;
@@ -552,7 +582,7 @@ export class MessageComposer extends WithSubscriptions {
     });
 
   private subscribeMessageComposerConfigStateChanged = () => {
-    let draftUnsubscribeFunctions: Unsubscribe[] | null;
+    let draftUnsubscribeFunction: Unsubscribe | null;
 
     const unsubscribe = this.configState.subscribeWithSelector(
       (currentValue) => ({
@@ -567,20 +597,17 @@ export class MessageComposer extends WithSubscriptions {
           });
         }
 
-        if (draftsEnabled && !draftUnsubscribeFunctions) {
-          draftUnsubscribeFunctions = [
-            this.subscribeDraftUpdated(),
-            this.subscribeDraftDeleted(),
-          ];
-        } else if (!draftsEnabled && draftUnsubscribeFunctions) {
-          draftUnsubscribeFunctions.forEach((fn) => fn());
-          draftUnsubscribeFunctions = null;
+        if (draftsEnabled && !draftUnsubscribeFunction) {
+          draftUnsubscribeFunction = this.registerDraftEventSubscriptions();
+        } else if (!draftsEnabled && draftUnsubscribeFunction) {
+          draftUnsubscribeFunction();
+          draftUnsubscribeFunction = null;
         }
       },
     );
 
     return () => {
-      draftUnsubscribeFunctions?.forEach((unsubscribe) => unsubscribe());
+      draftUnsubscribeFunction?.();
       unsubscribe();
     };
   };
@@ -662,6 +689,25 @@ export class MessageComposer extends WithSubscriptions {
     if (!composition) return;
     const { draft } = composition;
     this.state.partialNext({ draftId: draft.id });
+    if (this.client.offlineDb) {
+      try {
+        const optimisticDraftResponse = {
+          channel_cid: this.channel.cid,
+          created_at: new Date().toISOString(),
+          message: draft as DraftMessage,
+          parent_id: draft.parent_id,
+          quoted_message: this.quotedMessage
+            ? unformatMessage(this.quotedMessage)
+            : undefined,
+        };
+        await this.client.offlineDb.upsertDraft({ draft: optimisticDraftResponse });
+      } catch (error) {
+        this.client.logger('error', `offlineDb:upsertDraft`, {
+          tags: ['channel', 'offlineDb'],
+          error,
+        });
+      }
+    }
     this.logDraftUpdateTimestamp();
     await this.channel.createDraft(draft);
   };
@@ -669,8 +715,22 @@ export class MessageComposer extends WithSubscriptions {
   deleteDraft = async () => {
     if (this.editedMessage || !this.config.drafts.enabled || !this.draftId) return;
     this.state.partialNext({ draftId: null }); // todo: should we clear the whole state?
+    const parentId = this.threadId ?? undefined;
+    if (this.client.offlineDb) {
+      try {
+        await this.client.offlineDb.deleteDraft({
+          cid: this.channel.cid,
+          parent_id: parentId,
+        });
+      } catch (error) {
+        this.client.logger('error', `offlineDb:deleteDraft`, {
+          tags: ['channel', 'offlineDb'],
+          error,
+        });
+      }
+    }
     this.logDraftUpdateTimestamp();
-    await this.channel.deleteDraft({ parent_id: this.threadId ?? undefined });
+    await this.channel.deleteDraft({ parent_id: parentId });
   };
 
   getDraft = async () => {
