@@ -8,9 +8,9 @@ export type PreCommandMiddleware = Middleware<
 
 export const createActiveCommandGuardMiddleware = (): PreCommandMiddleware => ({
   handlers: {
-    onChange: ({ discard, forward, state }) => {
+    onChange: ({ complete, forward, state }) => {
       if (state.command) {
-        return discard();
+        return complete(state);
       }
       return forward();
     },
