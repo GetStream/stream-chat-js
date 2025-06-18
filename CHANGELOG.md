@@ -1,3 +1,17 @@
+## [9.7.0](https://github.com/GetStream/stream-chat-js/compare/v9.6.1...v9.7.0) (2025-06-18)
+
+### Bug Fixes
+
+* separate draft event subscriptions and make it a public api ([#1565](https://github.com/GetStream/stream-chat-js/issues/1565)) ([94a9295](https://github.com/GetStream/stream-chat-js/commit/94a92954dd2684519d871772cabbc127b2054e35))
+
+### Features
+
+* [CHA-926] add global file/image upload methods ([#1564](https://github.com/GetStream/stream-chat-js/issues/1564)) ([8e226fb](https://github.com/GetStream/stream-chat-js/commit/8e226fb598d278a6dc4af04d3da783093caa41ed))
+* add pending message hook config ([#1562](https://github.com/GetStream/stream-chat-js/issues/1562)) ([5d914f7](https://github.com/GetStream/stream-chat-js/commit/5d914f773619d73c63df787ebd9e030c318511ed))
+* handle offline support for drafts ([#1559](https://github.com/GetStream/stream-chat-js/issues/1559)) ([4a168ef](https://github.com/GetStream/stream-chat-js/commit/4a168ef04cc0876ef9d331ec3f2a5df2a484e9e8))
+* introduce sync search ([#1558](https://github.com/GetStream/stream-chat-js/issues/1558)) ([8e225d5](https://github.com/GetStream/stream-chat-js/commit/8e225d57f41c9c8ad92ae55f687593e8183f4e5b))
+* offline drafts issues and optimistic update implementation ([#1566](https://github.com/GetStream/stream-chat-js/issues/1566)) ([570e431](https://github.com/GetStream/stream-chat-js/commit/570e431638a19d6bf37fa43586b9670c32aa80d8))
+
 ## [9.6.1](https://github.com/GetStream/stream-chat-js/compare/v9.6.0...v9.6.1) (2025-06-13)
 
 ### Bug Fixes
