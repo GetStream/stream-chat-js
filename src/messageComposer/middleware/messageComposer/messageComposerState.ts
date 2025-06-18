@@ -17,12 +17,19 @@ export const createMessageComposerStateCompositionMiddleware = (
       state,
       next,
     }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
-      const payload: Pick<LocalMessage, 'poll_id' | 'quoted_message_id'> = {};
+      const payload: Pick<
+        LocalMessage,
+        'poll_id' | 'quoted_message_id' | 'show_in_channel'
+      > = {};
       if (composer.quotedMessage) {
         payload.quoted_message_id = composer.quotedMessage.id;
       }
       if (composer.pollId) {
         payload.poll_id = composer.pollId;
+      }
+
+      if (composer.showReplyInChannel) {
+        payload.show_in_channel = true;
       }
 
       return next({
@@ -50,12 +57,19 @@ export const createDraftMessageComposerStateCompositionMiddleware = (
       state,
       next,
     }: MiddlewareHandlerParams<MessageDraftComposerMiddlewareValueState>) => {
-      const payload: Pick<LocalMessage, 'poll_id' | 'quoted_message_id'> = {};
+      const payload: Pick<
+        LocalMessage,
+        'poll_id' | 'quoted_message_id' | 'show_in_channel'
+      > = {};
       if (composer.quotedMessage) {
         payload.quoted_message_id = composer.quotedMessage.id;
       }
       if (composer.pollId) {
         payload.poll_id = composer.pollId;
+      }
+
+      if (composer.showReplyInChannel) {
+        payload.show_in_channel = true;
       }
 
       return next({

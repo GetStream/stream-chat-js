@@ -305,6 +305,70 @@ describe('stream-io/message-composer-middleware/own-state', () => {
     expect(result.state.localMessage.poll_id).toBe('poll-id-123');
     expect(result.state.localMessage.quoted_message).toBe(quotedMessage);
   });
+
+  it('should include show_in_channel in the message payload', async () => {
+    vi.spyOn(messageComposer, 'showReplyInChannel', 'get').mockReturnValue(true);
+
+    const result = await messageComposerStateMiddleware.handlers.compose(
+      setupHandlerParams({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
+        },
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
+
+    expect(result.state.message.show_in_channel).toBe(true);
+  });
+
+  it('should not include show_in_channel in the message payload', async () => {
+    vi.spyOn(messageComposer, 'showReplyInChannel', 'get').mockReturnValue(false);
+
+    const result = await messageComposerStateMiddleware.handlers.compose(
+      setupHandlerParams({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
+        },
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
+
+    expect(result.state.message.show_in_channel).toBeUndefined();
+  });
 });
 
 describe('stream-io/message-composer-middleware/draft-own-state', () => {
@@ -335,6 +399,7 @@ describe('stream-io/message-composer-middleware/draft-own-state', () => {
       client,
       quotedMessage: undefined,
       pollId: undefined,
+      showReplyInChannel: false,
     } as any;
 
     messageComposerStateMiddleware =
@@ -458,5 +523,41 @@ describe('stream-io/message-composer-middleware/draft-own-state', () => {
     expect(result.state.draft.attachments![0].type).toBe('image');
     expect(result.state.draft.quoted_message_id).toBe('quoted-message-id');
     expect(result.state.draft.poll_id).toBe('poll-id-123');
+  });
+
+  it('should include show_in_channel in the message payload', async () => {
+    vi.spyOn(messageComposer, 'showReplyInChannel', 'get').mockReturnValue(true);
+
+    const result = await messageComposerStateMiddleware.handlers.compose(
+      setupHandlerParamsDraft({
+        draft: {
+          text: 'Original draft text',
+          attachments: [
+            {
+              type: 'image',
+              image_url: 'https://example.com/image.jpg',
+            },
+          ],
+        },
+      }),
+    );
+    expect(result.state.draft.show_in_channel).toBe(true);
+  });
+
+  it('should not include show_in_channel in the message payload', async () => {
+    const result = await messageComposerStateMiddleware.handlers.compose(
+      setupHandlerParamsDraft({
+        draft: {
+          text: 'Original draft text',
+          attachments: [
+            {
+              type: 'image',
+              image_url: 'https://example.com/image.jpg',
+            },
+          ],
+        },
+      }),
+    );
+    expect(result.state.draft.show_in_channel).toBeUndefined();
   });
 });

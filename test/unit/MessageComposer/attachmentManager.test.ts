@@ -1039,10 +1039,18 @@ describe('AttachmentManager', () => {
 
       expect(attachmentManager.failedUploadsCount).toBe(1);
       expect(mockClient.notifications.addError).toHaveBeenCalledWith({
-        message: 'Upload failed',
+        message: 'Error uploading attachment',
         origin: {
           emitter: 'AttachmentManager',
-          context: { attachment: expect.any(Object) },
+          context: {
+            attachment: expect.any(Object),
+            failedAttachment: expect.any(Object),
+          },
+        },
+        options: {
+          type: 'api:attachment:upload:failed',
+          metadata: { reason: 'Upload failed' },
+          originalError: expect.any(Error),
         },
       });
     });
@@ -1072,10 +1080,17 @@ describe('AttachmentManager', () => {
 
       // Verify notification was added
       expect(mockClient.notifications.addError).toHaveBeenCalledWith({
-        message: 'Error uploading attachment',
+        message: 'The attachment upload was blocked',
         origin: {
           emitter: 'AttachmentManager',
-          context: { attachment: blockedAttachment },
+          context: {
+            attachment: blockedAttachment,
+            blockedAttachment: expect.any(Object),
+          },
+        },
+        options: {
+          type: 'validation:attachment:upload:blocked',
+          metadata: { reason: 'size_limit' },
         },
       });
     });
@@ -1152,6 +1167,9 @@ describe('AttachmentManager', () => {
 
       expect(mockClient.notifications.addError).toHaveBeenCalledWith({
         message: 'File is required for upload attachment',
+        options: {
+          type: 'validation:attachment:file:missing',
+        },
         origin: {
           emitter: 'AttachmentManager',
           context: {
@@ -1183,6 +1201,9 @@ describe('AttachmentManager', () => {
 
       expect(mockClient.notifications.addError).toHaveBeenCalledWith({
         message: 'File is required for upload attachment',
+        options: {
+          type: 'validation:attachment:file:missing',
+        },
         origin: {
           emitter: 'AttachmentManager',
           context: {

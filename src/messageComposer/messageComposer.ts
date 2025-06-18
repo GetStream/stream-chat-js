@@ -42,9 +42,10 @@ export type CompositionContext = Channel | Thread | LocalMessageWithLegacyThread
 
 export type MessageComposerState = {
   id: string;
-  quotedMessage: LocalMessageBase | null;
-  pollId: string | null;
   draftId: string | null;
+  pollId: string | null;
+  quotedMessage: LocalMessageBase | null;
+  showReplyInChannel: boolean;
 };
 
 export type MessageComposerOptions = {
@@ -82,10 +83,11 @@ const initState = (
 ): MessageComposerState => {
   if (!composition) {
     return {
-      id: MessageComposer.generateId(),
-      quotedMessage: null,
-      pollId: null,
       draftId: null,
+      id: MessageComposer.generateId(),
+      pollId: null,
+      quotedMessage: null,
+      showReplyInChannel: false,
     };
   }
 
@@ -104,14 +106,13 @@ const initState = (
   return {
     draftId,
     id,
+    pollId: message.poll_id ?? null,
     quotedMessage: quotedMessage
       ? formatMessage(quotedMessage as MessageResponseBase)
       : null,
-    pollId: message.poll_id ?? null,
+    showReplyInChannel: false,
   };
 };
-
-const noop = () => undefined;
 
 export class MessageComposer extends WithSubscriptions {
   readonly channel: Channel;
@@ -274,7 +275,15 @@ export class MessageComposer extends WithSubscriptions {
     return this.state.getLatestValue().pollId;
   }
 
+  get showReplyInChannel() {
+    return this.state.getLatestValue().showReplyInChannel;
+  }
+
   get hasSendableData() {
+    // If the offline mode is enabled, we allow sending a message if the composition is not empty.
+    if (this.client.offlineDb) {
+      return !this.compositionIsEmpty;
+    }
     return !!(
       (!this.attachmentManager.uploadsInProgressCount &&
         (!this.textComposer.textIsEmpty ||
@@ -355,24 +364,34 @@ export class MessageComposer extends WithSubscriptions {
     });
   }
 
+  public registerDraftEventSubscriptions = () => {
+    const unsubscribeDraftUpdated = this.subscribeDraftUpdated();
+    const unsubscribeDraftDeleted = this.subscribeDraftDeleted();
+
+    return () => {
+      unsubscribeDraftUpdated();
+      unsubscribeDraftDeleted();
+    };
+  };
+
   public registerSubscriptions = (): UnregisterSubscriptions => {
-    if (this.hasSubscriptions) {
-      // Already listening for events and changes
-      return noop;
+    if (!this.hasSubscriptions) {
+      this.addUnsubscribeFunction(this.subscribeMessageComposerSetupStateChange());
+      this.addUnsubscribeFunction(this.subscribeMessageUpdated());
+      this.addUnsubscribeFunction(this.subscribeMessageDeleted());
+
+      this.addUnsubscribeFunction(this.subscribeTextComposerStateChanged());
+      this.addUnsubscribeFunction(this.subscribeAttachmentManagerStateChanged());
+      this.addUnsubscribeFunction(this.subscribeLinkPreviewsManagerStateChanged());
+      this.addUnsubscribeFunction(this.subscribePollComposerStateChanged());
+      this.addUnsubscribeFunction(this.subscribeCustomDataManagerStateChanged());
+      this.addUnsubscribeFunction(this.subscribeMessageComposerStateChanged());
+      this.addUnsubscribeFunction(this.subscribeMessageComposerConfigStateChanged());
     }
-    this.addUnsubscribeFunction(this.subscribeMessageComposerSetupStateChange());
-    this.addUnsubscribeFunction(this.subscribeMessageUpdated());
-    this.addUnsubscribeFunction(this.subscribeMessageDeleted());
 
-    this.addUnsubscribeFunction(this.subscribeTextComposerStateChanged());
-    this.addUnsubscribeFunction(this.subscribeAttachmentManagerStateChanged());
-    this.addUnsubscribeFunction(this.subscribeLinkPreviewsManagerStateChanged());
-    this.addUnsubscribeFunction(this.subscribePollComposerStateChanged());
-    this.addUnsubscribeFunction(this.subscribeCustomDataManagerStateChanged());
-    this.addUnsubscribeFunction(this.subscribeMessageComposerStateChanged());
-    this.addUnsubscribeFunction(this.subscribeMessageComposerConfigStateChanged());
+    this.incrementRefCount();
 
-    return this.unregisterSubscriptions.bind(this);
+    return () => this.unregisterSubscriptions();
   };
 
   private subscribeMessageUpdated = () => {
@@ -543,7 +562,7 @@ export class MessageComposer extends WithSubscriptions {
     });
 
   private subscribeMessageComposerConfigStateChanged = () => {
-    let draftUnsubscribeFunctions: Unsubscribe[] | null;
+    let draftUnsubscribeFunction: Unsubscribe | null;
 
     const unsubscribe = this.configState.subscribeWithSelector(
       (currentValue) => ({
@@ -558,26 +577,27 @@ export class MessageComposer extends WithSubscriptions {
           });
         }
 
-        if (draftsEnabled && !draftUnsubscribeFunctions) {
-          draftUnsubscribeFunctions = [
-            this.subscribeDraftUpdated(),
-            this.subscribeDraftDeleted(),
-          ];
-        } else if (!draftsEnabled && draftUnsubscribeFunctions) {
-          draftUnsubscribeFunctions.forEach((fn) => fn());
-          draftUnsubscribeFunctions = null;
+        if (draftsEnabled && !draftUnsubscribeFunction) {
+          draftUnsubscribeFunction = this.registerDraftEventSubscriptions();
+        } else if (!draftsEnabled && draftUnsubscribeFunction) {
+          draftUnsubscribeFunction();
+          draftUnsubscribeFunction = null;
         }
       },
     );
 
     return () => {
-      draftUnsubscribeFunctions?.forEach((unsubscribe) => unsubscribe());
+      draftUnsubscribeFunction?.();
       unsubscribe();
     };
   };
 
   setQuotedMessage = (quotedMessage: LocalMessage | null) => {
     this.state.partialNext({ quotedMessage });
+  };
+
+  toggleShowReplyInChannel = () => {
+    this.state.partialNext({ showReplyInChannel: !this.showReplyInChannel });
   };
 
   clear = () => {
@@ -660,19 +680,67 @@ export class MessageComposer extends WithSubscriptions {
     await this.channel.deleteDraft({ parent_id: this.threadId ?? undefined });
   };
 
+  getDraft = async () => {
+    if (this.editedMessage || !this.config.drafts.enabled || !this.client.userID) return;
+
+    const draftFromOfflineDB = await this.client.offlineDb?.getDraft({
+      cid: this.channel.cid,
+      userId: this.client.userID,
+      parent_id: this.threadId ?? undefined,
+    });
+
+    if (draftFromOfflineDB) {
+      this.initState({ composition: draftFromOfflineDB });
+    }
+
+    try {
+      const response = await this.channel.getDraft({
+        parent_id: this.threadId ?? undefined,
+      });
+
+      const { draft } = response;
+
+      if (!draft) return;
+
+      this.client.offlineDb?.executeQuerySafely(
+        (db) =>
+          db.upsertDraft({
+            draft,
+          }),
+        { method: 'upsertDraft' },
+      );
+
+      this.initState({ composition: draft });
+    } catch (error) {
+      this.client.notifications.add({
+        message: 'Failed to get the draft',
+        origin: {
+          emitter: 'MessageComposer',
+          context: { composer: this },
+        },
+      });
+    }
+  };
+
   createPoll = async () => {
     const composition = await this.pollComposer.compose();
     if (!composition || !composition.data.id) return;
     try {
-      const { poll } = await this.client.createPoll(composition.data);
-      this.state.partialNext({ pollId: poll.id });
-      this.pollComposer.initState();
+      const poll = await this.client.polls.createPoll(composition.data);
+      this.state.partialNext({ pollId: poll?.id });
     } catch (error) {
-      this.client.notifications.add({
+      this.client.notifications.addError({
         message: 'Failed to create the poll',
         origin: {
           emitter: 'MessageComposer',
           context: { composer: this },
+        },
+        options: {
+          type: 'api:poll:create:failed',
+          metadata: {
+            reason: (error as Error).message,
+          },
+          originalError: error instanceof Error ? error : undefined,
         },
       });
       throw error;

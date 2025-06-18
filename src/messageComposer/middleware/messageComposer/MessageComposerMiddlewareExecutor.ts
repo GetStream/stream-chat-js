@@ -30,6 +30,7 @@ import {
   createCustomDataCompositionMiddleware,
   createDraftCustomDataCompositionMiddleware,
 } from './customData';
+import { createUserDataInjectionMiddleware } from './userDataInjection';
 import { createPollOnlyCompositionMiddleware } from './pollOnly';
 
 export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<
@@ -41,6 +42,7 @@ export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<
     // todo: document how to add custom data to a composed message using middleware
     //  or adding custom composer components (apart from AttachmentsManager, TextComposer etc.)
     this.use([
+      createUserDataInjectionMiddleware(composer),
       createPollOnlyCompositionMiddleware(composer),
       createTextComposerCompositionMiddleware(composer),
       createAttachmentsCompositionMiddleware(composer),
