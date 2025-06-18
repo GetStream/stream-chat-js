@@ -187,7 +187,7 @@ describe('create draft flow', () => {
 				task: {
 					channelId: 'test',
 					channelType: 'messaging',
-					parentId: draftMessage.parent_id,
+					threadId: draftMessage.parent_id,
 					payload: [draftMessage],
 					type: 'create-draft',
 				},
@@ -279,7 +279,7 @@ describe('delete draft flow', () => {
 				task: {
 					channelId: 'test',
 					channelType: 'messaging',
-					parentId: parent_id,
+					threadId: parent_id,
 					payload: [{ parent_id }],
 					type: 'delete-draft',
 				},

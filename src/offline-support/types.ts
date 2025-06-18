@@ -409,7 +409,7 @@ export type PendingTask = {
   channelType?: string;
   messageId?: string;
   id?: number;
-  parentId?: string;
+  threadId?: string;
 } & (
   | {
       payload: Parameters<Channel['sendReaction']>;

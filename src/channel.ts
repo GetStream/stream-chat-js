@@ -1652,7 +1652,7 @@ export class Channel {
           task: {
             channelId: this.id as string,
             channelType: this.type,
-            parentId: message.parent_id,
+            threadId: message.parent_id,
             payload: [message],
             type: 'create-draft',
           },
@@ -1701,7 +1701,7 @@ export class Channel {
           task: {
             channelId: this.id as string,
             channelType: this.type,
-            parentId: parent_id,
+            threadId: parent_id,
             payload: [options],
             type: 'delete-draft',
           },
