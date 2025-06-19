@@ -70,7 +70,10 @@ describe('ReminderManager', () => {
       const manager = new ReminderManager({ client, config });
       // @ts-expect-error accessing private property
       expect(manager.client).toBe(client);
-      expect(manager.configState.getLatestValue()).toEqual(config);
+      expect(manager.configState.getLatestValue()).toEqual({
+        ...DEFAULT_REMINDER_MANAGER_CONFIG,
+        ...config,
+      });
       expect(manager.state.getLatestValue()).toEqual({ reminders: new Map() });
     });
   });
@@ -325,7 +328,7 @@ describe('ReminderManager', () => {
         ?.state.getLatestValue() as ReminderState;
       expect({
         ...state,
-        timeLeftMs: Math.round(timeLeftMs ?? 0 / 1000),
+        timeLeftMs: Math.round((timeLeftMs ?? 0) / 1000),
       }).toEqual({
         ...reminderResponse,
         created_at: new Date(reminderResponse.created_at),
