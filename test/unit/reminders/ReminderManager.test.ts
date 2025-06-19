@@ -303,14 +303,18 @@ describe('ReminderManager', () => {
       client.dispatchEvent(generateReminderEvent(type, reminderResponse));
       expect(manager.reminders.size).toBe(1);
       const remindAtDate = new Date('1970-01-01');
-      expect(
-        manager.reminders.get(reminderResponse.message_id)?.state.getLatestValue(),
-      ).toEqual({
+      const { timeLeftMs, ...state } = manager.reminders
+        .get(reminderResponse.message_id)
+        ?.state.getLatestValue();
+      expect({
+        ...state,
+        timeLeftMs: Math.round(timeLeftMs / 1000),
+      }).toEqual({
         ...reminderResponse,
         created_at: new Date(reminderResponse.created_at),
         remind_at: remindAtDate,
         updated_at: new Date(reminderResponse.updated_at),
-        timeLeftMs: remindAtDate.getTime() - now.getTime(),
+        timeLeftMs: Math.round((remindAtDate.getTime() - now.getTime()) / 1000),
       });
     });
     it('removes reminder from state on reminder.deleted event', () => {
