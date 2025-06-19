@@ -177,10 +177,10 @@ export const getFirstWordFromText = (text: string): string => {
 };
 
 /**
- * Strips the trigger from the text.
- * @param text - The input text from which to strip the trigger.
- * @param trigger - The trigger string to be removed from the start of the text.
- * @returns The text with the trigger removed from the start.
+ * Strips the textToStrip from the start of the text.
+ * @param textToStrip - The string to be removed from the start of the text.
+ * @param text - The input text from which to strip the textToStrip.
+ * @returns The text with the textToStrip removed from the start.
  */
-export const stripTriggerFromText = (text: string, trigger: string) =>
-  text.replace(new RegExp(`^${escapeRegExp(trigger)}\\s*`), '');
+export const stripTextFromStartOfTheText = (textToStrip: string, text: string) =>
+  text.replace(new RegExp(`^${escapeRegExp(textToStrip)}\\s*`), '');

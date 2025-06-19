@@ -179,7 +179,7 @@ export class TextComposer {
   };
 
   setCommand = (command: CommandResponse | null) => {
-    if (command === this.command) return;
+    if (command?.name === this.command?.name) return;
     this.state.partialNext({ command });
   };
 

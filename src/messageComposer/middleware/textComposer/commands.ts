@@ -154,9 +154,10 @@ export const createCommandsMiddleware = (
 
         const commands = searchSource?.query(searchQuery).items;
 
-        const matchedCommand = commands?.find((command) =>
-          startsWithTextAndSpace(query, command.name),
-        );
+        const [command] = commands;
+
+        const matchedCommand =
+          command && startsWithTextAndSpace(query, command.name) ? command : null;
 
         if (matchedCommand) {
           return next({
