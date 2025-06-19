@@ -8,7 +8,6 @@ import { textIsEmpty } from '../../../src/messageComposer/textComposer';
 import { DraftResponse, LocalMessage } from '../../../src/types';
 import { logChatPromiseExecution } from '../../../src/utils';
 import { TextComposerConfig } from '../../../src/messageComposer/configuration';
-import { TextComposerState } from '../../../src';
 
 const textComposerMiddlewareExecuteOutput = {
   state: {
@@ -490,23 +489,26 @@ describe('TextComposer', () => {
       type: 'regular',
       text: 'Hello world',
     };
-    it('should insert text at the specified selection', () => {
+    it('should insert text at the specified selection', async () => {
       const {
         messageComposer: { textComposer },
       } = setup({ composition: message });
-      textComposer.insertText({ text: ' beautiful', selection: { start: 5, end: 5 } });
+      await textComposer.insertText({
+        text: ' beautiful',
+        selection: { start: 5, end: 5 },
+      });
       expect(textComposer.text).toBe('Hello beautiful world');
     });
 
-    it('should insert text at the end if no selection provided', () => {
+    it('should insert text at the end if no selection provided', async () => {
       const {
         messageComposer: { textComposer },
       } = setup({ composition: message });
-      textComposer.insertText({ text: '!' });
+      await textComposer.insertText({ text: '!' });
       expect(textComposer.text).toBe('Hello world!');
     });
 
-    it('should respect maxLengthOnEdit', () => {
+    it('should respect maxLengthOnEdit', async () => {
       const message: LocalMessage = {
         id: 'test-message',
         type: 'regular',
@@ -518,43 +520,43 @@ describe('TextComposer', () => {
         config: { maxLengthOnEdit: 8 },
         composition: message,
       });
-      textComposer.insertText({ text: ' beautiful world' });
+      await textComposer.insertText({ text: ' beautiful world' });
       expect(textComposer.text).toBe('Hello be');
     });
 
-    it('should handle empty text insertion', () => {
+    it('should handle empty text insertion', async () => {
       const {
         messageComposer: { textComposer },
       } = setup({ composition: message });
-      textComposer.insertText({ text: '', selection: { start: 5, end: 5 } });
+      await textComposer.insertText({ text: '', selection: { start: 5, end: 5 } });
       expect(textComposer.text).toBe('Hello world');
     });
 
-    it('should handle insertion at the start of text', () => {
+    it('should handle insertion at the start of text', async () => {
       const {
         messageComposer: { textComposer },
       } = setup({ composition: message });
-      textComposer.insertText({ text: 'Hi ', selection: { start: 0, end: 0 } });
+      await textComposer.insertText({ text: 'Hi ', selection: { start: 0, end: 0 } });
       expect(textComposer.text).toBe('Hi Hello world');
     });
 
-    it('should handle insertion at end of text', () => {
+    it('should handle insertion at end of text', async () => {
       const {
         messageComposer: { textComposer },
       } = setup({ composition: message });
-      textComposer.insertText({ text: '!', selection: { start: 11, end: 11 } });
+      await textComposer.insertText({ text: '!', selection: { start: 11, end: 11 } });
       expect(textComposer.text).toBe('Hello world!');
     });
 
-    it('should handle insertion with multi-character selection', () => {
+    it('should handle insertion with multi-character selection', async () => {
       const {
         messageComposer: { textComposer },
       } = setup({ composition: message });
-      textComposer.insertText({ text: 'Hi', selection: { start: 0, end: 5 } });
+      await textComposer.insertText({ text: 'Hi', selection: { start: 0, end: 5 } });
       expect(textComposer.text).toBe('Hi world');
     });
 
-    it('should handle insertion with multi-character selection and maxLengthOnEdit restricting the size', () => {
+    it('should handle insertion with multi-character selection and maxLengthOnEdit restricting the size', async () => {
       const message: LocalMessage = {
         id: 'test-message',
         type: 'regular',
@@ -567,16 +569,31 @@ describe('TextComposer', () => {
         composition: message,
       });
       const insertedText = 'Hi world';
-      textComposer.insertText({ text: insertedText, selection: { start: 7, end: 9 } });
+      await textComposer.insertText({
+        text: insertedText,
+        selection: { start: 7, end: 9 },
+      });
       expect(textComposer.text).toBe('Hello wHi ');
     });
 
-    it('should not insert text if disabled', () => {
+    it('should not insert text if disabled', async () => {
       const {
         messageComposer: { textComposer },
       } = setup({ composition: message, config: { enabled: false } });
-      textComposer.insertText({ text: ' beautiful', selection: { start: 5, end: 5 } });
+      await textComposer.insertText({
+        text: ' beautiful',
+        selection: { start: 5, end: 5 },
+      });
       expect(textComposer.text).toBe(message.text);
+    });
+
+    it('should reflect pasting of command trigger with partial command name', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
+      await textComposer.insertText({ text: '/giph', selection: { start: 0, end: 11 } });
+      expect(textComposer.text).toBe('/giph');
+      expect(textComposer.suggestions).toBeDefined();
     });
   });
 
