@@ -195,7 +195,13 @@ export class TextComposer {
     this.state.partialNext({ selection });
   };
 
-  insertText = ({ text, selection }: { text: string; selection?: TextSelection }) => {
+  insertText = async ({
+    text,
+    selection,
+  }: {
+    text: string;
+    selection?: TextSelection;
+  }) => {
     if (!this.enabled) return;
 
     const finalSelection: TextSelection = selection ?? this.selection;
@@ -217,7 +223,7 @@ export class TextComposer {
         ? finalText.length
         : currentText.slice(0, expectedCursorPosition).length;
 
-    this.state.partialNext({
+    await this.handleChange({
       text: finalText,
       selection: {
         start: cursorPosition,

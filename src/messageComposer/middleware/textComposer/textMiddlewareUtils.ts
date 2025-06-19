@@ -35,6 +35,14 @@ export const getTriggerCharWithToken = ({
   return isCommand ? result : result?.trim();
 };
 
+export const getCompleteCommandInString = (text: string) => {
+  // starts with "/" followed by 1+ non-whitespace chars followed by 1+ white-space chars
+  // the comand name is extracted into a separate group
+  const match = text.match(/^\/(\S+)\s+.*/);
+  const commandName = match && match[1];
+  return commandName;
+};
+
 export const insertItemWithTrigger = ({
   insertText,
   selection,
@@ -143,44 +151,3 @@ export const getTokenizedSuggestionDisplayName = ({
       : [displayName],
   },
 });
-
-/**
- * Utility function to check if a given input text matches another text.
- * @param input
- * @param textToBeMatchedWith
- * @returns
- */
-export const startsWithTextAndSpace = (
-  input: string,
-  textToBeMatchedWith: string,
-): boolean => {
-  try {
-    const regex = new RegExp(
-      `^${escapeRegExp(textToBeMatchedWith.toLowerCase())}\\s+`,
-      'i',
-    );
-    return regex.test(input.toLowerCase());
-  } catch (error) {
-    console.error('Error in validating with the regex:', error);
-    return false;
-  }
-};
-
-/**
- * Extracts the first word from a given text.
- * @param text - The input text from which to extract the first word.
- * @returns The first word found in the text, or an empty string if no word is found.
- */
-export const getFirstWordFromText = (text: string): string => {
-  const match = text.match(/^\s*(\S+)/);
-  return match ? match[1] : '';
-};
-
-/**
- * Strips the trigger from the text.
- * @param text - The input text from which to strip the trigger.
- * @param trigger - The trigger string to be removed from the start of the text.
- * @returns The text with the trigger removed from the start.
- */
-export const stripTriggerFromText = (text: string, trigger: string) =>
-  text.replace(new RegExp(`^${escapeRegExp(trigger)}\\s*`), '');
