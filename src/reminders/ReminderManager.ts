@@ -1,4 +1,5 @@
 import { Reminder } from './Reminder';
+import { DEFAULT_STOP_REFRESH_BOUNDARY_MS } from './ReminderTimer';
 import { StateStore } from '../store';
 import { ReminderPaginator } from '../pagination';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
@@ -26,6 +27,7 @@ export const DEFAULT_REMINDER_MANAGER_CONFIG: ReminderManagerConfig = {
     8 * oneHour,
     oneDay,
   ],
+  stopTimerRefreshBoundaryMs: DEFAULT_STOP_REFRESH_BOUNDARY_MS,
 };
 
 const isReminderExistsError = (error: Error) =>
@@ -51,12 +53,12 @@ export type ReminderManagerState = {
 
 export type ReminderManagerConfig = {
   scheduledOffsetsMs: number[];
-  stopTimerRefreshBoundaryMs?: number;
+  stopTimerRefreshBoundaryMs: number;
 };
 
 export type ReminderManagerOptions = {
   client: StreamChat;
-  config?: ReminderManagerConfig;
+  config?: Partial<ReminderManagerConfig>;
 };
 
 export class ReminderManager extends WithSubscriptions {
@@ -71,6 +73,9 @@ export class ReminderManager extends WithSubscriptions {
     this.configState = new StateStore({
       scheduledOffsetsMs:
         config?.scheduledOffsetsMs ?? DEFAULT_REMINDER_MANAGER_CONFIG.scheduledOffsetsMs,
+      stopTimerRefreshBoundaryMs:
+        config?.stopTimerRefreshBoundaryMs ??
+        DEFAULT_REMINDER_MANAGER_CONFIG.stopTimerRefreshBoundaryMs,
     });
     this.state = new StateStore({ reminders: new Map<MessageId, Reminder>() });
     this.paginator = new ReminderPaginator(client);
@@ -78,6 +83,15 @@ export class ReminderManager extends WithSubscriptions {
 
   // Config API START //
   updateConfig(config: Partial<ReminderManagerConfig>) {
+    if (
+      typeof config.stopTimerRefreshBoundaryMs === 'number' &&
+      config.stopTimerRefreshBoundaryMs !== this.stopTimerRefreshBoundaryMs
+    ) {
+      this.reminders.forEach((reminder) => {
+        reminder.timer.stopRefreshBoundaryMs =
+          config?.stopTimerRefreshBoundaryMs as number;
+      });
+    }
     this.configState.partialNext(config);
   }
 
