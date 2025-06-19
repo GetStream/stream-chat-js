@@ -43,9 +43,6 @@ export const getCompleteCommandInString = (text: string) => {
   return commandName;
 };
 
-export const stripCommandFromText = (text: string, commandName: string) =>
-  text.replace(new RegExp(`^${escapeRegExp(`/${commandName}`)}\\s*`), '');
-
 export const insertItemWithTrigger = ({
   insertText,
   selection,

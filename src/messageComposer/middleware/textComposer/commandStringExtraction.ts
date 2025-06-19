@@ -1,15 +1,18 @@
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
 import type { CommandSuggestion } from './types';
 import type { Middleware } from '../../../middleware';
-import { stripCommandFromText } from './textMiddlewareUtils';
+import { escapeRegExp } from './textMiddlewareUtils';
 
-export type ApplyCommandSettingsMiddleware = Middleware<
+export type CommandStringExtractionMiddleware = Middleware<
   TextComposerMiddlewareExecutorState<CommandSuggestion>,
   'onChange' | 'onSuggestionItemSelect'
 >;
 
+const stripCommandFromText = (text: string, commandName: string) =>
+  text.replace(new RegExp(`^${escapeRegExp(`/${commandName}`)}\\s*`), '');
+
 export const createCommandStringExtractionMiddleware =
-  (): ApplyCommandSettingsMiddleware => ({
+  (): CommandStringExtractionMiddleware => ({
     handlers: {
       onChange: ({ complete, forward, state }) => {
         const { command } = state;
