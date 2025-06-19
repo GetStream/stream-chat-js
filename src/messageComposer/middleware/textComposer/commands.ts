@@ -6,10 +6,9 @@ import type { CommandResponse } from '../../../types';
 import { mergeWith } from '../../../utils/mergeWith';
 import type { CommandSuggestion, TextComposerMiddlewareOptions } from './types';
 import {
-  getFirstWordFromText,
+  getCompleteCommandInString,
   getTriggerCharWithToken,
   insertItemWithTrigger,
-  startsWithTextAndSpace,
 } from './textMiddlewareUtils';
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
 
@@ -121,6 +120,17 @@ export const createCommandsMiddleware = (
       onChange: ({ state, next, complete, forward }) => {
         if (!state.selection) return forward();
         const finalText = state.text.slice(0, state.selection.end);
+        const commandName = getCompleteCommandInString(finalText);
+        if (commandName) {
+          const command = searchSource?.query(commandName).items[0];
+          if (command) {
+            return next({
+              ...state,
+              command,
+              suggestions: undefined,
+            });
+          }
+        }
 
         const triggerWithToken = getTriggerCharWithToken({
           trigger: finalOptions.trigger,
@@ -148,30 +158,11 @@ export const createCommandsMiddleware = (
           return next(newState);
         }
 
-        const query = triggerWithToken.slice(1);
-
-        const searchQuery = getFirstWordFromText(query);
-
-        const commands = searchSource?.query(searchQuery).items;
-
-        const [command] = commands;
-
-        const matchedCommand =
-          command && startsWithTextAndSpace(query, command.name) ? command : null;
-
-        if (matchedCommand) {
-          return next({
-            ...state,
-            command: matchedCommand,
-            suggestions: undefined,
-          });
-        }
-
         return complete({
           ...state,
           command: null,
           suggestions: {
-            query,
+            query: triggerWithToken.slice(1),
             searchSource,
             trigger: finalOptions.trigger,
           },
