@@ -52,6 +52,12 @@ const setup = ({
   const channel = client.channel('channelType', 'channelId');
   channel.keystroke = vi.fn().mockResolvedValue({});
   channel.getClient = vi.fn().mockReturnValue(client);
+  channel.getConfig = vi.fn().mockReturnValue({
+    commands: [
+      { name: 'ban', description: 'Ban a user' },
+      { name: 'mute', description: 'Mute a user' },
+    ],
+  });
 
   const messageComposer = new MessageComposer({
     client: client,
@@ -143,14 +149,13 @@ describe('TextComposerMiddlewareExecutor', () => {
       eventName: 'onChange',
       initialValue: {
         ...initialValue,
-        text: '/ban',
-        selection: { start: 4, end: 4 },
+        text: '/ban ',
+        selection: { start: 5, end: 5 },
       },
     });
 
-    expect(result.state.suggestions).toBeDefined();
-    expect(result.state.suggestions?.trigger).toBe('/');
-    expect(result.state.suggestions?.query).toBe('ban');
+    expect(result.state.command).toBeDefined();
+    expect(result.state.command?.name).toBe('ban');
 
     result = await textComposer.middlewareExecutor.execute({
       eventName: 'onChange',
@@ -206,6 +211,8 @@ describe('TextComposerMiddlewareExecutor', () => {
 
     expect(textComposer.text).toBe('/ban ');
     expect(textComposer.suggestions).toBeUndefined();
+    expect(textComposer.command).toBeDefined();
+    expect(textComposer.command?.name).toBe('ban');
   });
 
   it('should not be impacted by errors triggered by search source query', async () => {
@@ -290,14 +297,14 @@ describe('TextComposerMiddlewareExecutor', () => {
         eventName: 'onChange',
         initialValue: {
           ...initialValue,
-          text: '/test',
+          text: '/ban ',
           selection: { start: 0, end: 5 },
         },
       });
 
-      expect(result.state.suggestions).toBeDefined();
-      expect(result.state.suggestions?.trigger).toBe('/');
-      expect(result.state.suggestions?.query).toBe('test');
+      expect(result.state.suggestions).not.toBeDefined();
+      expect(result.state.command).toBeDefined();
+      expect(result.state.command?.name).toBe('ban');
     });
 
     it('should handle new search trigger', async () => {
@@ -432,10 +439,6 @@ describe('TextComposerMiddlewareExecutor', () => {
         selection: { start: 4, end: 4 },
       },
     });
-
-    expect(result.state.suggestions).toBeDefined();
-    expect(result.state.suggestions?.trigger).toBe('/');
-    expect(result.state.suggestions?.query).toBe('ban');
 
     // Then test a mention after the command
     result = await textComposer.middlewareExecutor.execute({

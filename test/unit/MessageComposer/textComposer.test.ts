@@ -103,6 +103,7 @@ describe('TextComposer', () => {
     it('should initialize with default config', () => {
       const { messageComposer } = setup();
       expect(messageComposer.textComposer.state.getLatestValue()).toEqual({
+        command: null,
         mentionedUsers: [],
         text: '',
         selection: { start: 0, end: 0 },
@@ -113,6 +114,7 @@ describe('TextComposer', () => {
       const defaultValue = 'XXX';
       const { messageComposer } = setup({ config: { defaultValue } });
       expect(messageComposer.textComposer.state.getLatestValue()).toEqual({
+        command: null,
         mentionedUsers: [],
         text: defaultValue,
         selection: { start: defaultValue.length, end: defaultValue.length },
@@ -224,6 +226,7 @@ describe('TextComposer', () => {
         updated_at: new Date(),
       };
       const initialState = {
+        command: null,
         mentionedUsers: [],
         text: '',
         selection: { start: 0, end: 0 },

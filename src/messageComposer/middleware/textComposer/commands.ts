@@ -5,7 +5,11 @@ import { BaseSearchSourceSync } from '../../../search';
 import type { CommandResponse } from '../../../types';
 import { mergeWith } from '../../../utils/mergeWith';
 import type { CommandSuggestion, TextComposerMiddlewareOptions } from './types';
-import { getTriggerCharWithToken, insertItemWithTrigger } from './textMiddlewareUtils';
+import {
+  getCompleteCommandInString,
+  getTriggerCharWithToken,
+  insertItemWithTrigger,
+} from './textMiddlewareUtils';
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
 
 export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion> {
@@ -115,10 +119,22 @@ export const createCommandsMiddleware = (
     handlers: {
       onChange: ({ state, next, complete, forward }) => {
         if (!state.selection) return forward();
+        const finalText = state.text.slice(0, state.selection.end);
+        const commandName = getCompleteCommandInString(finalText);
+        if (commandName) {
+          const command = searchSource?.query(commandName).items[0];
+          if (command) {
+            return next({
+              ...state,
+              command,
+              suggestions: undefined,
+            });
+          }
+        }
 
         const triggerWithToken = getTriggerCharWithToken({
           trigger: finalOptions.trigger,
-          text: state.text.slice(0, state.selection.end),
+          text: finalText,
           acceptTrailingSpaces: false,
           isCommand: true,
         });
@@ -144,6 +160,7 @@ export const createCommandsMiddleware = (
 
         return complete({
           ...state,
+          command: null,
           suggestions: {
             query: triggerWithToken.slice(1),
             searchSource,
@@ -151,13 +168,13 @@ export const createCommandsMiddleware = (
           },
         });
       },
-      onSuggestionItemSelect: ({ state, complete, forward }) => {
+      onSuggestionItemSelect: ({ state, next, forward }) => {
         const { selectedSuggestion } = state.change ?? {};
         if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
           return forward();
 
         searchSource.resetStateAndActivate();
-        return complete({
+        return next({
           ...state,
           ...insertItemWithTrigger({
             insertText: `/${selectedSuggestion.name} `,
@@ -165,6 +182,7 @@ export const createCommandsMiddleware = (
             text: state.text,
             trigger: finalOptions.trigger,
           }),
+          command: selectedSuggestion,
           suggestions: undefined,
         });
       },
