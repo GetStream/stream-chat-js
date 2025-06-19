@@ -5,12 +5,11 @@ import {
   Reminder,
   ReminderManager,
   ReminderResponse,
-  ReminderTimer,
+  ReminderState,
   StreamChat,
 } from '../../../src';
 import { describe, expect, it, vi } from 'vitest';
 import { PaginationQueryReturnValue } from '../../../src/pagination';
-import { sleep } from '../../../src/utils';
 
 const baseData = {
   channel_cid: 'channel_cid',
@@ -71,18 +70,39 @@ describe('ReminderManager', () => {
       const manager = new ReminderManager({ client, config });
       // @ts-expect-error accessing private property
       expect(manager.client).toBe(client);
-      expect(manager.configState.getLatestValue()).toEqual(config);
+      expect(manager.configState.getLatestValue()).toEqual({
+        ...DEFAULT_REMINDER_MANAGER_CONFIG,
+        ...config,
+      });
       expect(manager.state.getLatestValue()).toEqual({ reminders: new Map() });
     });
   });
 
   describe('config state API', () => {
-    it('updates config object', () => {
+    it('updates scheduledOffsetsMs', () => {
       const client = new StreamChat('api-key');
       const manager = new ReminderManager({ client });
       const config = { scheduledOffsetsMs: [1, 2, 3] };
       manager.updateConfig(config);
       expect(manager.scheduledOffsetsMs).toEqual(config.scheduledOffsetsMs);
+    });
+
+    it('updates stopTimerRefreshBoundaryMs for every timer', () => {
+      const client = new StreamChat('api-key');
+      const manager = new ReminderManager({ client });
+      const scheduleOffsetMs = 62 * 1000;
+      const reminderResponse = generateReminderResponse({ scheduleOffsetMs });
+      manager.upsertToState({ data: reminderResponse });
+
+      expect(manager.stopTimerRefreshBoundaryMs).toBe(DEFAULT_STOP_REFRESH_BOUNDARY_MS);
+      const config = { stopTimerRefreshBoundaryMs: 1 };
+      manager.updateConfig(config);
+      expect(manager.stopTimerRefreshBoundaryMs).toEqual(
+        config.stopTimerRefreshBoundaryMs,
+      );
+      expect(
+        manager.reminders.get(reminderResponse.message_id)?.timer.stopRefreshBoundaryMs,
+      ).toBe(1);
     });
   });
 
@@ -305,10 +325,10 @@ describe('ReminderManager', () => {
       const remindAtDate = new Date('1970-01-01');
       const { timeLeftMs, ...state } = manager.reminders
         .get(reminderResponse.message_id)
-        ?.state.getLatestValue();
+        ?.state.getLatestValue() as ReminderState;
       expect({
         ...state,
-        timeLeftMs: Math.round(timeLeftMs / 1000),
+        timeLeftMs: Math.round((timeLeftMs ?? 0) / 1000),
       }).toEqual({
         ...reminderResponse,
         created_at: new Date(reminderResponse.created_at),
