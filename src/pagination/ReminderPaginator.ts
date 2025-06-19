@@ -9,8 +9,26 @@ import type { StreamChat } from '../client';
 
 export class ReminderPaginator extends BasePaginator<ReminderResponse> {
   private client: StreamChat;
-  filters: ReminderFilters | undefined;
-  sort: ReminderSort | undefined;
+  protected _filters: ReminderFilters | undefined;
+  protected _sort: ReminderSort | undefined;
+
+  get filters(): ReminderFilters | undefined {
+    return this._filters;
+  }
+
+  get sort(): ReminderSort | undefined {
+    return this._sort;
+  }
+
+  set filters(filters: ReminderFilters | undefined) {
+    this._filters = filters;
+    this.resetState();
+  }
+
+  set sort(sort: ReminderSort | undefined) {
+    this._sort = sort;
+    this.resetState();
+  }
 
   constructor(client: StreamChat, options?: PaginatorOptions) {
     super(options);
