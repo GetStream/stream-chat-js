@@ -4036,7 +4036,7 @@ export type ReminderAPIResponse = APIResponse & {
 
 export type CreateReminderOptions = {
   messageId: string;
-  remind_at?: string;
+  remind_at?: string | null;
   user_id?: string;
 };
 
