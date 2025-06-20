@@ -1,3 +1,33 @@
+## [9.8.0](https://github.com/GetStream/stream-chat-js/compare/v9.7.0...v9.8.0) (2025-06-19)
+
+### Bug Fixes
+
+* allow to nullify reminder's remind_at value ([#1569](https://github.com/GetStream/stream-chat-js/issues/1569)) ([c1c6cf4](https://github.com/GetStream/stream-chat-js/commit/c1c6cf40c6a411487206d14a3a0a418ebb079881))
+* propagate stopTimerRefreshBoundaryMs to all reminder timers on ReminderManager config update ([#1568](https://github.com/GetStream/stream-chat-js/issues/1568)) ([944d1c2](https://github.com/GetStream/stream-chat-js/commit/944d1c233df4e77e6176b734068685b0f405012b))
+* run onChange middleware on TextComposer.insertText ([#1570](https://github.com/GetStream/stream-chat-js/issues/1570)) ([3768007](https://github.com/GetStream/stream-chat-js/commit/376800706c7677af8d06491d20f268e3d74683e2))
+
+### Features
+
+* handle command injection optionally ([#1548](https://github.com/GetStream/stream-chat-js/issues/1548)) ([ea912f9](https://github.com/GetStream/stream-chat-js/commit/ea912f9e0859fc85f8bcf00b58672bda3b43d658))
+
+### Refactors
+
+* protect ReminderPaginator filters and sort properties ([#1567](https://github.com/GetStream/stream-chat-js/issues/1567)) ([1a3f4c4](https://github.com/GetStream/stream-chat-js/commit/1a3f4c4dc4dce0d775b0fc8d9351338066acc47d))
+
+## [9.7.0](https://github.com/GetStream/stream-chat-js/compare/v9.6.1...v9.7.0) (2025-06-18)
+
+### Bug Fixes
+
+* separate draft event subscriptions and make it a public api ([#1565](https://github.com/GetStream/stream-chat-js/issues/1565)) ([94a9295](https://github.com/GetStream/stream-chat-js/commit/94a92954dd2684519d871772cabbc127b2054e35))
+
+### Features
+
+* [CHA-926] add global file/image upload methods ([#1564](https://github.com/GetStream/stream-chat-js/issues/1564)) ([8e226fb](https://github.com/GetStream/stream-chat-js/commit/8e226fb598d278a6dc4af04d3da783093caa41ed))
+* add pending message hook config ([#1562](https://github.com/GetStream/stream-chat-js/issues/1562)) ([5d914f7](https://github.com/GetStream/stream-chat-js/commit/5d914f773619d73c63df787ebd9e030c318511ed))
+* handle offline support for drafts ([#1559](https://github.com/GetStream/stream-chat-js/issues/1559)) ([4a168ef](https://github.com/GetStream/stream-chat-js/commit/4a168ef04cc0876ef9d331ec3f2a5df2a484e9e8))
+* introduce sync search ([#1558](https://github.com/GetStream/stream-chat-js/issues/1558)) ([8e225d5](https://github.com/GetStream/stream-chat-js/commit/8e225d57f41c9c8ad92ae55f687593e8183f4e5b))
+* offline drafts issues and optimistic update implementation ([#1566](https://github.com/GetStream/stream-chat-js/issues/1566)) ([570e431](https://github.com/GetStream/stream-chat-js/commit/570e431638a19d6bf37fa43586b9670c32aa80d8))
+
 ## [9.6.1](https://github.com/GetStream/stream-chat-js/compare/v9.6.0...v9.6.1) (2025-06-13)
 
 ### Bug Fixes

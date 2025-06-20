@@ -6,7 +6,7 @@ import type { TextSelection } from './middleware/textComposer/types';
 import type { TextComposerState } from './middleware/textComposer/types';
 import type { Suggestions } from './middleware/textComposer/types';
 import type { MessageComposer } from './messageComposer';
-import type { DraftMessage, LocalMessage, UserResponse } from '../types';
+import type { CommandResponse, DraftMessage, LocalMessage, UserResponse } from '../types';
 
 export type TextComposerOptions = {
   composer: MessageComposer;
@@ -37,6 +37,7 @@ const initState = ({
   if (!message) {
     const text = composer.config.text.defaultValue ?? '';
     return {
+      command: null,
       mentionedUsers: [],
       text,
       selection: { start: text.length, end: text.length },
@@ -118,6 +119,10 @@ export class TextComposer {
 
   // --- START STATE API ---
 
+  get command() {
+    return this.state.getLatestValue().command;
+  }
+
   get mentionedUsers() {
     return this.state.getLatestValue().mentionedUsers;
   }
@@ -146,6 +151,10 @@ export class TextComposer {
     this.state.partialNext({ mentionedUsers: users });
   }
 
+  clearCommand() {
+    this.state.partialNext({ command: null });
+  }
+
   upsertMentionedUser = (user: UserResponse) => {
     const mentionedUsers = [...this.mentionedUsers];
     const existingUserIndex = mentionedUsers.findIndex((u) => u.id === user.id);
@@ -169,6 +178,11 @@ export class TextComposer {
     this.state.partialNext({ mentionedUsers });
   };
 
+  setCommand = (command: CommandResponse | null) => {
+    if (command?.name === this.command?.name) return;
+    this.state.partialNext({ command });
+  };
+
   setText = (text: string) => {
     if (!this.enabled || text === this.text) return;
     this.state.partialNext({ text });
@@ -181,7 +195,13 @@ export class TextComposer {
     this.state.partialNext({ selection });
   };
 
-  insertText = ({ text, selection }: { text: string; selection?: TextSelection }) => {
+  insertText = async ({
+    text,
+    selection,
+  }: {
+    text: string;
+    selection?: TextSelection;
+  }) => {
     if (!this.enabled) return;
 
     const finalSelection: TextSelection = selection ?? this.selection;
@@ -203,7 +223,7 @@ export class TextComposer {
         ? finalText.length
         : currentText.slice(0, expectedCursorPosition).length;
 
-    this.state.partialNext({
+    await this.handleChange({
       text: finalText,
       selection: {
         start: cursorPosition,

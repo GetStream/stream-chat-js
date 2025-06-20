@@ -1769,6 +1769,8 @@ describe('OfflineSupportApi', () => {
             _sendMessage: vi.fn(),
             _sendReaction: vi.fn(),
             _deleteReaction: vi.fn(),
+            _createDraft: vi.fn(),
+            _deleteDraft: vi.fn(),
             state: { addMessageSorted: vi.fn() },
           } as unknown as Channel;
 
@@ -1805,6 +1807,22 @@ describe('OfflineSupportApi', () => {
           await offlineDb['executeTask']({ task });
 
           expect(mockChannel._deleteReaction).toHaveBeenCalledWith(...task.payload);
+        });
+
+        it('should call _createDraft for create-reaction task', async () => {
+          const task = generatePendingTask('create-draft') as PendingTask;
+
+          await offlineDb['executeTask']({ task });
+
+          expect(mockChannel._createDraft).toHaveBeenCalledWith(...task.payload);
+        });
+
+        it('should call _deleteDraft for delete-draft task', async () => {
+          const task = generatePendingTask('delete-draft') as PendingTask;
+
+          await offlineDb['executeTask']({ task });
+
+          expect(mockChannel._deleteDraft).toHaveBeenCalledWith(...task.payload);
         });
 
         it('should call _sendMessage and addMessageSorted if isPendingTask is true', async () => {

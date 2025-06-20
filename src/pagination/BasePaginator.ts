@@ -38,7 +38,7 @@ export const DEFAULT_PAGINATION_OPTIONS: Required<PaginatorOptions> = {
 
 export abstract class BasePaginator<T> {
   state: StateStore<PaginatorState<T>>;
-  protected pageSize: number;
+  pageSize: number;
   protected _executeQueryDebounced!: DebouncedExecQueryFunction;
   protected _isCursorPagination = false;
 

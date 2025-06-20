@@ -1,5 +1,10 @@
 import type { TextSelection } from './types';
 
+/**
+ * For commands, we want to match all patterns except:
+ * 1. Text not starting with trigger
+ * 2. Trigger in middle of text
+ */
 export const getTriggerCharWithToken = ({
   trigger,
   text,
@@ -12,6 +17,7 @@ export const getTriggerCharWithToken = ({
   acceptTrailingSpaces?: boolean;
 }) => {
   const triggerNorWhitespace = `[^\\s${trigger}]*`;
+
   const match = text.match(
     new RegExp(
       isCommand
@@ -24,6 +30,14 @@ export const getTriggerCharWithToken = ({
   );
 
   return match && match[match.length - 1].trim();
+};
+
+export const getCompleteCommandInString = (text: string) => {
+  // starts with "/" followed by 1+ non-whitespace chars followed by 1+ white-space chars
+  // the comand name is extracted into a separate group
+  const match = text.match(/^\/(\S+)\s+.*/);
+  const commandName = match && match[1];
+  return commandName;
 };
 
 export const insertItemWithTrigger = ({

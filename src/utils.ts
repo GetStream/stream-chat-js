@@ -297,9 +297,9 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
 
 /**
  * Takes the message object, parses the dates, sets `__html`
- * and sets the status to `received` if missing; returns a new message object.
+ * and sets the status to `received` if missing; returns a new LocalMessage object.
  *
- * @param {MessageResponse} message `MessageResponse` object
+ * @param {LocalMessage} message `LocalMessage` object
  */
 export function formatMessage(
   message: MessageResponse | MessageResponseBase | LocalMessage,
@@ -328,6 +328,35 @@ export function formatMessage(
     error: (message as LocalMessage).error ?? null,
     quoted_message: toLocalMessageBase((message as MessageResponse).quoted_message),
   } as LocalMessage;
+}
+
+/**
+ * @private
+ *
+ * Takes a LocalMessage, parses the dates back to strings,
+ * and converts the message back to a MessageResponse.
+ *
+ * @param {MessageResponse} message `MessageResponse` object
+ */
+export function unformatMessage(message: LocalMessage): MessageResponse {
+  const toMessageResponseBase = (
+    msg: LocalMessage | null | undefined,
+  ): MessageResponseBase | null => {
+    if (!msg) return null;
+    const newDateString = new Date().toISOString();
+    return {
+      ...msg,
+      created_at: message.created_at ? message.created_at.toISOString() : newDateString,
+      deleted_at: message.deleted_at ? message.deleted_at.toISOString() : undefined,
+      pinned_at: message.pinned_at ? message.pinned_at.toISOString() : undefined,
+      updated_at: message.updated_at ? message.updated_at.toISOString() : newDateString,
+    };
+  };
+
+  return {
+    ...toMessageResponseBase(message),
+    quoted_message: toMessageResponseBase((message as LocalMessage).quoted_message),
+  } as MessageResponse;
 }
 
 export const localMessageToNewMessagePayload = (localMessage: LocalMessage): Message => {

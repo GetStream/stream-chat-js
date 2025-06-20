@@ -38,5 +38,6 @@ export type TextComposerState<T extends Suggestion = Suggestion> = {
   mentionedUsers: UserResponse[];
   selection: TextSelection;
   text: string;
+  command?: CommandResponse | null;
   suggestions?: Suggestions<T>;
 };

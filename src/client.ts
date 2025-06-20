@@ -1972,9 +1972,7 @@ export class StreamChat {
         this.reminders.hydrateState(channelState.messages);
       }
 
-      if (channelState.draft) {
-        c.messageComposer.initState({ composition: channelState.draft });
-      }
+      c.messageComposer.initStateFromChannelResponse(channelState);
 
       channels.push(c);
     }
