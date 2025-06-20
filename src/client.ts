@@ -32,6 +32,7 @@ import {
 } from './utils';
 
 import type {
+  ActiveLiveLocationsAPIResponse,
   APIErrorResponse,
   APIResponse,
   AppSettings,
@@ -190,6 +191,8 @@ import type {
   SegmentTargetsResponse,
   SegmentType,
   SendFileAPIResponse,
+  SharedLocationRequest,
+  SharedLocationResponse,
   SortParam,
   StreamChatOptions,
   SyncOptions,
@@ -2553,7 +2556,6 @@ export class StreamChat {
       ...options,
     });
   }
-
   async blockUser(blockedUserID: string, user_id?: string) {
     return await this.post<BlockUserAPIResponse>(this.baseURL + '/users/block', {
       blocked_user_id: blockedUserID,
@@ -2572,6 +2574,17 @@ export class StreamChat {
       blocked_user_id: blockedUserID,
       ...(userID ? { user_id: userID } : {}),
     });
+  }
+
+  /** getSharedLocations
+   *
+   * @returns {Promise<ActiveLiveLocationsAPIResponse>} The server response
+   *
+   */
+  async getSharedLocations() {
+    return await this.get<ActiveLiveLocationsAPIResponse>(
+      this.baseURL + `/users/live_locations`,
+    );
   }
 
   /** muteUser - mutes a user
@@ -3731,7 +3744,6 @@ export class StreamChat {
       },
     );
   }
-
   /**
    * removeSegmentTargets - Remove targets from a segment
    *
@@ -4567,6 +4579,20 @@ export class StreamChat {
       sort: sort && normalizeQuerySort(sort),
       ...rest,
     });
+  }
+
+  /**
+   * updateLocation - Updates a location
+   *
+   * @param location UserLocation the location data to update
+   *
+   * @returns {Promise<APIResponse>} The server response
+   */
+  async updateLocation(location: SharedLocationRequest) {
+    return await this.put<SharedLocationResponse>(
+      this.baseURL + `/users/live_locations`,
+      location,
+    );
   }
 
   /**

@@ -354,6 +354,7 @@ All notable changes to this project will be documented in this file. See [standa
 * [CHA-826] normalize queryDrafts sort ([#1509](https://github.com/GetStream/stream-chat-js/issues/1509)) ([6df96c3](https://github.com/GetStream/stream-chat-js/commit/6df96c3d171d11891985307a71728063cacac73f))
 * add event fields on creating campaign ([#1512](https://github.com/GetStream/stream-chat-js/issues/1512)) ([6c76d6d](https://github.com/GetStream/stream-chat-js/commit/6c76d6db1f33ae14bee546bbf952317a8a144c43))
 
+
 ## [8.58.0](https://github.com/GetStream/stream-chat-js/compare/v8.57.6...v8.58.0) (2025-04-01)
 
 

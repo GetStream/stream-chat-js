@@ -55,7 +55,7 @@ export type PartializeKeys<T, K extends keyof T> = Partial<Pick<T, K>> & Omit<T,
 
 /* Unknown Record */
 export type UR = Record<string, unknown>;
-export type UnknownType = UR; // alias to avoid breaking change
+export type UnknownType = UR; //alias to avoid breaking change
 
 export type Unpacked<T> = T extends (infer U)[]
   ? U // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -324,6 +324,7 @@ export type ChannelAPIResponse = {
   threads?: ThreadResponse[];
   watcher_count?: number;
   watchers?: UserResponse[];
+  active_live_locations?: SharedLocationResponse[];
 };
 
 export type ChannelUpdateOptions = {
@@ -688,6 +689,7 @@ export type MessageResponseBase = MessageBase & {
   reminder?: ReminderResponseBase;
   reply_count?: number;
   shadowed?: boolean;
+  shared_location?: SharedLocationResponse;
   status?: string;
   thread_participants?: UserResponse[];
   updated_at?: string;
@@ -1438,6 +1440,7 @@ export type Event = CustomEventData & {
   // creation date of a message with last_read_message_id, formatted as Date ISO string
   last_read_at?: string;
   last_read_message_id?: string;
+  live_location?: SharedLocationResponse;
   mark_messages_deleted?: boolean;
   me?: OwnUserResponse;
   member?: ChannelMemberResponse;
@@ -2699,6 +2702,7 @@ export type Logger = (
 export type Message = Partial<
   MessageBase & {
     mentioned_users: string[];
+    shared_location?: SharedLocationRequest;
   }
 >;
 
@@ -3955,6 +3959,30 @@ export type DraftMessage = {
   show_in_channel?: boolean;
   silent?: boolean;
   type?: MessageLabel;
+};
+
+export type ActiveLiveLocationsAPIResponse = APIResponse & {
+  active_live_locations: SharedLocationResponse[];
+};
+
+export type SharedLocationResponse = {
+  channel_cid: string;
+  created_at: string;
+  created_by_device_id: string;
+  end_at?: string;
+  latitude: number;
+  longitude: number;
+  message_id: string;
+  updated_at: string;
+  user_id: string;
+};
+
+export type SharedLocationRequest = {
+  created_by_device_id: string;
+  end_at?: string;
+  latitude?: number;
+  longitude?: number;
+  message_id: string;
 };
 
 export type ThreadSort = ThreadSortBase | Array<ThreadSortBase>;
