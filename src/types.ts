@@ -3985,10 +3985,6 @@ export type SharedLocationRequest = {
   message_id: string;
 };
 
-export type UpdateLocationOptions = {
-  user_id?: string;
-};
-
 export type ThreadSort = ThreadSortBase | Array<ThreadSortBase>;
 
 export type ThreadSortBase = {
