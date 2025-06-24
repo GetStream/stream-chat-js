@@ -621,6 +621,7 @@ export class MessageComposer extends WithSubscriptions {
   };
 
   clear = () => {
+    this.setQuotedMessage(null);
     this.initState();
   };
 
