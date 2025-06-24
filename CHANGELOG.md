@@ -1,3 +1,13 @@
+## [9.9.0](https://github.com/GetStream/stream-chat-js/compare/v9.8.0...v9.9.0) (2025-06-24)
+
+### Bug Fixes
+
+* properly delete drafts with quoted messages ([#1573](https://github.com/GetStream/stream-chat-js/issues/1573)) ([8c65058](https://github.com/GetStream/stream-chat-js/commit/8c6505881b2133ccde40ac156b88988a37de39d1))
+
+### Features
+
+* [CHA-769] add live locations sdk js support ([#1500](https://github.com/GetStream/stream-chat-js/issues/1500)) ([7dcf10d](https://github.com/GetStream/stream-chat-js/commit/7dcf10dd4f5234fbc228409222d003e90f6a020d))
+
 ## [9.8.0](https://github.com/GetStream/stream-chat-js/compare/v9.7.0...v9.8.0) (2025-06-19)
 
 ### Bug Fixes
