@@ -701,6 +701,7 @@ describe('MessageComposer', () => {
       expect(spyPollComposer).toHaveBeenCalled();
       expect(spyCustomDataManager).toHaveBeenCalled();
       expect(spyInitState).toHaveBeenCalled();
+      expect(messageComposer.quotedMessage).to.be.null;
     });
 
     it('should restore state from edited message if available', () => {
