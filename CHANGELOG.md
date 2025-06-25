@@ -1,3 +1,9 @@
+## [9.10.0](https://github.com/GetStream/stream-chat-js/compare/v9.9.0...v9.10.0) (2025-06-25)
+
+### Features
+
+* [CHA-792] unread count by team ([#1574](https://github.com/GetStream/stream-chat-js/issues/1574)) ([8248ad6](https://github.com/GetStream/stream-chat-js/commit/8248ad68252ad1ea4e7648a50911c2d8d6a78e30))
+
 ## [9.9.0](https://github.com/GetStream/stream-chat-js/compare/v9.8.0...v9.9.0) (2025-06-24)
 
 ### Bug Fixes
