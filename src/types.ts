@@ -603,6 +603,7 @@ export type GetUnreadCountAPIResponse = APIResponse & {
   }[];
   total_unread_count: number;
   total_unread_threads_count: number;
+  total_unread_count_by_team?: Record<string, number>;
 };
 
 export type ChatLevelPushPreference = 'all' | 'none' | 'mentions' | (string & {});
