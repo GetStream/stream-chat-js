@@ -1,5 +1,6 @@
 import type {
   APIResponse,
+  AppealResponse,
   CustomCheckFlag,
   GetConfigResponse,
   GetUserModerationReportOptions,
@@ -193,7 +194,7 @@ export class Moderation {
     entityType: string,
     attachments: string[],
   ) {
-    return await this.client.post<UpsertConfigResponse>(
+    return await this.client.post<AppealResponse>(
       this.client.baseURL + '/api/v2/moderation/appeal',
       {
         text: text,

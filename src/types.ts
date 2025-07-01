@@ -3756,6 +3756,11 @@ export type UpsertConfigResponse = {
   config: ModerationConfigResponse;
 };
 
+export type AppealResponse = APIResponse & {
+  appeal_id: string;
+  review_queue_item_id: string;
+};
+
 export type ModerationFlagOptions = {
   custom?: Record<string, unknown>;
   moderation_payload?: ModerationPayload;
