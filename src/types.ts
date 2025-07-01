@@ -4055,6 +4055,7 @@ export type ReminderResponseBase = {
 };
 
 export type ReminderResponse = ReminderResponseBase & {
+  channel: ChannelResponse;
   user: UserResponse;
   message: MessageResponse;
 };
@@ -4092,7 +4093,7 @@ export type ReminderFilters = QueryFilters<{
     | RequireOnlyOne<
         Pick<
           QueryFilter<ReminderResponseBase['remind_at']>,
-          '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          '$exists' | '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
         >
       >
     | PrimitiveFilter<ReminderResponseBase['remind_at']>;
