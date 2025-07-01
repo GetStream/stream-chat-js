@@ -3581,6 +3581,10 @@ export type SubmitActionOptions = {
     channel_cid?: string;
   };
   user_id?: string;
+  decide_appeal?: {
+    DecisionReason: string;
+    status: 'accepted' | 'rejected';
+  };
 };
 
 export type GetUserModerationReportResponse = {
