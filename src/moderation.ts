@@ -181,6 +181,30 @@ export class Moderation {
   }
 
   /**
+   * Appeal against the moderation action
+   * @param {string} text
+   * @param {string} entityID
+   * @param {string} entityType
+   * @param {Array<string>} attachments
+   */
+  async appeal(
+    text: string,
+    entityID: string,
+    entityType: string,
+    attachments: string[],
+  ) {
+    return await this.client.post<UpsertConfigResponse>(
+      this.client.baseURL + '/api/v2/moderation/appeal',
+      {
+        text: text,
+        entityID: entityID,
+        entityType: entityType,
+        attachments: attachments,
+      },
+    );
+  }
+
+  /**
    * Upsert moderation config
    * @param {Object} config Moderation config to be upserted
    */
