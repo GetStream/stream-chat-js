@@ -201,10 +201,10 @@ export class Moderation {
     return await this.client.post<AppealResponse>(
       this.client.baseURL + '/api/v2/moderation/appeal',
       {
-        text: text,
+        text,
         entity_id: entityID,
         entity_type: entityType,
-        attachments: attachments,
+        attachments,
       },
     );
   }
