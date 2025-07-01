@@ -1,5 +1,6 @@
 import type {
   APIResponse,
+  AppealOptions,
   AppealResponse,
   AppealsSort,
   CustomCheckFlag,
@@ -197,6 +198,7 @@ export class Moderation {
     entityID: string,
     entityType: string,
     attachments: string[],
+    options: AppealOptions = {},
   ) {
     return await this.client.post<AppealResponse>(
       this.client.baseURL + '/api/v2/moderation/appeal',
@@ -205,6 +207,7 @@ export class Moderation {
         entity_id: entityID,
         entity_type: entityType,
         attachments,
+        ...options,
       },
     );
   }

@@ -3847,6 +3847,11 @@ export type ModerationFlagOptions = {
   user_id?: string;
 };
 
+export type AppealOptions = {
+  custom?: Record<string, unknown>;
+  user_id?: string;
+};
+
 export type ModerationMuteOptions = {
   timeout?: number;
   user_id?: string;
