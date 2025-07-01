@@ -198,8 +198,8 @@ export class Moderation {
       this.client.baseURL + '/api/v2/moderation/appeal',
       {
         text: text,
-        entityID: entityID,
-        entityType: entityType,
+        entity_id: entityID,
+        entity_type: entityType,
         attachments: attachments,
       },
     );
