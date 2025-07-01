@@ -3513,11 +3513,9 @@ export type AppealItem = {
   decision_reason: string;
   entity_id: string;
   entity_type: string;
-  review_queue_item_id: string;
   status: string;
   text: string;
   user: UserResponse;
-  user_id: string;
 };
 
 export type ReviewQueueItem = {
@@ -3841,7 +3839,6 @@ export type UpsertConfigResponse = {
 
 export type AppealResponse = APIResponse & {
   appeal_id: string;
-  review_queue_item_id: string;
 };
 
 export type ModerationFlagOptions = {
