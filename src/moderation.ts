@@ -182,7 +182,7 @@ export class Moderation {
   }
 
   /**
-   * Appeal against the moderation action
+   * Appeal against the moderation decision
    * @param {string} text
    * @param {string} entityID
    * @param {string} entityType
