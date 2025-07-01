@@ -4575,7 +4575,7 @@ export class StreamChat {
    */
   async queryReminders({ filter, sort, ...rest }: QueryRemindersOptions = {}) {
     return await this.post<QueryRemindersResponse>(`${this.baseURL}/reminders/query`, {
-      filter_conditions: filter,
+      filter,
       sort: sort && normalizeQuerySort(sort),
       ...rest,
     });
