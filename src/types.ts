@@ -3582,7 +3582,7 @@ export type SubmitActionOptions = {
   };
   user_id?: string;
   decide_appeal?: {
-    DecisionReason: string;
+    decision_reason: string;
     status: 'accepted' | 'rejected';
   };
 };
