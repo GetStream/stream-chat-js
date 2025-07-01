@@ -1,26 +1,27 @@
-import { Secret } from 'jsonwebtoken';
-import { UserFromToken, JWTServerToken, JWTUserToken } from './signing';
+import type jwt from 'jsonwebtoken';
+
+import { JWTServerToken, JWTUserToken, UserFromToken } from './signing';
 import { isFunction } from './utils';
-import { TokenOrProvider, ExtendableGenerics, DefaultGenerics, UserResponse } from './types';
+import type { TokenOrProvider, UserResponse } from './types';
 
 /**
  * TokenManager
  *
  * Handles all the operations around user token.
  */
-export class TokenManager<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> {
+export class TokenManager {
   loadTokenPromise: Promise<string> | null;
   type: 'static' | 'provider';
-  secret?: Secret;
+  secret?: jwt.Secret;
   token?: string;
   tokenProvider?: TokenOrProvider;
-  user?: UserResponse<StreamChatGenerics>;
+  user?: UserResponse;
   /**
    * Constructor
    *
    * @param {Secret} secret
    */
-  constructor(secret?: Secret) {
+  constructor(secret?: jwt.Secret) {
     this.loadTokenPromise = null;
     if (secret) {
       this.secret = secret;
@@ -38,9 +39,9 @@ export class TokenManager<StreamChatGenerics extends ExtendableGenerics = Defaul
    * Token provider should return a token string or a promise which resolves to string token.
    *
    * @param {TokenOrProvider} tokenOrProvider
-   * @param {UserResponse<StreamChatGenerics>} user
+   * @param {UserResponse} user
    */
-  setTokenOrProvider = async (tokenOrProvider: TokenOrProvider, user: UserResponse<StreamChatGenerics>) => {
+  setTokenOrProvider = async (tokenOrProvider: TokenOrProvider, user: UserResponse) => {
     this.validateToken(tokenOrProvider, user);
     this.user = user;
 
@@ -75,7 +76,7 @@ export class TokenManager<StreamChatGenerics extends ExtendableGenerics = Defaul
   };
 
   // Validates the user token.
-  validateToken = (tokenOrProvider: TokenOrProvider, user: UserResponse<StreamChatGenerics>) => {
+  validateToken = (tokenOrProvider: TokenOrProvider, user: UserResponse) => {
     // allow empty token for anon user
     if (user && user.anon && !tokenOrProvider) return;
 
@@ -84,7 +85,11 @@ export class TokenManager<StreamChatGenerics extends ExtendableGenerics = Defaul
       throw new Error('User token can not be empty');
     }
 
-    if (tokenOrProvider && typeof tokenOrProvider !== 'string' && !isFunction(tokenOrProvider)) {
+    if (
+      tokenOrProvider &&
+      typeof tokenOrProvider !== 'string' &&
+      !isFunction(tokenOrProvider)
+    ) {
       throw new Error('user token should either be a string or a function');
     }
 
@@ -93,8 +98,13 @@ export class TokenManager<StreamChatGenerics extends ExtendableGenerics = Defaul
       if (user.anon && tokenOrProvider === '') return;
 
       const tokenUserId = UserFromToken(tokenOrProvider);
-      if (tokenOrProvider != null && (tokenUserId == null || tokenUserId === '' || tokenUserId !== user.id)) {
-        throw new Error('userToken does not have a user_id or is not matching with user.id');
+      if (
+        tokenOrProvider != null &&
+        (tokenUserId == null || tokenUserId === '' || tokenUserId !== user.id)
+      ) {
+        throw new Error(
+          'userToken does not have a user_id or is not matching with user.id',
+        );
       }
     }
   };
@@ -116,7 +126,9 @@ export class TokenManager<StreamChatGenerics extends ExtendableGenerics = Defaul
         try {
           this.token = await this.tokenProvider();
         } catch (e) {
-          return reject(new Error(`Call to tokenProvider failed with message: ${e}`));
+          return reject(
+            new Error(`Call to tokenProvider failed with message: ${e}`, { cause: e }),
+          );
         }
         resolve(this.token);
       }

@@ -9,18 +9,25 @@
 
 import { withCancellation } from './concurrency';
 import { StateStore } from './store';
-import type { MessageResponse, Attachment, EventTypes, ExtendableGenerics, UpdateMessageAPIResponse } from './types';
+import type {
+  Attachment,
+  EventTypes,
+  MessageResponse,
+  UpdateMessageAPIResponse,
+} from './types';
 import type { StreamChat } from './client';
 import type { Unsubscribe } from './store';
 
 // type Unsubscribe = () => void;
-type WatchLocation = (handler: (value: { latitude: number; longitude: number }) => void) => Unsubscribe;
-type SerializeAndStore<SCG extends ExtendableGenerics> = (state: MessageResponse<SCG>[], userId: string) => void;
-type RetrieveAndDeserialize<SCG extends ExtendableGenerics> = (userId: string) => MessageResponse<SCG>[];
+type WatchLocation = (
+  handler: (value: { latitude: number; longitude: number }) => void,
+) => Unsubscribe;
+type SerializeAndStore = (state: MessageResponse[], userId: string) => void;
+type RetrieveAndDeserialize = (userId: string) => MessageResponse[];
 
-export type LiveLocationManagerState<SCG extends ExtendableGenerics> = {
+export type LiveLocationManagerState = {
   ready: boolean;
-  targetMessages: MessageResponse<SCG>[];
+  targetMessages: MessageResponse[];
 };
 
 // if (message.cid && this.messagesByChannelConfId[message.cid]) {
@@ -87,12 +94,15 @@ export type LiveLocationManagerState<SCG extends ExtendableGenerics> = {
 // }
 
 function isValidLiveLocationAttachment(attachment?: Attachment) {
+  // @ts-expect-error live location is not an attachment
   if (!attachment || attachment.type !== 'live_location' || attachment.stopped_sharing) {
     return false;
   }
 
   // If end_time has been defined, consider it
+  // @ts-expect-error live location is not an attachment
   if (typeof attachment.end_time === 'string') {
+    // @ts-expect-error live location is not an attachment
     const endTimeTimestamp = new Date(attachment.end_time).getTime();
 
     if (Number.isNaN(endTimeTimestamp)) return false;
@@ -113,29 +123,29 @@ function isValidLiveLocationMessage(message?: MessageResponse) {
   return isValidLiveLocationAttachment(attachment);
 }
 
-export type LiveLocationManagerConstructorParameters<SCG extends ExtendableGenerics> = {
-  client: StreamChat<SCG>;
+export type LiveLocationManagerConstructorParameters = {
+  client: StreamChat;
   watchLocation: WatchLocation;
-  retrieveAndDeserialize?: RetrieveAndDeserialize<SCG>;
-  serializeAndStore?: SerializeAndStore<SCG>;
+  retrieveAndDeserialize?: RetrieveAndDeserialize;
+  serializeAndStore?: SerializeAndStore;
 };
 
 // Hard-coded minimal throttle timeout
 const MIN_THROTTLE_TIMEOUT = 3000;
 
-export class LiveLocationManager<SCG extends ExtendableGenerics> {
-  public state: StateStore<LiveLocationManagerState<SCG>>;
-  private client: StreamChat<SCG>;
+export class LiveLocationManager {
+  public state: StateStore<LiveLocationManagerState>;
+  private client: StreamChat;
   private unsubscribeFunctions: Set<() => void> = new Set();
-  private serializeAndStore: SerializeAndStore<SCG>;
+  private serializeAndStore: SerializeAndStore;
   private watchLocation: WatchLocation;
   private messagesByChannelConfIdGetterCache: {
     calculated: { [key: string]: [MessageResponse, number] };
-    targetMessages: LiveLocationManagerState<SCG>['targetMessages'];
+    targetMessages: LiveLocationManagerState['targetMessages'];
   };
   private messagesByIdGetterCache: {
     calculated: { [key: string]: [MessageResponse, number] };
-    targetMessages: LiveLocationManagerState<SCG>['targetMessages'];
+    targetMessages: LiveLocationManagerState['targetMessages'];
   };
 
   static symbol = Symbol(LiveLocationManager.name);
@@ -144,7 +154,9 @@ export class LiveLocationManager<SCG extends ExtendableGenerics> {
     client,
     watchLocation,
     retrieveAndDeserialize = (userId) => {
-      const targetMessagesString = localStorage.getItem(`${userId}-${LiveLocationManager.name}`);
+      const targetMessagesString = localStorage.getItem(
+        `${userId}-${LiveLocationManager.name}`,
+      );
       if (!targetMessagesString) return [];
       return JSON.parse(targetMessagesString);
     },
@@ -155,12 +167,16 @@ export class LiveLocationManager<SCG extends ExtendableGenerics> {
         JSON.stringify(messages.map((message) => ({ id: message.id }))),
       );
     },
-  }: LiveLocationManagerConstructorParameters<SCG>) {
+  }: LiveLocationManagerConstructorParameters) {
     this.client = client;
 
-    const retreivedTargetMessages = retrieveAndDeserialize(client.userID!);
+    if (!client.userID) {
+      throw new Error('Live-location sharing is reserved for client-side use only');
+    }
 
-    this.state = new StateStore<LiveLocationManagerState<SCG>>({
+    const retreivedTargetMessages = retrieveAndDeserialize(client.userID);
+
+    this.state = new StateStore<LiveLocationManagerState>({
       targetMessages: retreivedTargetMessages,
       // If there are no messages to validate, the manager is considered "ready"
       ready: retreivedTargetMessages.length === 0,
@@ -185,13 +201,12 @@ export class LiveLocationManager<SCG extends ExtendableGenerics> {
     if (this.messagesByIdGetterCache.targetMessages !== targetMessages) {
       this.messagesByIdGetterCache.targetMessages = targetMessages;
 
-      this.messagesByIdGetterCache.calculated = targetMessages.reduce<{ [key: string]: [MessageResponse, number] }>(
-        (messagesById, message, index) => {
-          messagesById[message.id] = [message, index];
-          return messagesById;
-        },
-        {},
-      );
+      this.messagesByIdGetterCache.calculated = targetMessages.reduce<{
+        [key: string]: [MessageResponse, number];
+      }>((messagesById, message, index) => {
+        messagesById[message.id] = [message, index];
+        return messagesById;
+      }, {});
     }
 
     return this.messagesByIdGetterCache.calculated;
@@ -232,7 +247,10 @@ export class LiveLocationManager<SCG extends ExtendableGenerics> {
         }
 
         if (this.client.userID) {
-          this.serializeAndStore(this.state.getLatestValue().targetMessages, this.client.userID);
+          this.serializeAndStore(
+            this.state.getLatestValue().targetMessages,
+            this.client.userID,
+          );
         }
       },
     );
@@ -246,7 +264,6 @@ export class LiveLocationManager<SCG extends ExtendableGenerics> {
   private subscribeWatchLocation() {
     let nextWatcherCallTimestamp = Date.now();
 
-    // eslint-disable-next-line sonarjs/prefer-immediate-return
     const unsubscribe = this.watchLocation(({ latitude, longitude }) => {
       // Integrators can adjust the update interval by supplying custom watchLocation subscription,
       // but the minimal timeout still has to be set as a failsafe (to prevent rate-limitting)
@@ -255,7 +272,7 @@ export class LiveLocationManager<SCG extends ExtendableGenerics> {
       nextWatcherCallTimestamp = Date.now() + MIN_THROTTLE_TIMEOUT;
 
       withCancellation(LiveLocationManager.symbol, async () => {
-        const promises: Promise<UpdateMessageAPIResponse<SCG>>[] = [];
+        const promises: Promise<UpdateMessageAPIResponse>[] = [];
         const { ready } = this.state.getLatestValue();
 
         if (!ready) {
@@ -272,7 +289,10 @@ export class LiveLocationManager<SCG extends ExtendableGenerics> {
             continue;
           }
 
-          const promise = this.client.updateLiveLocation(message, { latitude, longitude });
+          const promise = this.client.updateLiveLocation(message, {
+            latitude,
+            longitude,
+          });
 
           promises.push(promise);
         }
@@ -294,7 +314,6 @@ export class LiveLocationManager<SCG extends ExtendableGenerics> {
     if (!this.client.userID || !targetMessages.length) return;
 
     const response = await this.client.search(
-      // @ts-expect-error valid filter
       { members: { $in: [this.client.userID] } },
       { id: { $in: targetMessages.map(({ id }) => id) } },
     );
@@ -312,17 +331,20 @@ export class LiveLocationManager<SCG extends ExtendableGenerics> {
     this.state.partialNext({ ready: true, targetMessages: newTargetMessages });
   }
 
-  private registerMessage(message: MessageResponse<SCG>) {
+  private registerMessage(message: MessageResponse) {
     if (!this.client.userID || message?.user?.id !== this.client.userID) return;
 
     if (!isValidLiveLocationMessage(message)) {
       return;
     }
 
-    this.state.next((currentValue) => ({ ...currentValue, targetMessages: [...currentValue.targetMessages, message] }));
+    this.state.next((currentValue) => ({
+      ...currentValue,
+      targetMessages: [...currentValue.targetMessages, message],
+    }));
   }
 
-  private updateRegisteredMessage(message: MessageResponse<SCG>) {
+  private updateRegisteredMessage(message: MessageResponse) {
     if (!this.client.userID || message?.user?.id !== this.client.userID) return;
 
     const [, targetMessageIndex] = this.messagesById[message.id];
@@ -362,17 +384,19 @@ export class LiveLocationManager<SCG extends ExtendableGenerics> {
   };
 
   private subscribeLiveLocationSharingUpdates() {
-    const subscriptions = ([
-      'live_location_sharing.started',
-      /**
-       * Both message.updated & live_location_sharing.stopped get emitted when message attachment gets an
-       * update, live_location_sharing.stopped gets emitted only locally and only if the update goes
-       * through, it's a failsafe for when channel is no longer being watched for whatever reason
-       */
-      'message.updated',
-      'live_location_sharing.stopped',
-      'message.deleted',
-    ] as EventTypes[]).map((eventType) =>
+    const subscriptions = (
+      [
+        'live_location_sharing.started',
+        /**
+         * Both message.updated & live_location_sharing.stopped get emitted when message attachment gets an
+         * update, live_location_sharing.stopped gets emitted only locally and only if the update goes
+         * through, it's a failsafe for when channel is no longer being watched for whatever reason
+         */
+        'message.updated',
+        'live_location_sharing.stopped',
+        'message.deleted',
+      ] as EventTypes[]
+    ).map((eventType) =>
       this.client.on(eventType, (event) => {
         if (!event.message) return;
 

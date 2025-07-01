@@ -99,7 +99,10 @@ function wrapWithContinuationTracking<T>(tag: string | symbol, cb: () => Promise
  * 3. If the function is the last in the queue, it cleans up the whole chain
  *    of promises after finishing.
  */
-function wrapWithCancellation<T>(tag: string | symbol, cb: (signal: AbortSignal) => Promise<T | 'canceled'>) {
+function wrapWithCancellation<T>(
+  tag: string | symbol,
+  cb: (signal: AbortSignal) => Promise<T | 'canceled'>,
+) {
   const ac = new AbortController();
   const wrapped = () => {
     if (ac.signal.aborted) {

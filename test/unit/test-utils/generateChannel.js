@@ -1,18 +1,23 @@
-import { v4 as uuidv4 } from 'uuid';
+import { generateUUIDv4 as uuidv4 } from '../../../src/utils';
 
 export const generateChannel = (options = { channel: {} }) => {
 	const { channel: optionsChannel, config, ...optionsBesidesChannel } = options;
 	const idFromOptions = optionsChannel && optionsChannel.id;
-	const id = idFromOptions ? idFromOptions : uuidv4();
 	const type = (optionsChannel && optionsChannel.type) || 'messaging';
+	const id = idFromOptions
+		? idFromOptions
+		: options.members && options.members.length
+			? `!members-${uuidv4()}`
+			: uuidv4();
 	return {
 		messages: [],
 		members: [],
+		pinned_messages: [],
 		...optionsBesidesChannel,
 		channel: {
 			id,
 			type,
-			cid: idFromOptions ? `${type}:${id}` : `${type}:!members-${uuidv4()}`,
+			cid: `${type}:${id}`,
 			created_at: '2020-04-28T11:20:48.578147Z',
 			updated_at: '2020-04-28T11:20:48.578147Z',
 			created_by: {
@@ -25,6 +30,7 @@ export const generateChannel = (options = { channel: {} }) => {
 				online: false,
 			},
 			frozen: false,
+			disabled: false,
 			config: {
 				created_at: '2020-04-24T11:36:43.859020368Z',
 				updated_at: '2020-04-24T11:36:43.859022903Z',

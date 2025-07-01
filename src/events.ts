@@ -8,6 +8,8 @@ export const EVENT_MAP = {
   'channel.unmuted': true,
   'channel.updated': true,
   'channel.visible': true,
+  'draft.deleted': true,
+  'draft.updated': true,
   'health.check': true,
   'member.added': true,
   'member.removed': true,
@@ -38,6 +40,7 @@ export const EVENT_MAP = {
   'reaction.deleted': true,
   'reaction.new': true,
   'reaction.updated': true,
+  'thread.updated': true,
   'typing.start': true,
   'typing.stop': true,
   'user.banned': true,
@@ -55,10 +58,17 @@ export const EVENT_MAP = {
 
   // local events
   'channels.queried': true,
+  'offline_reactions.queried': true,
   'connection.changed': true,
   'connection.recovered': true,
   'transport.changed': true,
   'capabilities.changed': true,
   'live_location_sharing.started': true,
   'live_location_sharing.stopped': true,
+
+  // Reminder events
+  'reminder.created': true,
+  'reminder.updated': true,
+  'reminder.deleted': true,
+  'notification.reminder_due': true,
 };
