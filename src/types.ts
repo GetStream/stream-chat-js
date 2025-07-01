@@ -3516,6 +3516,7 @@ export type AppealItem = {
   status: string;
   text: string;
   user: UserResponse;
+  id: string;
 };
 
 export type ReviewQueueItem = {
@@ -3756,6 +3757,10 @@ export type QueryAppealsFilters = QueryFilters<
           >
         >
       | PrimitiveFilter<AppealItem['created_at']>;
+  } & {
+    id?:
+      | RequireOnlyOne<Pick<QueryFilter<AppealItem['id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<AppealItem['id']>;
   } & {
     entity_id?:
       | RequireOnlyOne<Pick<QueryFilter<AppealItem['entity_id']>, '$eq' | '$in'>>
