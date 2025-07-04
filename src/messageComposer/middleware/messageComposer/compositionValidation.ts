@@ -28,10 +28,7 @@ export const createCompositionValidationMiddleware = (
       const hasExceededMaxLength =
         typeof maxLengthOnSend === 'number' && inputText.length > maxLengthOnSend;
 
-      const editedMessageIsUnchanged =
-        composer.editedMessage && !composer.lastChangeOriginIsLocal;
-
-      if (isEmptyMessage || editedMessageIsUnchanged || hasExceededMaxLength) {
+      if (isEmptyMessage || hasExceededMaxLength) {
         return await discard();
       }
 
