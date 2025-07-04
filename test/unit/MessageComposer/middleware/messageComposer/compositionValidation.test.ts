@@ -322,7 +322,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
     expect(result.status).toBeUndefined;
   });
 
-  it('should discard composition for edited message without any local change', async () => {
+  it('should not discard composition for edited message without any local change', async () => {
     const { messageComposer, validationMiddleware } = setupMiddleware();
     const localMessage: LocalMessage = {
       attachments: [],
@@ -355,7 +355,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
       }),
     );
 
-    expect(result.status).toBe('discard');
+    expect(result.status).toBeUndefined();
   });
 
   it('should not discard composition for newly composed message initiated with draft', async () => {
