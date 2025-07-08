@@ -13,8 +13,9 @@ import type {
   Attachment,
   EventTypes,
   MessageResponse,
-  UpdateMessageAPIResponse,
+  SharedLocationResponse,
 } from './types';
+import { WithSubscriptions } from './utils/WithSubscriptions';
 import type { StreamChat } from './client';
 import type { Unsubscribe } from './store';
 
@@ -24,14 +25,15 @@ type WatchLocation = (
 ) => Unsubscribe;
 type SerializeAndStore = (state: MessageResponse[], userId: string) => void;
 type RetrieveAndDeserialize = (userId: string) => MessageResponse[];
+type DeviceIdGenerator = () => string;
 
 export type LiveLocationManagerState = {
   ready: boolean;
   targetMessages: MessageResponse[];
 };
 
-// if (message.cid && this.messagesByChannelConfId[message.cid]) {
-//   const [m] = this.messagesByChannelConfId[message.cid];
+// if (message.cid && this.messagesByChannelCID[message.cid]) {
+//   const [m] = this.messagesByChannelCID[message.cid];
 //   throw new Error(
 //     `[LocationUpdater.registerMessage]: one live location sharing message per channel limit has been reached, unregister message "${m.id}" first`,
 //   );
@@ -125,6 +127,7 @@ function isValidLiveLocationMessage(message?: MessageResponse) {
 
 export type LiveLocationManagerConstructorParameters = {
   client: StreamChat;
+  getDeviceId: DeviceIdGenerator;
   watchLocation: WatchLocation;
   retrieveAndDeserialize?: RetrieveAndDeserialize;
   serializeAndStore?: SerializeAndStore;
@@ -133,13 +136,13 @@ export type LiveLocationManagerConstructorParameters = {
 // Hard-coded minimal throttle timeout
 const MIN_THROTTLE_TIMEOUT = 3000;
 
-export class LiveLocationManager {
+export class LiveLocationManager extends WithSubscriptions {
   public state: StateStore<LiveLocationManagerState>;
   private client: StreamChat;
-  private unsubscribeFunctions: Set<() => void> = new Set();
+  private getDeviceId: DeviceIdGenerator;
   private serializeAndStore: SerializeAndStore;
   private watchLocation: WatchLocation;
-  private messagesByChannelConfIdGetterCache: {
+  private messagesByChannelCIDGetterCache: {
     calculated: { [key: string]: [MessageResponse, number] };
     targetMessages: LiveLocationManagerState['targetMessages'];
   };
@@ -152,6 +155,7 @@ export class LiveLocationManager {
 
   constructor({
     client,
+    getDeviceId,
     watchLocation,
     retrieveAndDeserialize = (userId) => {
       const targetMessagesString = localStorage.getItem(
@@ -168,29 +172,32 @@ export class LiveLocationManager {
       );
     },
   }: LiveLocationManagerConstructorParameters) {
+    super();
+
     this.client = client;
 
     if (!client.userID) {
       throw new Error('Live-location sharing is reserved for client-side use only');
     }
 
-    const retreivedTargetMessages = retrieveAndDeserialize(client.userID);
+    const retrievedTargetMessages = retrieveAndDeserialize(client.userID);
 
     this.state = new StateStore<LiveLocationManagerState>({
-      targetMessages: retreivedTargetMessages,
+      targetMessages: retrievedTargetMessages,
       // If there are no messages to validate, the manager is considered "ready"
-      ready: retreivedTargetMessages.length === 0,
+      ready: retrievedTargetMessages.length === 0,
     });
+    this.getDeviceId = getDeviceId;
     this.watchLocation = watchLocation;
     this.serializeAndStore = serializeAndStore;
 
     this.messagesByIdGetterCache = {
-      targetMessages: retreivedTargetMessages,
+      targetMessages: retrievedTargetMessages,
       calculated: {},
     };
 
-    this.messagesByChannelConfIdGetterCache = {
-      targetMessages: retreivedTargetMessages,
+    this.messagesByChannelCIDGetterCache = {
+      targetMessages: retrievedTargetMessages,
       calculated: {},
     };
   }
@@ -212,23 +219,23 @@ export class LiveLocationManager {
     return this.messagesByIdGetterCache.calculated;
   }
 
-  public get messagesByChannelConfId() {
+  public get messagesByChannelCID() {
     const { targetMessages } = this.state.getLatestValue();
 
-    if (this.messagesByChannelConfIdGetterCache.targetMessages !== targetMessages) {
-      this.messagesByChannelConfIdGetterCache.targetMessages = targetMessages;
+    if (this.messagesByChannelCIDGetterCache.targetMessages !== targetMessages) {
+      this.messagesByChannelCIDGetterCache.targetMessages = targetMessages;
 
-      this.messagesByChannelConfIdGetterCache.calculated = targetMessages.reduce<{
+      this.messagesByChannelCIDGetterCache.calculated = targetMessages.reduce<{
         [key: string]: [MessageResponse, number];
-      }>((messagesByChannelConfIds, message, index) => {
-        if (!message.cid) return messagesByChannelConfIds;
+      }>((messagesByChannelCIDs, message, index) => {
+        if (!message.cid) return messagesByChannelCIDs;
 
-        messagesByChannelConfIds[message.cid] = [message, index];
-        return messagesByChannelConfIds;
+        messagesByChannelCIDs[message.cid] = [message, index];
+        return messagesByChannelCIDs;
       }, {});
     }
 
-    return this.messagesByChannelConfIdGetterCache.calculated;
+    return this.messagesByChannelCIDGetterCache.calculated;
   }
 
   private subscribeTargetMessagesChange() {
@@ -272,7 +279,7 @@ export class LiveLocationManager {
       nextWatcherCallTimestamp = Date.now() + MIN_THROTTLE_TIMEOUT;
 
       withCancellation(LiveLocationManager.symbol, async () => {
-        const promises: Promise<UpdateMessageAPIResponse>[] = [];
+        const promises: Promise<SharedLocationResponse>[] = [];
         const { ready } = this.state.getLatestValue();
 
         if (!ready) {
@@ -285,11 +292,13 @@ export class LiveLocationManager {
 
         for (const message of targetMessages) {
           if (!isValidLiveLocationMessage(message)) {
-            this.unregisterMessage(message);
+            this.unregisterMessage(message.id);
             continue;
           }
 
-          const promise = this.client.updateLiveLocation(message, {
+          const promise = this.client.updateLocation({
+            created_by_device_id: this.getDeviceId(),
+            message_id: message.id,
             latitude,
             longitude,
           });
@@ -361,8 +370,8 @@ export class LiveLocationManager {
     });
   }
 
-  private unregisterMessage(message: MessageResponse) {
-    const [, messageIndex] = this.messagesById[message.id] ?? [];
+  private unregisterMessage(messageId: string) {
+    const [, messageIndex] = this.messagesById[messageId] ?? [];
 
     if (typeof messageIndex !== 'number') return;
 
@@ -378,10 +387,7 @@ export class LiveLocationManager {
     });
   }
 
-  public unregisterSubscriptions = () => {
-    this.unsubscribeFunctions.forEach((cleanupFunction) => cleanupFunction());
-    this.unsubscribeFunctions.clear();
-  };
+  public unregisterSubscriptions = () => super.unregisterSubscriptions();
 
   private subscribeLiveLocationSharingUpdates() {
     const subscriptions = (
@@ -408,12 +414,14 @@ export class LiveLocationManager {
           if (!localMessage) return;
 
           if (!isValidLiveLocationMessage(event.message)) {
-            this.unregisterMessage(event.message);
+            this.unregisterMessage(event.message.id);
           } else {
             this.updateRegisteredMessage(event.message);
           }
         } else {
-          this.unregisterMessage(event.message);
+          this.unregisterMessage(
+            event.message.id ?? { id: event.live_location?.message_id },
+          );
         }
       }),
     );
@@ -422,13 +430,10 @@ export class LiveLocationManager {
   }
 
   public registerSubscriptions = () => {
-    if (this.unsubscribeFunctions.size) {
-      // LocationUpdater is already listening for events and changes
-      return;
-    }
+    if (this.hasSubscriptions) return;
 
-    this.unsubscribeFunctions.add(this.subscribeLiveLocationSharingUpdates());
-    this.unsubscribeFunctions.add(this.subscribeTargetMessagesChange());
+    this.addUnsubscribeFunction(this.subscribeLiveLocationSharingUpdates());
+    this.addUnsubscribeFunction(this.subscribeTargetMessagesChange());
     // TODO? - handle message registration during message updates too, message updated eol added (I hope not)
   };
 }

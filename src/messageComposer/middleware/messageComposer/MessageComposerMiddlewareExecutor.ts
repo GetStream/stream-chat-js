@@ -32,6 +32,10 @@ import {
 } from './customData';
 import { createUserDataInjectionMiddleware } from './userDataInjection';
 import { createPollOnlyCompositionMiddleware } from './pollOnly';
+import {
+  createDraftSharedLocationCompositionMiddleware,
+  createSharedLocationCompositionMiddleware,
+} from './sharedLocation';
 
 export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<
   MessageComposerMiddlewareState,
@@ -47,6 +51,7 @@ export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<
       createTextComposerCompositionMiddleware(composer),
       createAttachmentsCompositionMiddleware(composer),
       createLinkPreviewsCompositionMiddleware(composer),
+      createSharedLocationCompositionMiddleware(composer),
       createMessageComposerStateCompositionMiddleware(composer),
       createCustomDataCompositionMiddleware(composer),
       createCompositionValidationMiddleware(composer),
@@ -67,6 +72,7 @@ export class MessageDraftComposerMiddlewareExecutor extends MiddlewareExecutor<
       createDraftTextComposerCompositionMiddleware(composer),
       createDraftAttachmentsCompositionMiddleware(composer),
       createDraftLinkPreviewsCompositionMiddleware(composer),
+      createDraftSharedLocationCompositionMiddleware(composer),
       createDraftMessageComposerStateCompositionMiddleware(composer),
       createDraftCustomDataCompositionMiddleware(composer),
       createDraftCompositionValidationMiddleware(composer),

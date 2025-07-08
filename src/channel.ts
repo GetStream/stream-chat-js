@@ -11,7 +11,6 @@ import type {
   AIState,
   APIResponse,
   AscDesc,
-  Attachment,
   BanUserOptions,
   ChannelAPIResponse,
   ChannelData,
@@ -32,6 +31,7 @@ import type {
   GetMultipleMessagesAPIResponse,
   GetReactionsAPIResponse,
   GetRepliesAPIResponse,
+  LiveLocationPayload,
   LocalMessage,
   MarkReadOptions,
   MarkUnreadOptions,
@@ -63,6 +63,8 @@ import type {
   SearchPayload,
   SendMessageAPIResponse,
   SendMessageOptions,
+  SharedLocationResponse,
+  StaticLocationPayload,
   TruncateChannelAPIResponse,
   TruncateOptions,
   UpdateChannelAPIResponse,
@@ -669,50 +671,51 @@ export class Channel {
     return data;
   }
 
-  public async sendStaticLocation(
-    attachmentMetadata: { latitude: number; longitude: number } & Attachment,
+  public async sendSharedLocation(
+    location: StaticLocationPayload | LiveLocationPayload,
+    userId?: string,
   ) {
-    const { latitude, longitude } = attachmentMetadata;
+    const result = await this.sendMessage({
+      id: location.message_id,
+      shared_location: location,
+      user: userId ? { id: userId } : undefined,
+    });
 
-    const message: Message = {
-      attachments: [
-        {
-          ...attachmentMetadata,
-          type: 'static_location',
-          latitude,
-          longitude,
-        },
-      ],
-    };
+    if ((location as LiveLocationPayload).end_at) {
+      this.getClient().dispatchEvent({
+        message: result.message,
+        type: 'live_location_sharing.started',
+      });
+    }
 
-    return await this.sendMessage(message);
+    return result;
   }
 
-  public async startLiveLocationSharing(
-    attachmentMetadata: {
-      end_time: string;
-      latitude: number;
-      longitude: number;
-    } & Attachment,
-  ) {
+  public async sendStaticLocation(location: StaticLocationPayload) {
     const client = this.getClient();
     if (!client.userID) return;
 
-    // todo: live location is not an attachment (end_time)
-    const { latitude, longitude } = attachmentMetadata;
-    // todo: live location is not an attachment
-    const message: Message = {
-      attachments: [
-        {
-          ...attachmentMetadata,
-          type: 'live_location',
-          latitude,
-          longitude,
-        },
-      ],
-    };
+    return await this.sendMessage({
+      id: location.message_id,
+      shared_location: location,
+    });
+  }
 
+  public async startLiveLocationSharing(location: LiveLocationPayload) {
+    const client = this.getClient();
+    if (!client.userID) return;
+
+    if (!location.end_at) {
+      throw new Error('Live location sharing requires end_at parameter');
+    }
+
+    // todo: live location is not an attachment (end_time)
+    // const { latitude, longitude } = attachmentMetadata;
     // todo: live location is not an attachment
+    // const message: Message = {
+    //
+    // };
+    // todo: what will happen if we create a new location even though one already exists?
     // FIXME: this is wrong and could easily be walked around by integrators
     // const existing = await this.getClient().search(
     //   {
@@ -720,29 +723,20 @@ export class Channel {
     //   },
     //   {
     //     $and: [
-    //       { 'attachments.type': { $eq: 'live_location' } },
-    //       // has not been manually stopped
-    //       {
-    //         // 'attachments.stopped_sharing': {
-    //         //   $nin: [true],
-    //         // },
-    //       },
-    //       // has not ended
-    //       {
-    //         // 'attachments.end_time': {
-    //         //   $gt: new Date().toISOString(),
-    //         // },
-    //       },
+    //       // @ts-expect-error
+    //       { 'shared_location.end_at': { $exists: true} },
+    //       // @ts-expect-error
+    //       { 'shared_location.end_at': { $gt: new Date().toISOString()} },
     //     ],
     //   },
     // );
-
-    const promises: Promise<SendMessageAPIResponse>[] = [];
-
+    //
+    // const promises: Promise<SendMessageAPIResponse>[] = [];
+    //
     // for (const result of existing.results) {
-    // todo: live location is not an attachment
-    // const [attachment] = result.message.attachments ?? [];
-    // todo: live location is not an attachment
+    // // todo: live location is not an attachment
+    // const [attachment] = result.message.shared_location ?? [];
+    // // todo: live location is not an attachment
     // promises.push(
     //   client.partialUpdateMessage(result.message.id, {
     //     // @ts-expect-error
@@ -760,27 +754,33 @@ export class Channel {
 
     // FIXME: sending message if the previous part failed/did not happen
     // should result in BE error
-    promises.unshift(this.sendMessage(message));
+    // promises.unshift(this.sendMessage(message));
 
-    const [response] = await Promise.allSettled(promises);
+    // const [response] = await Promise.allSettled(promises);
 
-    if (response.status === 'fulfilled') {
-      this.getClient().dispatchEvent({
-        message: response.value.message,
-        type: 'live_location_sharing.started',
-      });
-    }
+    // if (response.status === 'fulfilled') {
+    //   this.getClient().dispatchEvent({
+    //     message: response.value.message,
+    //     type: 'live_location_sharing.started',
+    //   });
+    // }
+    const { message } = await this.sendMessage({
+      id: location.message_id,
+      shared_location: location,
+    });
+    this.getClient().dispatchEvent({
+      message,
+      type: 'live_location_sharing.started',
+    });
   }
 
-  public async stopLiveLocationSharing(message: MessageResponse) {
-    const [attachment] = message.attachments ?? [];
-    const response = await this.getClient().partialUpdateMessage(message.id, {
-      // @ts-expect-error this is a valid update
-      set: { attachments: [{ ...attachment, stopped_sharing: true }] },
+  public async stopLiveLocationSharing(locationToStop: SharedLocationResponse) {
+    const location = await this.getClient().updateLocation({
+      ...locationToStop,
+      end_at: new Date().toISOString(),
     });
-
     this.getClient().dispatchEvent({
-      message: response.message,
+      live_location: location,
       type: 'live_location_sharing.stopped',
     });
   }

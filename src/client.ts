@@ -191,7 +191,6 @@ import type {
   SegmentTargetsResponse,
   SegmentType,
   SendFileAPIResponse,
-  SharedLocationRequest,
   SharedLocationResponse,
   SortParam,
   StreamChatOptions,
@@ -209,6 +208,7 @@ import type {
   UpdateChannelTypeResponse,
   UpdateCommandOptions,
   UpdateCommandResponse,
+  UpdateLocationPayload,
   UpdateMessageAPIResponse,
   UpdateMessageOptions,
   UpdatePollAPIResponse,
@@ -2928,23 +2928,6 @@ export class StreamChat {
     return messageId;
   }
 
-  public updateLiveLocation(
-    message: MessageResponse,
-    { latitude, longitude }: { latitude: number; longitude: number },
-  ) {
-    const [attachment] = message.attachments ?? [];
-
-    if (!attachment || attachment.type !== 'live_location') {
-      throw new Error(
-        'Supplied message either has no attachments to update or attachment is not of type "live_location"',
-      );
-    }
-    // todo: live location is not an attachment
-    return this.partialUpdateMessage(message.id, {
-      set: { attachments: [{ ...attachment, latitude, longitude }] },
-    });
-  }
-
   /**
    * pinMessage - pins the message
    * @param {string | { id: string }} messageOrMessageId message object or message id
@@ -4601,11 +4584,11 @@ export class StreamChat {
   /**
    * updateLocation - Updates a location
    *
-   * @param location UserLocation the location data to update
+   * @param location SharedLocationRequest the location data to update
    *
-   * @returns {Promise<APIResponse>} The server response
+   * @returns {Promise<SharedLocationResponse>} The server response
    */
-  async updateLocation(location: SharedLocationRequest) {
+  async updateLocation(location: UpdateLocationPayload) {
     return await this.put<SharedLocationResponse>(
       this.baseURL + `/users/live_locations`,
       location,

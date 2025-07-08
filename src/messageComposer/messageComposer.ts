@@ -1,14 +1,16 @@
 import { AttachmentManager } from './attachmentManager';
 import { CustomDataManager } from './CustomDataManager';
 import { LinkPreviewsManager } from './linkPreviewsManager';
+import { LocationComposer } from './LocationComposer';
 import { PollComposer } from './pollComposer';
 import { TextComposer } from './textComposer';
-import { DEFAULT_COMPOSER_CONFIG } from './configuration/configuration';
+import { DEFAULT_COMPOSER_CONFIG } from './configuration';
 import type { MessageComposerMiddlewareValue } from './middleware';
 import {
   MessageComposerMiddlewareExecutor,
   MessageDraftComposerMiddlewareExecutor,
 } from './middleware';
+import type { Unsubscribe } from '../store';
 import { StateStore } from '../store';
 import { formatMessage, generateUUIDv4, isLocalMessage, unformatMessage } from '../utils';
 import { mergeWith } from '../utils/mergeWith';
@@ -24,11 +26,10 @@ import type {
   MessageResponse,
   MessageResponseBase,
 } from '../types';
+import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { StreamChat } from '../client';
 import type { MessageComposerConfig } from './configuration/types';
 import type { DeepPartial } from '../types.utility';
-import type { Unsubscribe } from '../store';
-import { WithSubscriptions } from '../utils/WithSubscriptions';
 
 type UnregisterSubscriptions = Unsubscribe;
 
@@ -129,6 +130,7 @@ export class MessageComposer extends WithSubscriptions {
   linkPreviewsManager: LinkPreviewsManager;
   textComposer: TextComposer;
   pollComposer: PollComposer;
+  locationComposer: LocationComposer;
   customDataManager: CustomDataManager;
   // todo: mediaRecorder: MediaRecorderController;
 
@@ -170,6 +172,7 @@ export class MessageComposer extends WithSubscriptions {
 
     this.attachmentManager = new AttachmentManager({ composer: this, message });
     this.linkPreviewsManager = new LinkPreviewsManager({ composer: this, message });
+    this.locationComposer = new LocationComposer({ composer: this, message });
     this.textComposer = new TextComposer({ composer: this, message });
     this.pollComposer = new PollComposer({ composer: this });
     this.customDataManager = new CustomDataManager({ composer: this, message });
@@ -298,7 +301,8 @@ export class MessageComposer extends WithSubscriptions {
       !this.quotedMessage &&
       this.textComposer.textIsEmpty &&
       !this.attachmentManager.attachments.length &&
-      !this.pollId
+      !this.pollId &&
+      !this.locationComposer.validLocation
     );
   }
 
@@ -320,6 +324,10 @@ export class MessageComposer extends WithSubscriptions {
 
   static generateId = generateUUIDv4;
 
+  refreshId = () => {
+    this.state.partialNext({ id: MessageComposer.generateId() });
+  };
+
   initState = ({
     composition,
   }: { composition?: DraftResponse | MessageResponse | LocalMessage } = {}) => {
@@ -333,6 +341,7 @@ export class MessageComposer extends WithSubscriptions {
           : formatMessage(composition);
     this.attachmentManager.initState({ message });
     this.linkPreviewsManager.initState({ message });
+    this.locationComposer.initState({ message });
     this.textComposer.initState({ message });
     this.pollComposer.initState();
     this.customDataManager.initState({ message });
@@ -403,6 +412,7 @@ export class MessageComposer extends WithSubscriptions {
       this.addUnsubscribeFunction(this.subscribeTextComposerStateChanged());
       this.addUnsubscribeFunction(this.subscribeAttachmentManagerStateChanged());
       this.addUnsubscribeFunction(this.subscribeLinkPreviewsManagerStateChanged());
+      this.addUnsubscribeFunction(this.subscribeLocationComposerStateChanged());
       this.addUnsubscribeFunction(this.subscribePollComposerStateChanged());
       this.addUnsubscribeFunction(this.subscribeCustomDataManagerStateChanged());
       this.addUnsubscribeFunction(this.subscribeMessageComposerStateChanged());
@@ -525,6 +535,18 @@ export class MessageComposer extends WithSubscriptions {
 
   private subscribeAttachmentManagerStateChanged = () =>
     this.attachmentManager.state.subscribe((_, previousValue) => {
+      if (typeof previousValue === 'undefined') return;
+
+      this.logStateUpdateTimestamp();
+
+      if (this.compositionIsEmpty) {
+        this.deleteDraft();
+        return;
+      }
+    });
+
+  private subscribeLocationComposerStateChanged = () =>
+    this.locationComposer.state.subscribe((_, previousValue) => {
       if (typeof previousValue === 'undefined') return;
 
       this.logStateUpdateTimestamp();
@@ -791,6 +813,32 @@ export class MessageComposer extends WithSubscriptions {
         },
         options: {
           type: 'api:poll:create:failed',
+          metadata: {
+            reason: (error as Error).message,
+          },
+          originalError: error instanceof Error ? error : undefined,
+        },
+      });
+      throw error;
+    }
+  };
+
+  sendLocation = async () => {
+    const location = this.locationComposer.validLocation;
+    if (this.threadId || !location) return;
+    try {
+      await this.channel.sendSharedLocation(location);
+      this.refreshId();
+      this.locationComposer.initState();
+    } catch (error) {
+      this.client.notifications.addError({
+        message: 'Failed to share the location',
+        origin: {
+          emitter: 'MessageComposer',
+          context: { composer: this },
+        },
+        options: {
+          type: 'api:location:create:failed',
           metadata: {
             reason: (error as Error).message,
           },

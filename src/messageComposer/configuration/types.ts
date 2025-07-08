@@ -11,6 +11,7 @@ export type UploadRequestFn = (
 export type DraftsConfiguration = {
   enabled: boolean;
 };
+
 export type TextComposerConfig = {
   /** If false, the text input, change and selection events are disabled */
   enabled: boolean;
@@ -23,6 +24,7 @@ export type TextComposerConfig = {
   /** Prevents sending a message longer than this length */
   maxLengthOnSend?: number;
 };
+
 export type AttachmentManagerConfig = {
   // todo: document removal of noFiles prop showing how to achieve the same with custom fileUploadFilter function
   /**
@@ -53,6 +55,15 @@ export type LinkPreviewsManagerConfig = {
   onLinkPreviewDismissed?: (linkPreview: LinkPreview) => void;
 };
 
+export type LocationComposerConfig = {
+  /** Allows for toggling the location addition.
+   * By default, the feature is enabled but has to be enabled also on channel level config via shared_locations.
+   */
+  enabled: boolean;
+  /** Function that provides a stable id for a device from which the location is shared */
+  getDeviceId: () => string;
+};
+
 export type MessageComposerConfig = {
   /** If true, enables creating drafts on the server */
   drafts: DraftsConfiguration;
@@ -60,6 +71,8 @@ export type MessageComposerConfig = {
   attachments: AttachmentManagerConfig;
   /** Configuration for the link previews manager */
   linkPreviews: LinkPreviewsManagerConfig;
+  /** Configuration for the location composer */
+  location: LocationComposerConfig;
   /** Maximum number of characters in a message */
   text: TextComposerConfig;
 };
