@@ -14,16 +14,16 @@ export type LocationComposerOptions = {
   message?: DraftMessage | LocalMessage;
 };
 
-export type StaticLocationComposerLocation = Omit<StaticLocationPayload, 'end_at'> & {
+export type StaticLocationPreview = Omit<StaticLocationPayload, 'end_at'> & {
   durationMs?: number;
 };
 
-export type LiveLocationComposerLocation = Omit<LiveLocationPayload, 'end_at'> & {
+export type LiveLocationPreview = Omit<LiveLocationPayload, 'end_at'> & {
   durationMs?: number;
 };
 
 export type LocationComposerState = {
-  location: StaticLocationComposerLocation | LiveLocationComposerLocation | null;
+  location: StaticLocationPreview | LiveLocationPreview | null;
 };
 
 const initState = ({
@@ -59,8 +59,7 @@ export class LocationComposer {
 
   get validLocation(): StaticLocationPayload | LiveLocationPayload | null {
     const { durationMs, ...location } =
-      this.location ??
-      ({} as StaticLocationComposerLocation | LiveLocationComposerLocation);
+      this.location ?? ({} as StaticLocationPreview | LiveLocationPreview);
     if (
       !!location?.created_by_device_id &&
       location.message_id &&
