@@ -310,7 +310,7 @@ export class MessageComposer extends WithSubscriptions {
     const initiatedWithoutDraft = this.lastChange.draftUpdate === null;
     const composingMessageFromScratch = initiatedWithoutDraft && !this.editedMessage;
 
-    // does not mean that the original editted message is different from the current state
+    // does not mean that the original edited message is different from the current state
     const editedMessageWasUpdated =
       !!this.editedMessage?.updated_at &&
       new Date(this.editedMessage.updated_at).getTime() < this.lastChange.stateUpdate;
