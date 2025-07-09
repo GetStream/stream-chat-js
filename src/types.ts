@@ -889,7 +889,6 @@ export type UserResponse = CustomUserData & {
   updated_at?: string;
   username?: string;
   avg_response_time?: number;
-  total_responses?: number;
 };
 
 export type TeamsRole = { [team: string]: string };
