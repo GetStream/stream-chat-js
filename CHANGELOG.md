@@ -1,3 +1,10 @@
+## [9.10.1](https://github.com/GetStream/stream-chat-js/compare/v9.10.0...v9.10.1) (2025-07-08)
+
+### Bug Fixes
+
+* allow the composition of unchanged edited message ([#1578](https://github.com/GetStream/stream-chat-js/issues/1578)) ([6aec136](https://github.com/GetStream/stream-chat-js/commit/6aec13619e0a3dc53afa73b1d72add3d413e7d3a))
+* query reminders filter key and add channel to the reminder response ([#1575](https://github.com/GetStream/stream-chat-js/issues/1575)) ([0b9be45](https://github.com/GetStream/stream-chat-js/commit/0b9be450cce5abca112f15f63ec045f460d7d58f))
+
 ## [9.10.0](https://github.com/GetStream/stream-chat-js/compare/v9.9.0...v9.10.0) (2025-06-25)
 
 ### Features
