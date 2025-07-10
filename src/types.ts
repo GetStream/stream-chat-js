@@ -3964,7 +3964,7 @@ export type DraftMessage = {
 };
 
 export type ActiveLiveLocationsAPIResponse = APIResponse & {
-  active_live_locations: SharedLocationResponse[];
+  active_live_locations: SharedLiveLocationResponse[];
 };
 
 export type SharedLocationResponse = {
@@ -3972,6 +3972,29 @@ export type SharedLocationResponse = {
   created_at: string;
   created_by_device_id: string;
   end_at?: string;
+  latitude: number;
+  longitude: number;
+  message_id: string;
+  updated_at: string;
+  user_id: string;
+};
+
+export type SharedStaticLocationResponse = {
+  channel_cid: string;
+  created_at: string;
+  created_by_device_id: string;
+  latitude: number;
+  longitude: number;
+  message_id: string;
+  updated_at: string;
+  user_id: string;
+};
+
+export type SharedLiveLocationResponse = {
+  channel_cid: string;
+  created_at: string;
+  created_by_device_id: string;
+  end_at: string;
   latitude: number;
   longitude: number;
   message_id: string;
