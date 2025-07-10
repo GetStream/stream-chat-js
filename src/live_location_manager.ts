@@ -9,128 +9,43 @@
 
 import { withCancellation } from './concurrency';
 import { StateStore } from './store';
-import type {
-  Attachment,
-  EventTypes,
-  MessageResponse,
-  SharedLocationResponse,
-} from './types';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import type { StreamChat } from './client';
 import type { Unsubscribe } from './store';
+import type {
+  EventTypes,
+  MessageResponse,
+  SharedLiveLocationResponse,
+  SharedLocationResponse,
+} from './types';
 
 // type Unsubscribe = () => void;
 type WatchLocation = (
   handler: (value: { latitude: number; longitude: number }) => void,
 ) => Unsubscribe;
-type SerializeAndStore = (state: MessageResponse[], userId: string) => void;
-type RetrieveAndDeserialize = (userId: string) => MessageResponse[];
 type DeviceIdGenerator = () => string;
+type MessageId = string;
 
 export type LiveLocationManagerState = {
   ready: boolean;
-  targetMessages: MessageResponse[];
+  messages: Map<MessageId, SharedLiveLocationResponse>;
 };
 
-// if (message.cid && this.messagesByChannelCID[message.cid]) {
-//   const [m] = this.messagesByChannelCID[message.cid];
-//   throw new Error(
-//     `[LocationUpdater.registerMessage]: one live location sharing message per channel limit has been reached, unregister message "${m.id}" first`,
-//   );
-// }
-
-// if (!attachment || attachment.type !== 'geolocation' || !attachment.geolocation_eol) {
-//   throw new Error(
-//     '[LocationUpdater.registerMessage]: Message has either no attachment, the attachment is not of type "geolocation" or the attachment is missing `geolocation_eol` property',
-//   );
-// }
-
-// if (typeof attachment.geolocation_eol !== 'string') {
-//   throw new Error(
-//     '[LocationUpdater.registerMessage]: `geolocation_eol` property is of incorrect type, should be date and time ISO 8601 string',
-//   );
-// }
-
-// const nowTimestamp = Date.now();
-// const eolTimestamp = new Date(attachment.geolocation_eol).getTime();
-
-// if (Number.isNaN(eolTimestamp) || eolTimestamp < nowTimestamp) {
-//   throw new Error(
-//     '[LocationUpdater.registerMessage]: `geolocation_eol` has either improper format or has not been set to some time in the future (is lesser than now)',
-//   );
-// }
-
-// private async getCompleteMessage(messageId: string) {
-//   const [cachedMessage, cachedMessageIndex] = this.messagesById[messageId] ?? [];
-
-//   const [cachedMessageAttachment] = cachedMessage?.attachments ?? [];
-
-//   if (isAttachmentValidLLSEntity(cachedMessageAttachment)) {
-//     return cachedMessage;
-//   }
-
-//   const queriedMessage = (await this.client.getMessage(messageId)).message;
-
-//   const [queriedMessageAttachment] = queriedMessage.attachments ?? [];
-
-//   if (isAttachmentValidLLSEntity(queriedMessageAttachment)) {
-//     this.state.next((currentValue) => {
-//       const newTargetMessages = [...currentValue.targetMessages];
-
-//       if (typeof cachedMessageIndex === 'number') {
-//         newTargetMessages[cachedMessageIndex] = queriedMessage;
-//       } else {
-//         newTargetMessages.push(queriedMessage);
-//       }
-
-//       return {
-//         ...currentValue,
-//         targetMessages: newTargetMessages,
-//       };
-//     });
-
-//     return queriedMessage;
-//   }
-
-//   return null;
-// }
-
-function isValidLiveLocationAttachment(attachment?: Attachment) {
-  // @ts-expect-error live location is not an attachment
-  if (!attachment || attachment.type !== 'live_location' || attachment.stopped_sharing) {
+function isValidLiveLocationMessage(
+  message?: MessageResponse,
+): message is MessageResponse & { shared_location: SharedLiveLocationResponse } {
+  if (!message || message.type === 'deleted' || !message.shared_location?.end_at)
     return false;
-  }
 
-  // If end_time has been defined, consider it
-  // @ts-expect-error live location is not an attachment
-  if (typeof attachment.end_time === 'string') {
-    // @ts-expect-error live location is not an attachment
-    const endTimeTimestamp = new Date(attachment.end_time).getTime();
+  const endTimeTimestamp = new Date(message.shared_location.end_at).getTime();
 
-    if (Number.isNaN(endTimeTimestamp)) return false;
-
-    const nowTimestamp = Date.now();
-
-    return nowTimestamp < endTimeTimestamp;
-  }
-
-  return true;
-}
-
-function isValidLiveLocationMessage(message?: MessageResponse) {
-  if (!message || message.type === 'deleted') return false;
-
-  const [attachment] = message.attachments ?? [];
-
-  return isValidLiveLocationAttachment(attachment);
+  return Date.now() < endTimeTimestamp;
 }
 
 export type LiveLocationManagerConstructorParameters = {
   client: StreamChat;
   getDeviceId: DeviceIdGenerator;
   watchLocation: WatchLocation;
-  retrieveAndDeserialize?: RetrieveAndDeserialize;
-  serializeAndStore?: SerializeAndStore;
 };
 
 // Hard-coded minimal throttle timeout
@@ -140,16 +55,8 @@ export class LiveLocationManager extends WithSubscriptions {
   public state: StateStore<LiveLocationManagerState>;
   private client: StreamChat;
   private getDeviceId: DeviceIdGenerator;
-  private serializeAndStore: SerializeAndStore;
+  private _deviceId: string;
   private watchLocation: WatchLocation;
-  private messagesByChannelCIDGetterCache: {
-    calculated: { [key: string]: [MessageResponse, number] };
-    targetMessages: LiveLocationManagerState['targetMessages'];
-  };
-  private messagesByIdGetterCache: {
-    calculated: { [key: string]: [MessageResponse, number] };
-    targetMessages: LiveLocationManagerState['targetMessages'];
-  };
 
   static symbol = Symbol(LiveLocationManager.name);
 
@@ -157,86 +64,63 @@ export class LiveLocationManager extends WithSubscriptions {
     client,
     getDeviceId,
     watchLocation,
-    retrieveAndDeserialize = (userId) => {
-      const targetMessagesString = localStorage.getItem(
-        `${userId}-${LiveLocationManager.name}`,
-      );
-      if (!targetMessagesString) return [];
-      return JSON.parse(targetMessagesString);
-    },
-    serializeAndStore = (messages, userId) => {
-      localStorage.setItem(
-        `${userId}-${LiveLocationManager.name}`,
-        // Strip sensitive data (these will be recovered at on first location watch call)
-        JSON.stringify(messages.map((message) => ({ id: message.id }))),
-      );
-    },
   }: LiveLocationManagerConstructorParameters) {
-    super();
-
-    this.client = client;
-
     if (!client.userID) {
       throw new Error('Live-location sharing is reserved for client-side use only');
     }
 
-    const retrievedTargetMessages = retrieveAndDeserialize(client.userID);
+    super();
 
+    this.client = client;
     this.state = new StateStore<LiveLocationManagerState>({
-      targetMessages: retrievedTargetMessages,
-      // If there are no messages to validate, the manager is considered "ready"
-      ready: retrievedTargetMessages.length === 0,
+      messages: new Map(),
+      ready: false,
     });
+    this._deviceId = getDeviceId();
     this.getDeviceId = getDeviceId;
     this.watchLocation = watchLocation;
-    this.serializeAndStore = serializeAndStore;
-
-    this.messagesByIdGetterCache = {
-      targetMessages: retrievedTargetMessages,
-      calculated: {},
-    };
-
-    this.messagesByChannelCIDGetterCache = {
-      targetMessages: retrievedTargetMessages,
-      calculated: {},
-    };
   }
 
-  public get messagesById() {
-    const { targetMessages } = this.state.getLatestValue();
+  private async assureStateInit() {
+    if (this.stateIsReady) return;
+    const { active_live_locations } = await this.client.getSharedLocations();
+    this.state.next({
+      messages: new Map(
+        active_live_locations.map((location) => [location.message_id, location]),
+      ),
+      ready: true,
+    });
+  }
 
-    if (this.messagesByIdGetterCache.targetMessages !== targetMessages) {
-      this.messagesByIdGetterCache.targetMessages = targetMessages;
+  public async init() {
+    await this.assureStateInit();
+    this.registerSubscriptions();
+  }
 
-      this.messagesByIdGetterCache.calculated = targetMessages.reduce<{
-        [key: string]: [MessageResponse, number];
-      }>((messagesById, message, index) => {
-        messagesById[message.id] = [message, index];
-        return messagesById;
-      }, {});
+  get messages() {
+    return this.state.getLatestValue().messages;
+  }
+
+  get stateIsReady() {
+    return this.state.getLatestValue().ready;
+  }
+
+  get deviceId() {
+    if (!this._deviceId) {
+      this._deviceId = this.getDeviceId();
     }
-
-    return this.messagesByIdGetterCache.calculated;
+    return this._deviceId;
   }
 
-  public get messagesByChannelCID() {
-    const { targetMessages } = this.state.getLatestValue();
+  public registerSubscriptions = () => {
+    if (this.hasSubscriptions) return;
 
-    if (this.messagesByChannelCIDGetterCache.targetMessages !== targetMessages) {
-      this.messagesByChannelCIDGetterCache.targetMessages = targetMessages;
+    this.addUnsubscribeFunction(this.subscribeLiveLocationSharingUpdates());
+    this.addUnsubscribeFunction(this.subscribeTargetMessagesChange());
+    // TODO? - handle message registration during message updates too, message updated eol added (I hope not)
+  };
 
-      this.messagesByChannelCIDGetterCache.calculated = targetMessages.reduce<{
-        [key: string]: [MessageResponse, number];
-      }>((messagesByChannelCIDs, message, index) => {
-        if (!message.cid) return messagesByChannelCIDs;
-
-        messagesByChannelCIDs[message.cid] = [message, index];
-        return messagesByChannelCIDs;
-      }, {});
-    }
-
-    return this.messagesByChannelCIDGetterCache.calculated;
-  }
+  public unregisterSubscriptions = () => super.unregisterSubscriptions();
 
   private subscribeTargetMessagesChange() {
     let unsubscribeWatchLocation: null | (() => void) = null;
@@ -244,20 +128,13 @@ export class LiveLocationManager extends WithSubscriptions {
     // Subscribe to location updates only if there are relevant messages to
     // update, no need for the location watcher to be active/instantiated otherwise
     const unsubscribe = this.state.subscribeWithSelector(
-      ({ targetMessages }) => ({ targetMessages }),
-      ({ targetMessages }) => {
-        if (!targetMessages.length) {
+      ({ messages }) => ({ messages }),
+      ({ messages }) => {
+        if (!messages.size) {
           unsubscribeWatchLocation?.();
           unsubscribeWatchLocation = null;
-        } else if (targetMessages.length && !unsubscribeWatchLocation) {
+        } else if (messages.size && !unsubscribeWatchLocation) {
           unsubscribeWatchLocation = this.subscribeWatchLocation();
-        }
-
-        if (this.client.userID) {
-          this.serializeAndStore(
-            this.state.getLatestValue().targetMessages,
-            this.client.userID,
-          );
         }
       },
     );
@@ -280,25 +157,14 @@ export class LiveLocationManager extends WithSubscriptions {
 
       withCancellation(LiveLocationManager.symbol, async () => {
         const promises: Promise<SharedLocationResponse>[] = [];
-        const { ready } = this.state.getLatestValue();
+        await this.assureStateInit();
 
-        if (!ready) {
-          await this.recoverAndValidateMessages();
-        }
-
-        const { targetMessages } = this.state.getLatestValue();
-        // If validator removes messages, we need to check
-        if (!targetMessages.length) return;
-
-        for (const message of targetMessages) {
-          if (!isValidLiveLocationMessage(message)) {
-            this.unregisterMessage(message.id);
+        for (const [messageId, location] of this.messages) {
+          if (location.latitude === latitude && location.longitude === longitude)
             continue;
-          }
-
           const promise = this.client.updateLocation({
-            created_by_device_id: this.getDeviceId(),
-            message_id: message.id,
+            created_by_device_id: this.deviceId,
+            message_id: messageId,
             latitude,
             longitude,
           });
@@ -306,7 +172,9 @@ export class LiveLocationManager extends WithSubscriptions {
           promises.push(promise);
         }
 
-        await Promise.allSettled(promises);
+        if (promises.length > 0) {
+          await Promise.allSettled(promises);
+        }
         // TODO: handle values (remove failed - based on specific error code), keep re-trying others
       });
     });
@@ -314,87 +182,12 @@ export class LiveLocationManager extends WithSubscriptions {
     return unsubscribe;
   }
 
-  /**
-   * Messages stored locally might've been updated while the device which registered message for updates has been offline.
-   */
-  private async recoverAndValidateMessages() {
-    const { targetMessages } = this.state.getLatestValue();
-
-    if (!this.client.userID || !targetMessages.length) return;
-
-    const response = await this.client.search(
-      { members: { $in: [this.client.userID] } },
-      { id: { $in: targetMessages.map(({ id }) => id) } },
-    );
-
-    const newTargetMessages = [];
-
-    for (const result of response.results) {
-      const { message } = result;
-
-      if (isValidLiveLocationMessage(message)) {
-        newTargetMessages.push(message);
-      }
-    }
-
-    this.state.partialNext({ ready: true, targetMessages: newTargetMessages });
-  }
-
-  private registerMessage(message: MessageResponse) {
-    if (!this.client.userID || message?.user?.id !== this.client.userID) return;
-
-    if (!isValidLiveLocationMessage(message)) {
-      return;
-    }
-
-    this.state.next((currentValue) => ({
-      ...currentValue,
-      targetMessages: [...currentValue.targetMessages, message],
-    }));
-  }
-
-  private updateRegisteredMessage(message: MessageResponse) {
-    if (!this.client.userID || message?.user?.id !== this.client.userID) return;
-
-    const [, targetMessageIndex] = this.messagesById[message.id];
-
-    this.state.next((currentValue) => {
-      const newTargetMessages = [...currentValue.targetMessages];
-
-      newTargetMessages[targetMessageIndex] = message;
-
-      return {
-        ...currentValue,
-        targetMessages: newTargetMessages,
-      };
-    });
-  }
-
-  private unregisterMessage(messageId: string) {
-    const [, messageIndex] = this.messagesById[messageId] ?? [];
-
-    if (typeof messageIndex !== 'number') return;
-
-    this.state.next((currentValue) => {
-      const newTargetMessages = [...currentValue.targetMessages];
-
-      newTargetMessages.splice(messageIndex, 1);
-
-      return {
-        ...currentValue,
-        targetMessages: newTargetMessages,
-      };
-    });
-  }
-
-  public unregisterSubscriptions = () => super.unregisterSubscriptions();
-
   private subscribeLiveLocationSharingUpdates() {
     const subscriptions = (
       [
         'live_location_sharing.started',
         /**
-         * Both message.updated & live_location_sharing.stopped get emitted when message attachment gets an
+         * Both message.updated & live_location_sharing.stopped get emitted when message gets an
          * update, live_location_sharing.stopped gets emitted only locally and only if the update goes
          * through, it's a failsafe for when channel is no longer being watched for whatever reason
          */
@@ -409,14 +202,12 @@ export class LiveLocationManager extends WithSubscriptions {
         if (event.type === 'live_location_sharing.started') {
           this.registerMessage(event.message);
         } else if (event.type === 'message.updated') {
-          const localMessage = this.messagesById[event.message.id];
-
-          if (!localMessage) return;
-
-          if (!isValidLiveLocationMessage(event.message)) {
+          const isRegistered = this.messages.has(event.message.id);
+          if (isRegistered && !isValidLiveLocationMessage(event.message)) {
             this.unregisterMessage(event.message.id);
-          } else {
-            this.updateRegisteredMessage(event.message);
+          }
+          if (!isRegistered && !isValidLiveLocationMessage(event.message)) {
+            this.registerMessage(event.message);
           }
         } else {
           this.unregisterMessage(
@@ -429,11 +220,33 @@ export class LiveLocationManager extends WithSubscriptions {
     return () => subscriptions.forEach((subscription) => subscription.unsubscribe());
   }
 
-  public registerSubscriptions = () => {
-    if (this.hasSubscriptions) return;
+  private registerMessage(message: MessageResponse) {
+    if (
+      !this.client.userID ||
+      message?.user?.id !== this.client.userID ||
+      !isValidLiveLocationMessage(message)
+    )
+      return;
 
-    this.addUnsubscribeFunction(this.subscribeLiveLocationSharingUpdates());
-    this.addUnsubscribeFunction(this.subscribeTargetMessagesChange());
-    // TODO? - handle message registration during message updates too, message updated eol added (I hope not)
-  };
+    this.state.next((currentValue) => {
+      const messages = new Map(currentValue.messages);
+      messages.set(message.id, message.shared_location);
+      return {
+        ...currentValue,
+        messages,
+      };
+    });
+  }
+
+  private unregisterMessage(messageId: string) {
+    const messages = this.messages;
+    const newMessages = new Map(messages);
+    newMessages.delete(messageId);
+
+    if (newMessages.size === messages.size) return;
+
+    this.state.partialNext({
+      messages: newMessages,
+    });
+  }
 }
