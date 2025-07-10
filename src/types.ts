@@ -2750,6 +2750,12 @@ export type SendMessageOptions = {
 
 export type UpdateMessageOptions = {
   skip_enrich_url?: boolean;
+  skip_push?: boolean;
+};
+
+export type SendReactionOptions = {
+  enforce_unique?: boolean;
+  skip_push?: boolean;
 };
 
 export type GetMessageOptions = {
@@ -2841,6 +2847,7 @@ export type Reaction = CustomReactionData & {
   score?: number;
   user?: UserResponse | null;
   user_id?: string;
+  emoji_code?: string;
 };
 
 export type Resource =
