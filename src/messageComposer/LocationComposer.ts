@@ -26,6 +26,8 @@ export type LocationComposerState = {
   location: StaticLocationPreview | LiveLocationPreview | null;
 };
 
+const MIN_LIVE_LOCATION_SHARE_DURATION = 60 * 1000; // 1 minute;
+
 const initState = ({
   message,
 }: {
@@ -64,7 +66,9 @@ export class LocationComposer {
       !!location?.created_by_device_id &&
       location.message_id &&
       location.latitude &&
-      location.longitude
+      location.longitude &&
+      (typeof durationMs === 'undefined' ||
+        durationMs >= MIN_LIVE_LOCATION_SHARE_DURATION)
     ) {
       return {
         ...location,

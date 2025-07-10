@@ -292,7 +292,8 @@ export class MessageComposer extends WithSubscriptions {
       (!this.attachmentManager.uploadsInProgressCount &&
         (!this.textComposer.textIsEmpty ||
           this.attachmentManager.successfulUploadsCount > 0)) ||
-      this.pollId
+      this.pollId ||
+      !!this.locationComposer.validLocation
     );
   }
 
