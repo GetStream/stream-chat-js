@@ -888,6 +888,7 @@ export type UserResponse = CustomUserData & {
   teams_role?: TeamsRole;
   updated_at?: string;
   username?: string;
+  avg_response_time?: number;
 };
 
 export type TeamsRole = { [team: string]: string };
@@ -2254,6 +2255,7 @@ export type AppSettings = {
   sqs_key?: string;
   sqs_secret?: string;
   sqs_url?: string;
+  user_response_time_enabled?: boolean;
   video_provider?: string;
   webhook_events?: Array<string> | null;
   webhook_url?: string;
