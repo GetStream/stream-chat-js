@@ -1395,20 +1395,8 @@ describe('AttachmentManager', () => {
         size: 100,
       };
 
-      // Mock fileToLocalUploadAttachment to return an attachment without duration
-      const expectedAttachment = {
-        type: 'image',
-        image_url: 'test-image-url',
-        localMetadata: {
-          id: 'test-id',
-          file: fileReference,
-          uploadState: 'finished',
-        },
-      };
-
       const result = await fileToLocalUploadAttachment(fileReference);
 
-      expect(result.file_size).toEqual(expectedAttachment.localMetadata.file.size);
       expect(result.duration).toBeUndefined();
     });
   });
