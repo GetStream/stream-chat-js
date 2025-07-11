@@ -5,10 +5,10 @@ import {
 } from '../../../src/constants';
 import {
   AttachmentManagerConfig,
-  DraftMessage,
   DraftResponse,
   FileReference,
   LocalMessage,
+  LocalVideoAttachment,
   MessageComposer,
   StreamChat,
 } from '../../../src';
@@ -1337,6 +1337,79 @@ describe('AttachmentManager', () => {
 
       // Verify the original ID was preserved
       expect(result.localMetadata.id).toBe(originalId);
+    });
+  });
+
+  describe('fileToLocalUploadAttachment', () => {
+    it('should return attachment with duration if its provided', async () => {
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
+      const fileToLocalUploadAttachment = (attachmentManager as any)
+        .fileToLocalUploadAttachment;
+
+      // Set a fileUploadFilter that allows all files
+      attachmentManager.fileUploadFilter = () => true;
+
+      // Create a file with duration
+      const fileReference = {
+        name: 'test.mp4',
+        type: 'video/mp4',
+        uri: 'test-uri',
+        duration: 120000,
+        size: 100,
+      };
+
+      // Mock fileToLocalUploadAttachment to return an attachment with duration
+      const expectedAttachment: LocalVideoAttachment = {
+        type: 'video',
+        asset_url: 'test-video-url',
+        localMetadata: {
+          id: 'test-id',
+          file: fileReference,
+          uploadState: 'finished',
+        },
+      };
+
+      const result = await fileToLocalUploadAttachment(fileReference);
+
+      expect(result.file_size).toEqual(expectedAttachment.localMetadata.file.size);
+      expect(result.duration).toEqual(expectedAttachment.localMetadata.file.duration);
+    });
+
+    it("should not include duration if it's not provided", async () => {
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
+      const fileToLocalUploadAttachment = (attachmentManager as any)
+        .fileToLocalUploadAttachment;
+
+      // Set a fileUploadFilter that allows all files
+      attachmentManager.fileUploadFilter = () => true;
+
+      // Create a file without duration
+      const fileReference = {
+        name: 'test.mp4',
+        type: 'video/mp4',
+        uri: 'test-uri',
+        size: 100,
+      };
+
+      // Mock fileToLocalUploadAttachment to return an attachment without duration
+      const expectedAttachment = {
+        type: 'image',
+        image_url: 'test-image-url',
+        localMetadata: {
+          id: 'test-id',
+          file: fileReference,
+          uploadState: 'finished',
+        },
+      };
+
+      const result = await fileToLocalUploadAttachment(fileReference);
+
+      expect(result.file_size).toEqual(expectedAttachment.localMetadata.file.size);
+      expect(result.duration).toBeUndefined();
     });
   });
 });
