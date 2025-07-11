@@ -376,6 +376,10 @@ export class AttachmentManager {
       localAttachment.thumb_url = fileLike.thumb_url;
     }
 
+    if (isFileReference(fileLike) && fileLike.duration) {
+      localAttachment.duration = fileLike.duration;
+    }
+
     return localAttachment;
   };
 
