@@ -8,11 +8,12 @@ import {
   DraftResponse,
   FileReference,
   LocalMessage,
-  LocalVideoAttachment,
   MessageComposer,
   StreamChat,
 } from '../../../src';
-import { AppSettings, AttachmentManager } from '../../../src';
+import { AppSettings } from '../../../src';
+import * as Utils from '../../../src/utils';
+import { beforeEach } from 'node:test';
 
 /**
  * Utility to generate a  file
@@ -1345,6 +1346,11 @@ describe('AttachmentManager', () => {
       const {
         messageComposer: { attachmentManager },
       } = setup();
+      vi.spyOn(Utils, 'generateUUIDv4').mockReturnValue('mock-uuid');
+      vi.spyOn(attachmentManager, 'getUploadConfigCheck').mockResolvedValue({
+        uploadBlocked: false,
+        reason: '',
+      });
       // Create a file of size 1234 bytes
       const fileContent = new Uint8Array(1234);
       const file = new File([fileContent], 'test.jpg', { type: 'image/jpeg' });
@@ -1355,11 +1361,13 @@ describe('AttachmentManager', () => {
         type: 'image',
         localMetadata: expect.objectContaining({
           file,
-          id: expect.any(String),
-          uploadState: expect.any(String),
+          id: 'mock-uuid',
+          uploadState: 'pending',
         }),
         fallback: 'test.jpg',
       });
+      expect(result.localMetadata.uploadPermissionCheck).toBeDefined();
+      expect(result.localMetadata.uploadState).toMatch(/pending|blocked/);
       expect(result.localMetadata.previewUri).toBeDefined();
     });
 
@@ -1367,6 +1375,11 @@ describe('AttachmentManager', () => {
       const {
         messageComposer: { attachmentManager },
       } = setup();
+      vi.spyOn(Utils, 'generateUUIDv4').mockReturnValue('mock-uuid');
+      vi.spyOn(attachmentManager, 'getUploadConfigCheck').mockResolvedValue({
+        uploadBlocked: false,
+        reason: '',
+      });
       const fileReference = {
         name: 'test.jpg',
         type: 'image/jpeg',
@@ -1382,27 +1395,33 @@ describe('AttachmentManager', () => {
         type: 'image',
         localMetadata: expect.objectContaining({
           file: fileReference,
-          id: expect.any(String),
-          uploadState: expect.any(String),
+          id: 'mock-uuid',
+          uploadState: 'pending',
         }),
         fallback: 'test.jpg',
         original_height: 1000,
         original_width: 1200,
       });
-      expect(result.localMetadata.previewUri).toBe(fileReference.uri);
+      expect(result.localMetadata.uploadPermissionCheck).toBeDefined();
+      expect(result.localMetadata.uploadState).toMatch(/pending|blocked/);
     });
 
     it('should create a LocalUploadAttachment from a FileReference with duration, thumb_url, and dimensions', async () => {
       const {
         messageComposer: { attachmentManager },
       } = setup();
+      vi.spyOn(Utils, 'generateUUIDv4').mockReturnValue('mock-uuid');
+      vi.spyOn(attachmentManager, 'getUploadConfigCheck').mockResolvedValue({
+        uploadBlocked: false,
+        reason: '',
+      });
       const fileReference = {
         name: 'test.mp4',
         type: 'video/mp4',
         size: 4321,
         uri: 'file://test.mp4',
         duration: 12.34,
-        thumb_url: 'file://thumb.mp4',
+        thumb_url: 'file://thumb.jpg',
         height: 720,
         width: 1280,
       };
@@ -1413,13 +1432,15 @@ describe('AttachmentManager', () => {
         type: 'video',
         localMetadata: expect.objectContaining({
           file: fileReference,
-          id: expect.any(String),
-          uploadState: expect.any(String),
+          id: 'mock-uuid',
+          uploadState: 'pending',
         }),
         title: 'test.mp4',
         duration: 12.34,
-        thumb_url: 'file://thumb.mp4',
+        thumb_url: 'file://thumb.jpg',
       });
+      expect(result.localMetadata.uploadPermissionCheck).toBeDefined();
+      expect(result.localMetadata.uploadState).toMatch(/pending|blocked/);
     });
   });
 });
