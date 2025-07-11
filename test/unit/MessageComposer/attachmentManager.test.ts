@@ -1341,63 +1341,85 @@ describe('AttachmentManager', () => {
   });
 
   describe('fileToLocalUploadAttachment', () => {
-    it('should return attachment with duration if its provided', async () => {
+    it('should create a LocalUploadAttachment from a File (image)', async () => {
       const {
         messageComposer: { attachmentManager },
       } = setup();
-      const fileToLocalUploadAttachment = (attachmentManager as any)
-        .fileToLocalUploadAttachment;
-
-      // Set a fileUploadFilter that allows all files
-      attachmentManager.fileUploadFilter = () => true;
-
-      // Create a file with duration
-      const fileReference = {
-        name: 'test.mp4',
-        type: 'video/mp4',
-        uri: 'test-uri',
-        duration: 120000,
-        size: 100,
-      };
-
-      // Mock fileToLocalUploadAttachment to return an attachment with duration
-      const expectedAttachment: LocalVideoAttachment = {
-        type: 'video',
-        asset_url: 'test-video-url',
-        localMetadata: {
-          id: 'test-id',
-          file: fileReference,
-          uploadState: 'finished',
-        },
-      };
-
-      const result = await fileToLocalUploadAttachment(fileReference);
-
-      expect(result.file_size).toEqual(expectedAttachment.localMetadata.file.size);
-      expect(result.duration).toEqual(expectedAttachment.localMetadata.file.duration);
+      // Create a file of size 1234 bytes
+      const fileContent = new Uint8Array(1234);
+      const file = new File([fileContent], 'test.jpg', { type: 'image/jpeg' });
+      const result = await attachmentManager.fileToLocalUploadAttachment(file);
+      expect(result).toMatchObject({
+        file_size: 1234,
+        mime_type: 'image/jpeg',
+        type: 'image',
+        localMetadata: expect.objectContaining({
+          file,
+          id: expect.any(String),
+          uploadState: expect.any(String),
+        }),
+        fallback: 'test.jpg',
+      });
+      expect(result.localMetadata.previewUri).toBeDefined();
     });
 
-    it("should not include duration if it's not provided", async () => {
+    it('should create a LocalUploadAttachment from a FileReference(image)', async () => {
       const {
         messageComposer: { attachmentManager },
       } = setup();
-      const fileToLocalUploadAttachment = (attachmentManager as any)
-        .fileToLocalUploadAttachment;
+      const fileReference = {
+        name: 'test.jpg',
+        type: 'image/jpeg',
+        size: 1234,
+        uri: 'file://test.jpg',
+        height: 1000,
+        width: 1200,
+      };
+      const result = await attachmentManager.fileToLocalUploadAttachment(fileReference);
+      expect(result).toMatchObject({
+        file_size: 1234,
+        mime_type: 'image/jpeg',
+        type: 'image',
+        localMetadata: expect.objectContaining({
+          file: fileReference,
+          id: expect.any(String),
+          uploadState: expect.any(String),
+        }),
+        fallback: 'test.jpg',
+        original_height: 1000,
+        original_width: 1200,
+      });
+      expect(result.localMetadata.previewUri).toBe(fileReference.uri);
+    });
 
-      // Set a fileUploadFilter that allows all files
-      attachmentManager.fileUploadFilter = () => true;
-
-      // Create a file without duration
+    it('should create a LocalUploadAttachment from a FileReference with duration, thumb_url, and dimensions', async () => {
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
       const fileReference = {
         name: 'test.mp4',
         type: 'video/mp4',
-        uri: 'test-uri',
-        size: 100,
+        size: 4321,
+        uri: 'file://test.mp4',
+        duration: 12.34,
+        thumb_url: 'file://thumb.mp4',
+        height: 720,
+        width: 1280,
       };
-
-      const result = await fileToLocalUploadAttachment(fileReference);
-
-      expect(result.duration).toBeUndefined();
+      const result = await attachmentManager.fileToLocalUploadAttachment(fileReference);
+      expect(result).toMatchObject({
+        file_size: 4321,
+        mime_type: 'video/mp4',
+        type: 'video',
+        localMetadata: expect.objectContaining({
+          file: fileReference,
+          id: expect.any(String),
+          uploadState: expect.any(String),
+        }),
+        title: 'test.mp4',
+        duration: 12.34,
+        thumb_url: 'file://thumb.mp4',
+      });
     });
   });
 });
