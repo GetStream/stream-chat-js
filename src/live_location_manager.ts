@@ -7,7 +7,7 @@
  * 4. live location is per-device, no other device which did not store the message locally, should be updating the live location attachment
  */
 
-import { withCancellation } from './concurrency';
+import { withCancellation } from './utils/concurrency';
 import { StateStore } from './store';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import type { StreamChat } from './client';
