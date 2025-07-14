@@ -1,3 +1,14 @@
+## [9.11.0](https://github.com/GetStream/stream-chat-js/compare/v9.10.1...v9.11.0) (2025-07-11)
+
+### Bug Fixes
+
+* add duration field to the local attachment if its available ([#1581](https://github.com/GetStream/stream-chat-js/issues/1581)) ([00e6fe5](https://github.com/GetStream/stream-chat-js/commit/00e6fe55c735a3f78e4901ce0472d39798623624))
+* add push v3 params to channel apis ([#1580](https://github.com/GetStream/stream-chat-js/issues/1580)) ([56cabda](https://github.com/GetStream/stream-chat-js/commit/56cabda973eefe48d0ebc60bd7f57a6a99d807f2))
+
+### Features
+
+* add avg response time to user response ([#1579](https://github.com/GetStream/stream-chat-js/issues/1579)) ([8434c42](https://github.com/GetStream/stream-chat-js/commit/8434c42c2271d055840c291a28ce768d48c568f4))
+
 ## [9.10.1](https://github.com/GetStream/stream-chat-js/compare/v9.10.0...v9.10.1) (2025-07-08)
 
 ### Bug Fixes

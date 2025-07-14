@@ -5,14 +5,15 @@ import {
 } from '../../../src/constants';
 import {
   AttachmentManagerConfig,
-  DraftMessage,
   DraftResponse,
   FileReference,
   LocalMessage,
   MessageComposer,
   StreamChat,
 } from '../../../src';
-import { AppSettings, AttachmentManager } from '../../../src';
+import { AppSettings } from '../../../src';
+import * as Utils from '../../../src/utils';
+import { beforeEach } from 'node:test';
 
 /**
  * Utility to generate a  file
@@ -1337,6 +1338,109 @@ describe('AttachmentManager', () => {
 
       // Verify the original ID was preserved
       expect(result.localMetadata.id).toBe(originalId);
+    });
+  });
+
+  describe('fileToLocalUploadAttachment', () => {
+    it('should create a LocalUploadAttachment from a File (image)', async () => {
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
+      vi.spyOn(Utils, 'generateUUIDv4').mockReturnValue('mock-uuid');
+      vi.spyOn(attachmentManager, 'getUploadConfigCheck').mockResolvedValue({
+        uploadBlocked: false,
+        reason: '',
+      });
+      // Create a file of size 1234 bytes
+      const fileContent = new Uint8Array(1234);
+      const file = new File([fileContent], 'test.jpg', { type: 'image/jpeg' });
+      const result = await attachmentManager.fileToLocalUploadAttachment(file);
+      expect(result).toMatchObject({
+        file_size: 1234,
+        mime_type: 'image/jpeg',
+        type: 'image',
+        localMetadata: expect.objectContaining({
+          file,
+          id: 'mock-uuid',
+          uploadState: 'pending',
+        }),
+        fallback: 'test.jpg',
+      });
+      expect(result.localMetadata.uploadPermissionCheck).toBeDefined();
+      expect(result.localMetadata.uploadState).toMatch(/pending|blocked/);
+      expect(result.localMetadata.previewUri).toBeDefined();
+    });
+
+    it('should create a LocalUploadAttachment from a FileReference(image)', async () => {
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
+      vi.spyOn(Utils, 'generateUUIDv4').mockReturnValue('mock-uuid');
+      vi.spyOn(attachmentManager, 'getUploadConfigCheck').mockResolvedValue({
+        uploadBlocked: false,
+        reason: '',
+      });
+      const fileReference = {
+        name: 'test.jpg',
+        type: 'image/jpeg',
+        size: 1234,
+        uri: 'file://test.jpg',
+        height: 1000,
+        width: 1200,
+      };
+      const result = await attachmentManager.fileToLocalUploadAttachment(fileReference);
+      expect(result).toMatchObject({
+        file_size: 1234,
+        mime_type: 'image/jpeg',
+        type: 'image',
+        localMetadata: expect.objectContaining({
+          file: fileReference,
+          id: 'mock-uuid',
+          uploadState: 'pending',
+        }),
+        fallback: 'test.jpg',
+        original_height: 1000,
+        original_width: 1200,
+      });
+      expect(result.localMetadata.uploadPermissionCheck).toBeDefined();
+      expect(result.localMetadata.uploadState).toMatch(/pending|blocked/);
+    });
+
+    it('should create a LocalUploadAttachment from a FileReference with duration, thumb_url, and dimensions', async () => {
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
+      vi.spyOn(Utils, 'generateUUIDv4').mockReturnValue('mock-uuid');
+      vi.spyOn(attachmentManager, 'getUploadConfigCheck').mockResolvedValue({
+        uploadBlocked: false,
+        reason: '',
+      });
+      const fileReference = {
+        name: 'test.mp4',
+        type: 'video/mp4',
+        size: 4321,
+        uri: 'file://test.mp4',
+        duration: 12.34,
+        thumb_url: 'file://thumb.jpg',
+        height: 720,
+        width: 1280,
+      };
+      const result = await attachmentManager.fileToLocalUploadAttachment(fileReference);
+      expect(result).toMatchObject({
+        file_size: 4321,
+        mime_type: 'video/mp4',
+        type: 'video',
+        localMetadata: expect.objectContaining({
+          file: fileReference,
+          id: 'mock-uuid',
+          uploadState: 'pending',
+        }),
+        title: 'test.mp4',
+        duration: 12.34,
+        thumb_url: 'file://thumb.jpg',
+      });
+      expect(result.localMetadata.uploadPermissionCheck).toBeDefined();
+      expect(result.localMetadata.uploadState).toMatch(/pending|blocked/);
     });
   });
 });
