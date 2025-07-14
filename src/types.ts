@@ -4008,6 +4008,8 @@ export type UpdateLocationPayload = {
   latitude?: number;
   longitude?: number;
   message_id: string;
+  user?: { id: string };
+  user_id?: string;
 };
 
 export type StaticLocationPayload = {
