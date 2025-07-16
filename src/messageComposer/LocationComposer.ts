@@ -84,6 +84,7 @@ export class LocationComposer {
 
   setData = (data: { durationMs?: number } & Coords) => {
     if (!this.config.enabled) return;
+    if (!data.latitude || !data.longitude) return;
 
     this.state.partialNext({
       location: {

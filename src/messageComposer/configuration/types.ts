@@ -56,7 +56,8 @@ export type LinkPreviewsManagerConfig = {
 };
 
 export type LocationComposerConfig = {
-  /** Allows for toggling the location addition.
+  /**
+   * Allows for toggling the location addition.
    * By default, the feature is enabled but has to be enabled also on channel level config via shared_locations.
    */
   enabled: boolean;
