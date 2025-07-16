@@ -32,7 +32,7 @@ export * from './token_manager';
 export * from './types';
 export * from './channel_manager';
 export * from './offline-support';
-export * from './live_location_manager';
+export * from './LiveLocationManager';
 // Don't use * here, that can break module augmentation https://github.com/microsoft/TypeScript/issues/46617
 export type {
   CustomAttachmentData,

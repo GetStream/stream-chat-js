@@ -18,11 +18,12 @@ import type {
   SharedLiveLocationResponse,
   SharedLocationResponse,
 } from './types';
+import type { Coords } from './messageComposer';
+
+export type WatchLocationHandler = (value: Coords) => void;
 
 // type Unsubscribe = () => void;
-type WatchLocation = (
-  handler: (value: { latitude: number; longitude: number }) => void,
-) => Unsubscribe;
+type WatchLocation = (handler: WatchLocationHandler) => Unsubscribe;
 type DeviceIdGenerator = () => string;
 type MessageId = string;
 
@@ -49,7 +50,7 @@ export type LiveLocationManagerConstructorParameters = {
 };
 
 // Hard-coded minimal throttle timeout
-const MIN_THROTTLE_TIMEOUT = 3000;
+export const UPDATE_LIVE_LOCATION_REQUEST_MIN_THROTTLE_TIMEOUT = 3000;
 
 export class LiveLocationManager extends WithSubscriptions {
   public state: StateStore<LiveLocationManagerState>;
@@ -81,21 +82,20 @@ export class LiveLocationManager extends WithSubscriptions {
     this.watchLocation = watchLocation;
   }
 
-  private async assureStateInit() {
-    if (this.stateIsReady) return;
-    const { active_live_locations } = await this.client.getSharedLocations();
-    this.state.next({
-      messages: new Map(
-        active_live_locations.map((location) => [location.message_id, location]),
-      ),
-      ready: true,
-    });
-  }
-
   public async init() {
     await this.assureStateInit();
     this.registerSubscriptions();
   }
+
+  public registerSubscriptions = () => {
+    this.incrementRefCount();
+    if (this.hasSubscriptions) return;
+
+    this.addUnsubscribeFunction(this.subscribeLiveLocationSharingUpdates());
+    this.addUnsubscribeFunction(this.subscribeTargetMessagesChange());
+  };
+
+  public unregisterSubscriptions = () => super.unregisterSubscriptions();
 
   get messages() {
     return this.state.getLatestValue().messages;
@@ -112,15 +112,16 @@ export class LiveLocationManager extends WithSubscriptions {
     return this._deviceId;
   }
 
-  public registerSubscriptions = () => {
-    if (this.hasSubscriptions) return;
-
-    this.addUnsubscribeFunction(this.subscribeLiveLocationSharingUpdates());
-    this.addUnsubscribeFunction(this.subscribeTargetMessagesChange());
-    // TODO? - handle message registration during message updates too, message updated eol added (I hope not)
-  };
-
-  public unregisterSubscriptions = () => super.unregisterSubscriptions();
+  private async assureStateInit() {
+    if (this.stateIsReady) return;
+    const { active_live_locations } = await this.client.getSharedLocations();
+    this.state.next({
+      messages: new Map(
+        active_live_locations.map((location) => [location.message_id, location]),
+      ),
+      ready: true,
+    });
+  }
 
   private subscribeTargetMessagesChange() {
     let unsubscribeWatchLocation: null | (() => void) = null;
@@ -146,14 +147,15 @@ export class LiveLocationManager extends WithSubscriptions {
   }
 
   private subscribeWatchLocation() {
-    let nextWatcherCallTimestamp = Date.now();
+    let nextAllowedUpdateCallTimestamp = Date.now();
 
     const unsubscribe = this.watchLocation(({ latitude, longitude }) => {
       // Integrators can adjust the update interval by supplying custom watchLocation subscription,
       // but the minimal timeout still has to be set as a failsafe (to prevent rate-limitting)
-      if (Date.now() < nextWatcherCallTimestamp) return;
+      if (Date.now() < nextAllowedUpdateCallTimestamp) return;
 
-      nextWatcherCallTimestamp = Date.now() + MIN_THROTTLE_TIMEOUT;
+      nextAllowedUpdateCallTimestamp =
+        Date.now() + UPDATE_LIVE_LOCATION_REQUEST_MIN_THROTTLE_TIMEOUT;
 
       withCancellation(LiveLocationManager.symbol, async () => {
         const promises: Promise<SharedLocationResponse>[] = [];
@@ -183,39 +185,41 @@ export class LiveLocationManager extends WithSubscriptions {
   }
 
   private subscribeLiveLocationSharingUpdates() {
-    const subscriptions = (
-      [
-        'live_location_sharing.started',
-        /**
-         * Both message.updated & live_location_sharing.stopped get emitted when message gets an
-         * update, live_location_sharing.stopped gets emitted only locally and only if the update goes
-         * through, it's a failsafe for when channel is no longer being watched for whatever reason
-         */
-        'message.updated',
-        'live_location_sharing.stopped',
-        'message.deleted',
-      ] as EventTypes[]
-    ).map((eventType) =>
-      this.client.on(eventType, (event) => {
-        if (!event.message) return;
+    /**
+     * Both message.updated & live_location_sharing.stopped get emitted when message gets an
+     * update, live_location_sharing.stopped gets emitted only locally and only if the update goes
+     * through, it's a failsafe for when channel is no longer being watched for whatever reason
+     */
+    const subscriptions = [
+      ...(
+        [
+          'live_location_sharing.started',
+          'message.updated',
+          'message.deleted',
+        ] as EventTypes[]
+      ).map((eventType) =>
+        this.client.on(eventType, (event) => {
+          if (!event.message) return;
 
-        if (event.type === 'live_location_sharing.started') {
-          this.registerMessage(event.message);
-        } else if (event.type === 'message.updated') {
-          const isRegistered = this.messages.has(event.message.id);
-          if (isRegistered && !isValidLiveLocationMessage(event.message)) {
+          if (event.type === 'live_location_sharing.started') {
+            this.registerMessage(event.message);
+          } else if (event.type === 'message.updated') {
+            const isRegistered = this.messages.has(event.message.id);
+            if (isRegistered && !isValidLiveLocationMessage(event.message)) {
+              this.unregisterMessage(event.message.id);
+            }
+            this.registerMessage(event.message);
+          } else {
             this.unregisterMessage(event.message.id);
           }
-          if (!isRegistered && !isValidLiveLocationMessage(event.message)) {
-            this.registerMessage(event.message);
-          }
-        } else {
-          this.unregisterMessage(
-            event.message.id ?? { id: event.live_location?.message_id },
-          );
-        }
+        }),
+      ),
+      this.client.on('live_location_sharing.stopped', (event) => {
+        if (!event.live_location) return;
+
+        this.unregisterMessage(event.live_location?.message_id);
       }),
-    );
+    ];
 
     return () => subscriptions.forEach((subscription) => subscription.unsubscribe());
   }
