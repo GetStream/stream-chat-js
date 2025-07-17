@@ -1,16 +1,16 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AbstractOfflineDB,
   Channel,
   ChannelAPIResponse,
   LocalMessage,
   MessageComposerConfig,
+  StaticLocationPayload,
   StreamChat,
   Thread,
 } from '../../../src';
 import { DeepPartial } from '../../../src/types.utility';
 import { MessageComposer } from '../../../src/messageComposer/messageComposer';
-import { StateStore } from '../../../src/store';
 import { DraftResponse, MessageResponse } from '../../../src/types';
 import { MockOfflineDB } from '../offline-support/MockOfflineDB';
 
@@ -30,24 +30,6 @@ vi.mock('../../../src/utils', () => ({
   formatMessage: vi.fn().mockImplementation((msg) => msg),
   randomId: vi.fn().mockReturnValue('test-uuid'),
   throttle: vi.fn().mockImplementation((fn) => fn),
-}));
-
-vi.mock('../../../src/messageComposer/attachmentManager', () => ({
-  AttachmentManager: vi.fn().mockImplementation(() => ({
-    state: new StateStore({ attachments: [] }),
-    initState: vi.fn(),
-    clear: vi.fn(),
-    attachments: [],
-  })),
-}));
-
-vi.mock('../../../src/messageComposer/pollComposer', () => ({
-  PollComposer: vi.fn().mockImplementation(() => ({
-    state: new StateStore({ poll: null }),
-    initState: vi.fn(),
-    clear: vi.fn(),
-    compose: vi.fn(),
-  })),
 }));
 
 vi.mock('../../../src/messageComposer/middleware/messageComposer', () => ({
@@ -106,15 +88,25 @@ const getThread = (channel: Channel, client: StreamChat, threadId: string) =>
 const setup = ({
   composition,
   compositionContext,
+  channelConfig,
   config,
 }: {
   composition?: LocalMessage | DraftResponse | MessageResponse | undefined;
   compositionContext?: Channel | Thread | LocalMessage | undefined;
+  channelConfig?: {
+    polls?: boolean;
+    shared_locations?: boolean;
+  };
   config?: DeepPartial<MessageComposerConfig>;
 } = {}) => {
   const mockClient = new StreamChat('test-api-key');
   mockClient.user = user;
   mockClient.userID = user.id;
+  const cid = 'messaging:test-channel-id';
+  if (channelConfig) {
+    // @ts-expect-error incomplete channel config object
+    mockClient.configs[cid] = channelConfig;
+  }
   // Create a proper Channel instance with only the necessary attributes mocked
   const mockChannel = new Channel(mockClient, 'messaging', 'test-channel-id', {
     id: 'test-channel-id',
@@ -199,6 +191,61 @@ describe('MessageComposer', () => {
 
       expect(messageComposer.config.publishTypingEvents).toBe(false);
       expect(messageComposer.config.text?.maxLengthOnEdit).toBe(1000);
+    });
+
+    it('should initialize with custom config overridden with back-end configuration', () => {
+      [
+        {
+          customConfig: { location: { enabled: true } },
+          channelConfig: { shared_locations: undefined },
+          expectedResult: { location: { enabled: true } }, // default is true
+        },
+        {
+          customConfig: { location: { enabled: true } },
+          channelConfig: { shared_locations: false },
+          expectedResult: { location: { enabled: false } },
+        },
+        {
+          customConfig: { location: { enabled: true } },
+          channelConfig: { shared_locations: true },
+          expectedResult: { location: { enabled: true } },
+        },
+        {
+          customConfig: { location: { enabled: undefined } },
+          channelConfig: { shared_locations: undefined },
+          expectedResult: { location: { enabled: true } }, // default is true
+        },
+        {
+          customConfig: { location: { enabled: undefined } },
+          channelConfig: { shared_locations: false },
+          expectedResult: { location: { enabled: false } },
+        },
+        {
+          customConfig: { location: { enabled: undefined } },
+          channelConfig: { shared_locations: true },
+          expectedResult: { location: { enabled: true } },
+        },
+        {
+          customConfig: { location: { enabled: false } },
+          channelConfig: { shared_locations: false },
+          expectedResult: { location: { enabled: false } },
+        },
+        {
+          customConfig: { location: { enabled: false } },
+          channelConfig: { shared_locations: undefined },
+          expectedResult: { location: { enabled: false } },
+        },
+        {
+          customConfig: { location: { enabled: false } },
+          channelConfig: { shared_locations: true },
+          expectedResult: { location: { enabled: false } },
+        },
+      ].forEach(({ customConfig, channelConfig, expectedResult }) => {
+        const { messageComposer } = setup({ channelConfig, config: customConfig });
+        expect(messageComposer.config.location.enabled).toBe(
+          expectedResult.location.enabled,
+        );
+      });
     });
 
     it('should initialize with message', () => {
@@ -468,13 +515,68 @@ describe('MessageComposer', () => {
       expect(messageComposer.lastChangeOriginIsLocal).toBe(true);
     });
 
+    it('should return the correct hasSendableData', () => {
+      const { messageComposer } = setup();
+
+      messageComposer.textComposer.state.partialNext({
+        text: '',
+        mentionedUsers: [],
+        selection: { start: 0, end: 0 },
+      });
+      expect(messageComposer.hasSendableData).toBe(false);
+
+      messageComposer.textComposer.state.partialNext({
+        text: 'Hello world',
+      });
+      expect(messageComposer.hasSendableData).toBe(true);
+      messageComposer.textComposer.state.partialNext({
+        text: '',
+      });
+
+      messageComposer.setQuotedMessage({
+        id: 'id',
+        type: 'regular',
+        status: 'delivered',
+        created_at: new Date(),
+        updated_at: new Date(),
+        deleted_at: null,
+        pinned_at: null,
+      });
+      expect(messageComposer.hasSendableData).toBe(false);
+      messageComposer.setQuotedMessage(null);
+
+      messageComposer.attachmentManager.state.partialNext({
+        attachments: [
+          { type: 'x', localMetadata: { id: 'x,', uploadState: 'finished', file: {} } },
+        ],
+      });
+      expect(messageComposer.hasSendableData).toBe(true);
+      messageComposer.attachmentManager.state.partialNext({
+        attachments: [
+          { type: 'x', localMetadata: { id: 'x,', uploadState: 'finished', file: {} } },
+          { type: 'x', localMetadata: { id: 'x,', uploadState: 'uploading', file: {} } },
+        ],
+      });
+      expect(messageComposer.hasSendableData).toBe(false);
+      messageComposer.attachmentManager.state.partialNext({
+        attachments: [],
+      });
+
+      messageComposer.state.partialNext({ pollId: 'pollId' });
+      expect(messageComposer.hasSendableData).toBe(true);
+      messageComposer.state.partialNext({ pollId: null });
+
+      messageComposer.updateConfig({ location: { enabled: true } });
+      messageComposer.locationComposer.setData({ latitude: 1, longitude: 1 });
+      expect(messageComposer.hasSendableData).toBe(true);
+      messageComposer.locationComposer.initState();
+
+      expect(messageComposer.hasSendableData).toBe(false);
+    });
+
     it('should return the correct compositionIsEmpty', () => {
       const { messageComposer } = setup();
-      const spyTextComposerTextIsEmpty = vi
-        .spyOn(messageComposer.textComposer, 'textIsEmpty', 'get')
-        .mockReturnValueOnce(true)
-        .mockReturnValueOnce(false);
-      // First case - empty composition
+
       messageComposer.textComposer.state.partialNext({
         text: '',
         mentionedUsers: [],
@@ -482,14 +584,46 @@ describe('MessageComposer', () => {
       });
       expect(messageComposer.compositionIsEmpty).toBe(true);
 
-      // Second case - non-empty composition
       messageComposer.textComposer.state.partialNext({
         text: 'Hello world',
-        mentionedUsers: [],
-        selection: { start: 0, end: 0 },
       });
       expect(messageComposer.compositionIsEmpty).toBe(false);
-      spyTextComposerTextIsEmpty.mockRestore();
+      messageComposer.textComposer.state.partialNext({
+        text: '',
+      });
+
+      messageComposer.setQuotedMessage({
+        id: 'id',
+        type: 'regular',
+        status: 'delivered',
+        created_at: new Date(),
+        updated_at: new Date(),
+        deleted_at: null,
+        pinned_at: null,
+      });
+      expect(messageComposer.compositionIsEmpty).toBe(false);
+      messageComposer.setQuotedMessage(null);
+
+      messageComposer.attachmentManager.state.partialNext({
+        attachments: [
+          { type: 'x', localMetadata: { id: 'x,', uploadState: 'finished', file: {} } },
+        ],
+      });
+      expect(messageComposer.compositionIsEmpty).toBe(false);
+      messageComposer.attachmentManager.state.partialNext({
+        attachments: [],
+      });
+
+      messageComposer.state.partialNext({ pollId: 'pollId' });
+      expect(messageComposer.compositionIsEmpty).toBe(false);
+      messageComposer.state.partialNext({ pollId: null });
+
+      messageComposer.updateConfig({ location: { enabled: true } });
+      messageComposer.locationComposer.setData({ latitude: 1, longitude: 1 });
+      expect(messageComposer.compositionIsEmpty).toBe(false);
+      messageComposer.locationComposer.initState();
+
+      expect(messageComposer.compositionIsEmpty).toBe(true);
     });
   });
 
@@ -687,6 +821,7 @@ describe('MessageComposer', () => {
       );
       const spyTextComposer = vi.spyOn(messageComposer.textComposer, 'initState');
       const spyPollComposer = vi.spyOn(messageComposer.pollComposer, 'initState');
+      const spyLocationComposer = vi.spyOn(messageComposer.locationComposer, 'initState');
       const spyCustomDataManager = vi.spyOn(
         messageComposer.customDataManager,
         'initState',
@@ -701,6 +836,7 @@ describe('MessageComposer', () => {
       expect(spyPollComposer).toHaveBeenCalled();
       expect(spyCustomDataManager).toHaveBeenCalled();
       expect(spyInitState).toHaveBeenCalled();
+      expect(spyLocationComposer).toHaveBeenCalled();
       expect(messageComposer.quotedMessage).to.be.null;
     });
 
@@ -1139,6 +1275,10 @@ describe('MessageComposer', () => {
 
       const spyCompose = vi.spyOn(messageComposer.pollComposer, 'compose');
       spyCompose.mockResolvedValue({ data: mockPoll });
+      const spyPollComposerInitState = vi.spyOn(
+        messageComposer.pollComposer,
+        'initState',
+      );
 
       const spyCreatePoll = vi.spyOn(mockClient, 'createPoll');
       spyCreatePoll.mockResolvedValue({ poll: mockPoll });
@@ -1147,7 +1287,7 @@ describe('MessageComposer', () => {
 
       expect(spyCompose).toHaveBeenCalled();
       expect(spyCreatePoll).toHaveBeenCalledWith(mockPoll);
-      expect(messageComposer.pollComposer.initState).not.toHaveBeenCalled();
+      expect(spyPollComposerInitState).not.toHaveBeenCalled();
       expect(messageComposer.state.getLatestValue().pollId).toBe('test-poll-id');
     });
 
@@ -1191,6 +1331,91 @@ describe('MessageComposer', () => {
           type: 'api:poll:create:failed',
           metadata: {
             reason: 'Failed to create poll',
+          },
+          originalError: expect.any(Error),
+          severity: 'error',
+        },
+      });
+    });
+
+    it('sends location message', async () => {
+      const { messageComposer, mockChannel } = setup();
+      messageComposer.locationComposer.setData({ latitude: 1, longitude: 1 });
+      const messageId = messageComposer.id;
+      const spySendSharedLocation = vi
+        .spyOn(mockChannel, 'sendSharedLocation')
+        .mockResolvedValue({
+          message: { id: 'x', status: 'received', type: 'regular' },
+          duration: '',
+        });
+
+      await messageComposer.sendLocation();
+
+      expect(spySendSharedLocation).toHaveBeenCalled();
+      expect(spySendSharedLocation).toHaveBeenCalledWith({
+        message_id: messageId,
+        created_by_device_id: messageComposer.locationComposer.deviceId,
+        latitude: 1,
+        longitude: 1,
+      } as StaticLocationPayload);
+      expect(messageComposer.locationComposer.state.getLatestValue()).toEqual({
+        location: null,
+      });
+    });
+
+    it('prevents sending location message when location data is invalid', async () => {
+      const { messageComposer, mockChannel } = setup();
+      const spySendSharedLocation = vi
+        .spyOn(mockChannel, 'sendSharedLocation')
+        .mockResolvedValue({
+          message: { id: 'x', status: 'received', type: 'regular' },
+          duration: '',
+        });
+
+      await messageComposer.sendLocation();
+
+      expect(spySendSharedLocation).not.toHaveBeenCalled();
+    });
+    it('prevents sending location message in thread', async () => {
+      const { mockChannel, mockClient } = setup();
+      const mockThread = getThread(mockChannel, mockClient, 'test-thread-id');
+      const { messageComposer: threadComposer } = setup({
+        compositionContext: mockThread,
+      });
+      threadComposer.locationComposer.setData({ latitude: 1, longitude: 1 });
+      const spySendSharedLocation = vi
+        .spyOn(mockChannel, 'sendSharedLocation')
+        .mockResolvedValue({
+          message: { id: 'x', status: 'received', type: 'regular' },
+          duration: '',
+        });
+
+      await threadComposer.sendLocation();
+
+      expect(spySendSharedLocation).not.toHaveBeenCalled();
+    });
+
+    it('handles failed location message request', async () => {
+      const { messageComposer, mockChannel, mockClient } = setup();
+      const error = new Error('Failed location request');
+      messageComposer.locationComposer.setData({ latitude: 1, longitude: 1 });
+      const messageId = messageComposer.id;
+      const spySendSharedLocation = vi
+        .spyOn(mockChannel, 'sendSharedLocation')
+        .mockRejectedValue(error);
+      const spyAddNotification = vi.spyOn(mockClient.notifications, 'add');
+
+      await expect(messageComposer.sendLocation()).rejects.toThrow(error.message);
+      expect(spyAddNotification).toHaveBeenCalledWith({
+        message: 'Failed to share the location',
+        origin: {
+          emitter: 'MessageComposer',
+          context: { composer: messageComposer },
+        },
+        options: {
+          type: 'api:location:create:failed',
+          metadata: {
+            reason: error.message,
           },
           originalError: expect.any(Error),
           severity: 'error',
@@ -1725,6 +1950,37 @@ describe('MessageComposer', () => {
 
         expect(spy).not.toHaveBeenCalled();
         spy.mockRestore();
+      });
+    });
+
+    describe('subscribeLocationComposerStateChanged', () => {
+      it('should log state update timestamp when attachments change', () => {
+        const { messageComposer } = setup();
+        const spy = vi.spyOn(messageComposer, 'logStateUpdateTimestamp');
+        const spyDeleteDraft = vi.spyOn(messageComposer, 'deleteDraft');
+
+        messageComposer.registerSubscriptions();
+        messageComposer.locationComposer.setData({
+          latitude: 1,
+          longitude: 1,
+        });
+
+        expect(spy).toHaveBeenCalled();
+        expect(spyDeleteDraft).not.toHaveBeenCalled();
+      });
+      it('deletes the draft when composition becomes empty', () => {
+        const { messageComposer } = setup();
+        vi.spyOn(messageComposer, 'logStateUpdateTimestamp');
+        const spyDeleteDraft = vi.spyOn(messageComposer, 'deleteDraft');
+        messageComposer.registerSubscriptions();
+        messageComposer.locationComposer.setData({
+          latitude: 1,
+          longitude: 1,
+        });
+
+        messageComposer.locationComposer.state.next({ location: null });
+
+        expect(spyDeleteDraft).toHaveBeenCalled();
       });
     });
 

@@ -30,6 +30,7 @@ import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { StreamChat } from '../client';
 import type { MessageComposerConfig } from './configuration/types';
 import type { DeepPartial } from '../types.utility';
+import type { MergeWithCustomizer } from '../utils/mergeWith/mergeWithCore';
 
 type UnregisterSubscriptions = Unsubscribe;
 
@@ -144,10 +145,6 @@ export class MessageComposer extends WithSubscriptions {
 
     this.compositionContext = compositionContext;
 
-    this.configState = new StateStore<MessageComposerConfig>(
-      mergeWith(DEFAULT_COMPOSER_CONFIG, config ?? {}),
-    );
-
     // channel is easily inferable from the context
     if (compositionContext instanceof Channel) {
       this.channel = compositionContext;
@@ -161,6 +158,32 @@ export class MessageComposer extends WithSubscriptions {
         'MessageComposer requires composition context pointing to channel (channel or context.cid)',
       );
     }
+
+    const mergeChannelConfigCustomizer: MergeWithCustomizer<
+      DeepPartial<MessageComposerConfig>
+    > = (originalVal, channelConfigVal, key) =>
+      typeof originalVal === 'object'
+        ? undefined
+        : originalVal === false && key === 'enabled' // prevent enabling features that are disabled client-side
+          ? false
+          : ['string', 'number', 'bigint', 'boolean', 'symbol'].includes(
+                // prevent enabling features that are disabled server-side
+                typeof channelConfigVal,
+              )
+            ? channelConfigVal // scalar values get overridden by server-side config
+            : originalVal;
+
+    this.configState = new StateStore<MessageComposerConfig>(
+      mergeWith(
+        mergeWith(DEFAULT_COMPOSER_CONFIG, config ?? {}),
+        {
+          location: {
+            enabled: this.channel.getConfig()?.shared_locations,
+          },
+        },
+        mergeChannelConfigCustomizer,
+      ),
+    );
 
     let message: LocalMessage | DraftMessage | undefined = undefined;
     if (compositionIsDraftResponse(composition)) {
