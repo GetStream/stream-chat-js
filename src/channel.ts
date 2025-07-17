@@ -62,6 +62,7 @@ import type {
   SearchPayload,
   SendMessageAPIResponse,
   SendMessageOptions,
+  SendReactionOptions,
   TruncateChannelAPIResponse,
   TruncateOptions,
   UpdateChannelAPIResponse,
@@ -420,7 +421,7 @@ export class Channel {
   async sendReaction(
     messageID: string,
     reaction: Reaction,
-    options?: { enforce_unique?: boolean; skip_push?: boolean },
+    options?: SendReactionOptions,
   ) {
     if (!messageID) {
       throw Error(`Message id is missing`);
@@ -464,7 +465,7 @@ export class Channel {
   async _sendReaction(
     messageID: string,
     reaction: Reaction,
-    options?: { enforce_unique?: boolean; skip_push?: boolean },
+    options?: SendReactionOptions,
   ) {
     if (!messageID) {
       throw Error(`Message id is missing`);
