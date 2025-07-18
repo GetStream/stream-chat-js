@@ -4105,9 +4105,9 @@ export type ReminderResponseBase = {
 };
 
 export type ReminderResponse = ReminderResponseBase & {
-  channel: ChannelResponse;
   user: UserResponse;
   message: MessageResponse;
+  channel?: ChannelResponse;
 };
 
 export type ReminderAPIResponse = APIResponse & {
