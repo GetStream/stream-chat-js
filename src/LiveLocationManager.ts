@@ -165,7 +165,7 @@ export class LiveLocationManager extends WithSubscriptions {
           if (location.latitude === latitude && location.longitude === longitude)
             continue;
           const promise = this.client.updateLocation({
-            created_by_device_id: this.deviceId,
+            created_by_device_id: location.created_by_device_id,
             message_id: messageId,
             latitude,
             longitude,
