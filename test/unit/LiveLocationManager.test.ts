@@ -415,6 +415,55 @@ describe('LiveLocationManager', () => {
 
         vi.useRealTimers();
       });
+
+      it('prevents live location update requests for expired live locations', async () => {
+        vi.useFakeTimers();
+        const client = await getClientWithUser(user);
+        vi.spyOn(client, 'getSharedLocations').mockResolvedValue({
+          active_live_locations: [
+            {
+              ...liveLocation,
+              end_at: new Date(
+                Date.now() + UPDATE_LIVE_LOCATION_REQUEST_MIN_THROTTLE_TIMEOUT - 1000,
+              ).toISOString(),
+            },
+          ],
+          duration: '',
+        });
+        const updateLocationSpy = vi
+          .spyOn(client, 'updateLocation')
+          .mockResolvedValue(liveLocation);
+        let watchHandler: WatchLocationHandler = () => {
+          throw new Error('XX');
+        };
+        const captureHandler = (handler: WatchLocationHandler) => {
+          watchHandler = handler;
+        };
+        const manager = new LiveLocationManager({
+          client,
+          getDeviceId,
+          watchLocation: makeWatchLocation([], captureHandler),
+        });
+
+        await manager.init();
+        watchHandler({ latitude: 1, longitude: 1 });
+
+        vi.waitFor(() => {
+          expect(updateLocationSpy).toHaveBeenCalledTimes(1);
+        });
+
+        const sleepPromise = sleep(0);
+        vi.advanceTimersByTime(UPDATE_LIVE_LOCATION_REQUEST_MIN_THROTTLE_TIMEOUT);
+        await sleepPromise;
+
+        watchHandler({ latitude: 3, longitude: 4 });
+
+        vi.waitFor(() => {
+          expect(updateLocationSpy).toHaveBeenCalledTimes(1);
+        });
+
+        vi.useRealTimers();
+      });
     });
 
     describe('live_location_sharing.started', () => {
