@@ -211,7 +211,7 @@ describe('LiveLocationManager', () => {
         await manager.init();
 
         // @ts-expect-error accessing private property
-        manager.unregisterMessage(liveLocation.message_id);
+        manager.unregisterMessages([liveLocation.message_id]);
         expect(updateLocationSpy).toHaveBeenCalledTimes(1);
         expect(manager.messages).toHaveLength(0);
       });

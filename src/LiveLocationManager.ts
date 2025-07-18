@@ -32,15 +32,19 @@ export type LiveLocationManagerState = {
   messages: Map<MessageId, SharedLiveLocationResponse>;
 };
 
+const isExpiredLocation = (location: SharedLiveLocationResponse) => {
+  const endTimeTimestamp = new Date(location.end_at).getTime();
+
+  return endTimeTimestamp < Date.now();
+};
+
 function isValidLiveLocationMessage(
   message?: MessageResponse,
 ): message is MessageResponse & { shared_location: SharedLiveLocationResponse } {
   if (!message || message.type === 'deleted' || !message.shared_location?.end_at)
     return false;
 
-  const endTimeTimestamp = new Date(message.shared_location.end_at).getTime();
-
-  return Date.now() < endTimeTimestamp;
+  return !isExpiredLocation(message.shared_location as SharedLiveLocationResponse);
 }
 
 export type LiveLocationManagerConstructorParameters = {
@@ -160,8 +164,13 @@ export class LiveLocationManager extends WithSubscriptions {
       withCancellation(LiveLocationManager.symbol, async () => {
         const promises: Promise<SharedLocationResponse>[] = [];
         await this.assureStateInit();
+        const expiredLocations: string[] = [];
 
         for (const [messageId, location] of this.messages) {
+          if (isExpiredLocation(location)) {
+            expiredLocations.push(location.message_id);
+            continue;
+          }
           if (location.latitude === latitude && location.longitude === longitude)
             continue;
           const promise = this.client.updateLocation({
@@ -173,7 +182,7 @@ export class LiveLocationManager extends WithSubscriptions {
 
           promises.push(promise);
         }
-
+        this.unregisterMessages(expiredLocations);
         if (promises.length > 0) {
           await Promise.allSettled(promises);
         }
@@ -206,18 +215,18 @@ export class LiveLocationManager extends WithSubscriptions {
           } else if (event.type === 'message.updated') {
             const isRegistered = this.messages.has(event.message.id);
             if (isRegistered && !isValidLiveLocationMessage(event.message)) {
-              this.unregisterMessage(event.message.id);
+              this.unregisterMessages([event.message.id]);
             }
             this.registerMessage(event.message);
           } else {
-            this.unregisterMessage(event.message.id);
+            this.unregisterMessages([event.message.id]);
           }
         }),
       ),
       this.client.on('live_location_sharing.stopped', (event) => {
         if (!event.live_location) return;
 
-        this.unregisterMessage(event.live_location?.message_id);
+        this.unregisterMessages([event.live_location?.message_id]);
       }),
     ];
 
@@ -242,10 +251,12 @@ export class LiveLocationManager extends WithSubscriptions {
     });
   }
 
-  private unregisterMessage(messageId: string) {
+  private unregisterMessages(messageIds: string[]) {
     const messages = this.messages;
-    const newMessages = new Map(messages);
-    newMessages.delete(messageId);
+    const removedMessages = new Set(messageIds);
+    const newMessages = new Map(
+      Array.from(messages).filter(([messageId]) => !removedMessages.has(messageId)),
+    );
 
     if (newMessages.size === messages.size) return;
 
