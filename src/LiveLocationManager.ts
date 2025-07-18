@@ -21,9 +21,7 @@ import type {
 import type { Coords } from './messageComposer';
 
 export type WatchLocationHandler = (value: Coords) => void;
-
-// type Unsubscribe = () => void;
-type WatchLocation = (handler: WatchLocationHandler) => Unsubscribe;
+export type WatchLocation = (handler: WatchLocationHandler) => Unsubscribe;
 type DeviceIdGenerator = () => string;
 type MessageId = string;
 
