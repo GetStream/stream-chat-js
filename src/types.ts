@@ -4012,11 +4012,11 @@ export type SharedLiveLocationResponse = {
 };
 
 export type UpdateLocationPayload = {
-  created_by_device_id: string;
+  message_id: string;
+  created_by_device_id?: string;
   end_at?: string;
   latitude?: number;
   longitude?: number;
-  message_id: string;
   user?: { id: string };
   user_id?: string;
 };

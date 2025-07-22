@@ -64,12 +64,12 @@ import type {
   SendMessageAPIResponse,
   SendMessageOptions,
   SendReactionOptions,
-  SharedLocationResponse,
   StaticLocationPayload,
   TruncateChannelAPIResponse,
   TruncateOptions,
   UpdateChannelAPIResponse,
   UpdateChannelOptions,
+  UpdateLocationPayload,
   UserResponse,
 } from './types';
 import type { Role } from './permissions';
@@ -692,9 +692,9 @@ export class Channel {
     return result;
   }
 
-  public async stopLiveLocationSharing(locationToStop: SharedLocationResponse) {
+  public async stopLiveLocationSharing(payload: UpdateLocationPayload) {
     const location = await this.getClient().updateLocation({
-      ...locationToStop,
+      ...payload,
       end_at: new Date().toISOString(),
     });
     this.getClient().dispatchEvent({
