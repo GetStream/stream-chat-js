@@ -330,13 +330,16 @@ describe('LiveLocationManager', () => {
         sleepPromise = sleep(0); // registerMessage is async under the hood
         vi.advanceTimersByTime(0);
         await sleepPromise;
-        expect(updateLocationSpy).toHaveBeenCalledTimes(1);
-        expect(updateLocationSpy).toHaveBeenCalledWith({
-          created_by_device_id: liveLocation.created_by_device_id,
-          message_id: liveLocation.message_id,
-          ...newCoords,
+
+        vi.waitFor(() => {
+          expect(updateLocationSpy).toHaveBeenCalledTimes(1);
+          expect(updateLocationSpy).toHaveBeenCalledWith({
+            created_by_device_id: liveLocation.created_by_device_id,
+            message_id: liveLocation.message_id,
+            ...newCoords,
+          });
+          expect(manager.messages).toHaveLength(2);
         });
-        expect(manager.messages).toHaveLength(2);
         vi.useRealTimers();
       });
 

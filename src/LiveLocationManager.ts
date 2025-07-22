@@ -25,9 +25,13 @@ export type WatchLocation = (handler: WatchLocationHandler) => Unsubscribe;
 type DeviceIdGenerator = () => string;
 type MessageId = string;
 
+export type ScheduledLiveLocationSharing = SharedLiveLocationResponse & {
+  stopSharingTimeout: ReturnType<typeof setTimeout> | null;
+};
+
 export type LiveLocationManagerState = {
   ready: boolean;
-  messages: Map<MessageId, SharedLiveLocationResponse>;
+  messages: Map<MessageId, ScheduledLiveLocationSharing>;
 };
 
 const isExpiredLocation = (location: SharedLiveLocationResponse) => {
@@ -119,7 +123,20 @@ export class LiveLocationManager extends WithSubscriptions {
     const { active_live_locations } = await this.client.getSharedLocations();
     this.state.next({
       messages: new Map(
-        active_live_locations.map((location) => [location.message_id, location]),
+        active_live_locations
+          .filter((location) => !isExpiredLocation(location))
+          .map((location) => [
+            location.message_id,
+            {
+              ...location,
+              stopSharingTimeout: setTimeout(
+                () => {
+                  this.unregisterMessages([location.message_id]);
+                },
+                new Date(location.end_at).getTime() - Date.now(),
+              ),
+            },
+          ]),
       ),
       ready: true,
     });
@@ -241,7 +258,15 @@ export class LiveLocationManager extends WithSubscriptions {
 
     this.state.next((currentValue) => {
       const messages = new Map(currentValue.messages);
-      messages.set(message.id, message.shared_location);
+      messages.set(message.id, {
+        ...message.shared_location,
+        stopSharingTimeout: setTimeout(
+          () => {
+            this.unregisterMessages([message.id]);
+          },
+          new Date(message.shared_location.end_at).getTime() - Date.now(),
+        ),
+      });
       return {
         ...currentValue,
         messages,
@@ -253,7 +278,13 @@ export class LiveLocationManager extends WithSubscriptions {
     const messages = this.messages;
     const removedMessages = new Set(messageIds);
     const newMessages = new Map(
-      Array.from(messages).filter(([messageId]) => !removedMessages.has(messageId)),
+      Array.from(messages).filter(([messageId, location]) => {
+        if (removedMessages.has(messageId) && location.stopSharingTimeout) {
+          clearTimeout(location.stopSharingTimeout);
+          location.stopSharingTimeout = null;
+        }
+        return !removedMessages.has(messageId);
+      }),
     );
 
     if (newMessages.size === messages.size) return;
