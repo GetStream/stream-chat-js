@@ -133,6 +133,10 @@ export type ChannelManagerOptions = {
   lockChannelOrder?: boolean;
 };
 
+export type QueryChannelsRequestType = (
+  ...params: Parameters<StreamChat['queryChannels']>
+) => Promise<Channel[]>;
+
 export const DEFAULT_CHANNEL_MANAGER_OPTIONS = {
   abortInFlightQuery: false,
   allowNotLoadedChannelPromotionForEvent: {
@@ -160,6 +164,7 @@ export class ChannelManager extends WithSubscriptions {
   private client: StreamChat;
   private eventHandlers: Map<string, EventHandlerType> = new Map();
   private eventHandlerOverrides: Map<string, EventHandlerOverrideType> = new Map();
+  private queryChannelsRequest: QueryChannelsRequestType;
   private options: ChannelManagerOptions = {};
   private stateOptions: ChannelStateOptions = {};
   private id: string;
@@ -168,10 +173,12 @@ export class ChannelManager extends WithSubscriptions {
     client,
     eventHandlerOverrides = {},
     options = {},
+    queryChannelsRequest,
   }: {
     client: StreamChat;
     eventHandlerOverrides?: ChannelManagerEventHandlerOverrides;
     options?: ChannelManagerOptions;
+    queryChannelsRequest?: QueryChannelsRequestType;
   }) {
     super();
 
@@ -192,6 +199,7 @@ export class ChannelManager extends WithSubscriptions {
     });
     this.setEventHandlerOverrides(eventHandlerOverrides);
     this.setOptions(options);
+    this.queryChannelsRequest = queryChannelsRequest ?? this.client.queryChannels;
     this.eventHandlers = new Map(
       Object.entries<EventHandlerType>({
         channelDeletedHandler: this.channelDeletedHandler,
@@ -252,6 +260,10 @@ export class ChannelManager extends WithSubscriptions {
     );
   };
 
+  public setQueryChannelsRequest = (queryChannelsRequest: QueryChannelsRequestType) => {
+    this.queryChannelsRequest = queryChannelsRequest;
+  };
+
   public setOptions = (options: ChannelManagerOptions = {}) => {
     this.options = { ...DEFAULT_CHANNEL_MANAGER_OPTIONS, ...options };
   };
@@ -266,7 +278,7 @@ export class ChannelManager extends WithSubscriptions {
       ...options,
     };
     try {
-      const channels = await this.client.queryChannels(
+      const channels = await this.queryChannelsRequest(
         filters,
         sort,
         options,
@@ -407,7 +419,7 @@ export class ChannelManager extends WithSubscriptions {
       this.state.partialNext({
         pagination: { ...pagination, isLoading: false, isLoadingNext: true },
       });
-      const nextChannels = await this.client.queryChannels(
+      const nextChannels = await this.queryChannelsRequest(
         filters,
         sort,
         options,
