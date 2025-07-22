@@ -2,9 +2,10 @@
  * RULES:
  *
  * 1. one loc-sharing message per channel per user
- * 2. mandatory geolocation_eol (maxnow + 24h max), which should be unchangeable by anyone (set once)
- * 3. serialized object must be stored
- * 4. live location is per-device, no other device which did not store the message locally, should be updating the live location attachment
+ * 2. live location is intended to be per device
+ * but created_by_device_id has currently no checks,
+ * and user can update the location from another device
+ * thus making location sharing based on user and channel
  */
 
 import { withCancellation } from './utils/concurrency';
