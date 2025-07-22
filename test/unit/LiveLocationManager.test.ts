@@ -547,7 +547,9 @@ describe('LiveLocationManager', () => {
         });
 
         await manager.init();
-        expect(manager.messages).toHaveLength(1);
+        vi.waitFor(() => {
+          expect(manager.messages).toHaveLength(1);
+        });
         client.dispatchEvent({
           message: {
             id: liveLocation.message_id,

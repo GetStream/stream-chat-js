@@ -1,13 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  createDraftSharedLocationCompositionMiddleware,
   createSharedLocationCompositionMiddleware,
   DraftResponse,
   LocalMessage,
   MessageComposer,
   MessageComposerMiddlewareState,
-  type MessageCompositionMiddleware,
-  MessageDraftComposerMiddlewareValueState,
   MiddlewareStatus,
   StreamChat,
 } from '../../../../../src';
@@ -136,68 +133,6 @@ describe('stream-io/message-composer-middleware/shared-location', () => {
         message: {},
         sendOptions: {},
       },
-    });
-  });
-});
-
-const setupDraftMiddlewareHandlerParams = (
-  initialState: MessageDraftComposerMiddlewareValueState = {},
-) => {
-  return {
-    state: initialState,
-    next: async (state: MessageDraftComposerMiddlewareValueState) => ({ state }),
-    complete: async (state: MessageDraftComposerMiddlewareValueState) => ({
-      state,
-      status: 'complete' as MiddlewareStatus,
-    }),
-    discard: async () => ({ state: initialState, status: 'discard' as MiddlewareStatus }),
-    forward: async () => ({ state: initialState }),
-  };
-};
-
-describe('stream-io/message-composer-middleware/draft-shared-location', () => {
-  it('injects shared_location to localMessage and message payloads', async () => {
-    const { messageComposer } = setup();
-    const middleware = createDraftSharedLocationCompositionMiddleware(messageComposer);
-    const coords = { latitude: 1, longitude: 1 };
-    messageComposer.locationComposer.setData(coords);
-    const result = await middleware.handlers.compose(setupDraftMiddlewareHandlerParams());
-    expect(result).toEqual({
-      state: {
-        draft: {
-          shared_location: {
-            created_by_device_id: messageComposer.locationComposer.deviceId,
-            message_id: messageComposer.id,
-            ...coords,
-          },
-        },
-      },
-    });
-  });
-
-  it('does not inject shared_location to localMessage and message payloads if none is set', async () => {
-    const { messageComposer } = setup();
-    const middleware = createDraftSharedLocationCompositionMiddleware(messageComposer);
-    const result = await middleware.handlers.compose(setupDraftMiddlewareHandlerParams());
-    expect(result).toEqual({
-      state: {},
-    });
-  });
-
-  it('does not inject shared_location to localMessage and message payloads if the location state is corrupted', async () => {
-    const { messageComposer } = setup();
-    const middleware = createDraftSharedLocationCompositionMiddleware(messageComposer);
-    // @ts-expect-error invalid location payload
-    messageComposer.locationComposer.state.next({
-      location: {
-        latitude: 1,
-        created_by_device_id: 'da',
-        message_id: messageComposer.id,
-      },
-    });
-    const result = await middleware.handlers.compose(setupDraftMiddlewareHandlerParams());
-    expect(result).toEqual({
-      state: {},
     });
   });
 });

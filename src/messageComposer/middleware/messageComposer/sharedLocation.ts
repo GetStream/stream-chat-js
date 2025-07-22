@@ -3,8 +3,6 @@ import type { MessageComposer } from '../../messageComposer';
 import type {
   MessageComposerMiddlewareState,
   MessageCompositionMiddleware,
-  MessageDraftComposerMiddlewareValueState,
-  MessageDraftCompositionMiddleware,
 } from './types';
 
 export const createSharedLocationCompositionMiddleware = (
@@ -36,31 +34,6 @@ export const createSharedLocationCompositionMiddleware = (
         },
         message: {
           ...state.message,
-          shared_location: location,
-        },
-      });
-    },
-  },
-});
-
-export const createDraftSharedLocationCompositionMiddleware = (
-  composer: MessageComposer,
-): MessageDraftCompositionMiddleware => ({
-  id: 'stream-io/message-composer-middleware/draft-shared-location',
-  handlers: {
-    compose: ({
-      state,
-      next,
-      forward,
-    }: MiddlewareHandlerParams<MessageDraftComposerMiddlewareValueState>) => {
-      const { locationComposer } = composer;
-      const location = locationComposer.validLocation;
-      if (!locationComposer || !location) return forward();
-
-      return next({
-        ...state,
-        draft: {
-          ...state.draft,
           shared_location: location,
         },
       });
