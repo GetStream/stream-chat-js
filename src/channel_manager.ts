@@ -173,12 +173,12 @@ export class ChannelManager extends WithSubscriptions {
     client,
     eventHandlerOverrides = {},
     options = {},
-    queryChannelsRequest,
+    queryChannelsOverride,
   }: {
     client: StreamChat;
     eventHandlerOverrides?: ChannelManagerEventHandlerOverrides;
     options?: ChannelManagerOptions;
-    queryChannelsRequest?: QueryChannelsRequestType;
+    queryChannelsOverride?: QueryChannelsRequestType;
   }) {
     super();
 
@@ -199,7 +199,8 @@ export class ChannelManager extends WithSubscriptions {
     });
     this.setEventHandlerOverrides(eventHandlerOverrides);
     this.setOptions(options);
-    this.queryChannelsRequest = queryChannelsRequest ?? this.client.queryChannels;
+    this.queryChannelsRequest =
+      queryChannelsOverride ?? ((...params) => this.client.queryChannels(...params));
     this.eventHandlers = new Map(
       Object.entries<EventHandlerType>({
         channelDeletedHandler: this.channelDeletedHandler,

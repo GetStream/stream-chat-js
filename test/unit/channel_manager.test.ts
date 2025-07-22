@@ -52,6 +52,11 @@ describe('ChannelManager', () => {
       channelManager = client.createChannelManager({});
     });
 
+    afterEach(() => {
+      sinon.restore();
+      sinon.reset();
+    });
+
     it('initializes properly', () => {
       const state = channelManager.state.getLatestValue();
       expect(state.channels).to.be.empty;
@@ -66,7 +71,7 @@ describe('ChannelManager', () => {
       expect(state.initialized).to.be.false;
     });
 
-    it('should properly set eventHandlerOverrides and options if they are passed', () => {
+    it('should properly set eventHandlerOverrides, options and queryChannelsRequest if they are passed', async () => {
       const eventHandlerOverrides = { newMessageHandler: () => {} };
       const options = {
         allowNotLoadedChannelPromotionForEvent: {
@@ -76,9 +81,16 @@ describe('ChannelManager', () => {
           'notification.message_new': false,
         },
       };
+      const queryChannelsOverride = async () => {
+        console.log('Called from override.');
+        return new Promise<Channel[]>((resolve) => {
+          resolve([]);
+        });
+      };
       const newChannelManager = client.createChannelManager({
         eventHandlerOverrides,
         options,
+        queryChannelsOverride,
       });
 
       expect(
@@ -88,9 +100,13 @@ describe('ChannelManager', () => {
         ...DEFAULT_CHANNEL_MANAGER_OPTIONS,
         ...options,
       });
+
+      const consoleLogSpy = vi.spyOn(console, 'log');
+      await (newChannelManager as any).queryChannelsRequest({});
+      expect(consoleLogSpy).toHaveBeenCalledWith('Called from override.');
     });
 
-    it('should properly set the default event handlers', () => {
+    it('should properly set the default event handlers', async () => {
       const {
         eventHandlers,
         channelDeletedHandler,
@@ -113,6 +129,12 @@ describe('ChannelManager', () => {
         notificationNewMessageHandler,
         notificationRemovedFromChannelHandler,
       });
+
+      const clientQueryChannelsSpy = vi
+        .spyOn(client, 'queryChannels')
+        .mockImplementation(async () => []);
+      await (channelManager as any).queryChannelsRequest({});
+      expect(clientQueryChannelsSpy).toHaveBeenCalledOnce();
     });
   });
 

@@ -233,6 +233,7 @@ import { PollManager } from './poll_manager';
 import type {
   ChannelManagerEventHandlerOverrides,
   ChannelManagerOptions,
+  QueryChannelsRequestType,
 } from './channel_manager';
 import { ChannelManager } from './channel_manager';
 import { NotificationManager } from './notifications';
@@ -720,10 +721,18 @@ export class StreamChat {
   createChannelManager = ({
     eventHandlerOverrides = {},
     options = {},
+    queryChannelsOverride,
   }: {
     eventHandlerOverrides?: ChannelManagerEventHandlerOverrides;
     options?: ChannelManagerOptions;
-  }) => new ChannelManager({ client: this, eventHandlerOverrides, options });
+    queryChannelsOverride?: QueryChannelsRequestType;
+  }) =>
+    new ChannelManager({
+      client: this,
+      eventHandlerOverrides,
+      options,
+      queryChannelsOverride,
+    });
 
   /**
    * Creates a new WebSocket connection with the current user. Returns empty promise, if there is an active connection
@@ -1832,10 +1841,12 @@ export class StreamChat {
       ...options,
     };
 
+    console.log('HERE');
     const data = await this.post<QueryChannelsAPIResponse>(
       this.baseURL + '/channels',
       payload,
     );
+    console.log('HERE2');
 
     return data.channels;
   }
@@ -1859,6 +1870,7 @@ export class StreamChat {
     options: ChannelOptions = {},
     stateOptions: ChannelStateOptions = {},
   ) {
+    console.log('TRY HERE ?');
     const channels = await this.queryChannelsRequest(filterConditions, sort, options);
 
     this.dispatchEvent({
