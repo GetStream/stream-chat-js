@@ -1841,12 +1841,10 @@ export class StreamChat {
       ...options,
     };
 
-    console.log('HERE');
     const data = await this.post<QueryChannelsAPIResponse>(
       this.baseURL + '/channels',
       payload,
     );
-    console.log('HERE2');
 
     return data.channels;
   }
@@ -1870,7 +1868,6 @@ export class StreamChat {
     options: ChannelOptions = {},
     stateOptions: ChannelStateOptions = {},
   ) {
-    console.log('TRY HERE ?');
     const channels = await this.queryChannelsRequest(filterConditions, sort, options);
 
     this.dispatchEvent({
