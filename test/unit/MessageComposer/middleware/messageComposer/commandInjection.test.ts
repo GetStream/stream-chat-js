@@ -168,7 +168,6 @@ describe('stream-io/message-composer-middleware/command-injection', () => {
   });
 
   it('should inject command into message text', async () => {
-    vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue('haha');
     vi.spyOn(messageComposer.textComposer, 'command', 'get').mockReturnValue({
       name: 'giphy',
       description: 'Send a giphy',
@@ -192,7 +191,7 @@ describe('stream-io/message-composer-middleware/command-injection', () => {
           pinned_at: null,
           reaction_groups: null,
           status: 'sending',
-          text: '',
+          text: 'haha',
           type: 'regular',
           updated_at: new Date(),
         },
@@ -323,7 +322,6 @@ describe('stream-io/message-composer-middleware/draft-command-injection', () => 
   });
 
   it('should inject command into draft text', async () => {
-    vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue('haha');
     vi.spyOn(messageComposer.textComposer, 'command', 'get').mockReturnValue({
       name: 'giphy',
       description: 'Send a giphy',
