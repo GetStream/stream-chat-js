@@ -191,7 +191,6 @@ import type {
   SegmentTargetsResponse,
   SegmentType,
   SendFileAPIResponse,
-  SharedLocationRequest,
   SharedLocationResponse,
   SortParam,
   StreamChatOptions,
@@ -209,6 +208,7 @@ import type {
   UpdateChannelTypeResponse,
   UpdateCommandOptions,
   UpdateCommandResponse,
+  UpdateLocationPayload,
   UpdateMessageAPIResponse,
   UpdateMessageOptions,
   UpdatePollAPIResponse,
@@ -4593,11 +4593,11 @@ export class StreamChat {
   /**
    * updateLocation - Updates a location
    *
-   * @param location UserLocation the location data to update
+   * @param location SharedLocationRequest the location data to update
    *
-   * @returns {Promise<APIResponse>} The server response
+   * @returns {Promise<SharedLocationResponse>} The server response
    */
-  async updateLocation(location: SharedLocationRequest) {
+  async updateLocation(location: UpdateLocationPayload) {
     return await this.put<SharedLocationResponse>(
       this.baseURL + `/users/live_locations`,
       location,

@@ -3,9 +3,11 @@ import { API_MAX_FILES_ALLOWED_PER_MESSAGE } from '../../constants';
 import type {
   AttachmentManagerConfig,
   LinkPreviewsManagerConfig,
+  LocationComposerConfig,
   MessageComposerConfig,
 } from './types';
 import type { TextComposerConfig } from './types';
+import { generateUUIDv4 } from '../../utils';
 
 export const DEFAULT_LINK_PREVIEW_MANAGER_CONFIG: LinkPreviewsManagerConfig = {
   debounceURLEnrichmentMs: 1500,
@@ -36,9 +38,15 @@ export const DEFAULT_TEXT_COMPOSER_CONFIG: TextComposerConfig = {
   publishTypingEvents: true,
 };
 
+export const DEFAULT_LOCATION_COMPOSER_CONFIG: LocationComposerConfig = {
+  enabled: true,
+  getDeviceId: () => generateUUIDv4(),
+};
+
 export const DEFAULT_COMPOSER_CONFIG: MessageComposerConfig = {
   attachments: DEFAULT_ATTACHMENT_MANAGER_CONFIG,
   drafts: { enabled: false },
   linkPreviews: DEFAULT_LINK_PREVIEW_MANAGER_CONFIG,
+  location: DEFAULT_LOCATION_COMPOSER_CONFIG,
   text: DEFAULT_TEXT_COMPOSER_CONFIG,
 };

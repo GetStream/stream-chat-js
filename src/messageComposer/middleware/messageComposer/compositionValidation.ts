@@ -20,15 +20,11 @@ export const createCompositionValidationMiddleware = (
     }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
       const { maxLengthOnSend } = composer.config.text ?? {};
       const inputText = state.message.text ?? '';
-      const isEmptyMessage =
-        textIsEmpty(inputText) &&
-        !state.message.attachments?.length &&
-        !state.message.poll_id;
 
       const hasExceededMaxLength =
         typeof maxLengthOnSend === 'number' && inputText.length > maxLengthOnSend;
 
-      if (isEmptyMessage || hasExceededMaxLength) {
+      if (composer.compositionIsEmpty || hasExceededMaxLength) {
         return await discard();
       }
 
