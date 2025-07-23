@@ -4,6 +4,7 @@ export * from './configuration';
 export * from './CustomDataManager';
 export * from './fileUtils';
 export * from './linkPreviewsManager';
+export * from './LocationComposer';
 export * from './messageComposer';
 export * from './middleware';
 export * from './pollComposer';

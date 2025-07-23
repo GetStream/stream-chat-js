@@ -13,91 +13,31 @@ import {
 import { MiddlewareStatus } from '../../../../../src/middleware';
 import { MessageComposerMiddlewareState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
 import { MessageDraftComposerMiddlewareValueState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
-import { LocalMessage } from '../../../../../src';
+import { LocalMessage, MessageResponse } from '../../../../../src';
+import { generateChannel } from '../../../test-utils/generateChannel';
 
-const setupMiddleware = (custom: { composer?: MessageComposer } = {}) => {
-  const client = {
-    userID: 'currentUser',
-    user: { id: 'currentUser' },
-  } as any;
+const setupMiddleware = (
+  custom: { composer?: MessageComposer; editedMessage?: MessageResponse } = {},
+) => {
+  const user = { id: 'user' };
+  const client = new StreamChat('apiKey');
+  client.user = user;
+  client.userID = user.id;
 
-  const channel = {
-    getClient: vi.fn().mockReturnValue(client),
-    state: {
-      members: {},
-      watchers: {},
-    },
-    getConfig: vi.fn().mockReturnValue({ commands: [] }),
-  } as any;
-
-  const textComposer = {
-    get text() {
-      return '';
-    },
-    get mentionedUsers() {
-      return [];
-    },
-  };
-
-  const attachmentManager = {
-    get uploadsInProgressCount() {
-      return 0;
-    },
-    get successfulUploads() {
-      return [];
-    },
-  };
-
-  const linkPreviewsManager = {
-    state: {
-      getLatestValue: () => ({
-        previews: new Map(),
-      }),
-    },
-  };
-
-  const pollComposer = {
-    state: {
-      getLatestValue: () => ({
-        data: {
-          options: [],
-          name: '',
-          max_votes_allowed: '',
-          id: '',
-          user_id: '',
-          voting_visibility: 'public',
-          allow_answers: false,
-          allow_user_suggested_options: false,
-          description: '',
-          enforce_unique_vote: true,
-        },
-        errors: {},
-      }),
-    },
-    get canCreatePoll() {
-      return false;
-    },
-  };
+  const channelResponse = generateChannel();
+  const channel = client.channel(
+    channelResponse.channel.type,
+    channelResponse.channel.id,
+  );
+  channel.initialized = true;
 
   const messageComposer =
     custom.composer ??
-    ({
-      channel,
-      config: {},
-      threadId: undefined,
+    new MessageComposer({
       client,
-      textComposer,
-      attachmentManager,
-      linkPreviewsManager,
-      pollComposer,
-      get lastChangeOriginIsLocal() {
-        return true;
-      },
-      editedMessage: undefined,
-      get quotedMessage() {
-        return undefined;
-      },
-    } as any);
+      compositionContext: channel,
+      composition: custom.editedMessage,
+    });
 
   return {
     messageComposer,
@@ -323,12 +263,9 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
   });
 
   it('should not discard composition for edited message without any local change', async () => {
-    const { messageComposer, validationMiddleware } = setupMiddleware();
-    const localMessage: LocalMessage = {
+    const editedMessage: MessageResponse = {
       attachments: [],
-      created_at: new Date(),
-      deleted_at: null,
-      error: undefined,
+      created_at: new Date().toISOString(),
       id: 'test-id',
       mentioned_users: [],
       parent_id: undefined,
@@ -337,20 +274,27 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
       status: 'sending',
       text: 'Hello world',
       type: 'regular',
-      updated_at: new Date(),
+      updated_at: new Date().toISOString(),
     };
-    messageComposer.editedMessage = localMessage;
+    const { messageComposer, validationMiddleware } = setupMiddleware({ editedMessage });
+
     vi.spyOn(messageComposer, 'lastChangeOriginIsLocal', 'get').mockReturnValue(false);
 
     const result = await validationMiddleware.handlers.compose(
       setupMiddlewareInputs({
         message: {
-          id: localMessage.id,
-          parent_id: localMessage.parent_id,
-          text: localMessage.text,
-          type: localMessage.type,
+          id: editedMessage.id,
+          parent_id: editedMessage.parent_id,
+          text: editedMessage.text,
+          type: editedMessage.type,
         },
-        localMessage,
+        localMessage: {
+          ...editedMessage,
+          created_at: new Date(editedMessage.created_at as string),
+          deleted_at: null,
+          pinned_at: null,
+          updated_at: new Date(editedMessage.updated_at as string),
+        } as LocalMessage,
         sendOptions: {},
       }),
     );
