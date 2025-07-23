@@ -9,6 +9,7 @@ import {
   DEFAULT_CHANNEL_MANAGER_OPTIONS,
   channelManagerEventToHandlerMapping,
   DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS,
+  QueryChannelsRequestType,
 } from '../../src';
 
 import { generateChannel } from './test-utils/generateChannel';
@@ -158,6 +159,21 @@ describe('ChannelManager', () => {
       expect(
         Object.fromEntries((channelManager as any).eventHandlerOverrides),
       ).to.deep.equal(eventHandlerOverrides);
+    });
+
+    it('should properly set queryChannelRequest', async () => {
+      const queryChannelsOverride = async () => {
+        console.log('Called from override.');
+        return new Promise<Channel[]>((resolve) => {
+          resolve([]);
+        });
+      };
+
+      channelManager.setQueryChannelsRequest(queryChannelsOverride);
+
+      const consoleLogSpy = vi.spyOn(console, 'log');
+      await (channelManager as any).queryChannelsRequest({});
+      expect(consoleLogSpy).toHaveBeenCalledWith('Called from override.');
     });
 
     it('should properly set options', () => {
@@ -429,6 +445,7 @@ describe('ChannelManager', () => {
   describe('querying and pagination', () => {
     let clientQueryChannelsStub: sinon.SinonStub;
     let mockChannelPages: Array<Array<Channel>>;
+    let mockChannelCidMap: Record<string, Channel>;
     let channelManager: ChannelManager;
 
     beforeEach(() => {
@@ -444,9 +461,20 @@ describe('ChannelManager', () => {
           client.channel(c.channel.type, c.channel.id),
         );
       });
+      mockChannelCidMap = Object.fromEntries(
+        mockChannelPages.flat().map((obj) => [obj.cid, obj]),
+      );
       clientQueryChannelsStub = sinon
         .stub(client, 'queryChannels')
-        .callsFake((_filters, _sort, options) => {
+        .callsFake((filters, _sort, options) => {
+          if (
+            typeof filters.cid === 'object' &&
+            filters.cid !== null &&
+            '$in' in filters.cid
+          ) {
+            const toReturn = (filters.cid['$in'] ?? []) as string[];
+            return Promise.resolve(toReturn.map((cid) => mockChannelCidMap[cid]));
+          }
           const offset = options?.offset ?? 0;
           return Promise.resolve(mockChannelPages[Math.floor(offset / 10)]);
         });
@@ -899,6 +927,39 @@ describe('ChannelManager', () => {
         expect(offset).to.equal(5);
         expect(hasNext).to.be.false;
       });
+
+      it('should execute queryChannelsOverride if set', async () => {
+        const fetchedChannels = mockChannelPages[2].concat(mockChannelPages[1]);
+        const queryChannelsOverride = async (
+          ...params: Parameters<QueryChannelsRequestType>
+        ) => {
+          const [filters, ...restParams] = params;
+          filters.cid = { $in: fetchedChannels.map((c) => c.cid) };
+
+          return await client.queryChannels(filters, ...restParams);
+        };
+        channelManager.setQueryChannelsRequest(queryChannelsOverride);
+
+        await channelManager.queryChannels(
+          { filterA: true },
+          { asc: 1 },
+          { limit: 15, offset: 0 },
+        );
+
+        const {
+          channels,
+          pagination: {
+            hasNext,
+            options: { offset },
+          },
+        } = channelManager.state.getLatestValue();
+
+        expect(clientQueryChannelsStub.calledOnce).to.be.true;
+        expect(channels.length).to.equal(15);
+        expect(channels).to.deep.equal(fetchedChannels);
+        expect(offset).to.equal(15);
+        expect(hasNext).to.be.true;
+      });
     });
 
     describe('loadNext', () => {
@@ -1194,6 +1255,60 @@ describe('ChannelManager', () => {
         expect(lastPage.length).to.equal(25);
         expect(hasNext).to.be.false;
         expect(offset).to.equal(25);
+      });
+
+      it('should properly paginate with queryChannelsOverride if set', async () => {
+        const fetchedChannels = mockChannelPages[2].concat(mockChannelPages[1]);
+        const fetchedNextPageChannels = mockChannelPages[0];
+        const queryChannelsOverride = async (
+          ...params: Parameters<QueryChannelsRequestType>
+        ) => {
+          const [filters, sort, options, ...restParams] = params;
+          const isInitialPage = options?.offset === 0;
+          filters.cid = {
+            $in: (isInitialPage ? fetchedChannels : fetchedNextPageChannels).map(
+              (c) => c.cid,
+            ),
+          };
+
+          return await client.queryChannels(filters, sort, options, ...restParams);
+        };
+
+        channelManager.setQueryChannelsRequest(queryChannelsOverride);
+
+        await channelManager.queryChannels(
+          { filterA: true },
+          { asc: 1 },
+          { limit: 15, offset: 0 },
+        );
+
+        const {
+          channels: prevChannels,
+          pagination: {
+            hasNext: prevHasNext,
+            options: { offset: prevOffset },
+          },
+        } = channelManager.state.getLatestValue();
+
+        expect(prevChannels.length).to.equal(15);
+        expect(prevChannels).to.deep.equal(fetchedChannels);
+        expect(prevOffset).to.equal(15);
+        expect(prevHasNext).to.be.true;
+
+        await channelManager.loadNext();
+
+        const {
+          channels,
+          pagination: {
+            hasNext,
+            options: { offset },
+          },
+        } = channelManager.state.getLatestValue();
+
+        expect(channels.length).to.equal(25);
+        expect(channels).to.deep.equal(fetchedChannels.concat(fetchedNextPageChannels));
+        expect(offset).to.equal(25);
+        expect(hasNext).to.be.false;
       });
     });
   });
