@@ -1231,6 +1231,15 @@ export type MarkUnreadOptions = {
   user_id?: string;
 };
 
+export type MarkDeliveredOptions = {
+  client_id?: string;
+  connection_id?: string;
+  message_id?: string;
+  thread_id?: string;
+  user?: UserResponse;
+  user_id?: string;
+};
+
 export type MuteUserOptions = {
   client_id?: string;
   connection_id?: string;

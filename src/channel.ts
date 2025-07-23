@@ -32,6 +32,7 @@ import type {
   GetReactionsAPIResponse,
   GetRepliesAPIResponse,
   LocalMessage,
+  MarkDeliveredOptions,
   MarkReadOptions,
   MarkUnreadOptions,
   MemberFilters,
@@ -1130,6 +1131,27 @@ export class Channel {
     return await this.getClient().post<APIResponse>(this._channelURL() + '/unread', {
       ...data,
     });
+  }
+
+  /**
+   * markDelivered - Send the mark delivered event for this user, only works if the `read_events` setting is enabled
+   *
+   * @param {MarkDeliveredOptions} data
+   * @return {Promise<EventAPIResponse | null>} Description
+   */
+  async markDelivered(data: MarkDeliveredOptions = {}) {
+    this._checkInitialized();
+
+    if (!this.getConfig()?.read_events && !this.getClient()._isUsingServerAuth()) {
+      return Promise.resolve(null);
+    }
+
+    return await this.getClient().post<EventAPIResponse>(
+      this._channelURL() + '/delivered',
+      {
+        ...data,
+      },
+    );
   }
 
   /**
