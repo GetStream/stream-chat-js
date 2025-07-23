@@ -20,7 +20,7 @@ export const createCommandInjectionMiddleware = (
       if (!command) {
         return forward();
       }
-      const { text } = state.localMessage;
+      const { text } = composer.textComposer;
 
       const injection = `/${command?.name}`;
       const enrichedText = `${injection} ${text}`;
@@ -54,7 +54,7 @@ export const createDraftCommandInjectionMiddleware = (
       if (!command) {
         return forward();
       }
-      const { text } = state.draft;
+      const { text } = composer.textComposer;
 
       const injection = `/${command?.name}`;
       const enrichedText = `${injection} ${text}`;
