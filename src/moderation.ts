@@ -1,5 +1,8 @@
 import type {
   APIResponse,
+  AppealOptions,
+  AppealResponse,
+  AppealsSort,
   CustomCheckFlag,
   GetConfigResponse,
   GetUserModerationReportOptions,
@@ -9,6 +12,9 @@ import type {
   ModerationMuteOptions,
   MuteUserResponse,
   Pager,
+  QueryAppealsFilters,
+  QueryAppealsPaginationOptions,
+  QueryAppealsResponse,
   QueryConfigsResponse,
   QueryModerationConfigsFilters,
   QueryModerationConfigsSort,
@@ -172,6 +178,53 @@ export class Moderation {
   ) {
     return await this.client.post<ReviewQueueResponse>(
       this.client.baseURL + '/api/v2/moderation/review_queue',
+      {
+        filter: filterConditions,
+        sort: normalizeQuerySort(sort),
+        ...options,
+      },
+    );
+  }
+
+  /**
+   * Appeal against the moderation decision
+   * @param {string} text
+   * @param {string} entityID
+   * @param {string} entityType
+   * @param {Array<string>} attachments
+   */
+  async appeal(
+    text: string,
+    entityID: string,
+    entityType: string,
+    attachments: string[],
+    options: AppealOptions = {},
+  ) {
+    return await this.client.post<AppealResponse>(
+      this.client.baseURL + '/api/v2/moderation/appeal',
+      {
+        text,
+        entity_id: entityID,
+        entity_type: entityType,
+        attachments,
+        ...options,
+      },
+    );
+  }
+
+  /**
+   * Query appeals
+   * @param {Object} filterConditions Filter conditions for querying appeals
+   * @param {Object} sort Sort conditions for querying appeals
+   * @param {Object} options Pagination options for querying appeals
+   */
+  async queryAppeals(
+    filterConditions: QueryAppealsFilters = {},
+    sort: AppealsSort = [],
+    options: QueryAppealsPaginationOptions = {},
+  ) {
+    return await this.client.post<QueryAppealsResponse>(
+      this.client.baseURL + '/api/v2/moderation/appeals',
       {
         filter: filterConditions,
         sort: normalizeQuerySort(sort),
