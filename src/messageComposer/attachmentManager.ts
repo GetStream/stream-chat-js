@@ -386,11 +386,20 @@ export class AttachmentManager {
   private ensureLocalUploadAttachment = async (
     attachment: Partial<LocalUploadAttachment>,
   ) => {
-    if (!attachment.localMetadata?.file || !attachment.localMetadata.id) {
+    if (!attachment.localMetadata?.file) {
       this.client.notifications.addError({
         message: 'File is required for upload attachment',
         origin: { emitter: 'AttachmentManager', context: { attachment } },
         options: { type: 'validation:attachment:file:missing' },
+      });
+      return;
+    }
+
+    if (!attachment.localMetadata.id) {
+      this.client.notifications.addError({
+        message: 'Local upload attachment missing local id',
+        origin: { emitter: 'AttachmentManager', context: { attachment } },
+        options: { type: 'validation:attachment:id:missing' },
       });
       return;
     }
@@ -556,10 +565,7 @@ export class AttachmentManager {
     );
 
     return Promise.all(
-      attachments
-        .filter(this.fileUploadFilter)
-        .slice(0, this.availableUploadSlots)
-        .map(this.uploadAttachment),
+      attachments.slice(0, this.availableUploadSlots).map(this.uploadAttachment),
     );
   };
 }

@@ -1201,9 +1201,9 @@ describe('AttachmentManager', () => {
       });
 
       expect(mockClient.notifications.addError).toHaveBeenCalledWith({
-        message: 'File is required for upload attachment',
+        message: 'Local upload attachment missing local id',
         options: {
-          type: 'validation:attachment:file:missing',
+          type: 'validation:attachment:id:missing',
         },
         origin: {
           emitter: 'AttachmentManager',
