@@ -106,6 +106,7 @@ import type {
   GetCampaignOptions,
   GetChannelTypeResponse,
   GetCommandResponse,
+  GetHookEventsResponse,
   GetImportResponse,
   GetMessageAPIResponse,
   GetMessageOptions,
@@ -116,6 +117,7 @@ import type {
   GetThreadOptions,
   GetUnreadCountAPIResponse,
   GetUnreadCountBatchAPIResponse,
+  HookEvent,
   ListChannelResponse,
   ListCommandsResponse,
   ListImportsPaginationOptions,
@@ -2162,6 +2164,20 @@ export class StreamChat {
       ios,
       endpoints: endpoints ? endpoints.join(',') : undefined,
     });
+  }
+
+  /**
+   * getHookEvents - Get available events for hooks (webhook, SQS, and SNS)
+   *
+   * @param {string[]} [products] Optional array of products to filter events by (e.g., ['chat', 'video', 'moderation'])
+   * @returns {Promise<GetHookEventsResponse>} Response containing available hook events
+   */
+  async getHookEvents(products?: string[]) {
+    const params = products && products.length > 0 ? { product: products } : {};
+    return await this.get<GetHookEventsResponse>(
+      this.baseURL + '/v1/hook/events',
+      params,
+    );
   }
 
   _addChannelConfig({ cid, config }: ChannelResponse) {

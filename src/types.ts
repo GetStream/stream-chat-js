@@ -576,6 +576,16 @@ export type GetRateLimitsResponse = APIResponse & {
   web?: RateLimitsMap;
 };
 
+export type HookEvent = {
+  name: string;
+  description: string;
+  products: string[];
+};
+
+export type GetHookEventsResponse = APIResponse & {
+  events: HookEvent[];
+};
+
 export type GetReactionsAPIResponse = APIResponse & {
   reactions: ReactionResponse[];
 };
