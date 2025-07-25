@@ -2174,10 +2174,7 @@ export class StreamChat {
    */
   async getHookEvents(products?: string[]) {
     const params = products && products.length > 0 ? { product: products.join(',') } : {};
-    return await this.get<GetHookEventsResponse>(
-      this.baseURL + '/v1/hook/events',
-      params,
-    );
+    return await this.get<GetHookEventsResponse>(this.baseURL + '/hook/events', params);
   }
 
   _addChannelConfig({ cid, config }: ChannelResponse) {
