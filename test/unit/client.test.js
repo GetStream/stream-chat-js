@@ -1155,7 +1155,7 @@ describe('X-Stream-Client header', () => {
 
 			expect(clientGetSpy).toHaveBeenCalledTimes(1);
 			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/v1/hook/events`, {
-				product: ['chat', 'video'],
+				product: 'chat,video',
 			});
 		});
 
@@ -1164,7 +1164,7 @@ describe('X-Stream-Client header', () => {
 
 			expect(clientGetSpy).toHaveBeenCalledTimes(1);
 			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/v1/hook/events`, {
-				product: ['chat'],
+				product: 'chat',
 			});
 		});
 

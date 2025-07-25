@@ -2173,7 +2173,7 @@ export class StreamChat {
    * @returns {Promise<GetHookEventsResponse>} Response containing available hook events
    */
   async getHookEvents(products?: string[]) {
-    const params = products && products.length > 0 ? { product: products } : {};
+    const params = products && products.length > 0 ? { product: products.join(',') } : {};
     return await this.get<GetHookEventsResponse>(
       this.baseURL + '/v1/hook/events',
       params,
