@@ -5,6 +5,7 @@ export * from './compositionValidation';
 export * from './linkPreviews';
 export * from './MessageComposerMiddlewareExecutor';
 export * from './messageComposerState';
+export * from './sharedLocation';
 export * from './textComposer';
 export * from './types';
 export * from './commandInjection';

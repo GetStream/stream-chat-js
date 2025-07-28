@@ -1859,3 +1859,103 @@ describe('message sending flow', () => {
 		});
 	});
 });
+
+describe('share location', () => {
+	const userId = 'user-id';
+	const staticLocation = {
+		created_by_device_id: 'created_by_device_id',
+		latitude: 1,
+		longitude: 2,
+		message_id: 'staticLocation_message_id',
+	};
+	const liveLocation = {
+		created_by_device_id: 'created_by_device_id',
+		end_at: 'end_at',
+		latitude: 1,
+		longitude: 2,
+		message_id: 'liveLocation_message_id',
+	};
+
+	const setup = async () => {
+		const client = await getClientWithUser({ id: 'user-abc' });
+		const channel = client.channel('messaging', 'test');
+		const sendMessageSpy = vi.spyOn(channel, 'sendMessage').mockResolvedValue({});
+		const dispatchEventSpy = vi.spyOn(client, 'dispatchEvent').mockResolvedValue({});
+		const updateLocationSpy = vi.spyOn(client, 'updateLocation').mockResolvedValue({});
+		return {
+			channel,
+			client,
+			dispatchEventSpy,
+			sendMessageSpy,
+			updateLocationSpy,
+		};
+	};
+
+	it('forwards the location object', async () => {
+		const { channel, sendMessageSpy } = await setup();
+
+		await channel.sendSharedLocation(staticLocation);
+		expect(sendMessageSpy).toHaveBeenCalledWith({
+			id: staticLocation.message_id,
+			shared_location: staticLocation,
+			user: undefined,
+		});
+
+		await channel.sendSharedLocation(liveLocation);
+		expect(sendMessageSpy).toHaveBeenCalledWith({
+			id: liveLocation.message_id,
+			shared_location: liveLocation,
+			user: undefined,
+		});
+	});
+
+	it('injects the user object into the request payload', async () => {
+		const { channel, sendMessageSpy } = await setup();
+
+		await channel.sendSharedLocation(staticLocation, userId);
+		expect(sendMessageSpy).toHaveBeenCalledWith({
+			id: staticLocation.message_id,
+			shared_location: staticLocation,
+			user: { id: userId },
+		});
+
+		await channel.sendSharedLocation(liveLocation, userId);
+		expect(sendMessageSpy).toHaveBeenCalledWith({
+			id: liveLocation.message_id,
+			shared_location: liveLocation,
+			user: { id: userId },
+		});
+	});
+	it('emits live_location_sharing.started local event', async () => {
+		const { channel, dispatchEventSpy, sendMessageSpy } = await setup();
+
+		sendMessageSpy.mockResolvedValueOnce({ message: { id: staticLocation.message_id } });
+		await channel.sendSharedLocation(staticLocation);
+		expect(dispatchEventSpy).not.toHaveBeenCalled();
+
+		sendMessageSpy.mockResolvedValueOnce({ message: { id: liveLocation.message_id } });
+		await channel.sendSharedLocation(liveLocation);
+		expect(dispatchEventSpy).toHaveBeenCalledWith({
+			message: { id: liveLocation.message_id },
+			type: 'live_location_sharing.started',
+		});
+	});
+
+	it('stops live location sharing', async () => {
+		const { channel, dispatchEventSpy, updateLocationSpy } = await setup();
+
+		updateLocationSpy.mockResolvedValueOnce(staticLocation);
+		await channel.stopLiveLocationSharing(staticLocation);
+		expect(dispatchEventSpy).toHaveBeenCalledWith({
+			live_location: expect.objectContaining(staticLocation),
+			type: 'live_location_sharing.stopped',
+		});
+
+		updateLocationSpy.mockResolvedValueOnce(liveLocation);
+		await channel.stopLiveLocationSharing(liveLocation);
+		expect(dispatchEventSpy).toHaveBeenCalledWith({
+			live_location: expect.objectContaining(liveLocation),
+			type: 'live_location_sharing.stopped',
+		});
+	});
+});

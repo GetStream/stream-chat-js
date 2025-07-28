@@ -1,3 +1,10 @@
+## [9.12.0](https://github.com/GetStream/stream-chat-js/compare/v9.11.0...v9.12.0) (2025-07-23)
+
+### Features
+
+* add static location and live location support ([#1423](https://github.com/GetStream/stream-chat-js/issues/1423)) ([8101f65](https://github.com/GetStream/stream-chat-js/commit/8101f65093e090c4812ae2ec68e48d3078373e75))
+* query channels request override ([#1583](https://github.com/GetStream/stream-chat-js/issues/1583)) ([71e4715](https://github.com/GetStream/stream-chat-js/commit/71e471592a351085c069e81c01d7cc6711d5b37f))
+
 ## [9.11.0](https://github.com/GetStream/stream-chat-js/compare/v9.10.1...v9.11.0) (2025-07-11)
 
 ### Bug Fixes

@@ -2287,7 +2287,6 @@ export type Attachment = CustomAttachmentData & {
   original_height?: number;
   original_width?: number;
   pretext?: string;
-  stopped_sharing?: boolean;
   text?: string;
   thumb_url?: string;
   title?: string;
@@ -2348,6 +2347,7 @@ export type ChannelConfigFields = {
   read_events?: boolean;
   replies?: boolean;
   search?: boolean;
+  shared_locations?: boolean;
   typing_events?: boolean;
   uploads?: boolean;
   url_enrichment?: boolean;
@@ -2705,7 +2705,7 @@ export type Logger = (
 export type Message = Partial<
   MessageBase & {
     mentioned_users: string[];
-    shared_location?: SharedLocationRequest;
+    shared_location?: StaticLocationPayload | LiveLocationPayload;
   }
 >;
 
@@ -4061,13 +4061,14 @@ export type DraftMessage = {
   parent_id?: string;
   poll_id?: string;
   quoted_message_id?: string;
+  shared_location?: StaticLocationPayload | LiveLocationPayload; // todo: live-location verify if possible
   show_in_channel?: boolean;
   silent?: boolean;
   type?: MessageLabel;
 };
 
 export type ActiveLiveLocationsAPIResponse = APIResponse & {
-  active_live_locations: SharedLocationResponse[];
+  active_live_locations: SharedLiveLocationResponse[];
 };
 
 export type SharedLocationResponse = {
@@ -4082,11 +4083,51 @@ export type SharedLocationResponse = {
   user_id: string;
 };
 
-export type SharedLocationRequest = {
+export type SharedStaticLocationResponse = {
+  channel_cid: string;
+  created_at: string;
   created_by_device_id: string;
+  latitude: number;
+  longitude: number;
+  message_id: string;
+  updated_at: string;
+  user_id: string;
+};
+
+export type SharedLiveLocationResponse = {
+  channel_cid: string;
+  created_at: string;
+  created_by_device_id: string;
+  end_at: string;
+  latitude: number;
+  longitude: number;
+  message_id: string;
+  updated_at: string;
+  user_id: string;
+};
+
+export type UpdateLocationPayload = {
+  message_id: string;
+  created_by_device_id?: string;
   end_at?: string;
   latitude?: number;
   longitude?: number;
+  user?: { id: string };
+  user_id?: string;
+};
+
+export type StaticLocationPayload = {
+  created_by_device_id: string;
+  latitude: number;
+  longitude: number;
+  message_id: string;
+};
+
+export type LiveLocationPayload = {
+  created_by_device_id: string;
+  end_at: string;
+  latitude: number;
+  longitude: number;
   message_id: string;
 };
 
@@ -4159,9 +4200,9 @@ export type ReminderResponseBase = {
 };
 
 export type ReminderResponse = ReminderResponseBase & {
-  channel: ChannelResponse;
   user: UserResponse;
   message: MessageResponse;
+  channel?: ChannelResponse;
 };
 
 export type ReminderAPIResponse = APIResponse & {

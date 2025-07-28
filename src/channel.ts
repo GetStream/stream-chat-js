@@ -31,6 +31,7 @@ import type {
   GetMultipleMessagesAPIResponse,
   GetReactionsAPIResponse,
   GetRepliesAPIResponse,
+  LiveLocationPayload,
   LocalMessage,
   MarkReadOptions,
   MarkUnreadOptions,
@@ -63,10 +64,12 @@ import type {
   SendMessageAPIResponse,
   SendMessageOptions,
   SendReactionOptions,
+  StaticLocationPayload,
   TruncateChannelAPIResponse,
   TruncateOptions,
   UpdateChannelAPIResponse,
   UpdateChannelOptions,
+  UpdateLocationPayload,
   UserResponse,
 } from './types';
 import type { Role } from './permissions';
@@ -667,6 +670,37 @@ export class Channel {
     );
     this.data = data.channel;
     return data;
+  }
+
+  public async sendSharedLocation(
+    location: StaticLocationPayload | LiveLocationPayload,
+    userId?: string,
+  ) {
+    const result = await this.sendMessage({
+      id: location.message_id,
+      shared_location: location,
+      user: userId ? { id: userId } : undefined,
+    });
+
+    if ((location as LiveLocationPayload).end_at) {
+      this.getClient().dispatchEvent({
+        message: result.message,
+        type: 'live_location_sharing.started',
+      });
+    }
+
+    return result;
+  }
+
+  public async stopLiveLocationSharing(payload: UpdateLocationPayload) {
+    const location = await this.getClient().updateLocation({
+      ...payload,
+      end_at: new Date().toISOString(),
+    });
+    this.getClient().dispatchEvent({
+      live_location: location,
+      type: 'live_location_sharing.stopped',
+    });
   }
 
   /**
