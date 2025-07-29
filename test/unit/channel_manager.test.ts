@@ -73,7 +73,9 @@ describe('ChannelManager', () => {
     });
 
     it('should properly set eventHandlerOverrides, options and queryChannelsRequest if they are passed', async () => {
-      const eventHandlerOverrides = { newMessageHandler: () => {} };
+      const eventHandlerOverrides = {
+        newMessageHandler: () => {},
+      };
       const options = {
         allowNotLoadedChannelPromotionForEvent: {
           'channel.visible': false,
@@ -802,6 +804,43 @@ describe('ChannelManager', () => {
             ),
           });
           expect(channels.length).to.equal(0);
+          expect(initialized).to.be.false;
+        });
+
+        it('should not set error when offline support is enabled and there are channels in the DB', async () => {
+          clientQueryChannelsStub.callsFake(() => mockChannelPages[2]);
+          client.setOfflineDBApi(new MockOfflineDB({ client }));
+          await client.offlineDb!.init(client.userID as string);
+
+          channelManager.state.partialNext({
+            channels: mockChannelPages[2],
+          });
+
+          clientQueryChannelsStub.rejects(new Error('fail'));
+          const sleepSpy = vi.spyOn(utils, 'sleep');
+          const stateChangeSpy = sinon.spy();
+          channelManager.state.subscribeWithSelector(
+            (nextValue) => ({
+              error: nextValue.error,
+            }),
+            stateChangeSpy,
+          );
+          stateChangeSpy.resetHistory();
+
+          await channelManager['executeChannelsQuery']({
+            filters: { filterA: true },
+            sort: { asc: 1 },
+            options: { limit: 10, offset: 0 },
+          });
+
+          const { channels, initialized, error } = channelManager.state.getLatestValue();
+
+          expect(clientQueryChannelsStub.callCount).to.equal(
+            DEFAULT_QUERY_CHANNELS_RETRY_COUNT + 1,
+          ); // // initial + however many retried are configured
+          expect(sleepSpy).toHaveBeenCalledTimes(DEFAULT_QUERY_CHANNELS_RETRY_COUNT);
+          expect(error).toEqual(undefined);
+          expect(channels.length).to.equal(5);
           expect(initialized).to.be.false;
         });
 
