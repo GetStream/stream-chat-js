@@ -1140,21 +1140,21 @@ describe('X-Stream-Client header', () => {
 			await client.getHookEvents();
 
 			expect(clientGetSpy).toHaveBeenCalledTimes(1);
-			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/v1/hook/events`, {});
+			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/hook/events`, {});
 		});
 
 		it('should call get with correct URL and empty params when empty products array specified', async () => {
 			await client.getHookEvents([]);
 
 			expect(clientGetSpy).toHaveBeenCalledTimes(1);
-			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/v1/hook/events`, {});
+			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/hook/events`, {});
 		});
 
 		it('should call get with product params when products specified', async () => {
 			await client.getHookEvents(['chat', 'video']);
 
 			expect(clientGetSpy).toHaveBeenCalledTimes(1);
-			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/v1/hook/events`, {
+			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/hook/events`, {
 				product: 'chat,video',
 			});
 		});
@@ -1163,7 +1163,7 @@ describe('X-Stream-Client header', () => {
 			await client.getHookEvents(['chat']);
 
 			expect(clientGetSpy).toHaveBeenCalledTimes(1);
-			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/v1/hook/events`, {
+			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/hook/events`, {
 				product: 'chat',
 			});
 		});
