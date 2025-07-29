@@ -83,6 +83,7 @@ describe('ChannelManager', () => {
         },
       };
       const queryChannelsOverride = async () => {
+        console.log('Called from override.');
         return new Promise<Channel[]>((resolve) => {
           resolve([]);
         });
@@ -162,6 +163,7 @@ describe('ChannelManager', () => {
 
     it('should properly set queryChannelRequest', async () => {
       const queryChannelsOverride = async () => {
+        console.log('Called from override.');
         return new Promise<Channel[]>((resolve) => {
           resolve([]);
         });
