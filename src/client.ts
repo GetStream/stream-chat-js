@@ -36,6 +36,7 @@ import type {
   APIErrorResponse,
   APIResponse,
   AppSettings,
+  Product,
   AppSettingsAPIResponse,
   BannedUsersFilters,
   BannedUsersPaginationOptions,
@@ -2169,10 +2170,10 @@ export class StreamChat {
   /**
    * getHookEvents - Get available events for hooks (webhook, SQS, and SNS)
    *
-   * @param {string[]} [products] Optional array of products to filter events by (e.g., ['chat', 'video', 'moderation'])
+   * @param {Product[]} [products] Optional array of products to filter events by (e.g., [Product.Chat, Product.Video])
    * @returns {Promise<GetHookEventsResponse>} Response containing available hook events
    */
-  async getHookEvents(products?: string[]) {
+  async getHookEvents(products?: Product[]) {
     const params = products && products.length > 0 ? { product: products.join(',') } : {};
     return await this.get<GetHookEventsResponse>(this.baseURL + '/hook/events', params);
   }

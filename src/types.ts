@@ -576,10 +576,17 @@ export type GetRateLimitsResponse = APIResponse & {
   web?: RateLimitsMap;
 };
 
+export enum Product {
+  Chat = 'chat',
+  Video = 'video',
+  Moderation = 'moderation',
+  Feeds = 'feeds',
+}
+
 export type HookEvent = {
   name: string;
   description: string;
-  products: string[];
+  products: Product[];
 };
 
 export type GetHookEventsResponse = APIResponse & {
