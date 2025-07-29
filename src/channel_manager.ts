@@ -318,10 +318,12 @@ export class ChannelManager extends WithSubscriptions {
         );
 
         const state = this.state.getLatestValue();
+        // If the offline support is enabled, and there are channels in the DB, we should not error out.
+        const isOfflineEnabledWithChannels =
+          this.client.offlineDb && state.channels.length;
 
         this.state.partialNext({
-          error:
-            this.client.offlineDb && state.channels.length ? undefined : wrappedError,
+          error: isOfflineEnabledWithChannels ? undefined : wrappedError,
           pagination: {
             ...state.pagination,
             isLoading: false,
