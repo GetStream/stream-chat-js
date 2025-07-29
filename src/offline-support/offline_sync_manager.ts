@@ -1,6 +1,7 @@
 import type { ExecuteBatchDBQueriesType } from './types';
 import type { StreamChat } from '../client';
 import type { AbstractOfflineDB } from './offline_support_api';
+import { AxiosError } from 'axios';
 
 /**
  * Manages synchronization between the local offline database and the Stream backend.
@@ -176,6 +177,10 @@ export class OfflineDBSyncManager {
       console.log('An error has occurred while syncing the DB.', e);
       // Error will be raised by the sync API if there are too many events.
       // In that case reset the entire DB and start fresh.
+      // We avoid resetting the DB if the error is due to timeout.
+      if (e instanceof AxiosError && e.response?.data?.code === 23) {
+        return;
+      }
       await this.offlineDb.resetDB();
     }
   };
