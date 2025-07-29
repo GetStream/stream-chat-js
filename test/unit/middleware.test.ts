@@ -546,6 +546,52 @@ describe('MiddlewareExecutor', () => {
       expect(secondResult.state.value).toBe(11); // 10 + 1
     });
 
+    it('should handle concurrent execute calls in async mode by not discarding the first one', async () => {
+      // Create a middleware that delays execution
+      const middleware: Middleware<{ value: number }, 'test'> = {
+        id: 'delayed-middleware',
+        handlers: {
+          test: async ({ state, next }) => {
+            // Simulate a longer delay to ensure the first execution is still in progress
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            return next({ ...state, value: state.value + 1 });
+          },
+        },
+      };
+
+      executor.use(middleware);
+
+      // Start the first execution
+      const firstExecution = executor.execute({
+        eventName: 'test',
+        initialValue: { value: 5 },
+      });
+
+      // Wait a short time to ensure the first execution has started but not completed
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Start the second execution before the first one completes
+      const secondExecution = executor.execute({
+        eventName: 'test',
+        initialValue: { value: 10 },
+        mode: 'concurrent',
+      });
+
+      // Wait for both executions to complete
+      const [firstResult, secondResult] = await Promise.all([
+        firstExecution,
+        secondExecution,
+      ]);
+
+      // The first execution should be discarded
+      expect(firstResult.status).toBeUndefined();
+      expect(firstResult.state.value).toBe(6); // 5 + 1
+
+      // The second execution should complete successfully
+      expect(secondResult.status).toBeUndefined();
+      expect(secondResult.state.value).toBe(11); // 10 + 1
+    });
+
     it('should handle concurrent execute calls with different event names', async () => {
       // Create middleware that handles different event names
       const middleware: Middleware<{ value: number }, 'test1' | 'test2'> = {

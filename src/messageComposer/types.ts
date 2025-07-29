@@ -113,6 +113,12 @@ export type LocalImageAttachmentUploadMetadata = LocalAttachmentUploadMetadata &
   previewUri?: string;
 };
 
+export type LocalNotImageAttachment =
+  | LocalFileAttachment
+  | LocalAudioAttachment
+  | LocalVideoAttachment
+  | LocalVoiceRecordingAttachment;
+
 export type AttachmentLoadingState =
   | 'uploading'
   | 'finished'

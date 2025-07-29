@@ -14,6 +14,10 @@ import {
   isFileReference,
   isImageFile,
 } from './fileUtils';
+import {
+  AttachmentPostUploadMiddlewareExecutor,
+  AttachmentPreUploadMiddlewareExecutor,
+} from './middleware/attachmentManager';
 import { StateStore } from '../store';
 import { generateUUIDv4 } from '../utils';
 import { DEFAULT_UPLOAD_SIZE_LIMIT_BYTES } from '../constants';
@@ -22,22 +26,13 @@ import type {
   FileLike,
   FileReference,
   LocalAttachment,
-  LocalAudioAttachment,
-  LocalFileAttachment,
+  LocalNotImageAttachment,
   LocalUploadAttachment,
-  LocalVideoAttachment,
-  LocalVoiceRecordingAttachment,
   UploadPermissionCheckResult,
 } from './types';
 import type { ChannelResponse, DraftMessage, LocalMessage } from '../types';
 import type { MessageComposer } from './messageComposer';
 import { mergeWithDiff } from '../utils/mergeWith';
-
-type LocalNotImageAttachment =
-  | LocalFileAttachment
-  | LocalAudioAttachment
-  | LocalVideoAttachment
-  | LocalVoiceRecordingAttachment;
 
 export type FileUploadFilter = (file: Partial<LocalUploadAttachment>) => boolean;
 
@@ -71,6 +66,8 @@ const initState = ({
 export class AttachmentManager {
   readonly state: StateStore<AttachmentManagerState>;
   readonly composer: MessageComposer;
+  readonly preUploadMiddlewareExecutor: AttachmentPreUploadMiddlewareExecutor;
+  readonly postUploadMiddlewareExecutor: AttachmentPostUploadMiddlewareExecutor;
   private attachmentsByIdGetterCache: {
     attachmentsById: Record<string, LocalAttachment>;
     attachments: LocalAttachment[];
@@ -80,6 +77,13 @@ export class AttachmentManager {
     this.composer = composer;
     this.state = new StateStore<AttachmentManagerState>(initState({ message }));
     this.attachmentsByIdGetterCache = { attachmentsById: {}, attachments: [] };
+
+    this.preUploadMiddlewareExecutor = new AttachmentPreUploadMiddlewareExecutor({
+      composer,
+    });
+    this.postUploadMiddlewareExecutor = new AttachmentPostUploadMiddlewareExecutor({
+      composer,
+    });
   }
 
   get attachmentsById() {
@@ -122,10 +126,16 @@ export class AttachmentManager {
     this.composer.updateConfig({ attachments: { acceptedFiles } });
   }
 
+  /*
+  @deprecated attachments can be filtered using injecting pre-upload middleware
+   */
   get fileUploadFilter() {
     return this.config.fileUploadFilter;
   }
 
+  /*
+  @deprecated attachments can be filtered using injecting pre-upload middleware
+   */
   set fileUploadFilter(fileUploadFilter: AttachmentManagerConfig['fileUploadFilter']) {
     this.composer.updateConfig({ attachments: { fileUploadFilter } });
   }
@@ -333,9 +343,10 @@ export class AttachmentManager {
     return { uploadBlocked: false };
   };
 
-  fileToLocalUploadAttachment = async (
+  // todo: convert to static in the next major release
+  fileToLocalUploadAttachment = (
     fileLike: FileReference | FileLike,
-  ): Promise<LocalUploadAttachment> => {
+  ): LocalUploadAttachment => {
     const file =
       isFileReference(fileLike) || isFile(fileLike)
         ? fileLike
@@ -345,16 +356,13 @@ export class AttachmentManager {
             mimeType: fileLike.type,
           });
 
-    const uploadPermissionCheck = await this.getUploadConfigCheck(file);
-
     const localAttachment: LocalUploadAttachment = {
       file_size: file.size,
       mime_type: file.type,
       localMetadata: {
         file,
         id: generateUUIDv4(),
-        uploadPermissionCheck,
-        uploadState: uploadPermissionCheck.uploadBlocked ? 'blocked' : 'pending',
+        uploadState: 'pending',
       },
       type: getAttachmentTypeFromMimeType(file.type),
     };
@@ -406,9 +414,14 @@ export class AttachmentManager {
 
     if (!this.fileUploadFilter(attachment)) return;
 
-    const newAttachment = await this.fileToLocalUploadAttachment(
+    const newAttachment = this.fileToLocalUploadAttachment(attachment.localMetadata.file);
+    newAttachment.localMetadata.uploadPermissionCheck = await this.getUploadConfigCheck(
       attachment.localMetadata.file,
     );
+    newAttachment.localMetadata.uploadState = newAttachment.localMetadata
+      .uploadPermissionCheck.uploadBlocked
+      ? 'blocked'
+      : 'pending';
     if (attachment.localMetadata.id) {
       newAttachment.localMetadata.id = attachment.localMetadata.id;
     }
@@ -555,17 +568,78 @@ export class AttachmentManager {
     return uploadedAttachment;
   };
 
+  uploadFile = async (file: FileReference | FileLike) => {
+    const preUpload = await this.preUploadMiddlewareExecutor.execute({
+      eventName: 'prepare',
+      initialValue: {
+        attachment: this.fileToLocalUploadAttachment(file),
+      },
+      mode: 'concurrent',
+    });
+
+    let attachment: LocalUploadAttachment = preUpload.state.attachment;
+
+    if (preUpload.status === 'discard') return attachment;
+    // todo: remove with the next major release as filtering can be done in middleware
+    // should we return the attachment object?
+    if (!this.fileUploadFilter(attachment)) return attachment;
+
+    if (attachment.localMetadata.uploadState === 'blocked') {
+      this.upsertAttachments([attachment]);
+      return preUpload.state.attachment;
+    }
+
+    attachment = {
+      ...attachment,
+      localMetadata: {
+        ...attachment.localMetadata,
+        uploadState: 'uploading',
+      },
+    };
+    this.upsertAttachments([attachment]);
+
+    let response: MinimumUploadRequestResult | undefined;
+    let error: Error | undefined;
+    try {
+      response = await this.doUploadRequest(file);
+    } catch (err) {
+      error = err instanceof Error ? err : undefined;
+    }
+
+    const postUpload = await this.postUploadMiddlewareExecutor.execute({
+      eventName: 'postProcess',
+      initialValue: {
+        attachment: {
+          ...attachment,
+          localMetadata: {
+            ...attachment.localMetadata,
+            uploadState: error ? 'failed' : 'finished',
+          },
+        },
+        error,
+        response,
+      },
+      mode: 'concurrent',
+    });
+    attachment = postUpload.state.attachment;
+
+    if (postUpload.status === 'discard') {
+      this.removeAttachments([attachment.localMetadata.id]);
+      return attachment;
+    }
+
+    this.updateAttachment(attachment);
+    return attachment;
+  };
+
   uploadFiles = async (files: FileReference[] | FileList | FileLike[]) => {
     if (!this.isUploadEnabled) return;
     const iterableFiles: FileReference[] | FileLike[] = isFileList(files)
       ? Array.from(files)
       : files;
-    const attachments = await Promise.all(
-      iterableFiles.map(this.fileToLocalUploadAttachment),
-    );
 
-    return Promise.all(
-      attachments.slice(0, this.availableUploadSlots).map(this.uploadAttachment),
+    return await Promise.all(
+      iterableFiles.slice(0, this.availableUploadSlots).map(this.uploadFile),
     );
   };
 }
