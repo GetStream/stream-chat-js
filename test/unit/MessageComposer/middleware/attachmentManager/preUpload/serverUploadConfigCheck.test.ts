@@ -1,4 +1,8 @@
-import { MessageComposer, MiddlewareStatus } from '../../../../../../src';
+import {
+  AttachmentManager,
+  MessageComposer,
+  MiddlewareStatus,
+} from '../../../../../../src';
 import { describe, expect, it, vi } from 'vitest';
 import {
   AttachmentPreUploadMiddlewareState,
@@ -36,7 +40,7 @@ const setup = () => {
 const getInitialState = (
   composer: MessageComposer,
 ): AttachmentPreUploadMiddlewareState => ({
-  attachment: composer.attachmentManager.fileToLocalUploadAttachment(
+  attachment: AttachmentManager.toLocalUploadAttachment(
     new File([''], 'test.jpg', { type: 'image/jpeg' }),
   ),
 });

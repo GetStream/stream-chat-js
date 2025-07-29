@@ -1005,7 +1005,7 @@ describe('AttachmentManager', () => {
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
 
       await attachmentManager.uploadAttachment(
-        attachmentManager.fileToLocalUploadAttachment(file),
+        await attachmentManager.fileToLocalUploadAttachment(file),
       );
 
       expect(attachmentManager.successfulUploadsCount).toBe(1);
@@ -1022,7 +1022,7 @@ describe('AttachmentManager', () => {
 
       await expect(
         attachmentManager.uploadAttachment(
-          attachmentManager.fileToLocalUploadAttachment(file),
+          await attachmentManager.fileToLocalUploadAttachment(file),
         ),
       ).resolves.toEqual({
         fallback: 'test.jpg',
@@ -1032,6 +1032,9 @@ describe('AttachmentManager', () => {
           file,
           uploadState: 'failed',
           previewUri: expect.any(String),
+          uploadPermissionCheck: {
+            uploadBlocked: false,
+          },
         },
         mime_type: 'image/jpeg',
         type: 'image',
@@ -1110,7 +1113,6 @@ describe('AttachmentManager', () => {
       // Create a file to upload
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
 
-      // Mock fileToLocalUploadAttachment to return a valid attachment
       const attachment = {
         type: 'image',
         localMetadata: {
@@ -1357,7 +1359,6 @@ describe('AttachmentManager', () => {
         'fileToLocalUploadAttachment',
       );
 
-      // Set a fileUploadFilter that allows all files
       attachmentManager.fileUploadFilter = () => true;
 
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
@@ -1381,7 +1382,6 @@ describe('AttachmentManager', () => {
       // Set a fileUploadFilter that allows all files
       attachmentManager.fileUploadFilter = () => true;
 
-      // Mock the fileToLocalUploadAttachment method to return a specific value
       const expectedAttachment = {
         type: 'image',
         image_url: 'test-url',
@@ -1420,7 +1420,6 @@ describe('AttachmentManager', () => {
       const originalId = 'original-test-id';
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
 
-      // Mock fileToLocalUploadAttachment to return a new attachment
       const newAttachment = {
         type: 'image',
         image_url: 'test-url',
@@ -1453,11 +1452,14 @@ describe('AttachmentManager', () => {
       const {
         messageComposer: { attachmentManager },
       } = setup();
-      vi.spyOn(Utils, 'generateUUIDv4').mockReturnValue('mock-uuid');
-      vi.spyOn(attachmentManager, 'getUploadConfigCheck').mockResolvedValue({
+      const uploadConfigCheckResult = {
         uploadBlocked: false,
         reason: '',
-      });
+      };
+      vi.spyOn(Utils, 'generateUUIDv4').mockReturnValue('mock-uuid');
+      vi.spyOn(attachmentManager, 'getUploadConfigCheck').mockResolvedValue(
+        uploadConfigCheckResult,
+      );
       // Create a file of size 1234 bytes
       const fileContent = new Uint8Array(1234);
       const file = new File([fileContent], 'test.jpg', { type: 'image/jpeg' });
@@ -1473,7 +1475,7 @@ describe('AttachmentManager', () => {
         }),
         fallback: 'test.jpg',
       });
-      expect(result.localMetadata.uploadPermissionCheck).toBeUndefined();
+      expect(result.localMetadata.uploadPermissionCheck).toEqual(uploadConfigCheckResult);
       expect(result.localMetadata.uploadState).toMatch(/pending|blocked/);
       expect(result.localMetadata.previewUri).toBeDefined();
     });
@@ -1483,10 +1485,13 @@ describe('AttachmentManager', () => {
         messageComposer: { attachmentManager },
       } = setup();
       vi.spyOn(Utils, 'generateUUIDv4').mockReturnValue('mock-uuid');
-      vi.spyOn(attachmentManager, 'getUploadConfigCheck').mockResolvedValue({
+      const uploadConfigCheckResult = {
         uploadBlocked: false,
         reason: '',
-      });
+      };
+      vi.spyOn(attachmentManager, 'getUploadConfigCheck').mockResolvedValue(
+        uploadConfigCheckResult,
+      );
       const fileReference = {
         name: 'test.jpg',
         type: 'image/jpeg',
@@ -1509,7 +1514,7 @@ describe('AttachmentManager', () => {
         original_height: 1000,
         original_width: 1200,
       });
-      expect(result.localMetadata.uploadPermissionCheck).toBeUndefined();
+      expect(result.localMetadata.uploadPermissionCheck).toEqual(uploadConfigCheckResult);
       expect(result.localMetadata.uploadState).toMatch(/pending|blocked/);
     });
 
@@ -1518,10 +1523,13 @@ describe('AttachmentManager', () => {
         messageComposer: { attachmentManager },
       } = setup();
       vi.spyOn(Utils, 'generateUUIDv4').mockReturnValue('mock-uuid');
-      vi.spyOn(attachmentManager, 'getUploadConfigCheck').mockResolvedValue({
+      const uploadConfigCheckResult = {
         uploadBlocked: false,
         reason: '',
-      });
+      };
+      vi.spyOn(attachmentManager, 'getUploadConfigCheck').mockResolvedValue(
+        uploadConfigCheckResult,
+      );
       const fileReference = {
         name: 'test.mp4',
         type: 'video/mp4',
@@ -1546,8 +1554,7 @@ describe('AttachmentManager', () => {
         duration: 12.34,
         thumb_url: 'file://thumb.jpg',
       });
-      expect(result.localMetadata.uploadPermissionCheck).toBeUndefined();
-      expect(result.localMetadata.uploadState).toMatch(/pending|blocked/);
+      expect(result.localMetadata.uploadPermissionCheck).toEqual(uploadConfigCheckResult);
     });
   });
 });

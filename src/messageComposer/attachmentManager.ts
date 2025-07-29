@@ -343,8 +343,7 @@ export class AttachmentManager {
     return { uploadBlocked: false };
   };
 
-  // todo: convert to static in the next major release
-  fileToLocalUploadAttachment = (
+  static toLocalUploadAttachment = (
     fileLike: FileReference | FileLike,
   ): LocalUploadAttachment => {
     const file =
@@ -391,6 +390,22 @@ export class AttachmentManager {
     return localAttachment;
   };
 
+  // @deprecated use AttachmentManager.toLocalUploadAttachment(file)
+  fileToLocalUploadAttachment = async (
+    fileLike: FileReference | FileLike,
+  ): Promise<LocalUploadAttachment> => {
+    const localAttachment = AttachmentManager.toLocalUploadAttachment(fileLike);
+    const uploadPermissionCheck = await this.getUploadConfigCheck(
+      localAttachment.localMetadata.file,
+    );
+    localAttachment.localMetadata.uploadPermissionCheck = uploadPermissionCheck;
+    localAttachment.localMetadata.uploadState = uploadPermissionCheck.uploadBlocked
+      ? 'blocked'
+      : 'pending';
+
+    return localAttachment;
+  };
+
   private ensureLocalUploadAttachment = async (
     attachment: Partial<LocalUploadAttachment>,
   ) => {
@@ -414,14 +429,9 @@ export class AttachmentManager {
 
     if (!this.fileUploadFilter(attachment)) return;
 
-    const newAttachment = this.fileToLocalUploadAttachment(attachment.localMetadata.file);
-    newAttachment.localMetadata.uploadPermissionCheck = await this.getUploadConfigCheck(
+    const newAttachment = await this.fileToLocalUploadAttachment(
       attachment.localMetadata.file,
     );
-    newAttachment.localMetadata.uploadState = newAttachment.localMetadata
-      .uploadPermissionCheck.uploadBlocked
-      ? 'blocked'
-      : 'pending';
     if (attachment.localMetadata.id) {
       newAttachment.localMetadata.id = attachment.localMetadata.id;
     }
@@ -468,6 +478,7 @@ export class AttachmentManager {
     return this.doDefaultUploadRequest(fileLike);
   };
 
+  // @deprecated use attachmentManager.uploadFile(file)
   uploadAttachment = async (attachment: LocalUploadAttachment) => {
     if (!this.isUploadEnabled) return;
 
@@ -572,7 +583,7 @@ export class AttachmentManager {
     const preUpload = await this.preUploadMiddlewareExecutor.execute({
       eventName: 'prepare',
       initialValue: {
-        attachment: this.fileToLocalUploadAttachment(file),
+        attachment: AttachmentManager.toLocalUploadAttachment(file),
       },
       mode: 'concurrent',
     });
