@@ -1,7 +1,8 @@
 import type { ExecuteBatchDBQueriesType } from './types';
 import type { StreamChat } from '../client';
 import type { AbstractOfflineDB } from './offline_support_api';
-import { AxiosError } from 'axios';
+import type { AxiosError } from 'axios';
+import { isAxiosError } from 'axios';
 import type { APIErrorResponse } from '../types';
 
 /**
@@ -177,7 +178,7 @@ export class OfflineDBSyncManager {
     } catch (e) {
       console.log('An error has occurred while syncing the DB.', e);
 
-      if (e instanceof AxiosError && e.code === 'ECONNABORTED') {
+      if (isAxiosError(e) && e.code === 'ECONNABORTED') {
         // If the sync was aborted due to timeout, we can simply return
         return;
       }
