@@ -1128,4 +1128,66 @@ describe('X-Stream-Client header', () => {
 
 		expect(userAgent).toMatchInlineSnapshot(`"deprecated"`);
 	});
+
+	describe('getHookEvents', () => {
+		let clientGetSpy;
+
+		beforeEach(() => {
+			clientGetSpy = vi.spyOn(client, 'get').mockResolvedValue({});
+		});
+
+		it('should call get with correct URL and no params when no products specified', async () => {
+			await client.getHookEvents();
+
+			expect(clientGetSpy).toHaveBeenCalledTimes(1);
+			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/hook/events`, {});
+		});
+
+		it('should call get with correct URL and empty params when empty products array specified', async () => {
+			await client.getHookEvents([]);
+
+			expect(clientGetSpy).toHaveBeenCalledTimes(1);
+			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/hook/events`, {});
+		});
+
+		it('should call get with product params when products specified', async () => {
+			await client.getHookEvents(['chat', 'video']);
+
+			expect(clientGetSpy).toHaveBeenCalledTimes(1);
+			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/hook/events`, {
+				product: 'chat,video',
+			});
+		});
+
+		it('should call get with single product param', async () => {
+			await client.getHookEvents(['chat']);
+
+			expect(clientGetSpy).toHaveBeenCalledTimes(1);
+			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/hook/events`, {
+				product: 'chat',
+			});
+		});
+
+		it('should return the response from get', async () => {
+			const mockResponse = {
+				events: [
+					{
+						name: 'message.new',
+						description: 'When a new message is added',
+						products: ['chat'],
+					},
+					{
+						name: 'call.created',
+						description: 'The call was created',
+						products: ['video'],
+					},
+				],
+			};
+			clientGetSpy.mockResolvedValue(mockResponse);
+
+			const result = await client.getHookEvents(['chat', 'video']);
+
+			expect(result).toEqual(mockResponse);
+		});
+	});
 });
