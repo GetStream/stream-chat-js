@@ -833,15 +833,17 @@ describe('ChannelManager', () => {
             options: { limit: 10, offset: 0 },
           });
 
-          const { channels, initialized, error } = channelManager.state.getLatestValue();
+          const { channels, initialized, error, pagination } =
+            channelManager.state.getLatestValue();
 
           expect(clientQueryChannelsStub.callCount).to.equal(
             DEFAULT_QUERY_CHANNELS_RETRY_COUNT + 1,
-          ); // // initial + however many retried are configured
+          ); // initial + however many retried are configured
           expect(sleepSpy).toHaveBeenCalledTimes(DEFAULT_QUERY_CHANNELS_RETRY_COUNT);
           expect(error).toEqual(undefined);
           expect(channels.length).to.equal(5);
           expect(initialized).to.be.false;
+          expect(pagination.isLoading).to.be.false;
         });
 
         it('does not retry more than 3 times', async () => {

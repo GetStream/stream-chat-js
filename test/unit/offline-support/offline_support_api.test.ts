@@ -2325,7 +2325,7 @@ describe('OfflineDBSyncManager', () => {
         expect(upsertUserSyncStatusSpy).toHaveBeenCalled();
       });
 
-      it('do not resets DB if sync API throws an AxiosError with request timeout', async () => {
+      it('do not reset the DB if sync API throws an AxiosError with request timeout', async () => {
         const recentDate = new Date();
         recentDate.setDate(recentDate.getDate() - 10);
         getLastSyncedAtSpy.mockResolvedValueOnce(recentDate.toString());
@@ -2344,7 +2344,7 @@ describe('OfflineDBSyncManager', () => {
         expect(upsertUserSyncStatusSpy).not.toHaveBeenCalled();
       });
 
-      it('do not reset DB if sync API throws a BE error with response timeout', async () => {
+      it('do not reset the DB if sync API throws a BE error with response timeout', async () => {
         const recentDate = new Date();
         recentDate.setDate(recentDate.getDate() - 10);
         getLastSyncedAtSpy.mockResolvedValueOnce(recentDate.toString());
