@@ -11,7 +11,7 @@ StreamChat<{
   messageType: MessageType;
   reactionType: ReactionType;
   userType: UserType;
-}>
+}>;
 ```
 
 Custom types provided when initializing the client will carry through to all client returns and provide intellisense to queries.
