@@ -2325,6 +2325,42 @@ describe('OfflineDBSyncManager', () => {
         expect(upsertUserSyncStatusSpy).toHaveBeenCalled();
       });
 
+      it('do not reset the DB if sync API throws an AxiosError with request timeout', async () => {
+        const recentDate = new Date();
+        recentDate.setDate(recentDate.getDate() - 10);
+        getLastSyncedAtSpy.mockResolvedValueOnce(recentDate.toString());
+
+        const axiosError = {
+          isAxiosError: true,
+          code: 'ECONNABORTED',
+          response: { data: { code: 4 } },
+        } as AxiosError<APIErrorResponse>;
+
+        syncApiSpy.mockRejectedValueOnce(axiosError);
+
+        await (syncManager as any).sync();
+
+        expect(resetDBSpy).not.toHaveBeenCalled();
+        expect(upsertUserSyncStatusSpy).not.toHaveBeenCalled();
+      });
+
+      it('do not reset the DB if sync API throws a BE error with response timeout', async () => {
+        const recentDate = new Date();
+        recentDate.setDate(recentDate.getDate() - 10);
+        getLastSyncedAtSpy.mockResolvedValueOnce(recentDate.toString());
+
+        const axiosError = {
+          response: { data: { code: 23 } },
+        } as AxiosError<APIErrorResponse>;
+
+        syncApiSpy.mockRejectedValueOnce(axiosError);
+
+        await (syncManager as any).sync();
+
+        expect(resetDBSpy).not.toHaveBeenCalled();
+        expect(upsertUserSyncStatusSpy).not.toHaveBeenCalled();
+      });
+
       it('resets DB if sync API throws an error', async () => {
         const recentDate = new Date();
         recentDate.setDate(recentDate.getDate() - 10);
