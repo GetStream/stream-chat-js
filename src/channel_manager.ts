@@ -317,7 +317,19 @@ export class ChannelManager extends WithSubscriptions {
           `Maximum number of retries reached in queryChannels. Last error message is: ${err}`,
         );
 
-        this.state.partialNext({ error: wrappedError });
+        const state = this.state.getLatestValue();
+        // If the offline support is enabled, and there are channels in the DB, we should not error out.
+        const isOfflineSupportEnabledWithChannels =
+          this.client.offlineDb && state.channels.length > 0;
+
+        this.state.partialNext({
+          error: isOfflineSupportEnabledWithChannels ? undefined : wrappedError,
+          pagination: {
+            ...state.pagination,
+            isLoading: false,
+            isLoadingNext: false,
+          },
+        });
         return;
       }
 
@@ -444,7 +456,11 @@ export class ChannelManager extends WithSubscriptions {
       this.client.logger('error', (error as Error).message);
       this.state.next((currentState) => ({
         ...currentState,
-        pagination: { ...currentState.pagination, isLoadingNext: false },
+        pagination: {
+          ...currentState.pagination,
+          isLoadingNext: false,
+          isLoading: false,
+        },
       }));
       throw error;
     }

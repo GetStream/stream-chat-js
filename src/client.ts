@@ -106,6 +106,7 @@ import type {
   GetCampaignOptions,
   GetChannelTypeResponse,
   GetCommandResponse,
+  GetHookEventsResponse,
   GetImportResponse,
   GetMessageAPIResponse,
   GetMessageOptions,
@@ -148,6 +149,7 @@ import type {
   PollVote,
   PollVoteData,
   PollVotesAPIResponse,
+  Product,
   PushPreference,
   PushProvider,
   PushProviderConfig,
@@ -2162,6 +2164,17 @@ export class StreamChat {
       ios,
       endpoints: endpoints ? endpoints.join(',') : undefined,
     });
+  }
+
+  /**
+   * getHookEvents - Get available events for hooks (webhook, SQS, and SNS)
+   *
+   * @param {Product[]} [products] Optional array of products to filter events by (e.g., [Product.Chat, Product.Video])
+   * @returns {Promise<GetHookEventsResponse>} Response containing available hook events
+   */
+  async getHookEvents(products?: Product[]) {
+    const params = products && products.length > 0 ? { product: products.join(',') } : {};
+    return await this.get<GetHookEventsResponse>(this.baseURL + '/hook/events', params);
   }
 
   _addChannelConfig({ cid, config }: ChannelResponse) {

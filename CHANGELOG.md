@@ -1,3 +1,13 @@
+## [9.13.0](https://github.com/GetStream/stream-chat-js/compare/v9.12.0...v9.13.0) (2025-07-30)
+
+### Bug Fixes
+
+* set loading state to [secure] when query channel errors out ([#1585](https://github.com/GetStream/stream-chat-js/issues/1585)) ([11c18f5](https://github.com/GetStream/stream-chat-js/commit/11c18f52873745d0c3d8d25f54e375b6d8f48eef)), closes [#1584](https://github.com/GetStream/stream-chat-js/issues/1584)
+
+### Features
+
+* add get hook event list ([#1586](https://github.com/GetStream/stream-chat-js/issues/1586)) ([40f1f92](https://github.com/GetStream/stream-chat-js/commit/40f1f92afa876d845a971885aa8fc0cf7dd286b9))
+
 ## [9.12.0](https://github.com/GetStream/stream-chat-js/compare/v9.11.0...v9.12.0) (2025-07-23)
 
 ### Features
