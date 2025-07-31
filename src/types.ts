@@ -295,6 +295,7 @@ export type ChannelResponse = CustomChannelData & {
   truncated_by?: UserResponse;
   truncated_by_id?: string;
   updated_at?: string;
+  message_count?: number;
 };
 
 export type QueryReactionsOptions = Pager;
@@ -2369,6 +2370,7 @@ export type ChannelConfigFields = {
   uploads?: boolean;
   url_enrichment?: boolean;
   user_message_reminders?: boolean; // Feature flag for user message reminders
+  message_count_enabled?: boolean; // Feature flag for message count
 };
 
 export type ChannelConfigWithInfo = ChannelConfigFields &
