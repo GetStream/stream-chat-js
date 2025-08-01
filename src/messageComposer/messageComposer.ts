@@ -700,7 +700,7 @@ export class MessageComposer extends WithSubscriptions {
           id: this.id,
           mentioned_users: [],
           parent_id: this.threadId ?? undefined,
-          pinned_at: null,
+          pinned_at: this.editedMessage?.pinned_at || null,
           reaction_groups: null,
           status: this.editedMessage ? this.editedMessage.status : 'sending',
           text,

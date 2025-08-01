@@ -16,7 +16,8 @@ import { MockOfflineDB } from '../offline-support/MockOfflineDB';
 
 const generateUuidV4Output = 'test-uuid';
 // Mock dependencies
-vi.mock('../../../src/utils', () => ({
+vi.mock('../../../src/utils', async (importOriginal) => ({
+  ...(await importOriginal()),
   axiosParamsSerializer: vi.fn(),
   isFunction: vi.fn(),
   isString: vi.fn(),
@@ -24,21 +25,15 @@ vi.mock('../../../src/utils', () => ({
   isArray: vi.fn(),
   isDate: vi.fn(),
   isNumber: vi.fn(),
-  debounce: vi.fn().mockImplementation((fn) => fn),
+  debounce: vi.fn().mockImplementation((fn) => {
+    fn.cancel = () => {};
+    fn.flush = () => {};
+    return fn;
+  }),
   generateUUIDv4: vi.fn().mockReturnValue('test-uuid'),
   isLocalMessage: vi.fn().mockReturnValue(true),
-  formatMessage: vi.fn().mockImplementation((msg) => msg),
   randomId: vi.fn().mockReturnValue('test-uuid'),
   throttle: vi.fn().mockImplementation((fn) => fn),
-}));
-
-vi.mock('../../../src/messageComposer/middleware/messageComposer', () => ({
-  MessageComposerMiddlewareExecutor: vi.fn().mockImplementation(() => ({
-    execute: vi.fn().mockResolvedValue({ state: {} }),
-  })),
-  MessageDraftComposerMiddlewareExecutor: vi.fn().mockImplementation(() => ({
-    execute: vi.fn().mockResolvedValue({ state: {} }),
-  })),
 }));
 
 const quotedMessage = {
@@ -877,29 +872,132 @@ describe('MessageComposer', () => {
 
     it('should compose message', async () => {
       const { messageComposer } = setup();
-      const mockResult = {
-        state: {
-          message: {
-            id: 'test-message-id',
-            text: 'Test message',
-          },
-        },
-        status: '',
-      };
-
-      const spyExecute = vi.spyOn(
-        messageComposer.compositionMiddlewareExecutor,
-        'execute',
-      );
-      spyExecute.mockResolvedValue(mockResult);
+      messageComposer.textComposer.setText('Test message');
 
       const result = await messageComposer.compose();
 
-      expect(spyExecute).toHaveBeenCalledWith({
-        eventName: 'compose',
-        initialValue: expect.any(Object),
+      expect(result).toEqual({
+        localMessage: {
+          attachments: [],
+          created_at: expect.any(Date),
+          deleted_at: null,
+          error: null,
+          id: 'test-uuid',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          quoted_message: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: 'Test message',
+          type: 'regular',
+          updated_at: expect.any(Date),
+          user: {
+            id: 'user-id',
+            name: 'User Name',
+          },
+          user_id: 'user-id',
+        },
+        message: {
+          id: 'test-uuid',
+          mentioned_users: [],
+          parent_id: undefined,
+          text: 'Test message',
+          type: 'regular',
+        },
+        sendOptions: {},
       });
-      expect(result).toEqual(mockResult.state);
+    });
+
+    it('should compose edited message', async () => {
+      const date = new Date();
+      const { messageComposer } = setup({
+        composition: {
+          attachments: [{ type: 'file' }],
+          created_at: date,
+          deleted_at: null,
+          id: 'test-uuid',
+          mentioned_users: [],
+          pinned: true,
+          pinned_at: date,
+          // reaction_counts has to be available to infer reaction_groups
+          reaction_counts: {
+            like: 1,
+          },
+          // reaction_groups: { like: { count: 1, sum_scores: 1 } },
+          // reaction_scores has to be available to infer reaction_groups
+          reaction_scores: {
+            like: 1,
+          },
+          status: 'received',
+          text: 'Test message',
+          type: 'regular',
+          updated_at: date,
+          user: {
+            id: 'user-id',
+            name: 'User Name',
+          },
+          user_id: 'user-id',
+        },
+      });
+
+      const result = await messageComposer.compose();
+
+      expect(result).toEqual({
+        localMessage: {
+          attachments: [{ type: 'file' }],
+          created_at: date,
+          deleted_at: null,
+          error: null,
+          id: 'test-uuid',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned: true,
+          pinned_at: date,
+          quoted_message: null,
+          reaction_counts: {
+            like: 1,
+          },
+          reaction_groups: { like: { count: 1, sum_scores: 1 } },
+          reaction_scores: {
+            like: 1,
+          },
+          status: 'received',
+          text: 'Test message',
+          type: 'regular',
+          updated_at: date,
+          user: {
+            id: 'user-id',
+            name: 'User Name',
+          },
+          user_id: 'user-id',
+        },
+        message: {
+          attachments: [
+            {
+              type: 'file',
+            },
+          ],
+          id: 'test-uuid',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned: true,
+          reaction_groups: {
+            like: {
+              count: 1,
+              sum_scores: 1,
+            },
+          },
+          reaction_scores: {
+            like: 1,
+          },
+          status: 'received',
+          text: 'Test message',
+          type: 'regular',
+          user_id: 'user-id',
+        },
+        sendOptions: {},
+      });
     });
 
     it('should return undefined when compose middleware returns discard status', async () => {
