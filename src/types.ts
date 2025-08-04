@@ -287,6 +287,7 @@ export type ChannelResponse = CustomChannelData & {
   last_message_at?: string;
   member_count?: number;
   members?: ChannelMemberResponse[];
+  message_count?: number;
   muted?: boolean;
   mute_expires_at?: string;
   own_capabilities?: string[];
@@ -295,7 +296,6 @@ export type ChannelResponse = CustomChannelData & {
   truncated_by?: UserResponse;
   truncated_by_id?: string;
   updated_at?: string;
-  message_count?: number;
 };
 
 export type QueryReactionsOptions = Pager;
@@ -2355,6 +2355,7 @@ export type ChannelConfigFields = {
   custom_events?: boolean;
   mark_messages_pending?: boolean;
   max_message_length?: number;
+  message_count_enabled?: boolean; // Feature flag for message count
   message_retention?: string;
   mutes?: boolean;
   name?: string;
@@ -2370,7 +2371,6 @@ export type ChannelConfigFields = {
   uploads?: boolean;
   url_enrichment?: boolean;
   user_message_reminders?: boolean; // Feature flag for user message reminders
-  message_count_enabled?: boolean; // Feature flag for message count
 };
 
 export type ChannelConfigWithInfo = ChannelConfigFields &
