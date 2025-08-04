@@ -4223,6 +4223,7 @@ export type EventHook = {
     mode: 'CALLBACK_MODE_NONE' | 'CALLBACK_MODE_REST' | 'CALLBACK_MODE_TWIRP';
   };
 
+  delete?: boolean;
   created_at?: string;
   updated_at?: string;
 };
