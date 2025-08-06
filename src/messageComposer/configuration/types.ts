@@ -2,7 +2,9 @@ import type { LinkPreview } from '../linkPreviewsManager';
 import type { FileUploadFilter } from '../attachmentManager';
 import type { FileLike, FileReference } from '../types';
 
-export type MinimumUploadRequestResult = { file: string; thumb_url?: string };
+export type MinimumUploadRequestResult = { file: string; thumb_url?: string } & Partial<
+  Record<string, unknown>
+>;
 
 export type UploadRequestFn = (
   fileLike: FileReference | FileLike,
@@ -39,7 +41,6 @@ export type AttachmentManagerConfig = {
    * describing which file types are allowed to be selected when uploading files.
    */
   acceptedFiles: string[];
-  // todo: refactor this. We want a pipeline where it would be possible to customize the preparation, upload, and post-upload steps.
   /** Function that allows to customize the upload request. */
   doUploadRequest?: UploadRequestFn;
 };

@@ -1,3 +1,18 @@
+## [9.14.0](https://github.com/GetStream/stream-chat-js/compare/v9.13.0...v9.14.0) (2025-08-01)
+
+### Bug Fixes
+
+* consider locally filtered messages in message pagination params calculation ([#1595](https://github.com/GetStream/stream-chat-js/issues/1595)) ([b2c01e8](https://github.com/GetStream/stream-chat-js/commit/b2c01e8ee5937a14d4f7771f14bde9f42dd5472f))
+* keep pinned message data upon message editing ([#1590](https://github.com/GetStream/stream-chat-js/issues/1590)) ([3bcfc28](https://github.com/GetStream/stream-chat-js/commit/3bcfc283f77e819b2a11c7c8231bf0195da055fd))
+
+### Features
+
+* add attachment manager middleware for pre-upload and post-upload events ([#1588](https://github.com/GetStream/stream-chat-js/issues/1588)) ([a8b0497](https://github.com/GetStream/stream-chat-js/commit/a8b0497ad22e297b3cab7decb0e9ed0e3539f95f))
+
+### Chores
+
+* **deps:** upgrade form-data to version 4.0.4 ([#1592](https://github.com/GetStream/stream-chat-js/issues/1592)) ([2dd6676](https://github.com/GetStream/stream-chat-js/commit/2dd6676e7bb69b881273f7f91dc512383a3d8e5b))
+
 ## [9.13.0](https://github.com/GetStream/stream-chat-js/compare/v9.12.0...v9.13.0) (2025-07-30)
 
 ### Bug Fixes

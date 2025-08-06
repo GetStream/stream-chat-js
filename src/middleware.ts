@@ -21,6 +21,12 @@ export type MiddlewareExecutionResult<TValue> = {
 export type ExecuteParams<TValue> = {
   eventName: string;
   initialValue: TValue;
+  /*
+  Determines how the concurrently run middleware handlers will be executed:
+  - async - all handlers are executed even though the same handler is invoked more than once
+  - cancelable - previously invoked handlers of the same eventName that have not yet resolved are canceled
+   */
+  mode?: 'concurrent' | 'cancelable'; // default 'cancelable'
 };
 
 export type MiddlewareHandlerParams<TValue> = {
@@ -107,6 +113,7 @@ export class MiddlewareExecutor<TValue, THandlers extends string> {
   protected async executeMiddlewareChain({
     eventName,
     initialValue,
+    mode = 'cancelable',
   }: ExecuteParams<TValue>): Promise<MiddlewareExecutionResult<TValue>> {
     let index = -1;
 
@@ -148,16 +155,19 @@ export class MiddlewareExecutor<TValue, THandlers extends string> {
       });
     };
 
-    const result = await withCancellation(
-      `middleware-execution-${this.id}-${eventName}`,
-      async (abortSignal) => {
-        const result = await execute(0, initialValue);
-        if (abortSignal.aborted) {
-          return 'canceled';
-        }
-        return result;
-      },
-    );
+    const result =
+      mode === 'cancelable'
+        ? await withCancellation(
+            `middleware-execution-${this.id}-${eventName}`,
+            async (abortSignal) => {
+              const result = await execute(0, initialValue);
+              if (abortSignal.aborted) {
+                return 'canceled';
+              }
+              return result;
+            },
+          )
+        : await execute(0, initialValue);
 
     return result === 'canceled' ? { state: initialValue, status: 'discard' } : result;
   }
@@ -165,10 +175,12 @@ export class MiddlewareExecutor<TValue, THandlers extends string> {
   async execute({
     eventName,
     initialValue: initialState,
+    mode,
   }: ExecuteParams<TValue>): Promise<MiddlewareExecutionResult<TValue>> {
     return await this.executeMiddlewareChain({
       eventName,
       initialValue: initialState,
+      mode,
     });
   }
 }
