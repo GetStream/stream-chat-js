@@ -27,6 +27,8 @@ import { normalizeQuerySort } from './utils';
 export const MODERATION_ENTITY_TYPES = {
   user: 'stream:user',
   message: 'stream:chat:v1:message',
+  activity: 'stream:feeds:v2:activity',
+  reaction: 'stream:feeds:v2:reaction',
   userprofile: 'stream:v1:user_profile',
 };
 
@@ -64,6 +66,58 @@ export class Moderation {
    */
   flagMessage(messageID: string, reason: string, options: ModerationFlagOptions = {}) {
     return this.flag(MODERATION_ENTITY_TYPES.message, messageID, '', reason, options);
+  }
+
+  /**
+   * Flag an activity
+   *
+   * @param {string} entityID Activity ID to be flagged
+   * @param {string} entityCreatorID User ID of the Activity creator
+   * @param {string} reason Reason for flagging the activity
+   * @param {Object} options Additional options for flagging the activity
+   * @param {string} options.user_id (For server side usage) User ID of the user who is flagging the target activity
+   * @param {Object} options.custom Additional data to be stored with the flag
+   * @returns
+   */
+  flagActivity(
+    entityID: string,
+    entityCreatorID: string,
+    reason: string,
+    options: ModerationFlagOptions = {},
+  ) {
+    return this.flag(
+      MODERATION_ENTITY_TYPES.activity,
+      entityID,
+      entityCreatorID,
+      reason,
+      options,
+    );
+  }
+
+  /**
+   * Flag a reaction
+   *
+   * @param {string} entityID Reaction ID to be flagged
+   * @param {string} entityCreatorID User ID of the Reaction creator
+   * @param {string} reason Reason for flagging the reaction
+   * @param {Object} options Additional options for flagging the reaction
+   * @param {string} options.user_id (For server side usage) User ID of the user who is flagging the target reaction
+   * @param {Object} options.custom Additional data to be stored with the flag
+   * @returns
+   */
+  flagReaction(
+    entityID: string,
+    entityCreatorID: string,
+    reason: string,
+    options: ModerationFlagOptions = {},
+  ) {
+    return this.flag(
+      MODERATION_ENTITY_TYPES.reaction,
+      entityID,
+      entityCreatorID,
+      reason,
+      options,
+    );
   }
 
   /**
