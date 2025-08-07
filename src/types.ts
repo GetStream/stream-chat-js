@@ -2355,7 +2355,6 @@ export type ChannelConfigFields = {
   custom_events?: boolean;
   mark_messages_pending?: boolean;
   max_message_length?: number;
-  message_count_enabled?: boolean; // Feature flag for message count
   message_retention?: string;
   mutes?: boolean;
   name?: string;
@@ -2367,6 +2366,7 @@ export type ChannelConfigFields = {
   replies?: boolean;
   search?: boolean;
   shared_locations?: boolean;
+  total_message_count?: boolean; // Feature flag for message count
   typing_events?: boolean;
   uploads?: boolean;
   url_enrichment?: boolean;
