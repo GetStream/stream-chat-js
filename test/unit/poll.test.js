@@ -1,7 +1,7 @@
 import sinon from 'sinon';
 import { Poll, StreamChat } from '../../src';
 
-import { describe, it, afterEach, expect } from 'vitest';
+import { describe, it, afterEach, expect, vi } from 'vitest';
 
 const pollId = 'WD4SBRJvLoGwB4oAoCQGM';
 
@@ -701,26 +701,26 @@ describe('Poll', () => {
 		getPollStub.restore();
 	});
 
-	it('should remove oldest vote before casting a new one if reached max votes allowed', async () => {
+	it('should publish a notification and not cast vote if reached max votes allowed', async () => {
 		const poll = new Poll({
 			client,
 			poll: { ...pollResponse, max_votes_allowed: user2Votes.length },
 		});
 		const option_id = 'ba933470-c0da-4b6f-a4d2-d2176ac0d4a8';
 		const messageId = 'XXX';
-		const removePollVoteStub = sinon.stub(client, 'removePollVote');
-		const castPollVoteStub = sinon.stub(client, 'castPollVote');
-		removePollVoteStub.resolves('removed');
-		castPollVoteStub.resolves({ vote: { id: 'vote1', option_id, user_id: 'user1' } });
+		const removePollVoteSpy = vi
+			.spyOn(client, 'removePollVote')
+			.mockResolvedValue('removed');
+		const castPollVoteSpy = vi
+			.spyOn(client, 'castPollVote')
+			.mockResolvedValue({ vote: { id: 'vote1', option_id, user_id: 'user1' } });
+		const addInfoNotificationSpy = vi.spyOn(client.notifications, 'addInfo');
 
 		await poll.castVote(option_id, messageId);
 
-		expect(removePollVoteStub.calledWith(messageId, pollResponse.id, user1Votes[1].id)).to
-			.be.true;
-		expect(castPollVoteStub.calledWith(messageId, pollResponse.id, { option_id })).to.be
-			.true;
-		removePollVoteStub.restore();
-		castPollVoteStub.restore();
+		expect(removePollVoteSpy).not.toHaveBeenCalled();
+		expect(castPollVoteSpy).not.toHaveBeenCalled();
+		expect(addInfoNotificationSpy).toHaveBeenCalledTimes(1);
 	});
 
 	it('should not remove oldest vote before casting a new one if not reached max votes allowed', async () => {
@@ -730,18 +730,21 @@ describe('Poll', () => {
 		});
 		const option_id = 'ba933470-c0da-4b6f-a4d2-d2176ac0d4a8';
 		const messageId = 'XXX';
-		const removePollVoteStub = sinon.stub(client, 'removePollVote');
-		const castPollVoteStub = sinon.stub(client, 'castPollVote');
-		removePollVoteStub.resolves('removed');
-		castPollVoteStub.resolves({ vote: { id: 'vote1', option_id, user_id: 'user1' } });
+		const removePollVoteSpy = vi
+			.spyOn(client, 'removePollVote')
+			.mockResolvedValue('removed');
+		const castPollVoteSpy = vi
+			.spyOn(client, 'castPollVote')
+			.mockResolvedValue({ vote: { id: 'vote1', option_id, user_id: 'user1' } });
+		const addInfoNotificationSpy = vi.spyOn(client.notifications, 'addInfo');
 
 		await poll.castVote(option_id, messageId);
 
-		expect(removePollVoteStub.called).to.be.false;
-		expect(castPollVoteStub.calledWith(messageId, pollResponse.id, { option_id })).to.be
-			.true;
-		removePollVoteStub.restore();
-		castPollVoteStub.restore();
+		expect(removePollVoteSpy).not.toHaveBeenCalled();
+		expect(castPollVoteSpy).toHaveBeenCalledWith(messageId, pollResponse.id, {
+			option_id,
+		});
+		expect(addInfoNotificationSpy).not.toHaveBeenCalled();
 	});
 
 	it('should not remove oldest vote before casting a new one if max_votes_allowed is not defined', async () => {
@@ -751,17 +754,20 @@ describe('Poll', () => {
 		});
 		const option_id = 'ba933470-c0da-4b6f-a4d2-d2176ac0d4a8';
 		const messageId = 'XXX';
-		const removePollVoteStub = sinon.stub(client, 'removePollVote');
-		const castPollVoteStub = sinon.stub(client, 'castPollVote');
-		removePollVoteStub.resolves('removed');
-		castPollVoteStub.resolves({ vote: { id: 'vote1', option_id, user_id: 'user1' } });
+		const removePollVoteSpy = vi
+			.spyOn(client, 'removePollVote')
+			.mockResolvedValue('removed');
+		const castPollVoteSpy = vi
+			.spyOn(client, 'castPollVote')
+			.mockResolvedValue({ vote: { id: 'vote1', option_id, user_id: 'user1' } });
+		const addInfoNotificationSpy = vi.spyOn(client.notifications, 'addInfo');
 
 		await poll.castVote(option_id, messageId);
 
-		expect(removePollVoteStub.called).to.be.false;
-		expect(castPollVoteStub.calledWith(messageId, pollResponse.id, { option_id })).to.be
-			.true;
-		removePollVoteStub.restore();
-		castPollVoteStub.restore();
+		expect(removePollVoteSpy).not.toHaveBeenCalled();
+		expect(castPollVoteSpy).toHaveBeenCalledWith(messageId, pollResponse.id, {
+			option_id,
+		});
+		expect(addInfoNotificationSpy).not.toHaveBeenCalled();
 	});
 });
