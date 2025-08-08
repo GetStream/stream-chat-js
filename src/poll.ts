@@ -324,20 +324,17 @@ export class Poll {
       max_votes_allowed && max_votes_allowed === Object.keys(ownVotesByOptionId).length;
 
     if (reachedVoteLimit) {
-      let oldestVote = Object.values(ownVotesByOptionId)[0];
-      Object.values(ownVotesByOptionId)
-        .slice(1)
-        .forEach((vote) => {
-          if (
-            !oldestVote?.created_at ||
-            new Date(vote.created_at) < new Date(oldestVote.created_at)
-          ) {
-            oldestVote = vote;
-          }
-        });
-      if (oldestVote?.id) {
-        await this.removeVote(oldestVote.id, messageId);
-      }
+      this.client.notifications.addInfo({
+        message: 'Reached the vote limit. Remove an existing vote first.',
+        origin: {
+          emitter: 'Poll',
+          context: { messageId, optionId },
+        },
+        options: {
+          type: 'validation:poll:castVote:limit',
+        },
+      });
+      return;
     }
     return await this.client.castPollVote(messageId, this.id as string, {
       option_id: optionId,
