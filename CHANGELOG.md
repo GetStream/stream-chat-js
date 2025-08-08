@@ -1,3 +1,13 @@
+## [9.15.0](https://github.com/GetStream/stream-chat-js/compare/v9.14.0...v9.15.0) (2025-08-08)
+
+### Bug Fixes
+
+* handle poll vote limit trespass with notification instead of removing the oldest vote ([#1598](https://github.com/GetStream/stream-chat-js/issues/1598)) ([832cd88](https://github.com/GetStream/stream-chat-js/commit/832cd88d416108b17c2b1ea1b4751e70baca10c6))
+
+### Features
+
+* allow to remove middleware by id ([#1599](https://github.com/GetStream/stream-chat-js/issues/1599)) ([9fcb6e8](https://github.com/GetStream/stream-chat-js/commit/9fcb6e828bc84854cfa78ef2a32ed49ee53c64a0))
+
 ## [9.14.0](https://github.com/GetStream/stream-chat-js/compare/v9.13.0...v9.14.0) (2025-08-01)
 
 ### Bug Fixes
