@@ -6,6 +6,33 @@ import {
   MiddlewareStatus,
 } from '../../src/middleware';
 
+const middleware1: Middleware<{ value: number }, 'test'> = {
+  id: 'middleware-1',
+  handlers: {
+    test: async ({ state, next }) => {
+      return next(state);
+    },
+  },
+};
+
+const middleware2: Middleware<{ value: number }, 'test'> = {
+  id: 'middleware-2',
+  handlers: {
+    test: async ({ state, next }) => {
+      return next(state);
+    },
+  },
+};
+
+const middleware3: Middleware<{ value: number }, 'test'> = {
+  id: 'middleware-3',
+  handlers: {
+    test: async ({ state, next }) => {
+      return next(state);
+    },
+  },
+};
+
 describe('MiddlewareExecutor', () => {
   let executor: MiddlewareExecutor<{ value: number }, 'test'>;
 
@@ -301,33 +328,6 @@ describe('MiddlewareExecutor', () => {
 
   describe('setOrder', () => {
     it('should reorder middleware based on provided order', () => {
-      const middleware1: Middleware<{ value: number }, 'test'> = {
-        id: 'middleware-1',
-        handlers: {
-          test: async ({ state, next }) => {
-            return next(state);
-          },
-        },
-      };
-
-      const middleware2: Middleware<{ value: number }, 'test'> = {
-        id: 'middleware-2',
-        handlers: {
-          test: async ({ state, next }) => {
-            return next(state);
-          },
-        },
-      };
-
-      const middleware3: Middleware<{ value: number }, 'test'> = {
-        id: 'middleware-3',
-        handlers: {
-          test: async ({ state, next }) => {
-            return next(state);
-          },
-        },
-      };
-
       executor.use([middleware1, middleware2, middleware3]);
 
       executor.setOrder(['middleware-3', 'middleware-1', 'middleware-2']);
@@ -368,6 +368,57 @@ describe('MiddlewareExecutor', () => {
       expect(middlewareList).toHaveLength(2);
       expect(middlewareList[0]).toBe(middleware2);
       expect(middlewareList[1]).toBe(middleware1);
+    });
+  });
+
+  describe('remove', () => {
+    it('should remove existing middleware by single id', () => {
+      executor.use([middleware1, middleware2, middleware3]);
+
+      executor.remove(middleware2.id);
+      // @ts-expect-error access private property for testing
+      const middlewareList = (executor as Middleware<{ value: number }, 'test'>)
+        .middleware;
+      expect(middlewareList).toHaveLength(2);
+      expect(middlewareList[0]).toEqual(middleware1);
+      expect(middlewareList[1]).toEqual(middleware3);
+    });
+
+    it('should remove existing middleware by id array', () => {
+      executor.use([middleware1, middleware2, middleware3]);
+
+      executor.remove([middleware3.id, middleware2.id]);
+      // @ts-expect-error access private property for testing
+      const middlewareList = (executor as Middleware<{ value: number }, 'test'>)
+        .middleware;
+      expect(middlewareList).toHaveLength(1);
+      expect(middlewareList[0]).toEqual(middleware1);
+    });
+
+    it('should not change existing middleware if id array is empty', () => {
+      executor.use([middleware1, middleware2, middleware3]);
+
+      executor.remove([]);
+      // @ts-expect-error access private property for testing
+      const middlewareList = (executor as Middleware<{ value: number }, 'test'>)
+        .middleware;
+      expect(middlewareList).toHaveLength(3);
+      expect(middlewareList[0]).toEqual(middleware1);
+      expect(middlewareList[1]).toEqual(middleware2);
+      expect(middlewareList[2]).toEqual(middleware3);
+    });
+
+    it('should not change existing middleware if id is empty string', () => {
+      executor.use([middleware1, middleware2, middleware3]);
+
+      executor.remove('');
+      // @ts-expect-error access private property for testing
+      const middlewareList = (executor as Middleware<{ value: number }, 'test'>)
+        .middleware;
+      expect(middlewareList).toHaveLength(3);
+      expect(middlewareList[0]).toEqual(middleware1);
+      expect(middlewareList[1]).toEqual(middleware2);
+      expect(middlewareList[2]).toEqual(middleware3);
     });
   });
 

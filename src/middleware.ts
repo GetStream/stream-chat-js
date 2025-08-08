@@ -110,6 +110,15 @@ export class MiddlewareExecutor<TValue, THandlers extends string> {
       .filter(Boolean) as Middleware<TValue, THandlers>[];
   }
 
+  remove(middlewareIds: string | string[]) {
+    if (!middlewareIds && !middlewareIds.length) return;
+    this.middleware = this.middleware.filter((md) =>
+      typeof middlewareIds === 'string'
+        ? middlewareIds !== md.id
+        : !middlewareIds.includes(md.id),
+    );
+  }
+
   protected async executeMiddlewareChain({
     eventName,
     initialValue,
