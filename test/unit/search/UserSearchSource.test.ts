@@ -108,6 +108,33 @@ describe('UserSearchSource', () => {
     });
   });
 
+  it('uses default options and custom filter builder options', () => {
+    const searchSource = new UserSearchSource(
+      client,
+      {},
+      {
+        initialContext: { banned: true },
+      },
+    );
+    expect(searchSource.type).toBe('users');
+    expect(searchSource.client).toBe(client);
+    expect(searchSource.pageSize).toBe(10);
+    expect(searchSource.offset).toBe(0);
+
+    expect(searchSource.filterBuilder.context.getLatestValue()).toEqual({ banned: true });
+
+    expect(searchSource.filterBuilder.filterConfig.getLatestValue()).toEqual({
+      $or: { enabled: true, generate: expect.any(Function) },
+    });
+    expect(
+      searchSource.filterBuilder.filterConfig
+        .getLatestValue()
+        .$or.generate({ searchQuery: 'x', banned: false }),
+    ).toEqual({
+      $or: [{ id: { $autocomplete: 'x' } }, { name: { $autocomplete: 'x' } }],
+    });
+  });
+
   it('calls buildFilters internally', async () => {
     const spyBuildFilters = vi
       .spyOn(searchSource.filterBuilder, 'buildFilters')

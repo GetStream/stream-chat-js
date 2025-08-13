@@ -131,6 +131,69 @@ describe('MessageSearchSource', () => {
     expect(searchSource.pageSize).toBe(3000);
   });
 
+  it('uses default options and custom filter builder options', () => {
+    const searchSource = new MessageSearchSource(
+      client,
+      {},
+      {
+        messageSearchChannelFilterBuilder: {
+          initialContext: { a: 'messageSearchChannelFilterBuilder' },
+        },
+        messageSearchFilterBuilder: {
+          initialContext: { b: 'messageSearchFilterBuilder' },
+        },
+        channelQueryFilterBuilder: {
+          initialContext: { c: 'channelQueryFilterBuilder' },
+        },
+      },
+    );
+    expect(searchSource.type).toBe('messages');
+    expect(searchSource['client']).toBe(client);
+    expect(searchSource.pageSize).toBe(10);
+
+    expect(searchSource.messageSearchFilterBuilder.filterConfig.getLatestValue()).toEqual(
+      {
+        text: { enabled: true, generate: expect.any(Function) },
+      },
+    );
+    expect(
+      searchSource.messageSearchFilterBuilder.filterConfig
+        .getLatestValue()
+        .text.generate({ searchQuery: 'searchQuery', b: 'hello' }),
+    ).toEqual({
+      text: 'searchQuery',
+    });
+    expect(searchSource.messageSearchFilterBuilder.context.getLatestValue()).toEqual({
+      b: 'messageSearchFilterBuilder',
+    });
+
+    expect(
+      searchSource.messageSearchChannelFilterBuilder.filterConfig.getLatestValue(),
+    ).toEqual({});
+
+    expect(
+      searchSource.messageSearchChannelFilterBuilder.context.getLatestValue(),
+    ).toEqual({
+      a: 'messageSearchChannelFilterBuilder',
+    });
+
+    expect(searchSource.channelQueryFilterBuilder.filterConfig.getLatestValue()).toEqual({
+      cid: { enabled: true, generate: expect.any(Function) },
+    });
+
+    expect(
+      searchSource.channelQueryFilterBuilder.filterConfig
+        .getLatestValue()
+        .cid.generate({ cids: ['1', '2'], c: '5' }),
+    ).toEqual({
+      cid: { $in: ['1', '2'] },
+    });
+
+    expect(searchSource.channelQueryFilterBuilder.context.getLatestValue()).toEqual({
+      c: 'channelQueryFilterBuilder',
+    });
+  });
+
   it('returns empty items when client.userID is missing', async () => {
     searchSource['client'].userID = undefined;
     // @ts-expect-error protected access

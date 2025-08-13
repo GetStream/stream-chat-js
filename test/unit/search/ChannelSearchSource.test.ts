@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, MockInstance } from 'v
 import { ChannelSearchSource } from '../../../src/search/ChannelSearchSource';
 import type { Channel } from '../../../src/channel';
 import type { StreamChat } from '../../../src/client';
-import type { ChannelAPIResponse } from '../../../src/types';
+import type { ChannelAPIResponse, ChannelFilters } from '../../../src/types';
 import { generateChannel } from '../test-utils/generateChannel';
 import { getClientWithUser } from '../test-utils/getClient';
 
@@ -42,7 +42,16 @@ describe('ChannelSearchSource', () => {
         initialFilterConfig: {
           customGenerator: {
             enabled: true,
-            generate: () => ({ members: { $in: ['member-id'] } }),
+            generate: ({ searchQuery }) => {
+              return searchQuery
+                ? {
+                    $and: [
+                      { members: { $in: ['member-id'] } },
+                      { name: { $autocomplete: searchQuery } },
+                    ],
+                  }
+                : { members: { $in: ['member-id'] } };
+            },
           },
         },
       },
@@ -70,7 +79,39 @@ describe('ChannelSearchSource', () => {
         .getLatestValue()
         .customGenerator.generate({ searchQuery: 'xxx' }),
     ).toEqual({
+      $and: [{ members: { $in: ['member-id'] } }, { name: { $autocomplete: 'xxx' } }],
+    });
+
+    expect(
+      searchSource.filterBuilder.filterConfig
+        .getLatestValue()
+        .customGenerator.generate({}),
+    ).toEqual({
       members: { $in: ['member-id'] },
+    });
+  });
+
+  it('uses default options and custom filter builder options', () => {
+    searchSource = new ChannelSearchSource(
+      client,
+      {},
+      {
+        initialContext: { isAdmin: true, searchQuery: 'abc' },
+      },
+    );
+    expect(searchSource.type).toBe('channels');
+    expect(searchSource.client).toBe(client);
+    expect(searchSource.filterBuilder).toBeDefined();
+    expect(searchSource.pageSize).toBe(10);
+    expect(searchSource.offset).toBe(0);
+
+    expect(searchSource.filterBuilder.context.getLatestValue()).toEqual({
+      isAdmin: true,
+      searchQuery: 'abc',
+    });
+
+    expect(searchSource.filterBuilder.filterConfig.getLatestValue()).toEqual({
+      name: { enabled: true, generate: expect.any(Function) },
     });
   });
 
