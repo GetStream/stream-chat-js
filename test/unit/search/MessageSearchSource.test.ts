@@ -23,7 +23,7 @@ describe('MessageSearchSource', () => {
     } as any;
     searchMock = vi.spyOn(client, 'search').mockResolvedValue(searchResponse);
     queryChannelsMock = vi.spyOn(client, 'queryChannels').mockResolvedValue([]);
-    searchSource = new MessageSearchSource(client as StreamChat);
+    searchSource = new MessageSearchSource(client);
   });
 
   afterEach(() => {
@@ -37,6 +37,98 @@ describe('MessageSearchSource', () => {
     expect(searchSource.messageSearchChannelFilterBuilder).toBeDefined();
     expect(searchSource.channelQueryFilterBuilder).toBeDefined();
     expect(searchSource.pageSize).toBe(10);
+  });
+
+  it('initializes with custom options', () => {
+    const searchSource = new MessageSearchSource(
+      client,
+      { pageSize: 3000 },
+      {
+        messageSearchChannelFilterBuilder: {
+          initialContext: { a: 'messageSearchChannelFilterBuilder' },
+          initialFilterConfig: {
+            custom: {
+              enabled: true,
+              generate: ({ searchQuery, a }) =>
+                searchQuery ? { name: { $autocomplete: searchQuery + a } } : null,
+            },
+          },
+        },
+        messageSearchFilterBuilder: {
+          initialContext: { b: 'messageSearchFilterBuilder' },
+          initialFilterConfig: {
+            text: {
+              enabled: true,
+              generate: ({ searchQuery, b }) =>
+                searchQuery ? { text: searchQuery + b } : null,
+            },
+          },
+        },
+        channelQueryFilterBuilder: {
+          initialContext: { c: 'channelQueryFilterBuilder' },
+          initialFilterConfig: {
+            cid: {
+              enabled: true,
+              generate: ({ cids, c }) =>
+                cids ? { cid: { $in: cids.concat([c as string]) } } : null,
+            },
+          },
+        },
+      },
+    );
+    expect(searchSource.type).toBe('messages');
+    expect(searchSource['client']).toBe(client);
+    expect(searchSource.messageSearchFilterBuilder.filterConfig.getLatestValue()).toEqual(
+      {
+        text: { enabled: true, generate: expect.any(Function) },
+      },
+    );
+    expect(
+      searchSource.messageSearchFilterBuilder.filterConfig
+        .getLatestValue()
+        .text.generate({ searchQuery: 'searchQuery', b: 'hello' }),
+    ).toEqual({
+      text: 'searchQueryhello',
+    });
+    expect(searchSource.messageSearchFilterBuilder.context.getLatestValue()).toEqual({
+      b: 'messageSearchFilterBuilder',
+    });
+
+    expect(
+      searchSource.messageSearchChannelFilterBuilder.filterConfig.getLatestValue(),
+    ).toEqual({
+      custom: { enabled: true, generate: expect.any(Function) },
+    });
+    expect(
+      searchSource.messageSearchChannelFilterBuilder.filterConfig
+        .getLatestValue()
+        .custom.generate({ searchQuery: 'sq', a: 'hi' }),
+    ).toEqual({
+      name: { $autocomplete: 'sqhi' },
+    });
+    expect(
+      searchSource.messageSearchChannelFilterBuilder.context.getLatestValue(),
+    ).toEqual({
+      a: 'messageSearchChannelFilterBuilder',
+    });
+
+    expect(searchSource.channelQueryFilterBuilder.filterConfig.getLatestValue()).toEqual({
+      cid: { enabled: true, generate: expect.any(Function) },
+    });
+
+    expect(
+      searchSource.channelQueryFilterBuilder.filterConfig
+        .getLatestValue()
+        .cid.generate({ cids: ['1', '2'], c: '5' }),
+    ).toEqual({
+      cid: { $in: ['1', '2', '5'] },
+    });
+
+    expect(searchSource.channelQueryFilterBuilder.context.getLatestValue()).toEqual({
+      c: 'channelQueryFilterBuilder',
+    });
+
+    expect(searchSource.pageSize).toBe(3000);
   });
 
   it('returns empty items when client.userID is missing', async () => {
@@ -80,16 +172,20 @@ describe('MessageSearchSource', () => {
     searchSource.messageSearchFilterBuilder.updateFilterConfig({
       'mentioned_users.id': {
         enabled: true,
-        generate: ({ searchQuery }) => ({
-          'mentioned_users.id': { $contains: searchQuery },
-        }),
+        generate: ({ searchQuery }) =>
+          searchQuery
+            ? {
+                'mentioned_users.id': { $contains: searchQuery },
+              }
+            : null,
       },
     });
     searchSource.messageSearchChannelFilters = { type: 'messaging' };
     searchSource.messageSearchChannelFilterBuilder.updateFilterConfig({
       type: {
         enabled: true,
-        generate: ({ searchQuery }) => ({ type: { $in: [searchQuery] } }),
+        generate: ({ searchQuery }) =>
+          searchQuery ? { type: { $in: [searchQuery] } } : null,
       },
     });
     searchSource.messageSearchSort = { created_at: 1 };

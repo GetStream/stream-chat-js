@@ -28,14 +28,16 @@ export type FilterGenerator<TFilters, TContext extends Record<string, unknown> =
   };
 };
 
+export type FilterBuilderOptions<TFilters, TContext extends Record<string, unknown>> = {
+  initialFilterConfig?: FilterGenerator<TFilters, TContext>;
+  initialContext?: TContext;
+};
+
 export class FilterBuilder<TFilters, TContext extends Record<string, unknown> = {}> {
   filterConfig: StateStore<FilterGenerator<TFilters, TContext>>;
   context: StateStore<TContext>;
 
-  constructor(params?: {
-    initialFilterConfig?: FilterGenerator<TFilters, TContext>;
-    initialContext?: TContext;
-  }) {
+  constructor(params?: FilterBuilderOptions<TFilters, TContext>) {
     this.context = new StateStore(params?.initialContext ?? ({} as TContext));
     this.filterConfig = new StateStore(
       params?.initialFilterConfig ?? ({} as FilterGenerator<TFilters, TContext>),

@@ -1,8 +1,11 @@
 import { BaseSearchSource } from './BaseSearchSource';
-import { FilterBuilder } from '../pagination';
+import { FilterBuilder, type FilterBuilderOptions } from '../pagination';
 import type { StreamChat } from '../client';
 import type { UserFilters, UserOptions, UserResponse, UserSort } from '../types';
 import type { SearchSourceOptions } from './types';
+
+type CustomContext = Record<string, unknown>;
+type UserSearchSourceFilterBuilderContext = { searchQuery?: string } & CustomContext;
 
 export class UserSearchSource extends BaseSearchSource<UserResponse> {
   readonly type = 'users';
@@ -10,12 +13,22 @@ export class UserSearchSource extends BaseSearchSource<UserResponse> {
   filters: UserFilters | undefined;
   sort: UserSort | undefined;
   searchOptions: Omit<UserOptions, 'limit' | 'offset'> | undefined;
-  filterBuilder: FilterBuilder<UserFilters, { searchQuery?: string }>;
+  filterBuilder: FilterBuilder<UserFilters, UserSearchSourceFilterBuilderContext>;
 
-  constructor(client: StreamChat, options?: SearchSourceOptions) {
+  constructor(
+    client: StreamChat,
+    options?: SearchSourceOptions,
+    filterBuilderOptions: FilterBuilderOptions<
+      UserFilters,
+      UserSearchSourceFilterBuilderContext
+    > = {},
+  ) {
     super(options);
     this.client = client;
-    this.filterBuilder = new FilterBuilder<UserFilters, { searchQuery?: string }>({
+    this.filterBuilder = new FilterBuilder<
+      UserFilters,
+      UserSearchSourceFilterBuilderContext
+    >({
       initialFilterConfig: {
         $or: {
           enabled: true,
@@ -30,6 +43,7 @@ export class UserSearchSource extends BaseSearchSource<UserResponse> {
               : null,
         },
       },
+      ...filterBuilderOptions,
     });
   }
 

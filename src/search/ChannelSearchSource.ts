@@ -1,9 +1,14 @@
 import { BaseSearchSource } from './BaseSearchSource';
+import type { FilterBuilderOptions } from '../pagination';
 import { FilterBuilder } from '../pagination';
 import type { Channel } from '../channel';
 import type { StreamChat } from '../client';
 import type { ChannelFilters, ChannelOptions, ChannelSort } from '../types';
 import type { SearchSourceOptions } from './types';
+
+type CustomContext = Record<string, unknown>;
+
+type ChannelSearchSourceFilterBuilderContext = { searchQuery?: string } & CustomContext;
 
 export class ChannelSearchSource extends BaseSearchSource<Channel> {
   readonly type = 'channels';
@@ -11,12 +16,32 @@ export class ChannelSearchSource extends BaseSearchSource<Channel> {
   filters: ChannelFilters | undefined;
   sort: ChannelSort | undefined;
   searchOptions: Omit<ChannelOptions, 'limit' | 'offset'> | undefined;
-  filterBuilder: FilterBuilder<ChannelFilters, { searchQuery?: string }>;
+  filterBuilder: FilterBuilder<ChannelFilters, ChannelSearchSourceFilterBuilderContext>;
 
-  constructor(client: StreamChat, options?: SearchSourceOptions) {
+  constructor(
+    client: StreamChat,
+    options?: SearchSourceOptions,
+    filterBuilderOptions: FilterBuilderOptions<
+      ChannelFilters,
+      ChannelSearchSourceFilterBuilderContext
+    > = {},
+  ) {
     super(options);
     this.client = client;
-    this.filterBuilder = new FilterBuilder<ChannelFilters, { searchQuery?: string }>();
+    this.filterBuilder = new FilterBuilder<
+      ChannelFilters,
+      ChannelSearchSourceFilterBuilderContext
+    >({
+      ...filterBuilderOptions,
+      initialFilterConfig: {
+        name: {
+          enabled: true,
+          generate: ({ searchQuery }) =>
+            searchQuery ? { name: { $autocomplete: searchQuery } } : null,
+        },
+        ...filterBuilderOptions.initialFilterConfig,
+      },
+    });
   }
 
   protected async query(searchQuery: string) {

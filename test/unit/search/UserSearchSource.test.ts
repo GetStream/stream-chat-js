@@ -52,6 +52,62 @@ describe('UserSearchSource', () => {
     expect(searchSource.offset).toBe(0);
   });
 
+  it('initializes with custom options', () => {
+    const searchSource = new UserSearchSource(
+      client,
+      { pageSize: 101 },
+      {
+        initialContext: { banned: true },
+        initialFilterConfig: {
+          role: {
+            enabled: true,
+            generate: () => ({ role: { $in: ['abc', 'efg'] } }),
+          },
+          $or: {
+            enabled: true,
+            generate: ({ banned, searchQuery }) =>
+              searchQuery
+                ? {
+                    $or: [
+                      { id: { $autocomplete: searchQuery } },
+                      { name: { $autocomplete: searchQuery } },
+                      { banned: banned as boolean },
+                    ],
+                  }
+                : null,
+          },
+        },
+      },
+    );
+    expect(searchSource.type).toBe('users');
+    expect(searchSource.client).toBe(client);
+    expect(searchSource.pageSize).toBe(101);
+    expect(searchSource.offset).toBe(0);
+
+    expect(searchSource.filterBuilder.context.getLatestValue()).toEqual({ banned: true });
+
+    expect(searchSource.filterBuilder.filterConfig.getLatestValue()).toEqual({
+      role: { enabled: true, generate: expect.any(Function) },
+      $or: { enabled: true, generate: expect.any(Function) },
+    });
+    expect(
+      searchSource.filterBuilder.filterConfig.getLatestValue().role.generate({}),
+    ).toEqual({
+      role: { $in: ['abc', 'efg'] },
+    });
+    expect(
+      searchSource.filterBuilder.filterConfig
+        .getLatestValue()
+        .$or.generate({ searchQuery: 'x', banned: false }),
+    ).toEqual({
+      $or: [
+        { id: { $autocomplete: 'x' } },
+        { name: { $autocomplete: 'x' } },
+        { banned: false },
+      ],
+    });
+  });
+
   it('calls buildFilters internally', async () => {
     const spyBuildFilters = vi
       .spyOn(searchSource.filterBuilder, 'buildFilters')

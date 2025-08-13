@@ -2,12 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, MockInstance } from 'v
 import { ChannelSearchSource } from '../../../src/search/ChannelSearchSource';
 import type { Channel } from '../../../src/channel';
 import type { StreamChat } from '../../../src/client';
-import type {
-  ChannelAPIResponse,
-  ChannelFilters,
-  ChannelResponse,
-  ChannelSort,
-} from '../../../src/types';
+import type { ChannelAPIResponse } from '../../../src/types';
 import { generateChannel } from '../test-utils/generateChannel';
 import { getClientWithUser } from '../test-utils/getClient';
 
@@ -25,7 +20,7 @@ describe('ChannelSearchSource', () => {
       client.channel(data.channel.type, data.channel.id),
     );
     queryChannelsMock = vi.spyOn(client, 'queryChannels').mockResolvedValue(channels);
-    searchSource = new ChannelSearchSource(client as StreamChat);
+    searchSource = new ChannelSearchSource(client);
   });
 
   afterEach(vi.clearAllMocks);
@@ -36,6 +31,46 @@ describe('ChannelSearchSource', () => {
     expect(searchSource.filterBuilder).toBeDefined();
     expect(searchSource.pageSize).toBe(10);
     expect(searchSource.offset).toBe(0);
+  });
+
+  it('initializes with custom options', () => {
+    searchSource = new ChannelSearchSource(
+      client,
+      { pageSize: 100 },
+      {
+        initialContext: { isAdmin: true, searchQuery: 'abc' },
+        initialFilterConfig: {
+          customGenerator: {
+            enabled: true,
+            generate: () => ({ members: { $in: ['member-id'] } }),
+          },
+        },
+      },
+    );
+    expect(searchSource.type).toBe('channels');
+    expect(searchSource.client).toBe(client);
+    expect(searchSource.filterBuilder).toBeDefined();
+    expect(searchSource.pageSize).toBe(100);
+    expect(searchSource.offset).toBe(0);
+
+    expect(searchSource.filterBuilder.context.getLatestValue()).toEqual({
+      searchQuery: 'abc',
+    });
+
+    expect(
+      searchSource.filterBuilder.filterConfig.getLatestValue().customGenerator,
+    ).toEqual({
+      enabled: true,
+      generate: expect.any(Function),
+    });
+
+    expect(
+      searchSource.filterBuilder.filterConfig
+        .getLatestValue()
+        .customGenerator.generate({ searchQuery: 'xxx' }),
+    ).toEqual({
+      members: { $in: ['member-id'] },
+    });
   });
 
   it('builds filters including membership filter with client userID', async () => {
@@ -71,9 +106,9 @@ describe('ChannelSearchSource', () => {
       {
         'member.user.name': {
           $autocomplete: 'channel search',
-        },
-        members: { $in: [user.id] },
-        name: { $autocomplete: 'channel' },
+        }, // custom
+        members: { $in: [user.id] }, // static default
+        name: { $autocomplete: 'channel search' }, // dynamic default
       },
       { last_message_at: -1 },
       { message_limit: 5, limit: searchSource.pageSize, offset: searchSource.offset },
