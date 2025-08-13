@@ -75,6 +75,48 @@ describe('MessageSearchSource', () => {
     );
   });
 
+  it('overrides the static filters with dynamic ones', async () => {
+    searchSource.messageSearchFilters = { 'mentioned_users.id': { $contains: 'abc' } };
+    searchSource.messageSearchFilterBuilder.updateFilterConfig({
+      'mentioned_users.id': {
+        enabled: true,
+        generate: ({ searchQuery }) => ({
+          'mentioned_users.id': { $contains: searchQuery },
+        }),
+      },
+    });
+    searchSource.messageSearchChannelFilters = { type: 'messaging' };
+    searchSource.messageSearchChannelFilterBuilder.updateFilterConfig({
+      type: {
+        enabled: true,
+        generate: ({ searchQuery }) => ({ type: { $in: [searchQuery] } }),
+      },
+    });
+    searchSource.messageSearchSort = { created_at: 1 };
+    searchSource.state.partialNext({ next: 'next-token-old' });
+
+    const searchQuery = 'hello';
+    // @ts-expect-error protected access
+    await searchSource.query(searchQuery);
+
+    expect(searchMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        members: { $in: [user.id] },
+        type: { $in: [searchQuery] },
+      }),
+      expect.objectContaining({
+        'mentioned_users.id': { $contains: searchQuery },
+        type: 'regular',
+        text: searchQuery,
+      }),
+      expect.objectContaining({
+        limit: searchSource.pageSize,
+        next: 'next-token-old',
+        sort: { created_at: 1 }, // note: merges created_at with default -1, order may vary
+      }),
+    );
+  });
+
   it('overrides the message type', async () => {
     searchSource.messageSearchFilters = { type: 'deleted' };
     searchSource.state.partialNext({ next: 'next-token-old' });
@@ -101,6 +143,7 @@ describe('MessageSearchSource', () => {
   it('calls queryChannels when some cids are missing locally', async () => {
     const m1 = generateMsg({ cid: 'cid1' });
     const m2 = generateMsg({ cid: 'cid2' });
+    searchSource.channelQueryFilters = { type: 'abc' };
     client.activeChannels = { cid1: {} as any };
     searchMock.mockResolvedValueOnce({
       results: [{ message: m1 }, { message: m2 }],
@@ -111,7 +154,7 @@ describe('MessageSearchSource', () => {
     await searchSource.query('query');
 
     expect(queryChannelsMock).toHaveBeenCalledWith(
-      { cid: { $in: ['cid2'] } },
+      { cid: { $in: ['cid2'] }, type: 'abc' },
       { last_message_at: -1 },
       undefined,
     );
@@ -129,6 +172,32 @@ describe('MessageSearchSource', () => {
     await searchSource.query('query');
 
     expect(queryChannelsMock).not.toHaveBeenCalled();
+  });
+
+  it('overrides static channel query filters with dynamic ones', async () => {
+    searchSource.channelQueryFilters = { type: 'abc' };
+    searchSource.channelQueryFilterBuilder.updateFilterConfig({
+      type: {
+        enabled: true,
+        generate: () => ({ type: 'efg' }),
+      },
+    });
+    const m1 = generateMsg({ cid: 'cid1' });
+    const m2 = generateMsg({ cid: 'cid2' });
+    client.activeChannels = { cid1: {} as any };
+    searchMock.mockResolvedValueOnce({
+      results: [{ message: m1 }, { message: m2 }],
+      next: undefined,
+    } as any);
+
+    // @ts-expect-error protected access
+    await searchSource.query('query');
+
+    expect(queryChannelsMock).toHaveBeenCalledWith(
+      { cid: { $in: ['cid2'] }, type: 'efg' },
+      { last_message_at: -1 },
+      undefined,
+    );
   });
 
   it('returns items and next from search', async () => {
