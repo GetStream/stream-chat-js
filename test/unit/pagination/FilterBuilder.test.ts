@@ -164,15 +164,15 @@ describe('FilterBuilder', () => {
 
   describe('complex nested filters', () => {
     type ComplexFilterFieldsSchema = ExtendedQueryFilters<{
-      tc_context_loadingPlaces_countryCodes: string;
-      tc_context_loadingPlaces_cities: string;
-      tc_context_loadingPlaces_postcodes: string;
-      tc_context_startAddress_countryCode: string;
-      tc_context_startAddress_city: string;
-      tc_context_startAddress_postcode: string;
-      tc_context_destinationAddresses_countryCodes: string;
-      tc_context_destinationAddresses_cities: string;
-      tc_context_destinationAddresses_postcodes: string;
+      loadingPlaces_countryCodes: string;
+      loadingPlaces_cities: string;
+      loadingPlaces_postcodes: string;
+      startAddress_countryCode: string;
+      startAddress_city: string;
+      startAddress_postcode: string;
+      destinationAddresses_countryCodes: string;
+      destinationAddresses_cities: string;
+      destinationAddresses_postcodes: string;
       name: string;
       'member.user.name': string;
       last_message_at: Date;
@@ -190,20 +190,20 @@ describe('FilterBuilder', () => {
                   {
                     $and: [
                       {
-                        tc_context_loadingPlaces_countryCodes: { $in: [searchQuery] },
+                        loadingPlaces_countryCodes: { $in: [searchQuery] },
                       },
                       {
-                        tc_context_loadingPlaces_cities: { $autocomplete: searchQuery },
+                        loadingPlaces_cities: { $autocomplete: searchQuery },
                       },
                     ],
                   },
                   {
                     $and: [
                       {
-                        tc_context_startAddress_countryCode: { $contains: searchQuery },
+                        startAddress_countryCode: { $contains: searchQuery },
                       },
                       {
-                        tc_context_startAddress_postcode: { $autocomplete: searchQuery },
+                        startAddress_postcode: { $autocomplete: searchQuery },
                       },
                     ],
                   },
@@ -227,20 +227,20 @@ describe('FilterBuilder', () => {
         {
           $and: [
             {
-              tc_context_loadingPlaces_countryCodes: { $in: [searchQueryString] },
+              loadingPlaces_countryCodes: { $in: [searchQueryString] },
             },
             {
-              tc_context_loadingPlaces_cities: { $autocomplete: searchQueryString },
+              loadingPlaces_cities: { $autocomplete: searchQueryString },
             },
           ],
         },
         {
           $and: [
             {
-              tc_context_startAddress_countryCode: { $contains: searchQueryString },
+              startAddress_countryCode: { $contains: searchQueryString },
             },
             {
-              tc_context_startAddress_postcode: { $autocomplete: searchQueryString },
+              startAddress_postcode: { $autocomplete: searchQueryString },
             },
           ],
         },

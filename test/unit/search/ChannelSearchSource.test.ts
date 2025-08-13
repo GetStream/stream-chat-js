@@ -54,6 +54,7 @@ describe('ChannelSearchSource', () => {
     expect(searchSource.offset).toBe(0);
 
     expect(searchSource.filterBuilder.context.getLatestValue()).toEqual({
+      isAdmin: true,
       searchQuery: 'abc',
     });
 
