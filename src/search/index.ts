@@ -1,6 +1,6 @@
 export * from './BaseSearchSource';
 export * from './SearchController';
-export { UserSearchSource } from './UserSearchSource';
-export { ChannelSearchSource } from './ChannelSearchSource';
-export { MessageSearchSource } from './MessageSearchSource';
+export * from './UserSearchSource';
+export * from './ChannelSearchSource';
+export * from './MessageSearchSource';
 export * from './types';
