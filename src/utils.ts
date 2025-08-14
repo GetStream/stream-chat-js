@@ -416,6 +416,81 @@ export const toUpdatedMessagePayload = (
   };
 };
 
+export const toDeletedMessage = ({
+  message,
+  deletedAt,
+  hardDelete = false,
+}: {
+  message: LocalMessage | LocalMessageBase;
+  deletedAt: LocalMessage['deleted_at'];
+  hardDelete: boolean;
+}) => {
+  if (hardDelete) {
+    /**
+     * In case of hard delete, we need to strip down all text, html, attachments and all the custom properties on message
+     * The hard-deleted message is kept in the UI until the messages are re-queried
+     * FIXME: we are returning an object that does not match LocalMessage | LocalMessageBase
+     */
+    return {
+      attachments: [],
+      cid: message.cid,
+      created_at: message.created_at,
+      deleted_at: deletedAt,
+      id: message.id,
+      latest_reactions: [],
+      mentioned_users: [],
+      own_reactions: [],
+      parent_id: message.parent_id,
+      reply_count: message.reply_count,
+      status: message.status,
+      thread_participants: message.thread_participants,
+      type: 'deleted' as const,
+      updated_at: message.updated_at,
+      user: message.user,
+    };
+  } else {
+    return {
+      ...message,
+      attachments: [],
+      type: 'deleted',
+      deleted_at: deletedAt,
+    };
+  }
+};
+
+export const deleteUserMessages = ({
+  messages,
+  user,
+  hardDelete = false,
+  deletedAt,
+}: {
+  messages: Array<LocalMessage>;
+  user: UserResponse;
+  hardDelete: boolean;
+  deletedAt: LocalMessage['deleted_at'];
+}) => {
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i];
+    if (message.user?.id === user.id) {
+      messages[i] =
+        message.type === 'deleted'
+          ? message
+          : (toDeletedMessage({ message, hardDelete, deletedAt }) as LocalMessage);
+    }
+
+    if (message.quoted_message?.user?.id === user.id) {
+      messages[i].quoted_message =
+        message.quoted_message.type === 'deleted'
+          ? message.quoted_message
+          : (toDeletedMessage({
+              message: messages[i].quoted_message as LocalMessageBase,
+              hardDelete,
+              deletedAt,
+            }) as LocalMessage);
+    }
+  }
+};
+
 export const findIndexInSortedArray = <T, L>({
   needle,
   sortedArray,

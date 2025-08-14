@@ -1404,7 +1404,11 @@ export class StreamChat {
    * @param {UserResponse} user
    * @param {boolean} hardDelete
    */
-  _deleteUserMessageReference = (user: UserResponse, hardDelete = false) => {
+  _deleteUserMessageReference = (
+    user: UserResponse,
+    hardDelete = false,
+    deletedAt?: LocalMessage['deleted_at'],
+  ) => {
     const refMap = this.state.userChannelReferences[user.id] || {};
 
     for (const channelID in refMap) {
@@ -1413,7 +1417,7 @@ export class StreamChat {
         const state = channel.state;
 
         /** deleted the messages from this user. */
-        state?.deleteUserMessages(user, hardDelete);
+        state?.deleteUserMessages(user, hardDelete, deletedAt);
       }
     }
   };
@@ -1478,7 +1482,11 @@ export class StreamChat {
       event.user.deleted_at &&
       (event.mark_messages_deleted || event.hard_delete)
     ) {
-      this._deleteUserMessageReference(event.user, event.hard_delete);
+      this._deleteUserMessageReference(
+        event.user,
+        event.hard_delete,
+        event.user.deleted_at ? new Date(event.user.deleted_at) : null,
+      );
     }
   };
 
@@ -1501,6 +1509,14 @@ export class StreamChat {
       event.type === 'user.deleted'
     ) {
       this._handleUserEvent(event);
+    }
+
+    if (event.type === 'user.messages.deleted' && !event.cid && event.user) {
+      this._deleteUserMessageReference(
+        event.user,
+        event.hard_delete,
+        event.created_at ? new Date(event.created_at) : null,
+      );
     }
 
     if (event.type === 'health.check' && event.me) {
