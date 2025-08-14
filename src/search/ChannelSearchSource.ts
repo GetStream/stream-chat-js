@@ -8,29 +8,36 @@ import type { SearchSourceOptions } from './types';
 
 type CustomContext = Record<string, unknown>;
 
-type ChannelSearchSourceFilterBuilderContext = { searchQuery?: string } & CustomContext;
+export type ChannelSearchSourceFilterBuilderContext<
+  C extends CustomContext = CustomContext,
+> = { searchQuery?: string } & C;
 
-export class ChannelSearchSource extends BaseSearchSource<Channel> {
+export class ChannelSearchSource<
+  TFilterContext extends CustomContext = CustomContext,
+> extends BaseSearchSource<Channel> {
   readonly type = 'channels';
   client: StreamChat;
   filters: ChannelFilters | undefined;
   sort: ChannelSort | undefined;
   searchOptions: Omit<ChannelOptions, 'limit' | 'offset'> | undefined;
-  filterBuilder: FilterBuilder<ChannelFilters, ChannelSearchSourceFilterBuilderContext>;
+  filterBuilder: FilterBuilder<
+    ChannelFilters,
+    ChannelSearchSourceFilterBuilderContext<TFilterContext>
+  >;
 
   constructor(
     client: StreamChat,
     options?: SearchSourceOptions,
     filterBuilderOptions: FilterBuilderOptions<
       ChannelFilters,
-      ChannelSearchSourceFilterBuilderContext
+      ChannelSearchSourceFilterBuilderContext<TFilterContext>
     > = {},
   ) {
     super(options);
     this.client = client;
     this.filterBuilder = new FilterBuilder<
       ChannelFilters,
-      ChannelSearchSourceFilterBuilderContext
+      ChannelSearchSourceFilterBuilderContext<TFilterContext>
     >({
       ...filterBuilderOptions,
       initialFilterConfig: {
@@ -50,7 +57,9 @@ export class ChannelSearchSource extends BaseSearchSource<Channel> {
         ...(this.client.userID ? { members: { $in: [this.client.userID] } } : {}),
         ...this.filters,
       },
-      context: { searchQuery },
+      context: { searchQuery } as Partial<
+        ChannelSearchSourceFilterBuilderContext<TFilterContext>
+      >,
     });
     const sort = this.sort ?? {};
     const options = { ...this.searchOptions, limit: this.pageSize, offset: this.offset };

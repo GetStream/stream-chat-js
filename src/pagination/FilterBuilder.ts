@@ -21,7 +21,10 @@ export type ExtendedQueryFilters<T> = {
   [K in keyof T]?: ExtendedQueryFilter<T[K]>;
 } & ExtendedQueryLogicalOperators<T>;
 
-export type FilterGenerator<TFilters, TContext extends Record<string, unknown> = {}> = {
+export type FilterBuilderGenerators<
+  TFilters,
+  TContext extends Record<string, unknown> = {},
+> = {
   [K in string]: {
     enabled: boolean;
     generate: (context: TContext) => Partial<TFilters> | null;
@@ -29,26 +32,26 @@ export type FilterGenerator<TFilters, TContext extends Record<string, unknown> =
 };
 
 export type FilterBuilderOptions<TFilters, TContext extends Record<string, unknown>> = {
-  initialFilterConfig?: FilterGenerator<TFilters, TContext>;
+  initialFilterConfig?: FilterBuilderGenerators<TFilters, TContext>;
   initialContext?: TContext;
 };
 
 export class FilterBuilder<TFilters, TContext extends Record<string, unknown> = {}> {
-  filterConfig: StateStore<FilterGenerator<TFilters, TContext>>;
+  filterConfig: StateStore<FilterBuilderGenerators<TFilters, TContext>>;
   context: StateStore<TContext>;
 
   constructor(params?: FilterBuilderOptions<TFilters, TContext>) {
     this.context = new StateStore(params?.initialContext ?? ({} as TContext));
     this.filterConfig = new StateStore(
-      params?.initialFilterConfig ?? ({} as FilterGenerator<TFilters, TContext>),
+      params?.initialFilterConfig ?? ({} as FilterBuilderGenerators<TFilters, TContext>),
     );
   }
 
-  updateFilterConfig(config: Partial<FilterGenerator<TFilters, TContext>>) {
+  updateFilterConfig(config: Partial<FilterBuilderGenerators<TFilters, TContext>>) {
     this.filterConfig.partialNext(config);
   }
 
-  enableFilter(filterKey: keyof FilterGenerator<TFilters, TContext>) {
+  enableFilter(filterKey: keyof FilterBuilderGenerators<TFilters, TContext>) {
     const config = this.filterConfig.getLatestValue();
     if (config[filterKey]) {
       this.filterConfig.partialNext({
@@ -60,7 +63,7 @@ export class FilterBuilder<TFilters, TContext extends Record<string, unknown> = 
     }
   }
 
-  disableFilter(filterKey: keyof FilterGenerator<TFilters, TContext>) {
+  disableFilter(filterKey: keyof FilterBuilderGenerators<TFilters, TContext>) {
     const config = this.filterConfig.getLatestValue();
     if (config[filterKey]) {
       this.filterConfig.partialNext({

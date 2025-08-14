@@ -40,11 +40,15 @@ describe('MessageSearchSource', () => {
   });
 
   it('initializes with custom options', () => {
-    const searchSource = new MessageSearchSource(
+    const searchSource = new MessageSearchSource<{
+      messageSearchChannelContext: { a: string };
+      messageSearchContext: { b: string };
+      channelQueryContext: { c: string };
+    }>(
       client,
       { pageSize: 3000 },
       {
-        messageSearchChannelFilterBuilder: {
+        messageSearchChannel: {
           initialContext: { a: 'messageSearchChannelFilterBuilder' },
           initialFilterConfig: {
             custom: {
@@ -54,7 +58,7 @@ describe('MessageSearchSource', () => {
             },
           },
         },
-        messageSearchFilterBuilder: {
+        messageSearch: {
           initialContext: { b: 'messageSearchFilterBuilder' },
           initialFilterConfig: {
             text: {
@@ -64,7 +68,7 @@ describe('MessageSearchSource', () => {
             },
           },
         },
-        channelQueryFilterBuilder: {
+        channelQuery: {
           initialContext: { c: 'channelQueryFilterBuilder' },
           initialFilterConfig: {
             cid: {
@@ -132,17 +136,21 @@ describe('MessageSearchSource', () => {
   });
 
   it('uses default options and custom filter builder options', () => {
-    const searchSource = new MessageSearchSource(
+    const searchSource = new MessageSearchSource<{
+      messageSearchChannelContext: { a: string };
+      messageSearchContext: { b: string };
+      channelQueryContext: { c: string };
+    }>(
       client,
       {},
       {
-        messageSearchChannelFilterBuilder: {
+        messageSearchChannel: {
           initialContext: { a: 'messageSearchChannelFilterBuilder' },
         },
-        messageSearchFilterBuilder: {
+        messageSearch: {
           initialContext: { b: 'messageSearchFilterBuilder' },
         },
-        channelQueryFilterBuilder: {
+        channelQuery: {
           initialContext: { c: 'channelQueryFilterBuilder' },
         },
       },

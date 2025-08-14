@@ -5,29 +5,37 @@ import type { UserFilters, UserOptions, UserResponse, UserSort } from '../types'
 import type { SearchSourceOptions } from './types';
 
 type CustomContext = Record<string, unknown>;
-type UserSearchSourceFilterBuilderContext = { searchQuery?: string } & CustomContext;
 
-export class UserSearchSource extends BaseSearchSource<UserResponse> {
+export type UserSearchSourceFilterBuilderContext<
+  C extends CustomContext = CustomContext,
+> = { searchQuery?: string } & C;
+
+export class UserSearchSource<
+  TFilterContext extends CustomContext = CustomContext,
+> extends BaseSearchSource<UserResponse> {
   readonly type = 'users';
   client: StreamChat;
   filters: UserFilters | undefined;
   sort: UserSort | undefined;
   searchOptions: Omit<UserOptions, 'limit' | 'offset'> | undefined;
-  filterBuilder: FilterBuilder<UserFilters, UserSearchSourceFilterBuilderContext>;
+  filterBuilder: FilterBuilder<
+    UserFilters,
+    UserSearchSourceFilterBuilderContext<TFilterContext>
+  >;
 
   constructor(
     client: StreamChat,
     options?: SearchSourceOptions,
     filterBuilderOptions: FilterBuilderOptions<
       UserFilters,
-      UserSearchSourceFilterBuilderContext
+      UserSearchSourceFilterBuilderContext<TFilterContext>
     > = {},
   ) {
     super(options);
     this.client = client;
     this.filterBuilder = new FilterBuilder<
       UserFilters,
-      UserSearchSourceFilterBuilderContext
+      UserSearchSourceFilterBuilderContext<TFilterContext>
     >({
       initialFilterConfig: {
         $or: {
@@ -50,7 +58,7 @@ export class UserSearchSource extends BaseSearchSource<UserResponse> {
   protected async query(searchQuery: string) {
     const filters = this.filterBuilder.buildFilters({
       baseFilters: this.filters,
-      context: { searchQuery },
+      context: { searchQuery } as UserSearchSourceFilterBuilderContext<TFilterContext>,
     });
     const sort = { id: 1, ...this.sort } as UserSort;
     const options = { ...this.searchOptions, limit: this.pageSize, offset: this.offset };

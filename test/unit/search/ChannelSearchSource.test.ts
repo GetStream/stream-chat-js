@@ -34,7 +34,7 @@ describe('ChannelSearchSource', () => {
   });
 
   it('initializes with custom options', () => {
-    searchSource = new ChannelSearchSource(
+    const searchSource = new ChannelSearchSource<{ isAdmin?: boolean }>(
       client,
       { pageSize: 100 },
       {
@@ -92,7 +92,7 @@ describe('ChannelSearchSource', () => {
   });
 
   it('uses default options and custom filter builder options', () => {
-    searchSource = new ChannelSearchSource(
+    const searchSource = new ChannelSearchSource(
       client,
       {},
       {

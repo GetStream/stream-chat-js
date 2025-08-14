@@ -14,22 +14,49 @@ import { FilterBuilder, type FilterBuilderOptions } from '../pagination';
 
 type CustomContext = Record<string, unknown>;
 
-export type MessageSearchSourceFilterBuilderOptions = {
-  messageSearchFilterBuilder?: FilterBuilderOptions<
-    MessageFilters,
-    { searchQuery?: string } & CustomContext
-  >;
-  messageSearchChannelFilterBuilder?: FilterBuilderOptions<
-    ChannelFilters,
-    { searchQuery?: string } & CustomContext
-  >;
-  channelQueryFilterBuilder?: FilterBuilderOptions<
-    ChannelFilters,
-    { cids?: string[] } & CustomContext
-  >;
+// Built-in contexts per builder
+type BuiltInContexts = {
+  messageSearchChannel: { searchQuery?: string };
+  messageSearch: { searchQuery?: string };
+  channelQuery: { cids?: string[] };
 };
 
-export class MessageSearchSource extends BaseSearchSource<MessageResponse> {
+// Merge Built-in with user-provided Custom context
+type MergeContext<
+  B extends Record<string, unknown>,
+  C extends CustomContext | undefined,
+> = B & (C extends object ? C : {});
+
+// User can provide custom context for each builder
+type MessageSearchSourceContexts = Partial<{
+  messageSearchChannelContext: Record<string, unknown>;
+  messageSearchContext: Record<string, unknown>;
+  channelQueryContext: Record<string, unknown>;
+}>;
+
+export type MessageSearchSourceFilterBuilderOptions<
+  TContexts extends MessageSearchSourceContexts = {},
+> = Partial<{
+  messageSearchChannel: FilterBuilderOptions<
+    ChannelFilters,
+    MergeContext<
+      BuiltInContexts['messageSearchChannel'],
+      TContexts['messageSearchChannelContext']
+    >
+  >;
+  messageSearch: FilterBuilderOptions<
+    MessageFilters,
+    MergeContext<BuiltInContexts['messageSearch'], TContexts['messageSearchContext']>
+  >;
+  channelQuery: FilterBuilderOptions<
+    ChannelFilters,
+    MergeContext<BuiltInContexts['channelQuery'], TContexts['channelQueryContext']>
+  >;
+}>;
+
+export class MessageSearchSource<
+  TContexts extends MessageSearchSourceContexts = {},
+> extends BaseSearchSource<MessageResponse> {
   readonly type = 'messages';
   private client: StreamChat;
 
@@ -41,78 +68,91 @@ export class MessageSearchSource extends BaseSearchSource<MessageResponse> {
   channelQuerySort: ChannelSort | undefined;
   channelQueryOptions: Omit<ChannelOptions, 'limit' | 'offset'> | undefined;
 
-  messageSearchFilterBuilder: FilterBuilder<
-    MessageFilters,
-    { searchQuery?: string } & CustomContext
-  >;
   messageSearchChannelFilterBuilder: FilterBuilder<
     ChannelFilters,
-    { searchQuery?: string } & CustomContext
+    MergeContext<
+      BuiltInContexts['messageSearchChannel'],
+      TContexts['messageSearchChannelContext']
+    >
+  >;
+  messageSearchFilterBuilder: FilterBuilder<
+    MessageFilters,
+    MergeContext<BuiltInContexts['messageSearch'], TContexts['messageSearchContext']>
   >;
   channelQueryFilterBuilder: FilterBuilder<
     ChannelFilters,
-    { cids?: string[] } & CustomContext
+    MergeContext<BuiltInContexts['channelQuery'], TContexts['channelQueryContext']>
   >;
 
   constructor(
     client: StreamChat,
     options?: SearchSourceOptions,
-    filterBuilderOptions: MessageSearchSourceFilterBuilderOptions = {},
+    filterBuilderOptions?: MessageSearchSourceFilterBuilderOptions<TContexts>,
   ) {
     super(options);
     this.client = client;
 
     this.messageSearchChannelFilterBuilder = new FilterBuilder<
       ChannelFilters,
-      { searchQuery?: string } & CustomContext
-    >(filterBuilderOptions.messageSearchChannelFilterBuilder);
+      MergeContext<
+        BuiltInContexts['messageSearchChannel'],
+        TContexts['messageSearchChannelContext']
+      >
+    >(filterBuilderOptions?.messageSearchChannel);
 
     this.messageSearchFilterBuilder = new FilterBuilder<
       MessageFilters,
-      { searchQuery?: string } & CustomContext
+      MergeContext<BuiltInContexts['messageSearch'], TContexts['messageSearchContext']>
     >({
-      ...filterBuilderOptions.messageSearchFilterBuilder,
+      ...filterBuilderOptions?.messageSearch,
       initialFilterConfig: {
         text: {
           enabled: true,
-          generate: ({ searchQuery }) => ({ text: searchQuery }),
+          generate: ({ searchQuery }) => (searchQuery ? { text: searchQuery } : null),
         },
-        ...filterBuilderOptions.messageSearchFilterBuilder?.initialFilterConfig,
+        ...filterBuilderOptions?.messageSearch?.initialFilterConfig,
       },
     });
 
     this.channelQueryFilterBuilder = new FilterBuilder<
       ChannelFilters,
-      { cids?: string[] } & CustomContext
+      MergeContext<BuiltInContexts['channelQuery'], TContexts['channelQueryContext']>
     >({
-      ...filterBuilderOptions.channelQueryFilterBuilder,
+      ...filterBuilderOptions?.channelQuery,
       initialFilterConfig: {
         cid: {
           enabled: true,
           generate: ({ cids }) => (cids ? { cid: { $in: cids } } : null),
         },
-        ...filterBuilderOptions.channelQueryFilterBuilder?.initialFilterConfig,
+        ...filterBuilderOptions?.channelQuery?.initialFilterConfig,
       },
     });
   }
 
   protected async query(searchQuery: string) {
-    if (!this.client.userID || !searchQuery) return { items: [] };
+    if (!this.client.userID || !searchQuery || this.next === null) return { items: [] };
 
     const channelFilters = this.messageSearchChannelFilterBuilder.buildFilters({
       baseFilters: {
         ...(this.client.userID ? { members: { $in: [this.client.userID] } } : {}),
         ...this.messageSearchChannelFilters,
       },
-      context: { searchQuery },
+      context: { searchQuery } as Partial<
+        MergeContext<
+          BuiltInContexts['messageSearchChannel'],
+          TContexts['messageSearchChannelContext']
+        >
+      >,
     });
 
     const messageFilters: MessageFilters = this.messageSearchFilterBuilder.buildFilters({
       baseFilters: {
-        type: 'regular', // FIXME: type: 'reply' resp. do not filter by type and allow to jump to a message in a thread - missing support
+        type: 'regular',
         ...this.messageSearchFilters,
       },
-      context: { searchQuery },
+      context: { searchQuery } as Partial<
+        MergeContext<BuiltInContexts['messageSearch'], TContexts['messageSearchContext']>
+      >,
     });
 
     const sort: SearchMessageSort = {
@@ -120,11 +160,11 @@ export class MessageSearchSource extends BaseSearchSource<MessageResponse> {
       ...this.messageSearchSort,
     };
 
-    const options = {
+    const options: SearchOptions = {
       limit: this.pageSize,
       next: this.next,
       sort,
-    } as SearchOptions;
+    };
 
     const { next, results } = await this.client.search(
       channelFilters,
@@ -137,15 +177,15 @@ export class MessageSearchSource extends BaseSearchSource<MessageResponse> {
       items.reduce((acc, message) => {
         if (message.cid && !this.client.activeChannels[message.cid]) acc.add(message.cid);
         return acc;
-      }, new Set<string>()), // keep the cids unique
+      }, new Set<string>()),
     );
 
-    const allChannelsLoadedLocally = cids.length === 0;
-
-    if (!allChannelsLoadedLocally) {
+    if (cids.length > 0) {
       const channelQueryFilters = this.channelQueryFilterBuilder.buildFilters({
         baseFilters: this.channelQueryFilters,
-        context: { cids },
+        context: { cids } as Partial<
+          MergeContext<BuiltInContexts['channelQuery'], TContexts['channelQueryContext']>
+        >,
       });
       await this.client.queryChannels(
         channelQueryFilters,

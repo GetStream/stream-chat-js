@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import {
   FilterBuilder,
-  FilterGenerator,
+  FilterBuilderGenerators,
   ExtendedQueryFilter,
   ExtendedQueryFilters,
 } from '../../../src/pagination/FilterBuilder';
@@ -23,7 +23,7 @@ type BasicFilterBuilderContext = SearchContext & {
 
 describe('FilterBuilder', () => {
   let initialContext: BasicFilterBuilderContext;
-  let initialFilterConfig: FilterGenerator<
+  let initialFilterConfig: FilterBuilderGenerators<
     BasicFilterFieldsSchema,
     BasicFilterBuilderContext
   >;
@@ -180,7 +180,10 @@ describe('FilterBuilder', () => {
       type: string;
     }>;
 
-    const filterConfig: FilterGenerator<ComplexFilterFieldsSchema, SearchContext> = {
+    const filterConfig: FilterBuilderGenerators<
+      ComplexFilterFieldsSchema,
+      SearchContext
+    > = {
       group1: {
         enabled: true,
         generate: ({ searchQuery }) =>

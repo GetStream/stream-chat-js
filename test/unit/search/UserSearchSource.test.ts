@@ -53,7 +53,7 @@ describe('UserSearchSource', () => {
   });
 
   it('initializes with custom options', () => {
-    const searchSource = new UserSearchSource(
+    const searchSource = new UserSearchSource<{ banned: boolean }>(
       client,
       { pageSize: 101 },
       {
@@ -91,7 +91,9 @@ describe('UserSearchSource', () => {
       $or: { enabled: true, generate: expect.any(Function) },
     });
     expect(
-      searchSource.filterBuilder.filterConfig.getLatestValue().role.generate({}),
+      searchSource.filterBuilder.filterConfig
+        .getLatestValue()
+        .role.generate({ banned: false }),
     ).toEqual({
       role: { $in: ['abc', 'efg'] },
     });
