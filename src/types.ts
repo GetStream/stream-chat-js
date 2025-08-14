@@ -2366,7 +2366,7 @@ export type ChannelConfigFields = {
   replies?: boolean;
   search?: boolean;
   shared_locations?: boolean;
-  total_message_count?: boolean; // Feature flag for message count
+  count_messages?: boolean; // Feature flag for message count
   typing_events?: boolean;
   uploads?: boolean;
   url_enrichment?: boolean;
