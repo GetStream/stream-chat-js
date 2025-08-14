@@ -45,6 +45,7 @@ export const EVENT_MAP = {
   'typing.stop': true,
   'user.banned': true,
   'user.deleted': true,
+  'user.messages.deleted': true,
   'user.presence.changed': true,
   'user.unbanned': true,
   'user.unread_message_reminder': true,

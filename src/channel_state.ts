@@ -11,7 +11,11 @@ import type {
   ReactionResponse,
   UserResponse,
 } from './types';
-import { addToMessageList, formatMessage } from './utils';
+import {
+  deleteUserMessages as _deleteUserMessages,
+  addToMessageList,
+  formatMessage,
+} from './utils';
 import { DEFAULT_MESSAGE_SET_PAGINATION } from './constants';
 
 type ChannelReadStatus = Record<
@@ -712,58 +716,30 @@ export class ChannelState {
    * @param {UserResponse} user
    * @param {boolean} hardDelete
    */
-  deleteUserMessages = (user: UserResponse, hardDelete = false) => {
-    const _deleteUserMessages = (
-      messages: Array<ReturnType<ChannelState['formatMessage']>>,
-      user: UserResponse,
-      hardDelete = false,
-    ) => {
-      for (let i = 0; i < messages.length; i++) {
-        const m = messages[i];
-        if (m.user?.id !== user.id) {
-          continue;
-        }
-
-        if (hardDelete) {
-          /**
-           * In case of hard delete, we need to strip down all text, html,
-           * attachments and all the custom properties on message
-           */
-          messages[i] = {
-            cid: m.cid,
-            created_at: m.created_at,
-            deleted_at: user.deleted_at,
-            id: m.id,
-            latest_reactions: [],
-            mentioned_users: [],
-            own_reactions: [],
-            parent_id: m.parent_id,
-            reply_count: m.reply_count,
-            status: m.status,
-            thread_participants: m.thread_participants,
-            type: 'deleted',
-            updated_at: m.updated_at,
-            user: m.user,
-          } as unknown as ReturnType<ChannelState['formatMessage']>;
-        } else {
-          messages[i] = {
-            ...m,
-            type: 'deleted',
-            deleted_at: user.deleted_at ? new Date(user.deleted_at) : null,
-          };
-        }
-      }
-    };
-
-    this.messageSets.forEach((set) =>
-      _deleteUserMessages(set.messages, user, hardDelete),
+  deleteUserMessages = (
+    user: UserResponse,
+    hardDelete = false,
+    deletedAt?: LocalMessage['deleted_at'],
+  ) => {
+    this.messageSets.forEach(({ messages }) =>
+      _deleteUserMessages({ messages, user, hardDelete, deletedAt: deletedAt ?? null }),
     );
 
     for (const parentId in this.threads) {
-      _deleteUserMessages(this.threads[parentId], user, hardDelete);
+      _deleteUserMessages({
+        messages: this.threads[parentId],
+        user,
+        hardDelete,
+        deletedAt: deletedAt ?? null,
+      });
     }
 
-    _deleteUserMessages(this.pinnedMessages, user, hardDelete);
+    _deleteUserMessages({
+      messages: this.pinnedMessages,
+      user,
+      hardDelete,
+      deletedAt: deletedAt ?? null,
+    });
   };
 
   /**

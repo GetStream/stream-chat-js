@@ -1903,6 +1903,15 @@ export class Channel {
           }
         }
         break;
+      case 'user.messages.deleted':
+        if (event.user) {
+          this.state.deleteUserMessages(
+            event.user,
+            !!event.hard_delete,
+            new Date(event.created_at ?? Date.now()),
+          );
+        }
+        break;
       case 'message.new':
         if (event.message) {
           /* if message belongs to current user, always assume timestamp is changed to filter it out and add again to avoid duplication */
