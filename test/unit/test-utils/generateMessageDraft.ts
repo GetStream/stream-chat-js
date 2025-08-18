@@ -7,7 +7,8 @@ export const generateMessageDraft = ({
   channel_cid,
   ...customMsgDraft
 }: Partial<DraftResponse>) => {
-  const channel = (customChannel ?? generateChannel()) as ChannelResponse;
+  const { channel: generatedChannel } = generateChannel();
+  const channel = customChannel ?? generatedChannel;
   return {
     channel,
     channel_cid: channel.cid,

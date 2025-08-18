@@ -6,9 +6,9 @@ import {
 	SearchController,
 	BaseSearchSourceSync,
 	BaseSearchSource,
-} from '../../src/search';
-import { generateUser } from './test-utils/generateUser';
-import { generateChannel } from './test-utils/generateChannel';
+} from '../../../src/search';
+import { generateUser } from '../test-utils/generateUser';
+import { generateChannel } from '../test-utils/generateChannel';
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
