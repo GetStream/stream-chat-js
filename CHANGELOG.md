@@ -1,3 +1,14 @@
+## [9.17.0](https://github.com/GetStream/stream-chat-js/compare/v9.16.0...v9.17.0) (2025-08-18)
+
+### Features
+
+* add FilterBuilder ([#1600](https://github.com/GetStream/stream-chat-js/issues/1600)) ([d8c72e5](https://github.com/GetStream/stream-chat-js/commit/d8c72e589f3de0d4740e99191095ac21939d6185))
+* handle user.messages.deleted WS event ([#1601](https://github.com/GetStream/stream-chat-js/issues/1601)) ([74ad9f0](https://github.com/GetStream/stream-chat-js/commit/74ad9f09569b3783526890463c0a091918b6827b))
+
+### Chores
+
+* **deps:** upgrade linkifyjs to v4.3.2 ([eb3a8be](https://github.com/GetStream/stream-chat-js/commit/eb3a8be3e9fa1f43fdb248f164aa3f8048e7803b))
+
 ## [9.16.0](https://github.com/GetStream/stream-chat-js/compare/v9.15.0...v9.16.0) (2025-08-14)
 
 ### Features

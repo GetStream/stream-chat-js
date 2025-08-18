@@ -1,11 +1,10 @@
-import { StreamChat } from '../../../src';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   BasePaginator,
+  DEFAULT_PAGINATION_OPTIONS,
   PaginationQueryParams,
   PaginationQueryReturnValue,
   type PaginatorOptions,
-  DEFAULT_PAGINATION_OPTIONS,
 } from '../../../src/pagination';
 import { sleep } from '../../../src/utils';
 
@@ -48,7 +47,6 @@ describe('BasePaginator', () => {
   describe('constructor', () => {
     it('initiates with the defaults', () => {
       const paginator = new Paginator();
-      // @ts-expect-error accessing private property
       expect(paginator.pageSize).toBe(DEFAULT_PAGINATION_OPTIONS.pageSize);
       expect(paginator.state.getLatestValue()).toEqual({
         hasNext: true,
@@ -62,9 +60,7 @@ describe('BasePaginator', () => {
     });
     it('initiates with custom options', () => {
       const paginator = new Paginator({ pageSize: 1 });
-      // @ts-expect-error accessing private property
       expect(paginator.pageSize).not.toBe(DEFAULT_PAGINATION_OPTIONS.pageSize);
-      // @ts-expect-error accessing private property
       expect(paginator.pageSize).toBe(1);
       expect(paginator.state.getLatestValue()).toEqual({
         hasNext: true,

@@ -59,7 +59,7 @@ const DEFAULT_SEARCH_SOURCE_OPTIONS: Required<SearchSourceOptions> = {
 
 abstract class BaseSearchSourceBase<T> implements ISearchSource<T> {
   state: StateStore<SearchSourceState<T>>;
-  protected pageSize: number;
+  pageSize: number;
   abstract readonly type: SearchSourceType;
 
   protected constructor(options?: SearchSourceOptions) {

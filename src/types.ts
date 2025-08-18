@@ -1446,6 +1446,8 @@ export type Event = CustomEventData & {
   ai_message?: string;
   ai_state?: AIState;
   channel?: ChannelResponse;
+  channel_custom?: CustomChannelData;
+  channel_member_count?: number;
   channel_id?: string;
   channel_type?: string;
   cid?: string;

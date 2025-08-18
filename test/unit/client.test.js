@@ -1019,6 +1019,218 @@ describe('message deletion', () => {
 	});
 });
 
+describe('user.messages.deleted', () => {
+	let client;
+
+	beforeEach(async () => {
+		client = await getClientWithUser();
+	});
+
+	const bannedUser = { id: 'banned-user' };
+	const otherUser = { id: 'other-user' };
+	const messageSet1 = [
+		{
+			attachments: [
+				{
+					type: 'image',
+					title: 'YouTube',
+					title_link: 'https://www.youtube.com/',
+					text: 'Enjoy the videos and music you love, upload original content, and share it all with friends, family, and the world on YouTube.',
+					image_url: 'https://www.youtube.com/img/desktop/yt_1200.png',
+					thumb_url: 'https://www.youtube.com/img/desktop/yt_1200.png',
+					og_scrape_url: 'https://www.youtube.com/',
+				},
+			],
+			created_at: '2021-01-01T00:01:00',
+			pinned: true,
+			pinned_at: '2022-01-01T00:01:00',
+			user: bannedUser,
+		},
+		{
+			created_at: '2021-01-01T00:02:00',
+			pinned: true,
+			pinned_at: '2022-01-01T00:02:00',
+			user: otherUser,
+		},
+		{ created_at: '2021-01-01T00:03:00', user: bannedUser },
+	].map(generateMsg);
+
+	const quoted_message = messageSet1[0];
+	const messageSet2 = [
+		{
+			created_at: '2020-01-01T00:01:00',
+			pinned: true,
+			pinned_at: '2022-01-01T00:03:00',
+			user: bannedUser,
+		},
+		{
+			created_at: '2020-01-01T00:02:00',
+			quoted_message,
+			quoted_message_id: quoted_message.id,
+			user: otherUser,
+		},
+		{ created_at: '2020-01-01T00:03:00', user: bannedUser },
+		{ created_at: '2020-01-01T00:04:00', user: otherUser },
+	].map(generateMsg);
+
+	const parent_id = messageSet2[0].id;
+	const thread1 = [
+		{ created_at: '2020-01-01T00:01:30', parent_id, user: bannedUser, type: 'reply' },
+		{ created_at: '2020-01-01T00:02:35', parent_id, user: otherUser, type: 'reply' },
+		{ created_at: '2020-01-01T00:03:45', parent_id, user: bannedUser, type: 'reply' },
+		{ created_at: '2020-01-01T00:04:00', parent_id, user: otherUser, type: 'reply' },
+	];
+
+	const pinnedMessages = [messageSet1[0], messageSet1[1], messageSet2[0]];
+
+	const setupChannel = (type, id) => {
+		const channel = client.channel(type, id);
+		channel.state.addMessagesSorted(messageSet1);
+		channel.state.addMessagesSorted(messageSet2, false, false, true, 'new');
+
+		// pinned messages
+		channel.state.addPinnedMessages(pinnedMessages);
+
+		// thread replies
+		channel.state.addMessagesSorted(thread1);
+
+		expect(channel.state.messageSets).toHaveLength(2);
+		expect(channel.state.messageSets[0].messages).toHaveLength(messageSet1.length);
+		expect(channel.state.messageSets[1].messages).toHaveLength(messageSet2.length);
+		expect(channel.state.pinnedMessages).toHaveLength(pinnedMessages.length);
+		expect(channel.state.threads[parent_id]).toHaveLength(thread1.length);
+
+		return channel;
+	};
+
+	it('ignores channel specific event', () => {
+		const channels = [setupChannel('type', 'id1'), setupChannel('type', 'id2')];
+		const event = {
+			type: 'user.messages.deleted',
+			cid: channels[0].cid,
+			channel_type: channels[0].type,
+			channel_id: channels[0].id,
+			user: bannedUser,
+			hard_delete: true,
+			created_at: '2025-02-01T14:01:30.000Z',
+		};
+		client._handleClientEvent(event);
+
+		channels.forEach((channel) => {
+			expect(channel.state.messageSets[0].messages).toHaveLength(messageSet1.length);
+			expect(channel.state.messageSets[1].messages).toHaveLength(messageSet2.length);
+
+			const check = (message) => {
+				expect(message).toEqual(message);
+			};
+
+			channel.state.messageSets[0].messages.forEach(check);
+			channel.state.messageSets[1].messages.forEach(check);
+			channel.state.pinnedMessages.forEach(check);
+			Object.values(channel.state.threads).forEach((replies) => replies.forEach(check));
+		});
+	});
+
+	it('removes the messages on hard delete', () => {
+		const channels = [setupChannel('type', 'id1'), setupChannel('type', 'id2')];
+
+		const event = {
+			type: 'user.messages.deleted',
+			user: bannedUser,
+			hard_delete: true,
+			created_at: '2025-02-01T14:01:30.000Z',
+		};
+		client._handleClientEvent(event);
+		channels.forEach((channel) => {
+			expect(channel.state.messageSets[0].messages).toHaveLength(messageSet1.length);
+			expect(channel.state.messageSets[1].messages).toHaveLength(messageSet2.length);
+
+			const check = (message) => {
+				const deletedMessage = {
+					attachments: [],
+					cid: message.cid,
+					created_at: message.created_at,
+					deleted_at: new Date(event.created_at),
+					id: message.id,
+					latest_reactions: [],
+					mentioned_users: [],
+					own_reactions: [],
+					parent_id: message.parent_id,
+					reply_count: message.reply_count,
+					status: message.status,
+					thread_participants: message.thread_participants,
+					type: 'deleted',
+					updated_at: message.updated_at,
+					user: message.user,
+				};
+				if (message.user.id === bannedUser.id) {
+					expect(message).toStrictEqual(deletedMessage);
+				} else if (message.quoted_message) {
+					expect(message).toStrictEqual({
+						...message,
+						quoted_message: {
+							...deletedMessage,
+							id: message.quoted_message.id,
+							user: message.quoted_message.user,
+						},
+					});
+				} else {
+					expect(message).toEqual(message);
+				}
+			};
+
+			channel.state.messageSets[0].messages.forEach(check);
+			channel.state.messageSets[1].messages.forEach(check);
+			channel.state.pinnedMessages.forEach(check);
+			Object.values(channel.state.threads).forEach((replies) => replies.forEach(check));
+		});
+	});
+
+	it('removes the messages on soft delete', () => {
+		const channels = [setupChannel('type', 'id1'), setupChannel('type', 'id2')];
+
+		const event = {
+			type: 'user.messages.deleted',
+			user: bannedUser,
+			soft_delete: true,
+			created_at: '2025-02-01T14:01:30.000Z',
+		};
+		client._handleClientEvent(event);
+		channels.forEach((channel) => {
+			expect(channel.state.messageSets[0].messages).toHaveLength(messageSet1.length);
+			expect(channel.state.messageSets[1].messages).toHaveLength(messageSet2.length);
+
+			const check = (message) => {
+				if (message.user.id === bannedUser.id) {
+					expect(message).toStrictEqual({
+						...message,
+						attachments: [],
+						deleted_at: new Date(event.created_at),
+						type: 'deleted',
+					});
+				} else if (message.quoted_message) {
+					expect(message).toStrictEqual({
+						...message,
+						quoted_message: {
+							...message.quoted_message,
+							attachments: [],
+							deleted_at: new Date(event.created_at),
+							type: 'deleted',
+						},
+					});
+				} else {
+					expect(message).toEqual(message);
+				}
+			};
+
+			channel.state.messageSets[0].messages.forEach(check);
+			channel.state.messageSets[1].messages.forEach(check);
+			channel.state.pinnedMessages.forEach(check);
+			Object.values(channel.state.threads).forEach((replies) => replies.forEach(check));
+		});
+	});
+});
+
 describe('dispatchEvent: offlineDb.executeQuerySafely', () => {
 	let client;
 	let executeQuerySafelySpy;
