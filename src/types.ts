@@ -287,6 +287,7 @@ export type ChannelResponse = CustomChannelData & {
   last_message_at?: string;
   member_count?: number;
   members?: ChannelMemberResponse[];
+  message_count?: number;
   muted?: boolean;
   mute_expires_at?: string;
   own_capabilities?: string[];
@@ -2365,6 +2366,7 @@ export type ChannelConfigFields = {
   replies?: boolean;
   search?: boolean;
   shared_locations?: boolean;
+  count_messages?: boolean; // Feature flag for message count
   typing_events?: boolean;
   uploads?: boolean;
   url_enrichment?: boolean;
