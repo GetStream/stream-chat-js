@@ -1,3 +1,9 @@
+## [9.16.0](https://github.com/GetStream/stream-chat-js/compare/v9.15.0...v9.16.0) (2025-08-14)
+
+### Features
+
+* add channel message count response fields ([#1594](https://github.com/GetStream/stream-chat-js/issues/1594)) ([c58fd6f](https://github.com/GetStream/stream-chat-js/commit/c58fd6ff991e47bf804e7e4e3713c92f98a6c86c))
+
 ## [9.15.0](https://github.com/GetStream/stream-chat-js/compare/v9.14.0...v9.15.0) (2025-08-08)
 
 ### Bug Fixes
