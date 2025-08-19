@@ -4206,6 +4206,7 @@ export type EventHook = {
   id?: string;
   hook_type?: HookType;
   enabled?: boolean;
+  product?: Product;
   event_types?: Array<string>;
   webhook_url?: string;
   sqs_queue_url?: string;
