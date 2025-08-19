@@ -712,6 +712,7 @@ export type MessageResponseBase = MessageBase & {
   status?: string;
   thread_participants?: UserResponse[];
   updated_at?: string;
+  deleted_for_me?: boolean;
 };
 
 export type ReactionGroupResponse = {
