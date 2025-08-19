@@ -692,7 +692,7 @@ export type MessageResponseBase = MessageBase & {
     language: TranslationLanguages;
   };
   latest_reactions?: ReactionResponse[];
-  member?: ChannelMemberResponse | null;
+  member?: ChannelMemberResponse;
   mentioned_users?: UserResponse[];
   message_text_updated_at?: string;
   moderation?: ModerationResponse; // present only with Moderation v2
