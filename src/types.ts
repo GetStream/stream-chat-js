@@ -3813,6 +3813,10 @@ export type QueryAppealsFilters = QueryFilters<
       $eq?: string;
     }>;
   } & {
+    channel_cid?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
     decision_reason?: RequireOnlyOne<{
       $eq?: string;
     }>;

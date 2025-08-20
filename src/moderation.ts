@@ -198,6 +198,7 @@ export class Moderation {
     entityID: string,
     entityType: string,
     attachments: string[],
+    channelCID: "",
     options: AppealOptions = {},
   ) {
     return await this.client.post<AppealResponse>(
@@ -207,6 +208,7 @@ export class Moderation {
         entity_id: entityID,
         entity_type: entityType,
         attachments,
+	channel_cid: "",
         ...options,
       },
     );
