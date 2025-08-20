@@ -3545,6 +3545,7 @@ export type AppealItem = {
   entity_type: string;
   status: string;
   text: string;
+  channel_cid: string;
   user: UserResponse;
   id: string;
 };

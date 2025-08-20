@@ -208,7 +208,7 @@ export class Moderation {
         entity_id: entityID,
         entity_type: entityType,
         attachments,
-	channel_cid: "",
+	channel_cid: channelCID,
         ...options,
       },
     );
