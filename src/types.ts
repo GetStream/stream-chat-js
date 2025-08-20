@@ -2241,7 +2241,7 @@ export type AppSettings = {
   disable_permissions_checks?: boolean;
   enforce_unique_usernames?: 'no' | 'app' | 'team';
   event_hooks?: Array<EventHook> | null;
-  explicit_hook_v2_deletion?: boolean;
+  explicit_event_hooks_deletion?: boolean;
   // all possible file mime types are https://www.iana.org/assignments/media-types/media-types.xhtml
   file_upload_config?: FileUploadConfig;
   firebase_config?: {
