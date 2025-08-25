@@ -712,6 +712,7 @@ export type MessageResponseBase = MessageBase & {
   status?: string;
   thread_participants?: UserResponse[];
   updated_at?: string;
+  deleted_for_me?: boolean;
 };
 
 export type ReactionGroupResponse = {
@@ -1455,6 +1456,7 @@ export type Event = CustomEventData & {
   connection_id?: string;
   // event creation timestamp, format Date ISO string
   created_at?: string;
+  deleted_for_me?: boolean;
   draft?: DraftResponse;
   // id of the message that was marked as unread - all the following messages are considered unread. (notification.mark_unread)
   first_unread_message_id?: string;
