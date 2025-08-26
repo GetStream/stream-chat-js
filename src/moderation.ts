@@ -192,13 +192,14 @@ export class Moderation {
    * @param {string} entityID
    * @param {string} entityType
    * @param {Array<string>} attachments
+   * @param {string} channelCID
    */
   async appeal(
     text: string,
     entityID: string,
     entityType: string,
     attachments: string[],
-    channelCID: '',
+    channelCID: string = '',
     options: AppealOptions = {},
   ) {
     return await this.client.post<AppealResponse>(
