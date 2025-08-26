@@ -310,16 +310,16 @@ export function formatMessage(
     if (!msg) return null;
     return {
       ...msg,
-      created_at: message.created_at ? new Date(message.created_at) : new Date(),
-      deleted_at: message.deleted_at ? new Date(message.deleted_at) : null,
-      pinned_at: message.pinned_at ? new Date(message.pinned_at) : null,
+      created_at: msg.created_at ? new Date(msg.created_at) : new Date(),
+      deleted_at: msg.deleted_at ? new Date(msg.deleted_at) : null,
+      pinned_at: msg.pinned_at ? new Date(msg.pinned_at) : null,
       reaction_groups: maybeGetReactionGroupsFallback(
-        message.reaction_groups,
-        message.reaction_counts,
-        message.reaction_scores,
+        msg.reaction_groups,
+        msg.reaction_counts,
+        msg.reaction_scores,
       ),
-      status: message.status || 'received',
-      updated_at: message.updated_at ? new Date(message.updated_at) : new Date(),
+      status: msg.status || 'received',
+      updated_at: msg.updated_at ? new Date(msg.updated_at) : new Date(),
     };
   };
 
