@@ -2244,6 +2244,7 @@ export type AppSettings = {
   disable_permissions_checks?: boolean;
   enforce_unique_usernames?: 'no' | 'app' | 'team';
   event_hooks?: Array<EventHook> | null;
+  explicit_event_hooks_deletion?: boolean;
   // all possible file mime types are https://www.iana.org/assignments/media-types/media-types.xhtml
   file_upload_config?: FileUploadConfig;
   firebase_config?: {
@@ -4306,6 +4307,7 @@ export type EventHook = {
   id?: string;
   hook_type?: HookType;
   enabled?: boolean;
+  product?: Product | 'all'; // optional, default is 'all'
   event_types?: Array<string>;
   webhook_url?: string;
   sqs_queue_url?: string;
@@ -4327,6 +4329,7 @@ export type EventHook = {
     mode: 'CALLBACK_MODE_NONE' | 'CALLBACK_MODE_REST' | 'CALLBACK_MODE_TWIRP';
   };
 
+  delete?: boolean;
   created_at?: string;
   updated_at?: string;
 };
