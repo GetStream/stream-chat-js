@@ -10,6 +10,8 @@ import type {
   ModerationConfig,
   ModerationFlagOptions,
   ModerationMuteOptions,
+  ModerationRule,
+  ModerationRuleRequest,
   MuteUserResponse,
   Pager,
   QueryAppealsFilters,
@@ -18,6 +20,9 @@ import type {
   QueryConfigsResponse,
   QueryModerationConfigsFilters,
   QueryModerationConfigsSort,
+  QueryModerationRulesFilters,
+  QueryModerationRulesResponse,
+  QueryModerationRulesSort,
   RequireAtLeastOne,
   ReviewQueueFilters,
   ReviewQueueItem,
@@ -26,6 +31,7 @@ import type {
   ReviewQueueSort,
   SubmitActionOptions,
   UpsertConfigResponse,
+  UpsertModerationRuleResponse,
 } from './types';
 import type { StreamChat } from './client';
 import { normalizeQuerySort } from './utils';
@@ -442,6 +448,62 @@ export class Moderation {
       '',
       {},
       flags,
+    );
+  }
+
+  /**
+   * Create or update a moderation rule
+   * @param {ModerationRuleRequest} rule Rule configuration to be upserted
+   * @returns
+   */
+  async upsertModerationRule(rule: ModerationRuleRequest) {
+    return await this.client.post<UpsertModerationRuleResponse>(
+      this.client.baseURL + '/api/v2/moderation/moderation_rule',
+      rule,
+    );
+  }
+
+  /**
+   * Query moderation rules
+   * @param {QueryModerationRulesFilters} filterConditions Filter conditions for querying moderation rules
+   * @param {QueryModerationRulesSort} sort Sort conditions for querying moderation rules
+   * @param {Pager} options Pagination options for querying moderation rules
+   * @returns
+   */
+  async queryModerationRules(
+    filterConditions: QueryModerationRulesFilters = {},
+    sort: QueryModerationRulesSort = [],
+    options: Pager = {},
+  ) {
+    return await this.client.post<QueryModerationRulesResponse>(
+      this.client.baseURL + '/api/v2/moderation/moderation_rules',
+      {
+        filter: filterConditions,
+        sort,
+        ...options,
+      },
+    );
+  }
+
+  /**
+   * Get a specific moderation rule by ID
+   * @param {string} id ID of the moderation rule to fetch
+   * @returns
+   */
+  async getModerationRule(id: string) {
+    return await this.client.get<{ rule: ModerationRule }>(
+      this.client.baseURL + '/api/v2/moderation/moderation_rule/' + id,
+    );
+  }
+
+  /**
+   * Delete a moderation rule by ID
+   * @param {string} id ID of the moderation rule to delete
+   * @returns
+   */
+  async deleteModerationRule(id: string) {
+    return await this.client.delete(
+      this.client.baseURL + '/api/v2/moderation/moderation_rule/' + id,
     );
   }
 }

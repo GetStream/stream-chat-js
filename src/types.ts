@@ -3882,6 +3882,171 @@ export type AppealResponse = APIResponse & {
   appeal_id: string;
 };
 
+// Moderation Rule Builder Types
+export type ModerationRule = {
+  id: string;
+  name: string;
+  description: string;
+  config_keys: string[];
+  team: string;
+  rule: RuleBuilderRule;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ModerationRuleRequest = {
+  name: string;
+  description: string;
+  config_keys: string[];
+  team: string;
+  rule: RuleBuilderRule;
+  enabled: boolean;
+};
+
+export type RuleBuilderRule = {
+  id: string;
+  rule_type: 'user' | 'content';
+  conditions?: RuleBuilderCondition[];
+  logic?: 'AND' | 'OR';
+  groups?: RuleBuilderConditionGroup[];
+  action: RuleBuilderAction;
+  cooldown_period?: string;
+};
+
+export type RuleBuilderCondition = {
+  type: string;
+  confidence?: number;
+  text_rule_params?: TextRuleParameters;
+  image_rule_params?: ImageRuleParameters;
+  video_rule_params?: VideoRuleParameters;
+  user_rule_params?: UserRuleParameters;
+  content_count_rule_params?: ContentCountRuleParameters;
+  text_content_params?: TextContentParameters;
+  image_content_params?: ImageContentParameters;
+  video_content_params?: VideoContentParameters;
+  user_created_within_params?: UserCreatedWithinParameters;
+  user_custom_property_params?: UserCustomPropertyParameters;
+};
+
+export type RuleBuilderConditionGroup = {
+  logic: 'AND' | 'OR';
+  conditions: RuleBuilderCondition[];
+};
+
+export type RuleBuilderAction = {
+  type: string;
+  ban_options?: BanOptions;
+  flag_user_options?: FlagUserOptions;
+  flag_content_options?: FlagContentOptions;
+  remove_content_options?: RemoveContentOptions;
+  shadow_content_options?: ShadowContentOptions;
+};
+
+export type TextRuleParameters = {
+  threshold: number;
+  time_window: string;
+  harm_labels?: string[];
+  llm_harm_labels?: Record<string, string>;
+  contains_url?: boolean;
+  severity?: string;
+  blocklist_match?: string[];
+};
+
+export type ImageRuleParameters = {
+  threshold: number;
+  time_window: string;
+  harm_labels: string[];
+};
+
+export type VideoRuleParameters = {
+  threshold: number;
+  time_window: string;
+  harm_labels: string[];
+};
+
+export type UserRuleParameters = {
+  max_age: string;
+};
+
+export type ContentCountRuleParameters = {
+  threshold: number;
+  time_window: string;
+};
+
+export type TextContentParameters = {
+  harm_labels?: string[];
+  llm_harm_labels?: Record<string, string>;
+  contains_url?: boolean;
+  severity?: string;
+  blocklist_match?: string[];
+};
+
+export type ImageContentParameters = {
+  harm_labels: string[];
+};
+
+export type VideoContentParameters = {
+  harm_labels: string[];
+};
+
+export type UserCreatedWithinParameters = {
+  max_age: string;
+};
+
+export type UserCustomPropertyParameters = {
+  property_key: string;
+  operator: string;
+  expected_value: string;
+};
+
+export type BanOptions = {
+  duration: number;
+  reason: string;
+  shadow_ban: boolean;
+  ip_ban: boolean;
+};
+
+export type FlagUserOptions = {
+  reason: string;
+};
+
+export type FlagContentOptions = {
+  reason: string;
+};
+
+export type RemoveContentOptions = {
+  reason: string;
+};
+
+export type ShadowContentOptions = {
+  reason: string;
+};
+
+export type QueryModerationRulesFilters = QueryFilters<{
+  name?: string;
+  team?: string;
+  enabled?: boolean;
+  rule_type?: string;
+  created_at?: PrimitiveFilter<string>;
+  updated_at?: PrimitiveFilter<string>;
+}>;
+
+export type QueryModerationRulesSort = Array<
+  Sort<'name' | 'enabled' | 'team' | 'created_at' | 'updated_at'>
+>;
+
+export type QueryModerationRulesResponse = {
+  rules: ModerationRule[];
+  default_llm_labels: Record<string, string>;
+  next?: string;
+  prev?: string;
+};
+
+export type UpsertModerationRuleResponse = {
+  rule: ModerationRule;
+};
+
 export type ModerationFlagOptions = {
   custom?: Record<string, unknown>;
   moderation_payload?: ModerationPayload;
