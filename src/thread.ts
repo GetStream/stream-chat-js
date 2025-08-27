@@ -47,6 +47,8 @@ export type ThreadState = {
   read: ThreadReadState;
   replies: Array<LocalMessage>;
   replyCount: number;
+  participantCount: number;
+  activeParticipantCount: number;
   title: string;
   updatedAt: Date | null;
 };
@@ -167,6 +169,8 @@ export class Thread extends WithSubscriptions {
       ),
       replies: threadData.latest_replies.map(formatMessage),
       replyCount: threadData.reply_count ?? 0,
+      participantCount: threadData.participant_count,
+      activeParticipantCount: threadData.active_participant_count,
       updatedAt: threadData.updated_at ? new Date(threadData.updated_at) : null,
       title: threadData.title,
       custom: constructCustomDataObject(threadData),
