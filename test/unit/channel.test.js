@@ -458,7 +458,7 @@ describe('Channel _handleChannelEvent', function () {
 		expect(
 			channel.state.messages.find((msg) => msg.id === quotingMessage.id).quoted_message
 				.deleted_at,
-		).to.be.null;
+		).to.be.ok;
 	});
 
 	describe('user.messages.deleted', () => {
@@ -577,6 +577,8 @@ describe('Channel _handleChannelEvent', function () {
 							...deletedMessage,
 							id: message.quoted_message.id,
 							user: message.quoted_message.user,
+							created_at: message.quoted_message.created_at,
+							updated_at: message.quoted_message.updated_at,
 						},
 					});
 				} else {
