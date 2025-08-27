@@ -1,3 +1,9 @@
+## [9.18.1](https://github.com/GetStream/stream-chat-js/compare/v9.18.0...v9.18.1) (2025-08-27)
+
+### Bug Fixes
+
+* formatMessage - reference the correct msg in toLocalMessageBase ([#1605](https://github.com/GetStream/stream-chat-js/issues/1605)) ([0fda67f](https://github.com/GetStream/stream-chat-js/commit/0fda67f06d418b47e36e32f4bb0e0b0d7e23db07))
+
 ## [9.18.0](https://github.com/GetStream/stream-chat-js/compare/v9.17.0...v9.18.0) (2025-08-27)
 
 ### Features
