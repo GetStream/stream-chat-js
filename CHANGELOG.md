@@ -1,3 +1,11 @@
+## [9.18.0](https://github.com/GetStream/stream-chat-js/compare/v9.17.0...v9.18.0) (2025-08-27)
+
+### Features
+
+* add product to event hook request and response ([#1603](https://github.com/GetStream/stream-chat-js/issues/1603)) ([fb04b0e](https://github.com/GetStream/stream-chat-js/commit/fb04b0e4770423bffa46c414983b02c5901bc2dd))
+* explicit event_hooks deletion ([#1596](https://github.com/GetStream/stream-chat-js/issues/1596)) ([00aa02e](https://github.com/GetStream/stream-chat-js/commit/00aa02ef1ab2a90754fad96b122132b8a7ec8907))
+* moderation rule builder endpoints ([#1606](https://github.com/GetStream/stream-chat-js/issues/1606)) ([36518c3](https://github.com/GetStream/stream-chat-js/commit/36518c39bf00ed58094a682a068db98689342e7f))
+
 ## [9.17.0](https://github.com/GetStream/stream-chat-js/compare/v9.16.0...v9.17.0) (2025-08-18)
 
 ### Features
