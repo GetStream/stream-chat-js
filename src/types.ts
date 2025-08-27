@@ -3787,7 +3787,7 @@ export type UpsertConfigResponse = {
 };
 
 // Moderation Rule Builder Types
-export type ModerationRuleV2 = {
+export type ModerationRule = {
   id: string;
   name: string;
   description: string;
@@ -3799,7 +3799,7 @@ export type ModerationRuleV2 = {
   updated_at: string;
 };
 
-export type ModerationRuleV2Request = {
+export type ModerationRuleRequest = {
   name: string;
   description: string;
   config_keys: string[];
@@ -3941,14 +3941,14 @@ export type QueryModerationRulesSort = Array<
 >;
 
 export type QueryModerationRulesResponse = {
-  rules: ModerationRuleV2[];
+  rules: ModerationRule[];
   default_llm_labels: Record<string, string>;
   next?: string;
   prev?: string;
 };
 
 export type UpsertModerationRuleResponse = {
-  rule: ModerationRuleV2;
+  rule: ModerationRule;
 };
 
 export type ModerationFlagOptions = {

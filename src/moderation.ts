@@ -7,8 +7,8 @@ import type {
   ModerationConfig,
   ModerationFlagOptions,
   ModerationMuteOptions,
-  ModerationRuleV2,
-  ModerationRuleV2Request,
+  ModerationRule,
+  ModerationRuleRequest,
   MuteUserResponse,
   Pager,
   QueryConfigsResponse,
@@ -397,10 +397,10 @@ export class Moderation {
 
   /**
    * Create or update a moderation rule
-   * @param {ModerationRuleV2Request} rule Rule configuration to be upserted
+   * @param {ModerationRuleRequest} rule Rule configuration to be upserted
    * @returns
    */
-  async upsertModerationRule(rule: ModerationRuleV2Request) {
+  async upsertModerationRule(rule: ModerationRuleRequest) {
     return await this.client.post<UpsertModerationRuleResponse>(
       this.client.baseURL + '/api/v2/moderation/moderation_rule',
       rule,
@@ -435,7 +435,7 @@ export class Moderation {
    * @returns
    */
   async getModerationRule(id: string) {
-    return await this.client.get<{ rule: ModerationRuleV2 }>(
+    return await this.client.get<{ rule: ModerationRule }>(
       this.client.baseURL + '/api/v2/moderation/moderation_rule/' + id,
     );
   }
