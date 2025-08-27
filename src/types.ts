@@ -511,12 +511,12 @@ export interface ThreadResponse extends CustomThreadData {
   parent_message_id: string;
   title: string;
   updated_at: string;
-  active_participant_count: number;
+  active_participant_count?: number;
   created_by?: UserResponse;
   deleted_at?: string;
   draft?: DraftResponse;
   last_message_at?: string;
-  participant_count: number;
+  participant_count?: number;
   read?: Array<ReadResponse>;
   reply_count?: number;
   thread_participants?: Array<{
