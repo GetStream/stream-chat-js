@@ -1172,6 +1172,8 @@ describe('user.messages.deleted', () => {
 							...deletedMessage,
 							id: message.quoted_message.id,
 							user: message.quoted_message.user,
+							created_at: message.quoted_message.created_at,
+							updated_at: message.quoted_message.updated_at,
 						},
 					});
 				} else {
