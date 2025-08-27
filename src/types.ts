@@ -3901,7 +3901,7 @@ export type UserCreatedWithinParameters = {
 export type UserCustomPropertyParameters = {
   property_key: string;
   operator: string;
-  expected_value: any;
+  expected_value: string;
 };
 
 export type BanOptions = {
