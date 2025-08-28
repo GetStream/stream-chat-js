@@ -3096,7 +3096,16 @@ export class StreamChat {
     );
   }
 
-  async deleteMessage(messageID: string, hardDelete?: boolean) {
+  /**
+   * deleteMessage - Delete a message
+   *
+   * @param {string} messageID The id of the message to delete
+   * @param {boolean} hardDelete Permanently delete the message instead of hiding it
+   * @param {boolean} deleteForMe Delete the message only for the current user
+   *
+   * @return {Promise<APIResponse & { message: MessageResponse }>} The API response
+   */
+  async deleteMessage(messageID: string, hardDelete?: boolean, deleteForMe?: boolean) {
     try {
       if (this.offlineDb) {
         if (hardDelete) {
@@ -3108,7 +3117,7 @@ export class StreamChat {
           {
             task: {
               messageId: messageID,
-              payload: [messageID, hardDelete],
+              payload: [messageID, hardDelete, deleteForMe],
               type: 'delete-message',
             },
           },
@@ -3121,13 +3130,16 @@ export class StreamChat {
       });
     }
 
-    return this._deleteMessage(messageID, hardDelete);
+    return this._deleteMessage(messageID, hardDelete, deleteForMe);
   }
 
-  async _deleteMessage(messageID: string, hardDelete?: boolean) {
+  async _deleteMessage(messageID: string, hardDelete?: boolean, deleteForMe?: boolean) {
     let params = {};
     if (hardDelete) {
       params = { hard: true };
+    }
+    if (deleteForMe) {
+      params = { ...params, delete_for_me: true };
     }
     return await this.delete<APIResponse & { message: MessageResponse }>(
       this.baseURL + `/messages/${encodeURIComponent(messageID)}`,
