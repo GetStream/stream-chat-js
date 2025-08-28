@@ -212,16 +212,13 @@ export class TextComposer {
       text,
       currentText.slice(finalSelection.end),
     ].join('');
+
     const finalText = textBeforeTrim.slice(
       0,
       typeof maxLengthOnEdit === 'number' ? maxLengthOnEdit : textBeforeTrim.length,
     );
-    const expectedCursorPosition =
-      currentText.slice(0, finalSelection.start).length + text.length;
-    const cursorPosition =
-      expectedCursorPosition >= finalText.length
-        ? finalText.length
-        : currentText.slice(0, expectedCursorPosition).length;
+    const expectedCursorPosition = finalSelection.start + text.length;
+    const cursorPosition = Math.min(expectedCursorPosition, finalText.length);
 
     await this.handleChange({
       text: finalText,
