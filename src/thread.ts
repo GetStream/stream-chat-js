@@ -47,8 +47,6 @@ export type ThreadState = {
   read: ThreadReadState;
   replies: Array<LocalMessage>;
   replyCount: number;
-  participantCount: number;
-  activeParticipantCount: number;
   title: string;
   updatedAt: Date | null;
 };
@@ -113,6 +111,7 @@ const constructCustomDataObject = <T extends ThreadResponse>(threadData: T) => {
 
 export class Thread extends WithSubscriptions {
   public readonly state: StateStore<ThreadState>;
+  public readonly threadData: ThreadResponse;
   public readonly id: string;
   public readonly messageComposer: MessageComposer;
 
@@ -169,14 +168,13 @@ export class Thread extends WithSubscriptions {
       ),
       replies: threadData.latest_replies.map(formatMessage),
       replyCount: threadData.reply_count ?? 0,
-      participantCount: threadData.participant_count ?? 0,
-      activeParticipantCount: threadData.active_participant_count ?? 0,
       updatedAt: threadData.updated_at ? new Date(threadData.updated_at) : null,
       title: threadData.title,
       custom: constructCustomDataObject(threadData),
     });
 
     this.id = threadData.parent_message_id;
+    this.threadData = threadData;
     this.client = client;
 
     this.messageComposer = new MessageComposer({
