@@ -869,6 +869,9 @@ describe('Channel _handleChannelEvent', function () {
 
 	it('should mark channel visible on channel.visible event', () => {
 		const channelVisibleEvent = {
+			channel: {
+				blocked: false,
+			},
 			type: 'channel.visible',
 			cid: 'messaging:id',
 			channel_id: 'id',
@@ -885,19 +888,69 @@ describe('Channel _handleChannelEvent', function () {
 			created_at: '2023-05-24T09:20:43.986615426Z',
 		};
 		channel.data.hidden = true;
+		channel.data.blocked = true;
 
 		channel._handleChannelEvent(channelVisibleEvent);
 		expect(channel.data.hidden).eq(false);
+		expect(channel.data.blocked).eq(false);
+	});
+
+	it('should treat blocked separately from hidden on channel.visible event', () => {
+		const channelVisibleEvent = {
+			channel: {
+				blocked: true,
+			},
+			type: 'channel.visible',
+			cid: 'messaging:id',
+			channel_id: 'id',
+			channel_type: 'messaging',
+			user: {
+				id: 'admin',
+				role: 'admin',
+				created_at: '2022-03-08T09:46:56.840739Z',
+				updated_at: '2022-03-15T08:30:09.796926Z',
+				last_active: '2023-05-24T09:20:31.041292724Z',
+				banned: false,
+				online: true,
+			},
+			created_at: '2023-05-24T09:20:43.986615426Z',
+		};
+		channel.data.hidden = true;
+		channel.data.blocked = true;
+
+		channel._handleChannelEvent(channelVisibleEvent);
+		expect(channel.data.hidden).eq(false);
+		expect(channel.data.blocked).eq(true);
 	});
 
 	it('should mark channel hidden on channel.hidden event', () => {
 		const channelVisibleEvent = {
+			channel: {
+				blocked: true,
+			},
 			type: 'channel.hidden',
 		};
 		channel.data.hidden = false;
+		channel.data.blocked = false;
 
 		channel._handleChannelEvent(channelVisibleEvent);
 		expect(channel.data.hidden).eq(true);
+		expect(channel.data.blocked).eq(true);
+	});
+
+	it('should treat blocked separately from hidden on channel.hidden event', () => {
+		const channelVisibleEvent = {
+			channel: {
+				blocked: false,
+			},
+			type: 'channel.hidden',
+		};
+		channel.data.hidden = false;
+		channel.data.blocked = false;
+
+		channel._handleChannelEvent(channelVisibleEvent);
+		expect(channel.data.hidden).eq(true);
+		expect(channel.data.blocked).eq(false);
 	});
 
 	it('should update the frozen flag and reload channel state to update `own_capabilities`', () => {

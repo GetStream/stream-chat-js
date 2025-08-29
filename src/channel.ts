@@ -2106,13 +2106,21 @@ export class Channel {
         }
         break;
       case 'channel.hidden':
-        channel.data = { ...channel.data, hidden: true };
+        channel.data = {
+          ...channel.data,
+          blocked: !!event.channel?.blocked,
+          hidden: true,
+        };
         if (event.clear_history) {
           channelState.clearMessages();
         }
         break;
       case 'channel.visible':
-        channel.data = { ...channel.data, hidden: false };
+        channel.data = {
+          ...channel.data,
+          blocked: !!event.channel?.blocked,
+          hidden: false,
+        };
         this.getClient().offlineDb?.handleChannelVisibilityEvent({ event });
         break;
       case 'user.banned':
