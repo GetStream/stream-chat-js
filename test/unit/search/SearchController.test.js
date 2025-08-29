@@ -322,6 +322,91 @@ describe('BaseSearchSource and implementations', () => {
 				await searchSource.executeQuery();
 				expect(searchSource.items).to.deep.equal(['item1', 'item2']);
 			});
+
+			it('properly updates hasNext while paginating', async () => {
+				searchSource.state.partialNext({
+					items: [],
+					isActive: true,
+					searchQuery: 'test',
+				});
+
+				sinon.stub(searchSource, 'query').resolves({
+					items: ['item1', 'item2'],
+					next: null,
+				});
+
+				await searchSource.executeQuery();
+				expect(searchSource.items).to.deep.equal(['item1', 'item2']);
+				expect(searchSource.hasNext).to.be.false;
+			});
+
+			it('prefers cursor over offset if returned', async () => {
+				searchSource.state.partialNext({
+					items: [],
+					isActive: true,
+					searchQuery: 'test',
+				});
+
+				sinon.stub(searchSource, 'query').resolves({
+					items: ['item1'],
+					next: 'some-cursor',
+				});
+
+				await searchSource.executeQuery();
+				expect(searchSource.items).to.deep.equal(['item1']);
+				expect(searchSource.hasNext).to.be.true;
+			});
+
+			it('falls back to offset pagination if cursor is not returned', async () => {
+				searchSource.pageSize = 1;
+				searchSource.state.partialNext({
+					items: [],
+					isActive: true,
+					searchQuery: 'test',
+				});
+
+				sinon.stub(searchSource, 'query').resolves({
+					items: ['item1'],
+				});
+
+				await searchSource.executeQuery();
+				expect(searchSource.items).to.deep.equal(['item1']);
+				expect(searchSource.hasNext).to.be.true;
+			});
+
+			it('properly applies offset pagination', async () => {
+				searchSource.state.partialNext({
+					items: [],
+					isActive: true,
+					searchQuery: 'test',
+				});
+
+				sinon.stub(searchSource, 'query').resolves({
+					items: ['item1'],
+				});
+
+				await searchSource.executeQuery();
+				expect(searchSource.items).to.deep.equal(['item1']);
+				expect(searchSource.hasNext).to.be.false;
+			});
+
+			it('ends pagination if returned cursor is falsy', async () => {
+				searchSource.pageSize = 1;
+				searchSource.state.partialNext({
+					items: [],
+					isActive: true,
+					searchQuery: 'test',
+				});
+
+				sinon.stub(searchSource, 'query').resolves({
+					items: ['item1'],
+					next: undefined,
+				});
+
+				await searchSource.executeQuery();
+				expect(searchSource.items).to.deep.equal(['item1']);
+				expect(searchSource.hasNext).to.be.false;
+			});
 		});
 
 		describe('search debounce', () => {
