@@ -1,3 +1,15 @@
+## [9.19.0](https://github.com/GetStream/stream-chat-js/compare/v9.18.1...v9.19.0) (2025-09-02)
+
+### Bug Fixes
+
+* calculate TextComposer selection upon text insertion correctly ([#1608](https://github.com/GetStream/stream-chat-js/issues/1608)) ([625d16c](https://github.com/GetStream/stream-chat-js/commit/625d16c7b9bd804aee7d75354db4c8f7bc5b24ec))
+* search cursor pagination ([#1611](https://github.com/GetStream/stream-chat-js/issues/1611)) ([b13de81](https://github.com/GetStream/stream-chat-js/commit/b13de81d9747b9091bc9998e769da791c1aad9f1))
+
+### Features
+
+* added ChannelMemberResponse to MessageResponse ([#1602](https://github.com/GetStream/stream-chat-js/issues/1602)) ([fe3998f](https://github.com/GetStream/stream-chat-js/commit/fe3998f79a3f4b508a508f537ce92a36c418ede9))
+* update channel's blocked property on channel.hidden and channel.visible events ([#1610](https://github.com/GetStream/stream-chat-js/issues/1610)) ([6fa6829](https://github.com/GetStream/stream-chat-js/commit/6fa682988536929ffdfc964a98870145bb5b120c))
+
 ## [9.18.1](https://github.com/GetStream/stream-chat-js/compare/v9.18.0...v9.18.1) (2025-08-27)
 
 ### Bug Fixes
