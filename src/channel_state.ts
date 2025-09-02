@@ -22,6 +22,8 @@ type ChannelReadStatus = Record<
     user: UserResponse;
     first_unread_message_id?: string;
     last_read_message_id?: string;
+    last_delivered_at?: Date | null;
+    last_delivered_message_id?: string;
   }
 >;
 
