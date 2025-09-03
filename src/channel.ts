@@ -1183,7 +1183,7 @@ export class Channel {
     }
 
     return await this.getClient().post<EventAPIResponse>(
-      this.getClient().baseURL + '/deliveries',
+      this.getClient().baseURL + '/channels/delivered',
       data,
     );
   }
