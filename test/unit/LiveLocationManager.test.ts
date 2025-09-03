@@ -74,7 +74,9 @@ describe('LiveLocationManager', () => {
         watchLocation,
       });
       expect(manager.deviceId).toEqual(deviceId);
+      // @ts-expect-error accessing private property
       expect(manager.getDeviceId).toEqual(getDeviceId);
+      // @ts-expect-error accessing private property
       expect(manager.watchLocation).toEqual(watchLocation);
       expect(manager.state.getLatestValue()).toEqual({
         messages: new Map(),
