@@ -817,6 +817,8 @@ export type ReadResponse = {
   user: UserResponse;
   last_read_message_id?: string;
   unread_messages?: number;
+  last_delivered_at?: string;
+  last_delivered_message_id?: string;
 };
 
 export type SearchAPIResponse = APIResponse & {
@@ -917,6 +919,9 @@ export type PrivacySettings = {
     enabled?: boolean;
   };
   typing_indicators?: {
+    enabled?: boolean;
+  };
+  delivery_receipts?: {
     enabled?: boolean;
   };
 };
@@ -1246,6 +1251,16 @@ export type MarkUnreadOptions = {
   connection_id?: string;
   message_id?: string;
   thread_id?: string;
+  user?: UserResponse;
+  user_id?: string;
+};
+
+export type MarkDeliveredOptions = {
+  channel_delivered_message: {
+    [channelId: string]: string;
+  };
+  client_id?: string;
+  connection_id?: string;
   user?: UserResponse;
   user_id?: string;
 };
