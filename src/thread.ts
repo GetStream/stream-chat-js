@@ -534,7 +534,7 @@ export class Thread extends WithSubscriptions {
       return null;
     }
 
-    return await this.channel.markRead({ thread_id: this.id });
+    return await this.client.deliveryReportCoordinator.markRead(this);
   };
 
   private throttledMarkAsRead = throttle(
