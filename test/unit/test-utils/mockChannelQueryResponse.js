@@ -42,6 +42,7 @@ export const mockChannelQueryResponse = {
 			custom_events: true,
 			push_notifications: true,
 			reminders: false,
+			shared_locations: false,
 			mark_messages_pending: false,
 			message_retention: 'infinite',
 			max_message_length: 5000,
