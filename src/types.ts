@@ -3136,6 +3136,7 @@ export type CampaignData = {
   segment_ids?: string[];
   sender_id?: string;
   sender_mode?: 'exclude' | 'include' | null;
+  sender_visibility?: 'hidden' | 'archived' | null;
   show_channels?: boolean;
   skip_push?: boolean;
   skip_webhook?: boolean;
