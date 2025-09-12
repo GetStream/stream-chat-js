@@ -33,6 +33,7 @@ import type {
   GetRepliesAPIResponse,
   LiveLocationPayload,
   LocalMessage,
+  MarkDeliveredOptions,
   MarkReadOptions,
   MarkUnreadOptions,
   MemberFilters,
@@ -1167,6 +1168,27 @@ export class Channel {
   }
 
   /**
+   * markDelivered - Send the mark delivered event for this user, only works if the `delivery_receipts` setting is enabled
+   *
+   * @param {MarkDeliveredOptions} data
+   * @return {Promise<EventAPIResponse | null>} Description
+   */
+  async markDelivered(data: MarkDeliveredOptions) {
+    this._checkInitialized();
+
+    // Check if delivery receipts are enabled for this user
+    const user = this.getClient().user;
+    if (user?.privacy_settings?.delivery_receipts?.enabled === false) {
+      return Promise.resolve(null);
+    }
+
+    return await this.getClient().post<EventAPIResponse>(
+      this.getClient().baseURL + '/channels/delivered',
+      data,
+    );
+  }
+
+  /**
    * clean - Cleans the channel state and fires stop typing if needed
    */
   clean() {
@@ -2148,6 +2170,9 @@ export class Channel {
           user: { ...(channelState.members[event.user.id]?.user || {}), ...event.user },
         };
         break;
+      case 'notification.channel_delivered':
+        console.log('notification.channel_delivered', event);
+        break;
       default:
     }
 
@@ -2259,11 +2284,15 @@ export class Channel {
     // that everything up to this point is not marked as unread
     if (userID != null) {
       const last_read = this.state.last_message_at || new Date();
+      const last_delivered_at = undefined;
+      const last_delivered_message_id = undefined;
       if (user) {
         this.state.read[user.id] = {
           user,
           last_read,
           unread_messages: 0,
+          last_delivered_at,
+          last_delivered_message_id,
         };
       }
     }
@@ -2276,6 +2305,10 @@ export class Channel {
           last_read_message_id: read.last_read_message_id,
           unread_messages: read.unread_messages ?? 0,
           user: read.user,
+          last_delivered_at: read.last_delivered_at
+            ? new Date(read.last_delivered_at)
+            : undefined,
+          last_delivered_message_id: read.last_delivered_message_id,
         };
 
         if (read.user.id === user?.id) {
