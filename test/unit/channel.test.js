@@ -1675,6 +1675,35 @@ describe('Channel.query', async () => {
 		});
 		mock.restore();
 	});
+
+	it(`update the messageComposer config`, async () => {
+		const client = await getClientWithUser();
+		const channel = client.channel('messaging', uuidv4());
+		expect(channel.messageComposer.config.location.enabled).toBe(true);
+
+		const postStub = sinon.stub(client, 'post');
+		postStub.onFirstCall().resolves({
+			...mockChannelQueryResponse,
+			channel: {
+				...mockChannelQueryResponse.channel,
+				config: { ...mockChannelQueryResponse.channel.config, shared_locations: false },
+			},
+		});
+
+		postStub.onSecondCall().resolves({
+			...mockChannelQueryResponse,
+			channel: {
+				...mockChannelQueryResponse.channel,
+				config: { ...mockChannelQueryResponse.channel.config, shared_locations: true },
+			},
+		});
+
+		await channel.query();
+		expect(channel.messageComposer.config.location.enabled).toBe(false);
+
+		await channel.query();
+		expect(channel.messageComposer.config.location.enabled).toBe(true);
+	});
 });
 
 describe('send reaction flow', () => {
