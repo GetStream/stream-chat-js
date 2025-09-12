@@ -21,6 +21,7 @@ export const EVENT_MAP = {
   'message.undeleted': true,
   'notification.added_to_channel': true,
   'notification.channel_deleted': true,
+  'notification.channel_delivered': true,
   'notification.channel_mutes_updated': true,
   'notification.channel_truncated': true,
   'notification.invite_accepted': true,
@@ -30,6 +31,7 @@ export const EVENT_MAP = {
   'notification.mark_unread': true,
   'notification.message_new': true,
   'notification.mutes_updated': true,
+  'notification.reminder_due': true,
   'notification.removed_from_channel': true,
   'notification.thread_message_new': true,
   'poll.closed': true,
@@ -40,6 +42,9 @@ export const EVENT_MAP = {
   'reaction.deleted': true,
   'reaction.new': true,
   'reaction.updated': true,
+  'reminder.created': true,
+  'reminder.deleted': true,
+  'reminder.updated': true,
   'thread.updated': true,
   'typing.start': true,
   'typing.stop': true,
@@ -66,10 +71,4 @@ export const EVENT_MAP = {
   'capabilities.changed': true,
   'live_location_sharing.started': true,
   'live_location_sharing.stopped': true,
-
-  // Reminder events
-  'reminder.created': true,
-  'reminder.updated': true,
-  'reminder.deleted': true,
-  'notification.reminder_due': true,
 };
