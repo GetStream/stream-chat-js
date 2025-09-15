@@ -88,6 +88,7 @@ describe('BasePaginator', () => {
       });
     });
   });
+
   describe('pagination API', () => {
     it('paginates to next pages', async () => {
       const paginator = new Paginator();
@@ -240,6 +241,7 @@ describe('BasePaginator', () => {
       expect(paginator.cursor).toEqual({ next: 'next1', prev: 'prev1' });
     });
   });
+
   describe('item management', () => {
     const item: TestItem = {
       id: 'id1',
@@ -286,28 +288,37 @@ describe('BasePaginator', () => {
     });
 
     describe('ingestItem', () => {
-      it('exists but does not match the filter anymore removes the item', () => {
-        const paginator = new Paginator();
-        paginator.state.partialNext({
-          items: [item3, item2, item],
-        });
+      it.each([
+        ['on lockItemOrder: false', false],
+        ['on lockItemOrder: true', true],
+      ])(
+        'exists but does not match the filter anymore removes the item %s',
+        (_, lockItemOrder) => {
+          const paginator = new Paginator({ lockItemOrder });
+          paginator.state.partialNext({
+            items: [item3, item2, item],
+          });
 
-        // @ts-expect-error accessing protected property
-        paginator.buildFilters = () => ({
-          teams: { $eq: ['abc', 'efg'] }, // required membership in these two teams
-        });
+          // @ts-expect-error accessing protected property
+          paginator.buildFilters = () => ({
+            teams: { $eq: ['abc', 'efg'] }, // required membership in these two teams
+          });
 
-        const adjustedItem = {
-          ...item,
-          teams: ['efg'], // removed from the team abc
-        };
+          const adjustedItem = {
+            ...item,
+            teams: ['efg'], // removed from the team abc
+          };
 
-        expect(paginator.ingestItem(adjustedItem)).toBeTruthy(); // item removed
-        expect(paginator.items).toHaveLength(2);
-      });
+          expect(paginator.ingestItem(adjustedItem)).toBeTruthy(); // item removed
+          expect(paginator.items).toHaveLength(2);
+        },
+      );
 
-      it('exists and matches the filter updates the item', () => {
-        const paginator = new Paginator();
+      it.each([
+        [' adjusts the order on lockItemOrder: false', false],
+        [' does not adjust the order on lockItemOrder: true', true],
+      ])('exists and matches the filter updates the item and %s', (_, lockItemOrder) => {
+        const paginator = new Paginator({ lockItemOrder });
         paginator.state.partialNext({
           items: [item, item2, item3],
         });
@@ -326,15 +337,110 @@ describe('BasePaginator', () => {
 
         expect(paginator.ingestItem(adjustedItem)).toBeTruthy(); // item updated
         expect(paginator.items).toHaveLength(3);
-        expect(paginator.items![0]).toStrictEqual(item2);
-        expect(paginator.items![1]).toStrictEqual(item3);
-        expect(paginator.items![2]).toStrictEqual(adjustedItem);
+
+        if (lockItemOrder) {
+          expect(paginator.items).toStrictEqual([adjustedItem, item2, item3]);
+        } else {
+          expect(paginator.items).toStrictEqual([item2, item3, adjustedItem]);
+        }
       });
 
-      it('does not exist and does not match the filter results in no action', () => {
+      it.each([
+        ['on lockItemOrder: false', false],
+        ['on lockItemOrder: true', true],
+      ])(
+        'does not exist and does not match the filter results in no action %s',
+        (_, lockItemOrder) => {
+          const paginator = new Paginator({ lockItemOrder });
+          paginator.state.partialNext({
+            items: [item],
+          });
+
+          // @ts-expect-error accessing protected property
+          paginator.buildFilters = () => ({
+            age: { $gt: 100 },
+          });
+
+          const adjustedItem = {
+            ...item,
+            id: 'id2',
+            name: 'test2',
+          };
+
+          expect(paginator.ingestItem(adjustedItem)).toBeFalsy(); // no action
+          expect(paginator.items).toStrictEqual([item]);
+        },
+      );
+
+      it.each([
+        ['on lockItemOrder: false', false],
+        ['on lockItemOrder: true', true],
+      ])(
+        'does not exist and matches the filter inserts according to default sort order (append) %s',
+        (_, lockItemOrder) => {
+          const paginator = new Paginator({ lockItemOrder });
+          paginator.state.partialNext({
+            items: [item3, item],
+          });
+
+          // @ts-expect-error accessing protected property
+          paginator.buildFilters = () => ({
+            teams: { $contains: 'abc' },
+          });
+
+          expect(paginator.ingestItem(item2)).toBeTruthy();
+          expect(paginator.items).toStrictEqual([item3, item, item2]);
+        },
+      );
+
+      it.each([
+        ['on lockItemOrder: false', false],
+        ['on lockItemOrder: true', true],
+      ])(
+        'does not exist and matches the filter inserts according to sort order %s',
+        (_, lockItemOrder) => {
+          const paginator = new Paginator({ lockItemOrder });
+          paginator.state.partialNext({
+            items: [item3, item],
+          });
+
+          // @ts-expect-error accessing protected property
+          paginator.buildFilters = () => ({
+            teams: { $contains: 'abc' },
+          });
+          paginator.sortComparator = makeComparator<
+            TestItem,
+            Partial<Record<keyof TestItem, AscDesc>>
+          >({ sort: { age: -1 } });
+
+          expect(paginator.ingestItem(item2)).toBeTruthy();
+          expect(paginator.items).toHaveLength(3);
+          expect(paginator.items![0]).toStrictEqual(item3);
+          expect(paginator.items![1]).toStrictEqual(item2);
+          expect(paginator.items![2]).toStrictEqual(item);
+        },
+      );
+
+      it('reflects the boost priority on lockItemOrder: false for newly ingested items', () => {
         const paginator = new Paginator();
         paginator.state.partialNext({
-          items: [item],
+          items: [item3, item],
+        });
+
+        // @ts-expect-error accessing protected property
+        paginator.buildFilters = () => ({
+          teams: { $contains: 'abc' },
+        });
+
+        paginator.boost(item2.id);
+        expect(paginator.ingestItem(item2)).toBeTruthy();
+        expect(paginator.items).toStrictEqual([item2, item3, item]);
+      });
+
+      it('reflects the boost priority on lockItemOrder: false for existing items recently boosted', () => {
+        const paginator = new Paginator();
+        paginator.state.partialNext({
+          items: [item, item2, item3],
         });
 
         // @ts-expect-error accessing protected property
@@ -342,19 +448,45 @@ describe('BasePaginator', () => {
           age: { $gt: 100 },
         });
 
+        paginator.sort = { age: 1 };
+
         const adjustedItem = {
-          ...item,
-          id: 'id2',
-          name: 'test2',
+          ...item2,
+          age: 103,
         };
+        paginator.boost(item2.id);
+        expect(paginator.ingestItem(adjustedItem)).toBeTruthy(); // item updated
+        expect(paginator.items).toHaveLength(3);
 
-        expect(paginator.ingestItem(adjustedItem)).toBeFalsy(); // no action
-        expect(paginator.items).toHaveLength(1);
-        expect(paginator.items![0]).toStrictEqual(item);
+        expect(paginator.items).toStrictEqual([adjustedItem, item, item3]);
       });
 
-      it('does not exist and matches the filter inserts according to default sort order (append)', () => {
-        const paginator = new Paginator();
+      it('does not reflect the boost priority on lockItemOrder: true', () => {
+        const paginator = new Paginator({ lockItemOrder: true });
+        paginator.state.partialNext({
+          items: [item, item2, item3],
+        });
+
+        // @ts-expect-error accessing protected property
+        paginator.buildFilters = () => ({
+          age: { $gt: 100 },
+        });
+
+        paginator.sort = { age: 1 };
+
+        const adjustedItem = {
+          ...item2,
+          age: 103,
+        };
+        paginator.boost(item2.id);
+        expect(paginator.ingestItem(adjustedItem)).toBeTruthy(); // item updated
+        expect(paginator.items).toHaveLength(3);
+
+        expect(paginator.items).toStrictEqual([item, adjustedItem, item3]);
+      });
+
+      it('reflects the boost priority on lockItemOrder: true when ingesting a new item', () => {
+        const paginator = new Paginator({ lockItemOrder: true });
         paginator.state.partialNext({
           items: [item3, item],
         });
@@ -364,33 +496,9 @@ describe('BasePaginator', () => {
           teams: { $contains: 'abc' },
         });
 
+        paginator.boost(item2.id);
         expect(paginator.ingestItem(item2)).toBeTruthy();
-        expect(paginator.items).toHaveLength(3);
-        expect(paginator.items![0]).toStrictEqual(item3);
-        expect(paginator.items![1]).toStrictEqual(item);
-        expect(paginator.items![2]).toStrictEqual(item2);
-      });
-
-      it('does not exist and matches the filter inserts according to sort order', () => {
-        const paginator = new Paginator();
-        paginator.state.partialNext({
-          items: [item3, item],
-        });
-
-        // @ts-expect-error accessing protected property
-        paginator.buildFilters = () => ({
-          teams: { $contains: 'abc' },
-        });
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({ sort: { age: -1 } });
-
-        expect(paginator.ingestItem(item2)).toBeTruthy();
-        expect(paginator.items).toHaveLength(3);
-        expect(paginator.items![0]).toStrictEqual(item3);
-        expect(paginator.items![1]).toStrictEqual(item2);
-        expect(paginator.items![2]).toStrictEqual(item);
+        expect(paginator.items).toStrictEqual([item2, item3, item]);
       });
     });
 
@@ -427,6 +535,29 @@ describe('BasePaginator', () => {
         expect(paginator.items).toHaveLength(2);
         expect(paginator.items![0]).toStrictEqual(item2);
         expect(paginator.items![1]).toStrictEqual(item);
+      });
+    });
+
+    describe('reload', () => {
+      it('starts the pagination from the beginning', async () => {
+        const a: TestItem = { id: 'a', age: 30 };
+        const b: TestItem = { id: 'b', age: 25 };
+        const c: TestItem = { id: 'c', age: 25 };
+        const d: TestItem = { id: 'd', age: 20 };
+
+        const paginator = new Paginator();
+        const nextSpy = vi.spyOn(paginator, 'next').mockResolvedValue();
+        paginator.state.next({
+          hasNext: false,
+          hasPrev: false,
+          isLoading: false,
+          items: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }],
+          offset: 4,
+        });
+        await paginator.reload();
+        expect(nextSpy).toHaveBeenCalledTimes(1);
+        expect(paginator.state.getLatestValue()).toStrictEqual(paginator.initialState);
+        nextSpy.mockRestore();
       });
     });
 
@@ -687,6 +818,238 @@ describe('BasePaginator', () => {
           ...resolvers1,
           ...resolvers2,
         ]);
+      });
+    });
+
+    describe('item boosting', () => {
+      const a = { id: 'a', age: 10, name: 'A' } as TestItem;
+      const b = { id: 'b', age: 20, name: 'B' } as TestItem;
+      const c = { id: 'c', age: 30, name: 'C' } as TestItem;
+
+      const byIdAsc = (l: TestItem, r: TestItem) =>
+        l.id < r.id ? -1 : l.id > r.id ? 1 : 0;
+
+      describe('clearExpiredBoosts', () => {
+        it('removes expired boosts and updates maxBoostSeq', () => {
+          const paginator = new Paginator();
+          // @ts-expect-error accessing protected property
+          paginator.boosts.clear();
+          const now = 1000000;
+
+          paginator.boost('fresh', { until: now + 1000, seq: 1 });
+          paginator.boost('stale', { until: now - 1, seq: 5 });
+
+          // @ts-expect-error accessing protected method
+          paginator.clearExpiredBoosts(now);
+
+          // @ts-expect-error accessing protected property
+          expect(Array.from(paginator.boosts.keys())).toEqual(['fresh']);
+          expect(paginator.maxBoostSeq).toBe(1);
+        });
+
+        it('sets maxBoostSeq to 0 when no boosts remain', () => {
+          const paginator = new Paginator();
+          // two expired boosts at "now"
+          paginator.boost('x', { until: 1000, seq: 1 });
+          paginator.boost('y', { until: 1500, seq: 3 });
+
+          // @ts-expect-error accessing protected method
+          paginator.clearExpiredBoosts(10000);
+
+          // @ts-expect-error accessing protected property
+          expect(paginator.boosts.size).toBe(0);
+          expect(paginator.maxBoostSeq).toBe(0);
+        });
+      });
+
+      describe('boostComparator', () => {
+        it('prioritizes boosted over non-boosted', () => {
+          vi.useFakeTimers();
+          const now = new Date('2025-01-01T00:00:00Z');
+          vi.setSystemTime(now);
+
+          const paginator = new Paginator();
+          paginator.sortComparator = byIdAsc;
+
+          // Boost only "a"
+          paginator.boost('b', { ttlMs: 10000, seq: 0 });
+
+          // @ts-expect-error: protected method
+          expect(paginator.boostComparator(a, b)).toBe(1); // a after b
+          // @ts-expect-error
+          expect(paginator.boostComparator(b, a)).toBe(-1); // b stays before a
+
+          // Let boost expire
+          vi.setSystemTime(new Date(now.getTime() + 11000));
+          // @ts-expect-error
+          expect(paginator.boostComparator(a, b)).toBe(-1); // fallback to byIdAsc
+          vi.useRealTimers();
+        });
+
+        it('when both boosted, higher seq comes first; ties fall back to sortComparator', () => {
+          vi.useFakeTimers();
+          const now = new Date('2025-01-01T00:00:00Z');
+          vi.setSystemTime(now);
+
+          const paginator = new Paginator();
+          // Fallback comparator id asc
+          paginator.sortComparator = byIdAsc;
+
+          paginator.boost('a', { ttlMs: 60000, seq: 1 });
+          paginator.boost('b', { ttlMs: 60000, seq: 3 });
+
+          // b has higher seq → should come first → comparator(a,b) > 0
+          // @ts-expect-error
+          expect(paginator.boostComparator(a, b)).toBe(1);
+          // reverse check
+          // @ts-expect-error
+          expect(paginator.boostComparator(b, a)).toBe(-1);
+
+          // Equal seq → fall back to sortComparator (id asc => a before b)
+          paginator.boost('a', { ttlMs: 60000, seq: 2 });
+          paginator.boost('b', { ttlMs: 60000, seq: 2 });
+          // @ts-expect-error
+          expect(paginator.boostComparator(a, b)).toBe(-1);
+
+          vi.useRealTimers();
+        });
+
+        it('ignores expired boosts automatically during comparison', () => {
+          vi.useFakeTimers();
+          const now = new Date('2025-01-01T00:00:00Z');
+          vi.setSystemTime(now);
+
+          const paginator = new Paginator();
+          paginator.sortComparator = byIdAsc;
+
+          paginator.boost('b', { ttlMs: 5000, seq: 10 });
+          // Initially boosted
+          // @ts-expect-error
+          expect(paginator.boostComparator(a, b)).toBe(1);
+
+          // Advance beyond TTL so boost is expired; comparator should fall back
+          vi.setSystemTime(new Date(now.getTime() + 6000));
+          // @ts-expect-error
+          expect(paginator.boostComparator(a, b)).toBe(-1); // byIdAsc, not boost
+          vi.useRealTimers();
+        });
+      });
+
+      describe('boost', () => {
+        it('assigns default TTL (15s) and default seq=0; updates maxBoostSeq only upward', () => {
+          vi.useFakeTimers();
+          const now = new Date('2025-01-01T00:00:00Z');
+          vi.setSystemTime(now);
+
+          const paginator = new Paginator();
+
+          paginator.boost('k'); // default 15s, seq 0
+          const b1 = paginator.getBoost('k')!;
+          expect(b1.seq).toBe(0);
+          expect(b1.until).toBe(now.getTime() + 15000);
+          expect(paginator.maxBoostSeq).toBe(0);
+
+          // Raise max seq
+          paginator.boost('m', { ttlMs: 1000, seq: 5 });
+          expect(paginator.maxBoostSeq).toBe(5);
+
+          // Lower seq should NOT decrease maxBoostSeq
+          paginator.boost('n', { ttlMs: 1000, seq: 2 });
+          expect(paginator.maxBoostSeq).toBe(5);
+
+          vi.useRealTimers();
+        });
+
+        it('accepts explicit until and seq', () => {
+          const paginator = new Paginator();
+          paginator.boost('z', { until: 42, seq: 7 });
+          const b = paginator.getBoost('z')!;
+          expect(b.until).toBe(42);
+          expect(b.seq).toBe(7);
+          expect(paginator.maxBoostSeq).toBe(7);
+        });
+      });
+
+      describe('getBoost', () => {
+        it('returns the boost record when present; otherwise undefined', () => {
+          const paginator = new Paginator();
+          expect(paginator.getBoost('missing')).toBeUndefined();
+          paginator.boost('a', { ttlMs: 1000, seq: 1 });
+          const b = paginator.getBoost('a');
+          expect(b).toBeDefined();
+          expect(b!.seq).toBe(1);
+        });
+      });
+
+      describe('removeBoost', () => {
+        it('removes a boost and recalculates maxBoostSeq', () => {
+          const paginator = new Paginator();
+          paginator.boost('a', { ttlMs: 60000, seq: 1 });
+          paginator.boost('b', { ttlMs: 60000, seq: 5 });
+          paginator.boost('c', { ttlMs: 60000, seq: 2 });
+          expect(paginator.maxBoostSeq).toBe(5);
+
+          paginator.removeBoost('b'); // remove current max
+          expect(paginator.getBoost('b')).toBeUndefined();
+          expect(paginator.maxBoostSeq).toBe(2);
+
+          paginator.removeBoost('c');
+          expect(paginator.getBoost('c')).toBeUndefined();
+          expect(paginator.maxBoostSeq).toBe(1);
+
+          paginator.removeBoost('a');
+          expect(paginator.getBoost('a')).toBeUndefined();
+          expect(paginator.maxBoostSeq).toBe(0);
+        });
+      });
+
+      describe('isBoosted', () => {
+        it('returns true when boost exists and now <= until; false otherwise', () => {
+          vi.useFakeTimers();
+          const now = new Date('2025-01-01T00:00:00Z');
+          vi.setSystemTime(now);
+
+          const paginator = new Paginator();
+          expect(paginator.isBoosted('x')).toBe(false);
+
+          paginator.boost('x', { ttlMs: 5000, seq: 0 });
+          expect(paginator.isBoosted('x')).toBe(true);
+
+          // Exactly at until is still considered boosted per <= check
+          vi.setSystemTime(new Date(now.getTime() + 5000));
+          expect(paginator.isBoosted('x')).toBe(true);
+
+          // After until → false
+          vi.setSystemTime(new Date(now.getTime() + 5001));
+          expect(paginator.isBoosted('x')).toBe(false);
+
+          vi.useRealTimers();
+        });
+      });
+
+      describe('integration: ingestion respects boostComparator implicitly', () => {
+        it('newly ingested boosted items float above non-boosted regardless of fallback sort', () => {
+          vi.useFakeTimers();
+          vi.setSystemTime(new Date('2025-01-01T00:00:00Z'));
+
+          const paginator = new Paginator();
+          paginator.sortComparator = makeComparator<
+            TestItem,
+            Partial<Record<keyof TestItem, AscDesc>>
+          >({
+            sort: { age: 1 }, // ascending age (so normally a < b < c by age)
+          });
+          paginator.state.partialNext({ items: [a, b] });
+
+          // Boost "c" before ingest → it should be placed ahead of non-boosted even though age is highest
+          paginator.boost('c', { ttlMs: 60000, seq: 1 });
+          expect(paginator.ingestItem(c)).toBeTruthy();
+
+          // c should be first due to boost, then a, then b (fallback sort would place c last otherwise)
+          expect(paginator.items!.map((i) => i.id)).toEqual(['c', 'a', 'b']);
+
+          vi.useRealTimers();
+        });
       });
     });
   });
