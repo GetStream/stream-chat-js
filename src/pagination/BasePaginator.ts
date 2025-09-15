@@ -35,16 +35,19 @@ export type PaginatorState<T = any> = {
 export type PaginatorOptions = {
   /** The number of milliseconds to debounce the search query. The default interval is 300ms. */
   debounceMs?: number;
+  /** Will prevent changing the index of existing items */
+  lockItemOrder?: boolean;
   pageSize?: number;
 };
 export const DEFAULT_PAGINATION_OPTIONS: Required<PaginatorOptions> = {
   debounceMs: 300,
+  lockItemOrder: false,
   pageSize: 10,
 } as const;
 
 export abstract class BasePaginator<T> {
   state: StateStore<PaginatorState<T>>;
-  pageSize: number;
+  config: Required<PaginatorOptions>;
   protected _executeQueryDebounced!: DebouncedExecQueryFunction;
   protected _isCursorPagination = false;
   /**
@@ -72,10 +75,16 @@ export abstract class BasePaginator<T> {
    * @protected
    */
   protected _filterFieldToDataResolvers: FieldToDataResolver<T>[];
+  /**
+   * Ephemeral priority for attention UX without breaking sort invariants
+   * @protected
+   */
+  protected boosts = new Map<string, { until: number; seq: number }>();
+  protected _maxBoostSeq: number = 0;
 
   protected constructor(options?: PaginatorOptions) {
-    const { debounceMs, pageSize } = { ...DEFAULT_PAGINATION_OPTIONS, ...options };
-    this.pageSize = pageSize;
+    this.config = { ...DEFAULT_PAGINATION_OPTIONS, ...options };
+    const { debounceMs } = this.config;
     this.state = new StateStore<PaginatorState<T>>(this.initialState);
     this.setDebounceOptions({ debounceMs });
     this.sortComparator = noOrderChange;
@@ -126,6 +135,19 @@ export abstract class BasePaginator<T> {
     return this.state.getLatestValue().offset;
   }
 
+  get pageSize() {
+    return this.config.pageSize;
+  }
+
+  /** Single point of truth: always use the effective comparator */
+  get effectiveComparator() {
+    return this.boostComparator;
+  }
+
+  get maxBoostSeq() {
+    return this._maxBoostSeq;
+  }
+
   abstract query(params: PaginationQueryParams): Promise<PaginationQueryReturnValue<T>>;
 
   abstract filterQueryResults(items: T[]): T[] | Promise<T[]>;
@@ -149,15 +171,77 @@ export abstract class BasePaginator<T> {
     });
   }
 
+  protected clearExpiredBoosts(now = Date.now()) {
+    for (const [id, b] of this.boosts) if (now > b.until) this.boosts.delete(id);
+    this._maxBoostSeq = Math.max(
+      ...Array.from(this.boosts.values()).map((boost) => boost.seq),
+      0,
+    );
+  }
+
+  /** Comparator that consults boosts first, then falls back to sortComparator */
+  protected boostComparator = (a: T, b: T): number => {
+    const now = Date.now();
+    this.clearExpiredBoosts(now);
+
+    const idA = this.getItemId(a);
+    const idB = this.getItemId(b);
+    const boostA = this.getBoost(idA);
+    const boostB = this.getBoost(idB);
+
+    const aIsBoosted = !!(boostA && now <= boostA.until);
+    const bIsBoosted = !!(boostB && now <= boostB.until);
+
+    if (aIsBoosted && !bIsBoosted) return -1;
+    if (!aIsBoosted && bIsBoosted) return 1;
+
+    if (aIsBoosted && bIsBoosted) {
+      // higher seq wins
+      const seqDistance = (boostB.seq ?? 0) - (boostA.seq ?? 0);
+      if (seqDistance !== 0) return seqDistance > 0 ? 1 : -1;
+      // fall through to normal comparator for stability
+    }
+    return this.sortComparator(a, b);
+  };
+
+  /** Public API to manage boosts */
+  boost(id: string, opts?: { ttlMs?: number; until?: number; seq?: number }) {
+    const now = Date.now();
+    const until = opts?.until ?? (opts?.ttlMs != null ? now + opts.ttlMs : now + 15000); // default 15s
+
+    if (typeof opts?.seq === 'number' && opts.seq > this._maxBoostSeq) {
+      this._maxBoostSeq = opts.seq;
+    }
+
+    const seq = opts?.seq ?? 0;
+    this.boosts.set(id, { until, seq });
+  }
+
+  getBoost(id: string) {
+    return this.boosts.get(id);
+  }
+
+  removeBoost(id: string) {
+    this.boosts.delete(id);
+    this._maxBoostSeq = Math.max(
+      ...Array.from(this.boosts.values()).map((boost) => boost.seq),
+      0,
+    );
+  }
+
+  isBoosted(id: string) {
+    const boost = this.getBoost(id);
+    return !!(boost && Date.now() <= boost.until);
+  }
+
   ingestItem(ingestedItem: T): boolean {
     const items = this.items ?? [];
     const id = this.getItemId(ingestedItem);
-
+    const next = items.slice();
     // If it doesn't match this paginator's filters, remove if present and exit.
     const existingIndex = items.findIndex((ch) => this.getItemId(ch) === id);
     if (!this.matchesFilter(ingestedItem)) {
       if (existingIndex >= 0) {
-        const next = items.slice();
         next.splice(existingIndex, 1);
         this.state.partialNext({ items: next });
         return true; // list changed (item removed)
@@ -165,21 +249,20 @@ export abstract class BasePaginator<T> {
       return false; // no change
     }
 
-    // Build comparator once per call (you can cache it when sort changes).
-
-    const next = items.slice();
-
     if (existingIndex >= 0) {
       // Update existing: remove then re-insert at the correct position
       next.splice(existingIndex, 1);
     }
 
-    // Find insertion index via binary search: first index where existing > ingestionItem
-    const insertAt = binarySearchInsertIndex({
-      needle: ingestedItem,
-      sortedArray: next,
-      compare: this.sortComparator,
-    });
+    const insertAt =
+      this.config.lockItemOrder && existingIndex >= 0
+        ? existingIndex
+        : // Find insertion index via binary search: first index where existing > ingestionItem
+          binarySearchInsertIndex({
+            needle: ingestedItem,
+            sortedArray: next,
+            compare: this.effectiveComparator,
+          });
 
     next.splice(insertAt, 0, ingestedItem);
     this.state.partialNext({ items: next });
@@ -246,18 +329,18 @@ export abstract class BasePaginator<T> {
     const insertionIndex = binarySearchInsertIndex({
       needle,
       sortedArray: items,
-      compare: this.sortComparator,
+      compare: this.effectiveComparator,
     });
 
     // quick neighbor checks
     const id = this.getItemId(needle);
     const left = insertionIndex - 1;
-    if (left >= 0 && this.sortComparator(items[left], needle) === 0) {
+    if (left >= 0 && this.effectiveComparator(items[left], needle) === 0) {
       if (this.getItemId(items[left]) === id) return { index: left, insertionIndex };
     }
     if (
       insertionIndex < items.length &&
-      this.sortComparator(items[insertionIndex], needle) === 0
+      this.effectiveComparator(items[insertionIndex], needle) === 0
     ) {
       if (this.getItemId(items[insertionIndex]) === id)
         return { index: insertionIndex, insertionIndex };
@@ -269,14 +352,14 @@ export abstract class BasePaginator<T> {
         ? locateOnPlateauAlternating(
             items,
             needle,
-            this.sortComparator,
+            this.effectiveComparator,
             this.getItemId.bind(this),
             insertionIndex,
           )
         : locateOnPlateauScanOneSide(
             items,
             needle,
-            this.sortComparator,
+            this.effectiveComparator,
             this.getItemId.bind(this),
             insertionIndex,
           );
@@ -380,5 +463,10 @@ export abstract class BasePaginator<T> {
   };
   prevDebounced = () => {
     this._executeQueryDebounced({ direction: 'prev' });
+  };
+
+  reload = async () => {
+    this.resetState();
+    await this.next();
   };
 }

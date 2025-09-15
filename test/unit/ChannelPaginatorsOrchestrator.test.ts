@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getClientWithUser } from './test-utils/getClient';
 import {
-  Channel,
   ChannelPaginator,
   ChannelResponse,
   EventTypes,
@@ -259,6 +258,22 @@ describe('ChannelPaginatorsOrchestrator', () => {
     });
   });
 
+  describe('reload', () => {
+    it('calls reload on all the paginators', async () => {
+      const paginator1 = new ChannelPaginator({ client });
+      const paginator2 = new ChannelPaginator({ client });
+      vi.spyOn(paginator1, 'reload').mockResolvedValue();
+      vi.spyOn(paginator2, 'reload').mockResolvedValue();
+      const orchestrator = new ChannelPaginatorsOrchestrator({
+        client,
+        paginators: [paginator1, paginator2],
+      });
+      await orchestrator.reload();
+      expect(paginator1.reload).toHaveBeenCalledTimes(1);
+      expect(paginator2.reload).toHaveBeenCalledTimes(1);
+    });
+  });
+
   // Helper to create a minimal channel with needed state
   function makeChannel(cid: string) {
     const [type, id] = cid.split(':');
@@ -320,7 +335,7 @@ describe('ChannelPaginatorsOrchestrator', () => {
     });
   });
 
-  describe.each(['channel.hidden', 'notification.removed_from_channel'] as EventTypes[])(
+  describe.each(['notification.removed_from_channel'] as EventTypes[])(
     '%s',
     (eventType) => {
       it('removes the channel from all paginators', async () => {
@@ -519,6 +534,109 @@ describe('ChannelPaginatorsOrchestrator', () => {
         expect(ingestItemSpy).not.toHaveBeenCalled();
         expect(removeItemSpy).toHaveBeenCalledWith({ item: ch });
       });
+    });
+  });
+
+  it.each([
+    'message.new',
+    'notification.message_new',
+    'notification.added_to_channel',
+    'channel.visible',
+  ] as EventTypes[])(
+    'boosts ingested channel on %s if the item is not already boosted at the top',
+    async (eventType) => {
+      vi.useFakeTimers();
+      const now = new Date('2025-01-01T00:00:00Z');
+      vi.setSystemTime(now);
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now.getTime());
+
+      const orchestrator = new ChannelPaginatorsOrchestrator({ client });
+      const ch = makeChannel('messaging:5');
+      client.activeChannels[ch.cid] = ch;
+
+      const paginator = new ChannelPaginator({ client });
+      const matchesFilterSpy = vi.spyOn(paginator, 'matchesFilter').mockReturnValue(true);
+
+      orchestrator.insertPaginator({ paginator });
+      orchestrator.registerSubscriptions();
+
+      // @ts-expect-error accessing protected property
+      expect(paginator.boosts.size).toBe(0);
+
+      client.dispatchEvent({ type: eventType, cid: ch.cid });
+
+      await vi.waitFor(() => {
+        // @ts-expect-error accessing protected property
+        expect(Array.from(paginator.boosts.entries())).toEqual([
+          [ch.cid, { seq: 1, until: now.getTime() + 15000 }],
+        ]);
+      });
+
+      client.dispatchEvent({ type: eventType, cid: ch.cid });
+      await vi.waitFor(() => {
+        // already at the top
+        // @ts-expect-error accessing protected property
+        expect(Array.from(paginator.boosts.entries())).toEqual([
+          [ch.cid, { seq: 1, until: now.getTime() + 15000 }],
+        ]);
+      });
+
+      matchesFilterSpy.mockReturnValue(false);
+      client.dispatchEvent({ type: eventType, cid: ch.cid });
+
+      await vi.waitFor(() => {
+        // @ts-expect-error accessing protected property
+        expect(Array.from(paginator.boosts.entries())).toEqual([
+          [ch.cid, { seq: 1, until: now.getTime() + 15000 }],
+        ]);
+      });
+
+      matchesFilterSpy.mockReturnValue(true);
+      // @ts-expect-error accessing protected property
+      paginator._maxBoostSeq = 1000;
+      client.dispatchEvent({ type: eventType, cid: ch.cid });
+      await vi.waitFor(() => {
+        // some other channel has a higher boost
+        // @ts-expect-error accessing protected property
+        expect(Array.from(paginator.boosts.entries())).toEqual([
+          [ch.cid, { seq: 1001, until: now.getTime() + 15000 }],
+        ]);
+      });
+
+      nowSpy.mockRestore();
+      vi.useRealTimers();
+    },
+  );
+
+  it.each([
+    'channel.updated',
+    'channel.truncated',
+    'member.updated',
+    'user.presence.changed',
+  ] as EventTypes[])('does not boost ingested channel on %s', async (eventType) => {
+    vi.useFakeTimers();
+    const now = new Date('2025-01-01T00:00:00Z');
+    vi.setSystemTime(now);
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now.getTime());
+
+    const orchestrator = new ChannelPaginatorsOrchestrator({ client });
+    const ch = makeChannel('messaging:5');
+    client.activeChannels[ch.cid] = ch;
+
+    const paginator = new ChannelPaginator({ client });
+    const matchesFilterSpy = vi.spyOn(paginator, 'matchesFilter').mockReturnValue(true);
+
+    orchestrator.insertPaginator({ paginator });
+    orchestrator.registerSubscriptions();
+
+    // @ts-expect-error accessing protected property
+    expect(paginator.boosts.size).toBe(0);
+
+    client.dispatchEvent({ type: eventType, cid: ch.cid });
+
+    await vi.waitFor(() => {
+      // @ts-expect-error accessing protected property
+      expect(paginator.boosts.size).toBe(0);
     });
   });
 

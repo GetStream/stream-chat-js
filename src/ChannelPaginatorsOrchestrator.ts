@@ -13,7 +13,7 @@ import type {
 import { getChannel } from './pagination/utility.queryChannel';
 import type { Channel } from './channel';
 
-type ChannelPaginatorsOrchestratorEventHandlerContext = {
+export type ChannelPaginatorsOrchestratorEventHandlerContext = {
   orchestrator: ChannelPaginatorsOrchestrator;
 };
 
@@ -73,12 +73,20 @@ const updateLists: EventHandlerPipelineHandler<
 
   if (!channel) return;
 
-  // todo: can these state updates be made atomic across all the paginators?
-  // maybe we could add to state store API that would allow to queue changes and then commit?
   orchestrator.paginators.forEach((paginator) => {
     if (paginator.matchesFilter(channel)) {
-      // todo: does it make sense to move channel at the top of the items array (original implementation)
-      //  if items are supposed to be ordered by the sort object?
+      const channelBoost = paginator.getBoost(channel.cid);
+      if (
+        [
+          'message.new',
+          'notification.message_new',
+          'notification.added_to_channel',
+          'channel.visible',
+        ].includes(event.type) &&
+        (!channelBoost || channelBoost.seq < paginator.maxBoostSeq)
+      ) {
+        paginator.boost(channel.cid, { seq: paginator.maxBoostSeq + 1 });
+      }
       paginator.ingestItem(channel);
     } else {
       // remove if it does not match the filter anymore
@@ -87,18 +95,11 @@ const updateLists: EventHandlerPipelineHandler<
   });
 };
 
-//  todo: we have to make sure that client.activeChannels is always up-to-date
+// we have to make sure that client.activeChannels is always up-to-date
 const channelDeletedHandler: LabeledEventHandler<ChannelPaginatorsOrchestratorEventHandlerContext> =
   {
     handle: removeItem,
     id: 'ChannelPaginatorsOrchestrator:default-handler:channel.deleted',
-  };
-
-// fixme: is it ok, remove item just because its property hidden is switched to hidden: true? What about offset cursor, should we update it?
-const channelHiddenHandler: LabeledEventHandler<ChannelPaginatorsOrchestratorEventHandlerContext> =
-  {
-    handle: removeItem,
-    id: 'ChannelPaginatorsOrchestrator:default-handler:channel.hidden',
   };
 
 // fixme: this handler should not be handled by the orchestrator but as Channel does not have reactive state,
@@ -188,7 +189,7 @@ export type ChannelPaginatorsOrchestratorState = {
   paginators: ChannelPaginator[];
 };
 
-type EventHandlers = Partial<
+export type ChannelPaginatorsOrchestratorEventHandlers = Partial<
   Record<
     SupportedEventType,
     LabeledEventHandler<ChannelPaginatorsOrchestratorEventHandlerContext>[]
@@ -198,7 +199,7 @@ type EventHandlers = Partial<
 export type ChannelPaginatorsOrchestratorOptions = {
   client: StreamChat;
   paginators?: ChannelPaginator[];
-  eventHandlers?: EventHandlers;
+  eventHandlers?: ChannelPaginatorsOrchestratorEventHandlers;
 };
 
 export class ChannelPaginatorsOrchestrator extends WithSubscriptions {
@@ -209,19 +210,19 @@ export class ChannelPaginatorsOrchestrator extends WithSubscriptions {
     EventHandlerPipeline<ChannelPaginatorsOrchestratorEventHandlerContext>
   >();
 
-  protected static readonly defaultEventHandlers: EventHandlers = {
-    'channel.deleted': [channelDeletedHandler],
-    'channel.hidden': [channelHiddenHandler],
-    'channel.updated': [channelUpdatedHandler],
-    'channel.truncated': [channelTruncatedHandler],
-    'channel.visible': [channelVisibleHandler],
-    'member.updated': [memberUpdatedHandler],
-    'message.new': [messageNewHandler],
-    'notification.added_to_channel': [notificationAddedToChannelHandler],
-    'notification.message_new': [notificationMessageNewHandler],
-    'notification.removed_from_channel': [notificationRemovedFromChannelHandler],
-    'user.presence.changed': [userPresenceChangedHandler],
-  };
+  protected static readonly defaultEventHandlers: ChannelPaginatorsOrchestratorEventHandlers =
+    {
+      'channel.deleted': [channelDeletedHandler],
+      'channel.updated': [channelUpdatedHandler],
+      'channel.truncated': [channelTruncatedHandler],
+      'channel.visible': [channelVisibleHandler],
+      'member.updated': [memberUpdatedHandler],
+      'message.new': [messageNewHandler],
+      'notification.added_to_channel': [notificationAddedToChannelHandler],
+      'notification.message_new': [notificationMessageNewHandler],
+      'notification.removed_from_channel': [notificationRemovedFromChannelHandler],
+      'user.presence.changed': [userPresenceChangedHandler],
+    };
 
   constructor({
     client,
@@ -242,13 +243,17 @@ export class ChannelPaginatorsOrchestrator extends WithSubscriptions {
     return this.state.getLatestValue().paginators;
   }
 
+  private get ctx(): ChannelPaginatorsOrchestratorEventHandlerContext {
+    return { orchestrator: this };
+  }
+
   /**
    * Returns deep copy of default handlers mapping.
    * The defaults can be enriched with custom handlers or the custom handlers can be replaced.
    */
-  static getDefaultHandlers(): EventHandlers {
+  static getDefaultHandlers(): ChannelPaginatorsOrchestratorEventHandlers {
     const src = ChannelPaginatorsOrchestrator.defaultEventHandlers;
-    const out: EventHandlers = {};
+    const out: ChannelPaginatorsOrchestratorEventHandlers = {};
     for (const [type, handlers] of Object.entries(src)) {
       if (!handlers) continue;
       out[type as SupportedEventType] = [...handlers];
@@ -321,7 +326,10 @@ export class ChannelPaginatorsOrchestrator extends WithSubscriptions {
     return pipe;
   }
 
-  private get ctx(): ChannelPaginatorsOrchestratorEventHandlerContext {
-    return { orchestrator: this };
-  }
+  reload = async () =>
+    await Promise.allSettled(
+      this.paginators.map(async (paginator) => {
+        await paginator.reload();
+      }),
+    );
 }
