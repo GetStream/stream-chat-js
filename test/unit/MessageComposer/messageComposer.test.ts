@@ -3,6 +3,8 @@ import {
   AbstractOfflineDB,
   Channel,
   ChannelAPIResponse,
+  ChannelConfigWithInfo,
+  ChannelResponse,
   LocalMessage,
   MessageComposerConfig,
   StaticLocationPayload,
@@ -175,16 +177,16 @@ describe('MessageComposer', () => {
     });
 
     it('should initialize with custom config', () => {
-      const customConfig = {
-        publishTypingEvents: false,
+      const customConfig: DeepPartial<MessageComposerConfig> = {
         text: {
           maxLengthOnEdit: 1000,
+          publishTypingEvents: false,
         },
       };
 
       const { messageComposer } = setup({ config: customConfig });
 
-      expect(messageComposer.config.publishTypingEvents).toBe(false);
+      expect(messageComposer.config.text.publishTypingEvents).toBe(false);
       expect(messageComposer.config.text?.maxLengthOnEdit).toBe(1000);
     });
 
