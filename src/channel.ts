@@ -1953,6 +1953,9 @@ export class Channel {
           );
         }
         break;
+      case 'message.delivered':
+        console.log('message.delivered', event);
+        break;
       case 'message.new':
         if (event.message) {
           const client = this.getClient();
@@ -2321,6 +2324,10 @@ export class Channel {
           last_read_message_id: read.last_read_message_id,
           unread_messages: read.unread_messages ?? 0,
           user: read.user,
+          last_delivered_at: read.last_delivered_at
+            ? new Date(read.last_delivered_at)
+            : undefined,
+          last_delivered_message_id: read.last_delivered_message_id,
         };
 
         if (read.user.id === user?.id) {
