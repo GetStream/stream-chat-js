@@ -1,3 +1,9 @@
+## [9.19.1](https://github.com/GetStream/stream-chat-js/compare/v9.19.0...v9.19.1) (2025-09-12)
+
+### Bug Fixes
+
+* update message composer location config upon querying a channel ([#1620](https://github.com/GetStream/stream-chat-js/issues/1620)) ([96d2d6d](https://github.com/GetStream/stream-chat-js/commit/96d2d6d6d0ca435f4ef00fcf38e8e9c7656fa3ab))
+
 ## [9.19.0](https://github.com/GetStream/stream-chat-js/compare/v9.18.1...v9.19.0) (2025-09-02)
 
 ### Bug Fixes
