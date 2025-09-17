@@ -1492,6 +1492,13 @@ export class Channel {
 
     this.getClient()._addChannelConfig(state.channel);
 
+    // the only config param that is necessary to be updated based on server config soon as the config is delivered
+    if (typeof state.channel.config?.shared_locations !== 'undefined') {
+      this.messageComposer.updateConfig({
+        location: { enabled: state.channel.config.shared_locations },
+      });
+    }
+
     // add any messages to our channel state
     const { messageSet } = this._initializeState(state, messageSetToAddToIfDoesNotExist);
     messageSet.pagination = {
