@@ -1905,7 +1905,7 @@ export class Channel {
           }
         }
         break;
-      case 'notification.channel_delivered':
+      case 'message.delivered':
         // todo: update also on thread
         if (event.user?.id && event.created_at) {
           channelState.read[event.user.id] = {

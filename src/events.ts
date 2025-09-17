@@ -21,7 +21,7 @@ export const EVENT_MAP = {
   'message.undeleted': true,
   'notification.added_to_channel': true,
   'notification.channel_deleted': true,
-  'notification.channel_delivered': true,
+  'message.delivered': true,
   'notification.channel_mutes_updated': true,
   'notification.channel_truncated': true,
   'notification.invite_accepted': true,
