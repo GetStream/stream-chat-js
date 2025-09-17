@@ -1263,8 +1263,6 @@ export type DeliveredMessageConfirmation = {
 
 export type MarkDeliveredOptions = {
   latest_delivered_messages: DeliveredMessageConfirmation[];
-  client_id?: string;
-  connection_id?: string;
   user?: UserResponse;
   user_id?: string;
 };
