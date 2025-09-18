@@ -988,7 +988,8 @@ export class StreamChat {
     // reset thread manager
     this.threads.resetState();
     // reset token manager
-    setTimeout(this.tokenManager.reset); // delay reseting to use token for disconnect calls
+    // setTimeout(this.tokenManager.reset); // delay reseting to use token for disconnect calls
+    this.tokenManager.reset();
 
     // close the WS connection
     return closePromise;
