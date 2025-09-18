@@ -3845,12 +3845,6 @@ export type RuleBuilderAction = {
   type: string;
   ban_options?: BanOptions;
   flag_user_options?: FlagUserOptions;
-  flag_content_options?: FlagContentOptions;
-  remove_content_options?: RemoveContentOptions;
-  shadow_content_options?: ShadowContentOptions;
-  bounce_content_options?: BounceContentOptions;
-  bounce_remove_content_options?: BounceRemoveContentOptions;
-  bounce_flag_content_options?: BounceFlagContentOptions;
 };
 
 export type TextRuleParameters = {
@@ -3918,30 +3912,6 @@ export type BanOptions = {
 };
 
 export type FlagUserOptions = {
-  reason: string;
-};
-
-export type FlagContentOptions = {
-  reason: string;
-};
-
-export type RemoveContentOptions = {
-  reason: string;
-};
-
-export type ShadowContentOptions = {
-  reason: string;
-};
-
-export type BounceContentOptions = {
-  reason: string;
-};
-
-export type BounceRemoveContentOptions = {
-  reason: string;
-};
-
-export type BounceFlagContentOptions = {
   reason: string;
 };
 
