@@ -1978,14 +1978,17 @@ export class Channel {
           if (event.user?.id) {
             for (const userId in channelState.read) {
               if (userId === event.user.id) {
+                const currentState = channelState.read[event.user.id];
                 channelState.read[event.user.id] = {
                   last_read: new Date(event.created_at as string),
                   user: event.user,
                   unread_messages: 0,
                   last_delivered_at: event.last_delivered_at
                     ? new Date(event.last_delivered_at)
-                    : undefined,
-                  last_delivered_message_id: event.last_delivered_message_id,
+                    : currentState.last_delivered_at,
+                  last_delivered_message_id:
+                    event.last_delivered_message_id ??
+                    currentState.last_delivered_message_id,
                 };
               } else {
                 channelState.read[userId].unread_messages += 1;
