@@ -3539,6 +3539,20 @@ export type ModerationFlag = {
   moderation_payload_hash?: string;
 };
 
+export type AppealItem = {
+  attachments: string[];
+  created_at: string;
+  updated_at: string;
+  decision_reason: string;
+  entity_id: string;
+  entity_type: string;
+  status: string;
+  text: string;
+  channel_cid: string;
+  user: UserResponse;
+  id: string;
+};
+
 export type ReviewQueueItem = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   actions_taken: any[];
@@ -3567,6 +3581,7 @@ export type ReviewQueueItem = {
   reviewed_at: string;
   status: string;
   updated_at: string;
+  appeal?: AppealItem;
 };
 
 export type CustomCheckFlag = {
@@ -3599,6 +3614,10 @@ export type SubmitActionOptions = {
     channel_cid?: string;
   };
   user_id?: string;
+  decide_appeal?: {
+    decision_reason: string;
+    status: 'accepted' | 'rejected';
+  };
 };
 
 export type GetUserModerationReportResponse = {
@@ -3741,12 +3760,76 @@ export type ReviewQueueFilters = QueryFilters<
     date_range?: RequireOnlyOne<{
       $eq?: string; // Format: "date1_date2"
     }>;
+  } & {
+    appeal?: boolean;
+  } & {
+    appeal_status?: RequireOnlyOne<{
+      $eq?: 'submitted' | 'accepted' | 'rejected';
+    }>;
   }
 >;
 
 export type ReviewQueueSort =
   | Sort<Pick<ReviewQueueItem, 'id' | 'created_at' | 'updated_at'>>
   | Array<Sort<Pick<ReviewQueueItem, 'id' | 'created_at' | 'updated_at'>>>;
+
+export type AppealsSort =
+  | Sort<Pick<AppealItem, 'created_at' | 'updated_at'>>
+  | Array<Sort<Pick<AppealItem, 'created_at' | 'updated_at'>>>;
+
+export type QueryAppealsFilters = QueryFilters<
+  {
+    entity_type?:
+      | RequireOnlyOne<Pick<QueryFilter<AppealItem['entity_type']>, '$eq' | '$in'>>
+      | PrimitiveFilter<AppealItem['entity_type']>;
+  } & {
+    created_at?:
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<AppealItem['created_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
+      | PrimitiveFilter<AppealItem['created_at']>;
+  } & {
+    id?:
+      | RequireOnlyOne<Pick<QueryFilter<AppealItem['id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<AppealItem['id']>;
+  } & {
+    entity_id?:
+      | RequireOnlyOne<Pick<QueryFilter<AppealItem['entity_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<AppealItem['entity_id']>;
+  } & {
+    status?:
+      | RequireOnlyOne<Pick<QueryFilter<AppealItem['status']>, '$eq' | '$in'>>
+      | PrimitiveFilter<AppealItem['status']>;
+  } & {
+    updated_at?:
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<AppealItem['updated_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
+      | PrimitiveFilter<AppealItem['updated_at']>;
+  } & {
+    text?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    channel_cid?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    decision_reason?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    review_queue_item_id?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  }
+>;
 
 export type QueryModerationConfigsSort = Array<Sort<'key' | 'created_at' | 'updated_at'>>;
 
@@ -3757,6 +3840,14 @@ export type ReviewQueueResponse = {
   next?: string;
   prev?: string;
 };
+
+export type QueryAppealsResponse = APIResponse & {
+  items: AppealItem[];
+  next?: string;
+  prev?: string;
+};
+
+export type QueryAppealsPaginationOptions = Pager;
 
 export type ModerationConfig = {
   key: string;
@@ -3787,6 +3878,10 @@ export type QueryConfigsResponse = {
 
 export type UpsertConfigResponse = {
   config: ModerationConfigResponse;
+};
+
+export type AppealResponse = APIResponse & {
+  appeal_id: string;
 };
 
 // Moderation Rule Builder Types
@@ -3957,6 +4052,11 @@ export type UpsertModerationRuleResponse = {
 export type ModerationFlagOptions = {
   custom?: Record<string, unknown>;
   moderation_payload?: ModerationPayload;
+  user_id?: string;
+};
+
+export type AppealOptions = {
+  custom?: Record<string, unknown>;
   user_id?: string;
 };
 
