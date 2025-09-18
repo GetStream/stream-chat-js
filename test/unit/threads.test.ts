@@ -16,7 +16,6 @@ import {
   THREAD_MANAGER_INITIAL_STATE,
   ThreadFilters,
   ThreadSort,
-  QueryThreadsOptions,
 } from '../../src';
 import { THREAD_RESPONSE_RESERVED_KEYS } from '../../src/thread';
 
@@ -56,6 +55,7 @@ describe('Threads 2.0', () => {
       channel: { id: uuidv4(), name: 'Test channel', members: [] },
     }).channel as ChannelResponse;
     channel = client.channel(channelResponse.type, channelResponse.id);
+    channel.initialized = true;
     parentMessageResponse = generateMsg() as MessageResponse;
     threadManager = new ThreadManager({ client });
   });
@@ -320,12 +320,12 @@ describe('Threads 2.0', () => {
 
       describe('markAsRead', () => {
         let stubbedChannelMarkRead: sinon.SinonStub<
-          Parameters<Channel['markRead']>,
-          ReturnType<Channel['markRead']>
+          Parameters<Channel['markAsReadRequest']>,
+          ReturnType<Channel['markAsReadRequest']>
         >;
 
         beforeEach(() => {
-          stubbedChannelMarkRead = sinon.stub(channel, 'markRead').resolves();
+          stubbedChannelMarkRead = sinon.stub(channel, 'markAsReadRequest').resolves();
         });
 
         it('does nothing if unread count of the current user is zero', async () => {

@@ -1131,16 +1131,26 @@ export class Channel {
   }
 
   /**
-   * markRead - Send the mark read event for this user, only works if the `read_events` setting is enabled
+   * markRead - Send the mark read event for this user, only works if the `read_events` setting is enabled. Syncs the message delivery report candidates local state.
    *
    * @param {MarkReadOptions} data
    * @return {Promise<EventAPIResponse | null>} Description
    */
   async markRead(data: MarkReadOptions = {}) {
+    return await this.getClient().deliveryReportCoordinator.markRead(this, data);
+  }
+
+  /**
+   * markReadRequest - Send the mark read event for this user, only works if the `read_events` setting is enabled
+   *
+   * @param {MarkReadOptions} data
+   * @return {Promise<EventAPIResponse | null>} Description
+   */
+  async markAsReadRequest(data: MarkReadOptions = {}) {
     this._checkInitialized();
 
     if (!this.getConfig()?.read_events && !this.getClient()._isUsingServerAuth()) {
-      return Promise.resolve(null);
+      return null;
     }
 
     return await this.getClient().post<EventAPIResponse>(this._channelURL() + '/read', {
@@ -1554,6 +1564,7 @@ export class Channel {
       { method: 'upsertChannels' },
     );
 
+    this.getClient().syncDeliveredCandidates([this]);
     return state;
   }
 
@@ -1879,11 +1890,34 @@ export class Channel {
             last_read_message_id: event.last_read_message_id,
             user: event.user,
             unread_messages: 0,
+            last_delivered_at: event.last_delivered_at
+              ? new Date(event.last_delivered_at)
+              : undefined,
+            last_delivered_message_id: event.last_delivered_message_id,
           };
+          const client = this.getClient();
 
-          if (event.user?.id === this.getClient().user?.id) {
+          const isOwnEvent = event.user?.id === client.user?.id;
+
+          if (isOwnEvent) {
             channelState.unreadCount = 0;
+            client.syncDeliveredCandidates([this]);
           }
+        }
+        break;
+      case 'message.delivered':
+        // todo: update also on thread
+        if (event.user?.id && event.created_at) {
+          channelState.read[event.user.id] = {
+            last_read: new Date(event.created_at),
+            last_read_message_id: event.last_read_message_id,
+            user: event.user,
+            unread_messages: event.unread_messages ?? 0,
+            last_delivered_at: event.last_delivered_at
+              ? new Date(event.last_delivered_at)
+              : undefined,
+            last_delivered_message_id: event.last_delivered_message_id,
+          };
         }
         break;
       case 'user.watching.start':
@@ -1921,8 +1955,9 @@ export class Channel {
         break;
       case 'message.new':
         if (event.message) {
+          const client = this.getClient();
           /* if message belongs to current user, always assume timestamp is changed to filter it out and add again to avoid duplication */
-          const ownMessage = event.user?.id === this.getClient().user?.id;
+          const ownMessage = event.user?.id === client.user?.id;
           const isThreadMessage =
             event.message.parent_id && !event.message.show_in_channel;
 
@@ -1943,10 +1978,17 @@ export class Channel {
           if (event.user?.id) {
             for (const userId in channelState.read) {
               if (userId === event.user.id) {
+                const currentState = channelState.read[event.user.id];
                 channelState.read[event.user.id] = {
                   last_read: new Date(event.created_at as string),
                   user: event.user,
                   unread_messages: 0,
+                  last_delivered_at: event.last_delivered_at
+                    ? new Date(event.last_delivered_at)
+                    : currentState.last_delivered_at,
+                  last_delivered_message_id:
+                    event.last_delivered_message_id ??
+                    currentState.last_delivered_message_id,
                 };
               } else {
                 channelState.read[userId].unread_messages += 1;
@@ -1957,6 +1999,8 @@ export class Channel {
           if (this._countMessageAsUnread(event.message)) {
             channelState.unreadCount = channelState.unreadCount + 1;
           }
+
+          client.syncDeliveredCandidates([this]);
         }
         break;
       case 'message.updated':
@@ -2057,7 +2101,7 @@ export class Channel {
         break;
       case 'notification.mark_unread': {
         const ownMessage = event.user?.id === this.getClient().user?.id;
-        if (!(ownMessage && event.user)) break;
+        if (!ownMessage || !event.user) break;
 
         const unreadCount = event.unread_messages ?? 0;
 
@@ -2067,6 +2111,10 @@ export class Channel {
           last_read_message_id: event.last_read_message_id,
           user: event.user,
           unread_messages: unreadCount,
+          last_delivered_at: event.last_delivered_at
+            ? new Date(event.last_delivered_at)
+            : undefined,
+          last_delivered_message_id: event.last_delivered_message_id,
         };
 
         channelState.unreadCount = unreadCount;
@@ -2272,6 +2320,10 @@ export class Channel {
     if (state.read) {
       for (const read of state.read) {
         this.state.read[read.user.id] = {
+          last_delivered_at: read.last_delivered_at
+            ? new Date(read.last_delivered_at)
+            : undefined,
+          last_delivered_message_id: read.last_delivered_message_id,
           last_read: new Date(read.last_read),
           last_read_message_id: read.last_read_message_id,
           unread_messages: read.unread_messages ?? 0,
