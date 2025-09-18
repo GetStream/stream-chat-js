@@ -1150,7 +1150,7 @@ export class Channel {
     this._checkInitialized();
 
     if (!this.getConfig()?.read_events && !this.getClient()._isUsingServerAuth()) {
-      return Promise.resolve(null);
+      return null;
     }
 
     return await this.getClient().post<EventAPIResponse>(this._channelURL() + '/read', {

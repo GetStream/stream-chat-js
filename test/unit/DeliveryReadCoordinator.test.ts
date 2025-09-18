@@ -59,6 +59,44 @@ describe('DeliveryReadCoordinator', () => {
     });
   });
 
+  it('announces at max 100 candidates per request', async () => {
+    const markChannelsDeliveredSpy = vi
+      .spyOn(client, 'markChannelsDelivered')
+      .mockResolvedValue({ ok: true } as any);
+
+    // last_read < last message
+    const channels = Array.from({ length: 110 }, (_, i) => {
+      const channel = client.channel(channelType, i.toString());
+      channel.initialized = true;
+      (channel.state as any).latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z')];
+      (channel.state as any).read['me'] = { last_read: new Date('2025-01-01T09:00:00Z') };
+      return channel;
+    });
+
+    client.syncDeliveredCandidates(channels);
+    vi.advanceTimersByTime(1000);
+    // trailing request is not triggered as there are no delivery candidates to report
+    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(1);
+    expect(
+      markChannelsDeliveredSpy.mock.calls[0][0].latest_delivered_messages.length,
+    ).toBe(100);
+    // @ts-expect-error accessing protected property deliveryReportCandidates
+    expect(client.deliveryReportCoordinator.deliveryReportCandidates.size).toBe(10);
+    // @ts-expect-error accessing protected property deliveryReportCandidates
+    expect(
+      Array.from(client.deliveryReportCoordinator.deliveryReportCandidates.keys()),
+    ).toEqual(channels.slice(100).map((channel) => channel.cid));
+
+    await Promise.resolve();
+    vi.advanceTimersByTime(1000);
+    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(2);
+    expect(
+      markChannelsDeliveredSpy.mock.calls[1][0].latest_delivered_messages.length,
+    ).toBe(10);
+    // @ts-expect-error accessing protected property deliveryReportCandidates
+    expect(client.deliveryReportCoordinator.deliveryReportCandidates.size).toBe(0);
+  });
+
   it('does nothing when delivery receipts are disabled', async () => {
     (client as any).user.privacy_settings.delivery_receipts.enabled = false;
     const markChannelsDeliveredSpy = vi

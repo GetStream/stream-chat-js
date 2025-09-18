@@ -10,8 +10,9 @@ import type {
 } from './types';
 import { throttle } from './utils';
 
+const MAX_DELIVERED_MESSAGE_COUNT_IN_PAYLOAD = 100 as const;
 const MARK_AS_DELIVERED_BUFFER_TIMEOUT = 1000 as const;
-const MARK_AS_READ_THROTTLE_TIMEOUT = 1000;
+const MARK_AS_READ_THROTTLE_TIMEOUT = 1000 as const;
 
 const isChannel = (item: Channel | Thread): item is Channel => item instanceof Channel;
 const isThread = (item: Channel | Thread): item is Thread => item instanceof Thread;
@@ -31,9 +32,10 @@ export type DeliveryReadCoordinatorOptions = {
 export class DeliveryReadCoordinator {
   protected client: StreamChat;
 
-  protected deliveryReportCandidates: Record<ChannelThreadCompositeId, MessageId> = {};
-  protected nextDeliveryReportCandidates: Record<ChannelThreadCompositeId, MessageId> =
-    {};
+  protected deliveryReportCandidates: Map<ChannelThreadCompositeId, MessageId> =
+    new Map();
+  protected nextDeliveryReportCandidates: Map<ChannelThreadCompositeId, MessageId> =
+    new Map();
 
   protected markDeliveredRequestPromise: Promise<EventAPIResponse | void> | null = null;
   protected markDeliveredTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -49,19 +51,29 @@ export class DeliveryReadCoordinator {
     return this.markDeliveredTimeout !== null;
   }
   private get hasDeliveryCandidates() {
-    return Object.keys(this.deliveryReportCandidates).length > 0;
+    return this.deliveryReportCandidates.size > 0;
   }
 
   /**
    * Build latest_delivered_messages payload from an arbitrary buffer (deliveryReportCandidates / nextDeliveryReportCandidates)
    */
-  private confirmationsFrom(map: Record<ChannelThreadCompositeId, MessageId>) {
-    return Object.entries(map).map(([key, messageId]) => {
+  private confirmationsFrom(map: Map<ChannelThreadCompositeId, MessageId>) {
+    return Array.from(map.entries()).map(([key, messageId]) => {
       const [type, id, parent_id] = key.split(':');
       return parent_id
         ? { cid: `${type}:${id}`, id: messageId, parent_id }
         : { cid: key, id: messageId };
     });
+  }
+
+  private confirmationsFromDeliveryReportCandidates() {
+    const entries = Array.from(this.deliveryReportCandidates);
+    const sendBuffer = new Map(entries.slice(0, MAX_DELIVERED_MESSAGE_COUNT_IN_PAYLOAD));
+    this.deliveryReportCandidates = new Map(
+      entries.slice(MAX_DELIVERED_MESSAGE_COUNT_IN_PAYLOAD),
+    );
+
+    return { latest_delivered_messages: this.confirmationsFrom(sendBuffer), sendBuffer };
   }
 
   /**
@@ -135,8 +147,8 @@ export class DeliveryReadCoordinator {
     const buffer = this.markDeliveredRequestInFlight
       ? this.nextDeliveryReportCandidates
       : this.deliveryReportCandidates;
-    if (candidate.id === null) delete buffer[candidate.key];
-    else buffer[candidate.key] = candidate.id;
+    if (candidate.id === null) buffer.delete(candidate.key);
+    else buffer.set(candidate.key, candidate.id);
   }
 
   /**
@@ -147,8 +159,8 @@ export class DeliveryReadCoordinator {
   private removeCandidateFor(collection: Channel | Thread) {
     const candidateKey = this.candidateKeyFor(collection);
     if (!candidateKey) return;
-    delete this.deliveryReportCandidates[candidateKey];
-    delete this.nextDeliveryReportCandidates[candidateKey];
+    this.deliveryReportCandidates.delete(candidateKey);
+    this.nextDeliveryReportCandidates.delete(candidateKey);
   }
 
   /**
@@ -170,10 +182,8 @@ export class DeliveryReadCoordinator {
   public announceDelivery = (options?: AnnounceDeliveryOptions) => {
     if (this.markDeliveredRequestInFlight || !this.hasDeliveryCandidates) return;
 
-    const sendBuffer = this.deliveryReportCandidates;
-    this.deliveryReportCandidates = {};
-
-    const latest_delivered_messages = this.confirmationsFrom(sendBuffer);
+    const { latest_delivered_messages, sendBuffer } =
+      this.confirmationsFromDeliveryReportCandidates();
     if (!latest_delivered_messages.length) return;
 
     const payload = { ...options, latest_delivered_messages };
@@ -182,10 +192,10 @@ export class DeliveryReadCoordinator {
       this.markDeliveredRequestPromise = null;
 
       // promote anything that arrived during request
-      for (const [k, v] of Object.entries(this.nextDeliveryReportCandidates)) {
-        this.deliveryReportCandidates[k] = v;
+      for (const [k, v] of this.nextDeliveryReportCandidates.entries()) {
+        this.deliveryReportCandidates.set(k, v);
       }
-      this.nextDeliveryReportCandidates = {};
+      this.nextDeliveryReportCandidates = new Map();
 
       // checks internally whether there are candidates to announce
       this.announceDeliveryBuffered(options);
@@ -194,8 +204,8 @@ export class DeliveryReadCoordinator {
     const handleError = () => {
       // repopulate relevant candidates for the next report
       for (const [k, v] of Object.entries(sendBuffer)) {
-        if (!(k in this.deliveryReportCandidates)) {
-          this.deliveryReportCandidates[k] = v;
+        if (!this.deliveryReportCandidates.has(k)) {
+          this.deliveryReportCandidates.set(k, v);
         }
       }
       postFlightReconcile();
