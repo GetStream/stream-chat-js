@@ -19,6 +19,7 @@ export class Campaign {
       segment_ids: this.data?.segment_ids,
       sender_id: this.data?.sender_id,
       sender_mode: this.data?.sender_mode,
+      sender_visibility: this.data?.sender_visibility,
       channel_template: this.data?.channel_template,
       create_channels: this.data?.create_channels,
       show_channels: this.data?.show_channels,
