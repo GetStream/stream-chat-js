@@ -987,9 +987,13 @@ export class StreamChat {
     this.state = new ClientState({ client: this });
     // reset thread manager
     this.threads.resetState();
-    // reset token manager
-    // setTimeout(this.tokenManager.reset); // delay reseting to use token for disconnect calls
-    this.tokenManager.reset();
+
+    // Since we wipe all user data already, we should reset token manager as well
+    closePromise
+      .finally(() => {
+        this.tokenManager.reset();
+      })
+      .catch((err) => console.error(err));
 
     // close the WS connection
     return closePromise;
