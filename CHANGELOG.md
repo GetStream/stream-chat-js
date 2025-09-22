@@ -1,3 +1,13 @@
+## [9.20.0](https://github.com/GetStream/stream-chat-js/compare/v9.19.1...v9.20.0) (2025-09-22)
+
+### Features
+
+* (cha-1233) added sender visibility to campaign ([#1616](https://github.com/GetStream/stream-chat-js/issues/1616)) ([68f709f](https://github.com/GetStream/stream-chat-js/commit/68f709fa0458301197371244a2d673915c4d7c84))
+
+### Refactors
+
+* **mod:** drop unsupported rule builder actions ([#1622](https://github.com/GetStream/stream-chat-js/issues/1622)) ([ff7fa5f](https://github.com/GetStream/stream-chat-js/commit/ff7fa5f224335111e1f076c6f4dce34a31affb5e))
+
 ## [9.19.1](https://github.com/GetStream/stream-chat-js/compare/v9.19.0...v9.19.1) (2025-09-12)
 
 ### Bug Fixes
