@@ -1,4 +1,6 @@
 import { ChannelState } from './channel_state';
+import { MessageComposer } from './messageComposer';
+import { OwnMessageReceiptsTracker } from './OwnMessageReceiptsTracker';
 import {
   generateChannelTempCid,
   logChatPromiseExecution,
@@ -74,7 +76,6 @@ import type {
 } from './types';
 import type { Role } from './permissions';
 import type { CustomChannelData } from './custom_types';
-import { MessageComposer } from './messageComposer';
 
 /**
  * Channel - The Channel class manages it's own state.
@@ -110,6 +111,7 @@ export class Channel {
   disconnected: boolean;
   push_preferences?: PushPreference;
   public readonly messageComposer: MessageComposer;
+  public readonly ownMessageReceiptsTracker: OwnMessageReceiptsTracker;
 
   /**
    * constructor - Create a channel
@@ -157,6 +159,13 @@ export class Channel {
     this.messageComposer = new MessageComposer({
       client: this._client,
       compositionContext: this,
+    });
+
+    this.ownMessageReceiptsTracker = new OwnMessageReceiptsTracker({
+      locateMessage: (timestampMs) => {
+        const msg = this.state.findMessageByTimestamp(timestampMs);
+        return msg && { timestampMs, msgId: msg.id };
+      },
     });
   }
 
@@ -1137,7 +1146,7 @@ export class Channel {
    * @return {Promise<EventAPIResponse | null>} Description
    */
   async markRead(data: MarkReadOptions = {}) {
-    return await this.getClient().deliveryReportCoordinator.markRead(this, data);
+    return await this.getClient().messageDeliveryReporter.markRead(this, data);
   }
 
   /**
@@ -1895,6 +1904,11 @@ export class Channel {
               : undefined,
             last_delivered_message_id: event.last_delivered_message_id,
           };
+          this.ownMessageReceiptsTracker.onMessageRead({
+            user: event.user,
+            readAt: event.created_at,
+            lastReadMessageId: event.last_read_message_id,
+          });
           const client = this.getClient();
 
           const isOwnEvent = event.user?.id === client.user?.id;
@@ -1918,6 +1932,12 @@ export class Channel {
               : undefined,
             last_delivered_message_id: event.last_delivered_message_id,
           };
+
+          this.ownMessageReceiptsTracker.onMessageDelivered({
+            user: event.user,
+            deliveredAt: event.created_at,
+            lastDeliveredMessageId: event.last_delivered_message_id,
+          });
         }
         break;
       case 'user.watching.start':
@@ -2334,6 +2354,8 @@ export class Channel {
           this.state.unreadCount = this.state.read[read.user.id].unread_messages;
         }
       }
+
+      this.ownMessageReceiptsTracker.ingestInitial(state.read);
     }
 
     return {

@@ -25,11 +25,11 @@ export type AnnounceDeliveryOptions = Omit<
   'latest_delivered_messages'
 >;
 
-export type DeliveryReadCoordinatorOptions = {
+export type MessageDeliveryReporterOptions = {
   client: StreamChat;
 };
 
-export class DeliveryReadCoordinator {
+export class MessageDeliveryReporter {
   protected client: StreamChat;
 
   protected deliveryReportCandidates: Map<ChannelThreadCompositeId, MessageId> =
@@ -40,7 +40,7 @@ export class DeliveryReadCoordinator {
   protected markDeliveredRequestPromise: Promise<EventAPIResponse | void> | null = null;
   protected markDeliveredTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  constructor({ client }: DeliveryReadCoordinatorOptions) {
+  constructor({ client }: MessageDeliveryReporterOptions) {
     this.client = client;
   }
 
@@ -246,7 +246,7 @@ export class DeliveryReadCoordinator {
   };
 
   /**
-   * Throttles the DeliveryReadCoordinator.markRead call
+   * Throttles the MessageDeliveryReporter.markRead call
    * @param collection
    * @param options
    */

@@ -240,7 +240,7 @@ import type {
   QueryChannelsRequestType,
 } from './channel_manager';
 import { ChannelManager } from './channel_manager';
-import { DeliveryReadCoordinator } from './DeliveryReadCoordinator';
+import { MessageDeliveryReporter } from './MessageDeliveryReporter';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
 import { StateStore } from './store';
@@ -273,7 +273,7 @@ export type MessageComposerSetupState = {
 
 export class StreamChat {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
-  deliveryReportCoordinator: DeliveryReadCoordinator;
+  messageDeliveryReporter: MessageDeliveryReporter;
   _user?: OwnUserResponse | UserResponse;
   appSettingsPromise?: Promise<AppSettingsAPIResponse>;
   activeChannels: {
@@ -504,7 +504,7 @@ export class StreamChat {
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
     this.reminders = new ReminderManager({ client: this });
-    this.deliveryReportCoordinator = new DeliveryReadCoordinator({ client: this });
+    this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });
   }
 
   /**
@@ -4715,6 +4715,6 @@ export class StreamChat {
   }
 
   syncDeliveredCandidates(collections: Channel[]) {
-    this.deliveryReportCoordinator.syncDeliveredCandidates(collections);
+    this.messageDeliveryReporter.syncDeliveredCandidates(collections);
   }
 }

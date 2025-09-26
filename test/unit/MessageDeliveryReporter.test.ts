@@ -15,7 +15,7 @@ const otherUser = {
 const mkMsg = (id: string, at: string | number | Date) =>
   ({ id, created_at: new Date(at) }) as any;
 
-describe('DeliveryReadCoordinator', () => {
+describe('MessageDeliveryReporter', () => {
   let client: StreamChat;
   let channel: Channel;
 
@@ -39,13 +39,13 @@ describe('DeliveryReadCoordinator', () => {
       .mockResolvedValue({ ok: true } as any);
 
     // last_read < last message
-    (channel.state as any).latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z')];
+    channel.state.latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z')];
     (channel.state as any).read['me'] = { last_read: new Date('2025-01-01T09:00:00Z') };
 
     client.syncDeliveredCandidates([channel]);
     expect(markChannelsDeliveredSpy).not.toHaveBeenCalled();
 
-    // throttle window (DeliveryReadCoordinator uses 1000ms)
+    // throttle window (MessageDeliveryReporter uses 1000ms)
     vi.advanceTimersByTime(1000);
     // trailing request is not triggered as there are no delivery candidates to report
     expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(1);
@@ -68,7 +68,7 @@ describe('DeliveryReadCoordinator', () => {
     const channels = Array.from({ length: 110 }, (_, i) => {
       const channel = client.channel(channelType, i.toString());
       channel.initialized = true;
-      (channel.state as any).latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z')];
+      channel.state.latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z')];
       (channel.state as any).read['me'] = { last_read: new Date('2025-01-01T09:00:00Z') };
       return channel;
     });
@@ -81,10 +81,10 @@ describe('DeliveryReadCoordinator', () => {
       markChannelsDeliveredSpy.mock.calls[0][0].latest_delivered_messages.length,
     ).toBe(100);
     // @ts-expect-error accessing protected property deliveryReportCandidates
-    expect(client.deliveryReportCoordinator.deliveryReportCandidates.size).toBe(10);
+    expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(10);
     // @ts-expect-error accessing protected property deliveryReportCandidates
     expect(
-      Array.from(client.deliveryReportCoordinator.deliveryReportCandidates.keys()),
+      Array.from(client.messageDeliveryReporter.deliveryReportCandidates.keys()),
     ).toEqual(channels.slice(100).map((channel) => channel.cid));
 
     await Promise.resolve();
@@ -94,7 +94,7 @@ describe('DeliveryReadCoordinator', () => {
       markChannelsDeliveredSpy.mock.calls[1][0].latest_delivered_messages.length,
     ).toBe(10);
     // @ts-expect-error accessing protected property deliveryReportCandidates
-    expect(client.deliveryReportCoordinator.deliveryReportCandidates.size).toBe(0);
+    expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(0);
   });
 
   it('does nothing when delivery receipts are disabled', async () => {
@@ -103,7 +103,7 @@ describe('DeliveryReadCoordinator', () => {
       .spyOn(client, 'markChannelsDelivered')
       .mockResolvedValue({ ok: true } as any);
 
-    (channel.state as any).latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z')];
+    channel.state.latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z')];
     (channel.state as any).read['me'] = { last_read: new Date('2025-01-01T09:00:00Z') };
 
     client.syncDeliveredCandidates([channel]);
@@ -134,14 +134,14 @@ describe('DeliveryReadCoordinator', () => {
       .spyOn(client, 'markChannelsDelivered')
       .mockResolvedValue({} as any);
 
-    (channel.state as any).latestMessages = [mkMsg('m1', 1000)];
+    channel.state.latestMessages = [mkMsg('m1', 1000)];
     (channel.state as any).read['me'] = { last_read: new Date(0) };
 
     client.syncDeliveredCandidates([channel]);
 
-    client.deliveryReportCoordinator.announceDeliveryBuffered();
-    client.deliveryReportCoordinator.announceDeliveryBuffered();
-    client.deliveryReportCoordinator.announceDeliveryBuffered();
+    client.messageDeliveryReporter.announceDeliveryBuffered();
+    client.messageDeliveryReporter.announceDeliveryBuffered();
+    client.messageDeliveryReporter.announceDeliveryBuffered();
 
     vi.advanceTimersByTime(1000);
     expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(1);
@@ -153,12 +153,12 @@ describe('DeliveryReadCoordinator', () => {
       .mockResolvedValue({} as any);
 
     (channel.state as any).read['me'] = { last_read: new Date('2025-01-01T09:00:00Z') };
-    (channel.state as any).latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z')];
+    channel.state.latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z')];
 
     client.syncDeliveredCandidates([channel]);
 
     // newer message arrives before throttle fires
-    (channel.state as any).latestMessages.push(mkMsg('m2', '2025-01-01T10:05:00Z'));
+    channel.state.latestMessages.push(mkMsg('m2', '2025-01-01T10:05:00Z'));
     client.syncDeliveredCandidates([channel]);
 
     vi.advanceTimersByTime(1000);
@@ -218,7 +218,7 @@ describe('DeliveryReadCoordinator', () => {
     await Promise.resolve();
 
     // Now announce again; the queued candidate should be sent
-    client.deliveryReportCoordinator.announceDeliveryBuffered();
+    client.messageDeliveryReporter.announceDeliveryBuffered();
     vi.advanceTimersByTime(1000);
 
     expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(2);
@@ -239,7 +239,7 @@ describe('DeliveryReadCoordinator', () => {
     vi.spyOn(channel, 'markAsReadRequest').mockResolvedValue({} as any);
 
     (channel.state as any).read['me'] = { last_read: new Date(0) };
-    (channel.state as any).latestMessages = [mkMsg('m1', 1000)];
+    channel.state.latestMessages = [mkMsg('m1', 1000)];
 
     client.syncDeliveredCandidates([channel]);
 
@@ -254,7 +254,7 @@ describe('DeliveryReadCoordinator', () => {
     vi.spyOn(channel, 'markAsReadRequest').mockRejectedValue({} as any);
 
     (channel.state as any).read['me'] = { last_read: new Date(0) };
-    (channel.state as any).latestMessages = [mkMsg('m1', 1000)];
+    channel.state.latestMessages = [mkMsg('m1', 1000)];
 
     client.syncDeliveredCandidates([channel]);
 
@@ -279,7 +279,7 @@ describe('DeliveryReadCoordinator', () => {
       .mockResolvedValue({} as any);
 
     (channel.state as any).read['me'] = { last_read: new Date(0) };
-    (channel.state as any).latestMessages = [];
+    channel.state.latestMessages = [];
 
     // simulate incoming message.new event
     const ev: Event = {
@@ -310,7 +310,7 @@ describe('DeliveryReadCoordinator', () => {
       .mockResolvedValue({} as any);
 
     (channel.state as any).read['me'] = { last_read: new Date(0) };
-    (channel.state as any).latestMessages = [];
+    channel.state.latestMessages = [];
 
     // simulate incoming message.new event
     const ev: Event = {
@@ -333,7 +333,7 @@ describe('DeliveryReadCoordinator', () => {
       .mockResolvedValue({} as any);
 
     (channel.state as any).read['me'] = { last_read: new Date(0) };
-    (channel.state as any).latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z') as any];
+    channel.state.latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z') as any];
 
     client.syncDeliveredCandidates([channel]);
 
@@ -358,7 +358,7 @@ describe('DeliveryReadCoordinator', () => {
       .mockResolvedValue({} as any);
 
     (channel.state as any).read['me'] = { last_read: new Date(0) };
-    (channel.state as any).latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z') as any];
+    channel.state.latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z') as any];
 
     client.syncDeliveredCandidates([channel]);
 
@@ -389,9 +389,9 @@ describe('DeliveryReadCoordinator', () => {
     const spy = vi.spyOn(channel, 'markAsReadRequest');
 
     // burst
-    client.deliveryReportCoordinator.throttledMarkRead(channel);
-    client.deliveryReportCoordinator.throttledMarkRead(channel);
-    client.deliveryReportCoordinator.throttledMarkRead(channel);
+    client.messageDeliveryReporter.throttledMarkRead(channel);
+    client.messageDeliveryReporter.throttledMarkRead(channel);
+    client.messageDeliveryReporter.throttledMarkRead(channel);
 
     expect(spy).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1000);
