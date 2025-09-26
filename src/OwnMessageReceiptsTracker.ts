@@ -281,6 +281,32 @@ export class OwnMessageReceiptsTracker {
     return usersDeliveredNotRead;
   }
 
+  /** Users for whom `msgRef` is their *last read* (exact match). */
+  usersWhoseLastReadIs(msgRef: MsgRef): UserResponse[] {
+    if (!msgRef.msgId) return [];
+    const start = findIndex(this.readSorted, msgRef, (x) => x.lastReadRef);
+    const end = findUpperIndex(this.readSorted, msgRef, (x) => x.lastReadRef);
+    const users: UserResponse[] = [];
+    for (let i = start; i < end; i++) {
+      const up = this.readSorted[i];
+      if (up.lastReadRef.msgId === msgRef.msgId) users.push(up.user);
+    }
+    return users;
+  }
+
+  /** Users for whom `msgRef` is their *last delivered* (exact match). */
+  usersWhoseLastDeliveredIs(msgRef: MsgRef): UserResponse[] {
+    if (!msgRef.msgId) return [];
+    const start = findIndex(this.deliveredSorted, msgRef, (x) => x.lastDeliveredRef);
+    const end = findUpperIndex(this.deliveredSorted, msgRef, (x) => x.lastDeliveredRef);
+    const users: UserResponse[] = [];
+    for (let i = start; i < end; i++) {
+      const up = this.deliveredSorted[i];
+      if (up.lastDeliveredRef.msgId === msgRef.msgId) users.push(up.user);
+    }
+    return users;
+  }
+
   // ---- queries: per-user status ----
 
   hasUserRead(msgRef: MsgRef, userId: string): boolean {

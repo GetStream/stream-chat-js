@@ -291,6 +291,72 @@ describe('OwnMessageDeliveryReadTracker', () => {
       expect(tracker.hasUserDelivered(ref(3000), 'u2')).toBe(true);
       expect(tracker.hasUserRead(ref(3000), 'u2')).toBe(true);
     });
+
+    describe('usersWhoseLastReadIs / usersWhoseLastDeliveredIs', () => {
+      it('returns users for whom the given message is their exact *last* read/delivered', () => {
+        const a = U('a');
+        const b = U('b');
+        const c = U('c');
+        const d = U('d'); // will share timestamp with m3 but different msgId via direct id override
+        const e = U('e'); // same for delivered side
+
+        // a: read m2 -> delivered m2
+        tracker.onMessageRead({ user: a, readAt: iso(2000) });
+
+        // b: read m3 -> delivered m3
+        tracker.onMessageRead({ user: b, readAt: iso(3000) });
+
+        // c: delivered m3 only
+        tracker.onMessageDelivered({ user: c, deliveredAt: iso(3000) });
+
+        // d: read at ts=3000 but with a different msgId "X" (tests plateau filtering by msgId)
+        tracker.onMessageRead({ user: d, readAt: iso(3000), lastReadMessageId: 'X' });
+
+        // e: delivered at ts=3000 but with a different msgId "X"
+        tracker.onMessageDelivered({
+          user: e,
+          deliveredAt: iso(3000),
+          lastDeliveredMessageId: 'X',
+        });
+
+        // Last READ is m2: only a
+        expect(ids(tracker.usersWhoseLastReadIs(ref(2000)))).toEqual(['a']);
+
+        // Last READ is m3: only b (d is same timestamp but different msgId)
+        expect(ids(tracker.usersWhoseLastReadIs(ref(3000)))).toEqual(['b']);
+
+        // Last DELIVERED is m2: only a
+        expect(ids(tracker.usersWhoseLastDeliveredIs(ref(2000)))).toEqual(['a']);
+
+        // Last DELIVERED is m3: b (read bumps delivered) and c (delivered-only); e excluded (msgId "X")
+        expect(ids(tracker.usersWhoseLastDeliveredIs(ref(3000)))).toEqual(['b', 'c']);
+      });
+
+      it('updates membership when a user advances beyond the message', () => {
+        const user = U('x');
+
+        // x reads m2 -> last read m2 (and delivered m2)
+        tracker.onMessageRead({ user, readAt: iso(2000) });
+        expect(ids(tracker.usersWhoseLastReadIs(ref(2000)))).toEqual(['x']);
+        expect(ids(tracker.usersWhoseLastDeliveredIs(ref(2000)))).toEqual(['x']);
+
+        // x later reads m4 -> moves out of m2 group and into m4 group
+        tracker.onMessageRead({ user, readAt: iso(4000) });
+        expect(ids(tracker.usersWhoseLastReadIs(ref(2000)))).toEqual([]);
+        expect(ids(tracker.usersWhoseLastReadIs(ref(4000)))).toEqual(['x']);
+
+        // delivered follows read bump
+        expect(ids(tracker.usersWhoseLastDeliveredIs(ref(2000)))).toEqual([]);
+        expect(ids(tracker.usersWhoseLastDeliveredIs(ref(4000)))).toEqual(['x']);
+      });
+
+      it('returns empty array for empty message id', () => {
+        expect(tracker.usersWhoseLastReadIs({ timestampMs: 123, msgId: '' })).toEqual([]);
+        expect(
+          tracker.usersWhoseLastDeliveredIs({ timestampMs: 123, msgId: '' }),
+        ).toEqual([]);
+      });
+    });
   });
 
   describe('ordering & movement in sorted arrays', () => {
