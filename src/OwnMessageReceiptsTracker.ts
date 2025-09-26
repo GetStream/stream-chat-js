@@ -92,7 +92,7 @@ export type OwnMessageReceiptsTrackerOptions = {
  *
  * Construction
  * ------------
- * `new OwnMessageReceiptsTracker(locateMessage)`
+ * `new OwnMessageReceiptsTracker({locateMessage})`
  * - `locateMessage(timestamp) => MsgRef | null` must resolve a message ref representation - `{ timestamp, msgId }`.
  *   - If `locateMessage` returns `null`, the event is ignored (message unknown locally).
  *
@@ -108,11 +108,15 @@ export type OwnMessageReceiptsTrackerOptions = {
  *
  * Queries
  * -------
- * - `readersForMessage(msgRef)        : User[]` → users with `lastReadRef >= msgRef`
- * - `deliveredForMessage(msgRef)      : User[]` → users with `lastDeliveredRef >= msgRef`
- * - `deliveredNotReadForMessage(msgRef): User[]` → delivered but `lastReadRef < msgRef`
- * - `hasUserRead(msgRef, userId)      : boolean`
- * - `hasUserDelivered(msgRef, userId) : boolean`
+ * - `readersForMessage(msgRef)         : UserResponse[]` → users with `lastReadRef >= msgRef`
+ * - `deliveredForMessage(msgRef)       : UserResponse[]` → users with `lastDeliveredRef >= msgRef`
+ * - `deliveredNotReadForMessage(msgRef): UserResponse[]` → delivered but `lastReadRef < msgRef`
+ * - `usersWhoseLastReadIs              : UserResponse[]` →  users for whom `msgRef` is their *last read* (exact match)
+ * - `usersWhoseLastDeliveredIs         : UserResponse[]` →  users for whom `msgRef` is their *last delivered* (exact match)
+ * - `groupUsersByLastReadMessage       : Record<MsgId, UserResponse[]> → mapping of messages to their readers
+ * - `groupUsersByLastDeliveredMessage  : Record<MsgId, UserResponse[]> → mapping of messages to their receivers
+ * - `hasUserRead(msgRef, userId)       : boolean`
+ * - `hasUserDelivered(msgRef, userId)  : boolean`
  *
  * Complexity
  * ----------
