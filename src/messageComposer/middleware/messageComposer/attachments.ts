@@ -36,6 +36,9 @@ export const createAttachmentsCompositionMiddleware = (
             emitter: 'MessageComposer',
             context: { composer },
           },
+          options: {
+            type: 'validation:attachment:upload:in-progress',
+          },
         });
         return discard();
       }
