@@ -1,3 +1,10 @@
+## [9.20.1](https://github.com/GetStream/stream-chat-js/compare/v9.20.0...v9.20.1) (2025-09-29)
+
+### Bug Fixes
+
+* add options to upload-in-progress warning notification ([#1625](https://github.com/GetStream/stream-chat-js/issues/1625)) ([96f1f44](https://github.com/GetStream/stream-chat-js/commit/96f1f44afcc4508ae4537e221b9901b74b21a7eb))
+* wait for WS disconnect before token reset ([#1623](https://github.com/GetStream/stream-chat-js/issues/1623)) ([2f29ed0](https://github.com/GetStream/stream-chat-js/commit/2f29ed0990237ec1fc0ba00163cdd2f8f6230d2f))
+
 ## [9.20.0](https://github.com/GetStream/stream-chat-js/compare/v9.19.1...v9.20.0) (2025-09-22)
 
 ### Features
