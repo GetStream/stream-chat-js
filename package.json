@@ -51,7 +51,7 @@
   "dependencies": {
     "@types/jsonwebtoken": "^9.0.8",
     "@types/ws": "^8.5.14",
-    "axios": "^1.6.0",
+    "axios": "^1.12.2",
     "base64-js": "^1.5.1",
     "form-data": "^4.0.4",
     "isomorphic-ws": "^5.0.0",
