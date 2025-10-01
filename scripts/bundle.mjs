@@ -22,7 +22,7 @@ const commonBuildOptions = {
   entryPoints: [resolve(__dirname, '../src/index.ts')],
   bundle: true,
   target: 'ES2020',
-  sourcemap: 'linked',
+  sourcemap: watchModeEnabled ? 'inline' : 'linked',
   define: {
     'process.env.PKG_VERSION': JSON.stringify(version),
   },
@@ -45,7 +45,6 @@ const bundles = [
     ...commonBuildOptions,
     format: 'cjs',
     external,
-    outExtension: { '.js': '.cjs' },
     entryNames: `[dir]/[name].${platform}`,
     outdir: resolve(__dirname, '../dist/cjs'),
     platform,
@@ -58,6 +57,8 @@ const bundles = [
   {
     ...commonBuildOptions,
     format: 'esm',
+    external,
+    outExtension: { '.js': '.mjs' },
     outdir: resolve(__dirname, '../dist/esm'),
     entryNames: `[dir]/[name]`,
     platform: 'browser',
