@@ -1,3 +1,9 @@
+## [9.20.3](https://github.com/GetStream/stream-chat-js/compare/v9.20.2...v9.20.3) (2025-10-01)
+
+### Bug Fixes
+
+* **bundle:** upgrade axios and externalize previously bundled packages ([#1627](https://github.com/GetStream/stream-chat-js/issues/1627)) ([2d14573](https://github.com/GetStream/stream-chat-js/commit/2d145737a4bf73bb3cad433f4e2defef9f6ff7ff))
+
 ## [9.20.2](https://github.com/GetStream/stream-chat-js/compare/v9.20.1...v9.20.2) (2025-10-01)
 
 ### Bug Fixes
