@@ -1,3 +1,9 @@
+## [9.20.2](https://github.com/GetStream/stream-chat-js/compare/v9.20.1...v9.20.2) (2025-10-01)
+
+### Bug Fixes
+
+* add last_updated field to ChannelFilters type ([#1626](https://github.com/GetStream/stream-chat-js/issues/1626)) ([6cf09d4](https://github.com/GetStream/stream-chat-js/commit/6cf09d427e5d3ff7f372d9d35f44f9edbbdee0a7))
+
 ## [9.20.1](https://github.com/GetStream/stream-chat-js/compare/v9.20.0...v9.20.1) (2025-09-29)
 
 ### Bug Fixes
