@@ -1742,7 +1742,9 @@ export type ChannelFilters = QueryFilters<
         >
       | PrimitiveFilter<string>;
     pinned?: boolean;
-    last_updated?: RequireOnlyOne<QueryFilter<string>> | PrimitiveFilter<string>;
+    last_updated?:
+      | RequireOnlyOne<Pick<QueryFilter<string>, '$eq' | '$gt' | '$gte' | '$lt' | '$lte'>>
+      | PrimitiveFilter<string>;
   } & {
     [Key in keyof Omit<ChannelResponse, 'name' | 'members' | keyof CustomChannelData>]:
       | RequireOnlyOne<QueryFilter<ChannelResponse[Key]>>
