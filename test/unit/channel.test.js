@@ -124,11 +124,11 @@ describe('Channel count unread', function () {
 	it('countUnread should return correct count when multiple message sets are loaded into state', () => {
 		expect(channel.countUnread(lastRead)).to.be.equal(0);
 		channel.state.addMessagesSorted([
-			generateMsg({ date: '2021-01-01T00:00:00' }),
-			generateMsg({ date: '2022-01-01T00:00:00' }),
+			generateMsg({ date: '2026-01-01T00:00:00' }),
+			generateMsg({ date: '2026-02-01T00:00:00' }),
 		]);
 		channel.state.addMessagesSorted(
-			[generateMsg({ date: '2020-01-01T00:00:00' })],
+			[generateMsg({ date: '2006-01-01T00:00:00' })],
 			false,
 			true,
 			true,
@@ -165,7 +165,7 @@ describe('Channel count unread', function () {
 			generateMsg({ date: '2022-01-01T00:00:00' }),
 		]);
 		channel.state.addMessagesSorted(
-			[generateMsg({ date: '2020-01-01T00:00:00' })],
+			[generateMsg({ date: '2010-01-01T00:00:00' })],
 			false,
 			true,
 			true,
