@@ -2272,6 +2272,10 @@ export class Channel {
     if (state.read) {
       for (const read of state.read) {
         this.state.read[read.user.id] = {
+          last_delivered_at: read.last_delivered_at
+            ? new Date(read.last_delivered_at)
+            : undefined,
+          last_delivered_message_id: read.last_delivered_message_id,
           last_read: new Date(read.last_read),
           last_read_message_id: read.last_read_message_id,
           unread_messages: read.unread_messages ?? 0,
