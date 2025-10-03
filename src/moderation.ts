@@ -1,6 +1,12 @@
 import type {
   APIResponse,
+  AppealOptions,
+  AppealRequest,
+  AppealResponse,
+  AppealsSort,
   CustomCheckFlag,
+  DecideAppealRequest,
+  GetAppealResponse,
   GetConfigResponse,
   GetUserModerationReportOptions,
   GetUserModerationReportResponse,
@@ -11,6 +17,9 @@ import type {
   ModerationRuleRequest,
   MuteUserResponse,
   Pager,
+  QueryAppealsFilters,
+  QueryAppealsPaginationOptions,
+  QueryAppealsResponse,
   QueryConfigsResponse,
   QueryModerationConfigsFilters,
   QueryModerationConfigsSort,
@@ -178,6 +187,76 @@ export class Moderation {
   ) {
     return await this.client.post<ReviewQueueResponse>(
       this.client.baseURL + '/api/v2/moderation/review_queue',
+      {
+        filter: filterConditions,
+        sort: normalizeQuerySort(sort),
+        ...options,
+      },
+    );
+  }
+
+  /**
+   * Appeal against the moderation decision
+   * @param {AppealRequest} appealRequest Appeal request to be appealed against
+   */
+  async appeal(appealRequest: AppealRequest, options: AppealOptions = {}) {
+    return await this.client.post<AppealResponse>(
+      this.client.baseURL + '/api/v2/moderation/appeal',
+      {
+        text: appealRequest.text,
+        entity_id: appealRequest.entityID,
+        entity_type: appealRequest.entityType,
+        attachments: appealRequest.attachments,
+        ...options,
+      },
+    );
+  }
+
+  /**
+   * Decide on an appeal
+   * @param {DecideAppealRequest} decideAppealRequest Request to decide on an appeal
+   */
+  async decideAppeal(
+    decideAppealRequest: DecideAppealRequest,
+    options: AppealOptions = {},
+  ) {
+    return await this.client.post<APIResponse>(
+      this.client.baseURL + '/api/v2/moderation/decide_appeal',
+      {
+        appeal_id: decideAppealRequest.appealID,
+        status: decideAppealRequest.status,
+        decision_reason: decideAppealRequest.decisionReason,
+        ...(decideAppealRequest.channelCIDs
+          ? { channel_cids: decideAppealRequest.channelCIDs }
+          : {}),
+        ...options,
+      },
+    );
+  }
+
+  /**
+   * Get Appeal Item
+   * @param {string} appealID ID of the appeal to be fetched
+   */
+  async getAppeal(appealID: string) {
+    return await this.client.get<GetAppealResponse>(
+      this.client.baseURL + '/api/v2/moderation/appeal/' + appealID,
+    );
+  }
+
+  /**
+   * Query appeals
+   * @param {Object} filterConditions Filter conditions for querying appeals
+   * @param {Object} sort Sort conditions for querying appeals
+   * @param {Object} options Pagination options for querying appeals
+   */
+  async queryAppeals(
+    filterConditions: QueryAppealsFilters = {},
+    sort: AppealsSort = [],
+    options: QueryAppealsPaginationOptions = {},
+  ) {
+    return await this.client.post<QueryAppealsResponse>(
+      this.client.baseURL + '/api/v2/moderation/appeals',
       {
         filter: filterConditions,
         sort: normalizeQuerySort(sort),
