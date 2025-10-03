@@ -1,9 +1,12 @@
 import type {
   APIResponse,
-  AppealResponse,
+  AppealOptions,
   AppealRequest,
+  AppealResponse,
   AppealsSort,
   CustomCheckFlag,
+  DecideAppealRequest,
+  GetAppealResponse,
   GetConfigResponse,
   GetUserModerationReportOptions,
   GetUserModerationReportResponse,
@@ -32,9 +35,6 @@ import type {
   SubmitActionOptions,
   UpsertConfigResponse,
   UpsertModerationRuleResponse,
-  AppealOptions,
-  GetAppealResponse,
-  DecideAppealRequest,
 } from './types';
 import type { StreamChat } from './client';
 import { normalizeQuerySort } from './utils';
