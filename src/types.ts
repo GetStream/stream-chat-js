@@ -3936,6 +3936,13 @@ export type AppealRequest = {
   attachments: string[];
 };
 
+export type DecideAppealRequest = {
+  appealID: string;
+  status: 'accepted' | 'rejected';
+  decisionReason: string;
+  channelCIDs?: string[];
+};
+
 export type RuleBuilderRule = {
   id: string;
   rule_type: 'user' | 'content';

@@ -34,6 +34,7 @@ import type {
   UpsertModerationRuleResponse,
   AppealOptions,
   GetAppealResponse,
+  DecideAppealRequest,
 } from './types';
 import type { StreamChat } from './client';
 import { normalizeQuerySort } from './utils';
@@ -206,6 +207,28 @@ export class Moderation {
         entity_id: appealRequest.entityID,
         entity_type: appealRequest.entityType,
         attachments: appealRequest.attachments,
+        ...options,
+      },
+    );
+  }
+
+  /**
+   * Decide on an appeal
+   * @param {DecideAppealRequest} decideAppealRequest Request to decide on an appeal
+   */
+  async decideAppeal(
+    decideAppealRequest: DecideAppealRequest,
+    options: AppealOptions = {},
+  ) {
+    return await this.client.post<APIResponse>(
+      this.client.baseURL + '/api/v2/moderation/decide_appeal',
+      {
+        appeal_id: decideAppealRequest.appealID,
+        status: decideAppealRequest.status,
+        decision_reason: decideAppealRequest.decisionReason,
+        ...(decideAppealRequest.channelCIDs
+          ? { channel_cids: decideAppealRequest.channelCIDs }
+          : {}),
         ...options,
       },
     );
