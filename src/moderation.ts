@@ -1,7 +1,7 @@
 import type {
   APIResponse,
-  AppealOptions,
   AppealResponse,
+  AppealRequest,
   AppealsSort,
   CustomCheckFlag,
   GetConfigResponse,
@@ -32,6 +32,8 @@ import type {
   SubmitActionOptions,
   UpsertConfigResponse,
   UpsertModerationRuleResponse,
+  AppealOptions,
+  GetAppealResponse,
 } from './types';
 import type { StreamChat } from './client';
 import { normalizeQuerySort } from './utils';
@@ -194,30 +196,28 @@ export class Moderation {
 
   /**
    * Appeal against the moderation decision
-   * @param {string} text
-   * @param {string} entityID
-   * @param {string} entityType
-   * @param {Array<string>} attachments
-   * @param {string} channelCID
+   * @param {AppealRequest} appealRequest Appeal request to be appealed against
    */
-  async appeal(
-    text: string,
-    entityID: string,
-    entityType: string,
-    attachments: string[],
-    channelCID: string = '',
-    options: AppealOptions = {},
-  ) {
+  async appeal(appealRequest: AppealRequest, options: AppealOptions = {}) {
     return await this.client.post<AppealResponse>(
       this.client.baseURL + '/api/v2/moderation/appeal',
       {
-        text,
-        entity_id: entityID,
-        entity_type: entityType,
-        attachments,
-        channel_cid: channelCID,
+        text: appealRequest.text,
+        entity_id: appealRequest.entityID,
+        entity_type: appealRequest.entityType,
+        attachments: appealRequest.attachments,
         ...options,
       },
+    );
+  }
+
+  /**
+   * Get Appeal Item
+   * @param {string} appealID ID of the appeal to be fetched
+   */
+  async getAppeal(appealID: string) {
+    return await this.client.get<GetAppealResponse>(
+      this.client.baseURL + '/api/v2/moderation/appeal/' + appealID,
     );
   }
 

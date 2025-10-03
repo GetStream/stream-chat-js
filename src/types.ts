@@ -3570,7 +3570,6 @@ export type AppealItem = {
   entity_type: string;
   status: string;
   text: string;
-  channel_cid: string;
   user: UserResponse;
   id: string;
 };
@@ -3622,24 +3621,26 @@ export type SubmitActionOptions = {
     reason?: string;
     timeout?: number;
     delete_messages?: DeleteMessagesOptions;
+    decision_reason?: string;
   };
   delete_message?: {
     hard_delete?: boolean;
+    decision_reason?: string;
   };
   delete_user?: {
     delete_conversation_channels?: boolean;
     hard_delete?: boolean;
     mark_messages_deleted?: boolean;
+    decision_reason?: string;
   };
-  restore?: {};
+  restore?: {
+    decision_reason?: string;
+  };
   unban?: {
     channel_cid?: string;
+    decision_reason?: string;
   };
   user_id?: string;
-  decide_appeal?: {
-    decision_reason: string;
-    status: 'accepted' | 'rejected';
-  };
 };
 
 export type GetUserModerationReportResponse = {
@@ -3839,10 +3840,6 @@ export type QueryAppealsFilters = QueryFilters<
       $eq?: string;
     }>;
   } & {
-    channel_cid?: RequireOnlyOne<{
-      $eq?: string;
-    }>;
-  } & {
     decision_reason?: RequireOnlyOne<{
       $eq?: string;
     }>;
@@ -3906,6 +3903,10 @@ export type AppealResponse = APIResponse & {
   appeal_id: string;
 };
 
+export type GetAppealResponse = APIResponse & {
+  item: AppealItem;
+};
+
 // Moderation Rule Builder Types
 export type ModerationRule = {
   id: string;
@@ -3926,6 +3927,13 @@ export type ModerationRuleRequest = {
   team: string;
   rule: RuleBuilderRule;
   enabled: boolean;
+};
+
+export type AppealRequest = {
+  text: string;
+  entityID: string;
+  entityType: string;
+  attachments: string[];
 };
 
 export type RuleBuilderRule = {
