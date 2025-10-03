@@ -817,6 +817,8 @@ export type ReadResponse = {
   user: UserResponse;
   last_read_message_id?: string;
   unread_messages?: number;
+  last_delivered_at?: string;
+  last_delivered_message_id?: string;
 };
 
 export type SearchAPIResponse = APIResponse & {
@@ -917,6 +919,9 @@ export type PrivacySettings = {
     enabled?: boolean;
   };
   typing_indicators?: {
+    enabled?: boolean;
+  };
+  delivery_receipts?: {
     enabled?: boolean;
   };
 };
@@ -1250,6 +1255,18 @@ export type MarkUnreadOptions = {
   user_id?: string;
 };
 
+export type DeliveredMessageConfirmation = {
+  cid: string;
+  id: string;
+  parent_id?: string; // todo: should we include parent_id if thread delivery receipts are not yet supported?
+};
+
+export type MarkDeliveredOptions = {
+  latest_delivered_messages: DeliveredMessageConfirmation[];
+  user?: UserResponse;
+  user_id?: string;
+};
+
 export type MuteUserOptions = {
   client_id?: string;
   connection_id?: string;
@@ -1460,6 +1477,8 @@ export type Event = CustomEventData & {
   // id of the message that was marked as unread - all the following messages are considered unread. (notification.mark_unread)
   first_unread_message_id?: string;
   hard_delete?: boolean;
+  last_delivered_at?: string;
+  last_delivered_message_id?: string;
   // creation date of a message with last_read_message_id, formatted as Date ISO string
   last_read_at?: string;
   last_read_message_id?: string;
