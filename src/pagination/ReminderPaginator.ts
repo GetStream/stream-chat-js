@@ -37,7 +37,9 @@ export class ReminderPaginator extends BasePaginator<ReminderResponse> {
 
   query = async ({
     direction,
-  }: PaginationQueryParams): Promise<PaginationQueryReturnValue<ReminderResponse>> => {
+  }: Required<PaginationQueryParams>): Promise<
+    PaginationQueryReturnValue<ReminderResponse>
+  > => {
     const cursor = this.cursor?.[direction];
     const {
       reminders: items,
