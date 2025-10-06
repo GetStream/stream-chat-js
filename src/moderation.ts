@@ -235,6 +235,38 @@ export class Moderation {
   }
 
   /**
+   * Accept an appeal
+   * @param {appealID} appealID ID of appeal
+   * @param {decisionReason} decisionReason Reason for accepting an appeal
+   */
+  async acceptAppeal(
+    appealID: string,
+    decisionReason: string,
+    options: AppealOptions = {},
+  ) {
+    return await this.decideAppeal(
+      { appealID, decisionReason, status: 'accepted' },
+      options,
+    );
+  }
+
+  /**
+   * Reject an appeal
+   * @param {appealID} appealID ID of appeal
+   * @param {decisionReason} decisionReason Reason for rejecting an appeal
+   */
+  async rejectAppeal(
+    appealID: string,
+    decisionReason: string,
+    options: AppealOptions = {},
+  ) {
+    return await this.decideAppeal(
+      { appealID, decisionReason, status: 'rejected' },
+      options,
+    );
+  }
+
+  /**
    * Get Appeal Item
    * @param {string} appealID ID of the appeal to be fetched
    */
