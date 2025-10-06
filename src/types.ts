@@ -1140,6 +1140,7 @@ export type UpdateChannelTypeRequest =
     typing_events?: boolean;
     uploads?: boolean;
     url_enrichment?: boolean;
+    count_messages?: boolean;
   };
 
 export type UpdateChannelTypeResponse = {
@@ -1176,6 +1177,7 @@ export type UpdateChannelTypeResponse = {
   blocklists?: BlockListOptions[];
   partition_size?: number;
   partition_ttl?: string;
+  count_messages?: boolean;
 };
 
 export type GetChannelTypeResponse = {
@@ -1212,6 +1214,7 @@ export type GetChannelTypeResponse = {
   blocklists?: BlockListOptions[];
   partition_size?: number;
   partition_ttl?: string;
+  count_messages?: boolean;
 };
 
 export type UpdateChannelOptions = Partial<{
@@ -2392,7 +2395,7 @@ export type ChannelConfigFields = {
   replies?: boolean;
   search?: boolean;
   shared_locations?: boolean;
-  count_messages?: boolean; // Feature flag for message count
+  count_messages?: boolean;
   typing_events?: boolean;
   uploads?: boolean;
   url_enrichment?: boolean;
