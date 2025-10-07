@@ -175,8 +175,6 @@ export class OwnMessageReceiptsTracker {
     }
   }
 
-  // ---- event handlers (call these from your WS/event layer) ----
-
   /** message.read — user read up to and including messageId. */
   onMessageRead({
     user,
@@ -366,31 +364,3 @@ export class OwnMessageReceiptsTracker {
     return up;
   }
 }
-// ------------------------------------------------------------
-// Usage example (commented):
-// ------------------------------------------------------------
-/*
-const registry = new MessageRegistry();
-registry.register('general', 'm1', '2025-01-01T00:00:00Z');
-registry.register('general', 'm2', '2025-01-01T00:00:01Z');
-registry.register('general', 'm3', '2025-01-01T00:00:02Z');
-
-const svc = new OwnMessageDeliveryReadTracker(registry.toLocate());
-
-// Initial snapshots (optional)
-svc.ingestInitial([
-  { user: { id: 'u1' }, last_read: '', last_read_message_id: 'm1' },
-  { user: { id: 'u2' }, last_read: '', last_delivered_message_id: 'm2' },
-]);
-
-// Live events
-svc.onMessageDelivered({ id: 'u1' }, 'm3'); // u1 delivered m3
-svc.onMessageRead({ id: 'u2' }, 'm3');      // u2 read m3
-
-// Queries
-svc.readersForMessage('m2');               // -> users who read m2
-svc.deliveredForMessage('m2');             // -> users who delivered m2 (includes readers)
-svc.deliveredNotReadForMessage('m2');      // -> delivered-only users
-svc.getReadCount('m2');                    // -> number
-svc.statusForUser('m2', 'u1');             // -> 'read' | 'delivered' | 'none'
-*/
