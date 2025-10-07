@@ -1140,6 +1140,7 @@ export type UpdateChannelTypeRequest =
     typing_events?: boolean;
     uploads?: boolean;
     url_enrichment?: boolean;
+    count_messages?: boolean;
   };
 
 export type UpdateChannelTypeResponse = {
@@ -1176,6 +1177,7 @@ export type UpdateChannelTypeResponse = {
   blocklists?: BlockListOptions[];
   partition_size?: number;
   partition_ttl?: string;
+  count_messages?: boolean;
 };
 
 export type GetChannelTypeResponse = {
@@ -1212,6 +1214,7 @@ export type GetChannelTypeResponse = {
   blocklists?: BlockListOptions[];
   partition_size?: number;
   partition_ttl?: string;
+  count_messages?: boolean;
 };
 
 export type UpdateChannelOptions = Partial<{
@@ -1761,6 +1764,9 @@ export type ChannelFilters = QueryFilters<
         >
       | PrimitiveFilter<string>;
     pinned?: boolean;
+    last_updated?:
+      | RequireOnlyOne<Pick<QueryFilter<string>, '$eq' | '$gt' | '$gte' | '$lt' | '$lte'>>
+      | PrimitiveFilter<string>;
   } & {
     [Key in keyof Omit<ChannelResponse, 'name' | 'members' | keyof CustomChannelData>]:
       | RequireOnlyOne<QueryFilter<ChannelResponse[Key]>>
@@ -2389,7 +2395,7 @@ export type ChannelConfigFields = {
   replies?: boolean;
   search?: boolean;
   shared_locations?: boolean;
-  count_messages?: boolean; // Feature flag for message count
+  count_messages?: boolean;
   typing_events?: boolean;
   uploads?: boolean;
   url_enrichment?: boolean;
@@ -3155,6 +3161,7 @@ export type CampaignData = {
   segment_ids?: string[];
   sender_id?: string;
   sender_mode?: 'exclude' | 'include' | null;
+  sender_visibility?: 'hidden' | 'archived' | null;
   show_channels?: boolean;
   skip_push?: boolean;
   skip_webhook?: boolean;
@@ -3863,9 +3870,6 @@ export type RuleBuilderAction = {
   type: string;
   ban_options?: BanOptions;
   flag_user_options?: FlagUserOptions;
-  flag_content_options?: FlagContentOptions;
-  remove_content_options?: RemoveContentOptions;
-  shadow_content_options?: ShadowContentOptions;
 };
 
 export type TextRuleParameters = {
@@ -3933,18 +3937,6 @@ export type BanOptions = {
 };
 
 export type FlagUserOptions = {
-  reason: string;
-};
-
-export type FlagContentOptions = {
-  reason: string;
-};
-
-export type RemoveContentOptions = {
-  reason: string;
-};
-
-export type ShadowContentOptions = {
   reason: string;
 };
 
