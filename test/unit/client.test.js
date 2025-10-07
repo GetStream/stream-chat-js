@@ -1405,3 +1405,43 @@ describe('X-Stream-Client header', () => {
 		});
 	});
 });
+
+describe('markChannelsDelivered', () => {
+	let client;
+	const user = { id: 'user' };
+
+	beforeEach(() => {
+		client = new StreamChat('', '');
+
+		vi.spyOn(client, 'post').mockResolvedValue({
+			ok: true,
+		});
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('prevents triggering the request with empty payload', async () => {
+		await client.markChannelsDelivered();
+		expect(client.post).not.toHaveBeenCalled();
+
+		await client.markChannelsDelivered({});
+		expect(client.post).not.toHaveBeenCalled();
+
+		await client.markChannelsDelivered({ latest_delivered_messages: [] });
+		expect(client.post).not.toHaveBeenCalled();
+
+		await client.markChannelsDelivered({ user, user_id: user.id });
+		expect(client.post).not.toHaveBeenCalled();
+	});
+
+	it('triggers the request with at least on channel to report', async () => {
+		const delivered = [{ cid: 'cid', id: 'message-id' }];
+		await client.markChannelsDelivered({ latest_delivered_messages: delivered });
+		expect(client.post).toHaveBeenCalledWith(
+			'https://chat.stream-io-api.com/channels/delivered',
+			{ latest_delivered_messages: delivered },
+		);
+	});
+});

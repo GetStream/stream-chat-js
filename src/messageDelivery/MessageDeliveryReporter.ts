@@ -1,14 +1,14 @@
-import type { StreamChat } from './client';
-import { Channel } from './channel';
-import type { ThreadUserReadState } from './thread';
-import { Thread } from './thread';
+import type { StreamChat } from '../client';
+import { Channel } from '../channel';
+import type { ThreadUserReadState } from '../thread';
+import { Thread } from '../thread';
 import type {
   EventAPIResponse,
   LocalMessage,
   MarkDeliveredOptions,
   MarkReadOptions,
-} from './types';
-import { throttle } from './utils';
+} from '../types';
+import { throttle } from '../utils';
 
 const MAX_DELIVERED_MESSAGE_COUNT_IN_PAYLOAD = 100 as const;
 const MARK_AS_DELIVERED_BUFFER_TIMEOUT = 1000 as const;
@@ -142,6 +142,8 @@ export class MessageDeliveryReporter {
    * @param collection
    */
   private trackDeliveredCandidate(collection: Channel | Thread) {
+    if (isChannel(collection) && !collection.getConfig()?.read_events) return;
+    if (isThread(collection) && !collection.channel.getConfig()?.read_events) return;
     const candidate = this.getNextDeliveryReportCandidate(collection);
     if (!candidate?.key) return;
     const buffer = this.markDeliveredRequestInFlight
@@ -170,7 +172,7 @@ export class MessageDeliveryReporter {
    * @param collections
    */
   public syncDeliveredCandidates(collections: (Channel | Thread)[]) {
-    if (!this.client.user?.privacy_settings?.delivery_receipts?.enabled) return;
+    if (this.client.user?.privacy_settings?.delivery_receipts?.enabled === false) return;
     for (const c of collections) this.trackDeliveredCandidate(c);
     this.announceDeliveryBuffered();
   }

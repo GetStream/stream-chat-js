@@ -1,4 +1,4 @@
-import type { ReadResponse, UserResponse } from './types';
+import type { ReadResponse, UserResponse } from '../types';
 
 type UserId = string;
 type MessageId = string;
@@ -194,7 +194,7 @@ export class OwnMessageReceiptsTracker {
     if (!msgRef) return;
     const userProgress = this.ensureUser(user);
     // newly announced read message is older than or equal the already recorded last read message
-    if (compareRefsAsc(msgRef, userProgress.lastReadRef) <= 0) return; // no-op
+    if (compareRefsAsc(msgRef, userProgress.lastReadRef) <= 0) return;
 
     // move in readSorted
     removeByOldKey(
@@ -241,7 +241,7 @@ export class OwnMessageReceiptsTracker {
         ? userProgress.lastReadRef
         : msgRef; // max(read, loc)
     // newly announced delivered is older than or equal what is already registered
-    if (compareRefsAsc(newDelivered, userProgress.lastDeliveredRef) <= 0) return; // no-op
+    if (compareRefsAsc(newDelivered, userProgress.lastDeliveredRef) <= 0) return;
 
     removeByOldKey(
       this.deliveredSorted,

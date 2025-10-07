@@ -22,9 +22,16 @@ describe('MessageDeliveryReporter', () => {
   beforeEach(async () => {
     vi.useFakeTimers();
     client = getClientWithUser(ownUser);
-    (client as any).user.privacy_settings.delivery_receipts.enabled = true;
+    (client as any).user.privacy_settings.delivery_receipts.enabled = undefined;
+
     channel = client.channel(channelType, channelId);
     channel.initialized = true;
+    client.configs[channel.cid] = {
+      created_at: '',
+      read_events: true,
+      reminders: false,
+      updated_at: '',
+    };
   });
 
   afterEach(() => {
@@ -72,6 +79,14 @@ describe('MessageDeliveryReporter', () => {
       (channel.state as any).read['me'] = { last_read: new Date('2025-01-01T09:00:00Z') };
       return channel;
     });
+    channels.forEach((ch) => {
+      client.configs[ch.cid] = {
+        created_at: '',
+        read_events: true,
+        reminders: false,
+        updated_at: '',
+      };
+    });
 
     client.syncDeliveredCandidates(channels);
     vi.advanceTimersByTime(1000);
@@ -82,8 +97,8 @@ describe('MessageDeliveryReporter', () => {
     ).toBe(100);
     // @ts-expect-error accessing protected property deliveryReportCandidates
     expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(10);
-    // @ts-expect-error accessing protected property deliveryReportCandidates
     expect(
+      // @ts-expect-error accessing protected property deliveryReportCandidates
       Array.from(client.messageDeliveryReporter.deliveryReportCandidates.keys()),
     ).toEqual(channels.slice(100).map((channel) => channel.cid));
 
@@ -99,6 +114,26 @@ describe('MessageDeliveryReporter', () => {
 
   it('does nothing when delivery receipts are disabled', async () => {
     (client as any).user.privacy_settings.delivery_receipts.enabled = false;
+    const markChannelsDeliveredSpy = vi
+      .spyOn(client, 'markChannelsDelivered')
+      .mockResolvedValue({ ok: true } as any);
+
+    channel.state.latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z')];
+    (channel.state as any).read['me'] = { last_read: new Date('2025-01-01T09:00:00Z') };
+
+    client.syncDeliveredCandidates([channel]);
+    vi.advanceTimersByTime(1000);
+
+    expect(markChannelsDeliveredSpy).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when read events are disabled in channel config', async () => {
+    client.configs[channel.cid] = {
+      created_at: '',
+      read_events: false,
+      reminders: false,
+      updated_at: '',
+    };
     const markChannelsDeliveredSpy = vi
       .spyOn(client, 'markChannelsDelivered')
       .mockResolvedValue({ ok: true } as any);
@@ -191,6 +226,19 @@ describe('MessageDeliveryReporter', () => {
     const ch2 = client.channel('messaging', 'ch2');
     ch2.initialized = true;
 
+    client.configs[ch1.cid] = {
+      created_at: '',
+      read_events: true,
+      reminders: false,
+      updated_at: '',
+    };
+
+    client.configs[ch2.cid] = {
+      created_at: '',
+      read_events: true,
+      reminders: false,
+      updated_at: '',
+    };
     client.syncDeliveredCandidates([ch1]);
     vi.advanceTimersByTime(1000);
 
@@ -386,7 +434,7 @@ describe('MessageDeliveryReporter', () => {
   });
 
   it('throttles markRead (burst collapses to one underlying request)', async () => {
-    const spy = vi.spyOn(channel, 'markAsReadRequest');
+    const spy = vi.spyOn(channel, 'markAsReadRequest').mockResolvedValue({} as any);
 
     // burst
     client.messageDeliveryReporter.throttledMarkRead(channel);

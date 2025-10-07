@@ -1,6 +1,6 @@
 import { ChannelState } from './channel_state';
 import { MessageComposer } from './messageComposer';
-import { OwnMessageReceiptsTracker } from './OwnMessageReceiptsTracker';
+import { OwnMessageReceiptsTracker } from './messageDelivery';
 import {
   generateChannelTempCid,
   logChatPromiseExecution,

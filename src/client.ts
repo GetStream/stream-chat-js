@@ -240,7 +240,7 @@ import type {
   QueryChannelsRequestType,
 } from './channel_manager';
 import { ChannelManager } from './channel_manager';
-import { MessageDeliveryReporter } from './MessageDeliveryReporter';
+import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
 import { StateStore } from './store';
@@ -4698,16 +4698,13 @@ export class StreamChat {
   }
 
   /**
-   * Send the mark delivered event for this user, only works if the `delivery_receipts` setting is enabled
+   * Send the mark delivered event for this user
    *
    * @param {MarkDeliveredOptions} data
    * @return {Promise<EventAPIResponse | void>} Description
    */
-  async markChannelsDelivered(data?: MarkDeliveredOptions) {
-    const deliveryReceiptsEnabled =
-      this.user?.privacy_settings?.delivery_receipts?.enabled;
-    if (!deliveryReceiptsEnabled) return;
-
+  async markChannelsDelivered(data: MarkDeliveredOptions) {
+    if (!data?.latest_delivered_messages?.length) return;
     return await this.post<EventAPIResponse>(
       this.baseURL + '/channels/delivered',
       data ?? {},
