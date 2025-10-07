@@ -1894,15 +1894,14 @@ export class Channel {
         break;
       case 'message.read':
         if (event.user?.id && event.created_at) {
+          const previousReadState = channelState.read[event.user.id];
           channelState.read[event.user.id] = {
+            // in case we already have delivery information
+            ...previousReadState,
             last_read: new Date(event.created_at),
             last_read_message_id: event.last_read_message_id,
             user: event.user,
             unread_messages: 0,
-            last_delivered_at: event.last_delivered_at
-              ? new Date(event.last_delivered_at)
-              : undefined,
-            last_delivered_message_id: event.last_delivered_message_id,
           };
           this.ownMessageReceiptsTracker.onMessageRead({
             user: event.user,
@@ -1922,15 +1921,14 @@ export class Channel {
       case 'message.delivered':
         // todo: update also on thread
         if (event.user?.id && event.created_at) {
+          const previousReadState = channelState.read[event.user.id];
           channelState.read[event.user.id] = {
-            last_read: new Date(event.created_at),
-            last_read_message_id: event.last_read_message_id,
-            user: event.user,
-            unread_messages: event.unread_messages ?? 0,
+            ...previousReadState,
             last_delivered_at: event.last_delivered_at
               ? new Date(event.last_delivered_at)
               : undefined,
             last_delivered_message_id: event.last_delivered_message_id,
+            user: event.user,
           };
 
           this.ownMessageReceiptsTracker.onMessageDelivered({
@@ -1998,17 +1996,12 @@ export class Channel {
           if (event.user?.id) {
             for (const userId in channelState.read) {
               if (userId === event.user.id) {
-                const currentState = channelState.read[event.user.id];
                 channelState.read[event.user.id] = {
                   last_read: new Date(event.created_at as string),
                   user: event.user,
                   unread_messages: 0,
-                  last_delivered_at: event.last_delivered_at
-                    ? new Date(event.last_delivered_at)
-                    : currentState.last_delivered_at,
-                  last_delivered_message_id:
-                    event.last_delivered_message_id ??
-                    currentState.last_delivered_message_id,
+                  last_delivered_at: new Date(event.created_at as string),
+                  last_delivered_message_id: event.message.id,
                 };
               } else {
                 channelState.read[userId].unread_messages += 1;
@@ -2124,17 +2117,15 @@ export class Channel {
         if (!ownMessage || !event.user) break;
 
         const unreadCount = event.unread_messages ?? 0;
-
+        const currentState = channelState.read[event.user.id];
         channelState.read[event.user.id] = {
+          // keep the message delivery info
+          ...currentState,
           first_unread_message_id: event.first_unread_message_id,
           last_read: new Date(event.last_read_at as string),
           last_read_message_id: event.last_read_message_id,
           user: event.user,
           unread_messages: unreadCount,
-          last_delivered_at: event.last_delivered_at
-            ? new Date(event.last_delivered_at)
-            : undefined,
-          last_delivered_message_id: event.last_delivered_message_id,
         };
 
         channelState.unreadCount = unreadCount;

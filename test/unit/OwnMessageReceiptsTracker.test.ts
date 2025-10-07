@@ -39,7 +39,7 @@ describe('OwnMessageDeliveryReadTracker', () => {
   let tracker: OwnMessageReceiptsTracker;
 
   beforeEach(() => {
-    tracker = new OwnMessageReceiptsTracker({ locateMessage: makeLocator(), ownUserId });
+    tracker = new OwnMessageReceiptsTracker({ locateMessage: makeLocator() });
   });
 
   describe('ingestInitial', () => {
@@ -129,7 +129,7 @@ describe('OwnMessageDeliveryReadTracker', () => {
       // re-init with a locator that knows only m1..m3 (m4 is unknown)
       const locator = (ts?: number) =>
         ts && ts <= 3000 ? { timestampMs: ts, msgId: byTs.get(ts)!.id } : null;
-      tracker = new OwnMessageReceiptsTracker({ locateMessage: locator, ownUserId });
+      tracker = new OwnMessageReceiptsTracker({ locateMessage: locator });
 
       const dave = U('dave');
       tracker.onMessageRead({ user: dave, readAt: iso(4000) }); // unknown -> ignored
@@ -144,7 +144,7 @@ describe('OwnMessageDeliveryReadTracker', () => {
 
     it('prevents search for message if last read message id is provided', () => {
       const locator = vi.fn().mockImplementation(() => {});
-      tracker = new OwnMessageReceiptsTracker({ locateMessage: locator, ownUserId });
+      tracker = new OwnMessageReceiptsTracker({ locateMessage: locator });
       const user = U('frank');
       tracker.onMessageRead({ user, readAt: iso(3000), lastReadMessageId: 'X' }); // unknown -> ignored
       expect(locator).not.toHaveBeenCalled();
@@ -203,7 +203,7 @@ describe('OwnMessageDeliveryReadTracker', () => {
     it('ignores delivered events with unknown timestamps (locator returns null)', () => {
       const locator = (t?: number) =>
         t && t <= 2000 ? { timestampMs: t, msgId: byTs.get(t)!.id } : null;
-      tracker = new OwnMessageReceiptsTracker({ locateMessage: locator, ownUserId });
+      tracker = new OwnMessageReceiptsTracker({ locateMessage: locator });
 
       const frank = U('frank');
       tracker.onMessageDelivered({ user: frank, deliveredAt: iso(3000) }); // unknown -> ignored
@@ -216,7 +216,7 @@ describe('OwnMessageDeliveryReadTracker', () => {
 
     it('prevents search for message if last read message id is provided', () => {
       const locator = vi.fn().mockImplementation(() => {});
-      tracker = new OwnMessageReceiptsTracker({ locateMessage: locator, ownUserId });
+      tracker = new OwnMessageReceiptsTracker({ locateMessage: locator });
       const user = U('frank');
       tracker.onMessageDelivered({
         user,
