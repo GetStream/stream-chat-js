@@ -965,7 +965,7 @@ describe('message deletion', () => {
 			expect(taskArg).to.deep.equal({
 				task: {
 					messageId,
-					payload: [messageId, false, undefined],
+					payload: [messageId, false],
 					type: 'delete-message',
 				},
 			});
@@ -984,26 +984,53 @@ describe('message deletion', () => {
 			expect(taskArg).to.deep.equal({
 				task: {
 					messageId,
-					payload: [messageId, true, undefined],
+					payload: [messageId, true],
 					type: 'delete-message',
 				},
 			});
 			expect(_deleteMessageSpy).not.toHaveBeenCalled();
 		});
 
-		it('should soft delete the message and queue task with deleteForMe=true', async () => {
-			await client.deleteMessage(messageId, false, true);
+		it.each([
+			[
+				'{ hardDelete: false, deleteForMe: true }',
+				{ hardDelete: false, deleteForMe: true },
+			],
+			[
+				'{ hardDelete: true, deleteForMe: true }',
+				{ hardDelete: true, deleteForMe: true },
+			],
+			[
+				'{ hardDelete: false, deleteForMe: false }',
+				{ hardDelete: false, deleteForMe: false },
+			],
+			[
+				'{ hardDelete: false, deleteForMe: false }',
+				{ hardDelete: false, deleteForMe: false },
+			],
+		])('should parse delete message options %s', async (_, options) => {
+			await client.deleteMessage(messageId, options);
+			if (options.hardDelete) {
+				expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledTimes(1);
+				expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledWith({
+					id: messageId,
+				});
+				expect(client.offlineDb.softDeleteMessage).not.toHaveBeenCalled();
+			} else {
+				expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledTimes(1);
+				expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledWith({
+					id: messageId,
+				});
+				expect(client.offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
+			}
 
-			expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledTimes(1);
-			expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledWith({ id: messageId });
-			expect(client.offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 
 			const taskArg = queueTaskSpy.mock.calls[0][0];
 			expect(taskArg).to.deep.equal({
 				task: {
 					messageId,
-					payload: [messageId, false, true],
+					payload: [messageId, options],
 					type: 'delete-message',
 				},
 			});
@@ -1016,8 +1043,37 @@ describe('message deletion', () => {
 			await client.deleteMessage(messageId, true);
 
 			expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_deleteMessageSpy).toHaveBeenCalledWith(messageId, true, undefined);
+			expect(_deleteMessageSpy).toHaveBeenCalledWith(messageId, true);
 		});
+
+		it.each([
+			[
+				'{ hardDelete: false, deleteForMe: true }',
+				{ hardDelete: false, deleteForMe: true },
+			],
+			[
+				'{ hardDelete: true, deleteForMe: true }',
+				{ hardDelete: true, deleteForMe: true },
+			],
+			[
+				'{ hardDelete: false, deleteForMe: false }',
+				{ hardDelete: false, deleteForMe: false },
+			],
+			[
+				'{ hardDelete: false, deleteForMe: false }',
+				{ hardDelete: false, deleteForMe: false },
+			],
+		])(
+			'should fall back to _deleteMessage if offlineDb is not set and delete options object is provided as %s',
+			async (_, options) => {
+				client.offlineDb = undefined;
+
+				await client.deleteMessage(messageId, options);
+
+				expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
+				expect(_deleteMessageSpy).toHaveBeenCalledWith(messageId, options);
+			},
+		);
 
 		it('should log and fall back to _deleteMessage if offline delete throws', async () => {
 			client.offlineDb.softDeleteMessage.mockRejectedValue(new Error('Offline failure'));
@@ -1027,7 +1083,7 @@ describe('message deletion', () => {
 			expect(loggerSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).not.toHaveBeenCalled();
 			expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_deleteMessageSpy).toHaveBeenCalledWith(messageId, false, undefined);
+			expect(_deleteMessageSpy).toHaveBeenCalledWith(messageId, false);
 		});
 	});
 
@@ -1052,18 +1108,50 @@ describe('message deletion', () => {
 			);
 		});
 
-		it('should call delete with delete_for_me=true param when deleteForMe is true', async () => {
-			await client._deleteMessage(messageId, false, true);
+		it.each([
+			['{}', {}],
+			['{ hardDelete: true }', { hardDelete: true }],
+			['{ hardDelete: false }', { hardDelete: false }],
+			['{ deleteForMe: true }', { deleteForMe: true }],
+			['{ deleteForMe: false }', { deleteForMe: false }],
+			[
+				'{ hardDelete: false, deleteForMe: true }',
+				{ hardDelete: false, deleteForMe: true },
+			],
+			[
+				'{ hardDelete: true, deleteForMe: true }',
+				{ hardDelete: true, deleteForMe: true },
+			],
+			[
+				'{ hardDelete: false, deleteForMe: false }',
+				{ hardDelete: false, deleteForMe: false },
+			],
+			[
+				'{ hardDelete: false, deleteForMe: false }',
+				{ hardDelete: false, deleteForMe: false },
+			],
+		])('should parse delete options %s accordingly', async (_, options) => {
+			await client._deleteMessage(messageId, options);
 
+			const expectedParams =
+				Object.values(options).length === 2 && Object.values(options).every((val) => val)
+					? { delete_for_me: true, hard: true }
+					: Object.keys(options).length === 0
+						? {}
+						: options.deleteForMe
+							? { delete_for_me: true }
+							: options.hardDelete
+								? { hard: true }
+								: {};
 			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
 			expect(clientDeleteSpy).toHaveBeenCalledWith(
 				`${client.baseURL}/messages/${encodeURIComponent(messageId)}`,
-				{ delete_for_me: true },
+				expectedParams,
 			);
 		});
 
 		it('should call delete with both hard and delete_for_me params when both are true', async () => {
-			await client._deleteMessage(messageId, true, true);
+			await client._deleteMessage(messageId, { deleteForMe: true, hardDelete: true });
 
 			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
 			expect(clientDeleteSpy).toHaveBeenCalledWith(
@@ -1082,171 +1170,6 @@ describe('message deletion', () => {
 				message: { id: messageId },
 			});
 		});
-	});
-});
-
-describe('delete for me functionality', () => {
-	const messageId = 'msg-delete-for-me-123';
-	let deletingUser, otherUser, deletingUserClient, otherUserClient;
-	let deletingUserEventSpy, otherUserEventSpy;
-
-	beforeEach(async () => {
-		deletingUser = { id: 'deleting-user', name: 'Deleting User' };
-		otherUser = { id: 'other-user', name: 'Other User' };
-
-		// Create clients for both users
-		deletingUserClient = await getClientWithUser(deletingUser);
-		otherUserClient = await getClientWithUser(otherUser);
-
-		// Set up event spies to track which events each client receives
-		deletingUserEventSpy = vi.fn();
-		otherUserEventSpy = vi.fn();
-
-		deletingUserClient.on('message.deleted', deletingUserEventSpy);
-		otherUserClient.on('message.deleted', otherUserEventSpy);
-
-		// Mock the delete API call to simulate server response
-		vi.spyOn(deletingUserClient, 'delete').mockResolvedValue({
-			message: {
-				id: messageId,
-				text: 'Test message',
-				user: deletingUser,
-				deleted_for_me: true,
-				deleted_at: new Date().toISOString(),
-			},
-		});
-	});
-
-	afterEach(() => {
-		vi.resetAllMocks();
-		deletingUserClient.off('message.deleted', deletingUserEventSpy);
-		otherUserClient.off('message.deleted', otherUserEventSpy);
-	});
-
-	it('should send delete_for_me=true to API when deleteForMe is true', async () => {
-		await deletingUserClient.deleteMessage(messageId, false, true);
-
-		expect(deletingUserClient.delete).toHaveBeenCalledWith(
-			`${deletingUserClient.baseURL}/messages/${encodeURIComponent(messageId)}`,
-			{ delete_for_me: true },
-		);
-	});
-
-	it('should handle message.deleted event with deleted_for_me=true for deleting user', () => {
-		const deletedMessage = {
-			id: messageId,
-			text: 'Test message',
-			user: deletingUser,
-			deleted_for_me: true,
-			deleted_at: new Date().toISOString(),
-		};
-
-		// Simulate server sending message.deleted event only to deleting user with deleted_for_me=true
-		const eventForDeletingUser = {
-			type: 'message.deleted',
-			deleted_for_me: true,
-			message: deletedMessage,
-		};
-
-		deletingUserClient.dispatchEvent(eventForDeletingUser);
-
-		expect(deletingUserEventSpy).toHaveBeenCalledWith(eventForDeletingUser);
-		expect(otherUserEventSpy).not.toHaveBeenCalled();
-	});
-
-	it('should not send event to other users when message is deleted for me', () => {
-		const deletedMessage = {
-			id: messageId,
-			text: 'Test message',
-			user: deletingUser,
-			deleted_for_me: true,
-			deleted_at: new Date().toISOString(),
-		};
-
-		// Simulate that only the deleting user receives the event
-		const eventForDeletingUser = {
-			type: 'message.deleted',
-			deleted_for_me: true,
-			message: deletedMessage,
-		};
-
-		deletingUserClient.dispatchEvent(eventForDeletingUser);
-
-		// Other user should not receive any event
-		expect(otherUserEventSpy).not.toHaveBeenCalled();
-		expect(deletingUserEventSpy).toHaveBeenCalledOnce();
-	});
-
-	it('should return deleted_for_me=true when deleting user fetches the message', async () => {
-		const messageWithDeletedForMe = {
-			id: messageId,
-			text: 'Test message',
-			user: deletingUser,
-			deleted_for_me: true,
-			deleted_at: new Date().toISOString(),
-		};
-
-		// Mock getMessage API for deleting user
-		vi.spyOn(deletingUserClient, 'get').mockResolvedValue({
-			message: messageWithDeletedForMe,
-		});
-
-		const result = await deletingUserClient.getMessage(messageId);
-
-		expect(result.message.deleted_for_me).toBe(true);
-		expect(deletingUserClient.get).toHaveBeenCalledWith(
-			`${deletingUserClient.baseURL}/messages/${encodeURIComponent(messageId)}`,
-			{},
-		);
-	});
-
-	it('should return normal message when other user fetches the message', async () => {
-		const normalMessage = {
-			id: messageId,
-			text: 'Test message',
-			user: deletingUser,
-			deleted_for_me: false, // or undefined
-			// no deleted_at since it's not deleted for this user
-		};
-
-		// Mock getMessage API for other user
-		vi.spyOn(otherUserClient, 'get').mockResolvedValue({
-			message: normalMessage,
-		});
-
-		const result = await otherUserClient.getMessage(messageId);
-
-		expect(result.message.deleted_for_me).toBeFalsy();
-		expect(result.message.deleted_at).toBeUndefined();
-		expect(otherUserClient.get).toHaveBeenCalledWith(
-			`${otherUserClient.baseURL}/messages/${encodeURIComponent(messageId)}`,
-			{},
-		);
-	});
-
-	it('should preserve deleted_for_me field in message responses', () => {
-		// Test that deleted_for_me field is properly preserved in responses
-		const messageWithDeletedForMe = {
-			id: messageId,
-			text: 'Test message',
-			user: deletingUser,
-			deleted_for_me: true,
-			deleted_at: new Date().toISOString(),
-		};
-
-		const normalMessage = {
-			id: messageId,
-			text: 'Test message',
-			user: deletingUser,
-			deleted_for_me: false,
-		};
-
-		// Verify the deleted_for_me field is correctly present/absent
-		expect(messageWithDeletedForMe.deleted_for_me).toBe(true);
-		expect(messageWithDeletedForMe.deleted_at).toBeDefined();
-		
-		expect(normalMessage.deleted_for_me).toBe(false);
-		expect(normalMessage.deleted_at).toBeUndefined();
 	});
 });
 

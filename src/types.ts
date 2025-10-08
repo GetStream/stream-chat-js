@@ -969,7 +969,7 @@ export type BanUserOptions = UnBanUserOptions & {
   ip_ban?: boolean;
   reason?: string;
   timeout?: number;
-  delete_messages?: DeleteMessagesOptions;
+  delete_messages?: MessageDeletionStrategy;
 };
 
 export type ChannelOptions = {
@@ -3604,14 +3604,21 @@ export type CustomCheckFlag = {
   reason?: string;
 };
 
-export type DeleteMessagesOptions = 'soft' | 'hard';
+export type MessageDeletionStrategy = 'soft' | 'hard';
+// @deprecated use type MessageDeletionStrategy instead
+export type DeleteMessagesOptions = MessageDeletionStrategy;
+
+export type DeleteMessageOptions = {
+  deleteForMe?: boolean;
+  hardDelete?: boolean;
+};
 
 export type SubmitActionOptions = {
   ban?: {
     channel_ban_only?: boolean;
     reason?: string;
     timeout?: number;
-    delete_messages?: DeleteMessagesOptions;
+    delete_messages?: MessageDeletionStrategy;
   };
   delete_message?: {
     hard_delete?: boolean;

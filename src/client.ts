@@ -80,6 +80,7 @@ import type {
   DeactivateUsersOptions,
   DeleteChannelsResponse,
   DeleteCommandResponse,
+  DeleteMessageOptions,
   DeleteUserOptions,
   Device,
   DeviceIdentifier,
@@ -3107,14 +3108,23 @@ export class StreamChat {
    * deleteMessage - Delete a message
    *
    * @param {string} messageID The id of the message to delete
-   * @param {boolean} hardDelete Permanently delete the message instead of hiding it
-   * @param {boolean} deleteForMe Delete the message only for the current user
-   *
+   * @param {boolean | DeleteMessageOptions | undefined} [optionsOrHardDelete]
    * @return {Promise<APIResponse & { message: MessageResponse }>} The API response
    */
-  async deleteMessage(messageID: string, hardDelete?: boolean, deleteForMe?: boolean) {
+  // fixme: remove the signature with optionsOrHardDelete boolean with the next major release
+  async deleteMessage(
+    messageID: string,
+    optionsOrHardDelete?: DeleteMessageOptions | boolean,
+  ): Promise<APIResponse & { message: MessageResponse }> {
+    const { hardDelete } = (
+      typeof optionsOrHardDelete === 'boolean'
+        ? { hardDelete: optionsOrHardDelete }
+        : (optionsOrHardDelete ?? {})
+    ) as DeleteMessageOptions;
+
     try {
       if (this.offlineDb) {
+        // todo: write code for this.offlineDb.deleteForMe
         if (hardDelete) {
           await this.offlineDb.hardDeleteMessage({ id: messageID });
         } else {
@@ -3124,7 +3134,7 @@ export class StreamChat {
           {
             task: {
               messageId: messageID,
-              payload: [messageID, hardDelete, deleteForMe],
+              payload: [messageID, optionsOrHardDelete],
               type: 'delete-message',
             },
           },
@@ -3137,10 +3147,20 @@ export class StreamChat {
       });
     }
 
-    return this._deleteMessage(messageID, hardDelete, deleteForMe);
+    return this._deleteMessage(messageID, optionsOrHardDelete);
   }
 
-  async _deleteMessage(messageID: string, hardDelete?: boolean, deleteForMe?: boolean) {
+  // fixme: remove the signature with optionsOrHardDelete boolean with the next major release
+  async _deleteMessage(
+    messageID: string,
+    optionsOrHardDelete?: DeleteMessageOptions | boolean,
+  ): Promise<APIResponse & { message: MessageResponse }> {
+    const { deleteForMe, hardDelete } = (
+      typeof optionsOrHardDelete === 'boolean'
+        ? { hardDelete: optionsOrHardDelete }
+        : (optionsOrHardDelete ?? {})
+    ) as DeleteMessageOptions;
+
     let params = {};
     if (hardDelete) {
       params = { hard: true };
