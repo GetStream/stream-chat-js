@@ -203,25 +203,28 @@ export class TextComposer {
     selection?: TextSelection;
   }) => {
     if (!this.enabled) return;
-
+    /**
+     * Windows inserts \r\n; macOS inserts \n.
+     * The caret can fall inside a CRLF pair during repeated pastes on Windows.
+     * That corrupts newline alignment (a\nb\na\nba\nb\n\n).
+     * Normalize the text to prevent it.
+     */
+    const normalizedText = text.replace(/\r\n/g, '\n');
     const finalSelection: TextSelection = selection ?? this.selection;
     const { maxLengthOnEdit } = this.composer.config.text ?? {};
     const currentText = this.text;
     const textBeforeTrim = [
       currentText.slice(0, finalSelection.start),
-      text,
+      normalizedText,
       currentText.slice(finalSelection.end),
     ].join('');
+
     const finalText = textBeforeTrim.slice(
       0,
       typeof maxLengthOnEdit === 'number' ? maxLengthOnEdit : textBeforeTrim.length,
     );
-    const expectedCursorPosition =
-      currentText.slice(0, finalSelection.start).length + text.length;
-    const cursorPosition =
-      expectedCursorPosition >= finalText.length
-        ? finalText.length
-        : currentText.slice(0, expectedCursorPosition).length;
+    const expectedCursorPosition = finalSelection.start + normalizedText.length;
+    const cursorPosition = Math.min(expectedCursorPosition, finalText.length);
 
     await this.handleChange({
       text: finalText,

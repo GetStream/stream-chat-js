@@ -693,6 +693,7 @@ export type MessageResponseBase = MessageBase & {
     language: TranslationLanguages;
   };
   latest_reactions?: ReactionResponse[];
+  member?: ChannelMemberResponse;
   mentioned_users?: UserResponse[];
   message_text_updated_at?: string;
   moderation?: ModerationResponse; // present only with Moderation v2
@@ -817,6 +818,8 @@ export type ReadResponse = {
   user: UserResponse;
   last_read_message_id?: string;
   unread_messages?: number;
+  last_delivered_at?: string;
+  last_delivered_message_id?: string;
 };
 
 export type SearchAPIResponse = APIResponse & {
@@ -917,6 +920,9 @@ export type PrivacySettings = {
     enabled?: boolean;
   };
   typing_indicators?: {
+    enabled?: boolean;
+  };
+  delivery_receipts?: {
     enabled?: boolean;
   };
 };
@@ -1135,6 +1141,7 @@ export type UpdateChannelTypeRequest =
     typing_events?: boolean;
     uploads?: boolean;
     url_enrichment?: boolean;
+    count_messages?: boolean;
   };
 
 export type UpdateChannelTypeResponse = {
@@ -1171,6 +1178,7 @@ export type UpdateChannelTypeResponse = {
   blocklists?: BlockListOptions[];
   partition_size?: number;
   partition_ttl?: string;
+  count_messages?: boolean;
 };
 
 export type GetChannelTypeResponse = {
@@ -1207,6 +1215,7 @@ export type GetChannelTypeResponse = {
   blocklists?: BlockListOptions[];
   partition_size?: number;
   partition_ttl?: string;
+  count_messages?: boolean;
 };
 
 export type UpdateChannelOptions = Partial<{
@@ -1246,6 +1255,18 @@ export type MarkUnreadOptions = {
   connection_id?: string;
   message_id?: string;
   thread_id?: string;
+  user?: UserResponse;
+  user_id?: string;
+};
+
+export type DeliveredMessageConfirmation = {
+  cid: string;
+  id: string;
+  parent_id?: string; // todo: should we include parent_id if thread delivery receipts are not yet supported?
+};
+
+export type MarkDeliveredOptions = {
+  latest_delivered_messages: DeliveredMessageConfirmation[];
   user?: UserResponse;
   user_id?: string;
 };
@@ -1461,6 +1482,8 @@ export type Event = CustomEventData & {
   // id of the message that was marked as unread - all the following messages are considered unread. (notification.mark_unread)
   first_unread_message_id?: string;
   hard_delete?: boolean;
+  last_delivered_at?: string;
+  last_delivered_message_id?: string;
   // creation date of a message with last_read_message_id, formatted as Date ISO string
   last_read_at?: string;
   last_read_message_id?: string;
@@ -1743,6 +1766,9 @@ export type ChannelFilters = QueryFilters<
         >
       | PrimitiveFilter<string>;
     pinned?: boolean;
+    last_updated?:
+      | RequireOnlyOne<Pick<QueryFilter<string>, '$eq' | '$gt' | '$gte' | '$lt' | '$lte'>>
+      | PrimitiveFilter<string>;
   } & {
     [Key in keyof Omit<ChannelResponse, 'name' | 'members' | keyof CustomChannelData>]:
       | RequireOnlyOne<QueryFilter<ChannelResponse[Key]>>
@@ -2246,6 +2272,7 @@ export type AppSettings = {
   disable_permissions_checks?: boolean;
   enforce_unique_usernames?: 'no' | 'app' | 'team';
   event_hooks?: Array<EventHook> | null;
+  explicit_event_hooks_deletion?: boolean;
   // all possible file mime types are https://www.iana.org/assignments/media-types/media-types.xhtml
   file_upload_config?: FileUploadConfig;
   firebase_config?: {
@@ -2370,7 +2397,7 @@ export type ChannelConfigFields = {
   replies?: boolean;
   search?: boolean;
   shared_locations?: boolean;
-  count_messages?: boolean; // Feature flag for message count
+  count_messages?: boolean;
   typing_events?: boolean;
   uploads?: boolean;
   url_enrichment?: boolean;
@@ -3136,6 +3163,7 @@ export type CampaignData = {
   segment_ids?: string[];
   sender_id?: string;
   sender_mode?: 'exclude' | 'include' | null;
+  sender_visibility?: 'hidden' | 'archived' | null;
   show_channels?: boolean;
   skip_push?: boolean;
   skip_webhook?: boolean;
@@ -3788,6 +3816,156 @@ export type UpsertConfigResponse = {
   config: ModerationConfigResponse;
 };
 
+// Moderation Rule Builder Types
+export type ModerationRule = {
+  id: string;
+  name: string;
+  description: string;
+  config_keys: string[];
+  team: string;
+  rule: RuleBuilderRule;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ModerationRuleRequest = {
+  name: string;
+  description: string;
+  config_keys: string[];
+  team: string;
+  rule: RuleBuilderRule;
+  enabled: boolean;
+};
+
+export type RuleBuilderRule = {
+  id: string;
+  rule_type: 'user' | 'content';
+  conditions?: RuleBuilderCondition[];
+  logic?: 'AND' | 'OR';
+  groups?: RuleBuilderConditionGroup[];
+  action: RuleBuilderAction;
+  cooldown_period?: string;
+};
+
+export type RuleBuilderCondition = {
+  type: string;
+  confidence?: number;
+  text_rule_params?: TextRuleParameters;
+  image_rule_params?: ImageRuleParameters;
+  video_rule_params?: VideoRuleParameters;
+  user_rule_params?: UserRuleParameters;
+  content_count_rule_params?: ContentCountRuleParameters;
+  text_content_params?: TextContentParameters;
+  image_content_params?: ImageContentParameters;
+  video_content_params?: VideoContentParameters;
+  user_created_within_params?: UserCreatedWithinParameters;
+  user_custom_property_params?: UserCustomPropertyParameters;
+};
+
+export type RuleBuilderConditionGroup = {
+  logic: 'AND' | 'OR';
+  conditions: RuleBuilderCondition[];
+};
+
+export type RuleBuilderAction = {
+  type: string;
+  ban_options?: BanOptions;
+  flag_user_options?: FlagUserOptions;
+};
+
+export type TextRuleParameters = {
+  threshold: number;
+  time_window: string;
+  harm_labels?: string[];
+  llm_harm_labels?: Record<string, string>;
+  contains_url?: boolean;
+  severity?: string;
+  blocklist_match?: string[];
+};
+
+export type ImageRuleParameters = {
+  threshold: number;
+  time_window: string;
+  harm_labels: string[];
+};
+
+export type VideoRuleParameters = {
+  threshold: number;
+  time_window: string;
+  harm_labels: string[];
+};
+
+export type UserRuleParameters = {
+  max_age: string;
+};
+
+export type ContentCountRuleParameters = {
+  threshold: number;
+  time_window: string;
+};
+
+export type TextContentParameters = {
+  harm_labels?: string[];
+  llm_harm_labels?: Record<string, string>;
+  contains_url?: boolean;
+  severity?: string;
+  blocklist_match?: string[];
+};
+
+export type ImageContentParameters = {
+  harm_labels: string[];
+};
+
+export type VideoContentParameters = {
+  harm_labels: string[];
+};
+
+export type UserCreatedWithinParameters = {
+  max_age: string;
+};
+
+export type UserCustomPropertyParameters = {
+  property_key: string;
+  operator: string;
+  expected_value: string;
+};
+
+export type BanOptions = {
+  duration: number;
+  reason: string;
+  shadow_ban: boolean;
+  ip_ban: boolean;
+};
+
+export type FlagUserOptions = {
+  reason: string;
+};
+
+export type QueryModerationRulesFilters = QueryFilters<{
+  name?: string;
+  team?: string;
+  enabled?: boolean;
+  rule_type?: string;
+  created_at?: PrimitiveFilter<string>;
+  updated_at?: PrimitiveFilter<string>;
+}>;
+
+export type QueryModerationRulesSort = Array<
+  Sort<'name' | 'enabled' | 'team' | 'created_at' | 'updated_at'>
+>;
+
+export type QueryModerationRulesResponse = {
+  rules: ModerationRule[];
+  default_llm_labels: Record<string, string>;
+  next?: string;
+  prev?: string;
+};
+
+export type UpsertModerationRuleResponse = {
+  rule: ModerationRule;
+};
+
 export type ModerationFlagOptions = {
   custom?: Record<string, unknown>;
   moderation_payload?: ModerationPayload;
@@ -4208,6 +4386,7 @@ export type EventHook = {
   id?: string;
   hook_type?: HookType;
   enabled?: boolean;
+  product?: Product | 'all'; // optional, default is 'all'
   event_types?: Array<string>;
   webhook_url?: string;
   sqs_queue_url?: string;
@@ -4229,6 +4408,7 @@ export type EventHook = {
     mode: 'CALLBACK_MODE_NONE' | 'CALLBACK_MODE_REST' | 'CALLBACK_MODE_TWIRP';
   };
 
+  delete?: boolean;
   created_at?: string;
   updated_at?: string;
 };

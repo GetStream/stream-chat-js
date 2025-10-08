@@ -492,6 +492,19 @@ describe('TextComposer', () => {
       type: 'regular',
       text: 'Hello world',
     };
+
+    it('normalizes the Windows newline sequence "\\r\\n" to "\\n"', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
+      await textComposer.insertText({
+        text: ' a\r\nb\r\n',
+        selection: { start: 5, end: 5 },
+      });
+      expect(textComposer.text).toBe('Hello a\nb\n world');
+      expect(textComposer.selection).toStrictEqual({ start: 10, end: 10 });
+    });
+
     it('should insert text at the specified selection', async () => {
       const {
         messageComposer: { textComposer },
@@ -501,6 +514,7 @@ describe('TextComposer', () => {
         selection: { start: 5, end: 5 },
       });
       expect(textComposer.text).toBe('Hello beautiful world');
+      expect(textComposer.selection).toStrictEqual({ start: 15, end: 15 });
     });
 
     it('should insert text at the end if no selection provided', async () => {
@@ -509,6 +523,7 @@ describe('TextComposer', () => {
       } = setup({ composition: message });
       await textComposer.insertText({ text: '!' });
       expect(textComposer.text).toBe('Hello world!');
+      expect(textComposer.selection).toStrictEqual({ start: 12, end: 12 });
     });
 
     it('should respect maxLengthOnEdit', async () => {
@@ -525,6 +540,7 @@ describe('TextComposer', () => {
       });
       await textComposer.insertText({ text: ' beautiful world' });
       expect(textComposer.text).toBe('Hello be');
+      expect(textComposer.selection).toStrictEqual({ start: 8, end: 8 });
     });
 
     it('should handle empty text insertion', async () => {
@@ -533,6 +549,7 @@ describe('TextComposer', () => {
       } = setup({ composition: message });
       await textComposer.insertText({ text: '', selection: { start: 5, end: 5 } });
       expect(textComposer.text).toBe('Hello world');
+      expect(textComposer.selection).toStrictEqual({ start: 5, end: 5 });
     });
 
     it('should handle insertion at the start of text', async () => {
@@ -541,6 +558,7 @@ describe('TextComposer', () => {
       } = setup({ composition: message });
       await textComposer.insertText({ text: 'Hi ', selection: { start: 0, end: 0 } });
       expect(textComposer.text).toBe('Hi Hello world');
+      expect(textComposer.selection).toStrictEqual({ start: 3, end: 3 });
     });
 
     it('should handle insertion at end of text', async () => {
@@ -549,6 +567,7 @@ describe('TextComposer', () => {
       } = setup({ composition: message });
       await textComposer.insertText({ text: '!', selection: { start: 11, end: 11 } });
       expect(textComposer.text).toBe('Hello world!');
+      expect(textComposer.selection).toStrictEqual({ start: 12, end: 12 });
     });
 
     it('should handle insertion with multi-character selection', async () => {
@@ -557,6 +576,7 @@ describe('TextComposer', () => {
       } = setup({ composition: message });
       await textComposer.insertText({ text: 'Hi', selection: { start: 0, end: 5 } });
       expect(textComposer.text).toBe('Hi world');
+      expect(textComposer.selection).toStrictEqual({ start: 2, end: 2 });
     });
 
     it('should handle insertion with multi-character selection and maxLengthOnEdit restricting the size', async () => {
@@ -577,6 +597,7 @@ describe('TextComposer', () => {
         selection: { start: 7, end: 9 },
       });
       expect(textComposer.text).toBe('Hello wHi ');
+      expect(textComposer.selection).toStrictEqual({ start: 10, end: 10 });
     });
 
     it('should not insert text if disabled', async () => {
@@ -588,6 +609,7 @@ describe('TextComposer', () => {
         selection: { start: 5, end: 5 },
       });
       expect(textComposer.text).toBe(message.text);
+      expect(textComposer.selection).toStrictEqual({ start: 11, end: 11 });
     });
 
     it('should reflect pasting of command trigger with partial command name', async () => {
@@ -597,6 +619,7 @@ describe('TextComposer', () => {
       await textComposer.insertText({ text: '/giph', selection: { start: 0, end: 11 } });
       expect(textComposer.text).toBe('/giph');
       expect(textComposer.suggestions).toBeDefined();
+      expect(textComposer.selection).toStrictEqual({ start: 5, end: 5 });
     });
   });
 

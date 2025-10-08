@@ -3,6 +3,8 @@ import {
   AbstractOfflineDB,
   Channel,
   ChannelAPIResponse,
+  ChannelConfigWithInfo,
+  ChannelResponse,
   LocalMessage,
   MessageComposerConfig,
   StaticLocationPayload,
@@ -175,16 +177,16 @@ describe('MessageComposer', () => {
     });
 
     it('should initialize with custom config', () => {
-      const customConfig = {
-        publishTypingEvents: false,
+      const customConfig: DeepPartial<MessageComposerConfig> = {
         text: {
           maxLengthOnEdit: 1000,
+          publishTypingEvents: false,
         },
       };
 
       const { messageComposer } = setup({ config: customConfig });
 
-      expect(messageComposer.config.publishTypingEvents).toBe(false);
+      expect(messageComposer.config.text.publishTypingEvents).toBe(false);
       expect(messageComposer.config.text?.maxLengthOnEdit).toBe(1000);
     });
 
@@ -1640,7 +1642,7 @@ describe('MessageComposer', () => {
       const spyChannelGetDraft = vi.spyOn(mockChannel, 'getDraft');
       spyChannelGetDraft.mockRejectedValue(new Error('Failed to get draft'));
 
-      const spyAddNotification = vi.spyOn(mockClient.notifications, 'add');
+      const spyLogger = vi.spyOn(mockClient, 'logger');
 
       await messageComposer.getDraft();
 
@@ -1651,13 +1653,7 @@ describe('MessageComposer', () => {
       expect(initStateSpy).toHaveBeenCalledTimes(1);
       expect(spyChannelGetDraft).toHaveBeenCalled();
       expect(messageComposer.state.getLatestValue().draftId).toBe('test-message-id');
-      expect(spyAddNotification).toHaveBeenCalledWith({
-        message: 'Failed to get the draft',
-        origin: {
-          emitter: 'MessageComposer',
-          context: { composer: messageComposer },
-        },
-      });
+      expect(spyLogger).toHaveBeenCalledTimes(1);
     });
   });
 

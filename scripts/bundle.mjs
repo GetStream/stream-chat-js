@@ -10,24 +10,19 @@ const __dirname = import.meta.dirname;
 
 const watchModeEnabled = process.argv.includes('--watch') || process.argv.includes('-w');
 
-// Those dependencies are distributed as ES modules, and cannot be externalized
-// in our CJS bundle. We convert them to CJS and bundle them instead.
-const bundledDeps = ['axios', 'form-data', 'isomorphic-ws', 'base64-js'];
-
 const version = getPackageVersion();
 
-const deps = Object.keys({
+const external = Object.keys({
   ...packageJson.dependencies,
   ...packageJson.peerDependencies,
 });
-const external = deps.filter((dep) => !bundledDeps.includes(dep));
 
 /** @type esbuild.BuildOptions */
 const commonBuildOptions = {
   entryPoints: [resolve(__dirname, '../src/index.ts')],
   bundle: true,
   target: 'ES2020',
-  sourcemap: 'linked',
+  sourcemap: watchModeEnabled ? 'inline' : 'linked',
   define: {
     'process.env.PKG_VERSION': JSON.stringify(version),
   },
@@ -50,7 +45,6 @@ const bundles = [
     ...commonBuildOptions,
     format: 'cjs',
     external,
-    outExtension: { '.js': '.cjs' },
     entryNames: `[dir]/[name].${platform}`,
     outdir: resolve(__dirname, '../dist/cjs'),
     platform,
@@ -63,6 +57,8 @@ const bundles = [
   {
     ...commonBuildOptions,
     format: 'esm',
+    external,
+    outExtension: { '.js': '.mjs' },
     outdir: resolve(__dirname, '../dist/esm'),
     entryNames: `[dir]/[name]`,
     platform: 'browser',

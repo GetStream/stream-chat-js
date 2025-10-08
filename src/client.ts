@@ -87,6 +87,7 @@ import type {
   DraftSort,
   EndpointName,
   Event,
+  EventAPIResponse,
   EventHandler,
   ExportChannelOptions,
   ExportChannelRequest,
@@ -124,6 +125,7 @@ import type {
   LocalMessage,
   Logger,
   MarkChannelsReadOptions,
+  MarkDeliveredOptions,
   MessageFilters,
   MessageFlagsFilters,
   MessageFlagsPaginationOptions,
@@ -987,8 +989,13 @@ export class StreamChat {
     this.state = new ClientState({ client: this });
     // reset thread manager
     this.threads.resetState();
-    // reset token manager
-    setTimeout(this.tokenManager.reset); // delay reseting to use token for disconnect calls
+
+    // Since we wipe all user data already, we should reset token manager as well
+    closePromise
+      .finally(() => {
+        this.tokenManager.reset();
+      })
+      .catch((err) => console.error(err));
 
     // close the WS connection
     return closePromise;
@@ -4703,5 +4710,22 @@ export class StreamChat {
    */
   deleteImage(url: string) {
     return this.delete<APIResponse>(`${this.baseURL}/uploads/image`, { url });
+  }
+
+  /**
+   * Send the mark delivered event for this user, only works if the `delivery_receipts` setting is enabled
+   *
+   * @param {MarkDeliveredOptions} data
+   * @return {Promise<EventAPIResponse | void>} Description
+   */
+  async markChannelsDelivered(data?: MarkDeliveredOptions) {
+    const deliveryReceiptsEnabled =
+      this.user?.privacy_settings?.delivery_receipts?.enabled;
+    if (!deliveryReceiptsEnabled) return;
+
+    return await this.post<EventAPIResponse>(
+      this.baseURL + '/channels/delivered',
+      data ?? {},
+    );
   }
 }

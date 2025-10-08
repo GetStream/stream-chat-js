@@ -319,6 +319,33 @@ describe('Client connectUser', () => {
 	});
 });
 
+describe('Client disconnectUser', () => {
+	it(`it should reset token manager after WS is disconnected, but before disconnect promise is resolved`, async () => {
+		const client = new StreamChat('', '');
+		client.tokenManager = {
+			reset: sinon.spy(),
+		};
+		const { resolve, promise } = Promise.withResolvers();
+		client.wsConnection = { disconnect: () => promise };
+		client.wsFallback = null;
+		const disconnectPromise = client.disconnectUser();
+		expect(client.tokenManager.reset.called).to.be.false;
+		resolve();
+		await disconnectPromise;
+		expect(client.tokenManager.reset.called).to.be.true;
+	});
+
+	it('should reset token manager even if WS disconnect fails', async () => {
+		const client = new StreamChat('', '');
+		client.tokenManager = {
+			reset: sinon.spy(),
+		};
+		client.wsConnection = { disconnect: () => Promise.reject() };
+		await expect(client.disconnectUser()).rejects.toThrow();
+		expect(client.tokenManager.reset.called).to.be.true;
+	});
+});
+
 describe('Detect node environment', () => {
 	const client = new StreamChat('', '');
 	it('node property should be true', () => {
@@ -1376,6 +1403,8 @@ describe('user.messages.deleted', () => {
 							...deletedMessage,
 							id: message.quoted_message.id,
 							user: message.quoted_message.user,
+							created_at: message.quoted_message.created_at,
+							updated_at: message.quoted_message.updated_at,
 						},
 					});
 				} else {

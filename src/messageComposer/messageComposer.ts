@@ -235,12 +235,10 @@ export class MessageComposer extends WithSubscriptions {
     return `${this.evaluateContextType(compositionContext)}_${compositionContext.id}`;
   }
 
+  static generateId = generateUUIDv4;
+
   get config(): MessageComposerConfig {
     return this.configState.getLatestValue();
-  }
-
-  updateConfig(config: DeepPartial<MessageComposerConfig>) {
-    this.configState.partialNext(mergeWith(this.config, config));
   }
 
   get contextType() {
@@ -346,7 +344,9 @@ export class MessageComposer extends WithSubscriptions {
     return editedMessageWasUpdated || draftWasChanged || composingMessageFromScratch;
   }
 
-  static generateId = generateUUIDv4;
+  updateConfig(config: DeepPartial<MessageComposerConfig>) {
+    this.configState.partialNext(mergeWith(this.config, config));
+  }
 
   refreshId = () => {
     this.state.partialNext({ id: MessageComposer.generateId() });
@@ -812,12 +812,9 @@ export class MessageComposer extends WithSubscriptions {
 
       this.initState({ composition: draft });
     } catch (error) {
-      this.client.notifications.add({
-        message: 'Failed to get the draft',
-        origin: {
-          emitter: 'MessageComposer',
-          context: { composer: this },
-        },
+      this.client.logger('error', `messageComposer:getDraft`, {
+        tags: ['channel', 'messageComposer'],
+        error,
       });
     }
   };

@@ -1,3 +1,76 @@
+## [9.21.0](https://github.com/GetStream/stream-chat-js/compare/v9.20.3...v9.21.0) (2025-10-08)
+
+### Bug Fixes
+
+* do not add error to client notifications for getDrafts ([#1631](https://github.com/GetStream/stream-chat-js/issues/1631)) ([4923459](https://github.com/GetStream/stream-chat-js/commit/49234597ba4e600505477cd06d4071e97cf2a3a4))
+* normalize Windows CRLF newline sequence into LF line ending ([#1630](https://github.com/GetStream/stream-chat-js/issues/1630)) ([458f807](https://github.com/GetStream/stream-chat-js/commit/458f807b84507dafbdeb4152a6604875a14fd304))
+
+### Features
+
+* (cha-1300) add count messages as feature ([#1629](https://github.com/GetStream/stream-chat-js/issues/1629)) ([20f0450](https://github.com/GetStream/stream-chat-js/commit/20f0450f46ad514b867fddf8804eeaa4caae4ea5))
+* **CHA-991:** support delivery receipts ([#1628](https://github.com/GetStream/stream-chat-js/issues/1628)) ([c9ec72d](https://github.com/GetStream/stream-chat-js/commit/c9ec72d95758ab4940ccaafa3c50fe3f4e7d9f6c))
+
+## [9.20.3](https://github.com/GetStream/stream-chat-js/compare/v9.20.2...v9.20.3) (2025-10-01)
+
+### Bug Fixes
+
+* **bundle:** upgrade axios and externalize previously bundled packages ([#1627](https://github.com/GetStream/stream-chat-js/issues/1627)) ([2d14573](https://github.com/GetStream/stream-chat-js/commit/2d145737a4bf73bb3cad433f4e2defef9f6ff7ff))
+
+## [9.20.2](https://github.com/GetStream/stream-chat-js/compare/v9.20.1...v9.20.2) (2025-10-01)
+
+### Bug Fixes
+
+* add last_updated field to ChannelFilters type ([#1626](https://github.com/GetStream/stream-chat-js/issues/1626)) ([6cf09d4](https://github.com/GetStream/stream-chat-js/commit/6cf09d427e5d3ff7f372d9d35f44f9edbbdee0a7))
+
+## [9.20.1](https://github.com/GetStream/stream-chat-js/compare/v9.20.0...v9.20.1) (2025-09-29)
+
+### Bug Fixes
+
+* add options to upload-in-progress warning notification ([#1625](https://github.com/GetStream/stream-chat-js/issues/1625)) ([96f1f44](https://github.com/GetStream/stream-chat-js/commit/96f1f44afcc4508ae4537e221b9901b74b21a7eb))
+* wait for WS disconnect before token reset ([#1623](https://github.com/GetStream/stream-chat-js/issues/1623)) ([2f29ed0](https://github.com/GetStream/stream-chat-js/commit/2f29ed0990237ec1fc0ba00163cdd2f8f6230d2f))
+
+## [9.20.0](https://github.com/GetStream/stream-chat-js/compare/v9.19.1...v9.20.0) (2025-09-22)
+
+### Features
+
+* (cha-1233) added sender visibility to campaign ([#1616](https://github.com/GetStream/stream-chat-js/issues/1616)) ([68f709f](https://github.com/GetStream/stream-chat-js/commit/68f709fa0458301197371244a2d673915c4d7c84))
+
+### Refactors
+
+* **mod:** drop unsupported rule builder actions ([#1622](https://github.com/GetStream/stream-chat-js/issues/1622)) ([ff7fa5f](https://github.com/GetStream/stream-chat-js/commit/ff7fa5f224335111e1f076c6f4dce34a31affb5e))
+
+## [9.19.1](https://github.com/GetStream/stream-chat-js/compare/v9.19.0...v9.19.1) (2025-09-12)
+
+### Bug Fixes
+
+* update message composer location config upon querying a channel ([#1620](https://github.com/GetStream/stream-chat-js/issues/1620)) ([96d2d6d](https://github.com/GetStream/stream-chat-js/commit/96d2d6d6d0ca435f4ef00fcf38e8e9c7656fa3ab))
+
+## [9.19.0](https://github.com/GetStream/stream-chat-js/compare/v9.18.1...v9.19.0) (2025-09-02)
+
+### Bug Fixes
+
+* calculate TextComposer selection upon text insertion correctly ([#1608](https://github.com/GetStream/stream-chat-js/issues/1608)) ([625d16c](https://github.com/GetStream/stream-chat-js/commit/625d16c7b9bd804aee7d75354db4c8f7bc5b24ec))
+* search cursor pagination ([#1611](https://github.com/GetStream/stream-chat-js/issues/1611)) ([b13de81](https://github.com/GetStream/stream-chat-js/commit/b13de81d9747b9091bc9998e769da791c1aad9f1))
+
+### Features
+
+* added ChannelMemberResponse to MessageResponse ([#1602](https://github.com/GetStream/stream-chat-js/issues/1602)) ([fe3998f](https://github.com/GetStream/stream-chat-js/commit/fe3998f79a3f4b508a508f537ce92a36c418ede9))
+* update channel's blocked property on channel.hidden and channel.visible events ([#1610](https://github.com/GetStream/stream-chat-js/issues/1610)) ([6fa6829](https://github.com/GetStream/stream-chat-js/commit/6fa682988536929ffdfc964a98870145bb5b120c))
+
+## [9.18.1](https://github.com/GetStream/stream-chat-js/compare/v9.18.0...v9.18.1) (2025-08-27)
+
+### Bug Fixes
+
+* formatMessage - reference the correct msg in toLocalMessageBase ([#1605](https://github.com/GetStream/stream-chat-js/issues/1605)) ([0fda67f](https://github.com/GetStream/stream-chat-js/commit/0fda67f06d418b47e36e32f4bb0e0b0d7e23db07))
+
+## [9.18.0](https://github.com/GetStream/stream-chat-js/compare/v9.17.0...v9.18.0) (2025-08-27)
+
+### Features
+
+* add product to event hook request and response ([#1603](https://github.com/GetStream/stream-chat-js/issues/1603)) ([fb04b0e](https://github.com/GetStream/stream-chat-js/commit/fb04b0e4770423bffa46c414983b02c5901bc2dd))
+* explicit event_hooks deletion ([#1596](https://github.com/GetStream/stream-chat-js/issues/1596)) ([00aa02e](https://github.com/GetStream/stream-chat-js/commit/00aa02ef1ab2a90754fad96b122132b8a7ec8907))
+* moderation rule builder endpoints ([#1606](https://github.com/GetStream/stream-chat-js/issues/1606)) ([36518c3](https://github.com/GetStream/stream-chat-js/commit/36518c39bf00ed58094a682a068db98689342e7f))
+
 ## [9.17.0](https://github.com/GetStream/stream-chat-js/compare/v9.16.0...v9.17.0) (2025-08-18)
 
 ### Features

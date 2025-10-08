@@ -1492,6 +1492,13 @@ export class Channel {
 
     this.getClient()._addChannelConfig(state.channel);
 
+    // the only config param that is necessary to be updated based on server config soon as the config is delivered
+    if (typeof state.channel.config?.shared_locations !== 'undefined') {
+      this.messageComposer.updateConfig({
+        location: { enabled: state.channel.config.shared_locations },
+      });
+    }
+
     // add any messages to our channel state
     const { messageSet } = this._initializeState(state, messageSetToAddToIfDoesNotExist);
     messageSet.pagination = {
@@ -2106,13 +2113,21 @@ export class Channel {
         }
         break;
       case 'channel.hidden':
-        channel.data = { ...channel.data, hidden: true };
+        channel.data = {
+          ...channel.data,
+          blocked: !!event.channel?.blocked,
+          hidden: true,
+        };
         if (event.clear_history) {
           channelState.clearMessages();
         }
         break;
       case 'channel.visible':
-        channel.data = { ...channel.data, hidden: false };
+        channel.data = {
+          ...channel.data,
+          blocked: !!event.channel?.blocked,
+          hidden: false,
+        };
         this.getClient().offlineDb?.handleChannelVisibilityEvent({ event });
         break;
       case 'user.banned':
@@ -2257,6 +2272,10 @@ export class Channel {
     if (state.read) {
       for (const read of state.read) {
         this.state.read[read.user.id] = {
+          last_delivered_at: read.last_delivered_at
+            ? new Date(read.last_delivered_at)
+            : undefined,
+          last_delivered_message_id: read.last_delivered_message_id,
           last_read: new Date(read.last_read),
           last_read_message_id: read.last_read_message_id,
           unread_messages: read.unread_messages ?? 0,
