@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getClientWithUser } from './test-utils/getClient';
-import type { Channel, Event, EventAPIResponse, StreamChat } from '../../src';
+import { getClientWithUser } from '../test-utils/getClient';
+import type { Channel, Event, EventAPIResponse, StreamChat } from '../../../src';
 
 const channelType = 'messaging';
 const channelId = 'channelId';

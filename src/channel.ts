@@ -1,6 +1,6 @@
 import { ChannelState } from './channel_state';
 import { MessageComposer } from './messageComposer';
-import { OwnMessageReceiptsTracker } from './messageDelivery';
+import { MessageReceiptsTracker } from './messageDelivery';
 import {
   generateChannelTempCid,
   logChatPromiseExecution,
@@ -111,7 +111,7 @@ export class Channel {
   disconnected: boolean;
   push_preferences?: PushPreference;
   public readonly messageComposer: MessageComposer;
-  public readonly ownMessageReceiptsTracker: OwnMessageReceiptsTracker;
+  public readonly messageReceiptsTracker: MessageReceiptsTracker;
 
   /**
    * constructor - Create a channel
@@ -161,7 +161,7 @@ export class Channel {
       compositionContext: this,
     });
 
-    this.ownMessageReceiptsTracker = new OwnMessageReceiptsTracker({
+    this.messageReceiptsTracker = new MessageReceiptsTracker({
       locateMessage: (timestampMs) => {
         const msg = this.state.findMessageByTimestamp(timestampMs);
         return msg && { timestampMs, msgId: msg.id };
@@ -1903,7 +1903,7 @@ export class Channel {
             user: event.user,
             unread_messages: 0,
           };
-          this.ownMessageReceiptsTracker.onMessageRead({
+          this.messageReceiptsTracker.onMessageRead({
             user: event.user,
             readAt: event.created_at,
             lastReadMessageId: event.last_read_message_id,
@@ -1931,7 +1931,7 @@ export class Channel {
             user: event.user,
           };
 
-          this.ownMessageReceiptsTracker.onMessageDelivered({
+          this.messageReceiptsTracker.onMessageDelivered({
             user: event.user,
             deliveredAt: event.created_at,
             lastDeliveredMessageId: event.last_delivered_message_id,
@@ -2346,7 +2346,7 @@ export class Channel {
         }
       }
 
-      this.ownMessageReceiptsTracker.ingestInitial(state.read);
+      this.messageReceiptsTracker.ingestInitial(state.read);
     }
 
     return {

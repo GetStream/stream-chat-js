@@ -75,7 +75,7 @@ export type OwnMessageReceiptsTrackerOptions = {
 };
 
 /**
- * OwnMessageReceiptsTracker
+ * MessageReceiptsTracker
  * --------------------------------
  * Tracks **other participants’** delivery/read progress toward **own (outgoing) messages**
  * within a **single timeline** (one channel/thread).
@@ -92,7 +92,7 @@ export type OwnMessageReceiptsTrackerOptions = {
  *
  * Construction
  * ------------
- * `new OwnMessageReceiptsTracker({locateMessage})`
+ * `new MessageReceiptsTracker({locateMessage})`
  * - `locateMessage(timestamp) => MsgRef | null` must resolve a message ref representation - `{ timestamp, msgId }`.
  *   - If `locateMessage` returns `null`, the event is ignored (message unknown locally).
  *
@@ -131,7 +131,7 @@ export type OwnMessageReceiptsTrackerOptions = {
  *   equal-timestamp plateau (upper-bound insertion), preserving intuitive arrival order.
  * - This tracker models **others’ progress toward own messages**;
  */
-export class OwnMessageReceiptsTracker {
+export class MessageReceiptsTracker {
   private byUser = new Map<UserId, UserProgress>();
   private readSorted: UserProgress[] = []; // asc by lastReadRef
   private deliveredSorted: UserProgress[] = []; // asc by lastDeliveredRef

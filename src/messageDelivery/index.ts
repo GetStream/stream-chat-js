@@ -1,2 +1,2 @@
 export * from './MessageDeliveryReporter';
-export * from './OwnMessageReceiptsTracker';
+export * from './MessageReceiptsTracker';
