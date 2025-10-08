@@ -1,3 +1,15 @@
+## [9.21.0](https://github.com/GetStream/stream-chat-js/compare/v9.20.3...v9.21.0) (2025-10-08)
+
+### Bug Fixes
+
+* do not add error to client notifications for getDrafts ([#1631](https://github.com/GetStream/stream-chat-js/issues/1631)) ([4923459](https://github.com/GetStream/stream-chat-js/commit/49234597ba4e600505477cd06d4071e97cf2a3a4))
+* normalize Windows CRLF newline sequence into LF line ending ([#1630](https://github.com/GetStream/stream-chat-js/issues/1630)) ([458f807](https://github.com/GetStream/stream-chat-js/commit/458f807b84507dafbdeb4152a6604875a14fd304))
+
+### Features
+
+* (cha-1300) add count messages as feature ([#1629](https://github.com/GetStream/stream-chat-js/issues/1629)) ([20f0450](https://github.com/GetStream/stream-chat-js/commit/20f0450f46ad514b867fddf8804eeaa4caae4ea5))
+* **CHA-991:** support delivery receipts ([#1628](https://github.com/GetStream/stream-chat-js/issues/1628)) ([c9ec72d](https://github.com/GetStream/stream-chat-js/commit/c9ec72d95758ab4940ccaafa3c50fe3f4e7d9f6c))
+
 ## [9.20.3](https://github.com/GetStream/stream-chat-js/compare/v9.20.2...v9.20.3) (2025-10-01)
 
 ### Bug Fixes
