@@ -247,6 +247,88 @@ describe('MessageDeliveryReadTracker', () => {
     });
   });
 
+  describe('onNotificationMarkUnread', () => {
+    const user = U('u');
+    it('moves lastRead backward to the event boundary and keeps delivered unchanged (no backward move)', () => {
+      tracker.onMessageRead({ user, readAt: iso(3000), lastReadMessageId: 'm3' });
+
+      tracker.onNotificationMarkUnread({
+        user,
+        lastReadAt: iso(2000),
+        lastReadMessageId: 'm2',
+      });
+
+      const userProgress = tracker.getUserProgress(user.id)!;
+      // read moved back to m2
+      expect(userProgress.lastReadRef).toEqual(ref(2000));
+      // delivered did NOT move backward (stays at m3)
+      expect(userProgress.lastDeliveredRef).toEqual(ref(3000));
+
+      // sanity checks in queries
+      expect(tracker.hasUserRead(ref(2000), 'u')).toBe(true);
+      expect(tracker.hasUserRead(ref(3000), 'u')).toBe(false);
+      expect(tracker.hasUserDelivered(ref(3000), 'u')).toBe(true);
+    });
+
+    it('supports unread to MIN when lastReadAt is not provided', () => {
+      // v delivered m4 and read m2
+      tracker.onMessageDelivered({
+        user,
+        deliveredAt: iso(4000),
+        lastDeliveredMessageId: 'm4',
+      });
+      tracker.onMessageRead({ user, readAt: iso(2000), lastReadMessageId: 'm2' });
+
+      let userProgress = tracker.getUserProgress(user.id)!;
+      expect(userProgress.lastReadRef).toEqual(ref(2000));
+      expect(userProgress.lastDeliveredRef).toEqual(ref(4000));
+
+      // Unread everything (no lastReadAt) -> lastRead becomes MIN_REF; delivered stays at m4
+      tracker.onNotificationMarkUnread({
+        user,
+      });
+
+      userProgress = tracker.getUserProgress(user.id)!;
+      expect(userProgress.lastReadRef.timestampMs).toBe(Number.NEGATIVE_INFINITY);
+      expect(userProgress.lastReadRef.msgId).toBe('');
+      // delivered remains ahead (not decreased)
+      expect(userProgress.lastDeliveredRef).toEqual(ref(4000));
+    });
+
+    it('is a no-op when the provided last_read equals current lastReadRef', () => {
+      tracker.onMessageRead({ user, readAt: iso(3000) });
+      const before = structuredClone(tracker.getUserProgress(user.id)!);
+
+      tracker.onNotificationMarkUnread({
+        user,
+        lastReadAt: iso(3000),
+        lastReadMessageId: 'm3',
+      });
+
+      const after = tracker.getUserProgress(user.id)!;
+      expect(after.lastReadRef).toEqual(before.lastReadRef);
+      expect(after.lastDeliveredRef).toEqual(before.lastDeliveredRef);
+    });
+
+    it('does not call locateMessage when lastReadMessageId is provided', () => {
+      const locator = vi.fn().mockImplementation(makeLocator());
+      tracker = new MessageReceiptsTracker({ locateMessage: locator });
+
+      tracker.onNotificationMarkUnread({
+        user,
+        lastReadAt: iso(2000),
+        lastReadMessageId: 'm2',
+      });
+
+      // new read state applied
+      const userProgress = tracker.getUserProgress(user.id)!;
+      expect(userProgress.lastReadRef).toEqual(ref(2000));
+
+      // ensure locator wasn’t used to derive the read ref
+      expect(locator).not.toHaveBeenCalled();
+    });
+  });
+
   describe('queries', () => {
     it('readersForMessage / deliveredForMessage / deliveredNotReadForMessage', () => {
       const a = U('a');

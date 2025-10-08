@@ -2129,6 +2129,11 @@ export class Channel {
         };
 
         channelState.unreadCount = unreadCount;
+        this.messageReceiptsTracker.onNotificationMarkUnread({
+          user: event.user,
+          lastReadAt: event.last_read_at,
+          lastReadMessageId: event.last_read_message_id,
+        });
         break;
       }
       case 'channel.updated':

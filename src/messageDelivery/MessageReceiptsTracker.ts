@@ -175,6 +175,40 @@ export class MessageReceiptsTracker {
     }
   }
 
+  /** message.delivered — user device confirmed delivery up to and including messageId. */
+  onMessageDelivered({
+    user,
+    deliveredAt,
+    lastDeliveredMessageId,
+  }: {
+    user: UserResponse;
+    deliveredAt: string;
+    lastDeliveredMessageId?: string;
+  }) {
+    const timestampMs = new Date(deliveredAt).getTime();
+    const msgRef = lastDeliveredMessageId
+      ? { timestampMs, msgId: lastDeliveredMessageId }
+      : this.locateMessage(new Date(deliveredAt).getTime());
+    if (!msgRef) return;
+    const userProgress = this.ensureUser(user);
+
+    const newDelivered =
+      compareRefsAsc(msgRef, userProgress.lastReadRef) < 0
+        ? userProgress.lastReadRef
+        : msgRef; // max(read, loc)
+    // newly announced delivered is older than or equal what is already registered
+    if (compareRefsAsc(newDelivered, userProgress.lastDeliveredRef) <= 0) return;
+
+    removeByOldKey(
+      this.deliveredSorted,
+      userProgress,
+      userProgress.lastDeliveredRef,
+      (x) => x.lastDeliveredRef,
+    );
+    userProgress.lastDeliveredRef = newDelivered;
+    insertByKey(this.deliveredSorted, userProgress, (x) => x.lastDeliveredRef);
+  }
+
   /** message.read — user read up to and including messageId. */
   onMessageRead({
     user,
@@ -217,38 +251,55 @@ export class MessageReceiptsTracker {
     }
   }
 
-  /** message.delivered — user device confirmed delivery up to and including messageId. */
-  onMessageDelivered({
+  /** notification.mark_unread — user marked messages unread starting at `first_unread_message_id`.
+   * Sets lastReadRef to the event’s last_read_* values. Delivery never moves backward.
+   * The event is sent only to the user that triggered the action (own user), so we will never adjust read ref
+   * for other users - we will not see changes in the UI for other users. However, this implementation does not
+   * take into consideration this fact and is ready to handle the mark-unread event for any user.
+   */
+  onNotificationMarkUnread({
     user,
-    deliveredAt,
-    lastDeliveredMessageId,
+    lastReadAt,
+    lastReadMessageId,
   }: {
     user: UserResponse;
-    deliveredAt: string;
-    lastDeliveredMessageId?: string;
+    lastReadAt?: string;
+    lastReadMessageId?: string;
   }) {
-    const timestampMs = new Date(deliveredAt).getTime();
-    const msgRef = lastDeliveredMessageId
-      ? { timestampMs, msgId: lastDeliveredMessageId }
-      : this.locateMessage(new Date(deliveredAt).getTime());
-    if (!msgRef) return;
     const userProgress = this.ensureUser(user);
 
-    const newDelivered =
-      compareRefsAsc(msgRef, userProgress.lastReadRef) < 0
-        ? userProgress.lastReadRef
-        : msgRef; // max(read, loc)
-    // newly announced delivered is older than or equal what is already registered
-    if (compareRefsAsc(newDelivered, userProgress.lastDeliveredRef) <= 0) return;
+    const newReadRef: MsgRef = lastReadAt
+      ? { timestampMs: new Date(lastReadAt).getTime(), msgId: lastReadMessageId ?? '' }
+      : { ...MIN_REF };
+
+    // If no change, exit early.
+    if (
+      compareRefsAsc(newReadRef, userProgress.lastReadRef) === 0 &&
+      newReadRef.msgId === userProgress.lastReadRef.msgId
+    ) {
+      return;
+    }
 
     removeByOldKey(
-      this.deliveredSorted,
+      this.readSorted,
       userProgress,
-      userProgress.lastDeliveredRef,
-      (x) => x.lastDeliveredRef,
+      userProgress.lastReadRef,
+      (x) => x.lastReadRef,
     );
-    userProgress.lastDeliveredRef = newDelivered;
-    insertByKey(this.deliveredSorted, userProgress, (x) => x.lastDeliveredRef);
+    userProgress.lastReadRef = newReadRef;
+    insertByKey(this.readSorted, userProgress, (x) => x.lastReadRef);
+
+    // Maintain invariant delivered >= read.
+    if (compareRefsAsc(userProgress.lastDeliveredRef, userProgress.lastReadRef) < 0) {
+      removeByOldKey(
+        this.deliveredSorted,
+        userProgress,
+        userProgress.lastDeliveredRef,
+        (x) => x.lastDeliveredRef,
+      );
+      userProgress.lastDeliveredRef = userProgress.lastReadRef;
+      insertByKey(this.deliveredSorted, userProgress, (x) => x.lastDeliveredRef);
+    }
   }
 
   /** All users who READ this message. */
