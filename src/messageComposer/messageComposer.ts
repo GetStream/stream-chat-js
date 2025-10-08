@@ -812,12 +812,9 @@ export class MessageComposer extends WithSubscriptions {
 
       this.initState({ composition: draft });
     } catch (error) {
-      this.client.notifications.add({
-        message: 'Failed to get the draft',
-        origin: {
-          emitter: 'MessageComposer',
-          context: { composer: this },
-        },
+      this.client.logger('error', `messageComposer:getDraft`, {
+        tags: ['channel', 'messageComposer'],
+        error,
       });
     }
   };
