@@ -1,3 +1,10 @@
+## [9.22.0](https://github.com/GetStream/stream-chat-js/compare/v9.21.0...v9.22.0) (2025-10-09)
+
+### Features
+
+* add deleted_for_me field in message response ([#1604](https://github.com/GetStream/stream-chat-js/issues/1604)) ([26e83c4](https://github.com/GetStream/stream-chat-js/commit/26e83c45259bea48506ae107a49f22d5d4fafd95))
+* add message delivery receipts ([#1617](https://github.com/GetStream/stream-chat-js/issues/1617)) ([c8a2fe6](https://github.com/GetStream/stream-chat-js/commit/c8a2fe66f014b59b34f8c1391dc7c4d65b380765))
+
 ## [9.21.0](https://github.com/GetStream/stream-chat-js/compare/v9.20.3...v9.21.0) (2025-10-08)
 
 ### Bug Fixes

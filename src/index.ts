@@ -8,6 +8,7 @@ export * from './connection';
 export * from './events';
 export * from './insights';
 export * from './messageComposer';
+export * from './messageDelivery';
 export * from './middleware';
 export * from './moderation';
 export * from './notifications';

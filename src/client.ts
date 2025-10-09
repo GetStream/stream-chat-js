@@ -80,6 +80,7 @@ import type {
   DeactivateUsersOptions,
   DeleteChannelsResponse,
   DeleteCommandResponse,
+  DeleteMessageOptions,
   DeleteUserOptions,
   Device,
   DeviceIdentifier,
@@ -240,6 +241,7 @@ import type {
   QueryChannelsRequestType,
 } from './channel_manager';
 import { ChannelManager } from './channel_manager';
+import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
 import { StateStore } from './store';
@@ -272,7 +274,7 @@ export type MessageComposerSetupState = {
 
 export class StreamChat {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
-
+  messageDeliveryReporter: MessageDeliveryReporter;
   _user?: OwnUserResponse | UserResponse;
   appSettingsPromise?: Promise<AppSettingsAPIResponse>;
   activeChannels: {
@@ -503,6 +505,7 @@ export class StreamChat {
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
     this.reminders = new ReminderManager({ client: this });
+    this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });
   }
 
   /**
@@ -2010,7 +2013,7 @@ export class StreamChat {
 
       channels.push(c);
     }
-
+    this.syncDeliveredCandidates(channels);
     return channels;
   }
 
@@ -3103,10 +3106,30 @@ export class StreamChat {
     );
   }
 
-  async deleteMessage(messageID: string, hardDelete?: boolean) {
+  /**
+   * deleteMessage - Delete a message
+   *
+   * @param {string} messageID The id of the message to delete
+   * @param {boolean | DeleteMessageOptions | undefined} [optionsOrHardDelete]
+   * @return {Promise<APIResponse & { message: MessageResponse }>} The API response
+   */
+  // fixme: remove the signature with optionsOrHardDelete boolean with the next major release
+  async deleteMessage(
+    messageID: string,
+    optionsOrHardDelete?: DeleteMessageOptions | boolean,
+  ): Promise<APIResponse & { message: MessageResponse }> {
+    let options: DeleteMessageOptions = {};
+    if (typeof optionsOrHardDelete === 'boolean') {
+      options = optionsOrHardDelete ? { hardDelete: true } : {};
+    } else if (optionsOrHardDelete?.deleteForMe) {
+      options = { deleteForMe: true };
+    } else if (optionsOrHardDelete?.hardDelete) {
+      options = { hardDelete: true };
+    }
+
     try {
       if (this.offlineDb) {
-        if (hardDelete) {
+        if (options.hardDelete) {
           await this.offlineDb.hardDeleteMessage({ id: messageID });
         } else {
           await this.offlineDb.softDeleteMessage({ id: messageID });
@@ -3115,7 +3138,7 @@ export class StreamChat {
           {
             task: {
               messageId: messageID,
-              payload: [messageID, hardDelete],
+              payload: [messageID, options],
               type: 'delete-message',
             },
           },
@@ -3128,18 +3151,40 @@ export class StreamChat {
       });
     }
 
-    return this._deleteMessage(messageID, hardDelete);
+    return this._deleteMessage(messageID, options);
   }
 
-  async _deleteMessage(messageID: string, hardDelete?: boolean) {
+  // fixme: remove the signature with optionsOrHardDelete boolean with the next major release
+  async _deleteMessage(
+    messageID: string,
+    optionsOrHardDelete?: DeleteMessageOptions | boolean,
+  ): Promise<APIResponse & { message: MessageResponse }> {
+    // this is a API call method, we do not route hardDelete: true and deleteForMe: true to deleteForMe: true
+    // and expect to receive error response from the server
+    const { deleteForMe, hardDelete } = (
+      typeof optionsOrHardDelete === 'boolean'
+        ? { hardDelete: optionsOrHardDelete }
+        : (optionsOrHardDelete ?? {})
+    ) as DeleteMessageOptions;
+
     let params = {};
     if (hardDelete) {
       params = { hard: true };
     }
-    return await this.delete<APIResponse & { message: MessageResponse }>(
+    if (deleteForMe) {
+      params = { ...params, delete_for_me: true };
+    }
+    const result = await this.delete<APIResponse & { message: MessageResponse }>(
       this.baseURL + `/messages/${encodeURIComponent(messageID)}`,
       params,
     );
+
+    // necessary to populate the below values as the server does not return the message in the response as deleted
+    if (deleteForMe) {
+      result.message.deleted_for_me = true;
+      result.message.type = 'deleted';
+    }
+    return result;
   }
 
   /**
@@ -4701,19 +4746,20 @@ export class StreamChat {
   }
 
   /**
-   * Send the mark delivered event for this user, only works if the `delivery_receipts` setting is enabled
+   * Send the mark delivered event for this user
    *
    * @param {MarkDeliveredOptions} data
    * @return {Promise<EventAPIResponse | void>} Description
    */
-  async markChannelsDelivered(data?: MarkDeliveredOptions) {
-    const deliveryReceiptsEnabled =
-      this.user?.privacy_settings?.delivery_receipts?.enabled;
-    if (!deliveryReceiptsEnabled) return;
-
+  async markChannelsDelivered(data: MarkDeliveredOptions) {
+    if (!data?.latest_delivered_messages?.length) return;
     return await this.post<EventAPIResponse>(
       this.baseURL + '/channels/delivered',
       data ?? {},
     );
+  }
+
+  syncDeliveredCandidates(collections: Channel[]) {
+    this.messageDeliveryReporter.syncDeliveredCandidates(collections);
   }
 }
