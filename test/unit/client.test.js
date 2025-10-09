@@ -934,7 +934,7 @@ describe('message deletion', () => {
 		await client.offlineDb.init(client.userID);
 
 		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
-		clientDeleteSpy = vi.spyOn(client, 'delete').mockResolvedValue({});
+		clientDeleteSpy = vi.spyOn(client, 'delete').mockResolvedValue({ message: {} });
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
 	});
 
@@ -953,52 +953,102 @@ describe('message deletion', () => {
 			vi.resetAllMocks();
 		});
 
-		it('should soft delete the message and queue task if hardDelete is false', async () => {
-			await client.deleteMessage(messageId, false);
+		it.each([
+			['undefined', undefined, {}],
+			['true', true, { hardDelete: true }],
+			['false', false, {}],
+			['{ hardDelete: false }', { hardDelete: false }, {}],
+			['{ hardDelete: true }', { hardDelete: true }, { hardDelete: true }],
+			['{ deleteForMe: true }', { deleteForMe: true }, { deleteForMe: true }],
+			['{ deleteForMe: false }', { deleteForMe: false }, {}],
+			[
+				'{ hardDelete: false, deleteForMe: true }',
+				{ hardDelete: false, deleteForMe: true },
+				{ deleteForMe: true },
+			],
+			[
+				'{ hardDelete: true, deleteForMe: true }',
+				{ hardDelete: true, deleteForMe: true },
+				{ deleteForMe: true },
+			],
+			[
+				'{ hardDelete: false, deleteForMe: false }',
+				{ hardDelete: false, deleteForMe: false },
+				{},
+			],
+			[
+				'{ hardDelete: true, deleteForMe: false }',
+				{ hardDelete: true, deleteForMe: false },
+				{ hardDelete: true },
+			],
+		])('should parse delete message options %s', async (_, options, expectedOptions) => {
+			await client.deleteMessage(messageId, options);
+			if (expectedOptions.hardDelete) {
+				expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledTimes(1);
+				expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledWith({
+					id: messageId,
+				});
+				expect(client.offlineDb.softDeleteMessage).not.toHaveBeenCalled();
+			} else {
+				expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledTimes(1);
+				expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledWith({
+					id: messageId,
+				});
+				expect(client.offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
+			}
 
-			expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledTimes(1);
-			expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledWith({ id: messageId });
-			expect(client.offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 
 			const taskArg = queueTaskSpy.mock.calls[0][0];
 			expect(taskArg).to.deep.equal({
 				task: {
 					messageId,
-					payload: [messageId, false],
+					payload: [messageId, expectedOptions],
 					type: 'delete-message',
 				},
 			});
 			expect(_deleteMessageSpy).not.toHaveBeenCalled();
 		});
 
-		it('should hard delete the message and queue task if hardDelete is true', async () => {
-			await client.deleteMessage(messageId, true);
+		it.each([
+			['undefined', undefined, {}],
+			['true', true, { hardDelete: true }],
+			['false', false, {}],
+			['{ hardDelete: false }', { hardDelete: false }, {}],
+			['{ hardDelete: true }', { hardDelete: true }, { hardDelete: true }],
+			['{ deleteForMe: true }', { deleteForMe: true }, { deleteForMe: true }],
+			['{ deleteForMe: false }', { deleteForMe: false }, {}],
+			[
+				'{ hardDelete: false, deleteForMe: true }',
+				{ hardDelete: false, deleteForMe: true },
+				{ deleteForMe: true },
+			],
+			[
+				'{ hardDelete: true, deleteForMe: true }',
+				{ hardDelete: true, deleteForMe: true },
+				{ deleteForMe: true },
+			],
+			[
+				'{ hardDelete: false, deleteForMe: false }',
+				{ hardDelete: false, deleteForMe: false },
+				{},
+			],
+			[
+				'{ hardDelete: true, deleteForMe: false }',
+				{ hardDelete: true, deleteForMe: false },
+				{ hardDelete: true },
+			],
+		])(
+			'should fall back to _deleteMessage if offlineDb is not set and delete options is %s',
+			async (_, options, expectedOptions) => {
+				client.offlineDb = undefined;
 
-			expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledTimes(1);
-			expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledWith({ id: messageId });
-			expect(client.offlineDb.softDeleteMessage).not.toHaveBeenCalled();
-			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
+				await client.deleteMessage(messageId, options);
 
-			const taskArg = queueTaskSpy.mock.calls[0][0];
-			expect(taskArg).to.deep.equal({
-				task: {
-					messageId,
-					payload: [messageId, true],
-					type: 'delete-message',
-				},
-			});
-			expect(_deleteMessageSpy).not.toHaveBeenCalled();
-		});
-
-		it('should fall back to _deleteMessage if offlineDb is not set', async () => {
-			client.offlineDb = undefined;
-
-			await client.deleteMessage(messageId, true);
-
-			expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_deleteMessageSpy).toHaveBeenCalledWith(messageId, true);
-		});
+				expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
+				expect(_deleteMessageSpy).toHaveBeenCalledWith(messageId, expectedOptions);
+			},
+		);
 
 		it('should log and fall back to _deleteMessage if offline delete throws', async () => {
 			client.offlineDb.softDeleteMessage.mockRejectedValue(new Error('Offline failure'));
@@ -1008,7 +1058,7 @@ describe('message deletion', () => {
 			expect(loggerSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).not.toHaveBeenCalled();
 			expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_deleteMessageSpy).toHaveBeenCalledWith(messageId, false);
+			expect(_deleteMessageSpy).toHaveBeenCalledWith(messageId, {});
 		});
 	});
 
@@ -1033,14 +1083,77 @@ describe('message deletion', () => {
 			);
 		});
 
+		it.each([
+			['{}', {}],
+			['{ hardDelete: true }', { hardDelete: true }],
+			['{ hardDelete: false }', { hardDelete: false }],
+			['{ deleteForMe: true }', { deleteForMe: true }],
+			['{ deleteForMe: false }', { deleteForMe: false }],
+			[
+				'{ hardDelete: false, deleteForMe: true }',
+				{ hardDelete: false, deleteForMe: true },
+			],
+			[
+				'{ hardDelete: true, deleteForMe: true }',
+				{ hardDelete: true, deleteForMe: true },
+			],
+			[
+				'{ hardDelete: false, deleteForMe: false }',
+				{ hardDelete: false, deleteForMe: false },
+			],
+			[
+				'{ hardDelete: false, deleteForMe: false }',
+				{ hardDelete: false, deleteForMe: false },
+			],
+		])('should parse delete options %s accordingly', async (_, options) => {
+			await client._deleteMessage(messageId, options);
+
+			const expectedParams =
+				Object.values(options).length === 2 && Object.values(options).every((val) => val)
+					? { delete_for_me: true, hard: true }
+					: Object.keys(options).length === 0
+						? {}
+						: options.deleteForMe
+							? { delete_for_me: true }
+							: options.hardDelete
+								? { hard: true }
+								: {};
+			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
+			expect(clientDeleteSpy).toHaveBeenCalledWith(
+				`${client.baseURL}/messages/${encodeURIComponent(messageId)}`,
+				expectedParams,
+			);
+		});
+
+		it('should call delete with both hard and delete_for_me params when both are true', async () => {
+			await client._deleteMessage(messageId, { deleteForMe: true, hardDelete: true });
+
+			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
+			expect(clientDeleteSpy).toHaveBeenCalledWith(
+				`${client.baseURL}/messages/${encodeURIComponent(messageId)}`,
+				{ hard: true, delete_for_me: true },
+			);
+		});
+
 		it('should return the response from delete', async () => {
 			clientDeleteSpy.mockResolvedValue({
 				message: { id: messageId },
 			});
 			const result = await client._deleteMessage(messageId);
 
-			expect(result).toEqual({
+			expect(result).toStrictEqual({
 				message: { id: messageId },
+			});
+		});
+
+		it('enriches the deleted-for-me message with type="deleted" and deleted_for_me=true', async () => {
+			clientDeleteSpy.mockResolvedValue({
+				message: { id: messageId },
+			});
+			const result = await client._deleteMessage(messageId, { deleteForMe: true });
+
+			expect(result).toStrictEqual({
+				message: { deleted_for_me: true, id: messageId, type: 'deleted' },
 			});
 		});
 	});

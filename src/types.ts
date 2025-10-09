@@ -713,6 +713,7 @@ export type MessageResponseBase = MessageBase & {
   status?: string;
   thread_participants?: UserResponse[];
   updated_at?: string;
+  deleted_for_me?: boolean;
 };
 
 export type ReactionGroupResponse = {
@@ -968,7 +969,7 @@ export type BanUserOptions = UnBanUserOptions & {
   ip_ban?: boolean;
   reason?: string;
   timeout?: number;
-  delete_messages?: DeleteMessagesOptions;
+  delete_messages?: MessageDeletionStrategy;
 };
 
 export type ChannelOptions = {
@@ -1476,6 +1477,7 @@ export type Event = CustomEventData & {
   connection_id?: string;
   // event creation timestamp, format Date ISO string
   created_at?: string;
+  deleted_for_me?: boolean;
   draft?: DraftResponse;
   // id of the message that was marked as unread - all the following messages are considered unread. (notification.mark_unread)
   first_unread_message_id?: string;
@@ -3602,14 +3604,21 @@ export type CustomCheckFlag = {
   reason?: string;
 };
 
-export type DeleteMessagesOptions = 'soft' | 'hard';
+export type MessageDeletionStrategy = 'soft' | 'hard';
+// @deprecated use type MessageDeletionStrategy instead
+export type DeleteMessagesOptions = MessageDeletionStrategy;
+
+export type DeleteMessageOptions = {
+  deleteForMe?: boolean;
+  hardDelete?: boolean;
+};
 
 export type SubmitActionOptions = {
   ban?: {
     channel_ban_only?: boolean;
     reason?: string;
     timeout?: number;
-    delete_messages?: DeleteMessagesOptions;
+    delete_messages?: MessageDeletionStrategy;
   };
   delete_message?: {
     hard_delete?: boolean;

@@ -80,6 +80,7 @@ import type {
   DeactivateUsersOptions,
   DeleteChannelsResponse,
   DeleteCommandResponse,
+  DeleteMessageOptions,
   DeleteUserOptions,
   Device,
   DeviceIdentifier,
@@ -3105,10 +3106,30 @@ export class StreamChat {
     );
   }
 
-  async deleteMessage(messageID: string, hardDelete?: boolean) {
+  /**
+   * deleteMessage - Delete a message
+   *
+   * @param {string} messageID The id of the message to delete
+   * @param {boolean | DeleteMessageOptions | undefined} [optionsOrHardDelete]
+   * @return {Promise<APIResponse & { message: MessageResponse }>} The API response
+   */
+  // fixme: remove the signature with optionsOrHardDelete boolean with the next major release
+  async deleteMessage(
+    messageID: string,
+    optionsOrHardDelete?: DeleteMessageOptions | boolean,
+  ): Promise<APIResponse & { message: MessageResponse }> {
+    let options: DeleteMessageOptions = {};
+    if (typeof optionsOrHardDelete === 'boolean') {
+      options = optionsOrHardDelete ? { hardDelete: true } : {};
+    } else if (optionsOrHardDelete?.deleteForMe) {
+      options = { deleteForMe: true };
+    } else if (optionsOrHardDelete?.hardDelete) {
+      options = { hardDelete: true };
+    }
+
     try {
       if (this.offlineDb) {
-        if (hardDelete) {
+        if (options.hardDelete) {
           await this.offlineDb.hardDeleteMessage({ id: messageID });
         } else {
           await this.offlineDb.softDeleteMessage({ id: messageID });
@@ -3117,7 +3138,7 @@ export class StreamChat {
           {
             task: {
               messageId: messageID,
-              payload: [messageID, hardDelete],
+              payload: [messageID, options],
               type: 'delete-message',
             },
           },
@@ -3130,18 +3151,40 @@ export class StreamChat {
       });
     }
 
-    return this._deleteMessage(messageID, hardDelete);
+    return this._deleteMessage(messageID, options);
   }
 
-  async _deleteMessage(messageID: string, hardDelete?: boolean) {
+  // fixme: remove the signature with optionsOrHardDelete boolean with the next major release
+  async _deleteMessage(
+    messageID: string,
+    optionsOrHardDelete?: DeleteMessageOptions | boolean,
+  ): Promise<APIResponse & { message: MessageResponse }> {
+    // this is a API call method, we do not route hardDelete: true and deleteForMe: true to deleteForMe: true
+    // and expect to receive error response from the server
+    const { deleteForMe, hardDelete } = (
+      typeof optionsOrHardDelete === 'boolean'
+        ? { hardDelete: optionsOrHardDelete }
+        : (optionsOrHardDelete ?? {})
+    ) as DeleteMessageOptions;
+
     let params = {};
     if (hardDelete) {
       params = { hard: true };
     }
-    return await this.delete<APIResponse & { message: MessageResponse }>(
+    if (deleteForMe) {
+      params = { ...params, delete_for_me: true };
+    }
+    const result = await this.delete<APIResponse & { message: MessageResponse }>(
       this.baseURL + `/messages/${encodeURIComponent(messageID)}`,
       params,
     );
+
+    // necessary to populate the below values as the server does not return the message in the response as deleted
+    if (deleteForMe) {
+      result.message.deleted_for_me = true;
+      result.message.type = 'deleted';
+    }
+    return result;
   }
 
   /**
