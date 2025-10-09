@@ -993,6 +993,7 @@ describe('message deletion', () => {
 				expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledTimes(1);
 				expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledWith({
 					id: messageId,
+					deleteForMe: expectedOptions.deleteForMe,
 				});
 				expect(client.offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
 			}

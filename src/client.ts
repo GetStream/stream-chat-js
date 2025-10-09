@@ -3132,7 +3132,10 @@ export class StreamChat {
         if (options.hardDelete) {
           await this.offlineDb.hardDeleteMessage({ id: messageID });
         } else {
-          await this.offlineDb.softDeleteMessage({ id: messageID });
+          await this.offlineDb.softDeleteMessage({
+            id: messageID,
+            deleteForMe: options.deleteForMe,
+          });
         }
         return await this.offlineDb.queueTask<APIResponse & { message: MessageResponse }>(
           {
