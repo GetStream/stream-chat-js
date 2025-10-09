@@ -748,7 +748,8 @@ export const debounce = <T extends (...args: any[]) => any>(
 };
 
 // works exactly the same as lodash.throttle
-export const throttle = <T extends (...args: unknown[]) => unknown>(
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const throttle = <T extends (...args: any[]) => any>(
   fn: T,
   timeout = 200,
   { leading = true, trailing = false }: { leading?: boolean; trailing?: boolean } = {},

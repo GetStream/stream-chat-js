@@ -240,6 +240,7 @@ import type {
   QueryChannelsRequestType,
 } from './channel_manager';
 import { ChannelManager } from './channel_manager';
+import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
 import { StateStore } from './store';
@@ -272,7 +273,7 @@ export type MessageComposerSetupState = {
 
 export class StreamChat {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
-
+  messageDeliveryReporter: MessageDeliveryReporter;
   _user?: OwnUserResponse | UserResponse;
   appSettingsPromise?: Promise<AppSettingsAPIResponse>;
   activeChannels: {
@@ -503,6 +504,7 @@ export class StreamChat {
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
     this.reminders = new ReminderManager({ client: this });
+    this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });
   }
 
   /**
@@ -2010,7 +2012,7 @@ export class StreamChat {
 
       channels.push(c);
     }
-
+    this.syncDeliveredCandidates(channels);
     return channels;
   }
 
@@ -4701,19 +4703,20 @@ export class StreamChat {
   }
 
   /**
-   * Send the mark delivered event for this user, only works if the `delivery_receipts` setting is enabled
+   * Send the mark delivered event for this user
    *
    * @param {MarkDeliveredOptions} data
    * @return {Promise<EventAPIResponse | void>} Description
    */
-  async markChannelsDelivered(data?: MarkDeliveredOptions) {
-    const deliveryReceiptsEnabled =
-      this.user?.privacy_settings?.delivery_receipts?.enabled;
-    if (!deliveryReceiptsEnabled) return;
-
+  async markChannelsDelivered(data: MarkDeliveredOptions) {
+    if (!data?.latest_delivered_messages?.length) return;
     return await this.post<EventAPIResponse>(
       this.baseURL + '/channels/delivered',
       data ?? {},
     );
+  }
+
+  syncDeliveredCandidates(collections: Channel[]) {
+    this.messageDeliveryReporter.syncDeliveredCandidates(collections);
   }
 }

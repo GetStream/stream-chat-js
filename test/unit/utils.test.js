@@ -2718,7 +2718,7 @@ describe('messageSetPagination', () => {
 	});
 });
 
-describe('', () => {
+describe('binarySearchByDateEqualOrNearestGreater', () => {
 	const messages = [
 		{ created_at: '2024-08-05T08:55:00.199808Z', id: '0' },
 		{ created_at: '2024-08-05T08:55:01.199808Z', id: '1' },
