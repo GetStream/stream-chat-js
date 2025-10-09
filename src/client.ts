@@ -3116,16 +3116,18 @@ export class StreamChat {
     messageID: string,
     optionsOrHardDelete?: DeleteMessageOptions | boolean,
   ): Promise<APIResponse & { message: MessageResponse }> {
-    const { hardDelete } = (
-      typeof optionsOrHardDelete === 'boolean'
-        ? { hardDelete: optionsOrHardDelete }
-        : (optionsOrHardDelete ?? {})
-    ) as DeleteMessageOptions;
+    let options: DeleteMessageOptions = {};
+    if (typeof optionsOrHardDelete === 'boolean') {
+      options = optionsOrHardDelete ? { hardDelete: true } : {};
+    } else if (optionsOrHardDelete?.deleteForMe) {
+      options = { deleteForMe: true };
+    } else if (optionsOrHardDelete?.hardDelete) {
+      options = { hardDelete: true };
+    }
 
     try {
       if (this.offlineDb) {
-        // todo: write code for this.offlineDb.deleteForMe
-        if (hardDelete) {
+        if (options.hardDelete) {
           await this.offlineDb.hardDeleteMessage({ id: messageID });
         } else {
           await this.offlineDb.softDeleteMessage({ id: messageID });
@@ -3134,7 +3136,7 @@ export class StreamChat {
           {
             task: {
               messageId: messageID,
-              payload: [messageID, optionsOrHardDelete],
+              payload: [messageID, options],
               type: 'delete-message',
             },
           },
@@ -3147,7 +3149,7 @@ export class StreamChat {
       });
     }
 
-    return this._deleteMessage(messageID, optionsOrHardDelete);
+    return this._deleteMessage(messageID, options);
   }
 
   // fixme: remove the signature with optionsOrHardDelete boolean with the next major release
@@ -3155,6 +3157,8 @@ export class StreamChat {
     messageID: string,
     optionsOrHardDelete?: DeleteMessageOptions | boolean,
   ): Promise<APIResponse & { message: MessageResponse }> {
+    // this is a API call method, we do not route hardDelete: true and deleteForMe: true to deleteForMe: true
+    // and expect to receive error response from the server
     const { deleteForMe, hardDelete } = (
       typeof optionsOrHardDelete === 'boolean'
         ? { hardDelete: optionsOrHardDelete }
