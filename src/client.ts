@@ -3172,10 +3172,17 @@ export class StreamChat {
     if (deleteForMe) {
       params = { ...params, delete_for_me: true };
     }
-    return await this.delete<APIResponse & { message: MessageResponse }>(
+    const result = await this.delete<APIResponse & { message: MessageResponse }>(
       this.baseURL + `/messages/${encodeURIComponent(messageID)}`,
       params,
     );
+
+    // necessary to populate the below values as the server does not return the message in the response as deleted
+    if (deleteForMe) {
+      result.message.deleted_for_me = true;
+      result.message.type = 'deleted';
+    }
+    return result;
   }
 
   /**

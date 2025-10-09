@@ -1141,8 +1141,19 @@ describe('message deletion', () => {
 			});
 			const result = await client._deleteMessage(messageId);
 
-			expect(result).toEqual({
+			expect(result).toStrictEqual({
 				message: { id: messageId },
+			});
+		});
+
+		it('enriches the deleted-for-me message with type="deleted" and deleted_for_me=true', async () => {
+			clientDeleteSpy.mockResolvedValue({
+				message: { id: messageId },
+			});
+			const result = await client._deleteMessage(messageId, { deleteForMe: true });
+
+			expect(result).toStrictEqual({
+				message: { deleted_for_me: true, id: messageId, type: 'deleted' },
 			});
 		});
 	});
