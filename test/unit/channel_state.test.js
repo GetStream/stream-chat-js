@@ -665,6 +665,85 @@ describe('ChannelState addMessagesSorted', function () {
 	});
 });
 
+describe('ChannelState message pruning', () => {
+	let channelState;
+	let initialMessages = [];
+
+	beforeEach(() => {
+		channelState = new ChannelState();
+		initialMessages = Array.from({ length: 10 }, () => generateMsg());
+		channelState.addMessagesSorted(initialMessages);
+	});
+
+	it('should prune messages from the end when we are in the latest set', () => {
+		expect(channelState.messageSets.length).to.be.equal(1);
+		expect(channelState.messageSets[0].isLatest).to.be.equal(true);
+		expect(channelState.messageSets[0].isCurrent).to.be.equal(true);
+		expect(channelState.messages.length).to.be.equal(10);
+		expect(channelState.messagePagination.hasPrev).to.be.equal(false);
+
+		const previousHasNext = channelState.messagePagination.hasNext;
+
+		channelState.pruneFromEnd(5);
+
+		expect(channelState.messageSets.length).to.be.equal(1);
+		expect(channelState.messages.length).to.be.equal(5);
+		expect(channelState.messagePagination.hasPrev).to.be.equal(true);
+		expect(channelState.messagePagination.hasNext).to.be.equal(previousHasNext);
+	});
+
+	it('should do nothing if the current message set is not also the latest', () => {
+		expect(channelState.messageSets.length).to.be.equal(1);
+
+		channelState.messageSets[0].isLatest = false;
+
+		expect(channelState.messages.length).to.be.equal(10);
+		expect(channelState.messagePagination.hasPrev).to.be.equal(false);
+
+		channelState.pruneFromEnd(5);
+
+		expect(channelState.messages.length).to.be.equal(10);
+		expect(channelState.messagePagination.hasPrev).to.be.equal(false);
+	});
+
+	it('should prune the correct messageSet', () => {
+		channelState.addMessagesSorted(
+			Array.from({ length: 10 }, () => generateMsg()),
+			false,
+			true,
+			true,
+			'new',
+		);
+
+		expect(channelState.messageSets.length).to.be.equal(2);
+
+		channelState.pruneFromEnd(5);
+
+		const currentMessageSet = channelState.messageSets.find((ms) => ms.isCurrent);
+		const otherMessageSet = channelState.messageSets.find((ms) => !ms.isCurrent);
+
+		expect(currentMessageSet.messages.length).to.be.equal(5);
+		expect(currentMessageSet.pagination.hasPrev).to.be.equal(true);
+		expect(channelState.messages).to.be.equal(currentMessageSet.messages);
+
+		expect(otherMessageSet.messages.length).to.be.equal(10);
+		expect(otherMessageSet.pagination.hasPrev).to.be.equal(false);
+	});
+
+	it('should correctly apply pruning', () => {
+		channelState.pruneFromEnd(5);
+
+		expect(channelState.messages.length).to.be.equal(5);
+		for (const message of initialMessages.slice(-5)) {
+			expect(channelState.messages.some((m) => m.id === message.id)).to.be.equal(true);
+		}
+
+		for (const message of initialMessages.slice(0, 5)) {
+			expect(channelState.messages.some((m) => m.id === message.id)).to.be.equal(false);
+		}
+	});
+});
+
 describe('ChannelState reactions', () => {
 	const message = generateMsg();
 	let state;
