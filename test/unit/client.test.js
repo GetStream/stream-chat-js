@@ -934,7 +934,7 @@ describe('message deletion', () => {
 		await client.offlineDb.init(client.userID);
 
 		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
-		clientDeleteSpy = vi.spyOn(client, 'delete').mockResolvedValue({});
+		clientDeleteSpy = vi.spyOn(client, 'delete').mockResolvedValue({ message: {} });
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
 	});
 
