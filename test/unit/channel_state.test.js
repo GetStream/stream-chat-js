@@ -916,7 +916,9 @@ describe('ChannelState message pruning', () => {
 
 	beforeEach(() => {
 		channelState = new ChannelState();
-		initialMessages = Array.from({ length: 10 }, () => generateMsg());
+		initialMessages = Array.from({ length: 10 }, () =>
+			generateMsg({ date: toISOString(100) }),
+		);
 		channelState.addMessagesSorted(initialMessages);
 	});
 
@@ -953,7 +955,7 @@ describe('ChannelState message pruning', () => {
 
 	it('should prune the correct messageSet', () => {
 		channelState.addMessagesSorted(
-			Array.from({ length: 10 }, () => generateMsg()),
+			Array.from({ length: 10 }, () => generateMsg({ date: toISOString(50) })),
 			false,
 			true,
 			true,
