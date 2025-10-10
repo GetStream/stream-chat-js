@@ -152,7 +152,7 @@ export class ChannelState {
     );
   }
 
-  pruneFromEnd(maxMessages: number) {
+  pruneOldest(maxMessages: number) {
     const currentIndex = this.messageSets.findIndex((s) => s.isCurrent);
     if (this.messageSets[currentIndex].isLatest) {
       const newMessages = this.messageSets[currentIndex].messages;

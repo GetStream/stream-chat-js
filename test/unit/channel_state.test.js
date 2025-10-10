@@ -931,7 +931,7 @@ describe('ChannelState message pruning', () => {
 
 		const previousHasNext = channelState.messagePagination.hasNext;
 
-		channelState.pruneFromEnd(5);
+		channelState.pruneOldest(5);
 
 		expect(channelState.messageSets.length).to.be.equal(1);
 		expect(channelState.messages.length).to.be.equal(5);
@@ -947,7 +947,7 @@ describe('ChannelState message pruning', () => {
 		expect(channelState.messages.length).to.be.equal(10);
 		expect(channelState.messagePagination.hasPrev).to.be.equal(false);
 
-		channelState.pruneFromEnd(5);
+		channelState.pruneOldest(5);
 
 		expect(channelState.messages.length).to.be.equal(10);
 		expect(channelState.messagePagination.hasPrev).to.be.equal(false);
@@ -964,7 +964,7 @@ describe('ChannelState message pruning', () => {
 
 		expect(channelState.messageSets.length).to.be.equal(2);
 
-		channelState.pruneFromEnd(5);
+		channelState.pruneOldest(5);
 
 		const currentMessageSet = channelState.messageSets.find((ms) => ms.isCurrent);
 		const otherMessageSet = channelState.messageSets.find((ms) => !ms.isCurrent);
@@ -978,7 +978,7 @@ describe('ChannelState message pruning', () => {
 	});
 
 	it('should correctly apply pruning', () => {
-		channelState.pruneFromEnd(5);
+		channelState.pruneOldest(5);
 
 		expect(channelState.messages.length).to.be.equal(5);
 		for (const message of initialMessages.slice(-5)) {
