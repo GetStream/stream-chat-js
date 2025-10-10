@@ -1,3 +1,9 @@
+## [9.22.1](https://github.com/GetStream/stream-chat-js/compare/v9.22.0...v9.22.1) (2025-10-10)
+
+### Bug Fixes
+
+* **bundle:** define separate externals (browser/Node) ([#1634](https://github.com/GetStream/stream-chat-js/issues/1634)) ([7522859](https://github.com/GetStream/stream-chat-js/commit/75228595c7525c000a7af9b2c72f417b1df086b1)), closes [#1632](https://github.com/GetStream/stream-chat-js/issues/1632)
+
 ## [9.22.0](https://github.com/GetStream/stream-chat-js/compare/v9.21.0...v9.22.0) (2025-10-09)
 
 ### Features
