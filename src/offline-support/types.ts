@@ -267,6 +267,8 @@ export type DBDropPendingTasksType = {
 export type DBDeleteMessageType = {
   /** ID of the message. */
   id: string;
+  /** Whether to delete the message for the user only. */
+  deleteForMe?: boolean;
   /** Whether to immediately execute the operation. */
   execute?: boolean;
 };

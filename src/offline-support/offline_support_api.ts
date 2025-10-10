@@ -633,14 +633,18 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     event: Event;
     execute?: boolean;
   }) => {
-    const { message, hard_delete = false } = event;
+    const { message, deleted_for_me, hard_delete = false } = event;
 
     if (message) {
       const deleteMethod = hard_delete ? this.hardDeleteMessage : this.softDeleteMessage;
       return await this.queriesWithChannelGuard(
         { event, execute },
         async (executeOverride) =>
-          await deleteMethod({ id: message.id, execute: executeOverride }),
+          await deleteMethod({
+            id: message.id,
+            deleteForMe: deleted_for_me,
+            execute: executeOverride,
+          }),
       );
     }
 
