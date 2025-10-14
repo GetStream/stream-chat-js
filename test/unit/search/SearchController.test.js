@@ -11,6 +11,8 @@ import { generateUser } from '../test-utils/generateUser';
 import { generateChannel } from '../test-utils/generateChannel';
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { ErrorFromResponse } from '../../../src';
+import { APIErrorCodes } from '../../../src/errors';
 
 describe('SearchController', () => {
 	let searchController;
@@ -423,7 +425,7 @@ describe('BaseSearchSource and implementations', () => {
 				expect(searchSource.hasNext).toBe(true);
 			});
 
-			it('terminates pagination on fatal error', async () => {
+			it('terminates pagination on non-retryable error', async () => {
 				searchSource.pageSize = 1;
 				searchSource.state.partialNext({
 					items: [],
@@ -431,8 +433,13 @@ describe('BaseSearchSource and implementations', () => {
 					searchQuery: 'test',
 				});
 
-				vi.spyOn(searchSource, 'query').mockRejectedValue(new Error('anything'));
-				vi.spyOn(searchSource, 'isFatalError').mockReturnValue(true);
+				vi.spyOn(searchSource, 'query').mockRejectedValue(
+					new ErrorFromResponse('anything', {
+						code: APIErrorCodes[4],
+						response: {},
+						status: 400,
+					}),
+				);
 
 				await searchSource.executeQuery();
 				expect(searchSource.items).toStrictEqual([]);

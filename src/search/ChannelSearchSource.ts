@@ -3,12 +3,7 @@ import type { FilterBuilderOptions } from '../pagination';
 import { FilterBuilder } from '../pagination';
 import type { Channel } from '../channel';
 import type { StreamChat } from '../client';
-import type {
-  APIErrorResponse,
-  ChannelFilters,
-  ChannelOptions,
-  ChannelSort,
-} from '../types';
+import type { ChannelFilters, ChannelOptions, ChannelSort } from '../types';
 import type { SearchSourceOptions } from './types';
 
 type CustomContext = Record<string, unknown>;
@@ -75,20 +70,4 @@ export class ChannelSearchSource<
   protected filterQueryResults(items: Channel[]) {
     return items;
   }
-
-  protected isFatalError = (error: Error) => {
-    // unwrapping error message that has been wrapped
-    // 1. server-side once - /.*failed with error: "(.*)"/
-    // 2. client-side second time - StreamChat error code \d+:
-    const originalErrorString = error.message.match(
-      /StreamChat error code \d+: .*failed with error: "(.*)"/,
-    )?.[1];
-    if (!originalErrorString) return false;
-    try {
-      const originalError = JSON.parse(originalErrorString) as APIErrorResponse;
-      return /field is empty or contains invalid characters/.test(originalError.message);
-    } catch (e) {
-      return false;
-    }
-  };
 }

@@ -6,6 +6,8 @@ import type {
   SearchSourceState,
   SearchSourceType,
 } from './types';
+import type { APIError } from '../errors';
+import { isAPIError, isErrorRetryable } from '../errors';
 
 export type DebounceOptions = {
   debounceMs: number;
@@ -67,8 +69,6 @@ abstract class BaseSearchSourceBase<T> implements ISearchSource<T> {
     this.pageSize = pageSize;
     this.state = new StateStore<SearchSourceState<T>>(this.initialState);
   }
-
-  protected abstract isFatalError(error: Error): boolean;
 
   get lastQueryError() {
     return this.state.getLatestValue().lastQueryError;
@@ -219,9 +219,6 @@ export abstract class BaseSearchSource<T>
 
   protected abstract filterQueryResults(items: T[]): T[] | Promise<T[]>;
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  protected isFatalError = (e: Error) => false;
-
   setDebounceOptions = ({ debounceMs }: DebounceOptions) => {
     this.searchDebounced = debounce(this.executeQuery.bind(this), debounceMs);
   };
@@ -242,7 +239,7 @@ export abstract class BaseSearchSource<T>
       stateUpdate.items = await this.filterQueryResults(items);
     } catch (e) {
       stateUpdate.lastQueryError = e as Error;
-      if (this.isFatalError(e as Error)) {
+      if (isAPIError(e as Error) && !isErrorRetryable(e as APIError)) {
         stateUpdate.hasNext = false;
       }
     } finally {
@@ -273,10 +270,6 @@ export abstract class BaseSearchSourceSync<T>
 
   protected abstract filterQueryResults(items: T[]): T[];
 
-  /** Signals that with the current search query string it is not possible to perform further requests. */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  protected isFatalError = (e: Error) => false;
-
   setDebounceOptions = ({ debounceMs }: DebounceOptions) => {
     this.searchDebounced = debounce(this.executeQuery.bind(this), debounceMs);
   };
@@ -297,7 +290,7 @@ export abstract class BaseSearchSourceSync<T>
       stateUpdate.items = this.filterQueryResults(items);
     } catch (e) {
       stateUpdate.lastQueryError = e as Error;
-      if (this.isFatalError(e as Error)) {
+      if (isAPIError(e as Error) && !isErrorRetryable(e as APIError)) {
         stateUpdate.hasNext = false;
       }
     } finally {
