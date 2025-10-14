@@ -184,4 +184,34 @@ describe('ChannelSearchSource', () => {
       context: { searchQuery: 'no-user' },
     });
   });
+
+  describe('method isFatalError', () => {
+    it('considers fatal an error matching syntax /StreamChat error code \\d+: .*failed with error: "(.*)"/', () => {
+      const message =
+        'StreamChat error code 4: QueryChannels failed with error: "{"code":4,"message":"$autocomplete field is empty or contains invalid characters. Please provide a valid string to autocomplete","StatusCode":400,"duration":"","more_info":"","details":[]}"';
+      // @ts-expect-error accessing protected property
+      expect(searchSource.isFatalError(new Error(message))).toBe(true);
+    });
+
+    it('considers non-fatal an error not matching syntax /StreamChat error code \\d+: .*failed with error: "(.*)"/', () => {
+      const message =
+        'StreamChat error code: QueryChannels failed with error: "{"code":4,"message":"$autocomplete field is empty or contains invalid characters. Please provide a valid string to autocomplete","StatusCode":400,"duration":"","more_info":"","details":[]}"';
+      // @ts-expect-error accessing protected property
+      expect(searchSource.isFatalError(new Error(message))).toBe(false);
+    });
+
+    it('considers non-fatal an error with malformed JSON in the error message', () => {
+      const message =
+        'QueryChannels failed with error: "{code":4,"message":"$autocomplete field is empty or contains invalid characters. Please provide a valid string to autocomplete","StatusCode":400,"duration":"","more_info":"","details":[]}"';
+      // @ts-expect-error accessing protected property
+      expect(searchSource.isFatalError(new Error(message))).toBe(false);
+    });
+
+    it('considers non-fatal an error not containing "field is empty or contains invalid characters"', () => {
+      const message =
+        'StreamChat error code 4: QueryChannels failed with error: "{"code":4,"message":"$autocomplete field is empty or xx invalid characters. Please provide a valid string to autocomplete","StatusCode":400,"duration":"","more_info":"","details":[]}"';
+      // @ts-expect-error accessing protected property
+      expect(searchSource.isFatalError(new Error(message))).toBe(false);
+    });
+  });
 });
