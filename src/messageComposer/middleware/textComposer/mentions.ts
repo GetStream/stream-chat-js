@@ -111,6 +111,14 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
     return countLoadedMembers < MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY;
   }
 
+  toUserSuggestion = (user: UserResponse): UserSuggestion => ({
+    ...user,
+    ...getTokenizedSuggestionDisplayName({
+      displayName: user.name || user.id,
+      searchToken: this.searchQuery,
+    }),
+  });
+
   getStateBeforeFirstQuery(newSearchString: string) {
     const newState = super.getStateBeforeFirstQuery(newSearchString);
     const { items } = this.state.getLatestValue();
@@ -255,16 +263,7 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
     }
 
     return {
-      items: users.map(
-        (user) =>
-          ({
-            ...user,
-            ...getTokenizedSuggestionDisplayName({
-              displayName: user.name || user.id,
-              searchToken: this.searchQuery,
-            }),
-          }) as UserSuggestion,
-      ),
+      items: users.map(this.toUserSuggestion),
     };
   }
 
