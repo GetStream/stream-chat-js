@@ -14,7 +14,7 @@ import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewa
 
 export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion> {
   readonly type = 'commands';
-  private channel: Channel;
+  protected channel: Channel;
 
   constructor(channel: Channel, options?: SearchSourceOptions) {
     super(options);

@@ -84,8 +84,8 @@ export type MentionsSearchSourceOptions = SearchSourceOptions & {
 
 export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
   readonly type = 'mentions';
-  private client: StreamChat;
-  private channel: Channel;
+  protected client: StreamChat;
+  protected channel: Channel;
   userFilters: UserFilters | undefined;
   memberFilters: MemberFilters | undefined;
   userSort: UserSort | undefined;
