@@ -152,6 +152,15 @@ export class ChannelState {
     );
   }
 
+  pruneOldest(maxMessages: number) {
+    const currentIndex = this.messageSets.findIndex((s) => s.isCurrent);
+    if (this.messageSets[currentIndex].isLatest) {
+      const newMessages = this.messageSets[currentIndex].messages;
+      this.messageSets[currentIndex].messages = newMessages.slice(-maxMessages);
+      this.messageSets[currentIndex].pagination.hasPrev = true;
+    }
+  }
+
   /**
    * addMessageSorted - Add a message to the state
    *
@@ -821,7 +830,7 @@ export class ChannelState {
         messages: [],
         isLatest: true,
         isCurrent: true,
-        pagination: DEFAULT_MESSAGE_SET_PAGINATION,
+        pagination: { ...DEFAULT_MESSAGE_SET_PAGINATION },
       },
     ];
   }
@@ -1017,7 +1026,7 @@ export class ChannelState {
                 messages: [],
                 isCurrent: false,
                 isLatest: false,
-                pagination: DEFAULT_MESSAGE_SET_PAGINATION,
+                pagination: { ...DEFAULT_MESSAGE_SET_PAGINATION },
               });
               targetMessageSetIndex = this.messageSets.length - 1;
             } else {
@@ -1026,7 +1035,7 @@ export class ChannelState {
                 messages: [],
                 isCurrent: false,
                 isLatest,
-                pagination: DEFAULT_MESSAGE_SET_PAGINATION, // fixme: it is problematic decide about pagination without having data
+                pagination: { ...DEFAULT_MESSAGE_SET_PAGINATION }, // fixme: it is problematic decide about pagination without having data
               });
               if (isLatest) {
                 this.messageSets.slice(1).forEach((set) => {
