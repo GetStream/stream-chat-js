@@ -1,3 +1,15 @@
+## [9.23.0](https://github.com/GetStream/stream-chat-js/compare/v9.22.1...v9.23.0) (2025-10-15)
+
+### Features
+
+* add an api to prune messages from the end ([#1635](https://github.com/GetStream/stream-chat-js/issues/1635)) ([137dca6](https://github.com/GetStream/stream-chat-js/commit/137dca659868d8355c1ffa7571bd2967c6cb13b4))
+* add MentionsSearchSource.toUserSuggestion method ([#1637](https://github.com/GetStream/stream-chat-js/issues/1637)) ([e5e0dbf](https://github.com/GetStream/stream-chat-js/commit/e5e0dbf113e2dca238df3f9150212bb98dcd5639))
+* add offline support for delete message for me feature ([#1633](https://github.com/GetStream/stream-chat-js/issues/1633)) ([0ded575](https://github.com/GetStream/stream-chat-js/commit/0ded575a78ad4dc860ccd5b8e33dcaec19c837a8))
+
+### Refactors
+
+* make channel and client protected in CommandSearchSource and MentionsSearchSource ([#1636](https://github.com/GetStream/stream-chat-js/issues/1636)) ([afe749d](https://github.com/GetStream/stream-chat-js/commit/afe749df0dde35b1077a5a59c272a5c857a3825b))
+
 ## [9.22.1](https://github.com/GetStream/stream-chat-js/compare/v9.22.0...v9.22.1) (2025-10-10)
 
 ### Bug Fixes
