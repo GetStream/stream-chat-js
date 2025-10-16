@@ -10,6 +10,8 @@ import { generateUUIDv4 as uuidv4 } from '../../src/utils';
 
 import { vi, describe, beforeEach, afterEach, it, expect } from 'vitest';
 
+const toISOString = (timestampMs) => new Date(timestampMs).toISOString();
+
 describe('ChannelState addMessagesSorted', function () {
 	it('empty state add single messages', async function () {
 		const state = new ChannelState();
@@ -219,12 +221,15 @@ describe('ChannelState addMessagesSorted', function () {
 	it('should add messages to new message set', () => {
 		const state = new ChannelState();
 		state.addMessagesSorted([
-			generateMsg({ id: '12' }),
-			generateMsg({ id: '13' }),
-			generateMsg({ id: '14' }),
+			generateMsg({ id: '12', date: toISOString(100) }),
+			generateMsg({ id: '13', date: toISOString(200) }),
+			generateMsg({ id: '14', date: toISOString(300) }),
 		]);
 		state.addMessagesSorted(
-			[generateMsg({ id: '0' }), generateMsg({ id: '1' })],
+			[
+				generateMsg({ id: '0', date: toISOString(1000) }),
+				generateMsg({ id: '1', date: toISOString(1100) }),
+			],
 			false,
 			false,
 			true,
@@ -235,9 +240,13 @@ describe('ChannelState addMessagesSorted', function () {
 		expect(state.messages[0].id).to.be.equal('12');
 		expect(state.messages[1].id).to.be.equal('13');
 		expect(state.messages[2].id).to.be.equal('14');
-		expect(state.messageSets[1].messages.length).to.be.equal(2);
-		expect(state.messageSets[1].messages[0].id).to.be.equal('0');
-		expect(state.messageSets[1].messages[1].id).to.be.equal('1');
+		// set with ids 0,1 is added at the beginning as the newest set is inserted earlier
+		expect(state.messageSets[0].messages.map((m) => m.id)).toStrictEqual(['0', '1']);
+		expect(state.messageSets[1].messages.map((m) => m.id)).toStrictEqual([
+			'12',
+			'13',
+			'14',
+		]);
 	});
 
 	it('should add messages to current message set', () => {
@@ -276,17 +285,28 @@ describe('ChannelState addMessagesSorted', function () {
 		expect(state.latestMessages[2].id).to.be.equal('14');
 	});
 
-	it(`should add messages to latest message set when it's not currently active`, () => {
+	it('adds message page sorted', () => {
 		const state = new ChannelState();
+
+		// load first page
 		state.addMessagesSorted(
-			[generateMsg({ id: '12' }), generateMsg({ id: '13' }), generateMsg({ id: '14' })],
+			[
+				generateMsg({ id: '12', date: toISOString(1200) }),
+				generateMsg({ id: '13', date: toISOString(1300) }),
+				generateMsg({ id: '14', date: toISOString(1400) }),
+			],
 			false,
 			false,
 			true,
 			'latest',
 		);
+
+		// jump to a start
 		state.addMessagesSorted(
-			[generateMsg({ id: '0' }), generateMsg({ id: '1' })],
+			[
+				generateMsg({ id: '1', date: toISOString(100) }),
+				generateMsg({ id: '2', date: toISOString(200) }),
+			],
 			false,
 			false,
 			true,
@@ -294,10 +314,228 @@ describe('ChannelState addMessagesSorted', function () {
 		);
 		state.messageSets[0].isCurrent = false;
 		state.messageSets[1].isCurrent = true;
-		state.addMessagesSorted([generateMsg({ id: '15' })], false, false, true, 'latest');
+		// jump to a end
 
-		expect(state.latestMessages.length).to.be.equal(4);
-		expect(state.latestMessages[3].id).to.be.equal('15');
+		state.addMessagesSorted(
+			[generateMsg({ id: '10', date: toISOString(1000) })],
+			false,
+			false,
+			true,
+			'new',
+		);
+
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '8', date: toISOString(800) }),
+				generateMsg({ id: '9', date: toISOString(900) }),
+			],
+			false,
+			false,
+			true,
+			'new',
+		);
+
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '4', date: toISOString(400) }),
+				generateMsg({ id: '5', date: toISOString(500) }),
+				generateMsg({ id: '6', date: toISOString(600) }),
+			],
+			false,
+			false,
+			true,
+			'new',
+		);
+
+		state.addMessagesSorted(
+			[generateMsg({ id: '1500', date: toISOString(1500) })],
+			false,
+			false,
+			true,
+			'new',
+		);
+
+		const toTimestamp = (msg) => new Date(msg.created_at).getTime();
+		expect(state.messageSets.length).to.eql(6);
+		expect(state.messageSets[0].messages.map(toTimestamp)).toStrictEqual([1500]);
+		expect(state.messageSets[1].messages.map(toTimestamp)).toStrictEqual([
+			1200, 1300, 1400,
+		]);
+		expect(state.messageSets[2].messages.map(toTimestamp)).toStrictEqual([1000]);
+		expect(state.messageSets[3].messages.map(toTimestamp)).toStrictEqual([800, 900]);
+		expect(state.messageSets[4].messages.map(toTimestamp)).toStrictEqual([400, 500, 600]);
+		expect(state.messageSets[5].messages.map(toTimestamp)).toStrictEqual([100, 200]);
+	});
+
+	it('inputs messages pertaining to different sets into corresponding message set and breaks the state', () => {
+		const state = new ChannelState();
+
+		// load first page
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '12', date: toISOString(1200) }),
+				generateMsg({ id: '14', date: toISOString(1400) }),
+			],
+			false,
+			false,
+			true,
+			'latest',
+		);
+
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '6', date: toISOString(600) }),
+				generateMsg({ id: '8', date: toISOString(800) }),
+			],
+			false,
+			false,
+			true,
+			'new',
+		);
+
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '1', date: toISOString(100) }),
+				generateMsg({ id: '3', date: toISOString(300) }),
+			],
+			false,
+			false,
+			true,
+			'new',
+		);
+
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '7', date: 700 }),
+				generateMsg({ id: '2', date: 200 }),
+				generateMsg({ id: '13', date: toISOString(1300) }),
+			],
+			false,
+			false,
+			true,
+			'new',
+		);
+
+		const toTimestamp = (msg) => new Date(msg.created_at).getTime();
+		expect(state.messageSets.length).to.eql(4);
+		expect(state.messageSets[0].messages.map(toTimestamp)).toStrictEqual([1200, 1400]);
+		expect(state.messageSets[1].messages.map(toTimestamp)).toStrictEqual([
+			200, 700, 1300,
+		]);
+		expect(state.messageSets[2].messages.map(toTimestamp)).toStrictEqual([600, 800]);
+		expect(state.messageSets[3].messages.map(toTimestamp)).toStrictEqual([100, 300]);
+	});
+
+	it(`should add messages to latest message set when it's not currently active`, () => {
+		const state = new ChannelState();
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '12', date: toISOString(1200) }),
+				generateMsg({ id: '13', date: toISOString(1300) }),
+				generateMsg({ id: '14', date: toISOString(1400) }),
+			],
+			false,
+			false,
+			true,
+			'latest',
+		);
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '1', date: toISOString(100) }),
+				generateMsg({ id: '2', date: toISOString(200) }),
+			],
+			false,
+			false,
+			true,
+			'new',
+		);
+		state.messageSets[0].isCurrent = false;
+		state.messageSets[1].isCurrent = true;
+		state.addMessagesSorted(
+			[generateMsg({ id: '15', date: toISOString(1500) })],
+			false,
+			false,
+			true,
+			'latest',
+		);
+
+		expect(state.latestMessages.map((m) => m.id)).toStrictEqual(['12', '13', '14', '15']);
+	});
+
+	it('adjusts the latest set flag according to actual message creation date', () => {
+		const state = new ChannelState();
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '1', date: toISOString(100) }),
+				generateMsg({ id: '2', date: toISOString(200) }),
+			],
+			false,
+			false,
+			true,
+			'latest',
+		);
+		expect(state.latestMessages.map((m) => m.id)).toStrictEqual(['1', '2']);
+
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '12', date: toISOString(1200) }),
+				generateMsg({ id: '13', date: toISOString(1300) }),
+				generateMsg({ id: '14', date: toISOString(1400) }),
+			],
+			false,
+			false,
+			true,
+			'new',
+		);
+		expect(state.latestMessages.map((m) => m.id)).toStrictEqual(['12', '13', '14']);
+		expect(state.messageSets.filter((s) => s.isLatest).length).toBe(1);
+	});
+
+	it("the messageSetToAddToIfDoesNotExist: 'latest' should be ignored if the messages do not belong to the latest set based on their creation timestamp", () => {
+		const state = new ChannelState();
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '12', date: toISOString(1200) }),
+				generateMsg({ id: '13', date: toISOString(1300) }),
+				generateMsg({ id: '14', date: toISOString(1400) }),
+			],
+			false,
+			false,
+			true,
+			'latest',
+		);
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '1', date: toISOString(100) }),
+				generateMsg({ id: '2', date: toISOString(200) }),
+			],
+			false,
+			false,
+			true,
+			'new',
+		);
+		expect(state.messageSets[0].isCurrent).toBeTruthy();
+		expect(state.messageSets[1].isCurrent).toBeFalsy();
+
+		state.addMessagesSorted(
+			[generateMsg({ id: '15', date: toISOString(150) })],
+			false,
+			false,
+			true,
+			'latest',
+		);
+
+		expect(state.messageSets[0].messages.map((m) => m.id)).toStrictEqual([
+			'12',
+			'13',
+			'14',
+		]);
+		expect(state.latestMessages.map((m) => m.id)).toStrictEqual(['12', '13', '14']);
+		expect(state.messageSets[1].messages.map((m) => m.id)).toStrictEqual([
+			'1',
+			'15',
+			'2',
+		]);
 	});
 
 	it(`shouldn't create new message set for thread replies`, () => {
@@ -407,19 +645,33 @@ describe('ChannelState addMessagesSorted', function () {
 	it(`should do nothing if message is not available locally`, () => {
 		const state = new ChannelState();
 		state.addMessagesSorted([
-			generateMsg({ id: '12' }),
-			generateMsg({ id: '13' }),
-			generateMsg({ id: '14' }),
+			generateMsg({ id: '12', date: toISOString(1200) }),
+			generateMsg({ id: '13', date: toISOString(1300) }),
+			generateMsg({ id: '14', date: toISOString(1400) }),
 		]);
-		state.addMessagesSorted([generateMsg({ id: '5' })], false, false, true, 'new');
 		state.addMessagesSorted(
-			[generateMsg({ id: '1' }), generateMsg({ id: '2' })],
+			[generateMsg({ id: '5', date: toISOString(500) })],
 			false,
 			false,
 			true,
 			'new',
 		);
-		state.addMessagesSorted([generateMsg({ id: '8' })], false, false, false);
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '1', date: toISOString(100) }),
+				generateMsg({ id: '2', date: toISOString(200) }),
+			],
+			false,
+			false,
+			true,
+			'new',
+		);
+		state.addMessagesSorted(
+			[generateMsg({ id: '8', date: toISOString(800) })],
+			false,
+			false,
+			false,
+		);
 
 		expect(state.latestMessages.length).to.be.equal(3);
 		expect(state.messages.length).to.be.equal(3);
@@ -501,18 +753,18 @@ describe('ChannelState addMessagesSorted', function () {
 		it('when new messages overlap with latest messages', () => {
 			const state = new ChannelState();
 			const overlap = [
-				generateMsg({ id: '11', date: '2020-01-01T00:00:10.001Z' }),
-				generateMsg({ id: '12', date: '2020-01-01T00:00:21.002Z' }),
-				generateMsg({ id: '13', date: '2020-01-01T00:00:24.003Z' }),
+				generateMsg({ id: '11', date: toISOString(1100) }),
+				generateMsg({ id: '12', date: toISOString(1200) }),
+				generateMsg({ id: '13', date: toISOString(1300) }),
 			];
 			const messages = [
 				...overlap,
-				generateMsg({ id: '14', date: '2020-01-01T00:00:33.000Z' }),
-				generateMsg({ id: '15', date: '2020-01-01T00:00:43.000Z' }),
+				generateMsg({ id: '14', date: toISOString(1400) }),
+				generateMsg({ id: '15', date: toISOString(1500) }),
 			];
 			state.addMessagesSorted(messages);
 			const newMessages = [
-				generateMsg({ id: '10', date: '2020-01-01T00:00:03.000Z' }),
+				generateMsg({ id: '10', date: toISOString(1000) }),
 				...overlap,
 			];
 			state.addMessagesSorted(newMessages, false, true, true, 'new');
@@ -559,39 +811,32 @@ describe('ChannelState addMessagesSorted', function () {
 
 		it('when new messages overlap with messages, but not current or latest messages', () => {
 			const state = new ChannelState();
-			const overlap = [generateMsg({ id: '11', date: '2020-01-01T00:00:10.001Z' })];
-			const latestMessages = [
-				generateMsg({ id: '20', date: '2020-01-01T00:10:10.001Z' }),
-			];
+			const overlap = [generateMsg({ id: '11', date: toISOString(1100) })];
+			const latestMessages = [generateMsg({ id: '20', date: toISOString(2000) })];
 			state.addMessagesSorted(latestMessages);
-			const currentMessages = [
-				generateMsg({ id: '8', date: '2020-01-01T00:00:03.001Z' }),
-			];
+			const currentMessages = [generateMsg({ id: '8', date: toISOString(800) })];
 			state.addMessagesSorted(currentMessages, false, true, true, 'new');
 			state.messageSets[0].isCurrent = false;
 			state.messageSets[1].isCurrent = true;
 			const otherMessages = [
-				generateMsg({ id: '10', date: '2020-01-01T00:00:09.001Z' }),
+				generateMsg({ id: '10', date: toISOString(1000) }),
 				...overlap,
 			];
 			state.addMessagesSorted(otherMessages, false, true, true, 'new');
 			const newMessages = [
 				...overlap,
-				generateMsg({ id: '12', date: '2020-01-01T00:00:11.001Z' }),
+				generateMsg({ id: '12', date: toISOString(1200) }),
 			];
 			state.addMessagesSorted(newMessages, false, true, true, 'new');
 
-			expect(state.latestMessages.length).to.be.equal(1);
-			expect(state.latestMessages[0].id).to.be.equal('20');
-			expect(state.messages.length).to.be.equal(1);
-			expect(state.messages[0].id).to.be.equal('8');
 			expect(state.messageSets.length).to.be.equal(3);
-			expect(state.messageSets[0].messages).to.be.equal(state.latestMessages);
-			expect(state.messageSets[1].messages).to.be.equal(state.messages);
-			expect(state.messageSets[2].messages.length).to.be.equal(3);
-			expect(state.messageSets[2].messages[0].id).to.be.equal('10');
-			expect(state.messageSets[2].messages[1].id).to.be.equal('11');
-			expect(state.messageSets[2].messages[2].id).to.be.equal('12');
+			expect(state.latestMessages.map(({ id }) => id)).toStrictEqual(['20']);
+			expect(state.messages.map(({ id }) => id)).toStrictEqual(['8']);
+			expect(state.messageSets.map((s) => s.messages.map(({ id }) => id))).toStrictEqual([
+				['20'],
+				['10', '11', '12'],
+				['8'],
+			]);
 		});
 
 		it('when current messages overlap with latest', () => {
@@ -662,6 +907,87 @@ describe('ChannelState addMessagesSorted', function () {
 				hasNext: false,
 			});
 		});
+	});
+});
+
+describe('ChannelState message pruning', () => {
+	let channelState;
+	let initialMessages = [];
+
+	beforeEach(() => {
+		channelState = new ChannelState();
+		initialMessages = Array.from({ length: 10 }, () =>
+			generateMsg({ date: toISOString(100) }),
+		);
+		channelState.addMessagesSorted(initialMessages);
+	});
+
+	it('should prune messages from the end when we are in the latest set', () => {
+		expect(channelState.messageSets.length).to.be.equal(1);
+		expect(channelState.messageSets[0].isLatest).to.be.equal(true);
+		expect(channelState.messageSets[0].isCurrent).to.be.equal(true);
+		expect(channelState.messages.length).to.be.equal(10);
+		expect(channelState.messagePagination.hasPrev).to.be.equal(false);
+
+		const previousHasNext = channelState.messagePagination.hasNext;
+
+		channelState.pruneOldest(5);
+
+		expect(channelState.messageSets.length).to.be.equal(1);
+		expect(channelState.messages.length).to.be.equal(5);
+		expect(channelState.messagePagination.hasPrev).to.be.equal(true);
+		expect(channelState.messagePagination.hasNext).to.be.equal(previousHasNext);
+	});
+
+	it('should do nothing if the current message set is not also the latest', () => {
+		expect(channelState.messageSets.length).to.be.equal(1);
+
+		channelState.messageSets[0].isLatest = false;
+
+		expect(channelState.messages.length).to.be.equal(10);
+		expect(channelState.messagePagination.hasPrev).to.be.equal(false);
+
+		channelState.pruneOldest(5);
+
+		expect(channelState.messages.length).to.be.equal(10);
+		expect(channelState.messagePagination.hasPrev).to.be.equal(false);
+	});
+
+	it('should prune the correct messageSet', () => {
+		channelState.addMessagesSorted(
+			Array.from({ length: 10 }, () => generateMsg({ date: toISOString(50) })),
+			false,
+			true,
+			true,
+			'new',
+		);
+
+		expect(channelState.messageSets.length).to.be.equal(2);
+
+		channelState.pruneOldest(5);
+
+		const currentMessageSet = channelState.messageSets.find((ms) => ms.isCurrent);
+		const otherMessageSet = channelState.messageSets.find((ms) => !ms.isCurrent);
+
+		expect(currentMessageSet.messages.length).to.be.equal(5);
+		expect(currentMessageSet.pagination.hasPrev).to.be.equal(true);
+		expect(channelState.messages).to.be.equal(currentMessageSet.messages);
+
+		expect(otherMessageSet.messages.length).to.be.equal(10);
+		expect(otherMessageSet.pagination.hasPrev).to.be.equal(false);
+	});
+
+	it('should correctly apply pruning', () => {
+		channelState.pruneOldest(5);
+
+		expect(channelState.messages.length).to.be.equal(5);
+		for (const message of initialMessages.slice(-5)) {
+			expect(channelState.messages.some((m) => m.id === message.id)).to.be.equal(true);
+		}
+
+		for (const message of initialMessages.slice(0, 5)) {
+			expect(channelState.messages.some((m) => m.id === message.id)).to.be.equal(false);
+		}
 	});
 });
 
@@ -1099,7 +1425,7 @@ describe('ChannelState clean', () => {
 			cid: channel.cid,
 			type: 'typing.start',
 			user: { id: 'other' },
-			received_at: new Date(Date.now() - 10000).toISOString(),
+			received_at: toISOString(Date.now() - 10000),
 		});
 		expect(channel.state.typing['other']).not.to.be.undefined;
 
@@ -1243,12 +1569,12 @@ describe('latestMessages', () => {
 	it('should return latest messages - if they are not the current message set', () => {
 		const state = new ChannelState();
 		const latestMessages = [
-			generateMsg({ id: '1' }),
-			generateMsg({ id: '2' }),
-			generateMsg({ id: '3' }),
+			generateMsg({ id: '2', date: toISOString(200) }),
+			generateMsg({ id: '3', date: toISOString(300) }),
+			generateMsg({ id: '4', date: toISOString(400) }),
 		];
 		state.addMessagesSorted(latestMessages);
-		const newMessages = [generateMsg({ id: '0' })];
+		const newMessages = [generateMsg({ id: '1', date: toISOString(100) })];
 		state.addMessagesSorted(newMessages, false, true, true, 'new');
 		state.messageSets[0].isCurrent = false;
 		state.messageSets[1].isCurrent = true;
@@ -1262,16 +1588,16 @@ describe('latestMessages', () => {
 	it('should return latest messages - if they are not the current message set and new messages received', () => {
 		const state = new ChannelState();
 		const latestMessages = [
-			generateMsg({ id: '1' }),
-			generateMsg({ id: '2' }),
-			generateMsg({ id: '3' }),
+			generateMsg({ id: '2', date: toISOString(200) }),
+			generateMsg({ id: '3', date: toISOString(300) }),
+			generateMsg({ id: '4', date: toISOString(400) }),
 		];
 		state.addMessagesSorted(latestMessages);
-		const newMessages = [generateMsg({ id: '0' })];
+		const newMessages = [generateMsg({ id: '1', date: toISOString(100) })];
 		state.addMessagesSorted(newMessages, false, true, true, 'new');
 		state.messageSets[0].isCurrent = false;
 		state.messageSets[1].isCurrent = true;
-		const latestMessage = generateMsg({ id: '4' });
+		const latestMessage = generateMsg({ id: '5', date: toISOString(500) });
 		state.addMessagesSorted([latestMessage], false, true, true, 'latest');
 
 		expect(state.latestMessages.length).to.be.equal(latestMessages.length + 1);
@@ -1307,8 +1633,20 @@ describe('loadMessageIntoState', () => {
 
 	it('should switch message sets if message is available locally, but in a different set', async () => {
 		const state = new ChannelState();
-		state.addMessagesSorted([generateMsg({ id: '8' })], false, true, true, 'latest');
-		state.addMessagesSorted([generateMsg({ id: '5' })], false, true, true, 'new');
+		state.addMessagesSorted(
+			[generateMsg({ id: '8', date: toISOString(800) })],
+			false,
+			true,
+			true,
+			'latest',
+		);
+		state.addMessagesSorted(
+			[generateMsg({ id: '5', date: toISOString(500) })],
+			false,
+			true,
+			true,
+			'new',
+		);
 		await state.loadMessageIntoState('5');
 
 		expect(state.messageSets[0].isCurrent).to.be.equal(false);
@@ -1317,8 +1655,20 @@ describe('loadMessageIntoState', () => {
 
 	it('should switch to latest message set', async () => {
 		const state = new ChannelState();
-		state.addMessagesSorted([generateMsg({ id: '8' })], false, true, true, 'latest');
-		state.addMessagesSorted([generateMsg({ id: '5' })], false, true, true, 'new');
+		state.addMessagesSorted(
+			[generateMsg({ id: '8', date: toISOString(800) })],
+			false,
+			true,
+			true,
+			'latest',
+		);
+		state.addMessagesSorted(
+			[generateMsg({ id: '5', date: toISOString(500) })],
+			false,
+			true,
+			true,
+			'new',
+		);
 		state.messageSets[0].isCurrent = false;
 		state.messageSets[1].isCurrent = true;
 		await state.loadMessageIntoState('latest');
@@ -1328,8 +1678,11 @@ describe('loadMessageIntoState', () => {
 
 	it('should load message from backend and switch to the new message set', async () => {
 		const state = new ChannelState();
-		state.addMessagesSorted([generateMsg({ id: '5' }), generateMsg({ id: '6' })]);
-		const newMessages = [generateMsg({ id: '8' })];
+		state.addMessagesSorted([
+			generateMsg({ id: '5', date: toISOString(500) }),
+			generateMsg({ id: '6', date: toISOString(600) }),
+		]);
+		const newMessages = [generateMsg({ id: '8', date: toISOString(800) })];
 		state._channel = {
 			query: () => {
 				state.addMessagesSorted(newMessages, false, true, true, 'new');
@@ -1344,8 +1697,8 @@ describe('loadMessageIntoState', () => {
 	describe('if message is a thread reply', () => {
 		it('should do nothing if parent message and reply are available locally in the current set', async () => {
 			const state = new ChannelState();
-			const parentMessage = generateMsg({ id: '5' });
-			const reply = generateMsg({ id: '8', parent_id: '5' });
+			const parentMessage = generateMsg({ id: '5', date: toISOString(500) });
+			const reply = generateMsg({ id: '8', date: toISOString(800), parent_id: '5' });
 			state.addMessagesSorted([parentMessage]);
 			state.addMessagesSorted([reply]);
 
@@ -1357,8 +1710,8 @@ describe('loadMessageIntoState', () => {
 
 		it('should change message set if parent message and reply are available locally', async () => {
 			const state = new ChannelState();
-			const parentMessage = generateMsg({ id: '5' });
-			const reply = generateMsg({ id: '8', parent_id: '5' });
+			const parentMessage = generateMsg({ id: '5', date: toISOString(500) });
+			const reply = generateMsg({ id: '8', date: toISOString(800), parent_id: '5' });
 			state.addMessagesSorted([parentMessage]);
 			state.addMessagesSorted([reply]);
 			const otherMessages = [generateMsg(), generateMsg()];
@@ -1389,8 +1742,8 @@ describe('loadMessageIntoState', () => {
 
 		it('should load parent message and reply from backend, and switch to new message set', async () => {
 			const state = new ChannelState();
-			const parentMessage = generateMsg({ id: '5' });
-			const reply = generateMsg({ id: '8', parent_id: '5' });
+			const parentMessage = generateMsg({ id: '5', date: toISOString(500) });
+			const reply = generateMsg({ id: '8', date: toISOString(800), parent_id: '5' });
 			state._channel = {
 				getReplies: () => state.addMessagesSorted([reply], false, false, true, 'current'),
 				query: () => state.addMessagesSorted([parentMessage], false, true, true, 'new'),
@@ -1461,5 +1814,100 @@ describe('findMessage', () => {
 
 			expect(state.findMessage(messageId, `not${parentMessageId}`)).to.eql(undefined);
 		});
+	});
+});
+
+describe('find message by timestamp', () => {
+	it('finds the message with matching timestamp', () => {
+		const state = new ChannelState();
+		const expectedFoundMsg = generateMsg({
+			id: '2',
+			created_at: toISOString(200),
+		});
+		state.addMessagesSorted([
+			generateMsg({ id: '12', created_at: toISOString(1200) }),
+			generateMsg({ id: '13', created_at: toISOString(1300) }),
+			generateMsg({ id: '14', created_at: toISOString(1400) }),
+		]);
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '1', created_at: toISOString(100) }),
+				expectedFoundMsg,
+				generateMsg({ id: '3', created_at: toISOString(300) }),
+				generateMsg({ id: '4', created_at: toISOString(400) }),
+			],
+			false,
+			false,
+			true,
+			'new',
+		);
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '6', created_at: toISOString(600) }),
+				generateMsg({ id: '7', created_at: toISOString(700) }),
+			],
+			false,
+			false,
+			true,
+			'new',
+		);
+
+		const foundMessage = state.findMessageByTimestamp(
+			new Date(expectedFoundMsg.created_at).getTime(),
+		);
+		expect(foundMessage.id).toBe(expectedFoundMsg.id);
+	});
+
+	it('finds the first message if multiple messages with the same timestamp', () => {
+		const state = new ChannelState();
+		const expectedFoundMessage = generateMsg({
+			id: '2',
+			created_at: toISOString(200),
+		});
+		const msgWithSameTimestamp = { ...expectedFoundMessage, id: '3' };
+		state.addMessagesSorted([
+			generateMsg({ id: '12', created_at: toISOString(1200) }),
+			generateMsg({ id: '13', created_at: toISOString(1300) }),
+			generateMsg({ id: '14', created_at: toISOString(1400) }),
+		]);
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '1', created_at: toISOString(100) }),
+				expectedFoundMessage,
+				msgWithSameTimestamp,
+				generateMsg({ id: '3.5', created_at: toISOString(300) }),
+				generateMsg({ id: '4', created_at: toISOString(400) }),
+			],
+			false,
+			false,
+			true,
+			'new',
+		);
+		state.addMessagesSorted(
+			[
+				generateMsg({ id: '6', created_at: toISOString(600) }),
+				generateMsg({ id: '7', created_at: toISOString(700) }),
+			],
+			false,
+			false,
+			true,
+			'new',
+		);
+
+		const foundMessage = state.findMessageByTimestamp(
+			new Date(msgWithSameTimestamp.created_at).getTime(),
+		);
+		expect(foundMessage.id).toBe(expectedFoundMessage.id);
+	});
+
+	it('returns null if the message is not found', () => {
+		const state = new ChannelState();
+		state.addMessagesSorted([
+			generateMsg({ id: '12', created_at: toISOString(1200) }),
+			generateMsg({ id: '13', created_at: toISOString(1300) }),
+			generateMsg({ id: '14', created_at: toISOString(1400) }),
+		]);
+		const foundMessage = state.findMessageByTimestamp(200);
+		expect(foundMessage).toBeNull();
 	});
 });

@@ -492,6 +492,19 @@ describe('TextComposer', () => {
       type: 'regular',
       text: 'Hello world',
     };
+
+    it('normalizes the Windows newline sequence "\\r\\n" to "\\n"', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
+      await textComposer.insertText({
+        text: ' a\r\nb\r\n',
+        selection: { start: 5, end: 5 },
+      });
+      expect(textComposer.text).toBe('Hello a\nb\n world');
+      expect(textComposer.selection).toStrictEqual({ start: 10, end: 10 });
+    });
+
     it('should insert text at the specified selection', async () => {
       const {
         messageComposer: { textComposer },

@@ -84,8 +84,8 @@ export type MentionsSearchSourceOptions = SearchSourceOptions & {
 
 export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
   readonly type = 'mentions';
-  private client: StreamChat;
-  private channel: Channel;
+  protected client: StreamChat;
+  protected channel: Channel;
   userFilters: UserFilters | undefined;
   memberFilters: MemberFilters | undefined;
   userSort: UserSort | undefined;
@@ -110,6 +110,14 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
     const countLoadedMembers = Object.keys(this.channel.state.members || {}).length;
     return countLoadedMembers < MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY;
   }
+
+  toUserSuggestion = (user: UserResponse): UserSuggestion => ({
+    ...user,
+    ...getTokenizedSuggestionDisplayName({
+      displayName: user.name || user.id,
+      searchToken: this.searchQuery,
+    }),
+  });
 
   getStateBeforeFirstQuery(newSearchString: string) {
     const newState = super.getStateBeforeFirstQuery(newSearchString);
@@ -255,16 +263,7 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
     }
 
     return {
-      items: users.map(
-        (user) =>
-          ({
-            ...user,
-            ...getTokenizedSuggestionDisplayName({
-              displayName: user.name || user.id,
-              searchToken: this.searchQuery,
-            }),
-          }) as UserSuggestion,
-      ),
+      items: users.map(this.toUserSuggestion),
     };
   }
 

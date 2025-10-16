@@ -31,6 +31,38 @@ type ChannelReadStatus = Record<
   }
 >;
 
+const messageSetBounds = (
+  a: LocalMessage[] | MessageResponse[],
+  b: LocalMessage[] | MessageResponse[],
+) => ({
+  newestMessageA: new Date(a[0]?.created_at ?? 0),
+  oldestMessageA: new Date(a.slice(-1)[0]?.created_at ?? 0),
+  newestMessageB: new Date(b[0]?.created_at ?? 0),
+  oldestMessageB: new Date(b.slice(-1)[0]?.created_at ?? 0),
+});
+
+const aContainsOrEqualsB = (a: LocalMessage[], b: LocalMessage[]) => {
+  const { newestMessageA, newestMessageB, oldestMessageA, oldestMessageB } =
+    messageSetBounds(a, b);
+  return newestMessageA >= newestMessageB && oldestMessageB >= oldestMessageA;
+};
+
+const aOverlapsB = (a: LocalMessage[], b: LocalMessage[]) => {
+  const { newestMessageA, newestMessageB, oldestMessageA, oldestMessageB } =
+    messageSetBounds(a, b);
+  return (
+    oldestMessageA < oldestMessageB &&
+    oldestMessageB < newestMessageA &&
+    newestMessageA < newestMessageB
+  );
+};
+
+const messageSetsOverlapByTimestamp = (a: LocalMessage[], b: LocalMessage[]) =>
+  aContainsOrEqualsB(a, b) ||
+  aContainsOrEqualsB(b, a) ||
+  aOverlapsB(a, b) ||
+  aOverlapsB(b, a);
+
 /**
  * ChannelState - A container class for the channel state.
  */
@@ -118,6 +150,15 @@ export class ChannelState {
       this.messageSets.find((s) => s.isCurrent)?.pagination ||
       DEFAULT_MESSAGE_SET_PAGINATION
     );
+  }
+
+  pruneOldest(maxMessages: number) {
+    const currentIndex = this.messageSets.findIndex((s) => s.isCurrent);
+    if (this.messageSets[currentIndex].isLatest) {
+      const newMessages = this.messageSets[currentIndex].messages;
+      this.messageSets[currentIndex].messages = newMessages.slice(-maxMessages);
+      this.messageSets[currentIndex].pagination.hasPrev = true;
+    }
   }
 
   /**
@@ -789,7 +830,7 @@ export class ChannelState {
         messages: [],
         isLatest: true,
         isCurrent: true,
-        pagination: DEFAULT_MESSAGE_SET_PAGINATION,
+        pagination: { ...DEFAULT_MESSAGE_SET_PAGINATION },
       },
     ];
   }
@@ -867,6 +908,41 @@ export class ChannelState {
     return this.messageSets[messageSetIndex].messages.find((m) => m.id === messageId);
   }
 
+  findMessageByTimestamp(
+    timestampMs: number,
+    parentMessageId?: string,
+    exactTsMatch: boolean = false,
+  ): LocalMessage | null {
+    if (
+      (parentMessageId && !this.threads[parentMessageId]) ||
+      this.messageSets.length === 0
+    )
+      return null;
+    const setIndex = this.findMessageSetByOldestTimestamp(timestampMs);
+    const targetMsgSet = this.messageSets[setIndex]?.messages;
+    if (!targetMsgSet?.length) return null;
+    const firstMsgTimestamp = targetMsgSet[0].created_at.getTime();
+    const lastMsgTimestamp = targetMsgSet.slice(-1)[0].created_at.getTime();
+    const isOutOfBound =
+      timestampMs < firstMsgTimestamp || lastMsgTimestamp < timestampMs;
+    if (isOutOfBound && exactTsMatch) return null;
+
+    let msgIndex = 0,
+      hi = targetMsgSet.length - 1;
+    while (msgIndex < hi) {
+      const mid = (msgIndex + hi) >>> 1;
+      if (timestampMs <= targetMsgSet[mid].created_at.getTime()) hi = mid;
+      else msgIndex = mid + 1;
+    }
+
+    const foundMessage = targetMsgSet[msgIndex];
+    return !exactTsMatch
+      ? foundMessage
+      : foundMessage.created_at.getTime() === timestampMs
+        ? foundMessage
+        : null;
+  }
+
   private switchToMessageSet(index: number) {
     const currentMessages = this.messageSets.find((s) => s.isCurrent);
     if (!currentMessages) {
@@ -889,6 +965,26 @@ export class ChannelState {
     );
   }
 
+  /**
+   * Identifies the set index into which a message set would pertain if its first item's creation date corresponded to oldestTimestampMs.
+   * @param oldestTimestampMs
+   */
+  private findMessageSetByOldestTimestamp = (oldestTimestampMs: number): number => {
+    let lo = 0,
+      hi = this.messageSets.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      const msgSet = this.messageSets[mid];
+      // should not happen
+      if (msgSet.messages.length === 0) return -1;
+
+      const oldestMessageTimestampInSet = msgSet.messages[0].created_at.getTime();
+      if (oldestMessageTimestampInSet <= oldestTimestampMs) hi = mid;
+      else lo = mid + 1;
+    }
+    return lo;
+  };
+
   private findTargetMessageSet(
     newMessages: (MessageResponse | LocalMessage)[],
     addIfDoesNotExist = true,
@@ -896,39 +992,85 @@ export class ChannelState {
   ) {
     let messagesToAdd: (MessageResponse | LocalMessage)[] = newMessages;
     let targetMessageSetIndex!: number;
+    if (newMessages.length === 0)
+      return { targetMessageSetIndex: 0, messagesToAdd: newMessages };
     if (addIfDoesNotExist) {
-      const overlappingMessageSetIndices = this.messageSets
+      const overlappingMessageSetIndicesByMsgIds = this.messageSets
         .map((_, i) => i)
         .filter((i) =>
           this.areMessageSetsOverlap(this.messageSets[i].messages, newMessages),
         );
+      const overlappingMessageSetIndicesByTimestamp = this.messageSets
+        .map((_, i) => i)
+        .filter((i) =>
+          messageSetsOverlapByTimestamp(
+            this.messageSets[i].messages,
+            newMessages.map(formatMessage),
+          ),
+        );
       switch (messageSetToAddToIfDoesNotExist) {
         case 'new':
-          if (overlappingMessageSetIndices.length > 0) {
-            targetMessageSetIndex = overlappingMessageSetIndices[0];
+          if (overlappingMessageSetIndicesByMsgIds.length > 0) {
+            targetMessageSetIndex = overlappingMessageSetIndicesByMsgIds[0];
+          } else if (overlappingMessageSetIndicesByTimestamp.length > 0) {
+            targetMessageSetIndex = overlappingMessageSetIndicesByTimestamp[0];
             // No new message set is created if newMessages only contains thread replies
           } else if (newMessages.some((m) => !m.parent_id)) {
-            this.messageSets.push({
-              messages: [],
-              isCurrent: false,
-              isLatest: false,
-              pagination: DEFAULT_MESSAGE_SET_PAGINATION,
-            });
-            targetMessageSetIndex = this.messageSets.length - 1;
+            // find the index to insert the set
+            const setIngestIndex = this.findMessageSetByOldestTimestamp(
+              // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+              new Date(newMessages[0].created_at!).getTime(),
+            );
+            if (setIngestIndex === -1) {
+              this.messageSets.push({
+                messages: [],
+                isCurrent: false,
+                isLatest: false,
+                pagination: { ...DEFAULT_MESSAGE_SET_PAGINATION },
+              });
+              targetMessageSetIndex = this.messageSets.length - 1;
+            } else {
+              const isLatest = setIngestIndex === 0;
+              this.messageSets.splice(setIngestIndex, 0, {
+                messages: [],
+                isCurrent: false,
+                isLatest,
+                pagination: { ...DEFAULT_MESSAGE_SET_PAGINATION }, // fixme: it is problematic decide about pagination without having data
+              });
+              if (isLatest) {
+                this.messageSets.slice(1).forEach((set) => {
+                  set.isLatest = false;
+                });
+              }
+              targetMessageSetIndex = setIngestIndex;
+            }
           }
           break;
         case 'current':
-          targetMessageSetIndex = this.messageSets.findIndex((s) => s.isCurrent);
+          // determine if there is another set to which it would match taken into consideration the timestamp
+          if (overlappingMessageSetIndicesByTimestamp.length > 0) {
+            targetMessageSetIndex = overlappingMessageSetIndicesByTimestamp[0];
+          } else {
+            targetMessageSetIndex = this.messageSets.findIndex((s) => s.isCurrent);
+          }
           break;
         case 'latest':
-          targetMessageSetIndex = this.messageSets.findIndex((s) => s.isLatest);
+          // determine if there is another set to which it would match taken into consideration the timestamp
+          if (overlappingMessageSetIndicesByTimestamp.length > 0) {
+            targetMessageSetIndex = overlappingMessageSetIndicesByTimestamp[0];
+          } else {
+            targetMessageSetIndex = this.messageSets.findIndex((s) => s.isLatest);
+          }
           break;
         default:
           targetMessageSetIndex = -1;
       }
       // when merging the target set will be the first one from the overlapping message sets
-      const mergeTargetMessageSetIndex = overlappingMessageSetIndices.splice(0, 1)[0];
-      const mergeSourceMessageSetIndices = [...overlappingMessageSetIndices];
+      const mergeTargetMessageSetIndex = overlappingMessageSetIndicesByMsgIds.splice(
+        0,
+        1,
+      )[0];
+      const mergeSourceMessageSetIndices = [...overlappingMessageSetIndicesByMsgIds];
       if (
         mergeTargetMessageSetIndex !== undefined &&
         mergeTargetMessageSetIndex !== targetMessageSetIndex

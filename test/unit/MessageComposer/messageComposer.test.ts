@@ -1642,7 +1642,7 @@ describe('MessageComposer', () => {
       const spyChannelGetDraft = vi.spyOn(mockChannel, 'getDraft');
       spyChannelGetDraft.mockRejectedValue(new Error('Failed to get draft'));
 
-      const spyAddNotification = vi.spyOn(mockClient.notifications, 'add');
+      const spyLogger = vi.spyOn(mockClient, 'logger');
 
       await messageComposer.getDraft();
 
@@ -1653,13 +1653,7 @@ describe('MessageComposer', () => {
       expect(initStateSpy).toHaveBeenCalledTimes(1);
       expect(spyChannelGetDraft).toHaveBeenCalled();
       expect(messageComposer.state.getLatestValue().draftId).toBe('test-message-id');
-      expect(spyAddNotification).toHaveBeenCalledWith({
-        message: 'Failed to get the draft',
-        origin: {
-          emitter: 'MessageComposer',
-          context: { composer: messageComposer },
-        },
-      });
+      expect(spyLogger).toHaveBeenCalledTimes(1);
     });
   });
 

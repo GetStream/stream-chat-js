@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { resolve } from 'node:path';
+import { builtinModules } from 'node:module';
 import * as esbuild from 'esbuild';
 import packageJson from '../package.json' with { type: 'json' };
 import getPackageVersion from './get-package-version.mjs';
@@ -12,10 +13,19 @@ const watchModeEnabled = process.argv.includes('--watch') || process.argv.includ
 
 const version = getPackageVersion();
 
-const external = Object.keys({
+const modules = Object.keys({
   ...packageJson.dependencies,
   ...packageJson.peerDependencies,
 });
+
+// do not externalize modules that are ignored in browser field
+// externalizing them will cause esbuild to not replace the imports
+// in the bundles
+const browserIgnoreModules = Object.keys(packageJson.browser);
+const browserExternal = modules.filter(
+  (module) => !browserIgnoreModules.includes(module),
+);
+const nodeExternal = [...modules, ...builtinModules];
 
 /** @type esbuild.BuildOptions */
 const commonBuildOptions = {
@@ -44,7 +54,7 @@ const bundles = [
   ['browser', 'node'].map((platform) => ({
     ...commonBuildOptions,
     format: 'cjs',
-    external,
+    external: platform === 'browser' ? browserExternal : nodeExternal,
     entryNames: `[dir]/[name].${platform}`,
     outdir: resolve(__dirname, '../dist/cjs'),
     platform,
@@ -57,7 +67,7 @@ const bundles = [
   {
     ...commonBuildOptions,
     format: 'esm',
-    external,
+    external: browserExternal,
     outExtension: { '.js': '.mjs' },
     outdir: resolve(__dirname, '../dist/esm'),
     entryNames: `[dir]/[name]`,

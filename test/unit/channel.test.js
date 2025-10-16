@@ -124,11 +124,11 @@ describe('Channel count unread', function () {
 	it('countUnread should return correct count when multiple message sets are loaded into state', () => {
 		expect(channel.countUnread(lastRead)).to.be.equal(0);
 		channel.state.addMessagesSorted([
-			generateMsg({ date: '2021-01-01T00:00:00' }),
-			generateMsg({ date: '2022-01-01T00:00:00' }),
+			generateMsg({ date: '2026-01-01T00:00:00' }),
+			generateMsg({ date: '2026-02-01T00:00:00' }),
 		]);
 		channel.state.addMessagesSorted(
-			[generateMsg({ date: '2020-01-01T00:00:00' })],
+			[generateMsg({ date: '2006-01-01T00:00:00' })],
 			false,
 			true,
 			true,
@@ -165,7 +165,7 @@ describe('Channel count unread', function () {
 			generateMsg({ date: '2022-01-01T00:00:00' }),
 		]);
 		channel.state.addMessagesSorted(
-			[generateMsg({ date: '2020-01-01T00:00:00' })],
+			[generateMsg({ date: '2010-01-01T00:00:00' })],
 			false,
 			true,
 			true,
@@ -354,6 +354,8 @@ describe('Channel _handleChannelEvent', function () {
 		});
 		expect(channel.state.unreadCount).to.be.equal(30);
 	});
+
+	it('does not override the delivery information in the read status', () => {});
 
 	it('message.truncate removes all messages if "truncated_at" is "now"', function () {
 		const messages = [
@@ -652,6 +654,8 @@ describe('Channel _handleChannelEvent', function () {
 				last_read_message_id: '6',
 				user,
 				unread_messages: initialCountUnread,
+				last_delivered_at: new Date(1000).toISOString(),
+				last_delivered_message_id: 'delivered-msg-id',
 			};
 			notificationMarkUnreadEvent = {
 				type: 'notification.mark_unread',
@@ -690,6 +694,12 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.state.read[user.id].unread_messages).to.be.equal(
 				event.unread_messages,
 			);
+			expect(channel.state.read[user.id].last_delivered_at).toBe(
+				initialReadState.last_delivered_at,
+			);
+			expect(channel.state.read[user.id].last_delivered_message_id).toBe(
+				initialReadState.last_delivered_message_id,
+			);
 		});
 
 		it('should not update channel read state produced for another user or user is missing', () => {
@@ -715,6 +725,160 @@ describe('Channel _handleChannelEvent', function () {
 					initialReadState.unread_messages,
 				);
 			});
+		});
+	});
+
+	describe('message.read', () => {
+		let initialCountUnread;
+		let initialReadState;
+		let messageReadEvent;
+
+		beforeEach(() => {
+			initialCountUnread = 100;
+			initialReadState = {
+				last_read: new Date(1500).toISOString(),
+				last_read_message_id: '6',
+				user,
+				unread_messages: initialCountUnread,
+				last_delivered_at: new Date(1000).toISOString(),
+				last_delivered_message_id: 'delivered-msg-id',
+			};
+			messageReadEvent = {
+				type: 'message.read',
+				created_at: new Date(2000).toISOString(),
+				cid: channel.cid,
+				channel_member_count: 100,
+				channel_type: channel.type,
+				channel_id: channel.id,
+				user,
+				last_read_message_id: '6b1006ad-7a6d-49d1-82d9-5ee5e8167e49',
+			};
+		});
+
+		it('should update channel read state produced for current user', () => {
+			channel.state.unreadCount = initialCountUnread;
+			channel.state.read[user.id] = initialReadState;
+			const event = messageReadEvent;
+
+			channel._handleChannelEvent(event);
+
+			expect(channel.state.unreadCount).toBe(0);
+			expect(new Date(channel.state.read[user.id].last_read).getTime()).toBe(
+				new Date(messageReadEvent.created_at).getTime(),
+			);
+			expect(channel.state.read[user.id].last_read_message_id).toBe(
+				event.last_read_message_id,
+			);
+			expect(channel.state.read[user.id].unread_messages).toBe(0);
+			expect(channel.state.read[user.id].last_delivered_at).toBe(
+				initialReadState.last_delivered_at,
+			);
+			expect(channel.state.read[user.id].last_delivered_message_id).toBe(
+				initialReadState.last_delivered_message_id,
+			);
+		});
+
+		it('should update channel read state produced for another user', () => {
+			const anotherUser = { id: 'another-user' };
+			channel.state.unreadCount = initialCountUnread;
+			channel.state.read[anotherUser.id] = initialReadState;
+			const event = { ...messageReadEvent, user: anotherUser };
+
+			channel._handleChannelEvent(event);
+
+			expect(channel.state.unreadCount).toBe(initialCountUnread);
+			expect(new Date(channel.state.read[anotherUser.id].last_read).getTime()).toBe(
+				new Date(messageReadEvent.created_at).getTime(),
+			);
+			expect(channel.state.read[anotherUser.id].last_read_message_id).toBe(
+				event.last_read_message_id,
+			);
+			expect(channel.state.read[anotherUser.id].unread_messages).toBe(0);
+			expect(channel.state.read[anotherUser.id].last_delivered_at).toBe(
+				initialReadState.last_delivered_at,
+			);
+			expect(channel.state.read[anotherUser.id].last_delivered_message_id).toBe(
+				initialReadState.last_delivered_message_id,
+			);
+		});
+	});
+
+	describe('message.delivered', () => {
+		let initialCountUnread;
+		let initialReadState;
+		let messageDeliveredEvent;
+
+		beforeEach(() => {
+			initialCountUnread = 100;
+			initialReadState = {
+				last_read: new Date(1500).toISOString(),
+				last_read_message_id: '6',
+				user,
+				unread_messages: initialCountUnread,
+				last_delivered_at: new Date(1000).toISOString(),
+				last_delivered_message_id: 'delivered-msg-id',
+			};
+			messageDeliveredEvent = {
+				type: 'message.delivered',
+				created_at: new Date(2000).toISOString(),
+				cid: channel.cid,
+				channel_member_count: 100,
+				channel_type: channel.type,
+				channel_id: channel.id,
+				user,
+				last_delivered_message_id: 'fd403be5-9207-48db-8bd7-13bd65ffbea6',
+				last_delivered_at: new Date(2000).toISOString(),
+			};
+		});
+
+		it('should update channel read state produced for current user', () => {
+			channel.state.unreadCount = initialCountUnread;
+			channel.state.read[user.id] = initialReadState;
+
+			channel._handleChannelEvent(messageDeliveredEvent);
+
+			expect(channel.state.unreadCount).toBe(initialReadState.unread_messages);
+			expect(new Date(channel.state.read[user.id].last_read).getTime()).toBe(
+				new Date(initialReadState.last_read).getTime(),
+			);
+			expect(channel.state.read[user.id].last_read_message_id).toBe(
+				initialReadState.last_read_message_id,
+			);
+			expect(channel.state.read[user.id].unread_messages).toBe(
+				initialReadState.unread_messages,
+			);
+			expect(new Date(channel.state.read[user.id].last_delivered_at).getTime()).toBe(
+				new Date(messageDeliveredEvent.last_delivered_at).getTime(),
+			);
+			expect(channel.state.read[user.id].last_delivered_message_id).toBe(
+				messageDeliveredEvent.last_delivered_message_id,
+			);
+		});
+
+		it('should update channel read state produced for another user', () => {
+			const anotherUser = { id: 'another-user' };
+			channel.state.unreadCount = initialCountUnread;
+			channel.state.read[anotherUser.id] = initialReadState;
+			const event = { ...messageDeliveredEvent, user: anotherUser };
+
+			channel._handleChannelEvent(event);
+
+			expect(channel.state.unreadCount).toBe(initialCountUnread);
+			expect(new Date(channel.state.read[anotherUser.id].last_read).getTime()).toBe(
+				new Date(initialReadState.last_read).getTime(),
+			);
+			expect(channel.state.read[anotherUser.id].last_read_message_id).toBe(
+				initialReadState.last_read_message_id,
+			);
+			expect(channel.state.read[anotherUser.id].unread_messages).toBe(
+				initialReadState.unread_messages,
+			);
+			expect(
+				new Date(channel.state.read[anotherUser.id].last_delivered_at).getTime(),
+			).toBe(new Date(event.last_delivered_at).getTime());
+			expect(channel.state.read[anotherUser.id].last_delivered_message_id).toBe(
+				event.last_delivered_message_id,
+			);
 		});
 	});
 

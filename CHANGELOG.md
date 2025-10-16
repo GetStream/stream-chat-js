@@ -1,3 +1,40 @@
+## [9.23.0](https://github.com/GetStream/stream-chat-js/compare/v9.22.1...v9.23.0) (2025-10-15)
+
+### Features
+
+* add an api to prune messages from the end ([#1635](https://github.com/GetStream/stream-chat-js/issues/1635)) ([137dca6](https://github.com/GetStream/stream-chat-js/commit/137dca659868d8355c1ffa7571bd2967c6cb13b4))
+* add MentionsSearchSource.toUserSuggestion method ([#1637](https://github.com/GetStream/stream-chat-js/issues/1637)) ([e5e0dbf](https://github.com/GetStream/stream-chat-js/commit/e5e0dbf113e2dca238df3f9150212bb98dcd5639))
+* add offline support for delete message for me feature ([#1633](https://github.com/GetStream/stream-chat-js/issues/1633)) ([0ded575](https://github.com/GetStream/stream-chat-js/commit/0ded575a78ad4dc860ccd5b8e33dcaec19c837a8))
+
+### Refactors
+
+* make channel and client protected in CommandSearchSource and MentionsSearchSource ([#1636](https://github.com/GetStream/stream-chat-js/issues/1636)) ([afe749d](https://github.com/GetStream/stream-chat-js/commit/afe749df0dde35b1077a5a59c272a5c857a3825b))
+
+## [9.22.1](https://github.com/GetStream/stream-chat-js/compare/v9.22.0...v9.22.1) (2025-10-10)
+
+### Bug Fixes
+
+* **bundle:** define separate externals (browser/Node) ([#1634](https://github.com/GetStream/stream-chat-js/issues/1634)) ([7522859](https://github.com/GetStream/stream-chat-js/commit/75228595c7525c000a7af9b2c72f417b1df086b1)), closes [#1632](https://github.com/GetStream/stream-chat-js/issues/1632)
+
+## [9.22.0](https://github.com/GetStream/stream-chat-js/compare/v9.21.0...v9.22.0) (2025-10-09)
+
+### Features
+
+* add deleted_for_me field in message response ([#1604](https://github.com/GetStream/stream-chat-js/issues/1604)) ([26e83c4](https://github.com/GetStream/stream-chat-js/commit/26e83c45259bea48506ae107a49f22d5d4fafd95))
+* add message delivery receipts ([#1617](https://github.com/GetStream/stream-chat-js/issues/1617)) ([c8a2fe6](https://github.com/GetStream/stream-chat-js/commit/c8a2fe66f014b59b34f8c1391dc7c4d65b380765))
+
+## [9.21.0](https://github.com/GetStream/stream-chat-js/compare/v9.20.3...v9.21.0) (2025-10-08)
+
+### Bug Fixes
+
+* do not add error to client notifications for getDrafts ([#1631](https://github.com/GetStream/stream-chat-js/issues/1631)) ([4923459](https://github.com/GetStream/stream-chat-js/commit/49234597ba4e600505477cd06d4071e97cf2a3a4))
+* normalize Windows CRLF newline sequence into LF line ending ([#1630](https://github.com/GetStream/stream-chat-js/issues/1630)) ([458f807](https://github.com/GetStream/stream-chat-js/commit/458f807b84507dafbdeb4152a6604875a14fd304))
+
+### Features
+
+* (cha-1300) add count messages as feature ([#1629](https://github.com/GetStream/stream-chat-js/issues/1629)) ([20f0450](https://github.com/GetStream/stream-chat-js/commit/20f0450f46ad514b867fddf8804eeaa4caae4ea5))
+* **CHA-991:** support delivery receipts ([#1628](https://github.com/GetStream/stream-chat-js/issues/1628)) ([c9ec72d](https://github.com/GetStream/stream-chat-js/commit/c9ec72d95758ab4940ccaafa3c50fe3f4e7d9f6c))
+
 ## [9.20.3](https://github.com/GetStream/stream-chat-js/compare/v9.20.2...v9.20.3) (2025-10-01)
 
 ### Bug Fixes
