@@ -28,7 +28,8 @@ describe('MessageDeliveryReporter', () => {
     channel.initialized = true;
     client.configs[channel.cid] = {
       created_at: '',
-      read_events: true,
+      delivery_events: true,
+      read_events: false,
       reminders: false,
       updated_at: '',
     };
@@ -82,7 +83,8 @@ describe('MessageDeliveryReporter', () => {
     channels.forEach((ch) => {
       client.configs[ch.cid] = {
         created_at: '',
-        read_events: true,
+        delivery_events: true,
+        read_events: false,
         reminders: false,
         updated_at: '',
       };
@@ -130,6 +132,7 @@ describe('MessageDeliveryReporter', () => {
   it('does nothing when read events are disabled in channel config', async () => {
     client.configs[channel.cid] = {
       created_at: '',
+      delivery_events: false,
       read_events: false,
       reminders: false,
       updated_at: '',
@@ -228,14 +231,16 @@ describe('MessageDeliveryReporter', () => {
 
     client.configs[ch1.cid] = {
       created_at: '',
-      read_events: true,
+      delivery_events: true,
+      read_events: false,
       reminders: false,
       updated_at: '',
     };
 
     client.configs[ch2.cid] = {
       created_at: '',
-      read_events: true,
+      delivery_events: true,
+      read_events: false,
       reminders: false,
       updated_at: '',
     };

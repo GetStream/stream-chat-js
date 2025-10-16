@@ -54,6 +54,11 @@ export class MessageDeliveryReporter {
     return this.deliveryReportCandidates.size > 0;
   }
 
+  private static hasPermissionToReportDeliveryFor(collection: Channel | Thread) {
+    if (isChannel(collection)) return !!collection.getConfig()?.delivery_events;
+    if (isThread(collection)) return !!collection.channel.getConfig()?.delivery_events;
+  }
+
   /**
    * Build latest_delivered_messages payload from an arbitrary buffer (deliveryReportCandidates / nextDeliveryReportCandidates)
    */
@@ -142,8 +147,7 @@ export class MessageDeliveryReporter {
    * @param collection
    */
   private trackDeliveredCandidate(collection: Channel | Thread) {
-    if (isChannel(collection) && !collection.getConfig()?.read_events) return;
-    if (isThread(collection) && !collection.channel.getConfig()?.read_events) return;
+    if (!MessageDeliveryReporter.hasPermissionToReportDeliveryFor(collection)) return;
     const candidate = this.getNextDeliveryReportCandidate(collection);
     if (!candidate?.key) return;
     const buffer = this.markDeliveredRequestInFlight

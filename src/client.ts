@@ -4749,17 +4749,14 @@ export class StreamChat {
   }
 
   /**
-   * Send the mark delivered event for this user
+   * Mark the channels delivered for the given messages and the user
    *
    * @param {MarkDeliveredOptions} data
    * @return {Promise<EventAPIResponse | void>} Description
    */
   async markChannelsDelivered(data: MarkDeliveredOptions) {
     if (!data?.latest_delivered_messages?.length) return;
-    return await this.post<EventAPIResponse>(
-      this.baseURL + '/channels/delivered',
-      data ?? {},
-    );
+    return await this.post<EventAPIResponse>(this.baseURL + '/channels/delivered', data);
   }
 
   syncDeliveredCandidates(collections: Channel[]) {

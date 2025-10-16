@@ -95,6 +95,7 @@ export type AppSettingsAPIResponse = APIResponse & {
         connect_events?: boolean;
         created_at?: string;
         custom_events?: boolean;
+        delivery_events?: boolean;
         mark_messages_pending?: boolean;
         max_message_length?: number;
         message_retention?: string;
@@ -1015,6 +1016,7 @@ export type CreateChannelOptions = {
   connect_events?: boolean;
   connection_id?: string;
   custom_events?: boolean;
+  delivery_events?: boolean;
   grants?: Record<string, string[]>;
   mark_messages_pending?: boolean;
   max_message_length?: number;
@@ -1120,6 +1122,7 @@ export type UpdateChannelTypeRequest =
     commands?: CommandVariants[];
     connect_events?: boolean;
     custom_events?: boolean;
+    delivery_events?: boolean;
     grants?: Record<string, string[]>;
     mark_messages_pending?: boolean;
     mutes?: boolean;
@@ -1151,6 +1154,7 @@ export type UpdateChannelTypeResponse = {
   connect_events: boolean;
   created_at: string;
   custom_events: boolean;
+  delivery_events: boolean;
   duration: string;
   grants: Record<string, string[]>;
   mark_messages_pending: boolean;
@@ -1188,6 +1192,7 @@ export type GetChannelTypeResponse = {
   connect_events: boolean;
   created_at: string;
   custom_events: boolean;
+  delivery_events: boolean;
   duration: string;
   grants: Record<string, string[]>;
   mark_messages_pending: boolean;
@@ -2384,6 +2389,7 @@ export type ChannelConfigFields = {
   blocklist_behavior?: ChannelConfigAutomodBehavior;
   connect_events?: boolean;
   custom_events?: boolean;
+  delivery_events?: boolean;
   mark_messages_pending?: boolean;
   max_message_length?: number;
   message_retention?: string;
