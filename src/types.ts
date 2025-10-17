@@ -3801,6 +3801,7 @@ export type ModerationConfig = {
   automod_semantic_filters_config?: AutomodSemanticFiltersConfig;
   automod_toxicity_config?: AutomodToxicityConfig;
   block_list_config?: BlockListConfig;
+  llm_config?: LLMConfig;
   team?: string;
 };
 
@@ -4004,6 +4005,8 @@ export type ModerationActionType =
   | 'bounce_flag'
   | 'bounce_remove';
 
+export type ModerationSeverity = 'low' | 'medium' | 'high' | 'critical';
+
 export type AutomodRule = {
   action: ModerationActionType;
   label: string;
@@ -4019,6 +4022,24 @@ export type BlockListConfig = {
   enabled: boolean;
   rules: BlockListRule[];
   async?: boolean;
+};
+
+export type LLMConfig = {
+  rules: LLMRule[];
+  severity_descriptions?: Record<ModerationSeverity, string>;
+  app_context?: string;
+};
+
+export type LLMRule = {
+  label: string;
+  description: string;
+  action: ModerationActionType;
+  severity_rules?: LLMSeverityRule[];
+};
+
+export type LLMSeverityRule = {
+  severity: ModerationSeverity;
+  action: ModerationActionType;
 };
 
 export type AutomodToxicityConfig = {
@@ -4047,7 +4068,7 @@ export type AutomodSemanticFiltersConfig = {
 
 export type AITextSeverityRule = {
   action: ModerationActionType;
-  severity: 'low' | 'medium' | 'high' | 'critical';
+  severity: ModerationSeverity;
 };
 
 export type AITextRule = {
