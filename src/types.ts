@@ -4446,3 +4446,20 @@ export type EventHook = {
   created_at?: string;
   updated_at?: string;
 };
+
+export type UpdateChannelsBatchRequest = {
+  operation: string;
+  filter: UpdateChannelsBatchFilters;
+  members?: string[] | Array<NewMemberPayload>;
+  data?: Partial<ChannelData>;
+};
+
+export type UpdateChannelsBatchFilters = {
+  cids?: string[];
+  channel_types?: string[];
+  tags?: Record<string, string>;
+};
+
+export type UpdateChannelsBatchResponse = {
+  result: Record<string, string>;
+} & Partial<TaskResponse>;
