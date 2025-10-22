@@ -71,8 +71,6 @@ import type {
   TruncateOptions,
   UpdateChannelAPIResponse,
   UpdateChannelOptions,
-  UpdateChannelsBatchRequest,
-  UpdateChannelsBatchResponse,
   UpdateLocationPayload,
   UserResponse,
 } from './types';
@@ -614,13 +612,6 @@ export class Channel {
       data: channelData,
       ...options,
     });
-  }
-
-  async batch_update(data: UpdateChannelsBatchRequest) {
-    return await this.getClient().put<UpdateChannelsBatchResponse>(
-      this.getClient().baseURL + '/channels/batch',
-      data,
-    );
   }
 
   /**
