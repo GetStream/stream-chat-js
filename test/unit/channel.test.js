@@ -213,6 +213,7 @@ describe('Channel count unread', function () {
 
 describe('Channel _handleChannelEvent', function () {
 	const user = { id: 'user' };
+	const otherUser = { id: 'other-user' };
 	let client;
 	let channel;
 
@@ -879,6 +880,90 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.state.read[anotherUser.id].last_delivered_message_id).toBe(
 				event.last_delivered_message_id,
 			);
+		});
+
+		it('prevents reporting delivery just reported', () => {
+			// enable delivery events
+			client._addChannelConfig({
+				cid: channel.cid,
+				config: { ...channel.getConfig(), delivery_events: true },
+			});
+			channel.state.read[user.id] = initialReadState;
+
+			channel._handleChannelEvent({
+				type: 'message.new',
+				user: otherUser,
+				message: generateMsg({
+					id: messageDeliveredEvent.last_delivered_message_id,
+					date: messageDeliveredEvent.last_delivered_at,
+				}),
+			});
+			expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(1);
+			expect(
+				client.messageDeliveryReporter.deliveryReportCandidates.get(channel.cid),
+			).toBe(messageDeliveredEvent.last_delivered_message_id);
+
+			channel._handleChannelEvent(messageDeliveredEvent);
+			expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(0);
+		});
+
+		it('keeps reporting delivery if having newer deliveries', () => {
+			// enable delivery events
+			client._addChannelConfig({
+				cid: channel.cid,
+				config: { ...channel.getConfig(), delivery_events: true },
+			});
+			channel.state.read[user.id] = initialReadState;
+			const newerMessage = generateMsg({
+				id: 'some-other-id',
+				date: new Date(3000).toISOString(),
+			});
+			channel._handleChannelEvent({
+				type: 'message.new',
+				user: otherUser,
+				message: newerMessage,
+			});
+
+			expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(1);
+			expect(
+				client.messageDeliveryReporter.deliveryReportCandidates.get(channel.cid),
+			).toBe(newerMessage.id);
+
+			// event refers to a message delivered 1000ms earlier than newerMessage - still want to report the newerMessage
+			channel._handleChannelEvent(messageDeliveredEvent);
+			expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(1);
+			expect(
+				client.messageDeliveryReporter.deliveryReportCandidates.get(channel.cid),
+			).toBe(newerMessage.id);
+		});
+
+		it("does not sync the delivery buffer upon other user's delivery confirmation", () => {
+			// enable delivery events
+			client._addChannelConfig({
+				cid: channel.cid,
+				config: { ...channel.getConfig(), delivery_events: true },
+			});
+			channel.state.read[user.id] = initialReadState;
+
+			channel._handleChannelEvent({
+				type: 'message.new',
+				user: otherUser,
+				message: generateMsg({
+					id: messageDeliveredEvent.last_delivered_message_id,
+					date: messageDeliveredEvent.last_delivered_at,
+				}),
+			});
+			expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(1);
+			expect(
+				client.messageDeliveryReporter.deliveryReportCandidates.get(channel.cid),
+			).toBe(messageDeliveredEvent.last_delivered_message_id);
+
+			channel._handleChannelEvent({ ...messageDeliveredEvent, user: otherUser });
+			expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(1);
+			// the originally planned message id is kept to be reported
+			expect(
+				client.messageDeliveryReporter.deliveryReportCandidates.get(channel.cid),
+			).toBe(messageDeliveredEvent.last_delivered_message_id);
 		});
 	});
 
