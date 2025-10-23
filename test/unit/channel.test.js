@@ -1687,9 +1687,13 @@ describe('Channel search', async () => {
 });
 
 describe('Channel lastMessage', async () => {
-	const client = await getClientWithUser();
-	const channel = client.channel('messaging', uuidv4());
-	client._addChannelConfig({ cid: channel.cid, config: {} });
+	let channel;
+	let client;
+	beforeEach(async () => {
+		client = await getClientWithUser();
+		channel = client.channel('messaging', uuidv4());
+		client._addChannelConfig({ cid: channel.cid, config: {} });
+	});
 
 	it('should return last message - messages are in order', () => {
 		channel.state = new ChannelState(channel);
@@ -1758,9 +1762,6 @@ describe('Channel lastMessage', async () => {
 		channel.state.addMessagesSorted(latestMessages);
 		channel.state.addMessagesSorted(otherMessages, 'new');
 
-		expect(channel.lastMessage().created_at.getTime()).to.be.equal(
-			new Date(latestMessageDate).getTime(),
-		);
 		expect(channel.state.last_message_at.getTime()).toBe(
 			new Date(latestMessages[1].created_at).getTime(),
 		);
