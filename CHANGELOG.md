@@ -1,3 +1,13 @@
+## [9.25.0](https://github.com/GetStream/stream-chat-js/compare/v9.24.0...v9.25.0) (2025-10-23)
+
+### Bug Fixes
+
+* prevent search source pagination on non-retryable response errors ([#1638](https://github.com/GetStream/stream-chat-js/issues/1638)) ([d306a1a](https://github.com/GetStream/stream-chat-js/commit/d306a1a7dd6fb138d07d0278068d31d0dcf068de))
+
+### Features
+
+* add delivery_events channel configuration parameter ([#1639](https://github.com/GetStream/stream-chat-js/issues/1639)) ([13d295a](https://github.com/GetStream/stream-chat-js/commit/13d295ae251f1c5aa5d97fad9340cce092dfb91c))
+
 ## [9.24.0](https://github.com/GetStream/stream-chat-js/compare/v9.23.0...v9.24.0) (2025-10-17)
 
 ### Features
