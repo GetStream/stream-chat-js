@@ -2403,6 +2403,7 @@ export type ChannelConfigFields = {
   replies?: boolean;
   search?: boolean;
   shared_locations?: boolean;
+  skip_last_msg_update_for_system_msgs?: boolean;
   count_messages?: boolean;
   typing_events?: boolean;
   uploads?: boolean;

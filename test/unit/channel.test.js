@@ -1689,9 +1689,10 @@ describe('Channel search', async () => {
 describe('Channel lastMessage', async () => {
 	const client = await getClientWithUser();
 	const channel = client.channel('messaging', uuidv4());
+	client._addChannelConfig({ cid: channel.cid, config: {} });
 
 	it('should return last message - messages are in order', () => {
-		channel.state = new ChannelState();
+		channel.state = new ChannelState(channel);
 		const latestMessageDate = '2018-01-01T00:13:24';
 		channel.state.addMessagesSorted([
 			generateMsg({ date: '2018-01-01T00:00:00' }),
@@ -1705,7 +1706,7 @@ describe('Channel lastMessage', async () => {
 	});
 
 	it('should return last message - messages are out of order', () => {
-		channel.state = new ChannelState();
+		channel.state = new ChannelState(channel);
 		const latestMessageDate = '2018-01-01T00:13:24';
 		channel.state.addMessagesSorted([
 			generateMsg({ date: latestMessageDate }),
@@ -1719,7 +1720,7 @@ describe('Channel lastMessage', async () => {
 	});
 
 	it('should return last message - state has more message sets loaded', () => {
-		channel.state = new ChannelState();
+		channel.state = new ChannelState(channel);
 		const latestMessageDate = '2018-01-01T00:13:24';
 		const latestMessages = [
 			generateMsg({ date: latestMessageDate }),
@@ -1735,6 +1736,33 @@ describe('Channel lastMessage', async () => {
 
 		expect(channel.lastMessage().created_at.getTime()).to.be.equal(
 			new Date(latestMessageDate).getTime(),
+		);
+	});
+
+	it('should return last message - system message is ignored when skip_last_msg_update_for_system_msgs: true', () => {
+		client._addChannelConfig({
+			cid: channel.cid,
+			config: { skip_last_msg_update_for_system_msgs: true },
+		});
+		channel.state = new ChannelState(channel);
+		const latestMessageDate = '2018-01-01T00:13:24';
+		const latestMessages = [
+			generateMsg({ date: latestMessageDate, type: 'system' }),
+			generateMsg({ date: '2018-01-01T00:02:00' }),
+			generateMsg({ date: '2018-01-01T00:00:00' }),
+		];
+		const otherMessages = [
+			generateMsg({ date: '2017-11-21T00:05:33' }),
+			generateMsg({ date: '2017-11-21T00:05:35' }),
+		];
+		channel.state.addMessagesSorted(latestMessages);
+		channel.state.addMessagesSorted(otherMessages, 'new');
+
+		expect(channel.lastMessage().created_at.getTime()).to.be.equal(
+			new Date(latestMessageDate).getTime(),
+		);
+		expect(channel.state.last_message_at.getTime()).toBe(
+			new Date(latestMessages[1].created_at).getTime(),
 		);
 	});
 });

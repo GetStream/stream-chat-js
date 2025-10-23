@@ -250,11 +250,15 @@ export class ChannelState {
           delete this.threads[message.id];
         }
 
-        if (!this.last_message_at) {
-          this.last_message_at = new Date(message.created_at.getTime());
-        }
+        const shouldSkipLastMessageAtUpdate =
+          this._channel.getConfig()?.skip_last_msg_update_for_system_msgs &&
+          message.type === 'system';
 
-        if (message.created_at.getTime() > this.last_message_at.getTime()) {
+        if (
+          !shouldSkipLastMessageAtUpdate &&
+          (!this.last_message_at ||
+            message.created_at.getTime() > this.last_message_at.getTime())
+        ) {
           this.last_message_at = new Date(message.created_at.getTime());
         }
       }
