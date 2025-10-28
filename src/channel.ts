@@ -1936,6 +1936,15 @@ export class Channel {
             deliveredAt: event.created_at,
             lastDeliveredMessageId: event.last_delivered_message_id,
           });
+
+          const client = this.getClient();
+          const isOwnEvent = event.user?.id === client.user?.id;
+
+          // make sure not to report deliveries that were
+          // already confirmed from own user from another device
+          if (isOwnEvent) {
+            client.syncDeliveredCandidates([this]);
+          }
         }
         break;
       case 'user.watching.start':

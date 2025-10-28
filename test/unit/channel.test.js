@@ -213,6 +213,7 @@ describe('Channel count unread', function () {
 
 describe('Channel _handleChannelEvent', function () {
 	const user = { id: 'user' };
+	const otherUser = { id: 'other-user' };
 	let client;
 	let channel;
 
@@ -879,6 +880,90 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.state.read[anotherUser.id].last_delivered_message_id).toBe(
 				event.last_delivered_message_id,
 			);
+		});
+
+		it('prevents reporting delivery just reported', () => {
+			// enable delivery events
+			client._addChannelConfig({
+				cid: channel.cid,
+				config: { ...channel.getConfig(), delivery_events: true },
+			});
+			channel.state.read[user.id] = initialReadState;
+
+			channel._handleChannelEvent({
+				type: 'message.new',
+				user: otherUser,
+				message: generateMsg({
+					id: messageDeliveredEvent.last_delivered_message_id,
+					date: messageDeliveredEvent.last_delivered_at,
+				}),
+			});
+			expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(1);
+			expect(
+				client.messageDeliveryReporter.deliveryReportCandidates.get(channel.cid),
+			).toBe(messageDeliveredEvent.last_delivered_message_id);
+
+			channel._handleChannelEvent(messageDeliveredEvent);
+			expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(0);
+		});
+
+		it('keeps reporting delivery if having newer deliveries', () => {
+			// enable delivery events
+			client._addChannelConfig({
+				cid: channel.cid,
+				config: { ...channel.getConfig(), delivery_events: true },
+			});
+			channel.state.read[user.id] = initialReadState;
+			const newerMessage = generateMsg({
+				id: 'some-other-id',
+				date: new Date(3000).toISOString(),
+			});
+			channel._handleChannelEvent({
+				type: 'message.new',
+				user: otherUser,
+				message: newerMessage,
+			});
+
+			expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(1);
+			expect(
+				client.messageDeliveryReporter.deliveryReportCandidates.get(channel.cid),
+			).toBe(newerMessage.id);
+
+			// event refers to a message delivered 1000ms earlier than newerMessage - still want to report the newerMessage
+			channel._handleChannelEvent(messageDeliveredEvent);
+			expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(1);
+			expect(
+				client.messageDeliveryReporter.deliveryReportCandidates.get(channel.cid),
+			).toBe(newerMessage.id);
+		});
+
+		it("does not sync the delivery buffer upon other user's delivery confirmation", () => {
+			// enable delivery events
+			client._addChannelConfig({
+				cid: channel.cid,
+				config: { ...channel.getConfig(), delivery_events: true },
+			});
+			channel.state.read[user.id] = initialReadState;
+
+			channel._handleChannelEvent({
+				type: 'message.new',
+				user: otherUser,
+				message: generateMsg({
+					id: messageDeliveredEvent.last_delivered_message_id,
+					date: messageDeliveredEvent.last_delivered_at,
+				}),
+			});
+			expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(1);
+			expect(
+				client.messageDeliveryReporter.deliveryReportCandidates.get(channel.cid),
+			).toBe(messageDeliveredEvent.last_delivered_message_id);
+
+			channel._handleChannelEvent({ ...messageDeliveredEvent, user: otherUser });
+			expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(1);
+			// the originally planned message id is kept to be reported
+			expect(
+				client.messageDeliveryReporter.deliveryReportCandidates.get(channel.cid),
+			).toBe(messageDeliveredEvent.last_delivered_message_id);
 		});
 	});
 
@@ -1687,11 +1772,16 @@ describe('Channel search', async () => {
 });
 
 describe('Channel lastMessage', async () => {
-	const client = await getClientWithUser();
-	const channel = client.channel('messaging', uuidv4());
+	let channel;
+	let client;
+	beforeEach(async () => {
+		client = await getClientWithUser();
+		channel = client.channel('messaging', uuidv4());
+		client._addChannelConfig({ cid: channel.cid, config: {} });
+	});
 
 	it('should return last message - messages are in order', () => {
-		channel.state = new ChannelState();
+		channel.state = new ChannelState(channel);
 		const latestMessageDate = '2018-01-01T00:13:24';
 		channel.state.addMessagesSorted([
 			generateMsg({ date: '2018-01-01T00:00:00' }),
@@ -1705,7 +1795,7 @@ describe('Channel lastMessage', async () => {
 	});
 
 	it('should return last message - messages are out of order', () => {
-		channel.state = new ChannelState();
+		channel.state = new ChannelState(channel);
 		const latestMessageDate = '2018-01-01T00:13:24';
 		channel.state.addMessagesSorted([
 			generateMsg({ date: latestMessageDate }),
@@ -1719,7 +1809,7 @@ describe('Channel lastMessage', async () => {
 	});
 
 	it('should return last message - state has more message sets loaded', () => {
-		channel.state = new ChannelState();
+		channel.state = new ChannelState(channel);
 		const latestMessageDate = '2018-01-01T00:13:24';
 		const latestMessages = [
 			generateMsg({ date: latestMessageDate }),
@@ -1735,6 +1825,30 @@ describe('Channel lastMessage', async () => {
 
 		expect(channel.lastMessage().created_at.getTime()).to.be.equal(
 			new Date(latestMessageDate).getTime(),
+		);
+	});
+
+	it('should return last message - system message is ignored when skip_last_msg_update_for_system_msgs: true', () => {
+		client._addChannelConfig({
+			cid: channel.cid,
+			config: { skip_last_msg_update_for_system_msgs: true },
+		});
+		channel.state = new ChannelState(channel);
+		const latestMessageDate = '2018-01-01T00:13:24';
+		const latestMessages = [
+			generateMsg({ date: latestMessageDate, type: 'system' }),
+			generateMsg({ date: '2018-01-01T00:02:00' }),
+			generateMsg({ date: '2018-01-01T00:00:00' }),
+		];
+		const otherMessages = [
+			generateMsg({ date: '2017-11-21T00:05:33' }),
+			generateMsg({ date: '2017-11-21T00:05:35' }),
+		];
+		channel.state.addMessagesSorted(latestMessages);
+		channel.state.addMessagesSorted(otherMessages, 'new');
+
+		expect(channel.state.last_message_at.getTime()).toBe(
+			new Date(latestMessages[1].created_at).getTime(),
 		);
 	});
 });

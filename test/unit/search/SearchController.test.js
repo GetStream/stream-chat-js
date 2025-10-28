@@ -10,7 +10,9 @@ import {
 import { generateUser } from '../test-utils/generateUser';
 import { generateChannel } from '../test-utils/generateChannel';
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { ErrorFromResponse } from '../../../src';
+import { APIErrorCodes } from '../../../src/errors';
 
 describe('SearchController', () => {
 	let searchController;
@@ -406,6 +408,42 @@ describe('BaseSearchSource and implementations', () => {
 				await searchSource.executeQuery();
 				expect(searchSource.items).to.deep.equal(['item1']);
 				expect(searchSource.hasNext).to.be.false;
+			});
+
+			it('stores error from a failed request, keeps ability to paginate', async () => {
+				searchSource.pageSize = 1;
+				searchSource.state.partialNext({
+					items: [],
+					isActive: true,
+					searchQuery: 'test',
+				});
+
+				vi.spyOn(searchSource, 'query').mockRejectedValue(new Error('anything'));
+
+				await searchSource.executeQuery();
+				expect(searchSource.items).toStrictEqual([]);
+				expect(searchSource.hasNext).toBe(true);
+			});
+
+			it('terminates pagination on non-retryable error', async () => {
+				searchSource.pageSize = 1;
+				searchSource.state.partialNext({
+					items: [],
+					isActive: true,
+					searchQuery: 'test',
+				});
+
+				vi.spyOn(searchSource, 'query').mockRejectedValue(
+					new ErrorFromResponse('anything', {
+						code: APIErrorCodes[4],
+						response: {},
+						status: 400,
+					}),
+				);
+
+				await searchSource.executeQuery();
+				expect(searchSource.items).toStrictEqual([]);
+				expect(searchSource.hasNext).toBe(false);
 			});
 		});
 

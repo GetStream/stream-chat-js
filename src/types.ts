@@ -95,6 +95,7 @@ export type AppSettingsAPIResponse = APIResponse & {
         connect_events?: boolean;
         created_at?: string;
         custom_events?: boolean;
+        delivery_events?: boolean;
         mark_messages_pending?: boolean;
         max_message_length?: number;
         message_retention?: string;
@@ -1015,6 +1016,7 @@ export type CreateChannelOptions = {
   connect_events?: boolean;
   connection_id?: string;
   custom_events?: boolean;
+  delivery_events?: boolean;
   grants?: Record<string, string[]>;
   mark_messages_pending?: boolean;
   max_message_length?: number;
@@ -1120,6 +1122,7 @@ export type UpdateChannelTypeRequest =
     commands?: CommandVariants[];
     connect_events?: boolean;
     custom_events?: boolean;
+    delivery_events?: boolean;
     grants?: Record<string, string[]>;
     mark_messages_pending?: boolean;
     mutes?: boolean;
@@ -1151,6 +1154,7 @@ export type UpdateChannelTypeResponse = {
   connect_events: boolean;
   created_at: string;
   custom_events: boolean;
+  delivery_events: boolean;
   duration: string;
   grants: Record<string, string[]>;
   mark_messages_pending: boolean;
@@ -1188,6 +1192,7 @@ export type GetChannelTypeResponse = {
   connect_events: boolean;
   created_at: string;
   custom_events: boolean;
+  delivery_events: boolean;
   duration: string;
   grants: Record<string, string[]>;
   mark_messages_pending: boolean;
@@ -2384,6 +2389,7 @@ export type ChannelConfigFields = {
   blocklist_behavior?: ChannelConfigAutomodBehavior;
   connect_events?: boolean;
   custom_events?: boolean;
+  delivery_events?: boolean;
   mark_messages_pending?: boolean;
   max_message_length?: number;
   message_retention?: string;
@@ -2397,6 +2403,7 @@ export type ChannelConfigFields = {
   replies?: boolean;
   search?: boolean;
   shared_locations?: boolean;
+  skip_last_msg_update_for_system_msgs?: boolean;
   count_messages?: boolean;
   typing_events?: boolean;
   uploads?: boolean;
@@ -3889,6 +3896,7 @@ export type ModerationConfig = {
   automod_semantic_filters_config?: AutomodSemanticFiltersConfig;
   automod_toxicity_config?: AutomodToxicityConfig;
   block_list_config?: BlockListConfig;
+  llm_config?: LLMConfig;
   team?: string;
 };
 
@@ -4119,6 +4127,8 @@ export type ModerationActionType =
   | 'bounce_flag'
   | 'bounce_remove';
 
+export type ModerationSeverity = 'low' | 'medium' | 'high' | 'critical';
+
 export type AutomodRule = {
   action: ModerationActionType;
   label: string;
@@ -4134,6 +4144,24 @@ export type BlockListConfig = {
   enabled: boolean;
   rules: BlockListRule[];
   async?: boolean;
+};
+
+export type LLMConfig = {
+  rules: LLMRule[];
+  severity_descriptions?: Record<ModerationSeverity, string>;
+  app_context?: string;
+};
+
+export type LLMRule = {
+  label: string;
+  description: string;
+  action: ModerationActionType;
+  severity_rules?: LLMSeverityRule[];
+};
+
+export type LLMSeverityRule = {
+  severity: ModerationSeverity;
+  action: ModerationActionType;
 };
 
 export type AutomodToxicityConfig = {
@@ -4162,7 +4190,7 @@ export type AutomodSemanticFiltersConfig = {
 
 export type AITextSeverityRule = {
   action: ModerationActionType;
-  severity: 'low' | 'medium' | 'high' | 'critical';
+  severity: ModerationSeverity;
 };
 
 export type AITextRule = {
