@@ -3148,12 +3148,15 @@ export type SegmentQueryOptions = CampaignQueryOptions;
 // TODO: add better typing
 export type CampaignFilters = {};
 
+export type CampaignChannelMember = CustomMemberData &
+  Pick<ChannelMemberResponse, 'user_id' | 'channel_role'>;
+
 export type CampaignData = {
   channel_template?: {
     type: string;
     custom?: {};
     id?: string;
-    members?: string[];
+    members?: string[] | CampaignChannelMember[];
     team?: string;
   };
   create_channels?: boolean;
