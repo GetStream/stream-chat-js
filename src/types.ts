@@ -331,6 +331,7 @@ export type ChannelAPIResponse = {
 
 export type ChannelUpdateOptions = {
   hide_history?: boolean;
+  hide_history_before?: string | Date;
   skip_push?: boolean;
 };
 
