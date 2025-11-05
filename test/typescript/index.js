@@ -23,6 +23,11 @@ const executables = [
 		type: "Unpacked<ReturnType<Channel<{ attachmentType: {}; channelType: { description?: string; }; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: {}; pollType: {}; pollOptionType: {}; }>['addMembers']>>",
 	},
 	{
+		f: rg.addFilterTags,
+		imports: ['Channel', 'Unpacked'],
+		type: "Unpacked<ReturnType<Channel<{ attachmentType: {}; channelType: { description?: string; }; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: {}; pollType: {}; pollOptionType: {}; }>['addFilterTags']>>",
+	},
+	{
 		f: rg.addModerators,
 		imports: ['Channel', 'Unpacked'],
 		type: "Unpacked<ReturnType<Channel<{ attachmentType: {}; channelType: { description?: string; }; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: {}; pollType: {}; pollOptionType: {}; }>['addModerators']>>",
@@ -332,6 +337,11 @@ const executables = [
 		f: rg.removeMembers,
 		imports: ['Channel', 'Unpacked'],
 		type: "Unpacked<ReturnType<Channel<{ attachmentType: {}; channelType: { description?: string; }; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: {}; pollType: {}; pollOptionType: {}; }>['removeMembers']>>",
+	},
+	{
+		f: rg.removeFilterTags,
+		imports: ['Channel', 'Unpacked'],
+		type: "Unpacked<ReturnType<Channel<{ attachmentType: {}; channelType: { description?: string; }; commandType: string & {}; eventType: {}; messageType: {}; reactionType: {}; userType: {}; pollType: {}; pollOptionType: {}; }>['removeFilterTags']>>",
 	},
 	{
 		f: rg.removeShadowBan,

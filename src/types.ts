@@ -282,6 +282,7 @@ export type ChannelResponse = CustomChannelData & {
   created_by?: UserResponse | null;
   created_by_id?: string;
   deleted_at?: string;
+  filter_tags?: string[];
   hidden?: boolean;
   invites?: string[];
   joined?: boolean;
@@ -2424,6 +2425,7 @@ export type ChannelData = CustomChannelData &
     members: string[] | Array<NewMemberPayload>;
     blocklist_behavior: AutomodBehavior;
     automod: Automod;
+    filter_tags: string[];
   }>;
 
 export type ChannelMute = {

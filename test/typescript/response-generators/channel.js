@@ -27,6 +27,20 @@ async function addMembers() {
 	return await channel.addMembers(newMembers);
 }
 
+async function addFilterTags() {
+	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
+	await channel.watch();
+
+	return await channel.addFilterTags(['tag1', 'tag2']);
+}
+
+async function removeFilterTags() {
+	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
+	await channel.watch();
+
+	return await channel.removeFilterTags(['tag1']);
+}
+
 async function addModerators() {
 	const channel = await utils.createTestChannel(uuidv4(), johnID);
 	return await channel.addModerators([johnID]);
@@ -243,6 +257,7 @@ async function watch() {
 module.exports = {
 	acceptInvite,
 	addMembers,
+	addFilterTags,
 	addModerators,
 	create,
 	deleteChannel,
@@ -260,6 +275,7 @@ module.exports = {
 	queryMembers,
 	rejectInvite,
 	removeMembers,
+	removeFilterTags,
 	sendFile,
 	sendImage,
 	show,
