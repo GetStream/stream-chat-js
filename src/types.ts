@@ -1261,6 +1261,7 @@ export type MarkUnreadOptions = {
   connection_id?: string;
   message_id?: string;
   thread_id?: string;
+  message_timestamp?: string;
   user?: UserResponse;
   user_id?: string;
 };
