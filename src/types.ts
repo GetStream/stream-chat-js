@@ -282,6 +282,7 @@ export type ChannelResponse = CustomChannelData & {
   created_by?: UserResponse | null;
   created_by_id?: string;
   deleted_at?: string;
+  filter_tags?: string[];
   hidden?: boolean;
   invites?: string[];
   joined?: boolean;
@@ -331,6 +332,7 @@ export type ChannelAPIResponse = {
 
 export type ChannelUpdateOptions = {
   hide_history?: boolean;
+  hide_history_before?: string | Date;
   skip_push?: boolean;
 };
 
@@ -2424,6 +2426,7 @@ export type ChannelData = CustomChannelData &
     members: string[] | Array<NewMemberPayload>;
     blocklist_behavior: AutomodBehavior;
     automod: Automod;
+    filter_tags: string[];
   }>;
 
 export type ChannelMute = {
@@ -3154,6 +3157,11 @@ export type CampaignData = {
     custom?: {};
     id?: string;
     members?: string[];
+    members_template?: Array<{
+      user_id: string;
+      channel_role?: string;
+      custom?: Record<string, unknown>;
+    }>;
     team?: string;
   };
   create_channels?: boolean;
