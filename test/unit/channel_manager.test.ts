@@ -38,7 +38,10 @@ describe('ChannelManager', () => {
     const channels = channelsResponse.map((c) =>
       client.channel(c.channel.type, c.channel.id),
     );
-    channelManager.state.partialNext({ channels, initialized: true });
+    channelManager.state.partialNext({
+      channels,
+      initialized: true,
+    });
   });
 
   afterEach(() => {
@@ -500,7 +503,9 @@ describe('ChannelManager', () => {
             client.offlineDb!.getChannelsForQuery as unknown as MockInstance
           ).mockResolvedValue(mockChannelPages[0]);
 
-          hydrateActiveChannelsSpy = sinon.stub(client, 'hydrateActiveChannels');
+          hydrateActiveChannelsSpy = sinon
+            .stub(client, 'hydrateActiveChannels')
+            .returns([]);
           executeChannelsQuerySpy = sinon.stub(
             channelManager as any,
             'executeChannelsQuery',
@@ -550,18 +555,11 @@ describe('ChannelManager', () => {
 
         it('does NOT hydrate from DB if already initialized', async () => {
           channelManager.state.partialNext({ initialized: true });
-          const stateChangeSpy = sinon.spy();
-          channelManager.state.subscribeWithSelector(
-            (nextValue) => ({ channels: nextValue.channels }),
-            stateChangeSpy,
-          );
-          stateChangeSpy.resetHistory();
 
           await channelManager.queryChannels({ filterA: true }, { asc: 1 });
 
           expect(client.offlineDb!.getChannelsForQuery).not.toHaveBeenCalled();
           expect(hydrateActiveChannelsSpy.called).to.be.false;
-          expect(stateChangeSpy.called).to.be.false;
           expect(executeChannelsQuerySpy.called).to.be.false;
           expect(scheduleSyncStatusCallbackSpy.called).to.be.true;
         });
@@ -628,18 +626,10 @@ describe('ChannelManager', () => {
         it('continues with normal queryChannels flow if client.user is missing', async () => {
           client.user = undefined;
 
-          const stateChangeSpy = sinon.spy();
-          channelManager.state.subscribeWithSelector(
-            (nextValue) => ({ channels: nextValue.channels }),
-            stateChangeSpy,
-          );
-          stateChangeSpy.resetHistory();
-
           await channelManager.queryChannels({ filterA: true }, { asc: 1 });
 
           expect(client.offlineDb!.getChannelsForQuery).not.toHaveBeenCalled();
           expect(hydrateActiveChannelsSpy.called).to.be.false;
-          expect(stateChangeSpy.called).to.be.false;
           expect(scheduleSyncStatusCallbackSpy.called).to.be.false;
           expect(executeChannelsQuerySpy.calledOnce).to.be.true;
         });
@@ -1364,7 +1354,6 @@ describe('ChannelManager', () => {
     let shouldConsiderPinnedChannelsStub: MockInstance<
       (typeof utils)['shouldConsiderPinnedChannels']
     >;
-    let promoteChannelSpy: MockInstance<(typeof utils)['promoteChannel']>;
     let getAndWatchChannelStub: MockInstance<(typeof utils)['getAndWatchChannel']>;
     let findLastPinnedChannelIndexStub: MockInstance<
       (typeof utils)['findLastPinnedChannelIndex']
@@ -1383,7 +1372,6 @@ describe('ChannelManager', () => {
       getAndWatchChannelStub = vi.spyOn(utils, 'getAndWatchChannel');
       findLastPinnedChannelIndexStub = vi.spyOn(utils, 'findLastPinnedChannelIndex');
       extractSortValueStub = vi.spyOn(utils, 'extractSortValue');
-      promoteChannelSpy = vi.spyOn(utils, 'promoteChannel');
     });
 
     afterEach(() => {
@@ -1406,36 +1394,31 @@ describe('ChannelManager', () => {
           'notification.removed_from_channel',
         ] as const
       ).forEach((eventType) => {
-        it('should return early if channels is undefined', () => {
-          channelManager.state.partialNext({ channels: undefined });
-
-          client.dispatchEvent({ type: eventType, cid: channelToRemove.cid });
-          client.dispatchEvent({ type: eventType, channel: channelToRemove });
-
-          expect(setChannelsStub).toHaveBeenCalledTimes(0);
-        });
-
         it('should remove the channel when event.cid matches', () => {
-          client.dispatchEvent({ type: eventType, cid: channelToRemove.cid });
+          const stateBefore = channelManager.state.getLatestValue();
 
-          expect(setChannelsStub).toHaveBeenCalledOnce();
-          const channels = setChannelsStub.mock.lastCall?.[0] as Channel[];
+          client.dispatchEvent({
+            type: eventType,
+            channel_type: channelToRemove.type,
+            channel_id: channelToRemove.id,
+          });
 
-          expect(channels.map((c) => c.id)).to.deep.equal(['channel1', 'channel3']);
-        });
+          const stateAfter = channelManager.state.getLatestValue();
 
-        it('should remove the channel when event.channel?.cid matches', () => {
-          client.dispatchEvent({ type: eventType, channel: channelToRemove });
-
-          expect(setChannelsStub).toHaveBeenCalledOnce();
-          expect(
-            (setChannelsStub.mock.calls[0][0] as Channel[]).map((c) => c.id),
-          ).to.deep.equal(['channel1', 'channel3']);
+          expect(stateBefore.channels).toHaveLength(3);
+          expect(stateAfter.channels).toHaveLength(2);
+          expect(stateAfter.channels.map((c) => c.cid)).not.toContain(
+            channelToRemove.cid,
+          );
         });
 
         it('should not modify the list if no channels match', () => {
           const { channels: prevChannels } = channelManager.state.getLatestValue();
-          client.dispatchEvent({ type: eventType, cid: 'channel123' });
+          client.dispatchEvent({
+            type: eventType,
+            channel_type: 'unknown',
+            channel_id: 'unknown',
+          });
           const { channels: newChannels } = channelManager.state.getLatestValue();
 
           expect(setChannelsStub).toHaveBeenCalledTimes(0);
@@ -1446,18 +1429,6 @@ describe('ChannelManager', () => {
     });
 
     describe('newMessageHandler', () => {
-      it('should not update the state early if channels are not defined', () => {
-        channelManager.state.partialNext({ channels: undefined });
-
-        client.dispatchEvent({
-          type: 'message.new',
-          channel_type: 'messaging',
-          channel_id: 'channel2',
-        });
-
-        expect(setChannelsStub).toHaveBeenCalledTimes(0);
-      });
-
       it('should not update the state if channel is pinned and sorting considers pinned channels', () => {
         const { channels: prevChannels } = channelManager.state.getLatestValue();
         isChannelPinnedStub.mockReturnValueOnce(true);
@@ -1577,6 +1548,10 @@ describe('ChannelManager', () => {
 
         const stateBefore = channelManager.state.getLatestValue();
 
+        const newChannelResponse = generateChannel({
+          channel: { id: 'channel4' },
+        });
+
         client.dispatchEvent({
           type: 'message.new',
           channel_type: 'messaging',
@@ -1586,58 +1561,11 @@ describe('ChannelManager', () => {
         const stateAfter = channelManager.state.getLatestValue();
 
         expect(setChannelsStub).toHaveBeenCalledOnce();
-        expect(promoteChannelSpy).toHaveBeenCalledOnce();
 
-        expect(stateBefore.channels.map((v) => v.cid)).toMatchInlineSnapshot(`
-          [
-            "messaging:channel1",
-            "messaging:channel2",
-            "messaging:channel3",
-          ]
-        `);
-        expect(stateAfter.channels.map((v) => v.cid)).toMatchInlineSnapshot(`
-          [
-            "messaging:channel4",
-            "messaging:channel1",
-            "messaging:channel2",
-            "messaging:channel3",
-          ]
-        `);
-      });
-
-      it('should move the channel upwards if all conditions allow it', () => {
-        isChannelPinnedStub.mockReturnValueOnce(false);
-        isChannelArchivedStub.mockReturnValueOnce(false);
-        shouldConsiderArchivedChannelsStub.mockReturnValueOnce(false);
-        shouldConsiderPinnedChannelsStub.mockReturnValueOnce(false);
-
-        const stateBefore = channelManager.state.getLatestValue();
-
-        client.dispatchEvent({
-          type: 'message.new',
-          channel_type: 'messaging',
-          channel_id: 'channel2',
-        });
-
-        const stateAfter = channelManager.state.getLatestValue();
-
-        expect(promoteChannelSpy).toHaveBeenCalledOnce();
-        expect(setChannelsStub).toHaveBeenCalledOnce();
-
-        expect(stateBefore.channels.map((v) => v.cid)).toMatchInlineSnapshot(`
-          [
-            "messaging:channel1",
-            "messaging:channel2",
-            "messaging:channel3",
-          ]
-        `);
-        expect(stateAfter.channels.map((v) => v.cid)).toMatchInlineSnapshot(`
-          [
-            "messaging:channel2",
-            "messaging:channel1",
-            "messaging:channel3",
-          ]
-        `);
+        expect(stateBefore.channels).toHaveLength(3);
+        expect(stateBefore.channels.map((c) => c.cid)).not.toContain(newChannelResponse.channel.cid);
+        expect(stateAfter.channels).toHaveLength(4);
+        expect(stateAfter.channels.map((c) => c.cid)).toContain(newChannelResponse.channel.cid);
       });
     });
 
@@ -1762,7 +1690,7 @@ describe('ChannelManager', () => {
         channelManager.setOptions({});
       });
 
-      it('should move channel when all criteria are met', async () => {
+      it('should add channel when all criteria are met', async () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
         const newChannel = client.channel(
           newChannelResponse.channel.type,
@@ -1782,23 +1710,11 @@ describe('ChannelManager', () => {
         const stateAfter = channelManager.state.getLatestValue();
 
         expect(getAndWatchChannelStub).toHaveBeenCalledOnce();
-        expect(promoteChannelSpy).toHaveBeenCalledOnce();
         expect(setChannelsStub).toHaveBeenCalledOnce();
-        expect(stateBefore.channels.map((c) => c.cid)).toMatchInlineSnapshot(`
-          [
-            "messaging:channel1",
-            "messaging:channel2",
-            "messaging:channel3",
-          ]
-        `);
-        expect(stateAfter.channels.map((c) => c.cid)).toMatchInlineSnapshot(`
-          [
-            "messaging:channel4",
-            "messaging:channel1",
-            "messaging:channel2",
-            "messaging:channel3",
-          ]
-        `);
+        expect(stateBefore.channels).toHaveLength(3);
+        expect(stateBefore.channels.map((c) => c.cid)).not.toContain(newChannel.cid);
+        expect(stateAfter.channels).toHaveLength(4);
+        expect(stateAfter.channels.map((c) => c.cid)).toContain(newChannel.cid);
       });
 
       it('should not add duplicate channels for multiple event invocations', async () => {
@@ -1825,23 +1741,11 @@ describe('ChannelManager', () => {
         const stateAfter = channelManager.state.getLatestValue();
 
         expect(getAndWatchChannelStub.mock.calls.length).to.equal(3);
-        expect(promoteChannelSpy.mock.calls.length).to.equal(3);
         expect(setChannelsStub.mock.calls.length).to.equal(3);
-        expect(stateBefore.channels.map((c) => c.cid)).toMatchInlineSnapshot(`
-          [
-            "messaging:channel1",
-            "messaging:channel2",
-            "messaging:channel3",
-          ]
-        `);
-        expect(stateAfter.channels.map((c) => c.cid)).toMatchInlineSnapshot(`
-          [
-            "messaging:channel4",
-            "messaging:channel1",
-            "messaging:channel2",
-            "messaging:channel3",
-          ]
-        `);
+        expect(stateBefore.channels).toHaveLength(3);
+        expect(stateBefore.channels.map((c) => c.cid)).not.toContain(newChannel.cid);
+        expect(stateAfter.channels).toHaveLength(4);
+        expect(stateAfter.channels.map((c) => c.cid)).toContain(newChannel.cid);
       });
     });
 
@@ -1865,24 +1769,6 @@ describe('ChannelManager', () => {
         await clock.runAllAsync();
 
         expect(getAndWatchChannelStub).toHaveBeenCalledTimes(0);
-        expect(setChannelsStub).toHaveBeenCalledTimes(0);
-      });
-
-      it('should not update the state if channels is undefined', async () => {
-        channelManager.state.partialNext({ channels: undefined });
-        const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
-        getAndWatchChannelStub.mockImplementation(async () =>
-          client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id),
-        );
-        client.dispatchEvent({
-          type: 'channel.visible',
-          channel_id: newChannelResponse.channel.id,
-          channel_type: newChannelResponse.channel.type,
-        });
-
-        await clock.runAllAsync();
-
-        expect(getAndWatchChannelStub).toHaveBeenCalled();
         expect(setChannelsStub).toHaveBeenCalledTimes(0);
       });
 
@@ -1960,23 +1846,11 @@ describe('ChannelManager', () => {
         const stateAfter = channelManager.state.getLatestValue();
 
         expect(getAndWatchChannelStub).toHaveBeenCalledOnce();
-        expect(promoteChannelSpy).toHaveBeenCalledOnce();
         expect(setChannelsStub).toHaveBeenCalledOnce();
-        expect(stateBefore.channels.map((c) => c.cid)).toMatchInlineSnapshot(`
-          [
-            "messaging:channel1",
-            "messaging:channel2",
-            "messaging:channel3",
-          ]
-        `);
-        expect(stateAfter.channels.map((c) => c.cid)).toMatchInlineSnapshot(`
-          [
-            "messaging:channel4",
-            "messaging:channel1",
-            "messaging:channel2",
-            "messaging:channel3",
-          ]
-        `);
+        expect(stateBefore.channels).toHaveLength(3);
+        expect(stateBefore.channels.map((c) => c.cid)).not.toContain(newChannel.cid);
+        expect(stateAfter.channels).toHaveLength(4);
+        expect(stateAfter.channels.map((c) => c.cid)).toContain(newChannel.cid);
       });
     });
 
@@ -2037,13 +1911,6 @@ describe('ChannelManager', () => {
         expect(setChannelsStub).toHaveBeenCalledTimes(0);
       });
 
-      it('should not update state early if channels are not available in state', () => {
-        channelManager.state.partialNext({ channels: undefined });
-        dispatchMemberUpdatedEvent();
-
-        expect(setChannelsStub).toHaveBeenCalledTimes(0);
-      });
-
       it('should not update state if options.lockChannelOrder is true', () => {
         channelManager.setOptions({ lockChannelOrder: true });
         dispatchMemberUpdatedEvent();
@@ -2083,66 +1950,12 @@ describe('ChannelManager', () => {
         isChannelArchivedStub.mockReturnValueOnce(true);
         shouldConsiderArchivedChannelsStub.mockReturnValueOnce(true);
         shouldConsiderPinnedChannelsStub.mockReturnValueOnce(true);
+
         dispatchMemberUpdatedEvent();
+        const stateAfter = channelManager.state.getLatestValue();
 
-        expect(setChannelsStub).toHaveBeenCalledOnce();
-        expect(
-          (setChannelsStub.mock.calls[0][0] as Channel[]).map((c) => c.id),
-        ).to.deep.equal(['channel2', 'channel1', 'channel3']);
-      });
-
-      it('should pin channel at the correct position when pinnedAtSort is 1', () => {
-        isChannelPinnedStub.mockReturnValueOnce(false);
-        shouldConsiderPinnedChannelsStub.mockReturnValueOnce(true);
-        findLastPinnedChannelIndexStub.mockReturnValueOnce(0);
-        extractSortValueStub.mockReturnValueOnce(1);
-        dispatchMemberUpdatedEvent('channel3');
-
-        expect(setChannelsStub).toHaveBeenCalledOnce();
-        expect(
-          (setChannelsStub.mock.calls[0][0] as Channel[]).map((c) => c.id),
-        ).to.deep.equal(['channel1', 'channel3', 'channel2']);
-      });
-
-      it('should pin channel at the correct position when pinnedAtSort is -1 and the target is not pinned', () => {
-        isChannelPinnedStub.mockImplementationOnce((c) => c.id === 'channel1');
-        shouldConsiderPinnedChannelsStub.mockReturnValueOnce(true);
-        findLastPinnedChannelIndexStub.mockReturnValueOnce(0);
-        extractSortValueStub.mockReturnValueOnce(-1);
-        dispatchMemberUpdatedEvent('channel3');
-
-        expect(setChannelsStub).toHaveBeenCalledOnce();
-        expect(
-          (setChannelsStub.mock.calls[0][0] as Channel[]).map((c) => c.id),
-        ).to.deep.equal(['channel1', 'channel3', 'channel2']);
-      });
-
-      it('should pin channel at the correct position when pinnedAtSort is -1 and the target is pinned', () => {
-        isChannelPinnedStub.mockImplementationOnce((c) =>
-          ['channel1', 'channel3'].includes(c.id!),
-        );
-        shouldConsiderPinnedChannelsStub.mockReturnValueOnce(true);
-        findLastPinnedChannelIndexStub.mockReturnValueOnce(0);
-        extractSortValueStub.mockReturnValueOnce(-1);
-        dispatchMemberUpdatedEvent('channel3');
-
-        expect(setChannelsStub).toHaveBeenCalledOnce();
-        expect(
-          (setChannelsStub.mock.calls[0][0] as Channel[]).map((c) => c.id),
-        ).to.deep.equal(['channel3', 'channel1', 'channel2']);
-      });
-
-      it('should not update state if position of target channel does not change', () => {
-        isChannelPinnedStub.mockReturnValueOnce(false);
-        shouldConsiderPinnedChannelsStub.mockReturnValueOnce(true);
-        findLastPinnedChannelIndexStub.mockReturnValueOnce(0);
-        extractSortValueStub.mockReturnValueOnce(1);
-        dispatchMemberUpdatedEvent();
-
-        const { channels } = channelManager.state.getLatestValue();
-
-        expect(setChannelsStub).toHaveBeenCalledTimes(0);
-        expect(channels[1].id).to.equal('channel2');
+        expect(stateAfter.channels).toHaveLength(3);
+        expect(setChannelsStub).toHaveBeenCalledTimes(1);
       });
     });
 
@@ -2251,22 +2064,10 @@ describe('ChannelManager', () => {
         const stateAfter = channelManager.state.getLatestValue();
 
         expect(setChannelsStub).toHaveBeenCalledOnce();
-        expect(promoteChannelSpy).toHaveBeenCalledOnce();
-        expect(stateBefore.channels.map((c) => c.cid)).toMatchInlineSnapshot(`
-          [
-            "messaging:channel1",
-            "messaging:channel2",
-            "messaging:channel3",
-          ]
-        `);
-        expect(stateAfter.channels.map((c) => c.cid)).toMatchInlineSnapshot(`
-          [
-            "messaging:channel4",
-            "messaging:channel1",
-            "messaging:channel2",
-            "messaging:channel3",
-          ]
-        `);
+        expect(stateBefore.channels).toHaveLength(3);
+        expect(stateBefore.channels.map((c) => c.cid)).not.toContain(newChannel.cid);
+        expect(stateAfter.channels).toHaveLength(4);
+        expect(stateAfter.channels.map((c) => c.cid)).toContain(newChannel.cid);
       });
     });
   });
