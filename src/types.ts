@@ -3155,6 +3155,11 @@ export type CampaignData = {
     custom?: {};
     id?: string;
     members?: string[];
+    members_template?: Array<{
+      user_id: string;
+      channel_role?: string;
+      custom?: Record<string, unknown>;
+    }>;
     team?: string;
   };
   create_channels?: boolean;
