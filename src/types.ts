@@ -332,6 +332,7 @@ export type ChannelAPIResponse = {
 
 export type ChannelUpdateOptions = {
   hide_history?: boolean;
+  hide_history_before?: string | Date;
   skip_push?: boolean;
 };
 
@@ -3156,6 +3157,11 @@ export type CampaignData = {
     custom?: {};
     id?: string;
     members?: string[];
+    members_template?: Array<{
+      user_id: string;
+      channel_role?: string;
+      custom?: Record<string, unknown>;
+    }>;
     team?: string;
   };
   create_channels?: boolean;
