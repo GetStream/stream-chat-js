@@ -776,6 +776,38 @@ export class Channel {
   }
 
   /**
+   * addFilterTags - add filter tags to the channel
+   *
+   * @param {string[]} tags An array of tags to add to the channel
+   * @param {Message} [message] Optional message object for channel members notification
+   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
+   * @return {Promise<UpdateChannelAPIResponse>} The server response
+   */
+  async addFilterTags(
+    tags: string[],
+    message?: Message,
+    options: ChannelUpdateOptions = {},
+  ) {
+    return await this._update({ add_filter_tags: tags, message, ...options });
+  }
+
+  /**
+   * removeFilterTags - remove filter tags from the channel
+   *
+   * @param {string[]} tags An array of tags to remove from the channel
+   * @param {Message} [message] Optional message object for channel members notification
+   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
+   * @return {Promise<UpdateChannelAPIResponse>} The server response
+   */
+  async removeFilterTags(
+    tags: string[],
+    message?: Message,
+    options: ChannelUpdateOptions = {},
+  ) {
+    return await this._update({ remove_filter_tags: tags, message, ...options });
+  }
+
+  /**
    * addModerators - add moderators to the channel
    *
    * @param {string[]} members An array of member identifiers
