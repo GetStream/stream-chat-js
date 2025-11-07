@@ -1753,6 +1753,7 @@ export type ReactionFilters = QueryFilters<
 
 export type ChannelFilters = QueryFilters<
   ContainsOperator<Omit<CustomChannelData, 'name'>> & {
+    app_banned?: 'only' | 'excluded';
     archived?: boolean;
     'member.user.name'?:
       | RequireOnlyOne<{
