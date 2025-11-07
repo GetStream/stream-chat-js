@@ -1327,7 +1327,7 @@ export const runDetached = <T>(
     onErrorCallback?: (error: Error) => void | Promise<void>;
   },
 ) => {
-  const { context, onSuccessCallback = () => undefined, onErrorCallback } = options ?? {};
+  const { context, onSuccessCallback, onErrorCallback } = options ?? {};
   const defaultOnError = (error: Error) => {
     console.log(`An error has occurred in context ${context}: ${error}`);
   };

@@ -1,6 +1,7 @@
 import type {
   PaginationQueryParams,
   PaginationQueryReturnValue,
+  PaginationQueryShapeChangeIdentifier,
   PaginatorOptions,
   PaginatorState,
 } from './BasePaginator';
@@ -11,11 +12,25 @@ import { makeComparator } from './sortCompiler';
 import { generateUUIDv4 } from '../utils';
 import type { StreamChat } from '../client';
 import type { Channel } from '../channel';
-import type { ChannelFilters, ChannelOptions, ChannelSort } from '../types';
+import type {
+  ChannelFilters,
+  ChannelOptions,
+  ChannelSort,
+  ChannelStateOptions,
+} from '../types';
 import type { FieldToDataResolver, PathResolver } from './types.normalization';
 import { resolveDotPathValue } from './utility.normalization';
+import type { ValueOrPatch } from '../store';
+import { isEqual } from '../utils/mergeWith/mergeWithCore';
 
 const DEFAULT_BACKEND_SORT: ChannelSort = { last_message_at: -1, updated_at: -1 }; // {last_updated: -1}
+
+export type ChannelQueryShape = {
+  filters: ChannelFilters;
+  sort?: ChannelSort;
+  options?: ChannelOptions;
+  stateOptions?: ChannelStateOptions;
+};
 
 export type ChannelPaginatorState = PaginatorState<Channel>;
 
@@ -25,13 +40,34 @@ export type ChannelPaginatorRequestOptions = Partial<
 
 export type ChannelPaginatorOptions = {
   client: StreamChat;
+  channelStateOptions?: ChannelStateOptions;
   filterBuilderOptions?: FilterBuilderOptions<ChannelFilters>;
   filters?: ChannelFilters;
   id?: string;
-  paginatorOptions?: PaginatorOptions;
+  paginatorOptions?: PaginatorOptions<Channel, ChannelQueryShape>;
   requestOptions?: ChannelPaginatorRequestOptions;
   sort?: ChannelSort | ChannelSort[];
 };
+
+const getQueryShapeRelevantChannelOptions = (options: ChannelOptions) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { limit: _, member_limit: __, message_limit: ___, ...relevantShape } = options;
+  return relevantShape;
+};
+
+const hasPaginationQueryShapeChanged: PaginationQueryShapeChangeIdentifier<
+  ChannelQueryShape
+> = (prevQueryShape, nextQueryShape) =>
+  !isEqual(
+    {
+      ...prevQueryShape,
+      options: getQueryShapeRelevantChannelOptions(prevQueryShape?.options ?? {}),
+    },
+    {
+      ...nextQueryShape,
+      options: getQueryShapeRelevantChannelOptions(nextQueryShape?.options ?? {}),
+    },
+  );
 
 const pinnedFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: (field) => field === 'pinned',
@@ -99,17 +135,19 @@ const channelSortPathResolver: PathResolver<Channel> = (channel, path) => {
 
 // todo: maybe items could be just an array of {cid: string} and the data would be retrieved from client.activeChannels
 // todo: maybe we should introduce client._cache.channels  that would be reactive and orchestrator would subscribe to client._cache.channels state to keep all the dependent state in sync
-export class ChannelPaginator extends BasePaginator<Channel> {
-  // state: StateStore<ChannelPaginatorState>;
+export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> {
+  private readonly _id: string;
   private client: StreamChat;
-  protected _filters: ChannelFilters | undefined;
+  protected _staticFilters: ChannelFilters | undefined;
   protected _sort: ChannelSort | ChannelSort[] | undefined;
   protected _options: ChannelPaginatorRequestOptions | undefined;
-  private _id: string;
+  protected _channelStateOptions: ChannelStateOptions | undefined;
+  protected _nextQueryShape: ChannelQueryShape | undefined;
   sortComparator: (a: Channel, b: Channel) => number;
   filterBuilder: FilterBuilder<ChannelFilters>;
 
   constructor({
+    channelStateOptions,
     client,
     id,
     filterBuilderOptions,
@@ -118,13 +156,14 @@ export class ChannelPaginator extends BasePaginator<Channel> {
     requestOptions,
     sort,
   }: ChannelPaginatorOptions) {
-    super(paginatorOptions);
+    super({ hasPaginationQueryShapeChanged, ...paginatorOptions });
     const definedSort = sort ?? DEFAULT_BACKEND_SORT;
     this.client = client;
     this._id = id ?? `channel-paginator-${generateUUIDv4()}`;
     this._sort = definedSort;
-    this._filters = filters;
+    this._staticFilters = filters;
     this._options = requestOptions;
+    this._channelStateOptions = channelStateOptions;
     this.filterBuilder = new FilterBuilder<ChannelFilters>(filterBuilderOptions);
     this.sortComparator = makeComparator<Channel, ChannelSort>({
       sort: definedSort,
@@ -147,8 +186,12 @@ export class ChannelPaginator extends BasePaginator<Channel> {
     return this._id;
   }
 
-  get filters(): ChannelFilters | undefined {
-    return this._filters;
+  get isOfflineSupportEnabled() {
+    return !!this.client.offlineDb;
+  }
+
+  get staticFilters(): ChannelFilters | undefined {
+    return this._staticFilters;
   }
 
   get sort(): ChannelSort | undefined {
@@ -159,9 +202,12 @@ export class ChannelPaginator extends BasePaginator<Channel> {
     return this._options;
   }
 
-  set filters(filters: ChannelFilters | undefined) {
-    this._filters = filters;
-    this.resetState();
+  get channelStateOptions(): ChannelStateOptions | undefined {
+    return this._channelStateOptions;
+  }
+
+  set staticFilters(filters: ChannelFilters | undefined) {
+    this._staticFilters = filters;
   }
 
   set sort(sort: ChannelSort | ChannelSort[] | undefined) {
@@ -169,12 +215,14 @@ export class ChannelPaginator extends BasePaginator<Channel> {
     this.sortComparator = makeComparator<Channel, ChannelSort>({
       sort: this.sort ?? DEFAULT_BACKEND_SORT,
     });
-    this.resetState();
   }
 
   set options(options: ChannelPaginatorRequestOptions | undefined) {
     this._options = options;
-    this.resetState();
+  }
+
+  set channelStateOptions(options: ChannelStateOptions | undefined) {
+    this._channelStateOptions = options;
   }
 
   getItemId(item: Channel): string {
@@ -183,24 +231,127 @@ export class ChannelPaginator extends BasePaginator<Channel> {
 
   buildFilters = (): ChannelFilters =>
     this.filterBuilder.buildFilters({
-      baseFilters: { ...this.filters },
+      baseFilters: { ...this.staticFilters },
     });
 
-  query = async ({ direction }: PaginationQueryParams = {}): Promise<
-    PaginationQueryReturnValue<Channel>
-  > => {
-    if (direction) {
-      console.warn('Direction is not supported with channel pagination.');
-    }
-    const filters = this.buildFilters();
-    const options: ChannelOptions = {
-      ...this.options,
-      limit: this.pageSize,
-      offset: this.offset,
+  // invoked inside BasePaginator.executeQuery() to keep it as a query descriptor;
+  protected getNextQueryShape(): ChannelQueryShape {
+    const shape: ChannelQueryShape = {
+      filters: this.buildFilters(),
+      options: {
+        ...this.options,
+        limit: this.pageSize,
+        offset: this.offset,
+      },
     };
-    const items = await this.client.queryChannels(filters, this.sort, options);
+
+    if (this.sort) {
+      shape.sort = this.sort;
+    }
+
+    if (this.channelStateOptions) {
+      shape.stateOptions = this.channelStateOptions;
+    }
+    return shape;
+  }
+
+  preloadFirstPageFromOfflineDb = async ({
+    direction,
+    queryShape,
+    reset,
+  }: PaginationQueryParams<ChannelQueryShape>) => {
+    if (
+      !this.client.offlineDb?.getChannelsForQuery ||
+      !this.client.user?.id ||
+      !queryShape
+    )
+      return undefined;
+
+    try {
+      const channelsFromDB = await this.client.offlineDb.getChannelsForQuery({
+        userId: this.client.user.id,
+        filters: queryShape.filters,
+        sort: queryShape.sort,
+      });
+
+      if (channelsFromDB) {
+        const offlineChannels = this.client.hydrateActiveChannels(channelsFromDB, {
+          offlineMode: true,
+          skipInitialization: [], // passing empty array will clear out the existing messages from channel state, this removes the possibility of duplicate messages
+        });
+
+        return offlineChannels;
+      }
+
+      if (!this.client.offlineDb.syncManager.syncStatus) {
+        this.client.offlineDb.syncManager.scheduleSyncStatusChangeCallback(
+          this.id,
+          async () => {
+            await this.executeQuery({ direction, queryShape, reset });
+          },
+        );
+        return;
+      }
+    } catch (error) {
+      this.client.logger('error', (error as Error).message);
+      if (this.config.throwErrors) throw error;
+    }
+    return;
+  };
+
+  populateOfflineDbAfterQuery = ({
+    items,
+    queryShape,
+  }: {
+    items?: Channel[];
+    queryShape?: ChannelQueryShape;
+  }) => {
+    if (!items || !queryShape) return undefined;
+
+    this.client.offlineDb?.executeQuerySafely(
+      (db) =>
+        db.upsertCidsForQuery({
+          cids: items.map((channel) => channel.cid),
+          filters: queryShape.filters,
+          sort: queryShape.sort,
+        }),
+      { method: 'upsertCidsForQuery' },
+    );
+  };
+
+  query = async (): Promise<PaginationQueryReturnValue<Channel>> => {
+    // get the params only if they were not generated previously
+    if (!this._nextQueryShape) {
+      this._nextQueryShape = this.getNextQueryShape();
+    }
+    const { filters, sort, options, stateOptions } = this._nextQueryShape;
+    let items: Channel[];
+    if (this.config.doRequest) {
+      items = (await this.config.doRequest(this._nextQueryShape)).items;
+    } else {
+      items = await this.client.queryChannels(filters, sort, options, stateOptions);
+    }
     return { items };
   };
 
   filterQueryResults = (items: Channel[]) => items;
+
+  setItems(valueOrFactory: ValueOrPatch<Channel[]>) {
+    super.setItems(valueOrFactory);
+
+    if (!this.client.offlineDb) return;
+
+    const { items: channels = [], sort } = this;
+    const filters = this.buildFilters();
+
+    this.client.offlineDb?.executeQuerySafely(
+      (db) =>
+        db.upsertCidsForQuery({
+          cids: channels.map((channel) => channel.cid),
+          filters,
+          sort,
+        }),
+      { method: 'upsertCidsForQuery' },
+    );
+  }
 }

@@ -5,11 +5,17 @@ import {
   DEFAULT_PAGINATION_OPTIONS,
   PaginationQueryParams,
   PaginationQueryReturnValue,
+  PaginatorCursor,
   type PaginatorOptions,
+  PaginatorState,
+  PrimitiveFilter,
+  QueryFilter,
   QueryFilters,
+  RequireOnlyOne,
 } from '../../../src';
 import { sleep } from '../../../src/utils';
 import { makeComparator } from '../../../src/pagination/sortCompiler';
+import { DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES } from '../../../src/constants';
 
 const toNextTick = async () => {
   const sleepPromise = sleep(0);
@@ -26,7 +32,16 @@ type TestItem = {
   age?: number;
 };
 
-class Paginator extends BasePaginator<TestItem> {
+type QueryShape = {
+  filters: {
+    [Key in keyof TestItem]:
+      | RequireOnlyOne<QueryFilter<TestItem[Key]>>
+      | PrimitiveFilter<TestItem[Key]>;
+  };
+  sort: { [Key in keyof TestItem]?: AscDesc };
+};
+
+class IncompletePaginator extends BasePaginator<TestItem, QueryShape> {
   sort: QueryFilters<TestItem> | undefined;
   sortComparator: (a: TestItem, b: TestItem) => number = vi.fn();
   queryResolve: Function = vi.fn();
@@ -34,11 +49,13 @@ class Paginator extends BasePaginator<TestItem> {
   queryPromise: Promise<PaginationQueryReturnValue<TestItem>> | null = null;
   mockClientQuery = vi.fn();
 
-  constructor(options: PaginatorOptions = {}) {
+  constructor(options: PaginatorOptions<TestItem, QueryShape> = {}) {
     super(options);
   }
 
-  query(params: PaginationQueryParams): Promise<PaginationQueryReturnValue<TestItem>> {
+  query(
+    params: PaginationQueryParams<QueryShape>,
+  ): Promise<PaginationQueryReturnValue<TestItem>> {
     const promise = new Promise<PaginationQueryReturnValue<TestItem>>(
       (queryResolve, queryReject) => {
         this.queryResolve = queryResolve;
@@ -55,11 +72,20 @@ class Paginator extends BasePaginator<TestItem> {
   }
 }
 
+const defaultNextQueryShape: QueryShape = { filters: { id: 'test-id' }, sort: { id: 1 } };
+
+class Paginator extends IncompletePaginator {
+  constructor(options: PaginatorOptions<TestItem, QueryShape> = {}) {
+    super(options);
+  }
+
+  getNextQueryShape = vi.fn().mockReturnValue(defaultNextQueryShape);
+}
+
 describe('BasePaginator', () => {
   describe('constructor', () => {
     it('initiates with the defaults', () => {
       const paginator = new Paginator();
-      expect(paginator.pageSize).toBe(DEFAULT_PAGINATION_OPTIONS.pageSize);
       expect(paginator.state.getLatestValue()).toEqual({
         hasNext: true,
         hasPrev: true,
@@ -69,30 +95,126 @@ describe('BasePaginator', () => {
         cursor: undefined,
         offset: 0,
       });
+      expect(paginator.isInitialized).toBe(false);
       // @ts-expect-error accessing protected property
       expect(paginator._filterFieldToDataResolvers).toHaveLength(0);
+      expect(paginator.config.initialCursor).toBeUndefined();
+      expect(paginator.config.initialOffset).toBeUndefined();
+      expect(paginator.config.throwErrors).toBe(false);
+      expect(paginator.pageSize).toBe(DEFAULT_PAGINATION_OPTIONS.pageSize);
+      expect(paginator.config.debounceMs).toBe(DEFAULT_PAGINATION_OPTIONS.debounceMs);
+      expect(paginator.config.lockItemOrder).toBe(
+        DEFAULT_PAGINATION_OPTIONS.lockItemOrder,
+      );
+      expect(paginator.config.hasPaginationQueryShapeChanged).toBe(
+        DEFAULT_PAGINATION_OPTIONS.hasPaginationQueryShapeChanged,
+      );
     });
 
     it('initiates with custom options', () => {
-      const paginator = new Paginator({ pageSize: 1 });
-      expect(paginator.pageSize).not.toBe(DEFAULT_PAGINATION_OPTIONS.pageSize);
-      expect(paginator.pageSize).toBe(1);
+      const options: PaginatorOptions<TestItem, QueryShape> = {
+        debounceMs: DEFAULT_PAGINATION_OPTIONS.debounceMs - 100,
+        doRequest: () => Promise.resolve({ items: [{ id: 'test-id' }] }),
+        hasPaginationQueryShapeChanged: () => true,
+        initialCursor: { next: 'next', prev: 'prev' },
+        initialOffset: 10,
+        lockItemOrder: !DEFAULT_PAGINATION_OPTIONS.lockItemOrder,
+        pageSize: DEFAULT_PAGINATION_OPTIONS.pageSize - 1,
+        throwErrors: true,
+      };
+      const paginator = new Paginator(options);
       expect(paginator.state.getLatestValue()).toEqual({
         hasNext: true,
         hasPrev: true,
         isLoading: false,
         items: undefined,
         lastQueryError: undefined,
-        cursor: undefined,
-        offset: 0,
+        cursor: options.initialCursor,
+        offset: options.initialOffset,
       });
+      expect(paginator.isInitialized).toBe(false);
+      // @ts-expect-error accessing protected property
+      expect(paginator._filterFieldToDataResolvers).toHaveLength(0);
+      expect(paginator.config.initialCursor).toStrictEqual(options.initialCursor);
+      expect(paginator.config.initialOffset).toStrictEqual(options.initialOffset);
+      expect(paginator.config.throwErrors).toBe(options.throwErrors);
+      expect(paginator.pageSize).toBe(options.pageSize);
+      expect(paginator.config.hasPaginationQueryShapeChanged).toStrictEqual(
+        options.hasPaginationQueryShapeChanged,
+      );
+      expect(paginator.config.debounceMs).toBe(options.debounceMs);
+      expect(paginator.config.lockItemOrder).toBe(options.lockItemOrder);
     });
   });
 
   describe('pagination API', () => {
-    it('paginates to next pages', async () => {
+    it('throws is the paginator does implement own getNextQueryShape', () => {
+      const paginator = new IncompletePaginator();
+      // @ts-expect-error accessing protected property
+      expect(paginator.getNextQueryShape).toThrow(
+        'Paginator.getNextQueryShape() is not implemented',
+      );
+    });
+
+    describe('shouldResetStateBeforeQuery', () => {
+      const stateBeforeQuery: PaginatorState<TestItem> = {
+        hasNext: true,
+        hasPrev: true,
+        isLoading: false,
+        items: [{ id: 'test-item' }],
+        lastQueryError: undefined,
+        cursor: { next: 'next', prev: 'prev' },
+        offset: 10,
+      };
+
+      const prevQueryShape: QueryShape = { filters: { id: 'a' }, sort: { id: 1 } };
+      const nextQueryShape: QueryShape = { filters: { id: 'b' }, sort: { id: 1 } };
+
+      it('resets the state before a query when querying the first page', () => {
+        const paginator = new Paginator();
+        const initialState = { ...stateBeforeQuery, items: undefined };
+        paginator.state.next(initialState);
+        expect(paginator.state.getLatestValue()).toEqual(initialState);
+        // @ts-expect-error accessing protected property
+        expect(paginator.shouldResetStateBeforeQuery()).toBe(true);
+      });
+
+      it('resets the state before a query when query shape changed', () => {
+        const prevQueryShape: QueryShape = { filters: { id: 'a' }, sort: { id: 1 } };
+        const nextQueryShape: QueryShape = { filters: { id: 'b' }, sort: { id: 1 } };
+        const paginator = new Paginator();
+        expect(
+          // @ts-expect-error accessing protected property
+          paginator.shouldResetStateBeforeQuery(prevQueryShape, nextQueryShape),
+        ).toBe(true);
+        expect(
+          // @ts-expect-error accessing protected property
+          paginator.shouldResetStateBeforeQuery(prevQueryShape, prevQueryShape),
+        ).toBe(false);
+      });
+
+      it('determines whether pagination state should be reset before a query using custom logic', () => {
+        const options = {
+          hasPaginationQueryShapeChanged: vi.fn().mockReturnValue(true),
+        };
+        const paginator = new Paginator(options);
+        expect(
+          // @ts-expect-error accessing protected property
+          paginator.shouldResetStateBeforeQuery(prevQueryShape, nextQueryShape),
+        ).toBe(true);
+        expect(
+          // @ts-expect-error accessing protected property
+          paginator.shouldResetStateBeforeQuery(prevQueryShape, prevQueryShape),
+        ).toBe(true);
+        expect(options.hasPaginationQueryShapeChanged).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    it('paginates to next pages (cursor)', async () => {
       const paginator = new Paginator();
       let nextPromise = paginator.next();
+      // wait for the DB data first page load
+      await sleep(0);
       expect(paginator.isLoading).toBe(true);
       expect(paginator.hasNext).toBe(true);
       expect(paginator.hasPrev).toBe(true);
@@ -104,7 +226,12 @@ describe('BasePaginator', () => {
       expect(paginator.hasPrev).toBe(true);
       expect(paginator.items).toEqual([{ id: 'id1' }]);
       expect(paginator.cursor).toEqual({ next: 'next1', prev: 'prev1' });
-      expect(paginator.mockClientQuery).toHaveBeenCalledWith({ direction: 'next' });
+      expect(paginator.mockClientQuery).toHaveBeenCalledWith({
+        direction: 'next',
+        queryShape: defaultNextQueryShape,
+        reset: undefined,
+        retryCount: 0,
+      });
 
       nextPromise = paginator.next();
       expect(paginator.isLoading).toBe(true);
@@ -127,6 +254,55 @@ describe('BasePaginator', () => {
       expect(paginator.isLoading).toBe(false);
       expect(paginator.mockClientQuery).toHaveBeenCalledTimes(3);
     });
+
+    it('paginates to next pages (offset)', async () => {
+      const paginator = new Paginator({ pageSize: 1 });
+      let nextPromise = paginator.next();
+      // wait for the DB data first page load
+      await sleep(0);
+      expect(paginator.isLoading).toBe(true);
+      expect(paginator.hasNext).toBe(true);
+      expect(paginator.hasPrev).toBe(true);
+
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await nextPromise;
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.hasNext).toBe(true);
+      expect(paginator.hasPrev).toBe(true);
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      expect(paginator.cursor).toBeUndefined();
+      expect(paginator.offset).toBe(1);
+      expect(paginator.mockClientQuery).toHaveBeenCalledWith({
+        direction: 'next',
+        queryShape: defaultNextQueryShape,
+        reset: undefined,
+        retryCount: 0,
+      });
+
+      nextPromise = paginator.next();
+      expect(paginator.isLoading).toBe(true);
+      paginator.queryResolve({ items: [{ id: 'id2' }] });
+      await nextPromise;
+      expect(paginator.hasNext).toBe(true);
+      expect(paginator.hasPrev).toBe(true);
+      expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]);
+      expect(paginator.cursor).toBeUndefined();
+      expect(paginator.offset).toBe(2);
+
+      nextPromise = paginator.next();
+      paginator.queryResolve({ items: [] });
+      await nextPromise;
+      expect(paginator.hasNext).toBe(false);
+      expect(paginator.hasPrev).toBe(true);
+      expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]);
+      expect(paginator.cursor).toBeUndefined();
+      expect(paginator.offset).toBe(2);
+
+      paginator.next();
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.mockClientQuery).toHaveBeenCalledTimes(3);
+    });
+
     it('paginates to next pages debounced', async () => {
       vi.useFakeTimers();
       const paginator = new Paginator({ debounceMs: 2000 });
@@ -136,6 +312,8 @@ describe('BasePaginator', () => {
       expect(paginator.hasNext).toBe(true);
       expect(paginator.hasPrev).toBe(true);
       vi.advanceTimersByTime(2000);
+      // await first page load from the DB
+      await toNextTick();
       expect(paginator.isLoading).toBe(true);
       expect(paginator.hasNext).toBe(true);
       expect(paginator.hasPrev).toBe(true);
@@ -148,7 +326,12 @@ describe('BasePaginator', () => {
       expect(paginator.hasPrev).toBe(true);
       expect(paginator.items).toEqual([{ id: 'id1' }]);
       expect(paginator.cursor).toEqual({ next: 'next1', prev: 'prev1' });
-      expect(paginator.mockClientQuery).toHaveBeenCalledWith({ direction: 'next' });
+      expect(paginator.mockClientQuery).toHaveBeenCalledWith({
+        direction: 'next',
+        queryShape: defaultNextQueryShape,
+        reset: undefined,
+        retryCount: 0,
+      });
 
       vi.useRealTimers();
     });
@@ -156,6 +339,7 @@ describe('BasePaginator', () => {
     it('paginates to a previous page', async () => {
       const paginator = new Paginator();
       let nextPromise = paginator.prev();
+      await sleep(0);
       expect(paginator.isLoading).toBe(true);
       expect(paginator.hasNext).toBe(true);
       expect(paginator.hasPrev).toBe(true);
@@ -167,7 +351,12 @@ describe('BasePaginator', () => {
       expect(paginator.hasPrev).toBe(true);
       expect(paginator.items).toEqual([{ id: 'id1' }]);
       expect(paginator.cursor).toEqual({ next: 'next1', prev: 'prev1' });
-      expect(paginator.mockClientQuery).toHaveBeenCalledWith({ direction: 'prev' });
+      expect(paginator.mockClientQuery).toHaveBeenCalledWith({
+        direction: 'prev',
+        queryShape: defaultNextQueryShape,
+        reset: undefined,
+        retryCount: 0,
+      });
 
       nextPromise = paginator.prev();
       expect(paginator.isLoading).toBe(true);
@@ -189,6 +378,7 @@ describe('BasePaginator', () => {
       paginator.prev();
       expect(paginator.isLoading).toBe(false);
     });
+
     it('debounces the pagination to a previous page', async () => {
       vi.useFakeTimers();
       const paginator = new Paginator({ debounceMs: 2000 });
@@ -198,6 +388,7 @@ describe('BasePaginator', () => {
       expect(paginator.hasNext).toBe(true);
       expect(paginator.hasPrev).toBe(true);
       vi.advanceTimersByTime(2000);
+      await toNextTick();
       expect(paginator.isLoading).toBe(true);
       expect(paginator.hasNext).toBe(true);
       expect(paginator.hasPrev).toBe(true);
@@ -210,13 +401,20 @@ describe('BasePaginator', () => {
       expect(paginator.hasPrev).toBe(true);
       expect(paginator.items).toEqual([{ id: 'id1' }]);
       expect(paginator.cursor).toEqual({ next: 'next1', prev: 'prev1' });
-      expect(paginator.mockClientQuery).toHaveBeenCalledWith({ direction: 'prev' });
+      expect(paginator.mockClientQuery).toHaveBeenCalledWith({
+        direction: 'prev',
+        queryShape: defaultNextQueryShape,
+        reset: undefined,
+        retryCount: 0,
+      });
       vi.useRealTimers();
     });
 
     it('prevents pagination if another query is in progress', async () => {
       const paginator = new Paginator();
       const nextPromise1 = paginator.next();
+      // wait for the first page load from the DB
+      await sleep(0);
       expect(paginator.isLoading).toBe(true);
       expect(paginator.mockClientQuery).toHaveBeenCalledTimes(1);
       const nextPromise2 = paginator.next();
@@ -225,13 +423,98 @@ describe('BasePaginator', () => {
       expect(paginator.mockClientQuery).toHaveBeenCalledTimes(1);
     });
 
+    it('resets the state if the query shape changed', async () => {
+      const paginator = new Paginator({ pageSize: 1 });
+      let nextPromise = paginator.next();
+      await sleep(0);
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await nextPromise;
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.hasNext).toBe(true);
+      expect(paginator.hasPrev).toBe(true);
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      expect(paginator.cursor).toBeUndefined();
+      expect(paginator.offset).toBe(1);
+
+      paginator.getNextQueryShape.mockReturnValueOnce({
+        filters: { id: 'test' },
+        sort: { id: -1 },
+      });
+      nextPromise = paginator.next();
+      await sleep(0);
+      expect(paginator.isLoading).toBe(true);
+      expect(paginator.items).toBeUndefined();
+      expect(paginator.offset).toBe(0);
+      paginator.queryResolve({ items: [{ id: 'id2' }] });
+      await nextPromise;
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.items).toEqual([{ id: 'id2' }]);
+      expect(paginator.offset).toBe(1);
+    });
+
+    it('resets the state if forced', async () => {
+      const paginator = new Paginator({ pageSize: 1 });
+      let nextPromise = paginator.next();
+      await sleep(0);
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await nextPromise;
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.hasNext).toBe(true);
+      expect(paginator.hasPrev).toBe(true);
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      expect(paginator.cursor).toBeUndefined();
+      expect(paginator.offset).toBe(1);
+
+      nextPromise = paginator.next({ reset: 'yes' });
+      await sleep(0);
+      expect(paginator.isLoading).toBe(true);
+      expect(paginator.items).toBeUndefined();
+      expect(paginator.offset).toBe(0);
+      paginator.queryResolve({ items: [{ id: 'id2' }] });
+      await nextPromise;
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.items).toEqual([{ id: 'id2' }]);
+      expect(paginator.offset).toBe(1);
+    });
+
+    it('does not reset the state if forced', async () => {
+      const paginator = new Paginator({ pageSize: 1 });
+      let nextPromise = paginator.next();
+      await sleep(0);
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await nextPromise;
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.hasNext).toBe(true);
+      expect(paginator.hasPrev).toBe(true);
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      expect(paginator.cursor).toBeUndefined();
+      expect(paginator.offset).toBe(1);
+
+      paginator.getNextQueryShape.mockReturnValueOnce({
+        filters: { id: 'test' },
+        sort: { id: -1 },
+      });
+      nextPromise = paginator.next({ reset: 'no' });
+      await sleep(0);
+      expect(paginator.items).toStrictEqual([{ id: 'id1' }]);
+      expect(paginator.offset).toBe(1);
+      paginator.queryResolve({ items: [{ id: 'id2' }] });
+      await nextPromise;
+      expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]);
+      expect(paginator.offset).toBe(2);
+    });
+
     it('stores lastQueryError and clears it with the next successful query', async () => {
       const paginator = new Paginator();
       let nextPromise = paginator.next();
+      // wait for the first page load from DB
+      await sleep(0);
       const error = new Error('Failed');
       paginator.queryReject(error);
-      await nextPromise;
+      // hand over to finish the cleanup and state update after the query execution
+      await sleep(0);
       expect(paginator.lastQueryError).toEqual(error);
+      expect(paginator.isLoading).toEqual(false);
 
       nextPromise = paginator.next();
       paginator.queryResolve({ items: [{ id: 'id1' }], next: 'next1', prev: 'prev1' });
@@ -239,6 +522,51 @@ describe('BasePaginator', () => {
       expect(paginator.lastQueryError).toBeUndefined();
       expect(paginator.items).toEqual([{ id: 'id1' }]);
       expect(paginator.cursor).toEqual({ next: 'next1', prev: 'prev1' });
+    });
+
+    it('throws error if enabled', async () => {
+      const paginator = new Paginator({ throwErrors: true });
+      let nextPromise = paginator.next();
+      // wait for the first page load from DB
+      await sleep(0);
+      const error = new Error('Failed');
+      paginator.queryReject(error);
+      await expect(nextPromise).rejects.toThrowError(error);
+      // hand over to finish the cleanup and state update after the query execution
+      await sleep(0);
+      expect(paginator.lastQueryError).toEqual(error);
+      expect(paginator.isLoading).toEqual(false);
+
+      nextPromise = paginator.next();
+      // wait for the first page load from DB
+      await sleep(0);
+      paginator.queryResolve({ items: [{ id: 'id1' }], next: 'next1', prev: 'prev1' });
+      await nextPromise;
+      expect(paginator.lastQueryError).toBeUndefined();
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      expect(paginator.cursor).toEqual({ next: 'next1', prev: 'prev1' });
+    });
+
+    it('retries the query', async () => {
+      vi.useFakeTimers();
+      const paginator = new Paginator();
+      let nextPromise = paginator.next({ retryCount: 2 });
+      // wait for the first page load from DB
+      await toNextTick();
+      const error = new Error('Failed');
+      paginator.queryReject(error);
+      // hand over to finish the cleanup and state update after the query execution
+      await toNextTick();
+      expect(paginator.lastQueryError).toEqual(error);
+      vi.advanceTimersByTime(DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES);
+      await toNextTick();
+
+      paginator.queryResolve({ items: [{ id: 'id1' }], next: 'next1', prev: 'prev1' });
+      await nextPromise;
+      expect(paginator.lastQueryError).toBeUndefined();
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      expect(paginator.cursor).toEqual({ next: 'next1', prev: 'prev1' });
+      vi.useRealTimers();
     });
   });
 
@@ -538,15 +866,118 @@ describe('BasePaginator', () => {
       });
     });
 
-    describe('reload', () => {
-      it('starts the pagination from the beginning', async () => {
-        const a: TestItem = { id: 'a', age: 30 };
-        const b: TestItem = { id: 'b', age: 25 };
-        const c: TestItem = { id: 'c', age: 25 };
-        const d: TestItem = { id: 'd', age: 20 };
-
+    describe('setItems', () => {
+      it('overrides all the items in the state with provided value', () => {
         const paginator = new Paginator();
-        const nextSpy = vi.spyOn(paginator, 'next').mockResolvedValue();
+        const items1 = [{ id: 'test-item1' }];
+        const items2 = [{ id: 'test-item2' }];
+        paginator.setItems(items1);
+        expect(paginator.items).toStrictEqual(items1);
+        paginator.setItems(items2);
+        expect(paginator.items).toStrictEqual(items2);
+      });
+
+      const items = [{ id: 'test-item1' }];
+      const expectedStateEmissions = [
+        {
+          cursor: undefined,
+          hasNext: true,
+          hasPrev: true,
+          isLoading: false,
+          items: undefined,
+          lastQueryError: undefined,
+          offset: 0,
+        },
+        {
+          cursor: undefined,
+          hasNext: true,
+          hasPrev: true,
+          isLoading: false,
+          items,
+          lastQueryError: undefined,
+          offset: 1,
+        },
+      ];
+
+      it('emits state change as long as the items are not the same', () => {
+        const paginator = new Paginator();
+        const subscriptionHandler = vi.fn();
+        const unsubscribe = paginator.state.subscribe(subscriptionHandler);
+        expect(subscriptionHandler).toHaveBeenCalledTimes(1);
+        expect(subscriptionHandler).toHaveBeenCalledWith(
+          expectedStateEmissions[0],
+          undefined,
+        );
+
+        paginator.setItems(items);
+        expect(paginator.items).toStrictEqual(items);
+        expect(subscriptionHandler).toHaveBeenCalledTimes(2);
+        expect(subscriptionHandler).toHaveBeenCalledWith(
+          expectedStateEmissions[1],
+          expectedStateEmissions[0],
+        );
+
+        // setting an object with the same reference
+        paginator.setItems(items);
+        expect(paginator.items).toStrictEqual(items);
+        expect(subscriptionHandler).toHaveBeenCalledTimes(2);
+        expect(subscriptionHandler).toHaveBeenCalledWith(
+          expectedStateEmissions[1],
+          expectedStateEmissions[0],
+        );
+
+        unsubscribe();
+      });
+
+      it('emits state change as long as the state factory returns objects with different reference', () => {
+        const paginator = new Paginator();
+        const subscriptionHandler = vi.fn();
+        const unsubscribe = paginator.state.subscribe(subscriptionHandler);
+
+        paginator.setItems(() => items);
+        expect(paginator.items).toStrictEqual(items);
+        // first call is on subscribe
+        expect(subscriptionHandler).toHaveBeenCalledTimes(2);
+        expect(subscriptionHandler).toHaveBeenCalledWith(
+          expectedStateEmissions[1],
+          expectedStateEmissions[0],
+        );
+
+        // setting an object with the same reference
+        paginator.setItems(() => items);
+        expect(paginator.items).toStrictEqual(items);
+        expect(subscriptionHandler).toHaveBeenCalledTimes(2);
+        expect(subscriptionHandler).toHaveBeenCalledWith(
+          expectedStateEmissions[1],
+          expectedStateEmissions[0],
+        );
+
+        unsubscribe();
+      });
+
+      it('updates the cursor if provided', () => {
+        const paginator = new Paginator();
+        const cursors: PaginatorCursor[] = [
+          { next: 'next1', prev: 'prev1' },
+          { next: 'next2', prev: 'prev1' },
+        ];
+        const subscriptionHandler = vi.fn();
+        const unsubscribe = paginator.state.subscribe(subscriptionHandler);
+
+        paginator.setItems(items, cursors[0]);
+        expect(subscriptionHandler).toHaveBeenCalledTimes(2);
+        expect(subscriptionHandler).toHaveBeenCalledWith(
+          { ...expectedStateEmissions[1], cursor: cursors[0], offset: 0 },
+          { ...expectedStateEmissions[0], cursor: undefined, offset: 0 },
+        );
+
+        unsubscribe();
+      });
+    });
+
+    describe('reload', () => {
+      it('starts the ended pagination from the beginning', async () => {
+        const paginator = new Paginator({ pageSize: 2 });
         paginator.state.next({
           hasNext: false,
           hasPrev: false,
@@ -554,10 +985,67 @@ describe('BasePaginator', () => {
           items: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }],
           offset: 4,
         });
-        await paginator.reload();
-        expect(nextSpy).toHaveBeenCalledTimes(1);
-        expect(paginator.state.getLatestValue()).toStrictEqual(paginator.initialState);
-        nextSpy.mockRestore();
+        let reloadPromise = paginator.reload();
+        // wait for the DB data first page load
+        await sleep(0);
+        expect(paginator.isLoading).toBe(true);
+        expect(paginator.hasNext).toBe(true);
+        expect(paginator.hasPrev).toBe(true);
+
+        paginator.queryResolve({ items: [{ id: 'id1' }] });
+        await reloadPromise;
+        expect(paginator.isLoading).toBe(false);
+        expect(paginator.hasNext).toBe(false);
+        expect(paginator.hasPrev).toBe(true);
+        expect(paginator.items).toEqual([{ id: 'id1' }]);
+        expect(paginator.cursor).toBeUndefined();
+        expect(paginator.offset).toBe(1);
+        expect(paginator.mockClientQuery).toHaveBeenCalledWith({
+          direction: 'next',
+          queryShape: defaultNextQueryShape,
+          reset: 'yes',
+          retryCount: 0,
+        });
+
+        reloadPromise = paginator.reload();
+        // wait for the DB data first page load
+        await sleep(0);
+        expect(paginator.isLoading).toBe(true);
+        expect(paginator.hasNext).toBe(true);
+        expect(paginator.hasPrev).toBe(true);
+
+        paginator.queryResolve({ items: [{ id: 'id2' }], next: 'next2' });
+        await reloadPromise;
+        expect(paginator.isLoading).toBe(false);
+        expect(paginator.hasNext).toBe(true);
+        expect(paginator.hasPrev).toBe(false);
+        expect(paginator.items).toEqual([{ id: 'id2' }]);
+        expect(paginator.cursor).toStrictEqual({ next: 'next2', prev: null });
+        expect(paginator.offset).toBe(0);
+        expect(paginator.mockClientQuery).toHaveBeenCalledWith({
+          direction: 'next',
+          queryShape: defaultNextQueryShape,
+          reset: 'yes',
+          retryCount: 0,
+        });
+
+        // reset in another direction
+        reloadPromise = paginator.reload();
+        // wait for the DB data first page load
+        await sleep(0);
+        expect(paginator.isLoading).toBe(true);
+        expect(paginator.hasNext).toBe(true);
+        expect(paginator.hasPrev).toBe(true);
+        expect(paginator.items).toBe(undefined);
+
+        paginator.queryResolve({ items: [{ id: 'id2' }], next: 'next2' });
+        await reloadPromise;
+        expect(paginator.isLoading).toBe(false);
+        expect(paginator.hasNext).toBe(true);
+        expect(paginator.hasPrev).toBe(false);
+        expect(paginator.items).toEqual([{ id: 'id2' }]);
+        expect(paginator.cursor).toStrictEqual({ next: 'next2', prev: null });
+        expect(paginator.offset).toBe(0);
       });
     });
 

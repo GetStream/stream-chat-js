@@ -2,6 +2,12 @@ import { generateUUIDv4 } from './utils';
 import type { Event } from './types';
 import type { Unsubscribe } from './store';
 
+type MatchById = { id: string | RegExp; regexMatch?: boolean };
+export type FindEventHandlerParams<CTX extends Record<string, unknown>> = {
+  handler?: LabeledEventHandler<CTX> | EventHandlerPipelineHandler<CTX>;
+  idMatch?: MatchById;
+};
+
 export type EventHandlerResult = { action: 'stop' }; // event processing run will be cancelled
 
 export type InsertEventHandlerPayload<CTX extends Record<string, unknown>> = {
@@ -35,6 +41,27 @@ export class EventHandlerPipeline<CTX extends Record<string, unknown> = {}> {
     return this.handlers.length;
   }
 
+  findIndex({ handler, idMatch }: FindEventHandlerParams<CTX>): number {
+    let index = -1;
+    if (handler) {
+      index = this.handlers.findIndex((existingHandler) =>
+        typeof (handler as LabeledEventHandler<CTX>).handle === 'function'
+          ? (handler as LabeledEventHandler<CTX>).handle === existingHandler.handle
+          : handler === existingHandler.handle,
+      );
+    }
+
+    if (idMatch) {
+      index = this.handlers.findIndex((h) => {
+        if (!h.id) return false;
+        if (idMatch.regexMatch || idMatch.id instanceof RegExp)
+          return !!h.id.match(idMatch.id);
+        return h.id === idMatch.id;
+      });
+    }
+    return index;
+  }
+
   /**
    * Insert a handler into the pipeline at the given index.
    *
@@ -53,7 +80,6 @@ export class EventHandlerPipeline<CTX extends Record<string, unknown> = {}> {
    * @param revertOnUnsubscribe   If true, restore the replaced handler when unsubscribing.
    * @returns                   An unsubscribe function that removes (and optionally restores) the handler.
    */
-
   insert({
     handle,
     id,
@@ -74,22 +100,29 @@ export class EventHandlerPipeline<CTX extends Record<string, unknown> = {}> {
       const old = this.handlers[validIndex];
       this.handlers[validIndex] = handler;
       return () => {
-        this.remove(handler);
+        this.remove({ handler });
         if (revertOnUnsubscribe) this.handlers.splice(validIndex, 0, old);
       };
     } else {
       this.handlers.splice(validIndex, 0, handler);
-      return () => this.remove(handler);
+      return () => this.remove({ handler });
     }
   }
 
-  remove(h: LabeledEventHandler<CTX> | EventHandlerPipelineHandler<CTX>): void {
-    const index = this.handlers.findIndex((handler) =>
-      typeof (h as LabeledEventHandler<CTX>).handle === 'function'
-        ? (h as LabeledEventHandler<CTX>).handle === handler.handle
-        : h === handler.handle,
-    );
-    if (index >= 0) this.handlers.splice(index, 1);
+  /**
+   * Remove handler by:
+   * - handler function identity or
+   * - by id that could be an exact match or
+   * - match by regexp.
+   * @param params {FindEventHandlerParams}
+   */
+  remove(params: FindEventHandlerParams<CTX>): void {
+    let index = this.findIndex(params);
+    // need to perform n+1 searches in case the search is done by regex => there can be multiple matches
+    while (index > -1) {
+      this.handlers.splice(index, 1);
+      index = this.findIndex(params);
+    }
   }
 
   replaceAll(handlers: LabeledEventHandler<CTX>[]): void {

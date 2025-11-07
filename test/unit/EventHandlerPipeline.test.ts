@@ -203,6 +203,68 @@ describe('EventHandlerPipeline', () => {
     });
   });
 
+  describe('findIndex', () => {
+    const h1 = {
+      id: 'h1',
+      handle: () => {
+        console.log(1);
+      },
+    };
+    const h2 = {
+      id: 'h2',
+      handle: () => {
+        console.log(2);
+      },
+    };
+
+    it('searches by handler function identity', () => {
+      const h3 = {
+        id: 'h2',
+        handle: () => {
+          console.log(2);
+        },
+      };
+
+      pipeline.insert(h1);
+      pipeline.insert(h2);
+      expect(pipeline.findIndex({ handler: h1 })).toBe(0);
+      expect(pipeline.findIndex({ handler: h2 })).toBe(1);
+      expect(pipeline.findIndex({ handler: h3 })).toBe(-1);
+    });
+
+    it('searches by exact handler id match', () => {
+      const h3 = {
+        id: 'H2',
+        handle: () => {
+          console.log(2);
+        },
+      };
+
+      pipeline.insert(h1);
+      pipeline.insert(h2);
+      expect(pipeline.findIndex({ idMatch: { id: h1.id } })).toBe(0);
+      expect(pipeline.findIndex({ idMatch: { id: h2.id } })).toBe(1);
+      expect(pipeline.findIndex({ idMatch: { id: h3.id } })).toBe(-1);
+    });
+
+    it('searches by handler id matching as regex', () => {
+      const h3 = {
+        id: 'H2',
+        handle: () => {
+          console.log(2);
+        },
+      };
+
+      pipeline.insert(h1);
+      pipeline.insert(h2);
+      expect(pipeline.findIndex({ idMatch: { id: h1.id, regexMatch: true } })).toBe(0);
+      expect(pipeline.findIndex({ idMatch: { id: h2.id, regexMatch: true } })).toBe(1);
+      expect(pipeline.findIndex({ idMatch: { id: new RegExp(h3.id, 'i') } })).toBe(1);
+      expect(pipeline.findIndex({ idMatch: { id: h3.id, regexMatch: true } })).toBe(-1);
+      expect(pipeline.findIndex({ idMatch: { id: /h/ } })).toBe(0);
+    });
+  });
+
   describe('remove', () => {
     it('removes by handler object identity', async () => {
       const out: string[] = [];
@@ -221,7 +283,7 @@ describe('EventHandlerPipeline', () => {
 
       pipeline.insert(h1);
       pipeline.insert(h2);
-      pipeline.remove(h2); // remove by object
+      pipeline.remove({ handler: h2 }); // remove by object
 
       // @ts-expect-error passing custom event type
       await pipeline.run(makeEvt('evt'), ctx);
@@ -235,7 +297,7 @@ describe('EventHandlerPipeline', () => {
       };
       const h1: LabeledEventHandler<TestCtx> = { id: 'h1', handle: fn };
       pipeline.insert(h1);
-      pipeline.remove(fn); // remove by function ref
+      pipeline.remove({ handler: fn }); // remove by function ref
 
       // @ts-expect-error passing custom event type
       await pipeline.run(makeEvt('evt'), ctx);
@@ -247,7 +309,7 @@ describe('EventHandlerPipeline', () => {
       const fn = () => {
         out.push('a');
       };
-      pipeline.remove(fn); // nothing inserted yet
+      pipeline.remove({ handler: fn }); // nothing inserted yet
 
       // @ts-expect-error passing custom event type
       await pipeline.run(makeEvt('evt'), ctx); // no errors
