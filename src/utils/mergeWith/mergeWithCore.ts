@@ -44,177 +44,162 @@ export const isClassInstance = (value: unknown): boolean => {
   return value.constructor && value.constructor !== Object;
 };
 
+type PairMemo = WeakMap<object, WeakSet<object>>;
+
+function memoHasOrAdd(memo: PairMemo, a: object, b: object): boolean {
+  const set = memo.get(a);
+  if (set && set.has(b)) return true;
+  if (set) set.add(b);
+  else memo.set(a, new WeakSet([b]));
+  return false;
+}
+
 /**
- * Performs a deep comparison between two values to determine if they are equivalent.
- * This is similar to Lodash's isEqual implementation but simplified.
+ * Deep semantic equality with cycle safety and symbol-key support.
+ * Keeps your existing semantics:
+ *  - Dates/RegExps compared by value
+ *  - "Class instances" are treated atomically (unequal unless ===)
+ *  - NaN equals NaN; -0 equals 0 (same as ===)
  */
 export const isEqual = (
   value1: unknown,
   value2: unknown,
-  compareStack = new Set<[unknown, unknown]>(),
-  objectStack1 = new WeakSet<object>(),
-  objectStack2 = new WeakSet<object>(),
+  pairMemo: PairMemo = new WeakMap(),
 ): boolean => {
-  // Handle simple equality cases first
-  if (value1 === value2) return true;
-
-  // If either is null/undefined, they're not equal (already checked ===)
+  if (value1 === value2) return true; // includes -0 === 0
   if (value1 == null || value2 == null) return false;
 
-  // Get the type of both values
-  const type1 = typeof value1;
-  const type2 = typeof value2;
+  const t1 = typeof value1;
+  const t2 = typeof value2;
+  if (t1 !== t2) return false;
 
-  // Different types mean they're not equal
-  if (type1 !== type2) return false;
-
-  // Handle non-object types that need special comparison
-  if (type1 !== 'object') {
-    // Special case for NaN
+  if (t1 !== 'object') {
+    // NaN handling
     // eslint-disable-next-line no-self-compare
-    if (value1 !== value1 && value2 !== value2) return true;
-    return value1 === value2;
+    return value1 !== value1 && value2 !== value2 ? true : value1 === value2;
   }
 
-  // At this point, both values are objects
-  const obj1 = value1 as object;
-  const obj2 = value2 as object;
+  // Objects
+  const o1 = value1 as object;
+  const o2 = value2 as object;
 
-  // Check for circular references in each object
-  if (objectStack1.has(obj1) || objectStack2.has(obj2)) {
-    // If either object has been seen before, consider them equal
-    // if they're both in a circular reference
-    return objectStack1.has(obj1) && objectStack2.has(obj2);
+  // Fast path for tag mismatch
+  const tag1 = Object.prototype.toString.call(o1);
+  const tag2 = Object.prototype.toString.call(o2);
+  if (tag1 !== tag2) return false;
+
+  // Special cases before instance test
+  if (o1 instanceof Date && o2 instanceof Date) {
+    return (o1 as Date).getTime() === (o2 as Date).getTime();
+  }
+  if (o1 instanceof RegExp && o2 instanceof RegExp) {
+    const r1 = o1 as RegExp,
+      r2 = o2 as RegExp;
+    return r1.source === r2.source && r1.flags === r2.flags;
   }
 
-  // Add objects to their respective stacks
-  objectStack1.add(obj1);
-  objectStack2.add(obj2);
+  // Handle Set comparison
+  // Two sets are equal if they have the same size and
+  // every value in one has an equivalent value in the
+  // other (using deep equality).
+  // Cannot use the same item for multiple matches in another set.
+  if (value1 instanceof Set && value2 instanceof Set) {
+    if (value1.size !== value2.size) return false;
+    if (memoHasOrAdd(pairMemo, value1, value2)) return true;
 
-  // Handle Date objects - needs to be before the class instance check
-  if (value1 instanceof Date && value2 instanceof Date) {
-    objectStack1.delete(obj1);
-    objectStack2.delete(obj2);
-    return value1.getTime() === value2.getTime();
-  }
+    const unmatched = new Set(value2);
 
-  // Handle RegExp objects - needs to be before the class instance check
-  if (value1 instanceof RegExp && value2 instanceof RegExp) {
-    objectStack1.delete(obj1);
-    objectStack2.delete(obj2);
-    return value1.toString() === value2.toString();
-  }
-
-  // If either is a class instance, use reference equality (already checked above)
-  if (isClassInstance(value1) || isClassInstance(value2)) {
-    // Clean up before returning
-    objectStack1.delete(obj1);
-    objectStack2.delete(obj2);
-    return false;
-  }
-
-  // Handle arrays
-  const isArray1 = Array.isArray(value1);
-  const isArray2 = Array.isArray(value2);
-
-  if (isArray1 !== isArray2) {
-    // Clean up before returning
-    objectStack1.delete(obj1);
-    objectStack2.delete(obj2);
-    return false;
-  }
-
-  if (isArray1 && isArray2) {
-    const arr1 = value1 as unknown[];
-    const arr2 = value2 as unknown[];
-
-    if (arr1.length !== arr2.length) {
-      // Clean up before returning
-      objectStack1.delete(obj1);
-      objectStack2.delete(obj2);
-      return false;
-    }
-
-    // Check for circular references in the comparison context
-    const pairKey: [unknown, unknown] = [value1, value2];
-    if (compareStack.has(pairKey)) {
-      // Clean up before returning
-      objectStack1.delete(obj1);
-      objectStack2.delete(obj2);
-      return true;
-    }
-    compareStack.add(pairKey);
-
-    // Compare each element
-    for (let i = 0; i < arr1.length; i++) {
-      if (!isEqual(arr1[i], arr2[i], compareStack, objectStack1, objectStack2)) {
-        compareStack.delete(pairKey);
-        // Clean up before returning
-        objectStack1.delete(obj1);
-        objectStack2.delete(obj2);
-        return false;
+    for (const v1 of value1) {
+      let matched = false;
+      for (const v2 of unmatched) {
+        if (isEqual(v1, v2, pairMemo)) {
+          unmatched.delete(v2); // consume the match
+          matched = true;
+          break;
+        }
       }
+      if (!matched) return false;
     }
 
-    compareStack.delete(pairKey);
-    objectStack1.delete(obj1);
-    objectStack2.delete(obj2);
+    return unmatched.size === 0;
+  }
+
+  // Handle Map comparison
+  if (value1 instanceof Map && value2 instanceof Map) {
+    if (value1.size !== value2.size) return false;
+
+    if (memoHasOrAdd(pairMemo, value1, value2)) return true;
+
+    const unmatched = new Set(value2); // tracks entries in map2 not yet matched
+
+    for (const [k1, v1] of value1) {
+      let matchedEntry: [unknown, unknown] | null = null;
+
+      for (const entry of unmatched) {
+        const [k2, v2] = entry as [unknown, unknown];
+        if (isEqual(k1, k2, pairMemo) && isEqual(v1, v2, pairMemo)) {
+          matchedEntry = entry;
+          break;
+        }
+      }
+
+      if (!matchedEntry) return false; // nothing matched this entry
+      unmatched.delete(matchedEntry); // consume it
+    }
+
+    return unmatched.size === 0;
+  }
+
+  // Treat non-plain instances atomically (your current rule)
+  if (isClassInstance(o1) || isClassInstance(o2)) return false;
+
+  // Cycle guard (pairwise)
+  if (memoHasOrAdd(pairMemo, o1, o2)) return true;
+
+  // Arrays (respect holes vs undefined)
+  if (Array.isArray(o1)) {
+    const a1 = value1 as unknown[],
+      a2 = value2 as unknown[];
+    if (a1.length !== a2.length) return false;
+    for (let i = 0; i < a1.length; i++) {
+      const has1 = i in a1,
+        has2 = i in a2;
+      if (has1 !== has2) return false;
+      if (has1 && !isEqual(a1[i], a2[i], pairMemo)) return false;
+    }
+    // Compare enumerable non-index props as well (to align with objects)
+    const extraKeys1 = Reflect.ownKeys(o1)
+      .filter((k) => typeof k !== 'string' || isNaN(+k))
+      .filter((k) => Object.prototype.propertyIsEnumerable.call(o1, k));
+    const extraKeys2 = Reflect.ownKeys(o2)
+      .filter((k) => typeof k !== 'string' || isNaN(+k))
+      .filter((k) => Object.prototype.propertyIsEnumerable.call(o2, k));
+    if (extraKeys1.length !== extraKeys2.length) return false;
+    for (const k of extraKeys1) {
+      if (!Object.prototype.hasOwnProperty.call(o2, k)) return false;
+      // @ts-expect-error index signature
+      if (!isEqual(o1[k], o2[k], pairMemo)) return false;
+    }
     return true;
   }
 
-  // Handle plain objects
-  const plainObj1 = value1 as Record<string, unknown>;
-  const plainObj2 = value2 as Record<string, unknown>;
+  // Plain objects (string + symbol enumerable own keys)
+  const keys1 = Reflect.ownKeys(o1).filter((k) =>
+    Object.prototype.propertyIsEnumerable.call(o1, k),
+  );
+  const keys2 = Reflect.ownKeys(o2).filter((k) =>
+    Object.prototype.propertyIsEnumerable.call(o2, k),
+  );
+  if (keys1.length !== keys2.length) return false;
 
-  const keys1 = Object.keys(plainObj1);
-  const keys2 = Object.keys(plainObj2);
+  // enforce same prototype to avoid {} == Object.create(null, ...)
+  if (Object.getPrototypeOf(o1) !== Object.getPrototypeOf(o2)) return false;
 
-  // If key counts differ, objects aren't equal
-  if (keys1.length !== keys2.length) {
-    // Clean up before returning
-    objectStack1.delete(obj1);
-    objectStack2.delete(obj2);
-    return false;
+  for (const k of keys1) {
+    if (!Object.prototype.hasOwnProperty.call(o2, k)) return false;
+    // @ts-expect-error index signature
+    if (!isEqual(o1[k], o2[k], pairMemo)) return false;
   }
-
-  // Verify all keys in obj2 are in obj1 (we already checked counts, so this
-  // also ensures all keys in obj1 are in obj2)
-  for (const key of keys2) {
-    if (!Object.prototype.hasOwnProperty.call(plainObj1, key)) {
-      // Clean up before returning
-      objectStack1.delete(obj1);
-      objectStack2.delete(obj2);
-      return false;
-    }
-  }
-
-  // Check for circular references in the comparison context
-  const pairKey: [unknown, unknown] = [value1, value2];
-  if (compareStack.has(pairKey)) {
-    // Clean up before returning
-    objectStack1.delete(obj1);
-    objectStack2.delete(obj2);
-    return true;
-  }
-  compareStack.add(pairKey);
-
-  // Compare each property's value
-  for (const key of keys1) {
-    if (
-      !isEqual(plainObj1[key], plainObj2[key], compareStack, objectStack1, objectStack2)
-    ) {
-      compareStack.delete(pairKey);
-      // Clean up before returning
-      objectStack1.delete(obj1);
-      objectStack2.delete(obj2);
-      return false;
-    }
-  }
-
-  compareStack.delete(pairKey);
-  // Clean up before returning successful comparison
-  objectStack1.delete(obj1);
-  objectStack2.delete(obj2);
   return true;
 };
 
@@ -241,13 +226,7 @@ function compareAndBuildDiff(
   modified: unknown,
   parentDiffNode: DiffNode,
   key?: string | symbol,
-  /**
-   * Tracks pairs of objects being compared
-   *  - It stores pairs of values that are being compared `[original, modified]`
-   *  - This helps detect when we're comparing the same pair of objects again
-   *  - It prevents infinite recursion when comparing complex object structures
-   */
-  compareStack = new Set<[unknown, unknown]>(),
+  pairMemo: PairMemo = new WeakMap(),
   /**
    * Tracks individual objects that are being processed in the current traversal path
    *  - It's used to detect when we encounter the same object multiple times in a single traversal path
@@ -257,9 +236,7 @@ function compareAndBuildDiff(
   objectStack = new Set<unknown>(),
 ): void {
   // If values are equal, no diff to record
-  if (isEqual(original, modified, new Set(compareStack))) {
-    return;
-  }
+  if (isEqual(original, modified)) return;
 
   // Handle additions (value in modified but not in original)
   if (original === undefined || original === null) {
@@ -335,16 +312,20 @@ function compareAndBuildDiff(
     parentDiffNode.children[String(key)] = currentDiffNode;
   }
 
-  // Check for circular references in comparison
-  const pairKey: [unknown, unknown] = [original, modified];
-  if (compareStack.has(pairKey)) {
-    // Remove from object stack before returning
-    if (typeof original === 'object' && original !== null) {
-      objectStack.delete(original);
+  // Pairwise cycle check (prevents infinite recursion across the *pair*)
+  if (
+    typeof original === 'object' &&
+    original !== null &&
+    typeof modified === 'object' &&
+    modified !== null
+  ) {
+    if (memoHasOrAdd(pairMemo, original as object, modified as object)) {
+      // already visited this exact pair in this diff traversal
+      // (prevents infinite recursion), so stop here
+      if (typeof original === 'object') objectStack.delete(original);
+      return;
     }
-    return;
   }
-  compareStack.add(pairKey);
 
   // Process all keys from both objects
   const allKeys = new Set([
@@ -380,17 +361,12 @@ function compareAndBuildDiff(
       modifiedValue,
       currentDiffNode,
       childKey,
-      compareStack,
+      pairMemo,
       objectStack,
     );
   }
 
-  compareStack.delete(pairKey);
-
-  // Remove from object stack before returning
-  if (typeof original === 'object' && original !== null) {
-    objectStack.delete(original);
-  }
+  if (typeof original === 'object' && original !== null) objectStack.delete(original);
 }
 
 export function createMergeCore<T extends object>(options: { trackDiff?: boolean } = {}) {

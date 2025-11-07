@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
 import {
   Channel,
   type ChannelFilters,
@@ -7,10 +7,12 @@ import {
   ChannelSort,
   DEFAULT_PAGINATION_OPTIONS,
   type FilterBuilderGenerators,
+  PaginatorCursor,
   type StreamChat,
 } from '../../../src';
 import { getClientWithUser } from '../test-utils/getClient';
 import type { FieldToDataResolver } from '../../../src/pagination/types.normalization';
+import { MockOfflineDB } from '../offline-support/MockOfflineDB';
 
 const user = { id: 'custom-id' };
 
@@ -31,85 +33,116 @@ describe('ChannelPaginator', () => {
     channel2.data!.updated_at = '1971-01-01T08:39:35.235Z';
   });
 
-  it('initiates with defaults', () => {
-    const paginator = new ChannelPaginator({ client });
-    expect(paginator.pageSize).toBe(DEFAULT_PAGINATION_OPTIONS.pageSize);
-    expect(paginator.state.getLatestValue()).toEqual({
-      hasNext: true,
-      hasPrev: true,
-      isLoading: false,
-      items: undefined,
-      lastQueryError: undefined,
-      cursor: undefined,
-      offset: 0,
+  describe('constructor()', () => {
+    it('initiates with defaults', () => {
+      const paginator = new ChannelPaginator({ client });
+      expect(paginator.pageSize).toBe(DEFAULT_PAGINATION_OPTIONS.pageSize);
+      expect(paginator.state.getLatestValue()).toEqual({
+        hasNext: true,
+        hasPrev: true,
+        isLoading: false,
+        items: undefined,
+        lastQueryError: undefined,
+        cursor: undefined,
+        offset: 0,
+      });
+      expect(paginator.id.startsWith('channel-paginator')).toBeTruthy();
+      expect(paginator.sortComparator).toBeDefined();
+
+      channel1.state.last_message_at = new Date('1970-01-01T08:39:35.235Z');
+      channel1.data!.updated_at = '1970-01-01T08:39:35.235Z';
+
+      channel2.state.last_message_at = new Date('1971-01-01T08:39:35.235Z');
+      channel2.data!.updated_at = '1971-01-01T08:39:35.235Z';
+
+      expect(paginator.sortComparator(channel1, channel2)).toBe(1); // channel2 comes before channel1
+      expect(paginator.filterBuilder.buildFilters()).toStrictEqual({});
+      expect(
+        paginator.filterBuilder.buildFilters({ baseFilters: paginator.staticFilters }),
+      ).toStrictEqual({});
+      // @ts-expect-error accessing protected property
+      expect(paginator._filterFieldToDataResolvers).toHaveLength(4);
+      expect(paginator.config.doRequest).toBeUndefined();
     });
-    expect(paginator.id.startsWith('channel-paginator')).toBeTruthy();
-    expect(paginator.sortComparator).toBeDefined();
 
-    channel1.state.last_message_at = new Date('1970-01-01T08:39:35.235Z');
-    channel1.data!.updated_at = '1970-01-01T08:39:35.235Z';
+    it('initiates with options', () => {
+      const customId = 'custom-id';
+      const filterGenerators: FilterBuilderGenerators<ChannelFilters> = {
+        custom: {
+          enabled: true,
+          generate: (context) => context,
+        },
+      };
+      const initialFilterBuilderContext = { x: 'y' };
 
-    channel2.state.last_message_at = new Date('1971-01-01T08:39:35.235Z');
-    channel2.data!.updated_at = '1971-01-01T08:39:35.235Z';
+      channel1.data!.created_at = '1970-01-01T08:39:35.235Z';
+      channel2.data!.created_at = '1971-01-01T08:39:35.235Z';
+      const doRequest = () => Promise.resolve({ items: [channel1] });
+      const hasPaginationQueryShapeChanged = () => true;
+      const paginatorOptions = {
+        debounceMs: 45000,
+        doRequest,
+        hasPaginationQueryShapeChanged,
+        initialCursor: { prev: 'prev', next: '' },
+        initialOffset: 10,
+        lockItemOrder: true,
+        pageSize: 2,
+        throwErrors: true,
+      };
 
-    expect(paginator.sortComparator(channel1, channel2)).toBe(1); // channel2 comes before channel1
-    expect(paginator.filterBuilder.buildFilters()).toStrictEqual({});
-    expect(
-      paginator.filterBuilder.buildFilters({ baseFilters: paginator.filters }),
-    ).toStrictEqual({});
-    // @ts-expect-error accessing protected property
-    expect(paginator._filterFieldToDataResolvers).toHaveLength(4);
-  });
+      const paginator = new ChannelPaginator({
+        client,
+        id: customId,
+        filterBuilderOptions: {
+          initialContext: initialFilterBuilderContext,
+          initialFilterConfig: filterGenerators,
+        },
+        filters: { type: 'type' },
+        paginatorOptions,
+        requestOptions: { member_limit: 5 },
+        sort: { created_at: 1 },
+      });
+      expect(paginator.pageSize).toBe(2);
+      expect(paginator.state.getLatestValue()).toEqual({
+        hasNext: true,
+        hasPrev: true,
+        isLoading: false,
+        items: undefined,
+        lastQueryError: undefined,
+        cursor: paginatorOptions.initialCursor,
+        offset: paginatorOptions.initialOffset,
+      });
+      expect(paginator.id.startsWith(customId)).toBeTruthy();
 
-  it('initiates with options', () => {
-    const customId = 'custom-id';
-    const filterGenerators: FilterBuilderGenerators<ChannelFilters> = {
-      custom: {
-        enabled: true,
-        generate: (context) => context,
-      },
-    };
-    const initialFilterBuilderContext = { x: 'y' };
-
-    channel1.data!.created_at = '1970-01-01T08:39:35.235Z';
-    channel2.data!.created_at = '1971-01-01T08:39:35.235Z';
-
-    const paginator = new ChannelPaginator({
-      client,
-      id: customId,
-      filterBuilderOptions: {
-        initialContext: initialFilterBuilderContext,
-        initialFilterConfig: filterGenerators,
-      },
-      filters: { type: 'type' },
-      paginatorOptions: { pageSize: 2 },
-      requestOptions: { member_limit: 5 },
-      sort: { created_at: 1 },
+      expect(paginator.sortComparator(channel1, channel2)).toBe(-1); // channel1 comes before channel2
+      expect(paginator.filterBuilder.buildFilters()).toStrictEqual({
+        ...initialFilterBuilderContext,
+      });
+      expect(
+        paginator.filterBuilder.buildFilters({ baseFilters: paginator.staticFilters }),
+      ).toStrictEqual({
+        type: 'type',
+        ...initialFilterBuilderContext,
+      });
+      // @ts-expect-error accessing protected property
+      expect(paginator._filterFieldToDataResolvers).toHaveLength(4);
+      expect(paginator.config.debounceMs).toStrictEqual(paginatorOptions.debounceMs);
+      expect(paginator.config.doRequest).toStrictEqual(doRequest);
+      expect(paginator.config.hasPaginationQueryShapeChanged).toStrictEqual(
+        hasPaginationQueryShapeChanged,
+      );
+      expect(paginator.config.initialCursor).toStrictEqual(
+        paginatorOptions.initialCursor,
+      );
+      expect(paginator.config.initialOffset).toStrictEqual(
+        paginatorOptions.initialOffset,
+      );
+      expect(paginator.config.pageSize).toStrictEqual(paginatorOptions.pageSize);
+      expect(paginator.config.lockItemOrder).toStrictEqual(
+        paginatorOptions.lockItemOrder,
+      );
+      expect(paginator.config.throwErrors).toStrictEqual(paginatorOptions.throwErrors);
     });
-    expect(paginator.pageSize).toBe(2);
-    expect(paginator.state.getLatestValue()).toEqual({
-      hasNext: true,
-      hasPrev: true,
-      isLoading: false,
-      items: undefined,
-      lastQueryError: undefined,
-      cursor: undefined,
-      offset: 0,
-    });
-    expect(paginator.id.startsWith(customId)).toBeTruthy();
-
-    expect(paginator.sortComparator(channel1, channel2)).toBe(-1); // channel1 comes before channel2
-    expect(paginator.filterBuilder.buildFilters()).toStrictEqual({
-      ...initialFilterBuilderContext,
-    });
-    expect(
-      paginator.filterBuilder.buildFilters({ baseFilters: paginator.filters }),
-    ).toStrictEqual({
-      type: 'type',
-      ...initialFilterBuilderContext,
-    });
-    // @ts-expect-error accessing protected property
-    expect(paginator._filterFieldToDataResolvers).toHaveLength(4);
   });
 
   describe('sortComparator', () => {
@@ -371,26 +404,72 @@ describe('ChannelPaginator', () => {
       lastQueryError: undefined,
       cursor: undefined,
     };
-    it('filters reset state', () => {
+
+    it('filters reset does not reset the paginator state', () => {
       const paginator = new ChannelPaginator({ client });
       paginator.state.partialNext(stateAfterQuery);
       expect(paginator.state.getLatestValue()).toStrictEqual(stateAfterQuery);
-      paginator.filters = {};
-      expect(paginator.state.getLatestValue()).toStrictEqual(paginator.initialState);
+      paginator.staticFilters = {};
+      expect(paginator.state.getLatestValue()).toStrictEqual(stateAfterQuery);
+      expect(paginator.staticFilters).toStrictEqual({});
     });
-    it('sort reset state', () => {
+
+    it('sort reset does not reset the paginator state updates the comparator', () => {
       const paginator = new ChannelPaginator({ client });
       paginator.state.partialNext(stateAfterQuery);
       expect(paginator.state.getLatestValue()).toStrictEqual(stateAfterQuery);
+      const originalComparator = paginator.sortComparator;
       paginator.sort = {};
-      expect(paginator.state.getLatestValue()).toStrictEqual(paginator.initialState);
+      expect(paginator.state.getLatestValue()).toStrictEqual(stateAfterQuery);
+      expect(paginator.sort).toStrictEqual({});
+      expect(paginator.sortComparator).not.toEqual(originalComparator);
     });
-    it('options reset state', () => {
+
+    it('options reset does not reset the paginator state', () => {
       const paginator = new ChannelPaginator({ client });
       paginator.state.partialNext(stateAfterQuery);
       expect(paginator.state.getLatestValue()).toStrictEqual(stateAfterQuery);
       paginator.options = {};
-      expect(paginator.state.getLatestValue()).toStrictEqual(paginator.initialState);
+      expect(paginator.state.getLatestValue()).toStrictEqual(stateAfterQuery);
+      expect(paginator.options).toStrictEqual({});
+    });
+
+    it('channelStateOptions reset does not reset the paginator state', () => {
+      const paginator = new ChannelPaginator({ client });
+      paginator.state.partialNext(stateAfterQuery);
+      expect(paginator.state.getLatestValue()).toStrictEqual(stateAfterQuery);
+      paginator.channelStateOptions = {};
+      expect(paginator.state.getLatestValue()).toStrictEqual(stateAfterQuery);
+      expect(paginator.channelStateOptions).toStrictEqual({});
+    });
+  });
+
+  describe('setItems', () => {
+    it('stores the new items in the offlineDB', async () => {
+      client.setOfflineDBApi(new MockOfflineDB({ client }));
+      (client.offlineDb!.initializeDB as unknown as MockInstance).mockReturnValue(true);
+      await client.offlineDb!.init(client.userID as string);
+      (
+        client.offlineDb?.upsertCidsForQuery as unknown as MockInstance
+      ).mockImplementation(() => Promise.resolve(true));
+
+      const filters = { id: 'abc' };
+      const sort = { id: 1 };
+      const items1 = [channel1];
+
+      const paginator = new ChannelPaginator({ client });
+      paginator.staticFilters = filters;
+      paginator.sort = sort;
+
+      paginator.setItems(items1);
+      expect(paginator.items).toStrictEqual(items1);
+      expect(
+        client.offlineDb?.upsertCidsForQuery as unknown as MockInstance,
+      ).toHaveBeenCalledWith({
+        cids: [channel1.cid],
+        filters,
+        sort,
+      });
     });
   });
 
@@ -435,6 +514,7 @@ describe('ChannelPaginator', () => {
           message_limit: 3,
           offset: 0,
         },
+        undefined, // channelStateOptions
       );
     });
   });

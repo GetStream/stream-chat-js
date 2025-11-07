@@ -1,15 +1,33 @@
 import { binarySearchInsertIndex } from './sortCompiler';
 import { itemMatchesFilter } from './filterCompiler';
-import { StateStore } from '../store';
-import { debounce, type DebouncedFunc } from '../utils';
+import { isPatch, StateStore, type ValueOrPatch } from '../store';
+import { debounce, type DebouncedFunc, sleep } from '../utils';
 import type { FieldToDataResolver } from './types.normalization';
 import { locateOnPlateauAlternating, locateOnPlateauScanOneSide } from './utility.search';
+import { isEqual } from '../utils/mergeWith/mergeWithCore';
+import { DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES } from '../constants';
 
 const noOrderChange = () => 0;
 
 type PaginationDirection = 'next' | 'prev';
-type Cursor = { next: string | null; prev: string | null };
-export type PaginationQueryParams = { direction?: PaginationDirection };
+export type PaginatorCursor = { next: string | null; prev: string | null };
+type StateResetPolicy = 'auto' | 'yes' | 'no' | (string & {});
+
+export type PaginationQueryShapeChangeIdentifier<S> = (
+  prevQueryShape?: S,
+  nextQueryShape?: S,
+) => boolean;
+
+export type PaginationQueryParams<Q> = {
+  direction?: PaginationDirection;
+  /** Data that define the query (filters, sort, ...) */
+  queryShape?: Q;
+  /** Per-call override of the reset behavior. */
+  reset?: StateResetPolicy;
+  /** Should retry the failed request given number of times. Default is 0. */
+  retryCount?: number;
+};
+
 export type PaginationQueryReturnValue<T> = { items: T[] } & {
   next?: string;
   prev?: string;
@@ -17,39 +35,76 @@ export type PaginationQueryReturnValue<T> = { items: T[] } & {
 export type PaginatorDebounceOptions = {
   debounceMs: number;
 };
-type DebouncedExecQueryFunction = DebouncedFunc<
-  (params: { direction: PaginationDirection }) => Promise<void>
+type DebouncedExecQueryFunction<Q> = DebouncedFunc<
+  (params: PaginationQueryParams<Q>) => Promise<void>
 >;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type PaginatorState<T = any> = {
+export type PaginatorState<T> = {
   hasNext: boolean;
   hasPrev: boolean;
   isLoading: boolean;
   items: T[] | undefined;
   lastQueryError?: Error;
-  cursor?: Cursor;
+  cursor?: PaginatorCursor;
   offset?: number;
 };
 
-export type PaginatorOptions = {
+export type PaginatorOptions<T, Q> = {
   /** The number of milliseconds to debounce the search query. The default interval is 300ms. */
   debounceMs?: number;
-  /** Will prevent changing the index of existing items */
+  /**
+   * Function containing custom logic that decides, whether the next pagination query to be executed should be considered the first page query.
+   * It makes sense to consider the next query as the first page query if filters, sort, options etc. (query params) excluding the page size have changed.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  hasPaginationQueryShapeChanged?: PaginationQueryShapeChangeIdentifier<any>;
+  /** Custom function to retrieve items pages and optionally return a cursor in case of cursor pagination. */
+  doRequest?: (queryParams: Q) => Promise<{ items: T[]; cursor?: PaginatorCursor }>;
+  /** In case of cursor pagination, specify the initial cursor value. */
+  initialCursor?: PaginatorCursor;
+  /** In case of offset pagination, specify the initial offset value. */
+  initialOffset?: number;
+  /** Will prevent changing the index of existing items. */
   lockItemOrder?: boolean;
+  /** The item page size to be requested from the server. */
   pageSize?: number;
+  /** Prevent silencing the errors thrown during the pagination execution. Default is false. */
+  throwErrors?: boolean;
 };
-export const DEFAULT_PAGINATION_OPTIONS: Required<PaginatorOptions> = {
+
+type OptionalPaginatorConfigFields =
+  | 'doRequest'
+  | 'initialCursor'
+  | 'initialOffset'
+  | 'throwErrors';
+
+export type BasePaginatorConfig<T, Q> = Pick<
+  PaginatorOptions<T, Q>,
+  OptionalPaginatorConfigFields
+> &
+  Required<Omit<PaginatorOptions<T, Q>, OptionalPaginatorConfigFields>>;
+
+const baseHasPaginationQueryShapeChanged: PaginationQueryShapeChangeIdentifier<
+  unknown
+> = (prevQueryShape, nextQueryShape) => !isEqual(prevQueryShape, nextQueryShape);
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const DEFAULT_PAGINATION_OPTIONS: BasePaginatorConfig<any, any> = {
   debounceMs: 300,
   lockItemOrder: false,
   pageSize: 10,
+  hasPaginationQueryShapeChanged: baseHasPaginationQueryShapeChanged,
+  throwErrors: false,
 } as const;
 
-export abstract class BasePaginator<T> {
+export abstract class BasePaginator<T, Q> {
   state: StateStore<PaginatorState<T>>;
-  config: Required<PaginatorOptions>;
-  protected _executeQueryDebounced!: DebouncedExecQueryFunction;
+  config: BasePaginatorConfig<T, Q>;
+  protected _executeQueryDebounced!: DebouncedExecQueryFunction<Q>;
   protected _isCursorPagination = false;
+  /** Last effective query shape produced by subclass for the most recent request. */
+  protected _lastQueryShape?: Q;
+  protected _nextQueryShape?: Q;
   /**
    * Comparison function used to keep items in a paginator sorted.
    *
@@ -82,10 +137,23 @@ export abstract class BasePaginator<T> {
   protected boosts = new Map<string, { until: number; seq: number }>();
   protected _maxBoostSeq: number = 0;
 
-  protected constructor(options?: PaginatorOptions) {
-    this.config = { ...DEFAULT_PAGINATION_OPTIONS, ...options };
+  protected constructor({
+    initialCursor,
+    initialOffset,
+    ...options
+  }: PaginatorOptions<T, Q> = {}) {
+    this.config = {
+      ...DEFAULT_PAGINATION_OPTIONS,
+      initialCursor,
+      initialOffset,
+      ...options,
+    };
     const { debounceMs } = this.config;
-    this.state = new StateStore<PaginatorState<T>>(this.initialState);
+    this.state = new StateStore<PaginatorState<T>>({
+      ...this.initialState,
+      cursor: initialCursor,
+      offset: initialOffset ?? 0,
+    });
     this.setDebounceOptions({ debounceMs });
     this.sortComparator = noOrderChange;
     this._filterFieldToDataResolvers = [];
@@ -111,15 +179,24 @@ export abstract class BasePaginator<T> {
     return this.state.getLatestValue().isLoading;
   }
 
-  get initialState(): PaginatorState {
+  /** Signals that the paginator has not performed any query so far */
+  get isInitialized() {
+    return typeof this._lastQueryShape !== 'undefined';
+  }
+
+  get isOfflineSupportEnabled() {
+    return false;
+  }
+
+  get initialState(): PaginatorState<T> {
     return {
       hasNext: true,
       hasPrev: true, //todo: check if optimistic value does not cause problems in UI
       isLoading: false,
-      items: undefined,
+      items: undefined, // todo: maybe should be null?
       lastQueryError: undefined,
-      cursor: undefined,
-      offset: 0,
+      cursor: this.config.initialCursor,
+      offset: this.config.initialOffset ?? 0,
     };
   }
 
@@ -139,6 +216,18 @@ export abstract class BasePaginator<T> {
     return this.config.pageSize;
   }
 
+  set pageSize(size: number) {
+    this.config.pageSize = size;
+  }
+
+  set initialCursor(cursor: PaginatorCursor) {
+    this.config.initialCursor = cursor;
+  }
+
+  set initialOffset(offset: number) {
+    this.config.initialOffset = offset;
+  }
+
   /** Single point of truth: always use the effective comparator */
   get effectiveComparator() {
     return this.boostComparator;
@@ -148,12 +237,40 @@ export abstract class BasePaginator<T> {
     return this._maxBoostSeq;
   }
 
-  abstract query(params: PaginationQueryParams): Promise<PaginationQueryReturnValue<T>>;
+  abstract query(
+    params: PaginationQueryParams<Q>,
+  ): Promise<PaginationQueryReturnValue<T>>;
 
   abstract filterQueryResults(items: T[]): T[] | Promise<T[]>;
 
+  /**
+   * Subclasses must return the query shape.
+   */
+  protected getNextQueryShape({
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    direction,
+  }: Pick<PaginationQueryParams<Q>, 'direction'> = {}): Q {
+    throw new Error('Paginator.getNextQueryShape() is not implemented');
+  }
+
+  /**
+   * Decide whether a param change between queries requires a state reset.
+   * Default: deep inequality => reset.
+   * Subclasses can override to implement domain rules
+   * (e.g. ChannelPaginator filters {cid: { $in: string[]}} with different CIDs may be required not to lead to reset).
+   */
+  protected shouldResetStateBeforeQuery(
+    prevQueryShape: unknown | undefined,
+    nextQueryShape: unknown | undefined,
+  ): boolean {
+    return (
+      typeof prevQueryShape === 'undefined' ||
+      this.config.hasPaginationQueryShapeChanged(prevQueryShape, nextQueryShape)
+    );
+  }
+
   protected buildFilters(): object | null {
-    return null; // === no filters'
+    return null; // === no filters
   }
 
   getItemId(item: T): string {
@@ -372,6 +489,29 @@ export abstract class BasePaginator<T> {
     return index > -1 ? (this.items ?? [])[index] : undefined;
   }
 
+  setItems(valueOrFactory: ValueOrPatch<T[]>, cursor?: PaginatorCursor) {
+    this.state.next((current) => {
+      const { items: currentItems = [] } = current;
+      const newItems = isPatch(valueOrFactory)
+        ? valueOrFactory(currentItems)
+        : valueOrFactory;
+
+      // If the references between the two values are the same, just return the
+      // current state; otherwise trigger a state change.
+      if (currentItems === newItems) {
+        return current;
+      }
+      const newState = { ...current, items: newItems };
+
+      if (cursor) {
+        newState.cursor = cursor;
+      } else {
+        newState.offset = newItems.length;
+      }
+      return newState;
+    });
+  }
+
   setFilterResolvers(resolvers: FieldToDataResolver<T>[]) {
     this._filterFieldToDataResolvers = resolvers;
   }
@@ -384,9 +524,24 @@ export abstract class BasePaginator<T> {
     this._executeQueryDebounced = debounce(this.executeQuery.bind(this), debounceMs);
   };
 
-  canExecuteQuery = (direction: PaginationDirection) =>
-    (!this.isLoading && direction === 'next' && this.hasNext) ||
-    (direction === 'prev' && this.hasPrev);
+  protected canExecuteQuery = ({
+    direction,
+    reset,
+  }: { direction: PaginationDirection } & Pick<PaginationQueryParams<Q>, 'reset'>) =>
+    !this.isLoading &&
+    (reset === 'yes' ||
+      (direction === 'next' && this.hasNext) ||
+      (direction === 'prev' && this.hasPrev));
+
+  isFirstPageQuery = (
+    params: { queryShape?: unknown } & Pick<PaginationQueryParams<Q>, 'reset'>,
+  ): boolean => {
+    if (typeof this.items === 'undefined') return true;
+    if (params.reset === 'yes') return true;
+    if (params.reset === 'no') return false;
+
+    return this.shouldResetStateBeforeQuery(this._lastQueryShape, params.queryShape);
+  };
 
   protected getStateBeforeFirstQuery(): PaginatorState<T> {
     return {
@@ -411,39 +566,112 @@ export abstract class BasePaginator<T> {
     };
   }
 
-  async executeQuery({ direction }: { direction: PaginationDirection }) {
-    if (!this.canExecuteQuery(direction)) return;
-    const isFirstPage = typeof this.items === 'undefined';
+  preloadFirstPageFromOfflineDb = (
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    params: PaginationQueryParams<Q>,
+  ): Promise<T[] | undefined> | T[] | undefined => undefined;
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  populateOfflineDbAfterQuery = (params: {
+    items: T[] | undefined;
+    queryShape: Q | undefined;
+  }): Promise<T[] | undefined> | T[] | undefined => undefined;
+
+  protected async runQueryRetryable(
+    params: PaginationQueryParams<Q> = {},
+  ): Promise<PaginationQueryReturnValue<T> | null> {
+    const { retryCount } = params;
+    try {
+      return await this.query(params);
+    } catch (e) {
+      // If the offline support is enabled, and there are items in the DB, we should not report the error.
+      const isOfflineSupportEnabledWithItems =
+        this.isOfflineSupportEnabled && (this.items ?? []).length > 0;
+      if (!isOfflineSupportEnabledWithItems) {
+        this.state.partialNext({ lastQueryError: e as Error });
+      }
+
+      const nextRetryCount = (retryCount ?? 0) - 1;
+      if (nextRetryCount > 0) {
+        // not swapping isLoading flag to false as the load has not finished yet
+        await sleep(DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES);
+        return await this.runQueryRetryable({
+          ...params,
+          retryCount: nextRetryCount,
+        });
+      }
+      if (this.config.throwErrors) {
+        this.state.partialNext({ isLoading: false });
+        throw e;
+      }
+      return null;
+    }
+  }
+
+  async executeQuery({
+    direction = 'next',
+    queryShape: forcedQueryShape, // todo: remove it?
+    reset,
+    retryCount = 0,
+  }: PaginationQueryParams<Q> = {}) {
+    const queryShape = forcedQueryShape ?? this.getNextQueryShape({ direction });
+    if (!this.canExecuteQuery({ direction, reset })) return;
+
+    const isFirstPage = this.isFirstPageQuery({ queryShape, reset });
     if (isFirstPage) {
-      this.state.next(this.getStateBeforeFirstQuery());
+      const state = this.getStateBeforeFirstQuery();
+      // preload from the offline DB only if no successful HTTP request has been run previously
+      let items: T[] | undefined = undefined;
+      if (!this.isInitialized) {
+        items =
+          (await this.preloadFirstPageFromOfflineDb({
+            direction,
+            queryShape,
+            reset,
+            retryCount,
+          })) ?? state.items;
+      }
+      this.state.next({ ...state, items });
     } else {
       this.state.partialNext({ isLoading: true });
     }
 
-    const stateUpdate: Partial<PaginatorState<T>> = {};
-    try {
-      const results = await this.query({ direction });
-      if (!results) return;
-      const { items, next, prev } = results;
-      if (isFirstPage && (next || prev)) {
-        this._isCursorPagination = true;
-      }
+    this._nextQueryShape = queryShape;
+    const results = await this.runQueryRetryable({
+      direction,
+      queryShape,
+      reset,
+      retryCount,
+    });
+    this._lastQueryShape = this._nextQueryShape;
+    this._nextQueryShape = undefined;
 
-      if (this._isCursorPagination) {
-        stateUpdate.cursor = { next: next || null, prev: prev || null };
-        stateUpdate.hasNext = !!next;
-        stateUpdate.hasPrev = !!prev;
-      } else {
-        stateUpdate.offset = (this.offset ?? 0) + items.length;
-        stateUpdate.hasNext = items.length === this.pageSize;
-      }
-
-      stateUpdate.items = await this.filterQueryResults(items);
-    } catch (e) {
-      stateUpdate.lastQueryError = e as Error;
-    } finally {
-      this.state.next(this.getStateAfterQuery(stateUpdate, isFirstPage));
+    // if the request failed the value is null, loading finished
+    if (!results) {
+      this.state.partialNext({ isLoading: false });
+      return;
     }
+
+    const stateUpdate: Partial<PaginatorState<T>> = { lastQueryError: undefined };
+
+    const { items, next, prev } = results;
+    if (isFirstPage && (next || prev)) {
+      this._isCursorPagination = true;
+    }
+
+    if (this._isCursorPagination) {
+      stateUpdate.cursor = { next: next || null, prev: prev || null };
+      stateUpdate.hasNext = !!next;
+      stateUpdate.hasPrev = !!prev;
+    } else {
+      stateUpdate.offset = (this.offset ?? 0) + items.length;
+      stateUpdate.hasNext = items.length === this.pageSize;
+    }
+
+    stateUpdate.items = await this.filterQueryResults(items);
+    const state = this.getStateAfterQuery(stateUpdate, isFirstPage);
+    this.state.next(state);
+    this.populateOfflineDbAfterQuery({ items: state.items, queryShape });
   }
 
   cancelScheduledQuery() {
@@ -454,19 +682,24 @@ export abstract class BasePaginator<T> {
     this.state.next(this.initialState);
   }
 
-  next = () => this.executeQuery({ direction: 'next' });
+  next = (params: Omit<PaginationQueryParams<Q>, 'direction' | 'queryShape'> = {}) =>
+    this.executeQuery({ direction: 'next', ...params });
 
-  prev = () => this.executeQuery({ direction: 'prev' });
+  prev = (params: Omit<PaginationQueryParams<Q>, 'direction' | 'queryShape'> = {}) =>
+    this.executeQuery({ direction: 'prev', ...params });
 
-  nextDebounced = () => {
-    this._executeQueryDebounced({ direction: 'next' });
+  nextDebounced = (
+    params: Omit<PaginationQueryParams<Q>, 'direction' | 'queryShape'> = {},
+  ) => {
+    this._executeQueryDebounced({ direction: 'next', ...params });
   };
-  prevDebounced = () => {
-    this._executeQueryDebounced({ direction: 'prev' });
+  prevDebounced = (
+    params: Omit<PaginationQueryParams<Q>, 'direction' | 'queryShape'> = {},
+  ) => {
+    this._executeQueryDebounced({ direction: 'prev', ...params });
   };
 
   reload = async () => {
-    this.resetState();
-    await this.next();
+    await this.next({ reset: 'yes' });
   };
 }
