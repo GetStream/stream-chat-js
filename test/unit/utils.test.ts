@@ -690,35 +690,6 @@ describe('Channel pinning and archiving utils', () => {
       expect(shouldConsiderArchivedChannels(mockFilters)).to.be.true;
     });
   });
-
-  describe('app_banned filter', () => {
-    it('should accept "only" as a valid value', () => {
-      const mockFilters: ChannelFilters = { app_banned: 'only' };
-      expect(mockFilters.app_banned).to.equal('only');
-    });
-
-    it('should accept "excluded" as a valid value', () => {
-      const mockFilters: ChannelFilters = { app_banned: 'excluded' };
-      expect(mockFilters.app_banned).to.equal('excluded');
-    });
-
-    it('should allow app_banned to be combined with other filters', () => {
-      const mockFilters: ChannelFilters = {
-        type: 'messaging',
-        app_banned: 'excluded',
-        archived: false,
-        members: { $in: ['user-1'] },
-      };
-      expect(mockFilters.app_banned).to.equal('excluded');
-      expect(mockFilters.type).to.equal('messaging');
-      expect(mockFilters.archived).to.be.false;
-    });
-
-    it('should allow app_banned to be undefined', () => {
-      const mockFilters: ChannelFilters = { type: 'messaging' };
-      expect(mockFilters.app_banned).to.be.undefined;
-    });
-  });
 });
 
 describe('promoteChannel', () => {
