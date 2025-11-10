@@ -6,7 +6,10 @@ import {
   EventTypes,
   type StreamChat,
 } from '../../src';
-import { ChannelPaginatorsOrchestrator } from '../../src/ChannelPaginatorsOrchestrator';
+import {
+  ChannelPaginatorsOrchestrator,
+  createPriorityOwnershipResolver,
+} from '../../src/ChannelPaginatorsOrchestrator';
 vi.mock('../../src/pagination/utility.queryChannel', async () => {
   return {
     getChannel: vi.fn(async ({ client, id, type }) => {
@@ -22,6 +25,146 @@ describe('ChannelPaginatorsOrchestrator', () => {
   beforeEach(() => {
     client = getClientWithUser();
     vi.clearAllMocks();
+  });
+
+  describe('ownershipResolver', () => {
+    it('keeps channel in all matching paginators by default', async () => {
+      const ch = makeChannel('messaging:100');
+      client.activeChannels[ch.cid] = ch;
+
+      const p1 = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+      const p2 = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+
+      const orchestrator = new ChannelPaginatorsOrchestrator({
+        client,
+        paginators: [p1, p2],
+      });
+      orchestrator.registerSubscriptions();
+
+      client.dispatchEvent({ type: 'message.new', cid: ch.cid });
+      await vi.waitFor(() => {
+        expect(orchestrator.getPaginatorById(p1.id)).toStrictEqual(p1);
+        expect(orchestrator.getPaginatorById(p2.id)).toStrictEqual(p2);
+        expect(p1.items).toHaveLength(1);
+        expect(p1.items![0]).toStrictEqual(ch);
+        expect(p2.items).toHaveLength(1);
+        expect(p2.items![0]).toStrictEqual(ch);
+      });
+    });
+
+    it('keeps channel only in highest-priority matching paginator when resolver provided', async () => {
+      const pHigh = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+      const pLow = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+      const orchestrator = new ChannelPaginatorsOrchestrator({
+        client,
+        paginators: [pLow, pHigh],
+        ownershipResolver: createPriorityOwnershipResolver([pHigh.id, pLow.id]),
+      });
+
+      const ch = makeChannel('messaging:101');
+      client.activeChannels[ch.cid] = ch;
+
+      orchestrator.registerSubscriptions();
+      client.dispatchEvent({ type: 'message.new', cid: ch.cid });
+
+      await vi.waitFor(() => {
+        expect(pHigh.items).toHaveLength(1);
+        expect(pHigh.items![0]).toStrictEqual(ch);
+        expect(pLow.items).toBeUndefined();
+      });
+    });
+
+    it('keeps item in all priority ownership paginators when resolver returns multiple ids', async () => {
+      const pHigh = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+      const pLow = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+      const orchestrator = new ChannelPaginatorsOrchestrator({
+        client,
+        paginators: [pLow, pHigh],
+        ownershipResolver: () => [pHigh.id, pLow.id],
+      });
+
+      const ch = makeChannel('messaging:101');
+      client.activeChannels[ch.cid] = ch;
+
+      orchestrator.registerSubscriptions();
+      client.dispatchEvent({ type: 'message.new', cid: ch.cid });
+
+      await vi.waitFor(() => {
+        expect(pHigh.items).toHaveLength(1);
+        expect(pHigh.items![0]).toStrictEqual(ch);
+        expect(pLow.items).toHaveLength(1);
+        expect(pLow.items![0]).toStrictEqual(ch);
+      });
+    });
+
+    it('accepts ownershipResolver as array of ids and applies priority', async () => {
+      const pLow = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+      const pHigh = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+      const orchestrator = new ChannelPaginatorsOrchestrator({
+        client,
+        paginators: [pLow, pHigh],
+        ownershipResolver: [pHigh.id, pLow.id],
+      });
+
+      const ch = makeChannel('messaging:102');
+      client.activeChannels[ch.cid] = ch;
+
+      orchestrator.registerSubscriptions();
+      client.dispatchEvent({ type: 'message.new', cid: ch.cid });
+
+      await vi.waitFor(() => {
+        expect(pHigh.items).toHaveLength(1);
+        expect(pHigh.items![0]).toStrictEqual(ch);
+        expect(pLow.items).toBeUndefined();
+      });
+    });
+
+    it('keeps items only in owner paginators if some matching paginators are not listed in ownershipResolver array', async () => {
+      const pLow = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+      const pHigh = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+      const orchestrator = new ChannelPaginatorsOrchestrator({
+        client,
+        paginators: [pLow, pHigh],
+        ownershipResolver: [pHigh.id],
+      });
+
+      const ch = makeChannel('messaging:102');
+      client.activeChannels[ch.cid] = ch;
+
+      orchestrator.registerSubscriptions();
+      client.dispatchEvent({ type: 'message.new', cid: ch.cid });
+
+      await vi.waitFor(() => {
+        expect(pHigh.items).toHaveLength(1);
+        expect(pHigh.items![0]).toStrictEqual(ch);
+        expect(pLow.items).toBeUndefined();
+      });
+    });
+
+    it('keeps items only in matching paginators if owner paginators are not matching', async () => {
+      const p1 = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+      const p2 = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+      const p3 = new ChannelPaginator({ client, filters: { type: 'messagingX' } });
+      const orchestrator = new ChannelPaginatorsOrchestrator({
+        client,
+        paginators: [p1, p2, p3],
+        ownershipResolver: [p3.id],
+      });
+
+      const ch = makeChannel('messaging:102');
+      client.activeChannels[ch.cid] = ch;
+
+      orchestrator.registerSubscriptions();
+      client.dispatchEvent({ type: 'message.new', cid: ch.cid });
+
+      await vi.waitFor(() => {
+        expect(p1.items).toHaveLength(1);
+        expect(p1.items![0]).toStrictEqual(ch);
+        expect(p2.items).toHaveLength(1);
+        expect(p2.items![0]).toStrictEqual(ch);
+        expect(p3.items).toBeUndefined();
+      });
+    });
   });
 
   describe('constructor', () => {
@@ -381,7 +524,10 @@ describe('ChannelPaginatorsOrchestrator', () => {
   // Helper to create a minimal channel with needed state
   function makeChannel(cid: string) {
     const [type, id] = cid.split(':');
-    return client.channel(type, id);
+    const channel = client.channel(type, id);
+    channel.data!.type = type;
+    channel.data!.id = id;
+    return channel;
   }
 
   describe.each(['channel.deleted', 'channel.hidden'] as EventTypes[])(
