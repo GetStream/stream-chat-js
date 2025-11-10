@@ -61,7 +61,7 @@ describe('ChannelPaginator', () => {
         paginator.filterBuilder.buildFilters({ baseFilters: paginator.staticFilters }),
       ).toStrictEqual({});
       // @ts-expect-error accessing protected property
-      expect(paginator._filterFieldToDataResolvers).toHaveLength(4);
+      expect(paginator._filterFieldToDataResolvers).toHaveLength(8);
       expect(paginator.config.doRequest).toBeUndefined();
     });
 
@@ -125,7 +125,7 @@ describe('ChannelPaginator', () => {
         ...initialFilterBuilderContext,
       });
       // @ts-expect-error accessing protected property
-      expect(paginator._filterFieldToDataResolvers).toHaveLength(4);
+      expect(paginator._filterFieldToDataResolvers).toHaveLength(8);
       expect(paginator.config.debounceMs).toStrictEqual(paginatorOptions.debounceMs);
       expect(paginator.config.doRequest).toStrictEqual(doRequest);
       expect(paginator.config.hasPaginationQueryShapeChanged).toStrictEqual(
@@ -286,6 +286,165 @@ describe('ChannelPaginator', () => {
   });
 
   describe('filter resolvers', () => {
+    const otherUserId = 'other-user';
+    it('resolves field "archived"', () => {
+      const paginator = new ChannelPaginator({
+        client,
+        filters: { members: { $in: [user.id] }, archived: true },
+      });
+
+      channel1.state.members = {
+        [user.id]: { user },
+        [otherUserId]: { user: { id: otherUserId } },
+      };
+
+      channel1.state.membership = {
+        user,
+        archived_at: '2025-09-03T12:19:39.101089Z',
+      };
+      expect(paginator.matchesFilter(channel1)).toBeTruthy();
+
+      channel1.state.membership = {
+        user,
+        archived_at: undefined,
+      };
+      expect(paginator.matchesFilter(channel1)).toBeFalsy();
+    });
+
+    it('resolves field "app_banned"', () => {
+      const paginator = new ChannelPaginator({
+        client,
+        filters: { members: { $in: [user.id] }, app_banned: 'only' },
+      });
+
+      channel1.state.members = {
+        [user.id]: { user },
+        [otherUserId]: { user: { id: otherUserId, banned: true } },
+      };
+
+      expect(paginator.matchesFilter(channel1)).toBeTruthy();
+
+      channel1.state.members[otherUserId].user!.banned = false;
+      expect(paginator.matchesFilter(channel1)).toBeFalsy();
+
+      // ===== excluded ====
+      paginator.staticFilters = { members: { $in: [user.id] }, app_banned: 'excluded' };
+
+      channel1.state.members[otherUserId].user!.banned = true;
+      expect(paginator.matchesFilter(channel1)).toBeFalsy();
+
+      channel1.state.members[otherUserId].user!.banned = false;
+      expect(paginator.matchesFilter(channel1)).toBeTruthy();
+    });
+
+    it('resolves field "has_unread"', () => {
+      const paginator = new ChannelPaginator({
+        client,
+        filters: { has_unread: true },
+      });
+
+      channel1.state.read = {
+        [user.id]: { last_read: new Date(2000), unread_messages: 0, user },
+        [otherUserId]: {
+          last_read: new Date(1000),
+          unread_messages: 1,
+          user: { id: otherUserId },
+        },
+      };
+
+      expect(paginator.matchesFilter(channel1)).toBeFalsy();
+
+      channel1.state.read[user.id].unread_messages = 1;
+      expect(paginator.matchesFilter(channel1)).toBeTruthy();
+    });
+
+    describe('resolves field "last_updated"', () => {
+      it('for primitive filter', () => {
+        const paginator = new ChannelPaginator({
+          client,
+          filters: { last_updated: new Date(1000).toISOString() },
+        });
+        channel1.data = { updated_at: undefined };
+        channel1.state.last_message_at = new Date(1000);
+
+        expect(paginator.matchesFilter(channel1)).toBeTruthy();
+
+        channel1.data = { updated_at: new Date(1000).toISOString() };
+        channel1.state.last_message_at = null;
+
+        expect(paginator.matchesFilter(channel1)).toBeTruthy();
+
+        channel1.data = { updated_at: undefined };
+        channel1.state.last_message_at = null;
+        expect(paginator.matchesFilter(channel1)).toBeFalsy();
+      });
+
+      it.each([
+        [
+          '$eq',
+          [
+            { val: 1000, expected: true },
+            { val: 1001, expected: false },
+            { val: 999, expected: false },
+          ],
+        ],
+        [
+          '$gt',
+          [
+            { val: 1000, expected: false },
+            { val: 1001, expected: true },
+            { val: 999, expected: false },
+          ],
+        ],
+        [
+          '$gte',
+          [
+            { val: 1000, expected: true },
+            { val: 1001, expected: true },
+            { val: 999, expected: false },
+          ],
+        ],
+        [
+          '$lt',
+          [
+            { val: 1000, expected: false },
+            { val: 1001, expected: false },
+            { val: 999, expected: true },
+          ],
+        ],
+        [
+          '$lte',
+          [
+            { val: 1000, expected: true },
+            { val: 1001, expected: false },
+            { val: 999, expected: true },
+          ],
+        ],
+      ])('for operator %s', (operator, scenarios) => {
+        const paginator = new ChannelPaginator({
+          client,
+          // @ts-expect-error operator in variable
+          filters: { last_updated: { [operator]: new Date(1000).toISOString() } },
+        });
+
+        channel1.data = { updated_at: undefined };
+        scenarios.forEach(({ val, expected }) => {
+          channel1.state.last_message_at = new Date(val);
+          expect(paginator.matchesFilter(channel1)).toBe(expected);
+        });
+
+        channel1.state.last_message_at = null;
+        scenarios.forEach(({ val, expected }) => {
+          channel1.data = { updated_at: new Date(val).toISOString() };
+          expect(paginator.matchesFilter(channel1)).toBe(expected);
+        });
+
+        channel1.data = { updated_at: undefined };
+        channel1.state.last_message_at = null;
+        expect(paginator.matchesFilter(channel1)).toBe(false);
+      });
+    });
+
     it('resolves "pinned" field', () => {
       const paginator = new ChannelPaginator({
         client,

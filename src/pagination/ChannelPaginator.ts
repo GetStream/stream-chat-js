@@ -50,8 +50,15 @@ export type ChannelPaginatorOptions = {
 };
 
 const getQueryShapeRelevantChannelOptions = (options: ChannelOptions) => {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { limit: _, member_limit: __, message_limit: ___, ...relevantShape } = options;
+  const {
+    /* eslint-disable @typescript-eslint/no-unused-vars */
+    limit: _,
+    member_limit: __,
+    message_limit: ___,
+    offset: ____,
+    /* eslint-enable @typescript-eslint/no-unused-vars */
+    ...relevantShape
+  } = options;
   return relevantShape;
 };
 
@@ -69,9 +76,45 @@ const hasPaginationQueryShapeChanged: PaginationQueryShapeChangeIdentifier<
     },
   );
 
-const pinnedFilterResolver: FieldToDataResolver<Channel> = {
-  matchesField: (field) => field === 'pinned',
-  resolve: (channel) => !!channel.state.membership.pinned_at,
+const archivedFilterResolver: FieldToDataResolver<Channel> = {
+  matchesField: (field) => field === 'archived',
+  resolve: (channel) => !!channel.state.membership.archived_at,
+};
+
+const appBannedFilterResolver: FieldToDataResolver<Channel> = {
+  matchesField: (field) => field === 'app_banned',
+  resolve: (channel) => {
+    const ownUserId = channel.getClient().user?.id;
+    const otherMembers = Object.values(channel.state.members).filter(
+      ({ user }) => user?.id !== ownUserId,
+    );
+    // Only applies to channels with exactly 2 members.
+    if (otherMembers.length !== 1) return false;
+    const otherMember = otherMembers[0];
+    return otherMember.user?.banned ? 'only' : 'excluded';
+  },
+};
+
+const hasUnreadFilterResolver: FieldToDataResolver<Channel> = {
+  matchesField: (field) => field === 'has_unread',
+  resolve: (channel) => {
+    const ownUserId = channel.getClient().user?.id;
+    return ownUserId && channel.state.read[ownUserId].unread_messages > 0;
+  },
+};
+
+const lastUpdatedFilterResolver: FieldToDataResolver<Channel> = {
+  matchesField: (field) => field === 'last_updated',
+  resolve: (channel) => {
+    // combination of last_message_at and updated_at
+    const lastMessageAt = channel.state.last_message_at?.getTime() ?? null;
+    const updatedAt = channel.data?.updated_at
+      ? new Date(channel.data?.updated_at).getTime()
+      : undefined;
+    return lastMessageAt !== null && updatedAt !== undefined
+      ? Math.max(lastMessageAt, updatedAt)
+      : (lastMessageAt ?? updatedAt);
+  },
 };
 
 const membersFilterResolver: FieldToDataResolver<Channel> = {
@@ -100,6 +143,11 @@ const memberUserNameFilterResolver: FieldToDataResolver<Channel> = {
       : [],
 };
 
+const pinnedFilterResolver: FieldToDataResolver<Channel> = {
+  matchesField: (field) => field === 'pinned',
+  resolve: (channel) => !!channel.state.membership.pinned_at,
+};
+
 const dataFieldFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: () => true,
   resolve: (channel, path) => resolveDotPathValue(channel.data, path),
@@ -111,16 +159,10 @@ const channelSortPathResolver: PathResolver<Channel> = (channel, path) => {
     case 'last_message_at':
       return channel.state.last_message_at;
     case 'has_unread': {
-      const userId = channel.getClient().user?.id;
-      return !!(userId && channel.state.read[userId].unread_messages);
+      return hasUnreadFilterResolver.resolve(channel, path);
     }
     case 'last_updated': {
-      // combination of last_message_at and updated_at
-      const lastMessageAt = channel.state.last_message_at?.getTime() ?? 0;
-      const updatedAt = channel.data?.updated_at
-        ? new Date(channel.data?.updated_at).getTime()
-        : 0;
-      return lastMessageAt >= updatedAt ? lastMessageAt : updatedAt;
+      return lastUpdatedFilterResolver.resolve(channel, path) ?? 0;
     }
     case 'pinned_at':
       return channel.state.membership.pinned_at;
@@ -175,6 +217,10 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       },
     });
     this.setFilterResolvers([
+      archivedFilterResolver,
+      appBannedFilterResolver,
+      hasUnreadFilterResolver,
+      lastUpdatedFilterResolver,
       pinnedFilterResolver,
       membersFilterResolver,
       memberUserNameFilterResolver,
