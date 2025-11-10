@@ -1,4 +1,4 @@
-const { v4: uuidv4 } = require('uuid');
+const { generateUUIDv4: uuidv4 } = require('../../../src/utils');
 const utils = require('../utils');
 
 async function addDevice() {
