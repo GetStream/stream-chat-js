@@ -22,6 +22,52 @@ type EventHandlerContext = ChannelPaginatorsOrchestratorEventHandlerContext;
 
 type SupportedEventType = EventTypes | (string & {});
 
+/**
+ * Resolves which paginators should be the "owners" of a channel
+ * when the channel matches multiple paginator filters.
+ *
+ * Return a set of paginator ids that should keep/own the item.
+ * Returning an empty set means the channel will be removed everywhere.
+ */
+export type PaginatorOwnershipResolver = (args: {
+  channel: Channel;
+  matchingPaginators: ChannelPaginator[];
+}) => string[];
+
+/**
+ * Convenience factory for a priority-based ownership resolver.
+ * - Provide an ordered list of paginator ids from highest to lowest priority.
+ * - If two or more paginators match a channel, the one with the highest priority wins.
+ * - If none of the matching paginator ids are in the priority list, all matches are kept (back-compat).
+ */
+export const createPriorityOwnershipResolver = (
+  priority?: string[],
+): PaginatorOwnershipResolver => {
+  if (!priority) {
+    return ({ matchingPaginators }) => matchingPaginators.map((p) => p.id);
+  }
+  const rank = new Map<string, number>(priority.map((id, index) => [id, index]));
+  return ({ matchingPaginators }) => {
+    if (matchingPaginators.length <= 1) {
+      return matchingPaginators.map((p) => p.id);
+    }
+    // The winner is the first item in the sorted array of matching paginators
+    const winner = [...matchingPaginators].sort((a, b) => {
+      const rankA = rank.get(a.id);
+      const rankB = rank.get(b.id);
+      const valueA = rankA === undefined ? Number.POSITIVE_INFINITY : rankA;
+      const valueB = rankB === undefined ? Number.POSITIVE_INFINITY : rankB;
+      return valueA - valueB;
+    })[0];
+    const winnerValue = rank.get(winner.id);
+    // If no explicit priority is set for any, keep all (preserve current behavior)
+    if (winnerValue === undefined) {
+      return matchingPaginators.map((p) => p.id);
+    }
+    return [winner.id];
+  };
+};
+
 const getCachedChannelFromEvent = (
   event: Event,
   cache: Record<string, Channel>,
@@ -101,25 +147,41 @@ const updateLists: EventHandlerPipelineHandler<EventHandlerContext> = async ({
 
   if (!channel) return;
 
+  const matchingPaginators = orchestrator.paginators.filter((p) =>
+    p.matchesFilter(channel),
+  );
+  const matchingIds = new Set(matchingPaginators.map((p) => p.id));
+
+  const ownerIds = orchestrator.resolveOwnership(channel, matchingPaginators);
+
   orchestrator.paginators.forEach((paginator) => {
-    if (paginator.matchesFilter(channel)) {
-      const channelBoost = paginator.getBoost(channel.cid);
-      if (
-        [
-          'message.new',
-          'notification.message_new',
-          'notification.added_to_channel',
-          'channel.visible',
-        ].includes(event.type) &&
-        (!channelBoost || channelBoost.seq < paginator.maxBoostSeq)
-      ) {
-        paginator.boost(channel.cid, { seq: paginator.maxBoostSeq + 1 });
-      }
-      paginator.ingestItem(channel);
-    } else {
+    if (!matchingIds.has(paginator.id)) {
       // remove if it does not match the filter anymore
       paginator.removeItem({ item: channel });
+      return;
     }
+
+    // Only if owners are specified, the items is removed from the non-owner matching paginators
+    if (ownerIds.size > 0 && !ownerIds.has(paginator.id)) {
+      // matched, but not selected to own - remove to enforce exclusivity
+      paginator.removeItem({ item: channel });
+      return;
+    }
+
+    // Selected owner: optionally boost then ingest
+    const channelBoost = paginator.getBoost(channel.cid);
+    if (
+      [
+        'message.new',
+        'notification.message_new',
+        'notification.added_to_channel',
+        'channel.visible',
+      ].includes(event.type) &&
+      (!channelBoost || channelBoost.seq < paginator.maxBoostSeq)
+    ) {
+      paginator.boost(channel.cid, { seq: paginator.maxBoostSeq + 1 });
+    }
+    paginator.ingestItem(channel);
   });
 };
 
@@ -215,6 +277,13 @@ export type ChannelPaginatorsOrchestratorOptions = {
   client: StreamChat;
   paginators?: ChannelPaginator[];
   eventHandlers?: ChannelPaginatorsOrchestratorEventHandlers;
+  /**
+   * Decide which paginator(s) should own a channel when multiple match.
+   * Defaults to keeping the channel in all matching paginators.
+   * Channels are kept only in the paginators that are listed in the ownershipResolver array.
+   * Empty ownershipResolver array means that the channel is kept in all matching paginators.
+   */
+  ownershipResolver?: PaginatorOwnershipResolver | string[];
 };
 
 export class ChannelPaginatorsOrchestrator extends WithSubscriptions {
@@ -224,6 +293,7 @@ export class ChannelPaginatorsOrchestrator extends WithSubscriptions {
     SupportedEventType,
     EventHandlerPipeline<EventHandlerContext>
   >();
+  protected ownershipResolver?: PaginatorOwnershipResolver;
 
   protected static readonly defaultEventHandlers: ChannelPaginatorsOrchestratorEventHandlers =
     {
@@ -244,10 +314,17 @@ export class ChannelPaginatorsOrchestrator extends WithSubscriptions {
     client,
     eventHandlers,
     paginators,
+    ownershipResolver,
   }: ChannelPaginatorsOrchestratorOptions) {
     super();
     this.client = client;
     this.state = new StateStore({ paginators: paginators ?? [] });
+    if (ownershipResolver) {
+      this.ownershipResolver = Array.isArray(ownershipResolver)
+        ? createPriorityOwnershipResolver(ownershipResolver)
+        : ownershipResolver;
+    }
+
     const finalEventHandlers =
       eventHandlers ?? ChannelPaginatorsOrchestrator.getDefaultHandlers();
     for (const [type, handlers] of Object.entries(finalEventHandlers)) {
@@ -279,6 +356,17 @@ export class ChannelPaginatorsOrchestrator extends WithSubscriptions {
       out[type as SupportedEventType] = [...handlers];
     }
     return out;
+  }
+
+  /**
+   * Which paginators should own the channel among the ones that matched.
+   * Default behavior keeps the channel in all matching paginators.
+   */
+  resolveOwnership(
+    channel: Channel,
+    matchingPaginators: ChannelPaginator[],
+  ): Set<string> {
+    return new Set(this.ownershipResolver?.({ channel, matchingPaginators }) ?? []);
   }
 
   getPaginatorById(id: string) {
