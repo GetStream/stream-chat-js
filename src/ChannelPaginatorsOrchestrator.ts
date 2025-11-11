@@ -294,6 +294,8 @@ export class ChannelPaginatorsOrchestrator extends WithSubscriptions {
     EventHandlerPipeline<EventHandlerContext>
   >();
   protected ownershipResolver?: PaginatorOwnershipResolver;
+  /** Track paginators already wrapped with ownership-aware filtering */
+  protected ownershipFilterAppliedPaginators = new WeakSet<ChannelPaginator>();
 
   protected static readonly defaultEventHandlers: ChannelPaginatorsOrchestratorEventHandlers =
     {
@@ -330,6 +332,8 @@ export class ChannelPaginatorsOrchestrator extends WithSubscriptions {
     for (const [type, handlers] of Object.entries(finalEventHandlers)) {
       if (handlers) this.ensurePipeline(type).replaceAll(handlers);
     }
+    // Ensure ownership rules are applied to initial paginators' query results
+    this.paginators.forEach((p) => this.wrapPaginatorFiltering(p));
   }
 
   get paginators(): ChannelPaginator[] {
@@ -369,6 +373,46 @@ export class ChannelPaginatorsOrchestrator extends WithSubscriptions {
     return new Set(this.ownershipResolver?.({ channel, matchingPaginators }) ?? []);
   }
 
+  /**
+   * Filter a page of query results for a specific paginator according to ownership rules.
+   * If no owners are specified by the resolver, all matching paginators keep the item.
+   */
+  protected filterItemsByOwnership({
+    paginator,
+    items,
+  }: {
+    paginator: ChannelPaginator;
+    items: Channel[];
+  }): Channel[] {
+    if (!items.length) return items;
+    const result: Channel[] = [];
+    for (const ch of items) {
+      const matchingPaginators = this.paginators.filter((p) => p.matchesFilter(ch));
+      const ownerIds = this.resolveOwnership(ch, matchingPaginators);
+      const noOwnersOrPaginatorIsOwner =
+        ownerIds.size === 0 || ownerIds.has(paginator.id);
+
+      if (noOwnersOrPaginatorIsOwner) {
+        result.push(ch);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Wrap paginator.filterQueryResults so that ownership rules are applied whenever
+   * the paginator ingests results from a server query (first page and subsequent pages).
+   */
+  protected wrapPaginatorFiltering(paginator: ChannelPaginator) {
+    if (this.ownershipFilterAppliedPaginators.has(paginator)) return;
+    const original = paginator.filterQueryResults.bind(paginator);
+    paginator.filterQueryResults = (items: Channel[]) => {
+      const filtered = original(items) as Channel[];
+      return this.filterItemsByOwnership({ paginator, items: filtered });
+    };
+    this.ownershipFilterAppliedPaginators.add(paginator);
+  }
+
   getPaginatorById(id: string) {
     return this.paginators.find((p) => p.id === id);
   }
@@ -392,6 +436,8 @@ export class ChannelPaginatorsOrchestrator extends WithSubscriptions {
     );
     paginators.splice(validIndex, 0, paginator);
     this.state.partialNext({ paginators });
+    // Wrap newly inserted paginator to enforce ownership on query results
+    this.wrapPaginatorFiltering(paginator);
   }
 
   addEventHandler({

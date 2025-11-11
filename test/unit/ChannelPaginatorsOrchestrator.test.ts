@@ -165,6 +165,51 @@ describe('ChannelPaginatorsOrchestrator', () => {
         expect(p3.items).toBeUndefined();
       });
     });
+
+    it('applies ownership rules to paginators when they paginate', async () => {
+      const ch1 = makeChannel('messaging:101');
+      const ch2 = makeChannel('messaging:102');
+      const queryChannelSpy = vi.spyOn(client, 'queryChannels').mockResolvedValue([ch1]);
+      const p1 = new ChannelPaginator({
+        client,
+        filters: { type: 'messaging' },
+        id: 'p1',
+        paginatorOptions: { pageSize: 1 },
+      });
+      const p2 = new ChannelPaginator({
+        client,
+        filters: { type: 'messaging' },
+        id: 'p2',
+        paginatorOptions: { pageSize: 1 },
+      });
+      new ChannelPaginatorsOrchestrator({
+        client,
+        paginators: [p1, p2],
+        ownershipResolver: [p2.id],
+      });
+
+      await Promise.all([p1, p2].map((p) => p.next()));
+
+      await vi.waitFor(() => {
+        expect(p1.items).toHaveLength(0);
+        // even though ownership claimed by p2, it is still possible to request next page.
+        expect(p1.hasNext).toBe(true);
+        expect(p2.items).toHaveLength(1);
+        expect(p2.items).toStrictEqual([ch1]);
+        expect(p2.hasNext).toBe(true);
+      });
+
+      queryChannelSpy.mockResolvedValue([ch2]);
+      await Promise.all([p1, p2].map((p) => p.next()));
+
+      await vi.waitFor(() => {
+        expect(p1.items).toHaveLength(0);
+        expect(p1.hasNext).toBe(true);
+        expect(p2.items).toHaveLength(2);
+        expect(p2.items).toStrictEqual([ch1, ch2]);
+        expect(p2.hasNext).toBe(true);
+      });
+    });
   });
 
   describe('constructor', () => {
