@@ -300,7 +300,6 @@ export class ChannelPaginatorsOrchestrator extends WithSubscriptions {
   protected static readonly defaultEventHandlers: ChannelPaginatorsOrchestratorEventHandlers =
     {
       'channel.deleted': [channelDeletedHandler],
-      'channel.hidden': [channelDeletedHandler],
       'channel.updated': [channelUpdatedHandler],
       'channel.truncated': [channelTruncatedHandler],
       'channel.visible': [channelVisibleHandler],
