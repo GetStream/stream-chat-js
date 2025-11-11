@@ -99,7 +99,11 @@ const hasUnreadFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: (field) => field === 'has_unread',
   resolve: (channel) => {
     const ownUserId = channel.getClient().user?.id;
-    return ownUserId && channel.state.read[ownUserId].unread_messages > 0;
+    return (
+      ownUserId &&
+      channel.state.read[ownUserId] &&
+      channel.state.read[ownUserId].unread_messages > 0
+    );
   },
 };
 
