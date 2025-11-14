@@ -4454,11 +4454,20 @@ export type UpdateChannelsBatchRequest = {
   data?: Partial<ChannelData>;
 };
 
-export type UpdateChannelsBatchFilters = {
-  cids?: string[];
-  channel_types?: string[];
-  tags?: Record<string, string>;
-};
+export type UpdateChannelsBatchFilters = QueryFilters<{
+  cids?:
+    | RequireOnlyOne<Pick<QueryFilter<string>, '$in'>>
+    | RequireOnlyOne<Pick<QueryFilter<string[]>, '$eq'>>
+    | PrimitiveFilter<string[]>;
+  types?:
+    | RequireOnlyOne<Pick<QueryFilter<string>, '$in'>>
+    | RequireOnlyOne<Pick<QueryFilter<string[]>, '$eq'>>
+    | PrimitiveFilter<string[]>;
+  filter_tags?:
+    | RequireOnlyOne<Pick<QueryFilter<string>, '$in'>>
+    | RequireOnlyOne<Pick<QueryFilter<Record<string, string>>, '$eq'>>
+    | PrimitiveFilter<Record<string, string>>;
+}>;
 
 export type UpdateChannelsBatchResponse = {
   result: Record<string, string>;
