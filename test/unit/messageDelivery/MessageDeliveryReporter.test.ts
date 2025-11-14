@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getClientWithUser } from '../test-utils/getClient';
-import type { Channel, Event, EventAPIResponse, StreamChat } from '../../../src';
+import {
+  type APIErrorResponse,
+  Channel,
+  ErrorFromResponse,
+  Event,
+  EventAPIResponse,
+  StreamChat,
+} from '../../../src';
+import type { AxiosResponse } from 'axios';
 
 const channelType = 'messaging';
 const channelId = 'channelId';
@@ -129,7 +137,7 @@ describe('MessageDeliveryReporter', () => {
     expect(markChannelsDeliveredSpy).not.toHaveBeenCalled();
   });
 
-  it('does nothing when read events are disabled in channel config', async () => {
+  it('does nothing when delievry events are disabled in channel config', async () => {
     client.configs[channel.cid] = {
       created_at: '',
       delivery_events: false,
@@ -300,6 +308,190 @@ describe('MessageDeliveryReporter', () => {
 
     vi.advanceTimersByTime(1000);
     expect(markChannelsDeliveredSpy).not.toHaveBeenCalled();
+  });
+
+  const receiveMessages = (count: number, startId = 0) => {
+    // last_read < last message
+    const channels = Array.from({ length: count }, (_, i) => {
+      const channel = client.channel(channelType, (i + startId).toString());
+      channel.initialized = true;
+      channel.state.latestMessages = [mkMsg('m1', '2025-01-01T10:00:00Z')];
+      (channel.state as any).read['me'] = { last_read: new Date('2025-01-01T09:00:00Z') };
+      return channel;
+    });
+    channels.forEach((ch) => {
+      client.configs[ch.cid] = {
+        created_at: '',
+        delivery_events: true,
+        read_events: false,
+        reminders: false,
+        updated_at: '',
+      };
+    });
+    client.syncDeliveredCandidates(channels);
+    return channels;
+  };
+
+  const retryableError = new ErrorFromResponse<APIErrorResponse>('X', {
+    code: -1,
+    response: {} as AxiosResponse,
+    status: 400,
+  });
+
+  const notRetryableError = new ErrorFromResponse<APIErrorResponse>('X', {
+    code: 2,
+    response: {} as AxiosResponse,
+    status: 400,
+  });
+
+  it('re-queues failed markChannelsDelivered request payloads', async () => {
+    const markChannelsDeliveredSpy = vi.spyOn(client, 'markChannelsDelivered');
+
+    markChannelsDeliveredSpy.mockRejectedValue(retryableError);
+    const channels1 = receiveMessages(110);
+    // @ts-expect-error accessing protected property deliveryReportCandidates
+    expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(110);
+    // @ts-expect-error accessing protected property nextDeliveryReportCandidates
+    expect(client.messageDeliveryReporter.nextDeliveryReportCandidates.size).toBe(0);
+
+    // =======================================================//
+    // trigger mark delivered request that will fail
+    vi.advanceTimersByTime(1000);
+    await Promise.resolve();
+    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(1);
+    // all the candidates have been returned back to deliveryReportCandidates
+    // @ts-expect-error accessing protected property deliveryReportCandidates
+    expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(110);
+    // @ts-expect-error accessing protected property nextDeliveryReportCandidates
+    expect(client.messageDeliveryReporter.nextDeliveryReportCandidates.size).toBe(0);
+
+    // =======================================================//
+    // retry - start mark delivered request that will again fail
+    vi.advanceTimersByTime(2000);
+    // receive new channels during the request
+    const channels2 = receiveMessages(110, channels1.length);
+
+    // the first 100 retried channels are in a sendBuffer - local scope
+    // @ts-expect-error accessing protected property deliveryReportCandidates
+    expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(10);
+    expect(
+      // @ts-expect-error accessing protected property deliveryReportCandidates
+      Array.from(client.messageDeliveryReporter.deliveryReportCandidates.keys()),
+    ).toEqual(channels1.slice(100).map((channel) => channel.cid));
+
+    // newly arrived channels2 present in nextDeliveryReportCandidates
+    // @ts-expect-error accessing protected property nextDeliveryReportCandidates
+    expect(client.messageDeliveryReporter.nextDeliveryReportCandidates.size).toBe(110);
+    expect(
+      // @ts-expect-error accessing protected property deliveryReportCandidates
+      Array.from(client.messageDeliveryReporter.nextDeliveryReportCandidates.keys()),
+    ).toEqual(channels2.slice(0).map((channel) => channel.cid));
+
+    // finish mark delivered request
+    await Promise.resolve();
+    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(2);
+    // all the candidates together now
+    // @ts-expect-error accessing protected property deliveryReportCandidates
+    expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(220);
+    expect(
+      // @ts-expect-error accessing protected property deliveryReportCandidates
+      Array.from(client.messageDeliveryReporter.deliveryReportCandidates.keys()),
+    ).toEqual([
+      ...channels1.slice(0).map((channel) => channel.cid),
+      ...channels2.slice(0).map((channel) => channel.cid),
+    ]);
+
+    // @ts-expect-error accessing protected property nextDeliveryReportCandidates
+    expect(client.messageDeliveryReporter.nextDeliveryReportCandidates.size).toBe(0);
+
+    // =======================================================//
+    // retry - start mark delivered request that will again fail
+    vi.advanceTimersByTime(4000);
+
+    // the first 100 retried channels are in a sendBuffer - local scope
+    // @ts-expect-error accessing protected property deliveryReportCandidates
+    expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(120);
+    expect(
+      // @ts-expect-error accessing protected property deliveryReportCandidates
+      Array.from(client.messageDeliveryReporter.deliveryReportCandidates.keys()),
+    ).toEqual([
+      ...channels1.slice(100).map((channel) => channel.cid),
+      ...channels2.slice(0).map((channel) => channel.cid),
+    ]);
+
+    // newly arrived channels2 present in nextDeliveryReportCandidates
+    // @ts-expect-error accessing protected property nextDeliveryReportCandidates
+    expect(client.messageDeliveryReporter.nextDeliveryReportCandidates.size).toBe(0);
+
+    // finish mark delivered request
+    await Promise.resolve();
+    // all the candidates together now
+    // @ts-expect-error accessing protected property deliveryReportCandidates
+    expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(220);
+    expect(
+      // @ts-expect-error accessing protected property deliveryReportCandidates
+      Array.from(client.messageDeliveryReporter.deliveryReportCandidates.keys()),
+    ).toEqual([
+      ...channels1.slice(0).map((channel) => channel.cid),
+      ...channels2.slice(0).map((channel) => channel.cid),
+    ]);
+
+    // @ts-expect-error accessing protected property nextDeliveryReportCandidates
+    expect(client.messageDeliveryReporter.nextDeliveryReportCandidates.size).toBe(0);
+
+    vi.advanceTimersByTime(8000);
+    // finish mark delivered request
+    await Promise.resolve();
+    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(4);
+
+    // success resets the interval
+    markChannelsDeliveredSpy.mockResolvedValueOnce({ ok: true } as any);
+    // the timeout does not increase anymore from the fourth failed retry
+    vi.advanceTimersByTime(8000);
+    // finish mark delivered request
+    await Promise.resolve();
+    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(5);
+
+    // after the previous success we are back to the base timeout
+    vi.advanceTimersByTime(1000);
+    // finish mark delivered request
+    await Promise.resolve();
+    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(6);
+
+    // @ts-expect-error accessing protected property deliveryReportCandidates
+    expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(120);
+    expect(
+      // @ts-expect-error accessing protected property deliveryReportCandidates
+      Array.from(client.messageDeliveryReporter.deliveryReportCandidates.keys()),
+    ).toEqual([
+      ...channels1.slice(100).map((channel) => channel.cid),
+      ...channels2.slice(0).map((channel) => channel.cid),
+    ]);
+
+    // @ts-expect-error accessing protected property nextDeliveryReportCandidates
+    expect(client.messageDeliveryReporter.nextDeliveryReportCandidates.size).toBe(0);
+  });
+
+  it('non retryable error does not schedule retry', async () => {
+    const markChannelsDeliveredSpy = vi.spyOn(client, 'markChannelsDelivered');
+
+    markChannelsDeliveredSpy.mockRejectedValue(notRetryableError);
+    const channels1 = receiveMessages(110);
+    // @ts-expect-error accessing protected property deliveryReportCandidates
+    expect(client.messageDeliveryReporter.deliveryReportCandidates.size).toBe(110);
+    // @ts-expect-error accessing protected property nextDeliveryReportCandidates
+    expect(client.messageDeliveryReporter.nextDeliveryReportCandidates.size).toBe(0);
+
+    // =======================================================//
+    // trigger mark delivered request that will fail
+    vi.advanceTimersByTime(1000);
+    await Promise.resolve();
+    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(1);
+
+    // will not retry
+    vi.advanceTimersByTime(2000);
+    await Promise.resolve();
+    expect(markChannelsDeliveredSpy).toHaveBeenCalledTimes(1);
   });
 
   it('does not remove the pending delivery candidate after failed markRead request', async () => {
