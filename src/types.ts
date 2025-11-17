@@ -4447,6 +4447,7 @@ export type EventHook = {
   sns_key?: string;
   sns_secret?: string;
   sns_role_arn?: string;
+  should_send_custom_events?: boolean;
 
   // pending message config
   timeout_ms?: number;
