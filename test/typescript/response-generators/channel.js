@@ -1,4 +1,4 @@
-const { v4: uuidv4 } = require('uuid');
+const { generateUUIDv4: uuidv4 } = require('../../../src/utils');
 const utils = require('../utils');
 const fs = require('fs');
 const url = require('url');
@@ -25,6 +25,20 @@ async function addMembers() {
 	await utils.createUsers(newMembers);
 
 	return await channel.addMembers(newMembers);
+}
+
+async function addFilterTags() {
+	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
+	await channel.watch();
+
+	return await channel.addFilterTags(['tag1', 'tag2']);
+}
+
+async function removeFilterTags() {
+	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
+	await channel.watch();
+
+	return await channel.removeFilterTags(['tag1']);
 }
 
 async function addModerators() {
@@ -243,6 +257,7 @@ async function watch() {
 module.exports = {
 	acceptInvite,
 	addMembers,
+	addFilterTags,
 	addModerators,
 	create,
 	deleteChannel,
@@ -260,6 +275,7 @@ module.exports = {
 	queryMembers,
 	rejectInvite,
 	removeMembers,
+	removeFilterTags,
 	sendFile,
 	sendImage,
 	show,

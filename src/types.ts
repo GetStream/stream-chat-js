@@ -282,6 +282,7 @@ export type ChannelResponse = CustomChannelData & {
   created_by?: UserResponse | null;
   created_by_id?: string;
   deleted_at?: string;
+  filter_tags?: string[];
   hidden?: boolean;
   invites?: string[];
   joined?: boolean;
@@ -331,6 +332,7 @@ export type ChannelAPIResponse = {
 
 export type ChannelUpdateOptions = {
   hide_history?: boolean;
+  hide_history_before?: string | Date;
   skip_push?: boolean;
 };
 
@@ -1260,6 +1262,7 @@ export type MarkUnreadOptions = {
   connection_id?: string;
   message_id?: string;
   thread_id?: string;
+  message_timestamp?: string | Date;
   user?: UserResponse;
   user_id?: string;
 };
@@ -1751,6 +1754,8 @@ export type ReactionFilters = QueryFilters<
 
 export type ChannelFilters = QueryFilters<
   ContainsOperator<Omit<CustomChannelData, 'name'>> & {
+    app_banned?: 'only' | 'excluded';
+    has_unread?: boolean;
     archived?: boolean;
     'member.user.name'?:
       | RequireOnlyOne<{
@@ -2403,6 +2408,7 @@ export type ChannelConfigFields = {
   replies?: boolean;
   search?: boolean;
   shared_locations?: boolean;
+  skip_last_msg_update_for_system_msgs?: boolean;
   count_messages?: boolean;
   typing_events?: boolean;
   uploads?: boolean;
@@ -2423,6 +2429,7 @@ export type ChannelData = CustomChannelData &
     members: string[] | Array<NewMemberPayload>;
     blocklist_behavior: AutomodBehavior;
     automod: Automod;
+    filter_tags: string[];
   }>;
 
 export type ChannelMute = {
@@ -3153,6 +3160,11 @@ export type CampaignData = {
     custom?: {};
     id?: string;
     members?: string[];
+    members_template?: Array<{
+      user_id: string;
+      channel_role?: string;
+      custom?: Record<string, unknown>;
+    }>;
     team?: string;
   };
   create_channels?: boolean;
@@ -4435,6 +4447,7 @@ export type EventHook = {
   sns_key?: string;
   sns_secret?: string;
   sns_role_arn?: string;
+  should_send_custom_events?: boolean;
 
   // pending message config
   timeout_ms?: number;

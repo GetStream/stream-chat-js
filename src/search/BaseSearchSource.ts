@@ -6,6 +6,8 @@ import type {
   SearchSourceState,
   SearchSourceType,
 } from './types';
+import type { APIError } from '../errors';
+import { isAPIError, isErrorRetryable } from '../errors';
 
 export type DebounceOptions = {
   debounceMs: number;
@@ -237,6 +239,9 @@ export abstract class BaseSearchSource<T>
       stateUpdate.items = await this.filterQueryResults(items);
     } catch (e) {
       stateUpdate.lastQueryError = e as Error;
+      if (isAPIError(e as Error) && !isErrorRetryable(e as APIError)) {
+        stateUpdate.hasNext = false;
+      }
     } finally {
       this.state.next(this.getStateAfterQuery(stateUpdate, hasNewSearchQuery));
     }
@@ -285,6 +290,9 @@ export abstract class BaseSearchSourceSync<T>
       stateUpdate.items = this.filterQueryResults(items);
     } catch (e) {
       stateUpdate.lastQueryError = e as Error;
+      if (isAPIError(e as Error) && !isErrorRetryable(e as APIError)) {
+        stateUpdate.hasNext = false;
+      }
     } finally {
       this.state.next(this.getStateAfterQuery(stateUpdate, hasNewSearchQuery));
     }
