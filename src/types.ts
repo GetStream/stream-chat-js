@@ -4460,7 +4460,7 @@ export type EventHook = {
   updated_at?: string;
 };
 
-export type UpdateChannelsBatchRequest = {
+export type UpdateChannelsBatchOptions = {
   operation: string;
   filter: UpdateChannelsBatchFilters;
   members?: string[] | Array<NewMemberPayload>;
