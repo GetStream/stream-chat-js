@@ -1,11 +1,14 @@
-import { binarySearchInsertIndex } from './sortCompiler';
-import { itemMatchesFilter } from './filterCompiler';
-import { isPatch, StateStore, type ValueOrPatch } from '../store';
-import { debounce, type DebouncedFunc, sleep } from '../utils';
-import type { FieldToDataResolver } from './types.normalization';
-import { locateOnPlateauAlternating, locateOnPlateauScanOneSide } from './utility.search';
-import { isEqual } from '../utils/mergeWith/mergeWithCore';
-import { DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES } from '../constants';
+import { binarySearchInsertIndex } from '../sortCompiler';
+import { itemMatchesFilter } from '../filterCompiler';
+import { isPatch, StateStore, type ValueOrPatch } from '../../store';
+import { debounce, type DebouncedFunc, sleep } from '../../utils';
+import type { FieldToDataResolver } from '../types.normalization';
+import {
+  locateOnPlateauAlternating,
+  locateOnPlateauScanOneSide,
+} from '../utility.search';
+import { isEqual } from '../../utils/mergeWith/mergeWithCore';
+import { DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES } from '../../constants';
 
 const noOrderChange = () => 0;
 

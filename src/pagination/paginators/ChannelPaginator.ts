@@ -6,22 +6,22 @@ import type {
   PaginatorState,
 } from './BasePaginator';
 import { BasePaginator } from './BasePaginator';
-import type { FilterBuilderOptions } from './FilterBuilder';
-import { FilterBuilder } from './FilterBuilder';
-import { makeComparator } from './sortCompiler';
-import { generateUUIDv4 } from '../utils';
-import type { StreamChat } from '../client';
-import type { Channel } from '../channel';
+import type { FilterBuilderOptions } from '../FilterBuilder';
+import { FilterBuilder } from '../FilterBuilder';
+import { makeComparator } from '../sortCompiler';
+import { generateUUIDv4 } from '../../utils';
+import type { StreamChat } from '../../client';
+import type { Channel } from '../../channel';
 import type {
   ChannelFilters,
   ChannelOptions,
   ChannelSort,
   ChannelStateOptions,
-} from '../types';
-import type { FieldToDataResolver, PathResolver } from './types.normalization';
-import { resolveDotPathValue } from './utility.normalization';
-import type { ValueOrPatch } from '../store';
-import { isEqual } from '../utils/mergeWith/mergeWithCore';
+} from '../../types';
+import type { FieldToDataResolver, PathResolver } from '../types.normalization';
+import { resolveDotPathValue } from '../utility.normalization';
+import type { ValueOrPatch } from '../../store';
+import { isEqual } from '../../utils/mergeWith/mergeWithCore';
 
 const DEFAULT_BACKEND_SORT: ChannelSort = { last_message_at: -1, updated_at: -1 }; // {last_updated: -1}
 

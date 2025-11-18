@@ -9,8 +9,8 @@ import type {
   ReminderFilters,
   ReminderResponse,
   ReminderSort,
-} from '../types';
-import type { StreamChat } from '../client';
+} from '../../types';
+import type { StreamChat } from '../../client';
 
 export class ReminderPaginator extends BasePaginator<
   ReminderResponse,
