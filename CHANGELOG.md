@@ -1,3 +1,19 @@
+## [9.26.0](https://github.com/GetStream/stream-chat-js/compare/v9.25.0...v9.26.0) (2025-11-18)
+
+### Bug Fixes
+
+* prevent reporting delivery for already reported message ([#1643](https://github.com/GetStream/stream-chat-js/issues/1643)) ([8612079](https://github.com/GetStream/stream-chat-js/commit/861207946912e7543bd656cd6a41db33a1fdbcb1))
+* skip channel.state.last_message_at update on incoming system message if configured ([#1642](https://github.com/GetStream/stream-chat-js/issues/1642)) ([0cd6009](https://github.com/GetStream/stream-chat-js/commit/0cd6009ca4bd41c0281536414e27a8d7e4de8a10))
+
+### Features
+
+* add app_banned and has_unread properties to ChannelFilters ([#1649](https://github.com/GetStream/stream-chat-js/issues/1649)) ([9b580b0](https://github.com/GetStream/stream-chat-js/commit/9b580b0dbfec3bcc7d8d31849d766302de101ae5))
+* add filter tags to channels ([#1646](https://github.com/GetStream/stream-chat-js/issues/1646)) ([4101531](https://github.com/GetStream/stream-chat-js/commit/410153127ea96e2fbfdabb7cdce406704f2163d1))
+* add hide_history_before option for adding members ([#1645](https://github.com/GetStream/stream-chat-js/issues/1645)) ([3c75c12](https://github.com/GetStream/stream-chat-js/commit/3c75c12b29a9f9f005170e04e86a10b7332b57c6))
+* add should_send_custom_events toggle ([#1651](https://github.com/GetStream/stream-chat-js/issues/1651)) ([39abbb6](https://github.com/GetStream/stream-chat-js/commit/39abbb68e20ca0acdd48822e3b99f61af4d2bcaa))
+* support members_template property for campaigns ([#1647](https://github.com/GetStream/stream-chat-js/issues/1647)) ([d04fade](https://github.com/GetStream/stream-chat-js/commit/d04fade7ae87ce79140afcbd3dd73afd6da528c4))
+* support option to mark messages unread by message timestamp ([#1648](https://github.com/GetStream/stream-chat-js/issues/1648)) ([64ddb4b](https://github.com/GetStream/stream-chat-js/commit/64ddb4b81f66d9412360d8a9336aba0b32fd7838))
+
 ## [9.25.0](https://github.com/GetStream/stream-chat-js/compare/v9.24.0...v9.25.0) (2025-10-23)
 
 ### Bug Fixes

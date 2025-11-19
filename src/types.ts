@@ -1262,6 +1262,7 @@ export type MarkUnreadOptions = {
   connection_id?: string;
   message_id?: string;
   thread_id?: string;
+  message_timestamp?: string | Date;
   user?: UserResponse;
   user_id?: string;
 };
@@ -1753,6 +1754,8 @@ export type ReactionFilters = QueryFilters<
 
 export type ChannelFilters = QueryFilters<
   ContainsOperator<Omit<CustomChannelData, 'name'>> & {
+    app_banned?: 'only' | 'excluded';
+    has_unread?: boolean;
     archived?: boolean;
     'member.user.name'?:
       | RequireOnlyOne<{
@@ -4559,6 +4562,7 @@ export type EventHook = {
   sns_key?: string;
   sns_secret?: string;
   sns_role_arn?: string;
+  should_send_custom_events?: boolean;
 
   // pending message config
   timeout_ms?: number;
