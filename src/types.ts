@@ -4459,3 +4459,29 @@ export type EventHook = {
   created_at?: string;
   updated_at?: string;
 };
+
+export type UpdateChannelsBatchOptions = {
+  operation: string;
+  filter: UpdateChannelsBatchFilters;
+  members?: string[] | Array<NewMemberPayload>;
+  data?: Partial<ChannelData>;
+};
+
+export type UpdateChannelsBatchFilters = QueryFilters<{
+  cids?:
+    | RequireOnlyOne<Pick<QueryFilter<string>, '$in'>>
+    | RequireOnlyOne<Pick<QueryFilter<string[]>, '$eq'>>
+    | PrimitiveFilter<string[]>;
+  types?:
+    | RequireOnlyOne<Pick<QueryFilter<string>, '$in'>>
+    | RequireOnlyOne<Pick<QueryFilter<string[]>, '$eq'>>
+    | PrimitiveFilter<string[]>;
+  filter_tags?:
+    | RequireOnlyOne<Pick<QueryFilter<string>, '$in'>>
+    | RequireOnlyOne<Pick<QueryFilter<Record<string, string>>, '$eq'>>
+    | PrimitiveFilter<Record<string, string>>;
+}>;
+
+export type UpdateChannelsBatchResponse = {
+  result: Record<string, string>;
+} & Partial<TaskResponse>;
