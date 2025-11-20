@@ -147,6 +147,7 @@ export type AppSettingsAPIResponse = APIResponse & {
     grants?: Record<string, string[]>;
     image_moderation_enabled?: boolean;
     image_upload_config?: FileUploadConfig;
+    moderation_webhook_url?: string;
     multi_tenant_enabled?: boolean;
     name?: string;
     organization?: string;
