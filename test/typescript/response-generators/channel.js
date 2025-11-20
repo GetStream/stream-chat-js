@@ -30,15 +30,25 @@ async function addMembers() {
 }
 
 async function addFilterTags() {
-	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
-	await channel.watch();
+	// Use server-side client for filter tag operations (required by backend)
+	const serverClient = utils.getServerTestClient();
+	const channelId = uuidv4();
+	await utils.createUsers([johnID]);
+	const channel = serverClient.channel('messaging', channelId, { members: [johnID] });
+	await channel.create();
 
 	return await channel.addFilterTags(['tag1', 'tag2']);
 }
 
 async function removeFilterTags() {
-	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
-	await channel.watch();
+	// Use server-side client for filter tag operations (required by backend)
+	const serverClient = utils.getServerTestClient();
+	const channelId = uuidv4();
+	await utils.createUsers([johnID]);
+	const channel = serverClient.channel('messaging', channelId, { members: [johnID] });
+	await channel.create();
+	// Add tags first, then remove them
+	await channel.addFilterTags(['tag1', 'tag2']);
 
 	return await channel.removeFilterTags(['tag1']);
 }
