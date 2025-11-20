@@ -546,10 +546,13 @@ declare module '../..' {
     image?: string;
     devices?: unknown[];
     invisible?: boolean;
+    last_engaged_at?: string;
+    mutes?: unknown[];
   }
   interface CustomChannelData {
     description?: string;
     image?: string;
+    smallTitle?: string;
   }
   interface CustomCommandData {
     testCreateCommand?: unknown;

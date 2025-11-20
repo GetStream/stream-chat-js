@@ -71,6 +71,7 @@ export type Unpacked<T> = T extends (infer U)[]
 
 export type APIResponse = {
   duration: string;
+  blocklist?: BlockListResponse;
 };
 
 export type TranslateResponse = {
@@ -1034,6 +1035,7 @@ export type CreateChannelOptions = {
   reminders?: boolean;
   replies?: boolean;
   search?: boolean;
+  shared_locations?: boolean;
   skip_last_msg_update_for_system_msgs?: boolean;
   typing_events?: boolean;
   uploads?: boolean;
@@ -1184,6 +1186,7 @@ export type UpdateChannelTypeResponse = {
   partition_size?: number;
   partition_ttl?: string;
   count_messages?: boolean;
+  user_message_reminders?: boolean;
 };
 
 export type GetChannelTypeResponse = {
@@ -1222,6 +1225,7 @@ export type GetChannelTypeResponse = {
   partition_size?: number;
   partition_ttl?: string;
   count_messages?: boolean;
+  user_message_reminders?: boolean;
 };
 
 export type UpdateChannelOptions = Partial<{
@@ -2373,6 +2377,7 @@ export type BlockList = {
   type?: string;
   validate?: boolean;
   is_leet_check_enabled?: boolean;
+  is_plural_check_enabled?: boolean;
 };
 
 export type ChannelConfig = ChannelConfigFields &
