@@ -149,6 +149,7 @@ export type AppSettingsAPIResponse = APIResponse & {
     image_moderation_enabled?: boolean;
     image_upload_config?: FileUploadConfig;
     moderation_enabled?: boolean;
+    moderation_multitenant_blocklist_enabled?: boolean;
     moderation_webhook_url?: string;
     multi_tenant_enabled?: boolean;
     name?: string;
