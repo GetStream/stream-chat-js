@@ -490,8 +490,8 @@ export type LocalMessageBase = Omit<
 };
 
 export type LocalMessage = LocalMessageBase & {
-  error?: ErrorFromResponse<APIErrorResponse>;
-  quoted_message?: LocalMessageBase;
+  error?: ErrorFromResponse<APIErrorResponse> | null;
+  quoted_message?: LocalMessageBase | null;
 };
 
 /**
@@ -910,7 +910,7 @@ export type UserResponse = CustomUserData & {
   role?: string;
   shadow_banned?: boolean;
   teams?: string[];
-  teams_role?: TeamsRole;
+  teams_role?: TeamsRole | null;
   updated_at?: string;
   username?: string;
   avg_response_time?: number;
@@ -1066,9 +1066,8 @@ export type DeactivateUsersOptions = {
 export type NewMemberPayload = CustomMemberData &
   Pick<ChannelMemberResponse, 'user_id' | 'channel_role'>;
 
-export type Thresholds = Record<
-  'explicit' | 'spam' | 'toxic',
-  Partial<{ block: number; flag: number }>
+export type Thresholds = Partial<
+  Record<'explicit' | 'spam' | 'toxic', Partial<{ block: number; flag: number }>>
 >;
 
 export type BlockListOptions = {
@@ -2049,7 +2048,7 @@ export type UserFilters = QueryFilters<
   }
 >;
 
-export type InviteStatus = 'pending' | 'accepted' | 'rejected';
+export type InviteStatus = 'pending' | 'accepted' | 'rejected' | 'member';
 
 // https://getstream.io/chat/docs/react/channel_member/#update-channel-members
 export type MemberFilters = QueryFilters<
@@ -2373,6 +2372,7 @@ export type BlockList = {
   team?: string;
   type?: string;
   validate?: boolean;
+  is_leet_check_enabled?: boolean;
 };
 
 export type ChannelConfig = ChannelConfigFields &

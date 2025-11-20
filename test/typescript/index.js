@@ -530,8 +530,44 @@ const run = async () => {
 	imports = uniqueTypes.join(', ');
 
 	imports = `import { ${imports} } from '../..';`;
+
+	// Module augmentation to add custom properties used in tests
+	const moduleAugmentation = `
+// Module augmentation to add custom properties for testing
+declare module '../..' {
+  interface CustomUserData {
+    testString?: string;
+    instrument?: string;
+    song?: string;
+    gender?: string;
+    unique?: string;
+    work?: string;
+    status?: string;
+    image?: string;
+    devices?: unknown[];
+    invisible?: boolean;
+  }
+  interface CustomChannelData {
+    description?: string;
+    image?: string;
+  }
+  interface CustomCommandData {
+    testCreateCommand?: unknown;
+    testCreateCommand_set?: unknown;
+    testDeleteCommand?: unknown;
+    testDeleteCommand_set?: unknown;
+    testGetCommand?: unknown;
+    testGetCommand_set?: unknown;
+    testListCommand?: unknown;
+    testListCommand_set?: unknown;
+    testUpdateCommand?: unknown;
+    testUpdateCommand_set?: unknown;
+    testUpdateCommand_set_two?: unknown;
+  }
+}`;
+
 	tsFileName = `${__dirname}/data.ts`;
-	fs.writeFile(tsFileName, `${imports} \n\n`, function (err) {
+	fs.writeFile(tsFileName, `${imports} \n${moduleAugmentation}\n\n`, function (err) {
 		if (err) {
 			return console.log(err);
 		}
