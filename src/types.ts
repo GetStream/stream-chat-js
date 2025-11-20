@@ -81,6 +81,7 @@ export type TranslateResponse = {
 
 export type AppSettingsAPIResponse = APIResponse & {
   app?: {
+    id?: string;
     // TODO
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     call_types: any;

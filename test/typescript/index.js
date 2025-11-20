@@ -552,6 +552,7 @@ declare module '../..' {
     unread_count?: number;
     total_unread_count?: number;
     unread_channels?: number;
+    unread_threads?: number;
   }
   interface CustomChannelData {
     description?: string;
