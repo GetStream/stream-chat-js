@@ -551,6 +551,7 @@ declare module '../..' {
     channel_mutes?: unknown[];
     unread_count?: number;
     total_unread_count?: number;
+    unread_channels?: number;
   }
   interface CustomChannelData {
     description?: string;
