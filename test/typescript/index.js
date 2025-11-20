@@ -550,11 +550,13 @@ declare module '../..' {
     mutes?: unknown[];
     channel_mutes?: unknown[];
     unread_count?: number;
+    total_unread_count?: number;
   }
   interface CustomChannelData {
     description?: string;
     image?: string;
     smallTitle?: string;
+    shared_locations?: boolean;
   }
   interface CustomCommandData {
     testCreateCommand?: unknown;
