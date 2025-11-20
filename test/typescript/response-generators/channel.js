@@ -1,4 +1,6 @@
-const { generateUUIDv4: uuidv4 } = require('../../../src/utils');
+// generateUUIDv4 is not exported from the public API, using test UUID for test data
+const uuidv4 = () =>
+	'test-' + Math.random().toString(36).substring(2, 15) + '-' + Date.now();
 const utils = require('../utils');
 const fs = require('fs');
 const url = require('url');
