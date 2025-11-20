@@ -549,6 +549,7 @@ declare module '../..' {
     last_engaged_at?: string;
     mutes?: unknown[];
     channel_mutes?: unknown[];
+    unread_count?: number;
   }
   interface CustomChannelData {
     description?: string;

@@ -789,7 +789,7 @@ export type OwnUserBase = {
   privacy_settings?: PrivacySettings;
   push_preferences?: PushPreference;
   roles?: string[];
-  total_unread_count_by_team?: Record<string, number>;
+  total_unread_count_by_team?: Record<string, number> | null;
 };
 
 export type OwnUserResponse = UserResponse & OwnUserBase;
@@ -1186,6 +1186,7 @@ export type UpdateChannelTypeResponse = {
   blocklist?: string;
   blocklist_behavior?: BlocklistBehavior;
   blocklists?: BlockListOptions[];
+  message_retention?: string;
   partition_size?: number;
   partition_ttl?: string;
   count_messages?: boolean;
@@ -1226,6 +1227,7 @@ export type GetChannelTypeResponse = {
   blocklist?: string;
   blocklist_behavior?: BlocklistBehavior;
   blocklists?: BlockListOptions[];
+  message_retention?: string;
   partition_size?: number;
   partition_ttl?: string;
   count_messages?: boolean;
