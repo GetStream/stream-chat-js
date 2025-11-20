@@ -20,8 +20,22 @@ import {
   UpdateChannelAPIResponse,
   PartialUserUpdate,
   PermissionObject,
+  PolicyRequest,
   ConnectAPIResponse,
 } from '../../dist/types';
+
+// Module augmentation to add custom properties for testing
+declare module '../../dist/types' {
+  interface CustomUserData {
+    example?: number;
+    phone?: number;
+    name?: string;
+  }
+  interface CustomChannelData {
+    color?: string;
+    name?: string;
+  }
+}
 const apiKey = 'apiKey';
 
 type UserType = {
@@ -108,7 +122,7 @@ voidReturn = client.off(eventHandler);
 voidReturn = client.on('message.new', eventHandler);
 voidReturn = client.off('message.new', eventHandler);
 
-let userReturn: ConnectAPIResponse;
+let userReturn: ConnectAPIResponse | undefined;
 userReturn = client.connectUser({ id: 'john', phone: 2 }, devToken);
 userReturn = client.connectUser({ id: 'john', phone: 2 }, async () => 'token');
 userReturn = client.setUser({ id: 'john', phone: 2 }, devToken);
@@ -227,7 +241,7 @@ const permissions = [
 ];
 
 client.updateChannelType('messaging', { permissions }).then((response) => {
-  const permissions: PermissionObject[] = response.permissions || [];
+  const permissions: PolicyRequest[] = response.permissions || [];
   const permissionName: string = permissions[0].name || '';
   const permissionRoles: string[] = permissions[0].roles || [];
 });
