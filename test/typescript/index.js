@@ -553,6 +553,7 @@ declare module '../..' {
     total_unread_count?: number;
     unread_channels?: number;
     unread_threads?: number;
+    nickname?: string;
   }
   interface CustomChannelData {
     description?: string;

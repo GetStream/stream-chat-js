@@ -81,7 +81,7 @@ export type TranslateResponse = {
 
 export type AppSettingsAPIResponse = APIResponse & {
   app?: {
-    id?: string;
+    id?: string | number;
     // TODO
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     call_types: any;
@@ -894,6 +894,7 @@ export type UsersAPIResponse = APIResponse & {
 
 export type UpdateUsersAPIResponse = APIResponse & {
   users: { [key: string]: UserResponse };
+  membership_deletion_task_id?: string;
 };
 
 export type UserResponse = CustomUserData & {
