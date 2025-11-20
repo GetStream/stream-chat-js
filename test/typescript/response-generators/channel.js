@@ -34,7 +34,10 @@ async function addFilterTags() {
 	const serverClient = utils.getServerTestClient();
 	const channelId = uuidv4();
 	await utils.createUsers([johnID]);
-	const channel = serverClient.channel('messaging', channelId, { members: [johnID] });
+	const channel = serverClient.channel('messaging', channelId, {
+		members: [johnID],
+		created_by_id: johnID, // Required for server-side auth
+	});
 	await channel.create();
 
 	return await channel.addFilterTags(['tag1', 'tag2']);
@@ -45,7 +48,10 @@ async function removeFilterTags() {
 	const serverClient = utils.getServerTestClient();
 	const channelId = uuidv4();
 	await utils.createUsers([johnID]);
-	const channel = serverClient.channel('messaging', channelId, { members: [johnID] });
+	const channel = serverClient.channel('messaging', channelId, {
+		members: [johnID],
+		created_by_id: johnID, // Required for server-side auth
+	});
 	await channel.create();
 	// Add tags first, then remove them
 	await channel.addFilterTags(['tag1', 'tag2']);
