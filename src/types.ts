@@ -151,6 +151,7 @@ export type AppSettingsAPIResponse = APIResponse & {
     name?: string;
     organization?: string;
     permission_version?: string;
+    placement?: string;
     policies?: Record<string, Policy[]>;
     poll_enabled?: boolean;
     push_notifications?: {
@@ -890,6 +891,7 @@ export type UpdateMessageAPIResponse = APIResponse & {
 
 export type UsersAPIResponse = APIResponse & {
   users: Array<UserResponse>;
+  membership_deletion_task_id?: string;
 };
 
 export type UpdateUsersAPIResponse = APIResponse & {
