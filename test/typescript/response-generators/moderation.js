@@ -75,16 +75,16 @@ async function deleteBlockList() {
 	await cleanupBlockList(client, name);
 	await cleanupBlockList(client, name2);
 
-	try {
-		await client.createBlockList({ name, words: ['F*!k'] });
-		await client.createBlockList({ name: name2, words: ['S!*t'] });
-	} catch (err) {
-		// in case the blocklist already exists
-		// do nothing
-	}
+	// Create the blocklists - if creation fails, the test should fail
+	await client.createBlockList({ name, words: ['F*!k'] });
+	await client.createBlockList({ name: name2, words: ['S!*t'] });
 
+	// Delete the first blocklist and return its response
 	const returnValue = await client.deleteBlockList(name);
+
+	// Clean up the second blocklist
 	await client.deleteBlockList(name2);
+
 	return returnValue;
 }
 
