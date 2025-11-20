@@ -789,6 +789,7 @@ export type OwnUserBase = {
   privacy_settings?: PrivacySettings;
   push_preferences?: PushPreference;
   roles?: string[];
+  total_unread_count_by_team?: Record<string, number>;
 };
 
 export type OwnUserResponse = UserResponse & OwnUserBase;
@@ -1041,6 +1042,7 @@ export type CreateChannelOptions = {
   uploads?: boolean;
   url_enrichment?: boolean;
   user_message_reminders?: boolean;
+  count_messages?: boolean;
 };
 
 export type CreateCommandOptions = {
@@ -1173,6 +1175,7 @@ export type UpdateChannelTypeResponse = {
   reminders: boolean;
   replies: boolean;
   search: boolean;
+  shared_locations: boolean;
   skip_last_msg_update_for_system_msgs: boolean;
   typing_events: boolean;
   updated_at: string;
@@ -1212,6 +1215,7 @@ export type GetChannelTypeResponse = {
   reminders: boolean;
   replies: boolean;
   search: boolean;
+  shared_locations: boolean;
   skip_last_msg_update_for_system_msgs: boolean;
   typing_events: boolean;
   updated_at: string;
