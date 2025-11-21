@@ -149,7 +149,7 @@ export type AppSettingsAPIResponse = APIResponse & {
     guest_user_creation_disabled?: boolean;
     image_moderation_enabled?: boolean;
     image_upload_config?: FileUploadConfig;
-    moderation_dashboard_preferences?: Record<string, unknown>;
+    moderation_dashboard_preferences?: Record<string, unknown> | null;
     moderation_enabled?: boolean;
     moderation_multitenant_blocklist_enabled?: boolean;
     moderation_webhook_url?: string;

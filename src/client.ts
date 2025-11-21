@@ -220,13 +220,13 @@ import type {
   UpdatePollOptionAPIResponse,
   UpdateReminderOptions,
   UpdateSegmentData,
+  UpdateUsersAPIResponse,
   UpsertPushPreferencesResponse,
   UserCustomEvent,
   UserFilters,
   UserOptions,
   UserResponse,
   UserSort,
-  UpdateUsersAPIResponse,
   VoteSort,
 } from './types';
 import { ErrorFromResponse } from './types';
