@@ -509,8 +509,8 @@ export type LocalMessageBase = Omit<
 };
 
 export type LocalMessage = LocalMessageBase & {
-  error?: ErrorFromResponse<APIErrorResponse> | null;
-  quoted_message?: LocalMessageBase | null;
+  error?: ErrorFromResponse<APIErrorResponse>;
+  quoted_message?: LocalMessageBase;
 };
 
 /**
