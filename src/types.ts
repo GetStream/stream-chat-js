@@ -146,6 +146,7 @@ export type AppSettingsAPIResponse = APIResponse & {
       type: string;
     }>;
     grants?: Record<string, string[]>;
+    guest_user_creation_disabled?: boolean;
     image_moderation_enabled?: boolean;
     image_upload_config?: FileUploadConfig;
     moderation_enabled?: boolean;
