@@ -148,9 +148,14 @@ export type AppSettingsAPIResponse = APIResponse & {
     grants?: Record<string, string[]>;
     guest_user_creation_disabled?: boolean;
     image_moderation_enabled?: boolean;
+    image_moderation_labels?: string[];
     image_upload_config?: FileUploadConfig;
+    allowed_flag_reasons?: string[];
+    max_aggregated_activities_length?: number;
+    moderation_bulk_submit_action_enabled?: boolean;
     moderation_dashboard_preferences?: Record<string, unknown> | null;
     moderation_enabled?: boolean;
+    moderation_llm_configurability_enabled?: boolean;
     moderation_multitenant_blocklist_enabled?: boolean;
     moderation_webhook_url?: string;
     multi_tenant_enabled?: boolean;
@@ -179,6 +184,8 @@ export type AppSettingsAPIResponse = APIResponse & {
     sqs_url?: string;
     suspended?: boolean;
     suspended_explanation?: string;
+    use_hook_v2?: boolean;
+    user_response_time_enabled?: boolean;
     user_search_disallowed_roles?: string[] | null;
     video_provider?: string;
     webhook_events?: Array<string>;
