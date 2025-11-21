@@ -1,4 +1,4 @@
-const { StreamChat } = require('../../dist');
+const { StreamChat } = require('../../dist/cjs/index.node.js');
 
 require('dotenv').config({ path: `${process.cwd()}/test/typescript/.env` });
 

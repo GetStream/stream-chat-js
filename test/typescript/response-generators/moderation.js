@@ -1,4 +1,6 @@
-const { generateUUIDv4: uuidv4 } = require('../../../src/utils');
+// generateUUIDv4 is not exported from the public API, using test UUID for test data
+const uuidv4 = () =>
+	'test-' + Math.random().toString(36).substring(2, 15) + '-' + Date.now();
 const utils = require('../utils');
 const { sleep } = require('../utils');
 
@@ -73,16 +75,16 @@ async function deleteBlockList() {
 	await cleanupBlockList(client, name);
 	await cleanupBlockList(client, name2);
 
-	try {
-		await client.createBlockList({ name, words: ['F*!k'] });
-		await client.createBlockList({ name: name2, words: ['S!*t'] });
-	} catch (err) {
-		// in case the blocklist already exists
-		// do nothing
-	}
+	// Create the blocklists - if creation fails, the test should fail
+	await client.createBlockList({ name, words: ['F*!k'] });
+	await client.createBlockList({ name: name2, words: ['S!*t'] });
 
+	// Delete the first blocklist and return its response
 	const returnValue = await client.deleteBlockList(name);
+
+	// Clean up the second blocklist
 	await client.deleteBlockList(name2);
+
 	return returnValue;
 }
 

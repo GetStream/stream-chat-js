@@ -104,6 +104,7 @@ export function isOwnUserBaseProperty(property: string) {
     privacy_settings: true,
     roles: true,
     push_preferences: true,
+    total_unread_count_by_team: true,
   };
 
   return ownUserBaseProperties[property as keyof OwnUserBase];

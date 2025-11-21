@@ -1,4 +1,6 @@
-const { generateUUIDv4: uuidv4 } = require('../../../src/utils');
+// generateUUIDv4 is not exported from the public API, using test UUID for test data
+const uuidv4 = () =>
+	'test-' + Math.random().toString(36).substring(2, 15) + '-' + Date.now();
 const utils = require('../utils');
 
 async function addDevice() {
@@ -113,9 +115,14 @@ async function markAllRead() {
 async function queryUsers() {
 	const user1 = uuidv4();
 	const user2 = uuidv4();
-	await utils.createUsers([user1, user2], { nickname: user2 });
+	const nickname = `test-nickname-${Date.now()}`;
+
+	// Create users with different properties
+	await utils.createUsers([user1], {}); // user1 without nickname
+	await utils.createUsers([user2], { nickname: nickname }); // user2 with nickname
+
 	const client = await utils.getTestClientForUser(user1);
-	return await client.queryUsers({ nickname: { $eq: user2 } });
+	return await client.queryUsers({ nickname: { $eq: nickname } });
 }
 
 async function queryBannedUsers() {
