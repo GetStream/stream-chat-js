@@ -4,6 +4,8 @@ import type {
   PaginationQueryShapeChangeIdentifier,
   PaginatorOptions,
   PaginatorState,
+  SetPaginatorItemsParams,
+  SortKey,
 } from './BasePaginator';
 import { BasePaginator } from './BasePaginator';
 import type { FilterBuilderOptions } from '../FilterBuilder';
@@ -20,7 +22,6 @@ import type {
 } from '../../types';
 import type { FieldToDataResolver, PathResolver } from '../types.normalization';
 import { resolveDotPathValue } from '../utility.normalization';
-import type { ValueOrPatch } from '../../store';
 import { isEqual } from '../../utils/mergeWith/mergeWithCore';
 
 const DEFAULT_BACKEND_SORT: ChannelSort = { last_message_at: -1, updated_at: -1 }; // {last_updated: -1}
@@ -244,8 +245,8 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     return this._staticFilters;
   }
 
-  get sort(): ChannelSort | undefined {
-    return this._sort;
+  get sort(): ChannelSort {
+    return this._sort ?? DEFAULT_BACKEND_SORT;
   }
 
   get options(): ChannelOptions | undefined {
@@ -283,6 +284,14 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     this.filterBuilder.buildFilters({
       baseFilters: { ...this.staticFilters },
     });
+
+  computeSortKey(item: Channel): SortKey {
+    const generateSortKey = super.makeSortKeyGenerator({
+      sort: this.sort,
+      resolvePathValue: channelSortPathResolver,
+    });
+    return generateSortKey(item);
+  }
 
   // invoked inside BasePaginator.executeQuery() to keep it as a query descriptor;
   protected getNextQueryShape(): ChannelQueryShape {
@@ -386,8 +395,8 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
 
   filterQueryResults = (items: Channel[]) => items;
 
-  setItems(valueOrFactory: ValueOrPatch<Channel[]>) {
-    super.setItems(valueOrFactory);
+  setItems(params: SetPaginatorItemsParams<Channel>) {
+    super.setItems(params);
 
     if (!this.client.offlineDb) return;
 
