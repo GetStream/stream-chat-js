@@ -162,6 +162,11 @@ export type AppSettingsAPIResponse = APIResponse & {
     name?: string;
     organization?: string;
     permission_version?: string;
+    /**
+     * The placement of the app in the form of `${region}.${shard}`.
+     * Examples: "us-east.c1", "dublin.c3", "singapore.c2"
+     * Note: The backend may add/remove regions or shards occasionally.
+     */
     placement?: string;
     policies?: Record<string, Policy[]>;
     poll_enabled?: boolean;
