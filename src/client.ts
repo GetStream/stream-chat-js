@@ -220,6 +220,7 @@ import type {
   UpdatePollOptionAPIResponse,
   UpdateReminderOptions,
   UpdateSegmentData,
+  UpdateUsersAPIResponse,
   UpsertPushPreferencesResponse,
   UserCustomEvent,
   UserFilters,
@@ -2396,11 +2397,9 @@ export class StreamChat {
       userMap[userObject.id] = userObject;
     }
 
-    return await this.post<
-      APIResponse & {
-        users: { [key: string]: UserResponse };
-      }
-    >(this.baseURL + '/users', { users: userMap });
+    return await this.post<UpdateUsersAPIResponse>(this.baseURL + '/users', {
+      users: userMap,
+    });
   }
 
   /**
@@ -2448,11 +2447,7 @@ export class StreamChat {
       }
     }
 
-    return await this.patch<
-      APIResponse & {
-        users: { [key: string]: UserResponse };
-      }
-    >(this.baseURL + '/users', { users });
+    return await this.patch<UpdateUsersAPIResponse>(this.baseURL + '/users', { users });
   }
 
   async deleteUser(

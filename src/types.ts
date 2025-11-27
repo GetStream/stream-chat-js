@@ -71,6 +71,7 @@ export type Unpacked<T> = T extends (infer U)[]
 
 export type APIResponse = {
   duration: string;
+  blocklist?: BlockListResponse;
 };
 
 export type TranslateResponse = {
@@ -80,6 +81,8 @@ export type TranslateResponse = {
 
 export type AppSettingsAPIResponse = APIResponse & {
   app?: {
+    id?: string | number;
+    allow_multi_user_devices?: boolean;
     // TODO
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     call_types: any;
@@ -108,6 +111,9 @@ export type AppSettingsAPIResponse = APIResponse & {
         read_events?: boolean;
         replies?: boolean;
         search?: boolean;
+        shared_locations?: boolean;
+        skip_last_msg_update_for_system_msgs?: boolean;
+        count_messages?: boolean;
         typing_events?: boolean;
         updated_at?: string;
         uploads?: boolean;
@@ -140,12 +146,28 @@ export type AppSettingsAPIResponse = APIResponse & {
       type: string;
     }>;
     grants?: Record<string, string[]>;
+    guest_user_creation_disabled?: boolean;
     image_moderation_enabled?: boolean;
+    image_moderation_labels?: string[];
     image_upload_config?: FileUploadConfig;
+    allowed_flag_reasons?: string[];
+    max_aggregated_activities_length?: number;
+    moderation_bulk_submit_action_enabled?: boolean;
+    moderation_dashboard_preferences?: Record<string, unknown> | null;
+    moderation_enabled?: boolean;
+    moderation_llm_configurability_enabled?: boolean;
+    moderation_multitenant_blocklist_enabled?: boolean;
+    moderation_webhook_url?: string;
     multi_tenant_enabled?: boolean;
     name?: string;
     organization?: string;
     permission_version?: string;
+    /**
+     * The placement of the app in the form of `${region}.${shard}`.
+     * Examples: "us-east.c1", "dublin.c3", "singapore.c2"
+     * Note: The backend may add/remove regions or shards occasionally.
+     */
+    placement?: string;
     policies?: Record<string, Policy[]>;
     poll_enabled?: boolean;
     push_notifications?: {
@@ -167,6 +189,8 @@ export type AppSettingsAPIResponse = APIResponse & {
     sqs_url?: string;
     suspended?: boolean;
     suspended_explanation?: string;
+    use_hook_v2?: boolean;
+    user_response_time_enabled?: boolean;
     user_search_disallowed_roles?: string[] | null;
     video_provider?: string;
     webhook_events?: Array<string>;
@@ -788,6 +812,7 @@ export type OwnUserBase = {
   privacy_settings?: PrivacySettings;
   push_preferences?: PushPreference;
   roles?: string[];
+  total_unread_count_by_team?: Record<string, number> | null;
 };
 
 export type OwnUserResponse = UserResponse & OwnUserBase;
@@ -884,10 +909,12 @@ export type UpdateMessageAPIResponse = APIResponse & {
 
 export type UsersAPIResponse = APIResponse & {
   users: Array<UserResponse>;
+  membership_deletion_task_id?: string;
 };
 
 export type UpdateUsersAPIResponse = APIResponse & {
   users: { [key: string]: UserResponse };
+  membership_deletion_task_id?: string;
 };
 
 export type UserResponse = CustomUserData & {
@@ -910,7 +937,7 @@ export type UserResponse = CustomUserData & {
   role?: string;
   shadow_banned?: boolean;
   teams?: string[];
-  teams_role?: TeamsRole;
+  teams_role?: TeamsRole | null;
   updated_at?: string;
   username?: string;
   avg_response_time?: number;
@@ -1034,11 +1061,13 @@ export type CreateChannelOptions = {
   reminders?: boolean;
   replies?: boolean;
   search?: boolean;
+  shared_locations?: boolean;
   skip_last_msg_update_for_system_msgs?: boolean;
   typing_events?: boolean;
   uploads?: boolean;
   url_enrichment?: boolean;
   user_message_reminders?: boolean;
+  count_messages?: boolean;
 };
 
 export type CreateCommandOptions = {
@@ -1066,9 +1095,8 @@ export type DeactivateUsersOptions = {
 export type NewMemberPayload = CustomMemberData &
   Pick<ChannelMemberResponse, 'user_id' | 'channel_role'>;
 
-export type Thresholds = Record<
-  'explicit' | 'spam' | 'toxic',
-  Partial<{ block: number; flag: number }>
+export type Thresholds = Partial<
+  Record<'explicit' | 'spam' | 'toxic', Partial<{ block: number; flag: number }>>
 >;
 
 export type BlockListOptions = {
@@ -1172,6 +1200,7 @@ export type UpdateChannelTypeResponse = {
   reminders: boolean;
   replies: boolean;
   search: boolean;
+  shared_locations: boolean;
   skip_last_msg_update_for_system_msgs: boolean;
   typing_events: boolean;
   updated_at: string;
@@ -1182,9 +1211,11 @@ export type UpdateChannelTypeResponse = {
   blocklist?: string;
   blocklist_behavior?: BlocklistBehavior;
   blocklists?: BlockListOptions[];
+  message_retention?: string;
   partition_size?: number;
   partition_ttl?: string;
   count_messages?: boolean;
+  user_message_reminders?: boolean;
 };
 
 export type GetChannelTypeResponse = {
@@ -1210,6 +1241,7 @@ export type GetChannelTypeResponse = {
   reminders: boolean;
   replies: boolean;
   search: boolean;
+  shared_locations: boolean;
   skip_last_msg_update_for_system_msgs: boolean;
   typing_events: boolean;
   updated_at: string;
@@ -1220,9 +1252,11 @@ export type GetChannelTypeResponse = {
   blocklist?: string;
   blocklist_behavior?: BlocklistBehavior;
   blocklists?: BlockListOptions[];
+  message_retention?: string;
   partition_size?: number;
   partition_ttl?: string;
   count_messages?: boolean;
+  user_message_reminders?: boolean;
 };
 
 export type UpdateChannelOptions = Partial<{
@@ -2049,7 +2083,7 @@ export type UserFilters = QueryFilters<
   }
 >;
 
-export type InviteStatus = 'pending' | 'accepted' | 'rejected';
+export type InviteStatus = 'pending' | 'accepted' | 'rejected' | 'member';
 
 // https://getstream.io/chat/docs/react/channel_member/#update-channel-members
 export type MemberFilters = QueryFilters<
@@ -2373,6 +2407,8 @@ export type BlockList = {
   team?: string;
   type?: string;
   validate?: boolean;
+  is_leet_check_enabled?: boolean;
+  is_plural_check_enabled?: boolean;
 };
 
 export type ChannelConfig = ChannelConfigFields &

@@ -1,4 +1,6 @@
-const { v4: uuid4 } = require('uuid');
+// External uuid package not available, using test UUID for test data
+const uuid4 = () =>
+	'test-' + Math.random().toString(36).substring(2, 15) + '-' + Date.now();
 const utils = require('../utils');
 
 const johnID = `john-${uuid4()}`;
