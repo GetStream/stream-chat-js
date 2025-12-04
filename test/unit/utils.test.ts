@@ -21,7 +21,6 @@ import {
   findLastPinnedChannelIndex,
   findPinnedAtSortOrder,
   extractSortValue,
-  promoteChannel,
   uniqBy,
   runDetached,
   sleep,
@@ -29,11 +28,12 @@ import {
 
 import type {
   ChannelFilters,
+  ChannelSort,
   ChannelSortBase,
   FormatMessageResponse,
   MessageResponse,
 } from '../../src';
-import { StreamChat, Channel } from '../../src';
+import { StreamChat, Channel, sortChannels } from '../../src';
 
 describe('addToMessageList', () => {
   const timestamp = new Date('2024-09-18T15:30:00.000Z').getTime();
@@ -692,221 +692,6 @@ describe('Channel pinning and archiving utils', () => {
   });
 });
 
-describe('promoteChannel', () => {
-  let client: StreamChat;
-
-  beforeEach(async () => {
-    client = await getClientWithUser();
-  });
-
-  it('should return the original list if the channel is already at the top', () => {
-    const channelsResponse = [generateChannel(), generateChannel()];
-    client.hydrateActiveChannels(channelsResponse);
-    const channels = channelsResponse.map((c) =>
-      client.channel(c.channel.type, c.channel.id),
-    );
-    const result = promoteChannel({
-      channels,
-      channelToMove: channels[0],
-      sort: {},
-    });
-
-    expect(result).to.deep.equal(channels);
-    expect(result).to.be.equal(channels);
-  });
-
-  it('should return the original list if the channel is pinned and pinned channels should be considered', () => {
-    const channelsResponse = [
-      generateChannel({ membership: { pinned_at: '2024-02-04T12:00:00Z' } }),
-      generateChannel({ membership: { pinned_at: '2024-02-04T12:01:00Z' } }),
-    ];
-    client.hydrateActiveChannels(channelsResponse);
-    const channels = channelsResponse.map((c) =>
-      client.channel(c.channel.type, c.channel.id),
-    );
-    const channelToMove = channels[1];
-
-    const result = promoteChannel({
-      channels,
-      channelToMove,
-      sort: [{ pinned_at: 1 }],
-    });
-
-    expect(result).to.deep.equal(channels);
-    expect(result).to.be.equal(channels);
-  });
-
-  it('should move a non-pinned channel upwards if it exists in the list', () => {
-    const channelsResponse = [
-      generateChannel({ channel: { id: 'channel1' } }),
-      generateChannel({ channel: { id: 'channel2' } }),
-      generateChannel({ channel: { id: 'channel3' } }),
-    ];
-    client.hydrateActiveChannels(channelsResponse);
-    const channels = channelsResponse.map((c) =>
-      client.channel(c.channel.type, c.channel.id),
-    );
-    const channelToMove = channels[2];
-
-    const result = promoteChannel({
-      channels,
-      channelToMove,
-      sort: {},
-    });
-
-    expect(result.map((c) => c.id)).to.deep.equal(['channel3', 'channel1', 'channel2']);
-    expect(result).to.not.equal(channels);
-  });
-
-  it('should correctly move a non-pinned channel if its index is provided', () => {
-    const channelsResponse = [
-      generateChannel({ channel: { id: 'channel1' } }),
-      generateChannel({ channel: { id: 'channel2' } }),
-      generateChannel({ channel: { id: 'channel3' } }),
-    ];
-    client.hydrateActiveChannels(channelsResponse);
-    const channels = channelsResponse.map((c) =>
-      client.channel(c.channel.type, c.channel.id),
-    );
-    const channelToMove = channels[2];
-
-    const result = promoteChannel({
-      channels,
-      channelToMove,
-      sort: {},
-      channelToMoveIndexWithinChannels: 2,
-    });
-
-    expect(result.map((c) => c.id)).to.deep.equal(['channel3', 'channel1', 'channel2']);
-    expect(result).to.not.equal(channels);
-  });
-
-  it('should move a non-pinned channel upwards if it does not exist in the list', () => {
-    const channelsResponse = [
-      generateChannel({ channel: { id: 'channel1' } }),
-      generateChannel({ channel: { id: 'channel2' } }),
-      generateChannel({ channel: { id: 'channel3' } }),
-    ];
-    const newChannel = generateChannel({ channel: { id: 'channel4' } });
-    client.hydrateActiveChannels([...channelsResponse, newChannel]);
-    const channels = channelsResponse.map((c) =>
-      client.channel(c.channel.type, c.channel.id),
-    );
-    const channelToMove = client.channel(newChannel.channel.type, newChannel.channel.id);
-
-    const result = promoteChannel({
-      channels,
-      channelToMove,
-      sort: {},
-    });
-
-    expect(result.map((c) => c.id)).to.deep.equal([
-      'channel4',
-      'channel1',
-      'channel2',
-      'channel3',
-    ]);
-    expect(result).to.not.equal(channels);
-  });
-
-  it('should correctly move a non-pinned channel upwards if it does not exist and the index is provided', () => {
-    const channelsResponse = [
-      generateChannel({ channel: { id: 'channel1' } }),
-      generateChannel({ channel: { id: 'channel2' } }),
-      generateChannel({ channel: { id: 'channel3' } }),
-    ];
-    const newChannel = generateChannel({ channel: { id: 'channel4' } });
-    client.hydrateActiveChannels([...channelsResponse, newChannel]);
-    const channels = channelsResponse.map((c) =>
-      client.channel(c.channel.type, c.channel.id),
-    );
-    const channelToMove = client.channel(newChannel.channel.type, newChannel.channel.id);
-
-    const result = promoteChannel({
-      channels,
-      channelToMove,
-      sort: {},
-      channelToMoveIndexWithinChannels: -1,
-    });
-
-    expect(result.map((c) => c.id)).to.deep.equal([
-      'channel4',
-      'channel1',
-      'channel2',
-      'channel3',
-    ]);
-    expect(result).to.not.equal(channels);
-  });
-
-  it('should move the channel just below the last pinned channel if pinned channels are considered', () => {
-    const channelsResponse = [
-      generateChannel({
-        channel: { id: 'pinned1' },
-        membership: { pinned_at: '2024-02-04T12:00:00Z' },
-      }),
-      generateChannel({
-        channel: { id: 'pinned2' },
-        membership: { pinned_at: '2024-02-04T12:01:00Z' },
-      }),
-      generateChannel({ channel: { id: 'channel1' } }),
-      generateChannel({ channel: { id: 'channel2' } }),
-    ];
-    client.hydrateActiveChannels(channelsResponse);
-    const channels = channelsResponse.map((c) =>
-      client.channel(c.channel.type, c.channel.id),
-    );
-    const channelToMove = channels[3];
-
-    const result = promoteChannel({
-      channels,
-      channelToMove,
-      sort: [{ pinned_at: -1 }],
-    });
-
-    expect(result.map((c) => c.id)).to.deep.equal([
-      'pinned1',
-      'pinned2',
-      'channel2',
-      'channel1',
-    ]);
-    expect(result).to.not.equal(channels);
-  });
-
-  it('should move the channel to the top of the list if pinned channels exist but are not considered', () => {
-    const channelsResponse = [
-      generateChannel({
-        channel: { id: 'pinned1' },
-        membership: { pinned_at: '2024-02-04T12:01:00Z' },
-      }),
-      generateChannel({
-        channel: { id: 'pinned2' },
-        membership: { pinned_at: '2024-02-04T12:00:00Z' },
-      }),
-      generateChannel({ channel: { id: 'channel1' } }),
-      generateChannel({ channel: { id: 'channel2' } }),
-    ];
-    client.hydrateActiveChannels(channelsResponse);
-    const channels = channelsResponse.map((c) =>
-      client.channel(c.channel.type, c.channel.id),
-    );
-    const channelToMove = channels[2];
-
-    const result = promoteChannel({
-      channels,
-      channelToMove,
-      sort: {},
-    });
-
-    expect(result.map((c) => c.id)).to.deep.equal([
-      'channel1',
-      'pinned1',
-      'pinned2',
-      'channel2',
-    ]);
-    expect(result).to.not.equal(channels);
-  });
-});
-
 describe('uniqBy', () => {
   it('should return an empty array if input is not an array', () => {
     expect(uniqBy(null, 'id')).to.deep.equal([]);
@@ -1169,5 +954,180 @@ describe('sleep', () => {
     vi.advanceTimersByTime(1000);
     await waitPromise;
     expect(resolved).toBe(true);
+  });
+});
+
+describe('sortChannels', () => {
+  let client: StreamChat;
+  let channels: Channel[];
+
+  beforeEach(() => {
+    client = getClientWithUser();
+
+    // Create sample channels with different properties for sorting
+    const channelResponses = [
+      generateChannel({
+        channel: {
+          created_at: '2025-01-01T10:00:00Z',
+          updated_at: '2025-01-01T10:00:30Z',
+          member_count: 5,
+          name: 'Alpha',
+          id: 'alpha',
+        },
+        membership: { pinned_at: '2025-01-01T11:00:00Z' },
+      }),
+      generateChannel({
+        channel: {
+          created_at: '2025-01-01T10:00:01Z',
+          updated_at: '2025-01-01T10:00:31Z',
+          member_count: 10,
+          name: 'Beta',
+          id: 'beta',
+        },
+      }),
+      generateChannel({
+        channel: {
+          created_at: '2025-01-01T10:00:02Z',
+          updated_at: '2025-01-01T10:00:32Z',
+          member_count: 3,
+          name: 'Charlie',
+          id: 'charlie',
+        },
+        membership: { pinned_at: '2025-01-01T11:30:00Z' },
+      }),
+    ];
+
+    client.hydrateActiveChannels(channelResponses);
+    channels = channelResponses.map((cr) =>
+      client.channel(cr.channel.type, cr.channel.id),
+    );
+  });
+
+  it('should sort channels by created_at in ascending order', () => {
+    const criteria: ChannelSort = { created_at: 1 };
+    const sorted = sortChannels([...channels], criteria);
+
+    expect(sorted.length).to.equal(3);
+    expect(sorted.map((c) => c.cid)).toMatchInlineSnapshot(`
+      [
+        "messaging:alpha",
+        "messaging:beta",
+        "messaging:charlie",
+      ]
+    `);
+  });
+
+  it('should sort channels by created_at in descending order', () => {
+    const criteria: ChannelSort = { created_at: -1 };
+    const sorted = sortChannels([...channels], criteria);
+
+    expect(sorted.length).to.equal(3);
+    expect(sorted.map((c) => c.cid)).toMatchInlineSnapshot(`
+      [
+        "messaging:charlie",
+        "messaging:beta",
+        "messaging:alpha",
+      ]
+    `);
+  });
+
+  it('should sort channels by updated_at', () => {
+    const criteria: ChannelSort = { updated_at: -1 };
+    const sorted = sortChannels([...channels], criteria);
+
+    expect(sorted.length).to.equal(3);
+    expect(sorted.map((c) => c.cid)).toMatchInlineSnapshot(`
+      [
+        "messaging:charlie",
+        "messaging:beta",
+        "messaging:alpha",
+      ]
+    `);
+  });
+
+  it('should sort channels by membership.pinned_at', () => {
+    const criteria: ChannelSort = { pinned_at: -1 };
+    const sorted = sortChannels([...channels], criteria);
+
+    expect(sorted.length).to.equal(3);
+    expect(sorted.map((c) => c.cid)).toMatchInlineSnapshot(`
+      [
+        "messaging:charlie",
+        "messaging:alpha",
+        "messaging:beta",
+      ]
+    `);
+  });
+
+  it('should sort channels by member_count', () => {
+    const criteria: ChannelSort = { member_count: -1 };
+    const sorted = sortChannels([...channels], criteria);
+
+    expect(sorted.length).to.equal(3);
+    expect(sorted.map((c) => c.cid)).toMatchInlineSnapshot(`
+      [
+        "messaging:beta",
+        "messaging:alpha",
+        "messaging:charlie",
+      ]
+    `);
+  });
+
+  it('should sort channels by name', () => {
+    // @ts-expect-error `name` is a custom property
+    const criteria: ChannelSort = { name: 1 };
+    const sorted = sortChannels([...channels], criteria);
+
+    expect(sorted.length).to.equal(3);
+    expect(sorted.map((c) => c.cid)).toMatchInlineSnapshot(`
+      [
+        "messaging:alpha",
+        "messaging:beta",
+        "messaging:charlie",
+      ]
+    `);
+  });
+
+  it('should sort by multiple criteria in the correct order', () => {
+    // Give two channels the same pinned status to test secondary sort
+    const channelsWithEqualPins = [...channels];
+    const channelResponse = generateChannel({
+      channel: {
+        created_at: '2025-01-01T10:00:04Z',
+        member_count: 7,
+        name: 'Delta',
+        id: 'delta',
+      },
+      membership: { pinned_at: channels[0].state.membership.pinned_at },
+    });
+
+    client.hydrateActiveChannels([channelResponse]);
+
+    channelsWithEqualPins.push(
+      client.channel(channelResponse.channel.type, channelResponse.channel.id),
+    );
+
+    // Sort by pinned_at (desc) first, then by member_count (desc)
+    const criteria: ChannelSort = [{ pinned_at: 1 }, { member_count: -1 }];
+    const sorted = sortChannels(channelsWithEqualPins, criteria);
+
+    // First two should have the same pinned_at but different member_count
+    expect(sorted.map((c) => c.cid)).toMatchInlineSnapshot(`
+      [
+        "messaging:delta",
+        "messaging:alpha",
+        "messaging:charlie",
+        "messaging:beta",
+      ]
+    `);
+  });
+
+  it('should handle non-existent property in sort criteria', () => {
+    // @ts-expect-error testing purposefully invalid criteria
+    const criteria: ChannelSort = { nonExistentProperty: 1 };
+    const sorted = sortChannels([...channels], criteria);
+
+    // Should maintain original order when property doesn't exist
+    expect(sorted).to.deep.equal(channels);
   });
 });

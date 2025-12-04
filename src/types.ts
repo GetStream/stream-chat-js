@@ -1,5 +1,4 @@
 import type { EVENT_MAP } from './events';
-import type { Channel } from './channel';
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { StableWSConnection } from './connection';
 import type { Role } from './permissions';
@@ -4184,17 +4183,6 @@ export type VelocityFilterConfig = {
   first_message_only: boolean;
   rules: VelocityFilterConfigRule[];
   async?: boolean;
-};
-
-export type PromoteChannelParams = {
-  channels: Array<Channel>;
-  channelToMove: Channel;
-  sort: ChannelSort;
-  /**
-   * If the index of the channel within `channels` list which is being moved upwards
-   * (`channelToMove`) is known, you can supply it to skip extra calculation.
-   */
-  channelToMoveIndexWithinChannels?: number;
 };
 
 /**

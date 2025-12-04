@@ -10,15 +10,13 @@ import type { ValueOrPatch } from './store';
 import { isPatch, StateStore } from './store';
 import type { Channel } from './channel';
 import {
-  extractSortValue,
-  findLastPinnedChannelIndex,
   getAndWatchChannel,
   isChannelArchived,
   isChannelPinned,
-  promoteChannel,
   shouldConsiderArchivedChannels,
   shouldConsiderPinnedChannels,
   sleep,
+  sortChannels,
   uniqBy,
 } from './utils';
 import { generateUUIDv4 } from './utils';
@@ -213,6 +211,20 @@ export class ChannelManager extends WithSubscriptions {
         notificationRemovedFromChannelHandler: this.notificationRemovedFromChannelHandler,
       }),
     );
+
+    this.state.addPreprocessor((currentState, previousState) => {
+      if (
+        currentState.channels === previousState?.channels &&
+        currentState.pagination.sort === previousState.pagination.sort
+      ) {
+        return;
+      }
+
+      currentState.channels = sortChannels(
+        currentState.channels,
+        currentState.pagination.sort,
+      );
+    });
   }
 
   public setChannels = (valueOrFactory: ChannelSetterParameterType) => {
@@ -467,10 +479,13 @@ export class ChannelManager extends WithSubscriptions {
   };
 
   private notificationAddedToChannelHandler = async (event: Event) => {
-    const { id, type, members } = event?.channel ?? {};
+    const channelId = event.channel_id ?? event.channel?.id;
+    const channelType = event.channel_type ?? event.channel?.type;
+    const members = event.channel?.members;
 
     if (
-      !type ||
+      !channelType ||
+      !channelId ||
       !this.options.allowNotLoadedChannelPromotionForEvent?.[
         'notification.added_to_channel'
       ]
@@ -478,65 +493,64 @@ export class ChannelManager extends WithSubscriptions {
       return;
     }
 
-    const channel = await getAndWatchChannel({
+    const targetChannel = await getAndWatchChannel({
       client: this.client,
-      id,
-      members: members?.reduce<string[]>((acc, { user, user_id }) => {
-        const userId = user_id || user?.id;
+      id: channelId,
+      members: members?.reduce<string[]>((memberIds, { user, user_id }) => {
+        const userId = user_id ?? user?.id;
         if (userId) {
-          acc.push(userId);
+          memberIds.push(userId);
         }
-        return acc;
+        return memberIds;
       }, []),
-      type,
+      type: channelType,
     });
 
-    const { pagination, channels } = this.state.getLatestValue();
-    if (!channels) {
-      return;
-    }
+    this.setChannels((currentChannels) => {
+      const targetChannelExistsWithinList = currentChannels.indexOf(targetChannel) >= 0;
 
-    const { sort } = pagination ?? {};
+      if (targetChannelExistsWithinList) {
+        return currentChannels;
+      }
 
-    this.setChannels(
-      promoteChannel({
-        channels,
-        channelToMove: channel,
-        sort,
-      }),
-    );
+      return [...currentChannels, targetChannel];
+    });
   };
 
   private channelDeletedHandler = (event: Event) => {
     const { channels } = this.state.getLatestValue();
-    if (!channels) {
+
+    const channelId = event.channel_id ?? event.channel?.id;
+    const channelType = event.channel_type ?? event.channel?.type;
+
+    if (!channelType || !channelId) {
       return;
     }
 
-    const newChannels = [...channels];
-    const channelIndex = newChannels.findIndex(
-      (channel) => channel.cid === (event.cid || event.channel?.cid),
+    const targetChannelIndex = channels.indexOf(
+      this.client.channel(channelType, channelId),
     );
 
-    if (channelIndex < 0) {
-      return;
-    }
+    if (targetChannelIndex < 0) return;
 
-    newChannels.splice(channelIndex, 1);
-    this.setChannels(newChannels);
+    this.setChannels((currentChannels) => {
+      const newChannels = [...currentChannels];
+
+      newChannels.splice(targetChannelIndex, 1);
+
+      return newChannels;
+    });
   };
 
   private channelHiddenHandler = this.channelDeletedHandler;
 
   private newMessageHandler = (event: Event) => {
     const { pagination, channels } = this.state.getLatestValue();
-    if (!channels) {
-      return;
-    }
+
     const { filters, sort } = pagination ?? {};
 
-    const channelType = event.channel_type;
-    const channelId = event.channel_id;
+    const channelId = event.channel_id ?? event.channel?.id;
+    const channelType = event.channel_type ?? event.channel?.type;
 
     if (!channelType || !channelId) {
       return;
@@ -568,37 +582,36 @@ export class ChannelManager extends WithSubscriptions {
       return;
     }
 
-    this.setChannels(
-      promoteChannel({
-        channels,
-        channelToMove: targetChannel,
-        channelToMoveIndexWithinChannels: targetChannelIndex,
-        sort,
-      }),
-    );
+    this.setChannels((currentChannels) => {
+      if (targetChannelExistsWithinList) {
+        return [...currentChannels];
+      }
+
+      return [...currentChannels, targetChannel];
+    });
   };
 
   private notificationNewMessageHandler = async (event: Event) => {
-    const { id, type } = event?.channel ?? {};
+    const channelId = event.channel_id ?? event.channel?.id;
+    const channelType = event.channel_type ?? event.channel?.type;
 
-    if (!id || !type) {
+    if (!channelType || !channelId) {
       return;
     }
 
-    const channel = await getAndWatchChannel({
+    const targetChannel = await getAndWatchChannel({
       client: this.client,
-      id,
-      type,
+      id: channelId,
+      type: channelType,
     });
 
-    const { channels, pagination } = this.state.getLatestValue();
-    const { filters, sort } = pagination ?? {};
+    const { pagination } = this.state.getLatestValue();
+    const { filters } = pagination ?? {};
 
     const considerArchivedChannels = shouldConsiderArchivedChannels(filters);
-    const isTargetChannelArchived = isChannelArchived(channel);
+    const isTargetChannelArchived = isChannelArchived(targetChannel);
 
     if (
-      !channels ||
       (considerArchivedChannels && isTargetChannelArchived && !filters.archived) ||
       (considerArchivedChannels && !isTargetChannelArchived && filters.archived) ||
       !this.options.allowNotLoadedChannelPromotionForEvent?.['notification.message_new']
@@ -606,36 +619,38 @@ export class ChannelManager extends WithSubscriptions {
       return;
     }
 
-    this.setChannels(
-      promoteChannel({
-        channels,
-        channelToMove: channel,
-        sort,
-      }),
-    );
+    this.setChannels((currentChannels) => {
+      const targetChannelExistsWithinList = currentChannels.indexOf(targetChannel) >= 0;
+
+      if (targetChannelExistsWithinList) {
+        return currentChannels;
+      }
+
+      return [...currentChannels, targetChannel];
+    });
   };
 
   private channelVisibleHandler = async (event: Event) => {
-    const { channel_type: channelType, channel_id: channelId } = event;
+    const channelId = event.channel_id ?? event.channel?.id;
+    const channelType = event.channel_type ?? event.channel?.type;
 
     if (!channelType || !channelId) {
       return;
     }
 
-    const channel = await getAndWatchChannel({
+    const targetChannel = await getAndWatchChannel({
       client: this.client,
       id: event.channel_id,
       type: event.channel_type,
     });
 
-    const { channels, pagination } = this.state.getLatestValue();
-    const { sort, filters } = pagination ?? {};
+    const { pagination } = this.state.getLatestValue();
+    const { filters } = pagination ?? {};
 
     const considerArchivedChannels = shouldConsiderArchivedChannels(filters);
-    const isTargetChannelArchived = isChannelArchived(channel);
+    const isTargetChannelArchived = isChannelArchived(targetChannel);
 
     if (
-      !channels ||
       (considerArchivedChannels && isTargetChannelArchived && !filters.archived) ||
       (considerArchivedChannels && !isTargetChannelArchived && filters.archived) ||
       !this.options.allowNotLoadedChannelPromotionForEvent?.['channel.visible']
@@ -643,13 +658,15 @@ export class ChannelManager extends WithSubscriptions {
       return;
     }
 
-    this.setChannels(
-      promoteChannel({
-        channels,
-        channelToMove: channel,
-        sort,
-      }),
-    );
+    this.setChannels((currentChannels) => {
+      const targetChannelExistsWithinList = currentChannels.indexOf(targetChannel) >= 0;
+
+      if (targetChannelExistsWithinList) {
+        return currentChannels;
+      }
+
+      return [...currentChannels, targetChannel];
+    });
   };
 
   private notificationRemovedFromChannelHandler = this.channelDeletedHandler;
@@ -657,23 +674,22 @@ export class ChannelManager extends WithSubscriptions {
   private memberUpdatedHandler = (event: Event) => {
     const { pagination, channels } = this.state.getLatestValue();
     const { filters, sort } = pagination;
+    const channelId = event.channel_id ?? event.channel?.id;
+    const channelType = event.channel_type ?? event.channel?.type;
+
     if (
       !event.member?.user ||
       event.member.user.id !== this.client.userID ||
-      !event.channel_type ||
-      !event.channel_id
+      !channelType ||
+      !channelId
     ) {
       return;
     }
-    const channelType = event.channel_type;
-    const channelId = event.channel_id;
 
     const considerPinnedChannels = shouldConsiderPinnedChannels(sort);
     const considerArchivedChannels = shouldConsiderArchivedChannels(filters);
-    const pinnedAtSort = extractSortValue({ atIndex: 0, sort, targetKey: 'pinned_at' });
 
     if (
-      !channels ||
       (!considerPinnedChannels && !considerArchivedChannels) ||
       this.options.lockChannelOrder
     ) {
@@ -685,7 +701,6 @@ export class ChannelManager extends WithSubscriptions {
     const targetChannelIndex = channels.indexOf(targetChannel);
     const targetChannelExistsWithinList = targetChannelIndex >= 0;
 
-    const isTargetChannelPinned = isChannelPinned(targetChannel);
     const isTargetChannelArchived = isChannelArchived(targetChannel);
 
     const newChannels = [...channels];
@@ -701,25 +716,11 @@ export class ChannelManager extends WithSubscriptions {
       // When archived filter false, and channel is archived
       (considerArchivedChannels && isTargetChannelArchived && !filters?.archived)
     ) {
-      this.setChannels(newChannels);
-      return;
+      // do nothing
+    } else {
+      newChannels.push(targetChannel);
     }
 
-    // handle pinning
-    let lastPinnedChannelIndex: number | null = null;
-
-    if (pinnedAtSort === 1 || (pinnedAtSort === -1 && !isTargetChannelPinned)) {
-      lastPinnedChannelIndex = findLastPinnedChannelIndex({ channels: newChannels });
-    }
-    const newTargetChannelIndex =
-      typeof lastPinnedChannelIndex === 'number' ? lastPinnedChannelIndex + 1 : 0;
-
-    // skip state update if the position of the channel does not change
-    if (channels[newTargetChannelIndex] === targetChannel) {
-      return;
-    }
-
-    newChannels.splice(newTargetChannelIndex, 0, targetChannel);
     this.setChannels(newChannels);
   };
 
