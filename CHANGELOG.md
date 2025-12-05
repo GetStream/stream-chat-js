@@ -1,3 +1,9 @@
+## [9.26.1](https://github.com/GetStream/stream-chat-js/compare/v9.26.0...v9.26.1) (2025-12-05)
+
+### Bug Fixes
+
+* increase the message delivery reporting interval upon repeated failed requests ([#1652](https://github.com/GetStream/stream-chat-js/issues/1652)) ([7ff04ab](https://github.com/GetStream/stream-chat-js/commit/7ff04abb8d17ed28a70cb45b799e194b1e786083))
+
 ## [9.26.0](https://github.com/GetStream/stream-chat-js/compare/v9.25.0...v9.26.0) (2025-11-18)
 
 ### Bug Fixes
