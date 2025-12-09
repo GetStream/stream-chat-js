@@ -1,3 +1,9 @@
+## [9.27.0](https://github.com/GetStream/stream-chat-js/compare/v9.26.1...v9.27.0) (2025-12-09)
+
+### Features
+
+* add ephemeralUpdateMessage server-side operation ([#1662](https://github.com/GetStream/stream-chat-js/issues/1662)) ([79b65d9](https://github.com/GetStream/stream-chat-js/commit/79b65d933dd3ce7a9861031fccd44bed1ee2f9f0))
+
 ## [9.26.1](https://github.com/GetStream/stream-chat-js/compare/v9.26.0...v9.26.1) (2025-12-05)
 
 ### Bug Fixes
