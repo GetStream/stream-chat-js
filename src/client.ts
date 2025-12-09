@@ -3102,6 +3102,41 @@ export class StreamChat {
   }
 
   /**
+   * Updates message fields without storing them in the database, only sends update event.
+   *
+   * Available only on the server-side.
+   *
+   * @param messageId the message id to update.
+   * @param partialMessageObject the message payload.
+   * @param partialUserOrUserId the user id linked to this action.
+   * @param options additional options.
+   */
+  async ephemeralUpdateMessage(
+    messageId: string,
+    partialMessageObject: PartialMessageUpdate,
+    partialUserOrUserId?: string | { id: string },
+    options?: UpdateMessageOptions,
+  ) {
+    if (!messageId) throw Error('messageId is required');
+
+    let user: { id: string } | undefined = undefined;
+    if (typeof partialUserOrUserId === 'string') {
+      user = { id: partialUserOrUserId };
+    } else if (typeof partialUserOrUserId?.id === 'string') {
+      user = { id: partialUserOrUserId.id };
+    }
+
+    return await this.patch<UpdateMessageAPIResponse>(
+      `${this.baseURL}/messages/${encodeURIComponent(messageId)}/ephemeral`,
+      {
+        ...partialMessageObject,
+        ...options,
+        user,
+      },
+    );
+  }
+
+  /**
    * deleteMessage - Delete a message
    *
    * @param {string} messageID The id of the message to delete
