@@ -2022,7 +2022,7 @@ export type QueryFilter<ObjectType = string> =
         $exists?: boolean;
         $gt?: PrimitiveFilter<ObjectType>;
         $gte?: PrimitiveFilter<ObjectType>;
-        $in?: PrimitiveFilter<Unpacked<ObjectType>>[];
+        $in?: PrimitiveFilter<ObjectType>[];
         $lt?: PrimitiveFilter<ObjectType>;
         $lte?: PrimitiveFilter<ObjectType>;
       }
