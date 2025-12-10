@@ -2022,14 +2022,14 @@ export type QueryFilter<ObjectType = string> =
         $exists?: boolean;
         $gt?: PrimitiveFilter<ObjectType>;
         $gte?: PrimitiveFilter<ObjectType>;
-        $in?: PrimitiveFilter<ObjectType>[];
+        $in?: PrimitiveFilter<Unpacked<ObjectType>>[];
         $lt?: PrimitiveFilter<ObjectType>;
         $lte?: PrimitiveFilter<ObjectType>;
       }
     : {
         $eq?: PrimitiveFilter<ObjectType>;
         $exists?: boolean;
-        $in?: PrimitiveFilter<ObjectType>[];
+        $in?: PrimitiveFilter<Unpacked<ObjectType>>[];
       };
 
 export type QueryFilters<Operators = {}> = {
