@@ -304,6 +304,7 @@ describe('ChannelState addMessagesSorted', function () {
 			true,
 			'latest',
 		);
+		expect(state.latestMessages.length).to.be.equal(3);
 		state.filterErrorMessages();
 		expect(state.latestMessages.length).to.be.equal(1);
 		expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledTimes(2);
