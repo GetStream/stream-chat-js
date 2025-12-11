@@ -1,3 +1,9 @@
+## [9.27.1](https://github.com/GetStream/stream-chat-js/compare/v9.27.0...v9.27.1) (2025-12-11)
+
+### Bug Fixes
+
+* improve type inference for $in filter in queryChannels ([#1663](https://github.com/GetStream/stream-chat-js/issues/1663)) ([640d5da](https://github.com/GetStream/stream-chat-js/commit/640d5da19893110e00b81ba513ea608789909725)), closes [#1661](https://github.com/GetStream/stream-chat-js/issues/1661)
+
 ## [9.27.0](https://github.com/GetStream/stream-chat-js/compare/v9.26.1...v9.27.0) (2025-12-09)
 
 ### Features
