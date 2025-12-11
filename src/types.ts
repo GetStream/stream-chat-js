@@ -4460,25 +4460,47 @@ export type EventHook = {
   updated_at?: string;
 };
 
+export type BatchUpdateOperation =
+  | 'addMembers'
+  | 'removeMembers'
+  | 'invites'
+  | 'assignRoles'
+  | 'addModerators'
+  | 'demoteModerators'
+  | 'hide'
+  | 'show'
+  | 'archive'
+  | 'unarchive'
+  | 'updateData'
+  | 'addFilterTags'
+  | 'removeFilterTags';
+
+export type BatchChannelDataUpdate = {
+  frozen?: boolean;
+  disabled?: boolean;
+  custom?: Record<string, unknown>;
+  team?: string;
+  config_overrides?: Record<string, unknown>;
+  auto_translation_enabled?: boolean;
+  auto_translation_language?: string;
+};
+
 export type UpdateChannelsBatchOptions = {
-  operation: string;
+  operation: BatchUpdateOperation;
   filter: UpdateChannelsBatchFilters;
   members?: string[] | Array<NewMemberPayload>;
-  data?: Partial<ChannelData>;
+  data?: BatchChannelDataUpdate;
 };
 
 export type UpdateChannelsBatchFilters = QueryFilters<{
   cids?:
-    | RequireOnlyOne<Pick<QueryFilter<string>, '$in'>>
-    | RequireOnlyOne<Pick<QueryFilter<string[]>, '$eq'>>
+    | RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$eq'>>
     | PrimitiveFilter<string[]>;
   types?:
-    | RequireOnlyOne<Pick<QueryFilter<string>, '$in'>>
-    | RequireOnlyOne<Pick<QueryFilter<string[]>, '$eq'>>
+    | RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$eq'>>
     | PrimitiveFilter<string[]>;
   filter_tags?:
-    | RequireOnlyOne<Pick<QueryFilter<string>, '$in'>>
-    | RequireOnlyOne<Pick<QueryFilter<Record<string, string>>, '$eq'>>
+    | RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$eq'>>
     | PrimitiveFilter<Record<string, string>>;
 }>;
 
