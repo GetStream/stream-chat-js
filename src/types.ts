@@ -2029,7 +2029,7 @@ export type QueryFilter<ObjectType = string> =
     : {
         $eq?: PrimitiveFilter<ObjectType>;
         $exists?: boolean;
-        $in?: PrimitiveFilter<ObjectType>[];
+        $in?: PrimitiveFilter<Unpacked<ObjectType>>[];
       };
 
 export type QueryFilters<Operators = {}> = {
