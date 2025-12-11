@@ -9,15 +9,20 @@ import { DEFAULT_MESSAGE_SET_PAGINATION } from '../../src/constants';
 import { generateUUIDv4 as uuidv4 } from '../../src/utils';
 
 import { vi, describe, beforeEach, afterEach, it, expect } from 'vitest';
+import { MockOfflineDB } from './offline-support/MockOfflineDB';
 
 const toISOString = (timestampMs) => new Date(timestampMs).toISOString();
 
 describe('ChannelState addMessagesSorted', function () {
 	let state;
+	let client;
 
-	beforeEach(() => {
-		const client = new StreamChat();
-		client.userID = 'userId';
+	beforeEach(async () => {
+		client = new StreamChat();
+		const offlineDb = new MockOfflineDB({ client });
+
+		client.setOfflineDBApi(offlineDb);
+		await client.offlineDb.init(client.userID);
 		const channel = new Channel(client, 'type', 'id', {});
 		client._addChannelConfig({ cid: channel.cid, config: {} });
 		state = new ChannelState(channel);
@@ -275,6 +280,35 @@ describe('ChannelState addMessagesSorted', function () {
 		expect(state.latestMessages[0].id).to.be.equal('12');
 		expect(state.latestMessages[1].id).to.be.equal('13');
 		expect(state.latestMessages[2].id).to.be.equal('14');
+	});
+
+	it('should remove blocked messages from the latest messages from the offline database', () => {
+		state.addMessagesSorted(
+			[
+				generateMsg({
+					id: '12',
+					date: toISOString(1200),
+					type: 'error',
+					moderation_details: { action: 'MESSAGE_RESPONSE_ACTION_REMOVE' },
+				}),
+				generateMsg({
+					id: '13',
+					date: toISOString(1300),
+					type: 'error',
+					moderation: { action: 'remove' },
+				}),
+				generateMsg({ id: '14', date: toISOString(1400) }),
+			],
+			false,
+			false,
+			true,
+			'latest',
+		);
+		state.filterErrorMessages();
+		expect(state.latestMessages.length).to.be.equal(1);
+		expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledTimes(2);
+		expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledWith({ id: '12' });
+		expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledWith({ id: '13' });
 	});
 
 	it('adds message page sorted', () => {
