@@ -209,6 +209,8 @@ import type {
   TokenOrProvider,
   TranslateResponse,
   UnBanUserOptions,
+  UpdateChannelsBatchOptions,
+  UpdateChannelsBatchResponse,
   UpdateChannelTypeRequest,
   UpdateChannelTypeResponse,
   UpdateCommandOptions,
@@ -4791,5 +4793,18 @@ export class StreamChat {
 
   syncDeliveredCandidates(collections: Channel[]) {
     this.messageDeliveryReporter.syncDeliveredCandidates(collections);
+  }
+
+  /**
+   *  Update Channels Batch
+   *
+   *  @param {UpdateChannelsBatchOptions} payload for updating channels in batch
+   *  @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
+   */
+  async updateChannelsBatch(payload: UpdateChannelsBatchOptions) {
+    return await this.put<APIResponse & UpdateChannelsBatchResponse>(
+      this.baseURL + `/channels/batch`,
+      payload,
+    );
   }
 }
