@@ -15,6 +15,7 @@ import {
   deleteUserMessages as _deleteUserMessages,
   addToMessageList,
   formatMessage,
+  isBlockedMessage,
 } from './utils';
 import { DEFAULT_MESSAGE_SET_PAGINATION } from './constants';
 
@@ -797,6 +798,12 @@ export class ChannelState {
     const filteredMessages = this.latestMessages.filter(
       (message) => message.type !== 'error',
     );
+
+    const blockedMessages = this.latestMessages.filter(isBlockedMessage);
+    // We need to hard delete the blocked messages from the offline database.
+    for (const message of blockedMessages) {
+      this._channel.getClient().offlineDb?.hardDeleteMessage({ id: message.id });
+    }
 
     this.latestMessages = filteredMessages;
   }
