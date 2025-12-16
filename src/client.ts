@@ -13,6 +13,7 @@ import { CheckSignature, DevToken, JWTUserToken } from './signing';
 import { TokenManager } from './token_manager';
 import { WSConnectionFallback } from './connection_fallback';
 import { Campaign } from './campaign';
+import { ChannelBatchUpdater } from './channel_batch_updater';
 import { Segment } from './segment';
 import { isErrorResponse, isWSFailure } from './errors';
 import {
@@ -3716,6 +3717,15 @@ export class StreamChat {
     }
 
     return new Campaign(this, idOrData, data);
+  }
+
+  /**
+   * channelBatchUpdater - Returns a ChannelBatchUpdater instance for batch channel operations
+   *
+   * @return {ChannelBatchUpdater} A ChannelBatchUpdater instance
+   */
+  channelBatchUpdater() {
+    return new ChannelBatchUpdater(this);
   }
 
   segment(type: SegmentType, idOrData: string | SegmentData, data?: SegmentData) {

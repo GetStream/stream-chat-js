@@ -4490,6 +4490,7 @@ export type UpdateChannelsBatchOptions = {
   filter: UpdateChannelsBatchFilters;
   members?: string[] | Array<NewMemberPayload>;
   data?: BatchChannelDataUpdate;
+  filter_tags_update?: string[];
 };
 
 export type UpdateChannelsBatchFilters = QueryFilters<{
