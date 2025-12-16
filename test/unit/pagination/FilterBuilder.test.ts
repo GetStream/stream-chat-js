@@ -4,7 +4,7 @@ import {
   FilterBuilderGenerators,
   ExtendedQueryFilter,
   ExtendedQueryFilters,
-} from '../../../src/pagination/FilterBuilder';
+} from '../../../src';
 
 type BasicFilterFieldsSchema = {
   name: ExtendedQueryFilter<string>;
