@@ -223,6 +223,7 @@ import type {
   UpdatePollOptionAPIResponse,
   UpdateReminderOptions,
   UpdateSegmentData,
+  UpdateUsersAPIResponse,
   UpsertPushPreferencesResponse,
   UserCustomEvent,
   UserFilters,
@@ -2399,11 +2400,9 @@ export class StreamChat {
       userMap[userObject.id] = userObject;
     }
 
-    return await this.post<
-      APIResponse & {
-        users: { [key: string]: UserResponse };
-      }
-    >(this.baseURL + '/users', { users: userMap });
+    return await this.post<UpdateUsersAPIResponse>(this.baseURL + '/users', {
+      users: userMap,
+    });
   }
 
   /**
@@ -2451,11 +2450,7 @@ export class StreamChat {
       }
     }
 
-    return await this.patch<
-      APIResponse & {
-        users: { [key: string]: UserResponse };
-      }
-    >(this.baseURL + '/users', { users });
+    return await this.patch<UpdateUsersAPIResponse>(this.baseURL + '/users', { users });
   }
 
   async deleteUser(
@@ -3101,6 +3096,41 @@ export class StreamChat {
 
     return await this.put<UpdateMessageAPIResponse>(
       this.baseURL + `/messages/${encodeURIComponent(id)}`,
+      {
+        ...partialMessageObject,
+        ...options,
+        user,
+      },
+    );
+  }
+
+  /**
+   * Updates message fields without storing them in the database, only sends update event.
+   *
+   * Available only on the server-side.
+   *
+   * @param messageId the message id to update.
+   * @param partialMessageObject the message payload.
+   * @param partialUserOrUserId the user id linked to this action.
+   * @param options additional options.
+   */
+  async ephemeralUpdateMessage(
+    messageId: string,
+    partialMessageObject: PartialMessageUpdate,
+    partialUserOrUserId?: string | { id: string },
+    options?: UpdateMessageOptions,
+  ) {
+    if (!messageId) throw Error('messageId is required');
+
+    let user: { id: string } | undefined = undefined;
+    if (typeof partialUserOrUserId === 'string') {
+      user = { id: partialUserOrUserId };
+    } else if (typeof partialUserOrUserId?.id === 'string') {
+      user = { id: partialUserOrUserId.id };
+    }
+
+    return await this.patch<UpdateMessageAPIResponse>(
+      `${this.baseURL}/messages/${encodeURIComponent(messageId)}/ephemeral`,
       {
         ...partialMessageObject,
         ...options,

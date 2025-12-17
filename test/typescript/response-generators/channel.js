@@ -1,4 +1,6 @@
-const { generateUUIDv4: uuidv4 } = require('../../../src/utils');
+// generateUUIDv4 is not exported from the public API, using test UUID for test data
+const uuidv4 = () =>
+	'test-' + Math.random().toString(36).substring(2, 15) + '-' + Date.now();
 const utils = require('../utils');
 const fs = require('fs');
 const url = require('url');
@@ -28,15 +30,31 @@ async function addMembers() {
 }
 
 async function addFilterTags() {
-	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
-	await channel.watch();
+	// Use server-side client for filter tag operations (required by backend)
+	const serverClient = utils.getServerTestClient();
+	const channelId = uuidv4();
+	await utils.createUsers([johnID]);
+	const channel = serverClient.channel('messaging', channelId, {
+		members: [johnID],
+		created_by_id: johnID, // Required for server-side auth
+	});
+	await channel.create();
 
 	return await channel.addFilterTags(['tag1', 'tag2']);
 }
 
 async function removeFilterTags() {
-	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
-	await channel.watch();
+	// Use server-side client for filter tag operations (required by backend)
+	const serverClient = utils.getServerTestClient();
+	const channelId = uuidv4();
+	await utils.createUsers([johnID]);
+	const channel = serverClient.channel('messaging', channelId, {
+		members: [johnID],
+		created_by_id: johnID, // Required for server-side auth
+	});
+	await channel.create();
+	// Add tags first, then remove them
+	await channel.addFilterTags(['tag1', 'tag2']);
 
 	return await channel.removeFilterTags(['tag1']);
 }
