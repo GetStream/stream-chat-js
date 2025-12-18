@@ -1,5 +1,6 @@
 export * from './base64';
 export * from './campaign';
+export * from './channel_batch_updater';
 export * from './client';
 export * from './client_state';
 export * from './channel';

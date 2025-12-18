@@ -13,6 +13,7 @@ import { CheckSignature, DevToken, JWTUserToken } from './signing';
 import { TokenManager } from './token_manager';
 import { WSConnectionFallback } from './connection_fallback';
 import { Campaign } from './campaign';
+import { ChannelBatchUpdater } from './channel_batch_updater';
 import { Segment } from './segment';
 import { isErrorResponse, isWSFailure } from './errors';
 import {
@@ -209,6 +210,8 @@ import type {
   TokenOrProvider,
   TranslateResponse,
   UnBanUserOptions,
+  UpdateChannelsBatchOptions,
+  UpdateChannelsBatchResponse,
   UpdateChannelTypeRequest,
   UpdateChannelTypeResponse,
   UpdateCommandOptions,
@@ -3746,6 +3749,15 @@ export class StreamChat {
     return new Campaign(this, idOrData, data);
   }
 
+  /**
+   * channelBatchUpdater - Returns a ChannelBatchUpdater instance for batch channel operations
+   *
+   * @return {ChannelBatchUpdater} A ChannelBatchUpdater instance
+   */
+  channelBatchUpdater() {
+    return new ChannelBatchUpdater(this);
+  }
+
   segment(type: SegmentType, idOrData: string | SegmentData, data?: SegmentData) {
     if (typeof idOrData === 'string') {
       return new Segment(this, type, idOrData, data);
@@ -4791,5 +4803,18 @@ export class StreamChat {
 
   syncDeliveredCandidates(collections: Channel[]) {
     this.messageDeliveryReporter.syncDeliveredCandidates(collections);
+  }
+
+  /**
+   *  Update Channels Batch
+   *
+   *  @param {UpdateChannelsBatchOptions} payload for updating channels in batch
+   *  @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
+   */
+  async updateChannelsBatch(payload: UpdateChannelsBatchOptions) {
+    return await this.put<APIResponse & UpdateChannelsBatchResponse>(
+      this.baseURL + `/channels/batch`,
+      payload,
+    );
   }
 }
