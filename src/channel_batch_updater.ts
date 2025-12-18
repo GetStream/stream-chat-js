@@ -1,5 +1,3 @@
-/* eslint no-unused-vars: "off" */
-
 import type { StreamChat } from './client';
 import type {
   APIResponse,
@@ -31,7 +29,7 @@ export class ChannelBatchUpdater {
   async addMembers(
     filter: UpdateChannelsBatchFilters,
     members: string[] | NewMemberPayload[],
-  ) {
+  ): Promise<APIResponse & UpdateChannelsBatchResponse> {
     return await this.client.updateChannelsBatch({
       operation: 'addMembers',
       filter,
@@ -46,7 +44,10 @@ export class ChannelBatchUpdater {
    * @param {string[]} members Member IDs to remove
    * @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
    */
-  async removeMembers(filter: UpdateChannelsBatchFilters, members: string[]) {
+  async removeMembers(
+    filter: UpdateChannelsBatchFilters,
+    members: string[],
+  ): Promise<APIResponse & UpdateChannelsBatchResponse> {
     return await this.client.updateChannelsBatch({
       operation: 'removeMembers',
       filter,
@@ -64,7 +65,7 @@ export class ChannelBatchUpdater {
   async inviteMembers(
     filter: UpdateChannelsBatchFilters,
     members: string[] | NewMemberPayload[],
-  ) {
+  ): Promise<APIResponse & UpdateChannelsBatchResponse> {
     return await this.client.updateChannelsBatch({
       operation: 'invites',
       filter,
@@ -79,7 +80,10 @@ export class ChannelBatchUpdater {
    * @param {string[]} members Member IDs to promote to moderator
    * @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
    */
-  async addModerators(filter: UpdateChannelsBatchFilters, members: string[]) {
+  async addModerators(
+    filter: UpdateChannelsBatchFilters,
+    members: string[],
+  ): Promise<APIResponse & UpdateChannelsBatchResponse> {
     return await this.client.updateChannelsBatch({
       operation: 'addModerators',
       filter,
@@ -94,7 +98,10 @@ export class ChannelBatchUpdater {
    * @param {string[]} members Member IDs to demote
    * @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
    */
-  async demoteModerators(filter: UpdateChannelsBatchFilters, members: string[]) {
+  async demoteModerators(
+    filter: UpdateChannelsBatchFilters,
+    members: string[],
+  ): Promise<APIResponse & UpdateChannelsBatchResponse> {
     return await this.client.updateChannelsBatch({
       operation: 'demoteModerators',
       filter,
@@ -109,7 +116,10 @@ export class ChannelBatchUpdater {
    * @param {NewMemberPayload[]} members Members with role assignments
    * @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
    */
-  async assignRoles(filter: UpdateChannelsBatchFilters, members: NewMemberPayload[]) {
+  async assignRoles(
+    filter: UpdateChannelsBatchFilters,
+    members: NewMemberPayload[],
+  ): Promise<APIResponse & UpdateChannelsBatchResponse> {
     return await this.client.updateChannelsBatch({
       operation: 'assignRoles',
       filter,
@@ -125,7 +135,9 @@ export class ChannelBatchUpdater {
    * @param {UpdateChannelsBatchFilters} filter Filter to select channels
    * @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
    */
-  async hide(filter: UpdateChannelsBatchFilters) {
+  async hide(
+    filter: UpdateChannelsBatchFilters,
+  ): Promise<APIResponse & UpdateChannelsBatchResponse> {
     return await this.client.updateChannelsBatch({
       operation: 'hide',
       filter,
@@ -138,7 +150,9 @@ export class ChannelBatchUpdater {
    * @param {UpdateChannelsBatchFilters} filter Filter to select channels
    * @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
    */
-  async show(filter: UpdateChannelsBatchFilters) {
+  async show(
+    filter: UpdateChannelsBatchFilters,
+  ): Promise<APIResponse & UpdateChannelsBatchResponse> {
     return await this.client.updateChannelsBatch({
       operation: 'show',
       filter,
@@ -151,7 +165,9 @@ export class ChannelBatchUpdater {
    * @param {UpdateChannelsBatchFilters} filter Filter to select channels
    * @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
    */
-  async archive(filter: UpdateChannelsBatchFilters) {
+  async archive(
+    filter: UpdateChannelsBatchFilters,
+  ): Promise<APIResponse & UpdateChannelsBatchResponse> {
     return await this.client.updateChannelsBatch({
       operation: 'archive',
       filter,
@@ -164,7 +180,9 @@ export class ChannelBatchUpdater {
    * @param {UpdateChannelsBatchFilters} filter Filter to select channels
    * @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
    */
-  async unarchive(filter: UpdateChannelsBatchFilters) {
+  async unarchive(
+    filter: UpdateChannelsBatchFilters,
+  ): Promise<APIResponse & UpdateChannelsBatchResponse> {
     return await this.client.updateChannelsBatch({
       operation: 'unarchive',
       filter,
@@ -180,7 +198,10 @@ export class ChannelBatchUpdater {
    * @param {BatchChannelDataUpdate} data Data to update
    * @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
    */
-  async updateData(filter: UpdateChannelsBatchFilters, data: BatchChannelDataUpdate) {
+  async updateData(
+    filter: UpdateChannelsBatchFilters,
+    data: BatchChannelDataUpdate,
+  ): Promise<APIResponse & UpdateChannelsBatchResponse> {
     return await this.client.updateChannelsBatch({
       operation: 'updateData',
       filter,
@@ -195,7 +216,10 @@ export class ChannelBatchUpdater {
    * @param {string[]} tags Tags to add
    * @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
    */
-  async addFilterTags(filter: UpdateChannelsBatchFilters, tags: string[]) {
+  async addFilterTags(
+    filter: UpdateChannelsBatchFilters,
+    tags: string[],
+  ): Promise<APIResponse & UpdateChannelsBatchResponse> {
     return await this.client.updateChannelsBatch({
       operation: 'addFilterTags',
       filter,
@@ -210,7 +234,10 @@ export class ChannelBatchUpdater {
    * @param {string[]} tags Tags to remove
    * @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
    */
-  async removeFilterTags(filter: UpdateChannelsBatchFilters, tags: string[]) {
+  async removeFilterTags(
+    filter: UpdateChannelsBatchFilters,
+    tags: string[],
+  ): Promise<APIResponse & UpdateChannelsBatchResponse> {
     return await this.client.updateChannelsBatch({
       operation: 'removeFilterTags',
       filter,
