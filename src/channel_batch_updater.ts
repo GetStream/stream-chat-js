@@ -1,3 +1,5 @@
+/* eslint no-unused-vars: "off" */
+
 import type { StreamChat } from './client';
 import type {
   APIResponse,
