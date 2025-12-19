@@ -1,3 +1,28 @@
+## [9.27.2](https://github.com/GetStream/stream-chat-js/compare/v9.27.1...v9.27.2) (2025-12-16)
+
+### Bug Fixes
+
+* remove blocked messages from offline db ([#1666](https://github.com/GetStream/stream-chat-js/issues/1666)) ([81883a4](https://github.com/GetStream/stream-chat-js/commit/81883a4d8c900ec807365e5b5f73695bc172e71e))
+* send edited message with error type as regular one ([#1664](https://github.com/GetStream/stream-chat-js/issues/1664)) ([547cd2f](https://github.com/GetStream/stream-chat-js/commit/547cd2f8d766e4c0a94600b20c9164d898aecd98))
+
+## [9.27.1](https://github.com/GetStream/stream-chat-js/compare/v9.27.0...v9.27.1) (2025-12-11)
+
+### Bug Fixes
+
+* improve type inference for $in filter in queryChannels ([#1663](https://github.com/GetStream/stream-chat-js/issues/1663)) ([640d5da](https://github.com/GetStream/stream-chat-js/commit/640d5da19893110e00b81ba513ea608789909725)), closes [#1661](https://github.com/GetStream/stream-chat-js/issues/1661)
+
+## [9.27.0](https://github.com/GetStream/stream-chat-js/compare/v9.26.1...v9.27.0) (2025-12-09)
+
+### Features
+
+* add ephemeralUpdateMessage server-side operation ([#1662](https://github.com/GetStream/stream-chat-js/issues/1662)) ([79b65d9](https://github.com/GetStream/stream-chat-js/commit/79b65d933dd3ce7a9861031fccd44bed1ee2f9f0))
+
+## [9.26.1](https://github.com/GetStream/stream-chat-js/compare/v9.26.0...v9.26.1) (2025-12-05)
+
+### Bug Fixes
+
+* increase the message delivery reporting interval upon repeated failed requests ([#1652](https://github.com/GetStream/stream-chat-js/issues/1652)) ([7ff04ab](https://github.com/GetStream/stream-chat-js/commit/7ff04abb8d17ed28a70cb45b799e194b1e786083))
+
 ## [9.26.0](https://github.com/GetStream/stream-chat-js/compare/v9.25.0...v9.26.0) (2025-11-18)
 
 ### Bug Fixes
