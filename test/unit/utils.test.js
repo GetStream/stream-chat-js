@@ -67,12 +67,36 @@ describe('test if sort is deterministic', () => {
 		expect(sort).to.have.length(4);
 		expect(sort[0].field).to.be.equal('created_at');
 		expect(sort[0].direction).to.be.equal(1);
+		expect(sort[0].type).toBe(null);
 		expect(sort[1].field).to.be.equal('has_unread');
 		expect(sort[1].direction).to.be.equal(-1);
+		expect(sort[1].type).toBe(null);
 		expect(sort[2].field).to.be.equal('last_active');
 		expect(sort[2].direction).to.be.equal(1);
+		expect(sort[2].type).toBe(null);
 		expect(sort[3].field).to.be.equal('deleted_at');
 		expect(sort[3].direction).to.be.equal(-1);
+		expect(sort[3].type).toBe(null);
+	});
+	it('test sort array with typed fields', () => {
+		let sort = normalizeQuerySort([
+			{ created_at: { direction: -1, type: 'string' }, has_unread: -1 },
+			{ last_active: 1, deleted_at: -1 },
+		]);
+
+		expect(sort).to.have.length(4);
+		expect(sort[0].field).to.be.equal('created_at');
+		expect(sort[0].direction).to.be.equal(-1);
+		expect(sort[0].type).toBe('string');
+		expect(sort[1].field).to.be.equal('has_unread');
+		expect(sort[1].direction).to.be.equal(-1);
+		expect(sort[1].type).toBe(null);
+		expect(sort[2].field).to.be.equal('last_active');
+		expect(sort[2].direction).to.be.equal(1);
+		expect(sort[2].type).toBe(null);
+		expect(sort[3].field).to.be.equal('deleted_at');
+		expect(sort[3].direction).to.be.equal(-1);
+		expect(sort[3].type).toBe(null);
 	});
 });
 
