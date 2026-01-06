@@ -518,7 +518,9 @@ describe('Client search', async () => {
 
 	it('search with sorting by defined field', async () => {
 		client.get = (url, config) => {
-			expect(config.payload.sort).to.be.eql([{ field: 'updated_at', direction: -1 }]);
+			expect(config.payload.sort).toEqual([
+				{ field: 'updated_at', direction: -1, type: null },
+			]);
 		};
 		await client.search({ cid: 'messaging:my-cid' }, 'query', {
 			sort: [{ updated_at: -1 }],
@@ -526,7 +528,9 @@ describe('Client search', async () => {
 	});
 	it('search with sorting by custom field', async () => {
 		client.get = (url, config) => {
-			expect(config.payload.sort).to.be.eql([{ field: 'custom_field', direction: -1 }]);
+			expect(config.payload.sort).toEqual([
+				{ field: 'custom_field', direction: -1, type: null },
+			]);
 		};
 		await client.search({ cid: 'messaging:my-cid' }, 'query', {
 			sort: [{ custom_field: -1 }],
@@ -536,7 +540,7 @@ describe('Client search', async () => {
 		await expect(
 			client.search({ cid: 'messaging:my-cid' }, 'query', {
 				offset: 1,
-				sort: [{ custom_field: -1 }],
+				sort: [{ custom_field: -1, type: null }],
 			}),
 		).resolves.toEqual();
 	});
