@@ -4499,7 +4499,7 @@ export type EventHook = {
 export type BatchUpdateOperation =
   | 'addMembers'
   | 'removeMembers'
-  | 'invites'
+  | 'inviteMembers'
   | 'assignRoles'
   | 'addModerators'
   | 'demoteModerators'

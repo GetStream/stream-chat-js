@@ -67,7 +67,7 @@ export class ChannelBatchUpdater {
     members: string[] | NewMemberPayload[],
   ): Promise<APIResponse & UpdateChannelsBatchResponse> {
     return await this.client.updateChannelsBatch({
-      operation: 'invites',
+      operation: 'inviteMembers',
       filter,
       members,
     });
