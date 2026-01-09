@@ -31,7 +31,10 @@ export type FilterBuilderGenerators<
   };
 };
 
-export type FilterBuilderOptions<TFilters, TContext extends Record<string, unknown>> = {
+export type FilterBuilderOptions<
+  TFilters,
+  TContext extends Record<string, unknown> = Record<string, unknown>,
+> = {
   initialFilterConfig?: FilterBuilderGenerators<TFilters, TContext>;
   initialContext?: TContext;
 };
