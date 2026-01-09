@@ -6,12 +6,12 @@ import {
   throttle,
 } from './utils';
 import type {
-  AscDesc,
   EventTypes,
   LocalMessage,
   MessagePaginationOptions,
   MessageResponse,
   ReadResponse,
+  Sort,
   ThreadResponse,
   UserResponse,
 } from './types';
@@ -22,7 +22,7 @@ import { MessageComposer } from './messageComposer';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 
 type QueryRepliesOptions = {
-  sort?: { created_at: AscDesc }[];
+  sort?: Required<Sort<'created_at'>>[];
 } & MessagePaginationOptions & { user?: UserResponse; user_id?: string };
 
 export type ThreadState = {
@@ -68,7 +68,7 @@ export type ThreadUserReadState = {
 export type ThreadReadState = Record<string, ThreadUserReadState | undefined>;
 
 const DEFAULT_PAGE_LIMIT = 50;
-const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
+const DEFAULT_SORT: QueryRepliesOptions['sort'] = [{ created_at: -1 }];
 const MARK_AS_READ_THROTTLE_TIMEOUT = 1000;
 // TODO: remove this once we move to API v2
 export const THREAD_RESPONSE_RESERVED_KEYS: Record<keyof ThreadResponse, true> = {
