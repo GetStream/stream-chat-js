@@ -1,3 +1,9 @@
+## [9.28.0](https://github.com/GetStream/stream-chat-js/compare/v9.27.2...v9.28.0) (2026-01-09)
+
+### Features
+
+*  batch channel updates ([#1656](https://github.com/GetStream/stream-chat-js/issues/1656)) ([189b822](https://github.com/GetStream/stream-chat-js/commit/189b8222a2176c15df638a161219e95c939bf083))
+
 ## [9.27.2](https://github.com/GetStream/stream-chat-js/compare/v9.27.1...v9.27.2) (2025-12-16)
 
 ### Bug Fixes
