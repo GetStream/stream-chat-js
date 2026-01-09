@@ -4495,3 +4495,52 @@ export type EventHook = {
   created_at?: string;
   updated_at?: string;
 };
+
+export type BatchUpdateOperation =
+  | 'addMembers'
+  | 'removeMembers'
+  | 'inviteMembers'
+  | 'assignRoles'
+  | 'addModerators'
+  | 'demoteModerators'
+  | 'hide'
+  | 'show'
+  | 'archive'
+  | 'unarchive'
+  | 'updateData'
+  | 'addFilterTags'
+  | 'removeFilterTags';
+
+export type BatchChannelDataUpdate = {
+  frozen?: boolean;
+  disabled?: boolean;
+  custom?: Record<string, unknown>;
+  team?: string;
+  config_overrides?: Record<string, unknown>;
+  auto_translation_enabled?: boolean;
+  auto_translation_language?: string;
+};
+
+export type UpdateChannelsBatchOptions = {
+  operation: BatchUpdateOperation;
+  filter: UpdateChannelsBatchFilters;
+  members?: string[] | Array<NewMemberPayload>;
+  data?: BatchChannelDataUpdate;
+  filter_tags_update?: string[];
+};
+
+export type UpdateChannelsBatchFilters = QueryFilters<{
+  cids?:
+    | RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$eq'>>
+    | PrimitiveFilter<string[]>;
+  types?:
+    | RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$eq'>>
+    | PrimitiveFilter<string[]>;
+  filter_tags?:
+    | RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$eq'>>
+    | PrimitiveFilter<Record<string, string>>;
+}>;
+
+export type UpdateChannelsBatchResponse = {
+  result: Record<string, string>;
+} & Partial<TaskResponse>;
