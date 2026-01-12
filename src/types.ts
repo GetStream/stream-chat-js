@@ -1011,6 +1011,21 @@ export type ChannelOptions = {
   state?: boolean;
   user_id?: string;
   watch?: boolean;
+  /**
+   * Name of a predefined filter to use instead of filter_conditions.
+   * When provided, filter_conditions and sort parameters are ignored.
+   */
+  predefined_filter?: string;
+  /**
+   * Values to interpolate into the predefined filter template placeholders.
+   * Only used when predefined_filter is provided.
+   */
+  filter_values?: Record<string, unknown>;
+  /**
+   * Values to interpolate into the predefined filter sort template placeholders.
+   * Only used when predefined_filter is provided.
+   */
+  sort_values?: Record<string, unknown>;
 };
 
 export type ChannelQueryOptions = {
@@ -4544,3 +4559,53 @@ export type UpdateChannelsBatchFilters = QueryFilters<{
 export type UpdateChannelsBatchResponse = {
   result: Record<string, string>;
 } & Partial<TaskResponse>;
+
+/**
+ * Predefined Filter Types
+ */
+
+export type PredefinedFilterOperation = 'QueryChannels';
+
+export type PredefinedFilterSortParam = {
+  field: string;
+  direction?: 1 | -1;
+  type?: string;
+};
+
+export type PredefinedFilter = {
+  name: string;
+  operation: PredefinedFilterOperation;
+  filter: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  description?: string;
+  sort?: PredefinedFilterSortParam[];
+  query_id?: number;
+};
+
+export type CreatePredefinedFilterOptions = {
+  name: string;
+  operation: PredefinedFilterOperation;
+  filter: Record<string, unknown>;
+  description?: string;
+  sort?: PredefinedFilterSortParam[];
+};
+
+export type UpdatePredefinedFilterOptions = Omit<CreatePredefinedFilterOptions, 'name'>;
+
+export type PredefinedFilterResponse = APIResponse & {
+  predefined_filter: PredefinedFilter;
+};
+
+export type PredefinedFiltersResponse = APIResponse & {
+  predefined_filters: PredefinedFilter[];
+  next?: string;
+  prev?: string;
+};
+
+export type PredefinedFilterSort = SortParam[];
+
+export type ListPredefinedFiltersOptions = Pager & {
+  sort?: PredefinedFilterSort;
+};
+
