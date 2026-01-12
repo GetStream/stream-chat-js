@@ -1,9 +1,6 @@
 // sortCompiler.spec.ts
 import { describe, it, expect } from 'vitest';
-import {
-  binarySearchInsertIndex,
-  makeComparator,
-} from '../../../src/pagination/sortCompiler';
+import { binarySearch, makeComparator } from '../../../src/pagination/sortCompiler';
 import { resolveDotPathValue as defaultResolvePathValue } from '../../../src/pagination/utility.normalization';
 import type { AscDesc } from '../../../src';
 
@@ -191,77 +188,387 @@ describe('makeComparator', () => {
   });
 });
 
-describe('binarySearchInsertIndex', () => {
-  it('inserts at beginning, middle, and end as expected', () => {
-    const items: Item[] = [
-      { cid: 'a', v: 10 },
-      { cid: 'b', v: 20 },
-      { cid: 'c', v: 30 },
-      { cid: 'd', v: 40 },
-    ];
-    const cmp = toComparator({ v: 1 });
+const numberCompare = (a: number, b: number) => a - b;
+const numberIdentityEquals = (a: number, b: number) => a === b;
 
-    // Insert before all
-    let index = binarySearchInsertIndex<Item>({
-      sortedArray: items,
-      needle: { cid: 'x', v: 5 },
-      compare: cmp,
-    });
-    expect(index).toBe(0);
+describe('binarySearch (generic cursor-based)', () => {
+  describe('empty array', () => {
+    it('returns not found and insertionIndex 0 for empty array', () => {
+      const result = binarySearch<number>({
+        needle: 42,
+        length: 0,
+        getItemAt: () => undefined,
+        itemIdentityEquals: numberIdentityEquals,
+        compare: numberCompare,
+      });
 
-    // Insert in the middle
-    index = binarySearchInsertIndex<Item>({
-      sortedArray: items,
-      needle: { cid: 'y', v: 25 },
-      compare: cmp,
+      expect(result).toEqual({ currentIndex: -1, insertionIndex: 0 });
     });
-    expect(index).toBe(2); // between 20 and 30
-
-    // Insert after all
-    index = binarySearchInsertIndex<Item>({
-      sortedArray: items,
-      needle: { cid: 'z', v: 50 },
-      compare: cmp,
-    });
-    expect(index).toBe(4);
   });
 
-  it('inserts after equal values block (stable position after equals)', () => {
-    const items: Item[] = [
-      { cid: 'a', v: 10 },
-      { cid: 'b', v: 10 },
-      { cid: 'c', v: 10 },
-    ];
-    const cmp = toComparator({ v: 1 });
+  describe('single-element array', () => {
+    it('finds the element with plateauScan enabled', () => {
+      const arr = [10];
 
-    const index = binarySearchInsertIndex<Item>({
-      sortedArray: items,
-      needle: { cid: 'x', v: 10 },
-      compare: cmp,
+      const result = binarySearch<number>({
+        needle: arr[0],
+        length: arr.length,
+        getItemAt: (i) => arr[i],
+        itemIdentityEquals: numberIdentityEquals,
+        compare: numberCompare,
+        plateauScan: true,
+      });
+
+      // insertionIndex is after the last <= needle (upper bound)
+      expect(result).toEqual({ currentIndex: 0, insertionIndex: 1 });
     });
 
-    // By design, our binary search returns the first position where existing > needle.
-    // For equals, it advances to the right of the equal block.
-    expect(index).toBe(3);
+    it('does not find the element when plateauScan is disabled', () => {
+      const arr = [10];
+
+      const result = binarySearch<number>({
+        needle: arr[0],
+        length: arr.length,
+        getItemAt: (i) => arr[i],
+        itemIdentityEquals: numberIdentityEquals,
+        compare: numberCompare,
+        plateauScan: false,
+      });
+
+      // insertionIndex is upper bound; currentIndex is -1 when plateauScan is false
+      expect(result).toEqual({ currentIndex: -1, insertionIndex: 1 });
+    });
+
+    it('inserts before the element when needle is smaller', () => {
+      const arr = [10];
+
+      const result = binarySearch<number>({
+        needle: 5,
+        length: arr.length,
+        getItemAt: (i) => arr[i],
+        itemIdentityEquals: numberIdentityEquals,
+        compare: numberCompare,
+        plateauScan: true,
+      });
+
+      expect(result).toEqual({ currentIndex: -1, insertionIndex: 0 });
+    });
+
+    it('inserts after the element when needle is larger', () => {
+      const arr = [10];
+
+      const result = binarySearch<number>({
+        needle: 20,
+        length: arr.length,
+        getItemAt: (i) => arr[i],
+        itemIdentityEquals: numberIdentityEquals,
+        compare: numberCompare,
+        plateauScan: true,
+      });
+
+      expect(result).toEqual({ currentIndex: -1, insertionIndex: 1 });
+    });
   });
 
-  it('respects multi-field comparator (e.g., secondary key decides insertion point)', () => {
-    const items: Item[] = [
-      { cid: '2', v: 1, nested: { x: 5 } },
-      { cid: '1', v: 1, nested: { x: 10 } }, // comes earlier due to nested.x desc
-      { cid: '3', v: 2, nested: { x: 0 } },
-    ];
-    const cmp = toComparator([{ v: 1 }, { 'nested.x': -1 }]);
+  describe('unique ascending numbers', () => {
+    const arr = [1, 3, 5, 7, 9];
 
-    // Needle with same v=1 but nested.x=7 should go between cid=1 (x=10) and cid=2 (x=5)
-    const index = binarySearchInsertIndex<Item>({
-      sortedArray: orderByComparator(items, cmp).map(
-        (cid) => items.find((i) => i.cid === cid)!,
-      ) as Item[],
-      needle: { cid: 'x', v: 1, nested: { x: 7 } },
-      compare: cmp,
+    it('computes correct insertionIndex when item not present (various positions)', () => {
+      const baseArgs = {
+        length: arr.length,
+        getItemAt: (i: number) => arr[i],
+        itemIdentityEquals: numberIdentityEquals,
+        compare: numberCompare,
+      };
+
+      // before all elements
+      expect(
+        binarySearch<number>({
+          ...baseArgs,
+          needle: 0,
+          plateauScan: true,
+        }),
+      ).toEqual({
+        currentIndex: -1,
+        insertionIndex: 0,
+      });
+
+      // between 1 and 3
+      expect(
+        binarySearch<number>({
+          ...baseArgs,
+          needle: 2,
+          plateauScan: true,
+        }),
+      ).toEqual({
+        currentIndex: -1,
+        insertionIndex: 1,
+      });
+
+      // between 3 and 5
+      expect(
+        binarySearch<number>({
+          ...baseArgs,
+          needle: 4,
+          plateauScan: true,
+        }),
+      ).toEqual({
+        currentIndex: -1,
+        insertionIndex: 2,
+      });
+
+      // after all elements
+      expect(
+        binarySearch<number>({
+          ...baseArgs,
+          needle: 10,
+          plateauScan: true,
+        }),
+      ).toEqual({
+        currentIndex: -1,
+        insertionIndex: arr.length,
+      });
     });
 
-    expect(index).toBe(1); // after the 10, before the 5
+    it('finds existing elements only when plateauScan is enabled', () => {
+      const baseArgs = {
+        length: arr.length,
+        getItemAt: (i: number) => arr[i],
+        itemIdentityEquals: numberIdentityEquals,
+        compare: numberCompare,
+      };
+
+      for (let idx = 0; idx < arr.length; idx++) {
+        const needle = arr[idx];
+
+        const found = binarySearch<number>({
+          ...baseArgs,
+          needle,
+          plateauScan: true,
+        });
+
+        // insertionIndex is upper bound (after the element)
+        expect(found.currentIndex).toBe(idx);
+        expect(found.insertionIndex).toBe(idx + 1);
+
+        const notFound = binarySearch<number>({
+          ...baseArgs,
+          needle,
+          plateauScan: false,
+        });
+
+        // Without plateauScan, currentIndex is always -1 even for existing element
+        expect(notFound.currentIndex).toBe(-1);
+        expect(notFound.insertionIndex).toBe(idx + 1);
+      }
+    });
+
+    it('treats omitted plateauScan the same as plateauScan=false', () => {
+      const needleIndex = 2;
+      const needle = arr[needleIndex]; // 5
+
+      const result = binarySearch<number>({
+        needle,
+        length: arr.length,
+        getItemAt: (i) => arr[i],
+        itemIdentityEquals: numberIdentityEquals,
+        compare: numberCompare,
+      });
+
+      // by default, plateauScan is falsy
+      expect(result.currentIndex).toBe(-1);
+      // insertionIndex is upper bound
+      expect(result.insertionIndex).toBe(needleIndex + 1);
+    });
+  });
+
+  describe('duplicates (plateaus) with object identity', () => {
+    type Obj = { id: number; label: string };
+
+    it('returns end-of-plateau insertionIndex and correct currentIndex for identity', () => {
+      // Plateau of 3's in the middle
+      const arr: Obj[] = [
+        { id: 1, label: 'a' }, // 0
+        { id: 3, label: 'b' }, // 1
+        { id: 3, label: 'c' }, // 2
+        { id: 3, label: 'd' }, // 3
+        { id: 5, label: 'e' }, // 4
+      ];
+
+      const compare = (a: Obj, b: Obj) => a.id - b.id;
+      const identityEquals = (a: Obj, b: Obj) => a === b;
+
+      const baseArgs = {
+        length: arr.length,
+        getItemAt: (i: number) => arr[i],
+        itemIdentityEquals: identityEquals,
+        compare,
+        plateauScan: true,
+      };
+
+      // insertionIndex for id=3 value is after all 3's → index 4
+      const insertionIndexFor3 = 4;
+
+      const needleMiddle = arr[2];
+      const resMiddle = binarySearch<Obj>({
+        ...baseArgs,
+        needle: needleMiddle,
+      });
+      expect(resMiddle).toEqual({
+        currentIndex: 2,
+        insertionIndex: insertionIndexFor3,
+      });
+
+      const needleLeft = arr[1];
+      const resLeft = binarySearch<Obj>({ ...baseArgs, needle: needleLeft });
+      expect(resLeft).toEqual({
+        currentIndex: 1,
+        insertionIndex: insertionIndexFor3,
+      });
+
+      const needleRight = arr[3];
+      const resRight = binarySearch<Obj>({ ...baseArgs, needle: needleRight });
+      expect(resRight).toEqual({
+        currentIndex: 3,
+        insertionIndex: insertionIndexFor3,
+      });
+    });
+
+    it('plateau at the start of the array', () => {
+      const arr: Obj[] = [
+        { id: 3, label: 'a' }, // 0
+        { id: 3, label: 'b' }, // 1
+        { id: 3, label: 'c' }, // 2
+        { id: 5, label: 'd' }, // 3
+        { id: 8, label: 'e' }, // 4
+      ];
+      const compare = (a: Obj, b: Obj) => a.id - b.id;
+      const identityEquals = (a: Obj, b: Obj) => a === b;
+
+      const insertionIndexFor3 = 3; // first element with id > 3 is index 3
+
+      const result = binarySearch<Obj>({
+        needle: arr[0],
+        length: arr.length,
+        getItemAt: (i) => arr[i],
+        itemIdentityEquals: identityEquals,
+        compare,
+        plateauScan: true,
+      });
+
+      expect(result).toEqual({
+        currentIndex: 0,
+        insertionIndex: insertionIndexFor3,
+      });
+    });
+
+    it('plateau at the end of the array', () => {
+      const arr: Obj[] = [
+        { id: 1, label: 'a' }, // 0
+        { id: 2, label: 'b' }, // 1
+        { id: 5, label: 'c' }, // 2
+        { id: 5, label: 'd' }, // 3
+        { id: 5, label: 'e' }, // 4
+      ];
+      const compare = (a: Obj, b: Obj) => a.id - b.id;
+      const identityEquals = (a: Obj, b: Obj) => a === b;
+
+      const insertionIndexFor5 = arr.length; // no element > 5
+
+      const result = binarySearch<Obj>({
+        needle: arr[4],
+        length: arr.length,
+        getItemAt: (i) => arr[i],
+        itemIdentityEquals: identityEquals,
+        compare,
+        plateauScan: true,
+      });
+
+      expect(result).toEqual({
+        currentIndex: 4,
+        insertionIndex: insertionIndexFor5,
+      });
+    });
+
+    it('does not match by value when identity differs', () => {
+      const arr: Obj[] = [
+        { id: 1, label: 'a' },
+        { id: 2, label: 'b' },
+        { id: 3, label: 'c' },
+      ];
+
+      const compare = (a: Obj, b: Obj) => a.id - b.id;
+      const identityEquals = (a: Obj, b: Obj) => a === b;
+
+      // same id as arr[1] but different object => not identical
+      const needle: Obj = { id: 2, label: 'other' };
+
+      const result = binarySearch<Obj>({
+        needle,
+        length: arr.length,
+        getItemAt: (i) => arr[i],
+        itemIdentityEquals: identityEquals,
+        compare,
+        plateauScan: true,
+      });
+
+      // upper bound for id=2 is after index 1 → index 2
+      expect(result).toEqual({
+        currentIndex: -1,
+        insertionIndex: 2,
+      });
+    });
+  });
+
+  describe('corruption handling (getItemAt returns undefined during binary search)', () => {
+    it('returns -1/-1 when mid item is undefined', () => {
+      // length = 4 → first mid = 2
+      const length = 4;
+
+      const getItemAt = (index: number): number | undefined => {
+        if (index === 2) return undefined; // corruption at mid
+        return index; // arbitrary non-undefined value for others
+      };
+
+      const result = binarySearch<number>({
+        needle: 10,
+        length,
+        getItemAt,
+        itemIdentityEquals: numberIdentityEquals,
+        compare: numberCompare,
+        plateauScan: true,
+      });
+
+      expect(result).toEqual({ currentIndex: -1, insertionIndex: -1 });
+    });
+  });
+
+  describe('plateauScan scanning behavior around insertionIndex', () => {
+    it('treats undefined during plateau scan as exhaustion of that side only', () => {
+      // We make one index undefined, but ensure binary search never hits it.
+      // length = 5 => first mid = 2. We'll set arr[2] so that compare(midItem, needle) > 0,
+      // forcing hi = 2 and thus never touching index 4 in binary search.
+      const backing: Array<number | undefined> = [10, 20, 30, 40, undefined];
+
+      const getItemAt = (i: number) => backing[i];
+
+      const needle = 5; // smaller than 30, so hi will move left on the first step
+
+      const result = binarySearch<number>({
+        needle,
+        length: backing.length,
+        getItemAt,
+        itemIdentityEquals: numberIdentityEquals,
+        compare: numberCompare,
+        plateauScan: true,
+      });
+
+      // insertionIndex is correct for the sorted values [10,20,30,40]
+      // first > 5 is 10 at index 0
+      expect(result).toEqual({
+        currentIndex: -1,
+        insertionIndex: 0,
+      });
+    });
   });
 });

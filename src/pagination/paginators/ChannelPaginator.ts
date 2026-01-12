@@ -5,7 +5,6 @@ import type {
   PaginatorOptions,
   PaginatorState,
   SetPaginatorItemsParams,
-  SortKey,
 } from './BasePaginator';
 import { BasePaginator } from './BasePaginator';
 import type { FilterBuilderOptions } from '../FilterBuilder';
@@ -284,14 +283,6 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     this.filterBuilder.buildFilters({
       baseFilters: { ...this.staticFilters },
     });
-
-  computeSortKey(item: Channel): SortKey {
-    const generateSortKey = super.makeSortKeyGenerator({
-      sort: this.sort,
-      resolvePathValue: channelSortPathResolver,
-    });
-    return generateSortKey(item);
-  }
 
   // invoked inside BasePaginator.executeQuery() to keep it as a query descriptor;
   protected getNextQueryShape(): ChannelQueryShape {

@@ -188,26 +188,26 @@ describe('ChannelPaginatorsOrchestrator', () => {
         ownershipResolver: [p2.id],
       });
 
-      await Promise.all([p1, p2].map((p) => p.next()));
+      await Promise.all([p1, p2].map((p) => p.toTail()));
 
       await vi.waitFor(() => {
         expect(p1.items).toHaveLength(0);
         // even though ownership claimed by p2, it is still possible to request next page.
-        expect(p1.hasNext).toBe(true);
+        expect(p1.hasMoreTail).toBe(true);
         expect(p2.items).toHaveLength(1);
         expect(p2.items).toStrictEqual([ch1]);
-        expect(p2.hasNext).toBe(true);
+        expect(p2.hasMoreTail).toBe(true);
       });
 
       queryChannelSpy.mockResolvedValue([ch2]);
-      await Promise.all([p1, p2].map((p) => p.next()));
+      await Promise.all([p1, p2].map((p) => p.toTail()));
 
       await vi.waitFor(() => {
         expect(p1.items).toHaveLength(0);
-        expect(p1.hasNext).toBe(true);
+        expect(p1.hasMoreTail).toBe(true);
         expect(p2.items).toHaveLength(2);
         expect(p2.items).toStrictEqual([ch1, ch2]);
-        expect(p2.hasNext).toBe(true);
+        expect(p2.hasMoreTail).toBe(true);
       });
     });
   });
@@ -702,8 +702,12 @@ describe('ChannelPaginatorsOrchestrator', () => {
         const p1 = new ChannelPaginator({ client });
         const p2 = new ChannelPaginator({ client });
         p1.state.partialNext({ items: [ch] });
-        vi.spyOn(p1, 'findItem').mockReturnValue(ch);
-        vi.spyOn(p2, 'findItem').mockReturnValue(undefined);
+        vi.spyOn(p1, 'locateByItem').mockReturnValue({
+          state: { currentIndex: 0, insertionIndex: 1 },
+        });
+        vi.spyOn(p2, 'locateByItem').mockReturnValue({
+          state: { currentIndex: -1, insertionIndex: 1 },
+        });
         const partialNextSpy1 = vi.spyOn(p1.state, 'partialNext');
         const partialNextSpy2 = vi.spyOn(p2.state, 'partialNext');
 
@@ -737,7 +741,9 @@ describe('ChannelPaginatorsOrchestrator', () => {
       const p = new ChannelPaginator({ client });
       const matchesFilterSpy = vi.spyOn(p, 'matchesFilter').mockReturnValue(true);
       const ingestItemSpy = vi.spyOn(p, 'ingestItem').mockReturnValue(true);
-      const removeItemSpy = vi.spyOn(p, 'removeItem').mockReturnValue(true);
+      const removeItemSpy = vi
+        .spyOn(p, 'removeItem')
+        .mockReturnValue({ state: { currentIndex: 0, insertionIndex: 1 } });
 
       orchestrator.insertPaginator({ paginator: p });
       orchestrator.registerSubscriptions();
@@ -762,7 +768,9 @@ describe('ChannelPaginatorsOrchestrator', () => {
       const orchestrator = new ChannelPaginatorsOrchestrator({ client });
 
       const p = new ChannelPaginator({ client });
-      const removeItemSpy = vi.spyOn(p, 'removeItem').mockReturnValue(true);
+      const removeItemSpy = vi
+        .spyOn(p, 'removeItem')
+        .mockReturnValue({ state: { currentIndex: 0, insertionIndex: -1 } });
       const ingestItemSpy = vi.spyOn(p, 'ingestItem').mockReturnValue(true);
       vi.spyOn(p, 'matchesFilter').mockReturnValue(true);
       orchestrator.insertPaginator({ paginator: p });
@@ -793,7 +801,9 @@ describe('ChannelPaginatorsOrchestrator', () => {
 
       const p = new ChannelPaginator({ client });
 
-      const removeItemSpy = vi.spyOn(p, 'removeItem').mockReturnValue(true);
+      const removeItemSpy = vi
+        .spyOn(p, 'removeItem')
+        .mockReturnValue({ state: { currentIndex: 0, insertionIndex: -1 } });
       const ingestItemSpy = vi.spyOn(p, 'ingestItem').mockReturnValue(true);
       vi.spyOn(p, 'matchesFilter').mockReturnValue(true);
 
@@ -817,7 +827,9 @@ describe('ChannelPaginatorsOrchestrator', () => {
 
       const p = new ChannelPaginator({ client });
 
-      const removeItemSpy = vi.spyOn(p, 'removeItem').mockReturnValue(true);
+      const removeItemSpy = vi
+        .spyOn(p, 'removeItem')
+        .mockReturnValue({ state: { currentIndex: 0, insertionIndex: -1 } });
       const ingestItemSpy = vi.spyOn(p, 'ingestItem').mockReturnValue(true);
       vi.spyOn(p, 'matchesFilter').mockReturnValue(false);
 

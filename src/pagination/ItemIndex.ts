@@ -1,3 +1,7 @@
+export type ItemIndexOptions<T> = {
+  getId: (item: T) => string;
+};
+
 /**
  * The ItemIndex is a canonical, ID-addressable storage layer for domain items.
  *
@@ -66,8 +70,11 @@
  */
 export class ItemIndex<T> {
   private byId = new Map<string, T>();
+  private readonly getId: (item: T) => string;
 
-  constructor(private getId: (item: T) => string) {}
+  constructor(options: ItemIndexOptions<T>) {
+    this.getId = options.getId;
+  }
 
   setMany(items: T[]) {
     for (const item of items) {
@@ -91,7 +98,15 @@ export class ItemIndex<T> {
     this.byId.delete(id);
   }
 
+  clear() {
+    this.byId.clear();
+  }
+
   entries() {
     return [...this.byId.entries()];
+  }
+
+  values() {
+    return [...this.byId.values()];
   }
 }

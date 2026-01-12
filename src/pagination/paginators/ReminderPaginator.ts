@@ -1,4 +1,4 @@
-import { BasePaginator } from './BasePaginator';
+import { BasePaginator, ZERO_PAGE_CURSOR } from './BasePaginator';
 import type {
   PaginationQueryParams,
   PaginationQueryReturnValue,
@@ -42,7 +42,7 @@ export class ReminderPaginator extends BasePaginator<
     client: StreamChat,
     options?: PaginatorOptions<ReminderResponse, QueryRemindersOptions>,
   ) {
-    super(options);
+    super({ initialCursor: ZERO_PAGE_CURSOR, ...options });
     this.client = client;
   }
 
@@ -66,7 +66,7 @@ export class ReminderPaginator extends BasePaginator<
     PaginationQueryReturnValue<ReminderResponse>
   > => {
     const { reminders: items, next, prev } = await this.client.queryReminders(queryShape);
-    return { items, next, prev };
+    return { items, headward: prev, tailward: next };
   };
 
   filterQueryResults = (items: ReminderResponse[]) => items;

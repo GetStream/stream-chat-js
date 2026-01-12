@@ -547,9 +547,9 @@ describe('EventHandlerPipeline', () => {
         },
       };
       const head = {
-        id: 'head',
+        id: 'isHead',
         handle: () => {
-          order.push('head');
+          order.push('isHead');
         },
       };
       const inserter = {
@@ -561,9 +561,9 @@ describe('EventHandlerPipeline', () => {
         },
       };
       const tail = {
-        id: 'tail',
+        id: 'isTail',
         handle: () => {
-          order.push('tail');
+          order.push('isTail');
         },
       };
 
@@ -574,14 +574,14 @@ describe('EventHandlerPipeline', () => {
       // @ts-expect-error passing custom event type
       await pipeline.run(makeEvt('e1'), ctx);
       // 'late' must NOT run for e1
-      expect(order).toEqual(['head', 'inserter', 'tail']);
+      expect(order).toEqual(['isHead', 'inserter', 'isTail']);
 
       order.length = 0;
 
       // @ts-expect-error passing custom event type
       await pipeline.run(makeEvt('e2'), ctx);
       // For the next event, late is present
-      expect(order).toEqual(['head', 'inserter', 'tail', 'late']);
+      expect(order).toEqual(['isHead', 'inserter', 'isTail', 'late']);
     });
   });
 });

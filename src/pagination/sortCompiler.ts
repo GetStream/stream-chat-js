@@ -10,8 +10,8 @@ import type { AscDesc } from '../types';
 import type { Comparator, PathResolver } from './types.normalization';
 
 export type ItemLocation = {
-  expected: number;
-  current: number;
+  currentIndex: number;
+  insertionIndex: number;
 };
 
 /**
@@ -47,7 +47,7 @@ export function binarySearch<T>({
   plateauScan?: boolean;
 }): ItemLocation {
   // empty array
-  if (length === 0) return { current: -1, expected: 0 };
+  if (length === 0) return { currentIndex: -1, insertionIndex: 0 };
 
   // --- 1) Binary search to find lower bound (insertionIndex) ---
   let lo = 0;
@@ -59,11 +59,10 @@ export function binarySearch<T>({
     if (!midItem) {
       // Corruption: we have an ID but no backing item.
       // Bail out with "not found".
-      return { current: -1, expected: -1 };
+      return { currentIndex: -1, insertionIndex: -1 };
     }
 
-    const cmp = compare(midItem, needle);
-    if (cmp < 0) {
+    if (compare(midItem, needle) <= 0) {
       // midItem < needle ⇒ go right
       lo = mid + 1;
     } else {
@@ -72,14 +71,16 @@ export function binarySearch<T>({
     }
   }
 
-  const expected = lo;
+  const insertionIndex = lo;
 
   // item is located where it is expected to be according to the sort
-  const itemAtExpectedIndex = getItemAt(expected);
+  const itemAtExpectedIndex = getItemAt(insertionIndex);
   if (itemAtExpectedIndex && itemIdentityEquals(itemAtExpectedIndex, needle)) {
-    return { current: expected, expected };
-  } else if (!plateauScan) {
-    return { current: -1, expected };
+    return { currentIndex: insertionIndex, insertionIndex };
+  }
+
+  if (!plateauScan) {
+    return { currentIndex: -1, insertionIndex };
   }
 
   // --- 2) Plateau scan around insertionIndex ---
@@ -87,43 +88,33 @@ export function binarySearch<T>({
   const checkSide = (atIndex: number) => {
     const result = { exhausted: false, found: false };
     const item = getItemAt(atIndex);
-    if (!item) {
-      result.exhausted = true;
-    } else {
-      const cmp = compare(item, needle);
-      if (cmp !== 0) {
-        result.exhausted = true;
-      } else {
-        if (itemIdentityEquals(item, needle)) {
-          result.found = true;
-        }
-      }
-    }
+    if (!item) result.exhausted = true;
+    else if (itemIdentityEquals(item, needle)) result.found = true;
     return result;
   };
 
   // Alternating left/right scan
-  let iLeft = expected - 1;
-  let iRight = expected + 1; // we've already checked insertionIndex
+  let iLeft = insertionIndex - 1;
+  let iRight = insertionIndex + 1; // we've already checked insertionIndex
   let leftDone = iLeft < 0;
   let rightDone = iRight >= length;
 
   while (!leftDone || !rightDone) {
     if (!leftDone) {
       const result = checkSide(iLeft);
-      if (result.found) return { current: iLeft, expected };
+      if (result.found) return { currentIndex: iLeft, insertionIndex };
       leftDone = result.exhausted || --iLeft < 0;
     }
 
     if (!rightDone) {
       const result = checkSide(iRight);
-      if (result.found) return { current: iRight, expected };
+      if (result.found) return { currentIndex: iRight, insertionIndex };
       rightDone = result.exhausted || ++iRight >= length;
     }
   }
 
   // Not found in plateau; insertion index is still the correct lower bound.
-  return { current: -1, expected };
+  return { currentIndex: -1, insertionIndex };
 }
 
 /**

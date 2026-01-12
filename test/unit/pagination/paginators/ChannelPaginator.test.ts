@@ -9,10 +9,10 @@ import {
   type FilterBuilderGenerators,
   PaginatorCursor,
   type StreamChat,
-} from '../../../src';
-import { getClientWithUser } from '../test-utils/getClient';
-import type { FieldToDataResolver } from '../../../src/pagination/types.normalization';
-import { MockOfflineDB } from '../offline-support/MockOfflineDB';
+} from '../../../../src';
+import { getClientWithUser } from '../../test-utils/getClient';
+import type { FieldToDataResolver } from '../../../../src/pagination/types.normalization';
+import { MockOfflineDB } from '../../offline-support/MockOfflineDB';
 
 const user = { id: 'custom-id' };
 
@@ -38,8 +38,8 @@ describe('ChannelPaginator', () => {
       const paginator = new ChannelPaginator({ client });
       expect(paginator.pageSize).toBe(DEFAULT_PAGINATION_OPTIONS.pageSize);
       expect(paginator.state.getLatestValue()).toEqual({
-        hasNext: true,
-        hasPrev: true,
+        hasMoreTail: true,
+        hasMoreHead: true,
         isLoading: false,
         items: undefined,
         lastQueryError: undefined,
@@ -83,7 +83,7 @@ describe('ChannelPaginator', () => {
         debounceMs: 45000,
         doRequest,
         hasPaginationQueryShapeChanged,
-        initialCursor: { prev: 'prev', next: '' },
+        initialCursor: { headward: 'headward', tailward: '' },
         initialOffset: 10,
         lockItemOrder: true,
         pageSize: 2,
@@ -104,8 +104,8 @@ describe('ChannelPaginator', () => {
       });
       expect(paginator.pageSize).toBe(2);
       expect(paginator.state.getLatestValue()).toEqual({
-        hasNext: true,
-        hasPrev: true,
+        hasMoreTail: true,
+        hasMoreHead: true,
         isLoading: false,
         items: undefined,
         lastQueryError: undefined,
@@ -556,8 +556,8 @@ describe('ChannelPaginator', () => {
   describe('setters', () => {
     const stateAfterQuery = {
       items: [channel1, channel2],
-      hasNext: false,
-      hasPrev: false,
+      hasMoreTail: false,
+      hasMoreHead: false,
       offset: 10,
       isLoading: false,
       lastQueryError: undefined,
@@ -620,7 +620,7 @@ describe('ChannelPaginator', () => {
       paginator.staticFilters = filters;
       paginator.sort = sort;
 
-      paginator.setItems(items1);
+      paginator.setItems({ valueOrFactory: items1 });
       expect(paginator.items).toStrictEqual(items1);
       expect(
         client.offlineDb?.upsertCidsForQuery as unknown as MockInstance,

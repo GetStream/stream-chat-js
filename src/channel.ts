@@ -1,6 +1,8 @@
 import { ChannelState } from './channel_state';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
+import { MessagePaginator } from './pagination/paginators';
+import { MessageOperations } from './messageOperations';
 import {
   generateChannelTempCid,
   logChatPromiseExecution,
@@ -72,10 +74,56 @@ import type {
   UpdateChannelAPIResponse,
   UpdateChannelOptions,
   UpdateLocationPayload,
+  UpdateMessageOptions,
   UserResponse,
 } from './types';
 import type { Role } from './permissions';
 import type { CustomChannelData } from './custom_types';
+import { StateStore } from './store';
+
+// todo: move to dedicated file
+export type SendMessageWithStateUpdateParams = {
+  localMessage: LocalMessage;
+  message?: Message;
+  options?: SendMessageOptions;
+  /**
+   * Per-call override for the send/retry request (advanced).
+   * If set, it takes precedence over channel instance configuration handlers.
+   */
+  sendMessageRequestFn?: CustomSendMessageRequestFn;
+};
+
+export type RetrySendMessageWithLocalUpdateParams = Omit<
+  SendMessageWithStateUpdateParams,
+  'message'
+>;
+
+export type UpdateMessageWithStateUpdateParams = {
+  localMessage: LocalMessage;
+  options?: UpdateMessageOptions;
+  /**
+   * Per-call override for the update request (advanced).
+   * If set, it takes precedence over channel instance configuration handlers.
+   */
+  updateMessageRequestFn?: CustomUpdateMessageRequestFn;
+};
+
+// Custom request function types for configuration
+export type CustomSendMessageRequestFn = (
+  params: Omit<SendMessageWithStateUpdateParams, 'sendMessageRequestFn'>,
+) => Promise<{ message: MessageResponse }>;
+
+export type CustomUpdateMessageRequestFn = (
+  params: Omit<UpdateMessageWithStateUpdateParams, 'updateMessageRequestFn'>,
+) => Promise<{ message: MessageResponse }>;
+
+export type ChannelInstanceConfig = {
+  requestHandlers?: {
+    sendMessageRequest?: CustomSendMessageRequestFn;
+    retrySendMessageRequest?: CustomSendMessageRequestFn;
+    updateMessageRequest?: CustomUpdateMessageRequestFn;
+  };
+};
 
 /**
  * Channel - The Channel class manages it's own state.
@@ -110,8 +158,11 @@ export class Channel {
   isTyping: boolean;
   disconnected: boolean;
   push_preferences?: PushPreference;
+  public readonly configState = new StateStore<ChannelInstanceConfig>({});
   public readonly messageComposer: MessageComposer;
   public readonly messageReceiptsTracker: MessageReceiptsTracker;
+  public readonly messagePaginator: MessagePaginator;
+  public readonly messageOperations: MessageOperations;
 
   /**
    * constructor - Create a channel
@@ -165,6 +216,54 @@ export class Channel {
       locateMessage: (timestampMs) => {
         const msg = this.state.findMessageByTimestamp(timestampMs);
         return msg && { timestampMs, msgId: msg.id };
+      },
+    });
+
+    this.messagePaginator = new MessagePaginator({ channel: this });
+
+    this.messageOperations = new MessageOperations({
+      ingest: (m) => this.messagePaginator.ingestItem(m),
+      get: (id) => this.messagePaginator.getItem(id),
+      handlers: () => {
+        const { requestHandlers } = this.configState.getLatestValue();
+        const sendMessageRequest = requestHandlers?.sendMessageRequest;
+        const retrySendMessageRequest = requestHandlers?.retrySendMessageRequest;
+        const updateMessageRequest = requestHandlers?.updateMessageRequest;
+        return {
+          send: sendMessageRequest
+            ? (p) =>
+                sendMessageRequest({
+                  localMessage: p.localMessage,
+                  message: p.message,
+                  options: p.options,
+                })
+            : undefined,
+          retry: retrySendMessageRequest
+            ? (p) =>
+                retrySendMessageRequest({
+                  localMessage: p.localMessage,
+                  message: p.message,
+                  options: p.options,
+                })
+            : undefined,
+          update: updateMessageRequest
+            ? (p) =>
+                updateMessageRequest({
+                  localMessage: p.localMessage,
+                  options: p.options,
+                })
+            : undefined,
+        };
+      },
+      defaults: {
+        send: async (m, o) => {
+          const result = await this.sendMessage(m, o);
+          return { message: result.message };
+        },
+        update: async (m, o) => {
+          const result = await this.getClient().updateMessage(m, undefined, o);
+          return { message: result.message };
+        },
       },
     });
   }
@@ -238,6 +337,51 @@ export class Channel {
       });
     }
     return await this._sendMessage(message, options);
+  }
+
+  /**
+   * Sends a message with optimistic local state update.
+   */
+  async sendMessageWithLocalUpdate(
+    params: SendMessageWithStateUpdateParams,
+  ): Promise<void> {
+    await this.messageOperations.send(
+      {
+        localMessage: params.localMessage,
+        message: params.message,
+        options: params.options,
+      },
+      params.sendMessageRequestFn,
+    );
+    if (this.messageComposer.config.text.publishTypingEvents) await this.stopTyping();
+  }
+
+  /**
+   * Retry sending a failed message.
+   */
+  async retrySendMessageWithLocalUpdate(
+    params: Omit<SendMessageWithStateUpdateParams, 'message'>,
+  ) {
+    await this.messageOperations.retry(
+      {
+        localMessage: { ...params.localMessage, type: 'regular' },
+        options: params.options,
+      },
+      params.sendMessageRequestFn,
+    );
+  }
+
+  /**
+   * Updates a message with optimistic local state update.
+   */
+  async updateMessageWithLocalUpdate(params: UpdateMessageWithStateUpdateParams) {
+    await this.messageOperations.update(
+      {
+        localMessage: params.localMessage,
+        options: params.options,
+      },
+      params.updateMessageRequestFn,
+    );
   }
 
   sendFile(
@@ -1399,7 +1543,7 @@ export class Channel {
     if (message.user?.id && this.getClient().userMuteStatus(message.user.id))
       return false;
 
-    // Return false if channel doesn't allow read events.
+    // Return false if channel doesn't allow ad events.
     if (
       Array.isArray(this.data?.own_capabilities) &&
       !this.data?.own_capabilities.includes('read-events')
@@ -1472,18 +1616,7 @@ export class Channel {
     return await this.query(defaultOptions, 'latest');
   };
 
-  /**
-   * query - Query the API, get messages, members or other channel fields
-   *
-   * @param {ChannelQueryOptions} options The query options
-   * @param {MessageSetType} messageSetToAddToIfDoesNotExist It's possible to load disjunct sets of a channel's messages into state, use `current` to load the initial channel state or if you want to extend the currently displayed messages, use `latest` if you want to load/extend the latest messages, `new` is used for loading a specific message and it's surroundings
-   *
-   * @return {Promise<QueryChannelAPIResponse>} Returns a query response
-   */
-  async query(
-    options: ChannelQueryOptions = {},
-    messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
-  ) {
+  async _query(options: ChannelQueryOptions = {}) {
     // Make sure we wait for the connect promise if there is a pending one
     await this.getClient().wsPromise;
 
@@ -1507,15 +1640,26 @@ export class Channel {
       queryURL += `/${encodeURIComponent(this.id)}`;
     }
 
-    const state = await this.getClient().post<QueryChannelAPIResponse>(
-      queryURL + '/query',
-      {
-        data: this._data,
-        state: true,
-        ...options,
-      },
-    );
+    return await this.getClient().post<QueryChannelAPIResponse>(queryURL + '/query', {
+      data: this._data,
+      state: true,
+      ...options,
+    });
+  }
 
+  /**
+   * query - Query the API, get messages, members or other channel fields
+   *
+   * @param {ChannelQueryOptions} options The query options
+   * @param {MessageSetType} messageSetToAddToIfDoesNotExist It's possible to load disjunct sets of a channel's messages into state, use `current` to load the initial channel state or if you want to extend the currently displayed messages, use `latest` if you want to load/extend the latest messages, `new` is used for loading a specific message and it's surroundings
+   *
+   * @return {Promise<QueryChannelAPIResponse>} Returns a query response
+   */
+  async query(
+    options: ChannelQueryOptions = {},
+    messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
+  ) {
+    const state = await this._query(options);
     // update the channel id if it was missing
     if (!this.id) {
       this.id = state.channel.id;
@@ -2052,6 +2196,9 @@ export class Channel {
 
           if (this._countMessageAsUnread(event.message)) {
             channelState.unreadCount = channelState.unreadCount + 1;
+            this.messagePaginator.setUnreadSnapshot({
+              unreadCount: channelState.unreadCount,
+            });
           }
 
           client.syncDeliveredCandidates([this]);
@@ -2100,6 +2247,8 @@ export class Channel {
             channelState.addPinnedMessage(event.message);
           }
         }
+
+        this.messagePaginator.clearUnreadSnapshot();
 
         break;
       case 'member.added':
@@ -2168,6 +2317,13 @@ export class Channel {
           user: event.user,
           unread_messages: unreadCount,
         };
+        this.messagePaginator.setUnreadSnapshot({
+          firstUnreadMessageId:
+            channelState.read[event.user.id].first_unread_message_id ?? null,
+          lastReadAt: channelState.read[event.user.id].last_read,
+          lastReadMessageId: channelState.read[event.user.id].last_read_message_id,
+          unreadCount,
+        });
 
         channelState.unreadCount = unreadCount;
         this.messageReceiptsTracker.onNotificationMarkUnread({

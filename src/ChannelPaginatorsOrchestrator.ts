@@ -95,7 +95,8 @@ const reEmit: EventHandlerPipelineHandler<EventHandlerContext> = ({
   if (!channel) return;
   orchestrator.paginators.forEach((paginator) => {
     const items = paginator.items;
-    if (paginator.findItem(channel) && items) {
+    const { state } = paginator.locateByItem(channel);
+    if ((state?.currentIndex ?? -1) > -1 && items) {
       paginator.state.partialNext({ items: [...items] });
     }
   });

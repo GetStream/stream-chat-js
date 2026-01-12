@@ -19,6 +19,7 @@ import {
   addFileToFormData,
   axiosParamsSerializer,
   chatCodes,
+  formatMessage,
   generateChannelTempCid,
   isFunction,
   isOnline,
@@ -244,33 +245,16 @@ import { ChannelManager } from './channel_manager';
 import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
-import { StateStore } from './store';
-import type { MessageComposer } from './messageComposer';
 import type { AbstractOfflineDB } from './offline-support';
+import type {
+  MessageComposerSetupState,
+  SetInstanceConfigurationFunctions,
+} from './configuration';
+import { InstanceConfigurationService } from './configuration/InstanceConfigurationService';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
 }
-
-type MessageComposerTearDownFunction = () => void;
-
-type MessageComposerSetupFunction = ({
-  composer,
-}: {
-  composer: MessageComposer;
-}) => void | MessageComposerTearDownFunction;
-
-export type MessageComposerSetupState = {
-  /**
-   * Each `MessageComposer` runs this function each time its signature changes or
-   * whenever you run `MessageComposer.registerSubscriptions`. Function returned
-   * from `applyModifications` will be used as a cleanup function - it will be stored
-   * and ran before new modification is applied. Cleaning up only the
-   * modified parts is the general way to go but if your setup gets a bit
-   * complicated, feel free to restore the whole composer with `MessageComposer.restore`.
-   */
-  setupFunction: MessageComposerSetupFunction | null;
-};
 
 export class StreamChat {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
@@ -329,12 +313,7 @@ export class StreamChat {
   sdkIdentifier?: SdkIdentifier;
   deviceIdentifier?: DeviceIdentifier;
   private nextRequestAbortController: AbortController | null = null;
-  /**
-   * @private
-   */
-  _messageComposerSetupState = new StateStore<MessageComposerSetupState>({
-    setupFunction: null,
-  });
+  instanceConfigurationService = new InstanceConfigurationService();
 
   /**
    * Initialize a client
@@ -581,7 +560,15 @@ export class StreamChat {
   public setMessageComposerSetupFunction = (
     setupFunction: MessageComposerSetupState['setupFunction'],
   ) => {
-    this._messageComposerSetupState.partialNext({ setupFunction });
+    this.instanceConfigurationService.setSetupFunctions({
+      MessageComposer: setupFunction,
+    });
+  };
+
+  public setInstanceConfigurationFunction = (
+    setupFunctions: SetInstanceConfigurationFunctions,
+  ) => {
+    this.instanceConfigurationService.setSetupFunctions(setupFunctions);
   };
 
   /**
@@ -2008,7 +1995,19 @@ export class StreamChat {
         this.polls.hydratePollCache(channelState.messages, true);
         this.reminders.hydrateState(channelState.messages);
       }
-
+      const requestedPageSize =
+        queryChannelsOptions?.message_limit ??
+        DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE;
+      c.messagePaginator.postQueryReconcile({
+        direction: 'tailward',
+        isFirstPage: true,
+        queryShape: { limit: requestedPageSize },
+        requestedPageSize,
+        results: {
+          items: channelState.messages.map(formatMessage),
+          tailward: channelState.messages[0]?.id,
+        },
+      });
       c.messageComposer.initStateFromChannelResponse(channelState);
 
       channels.push(c);
