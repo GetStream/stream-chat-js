@@ -4608,4 +4608,3 @@ export type PredefinedFilterSort = SortParam[];
 export type ListPredefinedFiltersOptions = Pager & {
   sort?: PredefinedFilterSort;
 };
-
