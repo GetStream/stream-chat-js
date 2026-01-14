@@ -76,6 +76,7 @@ import type {
   CreatePollAPIResponse,
   CreatePollData,
   CreatePollOptionAPIResponse,
+  CreatePredefinedFilterOptions,
   CreateReminderOptions,
   CustomPermissionOptions,
   DeactivateUsersOptions,
@@ -124,6 +125,8 @@ import type {
   ListCommandsResponse,
   ListImportsPaginationOptions,
   ListImportsResponse,
+  ListPredefinedFiltersOptions,
+  ListPredefinedFiltersResponse,
   LocalMessage,
   Logger,
   MarkChannelsReadOptions,
@@ -153,6 +156,7 @@ import type {
   PollVote,
   PollVoteData,
   PollVotesAPIResponse,
+  PredefinedFilterResponse,
   Product,
   PushPreference,
   PushProvider,
@@ -221,6 +225,7 @@ import type {
   UpdateMessageOptions,
   UpdatePollAPIResponse,
   UpdatePollOptionAPIResponse,
+  UpdatePredefinedFilterOptions,
   UpdateReminderOptions,
   UpdateSegmentData,
   UpdateUsersAPIResponse,
@@ -1841,10 +1846,10 @@ export class StreamChat {
   /**
    * queryChannelsRequest - Queries channels and returns the raw response
    *
-   * @param {ChannelFilters} filterConditions object MongoDB style filters
+   * @param {ChannelFilters} filterConditions object MongoDB style filters. Can be empty object when using predefined_filter in options.
    * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
-   * @param {ChannelOptions} [options] Options object
+   * @param {ChannelOptions} [options] Options object. Can include predefined_filter, filter_values, and sort_values for using predefined filters.
    *
    * @return {Promise<Array<ChannelAPIResponse>>} search channels response
    */
@@ -1865,13 +1870,23 @@ export class StreamChat {
       defaultOptions.watch = false;
     }
 
-    // Return a list of channels
-    const payload = {
-      filter_conditions: filterConditions,
-      sort: normalizeQuerySort(sort),
-      ...defaultOptions,
-      ...options,
-    };
+    const { predefined_filter, filter_values, sort_values, ...restOptions } = options;
+
+    // Build payload based on whether we're using a predefined filter or traditional filters
+    const payload = predefined_filter
+      ? {
+          predefined_filter,
+          filter_values,
+          sort_values,
+          ...defaultOptions,
+          ...restOptions,
+        }
+      : {
+          filter_conditions: filterConditions,
+          sort: normalizeQuerySort(sort),
+          ...defaultOptions,
+          ...restOptions,
+        };
 
     const data = await this.post<QueryChannelsAPIResponse>(
       this.baseURL + '/channels',
@@ -3769,7 +3784,7 @@ export class StreamChat {
   validateServerSideAuth() {
     if (!this.secret) {
       throw new Error(
-        'Campaigns is a server-side only feature. Please initialize the client with a secret to use this feature.',
+        'This feature can be used server-side only. Please initialize the client with a secret to use this feature.',
       );
     }
   }
@@ -4815,6 +4830,84 @@ export class StreamChat {
     return await this.put<APIResponse & UpdateChannelsBatchResponse>(
       this.baseURL + `/channels/batch`,
       payload,
+    );
+  }
+
+  /**
+   * createPredefinedFilter - Creates a new predefined filter (server-side only)
+   *
+   * @param {CreatePredefinedFilterOptions} options Predefined filter options
+   *
+   * @return {Promise<PredefinedFilterResponse>} The created predefined filter
+   */
+  async createPredefinedFilter(options: CreatePredefinedFilterOptions) {
+    this.validateServerSideAuth();
+    return await this.post<PredefinedFilterResponse>(
+      `${this.baseURL}/predefined_filters`,
+      options,
+    );
+  }
+
+  /**
+   * getPredefinedFilter - Gets a predefined filter by name (server-side only)
+   *
+   * @param {string} name Predefined filter name
+   *
+   * @return {Promise<PredefinedFilterResponse>} The predefined filter
+   */
+  async getPredefinedFilter(name: string) {
+    this.validateServerSideAuth();
+    return await this.get<PredefinedFilterResponse>(
+      `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
+    );
+  }
+
+  /**
+   * updatePredefinedFilter - Updates a predefined filter (server-side only)
+   *
+   * @param {string} name Predefined filter name
+   * @param {UpdatePredefinedFilterOptions} options Predefined filter options
+   *
+   * @return {Promise<PredefinedFilterResponse>} The updated predefined filter
+   */
+  async updatePredefinedFilter(name: string, options: UpdatePredefinedFilterOptions) {
+    this.validateServerSideAuth();
+    return await this.put<PredefinedFilterResponse>(
+      `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
+      options,
+    );
+  }
+
+  /**
+   * deletePredefinedFilter - Deletes a predefined filter (server-side only)
+   *
+   * @param {string} name Predefined filter name
+   *
+   * @return {Promise<APIResponse>} The server response
+   */
+  async deletePredefinedFilter(name: string) {
+    this.validateServerSideAuth();
+    return await this.delete<APIResponse>(
+      `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
+    );
+  }
+
+  /**
+   * listPredefinedFilters - Lists all predefined filters (server-side only)
+   *
+   * @param {ListPredefinedFiltersOptions} options Query options
+   *
+   * @return {Promise<ListPredefinedFiltersResponse>} The list of predefined filters
+   */
+  async listPredefinedFilters(options: ListPredefinedFiltersOptions = {}) {
+    this.validateServerSideAuth();
+    const { sort, ...paginationOptions } = options;
+    return await this.get<ListPredefinedFiltersResponse>(
+      `${this.baseURL}/predefined_filters`,
+      {
+        ...paginationOptions,
+        ...(sort ? { sort: JSON.stringify(sort) } : {}),
+      },
     );
   }
 }
