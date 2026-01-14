@@ -4568,7 +4568,7 @@ export type PredefinedFilterOperation = 'QueryChannels';
 
 export type PredefinedFilterSortParam = {
   field: string;
-  direction?: 1 | -1;
+  direction?: AscDesc;
   type?: string;
 };
 
