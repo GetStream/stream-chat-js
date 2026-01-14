@@ -6,7 +6,7 @@ import type {
   ListPredefinedFiltersOptions,
   ChannelOptions,
   PredefinedFilterResponse,
-  PredefinedFiltersResponse,
+  ListPredefinedFiltersResponse,
   APIResponse,
   QueryChannelsAPIResponse,
 } from '../../src/types';
@@ -168,7 +168,7 @@ describe('Predefined Filters', () => {
 
   describe('listPredefinedFilters', () => {
     it('should list all predefined filters', async () => {
-      const mockResponse: PredefinedFiltersResponse = {
+      const mockResponse: ListPredefinedFiltersResponse = {
         duration: '0.01s',
         predefined_filters: [
           {
@@ -197,7 +197,7 @@ describe('Predefined Filters', () => {
     });
 
     it('should pass pagination options', async () => {
-      const mockResponse: PredefinedFiltersResponse = {
+      const mockResponse: ListPredefinedFiltersResponse = {
         duration: '0.01s',
         predefined_filters: [],
         next: 'next_cursor',
@@ -219,7 +219,7 @@ describe('Predefined Filters', () => {
     });
 
     it('should serialize sort options as JSON', async () => {
-      const mockResponse: PredefinedFiltersResponse = {
+      const mockResponse: ListPredefinedFiltersResponse = {
         duration: '0.01s',
         predefined_filters: [],
       };

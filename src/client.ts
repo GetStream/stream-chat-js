@@ -156,7 +156,7 @@ import type {
   PollVoteData,
   PollVotesAPIResponse,
   PredefinedFilterResponse,
-  PredefinedFiltersResponse,
+  ListPredefinedFiltersResponse,
   Product,
   PushPreference,
   PushProvider,
@@ -4897,12 +4897,12 @@ export class StreamChat {
    *
    * @param {ListPredefinedFiltersOptions} options Query options
    *
-   * @return {Promise<PredefinedFiltersResponse>} The list of predefined filters
+   * @return {Promise<ListPredefinedFiltersResponse>} The list of predefined filters
    */
   async listPredefinedFilters(options: ListPredefinedFiltersOptions = {}) {
     this.validateServerSideAuth();
     const { sort, ...paginationOptions } = options;
-    return await this.get<PredefinedFiltersResponse>(
+    return await this.get<ListPredefinedFiltersResponse>(
       `${this.baseURL}/predefined_filters`,
       {
         ...paginationOptions,
