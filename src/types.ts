@@ -4597,7 +4597,7 @@ export type PredefinedFilterResponse = APIResponse & {
   predefined_filter: PredefinedFilter;
 };
 
-export type PredefinedFiltersResponse = APIResponse & {
+export type ListPredefinedFiltersResponse = APIResponse & {
   predefined_filters: PredefinedFilter[];
   next?: string;
   prev?: string;
