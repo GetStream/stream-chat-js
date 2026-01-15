@@ -5,6 +5,7 @@ import {
   ChannelAPIResponse,
   ChannelConfigWithInfo,
   ChannelResponse,
+  DEFAULT_COMPOSER_CONFIG,
   LocalMessage,
   MessageComposerConfig,
   StaticLocationPayload,
@@ -15,6 +16,7 @@ import { DeepPartial } from '../../../src/types.utility';
 import { MessageComposer } from '../../../src/messageComposer/messageComposer';
 import { DraftResponse, MessageResponse } from '../../../src/types';
 import { MockOfflineDB } from '../offline-support/MockOfflineDB';
+import { generateMsg } from '../test-utils/generateMessage';
 
 const generateUuidV4Output = 'test-uuid';
 // Mock dependencies
@@ -168,7 +170,7 @@ describe('MessageComposer', () => {
       const { messageComposer, mockChannel } = setup();
       expect(messageComposer).toBeDefined();
       expect(messageComposer.channel).toBe(mockChannel);
-      expect(messageComposer.config).toBeDefined();
+      expect(messageComposer.config).toStrictEqual(DEFAULT_COMPOSER_CONFIG);
       expect(messageComposer.attachmentManager).toBeDefined();
       expect(messageComposer.linkPreviewsManager).toBeDefined();
       expect(messageComposer.textComposer).toBeDefined();
@@ -178,16 +180,45 @@ describe('MessageComposer', () => {
 
     it('should initialize with custom config', () => {
       const customConfig: DeepPartial<MessageComposerConfig> = {
+        attachments: {
+          maxNumberOfFilesPerMessage: 1,
+        },
+        drafts: { enabled: true },
+        linkPreviews: { debounceURLEnrichmentMs: 20 },
+        location: { enabled: false },
         text: {
           maxLengthOnEdit: 1000,
           publishTypingEvents: false,
         },
+        sendMessageRequestFn: () => Promise.resolve({ message: generateMsg() }),
       };
 
       const { messageComposer } = setup({ config: customConfig });
 
-      expect(messageComposer.config.text.publishTypingEvents).toBe(false);
-      expect(messageComposer.config.text?.maxLengthOnEdit).toBe(1000);
+      expect(messageComposer.config).toStrictEqual({
+        attachments: {
+          acceptedFiles: DEFAULT_COMPOSER_CONFIG.attachments.acceptedFiles,
+          fileUploadFilter: DEFAULT_COMPOSER_CONFIG.attachments.fileUploadFilter,
+          maxNumberOfFilesPerMessage:
+            customConfig.attachments!.maxNumberOfFilesPerMessage,
+        },
+        drafts: customConfig.drafts,
+        linkPreviews: {
+          debounceURLEnrichmentMs: customConfig.linkPreviews!.debounceURLEnrichmentMs,
+          enabled: DEFAULT_COMPOSER_CONFIG.linkPreviews.enabled,
+          findURLFn: DEFAULT_COMPOSER_CONFIG.linkPreviews.findURLFn,
+        },
+        location: {
+          enabled: customConfig.location!.enabled,
+          getDeviceId: DEFAULT_COMPOSER_CONFIG.location!.getDeviceId,
+        },
+        sendMessageRequestFn: customConfig.sendMessageRequestFn,
+        text: {
+          enabled: DEFAULT_COMPOSER_CONFIG.text.enabled,
+          maxLengthOnEdit: customConfig.text!.maxLengthOnEdit,
+          publishTypingEvents: customConfig.text!.publishTypingEvents,
+        },
+      });
     });
 
     it('should initialize with custom config overridden with back-end configuration', () => {
@@ -1022,6 +1053,28 @@ describe('MessageComposer', () => {
         initialValue: expect.any(Object),
       });
       expect(result).toBeUndefined();
+    });
+
+    describe('sendMessage', () => {
+      it.fails('performs optimistic update before sending the message');
+      it.fails(
+        'updates the message in state after successful response if message has not arrived over WS',
+      );
+      it.fails(
+        'does not update the message in state after successful response if message has arrived over WS and the update timestamp is <= existing message timestamp',
+      );
+      it.fails(
+        'does not update the message in state if it already exists on the server and in the local state as not delivered',
+      );
+      it.fails(
+        'does not update the message in state if it already exists on the server and in the local state as not failed',
+      );
+      it.fails(
+        'updates the message in state if it already exists on the server and in the local state with status sending',
+      );
+      it.fails(
+        'updates the message in state if it does not exist on the server and the send request failed',
+      );
     });
 
     it('should compose draft', async () => {
