@@ -106,6 +106,7 @@ import type {
   FlagsPaginationOptions,
   FlagsResponse,
   FlagUserResponse,
+  FutureChannelBansResponse,
   GetBlockedUsersAPIResponse,
   GetCampaignOptions,
   GetChannelTypeResponse,
@@ -166,6 +167,7 @@ import type {
   PushProviderUpsertResponse,
   QueryChannelsAPIResponse,
   QueryDraftsResponse,
+  QueryFutureChannelBansOptions,
   QueryMessageHistoryFilters,
   QueryMessageHistoryOptions,
   QueryMessageHistoryResponse,
@@ -1820,6 +1822,21 @@ export class StreamChat {
         ...options,
       },
     });
+  }
+
+  /**
+   * queryFutureChannelBans - Query future channel bans created by a user
+   *
+   * @param {QueryFutureChannelBansOptions} options Option object with user_id, exclude_expired_bans, limit, offset
+   * @returns {Promise<FutureChannelBansResponse>} Future Channel Bans Response
+   */
+  async queryFutureChannelBans(options: QueryFutureChannelBansOptions = {}) {
+    return await this.get<FutureChannelBansResponse>(
+      this.baseURL + '/query_future_channel_bans',
+      {
+        payload: options,
+      },
+    );
   }
 
   /**
