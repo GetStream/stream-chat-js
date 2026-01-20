@@ -298,6 +298,7 @@ export type FutureChannelBansResponse = APIResponse & {
 
 export type QueryFutureChannelBansOptions = {
   user_id?: string;
+  target_user_id?: string;
   exclude_expired_bans?: boolean;
   limit?: number;
   offset?: number;
