@@ -69,6 +69,7 @@ import type {
   StaticLocationPayload,
   TruncateChannelAPIResponse,
   TruncateOptions,
+  UnBanUserOptions,
   UpdateChannelAPIResponse,
   UpdateChannelOptions,
   UpdateLocationPayload,
@@ -1659,11 +1660,13 @@ export class Channel {
    * unbanUser - Removes the bans for a user on a channel
    *
    * @param {string} targetUserID
+   * @param {UnBanUserOptions} options
    * @returns {Promise<APIResponse>}
    */
-  async unbanUser(targetUserID: string) {
+  async unbanUser(targetUserID: string, options?: UnBanUserOptions) {
     this._checkInitialized();
     return await this.getClient().unbanUser(targetUserID, {
+      ...options,
       type: this.type,
       id: this.id,
     });

@@ -284,6 +284,26 @@ export type BannedUsersResponse = APIResponse & {
   }>;
 };
 
+export type FutureChannelBan = {
+  user: UserResponse;
+  expires?: string;
+  reason?: string;
+  shadow?: boolean;
+  created_at: string;
+};
+
+export type FutureChannelBansResponse = APIResponse & {
+  bans: FutureChannelBan[];
+};
+
+export type QueryFutureChannelBansOptions = {
+  user_id?: string;
+  target_user_id?: string;
+  exclude_expired_bans?: boolean;
+  limit?: number;
+  offset?: number;
+};
+
 export type BlockListResponse = BlockList & {
   created_at?: string;
   type?: string;
@@ -994,6 +1014,7 @@ export type BannedUsersPaginationOptions = Omit<
 };
 
 export type BanUserOptions = UnBanUserOptions & {
+  ban_from_future_channels?: boolean;
   banned_by?: UserResponse;
   banned_by_id?: string;
   ip_ban?: boolean;
@@ -1493,6 +1514,7 @@ export type UnBanUserOptions = {
   client_id?: string;
   connection_id?: string;
   id?: string;
+  remove_future_channels_ban?: boolean;
   shadow?: boolean;
   target_user_id?: string;
   type?: string;
