@@ -1,3 +1,14 @@
+## [9.29.0](https://github.com/GetStream/stream-chat-js/compare/v9.28.0...v9.29.0) (2026-01-20)
+
+### Bug Fixes
+
+* escape strings interpolated into regular expressions ([#1669](https://github.com/GetStream/stream-chat-js/issues/1669)) ([32705e1](https://github.com/GetStream/stream-chat-js/commit/32705e1ef45b2600d18a68b6cf5989d70c308852))
+
+### Features
+
+* [CHA-1584] - Predefined filters support ([#1675](https://github.com/GetStream/stream-chat-js/issues/1675)) ([cb6d2d1](https://github.com/GetStream/stream-chat-js/commit/cb6d2d125172a17885f2a0bbee94d40cffd813c7))
+* add Future Channel Bans support [CHA-1696] ([#1677](https://github.com/GetStream/stream-chat-js/issues/1677)) ([2effaba](https://github.com/GetStream/stream-chat-js/commit/2effaba1d8c9105f3a015cb4d3201b4dfa925f84))
+
 ## [9.28.0](https://github.com/GetStream/stream-chat-js/compare/v9.27.2...v9.28.0) (2026-01-09)
 
 ### Features
