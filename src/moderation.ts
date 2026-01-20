@@ -1,6 +1,12 @@
 import type {
   APIResponse,
+  AppealOptions,
+  AppealRequest,
+  AppealResponse,
+  AppealsSort,
   CustomCheckFlag,
+  DecideAppealRequest,
+  GetAppealResponse,
   GetConfigResponse,
   GetUserModerationReportOptions,
   GetUserModerationReportResponse,
@@ -11,6 +17,9 @@ import type {
   ModerationRuleRequest,
   MuteUserResponse,
   Pager,
+  QueryAppealsFilters,
+  QueryAppealsPaginationOptions,
+  QueryAppealsResponse,
   QueryConfigsResponse,
   QueryModerationConfigsFilters,
   QueryModerationConfigsSort,
@@ -24,6 +33,7 @@ import type {
   ReviewQueueResponse,
   ReviewQueueSort,
   SubmitActionOptions,
+  SubmitActionResponse,
   UpsertConfigResponse,
   UpsertModerationRuleResponse,
 } from './types';
@@ -187,6 +197,108 @@ export class Moderation {
   }
 
   /**
+   * Appeal against the moderation decision
+   * @param {AppealRequest} appealRequest Appeal request to be appealed against
+   */
+  async appeal(appealRequest: AppealRequest, options: AppealOptions = {}) {
+    return await this.client.post<AppealResponse>(
+      this.client.baseURL + '/api/v2/moderation/appeal',
+      {
+        appeal_reason: appealRequest.appeal_reason || appealRequest.text,
+        entity_id: appealRequest.entityID,
+        entity_type: appealRequest.entityType,
+        attachments: appealRequest.attachments,
+        ...options,
+      },
+    );
+  }
+
+  /**
+   * Decide on an appeal
+   * @param {DecideAppealRequest} decideAppealRequest Request to decide on an appeal
+   */
+  async decideAppeal(
+    decideAppealRequest: DecideAppealRequest,
+    options: AppealOptions = {},
+  ) {
+    return await this.client.post<APIResponse>(
+      this.client.baseURL + '/api/v2/moderation/decide_appeal',
+      {
+        appeal_id: decideAppealRequest.appealID,
+        status: decideAppealRequest.status,
+        decision_reason: decideAppealRequest.decisionReason,
+        ...(decideAppealRequest.channelCIDs
+          ? { channel_cids: decideAppealRequest.channelCIDs }
+          : {}),
+        ...options,
+      },
+    );
+  }
+
+  /**
+   * Accept an appeal
+   * @param {appealID} appealID ID of appeal
+   * @param {decisionReason} decisionReason Reason for accepting an appeal
+   */
+  async acceptAppeal(
+    appealID: string,
+    decisionReason: string,
+    options: AppealOptions = {},
+  ) {
+    return await this.decideAppeal(
+      { appealID, decisionReason, status: 'accepted' },
+      options,
+    );
+  }
+
+  /**
+   * Reject an appeal
+   * @param {appealID} appealID ID of appeal
+   * @param {decisionReason} decisionReason Reason for rejecting an appeal
+   */
+  async rejectAppeal(
+    appealID: string,
+    decisionReason: string,
+    options: AppealOptions = {},
+  ) {
+    return await this.decideAppeal(
+      { appealID, decisionReason, status: 'rejected' },
+      options,
+    );
+  }
+
+  /**
+   * Get Appeal Item
+   * @param {string} appealID ID of the appeal to be fetched
+   */
+  async getAppeal(appealID: string) {
+    return await this.client.get<GetAppealResponse>(
+      this.client.baseURL + '/api/v2/moderation/appeal/' + appealID,
+    );
+  }
+
+  /**
+   * Query appeals
+   * @param {Object} filterConditions Filter conditions for querying appeals
+   * @param {Object} sort Sort conditions for querying appeals
+   * @param {Object} options Pagination options for querying appeals
+   */
+  async queryAppeals(
+    filterConditions: QueryAppealsFilters = {},
+    sort: AppealsSort = [],
+    options: QueryAppealsPaginationOptions = {},
+  ) {
+    return await this.client.post<QueryAppealsResponse>(
+      this.client.baseURL + '/api/v2/moderation/appeals',
+      {
+        filter: filterConditions,
+        sort: normalizeQuerySort(sort),
+        ...options,
+      },
+    );
+  }
+
+  /**
    * Upsert moderation config
    * @param {Object} config Moderation config to be upserted
    */
@@ -241,7 +353,7 @@ export class Moderation {
     itemID: string,
     options: SubmitActionOptions = {},
   ) {
-    return await this.client.post<{ item_id: string } & APIResponse>(
+    return await this.client.post<SubmitActionResponse>(
       this.client.baseURL + '/api/v2/moderation/submit_action',
       {
         action_type: actionType,

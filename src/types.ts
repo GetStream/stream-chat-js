@@ -3657,6 +3657,23 @@ export type ModerationFlag = {
   moderation_payload_hash?: string;
 };
 
+export type AppealItem = {
+  attachments: string[];
+  created_at: string;
+  updated_at: string;
+  decision_reason: string;
+  entity_id: string;
+  entity_type: string;
+  status: string;
+  /**
+   * @deprecated use appeal_reason instead
+   */
+  text?: string;
+  appeal_reason: string;
+  user: UserResponse;
+  id: string;
+};
+
 export type ReviewQueueItem = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   actions_taken: any[];
@@ -3685,6 +3702,7 @@ export type ReviewQueueItem = {
   reviewed_at: string;
   status: string;
   updated_at: string;
+  appeal?: AppealItem;
 };
 
 export type CustomCheckFlag = {
@@ -3704,26 +3722,98 @@ export type DeleteMessageOptions = {
   hardDelete?: boolean;
 };
 
+export type UnbanActionRequest = {
+  channel_cid?: string;
+  decision_reason?: string;
+};
+
+export type RejectAppealRequest = {
+  decision_reason: string;
+};
+
+export type RestoreActionRequest = {
+  decision_reason?: string;
+};
+
+export type UnblockActionRequest = {
+  decision_reason?: string;
+};
+
+export type BlockActionRequest = {
+  reason: string;
+};
+
+export type ShadowBlockActionRequest = {
+  reason?: string;
+};
+
+export type VideoKickUserRequest = Record<string, never>;
+
+export type VideoEndCallRequest = Record<string, never>;
+
+export type MarkReviewedRequest = {
+  disable_marking_content_as_reviewed?: boolean;
+  content_to_mark_as_reviewed_limit?: number;
+  decision_reason?: string;
+};
+
+export type DeleteActivityRequest = {
+  hard_delete: boolean;
+  reason?: string;
+};
+
+export type DeleteCommentRequest = {
+  hard_delete: boolean;
+  reason?: string;
+};
+
+export type DeleteReactionRequest = {
+  hard_delete: boolean;
+  reason?: string;
+};
+
 export type SubmitActionOptions = {
+  appeal_id?: string;
   ban?: {
     channel_ban_only?: boolean;
     reason?: string;
     timeout?: number;
+    decision_reason?: string;
     delete_messages?: MessageDeletionStrategy;
+    shadow?: boolean;
+    ip_ban?: boolean;
   };
   delete_message?: {
     hard_delete?: boolean;
+    decision_reason?: string;
+    reason?: string;
   };
   delete_user?: {
     delete_conversation_channels?: boolean;
     hard_delete?: boolean;
     mark_messages_deleted?: boolean;
+    decision_reason?: string;
+    reason?: string;
+    delete_feeds_content?: boolean;
   };
-  restore?: {};
-  unban?: {
-    channel_cid?: string;
-  };
+  restore?: RestoreActionRequest;
+  unban?: UnbanActionRequest;
+  block?: BlockActionRequest;
+  shadow_block?: ShadowBlockActionRequest;
+  kick_user?: VideoKickUserRequest;
+  end_call?: VideoEndCallRequest;
+  reject_appeal?: RejectAppealRequest;
+  mark_reviewed?: MarkReviewedRequest;
+  delete_activity?: DeleteActivityRequest;
+  delete_comment?: DeleteCommentRequest;
+  delete_reaction?: DeleteReactionRequest;
+  unblock?: UnblockActionRequest;
   user_id?: string;
+};
+
+export type SubmitActionResponse = APIResponse & {
+  item?: ReviewQueueItem;
+  appeal_item?: AppealItem;
 };
 
 export type GetUserModerationReportResponse = {
@@ -3866,12 +3956,72 @@ export type ReviewQueueFilters = QueryFilters<
     date_range?: RequireOnlyOne<{
       $eq?: string; // Format: "date1_date2"
     }>;
+  } & {
+    appeal?: boolean;
+  } & {
+    appeal_status?: RequireOnlyOne<{
+      $eq?: 'submitted' | 'accepted' | 'rejected';
+    }>;
   }
 >;
 
 export type ReviewQueueSort =
   | Sort<Pick<ReviewQueueItem, 'id' | 'created_at' | 'updated_at'>>
   | Array<Sort<Pick<ReviewQueueItem, 'id' | 'created_at' | 'updated_at'>>>;
+
+export type AppealsSort =
+  | Sort<Pick<AppealItem, 'created_at' | 'updated_at'>>
+  | Array<Sort<Pick<AppealItem, 'created_at' | 'updated_at'>>>;
+
+export type QueryAppealsFilters = QueryFilters<
+  {
+    entity_type?:
+      | RequireOnlyOne<Pick<QueryFilter<AppealItem['entity_type']>, '$eq' | '$in'>>
+      | PrimitiveFilter<AppealItem['entity_type']>;
+  } & {
+    created_at?:
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<AppealItem['created_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
+      | PrimitiveFilter<AppealItem['created_at']>;
+  } & {
+    id?:
+      | RequireOnlyOne<Pick<QueryFilter<AppealItem['id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<AppealItem['id']>;
+  } & {
+    entity_id?:
+      | RequireOnlyOne<Pick<QueryFilter<AppealItem['entity_id']>, '$eq' | '$in'>>
+      | PrimitiveFilter<AppealItem['entity_id']>;
+  } & {
+    status?:
+      | RequireOnlyOne<Pick<QueryFilter<AppealItem['status']>, '$eq' | '$in'>>
+      | PrimitiveFilter<AppealItem['status']>;
+  } & {
+    updated_at?:
+      | RequireOnlyOne<
+          Pick<
+            QueryFilter<AppealItem['updated_at']>,
+            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
+          >
+        >
+      | PrimitiveFilter<AppealItem['updated_at']>;
+  } & {
+    text?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    decision_reason?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    review_queue_item_id?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  }
+>;
 
 export type QueryModerationConfigsSort = Array<Sort<'key' | 'created_at' | 'updated_at'>>;
 
@@ -3882,6 +4032,14 @@ export type ReviewQueueResponse = {
   next?: string;
   prev?: string;
 };
+
+export type QueryAppealsResponse = APIResponse & {
+  items: AppealItem[];
+  next?: string;
+  prev?: string;
+};
+
+export type QueryAppealsPaginationOptions = Pager;
 
 export type ModerationConfig = {
   key: string;
@@ -3915,6 +4073,14 @@ export type UpsertConfigResponse = {
   config: ModerationConfigResponse;
 };
 
+export type AppealResponse = APIResponse & {
+  appeal_id: string;
+};
+
+export type GetAppealResponse = APIResponse & {
+  item: AppealItem;
+};
+
 // Moderation Rule Builder Types
 export type ModerationRule = {
   id: string;
@@ -3935,6 +4101,21 @@ export type ModerationRuleRequest = {
   team: string;
   rule: RuleBuilderRule;
   enabled: boolean;
+};
+
+export type AppealRequest = {
+  appeal_reason?: string;
+  text?: string;
+  entityID: string;
+  entityType: string;
+  attachments: string[];
+};
+
+export type DecideAppealRequest = {
+  appealID: string;
+  status: 'accepted' | 'rejected';
+  decisionReason: string;
+  channelCIDs?: string[];
 };
 
 export type RuleBuilderRule = {
@@ -4068,6 +4249,11 @@ export type UpsertModerationRuleResponse = {
 export type ModerationFlagOptions = {
   custom?: Record<string, unknown>;
   moderation_payload?: ModerationPayload;
+  user_id?: string;
+};
+
+export type AppealOptions = {
+  custom?: Record<string, unknown>;
   user_id?: string;
 };
 
