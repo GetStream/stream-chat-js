@@ -21,11 +21,12 @@ export const createPostUploadAttachmentEnrichmentMiddleware =
         if (!attachment || !response) return discard();
 
         const enrichedAttachment = { ...attachment };
+        const previewUri = attachment.localMetadata.previewUri;
+        if (previewUri) {
+          if (previewUri.startsWith('blob:')) URL.revokeObjectURL(previewUri);
+          delete enrichedAttachment.localMetadata.previewUri;
+        }
         if (isLocalImageAttachment(attachment)) {
-          if (attachment.localMetadata.previewUri) {
-            URL.revokeObjectURL(attachment.localMetadata.previewUri);
-            delete enrichedAttachment.localMetadata.previewUri;
-          }
           enrichedAttachment.image_url = response.file;
         } else {
           (enrichedAttachment as LocalNotImageAttachment).asset_url = response.file;
