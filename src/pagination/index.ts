@@ -1,3 +1,2 @@
-export * from './BasePaginator';
+export * from './paginators';
 export * from './FilterBuilder';
-export * from './ReminderPaginator';

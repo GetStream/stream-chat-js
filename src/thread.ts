@@ -15,11 +15,17 @@ import type {
   ThreadResponse,
   UserResponse,
 } from './types';
-import type { Channel } from './channel';
+import type {
+  Channel,
+  SendMessageWithStateUpdateParams,
+  UpdateMessageWithStateUpdateParams,
+} from './channel';
 import type { StreamChat } from './client';
 import type { CustomThreadData } from './custom_types';
 import { MessageComposer } from './messageComposer';
+import { MessageOperations } from './messageOperations';
 import { WithSubscriptions } from './utils/WithSubscriptions';
+import { MessagePaginator } from './pagination';
 
 type QueryRepliesOptions = {
   sort?: { created_at: AscDesc }[];
@@ -113,6 +119,8 @@ export class Thread extends WithSubscriptions {
   public readonly state: StateStore<ThreadState>;
   public readonly id: string;
   public readonly messageComposer: MessageComposer;
+  public readonly messagePaginator: MessagePaginator;
+  public readonly messageOperations: MessageOperations;
 
   private client: StreamChat;
   private failedRepliesMap: Map<string, LocalMessage> = new Map();
@@ -175,10 +183,61 @@ export class Thread extends WithSubscriptions {
     this.id = threadData.parent_message_id;
     this.client = client;
 
+    this.messagePaginator = new MessagePaginator({ channel: this.channel }); // todo: pass Thread instance
     this.messageComposer = new MessageComposer({
       client,
       composition: threadData.draft,
       compositionContext: this,
+    });
+
+    this.messageOperations = new MessageOperations({
+      ingest: (m) => this.messagePaginator.ingestItem(m),
+      get: (id) => this.messagePaginator.getItem(id),
+      normalizeOutgoingMessage: (m) => ({
+        ...m,
+        parent_id: this.id,
+      }),
+      handlers: () => {
+        const { requestHandlers } = this.channel.configState.getLatestValue();
+        const sendMessageRequest = requestHandlers?.sendMessageRequest;
+        const retrySendMessageRequest = requestHandlers?.retrySendMessageRequest;
+        const updateMessageRequest = requestHandlers?.updateMessageRequest;
+        return {
+          send: sendMessageRequest
+            ? (p) =>
+                sendMessageRequest({
+                  localMessage: p.localMessage,
+                  message: p.message,
+                  options: p.options,
+                })
+            : undefined,
+          retry: retrySendMessageRequest
+            ? (p) =>
+                retrySendMessageRequest({
+                  localMessage: p.localMessage,
+                  message: p.message,
+                  options: p.options,
+                })
+            : undefined,
+          update: updateMessageRequest
+            ? (p) =>
+                updateMessageRequest({
+                  localMessage: p.localMessage,
+                  options: p.options,
+                })
+            : undefined,
+        };
+      },
+      defaults: {
+        send: async (m, o) => {
+          const result = await this.channel.sendMessage(m, o);
+          return { message: result.message };
+        },
+        update: async (m, o) => {
+          const result = await this.channel.getClient().updateMessage(m, undefined, o);
+          return { message: result.message };
+        },
+      },
     });
   }
 
@@ -489,6 +548,7 @@ export class Thread extends WithSubscriptions {
 
     const formattedMessage = formatMessage(message);
 
+    // todo: do we really need to keep the failedRepliesMap?
     if (message.status === 'failed') {
       // store failed reply so that it's not lost when reloading or hydrating
       this.failedRepliesMap.set(formattedMessage.id, formattedMessage);
@@ -528,6 +588,57 @@ export class Thread extends WithSubscriptions {
       this.updateParentMessageLocally({ message });
     }
   };
+
+  /**
+   * Sends a message with optimistic local state update.
+   */
+  async sendMessageWithLocalUpdate({
+    localMessage,
+    message,
+    options,
+    sendMessageRequestFn,
+  }: SendMessageWithStateUpdateParams): Promise<void> {
+    await this.messageOperations.send(
+      {
+        localMessage,
+        message,
+        options,
+      },
+      sendMessageRequestFn,
+    );
+  }
+
+  /**
+   * Retry sending a failed message.
+   */
+  async retrySendMessageWithLocalUpdate(
+    params: Omit<SendMessageWithStateUpdateParams, 'message'>,
+  ) {
+    await this.messageOperations.retry(
+      {
+        localMessage: { ...params.localMessage, type: 'regular' },
+        options: params.options,
+      },
+      params.sendMessageRequestFn,
+    );
+  }
+
+  /**
+   * Updates a message with optimistic local state update.
+   *
+   * NOTE: This updates message state via `messagePaginator` only. If you still rely on
+   * `Thread.state.replies` as UI source of truth, make sure it is wired to paginator updates
+   * (or keep upserting separately until migration is complete).
+   */
+  async updateMessageWithLocalUpdate(params: UpdateMessageWithStateUpdateParams) {
+    await this.messageOperations.update(
+      {
+        localMessage: params.localMessage,
+        options: params.options,
+      },
+      params.updateMessageRequestFn,
+    );
+  }
 
   public markAsRead = async ({ force = false }: { force?: boolean } = {}) => {
     if (this.ownUnreadCount === 0 && !force) {
