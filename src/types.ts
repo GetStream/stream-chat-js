@@ -1824,7 +1824,7 @@ export type ReactionFilters = QueryFilters<
 >;
 
 export type ChannelFilters = QueryFilters<
-  ContainsOperator<Omit<CustomChannelData, 'name'>> & {
+  ContainsOperator<CustomChannelData & { name?: string }> & {
     app_banned?: 'only' | 'excluded';
     has_unread?: boolean;
     archived?: boolean;
@@ -1839,19 +1839,12 @@ export type ChannelFilters = QueryFilters<
       | RequireOnlyOne<Pick<QueryFilter<string>, '$in'>>
       | RequireOnlyOne<Pick<QueryFilter<string[]>, '$eq'>>
       | PrimitiveFilter<string[]>;
-    name?:
-      | RequireOnlyOne<
-          {
-            $autocomplete?: string;
-          } & QueryFilter<string>
-        >
-      | PrimitiveFilter<string>;
     pinned?: boolean;
     last_updated?:
       | RequireOnlyOne<Pick<QueryFilter<string>, '$eq' | '$gt' | '$gte' | '$lt' | '$lte'>>
       | PrimitiveFilter<string>;
   } & {
-    [Key in keyof Omit<ChannelResponse, 'name' | 'members' | keyof CustomChannelData>]:
+    [Key in keyof Omit<ChannelResponse, 'members' | keyof CustomChannelData>]:
       | RequireOnlyOne<QueryFilter<ChannelResponse[Key]>>
       | PrimitiveFilter<ChannelResponse[Key]>;
   }
@@ -2062,7 +2055,12 @@ export type QueryFilter<ObjectType = string> =
         $in?: PrimitiveFilter<ObjectType>[];
         $lt?: PrimitiveFilter<ObjectType>;
         $lte?: PrimitiveFilter<ObjectType>;
-      }
+      } & (NonNullable<ObjectType> extends string
+        ? {
+            $autocomplete?: PrimitiveFilter<ObjectType>;
+            $q?: PrimitiveFilter<ObjectType>;
+          }
+        : {})
     : {
         $eq?: PrimitiveFilter<ObjectType>;
         $exists?: boolean;
