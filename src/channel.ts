@@ -1,4 +1,5 @@
 import { ChannelState } from './channel_state';
+import { CooldownTimer } from './CooldownTimer';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
 import {
@@ -112,6 +113,7 @@ export class Channel {
   push_preferences?: PushPreference;
   public readonly messageComposer: MessageComposer;
   public readonly messageReceiptsTracker: MessageReceiptsTracker;
+  public readonly cooldownTimer: CooldownTimer;
 
   /**
    * constructor - Create a channel
@@ -167,6 +169,8 @@ export class Channel {
         return msg && { timestampMs, msgId: msg.id };
       },
     });
+
+    this.cooldownTimer = new CooldownTimer({ channel: this });
   }
 
   /**
@@ -1580,6 +1584,7 @@ export class Channel {
         .join();
     this.data = state.channel;
     this.offlineMode = false;
+    this.cooldownTimer.refresh();
 
     if (areCapabilitiesChanged) {
       this.getClient().dispatchEvent({
@@ -2032,6 +2037,9 @@ export class Channel {
           // 1. the message is mine
           // 2. the message is a thread reply from any user
           const preventUnreadCountUpdate = ownMessage || isThreadMessage;
+          if (ownMessage) {
+            this.cooldownTimer.refresh();
+          }
           if (preventUnreadCountUpdate) break;
 
           if (event.user?.id) {
@@ -2192,6 +2200,7 @@ export class Channel {
               event.channel?.own_capabilities ?? channel.data?.own_capabilities,
           };
           channel.data = newChannelData;
+          this.cooldownTimer.refresh();
         }
         break;
       case 'reaction.new':
@@ -2454,6 +2463,7 @@ export class Channel {
     );
 
     this.disconnected = true;
+    this.cooldownTimer.clearTimeout();
     this.state.setIsUpToDate(false);
   }
 }
