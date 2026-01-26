@@ -2046,7 +2046,7 @@ export class StreamChat {
       }
 
       c.messageComposer.initStateFromChannelResponse(channelState);
-
+      c.cooldownTimer.refresh();
       channels.push(c);
     }
     this.syncDeliveredCandidates(channels);
