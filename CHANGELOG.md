@@ -1,3 +1,9 @@
+## [9.30.1](https://github.com/GetStream/stream-chat-js/compare/v9.30.0...v9.30.1) (2026-01-26)
+
+### Bug Fixes
+
+* fix the response types for moderation ([#1681](https://github.com/GetStream/stream-chat-js/issues/1681)) ([2584867](https://github.com/GetStream/stream-chat-js/commit/25848676cf46c2441e8bf838a1782130911bbd5b))
+
 ## [9.30.0](https://github.com/GetStream/stream-chat-js/compare/v9.29.0...v9.30.0) (2026-01-26)
 
 ### Features
