@@ -105,11 +105,19 @@ export type BaseLocalAttachmentMetadata = {
 
 export type LocalAttachmentUploadMetadata = {
   file: File | FileReference;
+  /**
+   * Local preview URI, typically a Blob URL from `URL.createObjectURL(file)`
+   * or (for React Native `FileReference`) the provided `uri`.
+   */
+  previewUri?: string;
   uploadState: AttachmentLoadingState;
   uploadPermissionCheck?: UploadPermissionCheckResult; // added new
 };
 
 export type LocalImageAttachmentUploadMetadata = LocalAttachmentUploadMetadata & {
+  /**
+   * @deprecated `previewUri` is now available on `LocalAttachmentUploadMetadata`.
+   */
   previewUri?: string;
 };
 
