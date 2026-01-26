@@ -1,3 +1,10 @@
+## [9.30.0](https://github.com/GetStream/stream-chat-js/compare/v9.29.0...v9.30.0) (2026-01-26)
+
+### Features
+
+* add CooldownTimer to Channel ([#1678](https://github.com/GetStream/stream-chat-js/issues/1678)) ([6013fa1](https://github.com/GetStream/stream-chat-js/commit/6013fa1954d283f07d24e44b0fa3538bcf010f86))
+* add previewUri to all the upload file attachments ([#1679](https://github.com/GetStream/stream-chat-js/issues/1679)) ([5a70981](https://github.com/GetStream/stream-chat-js/commit/5a709817362d6e63152b5df4750b301bc65e89f8))
+
 ## [9.29.0](https://github.com/GetStream/stream-chat-js/compare/v9.28.0...v9.29.0) (2026-01-20)
 
 ### Bug Fixes
