@@ -1,6 +1,8 @@
 import type {
   APIResponse,
+  CheckResponse,
   CustomCheckFlag,
+  CustomCheckResponse,
   GetConfigResponse,
   GetUserModerationReportOptions,
   GetUserModerationReportResponse,
@@ -24,6 +26,8 @@ import type {
   ReviewQueueResponse,
   ReviewQueueSort,
   SubmitActionOptions,
+  SubmitActionResponse,
+  UnmuteUserResponse,
   UpsertConfigResponse,
   UpsertModerationRuleResponse,
 } from './types';
@@ -135,7 +139,7 @@ export class Moderation {
       user_id?: string;
     },
   ) {
-    return await this.client.post<{ item_id: string } & APIResponse>(
+    return await this.client.post<UnmuteUserResponse>(
       this.client.baseURL + '/api/v2/moderation/unmute',
       {
         target_ids: [targetID],
@@ -209,7 +213,7 @@ export class Moderation {
   }
 
   async deleteConfig(key: string, data?: { team?: string }) {
-    return await this.client.delete(
+    return await this.client.delete<APIResponse>(
       this.client.baseURL + '/api/v2/moderation/config/' + key,
       data,
     );
@@ -241,7 +245,7 @@ export class Moderation {
     itemID: string,
     options: SubmitActionOptions = {},
   ) {
-    return await this.client.post<{ item_id: string } & APIResponse>(
+    return await this.client.post<SubmitActionResponse>(
       this.client.baseURL + '/api/v2/moderation/submit_action',
       {
         action_type: actionType,
@@ -281,14 +285,17 @@ export class Moderation {
       test_mode?: boolean;
     },
   ) {
-    return await this.client.post(this.client.baseURL + `/api/v2/moderation/check`, {
-      entity_type: entityType,
-      entity_id: entityID,
-      entity_creator_id: entityCreatorID,
-      moderation_payload: moderationPayload,
-      config_key: configKey,
-      options,
-    });
+    return await this.client.post<CheckResponse>(
+      this.client.baseURL + `/api/v2/moderation/check`,
+      {
+        entity_type: entityType,
+        entity_id: entityID,
+        entity_creator_id: entityCreatorID,
+        moderation_payload: moderationPayload,
+        config_key: configKey,
+        options,
+      },
+    );
   }
 
   /**
@@ -368,15 +375,16 @@ export class Moderation {
     },
     flags: CustomCheckFlag[],
   ) {
-    return await this.client.post<
-      { id: string; item: ReviewQueueItem; status: string } & APIResponse
-    >(this.client.baseURL + `/api/v2/moderation/custom_check`, {
-      entity_type: entityType,
-      entity_id: entityID,
-      entity_creator_id: entityCreatorID,
-      moderation_payload: moderationPayload,
-      flags,
-    });
+    return await this.client.post<CustomCheckResponse>(
+      this.client.baseURL + `/api/v2/moderation/custom_check`,
+      {
+        entity_type: entityType,
+        entity_id: entityID,
+        entity_creator_id: entityCreatorID,
+        moderation_payload: moderationPayload,
+        flags,
+      },
+    );
   }
 
   /**
@@ -446,7 +454,7 @@ export class Moderation {
    * @returns
    */
   async deleteModerationRule(id: string) {
-    return await this.client.delete(
+    return await this.client.delete<APIResponse>(
       this.client.baseURL + '/api/v2/moderation/moderation_rule/' + id,
     );
   }

@@ -801,6 +801,11 @@ export type MuteUserResponse = APIResponse & {
   mute?: MuteResponse;
   mutes?: Array<Mute>;
   own_user?: OwnUserResponse;
+  non_existing_users?: string[];
+};
+
+export type UnmuteUserResponse = APIResponse & {
+  non_existing_users?: string[];
 };
 
 export type BlockUserAPIResponse = APIResponse & {
@@ -3685,6 +3690,7 @@ export type ReviewQueueItem = {
   reviewed_at: string;
   status: string;
   updated_at: string;
+  latest_moderator_action?: string;
 };
 
 export type CustomCheckFlag = {
@@ -3726,6 +3732,10 @@ export type SubmitActionOptions = {
   user_id?: string;
 };
 
+export type SubmitActionResponse = APIResponse & {
+  item?: ReviewQueueItem;
+};
+
 export type GetUserModerationReportResponse = {
   user: UserResponse;
   user_blocks?: Array<{
@@ -3734,6 +3744,19 @@ export type GetUserModerationReportResponse = {
     blocked_user_id: string;
   }>;
   user_mutes?: Mute[];
+};
+
+export type CheckResponse = APIResponse & {
+  status: string;
+  task_id?: string;
+  recommended_action: string;
+  item?: ReviewQueueItem;
+};
+
+export type CustomCheckResponse = APIResponse & {
+  id: string;
+  item: ReviewQueueItem;
+  status: string;
 };
 
 export type QueryModerationConfigsFilters = QueryFilters<
@@ -3788,6 +3811,12 @@ export type ReviewQueueFilters = QueryFilters<
       | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['entity_id']>, '$eq' | '$in'>>
       | PrimitiveFilter<ReviewQueueItem['entity_id']>;
   } & {
+    entity_creator_id?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<ReviewQueueItem['entity_creator_id']>, '$eq' | '$in'>
+        >
+      | PrimitiveFilter<ReviewQueueItem['entity_creator_id']>;
+  } & {
     reviewed?: boolean;
   } & {
     reviewed_at?:
@@ -3840,6 +3869,7 @@ export type ReviewQueueFilters = QueryFilters<
   } & {
     recommended_action?: RequireOnlyOne<{
       $eq?: string;
+      $in?: string[];
     }>;
   } & {
     flagged_user_id?: RequireOnlyOne<{
@@ -3852,6 +3882,7 @@ export type ReviewQueueFilters = QueryFilters<
   } & {
     label?: RequireOnlyOne<{
       $eq?: string;
+      $in?: string[];
     }>;
   } & {
     reporter_type?: RequireOnlyOne<{
@@ -3866,6 +3897,24 @@ export type ReviewQueueFilters = QueryFilters<
     date_range?: RequireOnlyOne<{
       $eq?: string; // Format: "date1_date2"
     }>;
+  } & {
+    latest_moderator_action?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<ReviewQueueItem['latest_moderator_action']>, '$eq' | '$in'>
+        >
+      | PrimitiveFilter<ReviewQueueItem['latest_moderator_action']>;
+  } & {
+    flags_count?: RequireOnlyOne<{
+      $eq?: number;
+    }>;
+  } & {
+    ai_text_severity?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    channel_cid?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
   }
 >;
 
@@ -3877,8 +3926,25 @@ export type QueryModerationConfigsSort = Array<Sort<'key' | 'created_at' | 'upda
 
 export type ReviewQueuePaginationOptions = Pager;
 
+export type FilterConfigResponse = {
+  llm_labels: string[];
+  ai_text_labels?: string[];
+};
+
+export type ModerationActionConfig = {
+  entity_type: string;
+  order: number;
+  action: string;
+  icon: string;
+  description: string;
+  custom?: Record<string, unknown>;
+};
+
 export type ReviewQueueResponse = {
   items: ReviewQueueItem[];
+  action_config?: Record<string, ModerationActionConfig[]>;
+  filter_config?: FilterConfigResponse;
+  stats?: Record<string, unknown>;
   next?: string;
   prev?: string;
 };
