@@ -191,6 +191,6 @@ export class CooldownTimer extends WithSubscriptions {
 
     this.timeout = setTimeout(() => {
       this.recalculate();
-    }, remaining * 1000);
+    }, 1000);
   };
 }

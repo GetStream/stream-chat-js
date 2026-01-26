@@ -9,7 +9,7 @@ describe('CooldownTimer', () => {
     vi.useRealTimers();
   });
 
-  it('computes remaining seconds and resets to 0 after timeout', async () => {
+  it('ticks down every second until it reaches 0', async () => {
     vi.useFakeTimers();
     const now = new Date('2026-01-01T00:00:10.000Z');
     vi.setSystemTime(now);
@@ -39,8 +39,12 @@ describe('CooldownTimer', () => {
       canSkipCooldown: false,
     });
 
-    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(channel.cooldownTimer.cooldownRemaining).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(1000);
     expect(channel.cooldownTimer.cooldownRemaining).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('does not set a timeout when cooldown is 0 or undefined', async () => {
@@ -94,7 +98,10 @@ describe('CooldownTimer', () => {
     channel.cooldownTimer.refresh();
     expect(channel.cooldownTimer.cooldownRemaining).toBe(10);
     expect(vi.getTimerCount()).toBe(1);
-    await vi.advanceTimersByTimeAsync(10000);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(channel.cooldownTimer.cooldownRemaining).toBe(9);
+    await vi.advanceTimersByTimeAsync(9000);
+    expect(channel.cooldownTimer.cooldownRemaining).toBe(0);
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -276,7 +283,10 @@ describe('CooldownTimer', () => {
 
     expect(channel.cooldownTimer.cooldownRemaining).toBe(5);
 
-    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(channel.cooldownTimer.cooldownRemaining).toBe(4);
+
+    await vi.advanceTimersByTimeAsync(4000);
     expect(channel.cooldownTimer.cooldownRemaining).toBe(0);
   });
 });
