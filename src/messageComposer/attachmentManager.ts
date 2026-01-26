@@ -368,15 +368,18 @@ export class AttachmentManager {
 
     localAttachment[isImageFile(file) ? 'fallback' : 'title'] = file.name;
 
-    if (isImageFile(file)) {
-      localAttachment.localMetadata.previewUri = isFileReference(fileLike)
-        ? fileLike.uri
-        : URL.createObjectURL?.(fileLike);
+    localAttachment.localMetadata.previewUri = isFileReference(fileLike)
+      ? fileLike.uri
+      : URL.createObjectURL?.(fileLike);
 
-      if (isFileReference(fileLike) && fileLike.height && fileLike.width) {
-        localAttachment.original_height = fileLike.height;
-        localAttachment.original_width = fileLike.width;
-      }
+    if (
+      isFileReference(fileLike) &&
+      fileLike.height &&
+      fileLike.width &&
+      isImageFile(file)
+    ) {
+      localAttachment.original_height = fileLike.height;
+      localAttachment.original_width = fileLike.width;
     }
 
     if (isFileReference(fileLike) && fileLike.thumb_url) {
@@ -561,11 +564,13 @@ export class AttachmentManager {
       },
     };
 
+    const previewUri = uploadedAttachment.localMetadata.previewUri;
+    if (previewUri) {
+      if (previewUri.startsWith('blob:')) URL.revokeObjectURL(previewUri);
+      delete uploadedAttachment.localMetadata.previewUri;
+    }
+
     if (isLocalImageAttachment(uploadedAttachment)) {
-      if (uploadedAttachment.localMetadata.previewUri) {
-        URL.revokeObjectURL(uploadedAttachment.localMetadata.previewUri);
-        delete uploadedAttachment.localMetadata.previewUri;
-      }
       uploadedAttachment.image_url = response.file;
     } else {
       (uploadedAttachment as LocalNotImageAttachment).asset_url = response.file;
