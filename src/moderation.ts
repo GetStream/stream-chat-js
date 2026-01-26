@@ -21,7 +21,6 @@ import type {
   QueryModerationRulesSort,
   RequireAtLeastOne,
   ReviewQueueFilters,
-  ReviewQueueItem,
   ReviewQueuePaginationOptions,
   ReviewQueueResponse,
   ReviewQueueSort,

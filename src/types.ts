@@ -3675,6 +3675,7 @@ export type ReviewQueueItem = {
   created_by: string;
   entity_id: string;
   entity_type: string;
+  entity_creator_id?: string;
   flags: ModerationFlag[];
   has_image: boolean;
   has_text: boolean;
