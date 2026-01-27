@@ -60,3 +60,5 @@ export {
   promoteChannel,
 } from './utils';
 export { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
+export * from './ChannelPaginatorsOrchestrator';
+export * from './EventHandlerPipeline';
