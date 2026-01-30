@@ -423,6 +423,8 @@ describe('MessageComposer', () => {
         quotedMessage,
         pollId: 'test-poll-id',
         draftId: 'test-draft-id',
+        showReplyInChannel: false,
+        editedMessage: null,
       });
 
       expect(messageComposer.id).toBe('test-id');
@@ -658,6 +660,7 @@ describe('MessageComposer', () => {
         quotedMessage: null,
         draftId: null,
         showReplyInChannel: false,
+        editedMessage: null,
       });
     });
 
@@ -677,6 +680,10 @@ describe('MessageComposer', () => {
         quotedMessage: null,
         draftId: null,
         showReplyInChannel: false,
+        editedMessage: expect.objectContaining({
+          id: 'test-message-id',
+          text: 'Hello world',
+        }),
       });
     });
 
@@ -860,6 +867,10 @@ describe('MessageComposer', () => {
         quotedMessage: null,
         draftId: null,
         showReplyInChannel: false,
+        editedMessage: expect.objectContaining({
+          id: 'edited-message-id',
+          poll_id: 'test-poll-id',
+        }),
       });
     });
 
@@ -1222,6 +1233,7 @@ describe('MessageComposer', () => {
         quotedMessage: null,
         draftId,
         showReplyInChannel: false,
+        editedMessage: null,
       });
 
       const spyChannelDeleteDraft = vi.spyOn(mockChannel, 'deleteDraft');
@@ -1263,6 +1275,7 @@ describe('MessageComposer', () => {
         quotedMessage: null,
         draftId,
         showReplyInChannel: false,
+        editedMessage: null,
       });
 
       const spyChannelDeleteDraft = vi
@@ -1304,6 +1317,7 @@ describe('MessageComposer', () => {
         quotedMessage: null,
         draftId,
         showReplyInChannel: false,
+        editedMessage: null,
       });
 
       vi.spyOn(messageComposer, 'threadId', 'get').mockReturnValue('thread-123');
@@ -1340,6 +1354,7 @@ describe('MessageComposer', () => {
         quotedMessage: null,
         draftId,
         showReplyInChannel: false,
+        editedMessage: null,
       });
 
       vi.spyOn(messageComposer, 'threadId', 'get').mockReturnValue('thread-123');
@@ -2004,6 +2019,8 @@ describe('MessageComposer', () => {
           pollId: 'new-poll-id',
           quotedMessage: null,
           draftId: null,
+          showReplyInChannel: false,
+          editedMessage: null,
         });
 
         expect(spy).toHaveBeenCalled();
