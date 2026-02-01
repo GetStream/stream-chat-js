@@ -353,6 +353,7 @@ export type QueryReactionsAPIResponse = APIResponse & {
 
 export type QueryChannelsAPIResponse = APIResponse & {
   channels: Omit<ChannelAPIResponse, keyof APIResponse>[];
+  predefined_filter?: ParsedPredefinedFilterResponse;
 };
 
 export type QueryChannelAPIResponse = APIResponse & ChannelAPIResponse;
@@ -4690,6 +4691,16 @@ export type ListPredefinedFiltersResponse = APIResponse & {
   predefined_filters: PredefinedFilter[];
   next?: string;
   prev?: string;
+};
+
+/**
+ * Contains the interpolated filter and sort from a predefined filter.
+ * This is returned in the QueryChannels response when using a predefined filter.
+ */
+export type ParsedPredefinedFilterResponse = {
+  name: string;
+  filter: Record<string, unknown>;
+  sort?: PredefinedFilterSortParam[];
 };
 
 export type PredefinedFilterSort = SortParam[];
