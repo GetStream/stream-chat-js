@@ -1,3 +1,10 @@
+## [9.31.0](https://github.com/GetStream/stream-chat-js/compare/v9.30.1...v9.31.0) (2026-02-02)
+
+### Features
+
+* [CHA-2354] Add ParsedPredefinedFilterResponse type ([#1683](https://github.com/GetStream/stream-chat-js/issues/1683)) ([f43f521](https://github.com/GetStream/stream-chat-js/commit/f43f5210cf4c3a6b820beb1294cbb22276c0498f))
+* add editedMessage to MessageComposer reactive state ([#1682](https://github.com/GetStream/stream-chat-js/issues/1682)) ([6aa8b5c](https://github.com/GetStream/stream-chat-js/commit/6aa8b5c685cc22068bb8ccc06638d71b2f6fe091))
+
 ## [9.30.1](https://github.com/GetStream/stream-chat-js/compare/v9.30.0...v9.30.1) (2026-01-26)
 
 ### Bug Fixes
