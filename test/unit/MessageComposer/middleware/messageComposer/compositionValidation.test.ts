@@ -319,7 +319,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
       type: 'regular',
       updated_at: new Date(),
     };
-    messageComposer.setEditedMessage(null);
+    messageComposer.editedMessage = undefined;
     vi.spyOn(messageComposer, 'lastChangeOriginIsLocal', 'get').mockReturnValue(false);
 
     const result = await validationMiddleware.handlers.compose(

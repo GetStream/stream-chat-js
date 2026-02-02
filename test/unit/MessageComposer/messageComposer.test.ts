@@ -874,6 +874,49 @@ describe('MessageComposer', () => {
       });
     });
 
+    it('setEditedMessage should set edited message baseline in state', () => {
+      const { messageComposer } = setup();
+      expect(messageComposer.editedMessage).toBeUndefined();
+      expect(messageComposer.state.getLatestValue().editedMessage).toBeNull();
+
+      const baseline: LocalMessage = {
+        id: 'edited-message-id',
+        type: 'regular',
+        created_at: new Date(),
+        deleted_at: null,
+        pinned_at: null,
+        status: 'received',
+        updated_at: new Date(),
+      };
+
+      messageComposer.setEditedMessage(baseline);
+
+      expect(messageComposer.editedMessage?.id).toBe('edited-message-id');
+      expect(messageComposer.state.getLatestValue().editedMessage?.id).toBe(
+        'edited-message-id',
+      );
+    });
+
+    it('setEditedMessage should clear edited message baseline when set to null', () => {
+      const { messageComposer } = setup({
+        composition: {
+          id: 'edited-message-id',
+          type: 'regular',
+          text: 'Edited message',
+          attachments: [],
+          mentioned_users: [],
+        },
+      });
+
+      expect(messageComposer.editedMessage).toBeDefined();
+      expect(messageComposer.state.getLatestValue().editedMessage).toBeDefined();
+
+      messageComposer.setEditedMessage(null);
+
+      expect(messageComposer.editedMessage).toBeUndefined();
+      expect(messageComposer.state.getLatestValue().editedMessage).toBeNull();
+    });
+
     it('should clear state if no edited message available', () => {
       const { messageComposer } = setup();
       const spyClear = vi.spyOn(messageComposer, 'clear');

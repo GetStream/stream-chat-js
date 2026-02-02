@@ -253,6 +253,10 @@ export class MessageComposer extends WithSubscriptions {
     return this.state.getLatestValue().editedMessage ?? undefined;
   }
 
+  set editedMessage(editedMessage: LocalMessage | undefined) {
+    this.state.partialNext({ editedMessage: editedMessage ?? null });
+  }
+
   setEditedMessage = (editedMessage: LocalMessage | null | undefined) => {
     this.state.partialNext({ editedMessage: editedMessage ?? null });
   };
