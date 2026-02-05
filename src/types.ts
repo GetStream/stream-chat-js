@@ -1220,7 +1220,7 @@ export type UpdateChannelTypeRequest =
     url_enrichment?: boolean;
     count_messages?: boolean;
     push_level?: 'all' | 'all_mentions' | 'direct_mentions' | 'mentions' | 'none';
-};
+  };
 
 export type UpdateChannelTypeResponse = {
   automod: Automod;
