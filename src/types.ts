@@ -743,6 +743,7 @@ export type MessageResponseBase = MessageBase & {
   latest_reactions?: ReactionResponse[];
   member?: ChannelMemberResponse;
   mentioned_users?: UserResponse[];
+  mentioned_channel?: boolean;
   message_text_updated_at?: string;
   moderation?: ModerationResponse; // present only with Moderation v2
   moderation_details?: ModerationDetailsResponse; // present only with Moderation v1
@@ -1110,6 +1111,7 @@ export type CreateChannelOptions = {
   url_enrichment?: boolean;
   user_message_reminders?: boolean;
   count_messages?: boolean;
+  push_level?: 'all' | 'all_mentions' | 'direct_mentions' | 'mentions' | 'none';
 };
 
 export type CreateCommandOptions = {
@@ -1217,7 +1219,8 @@ export type UpdateChannelTypeRequest =
     uploads?: boolean;
     url_enrichment?: boolean;
     count_messages?: boolean;
-  };
+    push_level?: 'all' | 'all_mentions' | 'direct_mentions' | 'mentions' | 'none';
+};
 
 export type UpdateChannelTypeResponse = {
   automod: Automod;
@@ -1258,6 +1261,7 @@ export type UpdateChannelTypeResponse = {
   partition_ttl?: string;
   count_messages?: boolean;
   user_message_reminders?: boolean;
+  push_level?: string;
 };
 
 export type GetChannelTypeResponse = {
@@ -1299,6 +1303,7 @@ export type GetChannelTypeResponse = {
   partition_ttl?: string;
   count_messages?: boolean;
   user_message_reminders?: boolean;
+  push_level?: string;
 };
 
 export type UpdateChannelOptions = Partial<{
@@ -2848,6 +2853,7 @@ export type Message = Partial<
   MessageBase & {
     mentioned_users: string[];
     shared_location?: StaticLocationPayload | LiveLocationPayload;
+    mentioned_channel?: boolean;
   }
 >;
 
