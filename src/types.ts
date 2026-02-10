@@ -4714,3 +4714,111 @@ export type PredefinedFilterSort = SortParam[];
 export type ListPredefinedFiltersOptions = Pager & {
   sort?: PredefinedFilterSort;
 };
+
+/**
+ * Team Usage Stats Types
+ */
+
+/**
+ * Represents a metric value for a specific date
+ */
+export type DailyValue = {
+  /** Date in YYYY-MM-DD format */
+  date: string;
+  /** Metric value for this date */
+  value: number;
+};
+
+/**
+ * Statistics for a single metric with optional daily breakdown
+ */
+export type MetricStats = {
+  /** Per-day values (only present in daily mode) */
+  daily?: DailyValue[];
+  /** Aggregated total value */
+  total: number;
+};
+
+/**
+ * Usage statistics for a single team containing all 16 metrics
+ */
+export type TeamUsageStats = {
+  /** Team identifier (empty string for users not assigned to any team) */
+  team: string;
+
+  // Daily activity metrics (total = SUM of daily values)
+  /** Daily active users */
+  users_daily: MetricStats;
+  /** Daily messages sent */
+  messages_daily: MetricStats;
+  /** Daily translations */
+  translations_daily: MetricStats;
+  /** Daily image moderations */
+  image_moderations_daily: MetricStats;
+
+  // Peak metrics (total = MAX of daily values)
+  /** Peak concurrent users */
+  concurrent_users: MetricStats;
+  /** Peak concurrent connections */
+  concurrent_connections: MetricStats;
+
+  // Rolling/cumulative metrics (total = LATEST daily value)
+  /** Total users */
+  users_total: MetricStats;
+  /** Users active in last 24 hours */
+  users_last_24_hours: MetricStats;
+  /** MAU - users active in last 30 days */
+  users_last_30_days: MetricStats;
+  /** Users active this month */
+  users_month_to_date: MetricStats;
+  /** Engaged MAU */
+  users_engaged_last_30_days: MetricStats;
+  /** Engaged users this month */
+  users_engaged_month_to_date: MetricStats;
+  /** Total messages */
+  messages_total: MetricStats;
+  /** Messages in last 24 hours */
+  messages_last_24_hours: MetricStats;
+  /** Messages in last 30 days */
+  messages_last_30_days: MetricStats;
+  /** Messages this month */
+  messages_month_to_date: MetricStats;
+};
+
+/**
+ * Options for querying team-level usage statistics
+ */
+export type QueryTeamUsageStatsOptions = {
+  /**
+   * Month in YYYY-MM format (e.g., '2026-01').
+   * Mutually exclusive with start_date/end_date.
+   * Returns aggregated monthly values.
+   */
+  month?: string;
+  /**
+   * Start date in YYYY-MM-DD format.
+   * Used with end_date for custom date range.
+   * Returns daily breakdown.
+   */
+  start_date?: string;
+  /**
+   * End date in YYYY-MM-DD format.
+   * Used with start_date for custom date range.
+   * Returns daily breakdown.
+   */
+  end_date?: string;
+  /** Maximum number of teams to return per page (default: 30, max: 30) */
+  limit?: number;
+  /** Cursor for pagination to fetch next page of teams */
+  next?: string;
+};
+
+/**
+ * Response containing team-level usage statistics
+ */
+export type QueryTeamUsageStatsResponse = APIResponse & {
+  /** Array of team usage statistics */
+  teams: TeamUsageStats[];
+  /** Cursor for pagination to fetch next page */
+  next?: string;
+};
