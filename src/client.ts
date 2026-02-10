@@ -181,6 +181,8 @@ import type {
   QueryRemindersResponse,
   QuerySegmentsOptions,
   QuerySegmentTargetsFilter,
+  QueryTeamUsageStatsOptions,
+  QueryTeamUsageStatsResponse,
   QueryThreadsAPIResponse,
   QueryThreadsOptions,
   QueryVotesFilters,
@@ -4746,6 +4748,28 @@ export class StreamChat {
       sort: sort && normalizeQuerySort(sort),
       ...rest,
     });
+  }
+
+  /**
+   * queryTeamUsageStats - Queries team-level usage statistics from the warehouse database
+   *
+   * Returns all 16 metrics grouped by team with cursor-based pagination.
+   *
+   * Date Range Options (mutually exclusive):
+   * - Use 'month' parameter (YYYY-MM format) for monthly aggregated values
+   * - Use 'start_date'/'end_date' parameters (YYYY-MM-DD format) for daily breakdown
+   * - If neither provided, defaults to current month (monthly mode)
+   *
+   * This endpoint is server-side only.
+   *
+   * @param {QueryTeamUsageStatsOptions} options The options for querying team usage stats
+   * @returns {Promise<QueryTeamUsageStatsResponse>}
+   */
+  async queryTeamUsageStats(options: QueryTeamUsageStatsOptions = {}) {
+    return await this.post<QueryTeamUsageStatsResponse>(
+      `${this.baseURL}/stats/team_usage`,
+      options,
+    );
   }
 
   /**

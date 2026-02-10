@@ -220,6 +220,33 @@ async function updateCommand() {
 	return result;
 }
 
+async function queryTeamUsageStats() {
+	// Use multi-tenancy server client for team usage stats (server-side only endpoint)
+	const authClient = await utils.getMultiTenancyServerTestClient();
+	// Query with current month (default behavior)
+	return await authClient.queryTeamUsageStats();
+}
+
+async function queryTeamUsageStatsWithMonth() {
+	const authClient = await utils.getMultiTenancyServerTestClient();
+	// Query with specific month
+	const now = new Date();
+	const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+	return await authClient.queryTeamUsageStats({ month });
+}
+
+async function queryTeamUsageStatsWithDateRange() {
+	const authClient = await utils.getMultiTenancyServerTestClient();
+	// Query with date range for daily breakdown
+	const now = new Date();
+	const endDate = now.toISOString().split('T')[0]; // YYYY-MM-DD
+	const startDate = new Date(now.setDate(now.getDate() - 7)).toISOString().split('T')[0];
+	return await authClient.queryTeamUsageStats({
+		start_date: startDate,
+		end_date: endDate,
+	});
+}
+
 module.exports = {
 	addDevice,
 	connect,
@@ -240,4 +267,7 @@ module.exports = {
 	syncTeam,
 	updateAppSettings,
 	updateCommand,
+	queryTeamUsageStats,
+	queryTeamUsageStatsWithMonth,
+	queryTeamUsageStatsWithDateRange,
 };
