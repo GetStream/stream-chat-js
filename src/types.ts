@@ -2814,7 +2814,7 @@ type GiphyVersionInfo = {
   size?: string;
 };
 
-type GiphyVersions =
+export type GiphyVersions =
   | 'original'
   | 'fixed_height'
   | 'fixed_height_still'
@@ -2823,7 +2823,7 @@ type GiphyVersions =
   | 'fixed_width_still'
   | 'fixed_width_downsampled';
 
-type GiphyData = {
+export type GiphyData = {
   [key in GiphyVersions]: GiphyVersionInfo;
 };
 

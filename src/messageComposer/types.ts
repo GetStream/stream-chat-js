@@ -1,4 +1,4 @@
-import type { Attachment, FileUploadConfig } from '../types';
+import type { Attachment, FileUploadConfig, GiphyData } from '../types';
 
 export type LocalAttachment = AnyLocalAttachment | LocalUploadAttachment;
 
@@ -97,6 +97,14 @@ export type ImageAttachment = Attachment & {
   image_url?: string;
   original_height?: number;
   original_width?: number;
+};
+
+export type GiphyAttachment = Attachment & {
+  type: 'giphy';
+  giphy?: GiphyData;
+  title?: string;
+  title_link?: string;
+  thumbnail_url?: string;
 };
 
 export type BaseLocalAttachmentMetadata = {
