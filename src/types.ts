@@ -4718,6 +4718,7 @@ export type QueryAnalysisSortBy = 'calls' | 'avg_latency' | 'updated_at';
 export type QueryAnalysisStats = {
   calls: number;
   max_latency_ms: number;
+  avg_latency_ms?: number;
   last_seen?: string;
 };
 
