@@ -4711,8 +4711,6 @@ export type ListPredefinedFiltersOptions = Pager & {
 
 // Query Analysis Types
 export type QueryAnalysisOperation = 'channel' | 'users' | 'messages' | 'members';
-export type QueryAnalysisScore = 'good' | 'moderate' | 'poor';
-export type QueryAnalysisType = 'estimated' | 'measured';
 export type QueryAnalysisSortBy = 'calls' | 'max_latency' | 'updated_at';
 
 export type QueryAnalysisStats = {
@@ -4748,8 +4746,6 @@ export type QueryAnalysisSortOrder = 'asc' | 'desc';
 
 export type ListQueryAnalysisOptions = {
   operation?: QueryAnalysisOperation;
-  score?: QueryAnalysisScore;
-  analysis_type?: QueryAnalysisType;
   sort_by?: QueryAnalysisSortBy;
   sort_order?: QueryAnalysisSortOrder;
   limit?: number;
