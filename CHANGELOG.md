@@ -1,3 +1,11 @@
+## [9.32.0](https://github.com/GetStream/stream-chat-js/compare/v9.31.0...v9.32.0) (2026-02-11)
+
+### Features
+
+* [CHA-1563] Add channel mentions and push_level on channel types ([#1684](https://github.com/GetStream/stream-chat-js/issues/1684)) ([3eea8c6](https://github.com/GetStream/stream-chat-js/commit/3eea8c6f203a8e3baad4dd2388a29760e603b866))
+* add queryTeamUsageStats API for multi-tenant usage metrics ([#1685](https://github.com/GetStream/stream-chat-js/issues/1685)) ([75e6e21](https://github.com/GetStream/stream-chat-js/commit/75e6e212938c0cf8d36d8d073d602b2fca275767))
+* export giphy attachment identity function ([#1686](https://github.com/GetStream/stream-chat-js/issues/1686)) ([3898018](https://github.com/GetStream/stream-chat-js/commit/3898018b15f63988d675044f64c93189cf5276fe))
+
 ## [9.31.0](https://github.com/GetStream/stream-chat-js/compare/v9.30.1...v9.31.0) (2026-02-02)
 
 ### Features
