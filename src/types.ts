@@ -4710,7 +4710,7 @@ export type ListPredefinedFiltersOptions = Pager & {
 };
 
 // Query Analysis Types
-export type QueryAnalysisOperation = 'channel' | 'users' | 'messages' | 'members';
+export type QueryAnalysisOperation = 'channel';
 export type QueryAnalysisSortBy = 'calls' | 'max_latency' | 'updated_at';
 
 export type QueryAnalysisStats = {
