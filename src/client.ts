@@ -128,6 +128,8 @@ import type {
   ListImportsResponse,
   ListPredefinedFiltersOptions,
   ListPredefinedFiltersResponse,
+  ListQueryAnalysisOptions,
+  ListQueryAnalysisResponse,
   LocalMessage,
   Logger,
   MarkChannelsReadOptions,
@@ -4925,6 +4927,14 @@ export class StreamChat {
         ...paginationOptions,
         ...(sort ? { sort: JSON.stringify(sort) } : {}),
       },
+    );
+  }
+
+  async listQueryAnalysis(options: ListQueryAnalysisOptions = {}) {
+    this.validateServerSideAuth();
+    return await this.get<ListQueryAnalysisResponse>(
+      `${this.baseURL}/query_analysis`,
+      options,
     );
   }
 }

@@ -4708,3 +4708,55 @@ export type PredefinedFilterSort = SortParam[];
 export type ListPredefinedFiltersOptions = Pager & {
   sort?: PredefinedFilterSort;
 };
+
+// Query Analysis Types
+export type QueryAnalysisOperation = 'channel' | 'users' | 'messages' | 'members';
+export type QueryAnalysisScore = 'good' | 'moderate' | 'poor';
+export type QueryAnalysisType = 'estimated' | 'measured';
+export type QueryAnalysisSortBy = 'calls' | 'avg_latency' | 'updated_at';
+
+export type QueryAnalysisStats = {
+  calls: number;
+  max_latency_ms: number;
+  last_seen?: string;
+};
+
+export type QueryAnalysisPerformance = {
+  score: string;
+  analysis_type: string;
+  indexed_fields: string[];
+  unindexed_fields: string[];
+  unindexed_sort_fields: string[];
+  scan_type?: string;
+  warnings: string[];
+  recommendations: string[];
+  last_analyzed?: string;
+};
+
+export type QueryAnalysisItem = {
+  query_id: number;
+  operation: string;
+  filter: Record<string, unknown>;
+  sort?: PredefinedFilterSortParam[];
+  updated_at: string;
+  stats?: QueryAnalysisStats;
+  performance: QueryAnalysisPerformance;
+};
+
+export type QueryAnalysisSortOrder = 'asc' | 'desc';
+
+export type ListQueryAnalysisOptions = {
+  operation?: QueryAnalysisOperation;
+  score?: QueryAnalysisScore;
+  analysis_type?: QueryAnalysisType;
+  sort_by?: QueryAnalysisSortBy;
+  sort_order?: QueryAnalysisSortOrder;
+  limit?: number;
+  cursor?: string;
+};
+
+export type ListQueryAnalysisResponse = APIResponse & {
+  queries: QueryAnalysisItem[];
+  next_cursor?: string;
+  prev_cursor?: string;
+};
