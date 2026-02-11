@@ -4713,7 +4713,7 @@ export type ListPredefinedFiltersOptions = Pager & {
 export type QueryAnalysisOperation = 'channel' | 'users' | 'messages' | 'members';
 export type QueryAnalysisScore = 'good' | 'moderate' | 'poor';
 export type QueryAnalysisType = 'estimated' | 'measured';
-export type QueryAnalysisSortBy = 'calls' | 'avg_latency' | 'updated_at';
+export type QueryAnalysisSortBy = 'calls' | 'max_latency' | 'updated_at';
 
 export type QueryAnalysisStats = {
   calls: number;
