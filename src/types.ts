@@ -4749,11 +4749,12 @@ export type ListQueryAnalysisOptions = {
   sort_by?: QueryAnalysisSortBy;
   sort_order?: QueryAnalysisSortOrder;
   limit?: number;
-  cursor?: string;
+  next?: string;
+  prev?: string;
 };
 
 export type ListQueryAnalysisResponse = APIResponse & {
   queries: QueryAnalysisItem[];
-  next_cursor?: string;
-  prev_cursor?: string;
+  next?: string;
+  prev?: string;
 };
