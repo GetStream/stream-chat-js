@@ -65,19 +65,136 @@ describe('PollComposerStateMiddleware', () => {
       expect(result.status).toBeUndefined;
     });
 
-    it('should validate max_votes_allowed field with invalid value', async () => {
+    it('should clamp max_votes_allowed below 2 to 2', async () => {
       const stateMiddleware = setup();
       const result = await stateMiddleware.handlers.handleFieldChange(
         setupHandlerParams({
-          nextState: { ...getInitialState() },
-          previousState: { ...getInitialState() },
-          targetFields: { max_votes_allowed: '1' }, // Invalid value (less than 2)
+          nextState: {
+            ...getInitialState(),
+            data: { ...getInitialState().data, enforce_unique_vote: false },
+          },
+          previousState: {
+            ...getInitialState(),
+            data: { ...getInitialState().data, enforce_unique_vote: false },
+          },
+          targetFields: { max_votes_allowed: '1' },
         }),
       );
 
-      expect(result.state.nextState.errors.max_votes_allowed).toBeDefined();
-      expect(result.state.nextState.data.max_votes_allowed).toBe('1');
-      expect(result.status).toBeUndefined;
+      expect(result.state.nextState.data.max_votes_allowed).toBe('2');
+      expect(result.state.nextState.errors.max_votes_allowed).toBeUndefined();
+    });
+
+    it('should clamp max_votes_allowed above 10 to 10', async () => {
+      const stateMiddleware = setup();
+      const result = await stateMiddleware.handlers.handleFieldChange(
+        setupHandlerParams({
+          nextState: {
+            ...getInitialState(),
+            data: { ...getInitialState().data, enforce_unique_vote: false },
+          },
+          previousState: {
+            ...getInitialState(),
+            data: { ...getInitialState().data, enforce_unique_vote: false },
+          },
+          targetFields: { max_votes_allowed: '15' },
+        }),
+      );
+
+      expect(result.state.nextState.data.max_votes_allowed).toBe('10');
+      expect(result.state.nextState.errors.max_votes_allowed).toBeUndefined();
+    });
+
+    it('should leave max_votes_allowed unchanged when between 2 and 10', async () => {
+      const stateMiddleware = setup();
+      const result = await stateMiddleware.handlers.handleFieldChange(
+        setupHandlerParams({
+          nextState: {
+            ...getInitialState(),
+            data: { ...getInitialState().data, enforce_unique_vote: false },
+          },
+          previousState: {
+            ...getInitialState(),
+            data: { ...getInitialState().data, enforce_unique_vote: false },
+          },
+          targetFields: { max_votes_allowed: '5' },
+        }),
+      );
+
+      expect(result.state.nextState.data.max_votes_allowed).toBe('5');
+      expect(result.state.nextState.errors.max_votes_allowed).toBeUndefined();
+    });
+
+    it('should keep max_votes_allowed boundaries 2 and 10 as-is', async () => {
+      const stateMiddleware = setup();
+      const resultTwo = await stateMiddleware.handlers.handleFieldChange(
+        setupHandlerParams({
+          nextState: {
+            ...getInitialState(),
+            data: { ...getInitialState().data, enforce_unique_vote: false },
+          },
+          previousState: {
+            ...getInitialState(),
+            data: { ...getInitialState().data, enforce_unique_vote: false },
+          },
+          targetFields: { max_votes_allowed: '2' },
+        }),
+      );
+      const resultTen = await stateMiddleware.handlers.handleFieldChange(
+        setupHandlerParams({
+          nextState: {
+            ...getInitialState(),
+            data: { ...getInitialState().data, enforce_unique_vote: false },
+          },
+          previousState: {
+            ...getInitialState(),
+            data: { ...getInitialState().data, enforce_unique_vote: false },
+          },
+          targetFields: { max_votes_allowed: '10' },
+        }),
+      );
+
+      expect(resultTwo.state.nextState.data.max_votes_allowed).toBe('2');
+      expect(resultTen.state.nextState.data.max_votes_allowed).toBe('10');
+    });
+
+    it('should set max_votes_allowed to empty when value is empty', async () => {
+      const stateMiddleware = setup();
+      const result = await stateMiddleware.handlers.handleFieldChange(
+        setupHandlerParams({
+          nextState: {
+            ...getInitialState(),
+            data: { ...getInitialState().data, enforce_unique_vote: false },
+          },
+          previousState: {
+            ...getInitialState(),
+            data: { ...getInitialState().data, enforce_unique_vote: false },
+          },
+          targetFields: { max_votes_allowed: '' },
+        }),
+      );
+
+      expect(result.state.nextState.data.max_votes_allowed).toBe('');
+    });
+
+    it('should set max_votes_allowed to empty when value is non-numeric', async () => {
+      const stateMiddleware = setup();
+      const result = await stateMiddleware.handlers.handleFieldChange(
+        setupHandlerParams({
+          nextState: {
+            ...getInitialState(),
+            data: { ...getInitialState().data, enforce_unique_vote: false },
+          },
+          previousState: {
+            ...getInitialState(),
+            data: { ...getInitialState().data, enforce_unique_vote: false },
+          },
+          targetFields: { max_votes_allowed: 'abc' },
+        }),
+      );
+
+      expect(result.state.nextState.data.max_votes_allowed).toBe('');
+      expect(result.state.nextState.errors.max_votes_allowed).toBeUndefined();
     });
 
     it('should not validate max_votes_allowed field with valid value if enforce_unique_vote is true', async () => {

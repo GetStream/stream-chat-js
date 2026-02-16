@@ -106,12 +106,22 @@ export const isTargetedOptionTextUpdate = (
   typeof (value as TargetedPollOptionTextUpdate)?.index === 'number' &&
   typeof (value as TargetedPollOptionTextUpdate)?.text === 'string';
 
+const clampMaxVotesAllowed = (value: unknown): string => {
+  if (value === '' || value == null) return '';
+  const num = typeof value === 'string' ? parseInt(value, 10) : Number(value);
+  if (!Number.isInteger(num) || Number.isNaN(num)) return '';
+  return String(Math.min(10, Math.max(2, num)));
+};
+
 export const pollCompositionStateProcessors: Partial<
   Record<keyof PollComposerState['data'], PollCompositionStateProcessor>
 > = {
   enforce_unique_vote: ({ value }) => ({
     enforce_unique_vote: value,
     max_votes_allowed: '',
+  }),
+  max_votes_allowed: ({ value }) => ({
+    max_votes_allowed: clampMaxVotesAllowed(value),
   }),
   options: ({ value, data }) => {
     // If it's a direct array update (like drag-drop reordering)
