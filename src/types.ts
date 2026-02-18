@@ -2514,7 +2514,7 @@ export type ChannelData = CustomChannelData &
     blocklist_behavior: AutomodBehavior;
     automod: Automod;
     filter_tags: string[];
-    team: string | string[];
+    team?: string;
   }>;
 
 export type ChannelMute = {
