@@ -1,3 +1,9 @@
+## [9.33.0](https://github.com/GetStream/stream-chat-js/compare/v9.32.0...v9.33.0) (2026-02-18)
+
+### Features
+
+* always clamp poll max_votes_allowed between 2 and 10 during the poll composition ([#1688](https://github.com/GetStream/stream-chat-js/issues/1688)) ([de5d6ac](https://github.com/GetStream/stream-chat-js/commit/de5d6aca2cbde29a4a4085950299e09217fbae2f))
+
 ## [9.32.0](https://github.com/GetStream/stream-chat-js/compare/v9.31.0...v9.32.0) (2026-02-11)
 
 ### Features
