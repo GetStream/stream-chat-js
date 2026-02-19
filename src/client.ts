@@ -2646,7 +2646,11 @@ export class StreamChat {
       blocked_user_id: blockedUserID,
       ...(user_id ? { user_id } : {}),
     });
-    this.blockedUsers.next(({ userIds }) => ({ userIds: userIds.concat(blockedUserID) }));
+    if (this._cacheEnabled()) {
+      this.blockedUsers.next(({ userIds }) => ({
+        userIds: userIds.concat(blockedUserID),
+      }));
+    }
     return result;
   }
 
@@ -2661,9 +2665,11 @@ export class StreamChat {
       blocked_user_id: blockedUserID,
       ...(userID ? { user_id: userID } : {}),
     });
-    this.blockedUsers.next(({ userIds }) => ({
-      userIds: userIds.filter((id) => id !== blockedUserID),
-    }));
+    if (this._cacheEnabled()) {
+      this.blockedUsers.next(({ userIds }) => ({
+        userIds: userIds.filter((id) => id !== blockedUserID),
+      }));
+    }
     return result;
   }
 
