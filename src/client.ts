@@ -273,6 +273,8 @@ type MessageComposerSetupFunction = ({
   composer: MessageComposer;
 }) => void | MessageComposerTearDownFunction;
 
+export type BlockedUsersState = { userIds: string[] };
+
 export type MessageComposerSetupState = {
   /**
    * Each `MessageComposer` runs this function each time its signature changes or
@@ -322,6 +324,7 @@ export class StreamChat {
   moderation: Moderation;
   mutedChannels: ChannelMute[];
   mutedUsers: Mute[];
+  blockedUsers: StateStore<BlockedUsersState>;
   node: boolean;
   options: StreamChatOptions;
   secret?: string;
@@ -382,6 +385,7 @@ export class StreamChat {
     // a list of channels to hide ws events from
     this.mutedChannels = [];
     this.mutedUsers = [];
+    this.blockedUsers = new StateStore<BlockedUsersState>({ userIds: [] });
 
     this.moderation = new Moderation(this);
 
@@ -1547,6 +1551,7 @@ export class StreamChat {
       client.state.updateUser(event.me);
       client.mutedChannels = event.me.channel_mutes;
       client.mutedUsers = event.me.mutes;
+      client.blockedUsers.partialNext({ userIds: event.me.blocked_user_ids ?? [] });
     }
 
     if (event.channel && event.type === 'notification.message_new') {
@@ -2637,10 +2642,12 @@ export class StreamChat {
     });
   }
   async blockUser(blockedUserID: string, user_id?: string) {
-    return await this.post<BlockUserAPIResponse>(this.baseURL + '/users/block', {
+    const result = await this.post<BlockUserAPIResponse>(this.baseURL + '/users/block', {
       blocked_user_id: blockedUserID,
       ...(user_id ? { user_id } : {}),
     });
+    this.blockedUsers.next(({ userIds }) => ({ userIds: userIds.concat(blockedUserID) }));
+    return result;
   }
 
   async getBlockedUsers(user_id?: string) {
@@ -2650,10 +2657,14 @@ export class StreamChat {
   }
 
   async unBlockUser(blockedUserID: string, userID?: string) {
-    return await this.post<APIResponse>(this.baseURL + '/users/unblock', {
+    const result = await this.post<APIResponse>(this.baseURL + '/users/unblock', {
       blocked_user_id: blockedUserID,
       ...(userID ? { user_id: userID } : {}),
     });
+    this.blockedUsers.next(({ userIds }) => ({
+      userIds: userIds.filter((id) => id !== blockedUserID),
+    }));
+    return result;
   }
 
   /** getSharedLocations
