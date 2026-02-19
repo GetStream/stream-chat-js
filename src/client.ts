@@ -2655,9 +2655,18 @@ export class StreamChat {
   }
 
   async getBlockedUsers(user_id?: string) {
-    return await this.get<GetBlockedUsersAPIResponse>(this.baseURL + '/users/block', {
-      ...(user_id ? { user_id } : {}),
-    });
+    const result = await this.get<GetBlockedUsersAPIResponse>(
+      this.baseURL + '/users/block',
+      {
+        ...(user_id ? { user_id } : {}),
+      },
+    );
+    if (this._cacheEnabled()) {
+      this.blockedUsers.partialNext({
+        userIds: result.blocks.map(({ blocked_user_id }) => blocked_user_id),
+      });
+    }
+    return result;
   }
 
   async unBlockUser(blockedUserID: string, userID?: string) {
