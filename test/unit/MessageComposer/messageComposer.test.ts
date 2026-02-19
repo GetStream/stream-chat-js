@@ -627,26 +627,36 @@ describe('MessageComposer', () => {
   });
 
   describe('offlineDB enabled', () => {
+    it('hasSendableData should return true if the composition is not empty', () => {
+      const { messageComposer } = offlineModeMessageComposerSetup({
+        composition: {
+          id: 'test-message-id',
+          type: 'regular',
+          text: 'Hello',
+        },
+      });
+
+      expect(messageComposer.hasSendableData).toBe(true);
+    });
+
+    it('hasSendableData should return true if the composition is not empty with attachments', () => {
+      const { messageComposer } = offlineModeMessageComposerSetup({
+        composition: {
+          id: 'test-message-id',
+          type: 'regular',
+          attachments: [
+            { type: 'x', localMetadata: { id: 'x,', uploadState: 'finished', file: {} } },
+          ],
+        },
+      });
+
+      expect(messageComposer.hasSendableData).toBe(true);
+    });
+
     it('hasSendableData should return false if the composition is empty', () => {
       const { messageComposer } = offlineModeMessageComposerSetup();
 
-      const spyCompositionIsEmpty = vi
-        .spyOn(messageComposer, 'compositionIsEmpty', 'get')
-        .mockReturnValue(true);
-
       expect(messageComposer.hasSendableData).toBe(false);
-      spyCompositionIsEmpty.mockRestore();
-    });
-
-    it('hasSendableData should return true if the composition is not empty', () => {
-      const { messageComposer } = offlineModeMessageComposerSetup();
-
-      const spyCompositionIsEmpty = vi
-        .spyOn(messageComposer, 'compositionIsEmpty', 'get')
-        .mockReturnValue(false);
-
-      expect(messageComposer.hasSendableData).toBe(true);
-      spyCompositionIsEmpty.mockRestore();
     });
   });
 
