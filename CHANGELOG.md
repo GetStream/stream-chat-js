@@ -1,3 +1,9 @@
+## [9.34.0](https://github.com/GetStream/stream-chat-js/compare/v9.33.0...v9.34.0) (2026-02-19)
+
+### Features
+
+* add property team to type ChannelData ([#1690](https://github.com/GetStream/stream-chat-js/issues/1690)) ([6b97d14](https://github.com/GetStream/stream-chat-js/commit/6b97d144ea059cb37adee7f2a1ee8d7bd4ad3fa4))
+
 ## [9.33.0](https://github.com/GetStream/stream-chat-js/compare/v9.32.0...v9.33.0) (2026-02-18)
 
 ### Features
