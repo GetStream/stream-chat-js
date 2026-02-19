@@ -1,3 +1,9 @@
+## [9.35.1](https://github.com/GetStream/stream-chat-js/compare/v9.35.0...v9.35.1) (2026-02-19)
+
+### Bug Fixes
+
+* hasSendableData logic for offline storage enabled ([#1692](https://github.com/GetStream/stream-chat-js/issues/1692)) ([d2fa80d](https://github.com/GetStream/stream-chat-js/commit/d2fa80df6fc769484560ebf0891593c6c11d4a0b))
+
 ## [9.35.0](https://github.com/GetStream/stream-chat-js/compare/v9.34.0...v9.35.0) (2026-02-19)
 
 ### Features
