@@ -1,3 +1,9 @@
+## [9.35.0](https://github.com/GetStream/stream-chat-js/compare/v9.34.0...v9.35.0) (2026-02-19)
+
+### Features
+
+* add blockedUsers state to StreamChat class ([#1691](https://github.com/GetStream/stream-chat-js/issues/1691)) ([2370fd8](https://github.com/GetStream/stream-chat-js/commit/2370fd892c235afe401a0dc28f5d5a62f6a9f4d6))
+
 ## [9.34.0](https://github.com/GetStream/stream-chat-js/compare/v9.33.0...v9.34.0) (2026-02-19)
 
 ### Features
