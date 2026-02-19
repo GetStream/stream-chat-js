@@ -327,7 +327,12 @@ export class MessageComposer extends WithSubscriptions {
   get hasSendableData() {
     // If the offline mode is enabled, we allow sending a message if the composition is not empty.
     if (this.client.offlineDb) {
-      return !this.compositionIsEmpty;
+      return (
+        !this.textComposer.textIsEmpty ||
+        !!this.attachmentManager.attachments.length ||
+        !!this.pollId ||
+        !!this.locationComposer.validLocation
+      );
     }
     return !!(
       (!this.attachmentManager.uploadsInProgressCount &&
