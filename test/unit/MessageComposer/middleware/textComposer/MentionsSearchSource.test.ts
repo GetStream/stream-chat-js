@@ -5,7 +5,6 @@ import {
 } from '../../../../../src/messageComposer/middleware/textComposer/mentions';
 import { Channel } from '../../../../../src/channel';
 import { StreamChat } from '../../../../../src/client';
-import { MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY } from '../../../../../src/constants';
 import type {
   ChannelMemberResponse,
   Mute,
@@ -83,6 +82,9 @@ describe('MentionsSearchSource', () => {
     } as any;
 
     channel = {
+      data: {
+        member_count: Object.keys(mockMembers).length,
+      },
       getClient: vi.fn().mockReturnValue(client),
       state: {
         members: mockMembers,
@@ -123,16 +125,52 @@ describe('MentionsSearchSource', () => {
     const source = new MentionsSearchSource(channel);
     source.activate();
 
-    // Simulate more members than MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY
-    const manyMembers: Record<string, ChannelMemberResponse> = {};
-    for (let i = 0; i < MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY + 1; i++) {
-      manyMembers[`user${i}`] = { user: { id: `user${i}`, name: `User ${i}` } };
-    }
-    channel.state.members = manyMembers;
+    // Simulate a partial members cache to force remote query path.
+    channel.state.members = { user1: mockMembers.user1 };
+    channel.data = { member_count: Object.keys(mockMembers).length };
 
     const result = await source.query('john');
     expect(channel.queryMembers).toHaveBeenCalled();
     expect(result.items).toHaveLength(Object.keys(mockMembers).length);
+  });
+
+  it('should query members when member_count is missing', async () => {
+    const source = new MentionsSearchSource(channel);
+    source.activate();
+    source.config.textComposerText = '@jo';
+    channel.data = undefined;
+
+    const result = await source.query('jo');
+    expect(channel.queryMembers).toHaveBeenCalledTimes(1);
+    expect(result.items).toHaveLength(Object.keys(mockMembers).length);
+  });
+
+  it('should query members when member_count does not match loaded members', async () => {
+    const source = new MentionsSearchSource(channel);
+    source.activate();
+    source.config.textComposerText = '@jo';
+    channel.data = { member_count: Object.keys(mockMembers).length + 10 };
+
+    const result = await source.query('jo');
+    expect(channel.queryMembers).toHaveBeenCalledTimes(1);
+    expect(result.items).toHaveLength(Object.keys(mockMembers).length);
+  });
+
+  it('should return queryMembers users without mutating channel members cache', async () => {
+    const source = new MentionsSearchSource(channel);
+    source.activate();
+    source.config.textComposerText = '@new';
+    channel.state.members = {};
+    channel.data = { member_count: 2 };
+    channel.queryMembers = vi.fn().mockResolvedValue({
+      members: [{ user: { id: 'new-user', name: 'New User' } }],
+    });
+
+    const result = await source.query('new');
+    expect(channel.queryMembers).toHaveBeenCalledTimes(1);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].name).toBe('New User');
+    expect(channel.state.members['new-user']).toBeUndefined();
   });
 
   it('should query all app users when mentionAllAppUsers is true', async () => {
@@ -179,6 +217,24 @@ describe('MentionsSearchSource', () => {
     const result = await source.query('');
     expect(result.items).toHaveLength(Object.keys(mockMembers).length - 1);
     expect(result.items[0].id).toBe('user2');
+  });
+
+  it('should apply mute filtering when query is executed through BaseSearchSource pipeline', async () => {
+    const source = new MentionsSearchSource(channel);
+    source.activate();
+    source.config.textComposerText = '@';
+    const mute: Mute = {
+      target: { id: 'user1' },
+      user: { id: 'currentUser' },
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    client.mutedUsers = [mute];
+
+    await source.executeQuery('');
+    const items = source.state.getLatestValue().items ?? [];
+    expect(items).toHaveLength(1);
+    expect(items[0].id).toBe('user2');
   });
 
   it('should preserve items in state before first query', () => {

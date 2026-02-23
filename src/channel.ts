@@ -9,7 +9,6 @@ import {
   normalizeQuerySort,
 } from './utils';
 import type { StreamChat } from './client';
-import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import type {
   AIState,
   APIResponse,
@@ -1562,8 +1561,7 @@ export class Channel {
       ...messageSetPagination({
         parentSet: messageSet,
         messagePaginationOptions: options?.messages,
-        requestedPageSize:
-          options?.messages?.limit ?? DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
+        requestedPageSize: options?.messages?.limit,
         returnedPage: state.messages,
         logger: this.getClient().logger,
       }),
