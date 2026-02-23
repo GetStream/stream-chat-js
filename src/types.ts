@@ -4620,9 +4620,7 @@ export type BatchUpdateOperation =
   | 'show'
   | 'archive'
   | 'unarchive'
-  | 'updateData'
-  | 'addFilterTags'
-  | 'removeFilterTags';
+  | 'updateData';
 
 export type BatchChannelDataUpdate = {
   frozen?: boolean;
@@ -4639,7 +4637,6 @@ export type UpdateChannelsBatchOptions = {
   filter: UpdateChannelsBatchFilters;
   members?: string[] | Array<NewMemberPayload>;
   data?: BatchChannelDataUpdate;
-  filter_tags_update?: string[];
 };
 
 export type UpdateChannelsBatchFilters = QueryFilters<{
@@ -4649,9 +4646,6 @@ export type UpdateChannelsBatchFilters = QueryFilters<{
   types?:
     | RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$eq'>>
     | PrimitiveFilter<string[]>;
-  filter_tags?:
-    | RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$eq'>>
-    | PrimitiveFilter<Record<string, string>>;
 }>;
 
 export type UpdateChannelsBatchResponse = {

@@ -208,40 +208,4 @@ export class ChannelBatchUpdater {
       data,
     });
   }
-
-  /**
-   * addFilterTags - Add filter tags to channels matching the filter
-   *
-   * @param {UpdateChannelsBatchFilters} filter Filter to select channels
-   * @param {string[]} tags Tags to add
-   * @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
-   */
-  async addFilterTags(
-    filter: UpdateChannelsBatchFilters,
-    tags: string[],
-  ): Promise<APIResponse & UpdateChannelsBatchResponse> {
-    return await this.client.updateChannelsBatch({
-      operation: 'addFilterTags',
-      filter,
-      filter_tags_update: tags,
-    });
-  }
-
-  /**
-   * removeFilterTags - Remove filter tags from channels matching the filter
-   *
-   * @param {UpdateChannelsBatchFilters} filter Filter to select channels
-   * @param {string[]} tags Tags to remove
-   * @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
-   */
-  async removeFilterTags(
-    filter: UpdateChannelsBatchFilters,
-    tags: string[],
-  ): Promise<APIResponse & UpdateChannelsBatchResponse> {
-    return await this.client.updateChannelsBatch({
-      operation: 'removeFilterTags',
-      filter,
-      filter_tags_update: tags,
-    });
-  }
 }
