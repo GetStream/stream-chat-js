@@ -16,7 +16,6 @@ import type {
   UserSort,
 } from '../../../types';
 import type { Channel } from '../../../channel';
-import { MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY } from '../../../constants';
 import type { Middleware } from '../../../middleware';
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
 
@@ -107,8 +106,8 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
   }
 
   get allMembersLoadedWithInitialChannelQuery() {
-    const countLoadedMembers = Object.keys(this.channel.state.members || {}).length;
-    return countLoadedMembers < MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY;
+    const { state, data } = this.channel;
+    return Object.keys(state.members).length === (data?.member_count ?? 0);
   }
 
   toUserSuggestion = (user: UserResponse): UserSuggestion => ({
@@ -236,13 +235,13 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
     };
   };
 
-  queryUsers = async (searchQuery: string) => {
+  queryUsers = async (searchQuery: string): Promise<UserResponse[]> => {
     const { filters, sort, options } = this.prepareQueryUsersParams(searchQuery);
     const { users } = await this.client.queryUsers(filters, sort, options);
     return users;
   };
 
-  queryMembers = async (searchQuery: string) => {
+  queryMembers = async (searchQuery: string): Promise<UserResponse[]> => {
     const { filters, sort, options } = this.prepareQueryMembersParams(searchQuery);
     const response = await this.channel.queryMembers(filters, sort, options);
 

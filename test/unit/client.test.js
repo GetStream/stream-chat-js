@@ -7,7 +7,6 @@ import { StreamChat } from '../../src/client';
 import { ConnectionState } from '../../src/connection_fallback';
 import { StableWSConnection } from '../../src/connection';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
-import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
 
 import {
 	describe,
@@ -22,6 +21,8 @@ import {
 import { Channel } from '../../src';
 import { normalizeQuerySort } from '../../src/utils';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
+
+const DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE = 100;
 
 describe('StreamChat getInstance', () => {
 	beforeEach(() => {

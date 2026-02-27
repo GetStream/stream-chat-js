@@ -1,12 +1,9 @@
-export const DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE = 25;
-export const DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE = 100;
 export const DEFAULT_MESSAGE_SET_PAGINATION = Object.freeze({
   hasNext: false,
   hasPrev: false,
 });
 export const DEFAULT_UPLOAD_SIZE_LIMIT_BYTES = 100 * 1024 * 1024; // 100 MB
 export const API_MAX_FILES_ALLOWED_PER_MESSAGE = 10;
-export const MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY = 100;
 export const RESERVED_UPDATED_MESSAGE_FIELDS = Object.freeze({
   // Dates should not be converted back to ISO strings as JS looses precision on them (milliseconds)
   created_at: true,

@@ -809,10 +809,28 @@ export const uniqBy = <T>(
 
 type MessagePaginationUpdatedParams = {
   parentSet: MessageSet;
-  requestedPageSize: number;
+  requestedPageSize?: number;
   returnedPage: MessageResponse[];
   logger?: Logger;
   messagePaginationOptions?: MessagePaginationOptions;
+};
+
+type PaginationBoundaries = Pick<
+  MessagePaginationUpdatedParams,
+  'requestedPageSize' | 'returnedPage'
+>;
+
+const toPageSize = ({ requestedPageSize, returnedPage }: PaginationBoundaries) =>
+  typeof requestedPageSize === 'number'
+    ? requestedPageSize
+    : Math.max(returnedPage.length, 1);
+
+const hasMoreByPageSize = ({ requestedPageSize, returnedPage }: PaginationBoundaries) => {
+  // If the caller doesn't provide a page size, we optimistically
+  // continue pagination until we receive an empty page.
+  if (typeof requestedPageSize !== 'number') return returnedPage.length > 0;
+  if (requestedPageSize <= 0) return false;
+  return returnedPage.length >= requestedPageSize;
 };
 
 export function binarySearchByDateEqualOrNearestGreater(
@@ -866,13 +884,13 @@ const messagePaginationCreatedAtAround = ({
   const wholePageHasOlderMessages =
     !!lastPageMsg?.created_at && new Date(lastPageMsg.created_at) < createdAtAroundDate;
 
+  const pageSize = toPageSize({ requestedPageSize, returnedPage });
   const requestedPageSizeNotMet =
-    requestedPageSize > parentSet.messages.length &&
-    requestedPageSize > returnedPage.length;
+    pageSize > parentSet.messages.length && pageSize > returnedPage.length;
   const noMoreMessages =
-    (requestedPageSize > parentSet.messages.length ||
+    (pageSize > parentSet.messages.length ||
       parentSet.messages.length >= returnedPage.length) &&
-    requestedPageSize > returnedPage.length;
+    pageSize > returnedPage.length;
 
   if (wholePageHasNewerMessages) {
     hasPrev = false;
@@ -937,10 +955,11 @@ const messagePaginationIdAround = ({
   let updateHasNext = lastPageMsgIsLastInSet;
 
   const midPoint = Math.floor(returnedPage.length / 2);
+  const pageSize = toPageSize({ requestedPageSize, returnedPage });
   const noMoreMessages =
-    (requestedPageSize > parentSet.messages.length ||
+    (pageSize > parentSet.messages.length ||
       parentSet.messages.length >= returnedPage.length) &&
-    requestedPageSize > returnedPage.length;
+    pageSize > returnedPage.length;
 
   if (noMoreMessages) {
     hasNext = hasPrev = false;
@@ -1009,7 +1028,7 @@ const messagePaginationLinear = ({
     !messagePaginationOptions?.id_around &&
     !messagePaginationOptions?.created_at_around;
 
-  const hasMore = returnedPage.length >= requestedPageSize;
+  const hasMore = hasMoreByPageSize({ requestedPageSize, returnedPage });
 
   if (typeof queriedPrevMessages !== 'undefined' || containsUnrecognizedOptionsOnly) {
     hasPrev = hasMore;

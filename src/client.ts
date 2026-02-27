@@ -246,7 +246,6 @@ import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
 import { Moderation } from './moderation';
 import { ThreadManager } from './thread_manager';
-import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import { PollManager } from './poll_manager';
 import type {
   ChannelManagerEventHandlerOverrides,
@@ -2041,9 +2040,7 @@ export class StreamChat {
           ...updatedMessagesSet.pagination,
           ...messageSetPagination({
             parentSet: updatedMessagesSet,
-            requestedPageSize:
-              queryChannelsOptions?.message_limit ||
-              DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE,
+            requestedPageSize: queryChannelsOptions?.message_limit,
             returnedPage: channelState.messages,
             logger: this.logger,
           }),

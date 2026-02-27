@@ -8,11 +8,12 @@ import sinon from 'sinon';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 
 import { ChannelState, StreamChat } from '../../src';
-import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
 import { generateUUIDv4 as uuidv4 } from '../../src/utils';
 
 import { describe, beforeEach, afterEach, it, expect, vi } from 'vitest';
+
+const DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE = 100;
 
 describe('Channel count unread', function () {
 	let lastRead;
@@ -1933,7 +1934,7 @@ describe('Channel.query', async () => {
 		mock.restore();
 	});
 
-	it('should not update pagination for queried message set', async () => {
+	it('should not update pagination for queried message set when explicit limit is not met', async () => {
 		const client = await getClientWithUser();
 		const channel = client.channel('messaging', uuidv4());
 		const mockedChannelQueryResponse = {
@@ -1945,7 +1946,9 @@ describe('Channel.query', async () => {
 		};
 		const mock = sinon.mock(client);
 		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
-		await channel.query();
+		await channel.query({
+			messages: { limit: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE },
+		});
 		expect(channel.state.messageSets.length).to.be.equal(1);
 		expect(channel.state.messageSets[0].pagination).to.eql({
 			hasNext: false,
