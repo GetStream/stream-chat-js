@@ -1,0 +1,21 @@
+{
+  "tasks": {
+    "thread-minimal-constructor": "pending",
+    "thread-hydration-pagination": "pending",
+    "react-thread-instance-flow": "pending",
+    "thread-provider-decoupling": "pending",
+    "js-tests": "pending",
+    "react-tests": "pending",
+    "verification": "pending"
+  },
+  "flags": {
+    "blocked": false,
+    "needs-review": false,
+    "awaiting-human-input": false
+  },
+  "meta": {
+    "last_updated": "2026-02-27",
+    "worktree": "/Users/martincupela/Projects/stream/chat/stream-chat-js-worktrees/thread-constructor-minimal-init",
+    "branch": "feat/init-empty-thread"
+  }
+}
