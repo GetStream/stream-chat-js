@@ -57,3 +57,23 @@ This keeps `Thread` usable immediately after construction with no undefined requ
 
 **Tradeoffs / Consequences:**  
 Minimal instances start non-paginable until hydrated by server data; Task 2 is responsible for carrying hydrated pagination into existing instances.
+
+## Decision: Hydration must overwrite pagination from the fetched thread instance
+
+**Date:** 2026-02-27  
+**Context:**  
+Minimal constructor threads initialize with null pagination cursors, so pagination methods remain inert until server-backed thread state is applied.
+
+**Decision:**  
+`Thread.hydrateState(...)` now copies `pagination` from the hydrated source thread alongside replies/read/metadata.
+
+**Reasoning:**  
+`loadPrevPage/loadNextPage` depend on `prevCursor/nextCursor`; without hydration of pagination, minimal threads stay permanently non-paginable after `reload()`.
+
+**Alternatives considered:**
+
+- Recompute pagination from current local replies during hydration — rejected because local replies may include optimistic/pending items and may not reflect server window boundaries.
+- Keep pagination untouched and rely on later events — rejected because pagination remains blocked with null cursors.
+
+**Tradeoffs / Consequences:**  
+Hydration treats fetched thread pagination as source-of-truth and replaces local pagination state at once.

@@ -39,7 +39,7 @@ Tasks are self-contained and parallelizable where possible; tasks touching the s
 
 **Dependencies:** Task 1
 
-**Status:** in-progress
+**Status:** done
 
 **Owner:** codex
 
@@ -51,8 +51,8 @@ Tasks are self-contained and parallelizable where possible; tasks touching the s
 
 **Acceptance Criteria:**
 
-- [ ] `hydrateState(...)` updates pagination fields required by `loadPrevPage/loadNextPage`.
-- [ ] Minimal thread does not get stuck with unusable pagination after reload.
+- [x] `hydrateState(...)` updates pagination fields required by `loadPrevPage/loadNextPage`.
+- [x] Minimal thread does not get stuck with unusable pagination after reload.
 
 ## Task 3: Decouple `ThreadProvider` from `Channel` Rendering
 

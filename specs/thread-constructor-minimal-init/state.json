@@ -1,7 +1,7 @@
 {
   "tasks": {
     "thread-minimal-constructor": "done",
-    "thread-hydration-pagination": "in-progress",
+    "thread-hydration-pagination": "done",
     "react-thread-instance-flow": "pending",
     "thread-provider-decoupling": "pending",
     "js-tests": "pending",
