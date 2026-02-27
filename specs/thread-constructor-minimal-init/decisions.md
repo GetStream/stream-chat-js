@@ -37,3 +37,23 @@ This satisfies both minimal and payload-backed creation without constructor over
 
 **Tradeoffs / Consequences:**  
 Runtime validation must be explicit for missing minimal inputs (especially `parentMessage.id`) to avoid ambiguous failures.
+
+## Decision: Minimal constructor branch requires explicit parent identity and initializes deterministic defaults
+
+**Date:** 2026-02-27  
+**Context:**  
+Task 1 implementation needed to support creating `Thread` without API `threadData` while preserving runtime guarantees expected by existing thread methods.
+
+**Decision:**  
+When `threadData` is absent, constructor requires `channel` and `parentMessage.id`; it initializes full `ThreadState` with deterministic defaults (`replies: []`, empty participants/custom/title, placeholder read state for current user when available, and pagination cursors set to `null`).
+
+**Reasoning:**  
+This keeps `Thread` usable immediately after construction with no undefined required fields and provides a stable baseline for later hydration/reload to populate server-backed state.
+
+**Alternatives considered:**
+
+- Allow missing `parentMessage.id` and derive later — rejected because thread identity and thread-scoped operations depend on a stable id at construction time.
+- Leave read/pagination fields partially undefined in minimal mode — rejected because it introduces conditional handling across runtime selectors and pagination codepaths.
+
+**Tradeoffs / Consequences:**  
+Minimal instances start non-paginable until hydrated by server data; Task 2 is responsible for carrying hydrated pagination into existing instances.

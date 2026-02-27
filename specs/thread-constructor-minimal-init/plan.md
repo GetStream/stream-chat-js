@@ -3,7 +3,7 @@
 ## Worktree
 
 - **Path:** `/Users/martincupela/Projects/stream/chat/stream-chat-js-worktrees/thread-constructor-minimal-init`
-- **Branch:** `feat/init-empty-thread`
+- **Branch:** `agent/feat/init-empty-thread`
 - **Base branch:** `master`
 
 ## Task Overview
@@ -16,7 +16,7 @@ Tasks are self-contained and parallelizable where possible; tasks touching the s
 
 **Dependencies:** None
 
-**Status:** in-progress
+**Status:** done
 
 **Owner:** codex
 
@@ -29,9 +29,9 @@ Tasks are self-contained and parallelizable where possible; tasks touching the s
 
 **Acceptance Criteria:**
 
-- [ ] `Thread` can be constructed without `threadData`.
-- [ ] Constructor still accepts `threadData` when provided.
-- [ ] Minimal init produces a valid `ThreadState` shape with no undefined required fields.
+- [x] `Thread` can be constructed without `threadData`.
+- [x] Constructor still accepts `threadData` when provided.
+- [x] Minimal init produces a valid `ThreadState` shape with no undefined required fields.
 
 ## Task 2: Complete Hydration + Pagination Bootstrap for Minimal Threads
 
@@ -39,9 +39,9 @@ Tasks are self-contained and parallelizable where possible; tasks touching the s
 
 **Dependencies:** Task 1
 
-**Status:** pending
+**Status:** in-progress
 
-**Owner:** unassigned
+**Owner:** codex
 
 **Scope:**
 
