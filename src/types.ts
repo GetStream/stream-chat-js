@@ -2217,32 +2217,37 @@ export type MemberFilters = QueryFilters<
 
 export type BannedUsersSort = BannedUsersSortBase | Array<BannedUsersSortBase>;
 
-export type BannedUsersSortBase = { created_at?: AscDesc };
+export type BannedUsersSortBase = Sort<'created_at'>;
 
 export type ReactionSort = ReactionSortBase | Array<ReactionSortBase>;
 
-export type ReactionSortBase = Sort<CustomReactionData> & {
-  created_at?: AscDesc;
-};
+export type ReactionSortBase = Sort<CustomReactionData> & Sort<'created_at'>;
 
 export type ChannelSort = ChannelSortBase | Array<ChannelSortBase>;
 
-export type ChannelSortBase = Sort<CustomChannelData> & {
-  created_at?: AscDesc;
-  has_unread?: AscDesc;
-  last_message_at?: AscDesc;
-  last_updated?: AscDesc;
-  member_count?: AscDesc;
-  pinned_at?: AscDesc;
-  unread_count?: AscDesc;
-  updated_at?: AscDesc;
-};
+export type ChannelSortBase = Sort<CustomChannelData> &
+  Sort<
+    | 'created_at'
+    | 'has_unread'
+    | 'last_message_at'
+    | 'last_updated'
+    | 'member_count'
+    | 'pinned_at'
+    | 'unread_count'
+    | 'updated_at'
+  >;
 
 export type PinnedMessagesSort = PinnedMessagesSortBase | Array<PinnedMessagesSortBase>;
-export type PinnedMessagesSortBase = { pinned_at?: AscDesc };
+export type PinnedMessagesSortBase = Sort<'pinned_at'>;
 
-export type Sort<T> = {
-  [P in keyof T]?: AscDesc;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type Sort<T extends string | Record<string, any>> = {
+  [P in T extends string ? T : keyof T]?:
+    | AscDesc
+    | {
+        direction: AscDesc;
+        type?: 'string' | 'number';
+      };
 };
 
 export type UserSort = Sort<UserResponse> | Array<Sort<UserResponse>>;
@@ -2261,51 +2266,40 @@ export type MemberSort =
       >
     >;
 
-export type SearchMessageSortBase = Sort<CustomMessageData> & {
-  attachments?: AscDesc;
-  'attachments.type'?: AscDesc;
-  created_at?: AscDesc;
-  id?: AscDesc;
-  'mentioned_users.id'?: AscDesc;
-  parent_id?: AscDesc;
-  pinned?: AscDesc;
-  relevance?: AscDesc;
-  reply_count?: AscDesc;
-  text?: AscDesc;
-  type?: AscDesc;
-  updated_at?: AscDesc;
-  'user.id'?: AscDesc;
-};
+export type SearchMessageSortBase = Sort<CustomMessageData> &
+  Sort<
+    | 'attachments'
+    | 'attachments.type'
+    | 'created_at'
+    | 'id'
+    | 'mentioned_users.id'
+    | 'parent_id'
+    | 'pinned'
+    | 'relevance'
+    | 'reply_count'
+    | 'text'
+    | 'type'
+    | 'updated_at'
+    | 'user.id'
+  >;
 
 export type SearchMessageSort = SearchMessageSortBase | Array<SearchMessageSortBase>;
 
 export type QuerySort = BannedUsersSort | ChannelSort | SearchMessageSort | UserSort;
 
-export type DraftSortBase = {
-  created_at?: AscDesc;
-};
+export type DraftSortBase = Sort<'created_ats'>;
 
 export type DraftSort = DraftSortBase | Array<DraftSortBase>;
 
 export type PollSort = PollSortBase | Array<PollSortBase>;
 
-export type PollSortBase = {
-  created_at?: AscDesc;
-  id?: AscDesc;
-  is_closed?: AscDesc;
-  name?: AscDesc;
-  updated_at?: AscDesc;
-};
+export type PollSortBase = Sort<
+  'created_at' | 'id' | 'is_closed' | 'name' | 'updated_at'
+>;
 
 export type VoteSort = VoteSortBase | Array<VoteSortBase>;
 
-export type VoteSortBase = {
-  created_at?: AscDesc;
-  id?: AscDesc;
-  is_closed?: AscDesc;
-  name?: AscDesc;
-  updated_at?: AscDesc;
-};
+export type VoteSortBase = PollSortBase;
 
 /**
  * Base Types
@@ -3620,10 +3614,9 @@ export type QueryMessageHistorySort =
   | QueryMessageHistorySortBase
   | Array<QueryMessageHistorySortBase>;
 
-export type QueryMessageHistorySortBase = {
-  message_updated_at?: AscDesc;
-  message_updated_by_id?: AscDesc;
-};
+export type QueryMessageHistorySortBase = Sort<
+  'message_updated_at' | 'message_updated_by_id'
+>;
 
 export type QueryMessageHistoryOptions = Pager;
 
@@ -4434,15 +4427,15 @@ export type LiveLocationPayload = {
 
 export type ThreadSort = ThreadSortBase | Array<ThreadSortBase>;
 
-export type ThreadSortBase = {
-  active_participant_count?: AscDesc;
-  created_at?: AscDesc;
-  last_message_at?: AscDesc;
-  parent_message_id?: AscDesc;
-  participant_count?: AscDesc;
-  reply_count?: AscDesc;
-  updated_at?: AscDesc;
-};
+export type ThreadSortBase = Sort<
+  | 'active_participant_count'
+  | 'created_at'
+  | 'last_message_at'
+  | 'parent_message_id'
+  | 'participant_count'
+  | 'reply_count'
+  | 'updated_at'
+>;
 
 export type ThreadFilters = QueryFilters<
   {
