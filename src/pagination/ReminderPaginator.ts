@@ -4,10 +4,18 @@ import type {
   PaginationQueryReturnValue,
   PaginatorOptions,
 } from './BasePaginator';
-import type { ReminderFilters, ReminderResponse, ReminderSort } from '../types';
+import type {
+  QueryRemindersOptions,
+  ReminderFilters,
+  ReminderResponse,
+  ReminderSort,
+} from '../types';
 import type { StreamChat } from '../client';
 
-export class ReminderPaginator extends BasePaginator<ReminderResponse> {
+export class ReminderPaginator extends BasePaginator<
+  ReminderResponse,
+  QueryRemindersOptions
+> {
   private client: StreamChat;
   protected _filters: ReminderFilters | undefined;
   protected _sort: ReminderSort | undefined;
@@ -30,25 +38,34 @@ export class ReminderPaginator extends BasePaginator<ReminderResponse> {
     this.resetState();
   }
 
-  constructor(client: StreamChat, options?: PaginatorOptions) {
+  constructor(
+    client: StreamChat,
+    options?: PaginatorOptions<ReminderResponse, QueryRemindersOptions>,
+  ) {
     super(options);
     this.client = client;
   }
 
-  query = async ({
+  protected getNextQueryShape({
     direction,
-  }: PaginationQueryParams): Promise<PaginationQueryReturnValue<ReminderResponse>> => {
+  }: Required<
+    Pick<PaginationQueryParams<QueryRemindersOptions>, 'direction'>
+  >): QueryRemindersOptions {
     const cursor = this.cursor?.[direction];
-    const {
-      reminders: items,
-      next,
-      prev,
-    } = await this.client.queryReminders({
+    return {
       filter: this.filters,
       sort: this.sort,
       limit: this.pageSize,
       [direction]: cursor,
-    });
+    };
+  }
+
+  query = async ({
+    queryShape,
+  }: PaginationQueryParams<QueryRemindersOptions>): Promise<
+    PaginationQueryReturnValue<ReminderResponse>
+  > => {
+    const { reminders: items, next, prev } = await this.client.queryReminders(queryShape);
     return { items, next, prev };
   };
 

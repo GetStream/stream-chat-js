@@ -439,6 +439,51 @@ describe('MessageDeliveryReadTracker', () => {
         ).toEqual([]);
       });
     });
+
+    describe('groupUsersByLastReadMessage / groupUsersByLastDeliveredMessage', () => {
+      it('returns users for whom the given message is their exact *last* read/delivered', () => {
+        const a = U('a');
+        const b = U('b');
+        const c = U('c');
+        const d = U('d'); // will share timestamp with m3 but different msgId via direct id override
+        const e = U('e'); // same for delivered side
+        const f = U('f'); // same for delivered side
+
+        tracker.onMessageDelivered({
+          user: c,
+          deliveredAt: iso(2000),
+          lastDeliveredMessageId: '2000',
+        });
+        tracker.onMessageDelivered({
+          user: a,
+          deliveredAt: iso(2000),
+          lastDeliveredMessageId: '2000',
+        });
+        tracker.onMessageDelivered({
+          user: e,
+          deliveredAt: iso(3000),
+          lastDeliveredMessageId: '3000',
+        });
+        tracker.onMessageDelivered({
+          user: f,
+          deliveredAt: iso(3000),
+          lastDeliveredMessageId: '3000',
+        });
+
+        tracker.onMessageRead({ user: a, readAt: iso(1000), lastReadMessageId: '1000' });
+        tracker.onMessageRead({ user: d, readAt: iso(3000), lastReadMessageId: '3000' });
+        tracker.onMessageRead({ user: b, readAt: iso(3000), lastReadMessageId: '3000' });
+
+        expect(tracker.groupUsersByLastDeliveredMessage()).toStrictEqual({
+          '2000': [c, a],
+          '3000': [e, f, d, b],
+        });
+        expect(tracker.groupUsersByLastReadMessage()).toStrictEqual({
+          '1000': [a],
+          '3000': [d, b],
+        });
+      });
+    });
   });
 
   describe('ordering & movement in sorted arrays', () => {
