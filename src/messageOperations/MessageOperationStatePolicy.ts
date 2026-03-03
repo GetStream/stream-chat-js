@@ -52,11 +52,13 @@ export class MessageOperationStatePolicy {
     const formatted = formatMessage({ ...messageFromResponse, status: 'received' });
     const existing = this.ctx.get(messageId);
 
-    if (
-      !existing ||
-      existing.updated_at.getTime() < formatted.updated_at.getTime() ||
-      existing.status === 'sending'
-    ) {
+    const serverNewer =
+      !existing || formatted.updated_at.getTime() > existing.updated_at.getTime();
+    const serverSameOrNewer =
+      !existing || formatted.updated_at.getTime() >= existing.updated_at.getTime();
+    const existingIsOurOptimisticSend = existing?.status === 'sending';
+
+    if (serverNewer || (existingIsOurOptimisticSend && serverSameOrNewer)) {
       this.ctx.ingest(formatted);
     }
   }

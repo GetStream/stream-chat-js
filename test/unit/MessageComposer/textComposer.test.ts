@@ -40,6 +40,7 @@ vi.mock('../../../src/utils', () => ({
   isLocalMessage: vi.fn().mockReturnValue(true),
   formatMessage: vi.fn().mockImplementation((msg) => msg),
   throttle: vi.fn().mockImplementation((fn) => fn),
+  normalizeQuerySort: vi.fn().mockReturnValue([{ field: 'created_at', direction: -1 }]),
 }));
 
 const setup = ({
