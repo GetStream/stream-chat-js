@@ -60,9 +60,9 @@ Tasks are self-contained and parallelizable where possible; tasks touching the s
 
 **Dependencies:** None
 
-**Status:** pending
+**Status:** done
 
-**Owner:** unassigned
+**Owner:** codex
 
 **Scope:**
 
@@ -72,8 +72,8 @@ Tasks are self-contained and parallelizable where possible; tasks touching the s
 
 **Acceptance Criteria:**
 
-- [ ] `ThreadProvider` no longer renders `<Channel />`.
-- [ ] Thread context remains available to downstream components.
+- [x] `ThreadProvider` no longer renders `<Channel />`.
+- [x] Thread context remains available to downstream components.
 
 ## Task 4: Make `Thread.tsx` Thread-Instance-Driven (No `ChannelActionContext` Thread Actions)
 
@@ -81,9 +81,9 @@ Tasks are self-contained and parallelizable where possible; tasks touching the s
 
 **Dependencies:** Task 3
 
-**Status:** pending
+**Status:** done
 
-**Owner:** unassigned
+**Owner:** codex
 
 **Scope:**
 
@@ -93,9 +93,9 @@ Tasks are self-contained and parallelizable where possible; tasks touching the s
 
 **Acceptance Criteria:**
 
-- [ ] `Thread.tsx` renders with a minimal thread instance and self-hydrates.
-- [ ] Pagination in thread-instance mode uses `threadInstance` methods.
-- [ ] Thread-instance flow does not require `ChannelActionContext.loadMoreThread/closeThread`.
+- [x] `Thread.tsx` renders with a minimal thread instance and self-hydrates.
+- [x] Pagination in thread-instance mode uses `threadInstance` methods.
+- [x] Thread-instance flow does not require `ChannelActionContext.loadMoreThread/closeThread`.
 
 ## Task 5: Add `stream-chat-js` Unit Coverage for Minimal Constructor + Hydration
 
@@ -103,9 +103,9 @@ Tasks are self-contained and parallelizable where possible; tasks touching the s
 
 **Dependencies:** Task 2
 
-**Status:** pending
+**Status:** done
 
-**Owner:** unassigned
+**Owner:** codex
 
 **Scope:**
 
@@ -115,8 +115,8 @@ Tasks are self-contained and parallelizable where possible; tasks touching the s
 
 **Acceptance Criteria:**
 
-- [ ] Tests cover minimal construction, missing id validation, and reload hydration path.
-- [ ] Tests verify pagination becomes usable after hydration.
+- [x] Tests cover minimal construction, missing id validation, and reload hydration path.
+- [x] Tests verify pagination becomes usable after hydration.
 
 ## Task 6: Add `stream-chat-react` Coverage for Thread-Instance-Only Flow
 

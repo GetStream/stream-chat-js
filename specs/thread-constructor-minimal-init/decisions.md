@@ -77,3 +77,41 @@ Minimal constructor threads initialize with null pagination cursors, so paginati
 
 **Tradeoffs / Consequences:**  
 Hydration treats fetched thread pagination as source-of-truth and replaces local pagination state at once.
+
+## Decision: ThreadProvider should be thread-context-only and not mount Channel
+
+**Date:** 2026-02-27  
+**Context:**  
+Task 3 requires enabling sibling rendering of `Channel` and `Thread` in layoutController flow, which is blocked when `ThreadProvider` internally mounts `<Channel>`.
+
+**Decision:**  
+`ThreadProvider` now renders only `<ThreadContext.Provider>` and no longer wraps children with `<Channel>`.
+
+**Reasoning:**  
+This removes hidden channel-context coupling from thread provider composition and makes thread context provisioning independent from channel rendering topology.
+
+**Alternatives considered:**
+
+- Keep `<Channel>` wrapper and adapt Thread internals only — rejected because it preserves structural coupling and prevents true sibling layout control.
+
+**Tradeoffs / Consequences:**  
+`Thread.tsx` must no longer rely on channel action/state contexts in thread-instance mode; this is addressed in Task 4.
+
+## Decision: Thread.tsx runs in thread-instance-only mode without channel contexts
+
+**Date:** 2026-02-27  
+**Context:**  
+After removing `<Channel>` from `ThreadProvider`, `Thread.tsx` must render outside channel providers in the layoutController sibling setup.
+
+**Decision:**  
+`Thread.tsx` now depends only on `Thread` instance data (`useThreadContext` + `useStateStore(thread.state, ...)`) and uses thread instance methods for close, hydration (`reload` when stale), and pagination.
+
+**Reasoning:**  
+This removes hard runtime coupling to `ChannelStateContext`/`ChannelActionContext`, which are not guaranteed to exist in the target composition.
+
+**Alternatives considered:**
+
+- Keep optional reads from `ChannelStateContext` as fallback — rejected because that still makes Thread behavior coupled to channel context presence.
+
+**Tradeoffs / Consequences:**  
+Legacy channel-thread-only usage of `Thread.tsx` without a thread instance is no longer handled by this flow and must be adapted through thread-instance provisioning.

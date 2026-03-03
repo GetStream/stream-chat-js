@@ -32,6 +32,7 @@ describe('Channel count unread', function () {
 		channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
 		channel.initialized = true;
 		channel.lastRead = () => lastRead;
+		channel.data.own_capabilities = ['read-events'];
 
 		const ignoredMessages = [
 			generateMsg({ date: '2018-01-01T00:00:00', mentioned_users: [user] }),
@@ -223,6 +224,7 @@ describe('Channel _handleChannelEvent', function () {
 		client.userID = user.id;
 		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
 		channel = client.channel('messaging', 'id');
+		channel.data.own_capabilities = ['read-events'];
 		channel.initialized = true;
 	});
 
@@ -275,6 +277,21 @@ describe('Channel _handleChannelEvent', function () {
 
 		expect(channel.state.membership).to.not.have.keys(['pinned_at', 'archived_at']);
 		expect(channel.state.membership).to.equal(channel.state.members[user.id]);
+	});
+
+	it('increments member_count from zero on member.added and syncs state member_count', () => {
+		channel.data.member_count = 0;
+
+		channel._handleChannelEvent({
+			type: 'member.added',
+			user,
+			member: generateMember({
+				user: { id: 'new-user' },
+			}),
+		});
+
+		expect(channel.data.member_count).to.equal(1);
+		expect(channel.state.member_count).to.equal(1);
 	});
 
 	it('message.new does not reset the unreadCount for current user messages', function () {
@@ -701,6 +718,24 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.state.read[user.id].last_delivered_message_id).toBe(
 				initialReadState.last_delivered_message_id,
 			);
+			expect(
+				channel.messageReceiptsTracker.getUserProgress(user.id)?.lastReadRef.msgId,
+			).toBe(event.last_read_message_id);
+		});
+
+		it('should reconcile tracker with metadata patch for notification.mark_unread', () => {
+			channel.state.read[user.id] = initialReadState;
+			const reconcileSpy = vi.spyOn(
+				channel.messageReceiptsTracker,
+				'reconcileFromReadStore',
+			);
+
+			channel._handleChannelEvent(notificationMarkUnreadEvent);
+
+			expect(reconcileSpy).toHaveBeenCalledTimes(1);
+			expect(reconcileSpy.mock.calls[0][0].meta).toEqual({
+				changedUserIds: [user.id],
+			});
 		});
 
 		it('should not update channel read state produced for another user or user is missing', () => {
@@ -771,12 +806,15 @@ describe('Channel _handleChannelEvent', function () {
 				event.last_read_message_id,
 			);
 			expect(channel.state.read[user.id].unread_messages).toBe(0);
-			expect(channel.state.read[user.id].last_delivered_at).toBe(
-				initialReadState.last_delivered_at,
+			expect(new Date(channel.state.read[user.id].last_delivered_at).getTime()).toBe(
+				new Date(messageReadEvent.created_at).getTime(),
 			);
 			expect(channel.state.read[user.id].last_delivered_message_id).toBe(
-				initialReadState.last_delivered_message_id,
+				event.last_read_message_id,
 			);
+			expect(
+				channel.messageReceiptsTracker.getUserProgress(user.id)?.lastReadRef.msgId,
+			).toBe(event.last_read_message_id);
 		});
 
 		it('should update channel read state produced for another user', () => {
@@ -795,11 +833,32 @@ describe('Channel _handleChannelEvent', function () {
 				event.last_read_message_id,
 			);
 			expect(channel.state.read[anotherUser.id].unread_messages).toBe(0);
-			expect(channel.state.read[anotherUser.id].last_delivered_at).toBe(
-				initialReadState.last_delivered_at,
+			expect(new Date(channel.state.read[anotherUser.id].last_delivered_at).getTime()).toBe(
+				new Date(messageReadEvent.created_at).getTime(),
 			);
 			expect(channel.state.read[anotherUser.id].last_delivered_message_id).toBe(
-				initialReadState.last_delivered_message_id,
+				event.last_read_message_id,
+			);
+		});
+
+		it('should emit readStore subscription updates for single-user message.read events', () => {
+			channel.state.read[user.id] = initialReadState;
+			const changes = [];
+			const unsubscribe = channel.state.readStore.subscribe((next, prev) => {
+				if (!prev) return;
+				changes.push({
+					next: next.read[user.id],
+					prev: prev.read[user.id],
+				});
+			});
+
+			channel._handleChannelEvent(messageReadEvent);
+			unsubscribe();
+
+			expect(changes).to.have.length(1);
+			expect(changes[0].next).to.not.equal(changes[0].prev);
+			expect(new Date(changes[0].next.last_read).getTime()).toBe(
+				new Date(messageReadEvent.created_at).getTime(),
 			);
 		});
 	});
@@ -853,6 +912,29 @@ describe('Channel _handleChannelEvent', function () {
 			);
 			expect(channel.state.read[user.id].last_delivered_message_id).toBe(
 				messageDeliveredEvent.last_delivered_message_id,
+			);
+		});
+
+		it('should not move canonical delivered state backwards on out-of-order events', () => {
+			channel.state.read[user.id] = {
+				...initialReadState,
+				last_delivered_at: new Date(3000).toISOString(),
+				last_delivered_message_id: 'newer-message-id',
+			};
+			const olderDeliveryEvent = {
+				...messageDeliveredEvent,
+				created_at: new Date(2000).toISOString(),
+				last_delivered_at: new Date(2000).toISOString(),
+				last_delivered_message_id: 'older-message-id',
+			};
+
+			channel._handleChannelEvent(olderDeliveryEvent);
+
+			expect(new Date(channel.state.read[user.id].last_delivered_at).getTime()).toBe(
+				new Date(3000).getTime(),
+			);
+			expect(channel.state.read[user.id].last_delivered_message_id).toBe(
+				'newer-message-id',
 			);
 		});
 
@@ -1202,7 +1284,7 @@ describe('Channel _handleChannelEvent', function () {
 		expect(channel.data.blocked).eq(false);
 	});
 
-	it('should update the frozen flag and reload channel state to update `own_capabilities`', () => {
+	it('should update the frozen flag and reload channel state when frozen changes', () => {
 		const event = {
 			channel: { frozen: true },
 			type: 'channel.updated',
@@ -1218,6 +1300,18 @@ describe('Channel _handleChannelEvent', function () {
 		expect(channelQuerySpy).toHaveBeenCalledTimes(1);
 
 		// Make sure that we don't wipe out any data
+	});
+
+	it('preserves member_count on channel.updated when event payload omits member_count', () => {
+		channel.data.member_count = 3;
+		channel.data.frozen = false;
+		channel._handleChannelEvent({
+			channel: { frozen: false },
+			type: 'channel.updated',
+		});
+
+		expect(channel.data.member_count).to.equal(3);
+		expect(channel.state.member_count).to.equal(3);
 	});
 
 	it(`should make sure that state reload doesn't wipe out existing data`, async () => {
@@ -1381,16 +1475,17 @@ describe('Channels - Constructor', function () {
 		const channel = client.channel('messaging', '123', { cool: true });
 		expect(channel.cid).to.eql('messaging:123');
 		expect(channel.id).to.eql('123');
-		expect(channel.data).to.eql({ cool: true });
+		expect(channel.data.cool).to.eql(true);
 	});
 
 	it('custom data merges to the right with current data', function () {
 		let channel = client.channel('messaging', 'brand_new_123', { cool: true });
 		expect(channel.cid).to.eql('messaging:brand_new_123');
 		expect(channel.id).to.eql('brand_new_123');
-		expect(channel.data).to.eql({ cool: true });
+		expect(channel.data.cool).to.eql(true);
 		channel = client.channel('messaging', 'brand_new_123', { custom_cool: true });
-		expect(channel.data).to.eql({ cool: true, custom_cool: true });
+		expect(channel.data.cool).to.eql(true);
+		expect(channel.data.custom_cool).to.eql(true);
 	});
 
 	it('default options', function () {
@@ -1407,12 +1502,13 @@ describe('Channels - Constructor', function () {
 	it('undefined ID no options', function () {
 		const channel = client.channel('messaging', undefined);
 		expect(channel.id).to.eql(undefined);
-		expect(channel.data).to.eql({});
+		expect(channel.data.own_capabilities).to.eql([]);
+		expect(Object.keys(channel.data)).to.eql(['own_capabilities']);
 	});
 
 	it('short version with options', function () {
 		const channel = client.channel('messaging', { members: ['tommaso', 'thierry'] });
-		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel.data.members).to.eql(['tommaso', 'thierry']);
 		expect(channel.id).to.eql(undefined);
 	});
 
@@ -1420,7 +1516,7 @@ describe('Channels - Constructor', function () {
 		const channel = client.channel('messaging', null, {
 			members: ['tommaso', 'thierry'],
 		});
-		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel.data.members).to.eql(['tommaso', 'thierry']);
 		expect(channel.id).to.eql(undefined);
 	});
 
@@ -1428,7 +1524,7 @@ describe('Channels - Constructor', function () {
 		const channel = client.channel('messaging', '', {
 			members: ['tommaso', 'thierry'],
 		});
-		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel.data.members).to.eql(['tommaso', 'thierry']);
 		expect(channel.id).to.eql(undefined);
 	});
 
@@ -1436,7 +1532,7 @@ describe('Channels - Constructor', function () {
 		const channel = client.channel('messaging', undefined, {
 			members: ['tommaso', 'thierry'],
 		});
-		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel.data.members).to.eql(['tommaso', 'thierry']);
 		expect(channel.id).to.eql(undefined);
 	});
 });
@@ -1890,6 +1986,42 @@ describe('Channel _initializeState', () => {
 		channel._initializeState(secondState);
 
 		expect(Object.keys(channel.state.members)).deep.to.be.equal(['alice']);
+	});
+
+	it('should merge read state without overwriting existing users', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channel('messaging', uuidv4());
+		const existingUser = { id: 'existing-user' };
+		const newUser = { id: 'new-user' };
+		channel.messageReceiptsTracker.setPendingReadStoreReconcileMeta({
+			changedUserIds: [existingUser.id],
+		});
+		channel.state.read = {
+			[existingUser.id]: {
+				last_read: new Date('2026-01-01T00:00:00.000Z'),
+				unread_messages: 1,
+				user: existingUser,
+			},
+		};
+
+		channel._initializeState({
+			read: [
+				{
+					last_delivered_at: new Date('2026-01-02T00:00:00.000Z').toISOString(),
+					last_delivered_message_id: 'delivered-message-id',
+					last_read: new Date('2026-01-02T00:00:00.000Z').toISOString(),
+					last_read_message_id: 'read-message-id',
+					unread_messages: 0,
+					user: newUser,
+				},
+			],
+		});
+
+		expect(channel.state.read[existingUser.id]).toBeDefined();
+		expect(channel.state.read[newUser.id]).toBeDefined();
+		expect(channel.state.read[newUser.id].last_read_message_id).toBe('read-message-id');
+		expect(channel.messageReceiptsTracker.getUserProgress(existingUser.id)).toBeTruthy();
+		expect(channel.messageReceiptsTracker.getUserProgress(newUser.id)).toBeTruthy();
 	});
 });
 

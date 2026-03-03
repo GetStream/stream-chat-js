@@ -131,6 +131,48 @@ describe('StreamChat getInstance', () => {
 	});
 });
 
+describe('StreamChat config(s) store', () => {
+	it('initializes configsStore and keeps configs access backward compatible', () => {
+		const client = new StreamChat('key', 'secret');
+
+		expect(client.configs).to.eql({});
+		expect(client.configsStore.getLatestValue()).to.eql({ configs: {} });
+
+		const nextConfigs = { 'messaging:next': { typing_events: true } };
+		client.configs = nextConfigs;
+
+		expect(client.configs).to.equal(nextConfigs);
+		expect(client.configsStore.getLatestValue()).to.eql({ configs: nextConfigs });
+	});
+
+	it('updates configsStore through _addChannelConfig when cache is enabled', () => {
+		const client = new StreamChat('key', 'secret');
+
+		client._addChannelConfig({
+			cid: 'messaging:channel-1',
+			config: { replies: true },
+		});
+
+		expect(client.configsStore.getLatestValue()).to.eql({
+			configs: {
+				'messaging:channel-1': { replies: true },
+			},
+		});
+	});
+
+	it('does not update configsStore through _addChannelConfig when cache is disabled', () => {
+		const client = new StreamChat('key', 'secret');
+		client._cacheEnabled = () => false;
+
+		client._addChannelConfig({
+			cid: 'messaging:channel-1',
+			config: { replies: true },
+		});
+
+		expect(client.configsStore.getLatestValue()).to.eql({ configs: {} });
+	});
+});
+
 describe('Client userMuteStatus', function () {
 	const client = new StreamChat('', '');
 	const user = { id: 'user' };
@@ -721,6 +763,44 @@ describe('StreamChat.queryChannels', async () => {
 		queryChannelsResponse.forEach((item) => {
 			expect(item).to.be.instanceOf(Channel);
 		});
+		postStub.restore();
+	});
+
+	it('should sync channel data-backed stores when hydrating channels from queryChannels', async () => {
+		const client = await getClientWithUser();
+		const mockedChannelsQueryResponse = [
+			{
+				...mockChannelQueryResponse,
+				channel: {
+					...mockChannelQueryResponse.channel,
+					member_count: 7,
+					own_capabilities: ['send-message', 'read-events'],
+				},
+				messages: Array.from(
+					{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE },
+					generateMsg,
+				),
+			},
+		];
+		const postStub = sinon
+			.stub(client, 'post')
+			.returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
+
+		const [channel] = await client.queryChannels();
+
+		expect(channel.state.member_count).to.equal(7);
+		expect(channel.state.ownCapabilitiesStore.getLatestValue()).to.eql({
+			ownCapabilities: ['send-message', 'read-events'],
+		});
+
+		channel.data.member_count = 8;
+		channel.data.own_capabilities = ['send-message'];
+
+		expect(channel.state.member_count).to.equal(8);
+		expect(channel.state.ownCapabilitiesStore.getLatestValue()).to.eql({
+			ownCapabilities: ['send-message'],
+		});
+
 		postStub.restore();
 	});
 

@@ -2,9 +2,9 @@
   "tasks": {
     "thread-minimal-constructor": "done",
     "thread-hydration-pagination": "done",
-    "react-thread-instance-flow": "pending",
-    "thread-provider-decoupling": "pending",
-    "js-tests": "pending",
+    "react-thread-instance-flow": "done",
+    "thread-provider-decoupling": "done",
+    "js-tests": "done",
     "react-tests": "pending",
     "verification": "pending"
   },

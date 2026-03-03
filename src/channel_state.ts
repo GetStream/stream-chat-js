@@ -18,6 +18,7 @@ import {
   isBlockedMessage,
 } from './utils';
 import { DEFAULT_MESSAGE_SET_PAGINATION } from './constants';
+import { StateStore } from './store';
 
 type ChannelReadStatus = Record<
   string,
@@ -31,6 +32,32 @@ type ChannelReadStatus = Record<
     last_delivered_message_id?: string;
   }
 >;
+
+export type WatcherState = {
+  watcherCount: number;
+  watchers: Record<string, UserResponse>;
+};
+
+export type TypingUsersState = {
+  typing: Record<string, Event>;
+};
+
+export type ReadState = {
+  read: ChannelReadStatus;
+};
+
+export type MutedUsersState = {
+  mutedUsers: Array<UserResponse>;
+};
+
+export type MembersState = {
+  members: Record<string, ChannelMemberResponse>;
+  memberCount: number;
+};
+
+export type OwnCapabilitiesState = {
+  ownCapabilities: string[];
+};
 
 const messageSetBounds = (
   a: LocalMessage[] | MessageResponse[],
@@ -69,15 +96,16 @@ const messageSetsOverlapByTimestamp = (a: LocalMessage[], b: LocalMessage[]) =>
  */
 export class ChannelState {
   _channel: Channel;
-  watcher_count: number;
-  typing: Record<string, Event>;
-  read: ChannelReadStatus;
+  readonly watcherStore: StateStore<WatcherState>;
+  readonly typingStore: StateStore<TypingUsersState>;
+  readonly readStore: StateStore<ReadState>;
+  readonly membersStore: StateStore<MembersState>;
+  readonly ownCapabilitiesStore: StateStore<OwnCapabilitiesState>;
+  // todo: is this actually used somewhere?
+  readonly mutedUsersStore: StateStore<MutedUsersState>;
   pinnedMessages: Array<ReturnType<ChannelState['formatMessage']>>;
   pending_messages: Array<PendingMessageResponse>;
   threads: Record<string, Array<ReturnType<ChannelState['formatMessage']>>>;
-  mutedUsers: Array<UserResponse>;
-  watchers: Record<string, UserResponse>;
-  members: Record<string, ChannelMemberResponse>;
   unreadCount: number;
   membership: ChannelMemberResponse;
   last_message_at: Date | null;
@@ -98,17 +126,26 @@ export class ChannelState {
 
   constructor(channel: Channel) {
     this._channel = channel;
-    this.watcher_count = 0;
-    this.typing = {};
-    this.read = {};
+    this.watcherStore = new StateStore<WatcherState>({
+      watcherCount: 0,
+      watchers: {},
+    });
+    this.typingStore = new StateStore<TypingUsersState>({
+      typing: {},
+    });
+    this.readStore = new StateStore<ReadState>({ read: {} });
+    // a list of users to hide messages from
+    this.mutedUsersStore = new StateStore<MutedUsersState>({ mutedUsers: [] });
+    this.membersStore = new StateStore<MembersState>({ members: {}, memberCount: 0 });
+    this.ownCapabilitiesStore = new StateStore<OwnCapabilitiesState>({
+      ownCapabilities: [],
+    });
+    this.syncMemberCountFromChannelData(channel?.data);
+    this.syncOwnCapabilitiesFromChannelData(channel?.data);
     this.initMessages();
     this.pinnedMessages = [];
     this.pending_messages = [];
     this.threads = {};
-    // a list of users to hide messages from
-    this.mutedUsers = [];
-    this.watchers = {};
-    this.members = {};
     this.membership = {};
     this.unreadCount = 0;
     /**
@@ -144,6 +181,144 @@ export class ChannelState {
   set latestMessages(messages: Array<ReturnType<ChannelState['formatMessage']>>) {
     const index = this.messageSets.findIndex((s) => s.isLatest);
     this.messageSets[index].messages = messages;
+  }
+
+  get members() {
+    return this.membersStore.getLatestValue().members;
+  }
+
+  set members(members: Record<string, ChannelMemberResponse>) {
+    this.membersStore.partialNext({ members });
+  }
+
+  get member_count() {
+    return this.membersStore.getLatestValue().memberCount;
+  }
+
+  set member_count(memberCount: number) {
+    this.membersStore.partialNext({ memberCount });
+  }
+
+  get read() {
+    return this.readStore.getLatestValue().read;
+  }
+
+  set read(read: ChannelReadStatus) {
+    this.readStore.next({ read });
+  }
+
+  get typing() {
+    return this._channel?.messageComposer?.textComposer.typing ??
+      this.typingStore.getLatestValue().typing;
+  }
+
+  set typing(typing: Record<string, Event>) {
+    this.typingStore.next({ typing });
+
+    if (this._channel?.messageComposer) {
+      this._channel.messageComposer.textComposer.setTyping(typing);
+    }
+  }
+
+  syncMemberCountFromChannelData(
+    data: Channel['data'],
+    fallbackData: Channel['data'] = this._channel?.data,
+  ) {
+    const fallbackMemberCount =
+      typeof fallbackData?.member_count === 'number'
+        ? fallbackData.member_count
+        : this.membersStore.getLatestValue().memberCount;
+
+    if (!data || typeof data !== 'object') {
+      this.membersStore.partialNext({ memberCount: fallbackMemberCount ?? 0 });
+      return;
+    }
+
+    const dataDescriptor = Object.getOwnPropertyDescriptor(data, 'member_count');
+    let memberCount =
+      typeof data.member_count === 'number'
+        ? data.member_count
+        : typeof fallbackMemberCount === 'number'
+          ? fallbackMemberCount
+          : undefined;
+
+    this.membersStore.partialNext({ memberCount: memberCount ?? 0 });
+
+    Object.defineProperty(data, 'member_count', {
+      configurable: true,
+      enumerable: dataDescriptor?.enumerable ?? false,
+      get: () => memberCount,
+      set: (nextMemberCount: number | undefined) => {
+        memberCount = typeof nextMemberCount === 'number' ? nextMemberCount : undefined;
+        this.membersStore.partialNext({ memberCount: memberCount ?? 0 });
+      },
+    });
+  }
+
+  syncOwnCapabilitiesFromChannelData(
+    data: Channel['data'],
+    fallbackData: Channel['data'] = this._channel?.data,
+  ) {
+    if (!data || typeof data !== 'object') {
+      this.ownCapabilitiesStore.next({ ownCapabilities: [] });
+      return;
+    }
+
+    let ownCapabilities = Array.isArray(data.own_capabilities)
+      ? [...data.own_capabilities]
+      : Array.isArray(fallbackData?.own_capabilities)
+        ? [...fallbackData.own_capabilities]
+        : [];
+
+    this.ownCapabilitiesStore.next({ ownCapabilities: ownCapabilities });
+
+    Object.defineProperty(data, 'own_capabilities', {
+      configurable: true,
+      enumerable: true,
+      get: () => ownCapabilities,
+      set: (nextOwnCapabilities: string[] | undefined) => {
+        ownCapabilities = Array.isArray(nextOwnCapabilities)
+          ? [...nextOwnCapabilities]
+          : [];
+        this.ownCapabilitiesStore.next({ ownCapabilities: ownCapabilities });
+      },
+    });
+  }
+
+  setTypingEvent(userID: string, event: Event) {
+    this.typing = { ...this.typing, [userID]: event };
+  }
+
+  removeTypingEvent(userID: string) {
+    if (!this.typing[userID]) return;
+
+    const typing = { ...this.typing };
+    delete typing[userID];
+    this.typing = typing;
+  }
+
+  get mutedUsers() {
+    return this.mutedUsersStore.getLatestValue().mutedUsers;
+  }
+
+  set mutedUsers(mutedUsers: Array<UserResponse>) {
+    this.mutedUsersStore.next({ mutedUsers });
+  }
+
+  get watchers() {
+    return this.watcherStore.getLatestValue().watchers;
+  }
+
+  set watchers(watchers: Record<string, UserResponse>) {
+    this.watcherStore.partialNext({ watchers });
+  }
+
+  get watcher_count() {
+    return this.watcherStore.getLatestValue().watcherCount;
+  }
+
+  set watcher_count(watcherCount: number) {
+    this.watcherStore.partialNext({ watcherCount });
   }
 
   get messagePagination() {
@@ -820,7 +995,7 @@ export class ChannelState {
           ? new Date(lastEvent.received_at)
           : lastEvent.received_at || new Date();
       if (now.getTime() - receivedAt.getTime() > 7000) {
-        delete this.typing[userID];
+        this.removeTypingEvent(userID);
         this._channel.getClient().dispatchEvent({
           cid: this._channel.cid,
           type: 'typing.stop',

@@ -275,6 +275,10 @@ type MessageComposerSetupFunction = ({
 
 export type BlockedUsersState = { userIds: string[] };
 
+export type ChannelConfigsState = {
+  configs: Configs;
+};
+
 export type MessageComposerSetupState = {
   /**
    * Each `MessageComposer` runs this function each time its signature changes or
@@ -307,7 +311,6 @@ export class StreamChat {
   browser: boolean;
   cleaningIntervalRef?: NodeJS.Timeout;
   clientID?: string;
-  configs: Configs;
   key: string;
   listeners: Record<string, Array<(event: Event) => void>>;
   logger: Logger;
@@ -323,7 +326,8 @@ export class StreamChat {
   recoverStateOnReconnect?: boolean;
   moderation: Moderation;
   mutedChannels: ChannelMute[];
-  mutedUsers: Mute[];
+  readonly mutedUsersStore: StateStore<{ mutedUsers: Mute[] }>;
+  readonly configsStore: StateStore<ChannelConfigsState>;
   blockedUsers: StateStore<BlockedUsersState>;
   node: boolean;
   options: StreamChatOptions;
@@ -384,7 +388,12 @@ export class StreamChat {
     this.state = new ClientState({ client: this });
     // a list of channels to hide ws events from
     this.mutedChannels = [];
-    this.mutedUsers = [];
+    this.mutedUsersStore = new StateStore<{ mutedUsers: Mute[] }>({
+      mutedUsers: [],
+    });
+    this.configsStore = new StateStore<{ configs: Configs }>({
+      configs: {},
+    });
     this.blockedUsers = new StateStore<BlockedUsersState>({ userIds: [] });
 
     this.moderation = new Moderation(this);
@@ -523,6 +532,22 @@ export class StreamChat {
     this.polls = new PollManager({ client: this });
     this.reminders = new ReminderManager({ client: this });
     this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });
+  }
+
+  get mutedUsers() {
+    return this.mutedUsersStore.getLatestValue().mutedUsers;
+  }
+
+  set mutedUsers(mutedUsers: Mute[]) {
+    this.mutedUsersStore.next({ mutedUsers });
+  }
+
+  get configs() {
+    return this.configsStore.getLatestValue().configs;
+  }
+
+  set configs(configs: Configs) {
+    this.configsStore.next({ configs });
   }
 
   /**
@@ -2021,7 +2046,9 @@ export class StreamChat {
     for (const channelState of channelsFromApi) {
       this._addChannelConfig(channelState.channel);
       const c = this.channel(channelState.channel.type, channelState.channel.id);
+      const previousData = c.data;
       c.data = channelState.channel;
+      c._syncStateFromChannelData(c.data, previousData);
       c.offlineMode = offlineMode;
       c.initialized = !offlineMode;
       c.push_preferences = channelState.push_preferences;
@@ -2248,7 +2275,10 @@ export class StreamChat {
 
   _addChannelConfig({ cid, config }: ChannelResponse) {
     if (this._cacheEnabled()) {
-      this.configs[cid] = config;
+      this.configs = {
+        ...this.configs,
+        [cid]: config,
+      };
     }
   }
 
@@ -2398,7 +2428,9 @@ export class StreamChat {
     ) {
       const channel = this.activeChannels[cid];
       if (Object.keys(custom).length > 0) {
+        const previousData = channel.data;
         channel.data = { ...channel.data, ...custom };
+        channel._syncStateFromChannelData(channel.data, previousData);
         channel._data = { ...channel._data, ...custom };
       }
       return channel;
