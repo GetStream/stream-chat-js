@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { MessageOperations } from '../../../src/messageOperations/MessageOperations';
 import type { LocalMessage, Message, MessageResponse } from '../../../src/types';
 
@@ -112,6 +112,144 @@ describe('MessageOperations', () => {
 
     await expect(ops.send({ localMessage })).rejects.toThrow('nope');
     expect(store.get('m1')?.status).toBe('failed');
+  });
+
+  it('reuses cached payload and options when retry is called without explicit params', async () => {
+    const store: Store = new Map();
+    const sendCalls: Array<{ message: Message; options: unknown }> = [];
+
+    const ops = new MessageOperations({
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        send: async (message, options) => {
+          sendCalls.push({ message, options });
+          if (sendCalls.length === 1) {
+            throw new Error('send failed');
+          }
+          return { message: makeMessageResponse({ id: 'm1', text: 'retried' }) };
+        },
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+    });
+
+    const localMessage = makeLocalMessage({ id: 'm1', text: 'local text' });
+    const cachedMessage = {
+      id: 'm1',
+      text: 'cached text',
+      type: 'regular',
+    } as Message;
+    const cachedOptions = { skip_push: true };
+
+    await expect(
+      ops.send({
+        localMessage,
+        message: cachedMessage,
+        options: cachedOptions,
+      }),
+    ).rejects.toThrow('send failed');
+
+    await ops.retry({ localMessage });
+
+    expect(sendCalls[1].message).toEqual(cachedMessage);
+    expect(sendCalls[1].options).toEqual(cachedOptions);
+  });
+
+  it('does not reuse expired cached payload and options', async () => {
+    vi.useFakeTimers();
+    try {
+      const store: Store = new Map();
+      const sendCalls: Array<{ message: Message; options: unknown }> = [];
+
+      const ops = new MessageOperations({
+        ingest: (m) => store.set(m.id, m),
+        get: (id) => store.get(id),
+        handlers: () => ({}),
+        defaults: {
+          send: async (message, options) => {
+            sendCalls.push({ message, options });
+            if (sendCalls.length === 1) {
+              throw new Error('send failed');
+            }
+            return { message: makeMessageResponse({ id: 'm1', text: 'retried' }) };
+          },
+          update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+        },
+      });
+
+      const localMessage = makeLocalMessage({ id: 'm1', text: 'local text' });
+      const cachedMessage = {
+        id: 'm1',
+        text: 'cached text',
+        type: 'regular',
+      } as Message;
+      const cachedOptions = { skip_push: true };
+
+      await expect(
+        ops.send({
+          localMessage,
+          message: cachedMessage,
+          options: cachedOptions,
+        }),
+      ).rejects.toThrow('send failed');
+
+      vi.advanceTimersByTime(5 * 60 * 1000 + 1);
+
+      await ops.retry({ localMessage });
+
+      expect(sendCalls[1].message.text).toBe('local text');
+      expect(sendCalls[1].options).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears cached payload after successful retry', async () => {
+    const store: Store = new Map();
+    const sendCalls: Array<{ message: Message; options: unknown }> = [];
+
+    const ops = new MessageOperations({
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        send: async (message, options) => {
+          sendCalls.push({ message, options });
+          if (sendCalls.length === 1) {
+            throw new Error('send failed');
+          }
+          return {
+            message: makeMessageResponse({ id: 'm1', text: `ok-${sendCalls.length}` }),
+          };
+        },
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+    });
+
+    const localMessage = makeLocalMessage({ id: 'm1', text: 'local text' });
+    const cachedMessage = {
+      id: 'm1',
+      text: 'cached text',
+      type: 'regular',
+    } as Message;
+    const cachedOptions = { skip_push: true };
+
+    await expect(
+      ops.send({
+        localMessage,
+        message: cachedMessage,
+        options: cachedOptions,
+      }),
+    ).rejects.toThrow('send failed');
+
+    await ops.retry({ localMessage });
+    await ops.retry({ localMessage });
+
+    expect(sendCalls[1].message).toEqual(cachedMessage);
+    expect(sendCalls[1].options).toEqual(cachedOptions);
+    expect(sendCalls[2].message.text).toBe('local text');
+    expect(sendCalls[2].options).toBeUndefined();
   });
 
   it('normalizes outgoing message for send', async () => {
