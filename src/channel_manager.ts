@@ -149,7 +149,6 @@ export const DEFAULT_CHANNEL_MANAGER_OPTIONS = {
 };
 
 export const DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS = {
-  limit: 10,
   offset: 0,
 };
 
@@ -293,7 +292,7 @@ export class ChannelManager extends WithSubscriptions {
         channels,
         pagination: {
           ...pagination,
-          hasNext: (channels?.length ?? 0) >= limit,
+          hasNext: (channels?.length ?? 0) >= (limit ?? 1),
           isLoading: false,
           options: newOptions,
         },
@@ -446,7 +445,7 @@ export class ChannelManager extends WithSubscriptions {
         channels: uniqBy<Channel>([...(channels || []), ...nextChannels], 'cid'),
         pagination: {
           ...pagination,
-          hasNext: (nextChannels?.length ?? 0) >= limit,
+          hasNext: (nextChannels?.length ?? 0) >= (limit ?? 1),
           isLoading: false,
           isLoadingNext: false,
           options: newOptions,

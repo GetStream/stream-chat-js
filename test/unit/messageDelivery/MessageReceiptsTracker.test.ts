@@ -5,6 +5,8 @@ import {
   ReadResponse,
   UserResponse,
 } from '../../../src';
+import { StateStore } from '../../../src/store';
+import type { Channel } from '../../../src/channel';
 
 const ownUserId = 'author';
 const U = (id: string): UserResponse => ({ id, name: id }); // matches UserResponse shape for the service
@@ -20,11 +22,30 @@ const msgs = [
 const byTs = new Map<number, { id: string; ts: number }>(msgs.map((m) => [m.ts, m]));
 const ref = (ts: number): MsgRef => ({ timestampMs: ts, msgId: byTs.get(ts)!.id });
 
-// Message locator used by the service (O(1) lookup by exact timestamp)
-const makeLocator = () => (timestampMs?: number) => {
-  if (!timestampMs) return null;
+const defaultFindMessageByTimestamp = (timestampMs?: number) => {
+  if (!timestampMs) return undefined;
   const m = byTs.get(timestampMs);
-  return m ? { timestampMs: m.ts, msgId: m.id } : null;
+  return m ? { id: m.id } : undefined;
+};
+
+const createChannelMock = ({
+  findMessageByTimestamp = defaultFindMessageByTimestamp,
+}: {
+  findMessageByTimestamp?: (timestampMs?: number) => { id: string } | undefined;
+} = {}) => {
+  const readStore = new StateStore({
+    read: {},
+  });
+
+  return {
+    channel: {
+      state: {
+        findMessageByTimestamp,
+        readStore,
+      },
+    } as unknown as Channel,
+    readStore,
+  };
 };
 
 // ISO builders (service parses Date strings)
@@ -37,9 +58,34 @@ const ids = (users: any[]) => users.map((u) => u.id);
 
 describe('MessageDeliveryReadTracker', () => {
   let tracker: MessageReceiptsTracker;
+  let channelMock: ReturnType<typeof createChannelMock>;
 
   beforeEach(() => {
-    tracker = new MessageReceiptsTracker({ locateMessage: makeLocator() });
+    channelMock = createChannelMock();
+    tracker = new MessageReceiptsTracker({ channel: channelMock.channel });
+  });
+
+  describe('constructor', () => {
+    it('allows locateMessage constructor override while requiring channel', () => {
+      const customLocateMessage = vi.fn((timestampMs: number) => ({
+        timestampMs,
+        msgId: 'custom',
+      }));
+      const trackerWithCustomLocator = new MessageReceiptsTracker({
+        channel: channelMock.channel,
+        locateMessage: customLocateMessage,
+      });
+
+      trackerWithCustomLocator.onMessageRead({
+        user: U('compat-user'),
+        readAt: iso(2000),
+      });
+
+      expect(customLocateMessage).toHaveBeenCalledWith(2000);
+      expect(
+        trackerWithCustomLocator.getUserProgress('compat-user')?.lastReadRef.msgId,
+      ).toBe('custom');
+    });
   });
 
   describe('ingestInitial', () => {
@@ -126,10 +172,12 @@ describe('MessageDeliveryReadTracker', () => {
     });
 
     it('ignores read events with unknown timestamps (locator returns null)', () => {
-      // re-init with a locator that knows only m1..m3 (m4 is unknown)
-      const locator = (ts?: number) =>
-        ts && ts <= 3000 ? { timestampMs: ts, msgId: byTs.get(ts)!.id } : null;
-      tracker = new MessageReceiptsTracker({ locateMessage: locator });
+      // re-init with channel state that knows only m1..m3 (m4 is unknown)
+      channelMock = createChannelMock({
+        findMessageByTimestamp: (ts?: number) =>
+          ts && ts <= 3000 ? { id: byTs.get(ts)!.id } : undefined,
+      });
+      tracker = new MessageReceiptsTracker({ channel: channelMock.channel });
 
       const dave = U('dave');
       tracker.onMessageRead({ user: dave, readAt: iso(4000) }); // unknown -> ignored
@@ -143,11 +191,12 @@ describe('MessageDeliveryReadTracker', () => {
     });
 
     it('prevents search for message if last read message id is provided', () => {
-      const locator = vi.fn().mockImplementation(() => {});
-      tracker = new MessageReceiptsTracker({ locateMessage: locator });
+      const findMessageByTimestamp = vi.fn().mockImplementation(() => {});
+      channelMock = createChannelMock({ findMessageByTimestamp });
+      tracker = new MessageReceiptsTracker({ channel: channelMock.channel });
       const user = U('frank');
       tracker.onMessageRead({ user, readAt: iso(3000), lastReadMessageId: 'X' }); // unknown -> ignored
-      expect(locator).not.toHaveBeenCalled();
+      expect(findMessageByTimestamp).not.toHaveBeenCalled();
       expect(tracker.getUserProgress('frank')).toStrictEqual({
         lastDeliveredRef: {
           msgId: 'X',
@@ -201,9 +250,11 @@ describe('MessageDeliveryReadTracker', () => {
     });
 
     it('ignores delivered events with unknown timestamps (locator returns null)', () => {
-      const locator = (t?: number) =>
-        t && t <= 2000 ? { timestampMs: t, msgId: byTs.get(t)!.id } : null;
-      tracker = new MessageReceiptsTracker({ locateMessage: locator });
+      channelMock = createChannelMock({
+        findMessageByTimestamp: (t?: number) =>
+          t && t <= 2000 ? { id: byTs.get(t)!.id } : undefined,
+      });
+      tracker = new MessageReceiptsTracker({ channel: channelMock.channel });
 
       const frank = U('frank');
       tracker.onMessageDelivered({ user: frank, deliveredAt: iso(3000) }); // unknown -> ignored
@@ -215,15 +266,16 @@ describe('MessageDeliveryReadTracker', () => {
     });
 
     it('prevents search for message if last read message id is provided', () => {
-      const locator = vi.fn().mockImplementation(() => {});
-      tracker = new MessageReceiptsTracker({ locateMessage: locator });
+      const findMessageByTimestamp = vi.fn().mockImplementation(() => {});
+      channelMock = createChannelMock({ findMessageByTimestamp });
+      tracker = new MessageReceiptsTracker({ channel: channelMock.channel });
       const user = U('frank');
       tracker.onMessageDelivered({
         user,
         deliveredAt: iso(3000),
         lastDeliveredMessageId: 'X',
       }); // unknown -> ignored
-      expect(locator).not.toHaveBeenCalled();
+      expect(findMessageByTimestamp).not.toHaveBeenCalled();
       expect(tracker.getUserProgress('frank')).toStrictEqual({
         lastDeliveredRef: {
           msgId: 'X',
@@ -311,8 +363,11 @@ describe('MessageDeliveryReadTracker', () => {
     });
 
     it('does not call locateMessage when lastReadMessageId is provided', () => {
-      const locator = vi.fn().mockImplementation(makeLocator());
-      tracker = new MessageReceiptsTracker({ locateMessage: locator });
+      const findMessageByTimestamp = vi
+        .fn()
+        .mockImplementation(defaultFindMessageByTimestamp);
+      channelMock = createChannelMock({ findMessageByTimestamp });
+      tracker = new MessageReceiptsTracker({ channel: channelMock.channel });
 
       tracker.onNotificationMarkUnread({
         user,
@@ -325,7 +380,42 @@ describe('MessageDeliveryReadTracker', () => {
       expect(userProgress.lastReadRef).toEqual(ref(2000));
 
       // ensure locator wasn’t used to derive the read ref
-      expect(locator).not.toHaveBeenCalled();
+      expect(findMessageByTimestamp).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('subscriptions', () => {
+    it('reconciles from readStore emissions when subscribed and stops after unsubscribe', () => {
+      const user = U('subscribed-user');
+      tracker.registerSubscriptions();
+      tracker.setPendingReadStoreReconcileMeta({ changedUserIds: [user.id] });
+
+      channelMock.readStore.next({
+        read: {
+          [user.id]: {
+            last_read: new Date(2000),
+            user,
+            unread_messages: 0,
+            last_read_message_id: 'm2',
+          },
+        },
+      });
+      expect(tracker.getUserProgress(user.id)?.lastReadRef).toEqual(ref(2000));
+
+      tracker.unregisterSubscriptions();
+      channelMock.readStore.next({
+        read: {
+          [user.id]: {
+            last_read: new Date(3000),
+            user,
+            unread_messages: 0,
+            last_read_message_id: 'm3',
+          },
+        },
+      });
+
+      // no longer subscribed -> unchanged
+      expect(tracker.getUserProgress(user.id)?.lastReadRef).toEqual(ref(2000));
     });
   });
 
@@ -504,6 +594,205 @@ describe('MessageDeliveryReadTracker', () => {
       expect(ids(tracker.readersForMessage(ref(3000)))).toEqual(['y', 'x']);
       // and of m4 -> x only
       expect(ids(tracker.readersForMessage(ref(4000)))).toEqual(['x']);
+    });
+  });
+
+  describe('snapshotStore', () => {
+    it('updates revision on every ingestInitial call', () => {
+      const snapshot = [
+        { user: U('alice'), last_read: iso(2000), last_delivered_at: iso(2000) },
+      ];
+
+      tracker.ingestInitial(snapshot);
+      expect(tracker.snapshotStore.getLatestValue().revision).toBe(1);
+      expect(tracker.snapshotStore.getLatestValue().readersByMessageId).toEqual({
+        m2: [U('alice')],
+      });
+
+      // same state still emits for full ingest calls
+      tracker.ingestInitial(snapshot);
+      expect(tracker.snapshotStore.getLatestValue().revision).toBe(2);
+
+      // changed state -> new revision
+      tracker.ingestInitial([
+        { user: U('alice'), last_read: iso(3000), last_delivered_at: iso(3000) },
+      ]);
+      expect(tracker.snapshotStore.getLatestValue().revision).toBe(3);
+    });
+
+    it('updates revision for effective message.read changes only', () => {
+      const user = U('reader');
+
+      tracker.onMessageRead({ user, readAt: iso(2000) });
+      expect(tracker.snapshotStore.getLatestValue().revision).toBe(1);
+
+      // same/older read should be a no-op
+      tracker.onMessageRead({ user, readAt: iso(2000) });
+      tracker.onMessageRead({ user, readAt: iso(1000) });
+      expect(tracker.snapshotStore.getLatestValue().revision).toBe(1);
+
+      tracker.onMessageRead({ user, readAt: iso(3000) });
+      expect(tracker.snapshotStore.getLatestValue().revision).toBe(2);
+    });
+
+    it('updates revision for effective message.delivered changes only', () => {
+      const user = U('delivered-user');
+
+      tracker.onMessageDelivered({ user, deliveredAt: iso(2000) });
+      expect(tracker.snapshotStore.getLatestValue().revision).toBe(1);
+
+      // same/older delivery should be a no-op
+      tracker.onMessageDelivered({ user, deliveredAt: iso(2000) });
+      tracker.onMessageDelivered({ user, deliveredAt: iso(1000) });
+      expect(tracker.snapshotStore.getLatestValue().revision).toBe(1);
+
+      tracker.onMessageDelivered({ user, deliveredAt: iso(3000) });
+      expect(tracker.snapshotStore.getLatestValue().revision).toBe(2);
+    });
+
+    it('updates revision for effective notification.mark_unread changes only', () => {
+      const user = U('mark-unread-user');
+
+      tracker.onMessageRead({ user, readAt: iso(3000), lastReadMessageId: 'm3' });
+      expect(tracker.snapshotStore.getLatestValue().revision).toBe(1);
+
+      tracker.onNotificationMarkUnread({
+        user,
+        lastReadAt: iso(2000),
+        lastReadMessageId: 'm2',
+      });
+      expect(tracker.snapshotStore.getLatestValue().revision).toBe(2);
+
+      // same boundary -> no-op
+      tracker.onNotificationMarkUnread({
+        user,
+        lastReadAt: iso(2000),
+        lastReadMessageId: 'm2',
+      });
+      expect(tracker.snapshotStore.getLatestValue().revision).toBe(2);
+    });
+  });
+
+  describe('reconcileFromReadStore', () => {
+    it('reconciles changed/removed users from metadata deltas', () => {
+      const alice = U('alice');
+      const bob = U('bob');
+      const carol = U('carol');
+      const previousReadState = {
+        [alice.id]: {
+          last_read: new Date(2000),
+          unread_messages: 0,
+          user: alice,
+          last_read_message_id: 'm2',
+        },
+        [bob.id]: {
+          last_read: new Date(3000),
+          unread_messages: 0,
+          user: bob,
+          last_read_message_id: 'm3',
+          last_delivered_at: new Date(3000),
+          last_delivered_message_id: 'm3',
+        },
+      };
+      const nextReadState = {
+        [bob.id]: {
+          last_read: new Date(4000),
+          unread_messages: 0,
+          user: bob,
+          last_read_message_id: 'm4',
+          last_delivered_at: new Date(4000),
+          last_delivered_message_id: 'm4',
+        },
+        [carol.id]: {
+          last_read: new Date(2000),
+          unread_messages: 0,
+          user: carol,
+          last_read_message_id: 'm2',
+          last_delivered_at: new Date(2000),
+          last_delivered_message_id: 'm2',
+        },
+      };
+
+      tracker.ingestInitial([
+        { user: alice, last_read: iso(2000), last_delivered_at: iso(2000) },
+        { user: bob, last_read: iso(3000), last_delivered_at: iso(3000) },
+      ]);
+
+      tracker.reconcileFromReadStore({
+        previousReadState,
+        nextReadState,
+        meta: {
+          changedUserIds: [bob.id, carol.id],
+          removedUserIds: [alice.id],
+        },
+      });
+
+      expect(tracker.getUserProgress(alice.id)).toBeNull();
+      expect(tracker.getUserProgress(bob.id)?.lastReadRef).toEqual(ref(4000));
+      expect(tracker.getUserProgress(carol.id)?.lastReadRef).toEqual(ref(2000));
+    });
+
+    it('ignores non-bootstrap reconcile when metadata is absent', () => {
+      const user = U('missing-meta-user');
+
+      tracker.reconcileFromReadStore({
+        previousReadState: {},
+        nextReadState: {
+          [user.id]: {
+            last_read: new Date(3000),
+            unread_messages: 0,
+            user,
+            last_read_message_id: 'm3',
+            last_delivered_at: new Date(3000),
+            last_delivered_message_id: 'm3',
+          },
+        },
+      });
+
+      expect(tracker.getUserProgress(user.id)).toBeNull();
+      expect(tracker.snapshotStore.getLatestValue().revision).toBe(0);
+    });
+
+    it('applies only metadata-declared user deltas', () => {
+      const user = U('meta-user');
+      tracker.ingestInitial([
+        {
+          user,
+          last_read: iso(2000),
+          last_delivered_at: iso(2000),
+          last_read_message_id: 'm2',
+          last_delivered_message_id: 'm2',
+        },
+      ]);
+      expect(tracker.snapshotStore.getLatestValue().revision).toBe(1);
+
+      tracker.reconcileFromReadStore({
+        previousReadState: {
+          [user.id]: {
+            last_read: new Date(2000),
+            unread_messages: 0,
+            user,
+            last_read_message_id: 'm2',
+            last_delivered_at: new Date(2000),
+            last_delivered_message_id: 'm2',
+          },
+        },
+        nextReadState: {
+          [user.id]: {
+            last_read: new Date(4000),
+            unread_messages: 0,
+            user,
+            last_read_message_id: 'm4',
+            last_delivered_at: new Date(4000),
+            last_delivered_message_id: 'm4',
+          },
+        },
+        meta: { changedUserIds: [] },
+      });
+
+      // Metadata drives reconciliation; undeclared users are ignored.
+      expect(tracker.getUserProgress(user.id)?.lastReadRef).toEqual(ref(2000));
+      expect(tracker.snapshotStore.getLatestValue().revision).toBe(1);
     });
   });
 });

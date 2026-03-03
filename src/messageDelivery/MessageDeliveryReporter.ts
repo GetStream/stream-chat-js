@@ -3,16 +3,20 @@ import { Channel } from '../channel';
 import type { ThreadUserReadState } from '../thread';
 import { Thread } from '../thread';
 import type {
+  ErrorFromResponse,
   EventAPIResponse,
   LocalMessage,
   MarkDeliveredOptions,
   MarkReadOptions,
 } from '../types';
+import { type APIErrorResponse } from '../types';
 import { throttle } from '../utils';
+import { isAPIError, isErrorRetryable } from '../errors';
 
 const MAX_DELIVERED_MESSAGE_COUNT_IN_PAYLOAD = 100 as const;
 const MARK_AS_DELIVERED_BUFFER_TIMEOUT = 1000 as const;
 const MARK_AS_READ_THROTTLE_TIMEOUT = 1000 as const;
+const RETRY_COUNT_LIMIT_FOR_TIMEOUT_INCREASE = 3 as const;
 
 const isChannel = (item: Channel | Thread): item is Channel => item instanceof Channel;
 const isThread = (item: Channel | Thread): item is Thread => item instanceof Thread;
@@ -40,6 +44,10 @@ export class MessageDeliveryReporter {
   protected markDeliveredRequestPromise: Promise<EventAPIResponse | void> | null = null;
   protected markDeliveredTimeout: ReturnType<typeof setTimeout> | null = null;
 
+  protected requestTimeoutMs: number = MARK_AS_DELIVERED_BUFFER_TIMEOUT;
+  // increased up to RETRY_COUNT_LIMIT_FOR_TIMEOUT_INCREASE
+  protected requestRetryCount: number = 0;
+
   constructor({ client }: MessageDeliveryReporterOptions) {
     this.client = client;
   }
@@ -47,16 +55,33 @@ export class MessageDeliveryReporter {
   private get markDeliveredRequestInFlight() {
     return this.markDeliveredRequestPromise !== null;
   }
+
   private get hasTimer() {
     return this.markDeliveredTimeout !== null;
   }
+
   private get hasDeliveryCandidates() {
     return this.deliveryReportCandidates.size > 0;
+  }
+
+  private get canExecuteRequest() {
+    return !this.markDeliveredRequestInFlight && this.hasDeliveryCandidates;
   }
 
   private static hasPermissionToReportDeliveryFor(collection: Channel | Thread) {
     if (isChannel(collection)) return !!collection.getConfig()?.delivery_events;
     if (isThread(collection)) return !!collection.channel.getConfig()?.delivery_events;
+  }
+
+  private increaseBackOff() {
+    if (this.requestRetryCount >= RETRY_COUNT_LIMIT_FOR_TIMEOUT_INCREASE) return;
+    this.requestRetryCount = this.requestRetryCount + 1;
+    this.requestTimeoutMs = this.requestTimeoutMs * 2;
+  }
+
+  private resetBackOff() {
+    this.requestTimeoutMs = MARK_AS_DELIVERED_BUFFER_TIMEOUT;
+    this.requestRetryCount = 0;
   }
 
   /**
@@ -186,7 +211,7 @@ export class MessageDeliveryReporter {
    * @param options
    */
   public announceDelivery = (options?: AnnounceDeliveryOptions) => {
-    if (this.markDeliveredRequestInFlight || !this.hasDeliveryCandidates) return;
+    if (!this.canExecuteRequest) return;
 
     const { latest_delivered_messages, sendBuffer } =
       this.confirmationsFromDeliveryReportCandidates();
@@ -194,7 +219,9 @@ export class MessageDeliveryReporter {
 
     const payload = { ...options, latest_delivered_messages };
 
-    const postFlightReconcile = () => {
+    const postFlightReconcile = ({
+      preventSchedulingRetry,
+    }: { preventSchedulingRetry?: boolean } = {}) => {
       this.markDeliveredRequestPromise = null;
 
       // promote anything that arrived during request
@@ -203,32 +230,47 @@ export class MessageDeliveryReporter {
       }
       this.nextDeliveryReportCandidates = new Map();
 
+      if (preventSchedulingRetry) return;
       // checks internally whether there are candidates to announce
       this.announceDeliveryBuffered(options);
     };
 
-    const handleError = () => {
-      // repopulate relevant candidates for the next report
-      for (const [k, v] of Object.entries(sendBuffer)) {
-        if (!this.deliveryReportCandidates.has(k)) {
-          this.deliveryReportCandidates.set(k, v);
-        }
-      }
+    const handleSuccess = () => {
+      this.resetBackOff();
       postFlightReconcile();
+    };
+
+    const handleError = (error: ErrorFromResponse<APIErrorResponse> | Error) => {
+      // re-populate relevant candidates for the next report
+      // but make sure to keep the items that failed to be reported the first next time
+      const newDeliveryReportCandidates = new Map(sendBuffer);
+      for (const [k, v] of this.deliveryReportCandidates.entries()) {
+        newDeliveryReportCandidates.set(k, v);
+      }
+      this.deliveryReportCandidates = newDeliveryReportCandidates;
+
+      if (
+        (isAPIError(error) && isErrorRetryable(error)) ||
+        (error as ErrorFromResponse<APIErrorResponse>).status >= 500
+      ) {
+        this.increaseBackOff();
+        postFlightReconcile();
+      } else {
+        postFlightReconcile({ preventSchedulingRetry: true });
+      }
     };
 
     this.markDeliveredRequestPromise = this.client
       .markChannelsDelivered(payload)
-      .then(postFlightReconcile, handleError);
+      .then(handleSuccess, handleError);
   };
 
   public announceDeliveryBuffered = (options?: AnnounceDeliveryOptions) => {
-    if (this.hasTimer || this.markDeliveredRequestInFlight || !this.hasDeliveryCandidates)
-      return;
+    if (this.hasTimer || !this.canExecuteRequest) return;
     this.markDeliveredTimeout = setTimeout(() => {
       this.markDeliveredTimeout = null;
       this.announceDelivery(options);
-    }, MARK_AS_DELIVERED_BUFFER_TIMEOUT);
+    }, this.requestTimeoutMs);
   };
 
   /**

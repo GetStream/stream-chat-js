@@ -104,6 +104,7 @@ export function isOwnUserBaseProperty(property: string) {
     privacy_settings: true,
     roles: true,
     push_preferences: true,
+    total_unread_count_by_team: true,
   };
 
   return ownUserBaseProperties[property as keyof OwnUserBase];
@@ -1341,3 +1342,13 @@ export const runDetached = <T>(
 
   promise.catch(onError);
 };
+
+export const isBlockedMessage = (message: LocalMessage) =>
+  message.type === 'error' &&
+  (message.moderation_details?.action === 'MESSAGE_RESPONSE_ACTION_REMOVE' ||
+    message.moderation?.action === 'remove');
+
+export const isBouncedMessage = (message: LocalMessage) =>
+  message.type === 'error' &&
+  (message?.moderation_details?.action === 'MESSAGE_RESPONSE_ACTION_BOUNCE' ||
+    message?.moderation?.action === 'bounce');

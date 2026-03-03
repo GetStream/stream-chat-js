@@ -1,4 +1,4 @@
-import type { Attachment, FileUploadConfig } from '../types';
+import type { Attachment, FileUploadConfig, GiphyData } from '../types';
 
 export type LocalAttachment = AnyLocalAttachment | LocalUploadAttachment;
 
@@ -99,17 +99,33 @@ export type ImageAttachment = Attachment & {
   original_width?: number;
 };
 
+export type GiphyAttachment = Attachment & {
+  type: 'giphy';
+  giphy?: GiphyData;
+  title?: string;
+  title_link?: string;
+  thumbnail_url?: string;
+};
+
 export type BaseLocalAttachmentMetadata = {
   id: string;
 };
 
 export type LocalAttachmentUploadMetadata = {
   file: File | FileReference;
+  /**
+   * Local preview URI, typically a Blob URL from `URL.createObjectURL(file)`
+   * or (for React Native `FileReference`) the provided `uri`.
+   */
+  previewUri?: string;
   uploadState: AttachmentLoadingState;
   uploadPermissionCheck?: UploadPermissionCheckResult; // added new
 };
 
 export type LocalImageAttachmentUploadMetadata = LocalAttachmentUploadMetadata & {
+  /**
+   * @deprecated `previewUri` is now available on `LocalAttachmentUploadMetadata`.
+   */
   previewUri?: string;
 };
 

@@ -1011,6 +1011,53 @@ describe('AttachmentManager', () => {
       expect(attachmentManager.successfulUploadsCount).toBe(1);
     });
 
+    it('revokes blob: previewUri when upload succeeds', async () => {
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
+
+      const createObjectURLSpy = vi
+        .spyOn(URL, 'createObjectURL')
+        .mockReturnValue('blob:test-image');
+      const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation();
+
+      const file = new File(['x'], 'test.jpg', { type: 'image/jpeg' });
+      const localAttachment = await attachmentManager.fileToLocalUploadAttachment(file);
+
+      const uploaded = await attachmentManager.uploadAttachment(localAttachment);
+
+      expect(createObjectURLSpy).toHaveBeenCalledWith(file);
+      expect(revokeObjectURLSpy).toHaveBeenCalledWith('blob:test-image');
+      expect(uploaded.localMetadata.previewUri).toBeUndefined();
+
+      createObjectURLSpy.mockRestore();
+      revokeObjectURLSpy.mockRestore();
+    });
+
+    it('does not revoke non-blob previewUri when upload succeeds', async () => {
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
+
+      const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation();
+
+      const fileReference = {
+        name: 'test.pdf',
+        type: 'application/pdf',
+        size: 4321,
+        uri: 'file://test.pdf',
+      };
+      const localAttachment =
+        await attachmentManager.fileToLocalUploadAttachment(fileReference);
+
+      const uploaded = await attachmentManager.uploadAttachment(localAttachment);
+
+      expect(revokeObjectURLSpy).not.toHaveBeenCalled();
+      expect(uploaded.localMetadata.previewUri).toBeUndefined();
+
+      revokeObjectURLSpy.mockRestore();
+    });
+
     it('should handle upload failures', async () => {
       const {
         messageComposer: { attachmentManager },
@@ -1480,6 +1527,42 @@ describe('AttachmentManager', () => {
       expect(result.localMetadata.previewUri).toBeDefined();
     });
 
+    it('should create a LocalUploadAttachment from a File (non-image) and set previewUri', async () => {
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
+      vi.spyOn(Utils, 'generateUUIDv4').mockReturnValue('mock-uuid');
+      const uploadConfigCheckResult = {
+        uploadBlocked: false,
+        reason: '',
+      };
+      vi.spyOn(attachmentManager, 'getUploadConfigCheck').mockResolvedValue(
+        uploadConfigCheckResult,
+      );
+
+      const createObjectURLSpy = vi
+        .spyOn(URL, 'createObjectURL')
+        .mockReturnValue('blob:test-pdf');
+      const file = new File(['pdf'], 'test.pdf', { type: 'application/pdf' });
+
+      const result = await attachmentManager.fileToLocalUploadAttachment(file);
+
+      expect(createObjectURLSpy).toHaveBeenCalledWith(file);
+      expect(result).toMatchObject({
+        file_size: 3,
+        mime_type: 'application/pdf',
+        type: 'file',
+        localMetadata: expect.objectContaining({
+          file,
+          id: 'mock-uuid',
+          uploadState: 'pending',
+          previewUri: 'blob:test-pdf',
+        }),
+        title: 'test.pdf',
+      });
+      expect(result.localMetadata.uploadPermissionCheck).toEqual(uploadConfigCheckResult);
+    });
+
     it('should create a LocalUploadAttachment from a FileReference(image)', async () => {
       const {
         messageComposer: { attachmentManager },
@@ -1516,6 +1599,7 @@ describe('AttachmentManager', () => {
       });
       expect(result.localMetadata.uploadPermissionCheck).toEqual(uploadConfigCheckResult);
       expect(result.localMetadata.uploadState).toMatch(/pending|blocked/);
+      expect(result.localMetadata.previewUri).toBe('file://test.jpg');
     });
 
     it('should create a LocalUploadAttachment from a FileReference with duration, thumb_url, and dimensions', async () => {
@@ -1554,6 +1638,7 @@ describe('AttachmentManager', () => {
         duration: 12.34,
         thumb_url: 'file://thumb.jpg',
       });
+      expect(result.localMetadata.previewUri).toBe('file://test.mp4');
       expect(result.localMetadata.uploadPermissionCheck).toEqual(uploadConfigCheckResult);
     });
   });

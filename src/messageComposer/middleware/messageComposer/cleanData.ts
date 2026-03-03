@@ -15,8 +15,13 @@ export const createCompositionDataCleanupMiddleware = (
       state,
       next,
     }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
+      const messageType =
+        !composer.editedMessage?.type || composer.editedMessage.type === 'error'
+          ? 'regular'
+          : composer.editedMessage.type;
+
       const common = {
-        type: composer.editedMessage?.type ?? 'regular',
+        type: messageType,
       };
 
       const editedMessagePayloadToBeSent = composer.editedMessage

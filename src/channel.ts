@@ -1,6 +1,8 @@
 import { ChannelState } from './channel_state';
+import { CooldownTimer } from './CooldownTimer';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
+import type { ReadStoreReconcileMeta } from './messageDelivery';
 import { MessagePaginator } from './pagination/paginators';
 import { MessageOperations } from './messageOperations';
 import {
@@ -71,6 +73,7 @@ import type {
   StaticLocationPayload,
   TruncateChannelAPIResponse,
   TruncateOptions,
+  UnBanUserOptions,
   UpdateChannelAPIResponse,
   UpdateChannelOptions,
   UpdateLocationPayload,
@@ -163,6 +166,7 @@ export class Channel {
   public readonly messageReceiptsTracker: MessageReceiptsTracker;
   public readonly messagePaginator: MessagePaginator;
   public readonly messageOperations: MessageOperations;
+  public readonly cooldownTimer: CooldownTimer;
 
   /**
    * constructor - Create a channel
@@ -212,12 +216,10 @@ export class Channel {
       compositionContext: this,
     });
 
-    this.messageReceiptsTracker = new MessageReceiptsTracker({
-      locateMessage: (timestampMs) => {
-        const msg = this.state.findMessageByTimestamp(timestampMs);
-        return msg && { timestampMs, msgId: msg.id };
-      },
-    });
+    this.messageReceiptsTracker = new MessageReceiptsTracker({ channel: this });
+    this.messageReceiptsTracker.registerSubscriptions();
+
+    this.cooldownTimer = new CooldownTimer({ channel: this });
 
     this.messagePaginator = new MessagePaginator({ channel: this });
 
@@ -780,7 +782,9 @@ export class Channel {
       ]
         .sort()
         .join();
+    const previousData = this.data;
     this.data = data.channel;
+    this._syncStateFromChannelData(this.data, previousData);
     // If the capabiltities are changed, we trigger the `capabilities.changed` event.
     if (areCapabilitiesChanged) {
       this.getClient().dispatchEvent({
@@ -805,7 +809,9 @@ export class Channel {
         cooldown: coolDownInterval,
       },
     );
+    const previousData = this.data;
     this.data = data.channel;
+    this._syncStateFromChannelData(this.data, previousData);
     return data;
   }
 
@@ -821,7 +827,9 @@ export class Channel {
         cooldown: 0,
       },
     );
+    const previousData = this.data;
     this.data = data.channel;
+    this._syncStateFromChannelData(this.data, previousData);
     return data;
   }
 
@@ -1042,7 +1050,9 @@ export class Channel {
       this._channelURL(),
       payload,
     );
+    const previousData = this.data;
     this.data = data.channel;
+    this._syncStateFromChannelData(this.data, previousData);
     return data;
   }
 
@@ -1400,7 +1410,9 @@ export class Channel {
     const combined = { ...defaultOptions, ...options };
     const state = await this.query(combined, 'latest');
     this.initialized = true;
+    const previousData = this.data;
     this.data = state.channel;
+    this._syncStateFromChannelData(this.data, previousData);
 
     this._client.logger(
       'info',
@@ -1543,7 +1555,7 @@ export class Channel {
     if (message.user?.id && this.getClient().userMuteStatus(message.user.id))
       return false;
 
-    // Return false if channel doesn't allow ad events.
+    // Return false if channel doesn't allow read events.
     if (
       Array.isArray(this.data?.own_capabilities) &&
       !this.data?.own_capabilities.includes('read-events')
@@ -1722,8 +1734,11 @@ export class Channel {
       ]
         .sort()
         .join();
+    const previousData = this.data;
     this.data = state.channel;
+    this._syncStateFromChannelData(this.data, previousData);
     this.offlineMode = false;
+    this.cooldownTimer.refresh();
 
     if (areCapabilitiesChanged) {
       this.getClient().dispatchEvent({
@@ -1803,11 +1818,13 @@ export class Channel {
    * unbanUser - Removes the bans for a user on a channel
    *
    * @param {string} targetUserID
+   * @param {UnBanUserOptions} options
    * @returns {Promise<APIResponse>}
    */
-  async unbanUser(targetUserID: string) {
+  async unbanUser(targetUserID: string, options?: UnBanUserOptions) {
     this._checkInitialized();
     return await this.getClient().unbanUser(targetUserID, {
+      ...options,
       type: this.type,
       id: this.id,
     });
@@ -2044,6 +2061,56 @@ export class Channel {
     this.listeners[key] = this.listeners[key].filter((value) => value !== callback);
   }
 
+  private _patchReadState(
+    patch: (currentReadState: ChannelState['read']) => ChannelState['read'],
+    reconcileMeta?: ReadStoreReconcileMeta,
+  ) {
+    let hasStateChanged = false;
+    this.messageReceiptsTracker.setPendingReadStoreReconcileMeta(reconcileMeta);
+
+    this.state.readStore.next((currentReadStoreState) => {
+      const nextReadState = patch(currentReadStoreState.read);
+
+      if (nextReadState === currentReadStoreState.read) {
+        return currentReadStoreState;
+      }
+      hasStateChanged = true;
+
+      return {
+        ...currentReadStoreState,
+        read: nextReadState,
+      };
+    });
+
+    if (!hasStateChanged) {
+      this.messageReceiptsTracker.setPendingReadStoreReconcileMeta(undefined);
+    }
+  }
+
+  private _upsertReadState(
+    userId: string,
+    update: (
+      currentUserReadState: ChannelState['read'][string] | undefined,
+    ) => ChannelState['read'][string],
+    reconcileMeta?: ReadStoreReconcileMeta,
+  ) {
+    let nextUserReadState: ChannelState['read'][string] | undefined;
+
+    this._patchReadState((currentReadState) => {
+      const currentUserReadState = currentReadState[userId];
+      const updatedUserReadState = update(currentUserReadState);
+
+      nextUserReadState = updatedUserReadState;
+
+      return {
+        ...currentReadState,
+        [userId]: updatedUserReadState,
+      };
+    }, reconcileMeta);
+
+    return nextUserReadState;
+  }
+
   _handleChannelEvent(event: Event) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const channel = this;
@@ -2060,32 +2127,54 @@ export class Channel {
     switch (event.type) {
       case 'typing.start':
         if (event.user?.id) {
-          channelState.typing[event.user.id] = event;
+          channelState.setTypingEvent(event.user.id, event);
         }
         break;
       case 'typing.stop':
         if (event.user?.id) {
-          delete channelState.typing[event.user.id];
+          channelState.removeTypingEvent(event.user.id);
         }
         break;
       case 'message.read':
         if (event.user?.id && event.created_at) {
-          const previousReadState = channelState.read[event.user.id];
-          channelState.read[event.user.id] = {
-            // in case we already have delivery information
-            ...previousReadState,
-            last_read: new Date(event.created_at),
-            last_read_message_id: event.last_read_message_id,
-            user: event.user,
-            unread_messages: 0,
-          };
-          this.messageReceiptsTracker.onMessageRead({
-            user: event.user,
-            readAt: event.created_at,
-            lastReadMessageId: event.last_read_message_id,
-          });
-          const client = this.getClient();
+          const eventUser = event.user;
+          const readAtDate = new Date(event.created_at);
+          const toDate = (value?: string | Date) =>
+            value ? (value instanceof Date ? value : new Date(value)) : undefined;
+          const userReadState = this._upsertReadState(
+            eventUser.id,
+            (currentUserReadState) => {
+              const currentDeliveredAt = toDate(currentUserReadState?.last_delivered_at);
 
+              return {
+                // preserve delivery information already known for user
+                ...currentUserReadState,
+                ...(currentUserReadState?.last_read
+                  ? { last_read: toDate(currentUserReadState.last_read) }
+                  : null),
+                ...(currentDeliveredAt
+                  ? { last_delivered_at: currentDeliveredAt }
+                  : null),
+                last_read: readAtDate,
+                last_read_message_id: event.last_read_message_id,
+                last_delivered_at:
+                  !currentDeliveredAt || currentDeliveredAt < readAtDate
+                    ? readAtDate
+                    : currentDeliveredAt,
+                last_delivered_message_id:
+                  !currentDeliveredAt || currentDeliveredAt < readAtDate
+                    ? (event.last_read_message_id ??
+                      currentUserReadState?.last_delivered_message_id)
+                    : currentUserReadState?.last_delivered_message_id,
+                user: eventUser,
+                unread_messages: 0,
+              };
+            },
+            { changedUserIds: [eventUser.id] },
+          );
+          void userReadState;
+
+          const client = this.getClient();
           const isOwnEvent = event.user?.id === client.user?.id;
 
           if (isOwnEvent) {
@@ -2097,21 +2186,40 @@ export class Channel {
       case 'message.delivered':
         // todo: update also on thread
         if (event.user?.id && event.created_at) {
-          const previousReadState = channelState.read[event.user.id];
-          channelState.read[event.user.id] = {
-            ...previousReadState,
-            last_delivered_at: event.last_delivered_at
-              ? new Date(event.last_delivered_at)
-              : undefined,
-            last_delivered_message_id: event.last_delivered_message_id,
-            user: event.user,
-          };
+          const eventUser = event.user;
+          const createdAt = event.created_at;
+          const toDate = (value?: string | Date) =>
+            value ? (value instanceof Date ? value : new Date(value)) : undefined;
+          const resolvedDeliveredAt = new Date(event.last_delivered_at ?? createdAt);
+          const userReadState = this._upsertReadState(
+            eventUser.id,
+            (currentUserReadState) => {
+              const currentDeliveredAt = toDate(currentUserReadState?.last_delivered_at);
+              const currentReadAt = toDate(currentUserReadState?.last_read);
 
-          this.messageReceiptsTracker.onMessageDelivered({
-            user: event.user,
-            deliveredAt: event.created_at,
-            lastDeliveredMessageId: event.last_delivered_message_id,
-          });
+              return {
+                ...currentUserReadState,
+                ...(currentReadAt ? { last_read: currentReadAt } : null),
+                ...(currentDeliveredAt
+                  ? { last_delivered_at: currentDeliveredAt }
+                  : null),
+                last_delivered_at:
+                  currentDeliveredAt && currentDeliveredAt > resolvedDeliveredAt
+                    ? currentDeliveredAt
+                    : resolvedDeliveredAt,
+                last_delivered_message_id:
+                  currentDeliveredAt && currentDeliveredAt > resolvedDeliveredAt
+                    ? currentUserReadState?.last_delivered_message_id
+                    : event.last_delivered_message_id,
+                user: eventUser,
+                // delivery events can be received before read events
+                last_read: currentReadAt ?? new Date(createdAt),
+                unread_messages: currentUserReadState?.unread_messages ?? 0,
+              };
+            },
+            { changedUserIds: [eventUser.id] },
+          );
+          void userReadState;
 
           const client = this.getClient();
           const isOwnEvent = event.user?.id === client.user?.id;
@@ -2176,22 +2284,45 @@ export class Channel {
           // 1. the message is mine
           // 2. the message is a thread reply from any user
           const preventUnreadCountUpdate = ownMessage || isThreadMessage;
+          if (ownMessage) {
+            this.cooldownTimer.refresh();
+          }
           if (preventUnreadCountUpdate) break;
 
           if (event.user?.id) {
-            for (const userId in channelState.read) {
-              if (userId === event.user.id) {
-                channelState.read[event.user.id] = {
-                  last_read: new Date(event.created_at as string),
-                  user: event.user,
-                  unread_messages: 0,
-                  last_delivered_at: new Date(event.created_at as string),
-                  last_delivered_message_id: event.message.id,
-                };
-              } else {
-                channelState.read[userId].unread_messages += 1;
-              }
-            }
+            const eventUser = event.user;
+            const eventUserId = eventUser.id;
+            const createdAt = new Date(event.created_at ?? Date.now());
+            const eventMessageId = event.message.id;
+            this._patchReadState(
+              (currentReadState) => {
+                const userIds = Object.keys(currentReadState);
+                if (!userIds.length) return currentReadState;
+
+                const nextReadState = { ...currentReadState };
+
+                for (const userId of userIds) {
+                  if (userId === eventUserId) {
+                    nextReadState[eventUserId] = {
+                      last_read: createdAt,
+                      user: eventUser,
+                      unread_messages: 0,
+                      last_delivered_at: createdAt,
+                      last_delivered_message_id: eventMessageId,
+                    };
+                  } else {
+                    nextReadState[userId] = {
+                      ...currentReadState[userId],
+                      unread_messages:
+                        (currentReadState[userId]?.unread_messages ?? 0) + 1,
+                    };
+                  }
+                }
+
+                return nextReadState;
+              },
+              { changedUserIds: Object.keys(channelState.read) },
+            );
           }
 
           if (this._countMessageAsUnread(event.message)) {
@@ -2270,7 +2401,10 @@ export class Channel {
             ...channelState.members,
             [memberCopy.user.id]: memberCopy,
           };
-          if (channel.data?.member_count && event.type === 'member.added') {
+          if (
+            event.type === 'member.added' &&
+            typeof channel.data?.member_count === 'number'
+          ) {
             channel.data.member_count += 1;
           }
         }
@@ -2295,7 +2429,7 @@ export class Channel {
 
           channelState.members = newMembers;
 
-          if (channel.data?.member_count) {
+          if (typeof channel.data?.member_count === 'number') {
             channel.data.member_count = Math.max(channel.data.member_count - 1, 0);
           }
 
@@ -2304,19 +2438,24 @@ export class Channel {
         break;
       case 'notification.mark_unread': {
         const ownMessage = event.user?.id === this.getClient().user?.id;
-        if (!ownMessage || !event.user) break;
-
+        if (!ownMessage || !event.user || !event.last_read_at) break;
+        const eventUser = event.user;
+        const lastReadAt = event.last_read_at;
         const unreadCount = event.unread_messages ?? 0;
-        const currentState = channelState.read[event.user.id];
-        channelState.read[event.user.id] = {
-          // keep the message delivery info
-          ...currentState,
-          first_unread_message_id: event.first_unread_message_id,
-          last_read: new Date(event.last_read_at as string),
-          last_read_message_id: event.last_read_message_id,
-          user: event.user,
-          unread_messages: unreadCount,
-        };
+        this._upsertReadState(
+          eventUser.id,
+          (currentUserReadState) => ({
+            // keep the message delivery info
+            ...currentUserReadState,
+            first_unread_message_id: event.first_unread_message_id,
+            last_read: new Date(lastReadAt),
+            last_read_message_id: event.last_read_message_id,
+            user: eventUser,
+            unread_messages: unreadCount,
+          }),
+          { changedUserIds: [eventUser.id] },
+        );
+
         this.messagePaginator.setUnreadSnapshot({
           firstUnreadMessageId:
             channelState.read[event.user.id].first_unread_message_id ?? null,
@@ -2326,11 +2465,6 @@ export class Channel {
         });
 
         channelState.unreadCount = unreadCount;
-        this.messageReceiptsTracker.onNotificationMarkUnread({
-          user: event.user,
-          lastReadAt: event.last_read_at,
-          lastReadMessageId: event.last_read_message_id,
-        });
         break;
       }
       case 'channel.updated':
@@ -2341,13 +2475,17 @@ export class Channel {
           if (isFrozenChanged) {
             this.query({ state: false, messages: { limit: 0 }, watchers: { limit: 0 } });
           }
+          const previousChannelData = channel.data;
           const newChannelData = {
             ...event.channel,
             hidden: event.channel?.hidden ?? channel.data?.hidden,
+            member_count: event.channel?.member_count ?? channel.data?.member_count,
             own_capabilities:
               event.channel?.own_capabilities ?? channel.data?.own_capabilities,
           };
           channel.data = newChannelData;
+          channel._syncStateFromChannelData(channel.data, previousChannelData);
+          this.cooldownTimer.refresh();
         }
         break;
       case 'reaction.new':
@@ -2373,24 +2511,30 @@ export class Channel {
           ) as MessageResponse;
         }
         break;
-      case 'channel.hidden':
+      case 'channel.hidden': {
+        const previousChannelData = channel.data;
         channel.data = {
           ...channel.data,
           blocked: !!event.channel?.blocked,
           hidden: true,
         };
+        channel._syncStateFromChannelData(channel.data, previousChannelData);
         if (event.clear_history) {
           channelState.clearMessages();
         }
         break;
-      case 'channel.visible':
+      }
+      case 'channel.visible': {
+        const previousChannelData = channel.data;
         channel.data = {
           ...channel.data,
           blocked: !!event.channel?.blocked,
           hidden: false,
         };
+        channel._syncStateFromChannelData(channel.data, previousChannelData);
         this.getClient().offlineDb?.handleChannelVisibilityEvent({ event });
         break;
+      }
       case 'user.banned':
         if (!event.user?.id) break;
         channelState.members[event.user.id] = {
@@ -2464,6 +2608,14 @@ export class Channel {
     }
   }
 
+  _syncStateFromChannelData(
+    data: Channel['data'],
+    fallbackData: Channel['data'] = this.data,
+  ) {
+    this.state.syncOwnCapabilitiesFromChannelData(data, fallbackData);
+    this.state.syncMemberCountFromChannelData(data, fallbackData);
+  }
+
   _initializeState(
     state: ChannelAPIResponse,
     messageSetToAddToIfDoesNotExist: MessageSetType = 'latest',
@@ -2518,10 +2670,11 @@ export class Channel {
     // initialize read state to last message or current time if the channel is empty
     // if the user is a member, this value will be overwritten later on otherwise this ensures
     // that everything up to this point is not marked as unread
+    const readUpdates: ChannelState['read'] = {};
     if (userID != null) {
       const last_read = this.state.last_message_at || new Date();
       if (user) {
-        this.state.read[user.id] = {
+        readUpdates[user.id] = {
           user,
           last_read,
           unread_messages: 0,
@@ -2532,7 +2685,7 @@ export class Channel {
     // apply read state if part of the state
     if (state.read) {
       for (const read of state.read) {
-        this.state.read[read.user.id] = {
+        readUpdates[read.user.id] = {
           last_delivered_at: read.last_delivered_at
             ? new Date(read.last_delivered_at)
             : undefined,
@@ -2544,11 +2697,28 @@ export class Channel {
         };
 
         if (read.user.id === user?.id) {
-          this.state.unreadCount = this.state.read[read.user.id].unread_messages;
+          this.state.unreadCount = readUpdates[read.user.id].unread_messages;
         }
       }
+    }
 
-      this.messageReceiptsTracker.ingestInitial(state.read);
+    const entries = Object.entries(readUpdates);
+    if (entries.length) {
+      this._patchReadState(
+        (currentReadState) => {
+          let hasChanges = false;
+          const nextReadState = { ...currentReadState };
+
+          for (const [userId, readState] of entries) {
+            if (nextReadState[userId] === readState) continue;
+            nextReadState[userId] = readState;
+            hasChanges = true;
+          }
+
+          return hasChanges ? nextReadState : currentReadState;
+        },
+        { changedUserIds: entries.map(([userId]) => userId) },
+      );
     }
 
     return {
@@ -2610,6 +2780,8 @@ export class Channel {
     );
 
     this.disconnected = true;
+    this.messageReceiptsTracker.unregisterSubscriptions();
+    this.cooldownTimer.clearTimeout();
     this.state.setIsUpToDate(false);
   }
 }

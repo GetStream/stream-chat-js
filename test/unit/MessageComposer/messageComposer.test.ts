@@ -454,6 +454,8 @@ describe('MessageComposer', () => {
         quotedMessage,
         pollId: 'test-poll-id',
         draftId: 'test-draft-id',
+        showReplyInChannel: false,
+        editedMessage: null,
       });
 
       expect(messageComposer.id).toBe('test-id');
@@ -656,26 +658,36 @@ describe('MessageComposer', () => {
   });
 
   describe('offlineDB enabled', () => {
+    it('hasSendableData should return true if the composition is not empty', () => {
+      const { messageComposer } = offlineModeMessageComposerSetup({
+        composition: {
+          id: 'test-message-id',
+          type: 'regular',
+          text: 'Hello',
+        },
+      });
+
+      expect(messageComposer.hasSendableData).toBe(true);
+    });
+
+    it('hasSendableData should return true if the composition is not empty with attachments', () => {
+      const { messageComposer } = offlineModeMessageComposerSetup({
+        composition: {
+          id: 'test-message-id',
+          type: 'regular',
+          attachments: [
+            { type: 'x', localMetadata: { id: 'x,', uploadState: 'finished', file: {} } },
+          ],
+        },
+      });
+
+      expect(messageComposer.hasSendableData).toBe(true);
+    });
+
     it('hasSendableData should return false if the composition is empty', () => {
       const { messageComposer } = offlineModeMessageComposerSetup();
 
-      const spyCompositionIsEmpty = vi
-        .spyOn(messageComposer, 'compositionIsEmpty', 'get')
-        .mockReturnValue(true);
-
       expect(messageComposer.hasSendableData).toBe(false);
-      spyCompositionIsEmpty.mockRestore();
-    });
-
-    it('hasSendableData should return true if the composition is not empty', () => {
-      const { messageComposer } = offlineModeMessageComposerSetup();
-
-      const spyCompositionIsEmpty = vi
-        .spyOn(messageComposer, 'compositionIsEmpty', 'get')
-        .mockReturnValue(false);
-
-      expect(messageComposer.hasSendableData).toBe(true);
-      spyCompositionIsEmpty.mockRestore();
     });
   });
 
@@ -689,6 +701,7 @@ describe('MessageComposer', () => {
         quotedMessage: null,
         draftId: null,
         showReplyInChannel: false,
+        editedMessage: null,
       });
     });
 
@@ -708,6 +721,10 @@ describe('MessageComposer', () => {
         quotedMessage: null,
         draftId: null,
         showReplyInChannel: false,
+        editedMessage: expect.objectContaining({
+          id: 'test-message-id',
+          text: 'Hello world',
+        }),
       });
     });
 
@@ -891,7 +908,54 @@ describe('MessageComposer', () => {
         quotedMessage: null,
         draftId: null,
         showReplyInChannel: false,
+        editedMessage: expect.objectContaining({
+          id: 'edited-message-id',
+          poll_id: 'test-poll-id',
+        }),
       });
+    });
+
+    it('setEditedMessage should set edited message baseline in state', () => {
+      const { messageComposer } = setup();
+      expect(messageComposer.editedMessage).toBeUndefined();
+      expect(messageComposer.state.getLatestValue().editedMessage).toBeNull();
+
+      const baseline: LocalMessage = {
+        id: 'edited-message-id',
+        type: 'regular',
+        created_at: new Date(),
+        deleted_at: null,
+        pinned_at: null,
+        status: 'received',
+        updated_at: new Date(),
+      };
+
+      messageComposer.setEditedMessage(baseline);
+
+      expect(messageComposer.editedMessage?.id).toBe('edited-message-id');
+      expect(messageComposer.state.getLatestValue().editedMessage?.id).toBe(
+        'edited-message-id',
+      );
+    });
+
+    it('setEditedMessage should clear edited message baseline when set to null', () => {
+      const { messageComposer } = setup({
+        composition: {
+          id: 'edited-message-id',
+          type: 'regular',
+          text: 'Edited message',
+          attachments: [],
+          mentioned_users: [],
+        },
+      });
+
+      expect(messageComposer.editedMessage).toBeDefined();
+      expect(messageComposer.state.getLatestValue().editedMessage).toBeDefined();
+
+      messageComposer.setEditedMessage(null);
+
+      expect(messageComposer.editedMessage).toBeUndefined();
+      expect(messageComposer.state.getLatestValue().editedMessage).toBeNull();
     });
 
     it('should clear state if no edited message available', () => {
@@ -1275,6 +1339,7 @@ describe('MessageComposer', () => {
         quotedMessage: null,
         draftId,
         showReplyInChannel: false,
+        editedMessage: null,
       });
 
       const spyChannelDeleteDraft = vi.spyOn(mockChannel, 'deleteDraft');
@@ -1316,6 +1381,7 @@ describe('MessageComposer', () => {
         quotedMessage: null,
         draftId,
         showReplyInChannel: false,
+        editedMessage: null,
       });
 
       const spyChannelDeleteDraft = vi
@@ -1357,6 +1423,7 @@ describe('MessageComposer', () => {
         quotedMessage: null,
         draftId,
         showReplyInChannel: false,
+        editedMessage: null,
       });
 
       vi.spyOn(messageComposer, 'threadId', 'get').mockReturnValue('thread-123');
@@ -1393,6 +1460,7 @@ describe('MessageComposer', () => {
         quotedMessage: null,
         draftId,
         showReplyInChannel: false,
+        editedMessage: null,
       });
 
       vi.spyOn(messageComposer, 'threadId', 'get').mockReturnValue('thread-123');
@@ -2057,6 +2125,8 @@ describe('MessageComposer', () => {
           pollId: 'new-poll-id',
           quotedMessage: null,
           draftId: null,
+          showReplyInChannel: false,
+          editedMessage: null,
         });
 
         expect(spy).toHaveBeenCalled();

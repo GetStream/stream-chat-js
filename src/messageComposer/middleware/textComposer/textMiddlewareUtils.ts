@@ -16,15 +16,16 @@ export const getTriggerCharWithToken = ({
   isCommand?: boolean;
   acceptTrailingSpaces?: boolean;
 }) => {
-  const triggerNorWhitespace = `[^\\s${trigger}]*`;
+  const escapedTrigger = escapeRegExp(trigger);
+  const triggerNorWhitespace = `[^\\s${escapedTrigger}]*`;
 
   const match = text.match(
     new RegExp(
       isCommand
-        ? `^[${trigger}]${triggerNorWhitespace}$`
+        ? `^[${escapedTrigger}]${triggerNorWhitespace}$`
         : acceptTrailingSpaces
-          ? `(?!^|\\W)?[${trigger}]${triggerNorWhitespace}\\s?${triggerNorWhitespace}$`
-          : `(?!^|\\W)?[${trigger}]${triggerNorWhitespace}$`,
+          ? `(?!^|\\W)?[${escapedTrigger}]${triggerNorWhitespace}\\s?${triggerNorWhitespace}$`
+          : `(?!^|\\W)?[${escapedTrigger}]${triggerNorWhitespace}$`,
       'g',
     ),
   );

@@ -2,6 +2,7 @@ import type { Attachment, SharedLocationResponse } from '../types';
 import type {
   AudioAttachment,
   FileAttachment,
+  GiphyAttachment,
   ImageAttachment,
   LocalAttachment,
   LocalAudioAttachment,
@@ -97,3 +98,7 @@ export const isSharedLocationResponse = (
   !!(location as SharedLocationResponse).latitude &&
   !!(location as SharedLocationResponse).longitude &&
   !!(location as SharedLocationResponse).channel_cid;
+
+export const isGiphyAttachment = (
+  attachment: Attachment,
+): attachment is GiphyAttachment => attachment.type === 'giphy';
