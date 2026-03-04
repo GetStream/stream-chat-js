@@ -41,6 +41,7 @@ export type MessagePaginatorSort = { created_at: AscDesc } | { created_at: AscDe
 
 export type MessagePaginatorFilter = {
   cid: string;
+  parent_id?: string;
 };
 
 const DEFAULT_BACKEND_SORT: MessagePaginatorSort = {
@@ -72,6 +73,7 @@ export type MessagePaginatorOptions = {
   channel: Channel;
   id?: string;
   itemIndex?: ItemIndex<LocalMessage>;
+  parentMessageId?: string;
   paginatorOptions?: PaginatorOptions<LocalMessage, MessageQueryShape>;
   /**
    * Controls whether `jumpToTheFirstUnreadMessage()` should prefer the `unreadStateSnapshot`
@@ -107,6 +109,7 @@ export type UnreadSnapshotState = {
 export class MessagePaginator extends BasePaginator<LocalMessage, MessageQueryShape> {
   private readonly _id: string;
   private channel: Channel;
+  private parentMessageId?: string;
   private unreadReferencePolicy: 'snapshot' | 'read-state-only';
   /**
    * Independent unread reference state (not tied to `channel.state.read`).
@@ -140,6 +143,7 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
     channel,
     id,
     itemIndex = new ItemIndex({ getId: (item) => item.id }),
+    parentMessageId,
     paginatorOptions,
     unreadReferencePolicy = 'snapshot',
   }: MessagePaginatorOptions) {
@@ -152,6 +156,7 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
     });
     this.config.deriveCursor = makeDeriveCursor(this);
     this.channel = channel;
+    this.parentMessageId = parentMessageId;
     this._id = id ?? `message-paginator-${generateUUIDv4()}`;
     this._sort = DEFAULT_BACKEND_SORT;
     this.unreadReferencePolicy = unreadReferencePolicy;
@@ -186,6 +191,7 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
    */
   buildFilters = (): MessagePaginatorFilter => ({
     cid: this.channel.cid,
+    ...(this.parentMessageId ? { parent_id: this.parentMessageId } : {}),
   });
 
   // invoked inside BasePaginator.executeQuery() to keep it as a query descriptor;
@@ -258,11 +264,17 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
           ? (result.cursor?.headward ?? undefined)
           : undefined;
     } else {
-      const { messages } = await this.channel.query({
-        messages: options,
-        // todo: why do we query for watchers?
-        // watchers: { limit: this.pageSize },
-      });
+      const { messages } = this.parentMessageId
+        ? await this.channel.getReplies(
+            this.parentMessageId,
+            options,
+            Array.isArray(this.sort) ? this.sort : [this.sort],
+          )
+        : await this.channel.query({
+            messages: options,
+            // todo: why do we query for watchers?
+            // watchers: { limit: this.pageSize },
+          });
       items = messages.map(formatMessage);
       const cursor = this.getCursorFromQueryResults({ direction, items });
       tailward = cursor.tailward;

@@ -224,7 +224,10 @@ export class Thread extends WithSubscriptions {
 
     this.client = client;
 
-    this.messagePaginator = new MessagePaginator({ channel: this.channel }); // todo: pass Thread instance
+    this.messagePaginator = new MessagePaginator({
+      channel: this.channel,
+      parentMessageId: this.id,
+    });
     this.messageComposer = new MessageComposer({
       client,
       composition: threadData?.draft ?? draft,

@@ -27,7 +27,11 @@ describe('MessagePaginator', () => {
   let itemIndex: ItemIndex<LocalMessage>;
 
   beforeEach(() => {
-    channel = { cid: 'channel-id', query: vi.fn() } as unknown as Channel;
+    channel = {
+      cid: 'channel-id',
+      getReplies: vi.fn(),
+      query: vi.fn(),
+    } as unknown as Channel;
     itemIndex = new ItemIndex<LocalMessage>({ getId: (message) => message.id });
   });
 
@@ -101,6 +105,18 @@ describe('MessagePaginator', () => {
       expect(paginator.buildFilters()).toEqual({ cid: 'channel-id' });
     });
 
+    it('builds thread-scoped filters when parentMessageId is provided', () => {
+      const paginator = new MessagePaginator({
+        channel,
+        itemIndex,
+        parentMessageId: 'parent-1',
+      });
+      expect(paginator.buildFilters()).toEqual({
+        cid: 'channel-id',
+        parent_id: 'parent-1',
+      });
+    });
+
     it('computes next query shape from cursor and direction', () => {
       const paginator = new MessagePaginator({ channel, itemIndex });
       const currentState = paginator.state.getLatestValue();
@@ -169,6 +185,36 @@ describe('MessagePaginator', () => {
       });
       expect(result.tailward).toBe('first');
       expect(result.headward).toBe('last');
+      expect(result.items[0].created_at).toBeInstanceOf(Date);
+      expect(result.items[1].created_at).toBeInstanceOf(Date);
+    });
+
+    it('queries replies endpoint when parentMessageId is provided', async () => {
+      const messages = [
+        { id: 'first-reply', created_at: '2022-01-01T00:00:00.000Z' },
+        { id: 'last-reply', created_at: '2022-01-02T00:00:00.000Z' },
+      ];
+      (channel.getReplies as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        messages,
+      });
+      const paginator = new MessagePaginator({
+        channel,
+        itemIndex,
+        parentMessageId: 'parent-1',
+      });
+      // @ts-expect-error setting protected field for test coverage
+      paginator._nextQueryShape = { id_gt: 'from-cursor', limit: 30 };
+
+      const result = await paginator.query({});
+
+      expect(channel.getReplies).toHaveBeenCalledWith(
+        'parent-1',
+        { id_gt: 'from-cursor', limit: 30 },
+        [{ created_at: 1 }],
+      );
+      expect(channel.query).not.toHaveBeenCalled();
+      expect(result.tailward).toBe('first-reply');
+      expect(result.headward).toBe('last-reply');
       expect(result.items[0].created_at).toBeInstanceOf(Date);
       expect(result.items[1].created_at).toBeInstanceOf(Date);
     });
