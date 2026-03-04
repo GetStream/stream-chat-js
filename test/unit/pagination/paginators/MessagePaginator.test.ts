@@ -318,7 +318,10 @@ describe('MessagePaginator', () => {
       const ok = await paginator.jumpToTheFirstUnreadMessage();
 
       expect(ok).toBe(true);
-      expect(jumpSpy).toHaveBeenCalledWith('m-unread', undefined);
+      expect(jumpSpy).toHaveBeenCalledWith(
+        'm-unread',
+        expect.objectContaining({ focusReason: 'jump-to-first-unread' }),
+      );
     });
 
     it('can ignore snapshot and rely on channel read state only', async () => {
@@ -365,6 +368,33 @@ describe('MessagePaginator', () => {
 
       items = [createMessage({ id: 'only', shadowed: true })];
       expect(paginator.filterQueryResults(items)).toEqual([]);
+    });
+  });
+
+  describe('messageFocusSignal', () => {
+    it('emits focus signal with unique token and clears stale timer safely', async () => {
+      vi.useFakeTimers();
+      const paginator = new MessagePaginator({ channel, itemIndex });
+
+      const first = paginator.emitMessageFocusSignal({
+        messageId: 'm1',
+        reason: 'jump-to-message',
+        ttlMs: 3000,
+      });
+      const second = paginator.emitMessageFocusSignal({
+        messageId: 'm1',
+        reason: 'jump-to-message',
+        ttlMs: 3000,
+      });
+
+      expect(second.token).toBeGreaterThan(first.token);
+      expect(paginator.messageFocusSignal.getLatestValue().signal?.token).toBe(
+        second.token,
+      );
+
+      vi.advanceTimersByTime(3000);
+      expect(paginator.messageFocusSignal.getLatestValue().signal).toBe(null);
+      vi.useRealTimers();
     });
   });
 

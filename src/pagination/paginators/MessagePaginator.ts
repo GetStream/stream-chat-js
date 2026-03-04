@@ -35,7 +35,40 @@ import { deriveCreatedAtAroundPaginationFlags } from '../cursorDerivation';
 import { deriveIdAroundPaginationFlags } from '../cursorDerivation/idAroundPaginationFlags';
 import { deriveLinearPaginationFlags } from '../cursorDerivation/linearPaginationFlags';
 
-export type JumpToMessageOptions = { pageSize?: number };
+export type MessageFocusReason =
+  | 'jump-to-message'
+  | 'jump-to-first-unread'
+  | 'jump-to-latest';
+
+export type MessageFocusSignal = {
+  messageId: string;
+  reason: MessageFocusReason;
+  token: number;
+  createdAt: number;
+  ttlMs: number;
+};
+
+export type MessageFocusSignalState = {
+  signal: MessageFocusSignal | null;
+};
+
+export type JumpToMessageOptions = {
+  pageSize?: number;
+  /**
+   * Optional reason attached to emitted focus signal.
+   * Defaults to `jump-to-message`.
+   */
+  focusReason?: MessageFocusReason;
+  /**
+   * TTL for the emitted focus signal in milliseconds.
+   * Defaults to `3000`.
+   */
+  focusSignalTtlMs?: number;
+  /**
+   * If true, suppresses focus signal emission after a successful jump.
+   */
+  suppressFocusSignal?: boolean;
+};
 
 export type MessagePaginatorSort = { created_at: AscDesc } | { created_at: AscDesc }[];
 
@@ -116,6 +149,9 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
    * Consumers may set this right before calling markRead / when opening a channel.
    */
   readonly unreadStateSnapshot: StateStore<UnreadSnapshotState>;
+  readonly messageFocusSignal: StateStore<MessageFocusSignalState>;
+  private clearMessageFocusSignalTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private messageFocusSignalToken = 0;
   protected _sort = DEFAULT_BACKEND_SORT;
   protected _nextQueryShape: MessageQueryShape | undefined;
   sortComparator: (a: LocalMessage, b: LocalMessage) => number;
@@ -165,6 +201,9 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
       firstUnreadMessageId: null,
       lastReadMessageId: null,
       unreadCount: 0,
+    });
+    this.messageFocusSignal = new StateStore<MessageFocusSignalState>({
+      signal: null,
     });
     this.sortComparator = makeComparator<LocalMessage, MessagePaginatorSort>({
       sort: this._sort,
@@ -317,7 +356,12 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
 
   jumpToMessage = async (
     messageId: string,
-    { pageSize }: JumpToMessageOptions = {},
+    {
+      focusReason,
+      focusSignalTtlMs,
+      pageSize,
+      suppressFocusSignal,
+    }: JumpToMessageOptions = {},
   ): Promise<boolean> => {
     let localMessage = this.getItem(messageId);
     let interval: AnyInterval | undefined;
@@ -366,6 +410,13 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
       this.setActiveInterval(interval, { updateState: false });
       if (state) this.state.partialNext(state);
     }
+    if (!suppressFocusSignal) {
+      this.emitMessageFocusSignal({
+        messageId,
+        reason: focusReason ?? 'jump-to-message',
+        ttlMs: focusSignalTtlMs,
+      });
+    }
     return true;
   };
 
@@ -391,7 +442,10 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
       return false;
     }
 
-    return await this.jumpToMessage(latestMessageId, options);
+    return await this.jumpToMessage(latestMessageId, {
+      ...options,
+      focusReason: 'jump-to-latest',
+    });
   };
 
   /**
@@ -419,12 +473,63 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
 
     const firstUnreadMessageId = firstUnreadFromSnapshot ?? firstUnreadFromReadState;
     if (firstUnreadMessageId) {
-      return await this.jumpToMessage(firstUnreadMessageId, options);
+      return await this.jumpToMessage(firstUnreadMessageId, {
+        ...options,
+        focusReason: 'jump-to-first-unread',
+      });
     }
 
     const lastReadMessageId = lastReadFromSnapshot ?? lastReadFromReadState;
     if (!lastReadMessageId) return false;
-    return await this.jumpToMessage(lastReadMessageId, options);
+    return await this.jumpToMessage(lastReadMessageId, {
+      ...options,
+      focusReason: 'jump-to-first-unread',
+    });
+  };
+
+  emitMessageFocusSignal = ({
+    messageId,
+    reason,
+    ttlMs = 3000,
+  }: {
+    messageId: string;
+    reason: MessageFocusReason;
+    ttlMs?: number;
+  }): MessageFocusSignal => {
+    this.messageFocusSignalToken += 1;
+    const signal: MessageFocusSignal = {
+      messageId,
+      reason,
+      token: this.messageFocusSignalToken,
+      createdAt: Date.now(),
+      ttlMs,
+    };
+
+    if (this.clearMessageFocusSignalTimeoutId) {
+      clearTimeout(this.clearMessageFocusSignalTimeoutId);
+      this.clearMessageFocusSignalTimeoutId = null;
+    }
+
+    this.messageFocusSignal.next({ signal });
+
+    this.clearMessageFocusSignalTimeoutId = setTimeout(() => {
+      this.clearMessageFocusSignal({ token: signal.token });
+    }, ttlMs);
+
+    return signal;
+  };
+
+  clearMessageFocusSignal = ({ token }: { token?: number } = {}) => {
+    const current = this.messageFocusSignal.getLatestValue().signal;
+    if (!current) return;
+    if (typeof token !== 'undefined' && current.token !== token) return;
+
+    if (this.clearMessageFocusSignalTimeoutId) {
+      clearTimeout(this.clearMessageFocusSignalTimeoutId);
+      this.clearMessageFocusSignalTimeoutId = null;
+    }
+
+    this.messageFocusSignal.next({ signal: null });
   };
 
   setUnreadSnapshot = (next: Partial<UnreadSnapshotState>): UnreadSnapshotState => {
