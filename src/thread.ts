@@ -18,6 +18,7 @@ import type {
 } from './types';
 import type {
   Channel,
+  DeleteMessageWithStateUpdateParams,
   SendMessageWithStateUpdateParams,
   UpdateMessageWithStateUpdateParams,
 } from './channel';
@@ -243,10 +244,18 @@ export class Thread extends WithSubscriptions {
       }),
       handlers: () => {
         const { requestHandlers } = this.channel.configState.getLatestValue();
+        const deleteMessageRequest = requestHandlers?.deleteMessageRequest;
         const sendMessageRequest = requestHandlers?.sendMessageRequest;
         const retrySendMessageRequest = requestHandlers?.retrySendMessageRequest;
         const updateMessageRequest = requestHandlers?.updateMessageRequest;
         return {
+          delete: deleteMessageRequest
+            ? (p) =>
+                deleteMessageRequest({
+                  localMessage: p.localMessage,
+                  options: p.options,
+                })
+            : undefined,
           send: sendMessageRequest
             ? (p) =>
                 sendMessageRequest({
@@ -273,6 +282,10 @@ export class Thread extends WithSubscriptions {
         };
       },
       defaults: {
+        delete: async (id, o) => {
+          const result = await this.channel.getClient().deleteMessage(id, o);
+          return { message: result.message };
+        },
         send: async (m, o) => {
           const result = await this.channel.sendMessage(m, o);
           return { message: result.message };
@@ -683,6 +696,19 @@ export class Thread extends WithSubscriptions {
         options: params.options,
       },
       params.updateMessageRequestFn,
+    );
+  }
+
+  /**
+   * Deletes a message with local state update.
+   */
+  async deleteMessageWithLocalUpdate(params: DeleteMessageWithStateUpdateParams) {
+    await this.messageOperations.delete(
+      {
+        localMessage: params.localMessage,
+        options: params.options,
+      },
+      params.deleteMessageRequestFn,
     );
   }
 

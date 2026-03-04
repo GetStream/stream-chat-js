@@ -30,6 +30,8 @@ const makeMessageResponse = (overrides?: Partial<MessageResponse>): MessageRespo
     ...overrides,
   }) as MessageResponse;
 
+const defaultDelete = async () => ({ message: makeMessageResponse({ id: 'm1' }) });
+
 describe('MessageOperations', () => {
   it('marks optimistic message as sending, then ingests received response', async () => {
     const store: Store = new Map();
@@ -39,6 +41,7 @@ describe('MessageOperations', () => {
       get: (id) => store.get(id),
       handlers: () => ({}),
       defaults: {
+        delete: defaultDelete,
         send: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
         update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
       },
@@ -58,6 +61,7 @@ describe('MessageOperations', () => {
       get: (id) => store.get(id),
       handlers: () => ({}),
       defaults: {
+        delete: defaultDelete,
         send: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
         update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
       },
@@ -80,6 +84,7 @@ describe('MessageOperations', () => {
       get: (id) => store.get(id),
       handlers: () => ({}),
       defaults: {
+        delete: defaultDelete,
         send: async () => {
           throw Object.assign(new Error('message already exists'), { code: 4 });
         },
@@ -101,6 +106,7 @@ describe('MessageOperations', () => {
       get: (id) => store.get(id),
       handlers: () => ({}),
       defaults: {
+        delete: defaultDelete,
         send: async () => {
           throw new Error('nope');
         },
@@ -123,6 +129,7 @@ describe('MessageOperations', () => {
       get: (id) => store.get(id),
       handlers: () => ({}),
       defaults: {
+        delete: defaultDelete,
         send: async (message, options) => {
           sendCalls.push({ message, options });
           if (sendCalls.length === 1) {
@@ -167,6 +174,7 @@ describe('MessageOperations', () => {
         get: (id) => store.get(id),
         handlers: () => ({}),
         defaults: {
+          delete: defaultDelete,
           send: async (message, options) => {
             sendCalls.push({ message, options });
             if (sendCalls.length === 1) {
@@ -214,6 +222,7 @@ describe('MessageOperations', () => {
       get: (id) => store.get(id),
       handlers: () => ({}),
       defaults: {
+        delete: defaultDelete,
         send: async (message, options) => {
           sendCalls.push({ message, options });
           if (sendCalls.length === 1) {
@@ -266,6 +275,7 @@ describe('MessageOperations', () => {
         },
       }),
       defaults: {
+        delete: defaultDelete,
         send: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
         update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
       },
@@ -288,6 +298,7 @@ describe('MessageOperations', () => {
       get: (id) => store.get(id),
       handlers: () => ({}),
       defaults: {
+        delete: defaultDelete,
         send: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
         update: async (_m, options) => {
           seenOptions = options;
@@ -325,6 +336,7 @@ describe('MessageOperations', () => {
       get: (id) => store.get(id),
       handlers: () => ({}),
       defaults: {
+        delete: defaultDelete,
         send: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
         update: async (_m, options) => {
           seenOptions = options;
@@ -337,5 +349,57 @@ describe('MessageOperations', () => {
 
     await ops.update({ localMessage });
     expect(seenOptions).toBeUndefined();
+  });
+
+  it('delete uses defaults.delete and ingests deleted message', async () => {
+    const store: Store = new Map();
+    const defaultsDelete = vi.fn(async () => ({
+      message: makeMessageResponse({ id: 'm1', deleted_at: new Date().toISOString() }),
+    }));
+
+    const ops = new MessageOperations({
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        delete: defaultsDelete,
+        send: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+    });
+
+    const localMessage = makeLocalMessage({ id: 'm1', status: 'received' });
+    await ops.delete({ localMessage });
+
+    expect(defaultsDelete).toHaveBeenCalledWith('m1', undefined);
+    expect(store.get('m1')?.deleted_at).toBeInstanceOf(Date);
+  });
+
+  it('delete uses per-call requestFn override', async () => {
+    const store: Store = new Map();
+
+    const ops = new MessageOperations({
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        delete: defaultDelete,
+        send: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+    });
+
+    const localMessage = makeLocalMessage({ id: 'm1', status: 'received' });
+
+    await ops.delete({ localMessage }, async () => ({
+      message: makeMessageResponse({
+        id: 'm1',
+        deleted_at: new Date().toISOString(),
+        text: 'deleted via override',
+      }),
+    }));
+
+    expect(store.get('m1')?.text).toBe('deleted via override');
+    expect(store.get('m1')?.deleted_at).toBeInstanceOf(Date);
   });
 });

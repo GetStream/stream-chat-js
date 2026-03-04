@@ -28,6 +28,7 @@ import type {
   ChannelUpdateOptions,
   CreateDraftResponse,
   DeleteChannelAPIResponse,
+  DeleteMessageOptions,
   DraftMessagePayload,
   Event,
   EventAPIResponse,
@@ -111,6 +112,16 @@ export type UpdateMessageWithStateUpdateParams = {
   updateMessageRequestFn?: CustomUpdateMessageRequestFn;
 };
 
+export type DeleteMessageWithStateUpdateParams = {
+  localMessage: LocalMessage;
+  options?: DeleteMessageOptions;
+  /**
+   * Per-call override for the delete request (advanced).
+   * If set, it takes precedence over channel instance configuration handlers.
+   */
+  deleteMessageRequestFn?: CustomDeleteMessageRequestFn;
+};
+
 // Custom request function types for configuration
 export type CustomSendMessageRequestFn = (
   params: Omit<SendMessageWithStateUpdateParams, 'sendMessageRequestFn'>,
@@ -120,8 +131,13 @@ export type CustomUpdateMessageRequestFn = (
   params: Omit<UpdateMessageWithStateUpdateParams, 'updateMessageRequestFn'>,
 ) => Promise<{ message: MessageResponse }>;
 
+export type CustomDeleteMessageRequestFn = (
+  params: Omit<DeleteMessageWithStateUpdateParams, 'deleteMessageRequestFn'>,
+) => Promise<{ message: MessageResponse }>;
+
 export type ChannelInstanceConfig = {
   requestHandlers?: {
+    deleteMessageRequest?: CustomDeleteMessageRequestFn;
     sendMessageRequest?: CustomSendMessageRequestFn;
     retrySendMessageRequest?: CustomSendMessageRequestFn;
     updateMessageRequest?: CustomUpdateMessageRequestFn;
@@ -228,10 +244,18 @@ export class Channel {
       get: (id) => this.messagePaginator.getItem(id),
       handlers: () => {
         const { requestHandlers } = this.configState.getLatestValue();
+        const deleteMessageRequest = requestHandlers?.deleteMessageRequest;
         const sendMessageRequest = requestHandlers?.sendMessageRequest;
         const retrySendMessageRequest = requestHandlers?.retrySendMessageRequest;
         const updateMessageRequest = requestHandlers?.updateMessageRequest;
         return {
+          delete: deleteMessageRequest
+            ? (p) =>
+                deleteMessageRequest({
+                  localMessage: p.localMessage,
+                  options: p.options,
+                })
+            : undefined,
           send: sendMessageRequest
             ? (p) =>
                 sendMessageRequest({
@@ -258,6 +282,10 @@ export class Channel {
         };
       },
       defaults: {
+        delete: async (id, o) => {
+          const result = await this.getClient().deleteMessage(id, o);
+          return { message: result.message };
+        },
         send: async (m, o) => {
           const result = await this.sendMessage(m, o);
           return { message: result.message };
@@ -383,6 +411,19 @@ export class Channel {
         options: params.options,
       },
       params.updateMessageRequestFn,
+    );
+  }
+
+  /**
+   * Deletes a message with local state update.
+   */
+  async deleteMessageWithLocalUpdate(params: DeleteMessageWithStateUpdateParams) {
+    await this.messageOperations.delete(
+      {
+        localMessage: params.localMessage,
+        options: params.options,
+      },
+      params.deleteMessageRequestFn,
     );
   }
 

@@ -1,6 +1,6 @@
 // todo: add tests
 import type { Message, UpdateMessageOptions } from '../types';
-import { localMessageToNewMessagePayload } from '../utils';
+import { formatMessage, localMessageToNewMessagePayload } from '../utils';
 import { MessageOperationStatePolicy } from './MessageOperationStatePolicy';
 import type {
   MessageOperationsContext,
@@ -193,5 +193,20 @@ export class MessageOperations {
         handlers.update ??
         (async (p) => await this.ctx.defaults.update(p.localMessage, updateOptions)),
     );
+  }
+
+  async delete(
+    params: OperationParams<'delete'>,
+    requestFn?: OperationRequestFn<'delete'>,
+  ): Promise<void> {
+    const handlers = this.ctx.handlers();
+    const doRequest =
+      requestFn ??
+      handlers.delete ??
+      (async (p: OperationParams<'delete'>) =>
+        await this.ctx.defaults.delete(p.localMessage.id, p.options));
+
+    const { message: messageFromResponse } = await doRequest(params);
+    this.ctx.ingest(formatMessage(messageFromResponse));
   }
 }
