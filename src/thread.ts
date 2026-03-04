@@ -1,15 +1,12 @@
 import { StateStore } from './store';
-import {
-  addToMessageList,
-  findIndexInSortedArray,
-  formatMessage,
-  throttle,
-} from './utils';
+import { addToMessageList, findIndexInSortedArray, formatMessage } from './utils';
 import type {
   AscDesc,
   DraftResponse,
+  EventAPIResponse,
   EventTypes,
   LocalMessage,
+  MarkReadOptions,
   MessagePaginationOptions,
   MessageResponse,
   ReadResponse,
@@ -77,7 +74,6 @@ export type ThreadReadState = Record<string, ThreadUserReadState | undefined>;
 
 const DEFAULT_PAGE_LIMIT = 50;
 const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
-const MARK_AS_READ_THROTTLE_TIMEOUT = 1000;
 // TODO: remove this once we move to API v2
 export const THREAD_RESPONSE_RESERVED_KEYS: Record<keyof ThreadResponse, true> = {
   active_participant_count: true,
@@ -117,7 +113,19 @@ const constructCustomDataObject = <T extends ThreadResponse>(threadData: T) => {
   return custom;
 };
 
+export type CustomThreadMarkReadRequestFn = (params: {
+  thread: Thread;
+  options?: MarkReadOptions;
+}) => Promise<EventAPIResponse | null> | void;
+
+export type ThreadInstanceConfig = {
+  requestHandlers?: {
+    markReadRequest?: CustomThreadMarkReadRequestFn;
+  };
+};
+
 export class Thread extends WithSubscriptions {
+  public readonly configState = new StateStore<ThreadInstanceConfig>({});
   public readonly state: StateStore<ThreadState>;
   public readonly id: string;
   public readonly messageComposer: MessageComposer;
@@ -419,7 +427,7 @@ export class Thread extends WithSubscriptions {
       }),
       ({ active, unreadMessageCount }) => {
         if (!active || !unreadMessageCount) return;
-        this.throttledMarkAsRead();
+        this.throttledMarkRead();
       },
     );
 
@@ -465,7 +473,7 @@ export class Thread extends WithSubscriptions {
       });
 
       if (active) {
-        this.throttledMarkAsRead();
+        this.throttledMarkRead();
       }
 
       const nextRead: ThreadReadState = {};
@@ -712,7 +720,7 @@ export class Thread extends WithSubscriptions {
     );
   }
 
-  public markAsRead = async ({ force = false }: { force?: boolean } = {}) => {
+  public markRead = async ({ force = false }: { force?: boolean } = {}) => {
     if (this.ownUnreadCount === 0 && !force) {
       return null;
     }
@@ -720,11 +728,15 @@ export class Thread extends WithSubscriptions {
     return await this.client.messageDeliveryReporter.markRead(this);
   };
 
-  private throttledMarkAsRead = throttle(
-    () => this.markAsRead(),
-    MARK_AS_READ_THROTTLE_TIMEOUT,
-    { trailing: true },
-  );
+  private throttledMarkRead = () => {
+    this.client.messageDeliveryReporter.throttledMarkRead(this);
+  };
+
+  /**
+   * @deprecated Use `thread.markRead` instead.
+   */
+  public markAsRead = ({ force = false }: { force?: boolean } = {}) =>
+    this.markRead({ force });
 
   public queryReplies = ({
     limit = DEFAULT_PAGE_LIMIT,

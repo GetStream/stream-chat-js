@@ -12,6 +12,7 @@ import {
   normalizeQuerySort,
 } from './utils';
 import type { StreamChat } from './client';
+import type { Thread } from './thread';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import type {
   AIState,
@@ -135,9 +136,16 @@ export type CustomDeleteMessageRequestFn = (
   params: Omit<DeleteMessageWithStateUpdateParams, 'deleteMessageRequestFn'>,
 ) => Promise<{ message: MessageResponse }>;
 
+export type CustomMarkReadRequestFn = (params: {
+  channel: Channel;
+  thread?: Thread;
+  options?: MarkReadOptions;
+}) => Promise<EventAPIResponse | null>;
+
 export type ChannelInstanceConfig = {
   requestHandlers?: {
     deleteMessageRequest?: CustomDeleteMessageRequestFn;
+    markReadRequest?: CustomMarkReadRequestFn;
     sendMessageRequest?: CustomSendMessageRequestFn;
     retrySendMessageRequest?: CustomSendMessageRequestFn;
     updateMessageRequest?: CustomUpdateMessageRequestFn;
@@ -1377,7 +1385,7 @@ export class Channel {
   }
 
   /**
-   * markReadRequest - Send the mark read event for this user, only works if the `read_events` setting is enabled
+   * markAsReadRequest - Send the mark read event for this user, only works if the `read_events` setting is enabled
    *
    * @param {MarkReadOptions} data
    * @return {Promise<EventAPIResponse | null>} Description
