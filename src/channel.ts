@@ -12,7 +12,6 @@ import {
   normalizeQuerySort,
 } from './utils';
 import type { StreamChat } from './client';
-import type { Thread } from './thread';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import type {
   AIState,
@@ -138,7 +137,6 @@ export type CustomDeleteMessageRequestFn = (
 
 export type CustomMarkReadRequestFn = (params: {
   channel: Channel;
-  thread?: Thread;
   options?: MarkReadOptions;
 }) => Promise<EventAPIResponse | null>;
 

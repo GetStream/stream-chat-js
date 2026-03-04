@@ -306,7 +306,6 @@ export class MessageDeliveryReporter {
         ?.markReadRequest as
         | ((params: {
             channel: Channel;
-            thread?: Thread;
             options?: MarkReadOptions;
           }) => Promise<EventAPIResponse | null> | void)
         | undefined;
