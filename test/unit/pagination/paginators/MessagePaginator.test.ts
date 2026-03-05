@@ -658,6 +658,42 @@ describe('MessagePaginator', () => {
     });
   });
 
+  describe('reflectQuotedMessageUpdate()', () => {
+    it('updates quoted_message for cached items that quote provided message', () => {
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      const quoted = createMessage({
+        id: 'quoted-1',
+        text: 'before update',
+      });
+      const quoteCarrier = createMessage({
+        id: 'carrier-1',
+        quoted_message_id: quoted.id,
+        quoted_message: quoted,
+      });
+      const nonCarrier = createMessage({
+        id: 'other-1',
+        quoted_message_id: 'another-quoted-id',
+      });
+
+      paginator.setItems({
+        valueOrFactory: [quoted, quoteCarrier, nonCarrier],
+        isFirstPage: true,
+        isLastPage: true,
+      });
+
+      const updatedQuoted = {
+        ...quoted,
+        text: 'after update',
+      };
+      paginator.reflectQuotedMessageUpdate(updatedQuoted);
+
+      expect(paginator.getItem(quoteCarrier.id)?.quoted_message?.text).toBe(
+        'after update',
+      );
+      expect(paginator.getItem(nonCarrier.id)?.quoted_message).toBeNull();
+    });
+  });
+
   describe.todo('postQueryReconcile and deriveCursor for', () => {});
   describe('linear pagination', () => {
     describe('updates the hasMoreTail flag only if the first message on page is the first message in interval', () => {

@@ -2,7 +2,7 @@ import { generateChannel } from './test-utils/generateChannel';
 import { generateMsg } from './test-utils/generateMessage';
 import { generateThreadResponse } from './test-utils/generateThreadResponse';
 import { getClientWithUser } from './test-utils/getClient';
-import { generateUUIDv4 as uuidv4 } from '../../src/utils';
+import { formatMessage, generateUUIDv4 as uuidv4 } from '../../src/utils';
 
 import sinon from 'sinon';
 import {
@@ -1269,6 +1269,43 @@ describe('Threads 2.0', () => {
             parentMessage.deleted_at,
           );
         });
+
+        it('reflects quoted_message updates in messagePaginator cache', () => {
+          const thread = createTestThread();
+          thread.registerSubscriptions();
+
+          const quotedMessage = generateMsg({
+            id: uuidv4(),
+            text: 'before delete',
+          }) as MessageResponse;
+          const quoteCarrier = generateMsg({
+            id: uuidv4(),
+            parent_id: thread.id,
+            quoted_message_id: quotedMessage.id,
+            quoted_message: quotedMessage,
+          }) as MessageResponse;
+
+          thread.messagePaginator.setItems({
+            valueOrFactory: [quoteCarrier].map(formatMessage),
+            isFirstPage: true,
+            isLastPage: true,
+          });
+
+          client.dispatchEvent({
+            type: 'message.deleted',
+            message: {
+              ...quotedMessage,
+              type: 'deleted',
+              deleted_at: new Date().toISOString(),
+            },
+          });
+
+          expect(
+            thread.messagePaginator.getItem(quoteCarrier.id)?.quoted_message?.type,
+          ).to.equal('deleted');
+
+          thread.unregisterSubscriptions();
+        });
       });
 
       describe('Events: message.updated, reaction.new, reaction.deleted', () => {
@@ -1297,6 +1334,174 @@ describe('Threads 2.0', () => {
 
             thread.unregisterSubscriptions();
           });
+        });
+
+        it('ingests "reaction.new" message into thread messagePaginator when parent_id matches thread.id', () => {
+          const thread = createTestThread();
+          thread.registerSubscriptions();
+          const message = generateMsg({
+            id: uuidv4(),
+            parent_id: thread.id,
+          }) as MessageResponse;
+
+          client.dispatchEvent({
+            type: 'reaction.new',
+            message,
+            reaction: {
+              type: 'love',
+              user_id: TEST_USER_ID,
+              message_id: message.id,
+              created_at: new Date().toISOString(),
+            },
+          });
+
+          expect(thread.messagePaginator.getItem(message.id)?.id).to.equal(message.id);
+
+          thread.unregisterSubscriptions();
+        });
+
+        it('ignores "reaction.new" message in thread messagePaginator when parent_id does not match thread.id', () => {
+          const thread = createTestThread();
+          thread.registerSubscriptions();
+          const message = generateMsg({
+            id: uuidv4(),
+            parent_id: uuidv4(),
+          }) as MessageResponse;
+
+          client.dispatchEvent({
+            type: 'reaction.new',
+            message,
+            reaction: {
+              type: 'love',
+              user_id: TEST_USER_ID,
+              message_id: message.id,
+              created_at: new Date().toISOString(),
+            },
+          });
+
+          expect(thread.messagePaginator.getItem(message.id)).to.be.undefined;
+
+          thread.unregisterSubscriptions();
+        });
+
+        (['reaction.deleted', 'reaction.updated'] as const).forEach((eventType) => {
+          it(`ingests "${eventType}" message into thread messagePaginator when parent_id matches thread.id`, () => {
+            const thread = createTestThread();
+            thread.registerSubscriptions();
+            const message = generateMsg({
+              id: uuidv4(),
+              parent_id: thread.id,
+            }) as MessageResponse;
+
+            client.dispatchEvent({
+              type: eventType,
+              message,
+              reaction: {
+                type: 'love',
+                user_id: TEST_USER_ID,
+                message_id: message.id,
+                created_at: new Date().toISOString(),
+              },
+            });
+
+            expect(thread.messagePaginator.getItem(message.id)?.id).to.equal(message.id);
+
+            thread.unregisterSubscriptions();
+          });
+
+          it(`ignores "${eventType}" message in thread messagePaginator when parent_id does not match thread.id`, () => {
+            const thread = createTestThread();
+            thread.registerSubscriptions();
+            const message = generateMsg({
+              id: uuidv4(),
+              parent_id: uuidv4(),
+            }) as MessageResponse;
+
+            client.dispatchEvent({
+              type: eventType,
+              message,
+              reaction: {
+                type: 'love',
+                user_id: TEST_USER_ID,
+                message_id: message.id,
+                created_at: new Date().toISOString(),
+              },
+            });
+
+            expect(thread.messagePaginator.getItem(message.id)).to.be.undefined;
+
+            thread.unregisterSubscriptions();
+          });
+        });
+
+        it('reflects quoted_message updates in messagePaginator on "message.updated"', () => {
+          const thread = createTestThread();
+          thread.registerSubscriptions();
+
+          const quotedMessage = generateMsg({
+            id: uuidv4(),
+            text: 'before update',
+          }) as MessageResponse;
+          const quoteCarrier = generateMsg({
+            id: uuidv4(),
+            parent_id: thread.id,
+            quoted_message_id: quotedMessage.id,
+            quoted_message: quotedMessage,
+          }) as MessageResponse;
+
+          thread.messagePaginator.setItems({
+            valueOrFactory: [quoteCarrier].map(formatMessage),
+            isFirstPage: true,
+            isLastPage: true,
+          });
+
+          client.dispatchEvent({
+            type: 'message.updated',
+            message: { ...quotedMessage, text: 'after update' },
+          });
+
+          expect(
+            thread.messagePaginator.getItem(quoteCarrier.id)?.quoted_message?.text,
+          ).to.equal('after update');
+
+          thread.unregisterSubscriptions();
+        });
+
+        it('reflects quoted_message updates in messagePaginator on "message.undeleted"', () => {
+          const thread = createTestThread();
+          thread.registerSubscriptions();
+
+          const quotedMessage = generateMsg({
+            id: uuidv4(),
+            text: 'before undelete',
+            type: 'deleted',
+          }) as MessageResponse;
+          const quoteCarrier = generateMsg({
+            id: uuidv4(),
+            parent_id: thread.id,
+            quoted_message_id: quotedMessage.id,
+            quoted_message: quotedMessage,
+          }) as MessageResponse;
+
+          thread.messagePaginator.setItems({
+            valueOrFactory: [quoteCarrier].map(formatMessage),
+            isFirstPage: true,
+            isLastPage: true,
+          });
+
+          client.dispatchEvent({
+            type: 'message.undeleted',
+            message: { ...quotedMessage, type: 'regular', text: 'after undelete' },
+          });
+
+          expect(
+            thread.messagePaginator.getItem(quoteCarrier.id)?.quoted_message?.text,
+          ).to.equal('after undelete');
+          expect(
+            thread.messagePaginator.getItem(quoteCarrier.id)?.quoted_message?.type,
+          ).to.equal('regular');
+
+          thread.unregisterSubscriptions();
         });
       });
     });

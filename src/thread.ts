@@ -565,6 +565,7 @@ export class Thread extends WithSubscriptions {
   private subscribeMessageDeleted = () =>
     this.client.on('message.deleted', (event) => {
       if (!event.message) return;
+      const formattedMessage = formatMessage(event.message);
 
       // Deleted message is a reply of this thread
       if (event.message.parent_id === this.id) {
@@ -580,11 +581,14 @@ export class Thread extends WithSubscriptions {
       if (event.message.id === this.id) {
         this.updateParentMessageLocally({ message: event.message });
       }
+
+      this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
     }).unsubscribe;
 
   private subscribeMessageUpdated = () => {
     const eventTypes: EventTypes[] = [
       'message.updated',
+      'message.undeleted',
       'reaction.new',
       'reaction.deleted',
       'reaction.updated',
@@ -595,6 +599,17 @@ export class Thread extends WithSubscriptions {
         this.client.on(eventType, (event) => {
           if (event.message) {
             this.updateParentMessageOrReplyLocally(event.message);
+            if (
+              ['reaction.new', 'reaction.deleted', 'reaction.updated'].includes(
+                eventType,
+              ) &&
+              event.message.parent_id === this.id
+            ) {
+              this.messagePaginator.ingestItem(formatMessage(event.message));
+            }
+            this.messagePaginator.reflectQuotedMessageUpdate(
+              formatMessage(event.message),
+            );
           }
         }).unsubscribe,
     );

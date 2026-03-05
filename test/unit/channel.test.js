@@ -347,6 +347,22 @@ describe('Channel _handleChannelEvent', function () {
 		expect(channel.messagePaginator.getItem(message.id)?.id).to.equal(message.id);
 	});
 
+	it('message.new ignores thread replies in messagePaginator', function () {
+		const message = generateMsg({
+			id: 'thread-reply-message-id',
+			parent_id: 'parent-message-id',
+			user: { id: 'another-user' },
+		});
+
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user: message.user,
+			message,
+		});
+
+		expect(channel.messagePaginator.getItem(message.id)).to.be.undefined;
+	});
+
 	it('message.new increment unreadCount properly', function () {
 		channel.state.unreadCount = 20;
 		channel._handleChannelEvent({
@@ -406,6 +422,105 @@ describe('Channel _handleChannelEvent', function () {
 		const parentFromPaginator = channel.messagePaginator.getItem(parentMessage.id);
 		expect(parentFromPaginator?.reply_count).to.be.equal(29);
 		expect(parentFromPaginator?.thread_participants).to.have.length(2);
+	});
+
+	it('message.updated ignores thread replies in messagePaginator', function () {
+		const parentMessage = generateMsg({ id: 'thread-parent-id' });
+		const threadReply = generateMsg({
+			id: 'thread-reply-id',
+			parent_id: parentMessage.id,
+			text: 'before update',
+		});
+
+		channel.messagePaginator.ingestItem(parentMessage);
+		channel._handleChannelEvent({
+			type: 'message.updated',
+			message: { ...threadReply, text: 'after update' },
+		});
+
+		expect(channel.messagePaginator.getItem(threadReply.id)).to.be.undefined;
+	});
+
+	it('message.updated syncs quoted_message references in messagePaginator', function () {
+		const quotedMessage = generateMsg({
+			id: 'quoted-message-id',
+			text: 'before update',
+		});
+		const quoteCarrier = generateMsg({
+			id: 'quote-carrier-id',
+			quoted_message_id: quotedMessage.id,
+			quoted_message: quotedMessage,
+		});
+
+		channel.messagePaginator.setItems({
+			valueOrFactory: [quotedMessage, quoteCarrier],
+			isFirstPage: true,
+			isLastPage: true,
+		});
+
+		channel._handleChannelEvent({
+			type: 'message.updated',
+			message: {
+				...quotedMessage,
+				text: 'after update',
+			},
+		});
+
+		expect(
+			channel.messagePaginator.getItem(quoteCarrier.id)?.quoted_message?.text,
+		).to.equal('after update');
+	});
+
+	it('message.undeleted ignores thread replies in messagePaginator', function () {
+		const parentMessage = generateMsg({ id: 'thread-parent-id-2' });
+		const threadReply = generateMsg({
+			id: 'thread-reply-id-2',
+			parent_id: parentMessage.id,
+			text: 'undeleted reply',
+		});
+
+		channel.messagePaginator.ingestItem(parentMessage);
+		channel._handleChannelEvent({
+			type: 'message.undeleted',
+			message: threadReply,
+		});
+
+		expect(channel.messagePaginator.getItem(threadReply.id)).to.be.undefined;
+	});
+
+	it('message.undeleted syncs quoted_message references in messagePaginator', function () {
+		const quotedMessage = generateMsg({
+			id: 'quoted-message-id-undeleted',
+			type: 'deleted',
+			text: 'before undelete',
+		});
+		const quoteCarrier = generateMsg({
+			id: 'quote-carrier-id-undeleted',
+			quoted_message_id: quotedMessage.id,
+			quoted_message: quotedMessage,
+		});
+
+		channel.messagePaginator.setItems({
+			valueOrFactory: [quotedMessage, quoteCarrier],
+			isFirstPage: true,
+			isLastPage: true,
+		});
+
+		channel._handleChannelEvent({
+			type: 'message.undeleted',
+			message: {
+				...quotedMessage,
+				type: 'regular',
+				text: 'after undelete',
+			},
+		});
+
+		expect(
+			channel.messagePaginator.getItem(quoteCarrier.id)?.quoted_message?.text,
+		).to.equal('after undelete');
+		expect(
+			channel.messagePaginator.getItem(quoteCarrier.id)?.quoted_message?.type,
+		).to.equal('regular');
 	});
 
 	it('does not override the delivery information in the read status', () => {});
@@ -578,6 +693,115 @@ describe('Channel _handleChannelEvent', function () {
 
 		const itemFromPaginator = channel.messagePaginator.getItem(message.id);
 		expect(itemFromPaginator?.deleted_at?.toISOString()).to.equal(deletedAt);
+	});
+
+	it('message.deleted syncs quoted_message references in messagePaginator', function () {
+		const quotedMessage = generateMsg({
+			id: 'quoted-message-id-on-delete',
+			text: 'before delete',
+		});
+		const quoteCarrier = generateMsg({
+			id: 'quote-carrier-id-on-delete',
+			quoted_message_id: quotedMessage.id,
+			quoted_message: quotedMessage,
+		});
+
+		channel.messagePaginator.setItems({
+			valueOrFactory: [quotedMessage, quoteCarrier],
+			isFirstPage: true,
+			isLastPage: true,
+		});
+
+		channel._handleChannelEvent({
+			type: 'message.deleted',
+			user: { id: 'id' },
+			message: {
+				...quotedMessage,
+				type: 'deleted',
+				text: 'after delete',
+				deleted_at: new Date().toISOString(),
+			},
+		});
+
+		expect(
+			channel.messagePaginator.getItem(quoteCarrier.id)?.quoted_message?.type,
+		).to.equal('deleted');
+	});
+
+	it('reaction.new ingests message into messagePaginator for non-thread messages', function () {
+		const message = generateMsg({ id: 'reaction-channel-message-id' });
+
+		channel._handleChannelEvent({
+			type: 'reaction.new',
+			message,
+			reaction: {
+				type: 'love',
+				user_id: 'user-1',
+				message_id: message.id,
+				created_at: new Date().toISOString(),
+			},
+		});
+
+		expect(channel.messagePaginator.getItem(message.id)?.id).to.equal(message.id);
+	});
+
+	it('reaction.new ignores thread replies in messagePaginator', function () {
+		const message = generateMsg({
+			id: 'reaction-thread-message-id',
+			parent_id: 'thread-parent-id',
+		});
+
+		channel._handleChannelEvent({
+			type: 'reaction.new',
+			message,
+			reaction: {
+				type: 'love',
+				user_id: 'user-1',
+				message_id: message.id,
+				created_at: new Date().toISOString(),
+			},
+		});
+
+		expect(channel.messagePaginator.getItem(message.id)).to.be.undefined;
+	});
+
+	['reaction.deleted', 'reaction.updated'].forEach((eventType) => {
+		it(`${eventType} ingests message into messagePaginator for non-thread messages`, function () {
+			const message = generateMsg({ id: `${eventType}-channel-message-id` });
+
+			channel._handleChannelEvent({
+				type: eventType,
+				message,
+				reaction: {
+					type: 'love',
+					user_id: 'user-1',
+					message_id: message.id,
+					created_at: new Date().toISOString(),
+				},
+			});
+
+			expect(channel.messagePaginator.getItem(message.id)?.id).to.equal(message.id);
+		});
+
+		it(`${eventType} ignores thread replies in messagePaginator`, function () {
+			const message = generateMsg({
+				id: `${eventType}-thread-message-id`,
+				parent_id: 'thread-parent-id',
+			});
+
+			channel._handleChannelEvent({
+				type: eventType,
+				message,
+				reaction: {
+					type: 'love',
+					user_id: 'user-1',
+					message_id: message.id,
+					created_at: new Date().toISOString(),
+				},
+			});
+
+			expect(channel.messagePaginator.getItem(message.id)).to.be.undefined;
+		});
 	});
 
 	describe('user.messages.deleted', () => {

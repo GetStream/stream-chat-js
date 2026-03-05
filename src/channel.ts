@@ -2294,13 +2294,15 @@ export class Channel {
       case 'message.deleted':
         if (event.message) {
           this._extendEventWithOwnReactions(event);
+          const formattedMessage = formatMessage(event.message);
           if (event.hard_delete) {
             channelState.removeMessage(event.message);
             this.messagePaginator.removeItem({ id: event.message.id });
           } else {
             channelState.addMessageSorted(event.message, false, false);
-            this.messagePaginator.ingestItem(formatMessage(event.message));
+            this.messagePaginator.ingestItem(formattedMessage);
           }
+          this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
 
           channelState.removeQuotedMessageReferences(event.message);
 
@@ -2338,7 +2340,9 @@ export class Channel {
             channelState.addPinnedMessage(event.message);
           }
 
-          this.messagePaginator.ingestItem(formatMessage(event.message));
+          if (!isThreadMessage) {
+            this.messagePaginator.ingestItem(formatMessage(event.message));
+          }
 
           // do not increase the unread count - the back-end does not increase the count neither in the following cases:
           // 1. the message is mine
@@ -2399,8 +2403,12 @@ export class Channel {
       case 'message.undeleted':
         if (event.message) {
           this._extendEventWithOwnReactions(event);
+          const formattedMessage = formatMessage(event.message);
           channelState.addMessageSorted(event.message, false, false);
-          this.messagePaginator.ingestItem(formatMessage(event.message));
+          if (!event.message.parent_id) {
+            this.messagePaginator.ingestItem(formattedMessage);
+            this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
+          }
           channelState._updateQuotedMessageReferences({ message: event.message });
           if (event.message.pinned) {
             channelState.addPinnedMessage(event.message);
@@ -2553,12 +2561,18 @@ export class Channel {
         if (event.message && event.reaction) {
           const { message, reaction } = event;
           event.message = channelState.addReaction(reaction, message) as MessageResponse;
+          if (!event.message?.parent_id) {
+            this.messagePaginator.ingestItem(formatMessage(event.message));
+          }
         }
         break;
       case 'reaction.deleted':
         if (event.message && event.reaction) {
           const { message, reaction } = event;
           event.message = channelState.removeReaction(reaction, message);
+          if (event.message && !event.message.parent_id) {
+            this.messagePaginator.ingestItem(formatMessage(event.message));
+          }
         }
         break;
       case 'reaction.updated':
@@ -2570,6 +2584,9 @@ export class Channel {
             message,
             true,
           ) as MessageResponse;
+          if (!event.message?.parent_id) {
+            this.messagePaginator.ingestItem(formatMessage(event.message));
+          }
         }
         break;
       case 'channel.hidden': {

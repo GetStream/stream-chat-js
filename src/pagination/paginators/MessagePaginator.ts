@@ -742,6 +742,26 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
     }
   };
 
+  /**
+   * Ensures quoted-message snapshots across loaded paginator cache are in sync
+   * with the provided message.
+   *
+   * Scans cached messages and updates any item where `quoted_message_id`
+   * matches `message.id`.
+   */
+  reflectQuotedMessageUpdate = (message: LocalMessage) => {
+    const cachedMessages = this._itemIndex.values();
+
+    for (const cachedMessage of cachedMessages) {
+      if (cachedMessage.quoted_message_id !== message.id) continue;
+
+      this.ingestItem({
+        ...cachedMessage,
+        quoted_message: message,
+      });
+    }
+  };
+
   filterQueryResults = (items: LocalMessage[]) =>
     items.filter(this.shouldIncludeMessageInInterval.bind(this));
 
