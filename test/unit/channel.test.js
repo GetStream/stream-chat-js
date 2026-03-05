@@ -804,6 +804,7 @@ describe('Channel _handleChannelEvent', function () {
 			initialReadState = {
 				last_read: new Date(1500).toISOString(),
 				last_read_message_id: '6',
+				first_unread_message_id: 'first-unread-msg-id',
 				user,
 				unread_messages: initialCountUnread,
 				last_delivered_at: new Date(1000).toISOString(),
@@ -835,6 +836,7 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.state.read[user.id].last_read_message_id).toBe(
 				event.last_read_message_id,
 			);
+			expect(channel.state.read[user.id].first_unread_message_id).toBeUndefined();
 			expect(channel.state.read[user.id].unread_messages).toBe(0);
 			expect(new Date(channel.state.read[user.id].last_delivered_at).getTime()).toBe(
 				new Date(messageReadEvent.created_at).getTime(),
@@ -862,6 +864,7 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.state.read[anotherUser.id].last_read_message_id).toBe(
 				event.last_read_message_id,
 			);
+			expect(channel.state.read[anotherUser.id].first_unread_message_id).toBeUndefined();
 			expect(channel.state.read[anotherUser.id].unread_messages).toBe(0);
 			expect(
 				new Date(channel.state.read[anotherUser.id].last_delivered_at).getTime(),

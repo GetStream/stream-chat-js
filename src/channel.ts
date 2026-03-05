@@ -2213,6 +2213,7 @@ export class Channel {
                     ? (event.last_read_message_id ??
                       currentUserReadState?.last_delivered_message_id)
                     : currentUserReadState?.last_delivered_message_id,
+                first_unread_message_id: undefined,
                 user: eventUser,
                 unread_messages: 0,
               };
