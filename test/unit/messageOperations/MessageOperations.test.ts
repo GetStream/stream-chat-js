@@ -402,4 +402,35 @@ describe('MessageOperations', () => {
     expect(store.get('m1')?.text).toBe('deleted via override');
     expect(store.get('m1')?.deleted_at).toBeInstanceOf(Date);
   });
+
+  it('delete uses configured handlers.delete when provided', async () => {
+    const store: Store = new Map();
+    const configuredDelete = vi.fn(async () => ({
+      message: makeMessageResponse({
+        id: 'm1',
+        deleted_at: new Date().toISOString(),
+        text: 'deleted via configured handler',
+      }),
+    }));
+
+    const ops = new MessageOperations({
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({ delete: configuredDelete }),
+      defaults: {
+        delete: defaultDelete,
+        send: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+    });
+
+    const localMessage = makeLocalMessage({ id: 'm1', status: 'received' });
+    await ops.delete({ localMessage, options: { hard: true } });
+
+    expect(configuredDelete).toHaveBeenCalledWith({
+      localMessage,
+      options: { hard: true },
+    });
+    expect(store.get('m1')?.text).toBe('deleted via configured handler');
+  });
 });

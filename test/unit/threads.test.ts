@@ -692,17 +692,19 @@ describe('Threads 2.0', () => {
         thread.registerSubscriptions();
 
         const stateBefore = thread.state.getLatestValue();
-        const stubbedMarkAsRead = sinon.stub(thread, 'markAsRead').resolves();
+        const stubbedMarkRead = sinon
+          .stub(client.messageDeliveryReporter, 'throttledMarkRead')
+          .returns(undefined);
         expect(stateBefore.active).to.be.false;
         expect(thread.ownUnreadCount).to.equal(42);
-        expect(stubbedMarkAsRead.called).to.be.false;
+        expect(stubbedMarkRead.called).to.be.false;
 
         thread.activate();
         clock.runAll();
 
         const stateAfter = thread.state.getLatestValue();
         expect(stateAfter.active).to.be.true;
-        expect(stubbedMarkAsRead.calledOnce).to.be.true;
+        expect(stubbedMarkRead.calledOnce).to.be.true;
 
         client.dispatchEvent({
           type: 'message.new',
@@ -714,7 +716,7 @@ describe('Threads 2.0', () => {
         });
         clock.runAll();
 
-        expect(stubbedMarkAsRead.calledTwice).to.be.true;
+        expect(stubbedMarkRead.calledTwice).to.be.true;
 
         thread.unregisterSubscriptions();
         clock.restore();
