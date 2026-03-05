@@ -373,6 +373,29 @@ describe('Channel _handleChannelEvent', function () {
 		expect(channel.state.unreadCount).to.be.equal(30);
 	});
 
+	it('message.updated syncs reply metadata into messagePaginator', function () {
+		const parentMessage = generateMsg({
+			id: 'parent-message-id',
+			reply_count: 1,
+			thread_participants: [{ id: 'user-1' }],
+		});
+
+		channel.messagePaginator.ingestItem(parentMessage);
+
+		channel._handleChannelEvent({
+			type: 'message.updated',
+			message: {
+				...parentMessage,
+				reply_count: 29,
+				thread_participants: [{ id: 'user-1' }, { id: 'user-2' }],
+			},
+		});
+
+		const parentFromPaginator = channel.messagePaginator.getItem(parentMessage.id);
+		expect(parentFromPaginator?.reply_count).to.be.equal(29);
+		expect(parentFromPaginator?.thread_participants).to.have.length(2);
+	});
+
 	it('does not override the delivery information in the read status', () => {});
 
 	it('message.truncate removes all messages if "truncated_at" is "now"', function () {

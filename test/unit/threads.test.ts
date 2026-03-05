@@ -99,6 +99,8 @@ describe('Threads 2.0', () => {
       expect(thread.id).to.equal(parentMessageResponse.id);
       // @ts-expect-error `name` is a custom property
       expect(thread.channel.data?.name).to.equal(channelResponse.name);
+      expect(thread.messagePaginator.sort).to.deep.equal([{ created_at: -1 }]);
+      expect(thread.messagePaginator.pageSize).to.equal(50);
     });
 
     it('initializes properly without threadData', () => {
@@ -114,6 +116,8 @@ describe('Threads 2.0', () => {
       expect(state.pagination.prevCursor).to.be.null;
       expect(state.pagination.nextCursor).to.be.null;
       expect(state.read).to.have.keys([TEST_USER_ID]);
+      expect(thread.messagePaginator.sort).to.deep.equal([{ created_at: -1 }]);
+      expect(thread.messagePaginator.pageSize).to.equal(50);
     });
 
     it('throws if minimal init parent message id is missing', () => {
@@ -236,11 +240,15 @@ describe('Threads 2.0', () => {
           expect(stateBefore.replyCount).to.equal(0);
           expect(stateBefore.parentMessage.text).to.equal(parentMessageResponse.text);
 
+          const nextParticipants = [
+            { id: 'participant-1' },
+          ] as unknown as ThreadResponse['thread_participants'];
           const updatedMessage = generateMsg({
-            id: parentMessageResponse.id,
-            text: 'aaa',
-            reply_count: 10,
             deleted_at: new Date().toISOString(),
+            id: parentMessageResponse.id,
+            reply_count: 10,
+            text: 'aaa',
+            thread_participants: nextParticipants,
           }) as MessageResponse;
 
           thread.updateParentMessageLocally({ message: updatedMessage });
@@ -249,6 +257,8 @@ describe('Threads 2.0', () => {
           expect(stateAfter.deletedAt).to.be.not.null;
           expect(stateAfter.deletedAt!.toISOString()).to.equal(updatedMessage.deleted_at);
           expect(stateAfter.replyCount).to.equal(updatedMessage.reply_count);
+          expect(stateAfter.participants).to.have.lengthOf(1);
+          expect(stateAfter.participants?.[0].user_id).to.equal('participant-1');
           expect(stateAfter.parentMessage.text).to.equal(updatedMessage.text);
         });
       });
@@ -995,6 +1005,76 @@ describe('Threads 2.0', () => {
           expect(stateAfter.replies.find((reply) => reply.id === newMessage.id)).not.to.be
             .undefined;
           expect(thread.ownUnreadCount).to.equal(1);
+
+          thread.unregisterSubscriptions();
+        });
+
+        it('increments local reply_count on new reply', () => {
+          const thread = createTestThread({
+            reply_count: 0,
+            read: [
+              {
+                last_read: new Date().toISOString(),
+                user: { id: TEST_USER_ID },
+                unread_messages: 0,
+              },
+            ],
+          });
+          thread.registerSubscriptions();
+
+          const newMessage = generateMsg({
+            parent_id: thread.id,
+            user: { id: 'bob' },
+          }) as MessageResponse;
+
+          client.dispatchEvent({
+            type: 'message.new',
+            message: newMessage,
+            user: { id: 'bob' },
+          });
+
+          const stateAfter = thread.state.getLatestValue();
+          expect(stateAfter.replyCount).to.equal(1);
+          expect(stateAfter.parentMessage.reply_count).to.equal(1);
+
+          thread.unregisterSubscriptions();
+        });
+
+        it('does not increment local reply_count for duplicate message.new events', () => {
+          const existingReply = generateMsg({
+            parent_id: parentMessageResponse.id,
+            user: { id: 'bob' },
+          }) as MessageResponse;
+          const thread = createTestThread({
+            latest_replies: [existingReply],
+            reply_count: 1,
+            read: [
+              {
+                user: { id: TEST_USER_ID },
+                last_read: new Date().toISOString(),
+                unread_messages: 0,
+              },
+            ],
+          });
+          thread.registerSubscriptions();
+
+          thread.state.next((current) => ({
+            ...current,
+            parentMessage: {
+              ...current.parentMessage,
+              reply_count: 1,
+            },
+          }));
+
+          client.dispatchEvent({
+            type: 'message.new',
+            message: existingReply,
+            user: { id: 'bob' },
+          });
+
+          const stateAfter = thread.state.getLatestValue();
+          expect(stateAfter.replyCount).to.equal(1);
+          expect(stateAfter.parentMessage.reply_count).to.equal(1);
 
           thread.unregisterSubscriptions();
         });

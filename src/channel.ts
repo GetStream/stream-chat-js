@@ -6,6 +6,7 @@ import type { ReadStoreReconcileMeta } from './messageDelivery';
 import { MessagePaginator } from './pagination/paginators';
 import { MessageOperations } from './messageOperations';
 import {
+  formatMessage,
   generateChannelTempCid,
   logChatPromiseExecution,
   messageSetPagination,
@@ -2388,6 +2389,7 @@ export class Channel {
         if (event.message) {
           this._extendEventWithOwnReactions(event);
           channelState.addMessageSorted(event.message, false, false);
+          this.messagePaginator.ingestItem(formatMessage(event.message));
           channelState._updateQuotedMessageReferences({ message: event.message });
           if (event.message.pinned) {
             channelState.addPinnedMessage(event.message);

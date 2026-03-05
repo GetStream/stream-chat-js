@@ -236,6 +236,10 @@ export class Thread extends WithSubscriptions {
     this.messagePaginator = new MessagePaginator({
       channel: this.channel,
       parentMessageId: this.id,
+      sort: DEFAULT_SORT,
+      paginatorOptions: {
+        pageSize: DEFAULT_PAGE_LIMIT,
+      },
     });
     this.messageComposer = new MessageComposer({
       client,
@@ -463,14 +467,22 @@ export class Thread extends WithSubscriptions {
       }
 
       const isOwnMessage = event.message.user?.id === this.client.userID;
-      const { active, read } = this.state.getLatestValue();
+      const { active, read, replies } = this.state.getLatestValue();
+      const hasReplyAlready =
+        replies.some((reply) => reply.id === event.message?.id) ||
+        !!this.messagePaginator.getItem(event.message.id);
 
+      this.messagePaginator.ingestItem(formatMessage(event.message));
       this.upsertReplyLocally({
         message: event.message,
         // Message from current user could have been added optimistically,
         // so the actual timestamp might differ in the event
         timestampChanged: isOwnMessage,
       });
+
+      if (!hasReplyAlready) {
+        this.incrementReplyCountLocally();
+      }
 
       if (active) {
         this.throttledMarkRead();
@@ -509,6 +521,21 @@ export class Thread extends WithSubscriptions {
 
       this.state.partialNext({ read: nextRead });
     }).unsubscribe;
+
+  private incrementReplyCountLocally = () => {
+    this.state.next((current) => {
+      const nextReplyCount = current.replyCount + 1;
+
+      return {
+        ...current,
+        parentMessage: {
+          ...current.parentMessage,
+          reply_count: nextReplyCount,
+        },
+        replyCount: nextReplyCount,
+      };
+    });
+  };
 
   private subscribeRepliesRead = () =>
     this.client.on('message.read', (event) => {
@@ -579,6 +606,7 @@ export class Thread extends WithSubscriptions {
     return symbol;
   };
 
+  // todo: can be removed with the next breaking change and use MessagePaginator only
   public deleteReplyLocally = ({ message }: { message: MessageResponse }) => {
     const { replies } = this.state.getLatestValue();
 
@@ -602,6 +630,7 @@ export class Thread extends WithSubscriptions {
     });
   };
 
+  // todo: can be removed with the next breaking change and use MessagePaginator only
   public upsertReplyLocally = ({
     message,
     timestampChanged = false,
@@ -629,6 +658,7 @@ export class Thread extends WithSubscriptions {
     }));
   };
 
+  // todo: can be removed with the next breaking change and use MessagePaginator only
   public updateParentMessageLocally = ({ message }: { message: MessageResponse }) => {
     if (message.id !== this.id) {
       throw new Error('Message does not belong to this thread');
@@ -641,11 +671,15 @@ export class Thread extends WithSubscriptions {
         ...current,
         deletedAt: formattedMessage.deleted_at,
         parentMessage: formattedMessage,
+        participants:
+          normalizeThreadParticipants(message.thread_participants, current.channel.cid) ??
+          current.participants,
         replyCount: message.reply_count ?? current.replyCount,
       };
     });
   };
 
+  // todo: can be removed with the next breaking change and use MessagePaginator only
   public updateParentMessageOrReplyLocally = (message: MessageResponse) => {
     if (message.parent_id === this.id) {
       this.upsertReplyLocally({ message });
@@ -738,6 +772,7 @@ export class Thread extends WithSubscriptions {
   public markAsRead = ({ force = false }: { force?: boolean } = {}) =>
     this.markRead({ force });
 
+  // todo: can be removed with the next breaking change and use MessagePaginator only
   public queryReplies = ({
     limit = DEFAULT_PAGE_LIMIT,
     sort = DEFAULT_SORT,
@@ -745,12 +780,14 @@ export class Thread extends WithSubscriptions {
   }: QueryRepliesOptions = {}) =>
     this.channel.getReplies(this.id, { limit, ...otherOptions }, sort);
 
+  // todo: can be removed with the next breaking change and use MessagePaginator only
   public loadNextPage = ({ limit = DEFAULT_PAGE_LIMIT }: { limit?: number } = {}) =>
     this.loadPage(limit);
 
+  // todo: can be removed with the next breaking change and use MessagePaginator only
   public loadPrevPage = ({ limit = DEFAULT_PAGE_LIMIT }: { limit?: number } = {}) =>
     this.loadPage(-limit);
-
+  // todo: can be removed with the next breaking change and use MessagePaginator only
   private loadPage = async (count: number) => {
     const { pagination } = this.state.getLatestValue();
     const [loadingKey, cursorKey, insertionMethodKey] =
@@ -801,6 +838,30 @@ export class Thread extends WithSubscriptions {
     }
   };
 }
+
+type MessageThreadParticipant = NonNullable<
+  MessageResponse['thread_participants']
+>[number];
+type ThreadParticipant = NonNullable<ThreadResponse['thread_participants']>[number];
+
+const normalizeThreadParticipants = (
+  participants: MessageResponse['thread_participants'] | undefined,
+  channelCid: string,
+): ThreadResponse['thread_participants'] | undefined => {
+  if (!participants) return undefined;
+
+  const nowIso = new Date().toISOString();
+
+  return participants.map(
+    (participant: MessageThreadParticipant): ThreadParticipant => ({
+      channel_cid: channelCid,
+      created_at: nowIso,
+      last_read_at: nowIso,
+      user: participant,
+      user_id: participant.id,
+    }),
+  );
+};
 
 const formatReadState = (read: ReadResponse[]): ThreadReadState =>
   read.reduce<ThreadReadState>((state, userRead) => {
