@@ -2329,6 +2329,8 @@ export class Channel {
             channelState.addPinnedMessage(event.message);
           }
 
+          this.messagePaginator.ingestItem(formatMessage(event.message));
+
           // do not increase the unread count - the back-end does not increase the count neither in the following cases:
           // 1. the message is mine
           // 2. the message is a thread reply from any user

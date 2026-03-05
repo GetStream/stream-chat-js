@@ -335,6 +335,18 @@ describe('Channel _handleChannelEvent', function () {
 		expect(channel.state.unreadCount).to.be.equal(100);
 	});
 
+	it('message.new ingests message into messagePaginator even for own messages', function () {
+		const message = generateMsg({ id: 'own-message-id', user });
+
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user,
+			message,
+		});
+
+		expect(channel.messagePaginator.getItem(message.id)?.id).to.equal(message.id);
+	});
+
 	it('message.new increment unreadCount properly', function () {
 		channel.state.unreadCount = 20;
 		channel._handleChannelEvent({
