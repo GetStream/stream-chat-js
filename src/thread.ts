@@ -74,6 +74,7 @@ export type ThreadReadState = Record<string, ThreadUserReadState | undefined>;
 
 const DEFAULT_PAGE_LIMIT = 50;
 const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
+const DEFAULT_ITEM_ORDER: { created_at: AscDesc } = { created_at: 1 };
 // TODO: remove this once we move to API v2
 export const THREAD_RESPONSE_RESERVED_KEYS: Record<keyof ThreadResponse, true> = {
   active_participant_count: true,
@@ -236,7 +237,8 @@ export class Thread extends WithSubscriptions {
     this.messagePaginator = new MessagePaginator({
       channel: this.channel,
       parentMessageId: this.id,
-      sort: DEFAULT_SORT,
+      requestSort: DEFAULT_SORT,
+      itemOrder: DEFAULT_ITEM_ORDER,
       paginatorOptions: {
         pageSize: DEFAULT_PAGE_LIMIT,
       },

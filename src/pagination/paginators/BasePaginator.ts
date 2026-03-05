@@ -303,6 +303,11 @@ export type PaginatorOptions<T, Q> = {
   /** If item index is provided, this index ensures updates in a single place and all consumers have access to a single source of data. */
   itemIndex?: ItemIndex<T>;
   /**
+   * Comparator defining in-memory item ordering for interval math and visible list rendering.
+   * Defaults to `sortComparator` to preserve existing paginator behavior.
+   */
+  itemOrderComparator?: (a: T, b: T) => number;
+  /**
    * Will prevent changing the index of existing items in state.
    * If true, an item that is already visible keeps its relative position in the current items array when updated.
    * It does not guarantee global stability across interval changes or page jumps.
@@ -320,6 +325,7 @@ type OptionalPaginatorConfigFields =
   | 'initialCursor'
   | 'initialOffset'
   | 'itemIndex'
+  | 'itemOrderComparator'
   | 'throwErrors';
 
 export type BasePaginatorConfig<T, Q> = Pick<
@@ -537,6 +543,10 @@ export abstract class BasePaginator<T, Q> {
     return this.boostComparator;
   }
 
+  protected get itemOrderComparator() {
+    return this.config.itemOrderComparator ?? this.sortComparator;
+  }
+
   get intervalComparator() {
     return (a: AnyInterval, b: AnyInterval) => {
       const aEdges = this.getIntervalPaginationEdges(a);
@@ -657,7 +667,7 @@ export abstract class BasePaginator<T, Q> {
       const seqDistance = (boostB.seq ?? 0) - (boostA.seq ?? 0);
       if (seqDistance !== 0) return seqDistance > 0 ? 1 : -1;
     }
-    return this.sortComparator(a, b);
+    return this.itemOrderComparator(a, b);
   };
 
   /**
@@ -719,7 +729,7 @@ export abstract class BasePaginator<T, Q> {
   }
 
   makeInterval({ page, isHead, isTail }: MakeIntervalParams<T>): Interval {
-    const sorted = [...page].sort((a, b) => this.sortComparator(a, b));
+    const sorted = [...page].sort((a, b) => this.itemOrderComparator(a, b));
     return {
       id: this.generateIntervalId(page),
       // Default semantics:
@@ -815,20 +825,20 @@ export abstract class BasePaginator<T, Q> {
   }
 
   protected compareIntervalHeadEdges(a: T, b: T): number {
-    const cmp = this.sortComparator(a, b);
+    const cmp = this.itemOrderComparator(a, b);
     return this.intervalSortDirection === 'asc' ? cmp : -cmp;
   }
 
   protected aIsMoreHeadwardThanB(a: T, b: T): boolean {
     return this.intervalItemIdsAreHeadFirst
-      ? this.sortComparator(a, b) === ComparisonResult.A_PRECEDES_B
-      : this.sortComparator(b, a) === ComparisonResult.A_PRECEDES_B;
+      ? this.itemOrderComparator(a, b) === ComparisonResult.A_PRECEDES_B
+      : this.itemOrderComparator(b, a) === ComparisonResult.A_PRECEDES_B;
   }
 
   protected aIsMoreTailwardThanB(a: T, b: T): boolean {
     return this.intervalItemIdsAreHeadFirst
-      ? this.sortComparator(b, a) === ComparisonResult.A_PRECEDES_B
-      : this.sortComparator(a, b) === ComparisonResult.A_PRECEDES_B;
+      ? this.itemOrderComparator(b, a) === ComparisonResult.A_PRECEDES_B
+      : this.itemOrderComparator(a, b) === ComparisonResult.A_PRECEDES_B;
   }
 
   protected getHeadIntervalFromSortedIntervals(
@@ -874,8 +884,8 @@ export abstract class BasePaginator<T, Q> {
     const bBounds = this.getIntervalSortBounds(b);
     if (!aBounds || !bBounds) return false;
     return (
-      this.sortComparator(aBounds.start, bBounds.end) <= 0 &&
-      this.sortComparator(bBounds.start, aBounds.end) <= 0
+      this.itemOrderComparator(aBounds.start, bBounds.end) <= 0 &&
+      this.itemOrderComparator(bBounds.start, aBounds.end) <= 0
     );
   }
 
@@ -904,8 +914,8 @@ export abstract class BasePaginator<T, Q> {
     // Strict overlap if:
     // a.first <= b.last && b.first <= a.last
     if (
-      this.sortComparator(aBounds.start, bBounds.end) <= 0 &&
-      this.sortComparator(bBounds.start, aBounds.end) <= 0
+      this.itemOrderComparator(aBounds.start, bBounds.end) <= 0 &&
+      this.itemOrderComparator(bBounds.start, aBounds.end) <= 0
     )
       return true;
 
@@ -936,7 +946,10 @@ export abstract class BasePaginator<T, Q> {
     const sortBounds = this.getIntervalSortBounds(interval);
     if (!sortBounds) return false;
     const { start, end } = sortBounds;
-    if (this.sortComparator(start, item) <= 0 && this.sortComparator(item, end) <= 0)
+    if (
+      this.itemOrderComparator(start, item) <= 0 &&
+      this.itemOrderComparator(item, end) <= 0
+    )
       return true;
 
     const edges = this.getIntervalPaginationEdges(interval);
@@ -973,7 +986,7 @@ export abstract class BasePaginator<T, Q> {
           itemIdentityEquals: (item1, item2) =>
             this.getItemId(item1) === this.getItemId(item2),
           // inter-interval operation sorts using the base comparator
-          compare: this.sortComparator.bind(this),
+          compare: this.itemOrderComparator.bind(this),
         });
         if (insertionIndex > -1) {
           merged.splice(insertionIndex, 0, item);
@@ -1086,7 +1099,7 @@ export abstract class BasePaginator<T, Q> {
       itemIdentityEquals: (item1, item2) =>
         this.getItemId(item1) === this.getItemId(item2),
       // items in intervals are not sorted by effectiveComparator
-      compare: this.sortComparator.bind(this),
+      compare: this.itemOrderComparator.bind(this),
       plateauScan: true,
     });
   }

@@ -100,6 +100,8 @@ describe('Threads 2.0', () => {
       // @ts-expect-error `name` is a custom property
       expect(thread.channel.data?.name).to.equal(channelResponse.name);
       expect(thread.messagePaginator.sort).to.deep.equal([{ created_at: -1 }]);
+      expect(thread.messagePaginator.requestSort).to.deep.equal([{ created_at: -1 }]);
+      expect(thread.messagePaginator.itemOrder).to.deep.equal({ created_at: 1 });
       expect(thread.messagePaginator.pageSize).to.equal(50);
     });
 
@@ -117,6 +119,8 @@ describe('Threads 2.0', () => {
       expect(state.pagination.nextCursor).to.be.null;
       expect(state.read).to.have.keys([TEST_USER_ID]);
       expect(thread.messagePaginator.sort).to.deep.equal([{ created_at: -1 }]);
+      expect(thread.messagePaginator.requestSort).to.deep.equal([{ created_at: -1 }]);
+      expect(thread.messagePaginator.itemOrder).to.deep.equal({ created_at: 1 });
       expect(thread.messagePaginator.pageSize).to.equal(50);
     });
 

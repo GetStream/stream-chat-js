@@ -83,6 +83,44 @@ describe('MessagePaginator', () => {
       expect(paginator.sort).toEqual({ created_at: 1 });
       expect(paginator.config.doRequest).toBe(doRequest);
     });
+
+    it('respects provided sort option', () => {
+      const paginator = new MessagePaginator({
+        channel,
+        sort: [{ created_at: -1 }],
+      });
+
+      expect(paginator.sort).toEqual([{ created_at: -1 }]);
+      expect(paginator.requestSort).toEqual([{ created_at: -1 }]);
+      expect(paginator.itemOrder).toEqual([{ created_at: -1 }]);
+
+      const newer = createMessage({ id: 'b', created_at: '2021-01-01T00:00:00.000Z' });
+      const older = createMessage({ id: 'a', created_at: '2020-01-01T00:00:00.000Z' });
+      expect(paginator.sortComparator(older, newer)).toBeGreaterThan(0);
+    });
+
+    it('prefers requestSort over deprecated sort alias', () => {
+      const paginator = new MessagePaginator({
+        channel,
+        requestSort: [{ created_at: 1 }],
+        sort: [{ created_at: -1 }],
+      });
+
+      expect(paginator.requestSort).toEqual([{ created_at: 1 }]);
+      expect(paginator.sort).toEqual([{ created_at: 1 }]);
+      expect(paginator.itemOrder).toEqual([{ created_at: 1 }]);
+    });
+
+    it('uses itemOrder when provided to decouple in-memory order from request sort', () => {
+      const paginator = new MessagePaginator({
+        channel,
+        requestSort: [{ created_at: -1 }],
+        itemOrder: [{ created_at: 1 }],
+      });
+
+      expect(paginator.requestSort).toEqual([{ created_at: -1 }]);
+      expect(paginator.itemOrder).toEqual([{ created_at: 1 }]);
+    });
   });
 
   describe('query shape handling', () => {
@@ -217,6 +255,41 @@ describe('MessagePaginator', () => {
       expect(result.headward).toBe('last-reply');
       expect(result.items[0].created_at).toBeInstanceOf(Date);
       expect(result.items[1].created_at).toBeInstanceOf(Date);
+    });
+
+    it('keeps items ordered chronologically when itemOrder is ascending and request sort is descending', async () => {
+      const messages = [
+        { id: 'newest-reply', created_at: '2022-01-03T00:00:00.000Z' },
+        { id: 'middle-reply', created_at: '2022-01-02T00:00:00.000Z' },
+        { id: 'oldest-reply', created_at: '2022-01-01T00:00:00.000Z' },
+      ];
+      (channel.getReplies as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        messages,
+      });
+      const paginator = new MessagePaginator({
+        channel,
+        itemIndex,
+        parentMessageId: 'parent-1',
+        requestSort: [{ created_at: -1 }],
+        itemOrder: [{ created_at: 1 }],
+      });
+      // @ts-expect-error setting protected field for test coverage
+      paginator._nextQueryShape = { id_gt: 'from-cursor', limit: 30 };
+
+      const result = await paginator.query({});
+
+      expect(channel.getReplies).toHaveBeenCalledWith(
+        'parent-1',
+        { id_gt: 'from-cursor', limit: 30 },
+        [{ created_at: -1 }],
+      );
+      expect(result.items.map((message) => message.id)).toEqual([
+        'oldest-reply',
+        'middle-reply',
+        'newest-reply',
+      ]);
+      expect(result.tailward).toBe('oldest-reply');
+      expect(result.headward).toBe('newest-reply');
     });
   });
 

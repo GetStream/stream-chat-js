@@ -113,6 +113,19 @@ export type MessagePaginatorOptions = {
   id?: string;
   itemIndex?: ItemIndex<LocalMessage>;
   parentMessageId?: string;
+  /**
+   * Sort passed to backend message/replies query.
+   * Does not affect in-memory item ordering.
+   */
+  requestSort?: MessagePaginatorSort;
+  /**
+   * @deprecated Use `requestSort` instead.
+   */
+  sort?: MessagePaginatorSort;
+  /**
+   * In-memory ordering for items exposed by paginator state.
+   */
+  itemOrder?: MessagePaginatorSort;
   paginatorOptions?: PaginatorOptions<LocalMessage, MessageQueryShape>;
   /**
    * Controls whether `jumpToTheFirstUnreadMessage()` should prefer the `unreadStateSnapshot`
@@ -142,8 +155,8 @@ export type UnreadSnapshotState = {
 };
 
 /**
- * MessagePaginator does not allow for sorting or filtering the items, because it is based on channe.query() and
- * not client.search() calls. So the paginator just updates the cursor.
+ * MessagePaginator allows configuring backend request sort, while keeping internal item ordering stable.
+ * Filtering of ingested items is still limited to local predicates (`filterQueryResults`).
  */
 export class MessagePaginator extends BasePaginator<LocalMessage, MessageQueryShape> {
   private readonly _id: string;
@@ -158,7 +171,8 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
   readonly messageFocusSignal: StateStore<MessageFocusSignalState>;
   private clearMessageFocusSignalTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private messageFocusSignalToken = 0;
-  protected _sort = DEFAULT_BACKEND_SORT;
+  protected _requestSort = DEFAULT_BACKEND_SORT;
+  protected _itemOrder: MessagePaginatorSort = DEFAULT_BACKEND_SORT;
   protected _nextQueryShape: MessageQueryShape | undefined;
   sortComparator: (a: LocalMessage, b: LocalMessage) => number;
   /**
@@ -186,9 +200,14 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
     id,
     itemIndex = new ItemIndex({ getId: (item) => item.id }),
     parentMessageId,
+    requestSort,
+    sort,
+    itemOrder,
     paginatorOptions,
     unreadReferencePolicy = 'snapshot',
   }: MessagePaginatorOptions) {
+    const resolvedRequestSort = requestSort ?? sort ?? DEFAULT_BACKEND_SORT;
+    const resolvedItemOrder = itemOrder ?? resolvedRequestSort;
     super({
       hasPaginationQueryShapeChanged,
       initialCursor: ZERO_PAGE_CURSOR,
@@ -200,7 +219,8 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
     this.channel = channel;
     this.parentMessageId = parentMessageId;
     this._id = id ?? `message-paginator-${generateUUIDv4()}`;
-    this._sort = DEFAULT_BACKEND_SORT;
+    this._requestSort = resolvedRequestSort;
+    this._itemOrder = resolvedItemOrder;
     this.unreadReferencePolicy = unreadReferencePolicy;
     this.unreadStateSnapshot = new StateStore<UnreadSnapshotState>({
       lastReadAt: null,
@@ -212,7 +232,16 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
       signal: null,
     });
     this.sortComparator = makeComparator<LocalMessage, MessagePaginatorSort>({
-      sort: this._sort,
+      sort: this._requestSort,
+      resolvePathValue: resolveDotPathValue,
+      tiebreaker: (l, r) => {
+        const leftId = this.getItemId(l);
+        const rightId = this.getItemId(r);
+        return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
+      },
+    });
+    this.config.itemOrderComparator = makeComparator<LocalMessage, MessagePaginatorSort>({
+      sort: this._itemOrder,
       resolvePathValue: resolveDotPathValue,
       tiebreaker: (l, r) => {
         const leftId = this.getItemId(l);
@@ -228,7 +257,15 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
   }
 
   get sort() {
-    return this._sort ?? DEFAULT_BACKEND_SORT;
+    return this._requestSort ?? DEFAULT_BACKEND_SORT;
+  }
+
+  get requestSort() {
+    return this._requestSort ?? DEFAULT_BACKEND_SORT;
+  }
+
+  get itemOrder() {
+    return this._itemOrder ?? this._requestSort ?? DEFAULT_BACKEND_SORT;
   }
 
   /**
@@ -298,7 +335,7 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
     let headward: string | undefined;
     if (this.config.doRequest) {
       const result = await this.config.doRequest(options);
-      items = result?.items ?? [];
+      items = this.getCanonicalQueryItems(result?.items ?? []);
       // if there is no direction, then we are jumping, and we want to set both directions in the cursor
       tailward =
         !direction || direction === 'tailward'
@@ -313,14 +350,14 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
         ? await this.channel.getReplies(
             this.parentMessageId,
             options,
-            Array.isArray(this.sort) ? this.sort : [this.sort],
+            Array.isArray(this.requestSort) ? this.requestSort : [this.requestSort],
           )
         : await this.channel.query({
             messages: options,
             // todo: why do we query for watchers?
             // watchers: { limit: this.pageSize },
           });
-      items = messages.map(formatMessage);
+      items = this.getCanonicalQueryItems(messages.map(formatMessage));
       const cursor = this.getCursorFromQueryResults({ direction, items });
       tailward = cursor.tailward;
       headward = cursor.headward;
@@ -657,6 +694,10 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
 
   filterQueryResults = (items: LocalMessage[]) =>
     items.filter(this.shouldIncludeMessageInInterval.bind(this));
+
+  private getCanonicalQueryItems(items: LocalMessage[]): LocalMessage[] {
+    return [...items].sort(this.itemOrderComparator);
+  }
 }
 
 const makeDeriveCursor =
