@@ -432,6 +432,12 @@ describe('Channel _handleChannelEvent', function () {
 	});
 
 	it('message.truncate clears messagePaginator unread snapshot', function () {
+		const cachedMessage = generateMsg({ id: 'truncate-cached-message-id' });
+		channel.messagePaginator.setItems({
+			valueOrFactory: [cachedMessage],
+			isFirstPage: true,
+			isLastPage: true,
+		});
 		channel.messagePaginator.setUnreadSnapshot({
 			firstUnreadMessageId: 'm-1',
 			lastReadAt: new Date('2021-01-01T00:00:00.000Z'),
@@ -453,6 +459,8 @@ describe('Channel _handleChannelEvent', function () {
 			lastReadMessageId: null,
 			unreadCount: 0,
 		});
+		expect(channel.messagePaginator.items).toBeUndefined();
+		expect(channel.messagePaginator.getItem(cachedMessage.id)).toBeUndefined();
 	});
 
 	it('message.truncate removes messages up to specified date', function () {
@@ -538,6 +546,38 @@ describe('Channel _handleChannelEvent', function () {
 			channel.state.messages.find((msg) => msg.id === quotingMessage.id).quoted_message
 				.deleted_at,
 		).to.be.ok;
+	});
+
+	it('message.deleted hard delete removes message from messagePaginator', function () {
+		const message = generateMsg({ id: 'hard-delete-message-id', silent: true });
+		channel.messagePaginator.ingestItem(message);
+		expect(channel.messagePaginator.getItem(message.id)?.id).to.equal(message.id);
+
+		channel._handleChannelEvent({
+			type: 'message.deleted',
+			user: { id: 'id' },
+			hard_delete: true,
+			message,
+		});
+
+		expect(
+			channel.messagePaginator.items?.find((m) => m.id === message.id),
+		).toBeUndefined();
+	});
+
+	it('message.deleted soft delete updates message in messagePaginator', function () {
+		const message = generateMsg({ id: 'soft-delete-message-id', text: 'before delete' });
+		channel.messagePaginator.ingestItem(message);
+
+		const deletedAt = new Date().toISOString();
+		channel._handleChannelEvent({
+			type: 'message.deleted',
+			user: { id: 'id' },
+			message: { ...message, deleted_at: deletedAt },
+		});
+
+		const itemFromPaginator = channel.messagePaginator.getItem(message.id);
+		expect(itemFromPaginator?.deleted_at?.toISOString()).to.equal(deletedAt);
 	});
 
 	describe('user.messages.deleted', () => {
@@ -717,6 +757,79 @@ describe('Channel _handleChannelEvent', function () {
 			channel.state.messageSets[1].messages.forEach(check);
 			channel.state.pinnedMessages.forEach(check);
 			Object.values(channel.state.threads).forEach((replies) => replies.forEach(check));
+		});
+
+		it('updates messagePaginator items on soft delete', () => {
+			const deletedAt = new Date('2025-02-01T14:01:30.000Z');
+			const bannedMessage = generateMsg({ id: 'mp-soft-banned', user: bannedUser });
+			const quoteCarrier = generateMsg({
+				id: 'mp-soft-quote-carrier',
+				quoted_message: bannedMessage,
+				quoted_message_id: bannedMessage.id,
+				user: otherUser,
+			});
+			channel.messagePaginator.setItems({
+				valueOrFactory: [bannedMessage, quoteCarrier],
+				isFirstPage: true,
+				isLastPage: true,
+			});
+
+			channel._handleChannelEvent({
+				type: 'user.messages.deleted',
+				cid: channel.cid,
+				channel_type: channel.type,
+				channel_id: channel.id,
+				user: bannedUser,
+				soft_delete: true,
+				created_at: deletedAt.toISOString(),
+			});
+
+			const deletedFromPaginator = channel.messagePaginator.getItem(bannedMessage.id);
+			expect(deletedFromPaginator?.type).to.equal('deleted');
+			expect(deletedFromPaginator?.deleted_at?.toISOString()).to.equal(
+				deletedAt.toISOString(),
+			);
+
+			const quoteCarrierFromPaginator = channel.messagePaginator.getItem(quoteCarrier.id);
+			expect(quoteCarrierFromPaginator?.quoted_message?.type).to.equal('deleted');
+			expect(
+				quoteCarrierFromPaginator?.quoted_message?.deleted_at?.toISOString(),
+			).to.equal(deletedAt.toISOString());
+		});
+
+		it('updates messagePaginator items on hard delete', () => {
+			const deletedAt = new Date('2025-02-01T14:01:30.000Z');
+			const bannedMessage = generateMsg({ id: 'mp-hard-banned', user: bannedUser });
+			const quoteCarrier = generateMsg({
+				id: 'mp-hard-quote-carrier',
+				quoted_message: bannedMessage,
+				quoted_message_id: bannedMessage.id,
+				user: otherUser,
+			});
+			channel.messagePaginator.setItems({
+				valueOrFactory: [bannedMessage, quoteCarrier],
+				isFirstPage: true,
+				isLastPage: true,
+			});
+
+			channel._handleChannelEvent({
+				type: 'user.messages.deleted',
+				cid: channel.cid,
+				channel_type: channel.type,
+				channel_id: channel.id,
+				user: bannedUser,
+				hard_delete: true,
+				created_at: deletedAt.toISOString(),
+			});
+
+			expect(
+				channel.messagePaginator.items?.find((m) => m.id === bannedMessage.id),
+			).toBeUndefined();
+			const quoteCarrierFromPaginator = channel.messagePaginator.getItem(quoteCarrier.id);
+			expect(quoteCarrierFromPaginator?.quoted_message?.type).to.equal('deleted');
+			expect(
+				quoteCarrierFromPaginator?.quoted_message?.deleted_at?.toISOString(),
+			).to.equal(deletedAt.toISOString());
 		});
 	});
 

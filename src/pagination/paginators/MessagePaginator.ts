@@ -26,7 +26,7 @@ import type {
 } from '../../types';
 import type { Channel } from '../../channel';
 import { StateStore } from '../../store';
-import { formatMessage, generateUUIDv4 } from '../../utils';
+import { formatMessage, generateUUIDv4, toDeletedMessage } from '../../utils';
 import { makeComparator } from '../sortCompiler';
 import type { FieldToDataResolver } from '../types.normalization';
 import { resolveDotPathValue } from '../utility.normalization';
@@ -690,6 +690,56 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
       lastReadAt: null,
       unreadCount: 0,
     });
+  };
+
+  clearStateAndCache = () => {
+    this.resetState();
+    this._itemIndex.clear();
+    this.clearUnreadSnapshot();
+    this.clearMessageFocusSignal();
+  };
+
+  applyMessageDeletionForUser = ({
+    userId,
+    hardDelete = false,
+    deletedAt,
+  }: {
+    userId: string;
+    hardDelete?: boolean;
+    deletedAt: Date;
+  }) => {
+    const loadedMessages = this.items ?? [];
+
+    for (const message of loadedMessages) {
+      if (message.user?.id === userId) {
+        if (hardDelete) {
+          this.removeItem({ id: message.id });
+        } else {
+          this.ingestItem(
+            toDeletedMessage({
+              message,
+              hardDelete,
+              deletedAt,
+            }) as LocalMessage,
+          );
+        }
+        continue;
+      }
+
+      if (
+        message.quoted_message?.user?.id === userId &&
+        message.quoted_message.type !== 'deleted'
+      ) {
+        this.ingestItem({
+          ...message,
+          quoted_message: toDeletedMessage({
+            message: message.quoted_message,
+            hardDelete,
+            deletedAt,
+          }) as LocalMessage,
+        });
+      }
+    }
   };
 
   filterQueryResults = (items: LocalMessage[]) =>

@@ -579,6 +579,85 @@ describe('MessagePaginator', () => {
     });
   });
 
+  describe('applyMessageDeletionForUser()', () => {
+    it('soft deletes user messages and quoted messages in paginator items', () => {
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      const deletedAt = new Date('2025-02-01T14:01:30.000Z');
+
+      const bannedUser = { id: 'banned-user' };
+      const otherUser = { id: 'other-user' };
+      const bannedMessage = createMessage({ id: 'banned-message', user: bannedUser });
+      const quoteCarrier = createMessage({
+        id: 'quote-carrier',
+        quoted_message: bannedMessage,
+        quoted_message_id: bannedMessage.id,
+        user: otherUser,
+      });
+
+      paginator.setItems({
+        valueOrFactory: [bannedMessage, quoteCarrier],
+        isFirstPage: true,
+        isLastPage: true,
+      });
+
+      paginator.applyMessageDeletionForUser({
+        userId: bannedUser.id,
+        hardDelete: false,
+        deletedAt,
+      });
+
+      const deletedFromPaginator = paginator.getItem(bannedMessage.id);
+      expect(deletedFromPaginator?.type).toBe('deleted');
+      expect(deletedFromPaginator?.deleted_at?.toISOString()).toBe(
+        deletedAt.toISOString(),
+      );
+
+      const quoteCarrierFromPaginator = paginator.getItem(quoteCarrier.id);
+      expect(quoteCarrierFromPaginator?.quoted_message?.type).toBe('deleted');
+      expect(quoteCarrierFromPaginator?.quoted_message?.deleted_at?.toISOString()).toBe(
+        deletedAt.toISOString(),
+      );
+    });
+
+    it('hard deletes user messages and marks quoted messages as deleted', () => {
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      const deletedAt = new Date('2025-02-01T14:01:30.000Z');
+
+      const bannedUser = { id: 'banned-user' };
+      const otherUser = { id: 'other-user' };
+      const bannedMessage = createMessage({
+        id: 'banned-message-hard',
+        user: bannedUser,
+      });
+      const quoteCarrier = createMessage({
+        id: 'quote-carrier-hard',
+        quoted_message: bannedMessage,
+        quoted_message_id: bannedMessage.id,
+        user: otherUser,
+      });
+
+      paginator.setItems({
+        valueOrFactory: [bannedMessage, quoteCarrier],
+        isFirstPage: true,
+        isLastPage: true,
+      });
+
+      paginator.applyMessageDeletionForUser({
+        userId: bannedUser.id,
+        hardDelete: true,
+        deletedAt,
+      });
+
+      expect(paginator.items?.find((m) => m.id === bannedMessage.id)).toBeUndefined();
+
+      const quoteCarrierFromPaginator = paginator.getItem(quoteCarrier.id);
+      expect(quoteCarrierFromPaginator?.quoted_message?.type).toBe('deleted');
+      expect(quoteCarrierFromPaginator?.quoted_message?.deleted_at?.toISOString()).toBe(
+        deletedAt.toISOString(),
+      );
+    });
+  });
+
   describe.todo('postQueryReconcile and deriveCursor for', () => {});
   describe('linear pagination', () => {
     describe('updates the hasMoreTail flag only if the first message on page is the first message in interval', () => {

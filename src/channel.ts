@@ -2294,8 +2294,13 @@ export class Channel {
       case 'message.deleted':
         if (event.message) {
           this._extendEventWithOwnReactions(event);
-          if (event.hard_delete) channelState.removeMessage(event.message);
-          else channelState.addMessageSorted(event.message, false, false);
+          if (event.hard_delete) {
+            channelState.removeMessage(event.message);
+            this.messagePaginator.removeItem({ id: event.message.id });
+          } else {
+            channelState.addMessageSorted(event.message, false, false);
+            this.messagePaginator.ingestItem(formatMessage(event.message));
+          }
 
           channelState.removeQuotedMessageReferences(event.message);
 
@@ -2306,11 +2311,15 @@ export class Channel {
         break;
       case 'user.messages.deleted':
         if (event.user) {
-          this.state.deleteUserMessages(
-            event.user,
-            !!event.hard_delete,
-            new Date(event.created_at ?? Date.now()),
-          );
+          const deletedAt = new Date(event.created_at ?? Date.now());
+          const hardDelete = !!event.hard_delete;
+          this.messagePaginator.applyMessageDeletionForUser({
+            userId: event.user.id,
+            hardDelete,
+            deletedAt,
+          });
+
+          this.state.deleteUserMessages(event.user, hardDelete, deletedAt);
         }
         break;
       case 'message.new':
@@ -2431,7 +2440,7 @@ export class Channel {
           }
         }
 
-        this.messagePaginator.clearUnreadSnapshot();
+        this.messagePaginator.clearStateAndCache();
 
         break;
       case 'member.added':
