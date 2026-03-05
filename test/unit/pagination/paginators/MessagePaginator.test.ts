@@ -358,6 +358,114 @@ describe('MessagePaginator', () => {
       expect(ok).toBe(false);
       expect(jumpSpy).not.toHaveBeenCalled();
     });
+
+    it('falls back to created_at_around query when unread ids are missing and lastReadAt exists', async () => {
+      const lastReadAt = new Date('2021-01-02T00:00:00.000Z');
+      const channelWithReadState = {
+        cid: 'channel-id',
+        query: vi.fn(),
+        state: {
+          read: {
+            user1: {
+              first_unread_message_id: null,
+              last_read: lastReadAt,
+              last_read_message_id: null,
+            },
+          },
+        },
+        getClient: () => ({
+          user: { id: 'user1' },
+        }),
+      } as unknown as Channel;
+
+      const paginator = new MessagePaginator({
+        channel: channelWithReadState,
+        itemIndex,
+      });
+      const executeQuerySpy = vi.spyOn(paginator, 'executeQuery').mockResolvedValue({
+        stateCandidate: {
+          items: [
+            createMessage({ created_at: '2021-01-01T00:00:00.000Z', id: 'm-read' }),
+            createMessage({ created_at: '2021-01-03T00:00:00.000Z', id: 'm-unread' }),
+          ],
+        },
+        targetInterval: null,
+      });
+      const jumpSpy = vi.spyOn(paginator, 'jumpToMessage').mockResolvedValue(true);
+
+      const ok = await paginator.jumpToTheFirstUnreadMessage({ pageSize: 25 });
+
+      expect(ok).toBe(true);
+      expect(executeQuerySpy).toHaveBeenCalledWith({
+        queryShape: { created_at_around: lastReadAt.toISOString(), limit: 25 },
+        updateState: false,
+      });
+      expect(jumpSpy).toHaveBeenCalledWith(
+        'm-unread',
+        expect.objectContaining({ focusReason: 'jump-to-first-unread' }),
+      );
+      expect(paginator.unreadStateSnapshot.getLatestValue()).toEqual({
+        firstUnreadMessageId: 'm-unread',
+        lastReadAt,
+        lastReadMessageId: 'm-read',
+        unreadCount: 0,
+      });
+    });
+
+    it('hydrates firstUnreadMessageId when the queried page starts after lastReadAt', async () => {
+      const lastReadAt = new Date('2021-01-01T00:00:00.000Z');
+      const channelWithReadState = {
+        cid: 'channel-id',
+        query: vi.fn(),
+        state: {
+          read: {
+            user1: {
+              first_unread_message_id: null,
+              last_read: lastReadAt,
+              last_read_message_id: null,
+            },
+          },
+        },
+        getClient: () => ({
+          user: { id: 'user1' },
+        }),
+      } as unknown as Channel;
+
+      const paginator = new MessagePaginator({
+        channel: channelWithReadState,
+        itemIndex,
+      });
+      vi.spyOn(paginator, 'executeQuery').mockResolvedValue({
+        stateCandidate: {
+          items: [
+            createMessage({
+              created_at: '2021-01-02T00:00:00.000Z',
+              id: 'm-first-unread',
+            }),
+            createMessage({
+              created_at: '2021-01-03T00:00:00.000Z',
+              id: 'm-newer-unread',
+            }),
+          ],
+        },
+        targetInterval: null,
+      });
+      const jumpSpy = vi.spyOn(paginator, 'jumpToMessage').mockResolvedValue(true);
+
+      const ok = await paginator.jumpToTheFirstUnreadMessage();
+
+      expect(ok).toBe(true);
+      expect(jumpSpy).toHaveBeenCalledWith(
+        'm-first-unread',
+        expect.objectContaining({ focusReason: 'jump-to-first-unread' }),
+      );
+      expect(paginator.unreadStateSnapshot.getLatestValue()).toEqual({
+        firstUnreadMessageId: 'm-first-unread',
+        lastReadAt,
+        lastReadMessageId: null,
+        unreadCount: 0,
+      });
+    });
   });
 
   describe('filterQueryResults()', () => {

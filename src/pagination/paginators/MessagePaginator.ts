@@ -102,6 +102,12 @@ const dataFieldFilterResolver: FieldToDataResolver<LocalMessage> = {
   resolve: (message, path) => resolveDotPathValue(message, path),
 };
 
+const getMessageCreatedAtTimestamp = (message: LocalMessage): number | null => {
+  if (!(message.created_at instanceof Date)) return null;
+  const timestamp = message.created_at.getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+};
+
 export type MessagePaginatorOptions = {
   channel: Channel;
   id?: string;
@@ -454,6 +460,14 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
    * IMPORTANT: This intentionally does *not* rely on `channel.state.read[ownUserId]` only,
    * because apps may mark a channel read immediately after opening it, while still
    * wanting to keep "jump to unread" UI indicators alive (based on a snapshot).
+   *
+   * Resolution order:
+   * 1) first unread id from snapshot/read-state
+   * 2) last read id from snapshot/read-state
+   * 3) timestamp fallback (`created_at_around`) when ids are missing but last-read timestamp is known
+   *
+   * The timestamp fallback mirrors legacy behavior where unread boundaries were inferred from
+   * a page around `last_read_at` and then reused by subsequent jumps.
    */
   jumpToTheFirstUnreadMessage = async (options?: JumpToMessageOptions) => {
     const ownUserId = this.channel.getClient().user?.id;
@@ -462,14 +476,15 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
     const unreadSnapshot =
       this.unreadReferencePolicy === 'snapshot'
         ? this.unreadStateSnapshot.getLatestValue()
-        : { firstUnreadMessageId: null, lastReadMessageId: null };
+        : { firstUnreadMessageId: null, lastReadAt: null, lastReadMessageId: null };
     const firstUnreadFromSnapshot = unreadSnapshot.firstUnreadMessageId;
-    const lastReadFromSnapshot = unreadSnapshot.lastReadMessageId;
+    const lastReadAtFromSnapshot = unreadSnapshot.lastReadAt;
+    const lastReadIdFromSnapshot = unreadSnapshot.lastReadMessageId;
 
-    const firstUnreadFromReadState =
-      this.channel.state.read[ownUserId]?.first_unread_message_id ?? null;
-    const lastReadFromReadState =
-      this.channel.state.read[ownUserId]?.last_read_message_id ?? null;
+    const ownReadState = this.channel.state.read[ownUserId];
+    const firstUnreadFromReadState = ownReadState?.first_unread_message_id ?? null;
+    const lastReadAtFromReadState = ownReadState?.last_read ?? null;
+    const lastReadIdFromReadState = ownReadState?.last_read_message_id ?? null;
 
     const firstUnreadMessageId = firstUnreadFromSnapshot ?? firstUnreadFromReadState;
     if (firstUnreadMessageId) {
@@ -479,12 +494,106 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
       });
     }
 
-    const lastReadMessageId = lastReadFromSnapshot ?? lastReadFromReadState;
-    if (!lastReadMessageId) return false;
-    return await this.jumpToMessage(lastReadMessageId, {
+    const lastReadMessageId = lastReadIdFromSnapshot ?? lastReadIdFromReadState;
+    if (lastReadMessageId) {
+      return await this.jumpToMessage(lastReadMessageId, {
+        ...options,
+        focusReason: 'jump-to-first-unread',
+      });
+    }
+
+    const lastReadAt = lastReadAtFromSnapshot ?? lastReadAtFromReadState;
+    if (!lastReadAt) return false;
+
+    // No stable unread/read ids are available. Query a page around last-read timestamp
+    // and infer boundaries from temporal position.
+    const result = await this.executeQuery({
+      queryShape: {
+        created_at_around: lastReadAt.toISOString(),
+        limit: options?.pageSize,
+      },
+      updateState: false,
+    });
+    if (!result) return false;
+
+    const {
+      firstUnreadMessageId: inferredFirstUnreadMessageId,
+      lastReadMessageId: inferredLastReadMessageId,
+    } = this.resolveUnreadBoundaryIdsByTimestamp({
+      lastReadAt,
+      messages: result.stateCandidate.items ?? [],
+    });
+
+    const targetMessageId = inferredFirstUnreadMessageId ?? inferredLastReadMessageId;
+    if (!targetMessageId) return false;
+
+    const jumpResult = await this.jumpToMessage(targetMessageId, {
       ...options,
       focusReason: 'jump-to-first-unread',
     });
+    if (!jumpResult) return false;
+
+    // Persist inferred boundaries so future "jump to first unread" calls can use ids directly
+    // instead of repeating timestamp-based inference.
+    this.setUnreadSnapshot({
+      firstUnreadMessageId: inferredFirstUnreadMessageId,
+      lastReadAt,
+      lastReadMessageId: inferredLastReadMessageId,
+    });
+
+    return true;
+  };
+
+  private resolveUnreadBoundaryIdsByTimestamp = ({
+    lastReadAt,
+    messages,
+  }: {
+    lastReadAt: Date;
+    messages: LocalMessage[];
+  }): { firstUnreadMessageId: string | null; lastReadMessageId: string | null } => {
+    // Messages are expected in chronological order. We find:
+    // - lastReadMessageId: newest message with created_at <= lastReadAt
+    // - firstUnreadMessageId: first message with created_at > lastReadAt
+    //
+    // If the page starts after lastReadAt, the entire page is unread and the first message is
+    // used as unread anchor (legacy "whole channel is unread" behavior for this queried window).
+    const lastReadTimestamp = lastReadAt.getTime();
+    if (!Number.isFinite(lastReadTimestamp) || !messages.length) {
+      return { firstUnreadMessageId: null, lastReadMessageId: null };
+    }
+
+    let firstUnreadMessageId: string | null = null;
+    let lastReadMessageId: string | null = null;
+
+    for (const message of messages) {
+      const messageTimestamp = getMessageCreatedAtTimestamp(message);
+      if (messageTimestamp === null) continue;
+
+      if (messageTimestamp <= lastReadTimestamp) {
+        lastReadMessageId = message.id;
+      } else if (!firstUnreadMessageId) {
+        firstUnreadMessageId = message.id;
+      }
+    }
+
+    const firstMessageWithTimestamp = messages.find(
+      (message) => getMessageCreatedAtTimestamp(message) !== null,
+    );
+    const firstMessageTimestamp =
+      firstMessageWithTimestamp &&
+      getMessageCreatedAtTimestamp(firstMessageWithTimestamp);
+    if (
+      firstMessageWithTimestamp &&
+      typeof firstMessageTimestamp === 'number' &&
+      lastReadTimestamp < firstMessageTimestamp
+    ) {
+      return {
+        firstUnreadMessageId: firstMessageWithTimestamp.id,
+        lastReadMessageId,
+      };
+    }
+
+    return { firstUnreadMessageId, lastReadMessageId };
   };
 
   emitMessageFocusSignal = ({

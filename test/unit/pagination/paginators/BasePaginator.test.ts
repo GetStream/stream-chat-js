@@ -280,6 +280,24 @@ describe('BasePaginator', () => {
       expect(paginator.mockClientQuery).toHaveBeenCalledTimes(3);
     });
 
+    it('supports legacy next/prev cursor fields from query response', async () => {
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+
+      const nextPromise = paginator.toTail();
+      await sleep(0);
+
+      paginator.queryResolve({
+        items: [{ id: 'id1' }],
+        next: 'next1',
+        prev: 'prev1',
+      });
+
+      await nextPromise;
+      expect(paginator.cursor).toEqual({ tailward: 'next1', headward: 'prev1' });
+      expect(paginator.hasMoreTail).toBe(true);
+      expect(paginator.hasMoreHead).toBe(true);
+    });
+
     it('paginates to next pages (offset)', async () => {
       const paginator = new Paginator({ pageSize: 1 });
       let nextPromise = paginator.toTail();
@@ -403,6 +421,88 @@ describe('BasePaginator', () => {
       });
 
       vi.useRealTimers();
+    });
+
+    it('supports legacy pagination aliases', async () => {
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+      expect(paginator.hasNext).toBe(true);
+      expect(paginator.hasPrev).toBe(true);
+
+      const nextPromise = paginator.next();
+      await sleep(0);
+      paginator.queryResolve({
+        items: [{ id: 'id1' }],
+        tailward: 'next1',
+        headward: 'prev1',
+      });
+      await nextPromise;
+      expect(paginator.mockClientQuery).toHaveBeenNthCalledWith(1, {
+        direction: 'tailward',
+        queryShape: defaultNextQueryShape,
+        reset: undefined,
+        retryCount: 0,
+      });
+
+      const prevPromise = paginator.prev();
+      paginator.queryResolve({
+        items: [{ id: 'id0' }],
+        tailward: 'next2',
+        headward: 'prev0',
+      });
+      await prevPromise;
+      expect(paginator.mockClientQuery).toHaveBeenNthCalledWith(2, {
+        direction: 'headward',
+        queryShape: defaultNextQueryShape,
+        reset: undefined,
+        retryCount: 0,
+      });
+    });
+
+    it('supports legacy debounced pagination aliases', async () => {
+      vi.useFakeTimers();
+      try {
+        const paginator = new Paginator({
+          debounceMs: 2000,
+          initialCursor: ZERO_PAGE_CURSOR,
+        });
+
+        paginator.nextDebounced();
+        vi.advanceTimersByTime(2000);
+        await toNextTick();
+        paginator.queryResolve({
+          items: [{ id: 'id2' }],
+          tailward: null,
+          headward: 'prev0',
+        });
+        await paginator.queryPromise;
+        await toNextTick();
+
+        paginator.prevDebounced();
+        vi.advanceTimersByTime(2000);
+        await toNextTick();
+        paginator.queryResolve({
+          items: [{ id: 'id-1' }],
+          tailward: 'next2',
+          headward: null,
+        });
+        await paginator.queryPromise;
+        await toNextTick();
+
+        expect(paginator.mockClientQuery).toHaveBeenNthCalledWith(1, {
+          direction: 'tailward',
+          queryShape: defaultNextQueryShape,
+          reset: undefined,
+          retryCount: 0,
+        });
+        expect(paginator.mockClientQuery).toHaveBeenNthCalledWith(2, {
+          direction: 'headward',
+          queryShape: defaultNextQueryShape,
+          reset: undefined,
+          retryCount: 0,
+        });
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('paginates to a previous page (cursor only)', async () => {

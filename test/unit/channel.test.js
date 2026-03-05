@@ -396,6 +396,30 @@ describe('Channel _handleChannelEvent', function () {
 		expect(channel.state.messages.length).to.be.equal(0);
 	});
 
+	it('message.truncate clears messagePaginator unread snapshot', function () {
+		channel.messagePaginator.setUnreadSnapshot({
+			firstUnreadMessageId: 'm-1',
+			lastReadAt: new Date('2021-01-01T00:00:00.000Z'),
+			lastReadMessageId: 'm-0',
+			unreadCount: 7,
+		});
+
+		channel._handleChannelEvent({
+			type: 'channel.truncated',
+			user: { id: 'id' },
+			channel: {
+				truncated_at: new Date().toISOString(),
+			},
+		});
+
+		expect(channel.messagePaginator.unreadStateSnapshot.getLatestValue()).toEqual({
+			firstUnreadMessageId: null,
+			lastReadAt: null,
+			lastReadMessageId: null,
+			unreadCount: 0,
+		});
+	});
+
 	it('message.truncate removes messages up to specified date', function () {
 		const messages = [
 			{ created_at: '2021-01-01T00:01:00' },
@@ -721,6 +745,12 @@ describe('Channel _handleChannelEvent', function () {
 			expect(
 				channel.messageReceiptsTracker.getUserProgress(user.id)?.lastReadRef.msgId,
 			).toBe(event.last_read_message_id);
+			expect(channel.messagePaginator.unreadStateSnapshot.getLatestValue()).toEqual({
+				firstUnreadMessageId: event.first_unread_message_id,
+				lastReadAt: new Date(event.last_read_at),
+				lastReadMessageId: event.last_read_message_id,
+				unreadCount: event.unread_messages,
+			});
 		});
 
 		it('should reconcile tracker with metadata patch for notification.mark_unread', () => {
