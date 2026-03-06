@@ -2,7 +2,7 @@ import { generateChannel } from './test-utils/generateChannel';
 import { generateMsg } from './test-utils/generateMessage';
 import { generateThreadResponse } from './test-utils/generateThreadResponse';
 import { getClientWithUser } from './test-utils/getClient';
-import { generateUUIDv4 as uuidv4 } from '../../src/utils';
+import { formatMessage, generateUUIDv4 as uuidv4 } from '../../src/utils';
 
 import sinon from 'sinon';
 import {
@@ -48,6 +48,26 @@ describe('Threads 2.0', () => {
     });
   }
 
+  function createMinimalThread({
+    parentMessageOverrides = {},
+    draft,
+  }: {
+    parentMessageOverrides?: Partial<MessageResponse>;
+    draft?: {
+      channel_cid: string;
+      created_at: string;
+      message: { id: string; text: string; parent_id?: string };
+      parent_id?: string;
+    };
+  } = {}) {
+    return new Thread({
+      client,
+      channel,
+      parentMessage: { ...parentMessageResponse, ...parentMessageOverrides },
+      draft,
+    });
+  }
+
   beforeEach(() => {
     client = new StreamChat('apiKey');
     client._setUser({ id: TEST_USER_ID });
@@ -79,6 +99,55 @@ describe('Threads 2.0', () => {
       expect(thread.id).to.equal(parentMessageResponse.id);
       // @ts-expect-error `name` is a custom property
       expect(thread.channel.data?.name).to.equal(channelResponse.name);
+      expect(thread.messagePaginator.sort).to.deep.equal([{ created_at: -1 }]);
+      expect(thread.messagePaginator.requestSort).to.deep.equal([{ created_at: -1 }]);
+      expect(thread.messagePaginator.itemOrder).to.deep.equal({ created_at: 1 });
+      expect(thread.messagePaginator.pageSize).to.equal(50);
+    });
+
+    it('initializes properly without threadData', () => {
+      const thread = createMinimalThread();
+      const state = thread.state.getLatestValue();
+
+      expect(thread.id).to.equal(parentMessageResponse.id);
+      expect(thread.channel.cid).to.equal(channel.cid);
+      expect(state.parentMessage.id).to.equal(parentMessageResponse.id);
+      expect(state.replies).to.deep.equal([]);
+      expect(state.participants).to.deep.equal([]);
+      expect(state.custom).to.deep.equal({});
+      expect(state.pagination.prevCursor).to.be.null;
+      expect(state.pagination.nextCursor).to.be.null;
+      expect(state.read).to.have.keys([TEST_USER_ID]);
+      expect(thread.messagePaginator.sort).to.deep.equal([{ created_at: -1 }]);
+      expect(thread.messagePaginator.requestSort).to.deep.equal([{ created_at: -1 }]);
+      expect(thread.messagePaginator.itemOrder).to.deep.equal({ created_at: 1 });
+      expect(thread.messagePaginator.pageSize).to.equal(50);
+    });
+
+    it('throws if minimal init parent message id is missing', () => {
+      expect(() =>
+        createMinimalThread({
+          parentMessageOverrides: { id: '' },
+        }),
+      ).to.throw();
+    });
+
+    it('accepts draft in minimal init path', () => {
+      const draftId = uuidv4();
+      const thread = createMinimalThread({
+        draft: {
+          channel_cid: channel.cid,
+          created_at: new Date().toISOString(),
+          message: {
+            id: draftId,
+            text: 'draft text',
+            parent_id: parentMessageResponse.id,
+          },
+          parent_id: parentMessageResponse.id,
+        },
+      });
+
+      expect(thread.messageComposer.draftId).to.equal(draftId);
     });
 
     describe('Methods', () => {
@@ -175,11 +244,15 @@ describe('Threads 2.0', () => {
           expect(stateBefore.replyCount).to.equal(0);
           expect(stateBefore.parentMessage.text).to.equal(parentMessageResponse.text);
 
+          const nextParticipants = [
+            { id: 'participant-1' },
+          ] as unknown as ThreadResponse['thread_participants'];
           const updatedMessage = generateMsg({
-            id: parentMessageResponse.id,
-            text: 'aaa',
-            reply_count: 10,
             deleted_at: new Date().toISOString(),
+            id: parentMessageResponse.id,
+            reply_count: 10,
+            text: 'aaa',
+            thread_participants: nextParticipants,
           }) as MessageResponse;
 
           thread.updateParentMessageLocally({ message: updatedMessage });
@@ -188,6 +261,8 @@ describe('Threads 2.0', () => {
           expect(stateAfter.deletedAt).to.be.not.null;
           expect(stateAfter.deletedAt!.toISOString()).to.equal(updatedMessage.deleted_at);
           expect(stateAfter.replyCount).to.equal(updatedMessage.reply_count);
+          expect(stateAfter.participants).to.have.lengthOf(1);
+          expect(stateAfter.participants?.[0].user_id).to.equal('participant-1');
           expect(stateAfter.parentMessage.text).to.equal(updatedMessage.text);
         });
       });
@@ -265,6 +340,30 @@ describe('Threads 2.0', () => {
           expect(stateAfter.participants).to.equal(hydrationState.participants);
         });
 
+        it('copies pagination state during hydration', () => {
+          const thread = createMinimalThread();
+          const hydrationThread = createTestThread({
+            latest_replies: [
+              generateMsg({ parent_id: parentMessageResponse.id }) as MessageResponse,
+            ],
+            reply_count: 3,
+          });
+
+          hydrationThread.state.next((current) => ({
+            ...current,
+            pagination: {
+              ...current.pagination,
+              nextCursor: 'next-cursor',
+            },
+          }));
+
+          thread.hydrateState(hydrationThread);
+
+          const stateAfter = thread.state.getLatestValue();
+          expect(stateAfter.pagination.prevCursor).to.not.be.null;
+          expect(stateAfter.pagination.nextCursor).to.equal('next-cursor');
+        });
+
         it('retains failed replies after hydration', () => {
           const thread = createTestThread();
           const hydrationThread = createTestThread({
@@ -284,6 +383,37 @@ describe('Threads 2.0', () => {
           const stateAfter = thread.state.getLatestValue();
           expect(stateAfter.replies).to.have.lengthOf(2);
           expect(stateAfter.replies[1].id).to.equal(failedMessage.id);
+        });
+      });
+
+      describe('reload', () => {
+        it('bootstraps pagination for minimally initialized threads', async () => {
+          const minimalThread = createMinimalThread();
+          const hydratedThread = createTestThread({
+            latest_replies: [
+              generateMsg({ parent_id: parentMessageResponse.id }) as MessageResponse,
+            ],
+            reply_count: 3,
+          });
+          hydratedThread.state.next((current) => ({
+            ...current,
+            pagination: {
+              ...current.pagination,
+              nextCursor: 'next-cursor',
+            },
+          }));
+
+          sinon.stub(client, 'getThread').resolves(hydratedThread);
+
+          const stateBefore = minimalThread.state.getLatestValue();
+          expect(stateBefore.pagination.prevCursor).to.be.null;
+          expect(stateBefore.pagination.nextCursor).to.be.null;
+
+          await minimalThread.reload();
+
+          const stateAfter = minimalThread.state.getLatestValue();
+          expect(stateAfter.pagination.prevCursor).to.not.be.null;
+          expect(stateAfter.pagination.nextCursor).to.equal('next-cursor');
         });
       });
 
@@ -576,17 +706,19 @@ describe('Threads 2.0', () => {
         thread.registerSubscriptions();
 
         const stateBefore = thread.state.getLatestValue();
-        const stubbedMarkAsRead = sinon.stub(thread, 'markAsRead').resolves();
+        const stubbedMarkRead = sinon
+          .stub(client.messageDeliveryReporter, 'throttledMarkRead')
+          .returns(undefined);
         expect(stateBefore.active).to.be.false;
         expect(thread.ownUnreadCount).to.equal(42);
-        expect(stubbedMarkAsRead.called).to.be.false;
+        expect(stubbedMarkRead.called).to.be.false;
 
         thread.activate();
         clock.runAll();
 
         const stateAfter = thread.state.getLatestValue();
         expect(stateAfter.active).to.be.true;
-        expect(stubbedMarkAsRead.calledOnce).to.be.true;
+        expect(stubbedMarkRead.calledOnce).to.be.true;
 
         client.dispatchEvent({
           type: 'message.new',
@@ -598,7 +730,7 @@ describe('Threads 2.0', () => {
         });
         clock.runAll();
 
-        expect(stubbedMarkAsRead.calledTwice).to.be.true;
+        expect(stubbedMarkRead.calledTwice).to.be.true;
 
         thread.unregisterSubscriptions();
         clock.restore();
@@ -881,6 +1013,76 @@ describe('Threads 2.0', () => {
           thread.unregisterSubscriptions();
         });
 
+        it('increments local reply_count on new reply', () => {
+          const thread = createTestThread({
+            reply_count: 0,
+            read: [
+              {
+                last_read: new Date().toISOString(),
+                user: { id: TEST_USER_ID },
+                unread_messages: 0,
+              },
+            ],
+          });
+          thread.registerSubscriptions();
+
+          const newMessage = generateMsg({
+            parent_id: thread.id,
+            user: { id: 'bob' },
+          }) as MessageResponse;
+
+          client.dispatchEvent({
+            type: 'message.new',
+            message: newMessage,
+            user: { id: 'bob' },
+          });
+
+          const stateAfter = thread.state.getLatestValue();
+          expect(stateAfter.replyCount).to.equal(1);
+          expect(stateAfter.parentMessage.reply_count).to.equal(1);
+
+          thread.unregisterSubscriptions();
+        });
+
+        it('does not increment local reply_count for duplicate message.new events', () => {
+          const existingReply = generateMsg({
+            parent_id: parentMessageResponse.id,
+            user: { id: 'bob' },
+          }) as MessageResponse;
+          const thread = createTestThread({
+            latest_replies: [existingReply],
+            reply_count: 1,
+            read: [
+              {
+                user: { id: TEST_USER_ID },
+                last_read: new Date().toISOString(),
+                unread_messages: 0,
+              },
+            ],
+          });
+          thread.registerSubscriptions();
+
+          thread.state.next((current) => ({
+            ...current,
+            parentMessage: {
+              ...current.parentMessage,
+              reply_count: 1,
+            },
+          }));
+
+          client.dispatchEvent({
+            type: 'message.new',
+            message: existingReply,
+            user: { id: 'bob' },
+          });
+
+          const stateAfter = thread.state.getLatestValue();
+          expect(stateAfter.replyCount).to.equal(1);
+          expect(stateAfter.parentMessage.reply_count).to.equal(1);
+
+          thread.unregisterSubscriptions();
+        });
+
         it('handles receiving a reply that was previously optimistically added', () => {
           const thread = createTestThread({
             latest_replies: [generateMsg() as MessageResponse],
@@ -1067,6 +1269,43 @@ describe('Threads 2.0', () => {
             parentMessage.deleted_at,
           );
         });
+
+        it('reflects quoted_message updates in messagePaginator cache', () => {
+          const thread = createTestThread();
+          thread.registerSubscriptions();
+
+          const quotedMessage = generateMsg({
+            id: uuidv4(),
+            text: 'before delete',
+          }) as MessageResponse;
+          const quoteCarrier = generateMsg({
+            id: uuidv4(),
+            parent_id: thread.id,
+            quoted_message_id: quotedMessage.id,
+            quoted_message: quotedMessage,
+          }) as MessageResponse;
+
+          thread.messagePaginator.setItems({
+            valueOrFactory: [quoteCarrier].map(formatMessage),
+            isFirstPage: true,
+            isLastPage: true,
+          });
+
+          client.dispatchEvent({
+            type: 'message.deleted',
+            message: {
+              ...quotedMessage,
+              type: 'deleted',
+              deleted_at: new Date().toISOString(),
+            },
+          });
+
+          expect(
+            thread.messagePaginator.getItem(quoteCarrier.id)?.quoted_message?.type,
+          ).to.equal('deleted');
+
+          thread.unregisterSubscriptions();
+        });
       });
 
       describe('Events: message.updated, reaction.new, reaction.deleted', () => {
@@ -1095,6 +1334,174 @@ describe('Threads 2.0', () => {
 
             thread.unregisterSubscriptions();
           });
+        });
+
+        it('ingests "reaction.new" message into thread messagePaginator when parent_id matches thread.id', () => {
+          const thread = createTestThread();
+          thread.registerSubscriptions();
+          const message = generateMsg({
+            id: uuidv4(),
+            parent_id: thread.id,
+          }) as MessageResponse;
+
+          client.dispatchEvent({
+            type: 'reaction.new',
+            message,
+            reaction: {
+              type: 'love',
+              user_id: TEST_USER_ID,
+              message_id: message.id,
+              created_at: new Date().toISOString(),
+            },
+          });
+
+          expect(thread.messagePaginator.getItem(message.id)?.id).to.equal(message.id);
+
+          thread.unregisterSubscriptions();
+        });
+
+        it('ignores "reaction.new" message in thread messagePaginator when parent_id does not match thread.id', () => {
+          const thread = createTestThread();
+          thread.registerSubscriptions();
+          const message = generateMsg({
+            id: uuidv4(),
+            parent_id: uuidv4(),
+          }) as MessageResponse;
+
+          client.dispatchEvent({
+            type: 'reaction.new',
+            message,
+            reaction: {
+              type: 'love',
+              user_id: TEST_USER_ID,
+              message_id: message.id,
+              created_at: new Date().toISOString(),
+            },
+          });
+
+          expect(thread.messagePaginator.getItem(message.id)).to.be.undefined;
+
+          thread.unregisterSubscriptions();
+        });
+
+        (['reaction.deleted', 'reaction.updated'] as const).forEach((eventType) => {
+          it(`ingests "${eventType}" message into thread messagePaginator when parent_id matches thread.id`, () => {
+            const thread = createTestThread();
+            thread.registerSubscriptions();
+            const message = generateMsg({
+              id: uuidv4(),
+              parent_id: thread.id,
+            }) as MessageResponse;
+
+            client.dispatchEvent({
+              type: eventType,
+              message,
+              reaction: {
+                type: 'love',
+                user_id: TEST_USER_ID,
+                message_id: message.id,
+                created_at: new Date().toISOString(),
+              },
+            });
+
+            expect(thread.messagePaginator.getItem(message.id)?.id).to.equal(message.id);
+
+            thread.unregisterSubscriptions();
+          });
+
+          it(`ignores "${eventType}" message in thread messagePaginator when parent_id does not match thread.id`, () => {
+            const thread = createTestThread();
+            thread.registerSubscriptions();
+            const message = generateMsg({
+              id: uuidv4(),
+              parent_id: uuidv4(),
+            }) as MessageResponse;
+
+            client.dispatchEvent({
+              type: eventType,
+              message,
+              reaction: {
+                type: 'love',
+                user_id: TEST_USER_ID,
+                message_id: message.id,
+                created_at: new Date().toISOString(),
+              },
+            });
+
+            expect(thread.messagePaginator.getItem(message.id)).to.be.undefined;
+
+            thread.unregisterSubscriptions();
+          });
+        });
+
+        it('reflects quoted_message updates in messagePaginator on "message.updated"', () => {
+          const thread = createTestThread();
+          thread.registerSubscriptions();
+
+          const quotedMessage = generateMsg({
+            id: uuidv4(),
+            text: 'before update',
+          }) as MessageResponse;
+          const quoteCarrier = generateMsg({
+            id: uuidv4(),
+            parent_id: thread.id,
+            quoted_message_id: quotedMessage.id,
+            quoted_message: quotedMessage,
+          }) as MessageResponse;
+
+          thread.messagePaginator.setItems({
+            valueOrFactory: [quoteCarrier].map(formatMessage),
+            isFirstPage: true,
+            isLastPage: true,
+          });
+
+          client.dispatchEvent({
+            type: 'message.updated',
+            message: { ...quotedMessage, text: 'after update' },
+          });
+
+          expect(
+            thread.messagePaginator.getItem(quoteCarrier.id)?.quoted_message?.text,
+          ).to.equal('after update');
+
+          thread.unregisterSubscriptions();
+        });
+
+        it('reflects quoted_message updates in messagePaginator on "message.undeleted"', () => {
+          const thread = createTestThread();
+          thread.registerSubscriptions();
+
+          const quotedMessage = generateMsg({
+            id: uuidv4(),
+            text: 'before undelete',
+            type: 'deleted',
+          }) as MessageResponse;
+          const quoteCarrier = generateMsg({
+            id: uuidv4(),
+            parent_id: thread.id,
+            quoted_message_id: quotedMessage.id,
+            quoted_message: quotedMessage,
+          }) as MessageResponse;
+
+          thread.messagePaginator.setItems({
+            valueOrFactory: [quoteCarrier].map(formatMessage),
+            isFirstPage: true,
+            isLastPage: true,
+          });
+
+          client.dispatchEvent({
+            type: 'message.undeleted',
+            message: { ...quotedMessage, type: 'regular', text: 'after undelete' },
+          });
+
+          expect(
+            thread.messagePaginator.getItem(quoteCarrier.id)?.quoted_message?.text,
+          ).to.equal('after undelete');
+          expect(
+            thread.messagePaginator.getItem(quoteCarrier.id)?.quoted_message?.type,
+          ).to.equal('regular');
+
+          thread.unregisterSubscriptions();
         });
       });
     });

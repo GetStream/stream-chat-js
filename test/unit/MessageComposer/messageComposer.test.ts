@@ -5,6 +5,7 @@ import {
   ChannelAPIResponse,
   ChannelConfigWithInfo,
   ChannelResponse,
+  DEFAULT_COMPOSER_CONFIG,
   LocalMessage,
   MessageComposerConfig,
   StaticLocationPayload,
@@ -15,6 +16,7 @@ import { DeepPartial } from '../../../src/types.utility';
 import { MessageComposer } from '../../../src/messageComposer/messageComposer';
 import { DraftResponse, MessageResponse } from '../../../src/types';
 import { MockOfflineDB } from '../offline-support/MockOfflineDB';
+import { generateMsg } from '../test-utils/generateMessage';
 
 const generateUuidV4Output = 'test-uuid';
 // Mock dependencies
@@ -168,7 +170,7 @@ describe('MessageComposer', () => {
       const { messageComposer, mockChannel } = setup();
       expect(messageComposer).toBeDefined();
       expect(messageComposer.channel).toBe(mockChannel);
-      expect(messageComposer.config).toBeDefined();
+      expect(messageComposer.config).toStrictEqual(DEFAULT_COMPOSER_CONFIG);
       expect(messageComposer.attachmentManager).toBeDefined();
       expect(messageComposer.linkPreviewsManager).toBeDefined();
       expect(messageComposer.textComposer).toBeDefined();
@@ -178,16 +180,45 @@ describe('MessageComposer', () => {
 
     it('should initialize with custom config', () => {
       const customConfig: DeepPartial<MessageComposerConfig> = {
+        attachments: {
+          maxNumberOfFilesPerMessage: 1,
+        },
+        drafts: { enabled: true },
+        linkPreviews: { debounceURLEnrichmentMs: 20 },
+        location: { enabled: false },
         text: {
           maxLengthOnEdit: 1000,
           publishTypingEvents: false,
         },
+        sendMessageRequestFn: () => Promise.resolve({ message: generateMsg() }),
       };
 
       const { messageComposer } = setup({ config: customConfig });
 
-      expect(messageComposer.config.text.publishTypingEvents).toBe(false);
-      expect(messageComposer.config.text?.maxLengthOnEdit).toBe(1000);
+      expect(messageComposer.config).toStrictEqual({
+        attachments: {
+          acceptedFiles: DEFAULT_COMPOSER_CONFIG.attachments.acceptedFiles,
+          fileUploadFilter: DEFAULT_COMPOSER_CONFIG.attachments.fileUploadFilter,
+          maxNumberOfFilesPerMessage:
+            customConfig.attachments!.maxNumberOfFilesPerMessage,
+        },
+        drafts: customConfig.drafts,
+        linkPreviews: {
+          debounceURLEnrichmentMs: customConfig.linkPreviews!.debounceURLEnrichmentMs,
+          enabled: DEFAULT_COMPOSER_CONFIG.linkPreviews.enabled,
+          findURLFn: DEFAULT_COMPOSER_CONFIG.linkPreviews.findURLFn,
+        },
+        location: {
+          enabled: customConfig.location!.enabled,
+          getDeviceId: DEFAULT_COMPOSER_CONFIG.location!.getDeviceId,
+        },
+        sendMessageRequestFn: customConfig.sendMessageRequestFn,
+        text: {
+          enabled: DEFAULT_COMPOSER_CONFIG.text.enabled,
+          maxLengthOnEdit: customConfig.text!.maxLengthOnEdit,
+          publishTypingEvents: customConfig.text!.publishTypingEvents,
+        },
+      });
     });
 
     it('should initialize with custom config overridden with back-end configuration', () => {
@@ -945,6 +976,7 @@ describe('MessageComposer', () => {
       expect(result).toEqual({
         localMessage: {
           attachments: [],
+          cid: 'messaging:test-channel-id',
           created_at: expect.any(Date),
           deleted_at: null,
           error: null,
@@ -1012,6 +1044,7 @@ describe('MessageComposer', () => {
       expect(result).toEqual({
         localMessage: {
           attachments: [{ type: 'file' }],
+          cid: 'messaging:test-channel-id',
           created_at: date,
           deleted_at: null,
           error: null,
@@ -1086,6 +1119,178 @@ describe('MessageComposer', () => {
         initialValue: expect.any(Object),
       });
       expect(result).toBeUndefined();
+    });
+
+    describe('sendMessage', () => {
+      it('performs optimistic update before sending the message', async () => {
+        const { messageComposer, mockChannel } = setup();
+        messageComposer.textComposer.setText('Hello');
+        const composed = await messageComposer.compose();
+        expect(composed).toBeDefined();
+        let resolveSend: (v: { message: MessageResponse }) => void = () => {};
+        const sendPromise = mockChannel.sendMessageWithLocalUpdate({
+          localMessage: composed!.localMessage,
+          message: composed!.message,
+          options: composed!.sendOptions,
+          sendMessageRequestFn: () =>
+            new Promise((resolve) => {
+              resolveSend = resolve;
+            }),
+        });
+        await Promise.resolve();
+        const optimistic = mockChannel.messagePaginator.getItem(
+          composed!.localMessage.id,
+        );
+        expect(optimistic?.status).toBe('sending');
+        resolveSend({ message: generateMsg({ id: composed!.localMessage.id }) });
+        await sendPromise;
+      });
+
+      it('updates the message in state after successful response if message has not arrived over WS', async () => {
+        const { messageComposer, mockChannel } = setup();
+        messageComposer.textComposer.setText('Hello');
+        const composed = await messageComposer.compose();
+        const serverMessage = generateMsg({
+          id: composed!.localMessage.id,
+          updated_at: new Date(
+            composed!.localMessage.updated_at.getTime() + 100,
+          ).toISOString(),
+        });
+        await mockChannel.sendMessageWithLocalUpdate({
+          localMessage: composed!.localMessage,
+          message: composed!.message,
+          options: composed!.sendOptions,
+          sendMessageRequestFn: async () => ({ message: serverMessage }),
+        });
+        const after = mockChannel.messagePaginator.getItem(composed!.localMessage.id);
+        expect(after?.status).toBe('received');
+      });
+
+      it('does not update the message in state after successful response if message has arrived over WS and the update timestamp is <= existing message timestamp', async () => {
+        const { messageComposer, mockChannel } = setup();
+        messageComposer.textComposer.setText('Hello');
+        const composed = await messageComposer.compose();
+        const messageId = composed!.localMessage.id;
+        const composedUpdatedAt = composed!.localMessage.updated_at.getTime();
+        const olderServerTime = new Date(composedUpdatedAt - 5000);
+        const serverMessage = generateMsg({
+          id: messageId,
+          updated_at: olderServerTime.toISOString(),
+        });
+        await mockChannel.sendMessageWithLocalUpdate({
+          localMessage: composed!.localMessage,
+          message: composed!.message,
+          options: composed!.sendOptions,
+          sendMessageRequestFn: async () => ({ message: serverMessage }),
+        });
+        const after = mockChannel.messagePaginator.getItem(messageId);
+        expect(after?.status).toBe('sending');
+        expect(after?.updated_at.getTime()).toBeGreaterThanOrEqual(
+          composedUpdatedAt - 100,
+        );
+      });
+
+      it('does not update the message in state if it already exists on the server and in the local state as not delivered', async () => {
+        const { messageComposer, mockChannel } = setup();
+        messageComposer.textComposer.setText('Hello');
+        const composed = await messageComposer.compose();
+        const messageId = composed!.localMessage.id;
+        const composedUpdatedAt = composed!.localMessage.updated_at.getTime();
+        const olderServerTime = new Date(composedUpdatedAt - 2000);
+        await mockChannel.sendMessageWithLocalUpdate({
+          localMessage: composed!.localMessage,
+          message: composed!.message,
+          options: composed!.sendOptions,
+          sendMessageRequestFn: async () => ({
+            message: generateMsg({
+              id: messageId,
+              updated_at: olderServerTime.toISOString(),
+            }),
+          }),
+        });
+        const after = mockChannel.messagePaginator.getItem(messageId);
+        expect(after?.status).toBe('sending');
+        expect(after?.updated_at.getTime()).toBeGreaterThanOrEqual(
+          composedUpdatedAt - 100,
+        );
+      });
+
+      it('does not update the message in state if it already exists on the server and in the local state as not failed', async () => {
+        const { messageComposer, mockChannel } = setup();
+        messageComposer.textComposer.setText('Hello');
+        const composed = await messageComposer.compose();
+        const messageId = composed!.localMessage.id;
+        const composedUpdatedAt = composed!.localMessage.updated_at.getTime();
+        const olderServerTime = new Date(composedUpdatedAt - 1000);
+        await mockChannel.sendMessageWithLocalUpdate({
+          localMessage: composed!.localMessage,
+          message: composed!.message,
+          options: composed!.sendOptions,
+          sendMessageRequestFn: async () => ({
+            message: generateMsg({
+              id: messageId,
+              updated_at: olderServerTime.toISOString(),
+            }),
+          }),
+        });
+        const after = mockChannel.messagePaginator.getItem(messageId);
+        expect(after?.status).toBe('sending');
+        expect(after?.updated_at.getTime()).toBe(composedUpdatedAt);
+      });
+
+      it('updates the message in state if it already exists on the server and in the local state with status sending', async () => {
+        const { messageComposer, mockChannel } = setup();
+        messageComposer.textComposer.setText('Hello');
+        const composed = await messageComposer.compose();
+        const messageId = composed!.localMessage.id;
+        const existingSending = {
+          ...composed!.localMessage,
+          status: 'sending' as const,
+          updated_at: new Date(Date.now() - 5000),
+        };
+        mockChannel.messagePaginator.ingestItem(existingSending);
+        const serverUpdatedAt = new Date(
+          composed!.localMessage.updated_at.getTime() + 100,
+        );
+        await mockChannel.sendMessageWithLocalUpdate({
+          localMessage: composed!.localMessage,
+          message: composed!.message,
+          options: composed!.sendOptions,
+          sendMessageRequestFn: async () => ({
+            message: generateMsg({
+              id: messageId,
+              updated_at: serverUpdatedAt.toISOString(),
+            }),
+          }),
+        });
+        const after = mockChannel.messagePaginator.getItem(messageId);
+        expect(after?.status).toBe('received');
+        expect(after?.updated_at.getTime()).toBe(serverUpdatedAt.getTime());
+      });
+
+      it('updates the message in state if it does not exist on the server and the send request failed', async () => {
+        const { messageComposer, mockChannel } = setup();
+        messageComposer.textComposer.setText('Hello');
+        const composed = await messageComposer.compose();
+        const messageId = composed!.localMessage.id;
+        const apiError = Object.assign(new Error('Network error'), {
+          code: 16,
+          response: { statusCode: 500 },
+        });
+        await expect(
+          mockChannel.sendMessageWithLocalUpdate({
+            localMessage: composed!.localMessage,
+            message: composed!.message,
+            options: composed!.sendOptions,
+            sendMessageRequestFn: async () => {
+              throw apiError;
+            },
+          }),
+        ).rejects.toThrow('Network error');
+        const after = mockChannel.messagePaginator.getItem(messageId);
+        expect(after?.status).toBe('failed');
+        expect(after?.error).toBeDefined();
+      });
     });
 
     it('should compose draft', async () => {
@@ -1765,16 +1970,29 @@ describe('MessageComposer', () => {
     });
 
     describe('subscribeMessageComposerSetupStateChange', () => {
-      it('should apply modifications when setup state changes', () => {
+      it('calls setupFunction with { composer } when client setMessageComposerSetupFunction is invoked', () => {
         const { messageComposer, mockClient } = setup();
-        const mockModifications = vi.fn();
+        const setupFn = vi.fn();
 
         messageComposer.registerSubscriptions();
-        mockClient._messageComposerSetupState.next({
-          setupFunction: mockModifications,
-        });
+        mockClient.setMessageComposerSetupFunction(setupFn);
 
-        expect(mockModifications).toHaveBeenCalledWith({ composer: messageComposer });
+        expect(setupFn).toHaveBeenCalledWith({ composer: messageComposer });
+      });
+
+      it('invokes previous tearDown before applying new setup when setup function changes', () => {
+        const { messageComposer, mockClient } = setup();
+        const tearDown1 = vi.fn();
+        const setup1 = vi.fn().mockReturnValue(tearDown1);
+        const setup2 = vi.fn();
+
+        messageComposer.registerSubscriptions();
+        mockClient.setMessageComposerSetupFunction(setup1);
+        expect(tearDown1).not.toHaveBeenCalled();
+
+        mockClient.setMessageComposerSetupFunction(setup2);
+        expect(tearDown1).toHaveBeenCalledOnce();
+        expect(setup2).toHaveBeenCalledWith({ composer: messageComposer });
       });
     });
 

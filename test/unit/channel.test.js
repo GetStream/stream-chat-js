@@ -32,6 +32,7 @@ describe('Channel count unread', function () {
 		channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
 		channel.initialized = true;
 		channel.lastRead = () => lastRead;
+		channel.data.own_capabilities = ['read-events'];
 
 		const ignoredMessages = [
 			generateMsg({ date: '2018-01-01T00:00:00', mentioned_users: [user] }),
@@ -223,6 +224,7 @@ describe('Channel _handleChannelEvent', function () {
 		client.userID = user.id;
 		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
 		channel = client.channel('messaging', 'id');
+		channel.data.own_capabilities = ['read-events'];
 		channel.initialized = true;
 	});
 
@@ -277,6 +279,21 @@ describe('Channel _handleChannelEvent', function () {
 		expect(channel.state.membership).to.equal(channel.state.members[user.id]);
 	});
 
+	it('increments member_count from zero on member.added and syncs state member_count', () => {
+		channel.data.member_count = 0;
+
+		channel._handleChannelEvent({
+			type: 'member.added',
+			user,
+			member: generateMember({
+				user: { id: 'new-user' },
+			}),
+		});
+
+		expect(channel.data.member_count).to.equal(1);
+		expect(channel.state.member_count).to.equal(1);
+	});
+
 	it('message.new does not reset the unreadCount for current user messages', function () {
 		channel.state.unreadCount = 100;
 		channel._handleChannelEvent({
@@ -318,6 +335,34 @@ describe('Channel _handleChannelEvent', function () {
 		expect(channel.state.unreadCount).to.be.equal(100);
 	});
 
+	it('message.new ingests message into messagePaginator even for own messages', function () {
+		const message = generateMsg({ id: 'own-message-id', user });
+
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user,
+			message,
+		});
+
+		expect(channel.messagePaginator.getItem(message.id)?.id).to.equal(message.id);
+	});
+
+	it('message.new ignores thread replies in messagePaginator', function () {
+		const message = generateMsg({
+			id: 'thread-reply-message-id',
+			parent_id: 'parent-message-id',
+			user: { id: 'another-user' },
+		});
+
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user: message.user,
+			message,
+		});
+
+		expect(channel.messagePaginator.getItem(message.id)).to.be.undefined;
+	});
+
 	it('message.new increment unreadCount properly', function () {
 		channel.state.unreadCount = 20;
 		channel._handleChannelEvent({
@@ -356,6 +401,128 @@ describe('Channel _handleChannelEvent', function () {
 		expect(channel.state.unreadCount).to.be.equal(30);
 	});
 
+	it('message.updated syncs reply metadata into messagePaginator', function () {
+		const parentMessage = generateMsg({
+			id: 'parent-message-id',
+			reply_count: 1,
+			thread_participants: [{ id: 'user-1' }],
+		});
+
+		channel.messagePaginator.ingestItem(parentMessage);
+
+		channel._handleChannelEvent({
+			type: 'message.updated',
+			message: {
+				...parentMessage,
+				reply_count: 29,
+				thread_participants: [{ id: 'user-1' }, { id: 'user-2' }],
+			},
+		});
+
+		const parentFromPaginator = channel.messagePaginator.getItem(parentMessage.id);
+		expect(parentFromPaginator?.reply_count).to.be.equal(29);
+		expect(parentFromPaginator?.thread_participants).to.have.length(2);
+	});
+
+	it('message.updated ignores thread replies in messagePaginator', function () {
+		const parentMessage = generateMsg({ id: 'thread-parent-id' });
+		const threadReply = generateMsg({
+			id: 'thread-reply-id',
+			parent_id: parentMessage.id,
+			text: 'before update',
+		});
+
+		channel.messagePaginator.ingestItem(parentMessage);
+		channel._handleChannelEvent({
+			type: 'message.updated',
+			message: { ...threadReply, text: 'after update' },
+		});
+
+		expect(channel.messagePaginator.getItem(threadReply.id)).to.be.undefined;
+	});
+
+	it('message.updated syncs quoted_message references in messagePaginator', function () {
+		const quotedMessage = generateMsg({
+			id: 'quoted-message-id',
+			text: 'before update',
+		});
+		const quoteCarrier = generateMsg({
+			id: 'quote-carrier-id',
+			quoted_message_id: quotedMessage.id,
+			quoted_message: quotedMessage,
+		});
+
+		channel.messagePaginator.setItems({
+			valueOrFactory: [quotedMessage, quoteCarrier],
+			isFirstPage: true,
+			isLastPage: true,
+		});
+
+		channel._handleChannelEvent({
+			type: 'message.updated',
+			message: {
+				...quotedMessage,
+				text: 'after update',
+			},
+		});
+
+		expect(
+			channel.messagePaginator.getItem(quoteCarrier.id)?.quoted_message?.text,
+		).to.equal('after update');
+	});
+
+	it('message.undeleted ignores thread replies in messagePaginator', function () {
+		const parentMessage = generateMsg({ id: 'thread-parent-id-2' });
+		const threadReply = generateMsg({
+			id: 'thread-reply-id-2',
+			parent_id: parentMessage.id,
+			text: 'undeleted reply',
+		});
+
+		channel.messagePaginator.ingestItem(parentMessage);
+		channel._handleChannelEvent({
+			type: 'message.undeleted',
+			message: threadReply,
+		});
+
+		expect(channel.messagePaginator.getItem(threadReply.id)).to.be.undefined;
+	});
+
+	it('message.undeleted syncs quoted_message references in messagePaginator', function () {
+		const quotedMessage = generateMsg({
+			id: 'quoted-message-id-undeleted',
+			type: 'deleted',
+			text: 'before undelete',
+		});
+		const quoteCarrier = generateMsg({
+			id: 'quote-carrier-id-undeleted',
+			quoted_message_id: quotedMessage.id,
+			quoted_message: quotedMessage,
+		});
+
+		channel.messagePaginator.setItems({
+			valueOrFactory: [quotedMessage, quoteCarrier],
+			isFirstPage: true,
+			isLastPage: true,
+		});
+
+		channel._handleChannelEvent({
+			type: 'message.undeleted',
+			message: {
+				...quotedMessage,
+				type: 'regular',
+				text: 'after undelete',
+			},
+		});
+
+		expect(
+			channel.messagePaginator.getItem(quoteCarrier.id)?.quoted_message?.text,
+		).to.equal('after undelete');
+		expect(
+			channel.messagePaginator.getItem(quoteCarrier.id)?.quoted_message?.type,
+		).to.equal('regular');
+	});
+
 	it('does not override the delivery information in the read status', () => {});
 
 	it('message.truncate removes all messages if "truncated_at" is "now"', function () {
@@ -377,6 +544,38 @@ describe('Channel _handleChannelEvent', function () {
 		});
 
 		expect(channel.state.messages.length).to.be.equal(0);
+	});
+
+	it('message.truncate clears messagePaginator unread snapshot', function () {
+		const cachedMessage = generateMsg({ id: 'truncate-cached-message-id' });
+		channel.messagePaginator.setItems({
+			valueOrFactory: [cachedMessage],
+			isFirstPage: true,
+			isLastPage: true,
+		});
+		channel.messagePaginator.setUnreadSnapshot({
+			firstUnreadMessageId: 'm-1',
+			lastReadAt: new Date('2021-01-01T00:00:00.000Z'),
+			lastReadMessageId: 'm-0',
+			unreadCount: 7,
+		});
+
+		channel._handleChannelEvent({
+			type: 'channel.truncated',
+			user: { id: 'id' },
+			channel: {
+				truncated_at: new Date().toISOString(),
+			},
+		});
+
+		expect(channel.messagePaginator.unreadStateSnapshot.getLatestValue()).toEqual({
+			firstUnreadMessageId: null,
+			lastReadAt: null,
+			lastReadMessageId: null,
+			unreadCount: 0,
+		});
+		expect(channel.messagePaginator.items).toBeUndefined();
+		expect(channel.messagePaginator.getItem(cachedMessage.id)).toBeUndefined();
 	});
 
 	it('message.truncate removes messages up to specified date', function () {
@@ -462,6 +661,147 @@ describe('Channel _handleChannelEvent', function () {
 			channel.state.messages.find((msg) => msg.id === quotingMessage.id).quoted_message
 				.deleted_at,
 		).to.be.ok;
+	});
+
+	it('message.deleted hard delete removes message from messagePaginator', function () {
+		const message = generateMsg({ id: 'hard-delete-message-id', silent: true });
+		channel.messagePaginator.ingestItem(message);
+		expect(channel.messagePaginator.getItem(message.id)?.id).to.equal(message.id);
+
+		channel._handleChannelEvent({
+			type: 'message.deleted',
+			user: { id: 'id' },
+			hard_delete: true,
+			message,
+		});
+
+		expect(
+			channel.messagePaginator.items?.find((m) => m.id === message.id),
+		).toBeUndefined();
+	});
+
+	it('message.deleted soft delete updates message in messagePaginator', function () {
+		const message = generateMsg({ id: 'soft-delete-message-id', text: 'before delete' });
+		channel.messagePaginator.ingestItem(message);
+
+		const deletedAt = new Date().toISOString();
+		channel._handleChannelEvent({
+			type: 'message.deleted',
+			user: { id: 'id' },
+			message: { ...message, deleted_at: deletedAt },
+		});
+
+		const itemFromPaginator = channel.messagePaginator.getItem(message.id);
+		expect(itemFromPaginator?.deleted_at?.toISOString()).to.equal(deletedAt);
+	});
+
+	it('message.deleted syncs quoted_message references in messagePaginator', function () {
+		const quotedMessage = generateMsg({
+			id: 'quoted-message-id-on-delete',
+			text: 'before delete',
+		});
+		const quoteCarrier = generateMsg({
+			id: 'quote-carrier-id-on-delete',
+			quoted_message_id: quotedMessage.id,
+			quoted_message: quotedMessage,
+		});
+
+		channel.messagePaginator.setItems({
+			valueOrFactory: [quotedMessage, quoteCarrier],
+			isFirstPage: true,
+			isLastPage: true,
+		});
+
+		channel._handleChannelEvent({
+			type: 'message.deleted',
+			user: { id: 'id' },
+			message: {
+				...quotedMessage,
+				type: 'deleted',
+				text: 'after delete',
+				deleted_at: new Date().toISOString(),
+			},
+		});
+
+		expect(
+			channel.messagePaginator.getItem(quoteCarrier.id)?.quoted_message?.type,
+		).to.equal('deleted');
+	});
+
+	it('reaction.new ingests message into messagePaginator for non-thread messages', function () {
+		const message = generateMsg({ id: 'reaction-channel-message-id' });
+
+		channel._handleChannelEvent({
+			type: 'reaction.new',
+			message,
+			reaction: {
+				type: 'love',
+				user_id: 'user-1',
+				message_id: message.id,
+				created_at: new Date().toISOString(),
+			},
+		});
+
+		expect(channel.messagePaginator.getItem(message.id)?.id).to.equal(message.id);
+	});
+
+	it('reaction.new ignores thread replies in messagePaginator', function () {
+		const message = generateMsg({
+			id: 'reaction-thread-message-id',
+			parent_id: 'thread-parent-id',
+		});
+
+		channel._handleChannelEvent({
+			type: 'reaction.new',
+			message,
+			reaction: {
+				type: 'love',
+				user_id: 'user-1',
+				message_id: message.id,
+				created_at: new Date().toISOString(),
+			},
+		});
+
+		expect(channel.messagePaginator.getItem(message.id)).to.be.undefined;
+	});
+
+	['reaction.deleted', 'reaction.updated'].forEach((eventType) => {
+		it(`${eventType} ingests message into messagePaginator for non-thread messages`, function () {
+			const message = generateMsg({ id: `${eventType}-channel-message-id` });
+
+			channel._handleChannelEvent({
+				type: eventType,
+				message,
+				reaction: {
+					type: 'love',
+					user_id: 'user-1',
+					message_id: message.id,
+					created_at: new Date().toISOString(),
+				},
+			});
+
+			expect(channel.messagePaginator.getItem(message.id)?.id).to.equal(message.id);
+		});
+
+		it(`${eventType} ignores thread replies in messagePaginator`, function () {
+			const message = generateMsg({
+				id: `${eventType}-thread-message-id`,
+				parent_id: 'thread-parent-id',
+			});
+
+			channel._handleChannelEvent({
+				type: eventType,
+				message,
+				reaction: {
+					type: 'love',
+					user_id: 'user-1',
+					message_id: message.id,
+					created_at: new Date().toISOString(),
+				},
+			});
+
+			expect(channel.messagePaginator.getItem(message.id)).to.be.undefined;
+		});
 	});
 
 	describe('user.messages.deleted', () => {
@@ -642,6 +982,79 @@ describe('Channel _handleChannelEvent', function () {
 			channel.state.pinnedMessages.forEach(check);
 			Object.values(channel.state.threads).forEach((replies) => replies.forEach(check));
 		});
+
+		it('updates messagePaginator items on soft delete', () => {
+			const deletedAt = new Date('2025-02-01T14:01:30.000Z');
+			const bannedMessage = generateMsg({ id: 'mp-soft-banned', user: bannedUser });
+			const quoteCarrier = generateMsg({
+				id: 'mp-soft-quote-carrier',
+				quoted_message: bannedMessage,
+				quoted_message_id: bannedMessage.id,
+				user: otherUser,
+			});
+			channel.messagePaginator.setItems({
+				valueOrFactory: [bannedMessage, quoteCarrier],
+				isFirstPage: true,
+				isLastPage: true,
+			});
+
+			channel._handleChannelEvent({
+				type: 'user.messages.deleted',
+				cid: channel.cid,
+				channel_type: channel.type,
+				channel_id: channel.id,
+				user: bannedUser,
+				soft_delete: true,
+				created_at: deletedAt.toISOString(),
+			});
+
+			const deletedFromPaginator = channel.messagePaginator.getItem(bannedMessage.id);
+			expect(deletedFromPaginator?.type).to.equal('deleted');
+			expect(deletedFromPaginator?.deleted_at?.toISOString()).to.equal(
+				deletedAt.toISOString(),
+			);
+
+			const quoteCarrierFromPaginator = channel.messagePaginator.getItem(quoteCarrier.id);
+			expect(quoteCarrierFromPaginator?.quoted_message?.type).to.equal('deleted');
+			expect(
+				quoteCarrierFromPaginator?.quoted_message?.deleted_at?.toISOString(),
+			).to.equal(deletedAt.toISOString());
+		});
+
+		it('updates messagePaginator items on hard delete', () => {
+			const deletedAt = new Date('2025-02-01T14:01:30.000Z');
+			const bannedMessage = generateMsg({ id: 'mp-hard-banned', user: bannedUser });
+			const quoteCarrier = generateMsg({
+				id: 'mp-hard-quote-carrier',
+				quoted_message: bannedMessage,
+				quoted_message_id: bannedMessage.id,
+				user: otherUser,
+			});
+			channel.messagePaginator.setItems({
+				valueOrFactory: [bannedMessage, quoteCarrier],
+				isFirstPage: true,
+				isLastPage: true,
+			});
+
+			channel._handleChannelEvent({
+				type: 'user.messages.deleted',
+				cid: channel.cid,
+				channel_type: channel.type,
+				channel_id: channel.id,
+				user: bannedUser,
+				hard_delete: true,
+				created_at: deletedAt.toISOString(),
+			});
+
+			expect(
+				channel.messagePaginator.items?.find((m) => m.id === bannedMessage.id),
+			).toBeUndefined();
+			const quoteCarrierFromPaginator = channel.messagePaginator.getItem(quoteCarrier.id);
+			expect(quoteCarrierFromPaginator?.quoted_message?.type).to.equal('deleted');
+			expect(
+				quoteCarrierFromPaginator?.quoted_message?.deleted_at?.toISOString(),
+			).to.equal(deletedAt.toISOString());
+		});
 	});
 
 	describe('notification.mark_unread', () => {
@@ -701,6 +1114,30 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.state.read[user.id].last_delivered_message_id).toBe(
 				initialReadState.last_delivered_message_id,
 			);
+			expect(
+				channel.messageReceiptsTracker.getUserProgress(user.id)?.lastReadRef.msgId,
+			).toBe(event.last_read_message_id);
+			expect(channel.messagePaginator.unreadStateSnapshot.getLatestValue()).toEqual({
+				firstUnreadMessageId: event.first_unread_message_id,
+				lastReadAt: new Date(event.last_read_at),
+				lastReadMessageId: event.last_read_message_id,
+				unreadCount: event.unread_messages,
+			});
+		});
+
+		it('should reconcile tracker with metadata patch for notification.mark_unread', () => {
+			channel.state.read[user.id] = initialReadState;
+			const reconcileSpy = vi.spyOn(
+				channel.messageReceiptsTracker,
+				'reconcileFromReadStore',
+			);
+
+			channel._handleChannelEvent(notificationMarkUnreadEvent);
+
+			expect(reconcileSpy).toHaveBeenCalledTimes(1);
+			expect(reconcileSpy.mock.calls[0][0].meta).toEqual({
+				changedUserIds: [user.id],
+			});
 		});
 
 		it('should not update channel read state produced for another user or user is missing', () => {
@@ -739,6 +1176,7 @@ describe('Channel _handleChannelEvent', function () {
 			initialReadState = {
 				last_read: new Date(1500).toISOString(),
 				last_read_message_id: '6',
+				first_unread_message_id: 'first-unread-msg-id',
 				user,
 				unread_messages: initialCountUnread,
 				last_delivered_at: new Date(1000).toISOString(),
@@ -770,13 +1208,17 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.state.read[user.id].last_read_message_id).toBe(
 				event.last_read_message_id,
 			);
+			expect(channel.state.read[user.id].first_unread_message_id).toBeUndefined();
 			expect(channel.state.read[user.id].unread_messages).toBe(0);
-			expect(channel.state.read[user.id].last_delivered_at).toBe(
-				initialReadState.last_delivered_at,
+			expect(new Date(channel.state.read[user.id].last_delivered_at).getTime()).toBe(
+				new Date(messageReadEvent.created_at).getTime(),
 			);
 			expect(channel.state.read[user.id].last_delivered_message_id).toBe(
-				initialReadState.last_delivered_message_id,
+				event.last_read_message_id,
 			);
+			expect(
+				channel.messageReceiptsTracker.getUserProgress(user.id)?.lastReadRef.msgId,
+			).toBe(event.last_read_message_id);
 		});
 
 		it('should update channel read state produced for another user', () => {
@@ -794,12 +1236,34 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.state.read[anotherUser.id].last_read_message_id).toBe(
 				event.last_read_message_id,
 			);
+			expect(channel.state.read[anotherUser.id].first_unread_message_id).toBeUndefined();
 			expect(channel.state.read[anotherUser.id].unread_messages).toBe(0);
-			expect(channel.state.read[anotherUser.id].last_delivered_at).toBe(
-				initialReadState.last_delivered_at,
-			);
+			expect(
+				new Date(channel.state.read[anotherUser.id].last_delivered_at).getTime(),
+			).toBe(new Date(messageReadEvent.created_at).getTime());
 			expect(channel.state.read[anotherUser.id].last_delivered_message_id).toBe(
-				initialReadState.last_delivered_message_id,
+				event.last_read_message_id,
+			);
+		});
+
+		it('should emit readStore subscription updates for single-user message.read events', () => {
+			channel.state.read[user.id] = initialReadState;
+			const changes = [];
+			const unsubscribe = channel.state.readStore.subscribe((next, prev) => {
+				if (!prev) return;
+				changes.push({
+					next: next.read[user.id],
+					prev: prev.read[user.id],
+				});
+			});
+
+			channel._handleChannelEvent(messageReadEvent);
+			unsubscribe();
+
+			expect(changes).to.have.length(1);
+			expect(changes[0].next).to.not.equal(changes[0].prev);
+			expect(new Date(changes[0].next.last_read).getTime()).toBe(
+				new Date(messageReadEvent.created_at).getTime(),
 			);
 		});
 	});
@@ -853,6 +1317,29 @@ describe('Channel _handleChannelEvent', function () {
 			);
 			expect(channel.state.read[user.id].last_delivered_message_id).toBe(
 				messageDeliveredEvent.last_delivered_message_id,
+			);
+		});
+
+		it('should not move canonical delivered state backwards on out-of-order events', () => {
+			channel.state.read[user.id] = {
+				...initialReadState,
+				last_delivered_at: new Date(3000).toISOString(),
+				last_delivered_message_id: 'newer-message-id',
+			};
+			const olderDeliveryEvent = {
+				...messageDeliveredEvent,
+				created_at: new Date(2000).toISOString(),
+				last_delivered_at: new Date(2000).toISOString(),
+				last_delivered_message_id: 'older-message-id',
+			};
+
+			channel._handleChannelEvent(olderDeliveryEvent);
+
+			expect(new Date(channel.state.read[user.id].last_delivered_at).getTime()).toBe(
+				new Date(3000).getTime(),
+			);
+			expect(channel.state.read[user.id].last_delivered_message_id).toBe(
+				'newer-message-id',
 			);
 		});
 
@@ -1202,7 +1689,7 @@ describe('Channel _handleChannelEvent', function () {
 		expect(channel.data.blocked).eq(false);
 	});
 
-	it('should update the frozen flag and reload channel state to update `own_capabilities`', () => {
+	it('should update the frozen flag and reload channel state when frozen changes', () => {
 		const event = {
 			channel: { frozen: true },
 			type: 'channel.updated',
@@ -1218,6 +1705,18 @@ describe('Channel _handleChannelEvent', function () {
 		expect(channelQuerySpy).toHaveBeenCalledTimes(1);
 
 		// Make sure that we don't wipe out any data
+	});
+
+	it('preserves member_count on channel.updated when event payload omits member_count', () => {
+		channel.data.member_count = 3;
+		channel.data.frozen = false;
+		channel._handleChannelEvent({
+			channel: { frozen: false },
+			type: 'channel.updated',
+		});
+
+		expect(channel.data.member_count).to.equal(3);
+		expect(channel.state.member_count).to.equal(3);
 	});
 
 	it(`should make sure that state reload doesn't wipe out existing data`, async () => {
@@ -1381,16 +1880,17 @@ describe('Channels - Constructor', function () {
 		const channel = client.channel('messaging', '123', { cool: true });
 		expect(channel.cid).to.eql('messaging:123');
 		expect(channel.id).to.eql('123');
-		expect(channel.data).to.eql({ cool: true });
+		expect(channel.data.cool).to.eql(true);
 	});
 
 	it('custom data merges to the right with current data', function () {
 		let channel = client.channel('messaging', 'brand_new_123', { cool: true });
 		expect(channel.cid).to.eql('messaging:brand_new_123');
 		expect(channel.id).to.eql('brand_new_123');
-		expect(channel.data).to.eql({ cool: true });
+		expect(channel.data.cool).to.eql(true);
 		channel = client.channel('messaging', 'brand_new_123', { custom_cool: true });
-		expect(channel.data).to.eql({ cool: true, custom_cool: true });
+		expect(channel.data.cool).to.eql(true);
+		expect(channel.data.custom_cool).to.eql(true);
 	});
 
 	it('default options', function () {
@@ -1407,12 +1907,13 @@ describe('Channels - Constructor', function () {
 	it('undefined ID no options', function () {
 		const channel = client.channel('messaging', undefined);
 		expect(channel.id).to.eql(undefined);
-		expect(channel.data).to.eql({});
+		expect(channel.data.own_capabilities).to.eql([]);
+		expect(Object.keys(channel.data)).to.eql(['own_capabilities']);
 	});
 
 	it('short version with options', function () {
 		const channel = client.channel('messaging', { members: ['tommaso', 'thierry'] });
-		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel.data.members).to.eql(['tommaso', 'thierry']);
 		expect(channel.id).to.eql(undefined);
 	});
 
@@ -1420,7 +1921,7 @@ describe('Channels - Constructor', function () {
 		const channel = client.channel('messaging', null, {
 			members: ['tommaso', 'thierry'],
 		});
-		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel.data.members).to.eql(['tommaso', 'thierry']);
 		expect(channel.id).to.eql(undefined);
 	});
 
@@ -1428,7 +1929,7 @@ describe('Channels - Constructor', function () {
 		const channel = client.channel('messaging', '', {
 			members: ['tommaso', 'thierry'],
 		});
-		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel.data.members).to.eql(['tommaso', 'thierry']);
 		expect(channel.id).to.eql(undefined);
 	});
 
@@ -1436,7 +1937,7 @@ describe('Channels - Constructor', function () {
 		const channel = client.channel('messaging', undefined, {
 			members: ['tommaso', 'thierry'],
 		});
-		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel.data.members).to.eql(['tommaso', 'thierry']);
 		expect(channel.id).to.eql(undefined);
 	});
 });
@@ -1890,6 +2391,42 @@ describe('Channel _initializeState', () => {
 		channel._initializeState(secondState);
 
 		expect(Object.keys(channel.state.members)).deep.to.be.equal(['alice']);
+	});
+
+	it('should merge read state without overwriting existing users', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channel('messaging', uuidv4());
+		const existingUser = { id: 'existing-user' };
+		const newUser = { id: 'new-user' };
+		channel.messageReceiptsTracker.setPendingReadStoreReconcileMeta({
+			changedUserIds: [existingUser.id],
+		});
+		channel.state.read = {
+			[existingUser.id]: {
+				last_read: new Date('2026-01-01T00:00:00.000Z'),
+				unread_messages: 1,
+				user: existingUser,
+			},
+		};
+
+		channel._initializeState({
+			read: [
+				{
+					last_delivered_at: new Date('2026-01-02T00:00:00.000Z').toISOString(),
+					last_delivered_message_id: 'delivered-message-id',
+					last_read: new Date('2026-01-02T00:00:00.000Z').toISOString(),
+					last_read_message_id: 'read-message-id',
+					unread_messages: 0,
+					user: newUser,
+				},
+			],
+		});
+
+		expect(channel.state.read[existingUser.id]).toBeDefined();
+		expect(channel.state.read[newUser.id]).toBeDefined();
+		expect(channel.state.read[newUser.id].last_read_message_id).toBe('read-message-id');
+		expect(channel.messageReceiptsTracker.getUserProgress(existingUser.id)).toBeTruthy();
+		expect(channel.messageReceiptsTracker.getUserProgress(newUser.id)).toBeTruthy();
 	});
 });
 
