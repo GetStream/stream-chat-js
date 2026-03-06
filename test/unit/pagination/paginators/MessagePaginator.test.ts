@@ -355,6 +355,57 @@ describe('MessagePaginator', () => {
       // jumping back to the head interval should restore its tailward cursor
       expect(paginator.cursor?.tailward).toBe('m8');
     });
+
+    it('emits merged state when jump resolves inside the active interval', async () => {
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      const existing = createMessage({
+        cid: 'channel-id',
+        id: 'm-existing',
+        created_at: '2020-01-01T00:00:00.000Z',
+      });
+      const target = createMessage({
+        cid: 'channel-id',
+        id: 'm-target',
+        created_at: '2020-01-02T00:00:00.000Z',
+      });
+
+      const activeInterval = paginator.ingestPage({
+        page: [existing],
+        isHead: true,
+        isTail: true,
+        setActive: true,
+      });
+
+      const partialNextSpy = vi.spyOn(paginator.state, 'partialNext');
+      vi.spyOn(paginator, 'executeQuery').mockImplementation(async () => {
+        itemIndex.setOne(target);
+        if (activeInterval?.itemIds) {
+          activeInterval.itemIds = [existing.id, target.id];
+        }
+        return {
+          stateCandidate: {
+            hasMoreHead: false,
+            hasMoreTail: false,
+            items: [existing, target],
+            isLoading: false,
+          },
+          targetInterval: activeInterval ?? null,
+        };
+      });
+
+      const ok = await paginator.jumpToMessage(target.id);
+
+      expect(ok).toBe(true);
+      expect(partialNextSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          items: expect.arrayContaining([
+            expect.objectContaining({ id: existing.id }),
+            expect.objectContaining({ id: target.id }),
+          ]),
+        }),
+      );
+      expect(paginator.items?.map((m) => m.id)).toEqual([existing.id, target.id]);
+    });
   });
 
   describe.todo('jumpToTheLatestMessage', () => {});

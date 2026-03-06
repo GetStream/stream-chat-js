@@ -451,8 +451,8 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
 
     if (!this.isActiveInterval(interval)) {
       this.setActiveInterval(interval, { updateState: false });
-      if (state) this.state.partialNext(state);
     }
+    if (state) this.state.partialNext(state);
     if (!suppressFocusSignal) {
       this.emitMessageFocusSignal({
         messageId,
@@ -486,6 +486,7 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
     }
 
     return await this.jumpToMessage(latestMessageId, {
+      suppressFocusSignal: true,
       ...options,
       focusReason: 'jump-to-latest',
     });
