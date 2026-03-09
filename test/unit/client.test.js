@@ -7,6 +7,7 @@ import { StreamChat } from '../../src/client';
 import { ConnectionState } from '../../src/connection_fallback';
 import { StableWSConnection } from '../../src/connection';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
+import { generateThreadResponse } from './test-utils/generateThreadResponse';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
 
 import {
@@ -784,6 +785,32 @@ describe('StreamChat.queryChannels', async () => {
 			});
 		});
 		mock.restore();
+	});
+});
+
+describe('StreamChat.queryThreads', () => {
+	it('returns threads and next, and hydrates poll cache with parent messages', async () => {
+		const client = await getClientWithUser();
+		const parentMessage = generateMsg();
+		const rawThread = generateThreadResponse(
+			mockChannelQueryResponse.channel,
+			parentMessage,
+		);
+		const apiResponse = { threads: [rawThread], next: undefined };
+
+		const postStub = sinon.stub(client, 'post');
+		postStub.onFirstCall().resolves(apiResponse);
+		const hydratePollCacheSpy = sinon.spy(client.polls, 'hydratePollCache');
+
+		const result = await client.queryThreads();
+
+		expect(result.threads).to.have.lengthOf(1);
+		expect(result.threads[0].id).to.equal(parentMessage.id);
+		expect(result.next).to.be.undefined;
+		expect(hydratePollCacheSpy.calledOnce).to.be.true;
+		expect(hydratePollCacheSpy.calledWith([parentMessage])).to.be.true;
+
+		postStub.restore();
 	});
 });
 
