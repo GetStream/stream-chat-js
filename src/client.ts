@@ -3358,6 +3358,10 @@ export class StreamChat {
       requestBody,
     );
 
+    // Hydrate the polls for the parent messages of the threads
+    const parentMessages = response.threads.map((thread) => thread.parent_message);
+    this.polls.hydratePollCache(parentMessages);
+
     return {
       threads: response.threads.map(
         (thread) => new Thread({ client: this, threadData: thread }),
