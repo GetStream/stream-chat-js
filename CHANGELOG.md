@@ -1,3 +1,13 @@
+## [9.36.0](https://github.com/GetStream/stream-chat-js/compare/v9.35.1...v9.36.0) (2026-03-10)
+
+### Bug Fixes
+
+* hydrate poll state with thread parent messages when querying thread ([#1696](https://github.com/GetStream/stream-chat-js/issues/1696)) ([bac5848](https://github.com/GetStream/stream-chat-js/commit/bac5848a55b6bdc1cf63ee32852cb97142d31000))
+
+### Features
+
+* remove filterTags from channel batch update API ([#1693](https://github.com/GetStream/stream-chat-js/issues/1693)) ([ef2169f](https://github.com/GetStream/stream-chat-js/commit/ef2169fcd116901ddfc61c6cb9463292338c6355))
+
 ## [9.35.1](https://github.com/GetStream/stream-chat-js/compare/v9.35.0...v9.35.1) (2026-02-19)
 
 ### Bug Fixes
