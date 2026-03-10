@@ -44,6 +44,7 @@ export class NotificationManager {
     const now = Date.now();
     const severity = options.severity || 'info';
     const duration = options.duration ?? this.config.durations[severity];
+    const isPersistent = duration === 0;
 
     const notification: Notification = {
       id,
@@ -52,7 +53,7 @@ export class NotificationManager {
       type: options?.type,
       severity,
       createdAt: now,
-      expiresAt: now + duration,
+      expiresAt: isPersistent ? undefined : now + duration,
       actions: options.actions,
       metadata: options.metadata,
       originalError: options.originalError,
@@ -62,11 +63,10 @@ export class NotificationManager {
       notifications: [...this.store.getLatestValue().notifications, notification],
     });
 
-    if (notification.expiresAt) {
+    if (!isPersistent && notification.expiresAt != null) {
       const timeout = setTimeout(() => {
         this.remove(id);
-      }, options.duration || this.config.durations[notification.severity]);
-
+      }, duration);
       this.timeouts.set(id, timeout);
     }
 

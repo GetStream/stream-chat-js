@@ -115,6 +115,8 @@ export class Channel {
   public readonly messageComposer: MessageComposer;
   public readonly messageReceiptsTracker: MessageReceiptsTracker;
   public readonly cooldownTimer: CooldownTimer;
+  public customDisplayNameGenerator?: (channel: Channel) => string | null | undefined;
+  public customDisplayImageGenerator?: (channel: Channel) => string | null | undefined;
 
   /**
    * constructor - Create a channel
@@ -194,6 +196,82 @@ export class Channel {
   getConfig() {
     const client = this.getClient();
     return client.configs[this.cid];
+  }
+
+  /**
+   * Returns the display name for this channel using the following fallback chain:
+   * 1. Result of `customDisplayNameGenerator` (if set on this instance)
+   * 2. The channel's `name` custom data property
+   * 3. For DM channels (exactly 2 members): the other member's name, then id, then "Direct Message"
+   * 4. For group channels (3+ members): comma-separated list of 2 other members' names
+   * 5. `null` if none of the above produced a value
+   *
+   * @return {string | null}
+   */
+  getDisplayName(): string | null {
+    // 1. Try custom logic
+    if (this.customDisplayNameGenerator) {
+      const custom = this.customDisplayNameGenerator(this);
+      if (custom) return custom;
+    }
+
+    // 2. Fall back to name
+    if (
+      this.data &&
+      'name' in this.data &&
+      typeof this.data.name === 'string' &&
+      this.data.name
+    ) {
+      return this.data.name;
+    }
+
+    const members = Object.values(this.state.members);
+    const currentUserId = this._client.userID;
+    const otherMembers = members.filter((member) => member.user?.id !== currentUserId);
+
+    // 3. Fall back 1:1 channels: other member's name, then id, then "Direct Message"
+    if (members.length === 2 && otherMembers.length === 1) {
+      const otherUser = otherMembers[0].user;
+      return otherUser?.name || otherUser?.id || 'Direct Message';
+    }
+
+    // 4. Fall back group channels: comma-separated list of other members' names (or ids); ellipsis if >2
+    if (otherMembers.length > 0) {
+      const names = otherMembers
+        .map((member) => member.user?.name || member.user?.id)
+        .filter(Boolean);
+      if (names.length > 0) {
+        return names.length > 2 ? `${names.slice(0, 2).join(', ')}...` : names.join(', ');
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Returns the display image URL for this channel using the following fallback chain:
+   * 1. Result of `customDisplayImageGenerator` (if set on this instance)
+   * 2. The channel's `image` custom data property
+   * 3. `null` if none of the above produced a value
+   *
+   * @return {string | null}
+   */
+  getDisplayImage(): string | null {
+    if (this.customDisplayImageGenerator) {
+      const custom = this.customDisplayImageGenerator(this);
+      if (custom) return custom;
+    }
+
+    if (
+      this.data &&
+      'image' in this.data &&
+      typeof this.data.image === 'string' &&
+      this.data.image
+    ) {
+      return this.data.image;
+    }
+
+    return null;
   }
 
   /**

@@ -82,6 +82,145 @@ describe('Threads 2.0', () => {
     });
 
     describe('Methods', () => {
+      describe('getDisplayName', () => {
+        describe('fallback 1: customDisplayNameGenerator', () => {
+          it('returns custom value when generator returns a string', () => {
+            const thread = createTestThread({ title: 'Thread Title' });
+            thread.customDisplayNameGenerator = () => 'Custom Title';
+            expect(thread.getDisplayName()).to.equal('Custom Title');
+          });
+
+          it('passes current ThreadState to generator', () => {
+            const thread = createTestThread({ title: 'My Title' });
+            let receivedState: unknown;
+            thread.customDisplayNameGenerator = (state) => {
+              receivedState = state;
+              return null;
+            };
+            thread.getDisplayName();
+            expect(receivedState).to.equal(thread.state.getLatestValue());
+          });
+
+          it('falls through when generator returns null', () => {
+            const thread = createTestThread({ title: 'Thread Title' });
+            thread.customDisplayNameGenerator = () => null;
+            expect(thread.getDisplayName()).to.equal('Thread Title');
+          });
+
+          it('falls through when generator returns empty string', () => {
+            const thread = createTestThread({ title: 'Thread Title' });
+            thread.customDisplayNameGenerator = () => '';
+            expect(thread.getDisplayName()).to.equal('Thread Title');
+          });
+        });
+
+        describe('fallback 2: thread.title', () => {
+          it('returns thread title when set', () => {
+            const thread = createTestThread({ title: 'My Thread' });
+            expect(thread.getDisplayName()).to.equal('My Thread');
+          });
+
+          it('title wins over participant names', () => {
+            const thread = createTestThread({
+              title: 'Explicit Title',
+              thread_participants: [
+                {
+                  channel_cid: 'messaging:test',
+                  created_at: '',
+                  last_read_at: '',
+                  user: { id: 'u1', name: 'Alice' },
+                },
+              ],
+            });
+            expect(thread.getDisplayName()).to.equal('Explicit Title');
+          });
+        });
+
+        describe('fallback 3: participants (name or id, ellipsis when >2)', () => {
+          it('returns two names without ellipsis when exactly 2 participants', () => {
+            const thread = createTestThread({
+              title: '',
+              thread_participants: [
+                {
+                  channel_cid: 'messaging:test',
+                  created_at: '',
+                  last_read_at: '',
+                  user: { id: 'u1', name: 'Alice' },
+                },
+                {
+                  channel_cid: 'messaging:test',
+                  created_at: '',
+                  last_read_at: '',
+                  user: { id: 'u2', name: 'Bob' },
+                },
+              ],
+            });
+            expect(thread.getDisplayName()).to.equal('Alice, Bob');
+          });
+
+          it('uses user id when participant has no name', () => {
+            const thread = createTestThread({
+              title: '',
+              thread_participants: [
+                {
+                  channel_cid: 'messaging:test',
+                  created_at: '',
+                  last_read_at: '',
+                  user: { id: 'u1', name: 'Alice' },
+                },
+                {
+                  channel_cid: 'messaging:test',
+                  created_at: '',
+                  last_read_at: '',
+                  user: { id: 'u2' },
+                },
+              ],
+            });
+            expect(thread.getDisplayName()).to.equal('Alice, u2');
+          });
+
+          it('returns first two names plus ellipsis when more than 2 participants', () => {
+            const thread = createTestThread({
+              title: '',
+              thread_participants: [
+                {
+                  channel_cid: 'messaging:test',
+                  created_at: '',
+                  last_read_at: '',
+                  user: { id: 'u1', name: 'Alice' },
+                },
+                {
+                  channel_cid: 'messaging:test',
+                  created_at: '',
+                  last_read_at: '',
+                  user: { id: 'u2', name: 'Bob' },
+                },
+                {
+                  channel_cid: 'messaging:test',
+                  created_at: '',
+                  last_read_at: '',
+                  user: { id: 'u3', name: 'Charlie' },
+                },
+                {
+                  channel_cid: 'messaging:test',
+                  created_at: '',
+                  last_read_at: '',
+                  user: { id: 'u4', name: 'Diana' },
+                },
+              ],
+            });
+            expect(thread.getDisplayName()).to.equal('Alice, Bob...');
+          });
+        });
+
+        describe('fallback 4: no value', () => {
+          it('returns null when no title and no participants', () => {
+            const thread = createTestThread({ title: '', thread_participants: [] });
+            expect(thread.getDisplayName()).to.be.null;
+          });
+        });
+      });
+
       describe('upsertReplyLocally', () => {
         it('prevents inserting a new message that does not belong to the associated thread', () => {
           const thread = createTestThread();

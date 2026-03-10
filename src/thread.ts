@@ -113,6 +113,9 @@ export class Thread extends WithSubscriptions {
   public readonly state: StateStore<ThreadState>;
   public readonly id: string;
   public readonly messageComposer: MessageComposer;
+  public customDisplayNameGenerator?: (
+    threadState: ThreadState,
+  ) => string | null | undefined;
 
   private client: StreamChat;
   private failedRepliesMap: Map<string, LocalMessage> = new Map();
@@ -192,6 +195,36 @@ export class Thread extends WithSubscriptions {
 
   get ownUnreadCount() {
     return ownUnreadCountSelector(this.client.userID)(this.state.getLatestValue());
+  }
+
+  /**
+   * Returns the display name for this thread using the following fallback chain:
+   * 1. Result of `customDisplayNameGenerator` (if set on this instance)
+   * 2. The thread's `title`
+   * 3. Comma-separated participant names (capped at 2), using `user.name` or `user.id`
+   * 4. `null` if none of the above produced a value
+   *
+   * @return {string | null}
+   */
+  getDisplayName(): string | null {
+    const currentState = this.state.getLatestValue();
+
+    if (this.customDisplayNameGenerator) {
+      const custom = this.customDisplayNameGenerator(currentState);
+      if (custom) return custom;
+    }
+
+    if (currentState.title) return currentState.title;
+
+    const { participants } = currentState;
+    if (participants && participants.length > 0) {
+      const names = participants.map((p) => p.user?.name || p.user?.id).filter(Boolean);
+      if (names.length > 0) {
+        return names.length > 2 ? `${names.slice(0, 2).join(', ')}...` : names.join(', ');
+      }
+    }
+
+    return null;
   }
 
   public activate = () => {

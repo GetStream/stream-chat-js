@@ -91,7 +91,10 @@ export type Notification = {
 export type NotificationOptions = Partial<
   Pick<Notification, 'type' | 'severity' | 'actions' | 'metadata' | 'originalError'>
 > & {
-  /** How long a notification should be displayed in milliseconds */
+  /**
+   * How long a notification should be displayed in milliseconds.
+   * Use `0` for persistent (no auto-dismiss); call `client.notifications.remove(id)` to dismiss.
+   */
   duration?: number;
 };
 
