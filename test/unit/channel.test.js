@@ -2552,7 +2552,7 @@ describe('Channel getDisplayName', () => {
 		});
 	});
 
-	describe('fallback 3: DM (exactly 2 members) – other member name, then id, then "Direct Message"', () => {
+	describe('fallback 3: DM (exactly 2 members) – other member name, then "Direct Message" (no user id in title)', () => {
 		it('returns other member name', () => {
 			const channel = client.channel('messaging', 'test-id');
 			channel.state.members = {
@@ -2562,13 +2562,13 @@ describe('Channel getDisplayName', () => {
 			expect(channel.getDisplayName()).to.equal('Other User');
 		});
 
-		it('returns other member id when name is missing', () => {
+		it('returns "Direct Message" when other member has no name (no user id in title)', () => {
 			const channel = client.channel('messaging', 'test-id');
 			channel.state.members = {
 				'current-user': { user: currentUser },
 				'other-user': { user: { id: 'other-user' } },
 			};
-			expect(channel.getDisplayName()).to.equal('other-user');
+			expect(channel.getDisplayName()).to.equal('Direct Message');
 		});
 
 		it('returns "Direct Message" when other member has no name or id', () => {
@@ -2590,8 +2590,8 @@ describe('Channel getDisplayName', () => {
 		});
 	});
 
-	describe('fallback 4: group (3+ members) – comma-separated names, ellipsis when >2', () => {
-		it('returns two names without ellipsis when exactly 2 other members', () => {
+	describe('fallback 4: group (3+ members) – comma-separated names only (no ellipsis, no user ids)', () => {
+		it('returns all other member names when exactly 2 other members', () => {
 			const channel = client.channel('messaging', 'test-id');
 			channel.state.members = {
 				'current-user': { user: currentUser },
@@ -2601,17 +2601,17 @@ describe('Channel getDisplayName', () => {
 			expect(channel.getDisplayName()).to.equal('Alice, Bob');
 		});
 
-		it('uses user id when member has no name', () => {
+		it('uses only names (skips members with no name, no user id in title)', () => {
 			const channel = client.channel('messaging', 'test-id');
 			channel.state.members = {
 				'current-user': { user: currentUser },
 				'user-2': { user: { id: 'user-2', name: 'Alice' } },
 				'user-3': { user: { id: 'user-3' } },
 			};
-			expect(channel.getDisplayName()).to.equal('Alice, user-3');
+			expect(channel.getDisplayName()).to.equal('Alice');
 		});
 
-		it('returns first two names plus ellipsis when more than 2 other members', () => {
+		it('returns all names concatenated without ellipsis when more than 2 other members', () => {
 			const channel = client.channel('messaging', 'test-id');
 			channel.state.members = {
 				'current-user': { user: currentUser },
@@ -2619,7 +2619,7 @@ describe('Channel getDisplayName', () => {
 				'user-3': { user: { id: 'user-3', name: 'Bob' } },
 				'user-4': { user: { id: 'user-4', name: 'Charlie' } },
 			};
-			expect(channel.getDisplayName()).to.equal('Alice, Bob...');
+			expect(channel.getDisplayName()).to.equal('Alice, Bob, Charlie');
 		});
 
 		it('channel name wins over group member names', () => {

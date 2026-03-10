@@ -213,7 +213,7 @@ export class Channel {
    * Returns the display name for this channel using the following fallback chain:
    * 1. Result of `customDisplayNameGenerator` (if set on this instance)
    * 2. The channel's `name` custom data property
-   * 3. For DM channels (exactly 2 members): the other member's name, then id, then "Direct Message"
+   * 3. For DM channels (exactly 2 members): the other member's name, then "Direct Message"
    * 4. For group channels (3+ members): comma-separated list of 2 other members' names
    * 5. `null` if none of the above produced a value
    *
@@ -240,19 +240,17 @@ export class Channel {
     const currentUserId = this._client.userID;
     const otherMembers = members.filter((member) => member.user?.id !== currentUserId);
 
-    // 3. Fall back 1:1 channels: other member's name, then id, then "Direct Message"
+    // 3. Fall back 1:1 channels: other member's name, then "Direct Message" (no user id in title)
     if (members.length === 2 && otherMembers.length === 1) {
       const otherUser = otherMembers[0].user;
-      return otherUser?.name || otherUser?.id || 'Direct Message';
+      return otherUser?.name || 'Direct Message';
     }
 
-    // 4. Fall back group channels: comma-separated list of other members' names (or ids); ellipsis if >2
+    // 4. Fall back group channels: comma-separated list of other members' names only (no user ids, no ellipsis)
     if (otherMembers.length > 0) {
-      const names = otherMembers
-        .map((member) => member.user?.name || member.user?.id)
-        .filter(Boolean);
+      const names = otherMembers.map((member) => member.user?.name).filter(Boolean);
       if (names.length > 0) {
-        return names.length > 2 ? `${names.slice(0, 2).join(', ')}...` : names.join(', ');
+        return names.join(', ');
       }
     }
 
