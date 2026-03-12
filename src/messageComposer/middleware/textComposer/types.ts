@@ -1,5 +1,5 @@
 import type { MessageComposer } from '../../messageComposer';
-import type { CommandResponse, UserResponse } from '../../../types';
+import type { CommandResponse, Event, UserResponse } from '../../../types';
 import type { TokenizationPayload } from './textMiddlewareUtils';
 import type { SearchSource, SearchSourceSync } from '../../../search';
 import type { CustomTextComposerSuggestion } from '../../types.custom';
@@ -38,6 +38,11 @@ export type TextComposerState<T extends Suggestion = Suggestion> = {
   mentionedUsers: UserResponse[];
   selection: TextSelection;
   text: string;
+  /**
+   * Live typing events keyed by user id.
+   * Maps `user.id` -> latest typing event (`typing.start`/`typing.stop`) for that user.
+   */
+  typing: Record<string, Event>;
   command?: CommandResponse | null;
   suggestions?: Suggestions<T>;
 };

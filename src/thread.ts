@@ -1,25 +1,30 @@
 import { StateStore } from './store';
-import {
-  addToMessageList,
-  findIndexInSortedArray,
-  formatMessage,
-  throttle,
-} from './utils';
+import { addToMessageList, findIndexInSortedArray, formatMessage } from './utils';
 import type {
   AscDesc,
+  DraftResponse,
+  EventAPIResponse,
   EventTypes,
   LocalMessage,
+  MarkReadOptions,
   MessagePaginationOptions,
   MessageResponse,
   ReadResponse,
   ThreadResponse,
   UserResponse,
 } from './types';
-import type { Channel } from './channel';
+import type {
+  Channel,
+  DeleteMessageWithStateUpdateParams,
+  SendMessageWithStateUpdateParams,
+  UpdateMessageWithStateUpdateParams,
+} from './channel';
 import type { StreamChat } from './client';
 import type { CustomThreadData } from './custom_types';
 import { MessageComposer } from './messageComposer';
+import { MessageOperations } from './messageOperations';
 import { WithSubscriptions } from './utils/WithSubscriptions';
+import { MessagePaginator } from './pagination';
 
 type QueryRepliesOptions = {
   sort?: { created_at: AscDesc }[];
@@ -69,7 +74,7 @@ export type ThreadReadState = Record<string, ThreadUserReadState | undefined>;
 
 const DEFAULT_PAGE_LIMIT = 50;
 const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
-const MARK_AS_READ_THROTTLE_TIMEOUT = 1000;
+const DEFAULT_ITEM_ORDER: { created_at: AscDesc } = { created_at: 1 };
 // TODO: remove this once we move to API v2
 export const THREAD_RESPONSE_RESERVED_KEYS: Record<keyof ThreadResponse, true> = {
   active_participant_count: true,
@@ -109,10 +114,24 @@ const constructCustomDataObject = <T extends ThreadResponse>(threadData: T) => {
   return custom;
 };
 
+export type CustomThreadMarkReadRequestFn = (params: {
+  thread: Thread;
+  options?: MarkReadOptions;
+}) => Promise<EventAPIResponse | null> | void;
+
+export type ThreadInstanceConfig = {
+  requestHandlers?: {
+    markReadRequest?: CustomThreadMarkReadRequestFn;
+  };
+};
+
 export class Thread extends WithSubscriptions {
+  public readonly configState = new StateStore<ThreadInstanceConfig>({});
   public readonly state: StateStore<ThreadState>;
   public readonly id: string;
   public readonly messageComposer: MessageComposer;
+  public readonly messagePaginator: MessagePaginator;
+  public readonly messageOperations: MessageOperations;
 
   private client: StreamChat;
   private failedRepliesMap: Map<string, LocalMessage> = new Map();
@@ -120,65 +139,176 @@ export class Thread extends WithSubscriptions {
   constructor({
     client,
     threadData,
+    channel,
+    parentMessage,
+    draft,
   }: {
     client: StreamChat;
-    threadData: ThreadResponse;
+    threadData?: ThreadResponse;
+    channel?: Channel;
+    parentMessage?: MessageResponse | LocalMessage;
+    draft?: DraftResponse;
   }) {
     super();
+    if (threadData) {
+      const threadChannel = client.channel(
+        threadData.channel.type,
+        threadData.channel.id,
+        {
+          // @ts-expect-error name is a "custom" property
+          name: threadData.channel.name,
+        },
+      );
+      threadChannel._hydrateMembers({
+        members: threadData.channel.members ?? [],
+        overrideCurrentState: false,
+      });
 
-    const channel = client.channel(threadData.channel.type, threadData.channel.id, {
-      // @ts-expect-error name is a "custom" property
-      name: threadData.channel.name,
-    });
-    channel._hydrateMembers({
-      members: threadData.channel.members ?? [],
-      overrideCurrentState: false,
-    });
+      this.state = new StateStore<ThreadState>({
+        // local only
+        active: false,
+        isLoading: false,
+        isStateStale: false,
+        // 99.9% should never change
+        channel: threadChannel,
+        createdAt: new Date(threadData.created_at),
+        // rest
+        deletedAt: threadData.deleted_at ? new Date(threadData.deleted_at) : null,
+        pagination: repliesPaginationFromInitialThread(threadData),
+        parentMessage: formatMessage(threadData.parent_message),
+        participants: threadData.thread_participants,
+        read: formatReadState(
+          !threadData.read || threadData.read.length === 0
+            ? getPlaceholderReadResponse(client.userID)
+            : threadData.read,
+        ),
+        replies: threadData.latest_replies.map(formatMessage),
+        replyCount: threadData.reply_count ?? 0,
+        updatedAt: threadData.updated_at ? new Date(threadData.updated_at) : null,
+        title: threadData.title,
+        custom: constructCustomDataObject(threadData),
+      });
 
-    // For when read object is undefined and due to that unreadMessageCount for
-    // the current user isn't being incremented on message.new
-    const placeholderReadResponse: ReadResponse[] = client.userID
-      ? [
-          {
-            user: { id: client.userID },
-            unread_messages: 0,
-            last_read: new Date().toISOString(),
-          },
-        ]
-      : [];
+      this.id = threadData.parent_message_id;
+    } else {
+      if (!channel) {
+        throw new Error('Channel is required when threadData is not provided');
+      }
 
-    this.state = new StateStore<ThreadState>({
-      // local only
-      active: false,
-      isLoading: false,
-      isStateStale: false,
-      // 99.9% should never change
-      channel,
-      createdAt: new Date(threadData.created_at),
-      // rest
-      deletedAt: threadData.deleted_at ? new Date(threadData.deleted_at) : null,
-      pagination: repliesPaginationFromInitialThread(threadData),
-      parentMessage: formatMessage(threadData.parent_message),
-      participants: threadData.thread_participants,
-      read: formatReadState(
-        !threadData.read || threadData.read.length === 0
-          ? placeholderReadResponse
-          : threadData.read,
-      ),
-      replies: threadData.latest_replies.map(formatMessage),
-      replyCount: threadData.reply_count ?? 0,
-      updatedAt: threadData.updated_at ? new Date(threadData.updated_at) : null,
-      title: threadData.title,
-      custom: constructCustomDataObject(threadData),
-    });
+      if (!parentMessage || !parentMessage.id) {
+        throw new Error(
+          'Parent message with a valid id is required when threadData is not provided',
+        );
+      }
 
-    this.id = threadData.parent_message_id;
+      const formattedParentMessage = formatMessage(parentMessage);
+      const createdAt = parentMessage.created_at
+        ? new Date(parentMessage.created_at)
+        : new Date();
+
+      this.state = new StateStore<ThreadState>({
+        active: false,
+        channel,
+        createdAt,
+        custom: {},
+        deletedAt: formattedParentMessage.deleted_at,
+        isLoading: false,
+        isStateStale: false,
+        pagination: {
+          isLoadingNext: false,
+          isLoadingPrev: false,
+          nextCursor: null,
+          prevCursor: null,
+        },
+        parentMessage: formattedParentMessage,
+        participants: [],
+        read: formatReadState(getPlaceholderReadResponse(client.userID)),
+        replies: [],
+        replyCount: parentMessage.reply_count ?? 0,
+        title: '',
+        updatedAt: parentMessage.updated_at ? new Date(parentMessage.updated_at) : null,
+      });
+
+      this.id = parentMessage.id;
+    }
+
     this.client = client;
 
+    this.messagePaginator = new MessagePaginator({
+      channel: this.channel,
+      parentMessageId: this.id,
+      requestSort: DEFAULT_SORT,
+      itemOrder: DEFAULT_ITEM_ORDER,
+      paginatorOptions: {
+        pageSize: DEFAULT_PAGE_LIMIT,
+      },
+    });
     this.messageComposer = new MessageComposer({
       client,
-      composition: threadData.draft,
+      composition: threadData?.draft ?? draft,
       compositionContext: this,
+    });
+
+    this.messageOperations = new MessageOperations({
+      ingest: (m) => this.messagePaginator.ingestItem(m),
+      get: (id) => this.messagePaginator.getItem(id),
+      normalizeOutgoingMessage: (m) => ({
+        ...m,
+        parent_id: this.id,
+      }),
+      handlers: () => {
+        const { requestHandlers } = this.channel.configState.getLatestValue();
+        const deleteMessageRequest = requestHandlers?.deleteMessageRequest;
+        const sendMessageRequest = requestHandlers?.sendMessageRequest;
+        const retrySendMessageRequest = requestHandlers?.retrySendMessageRequest;
+        const updateMessageRequest = requestHandlers?.updateMessageRequest;
+        return {
+          delete: deleteMessageRequest
+            ? (p) =>
+                deleteMessageRequest({
+                  localMessage: p.localMessage,
+                  options: p.options,
+                })
+            : undefined,
+          send: sendMessageRequest
+            ? (p) =>
+                sendMessageRequest({
+                  localMessage: p.localMessage,
+                  message: p.message,
+                  options: p.options,
+                })
+            : undefined,
+          retry: retrySendMessageRequest
+            ? (p) =>
+                retrySendMessageRequest({
+                  localMessage: p.localMessage,
+                  message: p.message,
+                  options: p.options,
+                })
+            : undefined,
+          update: updateMessageRequest
+            ? (p) =>
+                updateMessageRequest({
+                  localMessage: p.localMessage,
+                  options: p.options,
+                })
+            : undefined,
+        };
+      },
+      defaults: {
+        delete: async (id, o) => {
+          const result = await this.channel.getClient().deleteMessage(id, o);
+          return { message: result.message };
+        },
+        send: async (m, o) => {
+          const result = await this.channel.sendMessage(m, o);
+          return { message: result.message };
+        },
+        update: async (m, o) => {
+          const result = await this.channel.getClient().updateMessage(m, undefined, o);
+          return { message: result.message };
+        },
+      },
     });
   }
 
@@ -234,6 +364,7 @@ export class Thread extends WithSubscriptions {
       custom,
       title,
       deletedAt,
+      pagination,
       parentMessage,
       participants,
       read,
@@ -254,6 +385,7 @@ export class Thread extends WithSubscriptions {
       participants,
       read,
       replyCount,
+      pagination,
       replies: pendingReplies.length ? replies.concat(pendingReplies) : replies,
       updatedAt,
       isStateStale: false,
@@ -301,7 +433,7 @@ export class Thread extends WithSubscriptions {
       }),
       ({ active, unreadMessageCount }) => {
         if (!active || !unreadMessageCount) return;
-        this.throttledMarkAsRead();
+        this.throttledMarkRead();
       },
     );
 
@@ -337,8 +469,12 @@ export class Thread extends WithSubscriptions {
       }
 
       const isOwnMessage = event.message.user?.id === this.client.userID;
-      const { active, read } = this.state.getLatestValue();
+      const { active, read, replies } = this.state.getLatestValue();
+      const hasReplyAlready =
+        replies.some((reply) => reply.id === event.message?.id) ||
+        !!this.messagePaginator.getItem(event.message.id);
 
+      this.messagePaginator.ingestItem(formatMessage(event.message));
       this.upsertReplyLocally({
         message: event.message,
         // Message from current user could have been added optimistically,
@@ -346,8 +482,12 @@ export class Thread extends WithSubscriptions {
         timestampChanged: isOwnMessage,
       });
 
+      if (!hasReplyAlready) {
+        this.incrementReplyCountLocally();
+      }
+
       if (active) {
-        this.throttledMarkAsRead();
+        this.throttledMarkRead();
       }
 
       const nextRead: ThreadReadState = {};
@@ -384,6 +524,21 @@ export class Thread extends WithSubscriptions {
       this.state.partialNext({ read: nextRead });
     }).unsubscribe;
 
+  private incrementReplyCountLocally = () => {
+    this.state.next((current) => {
+      const nextReplyCount = current.replyCount + 1;
+
+      return {
+        ...current,
+        parentMessage: {
+          ...current.parentMessage,
+          reply_count: nextReplyCount,
+        },
+        replyCount: nextReplyCount,
+      };
+    });
+  };
+
   private subscribeRepliesRead = () =>
     this.client.on('message.read', (event) => {
       if (!event.user || !event.created_at || !event.thread) return;
@@ -410,6 +565,7 @@ export class Thread extends WithSubscriptions {
   private subscribeMessageDeleted = () =>
     this.client.on('message.deleted', (event) => {
       if (!event.message) return;
+      const formattedMessage = formatMessage(event.message);
 
       // Deleted message is a reply of this thread
       if (event.message.parent_id === this.id) {
@@ -425,11 +581,14 @@ export class Thread extends WithSubscriptions {
       if (event.message.id === this.id) {
         this.updateParentMessageLocally({ message: event.message });
       }
+
+      this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
     }).unsubscribe;
 
   private subscribeMessageUpdated = () => {
     const eventTypes: EventTypes[] = [
       'message.updated',
+      'message.undeleted',
       'reaction.new',
       'reaction.deleted',
       'reaction.updated',
@@ -440,6 +599,17 @@ export class Thread extends WithSubscriptions {
         this.client.on(eventType, (event) => {
           if (event.message) {
             this.updateParentMessageOrReplyLocally(event.message);
+            if (
+              ['reaction.new', 'reaction.deleted', 'reaction.updated'].includes(
+                eventType,
+              ) &&
+              event.message.parent_id === this.id
+            ) {
+              this.messagePaginator.ingestItem(formatMessage(event.message));
+            }
+            this.messagePaginator.reflectQuotedMessageUpdate(
+              formatMessage(event.message),
+            );
           }
         }).unsubscribe,
     );
@@ -453,6 +623,7 @@ export class Thread extends WithSubscriptions {
     return symbol;
   };
 
+  // todo: can be removed with the next breaking change and use MessagePaginator only
   public deleteReplyLocally = ({ message }: { message: MessageResponse }) => {
     const { replies } = this.state.getLatestValue();
 
@@ -476,6 +647,7 @@ export class Thread extends WithSubscriptions {
     });
   };
 
+  // todo: can be removed with the next breaking change and use MessagePaginator only
   public upsertReplyLocally = ({
     message,
     timestampChanged = false,
@@ -489,6 +661,7 @@ export class Thread extends WithSubscriptions {
 
     const formattedMessage = formatMessage(message);
 
+    // todo: do we really need to keep the failedRepliesMap?
     if (message.status === 'failed') {
       // store failed reply so that it's not lost when reloading or hydrating
       this.failedRepliesMap.set(formattedMessage.id, formattedMessage);
@@ -502,6 +675,7 @@ export class Thread extends WithSubscriptions {
     }));
   };
 
+  // todo: can be removed with the next breaking change and use MessagePaginator only
   public updateParentMessageLocally = ({ message }: { message: MessageResponse }) => {
     if (message.id !== this.id) {
       throw new Error('Message does not belong to this thread');
@@ -514,11 +688,15 @@ export class Thread extends WithSubscriptions {
         ...current,
         deletedAt: formattedMessage.deleted_at,
         parentMessage: formattedMessage,
+        participants:
+          normalizeThreadParticipants(message.thread_participants, current.channel.cid) ??
+          current.participants,
         replyCount: message.reply_count ?? current.replyCount,
       };
     });
   };
 
+  // todo: can be removed with the next breaking change and use MessagePaginator only
   public updateParentMessageOrReplyLocally = (message: MessageResponse) => {
     if (message.parent_id === this.id) {
       this.upsertReplyLocally({ message });
@@ -529,7 +707,71 @@ export class Thread extends WithSubscriptions {
     }
   };
 
-  public markAsRead = async ({ force = false }: { force?: boolean } = {}) => {
+  /**
+   * Sends a message with optimistic local state update.
+   */
+  async sendMessageWithLocalUpdate({
+    localMessage,
+    message,
+    options,
+    sendMessageRequestFn,
+  }: SendMessageWithStateUpdateParams): Promise<void> {
+    await this.messageOperations.send(
+      {
+        localMessage,
+        message,
+        options,
+      },
+      sendMessageRequestFn,
+    );
+  }
+
+  /**
+   * Retry sending a failed message.
+   */
+  async retrySendMessageWithLocalUpdate(
+    params: Omit<SendMessageWithStateUpdateParams, 'message'>,
+  ) {
+    await this.messageOperations.retry(
+      {
+        localMessage: { ...params.localMessage, type: 'regular' },
+        options: params.options,
+      },
+      params.sendMessageRequestFn,
+    );
+  }
+
+  /**
+   * Updates a message with optimistic local state update.
+   *
+   * NOTE: This updates message state via `messagePaginator` only. If you still rely on
+   * `Thread.state.replies` as UI source of truth, make sure it is wired to paginator updates
+   * (or keep upserting separately until migration is complete).
+   */
+  async updateMessageWithLocalUpdate(params: UpdateMessageWithStateUpdateParams) {
+    await this.messageOperations.update(
+      {
+        localMessage: params.localMessage,
+        options: params.options,
+      },
+      params.updateMessageRequestFn,
+    );
+  }
+
+  /**
+   * Deletes a message with local state update.
+   */
+  async deleteMessageWithLocalUpdate(params: DeleteMessageWithStateUpdateParams) {
+    await this.messageOperations.delete(
+      {
+        localMessage: params.localMessage,
+        options: params.options,
+      },
+      params.deleteMessageRequestFn,
+    );
+  }
+
+  public markRead = async ({ force = false }: { force?: boolean } = {}) => {
     if (this.ownUnreadCount === 0 && !force) {
       return null;
     }
@@ -537,12 +779,17 @@ export class Thread extends WithSubscriptions {
     return await this.client.messageDeliveryReporter.markRead(this);
   };
 
-  private throttledMarkAsRead = throttle(
-    () => this.markAsRead(),
-    MARK_AS_READ_THROTTLE_TIMEOUT,
-    { trailing: true },
-  );
+  private throttledMarkRead = () => {
+    this.client.messageDeliveryReporter.throttledMarkRead(this);
+  };
 
+  /**
+   * @deprecated Use `thread.markRead` instead.
+   */
+  public markAsRead = ({ force = false }: { force?: boolean } = {}) =>
+    this.markRead({ force });
+
+  // todo: can be removed with the next breaking change and use MessagePaginator only
   public queryReplies = ({
     limit = DEFAULT_PAGE_LIMIT,
     sort = DEFAULT_SORT,
@@ -550,12 +797,14 @@ export class Thread extends WithSubscriptions {
   }: QueryRepliesOptions = {}) =>
     this.channel.getReplies(this.id, { limit, ...otherOptions }, sort);
 
+  // todo: can be removed with the next breaking change and use MessagePaginator only
   public loadNextPage = ({ limit = DEFAULT_PAGE_LIMIT }: { limit?: number } = {}) =>
     this.loadPage(limit);
 
+  // todo: can be removed with the next breaking change and use MessagePaginator only
   public loadPrevPage = ({ limit = DEFAULT_PAGE_LIMIT }: { limit?: number } = {}) =>
     this.loadPage(-limit);
-
+  // todo: can be removed with the next breaking change and use MessagePaginator only
   private loadPage = async (count: number) => {
     const { pagination } = this.state.getLatestValue();
     const [loadingKey, cursorKey, insertionMethodKey] =
@@ -607,6 +856,30 @@ export class Thread extends WithSubscriptions {
   };
 }
 
+type MessageThreadParticipant = NonNullable<
+  MessageResponse['thread_participants']
+>[number];
+type ThreadParticipant = NonNullable<ThreadResponse['thread_participants']>[number];
+
+const normalizeThreadParticipants = (
+  participants: MessageResponse['thread_participants'] | undefined,
+  channelCid: string,
+): ThreadResponse['thread_participants'] | undefined => {
+  if (!participants) return undefined;
+
+  const nowIso = new Date().toISOString();
+
+  return participants.map(
+    (participant: MessageThreadParticipant): ThreadParticipant => ({
+      channel_cid: channelCid,
+      created_at: nowIso,
+      last_read_at: nowIso,
+      user: participant,
+      user_id: participant.id,
+    }),
+  );
+};
+
 const formatReadState = (read: ReadResponse[]): ThreadReadState =>
   read.reduce<ThreadReadState>((state, userRead) => {
     state[userRead.user.id] = {
@@ -617,6 +890,17 @@ const formatReadState = (read: ReadResponse[]): ThreadReadState =>
     };
     return state;
   }, {});
+
+const getPlaceholderReadResponse = (currentUserId?: string): ReadResponse[] =>
+  currentUserId
+    ? [
+        {
+          user: { id: currentUserId },
+          unread_messages: 0,
+          last_read: new Date().toISOString(),
+        },
+      ]
+    : [];
 
 const repliesPaginationFromInitialThread = (
   thread: ThreadResponse,
