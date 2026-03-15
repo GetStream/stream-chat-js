@@ -4172,6 +4172,69 @@ export type ModerationActionType =
   | 'bounce_flag'
   | 'bounce_remove';
 
+export type ModerationAITextRuleLabel =
+  | 'THREAT'
+  | 'SEXUAL_HARASSMENT'
+  | 'MORAL_HARASSMENT'
+  | 'SELF_HARM'
+  | 'TERRORISM'
+  | 'RACISM'
+  | 'LGBTQIAPLUS_PHOBIA'
+  | 'MISOGYNY'
+  | 'ABLEISM'
+  | 'PEDOPHILIA'
+  | 'INSULT'
+  | 'HATRED'
+  | 'BODY_SHAMING'
+  | 'TROLLING'
+  | 'DOXXING'
+  | 'VULGARITY'
+  | 'SEXUALLY_EXPLICIT'
+  | 'DRUG_EXPLICIT'
+  | 'WEAPON_EXPLICIT'
+  | 'DATING'
+  | 'REPUTATION_HARM'
+  | 'SCAM'
+  | 'PLATFORM_BYPASS'
+  | 'ADS'
+  | 'USELESS'
+  | 'FLOOD'
+  | 'PII'
+  | 'UNDERAGE_USER'
+  | 'LINK'
+  | 'GEOPOLITICAL'
+  | 'NEGATIVE_CRITICISM'
+  | 'TERRORISM_REFERENCE'
+  | 'BOYCOTT'
+  | 'POLITICS'
+  | 'FORBIDDEN_LINK';
+
+export type ModerationAIImageRuleLabel =
+  | 'Explicit'
+  | 'Non-Explicit Nudity of Intimate parts and Kissing'
+  | 'Swimwear or Underwear'
+  | 'Violence'
+  | 'Visually Disturbing'
+  | 'Drugs & Tobacco'
+  | 'Alcohol'
+  | 'Rude Gestures'
+  | 'Gambling'
+  | 'Hate Symbols'
+  | 'PII'
+  | 'QR Code';
+
+export type ModerationAIVideoRuleLabel =
+  | 'Explicit'
+  | 'Non-Explicit Nudity of Intimate parts and Kissing'
+  | 'Swimwear or Underwear'
+  | 'Violence'
+  | 'Visually Disturbing'
+  | 'Drugs & Tobacco'
+  | 'Alcohol'
+  | 'Rude Gestures'
+  | 'Gambling'
+  | 'Hate Symbols';
+
 export type ModerationSeverity = 'low' | 'medium' | 'high' | 'critical';
 
 export type AutomodRule = {
@@ -4239,7 +4302,7 @@ export type AITextSeverityRule = {
 };
 
 export type AITextRule = {
-  label: string;
+  label: ModerationAITextRuleLabel;
   action?: ModerationActionType;
   severity_rules?: AITextSeverityRule[];
 };
@@ -4254,7 +4317,7 @@ export type AITextConfig = {
 
 export type AIImageRule = {
   action: ModerationActionType;
-  label: string;
+  label: ModerationAIImageRuleLabel;
   min_confidence?: number;
 };
 
@@ -4266,7 +4329,7 @@ export type AIImageConfig = {
 
 export type AIVideoRule = {
   action: ModerationActionType;
-  label: string;
+  label: ModerationAIVideoRuleLabel;
   min_confidence?: number;
 };
 
