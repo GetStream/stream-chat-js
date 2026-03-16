@@ -71,3 +71,33 @@ console.log('file url: ', response.file);
   </body>
 </html>
 ```
+
+## Upload progress tracking (axios)
+
+You can track upload progress by passing axios’s `onUploadProgress` in the optional request config. This works with `client.uploadFile`, `client.uploadImage`, and with `channel.sendFile` / `channel.sendImage`.
+
+```js
+// Client upload with progress
+const response = await client.uploadFile(file, file.name, file.type, undefined, {
+  onUploadProgress: (progressEvent) => {
+    const percent = progressEvent.total
+      ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
+      : 0;
+    console.log(`Upload: ${percent}%`);
+  },
+});
+
+// Channel sendFile with progress
+const response = await channel.sendFile(file, file.name, file.type, undefined, {
+  onUploadProgress: (progressEvent) => {
+    const percent = progressEvent.total
+      ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
+      : 0;
+    console.log(`Upload: ${percent}%`);
+  },
+});
+```
+
+## Message composer / attachment manager
+
+When using the message composer’s attachment manager with the **default** upload path, upload progress is stored on each attachment’s `localMetadata.uploadProgress` (0–100). Progress is computed from the axios progress event; the initial state is 0% when the upload starts. When a custom `doUploadRequest` is configured, `uploadProgress` is left undefined so the UI can hide or show an indeterminate state (e.g. when using a custom `doUploadRequest` or when the progress event has `lengthComputable` false or no `total`).
