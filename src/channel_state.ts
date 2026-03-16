@@ -243,7 +243,12 @@ export class ChannelState {
             .state.updateUserReference(message.user, this._channel.cid);
         }
 
-        if (initializing && message.id && this.threads[message.id]) {
+        if (
+          initializing &&
+          message.id &&
+          this.threads[message.id] &&
+          !this._channel.getClient().preventThreadCleanup
+        ) {
           // If we are initializing the state of channel (e.g., in case of connection recovery),
           // then in that case we remove thread related to this message from threads object.
           // This way we can ensure that we don't have any stale data in thread object

@@ -321,6 +321,11 @@ export class StreamChat {
    * manually calling queryChannels endpoint.
    */
   recoverStateOnReconnect?: boolean;
+  /**
+   * If true, we will not clean up threads when channel state is in initializing state.
+   * The main use case for SDKs who do independent state recovery for channels.
+   */
+  preventThreadCleanup = false;
   moderation: Moderation;
   mutedChannels: ChannelMute[];
   mutedUsers: Mute[];
