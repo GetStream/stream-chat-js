@@ -1,3 +1,4 @@
+import type { AxiosRequestConfig } from 'axios';
 import { ChannelState } from './channel_state';
 import { CooldownTimer } from './CooldownTimer';
 import { MessageComposer } from './messageComposer';
@@ -250,6 +251,7 @@ export class Channel {
     name?: string,
     contentType?: string,
     user?: UserResponse,
+    axiosRequestConfig?: AxiosRequestConfig,
   ) {
     return this.getClient().sendFile(
       `${this._channelURL()}/file`,
@@ -257,6 +259,7 @@ export class Channel {
       name,
       contentType,
       user,
+      axiosRequestConfig,
     );
   }
 
@@ -265,6 +268,7 @@ export class Channel {
     name?: string,
     contentType?: string,
     user?: UserResponse,
+    axiosRequestConfig?: AxiosRequestConfig,
   ) {
     return this.getClient().sendFile(
       `${this._channelURL()}/image`,
@@ -272,6 +276,7 @@ export class Channel {
       name,
       contentType,
       user,
+      axiosRequestConfig,
     );
   }
 

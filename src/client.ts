@@ -1305,6 +1305,7 @@ export class StreamChat {
     name?: string,
     contentType?: string,
     user?: UserResponse,
+    axiosRequestConfig?: AxiosRequestConfig,
   ) {
     const data = addFileToFormData(uri, name, contentType || 'multipart/form-data');
     if (user != null) data.append('user', JSON.stringify(user));
@@ -1315,6 +1316,7 @@ export class StreamChat {
         timeout: 0,
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
+        ...axiosRequestConfig,
       },
     });
   }
@@ -4828,6 +4830,7 @@ export class StreamChat {
    * @param {string} [name] The name of the file
    * @param {string} [contentType] The content type of the file
    * @param {UserResponse} [user] Optional user information
+   * @param {AxiosRequestConfig} [axiosRequestConfig] Optional axios config (e.g. onUploadProgress for progress tracking)
    *
    * @return {Promise<SendFileAPIResponse>} Response containing the file URL
    */
@@ -4836,8 +4839,16 @@ export class StreamChat {
     name?: string,
     contentType?: string,
     user?: UserResponse,
+    axiosRequestConfig?: AxiosRequestConfig,
   ) {
-    return this.sendFile(`${this.baseURL}/uploads/file`, uri, name, contentType, user);
+    return this.sendFile(
+      `${this.baseURL}/uploads/file`,
+      uri,
+      name,
+      contentType,
+      user,
+      axiosRequestConfig,
+    );
   }
 
   /**
@@ -4847,6 +4858,7 @@ export class StreamChat {
    * @param {string} [name] The name of the image
    * @param {string} [contentType] The content type of the image
    * @param {UserResponse} [user] Optional user information
+   * @param {AxiosRequestConfig} [axiosRequestConfig] Optional axios config (e.g. onUploadProgress for progress tracking)
    *
    * @return {Promise<SendFileAPIResponse>} Response containing the image URL
    */
@@ -4855,8 +4867,16 @@ export class StreamChat {
     name?: string,
     contentType?: string,
     user?: UserResponse,
+    axiosRequestConfig?: AxiosRequestConfig,
   ) {
-    return this.sendFile(`${this.baseURL}/uploads/image`, uri, name, contentType, user);
+    return this.sendFile(
+      `${this.baseURL}/uploads/image`,
+      uri,
+      name,
+      contentType,
+      user,
+      axiosRequestConfig,
+    );
   }
 
   /**
