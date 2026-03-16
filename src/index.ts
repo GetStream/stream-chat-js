@@ -33,6 +33,7 @@ export type {
 export * from './thread_manager';
 export * from './token_manager';
 export * from './types';
+export * from './uploadManager';
 export * from './channel_manager';
 export * from './offline-support';
 export * from './LiveLocationManager';

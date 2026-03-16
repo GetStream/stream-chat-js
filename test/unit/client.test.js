@@ -345,6 +345,26 @@ describe('Client disconnectUser', () => {
 		await expect(client.disconnectUser()).rejects.toThrow();
 		expect(client.tokenManager.reset.called).to.be.true;
 	});
+
+	it('should clear upload manager records', async () => {
+		const client = new StreamChat('', '');
+		client.uploadManager.state.next(() => ({
+			uploads: [
+				{
+					id: 'upload-x',
+					uploadProgress: 0,
+				},
+			],
+		}));
+		const { resolve, promise } = Promise.withResolvers();
+		client.wsConnection = { disconnect: () => promise };
+		client.wsFallback = null;
+		const disconnectPromise = client.disconnectUser();
+		expect(client.uploadManager.uploads).to.have.length(0);
+		resolve();
+		await disconnectPromise;
+		expect(client.uploadManager.uploads).to.deep.equal([]);
+	});
 });
 
 describe('Detect node environment', () => {

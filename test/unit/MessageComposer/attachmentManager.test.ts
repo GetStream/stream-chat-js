@@ -9,7 +9,6 @@ import {
   DraftResponse,
   FileReference,
   LocalMessage,
-  MessageComposer,
   StreamChat,
 } from '../../../src';
 import { AppSettings } from '../../../src';
@@ -117,12 +116,14 @@ const setup = ({
     .fn()
     .mockResolvedValue({ file: 'test-image-url', thumb_url: 'thumb_url-image' });
   mockChannel.data = { own_capabilities: ['upload-file'] };
-  const messageComposer = new MessageComposer({
-    client: mockClient,
-    composition,
-    compositionContext: mockChannel,
-    config: { attachments: config },
-  });
+  // Use the channel's messageComposer so client.uploadManager (resolves via channelCid) hits this composer.
+  const messageComposer = mockChannel.messageComposer;
+  if (config) {
+    messageComposer.updateConfig({ attachments: config });
+  }
+  if (composition !== undefined) {
+    messageComposer.initState({ composition });
+  }
   return { mockClient, mockChannel, messageComposer };
 };
 
@@ -466,7 +467,62 @@ describe('AttachmentManager', () => {
 
       attachmentManager.initState();
 
-      expect(attachmentManager.state.getLatestValue()).toEqual({ attachments: [] });
+      expect(attachmentManager.state.getLatestValue()).toEqual({
+        attachments: [],
+      });
+    });
+
+    it('should unsubscribe upload progress listeners when re-initializing state', async () => {
+      const { messageComposer, mockClient } = setup();
+      const { attachmentManager } = messageComposer;
+
+      vi.spyOn(attachmentManager, 'doUploadRequest').mockImplementation(
+        () => new Promise(() => {}),
+      );
+
+      const upsertSpy = vi.spyOn(attachmentManager, 'upsertAttachments');
+
+      void attachmentManager.uploadFile(new File([], 'p.png', { type: 'image/png' }));
+
+      await vi.waitFor(() => {
+        expect(
+          (
+            attachmentManager as unknown as {
+              uploadProgressUnsubscribesByLocalId: Map<string, unknown>;
+            }
+          ).uploadProgressUnsubscribesByLocalId.size,
+        ).toBeGreaterThan(0);
+      });
+
+      const uploadId = mockClient.uploadManager.uploads[0]?.id;
+      expect(uploadId).toBeDefined();
+
+      expect(upsertSpy).toHaveBeenCalled();
+
+      upsertSpy.mockClear();
+      attachmentManager.initState();
+
+      expect(
+        (
+          attachmentManager as unknown as {
+            uploadProgressUnsubscribesByLocalId: Map<string, unknown>;
+          }
+        ).uploadProgressUnsubscribesByLocalId.size,
+      ).toBe(0);
+
+      mockClient.uploadManager.state.partialNext((current) => ({
+        ...current,
+        uploads: current.uploads.map((u) =>
+          u.id === uploadId
+            ? {
+                ...u,
+                uploadProgress: 99,
+              }
+            : u,
+        ),
+      }));
+
+      expect(upsertSpy).not.toHaveBeenCalled();
     });
 
     it('should initialize with message', () => {
@@ -613,6 +669,144 @@ describe('AttachmentManager', () => {
       expect(attachmentManager.attachments).toEqual([
         { localMetadata: { id: 'test-id-2' } },
       ]);
+    });
+
+    it('should delete matching upload records when removing upload attachments', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        messageComposer,
+        mockClient,
+        mockChannel,
+      } = setup({ config: { trackUploadProgress: false } });
+
+      const previewUri = 'blob:preview-for-remove-test';
+      const file = generateFile({ name: 'x.png', type: 'image/png' });
+      const attachment: LocalUploadAttachment = {
+        type: 'image',
+        mime_type: 'image/png',
+        file_size: file.size,
+        fallback: file.name,
+        localMetadata: {
+          id: 'att-with-upload',
+          file,
+          previewUri,
+          uploadState: 'uploading',
+        },
+      };
+
+      attachmentManager.upsertAttachments([attachment]);
+
+      vi.spyOn(attachmentManager, 'doUploadRequest').mockImplementation(
+        () => new Promise(() => {}),
+      );
+      void mockClient.uploadManager.upload({
+        id: 'att-with-upload',
+        channelCid: mockChannel.cid,
+        file,
+      });
+
+      await Promise.resolve();
+
+      expect(
+        mockClient.uploadManager.uploads.some((u) => u.id === 'att-with-upload'),
+      ).toBe(true);
+
+      attachmentManager.removeAttachments(['att-with-upload']);
+
+      expect(
+        mockClient.uploadManager.uploads.some((u) => u.id === 'att-with-upload'),
+      ).toBe(false);
+      expect(attachmentManager.attachments).toEqual([]);
+    });
+
+    it('should not delete upload records for another local attachment id', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockClient,
+        mockChannel,
+      } = setup({ config: { trackUploadProgress: false } });
+
+      const previewUri = 'blob:other-composer-uri';
+
+      vi.spyOn(attachmentManager, 'doUploadRequest').mockImplementation(
+        () => new Promise(() => {}),
+      );
+      void mockClient.uploadManager.upload({
+        id: 'other-composer-attachment',
+        channelCid: mockChannel.cid,
+        file: new File([], 'other.png'),
+      });
+
+      await Promise.resolve();
+
+      const file = generateFile({ name: 'x.png', type: 'image/png' });
+      attachmentManager.upsertAttachments([
+        {
+          type: 'image',
+          mime_type: 'image/png',
+          file_size: file.size,
+          fallback: file.name,
+          localMetadata: {
+            id: 'att-1',
+            file,
+            previewUri,
+            uploadState: 'uploading',
+          },
+        } as LocalUploadAttachment,
+      ]);
+
+      attachmentManager.removeAttachments(['att-1']);
+
+      expect(
+        mockClient.uploadManager.uploads.some(
+          (u) => u.id === 'other-composer-attachment',
+        ),
+      ).toBe(true);
+    });
+
+    it('should unsubscribe upload progress listeners when removing an in-flight upload', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockClient,
+      } = setup({ config: { trackUploadProgress: true } });
+
+      vi.spyOn(attachmentManager, 'doUploadRequest').mockImplementation(
+        () => new Promise(() => {}),
+      );
+      const upsertSpy = vi.spyOn(attachmentManager, 'upsertAttachments');
+
+      void attachmentManager.uploadFile(new File([], 'p.png', { type: 'image/png' }));
+
+      await vi.waitFor(() => {
+        expect(
+          (
+            attachmentManager as unknown as {
+              uploadProgressUnsubscribesByLocalId: Map<string, unknown>;
+            }
+          ).uploadProgressUnsubscribesByLocalId.size,
+        ).toBeGreaterThan(0);
+      });
+
+      const uploadId = mockClient.uploadManager.uploads[0]?.id;
+      expect(uploadId).toBeDefined();
+
+      upsertSpy.mockClear();
+      attachmentManager.removeAttachments([uploadId!]);
+
+      expect(
+        (
+          attachmentManager as unknown as {
+            uploadProgressUnsubscribesByLocalId: Map<string, unknown>;
+          }
+        ).uploadProgressUnsubscribesByLocalId.size,
+      ).toBe(0);
+
+      mockClient.uploadManager.state.partialNext((current) => ({
+        ...current,
+        uploads: [...current.uploads, { id: uploadId!, uploadProgress: 77 }],
+      }));
+
+      expect(upsertSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -1276,7 +1470,7 @@ describe('AttachmentManager', () => {
         messageComposer: { attachmentManager },
         mockChannel,
       } = setup();
-      const updateSpy = vi.spyOn(attachmentManager, 'updateAttachment');
+      const updateSpy = vi.spyOn(attachmentManager, 'upsertAttachments');
       const customUploadFn = vi.fn(async (_file, options) => {
         options?.onProgress?.(42);
         return { file: 'custom-upload-url' };
@@ -1304,9 +1498,11 @@ describe('AttachmentManager', () => {
         expect.objectContaining({ onProgress: expect.any(Function) }),
       );
       expect(updateSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          localMetadata: expect.objectContaining({ uploadProgress: 42 }),
-        }),
+        expect.arrayContaining([
+          expect.objectContaining({
+            localMetadata: expect.objectContaining({ uploadProgress: 42 }),
+          }),
+        ]),
       );
       expect(mockChannel.sendImage).not.toHaveBeenCalled();
     });
