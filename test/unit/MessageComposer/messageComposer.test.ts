@@ -624,6 +624,67 @@ describe('MessageComposer', () => {
 
       expect(messageComposer.compositionIsEmpty).toBe(true);
     });
+
+    describe('contentIsEmpty', () => {
+      it('is true when text, attachments, poll, and location are empty', () => {
+        const { messageComposer } = setup();
+        messageComposer.textComposer.state.partialNext({
+          text: '',
+          mentionedUsers: [],
+          selection: { start: 0, end: 0 },
+        });
+        expect(messageComposer.contentIsEmpty).toBe(true);
+      });
+
+      it('is false when text, attachments, poll, or valid location is set', () => {
+        const { messageComposer } = setup();
+        messageComposer.textComposer.state.partialNext({
+          text: '',
+          mentionedUsers: [],
+          selection: { start: 0, end: 0 },
+        });
+
+        messageComposer.textComposer.state.partialNext({ text: 'hi' });
+        expect(messageComposer.contentIsEmpty).toBe(false);
+        messageComposer.textComposer.state.partialNext({ text: '' });
+
+        messageComposer.attachmentManager.state.partialNext({
+          attachments: [
+            { type: 'x', localMetadata: { id: 'x', uploadState: 'finished', file: {} } },
+          ],
+        });
+        expect(messageComposer.contentIsEmpty).toBe(false);
+        messageComposer.attachmentManager.state.partialNext({ attachments: [] });
+
+        messageComposer.state.partialNext({ pollId: 'poll-id' });
+        expect(messageComposer.contentIsEmpty).toBe(false);
+        messageComposer.state.partialNext({ pollId: null });
+
+        messageComposer.updateConfig({ location: { enabled: true } });
+        messageComposer.locationComposer.setData({ latitude: 1, longitude: 1 });
+        expect(messageComposer.contentIsEmpty).toBe(false);
+      });
+
+      it('is unaffected by quoted message (unlike compositionIsEmpty)', () => {
+        const { messageComposer } = setup();
+        messageComposer.textComposer.state.partialNext({
+          text: '',
+          mentionedUsers: [],
+          selection: { start: 0, end: 0 },
+        });
+        messageComposer.setQuotedMessage({
+          id: 'id',
+          type: 'regular',
+          status: 'delivered',
+          created_at: new Date(),
+          updated_at: new Date(),
+          deleted_at: null,
+          pinned_at: null,
+        });
+        expect(messageComposer.contentIsEmpty).toBe(true);
+        expect(messageComposer.compositionIsEmpty).toBe(false);
+      });
+    });
   });
 
   describe('offlineDB enabled', () => {
