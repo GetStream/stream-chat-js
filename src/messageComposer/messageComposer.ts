@@ -344,8 +344,11 @@ export class MessageComposer extends WithSubscriptions {
   }
 
   get compositionIsEmpty() {
+    return !this.quotedMessage && this.contentIsEmpty;
+  }
+
+  get contentIsEmpty() {
     return (
-      !this.quotedMessage &&
       this.textComposer.textIsEmpty &&
       !this.attachmentManager.attachments.length &&
       !this.pollId &&
