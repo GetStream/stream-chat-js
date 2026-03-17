@@ -24,8 +24,6 @@ export type Notification = {
   id: string;
   /** The notification message text */
   message: string;
-  /** The severity level of the notification */
-  severity: NotificationSeverity;
   /** Timestamp when notification was created */
   createdAt: number;
   /**
@@ -35,6 +33,8 @@ export type Notification = {
   origin: NotificationOrigin;
   /** Array of action buttons for the notification */
   actions?: NotificationAction[];
+  /** The severity level of the notification. Defaults to undefined unless explicitly provided. */
+  severity?: NotificationSeverity;
   /**
    * Optional code that can be used to group the notifications of the same type, e.g. attachment-upload-blocked.
    * Format: domain:entity:operation:result
@@ -79,19 +79,27 @@ export type Notification = {
    *   'system:resource:unavailable';     // System resource unavailable
    */
   type?: string;
-  /** Optional timestamp when notification should expire */
-  expiresAt?: number;
+  /** Optional auto-dismiss duration in milliseconds. The timeout starts when NotificationManager.startTimeout() is called. */
+  duration?: number;
   /** Optional metadata to attach to the notification */
   metadata?: Record<string, unknown>;
+  /** Optional tags that can be used for routing or grouping notifications (e.g. `target:channel`). */
+  tags?: string[];
   /** In case of error notification the instance of the originally thrown error */
   originalError?: Error;
 };
 
 /** Configuration options when creating a notification */
 export type NotificationOptions = Partial<
-  Pick<Notification, 'type' | 'severity' | 'actions' | 'metadata' | 'originalError'>
+  Pick<
+    Notification,
+    'type' | 'severity' | 'actions' | 'metadata' | 'tags' | 'originalError'
+  >
 > & {
-  /** How long a notification should be displayed in milliseconds */
+  /**
+   * How long a notification should be displayed in milliseconds.
+   * Use `0` for persistent (no auto-dismiss); call `client.notifications.remove(id)` to dismiss.
+   */
   duration?: number;
 };
 
@@ -107,8 +115,11 @@ export type NotificationState = {
 /** State shape for the notification store */
 export type NotificationManagerState = NotificationState;
 
+export type NotificationSortComparator = (a: Notification, b: Notification) => number;
+
 export type NotificationManagerConfig = {
-  durations: Record<NotificationSeverity, number>;
+  durations: Partial<Record<NotificationSeverity, number>>;
+  sortComparator?: NotificationSortComparator;
 };
 
 export type AddNotificationPayload = Pick<Notification, 'message' | 'origin'> & {
