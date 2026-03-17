@@ -42,8 +42,9 @@ export class NotificationManager {
   add({ message, origin, options = {} }: AddNotificationPayload): string {
     const id = generateUUIDv4();
     const now = Date.now();
-    const severity = options.severity || 'info';
-    const duration = options.duration ?? this.config.durations[severity];
+    const severity = options.severity;
+    const duration =
+      options.duration ?? (severity ? this.config.durations[severity] : undefined);
 
     const notification: Notification = {
       id,
@@ -52,23 +53,20 @@ export class NotificationManager {
       type: options?.type,
       severity,
       createdAt: now,
-      expiresAt: now + duration,
+      duration,
       actions: options.actions,
       metadata: options.metadata,
+      tags: options.tags,
       originalError: options.originalError,
     };
 
+    const notifications = [...this.store.getLatestValue().notifications, notification];
+
     this.store.partialNext({
-      notifications: [...this.store.getLatestValue().notifications, notification],
+      notifications: this.config.sortComparator
+        ? [...notifications].sort(this.config.sortComparator)
+        : notifications,
     });
-
-    if (notification.expiresAt) {
-      const timeout = setTimeout(() => {
-        this.remove(id);
-      }, options.duration || this.config.durations[notification.severity]);
-
-      this.timeouts.set(id, timeout);
-    }
 
     return id;
   }
@@ -89,12 +87,34 @@ export class NotificationManager {
     return this.add({ message, origin, options: { ...options, severity: 'success' } });
   }
 
-  remove(id: string): void {
+  clearTimeout(id: string): void {
     const timeout = this.timeouts.get(id);
-    if (timeout) {
-      clearTimeout(timeout);
-      this.timeouts.delete(id);
-    }
+
+    if (!timeout) return;
+
+    clearTimeout(timeout);
+    this.timeouts.delete(id);
+  }
+
+  startTimeout(id: string, durationOverride?: number): void {
+    const notification = this.store
+      .getLatestValue()
+      .notifications.find((n) => n.id === id);
+    const duration = durationOverride ?? notification?.duration;
+
+    if (!notification || !duration) return;
+
+    this.clearTimeout(id);
+
+    const timeout = setTimeout(() => {
+      this.remove(id);
+    }, duration);
+
+    this.timeouts.set(id, timeout);
+  }
+
+  remove(id: string): void {
+    this.clearTimeout(id);
 
     this.store.partialNext({
       notifications: this.store.getLatestValue().notifications.filter((n) => n.id !== id),
