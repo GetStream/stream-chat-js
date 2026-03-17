@@ -1,3 +1,9 @@
+## [9.37.0](https://github.com/GetStream/stream-chat-js/compare/v9.36.2...v9.37.0) (2026-03-17)
+
+### Features
+
+* introduce contentIsEmpty flag for messageComposer ([#1705](https://github.com/GetStream/stream-chat-js/issues/1705)) ([c82a64f](https://github.com/GetStream/stream-chat-js/commit/c82a64f94f0008e9a2d1c18e7e9506185915fa66))
+
 ## [9.36.2](https://github.com/GetStream/stream-chat-js/compare/v9.36.1...v9.36.2) (2026-03-17)
 
 ### Bug Fixes
