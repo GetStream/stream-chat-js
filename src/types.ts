@@ -284,6 +284,26 @@ export type BannedUsersResponse = APIResponse & {
   }>;
 };
 
+export type FutureChannelBan = {
+  user: UserResponse;
+  expires?: string;
+  reason?: string;
+  shadow?: boolean;
+  created_at: string;
+};
+
+export type FutureChannelBansResponse = APIResponse & {
+  bans: FutureChannelBan[];
+};
+
+export type QueryFutureChannelBansOptions = {
+  user_id?: string;
+  target_user_id?: string;
+  exclude_expired_bans?: boolean;
+  limit?: number;
+  offset?: number;
+};
+
 export type BlockListResponse = BlockList & {
   created_at?: string;
   type?: string;
@@ -333,6 +353,7 @@ export type QueryReactionsAPIResponse = APIResponse & {
 
 export type QueryChannelsAPIResponse = APIResponse & {
   channels: Omit<ChannelAPIResponse, keyof APIResponse>[];
+  predefined_filter?: ParsedPredefinedFilterResponse;
 };
 
 export type QueryChannelAPIResponse = APIResponse & ChannelAPIResponse;
@@ -722,6 +743,7 @@ export type MessageResponseBase = MessageBase & {
   latest_reactions?: ReactionResponse[];
   member?: ChannelMemberResponse;
   mentioned_users?: UserResponse[];
+  mentioned_channel?: boolean;
   message_text_updated_at?: string;
   moderation?: ModerationResponse; // present only with Moderation v2
   moderation_details?: ModerationDetailsResponse; // present only with Moderation v1
@@ -781,6 +803,11 @@ export type MuteUserResponse = APIResponse & {
   mute?: MuteResponse;
   mutes?: Array<Mute>;
   own_user?: OwnUserResponse;
+  non_existing_users?: string[];
+};
+
+export type UnmuteUserResponse = APIResponse & {
+  non_existing_users?: string[];
 };
 
 export type BlockUserAPIResponse = APIResponse & {
@@ -792,6 +819,7 @@ export type BlockUserAPIResponse = APIResponse & {
 export type GetBlockedUsersAPIResponse = APIResponse & {
   blocks: BlockedUserDetails[];
 };
+
 export type BlockedUserDetails = APIResponse & {
   blocked_user: UserResponse;
   blocked_user_id: string;
@@ -994,6 +1022,7 @@ export type BannedUsersPaginationOptions = Omit<
 };
 
 export type BanUserOptions = UnBanUserOptions & {
+  ban_from_future_channels?: boolean;
   banned_by?: UserResponse;
   banned_by_id?: string;
   ip_ban?: boolean;
@@ -1011,6 +1040,21 @@ export type ChannelOptions = {
   state?: boolean;
   user_id?: string;
   watch?: boolean;
+  /**
+   * Name of a predefined filter to use instead of filter_conditions.
+   * When provided, filter_conditions and sort parameters are ignored.
+   */
+  predefined_filter?: string;
+  /**
+   * Values to interpolate into the predefined filter template placeholders.
+   * Only used when predefined_filter is provided.
+   */
+  filter_values?: Record<string, unknown>;
+  /**
+   * Values to interpolate into the predefined filter sort template placeholders.
+   * Only used when predefined_filter is provided.
+   */
+  sort_values?: Record<string, unknown>;
 };
 
 export type ChannelQueryOptions = {
@@ -1068,6 +1112,7 @@ export type CreateChannelOptions = {
   url_enrichment?: boolean;
   user_message_reminders?: boolean;
   count_messages?: boolean;
+  push_level?: 'all' | 'all_mentions' | 'direct_mentions' | 'mentions' | 'none';
 };
 
 export type CreateCommandOptions = {
@@ -1175,6 +1220,7 @@ export type UpdateChannelTypeRequest =
     uploads?: boolean;
     url_enrichment?: boolean;
     count_messages?: boolean;
+    push_level?: 'all' | 'all_mentions' | 'direct_mentions' | 'mentions' | 'none';
   };
 
 export type UpdateChannelTypeResponse = {
@@ -1216,6 +1262,7 @@ export type UpdateChannelTypeResponse = {
   partition_ttl?: string;
   count_messages?: boolean;
   user_message_reminders?: boolean;
+  push_level?: string;
 };
 
 export type GetChannelTypeResponse = {
@@ -1257,6 +1304,7 @@ export type GetChannelTypeResponse = {
   partition_ttl?: string;
   count_messages?: boolean;
   user_message_reminders?: boolean;
+  push_level?: string;
 };
 
 export type UpdateChannelOptions = Partial<{
@@ -1478,6 +1526,7 @@ export type UnBanUserOptions = {
   client_id?: string;
   connection_id?: string;
   id?: string;
+  remove_future_channels_ban?: boolean;
   shadow?: boolean;
   target_user_id?: string;
   type?: string;
@@ -2466,6 +2515,7 @@ export type ChannelData = CustomChannelData &
     blocklist_behavior: AutomodBehavior;
     automod: Automod;
     filter_tags: string[];
+    team?: string;
   }>;
 
 export type ChannelMute = {
@@ -2766,7 +2816,7 @@ type GiphyVersionInfo = {
   size?: string;
 };
 
-type GiphyVersions =
+export type GiphyVersions =
   | 'original'
   | 'fixed_height'
   | 'fixed_height_still'
@@ -2775,7 +2825,7 @@ type GiphyVersions =
   | 'fixed_width_still'
   | 'fixed_width_downsampled';
 
-type GiphyData = {
+export type GiphyData = {
   [key in GiphyVersions]: GiphyVersionInfo;
 };
 
@@ -2805,6 +2855,7 @@ export type Message = Partial<
   MessageBase & {
     mentioned_users: string[];
     shared_location?: StaticLocationPayload | LiveLocationPayload;
+    mentioned_channel?: boolean;
   }
 >;
 
@@ -3633,6 +3684,7 @@ export type ReviewQueueItem = {
   created_by: string;
   entity_id: string;
   entity_type: string;
+  entity_creator_id?: string;
   flags: ModerationFlag[];
   has_image: boolean;
   has_text: boolean;
@@ -3648,6 +3700,7 @@ export type ReviewQueueItem = {
   reviewed_at: string;
   status: string;
   updated_at: string;
+  latest_moderator_action?: string;
 };
 
 export type CustomCheckFlag = {
@@ -3760,6 +3813,10 @@ export type SubmitActionOptions = {
   user_id?: string;
 };
 
+export type SubmitActionResponse = APIResponse & {
+  item?: ReviewQueueItem;
+};
+
 export type GetUserModerationReportResponse = {
   user: UserResponse;
   user_blocks?: Array<{
@@ -3768,6 +3825,19 @@ export type GetUserModerationReportResponse = {
     blocked_user_id: string;
   }>;
   user_mutes?: Mute[];
+};
+
+export type CheckResponse = APIResponse & {
+  status: string;
+  task_id?: string;
+  recommended_action: string;
+  item?: ReviewQueueItem;
+};
+
+export type CustomCheckResponse = APIResponse & {
+  id: string;
+  item: ReviewQueueItem;
+  status: string;
 };
 
 export type QueryModerationConfigsFilters = QueryFilters<
@@ -3822,6 +3892,12 @@ export type ReviewQueueFilters = QueryFilters<
       | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['entity_id']>, '$eq' | '$in'>>
       | PrimitiveFilter<ReviewQueueItem['entity_id']>;
   } & {
+    entity_creator_id?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<ReviewQueueItem['entity_creator_id']>, '$eq' | '$in'>
+        >
+      | PrimitiveFilter<ReviewQueueItem['entity_creator_id']>;
+  } & {
     reviewed?: boolean;
   } & {
     reviewed_at?:
@@ -3874,6 +3950,7 @@ export type ReviewQueueFilters = QueryFilters<
   } & {
     recommended_action?: RequireOnlyOne<{
       $eq?: string;
+      $in?: string[];
     }>;
   } & {
     flagged_user_id?: RequireOnlyOne<{
@@ -3886,6 +3963,7 @@ export type ReviewQueueFilters = QueryFilters<
   } & {
     label?: RequireOnlyOne<{
       $eq?: string;
+      $in?: string[];
     }>;
   } & {
     reporter_type?: RequireOnlyOne<{
@@ -3900,6 +3978,24 @@ export type ReviewQueueFilters = QueryFilters<
     date_range?: RequireOnlyOne<{
       $eq?: string; // Format: "date1_date2"
     }>;
+  } & {
+    latest_moderator_action?:
+      | RequireOnlyOne<
+          Pick<QueryFilter<ReviewQueueItem['latest_moderator_action']>, '$eq' | '$in'>
+        >
+      | PrimitiveFilter<ReviewQueueItem['latest_moderator_action']>;
+  } & {
+    flags_count?: RequireOnlyOne<{
+      $eq?: number;
+    }>;
+  } & {
+    ai_text_severity?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
+  } & {
+    channel_cid?: RequireOnlyOne<{
+      $eq?: string;
+    }>;
   }
 >;
 
@@ -3911,8 +4007,25 @@ export type QueryModerationConfigsSort = Array<Sort<'key' | 'created_at' | 'upda
 
 export type ReviewQueuePaginationOptions = Pager;
 
+export type FilterConfigResponse = {
+  llm_labels: string[];
+  ai_text_labels?: string[];
+};
+
+export type ModerationActionConfig = {
+  entity_type: string;
+  order: number;
+  action: string;
+  icon: string;
+  description: string;
+  custom?: Record<string, unknown>;
+};
+
 export type ReviewQueueResponse = {
   items: ReviewQueueItem[];
+  action_config?: Record<string, ModerationActionConfig[]>;
+  filter_config?: FilterConfigResponse;
+  stats?: Record<string, unknown>;
   next?: string;
   prev?: string;
 };
@@ -4565,4 +4678,214 @@ export type EventHook = {
   delete?: boolean;
   created_at?: string;
   updated_at?: string;
+};
+
+export type BatchUpdateOperation =
+  | 'addMembers'
+  | 'removeMembers'
+  | 'inviteMembers'
+  | 'assignRoles'
+  | 'addModerators'
+  | 'demoteModerators'
+  | 'hide'
+  | 'show'
+  | 'archive'
+  | 'unarchive'
+  | 'updateData';
+
+export type BatchChannelDataUpdate = {
+  frozen?: boolean;
+  disabled?: boolean;
+  custom?: Record<string, unknown>;
+  team?: string;
+  config_overrides?: Record<string, unknown>;
+  auto_translation_enabled?: boolean;
+  auto_translation_language?: string;
+};
+
+export type UpdateChannelsBatchOptions = {
+  operation: BatchUpdateOperation;
+  filter: UpdateChannelsBatchFilters;
+  members?: string[] | Array<NewMemberPayload>;
+  data?: BatchChannelDataUpdate;
+};
+
+export type UpdateChannelsBatchFilters = QueryFilters<{
+  cids?:
+    | RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$eq'>>
+    | PrimitiveFilter<string[]>;
+  types?:
+    | RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$eq'>>
+    | PrimitiveFilter<string[]>;
+}>;
+
+export type UpdateChannelsBatchResponse = {
+  result: Record<string, string>;
+} & Partial<TaskResponse>;
+
+/**
+ * Predefined Filter Types
+ */
+
+export type PredefinedFilterOperation = 'QueryChannels';
+
+export type PredefinedFilterSortParam = {
+  field: string;
+  direction?: AscDesc;
+  type?: string;
+};
+
+export type PredefinedFilter = {
+  name: string;
+  operation: PredefinedFilterOperation;
+  filter: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  description?: string;
+  sort?: PredefinedFilterSortParam[];
+  query_id?: number;
+};
+
+export type CreatePredefinedFilterOptions = {
+  name: string;
+  operation: PredefinedFilterOperation;
+  filter: Record<string, unknown>;
+  description?: string;
+  sort?: PredefinedFilterSortParam[];
+};
+
+export type UpdatePredefinedFilterOptions = Omit<CreatePredefinedFilterOptions, 'name'>;
+
+export type PredefinedFilterResponse = APIResponse & {
+  predefined_filter: PredefinedFilter;
+};
+
+export type ListPredefinedFiltersResponse = APIResponse & {
+  predefined_filters: PredefinedFilter[];
+  next?: string;
+  prev?: string;
+};
+
+/**
+ * Contains the interpolated filter and sort from a predefined filter.
+ * This is returned in the QueryChannels response when using a predefined filter.
+ */
+export type ParsedPredefinedFilterResponse = {
+  name: string;
+  filter: Record<string, unknown>;
+  sort?: PredefinedFilterSortParam[];
+};
+
+export type PredefinedFilterSort = SortParam[];
+
+export type ListPredefinedFiltersOptions = Pager & {
+  sort?: PredefinedFilterSort;
+};
+
+/**
+ * Team Usage Stats Types
+ */
+
+/**
+ * Represents a metric value for a specific date
+ */
+export type DailyValue = {
+  /** Date in YYYY-MM-DD format */
+  date: string;
+  /** Metric value for this date */
+  value: number;
+};
+
+/**
+ * Statistics for a single metric with optional daily breakdown
+ */
+export type MetricStats = {
+  /** Per-day values (only present in daily mode) */
+  daily?: DailyValue[];
+  /** Aggregated total value */
+  total: number;
+};
+
+/**
+ * Usage statistics for a single team containing all 16 metrics
+ */
+export type TeamUsageStats = {
+  /** Team identifier (empty string for users not assigned to any team) */
+  team: string;
+
+  // Daily activity metrics (total = SUM of daily values)
+  /** Daily active users */
+  users_daily: MetricStats;
+  /** Daily messages sent */
+  messages_daily: MetricStats;
+  /** Daily translations */
+  translations_daily: MetricStats;
+  /** Daily image moderations */
+  image_moderations_daily: MetricStats;
+
+  // Peak metrics (total = MAX of daily values)
+  /** Peak concurrent users */
+  concurrent_users: MetricStats;
+  /** Peak concurrent connections */
+  concurrent_connections: MetricStats;
+
+  // Rolling/cumulative metrics (total = LATEST daily value)
+  /** Total users */
+  users_total: MetricStats;
+  /** Users active in last 24 hours */
+  users_last_24_hours: MetricStats;
+  /** MAU - users active in last 30 days */
+  users_last_30_days: MetricStats;
+  /** Users active this month */
+  users_month_to_date: MetricStats;
+  /** Engaged MAU */
+  users_engaged_last_30_days: MetricStats;
+  /** Engaged users this month */
+  users_engaged_month_to_date: MetricStats;
+  /** Total messages */
+  messages_total: MetricStats;
+  /** Messages in last 24 hours */
+  messages_last_24_hours: MetricStats;
+  /** Messages in last 30 days */
+  messages_last_30_days: MetricStats;
+  /** Messages this month */
+  messages_month_to_date: MetricStats;
+};
+
+/**
+ * Options for querying team-level usage statistics
+ */
+export type QueryTeamUsageStatsOptions = {
+  /**
+   * Month in YYYY-MM format (e.g., '2026-01').
+   * Mutually exclusive with start_date/end_date.
+   * Returns aggregated monthly values.
+   */
+  month?: string;
+  /**
+   * Start date in YYYY-MM-DD format.
+   * Used with end_date for custom date range.
+   * Returns daily breakdown.
+   */
+  start_date?: string;
+  /**
+   * End date in YYYY-MM-DD format.
+   * Used with start_date for custom date range.
+   * Returns daily breakdown.
+   */
+  end_date?: string;
+  /** Maximum number of teams to return per page (default: 30, max: 30) */
+  limit?: number;
+  /** Cursor for pagination to fetch next page of teams */
+  next?: string;
+};
+
+/**
+ * Response containing team-level usage statistics
+ */
+export type QueryTeamUsageStatsResponse = APIResponse & {
+  /** Array of team usage statistics */
+  teams: TeamUsageStats[];
+  /** Cursor for pagination to fetch next page */
+  next?: string;
 };

@@ -13,6 +13,7 @@ import { CheckSignature, DevToken, JWTUserToken } from './signing';
 import { TokenManager } from './token_manager';
 import { WSConnectionFallback } from './connection_fallback';
 import { Campaign } from './campaign';
+import { ChannelBatchUpdater } from './channel_batch_updater';
 import { Segment } from './segment';
 import { isErrorResponse, isWSFailure } from './errors';
 import {
@@ -75,6 +76,7 @@ import type {
   CreatePollAPIResponse,
   CreatePollData,
   CreatePollOptionAPIResponse,
+  CreatePredefinedFilterOptions,
   CreateReminderOptions,
   CustomPermissionOptions,
   DeactivateUsersOptions,
@@ -104,6 +106,7 @@ import type {
   FlagsPaginationOptions,
   FlagsResponse,
   FlagUserResponse,
+  FutureChannelBansResponse,
   GetBlockedUsersAPIResponse,
   GetCampaignOptions,
   GetChannelTypeResponse,
@@ -123,6 +126,8 @@ import type {
   ListCommandsResponse,
   ListImportsPaginationOptions,
   ListImportsResponse,
+  ListPredefinedFiltersOptions,
+  ListPredefinedFiltersResponse,
   LocalMessage,
   Logger,
   MarkChannelsReadOptions,
@@ -152,6 +157,7 @@ import type {
   PollVote,
   PollVoteData,
   PollVotesAPIResponse,
+  PredefinedFilterResponse,
   Product,
   PushPreference,
   PushProvider,
@@ -161,6 +167,7 @@ import type {
   PushProviderUpsertResponse,
   QueryChannelsAPIResponse,
   QueryDraftsResponse,
+  QueryFutureChannelBansOptions,
   QueryMessageHistoryFilters,
   QueryMessageHistoryOptions,
   QueryMessageHistoryResponse,
@@ -174,6 +181,8 @@ import type {
   QueryRemindersResponse,
   QuerySegmentsOptions,
   QuerySegmentTargetsFilter,
+  QueryTeamUsageStatsOptions,
+  QueryTeamUsageStatsResponse,
   QueryThreadsAPIResponse,
   QueryThreadsOptions,
   QueryVotesFilters,
@@ -209,6 +218,8 @@ import type {
   TokenOrProvider,
   TranslateResponse,
   UnBanUserOptions,
+  UpdateChannelsBatchOptions,
+  UpdateChannelsBatchResponse,
   UpdateChannelTypeRequest,
   UpdateChannelTypeResponse,
   UpdateCommandOptions,
@@ -218,6 +229,7 @@ import type {
   UpdateMessageOptions,
   UpdatePollAPIResponse,
   UpdatePollOptionAPIResponse,
+  UpdatePredefinedFilterOptions,
   UpdateReminderOptions,
   UpdateSegmentData,
   UpdateUsersAPIResponse,
@@ -260,6 +272,8 @@ type MessageComposerSetupFunction = ({
 }: {
   composer: MessageComposer;
 }) => void | MessageComposerTearDownFunction;
+
+export type BlockedUsersState = { userIds: string[] };
 
 export type MessageComposerSetupState = {
   /**
@@ -307,9 +321,15 @@ export class StreamChat {
    * manually calling queryChannels endpoint.
    */
   recoverStateOnReconnect?: boolean;
+  /**
+   * If true, we will not clean up threads when channel state is in initializing state.
+   * The main use case for SDKs who do independent state recovery for channels.
+   */
+  preventThreadCleanup = false;
   moderation: Moderation;
   mutedChannels: ChannelMute[];
   mutedUsers: Mute[];
+  blockedUsers: StateStore<BlockedUsersState>;
   node: boolean;
   options: StreamChatOptions;
   secret?: string;
@@ -370,6 +390,7 @@ export class StreamChat {
     // a list of channels to hide ws events from
     this.mutedChannels = [];
     this.mutedUsers = [];
+    this.blockedUsers = new StateStore<BlockedUsersState>({ userIds: [] });
 
     this.moderation = new Moderation(this);
 
@@ -1535,6 +1556,7 @@ export class StreamChat {
       client.state.updateUser(event.me);
       client.mutedChannels = event.me.channel_mutes;
       client.mutedUsers = event.me.mutes;
+      client.blockedUsers.partialNext({ userIds: event.me.blocked_user_ids ?? [] });
     }
 
     if (event.channel && event.type === 'notification.message_new') {
@@ -1815,6 +1837,21 @@ export class StreamChat {
   }
 
   /**
+   * queryFutureChannelBans - Query future channel bans created by a user
+   *
+   * @param {QueryFutureChannelBansOptions} options Option object with user_id, exclude_expired_bans, limit, offset
+   * @returns {Promise<FutureChannelBansResponse>} Future Channel Bans Response
+   */
+  async queryFutureChannelBans(options: QueryFutureChannelBansOptions = {}) {
+    return await this.get<FutureChannelBansResponse>(
+      this.baseURL + '/query_future_channel_bans',
+      {
+        payload: options,
+      },
+    );
+  }
+
+  /**
    * queryMessageFlags - Query message flags
    *
    * @param {MessageFlagsFilters} filterConditions MongoDB style filter conditions
@@ -1838,10 +1875,10 @@ export class StreamChat {
   /**
    * queryChannelsRequest - Queries channels and returns the raw response
    *
-   * @param {ChannelFilters} filterConditions object MongoDB style filters
+   * @param {ChannelFilters} filterConditions object MongoDB style filters. Can be empty object when using predefined_filter in options.
    * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
-   * @param {ChannelOptions} [options] Options object
+   * @param {ChannelOptions} [options] Options object. Can include predefined_filter, filter_values, and sort_values for using predefined filters.
    *
    * @return {Promise<Array<ChannelAPIResponse>>} search channels response
    */
@@ -1862,13 +1899,23 @@ export class StreamChat {
       defaultOptions.watch = false;
     }
 
-    // Return a list of channels
-    const payload = {
-      filter_conditions: filterConditions,
-      sort: normalizeQuerySort(sort),
-      ...defaultOptions,
-      ...options,
-    };
+    const { predefined_filter, filter_values, sort_values, ...restOptions } = options;
+
+    // Build payload based on whether we're using a predefined filter or traditional filters
+    const payload = predefined_filter
+      ? {
+          predefined_filter,
+          filter_values,
+          sort_values,
+          ...defaultOptions,
+          ...restOptions,
+        }
+      : {
+          filter_conditions: filterConditions,
+          sort: normalizeQuerySort(sort),
+          ...defaultOptions,
+          ...restOptions,
+        };
 
     const data = await this.post<QueryChannelsAPIResponse>(
       this.baseURL + '/channels',
@@ -2011,7 +2058,7 @@ export class StreamChat {
       }
 
       c.messageComposer.initStateFromChannelResponse(channelState);
-
+      c.cooldownTimer.refresh();
       channels.push(c);
     }
     this.syncDeliveredCandidates(channels);
@@ -2600,23 +2647,44 @@ export class StreamChat {
     });
   }
   async blockUser(blockedUserID: string, user_id?: string) {
-    return await this.post<BlockUserAPIResponse>(this.baseURL + '/users/block', {
+    const result = await this.post<BlockUserAPIResponse>(this.baseURL + '/users/block', {
       blocked_user_id: blockedUserID,
       ...(user_id ? { user_id } : {}),
     });
+    if (this._cacheEnabled()) {
+      this.blockedUsers.next(({ userIds }) => ({
+        userIds: userIds.concat(blockedUserID),
+      }));
+    }
+    return result;
   }
 
   async getBlockedUsers(user_id?: string) {
-    return await this.get<GetBlockedUsersAPIResponse>(this.baseURL + '/users/block', {
-      ...(user_id ? { user_id } : {}),
-    });
+    const result = await this.get<GetBlockedUsersAPIResponse>(
+      this.baseURL + '/users/block',
+      {
+        ...(user_id ? { user_id } : {}),
+      },
+    );
+    if (this._cacheEnabled()) {
+      this.blockedUsers.partialNext({
+        userIds: result.blocks.map(({ blocked_user_id }) => blocked_user_id),
+      });
+    }
+    return result;
   }
 
   async unBlockUser(blockedUserID: string, userID?: string) {
-    return await this.post<APIResponse>(this.baseURL + '/users/unblock', {
+    const result = await this.post<APIResponse>(this.baseURL + '/users/unblock', {
       blocked_user_id: blockedUserID,
       ...(userID ? { user_id: userID } : {}),
     });
+    if (this._cacheEnabled()) {
+      this.blockedUsers.next(({ userIds }) => ({
+        userIds: userIds.filter((id) => id !== blockedUserID),
+      }));
+    }
+    return result;
   }
 
   /** getSharedLocations
@@ -3295,6 +3363,10 @@ export class StreamChat {
       requestBody,
     );
 
+    // Hydrate the polls for the parent messages of the threads
+    const parentMessages = response.threads.map((thread) => thread.parent_message);
+    this.polls.hydratePollCache(parentMessages);
+
     return {
       threads: response.threads.map(
         (thread) => new Thread({ client: this, threadData: thread }),
@@ -3746,6 +3818,15 @@ export class StreamChat {
     return new Campaign(this, idOrData, data);
   }
 
+  /**
+   * channelBatchUpdater - Returns a ChannelBatchUpdater instance for batch channel operations
+   *
+   * @return {ChannelBatchUpdater} A ChannelBatchUpdater instance
+   */
+  channelBatchUpdater() {
+    return new ChannelBatchUpdater(this);
+  }
+
   segment(type: SegmentType, idOrData: string | SegmentData, data?: SegmentData) {
     if (typeof idOrData === 'string') {
       return new Segment(this, type, idOrData, data);
@@ -3757,7 +3838,7 @@ export class StreamChat {
   validateServerSideAuth() {
     if (!this.secret) {
       throw new Error(
-        'Campaigns is a server-side only feature. Please initialize the client with a secret to use this feature.',
+        'This feature can be used server-side only. Please initialize the client with a secret to use this feature.',
       );
     }
   }
@@ -4705,6 +4786,28 @@ export class StreamChat {
   }
 
   /**
+   * queryTeamUsageStats - Queries team-level usage statistics from the warehouse database
+   *
+   * Returns all 16 metrics grouped by team with cursor-based pagination.
+   *
+   * Date Range Options (mutually exclusive):
+   * - Use 'month' parameter (YYYY-MM format) for monthly aggregated values
+   * - Use 'start_date'/'end_date' parameters (YYYY-MM-DD format) for daily breakdown
+   * - If neither provided, defaults to current month (monthly mode)
+   *
+   * This endpoint is server-side only.
+   *
+   * @param {QueryTeamUsageStatsOptions} options The options for querying team usage stats
+   * @returns {Promise<QueryTeamUsageStatsResponse>}
+   */
+  async queryTeamUsageStats(options: QueryTeamUsageStatsOptions = {}) {
+    return await this.post<QueryTeamUsageStatsResponse>(
+      `${this.baseURL}/stats/team_usage`,
+      options,
+    );
+  }
+
+  /**
    * updateLocation - Updates a location
    *
    * @param location SharedLocationRequest the location data to update
@@ -4791,5 +4894,96 @@ export class StreamChat {
 
   syncDeliveredCandidates(collections: Channel[]) {
     this.messageDeliveryReporter.syncDeliveredCandidates(collections);
+  }
+
+  /**
+   *  Update Channels Batch
+   *
+   *  @param {UpdateChannelsBatchOptions} payload for updating channels in batch
+   *  @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
+   */
+  async updateChannelsBatch(payload: UpdateChannelsBatchOptions) {
+    return await this.put<APIResponse & UpdateChannelsBatchResponse>(
+      this.baseURL + `/channels/batch`,
+      payload,
+    );
+  }
+
+  /**
+   * createPredefinedFilter - Creates a new predefined filter (server-side only)
+   *
+   * @param {CreatePredefinedFilterOptions} options Predefined filter options
+   *
+   * @return {Promise<PredefinedFilterResponse>} The created predefined filter
+   */
+  async createPredefinedFilter(options: CreatePredefinedFilterOptions) {
+    this.validateServerSideAuth();
+    return await this.post<PredefinedFilterResponse>(
+      `${this.baseURL}/predefined_filters`,
+      options,
+    );
+  }
+
+  /**
+   * getPredefinedFilter - Gets a predefined filter by name (server-side only)
+   *
+   * @param {string} name Predefined filter name
+   *
+   * @return {Promise<PredefinedFilterResponse>} The predefined filter
+   */
+  async getPredefinedFilter(name: string) {
+    this.validateServerSideAuth();
+    return await this.get<PredefinedFilterResponse>(
+      `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
+    );
+  }
+
+  /**
+   * updatePredefinedFilter - Updates a predefined filter (server-side only)
+   *
+   * @param {string} name Predefined filter name
+   * @param {UpdatePredefinedFilterOptions} options Predefined filter options
+   *
+   * @return {Promise<PredefinedFilterResponse>} The updated predefined filter
+   */
+  async updatePredefinedFilter(name: string, options: UpdatePredefinedFilterOptions) {
+    this.validateServerSideAuth();
+    return await this.put<PredefinedFilterResponse>(
+      `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
+      options,
+    );
+  }
+
+  /**
+   * deletePredefinedFilter - Deletes a predefined filter (server-side only)
+   *
+   * @param {string} name Predefined filter name
+   *
+   * @return {Promise<APIResponse>} The server response
+   */
+  async deletePredefinedFilter(name: string) {
+    this.validateServerSideAuth();
+    return await this.delete<APIResponse>(
+      `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
+    );
+  }
+
+  /**
+   * listPredefinedFilters - Lists all predefined filters (server-side only)
+   *
+   * @param {ListPredefinedFiltersOptions} options Query options
+   *
+   * @return {Promise<ListPredefinedFiltersResponse>} The list of predefined filters
+   */
+  async listPredefinedFilters(options: ListPredefinedFiltersOptions = {}) {
+    this.validateServerSideAuth();
+    const { sort, ...paginationOptions } = options;
+    return await this.get<ListPredefinedFiltersResponse>(
+      `${this.baseURL}/predefined_filters`,
+      {
+        ...paginationOptions,
+        ...(sort ? { sort: JSON.stringify(sort) } : {}),
+      },
+    );
   }
 }

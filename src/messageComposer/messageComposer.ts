@@ -49,6 +49,11 @@ export type MessageComposerState = {
   pollId: string | null;
   quotedMessage: LocalMessageBase | null;
   showReplyInChannel: boolean;
+  /**
+   * Baseline snapshot of the message being edited (if any).
+   * This is intentionally immutable with respect to the editing session and can be used for restore/cancel.
+   */
+  editedMessage: LocalMessage | null;
 };
 
 export type MessageComposerOptions = {
@@ -91,10 +96,14 @@ const initState = (
       pollId: null,
       quotedMessage: null,
       showReplyInChannel: false,
+      editedMessage: null,
     };
   }
 
   const quotedMessage = composition.quoted_message;
+  const editedMessage = compositionIsDraftResponse(composition)
+    ? null
+    : formatMessage(composition);
   let message;
   let draftId = null;
   let id = MessageComposer.generateId(); // do not use draft id for messsage id
@@ -114,6 +123,7 @@ const initState = (
       ? formatMessage(quotedMessage as MessageResponseBase)
       : null,
     showReplyInChannel: false,
+    editedMessage,
   };
 };
 
@@ -126,7 +136,6 @@ export class MessageComposer extends WithSubscriptions {
   readonly compositionMiddlewareExecutor: MessageComposerMiddlewareExecutor;
   readonly draftCompositionMiddlewareExecutor: MessageDraftComposerMiddlewareExecutor;
 
-  editedMessage?: LocalMessage;
   attachmentManager: AttachmentManager;
   linkPreviewsManager: LinkPreviewsManager;
   textComposer: TextComposer;
@@ -190,7 +199,6 @@ export class MessageComposer extends WithSubscriptions {
       message = composition.message;
     } else if (composition) {
       message = formatMessage(composition);
-      this.editedMessage = message;
     }
 
     this.attachmentManager = new AttachmentManager({ composer: this, message });
@@ -240,6 +248,18 @@ export class MessageComposer extends WithSubscriptions {
   get config(): MessageComposerConfig {
     return this.configState.getLatestValue();
   }
+
+  get editedMessage(): LocalMessage | undefined {
+    return this.state.getLatestValue().editedMessage ?? undefined;
+  }
+
+  set editedMessage(editedMessage: LocalMessage | undefined) {
+    this.state.partialNext({ editedMessage: editedMessage ?? null });
+  }
+
+  setEditedMessage = (editedMessage: LocalMessage | null | undefined) => {
+    this.state.partialNext({ editedMessage: editedMessage ?? null });
+  };
 
   get contextType() {
     return MessageComposer.evaluateContextType(this.compositionContext);
@@ -307,7 +327,12 @@ export class MessageComposer extends WithSubscriptions {
   get hasSendableData() {
     // If the offline mode is enabled, we allow sending a message if the composition is not empty.
     if (this.client.offlineDb) {
-      return !this.compositionIsEmpty;
+      return (
+        !this.textComposer.textIsEmpty ||
+        !!this.attachmentManager.attachments.length ||
+        !!this.pollId ||
+        !!this.locationComposer.validLocation
+      );
     }
     return !!(
       (!this.attachmentManager.uploadsInProgressCount &&
@@ -370,14 +395,6 @@ export class MessageComposer extends WithSubscriptions {
     this.pollComposer.initState();
     this.customDataManager.initState({ message });
     this.state.next(initState(composition));
-    if (
-      composition &&
-      !compositionIsDraftResponse(composition) &&
-      message &&
-      isLocalMessage(message)
-    ) {
-      this.editedMessage = message;
-    }
   };
 
   initStateFromChannelResponse = (channelApiResponse: ChannelAPIResponse) => {

@@ -495,6 +495,21 @@ const executables = [
 		imports: ['Channel', 'Unpacked'],
 		type: "Unpacked<ReturnType<Channel['watch']>>",
 	},
+	{
+		f: rg.queryTeamUsageStats,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat['queryTeamUsageStats']>>",
+	},
+	{
+		f: rg.queryTeamUsageStatsWithMonth,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat['queryTeamUsageStats']>>",
+	},
+	{
+		f: rg.queryTeamUsageStatsWithDateRange,
+		imports: ['StreamChat', 'Unpacked'],
+		type: "Unpacked<ReturnType<StreamChat['queryTeamUsageStats']>>",
+	},
 
 	// Currently roles do not return
 	// {

@@ -35,23 +35,76 @@ const getInitialState = (
 });
 
 describe('createPostUploadAttachmentEnrichmentMiddleware', () => {
+  it('revokes blob: previewUri when enriching attachment', async () => {
+    const middleware = createPostUploadAttachmentEnrichmentMiddleware();
+    const revokeObjectURLSpy = vi
+      .spyOn(URL, 'revokeObjectURL')
+      .mockImplementation((_url) => undefined);
+
+    const initialAttachment = AttachmentManager.toLocalUploadAttachment(
+      new File([''], 'test.pdf', { type: 'application/pdf' }),
+    );
+    initialAttachment.localMetadata.previewUri = 'blob:previewUri';
+    initialAttachment.localMetadata.uploadPermissionCheck = {
+      uploadBlocked: false,
+    };
+    const response = {
+      file: 'https://example.com/file/url',
+    };
+
+    await middleware.handlers.postProcess(
+      setupHandlerParams({ attachment: initialAttachment, response }),
+    );
+
+    expect(revokeObjectURLSpy).toHaveBeenCalledWith('blob:previewUri');
+    revokeObjectURLSpy.mockRestore();
+  });
+
+  it('does not revoke non-blob previewUri when enriching attachment', async () => {
+    const middleware = createPostUploadAttachmentEnrichmentMiddleware();
+    const revokeObjectURLSpy = vi
+      .spyOn(URL, 'revokeObjectURL')
+      .mockImplementation((_url) => undefined);
+
+    const initialAttachment = AttachmentManager.toLocalUploadAttachment(
+      new File([''], 'test.pdf', { type: 'application/pdf' }),
+    );
+    initialAttachment.localMetadata.previewUri = 'file://test.pdf';
+    initialAttachment.localMetadata.uploadPermissionCheck = {
+      uploadBlocked: false,
+    };
+    const response = {
+      file: 'https://example.com/file/url',
+    };
+
+    await middleware.handlers.postProcess(
+      setupHandlerParams({ attachment: initialAttachment, response }),
+    );
+
+    expect(revokeObjectURLSpy).not.toHaveBeenCalled();
+    revokeObjectURLSpy.mockRestore();
+  });
+
   it('discards if attachment is not present in middleware state', async () => {
     const middleware = createPostUploadAttachmentEnrichmentMiddleware();
-    const initialAttachment = undefined;
-    const initialResponse = {};
+    const initialResponse = { file: 'https://example.com/file/url' };
+    const initialState = {
+      attachment: undefined,
+      response: initialResponse,
+    } as unknown as AttachmentPostUploadMiddlewareState;
     const {
       status,
       state: { attachment, response },
-    } = await middleware.handlers.postProcess(
-      setupHandlerParams({ attachment: initialAttachment, response: initialResponse }),
-    );
+    } = await middleware.handlers.postProcess(setupHandlerParams(initialState));
     expect(status).toBe('discard');
-    expect(attachment).toEqual(initialAttachment);
+    expect(attachment).toBeUndefined();
     expect(response).toEqual(initialResponse);
   });
   it('discards if response is not present in middleware state', async () => {
     const middleware = createPostUploadAttachmentEnrichmentMiddleware();
-    const initialAttachment = {};
+    const initialAttachment = AttachmentManager.toLocalUploadAttachment(
+      new File([''], 'test.jpg', { type: 'image/jpeg' }),
+    );
     const initialResponse = undefined;
     const {
       status,
@@ -65,7 +118,9 @@ describe('createPostUploadAttachmentEnrichmentMiddleware', () => {
   });
   it('forwards if error is present in middleware state', async () => {
     const middleware = createPostUploadAttachmentEnrichmentMiddleware();
-    const initialAttachment = {};
+    const initialAttachment = AttachmentManager.toLocalUploadAttachment(
+      new File([''], 'test.jpg', { type: 'image/jpeg' }),
+    );
     const {
       status,
       state: { attachment },
@@ -78,14 +133,13 @@ describe('createPostUploadAttachmentEnrichmentMiddleware', () => {
 
   it('enriches image attachment', async () => {
     const middleware = createPostUploadAttachmentEnrichmentMiddleware();
-    const initialAttachment = {
-      localMetadata: {
-        id: 'id',
-        file: new File([''], 'test.jpg', { type: 'image/jpeg' }),
-        previewUri: 'previewUri',
-        uploadPermissionCheck: { uploadBlocked: false, reason: '' },
-      },
-      type: 'image',
+    const initialAttachment = AttachmentManager.toLocalUploadAttachment(
+      new File([''], 'test.jpg', { type: 'image/jpeg' }),
+    );
+    initialAttachment.localMetadata.id = 'id';
+    initialAttachment.localMetadata.previewUri = 'blob:previewUri';
+    initialAttachment.localMetadata.uploadPermissionCheck = {
+      uploadBlocked: false,
     };
     const response = {
       file: 'https://example.com/file/url',
@@ -103,20 +157,21 @@ describe('createPostUploadAttachmentEnrichmentMiddleware', () => {
       localMetadata: {
         id: 'id',
         file: initialAttachment.localMetadata.file,
-        uploadPermissionCheck: { uploadBlocked: false, reason: '' },
+        uploadPermissionCheck: { uploadBlocked: false },
+        uploadState: 'pending',
       },
     });
   });
 
   it('enriches non-image attachment', async () => {
     const middleware = createPostUploadAttachmentEnrichmentMiddleware();
-    const initialAttachment = {
-      localMetadata: {
-        id: 'id',
-        file: new File([''], 'test.jpg', { type: 'image/jpeg' }),
-        uploadPermissionCheck: { uploadBlocked: false, reason: '' },
-      },
-      // type: 'file',
+    const initialAttachment = AttachmentManager.toLocalUploadAttachment(
+      new File([''], 'test.pdf', { type: 'application/pdf' }),
+    );
+    initialAttachment.localMetadata.id = 'id';
+    initialAttachment.localMetadata.previewUri = 'blob:previewUri';
+    initialAttachment.localMetadata.uploadPermissionCheck = {
+      uploadBlocked: false,
     };
     const response = {
       file: 'https://example.com/file/url',
@@ -133,6 +188,12 @@ describe('createPostUploadAttachmentEnrichmentMiddleware', () => {
       ...initialAttachment,
       asset_url: response.file,
       thumb_url: response.thumb_url,
+      localMetadata: {
+        id: 'id',
+        file: initialAttachment.localMetadata.file,
+        uploadPermissionCheck: { uploadBlocked: false },
+        uploadState: 'pending',
+      },
     });
   });
 });
