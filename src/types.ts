@@ -3658,7 +3658,7 @@ export type CustomCheckFlag = {
   reason?: string;
 };
 
-export type MessageDeletionStrategy = 'soft' | 'pruning' | 'hard';
+export type MessageDeletionStrategy = 'soft' | 'hard';
 // @deprecated use type MessageDeletionStrategy instead
 export type DeleteMessagesOptions = MessageDeletionStrategy;
 
