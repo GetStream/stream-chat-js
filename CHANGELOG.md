@@ -1,3 +1,9 @@
+## [9.36.1](https://github.com/GetStream/stream-chat-js/compare/v9.36.0...v9.36.1) (2026-03-17)
+
+### Bug Fixes
+
+* add flag to avoid thread cleanup when updating channel state ([#1702](https://github.com/GetStream/stream-chat-js/issues/1702)) ([5a5972c](https://github.com/GetStream/stream-chat-js/commit/5a5972c00a41c89bfcaa1647484adf405d88246c))
+
 ## [9.36.0](https://github.com/GetStream/stream-chat-js/compare/v9.35.1...v9.36.0) (2026-03-10)
 
 ### Bug Fixes
