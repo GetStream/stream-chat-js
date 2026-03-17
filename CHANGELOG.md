@@ -1,3 +1,9 @@
+## [9.36.2](https://github.com/GetStream/stream-chat-js/compare/v9.36.1...v9.36.2) (2026-03-17)
+
+### Bug Fixes
+
+* sync SubmitActionOptions type with backend submit_action endpoint ([#1704](https://github.com/GetStream/stream-chat-js/issues/1704)) ([529fc59](https://github.com/GetStream/stream-chat-js/commit/529fc595964d68a280d4c534b7199451ddb7984d))
+
 ## [9.36.1](https://github.com/GetStream/stream-chat-js/compare/v9.36.0...v9.36.1) (2026-03-17)
 
 ### Bug Fixes
