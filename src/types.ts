@@ -3721,23 +3721,94 @@ export type DeleteMessageOptions = {
 };
 
 export type SubmitActionOptions = {
+  appeal_id?: string;
   ban?: {
-    channel_ban_only?: boolean;
+    target_user_id?: string;
+    shadow?: boolean;
     reason?: string;
-    timeout?: number;
+    channel_ban_only?: boolean;
+    channel_cid?: string;
+    ip_ban?: boolean;
     delete_messages?: MessageDeletionStrategy;
+    timeout?: number;
+  };
+  block?: {
+    reason?: string;
+  };
+  custom?: {
+    id: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    options?: Record<string, any>;
+  };
+  delete_activity?: {
+    hard_delete?: boolean;
+    reason?: string;
+    entity_id?: string;
+    entity_type?: string;
+  };
+  delete_comment?: {
+    hard_delete?: boolean;
+    reason?: string;
+    entity_id?: string;
+    entity_type?: string;
   };
   delete_message?: {
     hard_delete?: boolean;
+    reason?: string;
+    entity_id?: string;
+    entity_type?: string;
+  };
+  delete_reaction?: {
+    hard_delete?: boolean;
+    reason?: string;
+    entity_id?: string;
+    entity_type?: string;
   };
   delete_user?: {
-    delete_conversation_channels?: boolean;
     hard_delete?: boolean;
+    reason?: string;
     mark_messages_deleted?: boolean;
+    delete_conversation_channels?: boolean;
+    delete_feeds_content?: boolean;
+    entity_id?: string;
+    entity_type?: string;
   };
-  restore?: {};
+  end_call?: Record<string, never>;
+  escalate?: {
+    reason: string;
+    category: string;
+    priority: string;
+  };
+  flag?: {
+    entity_type: string;
+    entity_id: string;
+    entity_creator_id?: string;
+    reason?: string;
+    moderation_payload?: ModerationPayload;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    custom?: Record<string, any>;
+  };
+  kick_user?: Record<string, never>;
+  mark_reviewed?: {
+    disable_marking_content_as_reviewed?: boolean;
+    content_to_mark_as_reviewed_limit?: number;
+    decision_reason?: string;
+  };
+  reject_appeal?: {
+    decision_reason: string;
+  };
+  restore?: {
+    decision_reason?: string;
+  };
+  shadow_block?: {
+    reason?: string;
+  };
   unban?: {
     channel_cid?: string;
+    decision_reason?: string;
+  };
+  unblock?: {
+    decision_reason?: string;
   };
   user_id?: string;
 };
