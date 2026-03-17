@@ -1,3 +1,9 @@
+## [9.38.0](https://github.com/GetStream/stream-chat-js/compare/v9.37.0...v9.38.0) (2026-03-17)
+
+### Features
+
+* support persistent and sorted notifications with manual timeout start ([#1706](https://github.com/GetStream/stream-chat-js/issues/1706)) ([21e66ad](https://github.com/GetStream/stream-chat-js/commit/21e66ad09830c2ca4cc39d32320614d21f965679))
+
 ## [9.37.0](https://github.com/GetStream/stream-chat-js/compare/v9.36.2...v9.37.0) (2026-03-17)
 
 ### Features
