@@ -1029,6 +1029,7 @@ export type BanUserOptions = UnBanUserOptions & {
   reason?: string;
   timeout?: number;
   delete_messages?: MessageDeletionStrategy;
+  delete_reactions?: boolean;
 };
 
 export type ChannelOptions = {
@@ -3711,7 +3712,7 @@ export type CustomCheckFlag = {
   reason?: string;
 };
 
-export type MessageDeletionStrategy = 'soft' | 'hard';
+export type MessageDeletionStrategy = 'soft' | 'hard' | 'pruning';
 // @deprecated use type MessageDeletionStrategy instead
 export type DeleteMessagesOptions = MessageDeletionStrategy;
 
@@ -3730,6 +3731,7 @@ export type SubmitActionOptions = {
     channel_cid?: string;
     ip_ban?: boolean;
     delete_messages?: MessageDeletionStrategy;
+    delete_reactions?: boolean;
     timeout?: number;
   };
   block?: {
