@@ -104,4 +104,4 @@ When using the message composer’s attachment manager, upload progress is track
 
 With a custom `doUploadRequest`, the function receives an optional second argument `options` with `onProgress?: (percent: number | undefined) => void`. Call `onProgress` from your upload implementation to drive the same `localMetadata.uploadProgress` updates. If you do not call it, `uploadProgress` stays at 0 until the upload finishes.
 
-Set `trackUploadProgress` to `false` to skip setting `uploadProgress` and to omit progress callbacks to both the default channel upload and custom `doUploadRequest`.
+Set `trackUploadProgress` to `false` to skip setting `uploadProgress` (will be `undefined` in this case) and to omit progress callbacks to both the default channel upload and custom `doUploadRequest`.
