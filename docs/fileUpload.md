@@ -100,4 +100,8 @@ const response = await channel.sendFile(file, file.name, file.type, undefined, {
 
 ## Message composer / attachment manager
 
-When using the message composer’s attachment manager with the **default** upload path, upload progress is stored on each attachment’s `localMetadata.uploadProgress` (0–100). Progress is computed from the axios progress event; the initial state is 0% when the upload starts. When a custom `doUploadRequest` is configured, `uploadProgress` is left undefined so the UI can hide or show an indeterminate state (e.g. when using a custom `doUploadRequest` or when the progress event has `lengthComputable` false or no `total`).
+When using the message composer’s attachment manager, upload progress is tracked when `config.attachments.trackUploadProgress` is `true` (the default). Progress is stored on each attachment’s `localMetadata.uploadProgress` (0–100 for the default upload path, from the axios progress event; the initial state is 0% when the upload starts).
+
+With a custom `doUploadRequest`, the function receives an optional second argument `options` with `onProgress?: (percent: number | undefined) => void`. Call `onProgress` from your upload implementation to drive the same `localMetadata.uploadProgress` updates. If you do not call it, `uploadProgress` stays at 0 until the upload finishes.
+
+Set `trackUploadProgress` to `false` to skip setting `uploadProgress` and to omit progress callbacks to both the default channel upload and custom `doUploadRequest`.
