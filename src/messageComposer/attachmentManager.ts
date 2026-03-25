@@ -2,6 +2,7 @@ import type {
   AttachmentManagerConfig,
   MinimumUploadRequestResult,
   UploadRequestFn,
+  UploadRequestOptions,
 } from './configuration';
 import { isLocalImageAttachment, isUploadedAttachment } from './attachmentIdentity';
 import {
@@ -447,7 +448,7 @@ export class AttachmentManager {
    */
   doDefaultUploadRequest = async (
     fileLike: FileReference | FileLike,
-    options?: { onProgress?: (percent: number | undefined) => void },
+    options?: UploadRequestOptions,
   ) => {
     const progressHandler = options?.onProgress
       ? (progressEvent: {
@@ -500,11 +501,11 @@ export class AttachmentManager {
 
   doUploadRequest = async (
     fileLike: FileReference | FileLike,
-    options?: { onProgress?: (percent: number | undefined) => void },
+    options?: UploadRequestOptions,
   ) => {
     const customUploadFn = this.config.doUploadRequest;
     if (customUploadFn) {
-      return await customUploadFn(fileLike);
+      return await customUploadFn(fileLike, options);
     }
 
     return this.doDefaultUploadRequest(fileLike, options);
@@ -536,19 +537,19 @@ export class AttachmentManager {
       return localAttachment;
     }
 
-    const useDefaultUpload = !this.config.doUploadRequest;
+    const shouldTrackProgress = this.config.trackUploadProgress;
     this.upsertAttachments([
       {
         ...attachment,
         localMetadata: {
           ...attachment.localMetadata,
           uploadState: 'uploading',
-          ...(useDefaultUpload && { uploadProgress: 0 }),
+          ...(shouldTrackProgress && { uploadProgress: 0 }),
         },
       },
     ]);
 
-    const uploadOptions = useDefaultUpload
+    const uploadOptions = shouldTrackProgress
       ? {
           onProgress: (percent: number | undefined) => {
             this.updateAttachment({
@@ -655,18 +656,18 @@ export class AttachmentManager {
       return preUpload.state.attachment;
     }
 
-    const useDefaultUpload = !this.config.doUploadRequest;
+    const shouldTrackProgress = this.config.trackUploadProgress;
     attachment = {
       ...attachment,
       localMetadata: {
         ...attachment.localMetadata,
         uploadState: 'uploading',
-        ...(useDefaultUpload && { uploadProgress: 0 }),
+        ...(shouldTrackProgress && { uploadProgress: 0 }),
       },
     };
     this.upsertAttachments([attachment]);
 
-    const uploadOptions = useDefaultUpload
+    const uploadOptions = shouldTrackProgress
       ? {
           onProgress: (percent: number | undefined) => {
             this.updateAttachment({

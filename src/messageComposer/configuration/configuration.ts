@@ -31,6 +31,7 @@ export const DEFAULT_ATTACHMENT_MANAGER_CONFIG: AttachmentManagerConfig = {
   acceptedFiles: [], // an empty array means all files are accepted
   fileUploadFilter: () => true,
   maxNumberOfFilesPerMessage: API_MAX_FILES_ALLOWED_PER_MESSAGE,
+  trackUploadProgress: true,
 };
 
 export const DEFAULT_TEXT_COMPOSER_CONFIG: TextComposerConfig = {

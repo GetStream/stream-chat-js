@@ -223,7 +223,11 @@ describe('AttachmentManager', () => {
       const {
         messageComposer: { attachmentManager },
       } = setup({ config });
-      expect(attachmentManager.config).toEqual({ ...config, acceptedFiles: [] });
+      expect(attachmentManager.config).toEqual({
+        ...config,
+        acceptedFiles: [],
+        trackUploadProgress: true,
+      });
     });
 
     it('should return the correct values from state', async () => {
@@ -1176,8 +1180,133 @@ describe('AttachmentManager', () => {
       // Upload the attachment
       await attachmentManager.uploadAttachment(attachment);
 
-      // Verify the custom upload function was called
-      expect(customUploadFn).toHaveBeenCalledWith(file);
+      // Verify the custom upload function was called with progress callback when tracking is on
+      expect(customUploadFn).toHaveBeenCalledWith(
+        file,
+        expect.objectContaining({ onProgress: expect.any(Function) }),
+      );
+      expect(mockChannel.sendImage).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('trackUploadProgress', () => {
+    it('defaults to true on merged attachment config', () => {
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
+      expect(attachmentManager.config.trackUploadProgress).toBe(true);
+    });
+
+    it('when false, default upload does not pass progress options to channel', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup({ config: { trackUploadProgress: false } });
+      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
+
+      await attachmentManager.uploadAttachment(
+        await attachmentManager.fileToLocalUploadAttachment(file),
+      );
+
+      expect(mockChannel.sendImage).toHaveBeenCalledWith(
+        file,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
+    });
+
+    it('when false, omits uploadProgress on attachment while upload is in flight', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup({ config: { trackUploadProgress: false } });
+      mockChannel.sendImage.mockImplementation(() => new Promise(() => {}));
+
+      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
+      const local = await attachmentManager.fileToLocalUploadAttachment(file);
+      void attachmentManager.uploadAttachment(local);
+
+      await vi.waitFor(() => {
+        expect(attachmentManager.uploadsInProgressCount).toBe(1);
+      });
+
+      const [att] = attachmentManager.attachments;
+      expect(att.localMetadata.uploadProgress).toBeUndefined();
+    });
+
+    it('when true, sets initial uploadProgress while default upload is in flight', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
+      mockChannel.sendImage.mockImplementation(() => new Promise(() => {}));
+
+      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
+      const local = await attachmentManager.fileToLocalUploadAttachment(file);
+      void attachmentManager.uploadAttachment(local);
+
+      await vi.waitFor(() => {
+        expect(attachmentManager.uploadsInProgressCount).toBe(1);
+      });
+
+      const [att] = attachmentManager.attachments;
+      expect(att.localMetadata.uploadProgress).toBe(0);
+    });
+
+    it('when false, custom doUploadRequest is called without options', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup({ config: { trackUploadProgress: false } });
+      const customUploadFn = vi.fn().mockResolvedValue({ file: 'custom-upload-url' });
+      attachmentManager.setCustomUploadFn(customUploadFn);
+
+      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
+      await attachmentManager.uploadFiles([file]);
+
+      expect(customUploadFn).toHaveBeenCalledWith(file, undefined);
+      expect(mockChannel.sendImage).not.toHaveBeenCalled();
+    });
+
+    it('when true, custom doUploadRequest receives onProgress and updates attachment when invoked', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
+      const updateSpy = vi.spyOn(attachmentManager, 'updateAttachment');
+      const customUploadFn = vi.fn(async (_file, options) => {
+        options?.onProgress?.(42);
+        return { file: 'custom-upload-url' };
+      });
+      attachmentManager.setCustomUploadFn(customUploadFn);
+
+      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
+      const attachment = {
+        type: 'image' as const,
+        localMetadata: {
+          id: 'test-id',
+          file,
+          uploadState: 'pending' as const,
+        },
+      };
+
+      vi.spyOn(attachmentManager, 'ensureLocalUploadAttachment').mockResolvedValue(
+        attachment,
+      );
+
+      await attachmentManager.uploadAttachment(attachment);
+
+      expect(customUploadFn).toHaveBeenCalledWith(
+        file,
+        expect.objectContaining({ onProgress: expect.any(Function) }),
+      );
+      expect(updateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          localMetadata: expect.objectContaining({ uploadProgress: 42 }),
+        }),
+      );
       expect(mockChannel.sendImage).not.toHaveBeenCalled();
     });
   });
@@ -1284,8 +1413,11 @@ describe('AttachmentManager', () => {
       // Upload the attachment
       await attachmentManager.uploadFiles([file]);
 
-      // Verify the custom upload function was called
-      expect(customUploadFn).toHaveBeenCalledWith(file);
+      // Verify the custom upload function was called with progress callback when tracking is on
+      expect(customUploadFn).toHaveBeenCalledWith(
+        file,
+        expect.objectContaining({ onProgress: expect.any(Function) }),
+      );
       expect(mockChannel.sendImage).not.toHaveBeenCalled();
     });
 
