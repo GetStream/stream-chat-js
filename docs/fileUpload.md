@@ -72,12 +72,22 @@ console.log('file url: ', response.file);
 </html>
 ```
 
-## Upload progress tracking (axios)
+## `axiosRequestConfig` (channel and client uploads)
 
-You can track upload progress by passing axios’s `onUploadProgress` in the optional request config. This works with `client.uploadFile`, `client.uploadImage`, and with `channel.sendFile` / `channel.sendImage`.
+Channel uploads use Axios under the hood. Both **`channel.sendFile`** and **`channel.sendImage`** accept an optional **fifth argument** `axiosRequestConfig` (`AxiosRequestConfig` from axios). The same optional argument exists on **`client.uploadFile`** and **`client.uploadImage`**.
+
+The client merges your config **after** its upload defaults (`timeout: 0`, large `maxContentLength` / `maxBodyLength`, and multipart headers from the form data). Any property you set can override or extend those defaults.
+
+Typical uses:
+
+- **`onUploadProgress`** — track bytes sent (see below)
+- **`signal`** — pass `AbortSignal` from an `AbortController` to cancel an in-flight upload
+- Other Axios per-request options your runtime supports
+
+### Upload progress (`onUploadProgress`)
 
 ```js
-// Client upload with progress
+// client.uploadFile with progress
 const response = await client.uploadFile(file, file.name, file.type, undefined, {
   onUploadProgress: (progressEvent) => {
     const percent = progressEvent.total
@@ -87,13 +97,23 @@ const response = await client.uploadFile(file, file.name, file.type, undefined, 
   },
 });
 
-// Channel sendFile with progress
+// channel.sendFile with progress
 const response = await channel.sendFile(file, file.name, file.type, undefined, {
   onUploadProgress: (progressEvent) => {
     const percent = progressEvent.total
       ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
       : 0;
     console.log(`Upload: ${percent}%`);
+  },
+});
+
+// channel.sendImage with progress (same fifth argument)
+const imageResponse = await channel.sendImage(file, file.name, file.type, undefined, {
+  onUploadProgress: (progressEvent) => {
+    const percent = progressEvent.total
+      ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
+      : 0;
+    console.log(`Image upload: ${percent}%`);
   },
 });
 ```
