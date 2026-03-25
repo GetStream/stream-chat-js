@@ -1311,6 +1311,224 @@ describe('AttachmentManager', () => {
     });
   });
 
+  describe('doDefaultUploadRequest', () => {
+    it('passes onUploadProgress to sendImage when onProgress is provided (File)', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
+      const onProgress = vi.fn();
+      const file = new File([''], 'photo.jpg', { type: 'image/jpeg' });
+
+      await attachmentManager.doDefaultUploadRequest(file, { onProgress });
+
+      expect(mockChannel.sendImage).toHaveBeenCalledTimes(1);
+      expect(mockChannel.sendFile).not.toHaveBeenCalled();
+      expect(mockChannel.sendImage).toHaveBeenCalledWith(
+        file,
+        undefined,
+        undefined,
+        undefined,
+        { onUploadProgress: expect.any(Function) },
+      );
+    });
+
+    it('passes onUploadProgress to sendFile when onProgress is provided (File)', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
+      const onProgress = vi.fn();
+      const file = new File([''], 'doc.pdf', { type: 'application/pdf' });
+
+      await attachmentManager.doDefaultUploadRequest(file, { onProgress });
+
+      expect(mockChannel.sendFile).toHaveBeenCalledTimes(1);
+      expect(mockChannel.sendImage).not.toHaveBeenCalled();
+      expect(mockChannel.sendFile).toHaveBeenCalledWith(
+        file,
+        undefined,
+        undefined,
+        undefined,
+        { onUploadProgress: expect.any(Function) },
+      );
+    });
+
+    it('passes onUploadProgress to sendImage when onProgress is provided (FileReference)', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
+      const onProgress = vi.fn();
+      const fileRef = generateFileReference({
+        name: 'remote.jpg',
+        type: 'image/jpeg',
+        uri: 'content://remote.jpg',
+        size: 10,
+      });
+
+      await attachmentManager.doDefaultUploadRequest(fileRef, { onProgress });
+
+      expect(mockChannel.sendImage).toHaveBeenCalledWith(
+        fileRef.uri,
+        fileRef.name,
+        fileRef.type,
+        undefined,
+        { onUploadProgress: expect.any(Function) },
+      );
+    });
+
+    it('passes onUploadProgress to sendFile when onProgress is provided (FileReference)', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
+      const onProgress = vi.fn();
+      const fileRef = generateFileReference({
+        name: 'remote.pdf',
+        type: 'application/pdf',
+        uri: 'content://remote.pdf',
+        size: 10,
+      });
+
+      await attachmentManager.doDefaultUploadRequest(fileRef, { onProgress });
+
+      expect(mockChannel.sendFile).toHaveBeenCalledWith(
+        fileRef.uri,
+        fileRef.name,
+        fileRef.type,
+        undefined,
+        { onUploadProgress: expect.any(Function) },
+      );
+    });
+
+    it('omits axios options when onProgress is not provided', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
+      const image = new File([''], 'photo.jpg', { type: 'image/jpeg' });
+      const pdf = new File([''], 'doc.pdf', { type: 'application/pdf' });
+
+      await attachmentManager.doDefaultUploadRequest(image);
+      await attachmentManager.doDefaultUploadRequest(pdf);
+
+      expect(mockChannel.sendImage).toHaveBeenCalledWith(
+        image,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
+      expect(mockChannel.sendFile).toHaveBeenCalledWith(
+        pdf,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
+    });
+
+    it('maps lengthComputable upload progress to rounded percent for sendImage', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
+      const onProgress = vi.fn();
+      const file = new File([''], 'photo.jpg', { type: 'image/jpeg' });
+
+      await attachmentManager.doDefaultUploadRequest(file, { onProgress });
+
+      const axiosOpts = vi.mocked(mockChannel.sendImage).mock.calls[0][4] as {
+        onUploadProgress: (e: {
+          loaded: number;
+          total?: number;
+          lengthComputable?: boolean;
+        }) => void;
+      };
+      axiosOpts.onUploadProgress({
+        loaded: 333,
+        total: 1000,
+        lengthComputable: true,
+      });
+      expect(onProgress).toHaveBeenCalledWith(33);
+
+      axiosOpts.onUploadProgress({
+        loaded: 100,
+        total: 100,
+        lengthComputable: true,
+      });
+      expect(onProgress).toHaveBeenLastCalledWith(100);
+    });
+
+    it('maps lengthComputable upload progress to rounded percent for sendFile', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
+      const onProgress = vi.fn();
+      const file = new File([''], 'doc.pdf', { type: 'application/pdf' });
+
+      await attachmentManager.doDefaultUploadRequest(file, { onProgress });
+
+      const axiosOpts = vi.mocked(mockChannel.sendFile).mock.calls[0][4] as {
+        onUploadProgress: (e: {
+          loaded: number;
+          total?: number;
+          lengthComputable?: boolean;
+        }) => void;
+      };
+      axiosOpts.onUploadProgress({
+        loaded: 1,
+        total: 3,
+        lengthComputable: true,
+      });
+      expect(onProgress).toHaveBeenCalledWith(33);
+    });
+
+    it('calls onProgress with undefined when length is not computable or total is missing', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
+      const onProgress = vi.fn();
+      const file = new File([''], 'photo.jpg', { type: 'image/jpeg' });
+
+      await attachmentManager.doDefaultUploadRequest(file, { onProgress });
+
+      const axiosOpts = vi.mocked(mockChannel.sendImage).mock.calls[0][4] as {
+        onUploadProgress: (e: {
+          loaded: number;
+          total?: number;
+          lengthComputable?: boolean;
+        }) => void;
+      };
+
+      onProgress.mockClear();
+      axiosOpts.onUploadProgress({
+        loaded: 50,
+        total: 100,
+        lengthComputable: false,
+      });
+      expect(onProgress).toHaveBeenCalledWith(undefined);
+
+      onProgress.mockClear();
+      axiosOpts.onUploadProgress({
+        loaded: 50,
+        total: 100,
+        lengthComputable: true,
+      });
+      expect(onProgress).toHaveBeenCalledWith(50);
+
+      onProgress.mockClear();
+      axiosOpts.onUploadProgress({
+        loaded: 50,
+        lengthComputable: true,
+      });
+      expect(onProgress).toHaveBeenCalledWith(undefined);
+    });
+  });
+
   describe('uploadFiles', () => {
     it('should upload files successfully', async () => {
       const {
