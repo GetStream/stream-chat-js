@@ -1753,13 +1753,17 @@ describe('Channel search', async () => {
 
 	it('search with sorting by defined field', async () => {
 		client.get = (url, config) => {
-			expect(config.payload.sort).to.be.eql([{ field: 'updated_at', direction: -1 }]);
+			expect(config.payload.sort).toEqual([
+				{ field: 'updated_at', direction: -1, type: null },
+			]);
 		};
 		await channel.search('query', { sort: [{ updated_at: -1 }] });
 	});
 	it('search with sorting by custom field', async () => {
 		client.get = (url, config) => {
-			expect(config.payload.sort).to.be.eql([{ field: 'custom_field', direction: -1 }]);
+			expect(config.payload.sort).toEqual([
+				{ field: 'custom_field', direction: -1, type: null },
+			]);
 		};
 		await channel.search('query', { sort: [{ custom_field: -1 }] });
 	});
