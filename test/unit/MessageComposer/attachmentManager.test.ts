@@ -3,6 +3,7 @@ import {
   API_MAX_FILES_ALLOWED_PER_MESSAGE,
   DEFAULT_UPLOAD_SIZE_LIMIT_BYTES,
 } from '../../../src/constants';
+import type { LocalUploadAttachment } from '../../../src';
 import {
   AttachmentManagerConfig,
   DraftResponse,
@@ -1308,6 +1309,54 @@ describe('AttachmentManager', () => {
         }),
       );
       expect(mockChannel.sendImage).not.toHaveBeenCalled();
+    });
+
+    it('on retry from failed state, onProgress keeps updating uploadProgress while uploading', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
+
+      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
+      mockChannel.sendImage.mockRejectedValueOnce(new Error('Upload failed'));
+
+      const local = await attachmentManager.fileToLocalUploadAttachment(file);
+      await attachmentManager.uploadAttachment(local);
+
+      const failedAttachment = attachmentManager.attachments[0];
+      expect(failedAttachment.localMetadata.uploadState).toBe('failed');
+
+      let releaseUpload!: () => void;
+      const uploadGate = new Promise<void>((resolve) => {
+        releaseUpload = resolve;
+      });
+
+      const customUploadFn = vi.fn(async (_file, options) => {
+        options?.onProgress?.(33);
+        await uploadGate;
+        return { file: 'retry-url' };
+      });
+      attachmentManager.setCustomUploadFn(customUploadFn);
+
+      const uploadPromise = attachmentManager.uploadAttachment(
+        failedAttachment as LocalUploadAttachment,
+      );
+
+      await vi.waitFor(() => {
+        expect(attachmentManager.attachments[0].localMetadata.uploadProgress).toBe(33);
+        expect(attachmentManager.attachments[0].localMetadata.uploadState).toBe(
+          'uploading',
+        );
+      });
+
+      releaseUpload();
+      await uploadPromise;
+
+      expect(customUploadFn).toHaveBeenCalledWith(
+        file,
+        expect.objectContaining({ onProgress: expect.any(Function) }),
+      );
+      expect(attachmentManager.attachments[0].localMetadata.uploadState).toBe('finished');
     });
   });
 

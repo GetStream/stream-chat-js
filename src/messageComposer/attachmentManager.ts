@@ -538,24 +538,23 @@ export class AttachmentManager {
     }
 
     const shouldTrackProgress = this.config.trackUploadProgress;
-    this.upsertAttachments([
-      {
-        ...attachment,
-        localMetadata: {
-          ...attachment.localMetadata,
-          uploadState: 'uploading',
-          ...(shouldTrackProgress && { uploadProgress: 0 }),
-        },
+    const uploadingAttachment: LocalUploadAttachment = {
+      ...attachment,
+      localMetadata: {
+        ...attachment.localMetadata,
+        uploadState: 'uploading',
+        ...(shouldTrackProgress && { uploadProgress: 0 }),
       },
-    ]);
+    };
+    this.upsertAttachments([uploadingAttachment]);
 
     const uploadOptions = shouldTrackProgress
       ? {
           onProgress: (percent: number | undefined) => {
             this.updateAttachment({
-              ...attachment,
+              ...uploadingAttachment,
               localMetadata: {
-                ...attachment.localMetadata,
+                ...uploadingAttachment.localMetadata,
                 uploadProgress: percent,
               },
             });
