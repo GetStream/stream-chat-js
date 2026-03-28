@@ -40,6 +40,7 @@ vi.mock('../../../src/utils', () => ({
   isLocalMessage: vi.fn().mockReturnValue(true),
   formatMessage: vi.fn().mockImplementation((msg) => msg),
   throttle: vi.fn().mockImplementation((fn) => fn),
+  normalizeQuerySort: vi.fn().mockReturnValue([{ field: 'created_at', direction: -1 }]),
 }));
 
 const setup = ({
@@ -105,8 +106,9 @@ describe('TextComposer', () => {
       expect(messageComposer.textComposer.state.getLatestValue()).toEqual({
         command: null,
         mentionedUsers: [],
-        text: '',
         selection: { start: 0, end: 0 },
+        text: '',
+        typing: {},
       });
     });
 
@@ -116,8 +118,9 @@ describe('TextComposer', () => {
       expect(messageComposer.textComposer.state.getLatestValue()).toEqual({
         command: null,
         mentionedUsers: [],
-        text: defaultValue,
         selection: { start: defaultValue.length, end: defaultValue.length },
+        text: defaultValue,
+        typing: {},
       });
     });
 
@@ -228,8 +231,9 @@ describe('TextComposer', () => {
       const initialState = {
         command: null,
         mentionedUsers: [],
-        text: '',
         selection: { start: 0, end: 0 },
+        text: '',
+        typing: {},
       };
       const {
         messageComposer: { textComposer },

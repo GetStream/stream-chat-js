@@ -20,6 +20,7 @@ import {
   addFileToFormData,
   axiosParamsSerializer,
   chatCodes,
+  formatMessage,
   generateChannelTempCid,
   isFunction,
   isOnline,
@@ -257,34 +258,22 @@ import { ChannelManager } from './channel_manager';
 import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
-import { StateStore } from './store';
-import type { MessageComposer } from './messageComposer';
 import type { AbstractOfflineDB } from './offline-support';
+import type {
+  MessageComposerSetupState,
+  SetInstanceConfigurationFunctions,
+} from './configuration';
+import { InstanceConfigurationService } from './configuration/InstanceConfigurationService';
+import { StateStore } from './store';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
 }
 
-type MessageComposerTearDownFunction = () => void;
-
-type MessageComposerSetupFunction = ({
-  composer,
-}: {
-  composer: MessageComposer;
-}) => void | MessageComposerTearDownFunction;
-
 export type BlockedUsersState = { userIds: string[] };
 
-export type MessageComposerSetupState = {
-  /**
-   * Each `MessageComposer` runs this function each time its signature changes or
-   * whenever you run `MessageComposer.registerSubscriptions`. Function returned
-   * from `applyModifications` will be used as a cleanup function - it will be stored
-   * and ran before new modification is applied. Cleaning up only the
-   * modified parts is the general way to go but if your setup gets a bit
-   * complicated, feel free to restore the whole composer with `MessageComposer.restore`.
-   */
-  setupFunction: MessageComposerSetupFunction | null;
+export type ChannelConfigsState = {
+  configs: Configs;
 };
 
 export class StreamChat {
@@ -307,7 +296,6 @@ export class StreamChat {
   browser: boolean;
   cleaningIntervalRef?: NodeJS.Timeout;
   clientID?: string;
-  configs: Configs;
   key: string;
   listeners: Record<string, Array<(event: Event) => void>>;
   logger: Logger;
@@ -328,7 +316,8 @@ export class StreamChat {
   preventThreadCleanup = false;
   moderation: Moderation;
   mutedChannels: ChannelMute[];
-  mutedUsers: Mute[];
+  readonly mutedUsersStore: StateStore<{ mutedUsers: Mute[] }>;
+  readonly configsStore: StateStore<ChannelConfigsState>;
   blockedUsers: StateStore<BlockedUsersState>;
   node: boolean;
   options: StreamChatOptions;
@@ -350,12 +339,7 @@ export class StreamChat {
   sdkIdentifier?: SdkIdentifier;
   deviceIdentifier?: DeviceIdentifier;
   private nextRequestAbortController: AbortController | null = null;
-  /**
-   * @private
-   */
-  _messageComposerSetupState = new StateStore<MessageComposerSetupState>({
-    setupFunction: null,
-  });
+  instanceConfigurationService = new InstanceConfigurationService();
 
   /**
    * Initialize a client
@@ -389,7 +373,12 @@ export class StreamChat {
     this.state = new ClientState({ client: this });
     // a list of channels to hide ws events from
     this.mutedChannels = [];
-    this.mutedUsers = [];
+    this.mutedUsersStore = new StateStore<{ mutedUsers: Mute[] }>({
+      mutedUsers: [],
+    });
+    this.configsStore = new StateStore<{ configs: Configs }>({
+      configs: {},
+    });
     this.blockedUsers = new StateStore<BlockedUsersState>({ userIds: [] });
 
     this.moderation = new Moderation(this);
@@ -530,6 +519,22 @@ export class StreamChat {
     this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });
   }
 
+  get mutedUsers() {
+    return this.mutedUsersStore.getLatestValue().mutedUsers;
+  }
+
+  set mutedUsers(mutedUsers: Mute[]) {
+    this.mutedUsersStore.next({ mutedUsers });
+  }
+
+  get configs() {
+    return this.configsStore.getLatestValue().configs;
+  }
+
+  set configs(configs: Configs) {
+    this.configsStore.next({ configs });
+  }
+
   /**
    * Get a client instance
    *
@@ -603,7 +608,15 @@ export class StreamChat {
   public setMessageComposerSetupFunction = (
     setupFunction: MessageComposerSetupState['setupFunction'],
   ) => {
-    this._messageComposerSetupState.partialNext({ setupFunction });
+    this.instanceConfigurationService.setSetupFunctions({
+      MessageComposer: setupFunction,
+    });
+  };
+
+  public setInstanceConfigurationFunction = (
+    setupFunctions: SetInstanceConfigurationFunctions,
+  ) => {
+    this.instanceConfigurationService.setSetupFunctions(setupFunctions);
   };
 
   /**
@@ -2026,7 +2039,9 @@ export class StreamChat {
     for (const channelState of channelsFromApi) {
       this._addChannelConfig(channelState.channel);
       const c = this.channel(channelState.channel.type, channelState.channel.id);
+      const previousData = c.data;
       c.data = channelState.channel;
+      c._syncStateFromChannelData(c.data, previousData);
       c.offlineMode = offlineMode;
       c.initialized = !offlineMode;
       c.push_preferences = channelState.push_preferences;
@@ -2056,7 +2071,19 @@ export class StreamChat {
         this.polls.hydratePollCache(channelState.messages, true);
         this.reminders.hydrateState(channelState.messages);
       }
-
+      const requestedPageSize =
+        queryChannelsOptions?.message_limit ??
+        DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE;
+      c.messagePaginator.postQueryReconcile({
+        direction: 'tailward',
+        isFirstPage: true,
+        queryShape: { limit: requestedPageSize },
+        requestedPageSize,
+        results: {
+          items: channelState.messages.map(formatMessage),
+          tailward: channelState.messages[0]?.id,
+        },
+      });
       c.messageComposer.initStateFromChannelResponse(channelState);
       c.cooldownTimer.refresh();
       channels.push(c);
@@ -2253,7 +2280,10 @@ export class StreamChat {
 
   _addChannelConfig({ cid, config }: ChannelResponse) {
     if (this._cacheEnabled()) {
-      this.configs[cid] = config;
+      this.configs = {
+        ...this.configs,
+        [cid]: config,
+      };
     }
   }
 
@@ -2403,7 +2433,9 @@ export class StreamChat {
     ) {
       const channel = this.activeChannels[cid];
       if (Object.keys(custom).length > 0) {
+        const previousData = channel.data;
         channel.data = { ...channel.data, ...custom };
+        channel._syncStateFromChannelData(channel.data, previousData);
         channel._data = { ...channel._data, ...custom };
       }
       return channel;
