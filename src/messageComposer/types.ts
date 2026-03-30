@@ -120,6 +120,8 @@ export type LocalAttachmentUploadMetadata = {
   previewUri?: string;
   uploadState: AttachmentLoadingState;
   uploadPermissionCheck?: UploadPermissionCheckResult; // added new
+  /** 0–100 while uploading when progress tracking is enabled; undefined otherwise or when indeterminate */
+  uploadProgress?: number;
 };
 
 export type LocalImageAttachmentUploadMetadata = LocalAttachmentUploadMetadata & {

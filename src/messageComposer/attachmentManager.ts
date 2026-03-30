@@ -2,6 +2,7 @@ import type {
   AttachmentManagerConfig,
   MinimumUploadRequestResult,
   UploadRequestFn,
+  UploadRequestOptions,
 } from './configuration';
 import { isLocalImageAttachment, isUploadedAttachment } from './attachmentIdentity';
 import {
@@ -445,12 +446,31 @@ export class AttachmentManager {
    * Method to perform the default upload behavior without checking for custom upload functions
    * to prevent recursive calls
    */
-  doDefaultUploadRequest = async (fileLike: FileReference | FileLike) => {
+  doDefaultUploadRequest = async (
+    fileLike: FileReference | FileLike,
+    options?: UploadRequestOptions,
+  ) => {
+    const progressHandler = options?.onProgress
+      ? (progressEvent: {
+          loaded: number;
+          total?: number;
+          lengthComputable?: boolean;
+        }) => {
+          const percent =
+            progressEvent.lengthComputable && progressEvent.total
+              ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
+              : undefined;
+          options.onProgress?.(percent);
+        }
+      : undefined;
+
     if (isFileReference(fileLike)) {
       return this.channel[isImageFile(fileLike) ? 'sendImage' : 'sendFile'](
         fileLike.uri,
         fileLike.name,
         fileLike.type,
+        undefined,
+        progressHandler ? { onUploadProgress: progressHandler } : undefined,
       );
     }
 
@@ -463,8 +483,15 @@ export class AttachmentManager {
         });
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { duration, ...result } =
-      await this.channel[isImageFile(fileLike) ? 'sendImage' : 'sendFile'](file);
+    const { duration, ...result } = await this.channel[
+      isImageFile(fileLike) ? 'sendImage' : 'sendFile'
+    ](
+      file,
+      undefined,
+      undefined,
+      undefined,
+      progressHandler ? { onUploadProgress: progressHandler } : undefined,
+    );
     return result;
   };
 
@@ -472,13 +499,16 @@ export class AttachmentManager {
    * todo: docs how to customize the image and file upload by overriding do
    */
 
-  doUploadRequest = async (fileLike: FileReference | FileLike) => {
+  doUploadRequest = async (
+    fileLike: FileReference | FileLike,
+    options?: UploadRequestOptions,
+  ) => {
     const customUploadFn = this.config.doUploadRequest;
     if (customUploadFn) {
-      return await customUploadFn(fileLike);
+      return await customUploadFn(fileLike, options);
     }
 
-    return this.doDefaultUploadRequest(fileLike);
+    return this.doDefaultUploadRequest(fileLike, options);
   };
 
   // @deprecated use attachmentManager.uploadFile(file)
@@ -507,19 +537,37 @@ export class AttachmentManager {
       return localAttachment;
     }
 
-    this.upsertAttachments([
-      {
-        ...attachment,
-        localMetadata: {
-          ...attachment.localMetadata,
-          uploadState: 'uploading',
-        },
+    const shouldTrackProgress = this.config.trackUploadProgress;
+    const uploadingAttachment: LocalUploadAttachment = {
+      ...attachment,
+      localMetadata: {
+        ...attachment.localMetadata,
+        uploadState: 'uploading',
+        ...(shouldTrackProgress && { uploadProgress: 0 }),
       },
-    ]);
+    };
+    this.upsertAttachments([uploadingAttachment]);
+
+    const uploadOptions = shouldTrackProgress
+      ? {
+          onProgress: (percent: number | undefined) => {
+            this.updateAttachment({
+              ...uploadingAttachment,
+              localMetadata: {
+                ...uploadingAttachment.localMetadata,
+                uploadProgress: percent,
+              },
+            });
+          },
+        }
+      : undefined;
 
     let response: MinimumUploadRequestResult;
     try {
-      response = await this.doUploadRequest(localAttachment.localMetadata.file);
+      response = await this.doUploadRequest(
+        localAttachment.localMetadata.file,
+        uploadOptions,
+      );
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'unknown error';
       const failedAttachment: LocalUploadAttachment = {
@@ -527,6 +575,7 @@ export class AttachmentManager {
         localMetadata: {
           ...attachment.localMetadata,
           uploadState: 'failed',
+          uploadProgress: undefined,
         },
       };
 
@@ -561,6 +610,7 @@ export class AttachmentManager {
       localMetadata: {
         ...attachment.localMetadata,
         uploadState: 'finished',
+        uploadProgress: undefined,
       },
     };
 
@@ -605,19 +655,35 @@ export class AttachmentManager {
       return preUpload.state.attachment;
     }
 
+    const shouldTrackProgress = this.config.trackUploadProgress;
     attachment = {
       ...attachment,
       localMetadata: {
         ...attachment.localMetadata,
         uploadState: 'uploading',
+        ...(shouldTrackProgress && { uploadProgress: 0 }),
       },
     };
     this.upsertAttachments([attachment]);
 
+    const uploadOptions = shouldTrackProgress
+      ? {
+          onProgress: (percent: number | undefined) => {
+            this.updateAttachment({
+              ...attachment,
+              localMetadata: {
+                ...attachment.localMetadata,
+                uploadProgress: percent,
+              },
+            });
+          },
+        }
+      : undefined;
+
     let response: MinimumUploadRequestResult | undefined;
     let error: Error | undefined;
     try {
-      response = await this.doUploadRequest(file);
+      response = await this.doUploadRequest(file, uploadOptions);
     } catch (err) {
       error = err instanceof Error ? err : undefined;
     }
@@ -630,6 +696,7 @@ export class AttachmentManager {
           localMetadata: {
             ...attachment.localMetadata,
             uploadState: error ? 'failed' : 'finished',
+            uploadProgress: undefined,
           },
         },
         error,
