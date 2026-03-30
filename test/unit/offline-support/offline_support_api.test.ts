@@ -2289,7 +2289,8 @@ describe('OfflineDBSyncManager', () => {
 
       it('resets DB if last sync was more than 30 days ago', async () => {
         const oldDate = new Date();
-        oldDate.setDate(oldDate.getDate() - 31);
+        // Use 32 days - ensures test runs even on daylight savings time changes
+        oldDate.setDate(oldDate.getDate() - 32);
         getLastSyncedAtSpy.mockResolvedValueOnce(oldDate.toString());
 
         await (syncManager as any).sync();
