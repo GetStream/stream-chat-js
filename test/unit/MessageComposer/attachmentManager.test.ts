@@ -1002,6 +1002,73 @@ describe('AttachmentManager', () => {
     });
   });
 
+  describe('waitForPendingAttachments', () => {
+    it('resolves immediately when there are no pending or uploading attachments', async () => {
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
+
+      await expect(
+        attachmentManager.waitForPendingAttachments(),
+      ).resolves.toBeUndefined();
+    });
+
+    it('resolves when in-flight uploads finish', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
+
+      let resolveUpload!: (value: { file: string; thumb_url?: string }) => void;
+      const uploadPromise = new Promise<{ file: string; thumb_url?: string }>(
+        (resolve) => {
+          resolveUpload = resolve;
+        },
+      );
+      mockChannel.sendImage.mockImplementation(() => uploadPromise);
+
+      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
+      const local = await attachmentManager.fileToLocalUploadAttachment(file);
+      void attachmentManager.uploadAttachment(local);
+
+      await vi.waitFor(() => {
+        expect(attachmentManager.uploadsInProgressCount).toBe(1);
+      });
+
+      const settled = attachmentManager.waitForPendingAttachments();
+      resolveUpload({ file: 'done-url' });
+      await expect(settled).resolves.toBeUndefined();
+      expect(attachmentManager.successfulUploadsCount).toBe(1);
+    });
+
+    it('resolves when in-flight uploads fail', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
+
+      let rejectUpload!: (err: Error) => void;
+      const uploadPromise = new Promise<never>((_, reject) => {
+        rejectUpload = reject;
+      });
+      mockChannel.sendImage.mockImplementation(() => uploadPromise);
+
+      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
+      const local = await attachmentManager.fileToLocalUploadAttachment(file);
+      const uploadWork = attachmentManager.uploadAttachment(local);
+
+      await vi.waitFor(() => {
+        expect(attachmentManager.uploadsInProgressCount).toBe(1);
+      });
+
+      const settled = attachmentManager.waitForPendingAttachments();
+      rejectUpload(new Error('upload failed'));
+      await expect(settled).resolves.toBeUndefined();
+      await uploadWork;
+      expect(attachmentManager.failedUploadsCount).toBe(1);
+    });
+  });
+
   describe('uploadAttachment', () => {
     it('should upload files successfully', async () => {
       const {

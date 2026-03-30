@@ -208,6 +208,28 @@ export class AttachmentManager {
     );
   }
 
+  /**
+   * Resolves when no attachment is still in `pending` or `uploading` (each in-flight upload has
+   * reached `finished`, `failed`, or `blocked`). Resolves immediately if there is nothing to wait for.
+   */
+  waitForPendingAttachments = (): Promise<void> => {
+    const hasPendingOrUploading = () =>
+      this.pendingUploadsCount > 0 || this.uploadsInProgressCount > 0;
+
+    if (!hasPendingOrUploading()) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      const unsubscribe = this.state.subscribe(() => {
+        if (!hasPendingOrUploading()) {
+          unsubscribe();
+          resolve();
+        }
+      });
+    });
+  };
+
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
     this.state.next(initState({ message }));
   };

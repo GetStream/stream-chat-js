@@ -258,7 +258,7 @@ import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
 import { StateStore } from './store';
-import type { MessageComposer } from './messageComposer';
+import { type MessageComposer, PendingMessagesManager } from './messageComposer';
 import type { AbstractOfflineDB } from './offline-support';
 
 function isString(x: unknown): x is string {
@@ -297,6 +297,7 @@ export class StreamChat {
   };
   threads: ThreadManager;
   polls: PollManager;
+  pendingMessages: PendingMessagesManager;
   offlineDb?: AbstractOfflineDB;
   notifications: NotificationManager;
   reminders: ReminderManager;
@@ -526,6 +527,7 @@ export class StreamChat {
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
+    this.pendingMessages = new PendingMessagesManager({ client: this });
     this.reminders = new ReminderManager({ client: this });
     this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });
   }
@@ -1014,6 +1016,7 @@ export class StreamChat {
     this.state = new ClientState({ client: this });
     // reset thread manager
     this.threads.resetState();
+    this.pendingMessages.clear();
 
     // Since we wipe all user data already, we should reset token manager as well
     closePromise

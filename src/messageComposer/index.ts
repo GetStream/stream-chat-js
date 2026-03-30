@@ -7,6 +7,7 @@ export * from './linkPreviewsManager';
 export * from './LocationComposer';
 export * from './messageComposer';
 export * from './middleware';
+export * from './pendingMessagesManager';
 export * from './pollComposer';
 export * from './textComposer';
 export * from './types';
