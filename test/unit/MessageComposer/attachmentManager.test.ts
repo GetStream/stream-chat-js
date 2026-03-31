@@ -469,6 +469,54 @@ describe('AttachmentManager', () => {
       expect(attachmentManager.state.getLatestValue()).toEqual({ attachments: [] });
     });
 
+    it('should delete uploads tracked for the current composer state', async () => {
+      const { messageComposer, mockClient } = setup();
+      const { attachmentManager } = messageComposer;
+
+      const never = vi.fn().mockImplementation(() => new Promise(() => {}));
+      void mockClient.uploadManager.startUpload({
+        uri: 'file://a',
+        messageId: messageComposer.id,
+        uploadMethod: never,
+      });
+      void mockClient.uploadManager.startUpload({
+        uri: 'file://b',
+        messageId: 'other-composer',
+        uploadMethod: never,
+      });
+
+      attachmentManager.state.next({
+        attachments: [
+          {
+            type: 'image',
+            localMetadata: {
+              id: 'att-1',
+              uploadState: 'uploading',
+              previewUri: 'file://a',
+              file: new File([''], 'a.jpg', { type: 'image/jpeg' }),
+            },
+          },
+        ],
+      });
+
+      expect(
+        mockClient.uploadManager.getUpload('file://a', messageComposer.id)?.state,
+      ).toBe('uploading');
+      expect(
+        mockClient.uploadManager.getUpload('file://b', 'other-composer')?.state,
+      ).toBe('uploading');
+
+      attachmentManager.initState();
+
+      expect(
+        mockClient.uploadManager.getUpload('file://a', messageComposer.id),
+      ).toBeUndefined();
+      expect(
+        mockClient.uploadManager.getUpload('file://b', 'other-composer')?.state,
+      ).toBe('uploading');
+      expect(attachmentManager.state.getLatestValue()).toEqual({ attachments: [] });
+    });
+
     it('should initialize with message', () => {
       const {
         messageComposer: { attachmentManager },
@@ -1170,6 +1218,7 @@ describe('AttachmentManager', () => {
         localMetadata: {
           id: 'test-id',
           file,
+          previewUri: 'test-uri',
           uploadState: 'pending',
         },
       };
@@ -1276,7 +1325,7 @@ describe('AttachmentManager', () => {
         messageComposer: { attachmentManager },
         mockChannel,
       } = setup();
-      const updateSpy = vi.spyOn(attachmentManager, 'updateAttachment');
+      const updateSpy = vi.spyOn(attachmentManager, 'upsertAttachments');
       const customUploadFn = vi.fn(async (_file, options) => {
         options?.onProgress?.(42);
         return { file: 'custom-upload-url' };
@@ -1289,6 +1338,7 @@ describe('AttachmentManager', () => {
         localMetadata: {
           id: 'test-id',
           file,
+          previewUri: 'test-uri',
           uploadState: 'pending' as const,
         },
       };
@@ -1304,9 +1354,11 @@ describe('AttachmentManager', () => {
         expect.objectContaining({ onProgress: expect.any(Function) }),
       );
       expect(updateSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          localMetadata: expect.objectContaining({ uploadProgress: 42 }),
-        }),
+        expect.arrayContaining([
+          expect.objectContaining({
+            localMetadata: expect.objectContaining({ uploadProgress: 42 }),
+          }),
+        ]),
       );
       expect(mockChannel.sendImage).not.toHaveBeenCalled();
     });

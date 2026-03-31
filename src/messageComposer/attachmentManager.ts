@@ -34,6 +34,7 @@ import type {
 import type { ChannelResponse, DraftMessage, LocalMessage } from '../types';
 import type { MessageComposer } from './messageComposer';
 import { mergeWithDiff } from '../utils/mergeWith';
+import type { UploadMethod } from '../uploadManager';
 
 export type FileUploadFilter = (file: Partial<LocalUploadAttachment>) => boolean;
 
@@ -208,7 +209,17 @@ export class AttachmentManager {
     );
   }
 
+  private deleteAttachmentsTrackedForCurrentState = () => {
+    const messageId = this.composer.id;
+    this.attachments.forEach((attachment) => {
+      const uri = attachment.localMetadata?.previewUri;
+      if (!uri) return;
+      this.client.uploadManager.removeUploadRecord({ uri, messageId });
+    });
+  };
+
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
+    this.deleteAttachmentsTrackedForCurrentState();
     this.state.next(initState({ message }));
   };
 
@@ -537,37 +548,9 @@ export class AttachmentManager {
       return localAttachment;
     }
 
-    const shouldTrackProgress = this.config.trackUploadProgress;
-    const uploadingAttachment: LocalUploadAttachment = {
-      ...attachment,
-      localMetadata: {
-        ...attachment.localMetadata,
-        uploadState: 'uploading',
-        ...(shouldTrackProgress && { uploadProgress: 0 }),
-      },
-    };
-    this.upsertAttachments([uploadingAttachment]);
-
-    const uploadOptions = shouldTrackProgress
-      ? {
-          onProgress: (percent: number | undefined) => {
-            this.updateAttachment({
-              ...uploadingAttachment,
-              localMetadata: {
-                ...uploadingAttachment.localMetadata,
-                uploadProgress: percent,
-              },
-            });
-          },
-        }
-      : undefined;
-
-    let response: MinimumUploadRequestResult;
+    let response: MinimumUploadRequestResult | undefined;
     try {
-      response = await this.doUploadRequest(
-        localAttachment.localMetadata.file,
-        uploadOptions,
-      );
+      response = await this.upload(attachment);
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'unknown error';
       const failedAttachment: LocalUploadAttachment = {
@@ -655,35 +638,10 @@ export class AttachmentManager {
       return preUpload.state.attachment;
     }
 
-    const shouldTrackProgress = this.config.trackUploadProgress;
-    attachment = {
-      ...attachment,
-      localMetadata: {
-        ...attachment.localMetadata,
-        uploadState: 'uploading',
-        ...(shouldTrackProgress && { uploadProgress: 0 }),
-      },
-    };
-    this.upsertAttachments([attachment]);
-
-    const uploadOptions = shouldTrackProgress
-      ? {
-          onProgress: (percent: number | undefined) => {
-            this.updateAttachment({
-              ...attachment,
-              localMetadata: {
-                ...attachment.localMetadata,
-                uploadProgress: percent,
-              },
-            });
-          },
-        }
-      : undefined;
-
     let response: MinimumUploadRequestResult | undefined;
     let error: Error | undefined;
     try {
-      response = await this.doUploadRequest(file, uploadOptions);
+      response = await this.upload(attachment);
     } catch (err) {
       error = err instanceof Error ? err : undefined;
     }
@@ -725,4 +683,56 @@ export class AttachmentManager {
       iterableFiles.slice(0, this.availableUploadSlots).map(this.uploadFile),
     );
   };
+
+  private upload(attachment: LocalUploadAttachment) {
+    if (!attachment.localMetadata.previewUri) {
+      throw new Error('Preview uri is required for upload');
+    }
+    const uri = attachment.localMetadata.previewUri;
+
+    const shouldTrackProgress = this.config.trackUploadProgress;
+    const uploadMethod: UploadMethod = (options?: UploadRequestOptions) =>
+      this.doUploadRequest(attachment.localMetadata.file, options);
+
+    const promise = new Promise<MinimumUploadRequestResult>((resolve, reject) => {
+      const unsubscribe = this.client.uploadManager.state.subscribeWithSelector(
+        (s) => ({ upload: s.uploads.find((u) => u.uri === uri) }),
+        ({ upload: nextUpload }) => {
+          if (!nextUpload) return;
+          if (nextUpload?.state === 'uploading') {
+            this.upsertAttachments([
+              {
+                ...attachment,
+                localMetadata: {
+                  ...attachment.localMetadata,
+                  uploadState: 'uploading',
+                  uploadProgress: nextUpload.uploadProgress,
+                },
+              },
+            ]);
+          } else {
+            if (nextUpload?.state === 'finished') {
+              resolve(nextUpload.response as MinimumUploadRequestResult);
+            } else {
+              reject(nextUpload?.error);
+            }
+            unsubscribe();
+            this.client.uploadManager.removeUploadRecord({
+              uri,
+              messageId: this.composer.id,
+            });
+          }
+        },
+      );
+    });
+
+    this.client.uploadManager.startUpload({
+      uri,
+      shouldTrackProgress,
+      messageId: this.composer.id,
+      uploadMethod,
+    });
+
+    return promise;
+  }
 }

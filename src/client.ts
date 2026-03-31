@@ -9,6 +9,7 @@ import type WebSocket from 'isomorphic-ws';
 import { Channel } from './channel';
 import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
+import { UploadManager } from './uploadManager';
 import { CheckSignature, DevToken, JWTUserToken } from './signing';
 import { TokenManager } from './token_manager';
 import { WSConnectionFallback } from './connection_fallback';
@@ -290,6 +291,7 @@ export type MessageComposerSetupState = {
 export class StreamChat {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
   messageDeliveryReporter: MessageDeliveryReporter;
+  uploadManager: UploadManager;
   _user?: OwnUserResponse | UserResponse;
   appSettingsPromise?: Promise<AppSettingsAPIResponse>;
   activeChannels: {
@@ -395,6 +397,7 @@ export class StreamChat {
     this.moderation = new Moderation(this);
 
     this.notifications = options?.notifications ?? new NotificationManager();
+    this.uploadManager = new UploadManager();
 
     // set the secret
     if (secretOrOptions && isString(secretOrOptions)) {

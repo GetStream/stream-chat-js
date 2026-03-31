@@ -201,7 +201,10 @@ export class MessageComposer extends WithSubscriptions {
       message = formatMessage(composition);
     }
 
-    this.attachmentManager = new AttachmentManager({ composer: this, message });
+    this.attachmentManager = new AttachmentManager({
+      composer: this,
+      message,
+    });
     this.linkPreviewsManager = new LinkPreviewsManager({ composer: this, message });
     this.locationComposer = new LocationComposer({ composer: this, message });
     this.textComposer = new TextComposer({ composer: this, message });
