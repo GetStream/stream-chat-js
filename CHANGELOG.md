@@ -1,3 +1,9 @@
+## [9.39.0](https://github.com/GetStream/stream-chat-js/compare/v9.38.0...v9.39.0) (2026-03-31)
+
+### Features
+
+* [CHA-2563] add retention policy endpoints ([#1713](https://github.com/GetStream/stream-chat-js/issues/1713)) ([18da9ed](https://github.com/GetStream/stream-chat-js/commit/18da9ed593bdb3e24a586c5b1a47baa565851161))
+
 ## [9.38.0](https://github.com/GetStream/stream-chat-js/compare/v9.37.0...v9.38.0) (2026-03-17)
 
 ### Features
