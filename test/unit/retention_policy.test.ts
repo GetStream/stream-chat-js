@@ -87,7 +87,10 @@ describe('Retention Policy Runs', () => {
 
       const options: GetRetentionPolicyRunsOptions = {
         filter_conditions: {
-          date: { $gte: '2026-03-01', $lte: '2026-03-31' },
+          $and: [
+            { date: { $gte: '2026-03-01T00:00:00Z' } },
+            { date: { $lte: '2026-03-31T00:00:00Z' } },
+          ],
         },
       };
 
@@ -95,7 +98,10 @@ describe('Retention Policy Runs', () => {
 
       expect(postSpy).toHaveBeenCalledWith(`${client.baseURL}/retention_policy/runs`, {
         filter_conditions: {
-          date: { $gte: '2026-03-01', $lte: '2026-03-31' },
+          $and: [
+            { date: { $gte: '2026-03-01T00:00:00Z' } },
+            { date: { $lte: '2026-03-31T00:00:00Z' } },
+          ],
         },
       });
       expect(result.runs).toHaveLength(1);
