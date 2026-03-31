@@ -83,6 +83,7 @@ import type {
   DeleteChannelsResponse,
   DeleteCommandResponse,
   DeleteMessageOptions,
+  DeleteRetentionPolicyResponse,
   DeleteUserOptions,
   Device,
   DeviceIdentifier,
@@ -118,6 +119,9 @@ import type {
   GetPollAPIResponse,
   GetPollOptionAPIResponse,
   GetRateLimitsResponse,
+  GetRetentionPolicyResponse,
+  GetRetentionPolicyRunsOptions,
+  GetRetentionPolicyRunsResponse,
   GetThreadAPIResponse,
   GetThreadOptions,
   GetUnreadCountAPIResponse,
@@ -205,6 +209,7 @@ import type {
   SegmentTargetsResponse,
   SegmentType,
   SendFileAPIResponse,
+  SetRetentionPolicyResponse,
   SharedLocationResponse,
   SortParam,
   StreamChatOptions,
@@ -4984,6 +4989,64 @@ export class StreamChat {
         ...paginationOptions,
         ...(sort ? { sort: JSON.stringify(sort) } : {}),
       },
+    );
+  }
+
+  /**
+   * setRetentionPolicy - Creates or updates a retention policy for the app.
+   * Server-side only.
+   *
+   * @param {string} policy The policy type ('old-messages' or 'inactive-channels')
+   * @param {number} maxAgeHours Max age in hours (24-43800)
+   * @returns {Promise<SetRetentionPolicyResponse>}
+   */
+  async setRetentionPolicy(policy: string, maxAgeHours: number) {
+    this.validateServerSideAuth();
+    return await this.post<SetRetentionPolicyResponse>(
+      this.baseURL + '/retention_policy',
+      { policy, max_age_hours: maxAgeHours },
+    );
+  }
+
+  /**
+   * deleteRetentionPolicy - Deletes a retention policy for the app.
+   * Server-side only.
+   *
+   * @param {string} policy The policy type ('old-messages' or 'inactive-channels')
+   * @returns {Promise<DeleteRetentionPolicyResponse>}
+   */
+  async deleteRetentionPolicy(policy: string) {
+    this.validateServerSideAuth();
+    return await this.post<DeleteRetentionPolicyResponse>(
+      this.baseURL + '/retention_policy/delete',
+      { policy },
+    );
+  }
+
+  /**
+   * getRetentionPolicy - Returns all retention policies configured for the app.
+   * Server-side only.
+   *
+   * @returns {Promise<GetRetentionPolicyResponse>}
+   */
+  async getRetentionPolicy() {
+    this.validateServerSideAuth();
+    return await this.get<GetRetentionPolicyResponse>(this.baseURL + '/retention_policy');
+  }
+
+  /**
+   * getRetentionPolicyRuns - Returns filtered and sorted retention cleanup run history.
+   * Supports filter_conditions on 'policy' and 'date' fields.
+   * Server-side only.
+   *
+   * @param {GetRetentionPolicyRunsOptions} options Filter, sort, and pagination options
+   * @returns {Promise<GetRetentionPolicyRunsResponse>}
+   */
+  async getRetentionPolicyRuns(options: GetRetentionPolicyRunsOptions = {}) {
+    this.validateServerSideAuth();
+    return await this.post<GetRetentionPolicyRunsResponse>(
+      this.baseURL + '/retention_policy/runs',
+      options,
     );
   }
 }

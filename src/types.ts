@@ -4891,3 +4891,50 @@ export type QueryTeamUsageStatsResponse = APIResponse & {
   /** Cursor for pagination to fetch next page */
   next?: string;
 };
+
+export type RetentionPolicyConfig = {
+  max_age_hours: number;
+};
+
+export type RetentionPolicy = {
+  app_pk: number;
+  policy: string;
+  config: RetentionPolicyConfig;
+  enabled_at: string;
+};
+
+export type SetRetentionPolicyResponse = APIResponse & {
+  policy: RetentionPolicy;
+};
+
+export type DeleteRetentionPolicyResponse = APIResponse;
+
+export type GetRetentionPolicyResponse = APIResponse & {
+  policies: RetentionPolicy[];
+};
+
+export type RetentionRunStats = {
+  channels_deleted?: number;
+  messages_deleted?: number;
+};
+
+export type RetentionRunResponse = {
+  app_pk: number;
+  policy: string;
+  date: string;
+  stats: RetentionRunStats;
+};
+
+export type GetRetentionPolicyRunsOptions = {
+  filter_conditions?: Record<string, unknown>;
+  sort?: Array<{ field: string; direction: 1 | -1 }>;
+  next?: string;
+  prev?: string;
+  limit?: number;
+};
+
+export type GetRetentionPolicyRunsResponse = APIResponse & {
+  runs: RetentionRunResponse[];
+  next?: string;
+  prev?: string;
+};
