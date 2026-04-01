@@ -73,6 +73,15 @@ export class UploadManager {
     );
 
   /**
+   * Clears all upload records and in-memory upload handles.
+   * Invoked when the user disconnects so a later session does not inherit stale upload state.
+   */
+  reset = () => {
+    this.state.next(initState());
+    this.uploadMethods.clear();
+  };
+
+  /**
    * Removes every upload record matching `predicate` and drops associated retry handles.
    */
   deleteUploadRecords = (predicate: (upload: UploadRecord) => boolean) => {

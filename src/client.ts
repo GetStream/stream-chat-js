@@ -1017,6 +1017,7 @@ export class StreamChat {
     this.state = new ClientState({ client: this });
     // reset thread manager
     this.threads.resetState();
+    this.uploadManager.reset();
 
     // Since we wipe all user data already, we should reset token manager as well
     closePromise

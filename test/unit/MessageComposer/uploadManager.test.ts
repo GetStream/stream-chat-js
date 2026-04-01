@@ -109,6 +109,22 @@ describe('UploadManager', () => {
     expect(uploadMethod).toHaveBeenCalledTimes(2);
   });
 
+  it('reset clears all records and drops retry handles', async () => {
+    const manager = new UploadManager();
+    const err = new Error('fail');
+    const uploadMethod = vi
+      .fn()
+      .mockRejectedValueOnce(err)
+      .mockResolvedValueOnce(undefined);
+
+    await manager.startUpload({ uri: 'u', messageId: 'm1', uploadMethod });
+    manager.reset();
+
+    expect(manager.uploads).toEqual([]);
+    await manager.retryUpload({ uri: 'u', messageId: 'm1' });
+    expect(uploadMethod).toHaveBeenCalledTimes(1);
+  });
+
   it('dedupes startUpload: existing uri prevents starting a second upload', async () => {
     const manager = new UploadManager();
     let resolve!: () => void;
