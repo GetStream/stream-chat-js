@@ -49,7 +49,6 @@ const upsertByLocalId = (
 
 export class UploadManager {
   readonly state: StateStore<UploadManagerState>;
-  private uploadMethods = new Map<string, UploadMethod>();
 
   constructor() {
     this.state = new StateStore<UploadManagerState>(initState());
@@ -62,31 +61,22 @@ export class UploadManager {
   getUpload = (localId: string) => this.uploads.find((u) => u.localId === localId);
 
   /**
-   * Clears all upload records and in-memory upload handles.
+   * Clears all upload records.
    * Invoked when the user disconnects so a later session does not inherit stale upload state.
    */
   reset = () => {
     this.state.next(initState());
-    this.uploadMethods.clear();
   };
 
   /**
-   * Removes every upload record matching `predicate` and drops associated retry handles.
+   * Removes every upload record matching `predicate`.
    */
   deleteUploadRecords = (predicate: (upload: UploadRecord) => boolean) => {
-    const removed: UploadRecord[] = [];
     this.state.next((current) => {
-      const nextUploads: UploadRecord[] = [];
-      for (const u of current.uploads) {
-        if (predicate(u)) removed.push(u);
-        else nextUploads.push(u);
-      }
-      if (removed.length === 0) return current;
+      const nextUploads = current.uploads.filter((u) => !predicate(u));
+      if (nextUploads.length === current.uploads.length) return current;
       return { ...current, uploads: nextUploads };
     });
-    for (const u of removed) {
-      this.uploadMethods.delete(u.localId);
-    }
   };
 
   private upsertUpload = (record: UploadRecord) => {
@@ -108,6 +98,10 @@ export class UploadManager {
     });
   };
 
+  /**
+   * When an upload with the same `localId` is already in progress (`uploading`), this call is ignored
+   * (no second upload is started).
+   */
   upload = async ({
     uri,
     localId,
@@ -123,8 +117,6 @@ export class UploadManager {
     // If previous state is failed, allow a new upload to re-attempt.
     const existing = this.getUpload(localId);
     if (existing?.state === 'uploading') return;
-
-    this.uploadMethods.set(localId, uploadMethod);
 
     const trackProgress = shouldTrackProgress ?? true;
     this.upsertUpload({
@@ -163,35 +155,6 @@ export class UploadManager {
     }
 
     this.finalizeSuccess(uri, localId, response);
-  };
-
-  /**
-   * Retries every failed upload for which `predicate` returns true.
-   *
-   * @throws If any matching failed upload has no stored upload method (inconsistent internal state).
-   */
-  retryFailedUploads = async (
-    predicate: (upload: UploadRecord) => boolean,
-  ): Promise<void> => {
-    const { uploads } = this.state.getLatestValue();
-    const targets = uploads.filter((u) => u.state === 'failed' && predicate(u));
-
-    const withMethods: { upload: UploadRecord; uploadMethod: UploadMethod }[] = [];
-    for (const u of targets) {
-      const uploadMethod = this.uploadMethods.get(u.localId);
-      if (!uploadMethod) {
-        throw new Error(
-          `UploadManager.retryFailedUploads: missing upload method for uri="${u.uri}" localId="${u.localId}"`,
-        );
-      }
-      withMethods.push({ upload: u, uploadMethod });
-    }
-
-    await Promise.all(
-      withMethods.map(({ upload: u, uploadMethod }) =>
-        this.upload({ uri: u.uri, localId: u.localId, uploadMethod }),
-      ),
-    );
   };
 
   /**
