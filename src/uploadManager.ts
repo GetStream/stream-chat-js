@@ -51,7 +51,7 @@ const upsertByUriAndMessageId = (
   return next;
 };
 
-const removeByUriAndMessageId = (
+const deleteByUriAndMessageId = (
   uploads: UploadRecord[],
   { uri, messageId }: { uri: string; messageId?: string },
 ): UploadRecord[] =>
@@ -80,9 +80,9 @@ export class UploadManager {
         u.uri === uri && (messageId !== undefined ? u.messageId === messageId : true),
     );
 
-  removeUploadRecord = ({ uri, messageId }: { uri: string; messageId?: string }) => {
+  deleteUploadRecord = ({ uri, messageId }: { uri: string; messageId?: string }) => {
     this.state.next((current) => {
-      const nextUploads = removeByUriAndMessageId(current.uploads, { uri, messageId });
+      const nextUploads = deleteByUriAndMessageId(current.uploads, { uri, messageId });
       return nextUploads === current.uploads
         ? current
         : {

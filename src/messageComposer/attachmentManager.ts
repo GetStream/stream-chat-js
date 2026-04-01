@@ -214,7 +214,7 @@ export class AttachmentManager {
     this.attachments.forEach((attachment) => {
       const uri = attachment.localMetadata?.previewUri;
       if (!uri) return;
-      this.client.uploadManager.removeUploadRecord({ uri, messageId });
+      this.client.uploadManager.deleteUploadRecord({ uri, messageId });
     });
   };
 
@@ -719,7 +719,7 @@ export class AttachmentManager {
               reject(nextUpload?.error);
             }
             unsubscribe();
-            this.client.uploadManager.removeUploadRecord({
+            this.client.uploadManager.deleteUploadRecord({
               uri,
               messageId: this.composer.id,
             });
