@@ -176,20 +176,33 @@ export class UploadManager {
     this.finalizeSuccess(uri, response, messageId);
   };
 
-  retryUpload = async ({
-    uri,
-    messageId,
-  }: {
-    uri: string;
-    messageId?: string;
-  }): Promise<void> => {
-    const current = this.getUpload(uri, messageId);
-    if (!current || current.state !== 'failed') return;
+  /**
+   * Retries every failed upload for which `predicate` returns true.
+   *
+   * @throws If any matching failed upload has no stored upload method (inconsistent internal state).
+   */
+  retryUploads = async (predicate: (upload: UploadRecord) => boolean): Promise<void> => {
+    const { uploads } = this.state.getLatestValue();
+    const targets = uploads.filter((u) => u.state === 'failed' && predicate(u));
 
-    const uploadMethod = this.uploadMethods.get(makeUploadMethodKey({ uri, messageId }));
-    if (!uploadMethod) return;
+    const withMethods: { upload: UploadRecord; uploadMethod: UploadMethod }[] = [];
+    for (const u of targets) {
+      const key = makeUploadMethodKey({ uri: u.uri, messageId: u.messageId });
+      const uploadMethod = this.uploadMethods.get(key);
+      if (!uploadMethod) {
+        const id = u.messageId !== undefined ? ` messageId="${u.messageId}"` : '';
+        throw new Error(
+          `UploadManager.retryUploads: missing upload method for uri="${u.uri}"${id}`,
+        );
+      }
+      withMethods.push({ upload: u, uploadMethod });
+    }
 
-    await this.startUpload({ uri, messageId, uploadMethod });
+    await Promise.all(
+      withMethods.map(({ upload: u, uploadMethod }) =>
+        this.startUpload({ uri: u.uri, messageId: u.messageId, uploadMethod }),
+      ),
+    );
   };
 
   /**
