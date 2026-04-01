@@ -518,6 +518,26 @@ describe('AttachmentManager', () => {
       expect(attachmentManager.state.getLatestValue()).toEqual({ attachments: [] });
     });
 
+    it('should delete upload records for the composer even when no attachment references the uri', async () => {
+      const { messageComposer, mockClient } = setup();
+      const { attachmentManager } = messageComposer;
+
+      const never = vi.fn().mockImplementation(() => new Promise(() => {}));
+      void mockClient.uploadManager.startUpload({
+        uri: 'file://orphan',
+        messageId: messageComposer.id,
+        uploadMethod: never,
+      });
+
+      attachmentManager.state.next({ attachments: [] });
+
+      attachmentManager.initState();
+
+      expect(
+        mockClient.uploadManager.getUpload('file://orphan', messageComposer.id),
+      ).toBeUndefined();
+    });
+
     it('should initialize with message', () => {
       const {
         messageComposer: { attachmentManager },

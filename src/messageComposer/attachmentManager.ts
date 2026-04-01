@@ -211,11 +211,9 @@ export class AttachmentManager {
 
   private deleteUploadRecords = () => {
     const messageId = this.composer.id;
-    this.attachments.forEach((attachment) => {
-      const uri = attachment.localMetadata?.previewUri;
-      if (!uri) return;
-      this.client.uploadManager.deleteUploadRecord({ uri, messageId });
-    });
+    this.client.uploadManager.deleteUploadRecords(
+      (upload) => upload.messageId === messageId,
+    );
   };
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
@@ -719,10 +717,10 @@ export class AttachmentManager {
               reject(nextUpload?.error);
             }
             unsubscribe();
-            this.client.uploadManager.deleteUploadRecord({
-              uri,
-              messageId: this.composer.id,
-            });
+            const messageId = this.composer.id;
+            this.client.uploadManager.deleteUploadRecords(
+              (u) => u.uri === uri && u.messageId === messageId,
+            );
           }
         },
       );

@@ -169,6 +169,52 @@ describe('UploadManager', () => {
     unsub();
   });
 
+  describe('deleteUploadRecords', () => {
+    it('removes matching records and leaves others', async () => {
+      const manager = new UploadManager();
+      const uploadA = vi.fn().mockResolvedValue(undefined);
+      const uploadB = vi.fn().mockResolvedValue(undefined);
+
+      await manager.startUpload({ uri: 'a', messageId: 'm1', uploadMethod: uploadA });
+      await manager.startUpload({ uri: 'b', messageId: 'm2', uploadMethod: uploadB });
+
+      expect(manager.getUpload('a', 'm1')?.state).toBe('finished');
+      expect(manager.getUpload('b', 'm2')?.state).toBe('finished');
+
+      manager.deleteUploadRecords((u) => u.messageId === 'm1');
+
+      expect(manager.getUpload('a', 'm1')).toBeUndefined();
+      expect(manager.getUpload('b', 'm2')?.state).toBe('finished');
+    });
+
+    it('clears upload method keys so retryUpload is a no-op for removed failed uploads', async () => {
+      const manager = new UploadManager();
+      const err = new Error('fail');
+      const uploadMethod = vi
+        .fn()
+        .mockRejectedValueOnce(err)
+        .mockResolvedValueOnce(undefined);
+
+      await manager.startUpload({ uri: 'u', messageId: 'm1', uploadMethod });
+      expect(manager.getUpload('u', 'm1')?.state).toBe('failed');
+
+      manager.deleteUploadRecords((u) => u.messageId === 'm1');
+
+      await manager.retryUpload({ uri: 'u', messageId: 'm1' });
+      expect(uploadMethod).toHaveBeenCalledTimes(1);
+    });
+
+    it('is a no-op when nothing matches', () => {
+      const manager = new UploadManager();
+      const uploadMethod = vi.fn().mockResolvedValue(undefined);
+      void manager.startUpload({ uri: 'u', messageId: 'm1', uploadMethod });
+
+      manager.deleteUploadRecords(() => false);
+
+      expect(manager.getUpload('u', 'm1')?.state).toBe('uploading');
+    });
+  });
+
   describe('waitForUploads', () => {
     it('resolves immediately when no uploads match the predicate', async () => {
       const manager = new UploadManager();

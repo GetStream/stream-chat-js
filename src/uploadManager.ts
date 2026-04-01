@@ -51,14 +51,6 @@ const upsertByUriAndMessageId = (
   return next;
 };
 
-const deleteByUriAndMessageId = (
-  uploads: UploadRecord[],
-  { uri, messageId }: { uri: string; messageId?: string },
-): UploadRecord[] =>
-  uploads.filter(
-    (u) => u.uri !== uri || (messageId !== undefined ? u.messageId !== messageId : false),
-  );
-
 const makeUploadMethodKey = ({ uri, messageId }: { uri: string; messageId?: string }) =>
   messageId ? `${messageId}::${uri}` : uri;
 
@@ -80,17 +72,25 @@ export class UploadManager {
         u.uri === uri && (messageId !== undefined ? u.messageId === messageId : true),
     );
 
-  deleteUploadRecord = ({ uri, messageId }: { uri: string; messageId?: string }) => {
+  /**
+   * Removes every upload record matching `predicate` and drops associated retry handles.
+   */
+  deleteUploadRecords = (predicate: (upload: UploadRecord) => boolean) => {
+    const removed: UploadRecord[] = [];
     this.state.next((current) => {
-      const nextUploads = deleteByUriAndMessageId(current.uploads, { uri, messageId });
-      return nextUploads === current.uploads
-        ? current
-        : {
-            ...current,
-            uploads: nextUploads,
-          };
+      const nextUploads: UploadRecord[] = [];
+      for (const u of current.uploads) {
+        if (predicate(u)) removed.push(u);
+        else nextUploads.push(u);
+      }
+      if (removed.length === 0) return current;
+      return { ...current, uploads: nextUploads };
     });
-    this.uploadMethods.delete(makeUploadMethodKey({ uri, messageId }));
+    for (const u of removed) {
+      this.uploadMethods.delete(
+        makeUploadMethodKey({ uri: u.uri, messageId: u.messageId }),
+      );
+    }
   };
 
   private upsertUpload = (record: UploadRecord) => {
