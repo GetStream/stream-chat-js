@@ -476,13 +476,11 @@ describe('AttachmentManager', () => {
 
       const never = vi.fn().mockImplementation(() => new Promise(() => {}));
       void mockClient.uploadManager.upload({
-        uri: 'file://a',
-        localId: 'att-1',
+        id: 'att-1',
         uploadMethod: never,
       });
       void mockClient.uploadManager.upload({
-        uri: 'file://b',
-        localId: 'other-att',
+        id: 'other-att',
         uploadMethod: never,
       });
 
@@ -516,8 +514,7 @@ describe('AttachmentManager', () => {
 
       const never = vi.fn().mockImplementation(() => new Promise(() => {}));
       void mockClient.uploadManager.upload({
-        uri: 'file://orphan',
-        localId: 'orphan-local',
+        id: 'orphan-local',
         uploadMethod: never,
       });
 
@@ -699,8 +696,7 @@ describe('AttachmentManager', () => {
       attachmentManager.upsertAttachments([attachment]);
 
       void mockClient.uploadManager.upload({
-        uri: previewUri,
-        localId: 'att-with-upload',
+        id: 'att-with-upload',
         shouldTrackProgress: false,
         uploadMethod: () => new Promise(() => {}),
       });
@@ -708,13 +704,13 @@ describe('AttachmentManager', () => {
       await Promise.resolve();
 
       expect(
-        mockClient.uploadManager.uploads.some((u) => u.localId === 'att-with-upload'),
+        mockClient.uploadManager.uploads.some((u) => u.id === 'att-with-upload'),
       ).toBe(true);
 
       attachmentManager.removeAttachments(['att-with-upload']);
 
       expect(
-        mockClient.uploadManager.uploads.some((u) => u.localId === 'att-with-upload'),
+        mockClient.uploadManager.uploads.some((u) => u.id === 'att-with-upload'),
       ).toBe(false);
       expect(attachmentManager.attachments).toEqual([]);
     });
@@ -728,8 +724,7 @@ describe('AttachmentManager', () => {
       const previewUri = 'blob:other-composer-uri';
 
       void mockClient.uploadManager.upload({
-        uri: previewUri,
-        localId: 'other-composer-attachment',
+        id: 'other-composer-attachment',
         shouldTrackProgress: false,
         uploadMethod: () => new Promise(() => {}),
       });
@@ -756,7 +751,7 @@ describe('AttachmentManager', () => {
 
       expect(
         mockClient.uploadManager.uploads.some(
-          (u) => u.localId === 'other-composer-attachment',
+          (u) => u.id === 'other-composer-attachment',
         ),
       ).toBe(true);
     });

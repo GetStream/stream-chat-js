@@ -216,7 +216,7 @@ export class AttachmentManager {
         .filter((id): id is string => Boolean(id)),
     );
     if (ids.size === 0) return;
-    this.client.uploadManager.deleteUploadRecords((upload) => ids.has(upload.localId));
+    this.client.uploadManager.deleteUploadRecords((upload) => ids.has(upload.id));
   };
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
@@ -287,7 +287,7 @@ export class AttachmentManager {
     if (!localAttachmentIds.length) return;
 
     const idsSet = new Set(localAttachmentIds);
-    this.client.uploadManager.deleteUploadRecords((upload) => idsSet.has(upload.localId));
+    this.client.uploadManager.deleteUploadRecords((upload) => idsSet.has(upload.id));
 
     this.state.partialNext({
       attachments: this.attachments.filter(
@@ -696,7 +696,6 @@ export class AttachmentManager {
     if (!attachment.localMetadata.previewUri) {
       throw new Error('Preview uri is required for upload');
     }
-    const uri = attachment.localMetadata.previewUri;
 
     const shouldTrackProgress = this.config.trackUploadProgress;
     const uploadMethod: UploadMethod = (options?: UploadRequestOptions) =>
@@ -706,7 +705,7 @@ export class AttachmentManager {
 
     const promise = new Promise<MinimumUploadRequestResult>((resolve, reject) => {
       const unsubscribe = this.client.uploadManager.state.subscribeWithSelector(
-        (s) => ({ upload: s.uploads.find((u) => u.localId === localId) }),
+        (s) => ({ upload: s.uploads.find((u) => u.id === localId) }),
         ({ upload: nextUpload }) => {
           if (!nextUpload) return;
           if (nextUpload?.state === 'uploading') {
@@ -727,15 +726,14 @@ export class AttachmentManager {
               reject(nextUpload?.error);
             }
             unsubscribe();
-            this.client.uploadManager.deleteUploadRecords((u) => u.localId === localId);
+            this.client.uploadManager.deleteUploadRecords((u) => u.id === localId);
           }
         },
       );
     });
 
     this.client.uploadManager.upload({
-      uri,
-      localId,
+      id: localId,
       shouldTrackProgress,
       uploadMethod,
     });

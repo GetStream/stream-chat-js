@@ -2,23 +2,20 @@ import { StateStore } from './store';
 
 export type UploadRecord =
   | {
-      uri: string;
-      localId: string;
+      id: string;
       state: 'uploading';
       uploadProgress?: number;
       error: undefined;
     }
   | {
-      uri: string;
-      localId: string;
+      id: string;
       state: 'finished';
       response: unknown;
       uploadProgress: undefined;
       error: undefined;
     }
   | {
-      uri: string;
-      localId: string;
+      id: string;
       state: 'failed';
       error: unknown;
       uploadProgress: undefined;
@@ -34,11 +31,8 @@ export type UploadManagerState = {
 
 const initState = (): UploadManagerState => ({ uploads: [] });
 
-const upsertByLocalId = (
-  uploads: UploadRecord[],
-  record: UploadRecord,
-): UploadRecord[] => {
-  const idx = uploads.findIndex((u) => u.localId === record.localId);
+const upsertById = (uploads: UploadRecord[], record: UploadRecord): UploadRecord[] => {
+  const idx = uploads.findIndex((u) => u.id === record.id);
   if (idx === -1) return [...uploads, record];
   const current = uploads[idx];
   if (current === record) return uploads;
@@ -58,7 +52,7 @@ export class UploadManager {
     return this.state.getLatestValue().uploads;
   }
 
-  getUpload = (localId: string) => this.uploads.find((u) => u.localId === localId);
+  getUpload = (id: string) => this.uploads.find((u) => u.id === id);
 
   /**
    * Clears all upload records.
@@ -82,15 +76,14 @@ export class UploadManager {
   private upsertUpload = (record: UploadRecord) => {
     this.state.next((current) => ({
       ...current,
-      uploads: upsertByLocalId(current.uploads, record),
+      uploads: upsertById(current.uploads, record),
     }));
   };
 
-  private finalizeSuccess = (uri: string, localId: string, response: unknown) => {
+  private finalizeSuccess = (id: string, response: unknown) => {
     // Mark finished then clear on the next state update.
     this.upsertUpload({
-      uri,
-      localId,
+      id,
       state: 'finished',
       uploadProgress: undefined,
       error: undefined,
@@ -99,29 +92,26 @@ export class UploadManager {
   };
 
   /**
-   * When an upload with the same `localId` is already in progress (`uploading`), this call is ignored
+   * When an upload with the same `id` is already in progress (`uploading`), this call is ignored
    * (no second upload is started).
    */
   upload = async ({
-    uri,
-    localId,
+    id,
     shouldTrackProgress,
     uploadMethod,
   }: {
-    uri: string;
-    localId: string;
+    id: string;
     shouldTrackProgress?: boolean;
     uploadMethod: UploadMethod;
   }): Promise<void> => {
     // De-duplication: do not start a second upload while uploading.
     // If previous state is failed, allow a new upload to re-attempt.
-    const existing = this.getUpload(localId);
+    const existing = this.getUpload(id);
     if (existing?.state === 'uploading') return;
 
     const trackProgress = shouldTrackProgress ?? true;
     this.upsertUpload({
-      uri,
-      localId,
+      id,
       state: 'uploading',
       uploadProgress: trackProgress ? 0 : undefined,
       error: undefined,
@@ -130,8 +120,7 @@ export class UploadManager {
     const onProgress = trackProgress
       ? (progress?: number) => {
           this.upsertUpload({
-            uri,
-            localId,
+            id,
             state: 'uploading',
             uploadProgress: progress,
             error: undefined,
@@ -144,8 +133,7 @@ export class UploadManager {
       response = await uploadMethod(onProgress ? { onProgress } : undefined);
     } catch (error) {
       this.upsertUpload({
-        uri,
-        localId,
+        id,
         state: 'failed',
         uploadProgress: undefined,
         error,
@@ -154,7 +142,7 @@ export class UploadManager {
       return;
     }
 
-    this.finalizeSuccess(uri, localId, response);
+    this.finalizeSuccess(id, response);
   };
 
   /**

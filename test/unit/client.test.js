@@ -351,7 +351,7 @@ describe('Client disconnectUser', () => {
 		client.uploadManager.state.next(() => ({
 			uploads: [
 				{
-					uri: 'file://x',
+					id: 'upload-x',
 					state: 'uploading',
 					uploadProgress: 0,
 					error: undefined,
