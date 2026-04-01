@@ -81,21 +81,21 @@ describe('UploadManager', () => {
     });
   });
 
-  it('retryUploads is a no-op when state is not failed', async () => {
+  it('retryFailedUploads is a no-op when state is not failed', async () => {
     const manager = new UploadManager();
     const uploadMethod = vi.fn().mockResolvedValue(undefined);
 
-    await manager.retryUploads(() => true);
+    await manager.retryFailedUploads(() => true);
     expect(uploadMethod).not.toHaveBeenCalled();
 
     // Start creates record; retry during uploading should no-op
     const never = vi.fn().mockImplementation(() => new Promise(() => {}));
     void manager.upload({ uri: 'u2', localId: 'u2', uploadMethod: never });
-    await manager.retryUploads((u) => u.localId === 'u2');
+    await manager.retryFailedUploads((u) => u.localId === 'u2');
     expect(uploadMethod).not.toHaveBeenCalled();
   });
 
-  it('retryUploads restarts only failed uploads that match the predicate', async () => {
+  it('retryFailedUploads restarts only failed uploads that match the predicate', async () => {
     const manager = new UploadManager();
     const err = new Error('fail');
     const uploadMethod = vi
@@ -106,12 +106,12 @@ describe('UploadManager', () => {
     await manager.upload({ uri: 'u', localId: 'u1', uploadMethod });
     expect(manager.getUpload('u1')?.state).toBe('failed');
 
-    await manager.retryUploads((u) => u.localId === 'u1');
+    await manager.retryFailedUploads((u) => u.localId === 'u1');
 
     expect(uploadMethod).toHaveBeenCalledTimes(2);
   });
 
-  it('retryUploads retries every matching failed upload in parallel', async () => {
+  it('retryFailedUploads retries every matching failed upload in parallel', async () => {
     const manager = new UploadManager();
     const err = new Error('fail');
     const uploadA = vi.fn().mockRejectedValueOnce(err).mockResolvedValueOnce(undefined);
@@ -120,7 +120,7 @@ describe('UploadManager', () => {
     await manager.upload({ uri: 'a', localId: 'm1', uploadMethod: uploadA });
     await manager.upload({ uri: 'b', localId: 'm2', uploadMethod: uploadB });
 
-    await manager.retryUploads((u) => u.localId === 'm1' || u.localId === 'm2');
+    await manager.retryFailedUploads((u) => u.localId === 'm1' || u.localId === 'm2');
 
     expect(uploadA).toHaveBeenCalledTimes(2);
     expect(uploadB).toHaveBeenCalledTimes(2);
@@ -138,7 +138,7 @@ describe('UploadManager', () => {
     manager.reset();
 
     expect(manager.uploads).toEqual([]);
-    await manager.retryUploads((u) => u.uri === 'u' && u.localId === 'm1');
+    await manager.retryFailedUploads((u) => u.uri === 'u' && u.localId === 'm1');
     expect(uploadMethod).toHaveBeenCalledTimes(1);
   });
 
@@ -219,7 +219,7 @@ describe('UploadManager', () => {
       expect(manager.getUpload('m2')?.state).toBe('finished');
     });
 
-    it('removes failed records so retryUploads has nothing to match', async () => {
+    it('removes failed records so retryFailedUploads has nothing to match', async () => {
       const manager = new UploadManager();
       const err = new Error('fail');
       const uploadMethod = vi
@@ -232,11 +232,11 @@ describe('UploadManager', () => {
 
       manager.deleteUploadRecords((u) => u.localId === 'm1');
 
-      await manager.retryUploads((u) => u.uri === 'u' && u.localId === 'm1');
+      await manager.retryFailedUploads((u) => u.uri === 'u' && u.localId === 'm1');
       expect(uploadMethod).toHaveBeenCalledTimes(1);
     });
 
-    it('retryUploads throws when a matching failed upload has no stored method', async () => {
+    it('retryFailedUploads throws when a matching failed upload has no stored method', async () => {
       const manager = new UploadManager();
       const err = new Error('fail');
       const uploadMethod = vi.fn().mockRejectedValue(err);
@@ -247,7 +247,7 @@ describe('UploadManager', () => {
       const internal = manager as unknown as { uploadMethods: Map<string, unknown> };
       internal.uploadMethods.clear();
 
-      await expect(manager.retryUploads(() => true)).rejects.toThrow(
+      await expect(manager.retryFailedUploads(() => true)).rejects.toThrow(
         /missing upload method for uri="u" localId="m1"/,
       );
       expect(uploadMethod).toHaveBeenCalledTimes(1);

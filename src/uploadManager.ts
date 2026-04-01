@@ -170,7 +170,9 @@ export class UploadManager {
    *
    * @throws If any matching failed upload has no stored upload method (inconsistent internal state).
    */
-  retryUploads = async (predicate: (upload: UploadRecord) => boolean): Promise<void> => {
+  retryFailedUploads = async (
+    predicate: (upload: UploadRecord) => boolean,
+  ): Promise<void> => {
     const { uploads } = this.state.getLatestValue();
     const targets = uploads.filter((u) => u.state === 'failed' && predicate(u));
 
@@ -179,7 +181,7 @@ export class UploadManager {
       const uploadMethod = this.uploadMethods.get(u.localId);
       if (!uploadMethod) {
         throw new Error(
-          `UploadManager.retryUploads: missing upload method for uri="${u.uri}" localId="${u.localId}"`,
+          `UploadManager.retryFailedUploads: missing upload method for uri="${u.uri}" localId="${u.localId}"`,
         );
       }
       withMethods.push({ upload: u, uploadMethod });
