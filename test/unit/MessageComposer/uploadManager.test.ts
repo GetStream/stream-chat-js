@@ -168,4 +168,84 @@ describe('UploadManager', () => {
 
     unsub();
   });
+
+  describe('waitForUploads', () => {
+    it('resolves immediately when no uploads match the predicate', async () => {
+      const manager = new UploadManager();
+      await expect(manager.waitForUploads(() => true)).resolves.toBeUndefined();
+    });
+
+    it('resolves when a matching upload succeeds', async () => {
+      const manager = new UploadManager();
+      const uploadMethod = vi.fn().mockResolvedValue({ ok: true });
+      void manager.startUpload({ uri: 'file://a', uploadMethod });
+
+      await expect(
+        manager.waitForUploads((u) => u.uri === 'file://a'),
+      ).resolves.toBeUndefined();
+
+      expect(manager.getUpload('file://a')?.state).toBe('finished');
+    });
+
+    it('resolves when a matching upload fails', async () => {
+      const manager = new UploadManager();
+      const uploadMethod = vi.fn().mockRejectedValue(new Error('fail'));
+      void manager.startUpload({ uri: 'file://a', uploadMethod });
+
+      await expect(
+        manager.waitForUploads((u) => u.uri === 'file://a'),
+      ).resolves.toBeUndefined();
+
+      expect(manager.getUpload('file://a')?.state).toBe('failed');
+    });
+
+    it('waits only for uploads that match the predicate', async () => {
+      const manager = new UploadManager();
+      let slowDone!: () => void;
+      const slow = new Promise<void>((r) => {
+        slowDone = r;
+      });
+      const uploadSlow = vi.fn().mockImplementation(async () => slow);
+      const uploadFast = vi.fn().mockResolvedValue(undefined);
+
+      void manager.startUpload({ uri: 'slow', uploadMethod: uploadSlow });
+      void manager.startUpload({ uri: 'fast', uploadMethod: uploadFast });
+
+      const waited = manager.waitForUploads((u) => u.uri === 'slow');
+      let settled = false;
+      void waited.then(() => {
+        settled = true;
+      });
+
+      await vi.waitFor(() => expect(manager.getUpload('fast')?.state).toBe('finished'));
+      expect(settled).toBe(false);
+
+      slowDone();
+      await expect(waited).resolves.toBeUndefined();
+    });
+
+    it('rejects when the predicate throws while matching uploads exist', async () => {
+      const manager = new UploadManager();
+      const uploadMethod = vi.fn().mockImplementation(() => new Promise(() => {}));
+      void manager.startUpload({ uri: 'u', uploadMethod });
+
+      const err = new Error('predicate boom');
+      await expect(
+        manager.waitForUploads(() => {
+          throw err;
+        }),
+      ).rejects.toBe(err);
+    });
+
+    it('resolves when all matching uploads are terminal', async () => {
+      const manager = new UploadManager();
+      const uploadMethod = vi.fn().mockResolvedValue(undefined);
+      void manager.startUpload({ uri: 'a', messageId: 'm1', uploadMethod });
+      void manager.startUpload({ uri: 'b', messageId: 'm1', uploadMethod });
+
+      await expect(
+        manager.waitForUploads((u) => u.messageId === 'm1'),
+      ).resolves.toBeUndefined();
+    });
+  });
 });

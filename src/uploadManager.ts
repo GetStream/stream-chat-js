@@ -182,4 +182,31 @@ export class UploadManager {
 
     await this.startUpload({ uri, messageId, uploadMethod });
   };
+
+  /**
+   * Resolves when every upload that matches `predicate` is in a terminal state (`finished` or `failed`).
+   * If no uploads match, resolves immediately (vacuous).
+   */
+  waitForUploads = (predicate: (upload: UploadRecord) => boolean): Promise<void> => {
+    const allMatchedTerminal = (): boolean => {
+      const { uploads } = this.state.getLatestValue();
+      const matched = uploads.filter(predicate);
+      if (matched.length === 0) return true;
+      return matched.every((u) => u.state === 'finished' || u.state === 'failed');
+    };
+
+    return new Promise<void>((resolve) => {
+      if (allMatchedTerminal()) {
+        resolve();
+        return;
+      }
+
+      const unsub = this.state.subscribe(() => {
+        if (allMatchedTerminal()) {
+          unsub();
+          resolve();
+        }
+      });
+    });
+  };
 }
