@@ -470,19 +470,19 @@ describe('AttachmentManager', () => {
       expect(attachmentManager.state.getLatestValue()).toEqual({ attachments: [] });
     });
 
-    it('should delete uploads tracked for the current composer state', async () => {
+    it('should delete uploads tracked for current attachment local ids', async () => {
       const { messageComposer, mockClient } = setup();
       const { attachmentManager } = messageComposer;
 
       const never = vi.fn().mockImplementation(() => new Promise(() => {}));
       void mockClient.uploadManager.startUpload({
         uri: 'file://a',
-        messageId: messageComposer.id,
+        localId: 'att-1',
         uploadMethod: never,
       });
       void mockClient.uploadManager.startUpload({
         uri: 'file://b',
-        messageId: 'other-composer',
+        localId: 'other-att',
         uploadMethod: never,
       });
 
@@ -500,32 +500,24 @@ describe('AttachmentManager', () => {
         ],
       });
 
-      expect(
-        mockClient.uploadManager.getUpload('file://a', messageComposer.id)?.state,
-      ).toBe('uploading');
-      expect(
-        mockClient.uploadManager.getUpload('file://b', 'other-composer')?.state,
-      ).toBe('uploading');
+      expect(mockClient.uploadManager.getUpload('att-1')?.state).toBe('uploading');
+      expect(mockClient.uploadManager.getUpload('other-att')?.state).toBe('uploading');
 
       attachmentManager.initState();
 
-      expect(
-        mockClient.uploadManager.getUpload('file://a', messageComposer.id),
-      ).toBeUndefined();
-      expect(
-        mockClient.uploadManager.getUpload('file://b', 'other-composer')?.state,
-      ).toBe('uploading');
+      expect(mockClient.uploadManager.getUpload('att-1')).toBeUndefined();
+      expect(mockClient.uploadManager.getUpload('other-att')?.state).toBe('uploading');
       expect(attachmentManager.state.getLatestValue()).toEqual({ attachments: [] });
     });
 
-    it('should delete upload records for the composer even when no attachment references the uri', async () => {
+    it('should not delete upload records on init when there are no attachment local ids', async () => {
       const { messageComposer, mockClient } = setup();
       const { attachmentManager } = messageComposer;
 
       const never = vi.fn().mockImplementation(() => new Promise(() => {}));
       void mockClient.uploadManager.startUpload({
         uri: 'file://orphan',
-        messageId: messageComposer.id,
+        localId: 'orphan-local',
         uploadMethod: never,
       });
 
@@ -533,9 +525,7 @@ describe('AttachmentManager', () => {
 
       attachmentManager.initState();
 
-      expect(
-        mockClient.uploadManager.getUpload('file://orphan', messageComposer.id),
-      ).toBeUndefined();
+      expect(mockClient.uploadManager.getUpload('orphan-local')?.state).toBe('uploading');
     });
 
     it('should initialize with message', () => {
@@ -710,37 +700,36 @@ describe('AttachmentManager', () => {
 
       void mockClient.uploadManager.startUpload({
         uri: previewUri,
-        messageId: messageComposer.id,
+        localId: 'att-with-upload',
         shouldTrackProgress: false,
         uploadMethod: () => new Promise(() => {}),
       });
 
       await Promise.resolve();
 
-      expect(mockClient.uploadManager.uploads.some((u) => u.uri === previewUri)).toBe(
-        true,
-      );
+      expect(
+        mockClient.uploadManager.uploads.some((u) => u.localId === 'att-with-upload'),
+      ).toBe(true);
 
       attachmentManager.removeAttachments(['att-with-upload']);
 
-      expect(mockClient.uploadManager.uploads.some((u) => u.uri === previewUri)).toBe(
-        false,
-      );
+      expect(
+        mockClient.uploadManager.uploads.some((u) => u.localId === 'att-with-upload'),
+      ).toBe(false);
       expect(attachmentManager.attachments).toEqual([]);
     });
 
-    it('should not delete upload records for another message composer id', async () => {
+    it('should not delete upload records for another local attachment id', async () => {
       const {
         messageComposer: { attachmentManager },
         mockClient,
       } = setup();
 
       const previewUri = 'blob:other-composer-uri';
-      const otherMessageId = 'other-composer-id';
 
       void mockClient.uploadManager.startUpload({
         uri: previewUri,
-        messageId: otherMessageId,
+        localId: 'other-composer-attachment',
         shouldTrackProgress: false,
         uploadMethod: () => new Promise(() => {}),
       });
@@ -765,9 +754,11 @@ describe('AttachmentManager', () => {
 
       attachmentManager.removeAttachments(['att-1']);
 
-      expect(mockClient.uploadManager.uploads.some((u) => u.uri === previewUri)).toBe(
-        true,
-      );
+      expect(
+        mockClient.uploadManager.uploads.some(
+          (u) => u.localId === 'other-composer-attachment',
+        ),
+      ).toBe(true);
     });
   });
 

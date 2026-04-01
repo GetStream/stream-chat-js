@@ -3,14 +3,14 @@ import { StateStore } from './store';
 export type UploadRecord =
   | {
       uri: string;
-      messageId?: string;
+      localId: string;
       state: 'uploading';
       uploadProgress?: number;
       error: undefined;
     }
   | {
       uri: string;
-      messageId?: string;
+      localId: string;
       state: 'finished';
       response: unknown;
       uploadProgress: undefined;
@@ -18,7 +18,7 @@ export type UploadRecord =
     }
   | {
       uri: string;
-      messageId?: string;
+      localId: string;
       state: 'failed';
       error: unknown;
       uploadProgress: undefined;
@@ -34,15 +34,11 @@ export type UploadManagerState = {
 
 const initState = (): UploadManagerState => ({ uploads: [] });
 
-const upsertByUriAndMessageId = (
+const upsertByLocalId = (
   uploads: UploadRecord[],
   record: UploadRecord,
 ): UploadRecord[] => {
-  const idx = uploads.findIndex(
-    (u) =>
-      u.uri === record.uri &&
-      (record.messageId !== undefined ? u.messageId === record.messageId : true),
-  );
+  const idx = uploads.findIndex((u) => u.localId === record.localId);
   if (idx === -1) return [...uploads, record];
   const current = uploads[idx];
   if (current === record) return uploads;
@@ -50,9 +46,6 @@ const upsertByUriAndMessageId = (
   next[idx] = { ...current, ...record };
   return next;
 };
-
-const makeUploadMethodKey = ({ uri, messageId }: { uri: string; messageId?: string }) =>
-  messageId ? `${messageId}::${uri}` : uri;
 
 export class UploadManager {
   readonly state: StateStore<UploadManagerState>;
@@ -66,11 +59,7 @@ export class UploadManager {
     return this.state.getLatestValue().uploads;
   }
 
-  getUpload = (uri: string, messageId?: string) =>
-    this.uploads.find(
-      (u) =>
-        u.uri === uri && (messageId !== undefined ? u.messageId === messageId : true),
-    );
+  getUpload = (localId: string) => this.uploads.find((u) => u.localId === localId);
 
   /**
    * Clears all upload records and in-memory upload handles.
@@ -96,24 +85,22 @@ export class UploadManager {
       return { ...current, uploads: nextUploads };
     });
     for (const u of removed) {
-      this.uploadMethods.delete(
-        makeUploadMethodKey({ uri: u.uri, messageId: u.messageId }),
-      );
+      this.uploadMethods.delete(u.localId);
     }
   };
 
   private upsertUpload = (record: UploadRecord) => {
     this.state.next((current) => ({
       ...current,
-      uploads: upsertByUriAndMessageId(current.uploads, record),
+      uploads: upsertByLocalId(current.uploads, record),
     }));
   };
 
-  private finalizeSuccess = (uri: string, response: unknown, messageId?: string) => {
+  private finalizeSuccess = (uri: string, localId: string, response: unknown) => {
     // Mark finished then clear on the next state update.
     this.upsertUpload({
       uri,
-      ...(messageId !== undefined ? { messageId } : {}),
+      localId,
       state: 'finished',
       uploadProgress: undefined,
       error: undefined,
@@ -123,26 +110,26 @@ export class UploadManager {
 
   startUpload = async ({
     uri,
-    messageId,
+    localId,
     shouldTrackProgress,
     uploadMethod,
   }: {
     uri: string;
-    messageId?: string;
+    localId: string;
     shouldTrackProgress?: boolean;
     uploadMethod: UploadMethod;
   }): Promise<void> => {
     // De-duplication: do not start a second upload while uploading.
     // If previous state is failed, allow a new startUpload to re-attempt.
-    const existing = this.getUpload(uri, messageId);
+    const existing = this.getUpload(localId);
     if (existing?.state === 'uploading') return;
 
-    this.uploadMethods.set(makeUploadMethodKey({ uri, messageId }), uploadMethod);
+    this.uploadMethods.set(localId, uploadMethod);
 
     const trackProgress = shouldTrackProgress ?? true;
     this.upsertUpload({
       uri,
-      messageId,
+      localId,
       state: 'uploading',
       uploadProgress: trackProgress ? 0 : undefined,
       error: undefined,
@@ -152,6 +139,7 @@ export class UploadManager {
       ? (progress?: number) => {
           this.upsertUpload({
             uri,
+            localId,
             state: 'uploading',
             uploadProgress: progress,
             error: undefined,
@@ -165,6 +153,7 @@ export class UploadManager {
     } catch (error) {
       this.upsertUpload({
         uri,
+        localId,
         state: 'failed',
         uploadProgress: undefined,
         error,
@@ -173,7 +162,7 @@ export class UploadManager {
       return;
     }
 
-    this.finalizeSuccess(uri, response, messageId);
+    this.finalizeSuccess(uri, localId, response);
   };
 
   /**
@@ -187,12 +176,10 @@ export class UploadManager {
 
     const withMethods: { upload: UploadRecord; uploadMethod: UploadMethod }[] = [];
     for (const u of targets) {
-      const key = makeUploadMethodKey({ uri: u.uri, messageId: u.messageId });
-      const uploadMethod = this.uploadMethods.get(key);
+      const uploadMethod = this.uploadMethods.get(u.localId);
       if (!uploadMethod) {
-        const id = u.messageId !== undefined ? ` messageId="${u.messageId}"` : '';
         throw new Error(
-          `UploadManager.retryUploads: missing upload method for uri="${u.uri}"${id}`,
+          `UploadManager.retryUploads: missing upload method for uri="${u.uri}" localId="${u.localId}"`,
         );
       }
       withMethods.push({ upload: u, uploadMethod });
@@ -200,7 +187,7 @@ export class UploadManager {
 
     await Promise.all(
       withMethods.map(({ upload: u, uploadMethod }) =>
-        this.startUpload({ uri: u.uri, messageId: u.messageId, uploadMethod }),
+        this.startUpload({ uri: u.uri, localId: u.localId, uploadMethod }),
       ),
     );
   };

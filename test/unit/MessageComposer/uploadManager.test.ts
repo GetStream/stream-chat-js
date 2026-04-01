@@ -6,12 +6,16 @@ describe('UploadManager', () => {
     const manager = new UploadManager();
     const uploadMethod = vi.fn().mockResolvedValue(undefined);
 
-    const promise = manager.startUpload({ uri: 'file://a', uploadMethod });
+    const promise = manager.startUpload({
+      uri: 'file://a',
+      localId: 'local-a',
+      uploadMethod,
+    });
 
     expect(manager.uploads).toEqual([
       {
         uri: 'file://a',
-        messageId: undefined,
+        localId: 'local-a',
         state: 'uploading',
         uploadProgress: 0,
         error: undefined,
@@ -24,25 +28,22 @@ describe('UploadManager', () => {
     );
   });
 
-  it('stores messageId on upload record when provided', async () => {
+  it('stores localId on upload record', async () => {
     const manager = new UploadManager();
     const uploadMethod = vi.fn().mockResolvedValue(undefined);
 
-    await manager.startUpload({ uri: 'u', messageId: 'm1', uploadMethod });
+    await manager.startUpload({ uri: 'u', localId: 'm1', uploadMethod });
 
-    // Upload is cleared on success; verify messageId was present on finished snapshot.
     const snapshots: unknown[] = [];
     const manager2 = new UploadManager();
     const unsub = manager2.state.subscribe((next) => snapshots.push(next.uploads));
-    await manager2.startUpload({ uri: 'u', messageId: 'm1', uploadMethod });
+    await manager2.startUpload({ uri: 'u', localId: 'm1', uploadMethod });
     unsub();
 
     expect(
       snapshots.some(
         (u: any) =>
-          u?.[0]?.uri === 'u' &&
-          u?.[0]?.state === 'finished' &&
-          u?.[0]?.messageId === 'm1',
+          u?.[0]?.uri === 'u' && u?.[0]?.state === 'finished' && u?.[0]?.localId === 'm1',
       ),
     ).toBe(true);
   });
@@ -54,11 +55,11 @@ describe('UploadManager', () => {
       onProgress = cb!;
     });
 
-    const start = manager.startUpload({ uri: 'u', uploadMethod });
+    const start = manager.startUpload({ uri: 'u', localId: 'u1', uploadMethod });
     onProgress(33);
-    expect(manager.getUpload('u')?.uploadProgress).toBe(33);
+    expect(manager.getUpload('u1')?.uploadProgress).toBe(33);
     onProgress(undefined);
-    expect(manager.getUpload('u')?.uploadProgress).toBeUndefined();
+    expect(manager.getUpload('u1')?.uploadProgress).toBeUndefined();
     await start;
   });
 
@@ -68,11 +69,12 @@ describe('UploadManager', () => {
     const uploadMethod = vi.fn().mockRejectedValue(err);
 
     await expect(
-      manager.startUpload({ uri: 'u', uploadMethod }),
+      manager.startUpload({ uri: 'u', localId: 'u1', uploadMethod }),
     ).resolves.toBeUndefined();
 
-    expect(manager.getUpload('u')).toEqual({
+    expect(manager.getUpload('u1')).toEqual({
       uri: 'u',
+      localId: 'u1',
       state: 'failed',
       uploadProgress: undefined,
       error: err,
@@ -88,8 +90,8 @@ describe('UploadManager', () => {
 
     // Start creates record; retry during uploading should no-op
     const never = vi.fn().mockImplementation(() => new Promise(() => {}));
-    void manager.startUpload({ uri: 'u2', uploadMethod: never });
-    await manager.retryUploads((u) => u.uri === 'u2');
+    void manager.startUpload({ uri: 'u2', localId: 'u2', uploadMethod: never });
+    await manager.retryUploads((u) => u.localId === 'u2');
     expect(uploadMethod).not.toHaveBeenCalled();
   });
 
@@ -101,10 +103,10 @@ describe('UploadManager', () => {
       .mockRejectedValueOnce(err)
       .mockResolvedValueOnce(undefined);
 
-    await manager.startUpload({ uri: 'u', uploadMethod });
-    expect(manager.getUpload('u')?.state).toBe('failed');
+    await manager.startUpload({ uri: 'u', localId: 'u1', uploadMethod });
+    expect(manager.getUpload('u1')?.state).toBe('failed');
 
-    await manager.retryUploads((u) => u.uri === 'u');
+    await manager.retryUploads((u) => u.localId === 'u1');
 
     expect(uploadMethod).toHaveBeenCalledTimes(2);
   });
@@ -115,10 +117,10 @@ describe('UploadManager', () => {
     const uploadA = vi.fn().mockRejectedValueOnce(err).mockResolvedValueOnce(undefined);
     const uploadB = vi.fn().mockRejectedValueOnce(err).mockResolvedValueOnce(undefined);
 
-    await manager.startUpload({ uri: 'a', messageId: 'm1', uploadMethod: uploadA });
-    await manager.startUpload({ uri: 'b', messageId: 'm2', uploadMethod: uploadB });
+    await manager.startUpload({ uri: 'a', localId: 'm1', uploadMethod: uploadA });
+    await manager.startUpload({ uri: 'b', localId: 'm2', uploadMethod: uploadB });
 
-    await manager.retryUploads((u) => u.messageId === 'm1' || u.messageId === 'm2');
+    await manager.retryUploads((u) => u.localId === 'm1' || u.localId === 'm2');
 
     expect(uploadA).toHaveBeenCalledTimes(2);
     expect(uploadB).toHaveBeenCalledTimes(2);
@@ -132,15 +134,15 @@ describe('UploadManager', () => {
       .mockRejectedValueOnce(err)
       .mockResolvedValueOnce(undefined);
 
-    await manager.startUpload({ uri: 'u', messageId: 'm1', uploadMethod });
+    await manager.startUpload({ uri: 'u', localId: 'm1', uploadMethod });
     manager.reset();
 
     expect(manager.uploads).toEqual([]);
-    await manager.retryUploads((u) => u.uri === 'u' && u.messageId === 'm1');
+    await manager.retryUploads((u) => u.uri === 'u' && u.localId === 'm1');
     expect(uploadMethod).toHaveBeenCalledTimes(1);
   });
 
-  it('dedupes startUpload: existing uri prevents starting a second upload', async () => {
+  it('dedupes startUpload: existing localId prevents starting a second upload', async () => {
     const manager = new UploadManager();
     let resolve!: () => void;
     const gate = new Promise<void>((r) => {
@@ -148,14 +150,14 @@ describe('UploadManager', () => {
     });
     const uploadMethod = vi.fn().mockImplementation(async () => gate);
 
-    void manager.startUpload({ uri: 'u', uploadMethod });
-    await manager.startUpload({ uri: 'u', uploadMethod });
+    void manager.startUpload({ uri: 'u', localId: 'same', uploadMethod });
+    await manager.startUpload({ uri: 'u', localId: 'same', uploadMethod });
 
     expect(uploadMethod).toHaveBeenCalledTimes(1);
     resolve();
   });
 
-  it('when messageId is provided, it is used to find/dedupe uploads', async () => {
+  it('different localIds allow concurrent uploads for the same uri', async () => {
     const manager = new UploadManager();
     let resolveA!: () => void;
     let resolveB!: () => void;
@@ -169,14 +171,13 @@ describe('UploadManager', () => {
     const uploadMethodA = vi.fn().mockImplementation(async () => gateA);
     const uploadMethodB = vi.fn().mockImplementation(async () => gateB);
 
-    void manager.startUpload({ uri: 'u', messageId: 'm1', uploadMethod: uploadMethodA });
-    void manager.startUpload({ uri: 'u', messageId: 'm2', uploadMethod: uploadMethodB });
+    void manager.startUpload({ uri: 'u', localId: 'm1', uploadMethod: uploadMethodA });
+    void manager.startUpload({ uri: 'u', localId: 'm2', uploadMethod: uploadMethodB });
 
-    expect(manager.getUpload('u', 'm1')?.state).toBe('uploading');
-    expect(manager.getUpload('u', 'm2')?.state).toBe('uploading');
+    expect(manager.getUpload('m1')?.state).toBe('uploading');
+    expect(manager.getUpload('m2')?.state).toBe('uploading');
 
-    // Dedupe only within the same (uri,messageId) pair.
-    await manager.startUpload({ uri: 'u', messageId: 'm1', uploadMethod: uploadMethodA });
+    await manager.startUpload({ uri: 'u', localId: 'm1', uploadMethod: uploadMethodA });
     expect(uploadMethodA).toHaveBeenCalledTimes(1);
     expect(uploadMethodB).toHaveBeenCalledTimes(1);
 
@@ -191,7 +192,7 @@ describe('UploadManager', () => {
     const snapshots: unknown[] = [];
     const unsub = manager.state.subscribe((next) => snapshots.push(next.uploads));
 
-    await manager.startUpload({ uri: 'u', uploadMethod });
+    await manager.startUpload({ uri: 'u', localId: 'u1', uploadMethod });
 
     // Expect: uploading -> finished -> removed
     expect(snapshots.some((u: any) => u?.[0]?.state === 'uploading')).toBe(true);
@@ -206,16 +207,16 @@ describe('UploadManager', () => {
       const uploadA = vi.fn().mockResolvedValue(undefined);
       const uploadB = vi.fn().mockResolvedValue(undefined);
 
-      await manager.startUpload({ uri: 'a', messageId: 'm1', uploadMethod: uploadA });
-      await manager.startUpload({ uri: 'b', messageId: 'm2', uploadMethod: uploadB });
+      await manager.startUpload({ uri: 'a', localId: 'm1', uploadMethod: uploadA });
+      await manager.startUpload({ uri: 'b', localId: 'm2', uploadMethod: uploadB });
 
-      expect(manager.getUpload('a', 'm1')?.state).toBe('finished');
-      expect(manager.getUpload('b', 'm2')?.state).toBe('finished');
+      expect(manager.getUpload('m1')?.state).toBe('finished');
+      expect(manager.getUpload('m2')?.state).toBe('finished');
 
-      manager.deleteUploadRecords((u) => u.messageId === 'm1');
+      manager.deleteUploadRecords((u) => u.localId === 'm1');
 
-      expect(manager.getUpload('a', 'm1')).toBeUndefined();
-      expect(manager.getUpload('b', 'm2')?.state).toBe('finished');
+      expect(manager.getUpload('m1')).toBeUndefined();
+      expect(manager.getUpload('m2')?.state).toBe('finished');
     });
 
     it('removes failed records so retryUploads has nothing to match', async () => {
@@ -226,12 +227,12 @@ describe('UploadManager', () => {
         .mockRejectedValueOnce(err)
         .mockResolvedValueOnce(undefined);
 
-      await manager.startUpload({ uri: 'u', messageId: 'm1', uploadMethod });
-      expect(manager.getUpload('u', 'm1')?.state).toBe('failed');
+      await manager.startUpload({ uri: 'u', localId: 'm1', uploadMethod });
+      expect(manager.getUpload('m1')?.state).toBe('failed');
 
-      manager.deleteUploadRecords((u) => u.messageId === 'm1');
+      manager.deleteUploadRecords((u) => u.localId === 'm1');
 
-      await manager.retryUploads((u) => u.uri === 'u' && u.messageId === 'm1');
+      await manager.retryUploads((u) => u.uri === 'u' && u.localId === 'm1');
       expect(uploadMethod).toHaveBeenCalledTimes(1);
     });
 
@@ -240,14 +241,14 @@ describe('UploadManager', () => {
       const err = new Error('fail');
       const uploadMethod = vi.fn().mockRejectedValue(err);
 
-      await manager.startUpload({ uri: 'u', messageId: 'm1', uploadMethod });
-      expect(manager.getUpload('u', 'm1')?.state).toBe('failed');
+      await manager.startUpload({ uri: 'u', localId: 'm1', uploadMethod });
+      expect(manager.getUpload('m1')?.state).toBe('failed');
 
       const internal = manager as unknown as { uploadMethods: Map<string, unknown> };
       internal.uploadMethods.clear();
 
       await expect(manager.retryUploads(() => true)).rejects.toThrow(
-        /missing upload method for uri="u" messageId="m1"/,
+        /missing upload method for uri="u" localId="m1"/,
       );
       expect(uploadMethod).toHaveBeenCalledTimes(1);
     });
@@ -255,11 +256,11 @@ describe('UploadManager', () => {
     it('is a no-op when nothing matches', () => {
       const manager = new UploadManager();
       const uploadMethod = vi.fn().mockResolvedValue(undefined);
-      void manager.startUpload({ uri: 'u', messageId: 'm1', uploadMethod });
+      void manager.startUpload({ uri: 'u', localId: 'm1', uploadMethod });
 
       manager.deleteUploadRecords(() => false);
 
-      expect(manager.getUpload('u', 'm1')?.state).toBe('uploading');
+      expect(manager.getUpload('m1')?.state).toBe('uploading');
     });
   });
 
@@ -272,25 +273,25 @@ describe('UploadManager', () => {
     it('resolves when a matching upload succeeds', async () => {
       const manager = new UploadManager();
       const uploadMethod = vi.fn().mockResolvedValue({ ok: true });
-      void manager.startUpload({ uri: 'file://a', uploadMethod });
+      void manager.startUpload({ uri: 'file://a', localId: 'a1', uploadMethod });
 
       await expect(
         manager.waitForUploads((u) => u.uri === 'file://a'),
       ).resolves.toBeUndefined();
 
-      expect(manager.getUpload('file://a')?.state).toBe('finished');
+      expect(manager.getUpload('a1')?.state).toBe('finished');
     });
 
     it('resolves when a matching upload fails', async () => {
       const manager = new UploadManager();
       const uploadMethod = vi.fn().mockRejectedValue(new Error('fail'));
-      void manager.startUpload({ uri: 'file://a', uploadMethod });
+      void manager.startUpload({ uri: 'file://a', localId: 'a1', uploadMethod });
 
       await expect(
         manager.waitForUploads((u) => u.uri === 'file://a'),
       ).resolves.toBeUndefined();
 
-      expect(manager.getUpload('file://a')?.state).toBe('failed');
+      expect(manager.getUpload('a1')?.state).toBe('failed');
     });
 
     it('waits only for uploads that match the predicate', async () => {
@@ -302,8 +303,16 @@ describe('UploadManager', () => {
       const uploadSlow = vi.fn().mockImplementation(async () => slow);
       const uploadFast = vi.fn().mockResolvedValue(undefined);
 
-      void manager.startUpload({ uri: 'slow', uploadMethod: uploadSlow });
-      void manager.startUpload({ uri: 'fast', uploadMethod: uploadFast });
+      void manager.startUpload({
+        uri: 'slow',
+        localId: 'slow',
+        uploadMethod: uploadSlow,
+      });
+      void manager.startUpload({
+        uri: 'fast',
+        localId: 'fast',
+        uploadMethod: uploadFast,
+      });
 
       const waited = manager.waitForUploads((u) => u.uri === 'slow');
       let settled = false;
@@ -321,7 +330,7 @@ describe('UploadManager', () => {
     it('rejects when the predicate throws while matching uploads exist', async () => {
       const manager = new UploadManager();
       const uploadMethod = vi.fn().mockImplementation(() => new Promise(() => {}));
-      void manager.startUpload({ uri: 'u', uploadMethod });
+      void manager.startUpload({ uri: 'u', localId: 'u1', uploadMethod });
 
       const err = new Error('predicate boom');
       await expect(
@@ -334,11 +343,11 @@ describe('UploadManager', () => {
     it('resolves when all matching uploads are terminal', async () => {
       const manager = new UploadManager();
       const uploadMethod = vi.fn().mockResolvedValue(undefined);
-      void manager.startUpload({ uri: 'a', messageId: 'm1', uploadMethod });
-      void manager.startUpload({ uri: 'b', messageId: 'm1', uploadMethod });
+      void manager.startUpload({ uri: 'a', localId: 'x1', uploadMethod });
+      void manager.startUpload({ uri: 'b', localId: 'x2', uploadMethod });
 
       await expect(
-        manager.waitForUploads((u) => u.messageId === 'm1'),
+        manager.waitForUploads((u) => u.localId === 'x1' || u.localId === 'x2'),
       ).resolves.toBeUndefined();
     });
   });

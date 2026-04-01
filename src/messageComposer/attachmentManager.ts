@@ -210,10 +210,13 @@ export class AttachmentManager {
   }
 
   private deleteUploadRecords = () => {
-    const messageId = this.composer.id;
-    this.client.uploadManager.deleteUploadRecords(
-      (upload) => upload.messageId === messageId,
+    const ids = new Set(
+      this.attachments
+        .map((a) => a.localMetadata?.id)
+        .filter((id): id is string => Boolean(id)),
     );
+    if (ids.size === 0) return;
+    this.client.uploadManager.deleteUploadRecords((upload) => ids.has(upload.localId));
   };
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
@@ -284,27 +287,7 @@ export class AttachmentManager {
     if (!localAttachmentIds.length) return;
 
     const idsSet = new Set(localAttachmentIds);
-    const previewUris = new Set<string>();
-    for (const attachment of this.attachments) {
-      const id = attachment.localMetadata?.id;
-      if (!id || !idsSet.has(id)) continue;
-      const { localMetadata } = attachment;
-      if (
-        localMetadata &&
-        'previewUri' in localMetadata &&
-        typeof localMetadata.previewUri === 'string' &&
-        localMetadata.previewUri
-      ) {
-        previewUris.add(localMetadata.previewUri);
-      }
-    }
-
-    if (previewUris.size > 0) {
-      const messageId = this.composer.id;
-      this.client.uploadManager.deleteUploadRecords(
-        (upload) => upload.messageId === messageId && previewUris.has(upload.uri),
-      );
-    }
+    this.client.uploadManager.deleteUploadRecords((upload) => idsSet.has(upload.localId));
 
     this.state.partialNext({
       attachments: this.attachments.filter(
@@ -719,9 +702,11 @@ export class AttachmentManager {
     const uploadMethod: UploadMethod = (options?: UploadRequestOptions) =>
       this.doUploadRequest(attachment.localMetadata.file, options);
 
+    const localId = attachment.localMetadata.id;
+
     const promise = new Promise<MinimumUploadRequestResult>((resolve, reject) => {
       const unsubscribe = this.client.uploadManager.state.subscribeWithSelector(
-        (s) => ({ upload: s.uploads.find((u) => u.uri === uri) }),
+        (s) => ({ upload: s.uploads.find((u) => u.localId === localId) }),
         ({ upload: nextUpload }) => {
           if (!nextUpload) return;
           if (nextUpload?.state === 'uploading') {
@@ -742,10 +727,7 @@ export class AttachmentManager {
               reject(nextUpload?.error);
             }
             unsubscribe();
-            const messageId = this.composer.id;
-            this.client.uploadManager.deleteUploadRecords(
-              (u) => u.uri === uri && u.messageId === messageId,
-            );
+            this.client.uploadManager.deleteUploadRecords((u) => u.localId === localId);
           }
         },
       );
@@ -753,8 +735,8 @@ export class AttachmentManager {
 
     this.client.uploadManager.startUpload({
       uri,
+      localId,
       shouldTrackProgress,
-      messageId: this.composer.id,
       uploadMethod,
     });
 
