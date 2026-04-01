@@ -29,9 +29,7 @@ export const createAttachmentsCompositionMiddleware = (
       const { attachmentManager } = composer;
       if (!attachmentManager) return forward();
 
-      const allowSendBeforeUploads =
-        composer.config.attachments?.allowSendBeforeAttachmentsUpload ?? false;
-      if (attachmentManager.uploadsInProgressCount > 0 && !allowSendBeforeUploads) {
+      if (attachmentManager.uploadsInProgressCount > 0) {
         composer.client.notifications.addWarning({
           message: 'Wait until all attachments have uploaded',
           origin: {

@@ -220,9 +220,7 @@ export class AttachmentManager {
   };
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
-    if (!this.config.allowSendBeforeAttachmentsUpload) {
-      this.deleteUploadRecords();
-    }
+    this.deleteUploadRecords();
     this.state.next(initState({ message }));
   };
 

@@ -557,13 +557,6 @@ describe('MessageComposer', () => {
         ],
       });
       expect(messageComposer.hasSendableData).toBe(false);
-      messageComposer.updateConfig({
-        attachments: { allowSendBeforeAttachmentsUpload: true },
-      });
-      expect(messageComposer.hasSendableData).toBe(true);
-      messageComposer.updateConfig({
-        attachments: { allowSendBeforeAttachmentsUpload: false },
-      });
       messageComposer.attachmentManager.state.partialNext({
         attachments: [],
       });
