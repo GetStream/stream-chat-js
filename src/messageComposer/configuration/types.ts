@@ -55,6 +55,13 @@ export type AttachmentManagerConfig = {
    * @default true
    */
   trackUploadProgress: boolean;
+  /**
+   * When false (default), sending waits until no attachment uploads are in progress (`hasSendableData` and
+   * composition middleware block send while uploads run). When true, send may proceed while uploads are
+   * still in progress; only attachments in the `finished` state are included in the outgoing message.
+   * @default false
+   */
+  allowSendBeforeAttachmentsUpload: boolean;
 };
 
 export type LinkPreviewsManagerConfig = {

@@ -337,8 +337,11 @@ export class MessageComposer extends WithSubscriptions {
         !!this.locationComposer.validLocation
       );
     }
+    const uploadsBlockSend =
+      !this.config.attachments.allowSendBeforeAttachmentsUpload &&
+      this.attachmentManager.uploadsInProgressCount > 0;
     return !!(
-      (!this.attachmentManager.uploadsInProgressCount &&
+      (!uploadsBlockSend &&
         (!this.textComposer.textIsEmpty ||
           this.attachmentManager.successfulUploadsCount > 0)) ||
       this.pollId ||

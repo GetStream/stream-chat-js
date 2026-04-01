@@ -228,6 +228,7 @@ describe('AttachmentManager', () => {
         ...config,
         acceptedFiles: [],
         trackUploadProgress: true,
+        allowSendBeforeAttachmentsUpload: false,
       });
     });
 
