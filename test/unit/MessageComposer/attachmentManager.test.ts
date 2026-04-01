@@ -469,44 +469,6 @@ describe('AttachmentManager', () => {
       expect(attachmentManager.state.getLatestValue()).toEqual({ attachments: [] });
     });
 
-    it('should delete uploads tracked for current attachment local ids', async () => {
-      const { messageComposer, mockClient } = setup();
-      const { attachmentManager } = messageComposer;
-
-      const never = vi.fn().mockImplementation(() => new Promise(() => {}));
-      void mockClient.uploadManager.upload({
-        id: 'att-1',
-        uploadMethod: never,
-      });
-      void mockClient.uploadManager.upload({
-        id: 'other-att',
-        uploadMethod: never,
-      });
-
-      attachmentManager.state.next({
-        attachments: [
-          {
-            type: 'image',
-            localMetadata: {
-              id: 'att-1',
-              uploadState: 'uploading',
-              previewUri: 'file://a',
-              file: new File([''], 'a.jpg', { type: 'image/jpeg' }),
-            },
-          },
-        ],
-      });
-
-      expect(mockClient.uploadManager.getUpload('att-1')?.state).toBe('uploading');
-      expect(mockClient.uploadManager.getUpload('other-att')?.state).toBe('uploading');
-
-      attachmentManager.initState();
-
-      expect(mockClient.uploadManager.getUpload('att-1')).toBeUndefined();
-      expect(mockClient.uploadManager.getUpload('other-att')?.state).toBe('uploading');
-      expect(attachmentManager.state.getLatestValue()).toEqual({ attachments: [] });
-    });
-
     it('should not delete upload records on init when there are no attachment local ids', async () => {
       const { messageComposer, mockClient } = setup();
       const { attachmentManager } = messageComposer;
@@ -1734,6 +1696,19 @@ describe('AttachmentManager', () => {
       expect(attachmentManager.successfulUploadsCount).toBe(1);
     });
 
+    it('should remove upload manager record after a successful upload', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockClient,
+      } = setup();
+      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
+
+      await attachmentManager.uploadFiles([file]);
+
+      const id = attachmentManager.attachments[0].localMetadata.id;
+      expect(mockClient.uploadManager.getUpload(id)).toBeUndefined();
+    });
+
     it('should handle upload failures', async () => {
       const {
         messageComposer: { attachmentManager },
@@ -1776,6 +1751,9 @@ describe('AttachmentManager', () => {
           originalError: expect.any(Error),
         },
       });
+
+      const id = attachmentManager.attachments[0].localMetadata.id;
+      expect(mockClient.uploadManager.getUpload(id)).toBeUndefined();
     });
 
     it('should register notification for blocked file', async () => {

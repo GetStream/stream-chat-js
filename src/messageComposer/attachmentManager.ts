@@ -209,18 +209,7 @@ export class AttachmentManager {
     );
   }
 
-  private deleteUploadRecords = () => {
-    const ids = new Set(
-      this.attachments
-        .map((a) => a.localMetadata?.id)
-        .filter((id): id is string => Boolean(id)),
-    );
-    if (ids.size === 0) return;
-    this.client.uploadManager.deleteUploadRecords((upload) => ids.has(upload.id));
-  };
-
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
-    this.deleteUploadRecords();
     this.state.next(initState({ message }));
   };
 
@@ -724,7 +713,6 @@ export class AttachmentManager {
               reject(nextUpload?.error);
             }
             unsubscribe();
-            this.client.uploadManager.deleteUploadRecords((u) => u.id === localId);
           }
         },
       );
