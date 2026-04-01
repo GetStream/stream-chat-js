@@ -683,6 +683,92 @@ describe('AttachmentManager', () => {
         { localMetadata: { id: 'test-id-2' } },
       ]);
     });
+
+    it('should delete matching upload records when removing upload attachments', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        messageComposer,
+        mockClient,
+      } = setup();
+
+      const previewUri = 'blob:preview-for-remove-test';
+      const file = generateFile({ name: 'x.png', type: 'image/png' });
+      const attachment: LocalUploadAttachment = {
+        type: 'image',
+        mime_type: 'image/png',
+        file_size: file.size,
+        fallback: file.name,
+        localMetadata: {
+          id: 'att-with-upload',
+          file,
+          previewUri,
+          uploadState: 'uploading',
+        },
+      };
+
+      attachmentManager.upsertAttachments([attachment]);
+
+      void mockClient.uploadManager.startUpload({
+        uri: previewUri,
+        messageId: messageComposer.id,
+        shouldTrackProgress: false,
+        uploadMethod: () => new Promise(() => {}),
+      });
+
+      await Promise.resolve();
+
+      expect(mockClient.uploadManager.uploads.some((u) => u.uri === previewUri)).toBe(
+        true,
+      );
+
+      attachmentManager.removeAttachments(['att-with-upload']);
+
+      expect(mockClient.uploadManager.uploads.some((u) => u.uri === previewUri)).toBe(
+        false,
+      );
+      expect(attachmentManager.attachments).toEqual([]);
+    });
+
+    it('should not delete upload records for another message composer id', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockClient,
+      } = setup();
+
+      const previewUri = 'blob:other-composer-uri';
+      const otherMessageId = 'other-composer-id';
+
+      void mockClient.uploadManager.startUpload({
+        uri: previewUri,
+        messageId: otherMessageId,
+        shouldTrackProgress: false,
+        uploadMethod: () => new Promise(() => {}),
+      });
+
+      await Promise.resolve();
+
+      const file = generateFile({ name: 'x.png', type: 'image/png' });
+      attachmentManager.upsertAttachments([
+        {
+          type: 'image',
+          mime_type: 'image/png',
+          file_size: file.size,
+          fallback: file.name,
+          localMetadata: {
+            id: 'att-1',
+            file,
+            previewUri,
+            uploadState: 'uploading',
+          },
+        } as LocalUploadAttachment,
+      ]);
+
+      attachmentManager.removeAttachments(['att-1']);
+
+      expect(mockClient.uploadManager.uploads.some((u) => u.uri === previewUri)).toBe(
+        true,
+      );
+    });
   });
 
   describe('getUploadConfigCheck', () => {

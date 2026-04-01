@@ -281,6 +281,31 @@ export class AttachmentManager {
   };
 
   removeAttachments = (localAttachmentIds: string[]) => {
+    if (!localAttachmentIds.length) return;
+
+    const idsSet = new Set(localAttachmentIds);
+    const previewUris = new Set<string>();
+    for (const attachment of this.attachments) {
+      const id = attachment.localMetadata?.id;
+      if (!id || !idsSet.has(id)) continue;
+      const { localMetadata } = attachment;
+      if (
+        localMetadata &&
+        'previewUri' in localMetadata &&
+        typeof localMetadata.previewUri === 'string' &&
+        localMetadata.previewUri
+      ) {
+        previewUris.add(localMetadata.previewUri);
+      }
+    }
+
+    if (previewUris.size > 0) {
+      const messageId = this.composer.id;
+      this.client.uploadManager.deleteUploadRecords(
+        (upload) => upload.messageId === messageId && previewUris.has(upload.uri),
+      );
+    }
+
     this.state.partialNext({
       attachments: this.attachments.filter(
         (attachment) => !localAttachmentIds.includes(attachment.localMetadata?.id),
