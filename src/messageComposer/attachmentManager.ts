@@ -733,7 +733,7 @@ export class AttachmentManager {
       );
     });
 
-    this.client.uploadManager.startUpload({
+    this.client.uploadManager.upload({
       uri,
       localId,
       shouldTrackProgress,

@@ -475,12 +475,12 @@ describe('AttachmentManager', () => {
       const { attachmentManager } = messageComposer;
 
       const never = vi.fn().mockImplementation(() => new Promise(() => {}));
-      void mockClient.uploadManager.startUpload({
+      void mockClient.uploadManager.upload({
         uri: 'file://a',
         localId: 'att-1',
         uploadMethod: never,
       });
-      void mockClient.uploadManager.startUpload({
+      void mockClient.uploadManager.upload({
         uri: 'file://b',
         localId: 'other-att',
         uploadMethod: never,
@@ -515,7 +515,7 @@ describe('AttachmentManager', () => {
       const { attachmentManager } = messageComposer;
 
       const never = vi.fn().mockImplementation(() => new Promise(() => {}));
-      void mockClient.uploadManager.startUpload({
+      void mockClient.uploadManager.upload({
         uri: 'file://orphan',
         localId: 'orphan-local',
         uploadMethod: never,
@@ -698,7 +698,7 @@ describe('AttachmentManager', () => {
 
       attachmentManager.upsertAttachments([attachment]);
 
-      void mockClient.uploadManager.startUpload({
+      void mockClient.uploadManager.upload({
         uri: previewUri,
         localId: 'att-with-upload',
         shouldTrackProgress: false,
@@ -727,7 +727,7 @@ describe('AttachmentManager', () => {
 
       const previewUri = 'blob:other-composer-uri';
 
-      void mockClient.uploadManager.startUpload({
+      void mockClient.uploadManager.upload({
         uri: previewUri,
         localId: 'other-composer-attachment',
         shouldTrackProgress: false,

@@ -108,7 +108,7 @@ export class UploadManager {
     });
   };
 
-  startUpload = async ({
+  upload = async ({
     uri,
     localId,
     shouldTrackProgress,
@@ -120,7 +120,7 @@ export class UploadManager {
     uploadMethod: UploadMethod;
   }): Promise<void> => {
     // De-duplication: do not start a second upload while uploading.
-    // If previous state is failed, allow a new startUpload to re-attempt.
+    // If previous state is failed, allow a new upload to re-attempt.
     const existing = this.getUpload(localId);
     if (existing?.state === 'uploading') return;
 
@@ -187,7 +187,7 @@ export class UploadManager {
 
     await Promise.all(
       withMethods.map(({ upload: u, uploadMethod }) =>
-        this.startUpload({ uri: u.uri, localId: u.localId, uploadMethod }),
+        this.upload({ uri: u.uri, localId: u.localId, uploadMethod }),
       ),
     );
   };
