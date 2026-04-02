@@ -18,7 +18,7 @@ import type { StreamChat } from '../client';
 import type { AxiosError } from 'axios';
 import { OfflineDBSyncManager } from './offline_sync_manager';
 import { StateStore } from '../store';
-import { runDetached } from '../utils';
+import { localMessageToNewMessagePayload, runDetached } from '../utils';
 import { isMessageUpdateReplayable } from './util';
 
 /**
@@ -1110,14 +1110,6 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   private shouldSkipQueueingTask = (error: AxiosError<APIErrorResponse>) =>
     error?.response?.data?.code === 4 || error?.response?.data?.code === 17;
 
-  private stripOfflineFailedMessageEditMetadata = (
-    message: LocalMessage | Partial<MessageResponse>,
-  ) => {
-    const normalizedMessage = { ...message };
-    delete normalizedMessage.message_text_updated_at;
-    return normalizedMessage;
-  };
-
   private mergeFailedMessageUpdateIntoPendingSendMessage = ({
     editedMessage,
     pendingMessage,
@@ -1125,8 +1117,17 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     editedMessage: LocalMessage | Partial<MessageResponse>;
     pendingMessage: Message;
   }) => {
-    const normalizedEditedMessage =
-      this.stripOfflineFailedMessageEditMetadata(editedMessage);
+    const normalizedEditedMessageSource = {
+      ...editedMessage,
+    } as LocalMessage & { message_text_updated_at?: string };
+
+    if (editedMessage.status === 'failed') {
+      delete normalizedEditedMessageSource.message_text_updated_at;
+    }
+
+    const normalizedEditedMessage = localMessageToNewMessagePayload(
+      normalizedEditedMessageSource,
+    );
     const pendingMessageStatus = (pendingMessage as { status?: string }).status;
 
     return {
