@@ -572,6 +572,20 @@ export class AttachmentManager {
 
       this.updateAttachment(failedAttachment);
       return failedAttachment;
+    } finally {
+      // TODO: this is a hacky solution to conditionally run delete middleware
+      // We should have a retry method that runs the same middlewares as the regular upload
+      if (
+        this.postUploadMiddlewareExecutor['middleware'].find(
+          (middleware) =>
+            middleware.id ===
+            'stream-io/attachment-manager-middleware/uploadManagerCleanUp',
+        )
+      ) {
+        this.client.uploadManager.deleteUploadRecords(
+          (upload) => upload.id === attachment.localMetadata.id,
+        );
+      }
     }
 
     if (!response) {
