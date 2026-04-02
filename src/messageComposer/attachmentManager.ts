@@ -700,40 +700,31 @@ export class AttachmentManager {
 
     const localId = attachment.localMetadata.id;
 
-    const promise = new Promise<MinimumUploadRequestResult>((resolve, reject) => {
-      const unsubscribe = this.client.uploadManager.state.subscribeWithSelector(
-        (s) => ({ upload: s.uploads.find((u) => u.id === localId) }),
-        ({ upload: nextUpload }) => {
-          if (!nextUpload) return;
-          if (nextUpload?.state === 'uploading') {
-            this.upsertAttachments([
-              {
-                ...attachment,
-                localMetadata: {
-                  ...attachment.localMetadata,
-                  uploadState: 'uploading',
-                  uploadProgress: nextUpload.uploadProgress,
-                },
+    const unsubscribe = this.client.uploadManager.state.subscribeWithSelector(
+      (s) => ({ upload: s.uploads.find((u) => u.id === localId) }),
+      ({ upload: nextUpload }) => {
+        if (!nextUpload) return;
+        if (nextUpload?.state === 'uploading') {
+          this.upsertAttachments([
+            {
+              ...attachment,
+              localMetadata: {
+                ...attachment.localMetadata,
+                uploadState: 'uploading',
+                uploadProgress: nextUpload.uploadProgress,
               },
-            ]);
-          } else {
-            if (nextUpload?.state === 'finished') {
-              resolve(nextUpload.response as MinimumUploadRequestResult);
-            } else {
-              reject(nextUpload?.error);
-            }
-            unsubscribe();
-          }
-        },
-      );
-    });
+            },
+          ]);
+        } else {
+          unsubscribe();
+        }
+      },
+    );
 
-    this.client.uploadManager.upload({
+    return this.client.uploadManager.upload({
       id: localId,
       shouldTrackProgress,
       uploadMethod,
-    });
-
-    return promise;
+    }) as Promise<MinimumUploadRequestResult>;
   }
 }

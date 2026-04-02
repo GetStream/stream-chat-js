@@ -72,13 +72,15 @@ describe('createUploadManagerCleanUpMiddleware', () => {
 
   it('deletes upload record for attachment id and forwards on error', async () => {
     const { composer, middleware } = setup();
-    void composer.client.uploadManager.upload({
-      id: 'local-2',
-      shouldTrackProgress: false,
-      uploadMethod: async () => {
-        throw new Error('fail');
-      },
-    });
+    void composer.client.uploadManager
+      .upload({
+        id: 'local-2',
+        shouldTrackProgress: false,
+        uploadMethod: async () => {
+          throw new Error('fail');
+        },
+      })
+      .catch(() => undefined);
     await vi.waitFor(() => {
       expect(composer.client.uploadManager.getUpload('local-2')?.state).toBe('failed');
     });

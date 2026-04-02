@@ -47,6 +47,9 @@ const upsertById = (uploads: UploadRecord[], record: UploadRecord): UploadRecord
 export class UploadManager {
   readonly state: StateStore<UploadManagerState>;
 
+  /** In-flight upload promises keyed by id (dedupes concurrent `upload` calls). */
+  private inFlightUploads = new Map<string, Promise<unknown>>();
+
   constructor() {
     this.state = new StateStore<UploadManagerState>(initState());
   }
@@ -62,6 +65,7 @@ export class UploadManager {
    * Invoked when the user disconnects so a later session does not inherit stale upload state.
    */
   reset = () => {
+    this.inFlightUploads.clear();
     this.state.next(initState());
   };
 
@@ -95,10 +99,10 @@ export class UploadManager {
   };
 
   /**
-   * When an upload with the same `id` is already in progress (`uploading`), this call is ignored
-   * (no second upload is started).
+   * Starts an upload for `id`, or returns the existing in-flight promise if one is already running.
+   * Resolves with `uploadMethod`'s result; rejects if `uploadMethod` rejects (state is still set to `failed`).
    */
-  upload = async ({
+  upload = ({
     id,
     shouldTrackProgress,
     uploadMethod,
@@ -106,72 +110,56 @@ export class UploadManager {
     id: string;
     shouldTrackProgress?: boolean;
     uploadMethod: UploadMethod;
-  }): Promise<void> => {
-    // De-duplication: do not start a second upload while uploading.
-    // If previous state is failed, allow a new upload to re-attempt.
-    const existing = this.getUpload(id);
-    if (existing?.state === 'uploading') return;
+  }): Promise<unknown> => {
+    const existingPromise = this.inFlightUploads.get(id);
+    if (existingPromise) return existingPromise;
 
-    const trackProgress = shouldTrackProgress ?? true;
-    this.upsertUpload({
-      id,
-      state: 'uploading',
-      uploadProgress: trackProgress ? 0 : undefined,
-      error: undefined,
+    let resolvePromise!: (value: unknown) => void;
+    let rejectPromise!: (reason?: unknown) => void;
+    const promise = new Promise<unknown>((resolve, reject) => {
+      resolvePromise = resolve;
+      rejectPromise = reject;
     });
 
-    const onProgress = trackProgress
-      ? (progress?: number) => {
-          this.upsertUpload({
-            id,
-            state: 'uploading',
-            uploadProgress: progress,
-            error: undefined,
-          });
-        }
-      : undefined;
+    this.inFlightUploads.set(id, promise);
 
-    let response: unknown;
-    try {
-      response = await uploadMethod(onProgress ? { onProgress } : undefined);
-    } catch (error) {
-      this.upsertUpload({
-        id,
-        state: 'failed',
-        uploadProgress: undefined,
-        error,
-      });
-      // Do not rethrow; integrators can observe failure from state.
-      return;
-    }
+    void (async () => {
+      const trackProgress = shouldTrackProgress ?? true;
+      try {
+        this.upsertUpload({
+          id,
+          state: 'uploading',
+          uploadProgress: trackProgress ? 0 : undefined,
+          error: undefined,
+        });
 
-    this.finalizeSuccess(id, response);
-  };
+        const onProgress = trackProgress
+          ? (progress?: number) => {
+              this.upsertUpload({
+                id,
+                state: 'uploading',
+                uploadProgress: progress,
+                error: undefined,
+              });
+            }
+          : undefined;
 
-  /**
-   * Resolves when every upload that matches `predicate` is in a terminal state (`finished` or `failed`).
-   * If no uploads match, resolves immediately (vacuous).
-   */
-  waitForUploads = (predicate: (upload: UploadRecord) => boolean): Promise<void> => {
-    const allMatchedTerminal = (): boolean => {
-      const { uploads } = this.state.getLatestValue();
-      const matched = uploads.filter(predicate);
-      if (matched.length === 0) return true;
-      return matched.every((u) => u.state === 'finished' || u.state === 'failed');
-    };
-
-    return new Promise<void>((resolve) => {
-      if (allMatchedTerminal()) {
-        resolve();
-        return;
+        const response = await uploadMethod(onProgress ? { onProgress } : undefined);
+        this.finalizeSuccess(id, response);
+        resolvePromise(response);
+      } catch (error) {
+        this.upsertUpload({
+          id,
+          state: 'failed',
+          uploadProgress: undefined,
+          error,
+        });
+        rejectPromise(error);
+      } finally {
+        this.inFlightUploads.delete(id);
       }
+    })();
 
-      const unsub = this.state.subscribe(() => {
-        if (allMatchedTerminal()) {
-          unsub();
-          resolve();
-        }
-      });
-    });
+    return promise;
   };
 }
