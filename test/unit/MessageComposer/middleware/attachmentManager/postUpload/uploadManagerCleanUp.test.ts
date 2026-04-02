@@ -1,4 +1,4 @@
-import { MessageComposer, MiddlewareStatus } from '../../../../../../src';
+import { MiddlewareStatus } from '../../../../../../src';
 import { describe, expect, it, vi } from 'vitest';
 import {
   AttachmentPostUploadMiddlewareState,
@@ -25,10 +25,8 @@ const setupHandlerParams = (initialState: AttachmentPostUploadMiddlewareState) =
 
 const setup = () => {
   const client = getClientWithUser({ id: 'user-id' });
-  const composer = new MessageComposer({
-    client,
-    compositionContext: client.channel('type', 'id'),
-  });
+  const channel = client.channel('type', 'id');
+  const composer = channel.messageComposer;
   return { composer, middleware: createUploadManagerCleanUpMiddleware(composer) };
 };
 
@@ -43,10 +41,14 @@ describe('createUploadManagerCleanUpMiddleware', () => {
 
   it('deletes upload record for attachment id and forwards on success', async () => {
     const { composer, middleware } = setup();
+    vi.spyOn(composer.attachmentManager, 'doUploadRequest').mockResolvedValue({
+      file: 'url',
+    });
     void composer.client.uploadManager.upload({
       id: 'local-1',
+      channelCid: composer.channel.cid,
+      file: new File([], 'a.jpg'),
       shouldTrackProgress: false,
-      uploadMethod: async () => ({ file: 'url' }),
     });
     await vi.waitFor(() => {
       expect(composer.client.uploadManager.getUpload('local-1')?.state).toBe('finished');
@@ -72,13 +74,15 @@ describe('createUploadManagerCleanUpMiddleware', () => {
 
   it('deletes upload record for attachment id and forwards on error', async () => {
     const { composer, middleware } = setup();
+    vi.spyOn(composer.attachmentManager, 'doUploadRequest').mockRejectedValue(
+      new Error('fail'),
+    );
     void composer.client.uploadManager
       .upload({
         id: 'local-2',
+        channelCid: composer.channel.cid,
+        file: new File([], 'a.jpg'),
         shouldTrackProgress: false,
-        uploadMethod: async () => {
-          throw new Error('fail');
-        },
       })
       .catch(() => undefined);
     await vi.waitFor(() => {

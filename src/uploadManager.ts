@@ -1,3 +1,5 @@
+import type { StreamChat } from './client';
+import type { FileLike, FileReference } from './types';
 import { StateStore } from './store';
 
 export type UploadRecord =
@@ -20,10 +22,6 @@ export type UploadRecord =
       error: unknown;
       uploadProgress: undefined;
     };
-
-export type UploadMethod = (args?: {
-  onProgress?: (progress?: number) => void;
-}) => Promise<unknown>;
 
 export type UploadManagerState = {
   uploads: UploadRecord[];
@@ -50,8 +48,18 @@ export class UploadManager {
   /** In-flight upload promises keyed by id (dedupes concurrent `upload` calls). */
   private inFlightUploads = new Map<string, Promise<unknown>>();
 
-  constructor() {
+  constructor(private readonly client: StreamChat) {
     this.state = new StateStore<UploadManagerState>(initState());
+  }
+
+  private resolveAttachmentManager(channelCid: string) {
+    const colon = channelCid.indexOf(':');
+    if (colon <= 0 || colon === channelCid.length - 1) {
+      throw new Error(`Invalid channelCid: ${channelCid}`);
+    }
+    const channelType = channelCid.slice(0, colon);
+    const channelId = channelCid.slice(colon + 1);
+    return this.client.channel(channelType, channelId).messageComposer.attachmentManager;
   }
 
   get uploads() {
@@ -100,16 +108,19 @@ export class UploadManager {
 
   /**
    * Starts an upload for `id`, or returns the existing in-flight promise if one is already running.
-   * Resolves with `uploadMethod`'s result; rejects if `uploadMethod` rejects (state is still set to `failed`).
+   * Uses {@link StreamChat.channel}(`channelCid`) → `messageComposer.attachmentManager.doUploadRequest`.
+   * Resolves with that result; rejects if the upload rejects (state is still set to `failed`).
    */
   upload = ({
     id,
+    channelCid,
+    file,
     shouldTrackProgress,
-    uploadMethod,
   }: {
     id: string;
+    channelCid: string;
+    file: FileReference | FileLike;
     shouldTrackProgress?: boolean;
-    uploadMethod: UploadMethod;
   }): Promise<unknown> => {
     const existingPromise = this.inFlightUploads.get(id);
     if (existingPromise) return existingPromise;
@@ -124,7 +135,9 @@ export class UploadManager {
     this.inFlightUploads.set(id, promise);
 
     void (async () => {
-      const trackProgress = shouldTrackProgress ?? true;
+      const attachmentManager = this.resolveAttachmentManager(channelCid);
+      const trackProgress =
+        shouldTrackProgress ?? attachmentManager.config.trackUploadProgress;
       try {
         this.upsertUpload({
           id,
@@ -144,7 +157,10 @@ export class UploadManager {
             }
           : undefined;
 
-        const response = await uploadMethod(onProgress ? { onProgress } : undefined);
+        const response = await attachmentManager.doUploadRequest(
+          file,
+          onProgress ? { onProgress } : undefined,
+        );
         this.finalizeSuccess(id, response);
         resolvePromise(response);
       } catch (error) {

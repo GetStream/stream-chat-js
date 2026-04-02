@@ -400,7 +400,7 @@ export class StreamChat {
     this.moderation = new Moderation(this);
 
     this.notifications = options?.notifications ?? new NotificationManager();
-    this.uploadManager = new UploadManager();
+    this.uploadManager = new UploadManager(this);
 
     // set the secret
     if (secretOrOptions && isString(secretOrOptions)) {

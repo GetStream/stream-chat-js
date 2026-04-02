@@ -24,17 +24,20 @@ import { generateUUIDv4 } from '../utils';
 import { DEFAULT_UPLOAD_SIZE_LIMIT_BYTES } from '../constants';
 import type {
   AttachmentLoadingState,
-  FileLike,
-  FileReference,
   LocalAttachment,
   LocalNotImageAttachment,
   LocalUploadAttachment,
   UploadPermissionCheckResult,
 } from './types';
-import type { ChannelResponse, DraftMessage, LocalMessage } from '../types';
+import type {
+  ChannelResponse,
+  DraftMessage,
+  FileLike,
+  FileReference,
+  LocalMessage,
+} from '../types';
 import type { MessageComposer } from './messageComposer';
 import { mergeWithDiff } from '../utils/mergeWith';
-import type { UploadMethod } from '../uploadManager';
 
 export type FileUploadFilter = (file: Partial<LocalUploadAttachment>) => boolean;
 
@@ -695,9 +698,6 @@ export class AttachmentManager {
 
   private upload(attachment: LocalUploadAttachment) {
     const shouldTrackProgress = this.config.trackUploadProgress;
-    const uploadMethod: UploadMethod = (options?: UploadRequestOptions) =>
-      this.doUploadRequest(attachment.localMetadata.file, options);
-
     const localId = attachment.localMetadata.id;
 
     const unsubscribe = this.client.uploadManager.state.subscribeWithSelector(
@@ -723,8 +723,9 @@ export class AttachmentManager {
 
     return this.client.uploadManager.upload({
       id: localId,
+      channelCid: this.channel.cid,
+      file: attachment.localMetadata.file,
       shouldTrackProgress,
-      uploadMethod,
     }) as Promise<MinimumUploadRequestResult>;
   }
 }

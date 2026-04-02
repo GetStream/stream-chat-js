@@ -9,7 +9,6 @@ import {
   DraftResponse,
   FileReference,
   LocalMessage,
-  MessageComposer,
   StreamChat,
 } from '../../../src';
 import { AppSettings } from '../../../src';
@@ -117,12 +116,14 @@ const setup = ({
     .fn()
     .mockResolvedValue({ file: 'test-image-url', thumb_url: 'thumb_url-image' });
   mockChannel.data = { own_capabilities: ['upload-file'] };
-  const messageComposer = new MessageComposer({
-    client: mockClient,
-    composition,
-    compositionContext: mockChannel,
-    config: { attachments: config },
-  });
+  // Use the channel's messageComposer so client.uploadManager (resolves via channelCid) hits this composer.
+  const messageComposer = mockChannel.messageComposer;
+  if (config) {
+    messageComposer.updateConfig({ attachments: config });
+  }
+  if (composition !== undefined) {
+    messageComposer.initState({ composition });
+  }
   return { mockClient, mockChannel, messageComposer };
 };
 
@@ -470,13 +471,17 @@ describe('AttachmentManager', () => {
     });
 
     it('should not delete upload records on init when there are no attachment local ids', async () => {
-      const { messageComposer, mockClient } = setup();
+      const { messageComposer, mockClient, mockChannel } = setup();
       const { attachmentManager } = messageComposer;
 
-      const never = vi.fn().mockImplementation(() => new Promise(() => {}));
+      vi.spyOn(attachmentManager, 'doUploadRequest').mockImplementation(
+        () => new Promise(() => {}),
+      );
       void mockClient.uploadManager.upload({
         id: 'orphan-local',
-        uploadMethod: never,
+        channelCid: mockChannel.cid,
+        file: new File([], 'orphan.png'),
+        shouldTrackProgress: false,
       });
 
       attachmentManager.state.next({ attachments: [] });
@@ -637,6 +642,7 @@ describe('AttachmentManager', () => {
         messageComposer: { attachmentManager },
         messageComposer,
         mockClient,
+        mockChannel,
       } = setup();
 
       const previewUri = 'blob:preview-for-remove-test';
@@ -656,10 +662,14 @@ describe('AttachmentManager', () => {
 
       attachmentManager.upsertAttachments([attachment]);
 
+      vi.spyOn(attachmentManager, 'doUploadRequest').mockImplementation(
+        () => new Promise(() => {}),
+      );
       void mockClient.uploadManager.upload({
         id: 'att-with-upload',
+        channelCid: mockChannel.cid,
+        file,
         shouldTrackProgress: false,
-        uploadMethod: () => new Promise(() => {}),
       });
 
       await Promise.resolve();
@@ -680,14 +690,19 @@ describe('AttachmentManager', () => {
       const {
         messageComposer: { attachmentManager },
         mockClient,
+        mockChannel,
       } = setup();
 
       const previewUri = 'blob:other-composer-uri';
 
+      vi.spyOn(attachmentManager, 'doUploadRequest').mockImplementation(
+        () => new Promise(() => {}),
+      );
       void mockClient.uploadManager.upload({
         id: 'other-composer-attachment',
+        channelCid: mockChannel.cid,
+        file: new File([], 'other.png'),
         shouldTrackProgress: false,
-        uploadMethod: () => new Promise(() => {}),
       });
 
       await Promise.resolve();
