@@ -23,6 +23,24 @@ import type { RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
  * Utility Types
  */
 
+/** Web `File` or `Blob`; used for uploads across browser and shared helpers. */
+export type FileLike = File | Blob;
+
+// todo: make sure that RN SDK passes MIME type in the type field
+export type FileReference = Pick<File, 'name' | 'size' | 'type'> & {
+  uri: string;
+  // For images
+  height?: number;
+  width?: number;
+
+  // For voice recordings
+  duration?: number;
+  waveform_data?: number[];
+
+  // This is specially needed for video in camera roll
+  thumb_url?: string;
+};
+
 export type Readable<T> = {
   [key in keyof T]: T[key];
 } & {};

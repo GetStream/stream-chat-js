@@ -72,6 +72,9 @@ describe('stream-io/message-composer-middleware/attachments', () => {
     };
 
     const attachmentManager = {
+      get attachments() {
+        return [];
+      },
       get uploadsInProgressCount() {
         return 0;
       },
@@ -159,7 +162,7 @@ describe('stream-io/message-composer-middleware/attachments', () => {
       }),
     );
 
-    expect(result.status).toBeUndefined;
+    expect(result.status).toBeUndefined();
     expect(result.state.message.attachments ?? []).toHaveLength(0);
     expect(result.state.localMessage.attachments ?? []).toHaveLength(0);
   });
@@ -175,11 +178,9 @@ describe('stream-io/message-composer-middleware/attachments', () => {
       },
     };
 
-    vi.spyOn(
-      messageComposer.attachmentManager,
-      'successfulUploads',
-      'get',
-    ).mockReturnValue([attachment]);
+    vi.spyOn(messageComposer.attachmentManager, 'attachments', 'get').mockReturnValue([
+      attachment,
+    ]);
 
     const result = await attachmentsMiddleware.handlers.compose(
       setup({
@@ -207,7 +208,7 @@ describe('stream-io/message-composer-middleware/attachments', () => {
       }),
     );
 
-    expect(result.status).toBeUndefined;
+    expect(result.status).toBeUndefined();
     expect(result.state.message.attachments ?? []).toHaveLength(1);
     expect(result.state.localMessage.attachments ?? []).toHaveLength(1);
     expect((result.state.message.attachments ?? [])[0].type).toBe('image');
@@ -236,11 +237,9 @@ describe('stream-io/message-composer-middleware/attachments', () => {
       },
     ];
 
-    vi.spyOn(
-      messageComposer.attachmentManager,
-      'successfulUploads',
-      'get',
-    ).mockReturnValue(attachments);
+    vi.spyOn(messageComposer.attachmentManager, 'attachments', 'get').mockReturnValue(
+      attachments,
+    );
 
     const result = await attachmentsMiddleware.handlers.compose(
       setup({
@@ -268,7 +267,7 @@ describe('stream-io/message-composer-middleware/attachments', () => {
       }),
     );
 
-    expect(result.status).toBeUndefined;
+    expect(result.status).toBeUndefined();
     expect(result.state.message.attachments ?? []).toHaveLength(2);
     expect(result.state.localMessage.attachments ?? []).toHaveLength(2);
     expect((result.state.message.attachments ?? [])[0].type).toBe('image');
@@ -291,11 +290,9 @@ describe('stream-io/message-composer-middleware/attachments', () => {
       'uploadsInProgressCount',
       'get',
     ).mockReturnValue(1);
-    vi.spyOn(
-      messageComposer.attachmentManager,
-      'successfulUploads',
-      'get',
-    ).mockReturnValue([]);
+    vi.spyOn(messageComposer.attachmentManager, 'attachments', 'get').mockReturnValue([
+      attachment,
+    ]);
 
     const result = await attachmentsMiddleware.handlers.compose(
       setup({
@@ -323,7 +320,17 @@ describe('stream-io/message-composer-middleware/attachments', () => {
       }),
     );
 
-    expect(result.status).toBeUndefined;
+    expect(result.status).toBe('discard');
+    expect(client.notifications.addWarning).toHaveBeenCalledWith({
+      message: 'Wait until all attachments have uploaded',
+      origin: {
+        emitter: 'MessageComposer',
+        context: { composer: messageComposer },
+      },
+      options: {
+        type: 'validation:attachment:upload:in-progress',
+      },
+    });
     expect(result.state.message.attachments ?? []).toHaveLength(0);
     expect(result.state.localMessage.attachments ?? []).toHaveLength(1);
   });
@@ -339,11 +346,9 @@ describe('stream-io/message-composer-middleware/attachments', () => {
       },
     };
 
-    vi.spyOn(
-      messageComposer.attachmentManager,
-      'successfulUploads',
-      'get',
-    ).mockReturnValue([]);
+    vi.spyOn(messageComposer.attachmentManager, 'attachments', 'get').mockReturnValue([
+      attachment,
+    ]);
 
     const result = await attachmentsMiddleware.handlers.compose(
       setup({
@@ -371,9 +376,178 @@ describe('stream-io/message-composer-middleware/attachments', () => {
       }),
     );
 
-    expect(result.status).toBeUndefined;
-    expect(result.state.message.attachments ?? []).toHaveLength(0);
+    expect(result.status).toBeUndefined();
+    expect(result.state.message.attachments ?? []).toHaveLength(1);
     expect(result.state.localMessage.attachments ?? []).toHaveLength(1);
+    expect('localMetadata' in (result.state.message.attachments ?? [])[0]!).toBeFalsy();
+  });
+
+  it('should merge existing message.attachments with attachment manager items', async () => {
+    const serverSide = {
+      type: 'image' as const,
+      image_url: 'https://example.com/existing.jpg',
+    };
+    const localOnly: LocalImageAttachment = {
+      type: 'image',
+      image_url: 'https://example.com/new.jpg',
+      localMetadata: {
+        id: 'attachment-1',
+        file: new File([], 'test.jpg', { type: 'image/jpeg' }),
+        uploadState: 'finished' as AttachmentLoadingState,
+      },
+    };
+
+    vi.spyOn(messageComposer.attachmentManager, 'attachments', 'get').mockReturnValue([
+      localOnly,
+    ]);
+
+    const result = await attachmentsMiddleware.handlers.compose(
+      setup({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
+          attachments: [serverSide],
+        },
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
+
+    expect(result.status).toBeUndefined();
+    expect(result.state.message.attachments ?? []).toHaveLength(2);
+    expect((result.state.message.attachments ?? [])[0]).toEqual(serverSide);
+    expect((result.state.message.attachments ?? [])[1].image_url).toBe(
+      'https://example.com/new.jpg',
+    );
+  });
+
+  it('should omit blocked and pending attachments from the composed payload', async () => {
+    const finished: LocalImageAttachment = {
+      type: 'image',
+      image_url: 'https://example.com/ok.jpg',
+      localMetadata: {
+        id: 'a1',
+        file: new File([], 'ok.jpg', { type: 'image/jpeg' }),
+        uploadState: 'finished' as AttachmentLoadingState,
+      },
+    };
+    const blocked: LocalImageAttachment = {
+      type: 'image',
+      image_url: 'https://example.com/blocked.jpg',
+      localMetadata: {
+        id: 'a2',
+        file: new File([], 'blocked.jpg', { type: 'image/jpeg' }),
+        uploadState: 'blocked' as AttachmentLoadingState,
+      },
+    };
+    const pending: LocalImageAttachment = {
+      type: 'image',
+      image_url: 'https://example.com/pending.jpg',
+      localMetadata: {
+        id: 'a3',
+        file: new File([], 'pending.jpg', { type: 'image/jpeg' }),
+        uploadState: 'pending' as AttachmentLoadingState,
+      },
+    };
+
+    vi.spyOn(messageComposer.attachmentManager, 'attachments', 'get').mockReturnValue([
+      finished,
+      blocked,
+      pending,
+    ]);
+
+    const result = await attachmentsMiddleware.handlers.compose(
+      setup({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
+        },
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
+
+    expect(result.status).toBeUndefined();
+    expect(result.state.message.attachments ?? []).toHaveLength(1);
+    expect((result.state.message.attachments ?? [])[0].image_url).toBe(
+      'https://example.com/ok.jpg',
+    );
+  });
+
+  it('should forward without changing state when all manager attachments are blocked or pending', async () => {
+    const blocked: LocalImageAttachment = {
+      type: 'image',
+      image_url: 'https://example.com/blocked.jpg',
+      localMetadata: {
+        id: 'a2',
+        file: new File([], 'blocked.jpg', { type: 'image/jpeg' }),
+        uploadState: 'blocked' as AttachmentLoadingState,
+      },
+    };
+
+    vi.spyOn(messageComposer.attachmentManager, 'attachments', 'get').mockReturnValue([
+      blocked,
+    ]);
+
+    const result = await attachmentsMiddleware.handlers.compose(
+      setup({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
+        },
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [],
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
+
+    expect(result.status).toBeUndefined();
+    expect(result.state.message.attachments).toBeUndefined();
+    expect(result.state.localMessage.attachments).toEqual([]);
   });
 });
 
@@ -401,6 +575,9 @@ describe('stream-io/message-composer-middleware/draft-attachments', () => {
     } as any;
 
     const attachmentManager = {
+      get attachments() {
+        return [];
+      },
       get uploadsInProgressCount() {
         return 0;
       },
@@ -448,6 +625,9 @@ describe('stream-io/message-composer-middleware/draft-attachments', () => {
       'successfulUploads',
       'get',
     ).mockReturnValue([attachment]);
+    vi.spyOn(messageComposer.attachmentManager!, 'attachments', 'get').mockReturnValue([
+      attachment,
+    ]);
 
     const result = await draftAttachmentsMiddleware.handlers.compose(
       setupDraft({
@@ -488,6 +668,9 @@ describe('stream-io/message-composer-middleware/draft-attachments', () => {
       'successfulUploads',
       'get',
     ).mockReturnValue([newAttachment]);
+    vi.spyOn(messageComposer.attachmentManager!, 'attachments', 'get').mockReturnValue([
+      newAttachment,
+    ]);
 
     const result = await draftAttachmentsMiddleware.handlers.compose(
       setupDraft({
@@ -520,5 +703,88 @@ describe('stream-io/message-composer-middleware/draft-attachments', () => {
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.attachments).toBeUndefined();
+  });
+
+  it('should omit blocked and pending attachments when merging into draft', async () => {
+    const finished: LocalImageAttachment = {
+      type: 'image',
+      image_url: 'https://example.com/ok.jpg',
+      localMetadata: {
+        id: 'a1',
+        file: new File([], 'ok.jpg', { type: 'image/jpeg' }),
+        uploadState: 'finished' as AttachmentLoadingState,
+      },
+    };
+    const blocked: LocalImageAttachment = {
+      type: 'image',
+      image_url: 'https://example.com/blocked.jpg',
+      localMetadata: {
+        id: 'a2',
+        file: new File([], 'b.jpg', { type: 'image/jpeg' }),
+        uploadState: 'blocked' as AttachmentLoadingState,
+      },
+    };
+
+    vi.spyOn(
+      messageComposer.attachmentManager!,
+      'successfulUploads',
+      'get',
+    ).mockReturnValue([finished, blocked]);
+    vi.spyOn(messageComposer.attachmentManager!, 'attachments', 'get').mockReturnValue([
+      finished,
+      blocked,
+    ]);
+
+    const result = await draftAttachmentsMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          text: '',
+          attachments: [],
+        },
+      }),
+    );
+
+    expect(result.status).toBeUndefined();
+    expect(result.state.draft.attachments).toHaveLength(1);
+    expect(result.state.draft.attachments?.[0].image_url).toBe(
+      'https://example.com/ok.jpg',
+    );
+  });
+
+  it('should keep only existing draft attachments when successful uploads exist but manager yields none after filter', async () => {
+    const pending: LocalImageAttachment = {
+      type: 'image',
+      image_url: 'https://example.com/pending.jpg',
+      localMetadata: {
+        id: 'a1',
+        file: new File([], 'p.jpg', { type: 'image/jpeg' }),
+        uploadState: 'pending' as AttachmentLoadingState,
+      },
+    };
+    const existingAttachment = {
+      type: 'file',
+      file_url: 'https://example.com/doc.pdf',
+    };
+
+    vi.spyOn(
+      messageComposer.attachmentManager!,
+      'successfulUploads',
+      'get',
+    ).mockReturnValue([pending]);
+    vi.spyOn(messageComposer.attachmentManager!, 'attachments', 'get').mockReturnValue([
+      pending,
+    ]);
+
+    const result = await draftAttachmentsMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          text: '',
+          attachments: [existingAttachment],
+        },
+      }),
+    );
+
+    expect(result.status).toBeUndefined();
+    expect(result.state.draft.attachments).toEqual([existingAttachment]);
   });
 });

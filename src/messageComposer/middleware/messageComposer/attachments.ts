@@ -44,7 +44,13 @@ export const createAttachmentsCompositionMiddleware = (
       }
 
       const attachments = (state.message.attachments ?? []).concat(
-        attachmentManager.successfulUploads.map(localAttachmentToAttachment),
+        attachmentManager.attachments
+          .filter(
+            (a) =>
+              a.localMetadata.uploadState !== 'blocked' &&
+              a.localMetadata.uploadState !== 'pending',
+          )
+          .map(localAttachmentToAttachment),
       );
 
       // prevent introducing attachments array into the payload sent to the server
@@ -81,7 +87,13 @@ export const createDraftAttachmentsCompositionMiddleware = (
       const successfulUploads = attachmentManager.successfulUploads;
       const attachments = successfulUploads.length
         ? (state.draft.attachments ?? []).concat(
-            successfulUploads.map(localAttachmentToAttachment),
+            attachmentManager.attachments
+              .filter(
+                (a) =>
+                  a.localMetadata.uploadState !== 'blocked' &&
+                  a.localMetadata.uploadState !== 'pending',
+              )
+              .map(localAttachmentToAttachment),
           )
         : undefined;
 

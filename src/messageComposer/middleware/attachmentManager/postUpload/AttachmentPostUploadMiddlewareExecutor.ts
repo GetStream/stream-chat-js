@@ -5,6 +5,7 @@ import type {
 } from '../types';
 import { createPostUploadAttachmentEnrichmentMiddleware } from './attachmentEnrichment';
 import { createUploadErrorHandlerMiddleware } from './uploadErrorHandler';
+import { createUploadManagerCleanUpMiddleware } from './uploadManagerCleanUp';
 
 export class AttachmentPostUploadMiddlewareExecutor extends MiddlewareExecutor<
   AttachmentPostUploadMiddlewareState,
@@ -15,6 +16,7 @@ export class AttachmentPostUploadMiddlewareExecutor extends MiddlewareExecutor<
     this.use([
       createUploadErrorHandlerMiddleware(composer),
       createPostUploadAttachmentEnrichmentMiddleware(),
+      createUploadManagerCleanUpMiddleware(composer),
     ]);
   }
 }

@@ -201,7 +201,10 @@ export class MessageComposer extends WithSubscriptions {
       message = formatMessage(composition);
     }
 
-    this.attachmentManager = new AttachmentManager({ composer: this, message });
+    this.attachmentManager = new AttachmentManager({
+      composer: this,
+      message,
+    });
     this.linkPreviewsManager = new LinkPreviewsManager({ composer: this, message });
     this.locationComposer = new LocationComposer({ composer: this, message });
     this.textComposer = new TextComposer({ composer: this, message });
@@ -334,8 +337,9 @@ export class MessageComposer extends WithSubscriptions {
         !!this.locationComposer.validLocation
       );
     }
+    const uploadsBlockSend = this.attachmentManager.uploadsInProgressCount > 0;
     return !!(
-      (!this.attachmentManager.uploadsInProgressCount &&
+      (!uploadsBlockSend &&
         (!this.textComposer.textIsEmpty ||
           this.attachmentManager.successfulUploadsCount > 0)) ||
       this.pollId ||

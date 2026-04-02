@@ -1,6 +1,6 @@
 import type { LinkPreview } from '../linkPreviewsManager';
 import type { FileUploadFilter } from '../attachmentManager';
-import type { FileLike, FileReference } from '../types';
+import type { FileLike, FileReference } from '../../types';
 
 export type MinimumUploadRequestResult = { file: string; thumb_url?: string } & Partial<
   Record<string, unknown>
@@ -8,7 +8,7 @@ export type MinimumUploadRequestResult = { file: string; thumb_url?: string } & 
 
 /** Optional second argument to `UploadRequestFn`; integrators may call `onProgress` to report 0–100 or `undefined` when indeterminate. */
 export type UploadRequestOptions = {
-  onProgress?: (percent: number | undefined) => void;
+  onProgress?: (percent: number | undefined) => unknown;
 };
 
 export type UploadRequestFn = (

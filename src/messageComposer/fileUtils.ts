@@ -1,12 +1,7 @@
-import type { Attachment } from '../types';
+import type { Attachment, FileLike, FileReference } from '../types';
 import { generateUUIDv4 } from '../utils';
 import { isLocalAttachment } from './attachmentIdentity';
-import type {
-  BaseLocalAttachmentMetadata,
-  FileLike,
-  FileReference,
-  LocalAttachment,
-} from './types';
+import type { BaseLocalAttachmentMetadata, LocalAttachment } from './types';
 
 export const isFile = (fileLike: FileReference | File | Blob): fileLike is File =>
   !!(fileLike as File).lastModified && !('uri' in fileLike);
