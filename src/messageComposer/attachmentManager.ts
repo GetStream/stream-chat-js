@@ -694,10 +694,6 @@ export class AttachmentManager {
   };
 
   private upload(attachment: LocalUploadAttachment) {
-    if (!attachment.localMetadata.previewUri) {
-      throw new Error('Preview uri is required for upload');
-    }
-
     const shouldTrackProgress = this.config.trackUploadProgress;
     const uploadMethod: UploadMethod = (options?: UploadRequestOptions) =>
       this.doUploadRequest(attachment.localMetadata.file, options);
