@@ -1,4 +1,11 @@
-import type { APIErrorResponse, ChannelResponse, Event } from '../types';
+import type {
+  APIErrorResponse,
+  ChannelResponse,
+  Event,
+  LocalMessage,
+  Message,
+  MessageResponse,
+} from '../types';
 
 import type {
   OfflineDBApi,
@@ -11,7 +18,8 @@ import type { StreamChat } from '../client';
 import type { AxiosError } from 'axios';
 import { OfflineDBSyncManager } from './offline_sync_manager';
 import { StateStore } from '../store';
-import { runDetached } from '../utils';
+import { localMessageToNewMessagePayload, runDetached } from '../utils';
+import { isMessageUpdateReplayable } from './util';
 
 /**
  * Abstract base class for an offline database implementation used with StreamChat.
@@ -309,6 +317,16 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * @returns {Promise<() => Promise<void>>}
    */
   abstract addPendingTask: OfflineDBApi['addPendingTask'];
+
+  /**
+   * @abstract
+   * Updates a pending task in the DB, given its ID.
+   * Will return the prepared queries for delayed execution (even if they are
+   * already executed).
+   * @param {DBUpdatePendingTaskType} options
+   * @returns {Promise<ExecuteBatchDBQueriesType>}
+   */
+  abstract updatePendingTask: OfflineDBApi['updatePendingTask'];
 
   /**
    * @abstract
@@ -1076,7 +1094,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       return await attemptTaskExecution();
     } catch (e) {
       if (!this.shouldSkipQueueingTask(e as AxiosError<APIErrorResponse>)) {
-        await this.addPendingTask(task);
+        await this.handleAddPendingTask({ task });
       }
       throw e;
     }
@@ -1092,13 +1110,112 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   private shouldSkipQueueingTask = (error: AxiosError<APIErrorResponse>) =>
     error?.response?.data?.code === 4 || error?.response?.data?.code === 17;
 
+  private mergeFailedMessageUpdateIntoPendingSendMessage = ({
+    editedMessage,
+    pendingMessage,
+  }: {
+    editedMessage: LocalMessage | Partial<MessageResponse>;
+    pendingMessage: Message;
+  }) => {
+    const normalizedEditedMessageSource = {
+      ...editedMessage,
+    } as LocalMessage & { message_text_updated_at?: string };
+
+    if (editedMessage.status === 'failed') {
+      delete normalizedEditedMessageSource.message_text_updated_at;
+    }
+
+    const normalizedEditedMessage = localMessageToNewMessagePayload(
+      normalizedEditedMessageSource,
+    );
+    const pendingMessageStatus = (pendingMessage as { status?: string }).status;
+
+    return {
+      ...pendingMessage,
+      ...normalizedEditedMessage,
+      ...(typeof pendingMessageStatus !== 'undefined'
+        ? { status: pendingMessageStatus }
+        : {}),
+    } as Message;
+  };
+
+  private isPendingSendMessageTask = (
+    task: PendingTask,
+  ): task is Extract<PendingTask, { type: 'send-message' }> =>
+    task.type === 'send-message';
+
+  private handleOfflineFailedUpdateMessagePendingTask = async (
+    task: Extract<PendingTask, { type: 'update-message' }>,
+  ) => {
+    const [message] = task.payload;
+    if (!message.id) {
+      return;
+    }
+
+    const pendingTasks = await this.getPendingTasks({ messageId: message.id });
+    const pendingSendMessageTask = pendingTasks.find(this.isPendingSendMessageTask);
+
+    if (!pendingSendMessageTask) {
+      return;
+    }
+
+    const updatedPendingSendMessage = this.mergeFailedMessageUpdateIntoPendingSendMessage(
+      {
+        editedMessage: message,
+        pendingMessage: pendingSendMessageTask.payload[0],
+      },
+    );
+
+    const updatedPendingTask: Extract<PendingTask, { type: 'send-message' }> = {
+      ...pendingSendMessageTask,
+      payload: [updatedPendingSendMessage, pendingSendMessageTask.payload[1]],
+    };
+
+    if (pendingSendMessageTask.id) {
+      await this.updatePendingTask({
+        id: pendingSendMessageTask.id,
+        task: updatedPendingTask,
+      });
+      return;
+    }
+
+    await this.addPendingTask({
+      ...updatedPendingTask,
+      id: undefined,
+    });
+  };
+
+  /**
+   * Central ingress for persisting pending tasks. It either stores the task as-is
+   * or rewrites an existing pending `send-message` task for offline edits of failed messages.
+   */
+  public handleAddPendingTask = async ({ task }: { task: PendingTask }) => {
+    if (task.type === 'update-message' && !isMessageUpdateReplayable(task.payload[0])) {
+      return;
+    }
+
+    if (
+      task.type === 'update-message' &&
+      !this.client.wsConnection?.isHealthy &&
+      task.payload[0].status === 'failed'
+    ) {
+      await this.handleOfflineFailedUpdateMessagePendingTask(task);
+      return;
+    }
+
+    await this.addPendingTask(task);
+  };
+
   /**
    * Executes a task from the list of supported pending tasks. Currently supported pending tasks
    * are:
+   * - Updating a message
    * - Deleting a message
    * - Sending a reaction
    * - Removing a reaction
    * - Sending a message
+   * - Creating a draft
+   * - Deleting a draft
    * It will throw if we try to execute a pending task that is not supported.
    * @param task - The task we want to execute
    * @param isPendingTask - a control value telling us if it's an actual pending task being executed
@@ -1108,6 +1225,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     { task }: { task: PendingTask },
     isPendingTask = false,
   ) => {
+    if (task.type === 'update-message') {
+      return await this.client._updateMessage(...task.payload);
+    }
+
     if (task.type === 'delete-message') {
       return await this.client._deleteMessage(...task.payload);
     }

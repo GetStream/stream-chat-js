@@ -228,6 +228,16 @@ export type DBDeletePendingTaskType = {
 };
 
 /**
+ * Update a pending task by ID.
+ */
+export type DBUpdatePendingTaskType = {
+  /** ID of the pending task. */
+  id: number;
+  /** The next task payload to persist. */
+  task: PendingTask;
+};
+
+/**
  * Options to delete a reaction from a message.
  */
 export type DBDeleteReactionType = {
@@ -372,6 +382,9 @@ export interface OfflineDBApi {
   addPendingTask: (task: PendingTask) => Promise<() => Promise<void>>;
   getPendingTasks: (conditions?: DBGetPendingTasksType) => Promise<PendingTask[]>;
   deleteDraft: (options: DBDeleteDraftType) => Promise<ExecuteBatchDBQueriesType>;
+  updatePendingTask: (
+    options: DBUpdatePendingTaskType,
+  ) => Promise<ExecuteBatchDBQueriesType>;
   deletePendingTask: (
     options: DBDeletePendingTaskType,
   ) => Promise<ExecuteBatchDBQueriesType>;
@@ -397,6 +410,7 @@ export type OfflineDBState = {
 };
 
 export type PendingTaskTypes = {
+  updateMessage: 'update-message';
   deleteMessage: 'delete-message';
   deleteReaction: 'delete-reaction';
   sendReaction: 'send-reaction';
@@ -416,6 +430,10 @@ export type PendingTask = {
   | {
       payload: Parameters<Channel['sendReaction']>;
       type: PendingTaskTypes['sendReaction'];
+    }
+  | {
+      payload: Parameters<StreamChat['updateMessage']>;
+      type: PendingTaskTypes['updateMessage'];
     }
   | {
       payload: Parameters<StreamChat['deleteMessage']>;

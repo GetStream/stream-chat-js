@@ -265,6 +265,7 @@ import { ReminderManager } from './reminders';
 import { StateStore } from './store';
 import type { MessageComposer } from './messageComposer';
 import type { AbstractOfflineDB } from './offline-support';
+import { getPendingTaskChannelData } from './offline-support/util';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -3106,6 +3107,38 @@ export class StreamChat {
    * @return {{ message: LocalMessage | MessageResponse }} Response that includes the message
    */
   async updateMessage(
+    message: LocalMessage | Partial<MessageResponse>,
+    partialUserOrUserId?: string | { id: string },
+    options?: UpdateMessageOptions,
+  ) {
+    if (!message.id) {
+      throw Error('Please specify the message.id when calling updateMessage');
+    }
+
+    const messageId = message.id as string;
+
+    try {
+      if (this.offlineDb) {
+        return await this.offlineDb.queueTask<UpdateMessageAPIResponse>({
+          task: {
+            ...getPendingTaskChannelData(message.cid),
+            messageId,
+            payload: [message, partialUserOrUserId, options],
+            type: 'update-message',
+          },
+        });
+      }
+    } catch (error) {
+      this.logger('error', `offlineDb:updateMessage`, {
+        tags: ['channel', 'offlineDb'],
+        error,
+      });
+    }
+
+    return await this._updateMessage(message, partialUserOrUserId, options);
+  }
+
+  async _updateMessage(
     message: LocalMessage | Partial<MessageResponse>,
     partialUserOrUserId?: string | { id: string },
     options?: UpdateMessageOptions,
