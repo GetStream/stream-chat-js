@@ -1680,6 +1680,7 @@ describe('OfflineSupportApi', () => {
         let executeTaskSpy: MockInstance;
         let shouldSkipSpy: MockInstance;
         let addPendingTaskSpy: MockInstance;
+        let handleAddPendingTaskSpy: MockInstance;
         let mockResponse: { ok: boolean };
 
         const task = generatePendingTask('send-message') as PendingTask;
@@ -1691,6 +1692,7 @@ describe('OfflineSupportApi', () => {
             .mockResolvedValue(mockResponse);
           shouldSkipSpy = vi.spyOn(offlineDb as any, 'shouldSkipQueueingTask');
           addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+          handleAddPendingTaskSpy = vi.spyOn(offlineDb, 'handleAddPendingTask');
           client.wsConnection = { isHealthy: true } as StableWSConnection;
         });
 
@@ -1723,7 +1725,7 @@ describe('OfflineSupportApi', () => {
 
           expect(result).toBeUndefined();
           expect(executeTaskSpy).not.toHaveBeenCalled();
-          expect(addPendingTaskSpy).toHaveBeenCalledWith(task);
+          expect(handleAddPendingTaskSpy).toHaveBeenCalledWith({ task });
         });
 
         it('should add task and rethrow if executeTask throws non-skippable error', async () => {
@@ -1737,7 +1739,7 @@ describe('OfflineSupportApi', () => {
 
           await expect(offlineDb.queueTask({ task })).rejects.toEqual(error);
 
-          expect(addPendingTaskSpy).toHaveBeenCalledWith(task);
+          expect(handleAddPendingTaskSpy).toHaveBeenCalledWith({ task });
           expect(shouldSkipSpy).toHaveBeenCalledWith(error);
         });
 
@@ -1757,8 +1759,175 @@ describe('OfflineSupportApi', () => {
         });
       });
 
+      describe('handleAddPendingTask', () => {
+        it('adds regular pending tasks as-is', async () => {
+          const task = generatePendingTask('send-message') as PendingTask;
+          const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+
+          await offlineDb.handleAddPendingTask({ task });
+
+          expect(addPendingTaskSpy).toHaveBeenCalledWith(task);
+        });
+
+        it('adds replayable update-message tasks as-is', async () => {
+          const task = generatePendingTask('update-message') as PendingTask;
+          const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+          const getPendingTasksSpy = vi.spyOn(offlineDb, 'getPendingTasks');
+
+          await offlineDb.handleAddPendingTask({ task });
+
+          expect(addPendingTaskSpy).toHaveBeenCalledWith(task);
+          expect(getPendingTasksSpy).not.toHaveBeenCalled();
+        });
+
+        it('does not persist non-replayable update-message tasks', async () => {
+          const task = generatePendingTask(
+            'update-message',
+            1,
+            {},
+            {
+              message: {
+                id: 'msg-123',
+                attachments: [{ type: 'image', image_url: 'file://local-image.jpg' }],
+              },
+            },
+          ) as PendingTask;
+          const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+          const getPendingTasksSpy = vi.spyOn(offlineDb, 'getPendingTasks');
+          const updatePendingTaskSpy = vi.spyOn(offlineDb, 'updatePendingTask');
+
+          await offlineDb.handleAddPendingTask({ task });
+
+          expect(addPendingTaskSpy).not.toHaveBeenCalled();
+          expect(getPendingTasksSpy).not.toHaveBeenCalled();
+          expect(updatePendingTaskSpy).not.toHaveBeenCalled();
+        });
+
+        it('rewrites a queued send-message task for offline failed update-message tasks', async () => {
+          client.wsConnection = { isHealthy: false } as StableWSConnection;
+          const task = generatePendingTask(
+            'update-message',
+            1,
+            {},
+            {
+              message: {
+                id: 'msg-123',
+                status: 'failed',
+                text: 'edited',
+                message_text_updated_at: '2026-04-01T20:48:43.886269Z',
+              },
+            },
+          ) as PendingTask;
+          const pendingSendOptions = { skip_enrich_url: true };
+          vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([
+            {
+              id: 7,
+              messageId: 'msg-123',
+              payload: [
+                { id: 'msg-123', status: 'sending', text: 'original' },
+                pendingSendOptions,
+              ],
+              type: 'send-message',
+            } as PendingTask,
+          ]);
+          const updatePendingTaskSpy = vi.spyOn(offlineDb, 'updatePendingTask');
+          const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+
+          await offlineDb.handleAddPendingTask({ task });
+
+          expect(updatePendingTaskSpy).toHaveBeenCalledWith({
+            id: 7,
+            task: expect.objectContaining({
+              id: 7,
+              messageId: 'msg-123',
+              type: 'send-message',
+            }),
+          });
+          expect(updatePendingTaskSpy.mock.calls[0][0].task.payload[0]).toMatchObject({
+            id: 'msg-123',
+            status: 'sending',
+            text: 'edited',
+          });
+          expect(
+            updatePendingTaskSpy.mock.calls[0][0].task.payload[0],
+          ).not.toHaveProperty('message_text_updated_at');
+          expect(updatePendingTaskSpy.mock.calls[0][0].task.payload[1]).toBe(
+            pendingSendOptions,
+          );
+          expect(addPendingTaskSpy).not.toHaveBeenCalled();
+        });
+
+        it('re-adds the rewritten send-message task if the pending task does not have an id', async () => {
+          client.wsConnection = { isHealthy: false } as StableWSConnection;
+          const task = generatePendingTask(
+            'update-message',
+            1,
+            {},
+            {
+              message: {
+                id: 'msg-123',
+                status: 'failed',
+                text: 'edited',
+                message_text_updated_at: '2026-04-01T20:48:43.886269Z',
+              },
+            },
+          ) as PendingTask;
+          vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([
+            {
+              messageId: 'msg-123',
+              payload: [
+                { id: 'msg-123', status: 'sending', text: 'original' },
+                undefined,
+              ],
+              type: 'send-message',
+            } as PendingTask,
+          ]);
+          const updatePendingTaskSpy = vi.spyOn(offlineDb, 'updatePendingTask');
+          const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+
+          await offlineDb.handleAddPendingTask({ task });
+
+          expect(updatePendingTaskSpy).not.toHaveBeenCalled();
+          expect(addPendingTaskSpy).toHaveBeenCalledWith({
+            messageId: 'msg-123',
+            payload: [{ id: 'msg-123', status: 'sending', text: 'edited' }, undefined],
+            type: 'send-message',
+            id: undefined,
+          });
+        });
+
+        it('does nothing for failed offline update-message tasks without a matching pending send task', async () => {
+          client.wsConnection = { isHealthy: false } as StableWSConnection;
+          const task = generatePendingTask(
+            'update-message',
+            1,
+            {},
+            {
+              message: {
+                id: 'msg-123',
+                status: 'failed',
+                text: 'edited',
+              },
+            },
+          ) as PendingTask;
+          vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([
+            generatePendingTask('delete-message', 3, {
+              messageId: 'msg-123',
+            }) as PendingTask,
+          ]);
+          const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+          const updatePendingTaskSpy = vi.spyOn(offlineDb, 'updatePendingTask');
+
+          await offlineDb.handleAddPendingTask({ task });
+
+          expect(addPendingTaskSpy).not.toHaveBeenCalled();
+          expect(updatePendingTaskSpy).not.toHaveBeenCalled();
+        });
+      });
+
       describe('executeTask', () => {
         let mockChannel: Channel;
+        let _updateMessageSpy: MockInstance;
         let _deleteMessageSpy: MockInstance;
         let clientChannelSpy: MockInstance;
 
@@ -1774,6 +1943,9 @@ describe('OfflineSupportApi', () => {
             state: { addMessageSorted: vi.fn() },
           } as unknown as Channel;
 
+          _updateMessageSpy = vi
+            .spyOn(client, '_updateMessage')
+            .mockImplementation(vi.fn());
           _deleteMessageSpy = vi
             .spyOn(client, '_deleteMessage')
             .mockImplementation(vi.fn());
@@ -1782,6 +1954,15 @@ describe('OfflineSupportApi', () => {
 
         afterEach(() => {
           vi.resetAllMocks();
+        });
+
+        it('should call _updateMessage for update-message task', async () => {
+          const task = generatePendingTask('update-message') as PendingTask;
+
+          await offlineDb['executeTask']({ task });
+
+          expect(_updateMessageSpy).toHaveBeenCalledWith(...task.payload);
+          expect(clientChannelSpy).not.toHaveBeenCalled();
         });
 
         it('should call _deleteMessage for delete-message task', async () => {

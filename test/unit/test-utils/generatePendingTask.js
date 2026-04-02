@@ -30,6 +30,11 @@ export const generatePendingTaskPayload = (type, options = {}) => {
 		return { type, payload: [messageId] };
 	}
 
+	if (type === 'update-message') {
+		const message = options.message ?? generateMsg({ id: options.messageId ?? '123' });
+		return { type, payload: [message, options.user, options.updateOptions] };
+	}
+
 	const message = options.message ?? generateMsg();
 	return { type, payload: [message] };
 };

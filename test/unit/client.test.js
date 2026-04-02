@@ -514,6 +514,181 @@ describe('updateMessage should maintain data integrity', () => {
 	});
 });
 
+describe('message update', () => {
+	let client;
+	let loggerSpy;
+	let queueTaskSpy;
+	let _updateMessageSpy;
+
+	beforeEach(async () => {
+		client = await getClientWithUser();
+		const offlineDb = new MockOfflineDB({ client });
+
+		client.setOfflineDBApi(offlineDb);
+		await client.offlineDb.init(client.userID);
+
+		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
+		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
+		_updateMessageSpy = vi.spyOn(client, '_updateMessage').mockResolvedValue({});
+	});
+
+	afterEach(() => {
+		vi.resetAllMocks();
+	});
+
+	describe('updateMessage', () => {
+		it('queues replayable updates through offlineDb', async () => {
+			const message = generateMsg({
+				id: 'msg-123',
+				cid: 'messaging:channel-123',
+				text: 'edited',
+			});
+
+			await client.updateMessage(message, { id: 'user-123' }, { skip_enrich_url: true });
+
+			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
+			expect(queueTaskSpy).toHaveBeenCalledWith({
+				task: {
+					channelId: 'channel-123',
+					channelType: 'messaging',
+					messageId: 'msg-123',
+					payload: [message, { id: 'user-123' }, { skip_enrich_url: true }],
+					type: 'update-message',
+				},
+			});
+			expect(_updateMessageSpy).not.toHaveBeenCalled();
+		});
+
+		it('queues replayable updates without channel data if cid is missing or invalid', async () => {
+			const message = generateMsg({
+				id: 'msg-123',
+				cid: 'invalid-cid',
+				text: 'edited',
+			});
+
+			await client.updateMessage(message);
+
+			expect(queueTaskSpy).toHaveBeenCalledWith({
+				task: {
+					messageId: 'msg-123',
+					payload: [message, undefined, undefined],
+					type: 'update-message',
+				},
+			});
+		});
+
+		it('falls back to _updateMessage if offlineDb is not set', async () => {
+			const message = generateMsg({
+				id: 'msg-123',
+				text: 'edited',
+			});
+
+			client.offlineDb = undefined;
+
+			await client.updateMessage(message, 'user-123', { skip_enrich_url: true });
+
+			expect(_updateMessageSpy).toHaveBeenCalledTimes(1);
+			expect(_updateMessageSpy).toHaveBeenCalledWith(message, 'user-123', {
+				skip_enrich_url: true,
+			});
+		});
+
+		it('routes updates with local attachment metadata through offlineDb queue handling', async () => {
+			const message = generateMsg({
+				id: 'msg-123',
+				attachments: [
+					{
+						type: 'image',
+						image_url: 'https://example.com/image.jpg',
+						localMetadata: {
+							file: { uri: 'file://test.jpg' },
+							id: 'local-1',
+							uploadState: 'pending',
+						},
+					},
+				],
+			});
+
+			await client.updateMessage(message);
+
+			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
+			expect(queueTaskSpy).toHaveBeenCalledWith({
+				task: {
+					messageId: 'msg-123',
+					payload: [message, undefined, undefined],
+					type: 'update-message',
+				},
+			});
+			expect(_updateMessageSpy).not.toHaveBeenCalled();
+		});
+
+		it('routes updates with originalFile attachments through offlineDb queue handling', async () => {
+			const message = generateMsg({
+				id: 'msg-123',
+				attachments: [
+					{
+						type: 'file',
+						asset_url: 'https://example.com/test.pdf',
+						originalFile: { uri: 'content://test.pdf' },
+					},
+				],
+			});
+
+			await client.updateMessage(message);
+
+			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
+			expect(queueTaskSpy).toHaveBeenCalledWith({
+				task: {
+					messageId: 'msg-123',
+					payload: [message, undefined, undefined],
+					type: 'update-message',
+				},
+			});
+			expect(_updateMessageSpy).not.toHaveBeenCalled();
+		});
+
+		it('logs and falls back to _updateMessage if offline queueing throws', async () => {
+			const message = generateMsg({
+				id: 'msg-123',
+				text: 'edited',
+			});
+			queueTaskSpy.mockRejectedValue(new Error('Offline failure'));
+
+			await client.updateMessage(message);
+
+			expect(loggerSpy).toHaveBeenCalledTimes(1);
+			expect(_updateMessageSpy).toHaveBeenCalledTimes(1);
+			expect(_updateMessageSpy).toHaveBeenCalledWith(message, undefined, undefined);
+		});
+
+		it('logs and falls back to _updateMessage when queueTask rethrows for failed offline edits', async () => {
+			const failedEditedMessage = generateMsg({
+				id: 'msg-123',
+				status: 'failed',
+				text: 'edited',
+				message_text_updated_at: '2026-04-01T20:48:43.886269Z',
+			});
+
+			client.wsConnection = { isHealthy: false };
+			queueTaskSpy.mockRejectedValue(new Error('Offline failure'));
+			_updateMessageSpy.mockResolvedValue({ message: failedEditedMessage });
+
+			const response = await client.updateMessage(failedEditedMessage);
+
+			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
+			expect(loggerSpy).toHaveBeenCalledTimes(1);
+			expect(_updateMessageSpy).toHaveBeenCalledTimes(1);
+			expect(_updateMessageSpy).toHaveBeenCalledWith(
+				failedEditedMessage,
+				undefined,
+				undefined,
+			);
+			expect(response.message.text).toBe('edited');
+			expect(response.message.status).toBe('failed');
+		});
+	});
+});
+
 describe('Client search', async () => {
 	const client = await getClientWithUser();
 
