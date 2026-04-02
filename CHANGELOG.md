@@ -1,3 +1,9 @@
+## [9.40.0](https://github.com/GetStream/stream-chat-js/compare/v9.39.0...v9.40.0) (2026-04-02)
+
+### Features
+
+* update message pending tasks ([#1716](https://github.com/GetStream/stream-chat-js/issues/1716)) ([af87ae2](https://github.com/GetStream/stream-chat-js/commit/af87ae270ddb76f07bcd893f652f0f95f21a7e9d))
+
 ## [9.39.0](https://github.com/GetStream/stream-chat-js/compare/v9.38.0...v9.39.0) (2026-03-31)
 
 ### Features
