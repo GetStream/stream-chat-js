@@ -41,6 +41,9 @@ const upsertById = (uploads: UploadRecord[], record: UploadRecord): UploadRecord
   return next;
 };
 
+/**
+ * @experimental - not yet ready for production use
+ */
 export class UploadManager {
   readonly state: StateStore<UploadManagerState>;
 

@@ -291,6 +291,9 @@ export type MessageComposerSetupState = {
 export class StreamChat {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
   messageDeliveryReporter: MessageDeliveryReporter;
+  /**
+   * @experimental - not yet ready for production use
+   */
   uploadManager: UploadManager;
   _user?: OwnUserResponse | UserResponse;
   appSettingsPromise?: Promise<AppSettingsAPIResponse>;
