@@ -2499,3 +2499,198 @@ describe('share location', () => {
 		});
 	});
 });
+
+describe('Channel getDisplayName', () => {
+	let client;
+	const currentUser = { id: 'current-user', name: 'Current User', image: 'current.jpg' };
+
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client._setUser(currentUser);
+	});
+
+	describe('fallback 1: customDisplayNameGenerator', () => {
+		it('returns custom value when generator returns a string', () => {
+			const channel = client.channel('messaging', 'test-id', { name: 'My Channel' });
+			channel.customDisplayNameGenerator = () => 'Custom Title';
+			expect(channel.getDisplayName()).to.equal('Custom Title');
+		});
+
+		it('passes channel instance to generator', () => {
+			const channel = client.channel('messaging', 'test-id');
+			let received;
+			channel.customDisplayNameGenerator = (ch) => {
+				received = ch;
+				return null;
+			};
+			channel.getDisplayName();
+			expect(received).to.equal(channel);
+		});
+
+		it('falls through when generator returns null', () => {
+			const channel = client.channel('messaging', 'test-id', { name: 'Fallback Name' });
+			channel.customDisplayNameGenerator = () => null;
+			expect(channel.getDisplayName()).to.equal('Fallback Name');
+		});
+
+		it('falls through when generator returns empty string', () => {
+			const channel = client.channel('messaging', 'test-id', { name: 'Fallback Name' });
+			channel.customDisplayNameGenerator = () => '';
+			expect(channel.getDisplayName()).to.equal('Fallback Name');
+		});
+	});
+
+	describe('fallback 2: channel.data.name', () => {
+		it('returns channel name when set', () => {
+			const channel = client.channel('messaging', 'test-id', { name: 'My Channel' });
+			expect(channel.getDisplayName()).to.equal('My Channel');
+		});
+
+		it('returns null when name is empty string (then no members)', () => {
+			const channel = client.channel('messaging', 'test-id', { name: '' });
+			expect(channel.getDisplayName()).to.be.null;
+		});
+	});
+
+	describe('fallback 3: DM (exactly 2 members) – other member name, then "Direct Message" (no user id in title)', () => {
+		it('returns other member name', () => {
+			const channel = client.channel('messaging', 'test-id');
+			channel.state.members = {
+				'current-user': { user: currentUser },
+				'other-user': { user: { id: 'other-user', name: 'Other User' } },
+			};
+			expect(channel.getDisplayName()).to.equal('Other User');
+		});
+
+		it('returns "Direct Message" when other member has no name (no user id in title)', () => {
+			const channel = client.channel('messaging', 'test-id');
+			channel.state.members = {
+				'current-user': { user: currentUser },
+				'other-user': { user: { id: 'other-user' } },
+			};
+			expect(channel.getDisplayName()).to.equal('Direct Message');
+		});
+
+		it('returns "Direct Message" when other member has no name or id', () => {
+			const channel = client.channel('messaging', 'test-id');
+			channel.state.members = {
+				'current-user': { user: currentUser },
+				'other-user': { user: undefined },
+			};
+			expect(channel.getDisplayName()).to.equal('Direct Message');
+		});
+
+		it('channel name wins over DM member', () => {
+			const channel = client.channel('messaging', 'test-id', { name: 'Custom Name' });
+			channel.state.members = {
+				'current-user': { user: currentUser },
+				'other-user': { user: { id: 'other-user', name: 'Other User' } },
+			};
+			expect(channel.getDisplayName()).to.equal('Custom Name');
+		});
+	});
+
+	describe('fallback 4: group (3+ members) – comma-separated names only (no ellipsis, no user ids)', () => {
+		it('returns all other member names when exactly 2 other members', () => {
+			const channel = client.channel('messaging', 'test-id');
+			channel.state.members = {
+				'current-user': { user: currentUser },
+				'user-2': { user: { id: 'user-2', name: 'Alice' } },
+				'user-3': { user: { id: 'user-3', name: 'Bob' } },
+			};
+			expect(channel.getDisplayName()).to.equal('Alice, Bob');
+		});
+
+		it('uses only names (skips members with no name, no user id in title)', () => {
+			const channel = client.channel('messaging', 'test-id');
+			channel.state.members = {
+				'current-user': { user: currentUser },
+				'user-2': { user: { id: 'user-2', name: 'Alice' } },
+				'user-3': { user: { id: 'user-3' } },
+			};
+			expect(channel.getDisplayName()).to.equal('Alice');
+		});
+
+		it('returns all names concatenated without ellipsis when more than 2 other members', () => {
+			const channel = client.channel('messaging', 'test-id');
+			channel.state.members = {
+				'current-user': { user: currentUser },
+				'user-2': { user: { id: 'user-2', name: 'Alice' } },
+				'user-3': { user: { id: 'user-3', name: 'Bob' } },
+				'user-4': { user: { id: 'user-4', name: 'Charlie' } },
+			};
+			expect(channel.getDisplayName()).to.equal('Alice, Bob, Charlie');
+		});
+
+		it('channel name wins over group member names', () => {
+			const channel = client.channel('messaging', 'test-id', { name: 'Custom Name' });
+			channel.state.members = {
+				'current-user': { user: currentUser },
+				'user-2': { user: { id: 'user-2', name: 'Alice' } },
+				'user-3': { user: { id: 'user-3', name: 'Bob' } },
+			};
+			expect(channel.getDisplayName()).to.equal('Custom Name');
+		});
+	});
+
+	describe('fallback 5: no value', () => {
+		it('returns null when no data and no members', () => {
+			const channel = client.channel('messaging', 'test-id');
+			expect(channel.getDisplayName()).to.be.null;
+		});
+	});
+});
+
+describe('Channel getDisplayImage', () => {
+	let client;
+	const currentUser = { id: 'current-user', name: 'Current User', image: 'current.jpg' };
+
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client._setUser(currentUser);
+	});
+
+	describe('fallback 1: customDisplayImageGenerator', () => {
+		it('returns custom value when generator returns a string', () => {
+			const channel = client.channel('messaging', 'test-id', { image: 'data.jpg' });
+			channel.customDisplayImageGenerator = () => 'custom-image.jpg';
+			expect(channel.getDisplayImage()).to.equal('custom-image.jpg');
+		});
+
+		it('passes channel instance to generator', () => {
+			const channel = client.channel('messaging', 'test-id');
+			let received;
+			channel.customDisplayImageGenerator = (ch) => {
+				received = ch;
+				return null;
+			};
+			channel.getDisplayImage();
+			expect(received).to.equal(channel);
+		});
+
+		it('falls through when generator returns null', () => {
+			const channel = client.channel('messaging', 'test-id', { image: 'fallback.jpg' });
+			channel.customDisplayImageGenerator = () => null;
+			expect(channel.getDisplayImage()).to.equal('fallback.jpg');
+		});
+	});
+
+	describe('fallback 2: channel.data.image', () => {
+		it('returns channel image when set', () => {
+			const channel = client.channel('messaging', 'test-id', { image: 'channel.jpg' });
+			expect(channel.getDisplayImage()).to.equal('channel.jpg');
+		});
+
+		it('returns null when image is empty string', () => {
+			const channel = client.channel('messaging', 'test-id', { image: '' });
+			expect(channel.getDisplayImage()).to.be.null;
+		});
+	});
+
+	describe('fallback 3: no value', () => {
+		it('returns null when no image available', () => {
+			const channel = client.channel('messaging', 'test-id');
+			expect(channel.getDisplayImage()).to.be.null;
+		});
+	});
+});
