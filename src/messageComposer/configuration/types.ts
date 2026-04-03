@@ -6,8 +6,14 @@ export type MinimumUploadRequestResult = { file: string; thumb_url?: string } & 
   Record<string, unknown>
 >;
 
+/** Optional second argument to `UploadRequestFn`; integrators may call `onProgress` to report 0–100 or `undefined` when indeterminate. */
+export type UploadRequestOptions = {
+  onProgress?: (percent: number | undefined) => void;
+};
+
 export type UploadRequestFn = (
   fileLike: FileReference | FileLike,
+  options?: UploadRequestOptions,
 ) => Promise<MinimumUploadRequestResult>;
 
 export type DraftsConfiguration = {
@@ -43,6 +49,12 @@ export type AttachmentManagerConfig = {
   acceptedFiles: string[];
   /** Function that allows to customize the upload request. */
   doUploadRequest?: UploadRequestFn;
+  /**
+   * When true, the attachment manager sets `localMetadata.uploadProgress` and passes `options.onProgress`
+   * to `doUploadRequest` (built-in and custom). Set to false to disable progress tracking.
+   * @default true
+   */
+  trackUploadProgress: boolean;
 };
 
 export type LinkPreviewsManagerConfig = {
