@@ -223,7 +223,7 @@ describe('Reminder', () => {
 					channel_cid: 'messaging:123',
 					remind_at: { $gt: '2024-01-01T00:00:00.000Z' },
 				},
-				sort: [{ field: 'remind_at', direction: 1 }],
+				sort: [{ field: 'remind_at', direction: 1, type: null }],
 				limit: 10,
 			});
 			expect(result).toEqual(queryResponse);
