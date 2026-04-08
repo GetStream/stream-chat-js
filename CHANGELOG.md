@@ -1,3 +1,9 @@
+## [9.41.0](https://github.com/GetStream/stream-chat-js/compare/v9.40.0...v9.41.0) (2026-04-08)
+
+### Features
+
+* allow tracking file/image upload progress ([#1708](https://github.com/GetStream/stream-chat-js/issues/1708)) ([dc0c815](https://github.com/GetStream/stream-chat-js/commit/dc0c815ddc06ab65d9fa256a491905221e233eb7))
+
 ## [9.40.0](https://github.com/GetStream/stream-chat-js/compare/v9.39.0...v9.40.0) (2026-04-02)
 
 ### Features
