@@ -1,3 +1,4 @@
+import type { AxiosRequestConfig } from 'axios';
 import { ChannelState } from './channel_state';
 import { CooldownTimer } from './CooldownTimer';
 import { MessageComposer } from './messageComposer';
@@ -245,11 +246,22 @@ export class Channel {
     return await this._sendMessage(message, options);
   }
 
+  /**
+   * Upload a file to this channel’s file endpoint (multipart). Forwards to the client’s `sendFile` implementation.
+   *
+   * @param uri File source: URL string, `File`, `Buffer`, or readable stream (Node).
+   * @param name File name sent in the multipart body.
+   * @param contentType MIME type; defaults are applied when omitted.
+   * @param user Optional user payload appended to the form as JSON.
+   * @param axiosRequestConfig Optional Axios per-request config, merged after upload defaults (e.g. `onUploadProgress`, `signal` from `AbortController`).
+   * @return Promise resolving to `{ file: string, ... }` with the CDN URL.
+   */
   sendFile(
     uri: string | NodeJS.ReadableStream | Buffer | File,
     name?: string,
     contentType?: string,
     user?: UserResponse,
+    axiosRequestConfig?: AxiosRequestConfig,
   ) {
     return this.getClient().sendFile(
       `${this._channelURL()}/file`,
@@ -257,14 +269,26 @@ export class Channel {
       name,
       contentType,
       user,
+      axiosRequestConfig,
     );
   }
 
+  /**
+   * Upload an image to this channel’s image endpoint (multipart). Uses the same transport as `sendFile`.
+   *
+   * @param uri Image source: URL string, `File`, or readable stream (Node). For `Buffer` uploads, use `sendFile` toward the channel file endpoint instead.
+   * @param name File name sent in the multipart body.
+   * @param contentType MIME type.
+   * @param user Optional user payload appended to the form as JSON.
+   * @param axiosRequestConfig Optional Axios per-request config, merged after upload defaults (e.g. `onUploadProgress`, `signal`).
+   * @return Promise resolving to `{ file: string, ... }` with the CDN URL.
+   */
   sendImage(
     uri: string | NodeJS.ReadableStream | File,
     name?: string,
     contentType?: string,
     user?: UserResponse,
+    axiosRequestConfig?: AxiosRequestConfig,
   ) {
     return this.getClient().sendFile(
       `${this._channelURL()}/image`,
@@ -272,6 +296,7 @@ export class Channel {
       name,
       contentType,
       user,
+      axiosRequestConfig,
     );
   }
 
