@@ -1581,7 +1581,10 @@ export class Channel {
     }
 
     // add any messages to our channel state
-    const { messageSet } = this._initializeState(state, messageSetToAddToIfDoesNotExist);
+    const { messageSet, removedMessageIds } = this._initializeState(
+      state,
+      messageSetToAddToIfDoesNotExist,
+    );
     messageSet.pagination = {
       ...messageSet.pagination,
       ...messageSetPagination({
@@ -1590,6 +1593,9 @@ export class Channel {
         requestedPageSize:
           options?.messages?.limit ?? DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
         returnedPage: state.messages,
+        filteredReturnedPage: state.messages.filter(
+          (m) => !removedMessageIds.includes(m.id),
+        ),
         logger: this.getClient().logger,
       }),
     };
@@ -2368,7 +2374,7 @@ export class Channel {
     if (!this.state.messages) {
       this.state.initMessages();
     }
-    const { messageSet } = this.state.addMessagesSorted(
+    const { messageSet, removedMessageIds } = this.state.addMessagesSorted(
       messages,
       false,
       true,
@@ -2434,6 +2440,7 @@ export class Channel {
 
     return {
       messageSet,
+      removedMessageIds,
     };
   }
 

@@ -164,6 +164,14 @@ describe('messageSetPagination', () => {
 		{ created_at: '2024-08-05T08:55:07.199808Z', id: '7' },
 		{ created_at: '2024-08-05T08:55:08.199808Z', id: '8' },
 	];
+	const shadowOlder = {
+		created_at: '2024-08-05T08:54:59.199808Z',
+		id: 'shadow-older',
+	};
+	const shadowNewer = {
+		created_at: '2024-08-05T08:55:09.199808Z',
+		id: 'shadow-newer',
+	};
 
 	describe('linear', () => {
 		describe('returned page size size is 0', () => {
@@ -175,6 +183,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length,
 								returnedPage: [],
+								filteredReturnedPage: [],
 								parentSet: { messages: [], pagination: {} },
 							}),
 						).to.eql({ hasNext: false });
@@ -185,6 +194,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: 1,
 								returnedPage: [],
+								filteredReturnedPage: [],
 								parentSet: { messages: messages.slice(0, 1), pagination: {} },
 							}),
 						).to.eql({ hasNext: false });
@@ -195,6 +205,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: 1,
 								returnedPage: [],
+								filteredReturnedPage: [],
 								parentSet: { messages: [], pagination: {} },
 							}),
 						).to.eql({ hasNext: false });
@@ -205,6 +216,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length,
 								returnedPage: [],
+								filteredReturnedPage: [],
 								parentSet: { messages, pagination: {} },
 							}),
 						).to.eql({ hasNext: false });
@@ -215,6 +227,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: 1,
 								returnedPage: [],
+								filteredReturnedPage: [],
 								parentSet: { messages, pagination: {} },
 							}),
 						).to.eql({ hasNext: false });
@@ -236,6 +249,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length,
 							returnedPage: [],
+							filteredReturnedPage: [],
 							parentSet: { messages: [], pagination: {} },
 						}),
 					).to.eql({ hasPrev: false });
@@ -246,6 +260,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: 1,
 							returnedPage: [],
+							filteredReturnedPage: [],
 							parentSet: { messages: messages.slice(0, 1), pagination: {} },
 						}),
 					).to.eql({ hasPrev: false });
@@ -256,6 +271,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: 1,
 							returnedPage: [],
+							filteredReturnedPage: [],
 							parentSet: { messages: [], pagination: {} },
 						}),
 					).to.eql({ hasPrev: false });
@@ -266,6 +282,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length,
 							returnedPage: [],
+							filteredReturnedPage: [],
 							parentSet: { messages, pagination: {} },
 						}),
 					).to.eql({ hasPrev: false });
@@ -276,6 +293,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: 1,
 							returnedPage: [],
+							filteredReturnedPage: [],
 							parentSet: { messages, pagination: {} },
 						}),
 					).to.eql({ hasPrev: false });
@@ -291,6 +309,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length,
 							returnedPage: messages,
+							filteredReturnedPage: messages,
 							parentSet: { messages, pagination: {} },
 						}),
 					).to.eql({ hasNext: true });
@@ -302,6 +321,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length + 1,
 							returnedPage: messages,
+							filteredReturnedPage: messages,
 							parentSet: { messages, pagination: {} },
 						}),
 					).to.eql({ hasNext: false });
@@ -313,6 +333,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length - 1,
 							returnedPage: messages,
+							filteredReturnedPage: messages,
 							parentSet: { messages, pagination: {} },
 						}),
 					).to.eql({ hasNext: true });
@@ -325,6 +346,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length - 1,
 								returnedPage: messages.slice(0, -1),
+								filteredReturnedPage: messages.slice(0, -1),
 								parentSet: { messages, pagination: {} },
 							}),
 						).to.eql({});
@@ -335,6 +357,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length,
 								returnedPage: messages.slice(0, -1),
+								filteredReturnedPage: messages.slice(0, -1),
 								parentSet: { messages, pagination: {} },
 							}),
 						).to.eql({});
@@ -345,6 +368,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length - 2,
 								returnedPage: messages.slice(0, -1),
+								filteredReturnedPage: messages.slice(0, -1),
 								parentSet: { messages, pagination: {} },
 							}),
 						).to.eql({});
@@ -355,6 +379,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length - 3,
 								returnedPage: messages.slice(0, -2),
+								filteredReturnedPage: messages.slice(0, -2),
 								parentSet: { messages: messages.slice(0, -1), pagination: {} },
 							}),
 						).to.eql({});
@@ -365,6 +390,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length,
 								returnedPage: messages.slice(0, -2),
+								filteredReturnedPage: messages.slice(0, -2),
 								parentSet: { messages: messages.slice(0, -1), pagination: {} },
 							}),
 						).to.eql({});
@@ -376,6 +402,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length,
 								returnedPage: messages,
+								filteredReturnedPage: messages,
 								parentSet: { messages: messages.slice(0, -1), pagination: {} },
 							}),
 						).to.eql({});
@@ -388,6 +415,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length,
 								returnedPage: messages.slice(0, -1),
+								filteredReturnedPage: messages.slice(0, -1),
 								parentSet: { messages: messages.slice(0, -2), pagination: {} },
 							}),
 						).to.eql({});
@@ -400,6 +428,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length - 2,
 								returnedPage: messages,
+								filteredReturnedPage: messages,
 								parentSet: { messages: messages.slice(0, -1), pagination: {} },
 							}),
 						).to.eql({});
@@ -414,6 +443,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length - 1,
 								returnedPage: messages.slice(1),
+								filteredReturnedPage: messages.slice(1),
 								parentSet: { messages, pagination: {} },
 							}),
 						).to.eql({ hasNext: true });
@@ -424,6 +454,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length,
 								returnedPage: messages.slice(1),
+								filteredReturnedPage: messages.slice(1),
 								parentSet: { messages, pagination: {} },
 							}),
 						).to.eql({ hasNext: false });
@@ -434,6 +465,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length - 2,
 								returnedPage: messages.slice(1),
+								filteredReturnedPage: messages.slice(1),
 								parentSet: { messages, pagination: {} },
 							}),
 						).to.eql({ hasNext: true });
@@ -444,6 +476,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length,
 								returnedPage: messages.slice(2),
+								filteredReturnedPage: messages.slice(2),
 								parentSet: { messages: messages.slice(1), pagination: {} },
 							}),
 						).to.eql({ hasNext: false });
@@ -455,6 +488,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length,
 								returnedPage: messages,
+								filteredReturnedPage: messages,
 								parentSet: { messages: messages.slice(-1), pagination: {} },
 							}),
 						).to.eql({});
@@ -467,6 +501,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length,
 								returnedPage: messages.slice(1),
+								filteredReturnedPage: messages.slice(1),
 								parentSet: { messages: messages.slice(2), pagination: {} },
 							}),
 						).to.eql({});
@@ -479,6 +514,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length - 2,
 								returnedPage: messages,
+								filteredReturnedPage: messages,
 								parentSet: { messages: messages.slice(1), pagination: {} },
 							}),
 						).to.eql({});
@@ -499,6 +535,13 @@ describe('messageSetPagination', () => {
 									messages.slice(-1)[0],
 									messages.slice(-2, -1)[0],
 								],
+								filteredReturnedPage: [
+									messages[1],
+									messages[0],
+									...messages.slice(2, -2),
+									messages.slice(-1)[0],
+									messages.slice(-2, -1)[0],
+								],
 								parentSet: { messages, pagination: {} },
 							}),
 						).to.eql({});
@@ -509,6 +552,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length,
 								returnedPage: messages.slice(1, -1),
+								filteredReturnedPage: messages.slice(1, -1),
 								parentSet: { messages, pagination: {} },
 							}),
 						).to.eql({});
@@ -519,6 +563,13 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length + 1,
 								returnedPage: [
+									messages[1],
+									messages[0],
+									...messages.slice(2, -2),
+									messages.slice(-1)[0],
+									messages.slice(-2, -1)[0],
+								],
+								filteredReturnedPage: [
 									messages[1],
 									messages[0],
 									...messages.slice(2, -2),
@@ -542,6 +593,13 @@ describe('messageSetPagination', () => {
 									messages.slice(-1)[0],
 									messages.slice(-2, -1)[0],
 								],
+								filteredReturnedPage: [
+									messages[1],
+									messages[0],
+									...messages.slice(2, -2),
+									messages.slice(-1)[0],
+									messages.slice(-2, -1)[0],
+								],
 								parentSet: { messages, pagination: {} },
 							}),
 						).to.eql({});
@@ -553,6 +611,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length - 2,
 								returnedPage: messages.slice(1, -1),
+								filteredReturnedPage: messages.slice(1, -1),
 								parentSet: { messages, pagination: {} },
 							}),
 						).to.eql({});
@@ -563,6 +622,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length - 3,
 								returnedPage: messages.slice(1, -1),
+								filteredReturnedPage: messages.slice(1, -1),
 								parentSet: { messages, pagination: {} },
 							}),
 						).to.eql({});
@@ -573,6 +633,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length + 1,
 								returnedPage: messages.slice(1, -1),
+								filteredReturnedPage: messages.slice(1, -1),
 								parentSet: { messages, pagination: {} },
 							}),
 						).to.eql({});
@@ -584,6 +645,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length,
 								returnedPage: messages,
+								filteredReturnedPage: messages,
 								parentSet: { messages: messages.slice(1, -1), pagination: {} },
 							}),
 						).to.eql({});
@@ -596,6 +658,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length,
 								returnedPage: messages.slice(1),
+								filteredReturnedPage: messages.slice(1),
 								parentSet: { messages: messages.slice(1, -1), pagination: {} },
 							}),
 						).to.eql({});
@@ -608,6 +671,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: option && { [option]: 'X' },
 								requestedPageSize: messages.length - 3,
 								returnedPage: messages,
+								filteredReturnedPage: messages,
 								parentSet: { messages: messages.slice(1, -1), pagination: {} },
 							}),
 						).to.eql({});
@@ -631,6 +695,7 @@ describe('messageSetPagination', () => {
 						messagePaginationOptions: option && { [option]: 'X' },
 						requestedPageSize: messages.length,
 						returnedPage: messages,
+						filteredReturnedPage: messages,
 						parentSet: { messages, pagination: {} },
 					}),
 				).to.eql({ hasPrev: true });
@@ -642,6 +707,7 @@ describe('messageSetPagination', () => {
 						messagePaginationOptions: option && { [option]: 'X' },
 						requestedPageSize: messages.length + 1,
 						returnedPage: messages,
+						filteredReturnedPage: messages,
 						parentSet: { messages, pagination: {} },
 					}),
 				).to.eql({ hasPrev: false });
@@ -653,6 +719,7 @@ describe('messageSetPagination', () => {
 						messagePaginationOptions: option && { [option]: 'X' },
 						requestedPageSize: messages.length - 1,
 						returnedPage: messages,
+						filteredReturnedPage: messages,
 						parentSet: { messages, pagination: {} },
 					}),
 				).to.eql({ hasPrev: true });
@@ -665,6 +732,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length - 1,
 							returnedPage: messages.slice(0, -1),
+							filteredReturnedPage: messages.slice(0, -1),
 							parentSet: { messages, pagination: {} },
 						}),
 					).to.eql({ hasPrev: true });
@@ -675,6 +743,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length - 2,
 							returnedPage: messages.slice(0, -1),
+							filteredReturnedPage: messages.slice(0, -1),
 							parentSet: { messages, pagination: {} },
 						}),
 					).to.eql({ hasPrev: true });
@@ -685,6 +754,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length,
 							returnedPage: messages.slice(0, -1),
+							filteredReturnedPage: messages.slice(0, -1),
 							parentSet: { messages, pagination: {} },
 						}),
 					).to.eql({ hasPrev: false });
@@ -695,6 +765,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length - 3,
 							returnedPage: messages.slice(0, -2),
+							filteredReturnedPage: messages.slice(0, -2),
 							parentSet: { messages: messages.slice(0, -1), pagination: {} },
 						}),
 					).to.eql({ hasPrev: true });
@@ -705,6 +776,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length,
 							returnedPage: messages.slice(0, -2),
+							filteredReturnedPage: messages.slice(0, -2),
 							parentSet: { messages: messages.slice(0, -1), pagination: {} },
 						}),
 					).to.eql({ hasPrev: false });
@@ -716,6 +788,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length,
 							returnedPage: messages,
+							filteredReturnedPage: messages,
 							parentSet: { messages: messages.slice(0, -1), pagination: {} },
 						}),
 					).to.eql({});
@@ -728,6 +801,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length,
 							returnedPage: messages.slice(0, -1),
+							filteredReturnedPage: messages.slice(0, -1),
 							parentSet: { messages: messages.slice(0, -2), pagination: {} },
 						}),
 					).to.eql({});
@@ -740,6 +814,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length - 2,
 							returnedPage: messages,
+							filteredReturnedPage: messages,
 							parentSet: { messages: messages.slice(0, -1), pagination: {} },
 						}),
 					).to.eql({});
@@ -754,6 +829,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length - 1,
 							returnedPage: messages.slice(1),
+							filteredReturnedPage: messages.slice(1),
 							parentSet: { messages, pagination: {} },
 						}),
 					).to.eql({});
@@ -764,6 +840,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length,
 							returnedPage: messages.slice(1),
+							filteredReturnedPage: messages.slice(1),
 							parentSet: { messages, pagination: {} },
 						}),
 					).to.eql({});
@@ -774,6 +851,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length - 2,
 							returnedPage: messages.slice(1),
+							filteredReturnedPage: messages.slice(1),
 							parentSet: { messages, pagination: {} },
 						}),
 					).to.eql({});
@@ -784,6 +862,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length,
 							returnedPage: messages.slice(2),
+							filteredReturnedPage: messages.slice(2),
 							parentSet: { messages: messages.slice(1), pagination: {} },
 						}),
 					).to.eql({});
@@ -795,6 +874,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length,
 							returnedPage: messages,
+							filteredReturnedPage: messages,
 							parentSet: { messages: messages.slice(-1), pagination: {} },
 						}),
 					).to.eql({});
@@ -807,6 +887,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length,
 							returnedPage: messages.slice(1),
+							filteredReturnedPage: messages.slice(1),
 							parentSet: { messages: messages.slice(2), pagination: {} },
 						}),
 					).to.eql({});
@@ -819,6 +900,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length - 2,
 							returnedPage: messages,
+							filteredReturnedPage: messages,
 							parentSet: { messages: messages.slice(1), pagination: {} },
 						}),
 					).to.eql({});
@@ -839,6 +921,13 @@ describe('messageSetPagination', () => {
 								messages.slice(-1)[0],
 								messages.slice(-2, -1)[0],
 							],
+							filteredReturnedPage: [
+								messages[1],
+								messages[0],
+								...messages.slice(2, -2),
+								messages.slice(-1)[0],
+								messages.slice(-2, -1)[0],
+							],
 							parentSet: { messages, pagination: {} },
 						}),
 					).to.eql({});
@@ -849,6 +938,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length,
 							returnedPage: messages.slice(1, -1),
+							filteredReturnedPage: messages.slice(1, -1),
 							parentSet: { messages, pagination: {} },
 						}),
 					).to.eql({});
@@ -859,6 +949,13 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length + 1,
 							returnedPage: [
+								messages[1],
+								messages[0],
+								...messages.slice(2, -2),
+								messages.slice(-1)[0],
+								messages.slice(-2, -1)[0],
+							],
+							filteredReturnedPage: [
 								messages[1],
 								messages[0],
 								...messages.slice(2, -2),
@@ -882,6 +979,13 @@ describe('messageSetPagination', () => {
 								messages.slice(-1)[0],
 								messages.slice(-2, -1)[0],
 							],
+							filteredReturnedPage: [
+								messages[1],
+								messages[0],
+								...messages.slice(2, -2),
+								messages.slice(-1)[0],
+								messages.slice(-2, -1)[0],
+							],
 							parentSet: { messages, pagination: {} },
 						}),
 					).to.eql({});
@@ -893,6 +997,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length - 2,
 							returnedPage: messages.slice(1, -1),
+							filteredReturnedPage: messages.slice(1, -1),
 							parentSet: { messages, pagination: {} },
 						}),
 					).to.eql({});
@@ -903,6 +1008,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length - 3,
 							returnedPage: messages.slice(1, -1),
+							filteredReturnedPage: messages.slice(1, -1),
 							parentSet: { messages, pagination: {} },
 						}),
 					).to.eql({});
@@ -913,6 +1019,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length + 1,
 							returnedPage: messages.slice(1, -1),
+							filteredReturnedPage: messages.slice(1, -1),
 							parentSet: { messages, pagination: {} },
 						}),
 					).to.eql({});
@@ -924,6 +1031,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length,
 							returnedPage: messages,
+							filteredReturnedPage: messages,
 							parentSet: { messages: messages.slice(1, -1), pagination: {} },
 						}),
 					).to.eql({});
@@ -936,6 +1044,7 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length,
 							returnedPage: messages.slice(1),
+							filteredReturnedPage: messages.slice(1),
 							parentSet: { messages: messages.slice(1, -1), pagination: {} },
 						}),
 					).to.eql({});
@@ -948,11 +1057,66 @@ describe('messageSetPagination', () => {
 							messagePaginationOptions: option && { [option]: 'X' },
 							requestedPageSize: messages.length - 3,
 							returnedPage: messages,
+							filteredReturnedPage: messages,
 							parentSet: { messages: messages.slice(1, -1), pagination: {} },
 						}),
 					).to.eql({});
 					restore();
 				});
+			});
+		});
+
+		describe('with filtered first or last returned messages', () => {
+			it('sets hasPrev when oldest returned message is filtered but raw page is full (id_lt)', () => {
+				const filtered = messages.slice(0, 8);
+				expect(
+					messageSetPagination({
+						messagePaginationOptions: { id_lt: 'X' },
+						requestedPageSize: 9,
+						returnedPage: [shadowOlder, ...filtered],
+						filteredReturnedPage: filtered,
+						parentSet: { messages: filtered, pagination: {} },
+					}),
+				).to.eql({ hasPrev: true });
+			});
+
+			it('sets hasPrev false when oldest returned message is filtered and raw page is not full (id_lt)', () => {
+				const filtered = messages.slice(0, 4);
+				expect(
+					messageSetPagination({
+						messagePaginationOptions: { id_lt: 'X' },
+						requestedPageSize: 9,
+						returnedPage: [shadowOlder, ...filtered],
+						filteredReturnedPage: filtered,
+						parentSet: { messages: filtered, pagination: {} },
+					}),
+				).to.eql({ hasPrev: false });
+			});
+
+			it('sets hasNext when newest returned message is filtered but raw page is full (id_gt)', () => {
+				const filtered = messages.slice(1, 9);
+				expect(
+					messageSetPagination({
+						messagePaginationOptions: { id_gt: 'X' },
+						requestedPageSize: 9,
+						returnedPage: [...filtered, shadowNewer],
+						filteredReturnedPage: filtered,
+						parentSet: { messages: filtered, pagination: {} },
+					}),
+				).to.eql({ hasNext: true });
+			});
+
+			it('sets hasNext false when newest returned message is filtered and raw page is not full (id_gt)', () => {
+				const filtered = messages.slice(4, 9);
+				expect(
+					messageSetPagination({
+						messagePaginationOptions: { id_gt: 'X' },
+						requestedPageSize: 9,
+						returnedPage: [...filtered, shadowNewer],
+						filteredReturnedPage: filtered,
+						parentSet: { messages: filtered, pagination: {} },
+					}),
+				).to.eql({ hasNext: false });
 			});
 		});
 	});
@@ -1014,6 +1178,7 @@ describe('messageSetPagination', () => {
 									messagePaginationOptions: messagePaginationOptions.firstHalf,
 									requestedPageSize: messages.length,
 									returnedPage: messages,
+									filteredReturnedPage: messages,
 									parentSet: { messages, pagination: {} },
 								}),
 							).to.eql({ hasPrev: false, hasNext: true });
@@ -1025,6 +1190,7 @@ describe('messageSetPagination', () => {
 									messagePaginationOptions: messagePaginationOptions.firstHalf,
 									requestedPageSize: messages.length + 1,
 									returnedPage: messages,
+									filteredReturnedPage: messages,
 									parentSet: { messages, pagination: {} },
 								}),
 							).to.eql({ hasPrev: false, hasNext: false });
@@ -1036,6 +1202,7 @@ describe('messageSetPagination', () => {
 									messagePaginationOptions: messagePaginationOptions.firstHalf,
 									requestedPageSize: messages.length - 1,
 									returnedPage: messages,
+									filteredReturnedPage: messages,
 									parentSet: { messages, pagination: {} },
 								}),
 							).to.eql({ hasPrev: false, hasNext: true });
@@ -1048,6 +1215,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length - 1,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -1058,6 +1226,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false });
@@ -1068,6 +1237,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length - 3,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false });
@@ -1078,6 +1248,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(0, -2),
+										filteredReturnedPage: messages.slice(0, -2),
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -1089,6 +1260,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -1101,6 +1273,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(0, -2),
+										filteredReturnedPage: messages.slice(0, -2),
 										parentSet: { messages: messages.slice(0, -3), pagination: {} },
 									}),
 								).to.eql({});
@@ -1113,6 +1286,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -1127,6 +1301,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length - 1,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -1137,6 +1312,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false });
@@ -1147,6 +1323,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length - 3,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false });
@@ -1157,6 +1334,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -1168,6 +1346,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({});
@@ -1180,6 +1359,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(2),
+										filteredReturnedPage: messages.slice(2),
 										parentSet: { messages: messages.slice(3), pagination: {} },
 									}),
 								).to.eql({});
@@ -1192,6 +1372,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({});
@@ -1212,6 +1393,13 @@ describe('messageSetPagination', () => {
 											messages.slice(-1)[0],
 											messages.slice(-2, -1)[0],
 										],
+										filteredReturnedPage: [
+											messages[1],
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+											messages.slice(-2, -1)[0],
+										],
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({});
@@ -1222,6 +1410,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length - 1,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -1236,6 +1425,11 @@ describe('messageSetPagination', () => {
 											...messages.slice(2, -2),
 											messages.slice(-1)[0],
 										],
+										filteredReturnedPage: [
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+										],
 										parentSet: { messages: messages.slice(1, -1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -1246,6 +1440,13 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length - 1,
 										returnedPage: [
+											messages[1],
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+											messages.slice(-2, -1)[0],
+										],
+										filteredReturnedPage: [
 											messages[1],
 											messages[0],
 											...messages.slice(2, -2),
@@ -1268,6 +1469,13 @@ describe('messageSetPagination', () => {
 											messages.slice(-1)[0],
 											messages.slice(-2, -1)[0],
 										],
+										filteredReturnedPage: [
+											messages[1],
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+											messages.slice(-2, -1)[0],
+										],
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({});
@@ -1278,6 +1486,11 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length - 3,
 										returnedPage: [
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-2, -1)[0],
+										],
+										filteredReturnedPage: [
 											messages[0],
 											...messages.slice(2, -2),
 											messages.slice(-2, -1)[0],
@@ -1296,6 +1509,11 @@ describe('messageSetPagination', () => {
 											...messages.slice(2, -2),
 											messages.slice(-1)[0],
 										],
+										filteredReturnedPage: [
+											messages[1],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+										],
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -1307,6 +1525,13 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length,
 										returnedPage: [
+											messages[1],
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+											messages.slice(-2, -1)[0],
+										],
+										filteredReturnedPage: [
 											messages[1],
 											messages[0],
 											...messages.slice(2, -2),
@@ -1329,6 +1554,11 @@ describe('messageSetPagination', () => {
 											...messages.slice(2, -2),
 											messages.slice(-1)[0],
 										],
+										filteredReturnedPage: [
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+										],
 										parentSet: { messages: messages.slice(1, -2), pagination: {} },
 									}),
 								).to.eql({});
@@ -1341,6 +1571,13 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.firstHalf,
 										requestedPageSize: messages.length - 2,
 										returnedPage: [
+											messages[1],
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+											messages.slice(-2, -1)[0],
+										],
+										filteredReturnedPage: [
 											messages[1],
 											messages[0],
 											...messages.slice(2, -2),
@@ -1362,6 +1599,7 @@ describe('messageSetPagination', () => {
 									messagePaginationOptions: messagePaginationOptions.mid,
 									requestedPageSize: messages.length,
 									returnedPage: messages,
+									filteredReturnedPage: messages,
 									parentSet: { messages, pagination: {} },
 								}),
 							).to.eql({ hasPrev: true, hasNext: true });
@@ -1373,6 +1611,7 @@ describe('messageSetPagination', () => {
 									messagePaginationOptions: messagePaginationOptions.mid,
 									requestedPageSize: messages.length + 1,
 									returnedPage: messages,
+									filteredReturnedPage: messages,
 									parentSet: { messages, pagination: {} },
 								}),
 							).to.eql({ hasPrev: false, hasNext: false });
@@ -1384,6 +1623,7 @@ describe('messageSetPagination', () => {
 									messagePaginationOptions: messagePaginationOptions.mid,
 									requestedPageSize: messages.length - 1,
 									returnedPage: messages,
+									filteredReturnedPage: messages,
 									parentSet: { messages, pagination: {} },
 								}),
 							).to.eql({ hasPrev: true, hasNext: true });
@@ -1396,6 +1636,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length - 1,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -1406,6 +1647,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: true });
@@ -1416,6 +1658,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length - 3,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: true });
@@ -1426,6 +1669,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -1437,6 +1681,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -1449,6 +1694,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1, -2), pagination: {} },
 									}),
 								).to.eql({});
@@ -1461,6 +1707,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -1475,6 +1722,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length - 1,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -1485,6 +1733,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({ hasNext: true });
@@ -1495,6 +1744,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length - 3,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({ hasNext: true });
@@ -1505,6 +1755,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -1516,6 +1767,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({});
@@ -1528,6 +1780,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(2, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -1540,6 +1793,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({});
@@ -1560,6 +1814,13 @@ describe('messageSetPagination', () => {
 											messages.slice(-1)[0],
 											messages.slice(-2, -1)[0],
 										],
+										filteredReturnedPage: [
+											messages[1],
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+											messages.slice(-2, -1)[0],
+										],
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({});
@@ -1570,6 +1831,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -1580,6 +1842,13 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length + 1,
 										returnedPage: [
+											messages[1],
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+											messages.slice(-2, -1)[0],
+										],
+										filteredReturnedPage: [
 											messages[1],
 											messages[0],
 											...messages.slice(2, -2),
@@ -1602,6 +1871,13 @@ describe('messageSetPagination', () => {
 											messages.slice(-1)[0],
 											messages.slice(-2, -1)[0],
 										],
+										filteredReturnedPage: [
+											messages[1],
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+											messages.slice(-2, -1)[0],
+										],
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({});
@@ -1612,6 +1888,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({});
@@ -1622,6 +1899,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length - 3,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({});
@@ -1632,6 +1910,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length + 1,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -1643,6 +1922,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -1655,6 +1935,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length + 1,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -1667,6 +1948,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.mid,
 										requestedPageSize: messages.length - 3,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -1682,6 +1964,7 @@ describe('messageSetPagination', () => {
 									messagePaginationOptions: messagePaginationOptions.secondHalf,
 									requestedPageSize: messages.length,
 									returnedPage: messages,
+									filteredReturnedPage: messages,
 									parentSet: { messages, pagination: {} },
 								}),
 							).to.eql({ hasPrev: true, hasNext: false });
@@ -1693,6 +1976,7 @@ describe('messageSetPagination', () => {
 									messagePaginationOptions: messagePaginationOptions.secondHalf,
 									requestedPageSize: messages.length + 1,
 									returnedPage: messages,
+									filteredReturnedPage: messages,
 									parentSet: { messages, pagination: {} },
 								}),
 							).to.eql({ hasPrev: false, hasNext: false });
@@ -1704,6 +1988,7 @@ describe('messageSetPagination', () => {
 									messagePaginationOptions: messagePaginationOptions.secondHalf,
 									requestedPageSize: messages.length - 1,
 									returnedPage: messages,
+									filteredReturnedPage: messages,
 									parentSet: { messages, pagination: {} },
 								}),
 							).to.eql({ hasPrev: true, hasNext: false });
@@ -1716,6 +2001,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length - 1,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -1726,6 +2012,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: true });
@@ -1736,6 +2023,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length - 3,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: true });
@@ -1746,6 +2034,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -1757,6 +2046,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -1769,6 +2059,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1, -2), pagination: {} },
 									}),
 								).to.eql({});
@@ -1781,6 +2072,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -1795,6 +2087,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length - 1,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -1805,6 +2098,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({ hasNext: false });
@@ -1815,6 +2109,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length - 3,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({ hasNext: false });
@@ -1825,6 +2120,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -1836,6 +2132,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({});
@@ -1848,6 +2145,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(2, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -1860,6 +2158,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({});
@@ -1880,6 +2179,13 @@ describe('messageSetPagination', () => {
 											messages.slice(-1)[0],
 											messages.slice(-2, -1)[0],
 										],
+										filteredReturnedPage: [
+											messages[1],
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+											messages.slice(-2, -1)[0],
+										],
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({});
@@ -1890,6 +2196,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -1900,6 +2207,13 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length + 1,
 										returnedPage: [
+											messages[1],
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+											messages.slice(-2, -1)[0],
+										],
+										filteredReturnedPage: [
 											messages[1],
 											messages[0],
 											...messages.slice(2, -2),
@@ -1922,6 +2236,13 @@ describe('messageSetPagination', () => {
 											messages.slice(-1)[0],
 											messages.slice(-2, -1)[0],
 										],
+										filteredReturnedPage: [
+											messages[1],
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+											messages.slice(-2, -1)[0],
+										],
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({});
@@ -1932,6 +2253,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({});
@@ -1942,6 +2264,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length - 3,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({});
@@ -1952,6 +2275,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length + 1,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -1963,6 +2287,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -1975,6 +2300,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length + 1,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -1987,6 +2313,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: messagePaginationOptions.secondHalf,
 										requestedPageSize: messages.length - 3,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -2006,6 +2333,7 @@ describe('messageSetPagination', () => {
 									messagePaginationOptions: { created_at_around },
 									requestedPageSize: messages.length,
 									returnedPage: messages,
+									filteredReturnedPage: messages,
 									parentSet: { messages, pagination: {} },
 								}),
 							).to.eql({ hasPrev: false });
@@ -2017,6 +2345,7 @@ describe('messageSetPagination', () => {
 									messagePaginationOptions: { created_at_around },
 									requestedPageSize: messages.length + 1,
 									returnedPage: messages,
+									filteredReturnedPage: messages,
 									parentSet: { messages, pagination: {} },
 								}),
 							).to.eql({ hasPrev: false, hasNext: false });
@@ -2028,6 +2357,7 @@ describe('messageSetPagination', () => {
 									messagePaginationOptions: { created_at_around },
 									requestedPageSize: messages.length - 1,
 									returnedPage: messages,
+									filteredReturnedPage: messages,
 									parentSet: { messages, pagination: {} },
 								}),
 							).to.eql({ hasPrev: false });
@@ -2040,6 +2370,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 1,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false });
@@ -2050,6 +2381,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false });
@@ -2060,6 +2392,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 3,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false });
@@ -2070,6 +2403,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -2081,6 +2415,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -2093,6 +2428,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1, -2), pagination: {} },
 									}),
 								).to.eql({});
@@ -2105,6 +2441,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -2119,6 +2456,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 1,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false });
@@ -2129,6 +2467,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false });
@@ -2139,6 +2478,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 3,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false });
@@ -2149,6 +2489,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -2160,6 +2501,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({});
@@ -2172,6 +2514,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(2, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -2184,6 +2527,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({});
@@ -2204,6 +2548,13 @@ describe('messageSetPagination', () => {
 											messages.slice(-1)[0],
 											messages.slice(-2, -1)[0],
 										],
+										filteredReturnedPage: [
+											messages[1],
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+											messages.slice(-2, -1)[0],
+										],
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({ hasPrev: false });
@@ -2214,6 +2565,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({ hasPrev: false });
@@ -2224,6 +2576,13 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length + 1,
 										returnedPage: [
+											messages[1],
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+											messages.slice(-2, -1)[0],
+										],
+										filteredReturnedPage: [
 											messages[1],
 											messages[0],
 											...messages.slice(2, -2),
@@ -2246,6 +2605,13 @@ describe('messageSetPagination', () => {
 											messages.slice(-1)[0],
 											messages.slice(-2, -1)[0],
 										],
+										filteredReturnedPage: [
+											messages[1],
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+											messages.slice(-2, -1)[0],
+										],
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({ hasPrev: false });
@@ -2256,6 +2622,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({ hasPrev: false });
@@ -2266,6 +2633,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 3,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({ hasPrev: false });
@@ -2276,6 +2644,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length + 1,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -2287,6 +2656,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -2299,6 +2669,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length + 1,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -2311,6 +2682,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 3,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -2328,6 +2700,7 @@ describe('messageSetPagination', () => {
 									messagePaginationOptions: { created_at_around },
 									requestedPageSize: messages.length,
 									returnedPage: messages,
+									filteredReturnedPage: messages,
 									parentSet: { messages, pagination: {} },
 								}),
 							).to.eql({ hasNext: false });
@@ -2339,6 +2712,7 @@ describe('messageSetPagination', () => {
 									messagePaginationOptions: { created_at_around },
 									requestedPageSize: messages.length + 1,
 									returnedPage: messages,
+									filteredReturnedPage: messages,
 									parentSet: { messages, pagination: {} },
 								}),
 							).to.eql({ hasPrev: false, hasNext: false });
@@ -2350,6 +2724,7 @@ describe('messageSetPagination', () => {
 									messagePaginationOptions: { created_at_around },
 									requestedPageSize: messages.length - 1,
 									returnedPage: messages,
+									filteredReturnedPage: messages,
 									parentSet: { messages, pagination: {} },
 								}),
 							).to.eql({ hasNext: false });
@@ -2362,6 +2737,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 1,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({ hasNext: false });
@@ -2372,6 +2748,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({ hasNext: false });
@@ -2382,6 +2759,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 3,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({ hasNext: false });
@@ -2392,6 +2770,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -2403,6 +2782,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -2415,6 +2795,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(1, -2), pagination: {} },
 									}),
 								).to.eql({});
@@ -2427,6 +2808,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -2441,6 +2823,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 1,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({ hasNext: false });
@@ -2451,6 +2834,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({ hasNext: false });
@@ -2461,6 +2845,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 3,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({ hasNext: false });
@@ -2471,6 +2856,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(0, -1), pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -2482,6 +2868,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({});
@@ -2494,6 +2881,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages: messages.slice(2, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -2506,6 +2894,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1), pagination: {} },
 									}),
 								).to.eql({});
@@ -2526,6 +2915,13 @@ describe('messageSetPagination', () => {
 											messages.slice(-1)[0],
 											messages.slice(-2, -1)[0],
 										],
+										filteredReturnedPage: [
+											messages[1],
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+											messages.slice(-2, -1)[0],
+										],
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({ hasNext: false });
@@ -2536,6 +2932,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({ hasNext: false });
@@ -2546,6 +2943,13 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length + 1,
 										returnedPage: [
+											messages[1],
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+											messages.slice(-2, -1)[0],
+										],
+										filteredReturnedPage: [
 											messages[1],
 											messages[0],
 											...messages.slice(2, -2),
@@ -2568,6 +2972,13 @@ describe('messageSetPagination', () => {
 											messages.slice(-1)[0],
 											messages.slice(-2, -1)[0],
 										],
+										filteredReturnedPage: [
+											messages[1],
+											messages[0],
+											...messages.slice(2, -2),
+											messages.slice(-1)[0],
+											messages.slice(-2, -1)[0],
+										],
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({ hasNext: false });
@@ -2578,6 +2989,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 2,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({ hasNext: false });
@@ -2588,6 +3000,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 3,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({ hasNext: false });
@@ -2598,6 +3011,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length + 1,
 										returnedPage: messages.slice(1, -1),
+										filteredReturnedPage: messages.slice(1, -1),
 										parentSet: { messages, pagination: {} },
 									}),
 								).to.eql({ hasPrev: false, hasNext: false });
@@ -2609,6 +3023,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -2621,6 +3036,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length + 1,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -2633,6 +3049,7 @@ describe('messageSetPagination', () => {
 										messagePaginationOptions: { created_at_around },
 										requestedPageSize: messages.length - 3,
 										returnedPage: messages,
+										filteredReturnedPage: messages,
 										parentSet: { messages: messages.slice(1, -1), pagination: {} },
 									}),
 								).to.eql({});
@@ -2668,6 +3085,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions: messagePaginationOptions,
 								requestedPageSize: messages.length,
 								returnedPage: messages,
+								filteredReturnedPage: messages,
 								parentSet: { messages, pagination: {} },
 							}),
 						).to.eql({});
@@ -2678,6 +3096,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions,
 								requestedPageSize: 1,
 								returnedPage: messages,
+								filteredReturnedPage: messages,
 								parentSet: { messages: evenSizeReturnPage.slice(0, 1), pagination: {} },
 							}),
 						).to.eql({ hasPrev: false, hasNext: false });
@@ -2688,6 +3107,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions,
 								requestedPageSize: 1,
 								returnedPage: messages,
+								filteredReturnedPage: messages,
 								parentSet: { messages, pagination: {} },
 							}),
 						).to.eql({ hasPrev: false, hasNext: false });
@@ -2698,6 +3118,7 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions,
 								requestedPageSize: messages.length,
 								returnedPage: messages,
+								filteredReturnedPage: messages,
 								parentSet: { messages: evenSizeReturnPage, pagination: {} },
 							}),
 						).to.eql({});
@@ -2708,11 +3129,66 @@ describe('messageSetPagination', () => {
 								messagePaginationOptions,
 								requestedPageSize: 1,
 								returnedPage: messages,
+								filteredReturnedPage: messages,
 								parentSet: { messages: evenSizeReturnPage, pagination: {} },
 							}),
 						).to.eql({ hasPrev: false, hasNext: false });
 					});
 				});
+			});
+		});
+
+		describe('with filtered first or last returned messages', () => {
+			const createdAtAroundMidMessage4 = new Date(
+				new Date(messages[4].created_at).getTime() - 500,
+			).toISOString();
+
+			it('id_around: sets hasPrev and hasNext when oldest returned row is filtered out', () => {
+				expect(
+					messageSetPagination({
+						messagePaginationOptions: { id_around: messages[4].id },
+						requestedPageSize: messages.length,
+						returnedPage: [shadowOlder, ...messages],
+						filteredReturnedPage: messages,
+						parentSet: { messages, pagination: {} },
+					}),
+				).to.eql({ hasPrev: true, hasNext: true });
+			});
+
+			it('id_around: sets hasPrev false when newest returned row is filtered out (target in first half)', () => {
+				expect(
+					messageSetPagination({
+						messagePaginationOptions: { id_around: messages[2].id },
+						requestedPageSize: messages.length,
+						returnedPage: [...messages, shadowNewer],
+						filteredReturnedPage: messages,
+						parentSet: { messages, pagination: {} },
+					}),
+				).to.eql({ hasPrev: false, hasNext: true });
+			});
+
+			it('created_at_around: sets hasPrev and hasNext when oldest returned row is filtered out', () => {
+				expect(
+					messageSetPagination({
+						messagePaginationOptions: { created_at_around: createdAtAroundMidMessage4 },
+						requestedPageSize: messages.length,
+						returnedPage: [shadowOlder, ...messages],
+						filteredReturnedPage: messages,
+						parentSet: { messages, pagination: {} },
+					}),
+				).to.eql({ hasPrev: true, hasNext: true });
+			});
+
+			it('created_at_around: sets hasPrev false and hasNext true when newest returned row is filtered out', () => {
+				expect(
+					messageSetPagination({
+						messagePaginationOptions: { created_at_around: createdAtAroundMidMessage4 },
+						requestedPageSize: messages.length,
+						returnedPage: [...messages, shadowNewer],
+						filteredReturnedPage: messages,
+						parentSet: { messages, pagination: {} },
+					}),
+				).to.eql({ hasPrev: false, hasNext: true });
 			});
 		});
 	});
