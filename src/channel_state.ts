@@ -221,7 +221,8 @@ export class ChannelState {
 
     for (let i = 0; i < messagesToAdd.length; i += 1) {
       const isFromShadowBannedUser = messagesToAdd[i].shadowed;
-      if (isFromShadowBannedUser) {
+      const isMessageUpdate = !addIfDoesNotExist;
+      if (isFromShadowBannedUser && !isMessageUpdate) {
         filteredMessageIds.push(messagesToAdd[i].id);
         continue;
       }
