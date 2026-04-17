@@ -811,6 +811,7 @@ type MessagePaginationUpdatedParams = {
   parentSet: MessageSet;
   requestedPageSize: number;
   returnedPage: MessageResponse[];
+  filteredReturnedPage: MessageResponse[];
   logger?: Logger;
   messagePaginationOptions?: MessagePaginationOptions;
 };
@@ -849,6 +850,7 @@ const messagePaginationCreatedAtAround = ({
   parentSet,
   requestedPageSize,
   returnedPage,
+  filteredReturnedPage,
   messagePaginationOptions,
 }: MessagePaginationUpdatedParams) => {
   const newPagination = { ...parentSet.pagination };
@@ -892,9 +894,14 @@ const messagePaginationCreatedAtAround = ({
     hasNext = hasPrev = false;
     updateHasPrev = updateHasNext = true;
   } else {
+    const [firstFilteredPageMsg, lastFilteredPageMsg] = [
+      filteredReturnedPage[0],
+      filteredReturnedPage.slice(-1)[0],
+    ];
     const [firstPageMsgIsFirstInSet, lastPageMsgIsLastInSet] = [
-      firstPageMsg?.id && firstPageMsg.id === parentSet.messages[0]?.id,
-      lastPageMsg?.id && lastPageMsg.id === parentSet.messages.slice(-1)[0]?.id,
+      firstFilteredPageMsg?.id && firstFilteredPageMsg.id === parentSet.messages[0]?.id,
+      lastFilteredPageMsg?.id &&
+        lastFilteredPageMsg.id === parentSet.messages.slice(-1)[0]?.id,
     ];
     updateHasPrev = firstPageMsgIsFirstInSet;
     updateHasNext = lastPageMsgIsLastInSet;
@@ -920,6 +927,7 @@ const messagePaginationIdAround = ({
   parentSet,
   requestedPageSize,
   returnedPage,
+  filteredReturnedPage,
   messagePaginationOptions,
 }: MessagePaginationUpdatedParams) => {
   const newPagination = { ...parentSet.pagination };
@@ -928,10 +936,13 @@ const messagePaginationIdAround = ({
   let hasPrev;
   let hasNext;
 
-  const [firstPageMsg, lastPageMsg] = [returnedPage[0], returnedPage.slice(-1)[0]];
+  const [firstFilteredPageMsg, lastFilteredPageMsg] = [
+    filteredReturnedPage[0],
+    filteredReturnedPage.slice(-1)[0],
+  ];
   const [firstPageMsgIsFirstInSet, lastPageMsgIsLastInSet] = [
-    firstPageMsg?.id === parentSet.messages[0]?.id,
-    lastPageMsg?.id === parentSet.messages.slice(-1)[0]?.id,
+    firstFilteredPageMsg?.id === parentSet.messages[0]?.id,
+    lastFilteredPageMsg?.id === parentSet.messages.slice(-1)[0]?.id,
   ];
   let updateHasPrev = firstPageMsgIsFirstInSet;
   let updateHasNext = lastPageMsgIsLastInSet;
@@ -974,6 +985,7 @@ const messagePaginationLinear = ({
   parentSet,
   requestedPageSize,
   returnedPage,
+  filteredReturnedPage,
   messagePaginationOptions,
 }: MessagePaginationUpdatedParams) => {
   const newPagination = { ...parentSet.pagination };
@@ -981,10 +993,14 @@ const messagePaginationLinear = ({
   let hasPrev;
   let hasNext;
 
-  const [firstPageMsg, lastPageMsg] = [returnedPage[0], returnedPage.slice(-1)[0]];
+  const [firstFilteredPageMsg, lastFilteredPageMsg] = [
+    filteredReturnedPage[0],
+    filteredReturnedPage.slice(-1)[0],
+  ];
   const [firstPageMsgIsFirstInSet, lastPageMsgIsLastInSet] = [
-    firstPageMsg?.id && firstPageMsg.id === parentSet.messages[0]?.id,
-    lastPageMsg?.id && lastPageMsg.id === parentSet.messages.slice(-1)[0]?.id,
+    firstFilteredPageMsg?.id && firstFilteredPageMsg.id === parentSet.messages[0]?.id,
+    lastFilteredPageMsg?.id &&
+      lastFilteredPageMsg.id === parentSet.messages.slice(-1)[0]?.id,
   ];
 
   const queriedNextMessages =
@@ -1028,9 +1044,9 @@ const messagePaginationLinear = ({
 };
 
 export const messageSetPagination = (params: MessagePaginationUpdatedParams) => {
-  const messagesFilteredLocally = params.returnedPage.filter(({ shadowed }) => shadowed);
   if (
-    params.parentSet.messages.length + messagesFilteredLocally.length <
+    params.parentSet.messages.length +
+      (params.returnedPage.length - params.filteredReturnedPage.length) <
     params.returnedPage.length
   ) {
     params.logger?.(

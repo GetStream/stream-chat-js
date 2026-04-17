@@ -2040,12 +2040,17 @@ export class StreamChat {
       c.push_preferences = channelState.push_preferences;
 
       let updatedMessagesSet;
+      let filteredMessageIds: string[] = [];
       if (skipInitialization === undefined) {
-        const { messageSet } = c._initializeState(channelState, 'latest');
+        const { messageSet, filteredMessageIds: _filteredMessageIds } =
+          c._initializeState(channelState, 'latest');
+        filteredMessageIds = _filteredMessageIds;
         updatedMessagesSet = messageSet;
       } else if (!skipInitialization.includes(channelState.channel.id)) {
         c.state.clearMessages();
-        const { messageSet } = c._initializeState(channelState, 'latest');
+        const { messageSet, filteredMessageIds: _filteredMessageIds } =
+          c._initializeState(channelState, 'latest');
+        filteredMessageIds = _filteredMessageIds;
         updatedMessagesSet = messageSet;
       }
 
@@ -2058,6 +2063,9 @@ export class StreamChat {
               queryChannelsOptions?.message_limit ||
               DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE,
             returnedPage: channelState.messages,
+            filteredReturnedPage: channelState.messages.filter(
+              (m) => !filteredMessageIds.includes(m.id),
+            ),
             logger: this.logger,
           }),
         };

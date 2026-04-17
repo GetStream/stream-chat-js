@@ -217,9 +217,12 @@ export class ChannelState {
       messageSetToAddToIfDoesNotExist,
     );
 
+    const filteredMessageIds: string[] = [];
+
     for (let i = 0; i < messagesToAdd.length; i += 1) {
       const isFromShadowBannedUser = messagesToAdd[i].shadowed;
       if (isFromShadowBannedUser) {
+        filteredMessageIds.push(messagesToAdd[i].id);
         continue;
       }
       // If message is already formatted we can skip the tasks below
@@ -306,6 +309,7 @@ export class ChannelState {
 
     return {
       messageSet: this.messageSets[targetMessageSetIndex],
+      filteredMessageIds,
     };
   }
 
