@@ -1,3 +1,10 @@
+## [9.41.1](https://github.com/GetStream/stream-chat-js/compare/v9.41.0...v9.41.1) (2026-04-17)
+
+### Bug Fixes
+
+* pagination breaks if first or last message on page is filtered (… ([#1718](https://github.com/GetStream/stream-chat-js/issues/1718)) ([659f33c](https://github.com/GetStream/stream-chat-js/commit/659f33c7b67d88ec406a11a82c27a254662ce86b))
+* update channel state if message becomes shadowed ([#1720](https://github.com/GetStream/stream-chat-js/issues/1720)) ([f8f91f1](https://github.com/GetStream/stream-chat-js/commit/f8f91f1bae508a7c1cace47813f728b56393057f))
+
 ## [9.41.0](https://github.com/GetStream/stream-chat-js/compare/v9.40.0...v9.41.0) (2026-04-08)
 
 ### Features
