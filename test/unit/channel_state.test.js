@@ -45,6 +45,19 @@ describe('ChannelState addMessagesSorted', function () {
 		expect(state.messages).to.be.empty;
 	});
 
+	it('updates an existing message with shadowed: true when applying a message update', () => {
+		state.addMessagesSorted([generateMsg({ id: 'shadow-update-msg' })]);
+
+		expect(state.messages).to.have.length(1);
+		expect(state.messages[0].shadowed).not.to.be.ok;
+
+		state.addMessageSorted({ ...state.messages[0], shadowed: true }, false, false);
+
+		expect(state.messages).to.have.length(1);
+		expect(state.messages[0].id).to.be.equal('shadow-update-msg');
+		expect(state.messages[0].shadowed).to.be.equal(true);
+	});
+
 	it('empty state add multiple messages', async function () {
 		state.addMessagesSorted([
 			generateMsg({ id: '1', date: '2020-01-01T00:00:00.001Z' }),
