@@ -18,6 +18,7 @@ import type {
   PromoteChannelParams,
   QueryChannelAPIResponse,
   ReactionGroupResponse,
+  Sort,
   UpdatedMessage,
   UserResponse,
 } from './types';
@@ -131,20 +132,26 @@ export function addFileToFormData(
 
   return data;
 }
-export function normalizeQuerySort<T extends Record<string, AscDesc | undefined>>(
-  sort: T | T[],
-) {
-  const sortFields: Array<{ direction: AscDesc; field: keyof T }> = [];
-  const sortArr = Array.isArray(sort) ? sort : [sort];
-  for (const item of sortArr) {
-    const entries = Object.entries(item) as [keyof T, AscDesc][];
-    if (entries.length > 1) {
-      console.warn(
-        "client._buildSort() - multiple fields in a single sort object detected. Object's field order is not guaranteed",
-      );
-    }
-    for (const [field, direction] of entries) {
-      sortFields.push({ field, direction });
+
+export function normalizeQuerySort<T extends Sort<string>>(sort: T | T[]) {
+  const sortFields: Array<{ direction: AscDesc; field: keyof T; type: string | null }> =
+    [];
+  const sortArray = Array.isArray(sort) ? sort : [sort];
+  for (const item of sortArray) {
+    const entries = Object.entries(item);
+
+    for (const [field, directionOrObject] of entries) {
+      if (!directionOrObject) continue;
+
+      if (typeof directionOrObject === 'number') {
+        sortFields.push({ field, direction: directionOrObject, type: null });
+      } else {
+        sortFields.push({
+          field,
+          direction: directionOrObject.direction,
+          type: directionOrObject.type ?? null,
+        });
+      }
     }
   }
   return sortFields;
