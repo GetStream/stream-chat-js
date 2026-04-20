@@ -11,7 +11,22 @@ export type UploadManagerState = {
   uploads: UploadRecord[];
 };
 
+type UploadPromise = ReturnType<typeof AttachmentManager.prototype.doUploadRequest>;
+
+type InFlightUpload = {
+  abortController: AbortController;
+  promise: UploadPromise;
+  reject: (reason?: unknown) => void;
+};
+
 const initState = (): UploadManagerState => ({ uploads: [] });
+
+const createCanceledUploadError = () => {
+  const error = new Error('Upload canceled') as Error & { code?: string; name: string };
+  error.code = 'ERR_CANCELED';
+  error.name = 'AbortError';
+  return error;
+};
 
 const upsertById = (uploads: UploadRecord[], record: UploadRecord): UploadRecord[] => {
   const idx = uploads.findIndex((u) => u.id === record.id);
@@ -41,7 +56,7 @@ const updateById = (
 export class UploadManager {
   readonly state: StateStore<UploadManagerState>;
 
-  private inFlightUploads = new Map<string, ReturnType<typeof this.upload>>();
+  private inFlightUploads = new Map<string, InFlightUpload>();
 
   constructor(private readonly client: StreamChat) {
     this.state = new StateStore<UploadManagerState>(initState());
@@ -68,14 +83,31 @@ export class UploadManager {
    * Invoked when the user disconnects so a later session does not inherit stale upload state.
    */
   reset = () => {
+    for (const upload of this.inFlightUploads.values()) {
+      upload.abortController.abort();
+      upload.reject(createCanceledUploadError());
+    }
+    this.clearUploads();
+  };
+
+  /**
+   * Removes the upload record for `id` if present and aborts the in-flight request.
+   */
+  deleteUploadRecord = (id: string, abortInFlight = true) => {
+    const inFlightUpload = this.inFlightUploads.get(id);
+    if (abortInFlight && inFlightUpload) {
+      inFlightUpload.abortController.abort();
+      inFlightUpload.reject(createCanceledUploadError());
+    }
+    this.clearUpload(id);
+  };
+
+  private clearUploads = () => {
     this.inFlightUploads.clear();
     this.state.next(initState());
   };
 
-  /**
-   * Removes the upload record for `id` if present.
-   */
-  deleteUploadRecord = (id: string) => {
+  private clearUpload = (id: string) => {
     this.state.next((current) => {
       const nextUploads = current.uploads.filter((u) => u.id !== id);
       if (nextUploads.length === current.uploads.length) return current;
@@ -98,8 +130,8 @@ export class UploadManager {
     channelCid: string;
     file: Parameters<typeof AttachmentManager.prototype.doUploadRequest>[0];
   }): ReturnType<typeof AttachmentManager.prototype.doUploadRequest> => {
-    const existingPromise = this.inFlightUploads.get(id);
-    if (existingPromise) return existingPromise;
+    const existingUpload = this.inFlightUploads.get(id);
+    if (existingUpload) return existingUpload.promise;
 
     let resolvePromise!: (
       value: Awaited<ReturnType<typeof AttachmentManager.prototype.doUploadRequest>>,
@@ -112,7 +144,12 @@ export class UploadManager {
       rejectPromise = reject;
     });
 
-    this.inFlightUploads.set(id, promise);
+    const inFlightUpload: InFlightUpload = {
+      abortController: new AbortController(),
+      promise,
+      reject: rejectPromise,
+    };
+    this.inFlightUploads.set(id, inFlightUpload);
 
     void (async () => {
       const attachmentManager = this.resolveAttachmentManager(channelCid);
@@ -125,6 +162,7 @@ export class UploadManager {
 
         const onProgress = trackProgress
           ? (progress?: number) => {
+              if (this.inFlightUploads.get(id) !== inFlightUpload) return;
               this.updateUpload({
                 id,
                 uploadProgress: progress,
@@ -132,15 +170,19 @@ export class UploadManager {
             }
           : undefined;
 
-        const response = await attachmentManager.doUploadRequest(
-          file,
-          onProgress ? { onProgress } : undefined,
-        );
+        const response = await attachmentManager.doUploadRequest(file, {
+          ...(onProgress ? { onProgress } : {}),
+          signal: inFlightUpload.abortController.signal,
+        });
+        if (this.inFlightUploads.get(id) !== inFlightUpload) return;
         resolvePromise(response);
       } catch (error) {
+        if (this.inFlightUploads.get(id) !== inFlightUpload) return;
         rejectPromise(error);
       } finally {
-        this.deleteUploadRecord(id);
+        if (this.inFlightUploads.get(id) === inFlightUpload) {
+          this.clearUpload(id);
+        }
       }
     })();
 

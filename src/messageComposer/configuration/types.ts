@@ -9,6 +9,8 @@ export type MinimumUploadRequestResult = { file: string; thumb_url?: string } & 
 /** Optional second argument to `UploadRequestFn`; integrators may call `onProgress` to report 0–100 or `undefined` when indeterminate. */
 export type UploadRequestOptions = {
   onProgress?: (percent: number | undefined) => void;
+  /** Optional signal for canceling the in-flight upload request. */
+  signal?: AbortSignal;
 };
 
 export type UploadRequestFn = (
