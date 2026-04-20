@@ -1391,14 +1391,21 @@ export class StreamChat {
     for (const channelID in refMap) {
       const channel = this.activeChannels[channelID];
       if (channel?.state) {
-        if (channel.state.members[user.id]) {
-          channel.state.members[user.id].user = user;
+        const state = channel.state;
+        if (state.members[user.id]) {
+          state.members = {
+            ...state.members,
+            [user.id]: { ...state.members[user.id], user },
+          };
         }
-        if (channel.state.watchers[user.id]) {
-          channel.state.watchers[user.id] = user;
+        if (state.watchers[user.id]) {
+          state.watchers = { ...state.watchers, [user.id]: user };
         }
-        if (channel.state.read[user.id]) {
-          channel.state.read[user.id].user = user;
+        if (state.read[user.id]) {
+          state.read = {
+            ...state.read,
+            [user.id]: { ...state.read[user.id], user },
+          };
         }
       }
     }
