@@ -599,6 +599,21 @@ describe('AttachmentManager', () => {
 
       expect(attachmentManager.attachments).toEqual(updatedAttachments);
     });
+
+    it('should do nothing if the attachments are the same', () => {
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
+      const attachment = { localMetadata: { id: 'test-id-1' }, type: 'image' };
+      attachmentManager.upsertAttachments([attachment]);
+
+      const spy = vi.fn();
+      attachmentManager.state.subscribe(spy);
+      spy.mockClear();
+      attachmentManager.upsertAttachments([attachment]);
+
+      expect(spy).not.toHaveBeenCalled();
+    });
   });
 
   describe('updateAttachment', () => {
@@ -649,6 +664,20 @@ describe('AttachmentManager', () => {
       attachmentManager.updateAttachment(updatedAttachment);
 
       expect(attachmentManager.attachments).toEqual(newAttachments);
+    });
+
+    it('should do nothing if the attachment is the same', () => {
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
+      const attachment = { localMetadata: { id: 'test-id-1' }, type: 'image' };
+      attachmentManager.upsertAttachments([attachment]);
+
+      const spy = vi.fn();
+      attachmentManager.state.subscribe(spy);
+      spy.mockReset();
+      attachmentManager.updateAttachment(attachment);
+      expect(spy).not.toHaveBeenCalled();
     });
   });
 

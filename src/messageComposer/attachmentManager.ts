@@ -247,12 +247,12 @@ export class AttachmentManager {
         return attachments;
       }
     }
-    return null;
+    return stateAttachments;
   };
 
   updateAttachment = (attachmentToUpdate: LocalAttachment) => {
     const updatedAttachments = this.prepareAttachmentUpdate(attachmentToUpdate);
-    if (updatedAttachments) {
+    if (updatedAttachments && updatedAttachments !== this.attachments) {
       this.state.partialNext({ attachments: updatedAttachments });
     }
   };
@@ -263,16 +263,17 @@ export class AttachmentManager {
     let hasUpdates = false;
     attachmentsToUpsert.forEach((attachment) => {
       const updatedAttachments = this.prepareAttachmentUpdate(attachment);
-      if (updatedAttachments) {
-        attachments = updatedAttachments;
-        hasUpdates = true;
-      } else {
+      if (updatedAttachments === null) {
         const localAttachment = ensureIsLocalAttachment(attachment);
         if (localAttachment) {
           attachments.push(localAttachment);
           hasUpdates = true;
         }
+      } else if (updatedAttachments !== this.attachments) {
+        attachments = updatedAttachments;
+        hasUpdates = true;
       }
+      // else: id exists and merge was a no-op (`prepareAttachmentUpdate` returns current state)
     });
     if (hasUpdates) {
       this.state.partialNext({ attachments });
