@@ -32,12 +32,12 @@ describe('UploadManager', () => {
       file,
     });
 
-    expect(manager.uploads).toEqual([
-      {
+    expect(manager.uploads).toEqual({
+      'local-a': {
         id: 'local-a',
         uploadProgress: 0,
       },
-    ]);
+    });
     await promise;
 
     expect(manager.getUpload('local-a')).toBeUndefined();
@@ -55,7 +55,7 @@ describe('UploadManager', () => {
 
     const snapshots: unknown[] = [];
     const { manager: manager2, doUploadRequest: doUploadRequest2 } = createManager();
-    const unsub = manager2.state.subscribe((next) => snapshots.push(next.uploads));
+    const unsub = manager2.state.subscribe((next) => snapshots.push({ ...next.uploads }));
     await manager2.upload({
       id: 'm1',
       channelCid: TEST_CID,
@@ -65,11 +65,15 @@ describe('UploadManager', () => {
 
     expect(
       snapshots.some((u: unknown) => {
-        const row = (u as UploadRecord[])?.[0];
+        const row = (u as Record<string, UploadRecord>)['m1'];
         return row?.id === 'm1' && row.uploadProgress === 0;
       }),
     ).toBe(true);
-    expect(snapshots.some((u: unknown) => (u as UploadRecord[]).length === 0)).toBe(true);
+    expect(
+      snapshots.some(
+        (u: unknown) => Object.keys(u as Record<string, UploadRecord>).length === 0,
+      ),
+    ).toBe(true);
     expect(doUploadRequest).toHaveBeenCalled();
     expect(doUploadRequest2).toHaveBeenCalled();
   });
@@ -121,7 +125,7 @@ describe('UploadManager', () => {
     ).rejects.toBe(err);
     manager.reset();
 
-    expect(manager.uploads).toEqual([]);
+    expect(manager.uploads).toEqual({});
     expect(doUploadRequest).toHaveBeenCalledTimes(1);
   });
 

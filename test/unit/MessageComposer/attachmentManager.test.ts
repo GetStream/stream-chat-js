@@ -494,7 +494,7 @@ describe('AttachmentManager', () => {
         ).toBeGreaterThan(0);
       });
 
-      const uploadId = mockClient.uploadManager.uploads[0]?.id;
+      const uploadId = Object.keys(mockClient.uploadManager.uploads)[0];
       expect(uploadId).toBeDefined();
 
       expect(upsertSpy).toHaveBeenCalled();
@@ -512,14 +512,13 @@ describe('AttachmentManager', () => {
 
       mockClient.uploadManager.state.partialNext((current) => ({
         ...current,
-        uploads: current.uploads.map((u) =>
-          u.id === uploadId
-            ? {
-                ...u,
-                uploadProgress: 99,
-              }
-            : u,
-        ),
+        uploads: {
+          ...current.uploads,
+          [uploadId!]: {
+            ...current.uploads[uploadId!],
+            uploadProgress: 99,
+          },
+        },
       }));
 
       expect(upsertSpy).not.toHaveBeenCalled();
@@ -736,15 +735,11 @@ describe('AttachmentManager', () => {
 
       await Promise.resolve();
 
-      expect(
-        mockClient.uploadManager.uploads.some((u) => u.id === 'att-with-upload'),
-      ).toBe(true);
+      expect('att-with-upload' in mockClient.uploadManager.uploads).toBe(true);
 
       attachmentManager.removeAttachments(['att-with-upload']);
 
-      expect(
-        mockClient.uploadManager.uploads.some((u) => u.id === 'att-with-upload'),
-      ).toBe(false);
+      expect('att-with-upload' in mockClient.uploadManager.uploads).toBe(false);
       expect(attachmentManager.attachments).toEqual([]);
     });
 
@@ -786,11 +781,7 @@ describe('AttachmentManager', () => {
 
       attachmentManager.removeAttachments(['att-1']);
 
-      expect(
-        mockClient.uploadManager.uploads.some(
-          (u) => u.id === 'other-composer-attachment',
-        ),
-      ).toBe(true);
+      expect('other-composer-attachment' in mockClient.uploadManager.uploads).toBe(true);
     });
 
     it('should unsubscribe upload progress listeners when removing an in-flight upload', async () => {
@@ -816,7 +807,7 @@ describe('AttachmentManager', () => {
         ).toBeGreaterThan(0);
       });
 
-      const uploadId = mockClient.uploadManager.uploads[0]?.id;
+      const uploadId = Object.keys(mockClient.uploadManager.uploads)[0];
       expect(uploadId).toBeDefined();
 
       upsertSpy.mockClear();
@@ -832,7 +823,10 @@ describe('AttachmentManager', () => {
 
       mockClient.uploadManager.state.partialNext((current) => ({
         ...current,
-        uploads: [...current.uploads, { id: uploadId!, uploadProgress: 77 }],
+        uploads: {
+          ...current.uploads,
+          [uploadId!]: { id: uploadId!, uploadProgress: 77 },
+        },
       }));
 
       expect(upsertSpy).not.toHaveBeenCalled();

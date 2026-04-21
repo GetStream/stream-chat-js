@@ -349,21 +349,21 @@ describe('Client disconnectUser', () => {
 	it('should clear upload manager records', async () => {
 		const client = new StreamChat('', '');
 		client.uploadManager.state.next(() => ({
-			uploads: [
-				{
+			uploads: {
+				'upload-x': {
 					id: 'upload-x',
 					uploadProgress: 0,
 				},
-			],
+			},
 		}));
 		const { resolve, promise } = Promise.withResolvers();
 		client.wsConnection = { disconnect: () => promise };
 		client.wsFallback = null;
 		const disconnectPromise = client.disconnectUser();
-		expect(client.uploadManager.uploads).to.have.length(0);
+		expect(Object.keys(client.uploadManager.uploads)).to.have.length(0);
 		resolve();
 		await disconnectPromise;
-		expect(client.uploadManager.uploads).to.deep.equal([]);
+		expect(client.uploadManager.uploads).to.deep.equal({});
 	});
 });
 

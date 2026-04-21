@@ -697,7 +697,7 @@ export class AttachmentManager {
 
     this.uploadProgressUnsubscribesByLocalId.get(localId)?.();
     const unsubscribe = this.client.uploadManager.state.subscribeWithSelector(
-      (s) => ({ upload: s.uploads.find((u) => u.id === localId) }),
+      (s) => ({ upload: s.uploads[localId] }),
       ({ upload: nextUpload }) => {
         if (!nextUpload) return;
         this.upsertAttachments([

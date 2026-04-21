@@ -8,31 +8,26 @@ export type UploadRecord = {
 };
 
 export type UploadManagerState = {
-  uploads: UploadRecord[];
+  uploads: Record<string, UploadRecord>;
 };
 
-const initState = (): UploadManagerState => ({ uploads: [] });
+const initState = (): UploadManagerState => ({ uploads: {} });
 
-const upsertById = (uploads: UploadRecord[], record: UploadRecord): UploadRecord[] => {
-  const idx = uploads.findIndex((u) => u.id === record.id);
-  if (idx === -1) return [...uploads, record];
-  const current = uploads[idx];
-  if (current === record) return uploads;
-  const next = [...uploads];
-  next[idx] = { ...current, ...record };
-  return next;
-};
+const upsertById = (
+  uploads: Record<string, UploadRecord>,
+  record: UploadRecord,
+): Record<string, UploadRecord> => ({
+  ...uploads,
+  [record.id]: { ...uploads[record.id], ...record },
+});
 
 const updateById = (
-  uploads: UploadRecord[],
+  uploads: Record<string, UploadRecord>,
   record: UploadRecord,
-): UploadRecord[] | null => {
-  const idx = uploads.findIndex((u) => u.id === record.id);
-  if (idx === -1) return null;
-  const current = uploads[idx];
-  const next = [...uploads];
-  next[idx] = { ...current, ...record };
-  return next;
+): Record<string, UploadRecord> | null => {
+  if (!(record.id in uploads)) return null;
+  const current = uploads[record.id];
+  return { ...uploads, [record.id]: { ...current, ...record } };
 };
 
 /**
@@ -61,7 +56,7 @@ export class UploadManager {
     return this.state.getLatestValue().uploads;
   }
 
-  getUpload = (id: string) => this.uploads.find((u) => u.id === id);
+  getUpload = (id: string) => this.uploads[id];
 
   /**
    * Clears all upload records.
@@ -77,9 +72,10 @@ export class UploadManager {
    */
   deleteUploadRecord = (id: string) => {
     this.state.next((current) => {
-      const nextUploads = current.uploads.filter((u) => u.id !== id);
-      if (nextUploads.length === current.uploads.length) return current;
-      return { ...current, uploads: nextUploads };
+      if (!(id in current.uploads)) return current;
+      const uploads = { ...current.uploads };
+      delete uploads[id];
+      return { ...current, uploads };
     });
     this.inFlightUploads.delete(id);
   };
