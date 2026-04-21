@@ -472,7 +472,7 @@ describe('AttachmentManager', () => {
       });
     });
 
-    it('should unsubscribe upload progress listeners when re-initializing state', async () => {
+    it('should not apply upload manager progress to composer attachments after re-initializing state', async () => {
       const { messageComposer, mockClient } = setup();
       const { attachmentManager } = messageComposer;
 
@@ -480,35 +480,17 @@ describe('AttachmentManager', () => {
         () => new Promise(() => {}),
       );
 
-      const upsertSpy = vi.spyOn(attachmentManager, 'upsertAttachments');
-
       void attachmentManager.uploadFile(new File([], 'p.png', { type: 'image/png' }));
 
       await vi.waitFor(() => {
-        expect(
-          (
-            attachmentManager as unknown as {
-              uploadProgressUnsubscribesByLocalId: Map<string, unknown>;
-            }
-          ).uploadProgressUnsubscribesByLocalId.size,
-        ).toBeGreaterThan(0);
+        expect(Object.keys(mockClient.uploadManager.uploads).length).toBeGreaterThan(0);
       });
 
       const uploadId = Object.keys(mockClient.uploadManager.uploads)[0];
       expect(uploadId).toBeDefined();
 
-      expect(upsertSpy).toHaveBeenCalled();
-
-      upsertSpy.mockClear();
       attachmentManager.initState();
-
-      expect(
-        (
-          attachmentManager as unknown as {
-            uploadProgressUnsubscribesByLocalId: Map<string, unknown>;
-          }
-        ).uploadProgressUnsubscribesByLocalId.size,
-      ).toBe(0);
+      expect(attachmentManager.attachments).toEqual([]);
 
       mockClient.uploadManager.state.partialNext((current) => ({
         ...current,
@@ -521,7 +503,7 @@ describe('AttachmentManager', () => {
         },
       }));
 
-      expect(upsertSpy).not.toHaveBeenCalled();
+      expect(attachmentManager.attachments).toEqual([]);
     });
 
     it('should initialize with message', () => {
@@ -784,7 +766,7 @@ describe('AttachmentManager', () => {
       expect('other-composer-attachment' in mockClient.uploadManager.uploads).toBe(true);
     });
 
-    it('should unsubscribe upload progress listeners when removing an in-flight upload', async () => {
+    it('should not apply upload manager progress to composer attachments after removing an in-flight upload', async () => {
       const {
         messageComposer: { attachmentManager },
         mockClient,
@@ -793,33 +775,18 @@ describe('AttachmentManager', () => {
       vi.spyOn(attachmentManager, 'doUploadRequest').mockImplementation(
         () => new Promise(() => {}),
       );
-      const upsertSpy = vi.spyOn(attachmentManager, 'upsertAttachments');
 
       void attachmentManager.uploadFile(new File([], 'p.png', { type: 'image/png' }));
 
       await vi.waitFor(() => {
-        expect(
-          (
-            attachmentManager as unknown as {
-              uploadProgressUnsubscribesByLocalId: Map<string, unknown>;
-            }
-          ).uploadProgressUnsubscribesByLocalId.size,
-        ).toBeGreaterThan(0);
+        expect(Object.keys(mockClient.uploadManager.uploads).length).toBeGreaterThan(0);
       });
 
       const uploadId = Object.keys(mockClient.uploadManager.uploads)[0];
       expect(uploadId).toBeDefined();
 
-      upsertSpy.mockClear();
       attachmentManager.removeAttachments([uploadId!]);
-
-      expect(
-        (
-          attachmentManager as unknown as {
-            uploadProgressUnsubscribesByLocalId: Map<string, unknown>;
-          }
-        ).uploadProgressUnsubscribesByLocalId.size,
-      ).toBe(0);
+      expect(attachmentManager.attachments).toEqual([]);
 
       mockClient.uploadManager.state.partialNext((current) => ({
         ...current,
@@ -829,7 +796,7 @@ describe('AttachmentManager', () => {
         },
       }));
 
-      expect(upsertSpy).not.toHaveBeenCalled();
+      expect(attachmentManager.attachments).toEqual([]);
     });
   });
 
@@ -1493,7 +1460,7 @@ describe('AttachmentManager', () => {
         messageComposer: { attachmentManager },
         mockChannel,
       } = setup();
-      const updateSpy = vi.spyOn(attachmentManager, 'upsertAttachments');
+      const updateSpy = vi.spyOn(attachmentManager, 'updateAttachment');
       const customUploadFn = vi.fn(async (_file, options) => {
         options?.onProgress?.(42);
         return { file: 'custom-upload-url' };
@@ -1521,11 +1488,9 @@ describe('AttachmentManager', () => {
         expect.objectContaining({ onProgress: expect.any(Function) }),
       );
       expect(updateSpy).toHaveBeenCalledWith(
-        expect.arrayContaining([
-          expect.objectContaining({
-            localMetadata: expect.objectContaining({ uploadProgress: 42 }),
-          }),
-        ]),
+        expect.objectContaining({
+          localMetadata: expect.objectContaining({ uploadProgress: 42 }),
+        }),
       );
       expect(mockChannel.sendImage).not.toHaveBeenCalled();
     });
