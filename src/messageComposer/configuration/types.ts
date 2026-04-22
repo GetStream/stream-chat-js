@@ -6,9 +6,14 @@ export type MinimumUploadRequestResult = { file: string; thumb_url?: string } & 
   Record<string, unknown>
 >;
 
-/** Optional second argument to `UploadRequestFn`; integrators may call `onProgress` to report 0–100 or `undefined` when indeterminate. */
+/**
+ * Optional second argument to `UploadRequestFn`.
+ * - Call `onProgress` to report 0–100 or `undefined` when indeterminate.
+ * - Forward `abortSignal` to your upload implementation to cancel the upload if the user deletes the attachment while it's uploading.
+ */
 export type UploadRequestOptions = {
   onProgress?: (percent: number | undefined) => void;
+  abortSignal?: AbortSignal;
 };
 
 export type UploadRequestFn = (

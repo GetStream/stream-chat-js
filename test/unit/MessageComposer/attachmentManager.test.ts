@@ -1382,7 +1382,7 @@ describe('AttachmentManager', () => {
       expect(attachmentManager.config.trackUploadProgress).toBe(true);
     });
 
-    it('when false, default upload does not pass progress options to channel', async () => {
+    it('when false, default upload passes abort signal without onUploadProgress to channel', async () => {
       const {
         messageComposer: { attachmentManager },
         mockChannel,
@@ -1398,7 +1398,7 @@ describe('AttachmentManager', () => {
         undefined,
         undefined,
         undefined,
-        undefined,
+        { signal: expect.any(AbortSignal) },
       );
     });
 
@@ -1440,7 +1440,7 @@ describe('AttachmentManager', () => {
       expect(att.localMetadata.uploadProgress).toBe(0);
     });
 
-    it('when false, custom doUploadRequest is called without options', async () => {
+    it('when false, custom doUploadRequest receives abortSignal only', async () => {
       const {
         messageComposer: { attachmentManager },
         mockChannel,
@@ -1451,7 +1451,9 @@ describe('AttachmentManager', () => {
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
       await attachmentManager.uploadFiles([file]);
 
-      expect(customUploadFn).toHaveBeenCalledWith(file, undefined);
+      expect(customUploadFn).toHaveBeenCalledWith(file, {
+        abortSignal: expect.any(AbortSignal),
+      });
       expect(mockChannel.sendImage).not.toHaveBeenCalled();
     });
 
@@ -1485,13 +1487,70 @@ describe('AttachmentManager', () => {
 
       expect(customUploadFn).toHaveBeenCalledWith(
         file,
-        expect.objectContaining({ onProgress: expect.any(Function) }),
+        expect.objectContaining({
+          onProgress: expect.any(Function),
+          abortSignal: expect.any(AbortSignal),
+        }),
       );
       expect(updateSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           localMetadata: expect.objectContaining({ uploadProgress: 42 }),
         }),
       );
+      expect(mockChannel.sendImage).not.toHaveBeenCalled();
+    });
+
+    it('aborts default upload axios signal when attachment is removed during upload', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
+      mockChannel.sendImage.mockImplementation(() => new Promise(() => {}));
+
+      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
+      const local = await attachmentManager.fileToLocalUploadAttachment(file);
+      void attachmentManager.uploadAttachment(local);
+
+      await vi.waitFor(() => {
+        expect(mockChannel.sendImage).toHaveBeenCalled();
+      });
+
+      const axiosOpts = mockChannel.sendImage.mock.calls[0][4] as {
+        signal?: AbortSignal;
+      };
+      expect(axiosOpts?.signal).toBeInstanceOf(AbortSignal);
+      expect(axiosOpts!.signal!.aborted).toBe(false);
+
+      attachmentManager.removeAttachments([local.localMetadata.id!]);
+
+      expect(axiosOpts!.signal!.aborted).toBe(true);
+    });
+
+    it('aborts custom upload abortSignal when attachment is removed during upload', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
+      let capturedSignal: AbortSignal | undefined;
+      const customUploadFn = vi.fn().mockImplementation((_file, opts) => {
+        capturedSignal = opts?.abortSignal;
+        return new Promise(() => {});
+      });
+      attachmentManager.setCustomUploadFn(customUploadFn);
+
+      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
+      const local = await attachmentManager.fileToLocalUploadAttachment(file);
+      void attachmentManager.uploadAttachment(local);
+
+      await vi.waitFor(() => {
+        expect(customUploadFn).toHaveBeenCalled();
+      });
+      expect(capturedSignal).toBeInstanceOf(AbortSignal);
+      expect(capturedSignal!.aborted).toBe(false);
+
+      attachmentManager.removeAttachments([local.localMetadata.id!]);
+
+      expect(capturedSignal!.aborted).toBe(true);
       expect(mockChannel.sendImage).not.toHaveBeenCalled();
     });
 
@@ -1659,6 +1718,27 @@ describe('AttachmentManager', () => {
         undefined,
         undefined,
         undefined,
+      );
+    });
+
+    it('passes axios signal when abortSignal is provided without onProgress', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
+      const controller = new AbortController();
+      const file = new File([''], 'photo.jpg', { type: 'image/jpeg' });
+
+      await attachmentManager.doDefaultUploadRequest(file, {
+        abortSignal: controller.signal,
+      });
+
+      expect(mockChannel.sendImage).toHaveBeenCalledWith(
+        file,
+        undefined,
+        undefined,
+        undefined,
+        { signal: controller.signal },
       );
     });
 

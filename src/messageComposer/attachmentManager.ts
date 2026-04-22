@@ -273,15 +273,15 @@ export class AttachmentManager {
   removeAttachments = (localAttachmentIds: string[]) => {
     if (!localAttachmentIds.length) return;
 
-    for (const id of localAttachmentIds) {
-      this.client.uploadManager.deleteUploadRecord(id);
-    }
-
     this.state.partialNext({
       attachments: this.attachments.filter(
         (attachment) => !localAttachmentIds.includes(attachment.localMetadata?.id),
       ),
     });
+
+    for (const id of localAttachmentIds) {
+      this.client.uploadManager.deleteUploadRecord(id);
+    }
   };
 
   getUploadConfigCheck = async (
@@ -471,13 +471,21 @@ export class AttachmentManager {
         }
       : undefined;
 
+    const axiosUploadConfig =
+      progressHandler || options?.abortSignal
+        ? {
+            ...(progressHandler ? { onUploadProgress: progressHandler } : {}),
+            ...(options?.abortSignal ? { signal: options.abortSignal } : {}),
+          }
+        : undefined;
+
     if (isFileReference(fileLike)) {
       return this.channel[isImageFile(fileLike) ? 'sendImage' : 'sendFile'](
         fileLike.uri,
         fileLike.name,
         fileLike.type,
         undefined,
-        progressHandler ? { onUploadProgress: progressHandler } : undefined,
+        axiosUploadConfig,
       );
     }
 
@@ -492,13 +500,7 @@ export class AttachmentManager {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { duration, ...result } = await this.channel[
       isImageFile(fileLike) ? 'sendImage' : 'sendFile'
-    ](
-      file,
-      undefined,
-      undefined,
-      undefined,
-      progressHandler ? { onUploadProgress: progressHandler } : undefined,
-    );
+    ](file, undefined, undefined, undefined, axiosUploadConfig);
     return result;
   };
 

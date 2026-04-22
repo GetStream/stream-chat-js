@@ -43,7 +43,10 @@ describe('UploadManager', () => {
     expect(manager.getUpload('local-a')).toBeUndefined();
     expect(doUploadRequest).toHaveBeenCalledWith(
       file,
-      expect.objectContaining({ onProgress: expect.any(Function) }),
+      expect.objectContaining({
+        onProgress: expect.any(Function),
+        abortSignal: expect.any(AbortSignal),
+      }),
     );
   });
 
@@ -195,7 +198,7 @@ describe('UploadManager', () => {
     expect(doUploadRequest).toHaveBeenCalled();
   });
 
-  it('omits onProgress when attachment manager config trackUploadProgress is false', async () => {
+  it('passes abortSignal without onProgress when trackUploadProgress is false', async () => {
     const { manager, doUploadRequest } = createManager(
       vi.fn().mockResolvedValue(undefined),
       false,
@@ -206,7 +209,9 @@ describe('UploadManager', () => {
       channelCid: TEST_CID,
       file,
     });
-    expect(doUploadRequest).toHaveBeenCalledWith(file, undefined);
+    expect(doUploadRequest).toHaveBeenCalledWith(file, {
+      abortSignal: expect.any(AbortSignal),
+    });
   });
 
   describe('deleteUploadRecord', () => {
@@ -243,13 +248,98 @@ describe('UploadManager', () => {
       expect(doUploadRequest).toHaveBeenCalledTimes(1);
     });
 
+    it('aborts abortSignal when deleteUploadRecord is called during upload', async () => {
+      let capturedSignal: AbortSignal | undefined;
+      const { manager, doUploadRequest } = createManager(
+        vi
+          .fn()
+          .mockImplementation((_file: unknown, opts?: { abortSignal?: AbortSignal }) => {
+            capturedSignal = opts?.abortSignal;
+            return new Promise(() => {});
+          }),
+      );
+
+      void manager.upload({ id: 'm1', channelCid: TEST_CID, file: new File([], 'x') });
+      await Promise.resolve();
+      expect(capturedSignal).toBeDefined();
+      expect(capturedSignal?.aborted).toBe(false);
+
+      manager.deleteUploadRecord('m1');
+      expect(capturedSignal?.aborted).toBe(true);
+      expect(doUploadRequest).toHaveBeenCalledTimes(1);
+    });
+
+    it('aborts all in-flight abortSignals when reset is called', async () => {
+      const signals: AbortSignal[] = [];
+      const { manager, doUploadRequest } = createManager(
+        vi
+          .fn()
+          .mockImplementation((_file: unknown, opts?: { abortSignal?: AbortSignal }) => {
+            if (opts?.abortSignal) signals.push(opts.abortSignal);
+            return new Promise(() => {});
+          }),
+      );
+
+      void manager.upload({ id: 'a', channelCid: TEST_CID, file: new File([], 'x') });
+      void manager.upload({ id: 'b', channelCid: TEST_CID, file: new File([], 'y') });
+      await Promise.resolve();
+      expect(signals).toHaveLength(2);
+      expect(signals.every((s) => !s.aborted)).toBe(true);
+
+      manager.reset();
+      expect(signals.every((s) => s.aborted)).toBe(true);
+      expect(manager.uploads).toEqual({});
+      expect(doUploadRequest).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects upload promise after delete when doUploadRequest honors abortSignal', async () => {
+      const { manager, doUploadRequest } = createManager(
+        vi
+          .fn()
+          .mockImplementation((_file: unknown, opts?: { abortSignal?: AbortSignal }) => {
+            const { abortSignal } = opts ?? {};
+            return new Promise((resolve, reject) => {
+              if (!abortSignal) {
+                reject(new Error('missing signal'));
+                return;
+              }
+              if (abortSignal.aborted) {
+                reject(new DOMException('The user aborted a request.', 'AbortError'));
+                return;
+              }
+              abortSignal.addEventListener(
+                'abort',
+                () =>
+                  reject(new DOMException('The user aborted a request.', 'AbortError')),
+                { once: true },
+              );
+            });
+          }),
+      );
+
+      const uploadPromise = manager.upload({
+        id: 'u-abort',
+        channelCid: TEST_CID,
+        file: new File([], 'x'),
+      });
+      await Promise.resolve();
+
+      manager.deleteUploadRecord('u-abort');
+
+      await expect(uploadPromise).rejects.toMatchObject({ name: 'AbortError' });
+      expect(doUploadRequest).toHaveBeenCalledTimes(1);
+    });
+
     it('does not re-insert the record when onProgress fires after deleteUploadRecord', async () => {
       let onProgress!: (p?: number) => void;
       const { manager, doUploadRequest } = createManager(
         vi
           .fn()
           .mockImplementation(
-            (_file: unknown, opts?: { onProgress?: (n?: number) => void }) => {
+            (
+              _file: unknown,
+              opts?: { onProgress?: (n?: number) => void; abortSignal?: AbortSignal },
+            ) => {
               onProgress = opts!.onProgress!;
               return new Promise(() => {});
             },

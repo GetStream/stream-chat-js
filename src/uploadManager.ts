@@ -1,4 +1,5 @@
 import type { StreamChat } from './client';
+import type { UploadRequestOptions } from './messageComposer/configuration/types';
 import { StateStore } from './store';
 import type { AttachmentManager } from '.';
 
@@ -30,13 +31,17 @@ const updateById = (
   return { ...uploads, [record.id]: { ...current, ...record } };
 };
 
+type UploadPromise = ReturnType<typeof AttachmentManager.prototype.doUploadRequest>;
+
+type InFlightUpload = { promise: UploadPromise; abortController: AbortController };
+
 /**
  * @internal
  */
 export class UploadManager {
   readonly state: StateStore<UploadManagerState>;
 
-  private inFlightUploads = new Map<string, ReturnType<typeof this.upload>>();
+  private inFlightUploads = new Map<string, InFlightUpload>();
 
   constructor(private readonly client: StreamChat) {
     this.state = new StateStore<UploadManagerState>(initState());
@@ -61,23 +66,32 @@ export class UploadManager {
   /**
    * Clears all upload records.
    * Invoked when the user disconnects so a later session does not inherit stale upload state.
+   * Aborts every in-flight upload request via its `UploadRequestOptions.abortSignal`.
    */
   reset = () => {
+    for (const { abortController } of this.inFlightUploads.values()) {
+      abortController.abort();
+    }
     this.inFlightUploads.clear();
     this.state.next(initState());
   };
 
   /**
    * Removes the upload record for `id` if present.
+   * If an upload is still in progress, aborts its `UploadRequestOptions.abortSignal`.
    */
   deleteUploadRecord = (id: string) => {
+    const flight = this.inFlightUploads.get(id);
+    if (flight) {
+      this.inFlightUploads.delete(id);
+      flight.abortController.abort();
+    }
     this.state.next((current) => {
       if (!(id in current.uploads)) return current;
       const uploads = { ...current.uploads };
       delete uploads[id];
       return { ...current, uploads };
     });
-    this.inFlightUploads.delete(id);
   };
 
   /**
@@ -94,21 +108,18 @@ export class UploadManager {
     channelCid: string;
     file: Parameters<typeof AttachmentManager.prototype.doUploadRequest>[0];
   }): ReturnType<typeof AttachmentManager.prototype.doUploadRequest> => {
-    const existingPromise = this.inFlightUploads.get(id);
-    if (existingPromise) return existingPromise;
+    const existing = this.inFlightUploads.get(id);
+    if (existing) return existing.promise;
 
-    let resolvePromise!: (
-      value: Awaited<ReturnType<typeof AttachmentManager.prototype.doUploadRequest>>,
-    ) => void;
+    let resolvePromise!: (value: Awaited<UploadPromise>) => void;
     let rejectPromise!: (reason?: unknown) => void;
-    const promise = new Promise<
-      Awaited<ReturnType<typeof AttachmentManager.prototype.doUploadRequest>>
-    >((resolve, reject) => {
+    const promise = new Promise<Awaited<UploadPromise>>((resolve, reject) => {
       resolvePromise = resolve;
       rejectPromise = reject;
     });
 
-    this.inFlightUploads.set(id, promise);
+    const abortController = new AbortController();
+    this.inFlightUploads.set(id, { promise, abortController });
 
     void (async () => {
       const attachmentManager = this.resolveAttachmentManager(channelCid);
@@ -128,14 +139,20 @@ export class UploadManager {
             }
           : undefined;
 
+        const uploadRequestOptions: UploadRequestOptions = {
+          abortSignal: abortController.signal,
+          ...(onProgress ? { onProgress } : {}),
+        };
+
         const response = await attachmentManager.doUploadRequest(
           file,
-          onProgress ? { onProgress } : undefined,
+          uploadRequestOptions,
         );
         resolvePromise(response);
       } catch (error) {
         rejectPromise(error);
       } finally {
+        this.inFlightUploads.delete(id);
         this.deleteUploadRecord(id);
       }
     })();
