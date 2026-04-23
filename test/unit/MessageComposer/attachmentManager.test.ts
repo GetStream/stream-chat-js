@@ -9,7 +9,6 @@ import {
   DraftResponse,
   FileReference,
   LocalMessage,
-  MessageComposer,
   StreamChat,
 } from '../../../src';
 import { AppSettings } from '../../../src';
@@ -117,12 +116,14 @@ const setup = ({
     .fn()
     .mockResolvedValue({ file: 'test-image-url', thumb_url: 'thumb_url-image' });
   mockChannel.data = { own_capabilities: ['upload-file'] };
-  const messageComposer = new MessageComposer({
-    client: mockClient,
-    composition,
-    compositionContext: mockChannel,
-    config: { attachments: config },
-  });
+  // Use the channel's messageComposer so client.uploadManager (resolves via channelCid) hits this composer.
+  const messageComposer = mockChannel.messageComposer;
+  if (config) {
+    messageComposer.updateConfig({ attachments: config });
+  }
+  if (composition !== undefined) {
+    messageComposer.initState({ composition });
+  }
   return { mockClient, mockChannel, messageComposer };
 };
 
@@ -466,7 +467,43 @@ describe('AttachmentManager', () => {
 
       attachmentManager.initState();
 
-      expect(attachmentManager.state.getLatestValue()).toEqual({ attachments: [] });
+      expect(attachmentManager.state.getLatestValue()).toEqual({
+        attachments: [],
+      });
+    });
+
+    it('should not apply upload manager progress to composer attachments after re-initializing state', async () => {
+      const { messageComposer, mockClient } = setup();
+      const { attachmentManager } = messageComposer;
+
+      vi.spyOn(attachmentManager, 'doUploadRequest').mockImplementation(
+        () => new Promise(() => {}),
+      );
+
+      void attachmentManager.uploadFile(new File([], 'p.png', { type: 'image/png' }));
+
+      await vi.waitFor(() => {
+        expect(Object.keys(mockClient.uploadManager.uploads).length).toBeGreaterThan(0);
+      });
+
+      const uploadId = Object.keys(mockClient.uploadManager.uploads)[0];
+      expect(uploadId).toBeDefined();
+
+      attachmentManager.initState();
+      expect(attachmentManager.attachments).toEqual([]);
+
+      mockClient.uploadManager.state.partialNext((current) => ({
+        ...current,
+        uploads: {
+          ...current.uploads,
+          [uploadId!]: {
+            ...current.uploads[uploadId!],
+            uploadProgress: 99,
+          },
+        },
+      }));
+
+      expect(attachmentManager.attachments).toEqual([]);
     });
 
     it('should initialize with message', () => {
@@ -543,6 +580,21 @@ describe('AttachmentManager', () => {
 
       expect(attachmentManager.attachments).toEqual(updatedAttachments);
     });
+
+    it('should do nothing if the attachments are the same', () => {
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
+      const attachment = { localMetadata: { id: 'test-id-1' }, type: 'image' };
+      attachmentManager.upsertAttachments([attachment]);
+
+      const spy = vi.fn();
+      attachmentManager.state.subscribe(spy);
+      spy.mockClear();
+      attachmentManager.upsertAttachments([attachment]);
+
+      expect(spy).not.toHaveBeenCalled();
+    });
   });
 
   describe('updateAttachment', () => {
@@ -594,6 +646,20 @@ describe('AttachmentManager', () => {
 
       expect(attachmentManager.attachments).toEqual(newAttachments);
     });
+
+    it('should do nothing if the attachment is the same', () => {
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
+      const attachment = { localMetadata: { id: 'test-id-1' }, type: 'image' };
+      attachmentManager.upsertAttachments([attachment]);
+
+      const spy = vi.fn();
+      attachmentManager.state.subscribe(spy);
+      spy.mockReset();
+      attachmentManager.updateAttachment(attachment);
+      expect(spy).not.toHaveBeenCalled();
+    });
   });
 
   describe('removeAttachments', () => {
@@ -613,6 +679,124 @@ describe('AttachmentManager', () => {
       expect(attachmentManager.attachments).toEqual([
         { localMetadata: { id: 'test-id-2' } },
       ]);
+    });
+
+    it('should delete matching upload records when removing upload attachments', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        messageComposer,
+        mockClient,
+        mockChannel,
+      } = setup({ config: { trackUploadProgress: false } });
+
+      const previewUri = 'blob:preview-for-remove-test';
+      const file = generateFile({ name: 'x.png', type: 'image/png' });
+      const attachment: LocalUploadAttachment = {
+        type: 'image',
+        mime_type: 'image/png',
+        file_size: file.size,
+        fallback: file.name,
+        localMetadata: {
+          id: 'att-with-upload',
+          file,
+          previewUri,
+          uploadState: 'uploading',
+        },
+      };
+
+      attachmentManager.upsertAttachments([attachment]);
+
+      vi.spyOn(attachmentManager, 'doUploadRequest').mockImplementation(
+        () => new Promise(() => {}),
+      );
+      void mockClient.uploadManager.upload({
+        id: 'att-with-upload',
+        channelCid: mockChannel.cid,
+        file,
+      });
+
+      await Promise.resolve();
+
+      expect('att-with-upload' in mockClient.uploadManager.uploads).toBe(true);
+
+      attachmentManager.removeAttachments(['att-with-upload']);
+
+      expect('att-with-upload' in mockClient.uploadManager.uploads).toBe(false);
+      expect(attachmentManager.attachments).toEqual([]);
+    });
+
+    it('should not delete upload records for another local attachment id', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockClient,
+        mockChannel,
+      } = setup({ config: { trackUploadProgress: false } });
+
+      const previewUri = 'blob:other-composer-uri';
+
+      vi.spyOn(attachmentManager, 'doUploadRequest').mockImplementation(
+        () => new Promise(() => {}),
+      );
+      void mockClient.uploadManager.upload({
+        id: 'other-composer-attachment',
+        channelCid: mockChannel.cid,
+        file: new File([], 'other.png'),
+      });
+
+      await Promise.resolve();
+
+      const file = generateFile({ name: 'x.png', type: 'image/png' });
+      attachmentManager.upsertAttachments([
+        {
+          type: 'image',
+          mime_type: 'image/png',
+          file_size: file.size,
+          fallback: file.name,
+          localMetadata: {
+            id: 'att-1',
+            file,
+            previewUri,
+            uploadState: 'uploading',
+          },
+        } as LocalUploadAttachment,
+      ]);
+
+      attachmentManager.removeAttachments(['att-1']);
+
+      expect('other-composer-attachment' in mockClient.uploadManager.uploads).toBe(true);
+    });
+
+    it('should not apply upload manager progress to composer attachments after removing an in-flight upload', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockClient,
+      } = setup({ config: { trackUploadProgress: true } });
+
+      vi.spyOn(attachmentManager, 'doUploadRequest').mockImplementation(
+        () => new Promise(() => {}),
+      );
+
+      void attachmentManager.uploadFile(new File([], 'p.png', { type: 'image/png' }));
+
+      await vi.waitFor(() => {
+        expect(Object.keys(mockClient.uploadManager.uploads).length).toBeGreaterThan(0);
+      });
+
+      const uploadId = Object.keys(mockClient.uploadManager.uploads)[0];
+      expect(uploadId).toBeDefined();
+
+      attachmentManager.removeAttachments([uploadId!]);
+      expect(attachmentManager.attachments).toEqual([]);
+
+      mockClient.uploadManager.state.partialNext((current) => ({
+        ...current,
+        uploads: {
+          ...current.uploads,
+          [uploadId!]: { id: uploadId!, uploadProgress: 77 },
+        },
+      }));
+
+      expect(attachmentManager.attachments).toEqual([]);
     });
   });
 
@@ -1198,7 +1382,7 @@ describe('AttachmentManager', () => {
       expect(attachmentManager.config.trackUploadProgress).toBe(true);
     });
 
-    it('when false, default upload does not pass progress options to channel', async () => {
+    it('when false, default upload passes abort signal without onUploadProgress to channel', async () => {
       const {
         messageComposer: { attachmentManager },
         mockChannel,
@@ -1214,7 +1398,7 @@ describe('AttachmentManager', () => {
         undefined,
         undefined,
         undefined,
-        undefined,
+        { signal: expect.any(AbortSignal) },
       );
     });
 
@@ -1256,7 +1440,7 @@ describe('AttachmentManager', () => {
       expect(att.localMetadata.uploadProgress).toBe(0);
     });
 
-    it('when false, custom doUploadRequest is called without options', async () => {
+    it('when false, custom doUploadRequest receives abortSignal only', async () => {
       const {
         messageComposer: { attachmentManager },
         mockChannel,
@@ -1267,7 +1451,9 @@ describe('AttachmentManager', () => {
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
       await attachmentManager.uploadFiles([file]);
 
-      expect(customUploadFn).toHaveBeenCalledWith(file, undefined);
+      expect(customUploadFn).toHaveBeenCalledWith(file, {
+        abortSignal: expect.any(AbortSignal),
+      });
       expect(mockChannel.sendImage).not.toHaveBeenCalled();
     });
 
@@ -1301,13 +1487,70 @@ describe('AttachmentManager', () => {
 
       expect(customUploadFn).toHaveBeenCalledWith(
         file,
-        expect.objectContaining({ onProgress: expect.any(Function) }),
+        expect.objectContaining({
+          onProgress: expect.any(Function),
+          abortSignal: expect.any(AbortSignal),
+        }),
       );
       expect(updateSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           localMetadata: expect.objectContaining({ uploadProgress: 42 }),
         }),
       );
+      expect(mockChannel.sendImage).not.toHaveBeenCalled();
+    });
+
+    it('aborts default upload axios signal when attachment is removed during upload', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
+      mockChannel.sendImage.mockImplementation(() => new Promise(() => {}));
+
+      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
+      const local = await attachmentManager.fileToLocalUploadAttachment(file);
+      void attachmentManager.uploadAttachment(local);
+
+      await vi.waitFor(() => {
+        expect(mockChannel.sendImage).toHaveBeenCalled();
+      });
+
+      const axiosOpts = mockChannel.sendImage.mock.calls[0][4] as {
+        signal?: AbortSignal;
+      };
+      expect(axiosOpts?.signal).toBeInstanceOf(AbortSignal);
+      expect(axiosOpts!.signal!.aborted).toBe(false);
+
+      attachmentManager.removeAttachments([local.localMetadata.id!]);
+
+      expect(axiosOpts!.signal!.aborted).toBe(true);
+    });
+
+    it('aborts custom upload abortSignal when attachment is removed during upload', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
+      let capturedSignal: AbortSignal | undefined;
+      const customUploadFn = vi.fn().mockImplementation((_file, opts) => {
+        capturedSignal = opts?.abortSignal;
+        return new Promise(() => {});
+      });
+      attachmentManager.setCustomUploadFn(customUploadFn);
+
+      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
+      const local = await attachmentManager.fileToLocalUploadAttachment(file);
+      void attachmentManager.uploadAttachment(local);
+
+      await vi.waitFor(() => {
+        expect(customUploadFn).toHaveBeenCalled();
+      });
+      expect(capturedSignal).toBeInstanceOf(AbortSignal);
+      expect(capturedSignal!.aborted).toBe(false);
+
+      attachmentManager.removeAttachments([local.localMetadata.id!]);
+
+      expect(capturedSignal!.aborted).toBe(true);
       expect(mockChannel.sendImage).not.toHaveBeenCalled();
     });
 
@@ -1475,6 +1718,27 @@ describe('AttachmentManager', () => {
         undefined,
         undefined,
         undefined,
+      );
+    });
+
+    it('passes axios signal when abortSignal is provided without onProgress', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup();
+      const controller = new AbortController();
+      const file = new File([''], 'photo.jpg', { type: 'image/jpeg' });
+
+      await attachmentManager.doDefaultUploadRequest(file, {
+        abortSignal: controller.signal,
+      });
+
+      expect(mockChannel.sendImage).toHaveBeenCalledWith(
+        file,
+        undefined,
+        undefined,
+        undefined,
+        { signal: controller.signal },
       );
     });
 

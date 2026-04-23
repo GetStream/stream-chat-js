@@ -122,6 +122,9 @@ const imageResponse = await channel.sendImage(file, file.name, file.type, undefi
 
 When using the message composer’s attachment manager, upload progress is tracked when `config.attachments.trackUploadProgress` is `true` (the default). Progress is stored on each attachment’s `localMetadata.uploadProgress` (0–100 for the default upload path, from the axios progress event; the initial state is 0% when the upload starts).
 
-With a custom `doUploadRequest`, the function receives an optional second argument `options` with `onProgress?: (percent: number | undefined) => void`. Call `onProgress` from your upload implementation to drive the same `localMetadata.uploadProgress` updates. If you do not call it, `uploadProgress` stays at 0 until the upload finishes.
+With a custom `doUploadRequest`, the function receives an optional second argument `options` with:
 
-Set `trackUploadProgress` to `false` to skip setting `uploadProgress` (will be `undefined` in this case) and to omit progress callbacks to both the default channel upload and custom `doUploadRequest`.
+- `onProgress?: (percent: number | undefined) => void` — call this from your upload implementation to drive the same `localMetadata.uploadProgress` updates. If you do not call it, `uploadProgress` stays at 0 until the upload finishes.
+- `abortSignal?: AbortSignal` — the SDK aborts this signal when the upload is cancelled (for example the user removes the attachment, or `client.uploadManager.reset()` runs on disconnect). Forward it to your transport (axios `signal`, `fetch` `signal`, etc.) if you want to cancel upload request.
+
+Set `trackUploadProgress` to `false` to skip setting `uploadProgress` (will be `undefined` in this case) and to omit `onProgress` to both the default channel upload and custom `doUploadRequest`.

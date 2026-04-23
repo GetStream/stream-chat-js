@@ -237,12 +237,12 @@ export class AttachmentManager {
         return attachments;
       }
     }
-    return null;
+    return stateAttachments;
   };
 
   updateAttachment = (attachmentToUpdate: LocalAttachment) => {
     const updatedAttachments = this.prepareAttachmentUpdate(attachmentToUpdate);
-    if (updatedAttachments) {
+    if (updatedAttachments && updatedAttachments !== this.attachments) {
       this.state.partialNext({ attachments: updatedAttachments });
     }
   };
@@ -253,16 +253,17 @@ export class AttachmentManager {
     let hasUpdates = false;
     attachmentsToUpsert.forEach((attachment) => {
       const updatedAttachments = this.prepareAttachmentUpdate(attachment);
-      if (updatedAttachments) {
-        attachments = updatedAttachments;
-        hasUpdates = true;
-      } else {
+      if (updatedAttachments === null) {
         const localAttachment = ensureIsLocalAttachment(attachment);
         if (localAttachment) {
           attachments.push(localAttachment);
           hasUpdates = true;
         }
+      } else if (updatedAttachments !== this.attachments) {
+        attachments = updatedAttachments;
+        hasUpdates = true;
       }
+      // else: id exists and merge was a no-op (`prepareAttachmentUpdate` returns current state)
     });
     if (hasUpdates) {
       this.state.partialNext({ attachments });
@@ -270,11 +271,17 @@ export class AttachmentManager {
   };
 
   removeAttachments = (localAttachmentIds: string[]) => {
+    if (!localAttachmentIds.length) return;
+
     this.state.partialNext({
       attachments: this.attachments.filter(
         (attachment) => !localAttachmentIds.includes(attachment.localMetadata?.id),
       ),
     });
+
+    for (const id of localAttachmentIds) {
+      this.client.uploadManager.deleteUploadRecord(id);
+    }
   };
 
   getUploadConfigCheck = async (
@@ -464,13 +471,21 @@ export class AttachmentManager {
         }
       : undefined;
 
+    const axiosUploadConfig =
+      progressHandler || options?.abortSignal
+        ? {
+            ...(progressHandler ? { onUploadProgress: progressHandler } : {}),
+            ...(options?.abortSignal ? { signal: options.abortSignal } : {}),
+          }
+        : undefined;
+
     if (isFileReference(fileLike)) {
       return this.channel[isImageFile(fileLike) ? 'sendImage' : 'sendFile'](
         fileLike.uri,
         fileLike.name,
         fileLike.type,
         undefined,
-        progressHandler ? { onUploadProgress: progressHandler } : undefined,
+        axiosUploadConfig,
       );
     }
 
@@ -485,13 +500,7 @@ export class AttachmentManager {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { duration, ...result } = await this.channel[
       isImageFile(fileLike) ? 'sendImage' : 'sendFile'
-    ](
-      file,
-      undefined,
-      undefined,
-      undefined,
-      progressHandler ? { onUploadProgress: progressHandler } : undefined,
-    );
+    ](file, undefined, undefined, undefined, axiosUploadConfig);
     return result;
   };
 
@@ -537,37 +546,9 @@ export class AttachmentManager {
       return localAttachment;
     }
 
-    const shouldTrackProgress = this.config.trackUploadProgress;
-    const uploadingAttachment: LocalUploadAttachment = {
-      ...attachment,
-      localMetadata: {
-        ...attachment.localMetadata,
-        uploadState: 'uploading',
-        ...(shouldTrackProgress && { uploadProgress: 0 }),
-      },
-    };
-    this.upsertAttachments([uploadingAttachment]);
-
-    const uploadOptions = shouldTrackProgress
-      ? {
-          onProgress: (percent: number | undefined) => {
-            this.updateAttachment({
-              ...uploadingAttachment,
-              localMetadata: {
-                ...uploadingAttachment.localMetadata,
-                uploadProgress: percent,
-              },
-            });
-          },
-        }
-      : undefined;
-
     let response: MinimumUploadRequestResult;
     try {
-      response = await this.doUploadRequest(
-        localAttachment.localMetadata.file,
-        uploadOptions,
-      );
+      response = await this.upload(attachment);
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'unknown error';
       const failedAttachment: LocalUploadAttachment = {
@@ -655,35 +636,10 @@ export class AttachmentManager {
       return preUpload.state.attachment;
     }
 
-    const shouldTrackProgress = this.config.trackUploadProgress;
-    attachment = {
-      ...attachment,
-      localMetadata: {
-        ...attachment.localMetadata,
-        uploadState: 'uploading',
-        ...(shouldTrackProgress && { uploadProgress: 0 }),
-      },
-    };
-    this.upsertAttachments([attachment]);
-
-    const uploadOptions = shouldTrackProgress
-      ? {
-          onProgress: (percent: number | undefined) => {
-            this.updateAttachment({
-              ...attachment,
-              localMetadata: {
-                ...attachment.localMetadata,
-                uploadProgress: percent,
-              },
-            });
-          },
-        }
-      : undefined;
-
     let response: MinimumUploadRequestResult | undefined;
     let error: Error | undefined;
     try {
-      response = await this.doUploadRequest(file, uploadOptions);
+      response = await this.upload(attachment);
     } catch (err) {
       error = err instanceof Error ? err : undefined;
     }
@@ -725,4 +681,44 @@ export class AttachmentManager {
       iterableFiles.slice(0, this.availableUploadSlots).map(this.uploadFile),
     );
   };
+
+  private upload(attachment: LocalUploadAttachment) {
+    const localId = attachment.localMetadata.id;
+
+    this.upsertAttachments([
+      {
+        ...attachment,
+        localMetadata: {
+          ...attachment.localMetadata,
+          uploadState: 'uploading',
+          uploadProgress: this.config.trackUploadProgress ? 0 : undefined,
+        },
+      },
+    ]);
+
+    const unsubscribe = this.client.uploadManager.state.subscribeWithSelector(
+      (s) => ({ upload: s.uploads[localId] }),
+      ({ upload: nextUpload }) => {
+        if (!nextUpload) return;
+        this.updateAttachment({
+          ...attachment,
+          localMetadata: {
+            ...attachment.localMetadata,
+            uploadState: 'uploading',
+            uploadProgress: nextUpload.uploadProgress,
+          },
+        });
+      },
+    );
+
+    return this.client.uploadManager
+      .upload({
+        id: localId,
+        channelCid: this.channel.cid,
+        file: attachment.localMetadata.file,
+      })
+      .finally(() => {
+        unsubscribe();
+      });
+  }
 }
