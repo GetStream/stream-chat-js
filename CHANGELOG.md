@@ -1,3 +1,9 @@
+## [9.42.0](https://github.com/GetStream/stream-chat-js/compare/v9.41.1...v9.42.0) (2026-04-23)
+
+### Features
+
+* global upload manager to track file uploads outside of AttachmentManager ([#1715](https://github.com/GetStream/stream-chat-js/issues/1715)) ([b172377](https://github.com/GetStream/stream-chat-js/commit/b17237786fb9276c14a4e579c322c9179fbff532))
+
 ## [9.41.1](https://github.com/GetStream/stream-chat-js/compare/v9.41.0...v9.41.1) (2026-04-17)
 
 ### Bug Fixes
