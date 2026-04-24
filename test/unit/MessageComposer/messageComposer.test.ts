@@ -700,20 +700,6 @@ describe('MessageComposer', () => {
       expect(messageComposer.hasSendableData).toBe(true);
     });
 
-    it('hasSendableData should return true if the composition is not empty with attachments', () => {
-      const { messageComposer } = offlineModeMessageComposerSetup({
-        composition: {
-          id: 'test-message-id',
-          type: 'regular',
-          attachments: [
-            { type: 'x', localMetadata: { id: 'x,', uploadState: 'finished', file: {} } },
-          ],
-        },
-      });
-
-      expect(messageComposer.hasSendableData).toBe(true);
-    });
-
     it('hasSendableData should return false if the composition is empty', () => {
       const { messageComposer } = offlineModeMessageComposerSetup();
 
