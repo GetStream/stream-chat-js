@@ -1,3 +1,9 @@
+## [9.42.1](https://github.com/GetStream/stream-chat-js/compare/v9.42.0...v9.42.1) (2026-04-24)
+
+### Bug Fixes
+
+* remove offline logic for has sendable data ([#1721](https://github.com/GetStream/stream-chat-js/issues/1721)) ([02ed829](https://github.com/GetStream/stream-chat-js/commit/02ed829d58e22d0ab18c09b7b3da92d096ec6dff))
+
 ## [9.42.0](https://github.com/GetStream/stream-chat-js/compare/v9.41.1...v9.42.0) (2026-04-23)
 
 ### Features
