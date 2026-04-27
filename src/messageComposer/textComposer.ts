@@ -2,7 +2,6 @@ import { TextComposerMiddlewareExecutor } from './middleware';
 import { StateStore } from '../store';
 import { logChatPromiseExecution } from '../utils';
 import type { TextComposerMiddlewareExecutorState } from './middleware';
-import type { TextComposerCommandActivationBehavior } from './middleware/textComposer/types';
 import type { TextComposerSuggestion } from './middleware/textComposer/types';
 import type { TextSelection } from './middleware/textComposer/types';
 import type { TextComposerState } from './middleware/textComposer/types';
@@ -13,10 +12,6 @@ import type { CommandResponse, DraftMessage, LocalMessage, UserResponse } from '
 export type TextComposerOptions = {
   composer: MessageComposer;
   message?: DraftMessage | LocalMessage;
-};
-
-export type SetCommandOptions = {
-  behavior?: TextComposerCommandActivationBehavior;
 };
 
 export const textIsEmpty = (text: string) => {
@@ -188,7 +183,7 @@ export class TextComposer {
     this.state.partialNext({ mentionedUsers });
   };
 
-  setCommand = (command: CommandResponse | null, options?: SetCommandOptions) => {
+  setCommand = (command: CommandResponse | null) => {
     if (!command) {
       this.clearCommand();
       return;
@@ -201,7 +196,6 @@ export class TextComposer {
       command,
       effects: [
         {
-          behavior: options?.behavior ?? 'snapshot-and-clear',
           command,
           stateToRestore: {
             mentionedUsers: this.mentionedUsers,
@@ -310,19 +304,11 @@ export class TextComposer {
     );
 
   private commitState = (state: TextComposerMiddlewareExecutorState) => {
-    const previousState = this.state.getLatestValue();
-    const { effects } = state;
-    const nextState = { ...state };
-    delete nextState.change;
-    delete nextState.effects;
+    const { change, effects, ...nextState } = state;
+    void change;
 
-    this.state.next(
-      this.composer.applyTextComposerEffects({
-        effects,
-        previousState,
-        state: nextState as TextComposerState,
-      }),
-    );
+    this.state.next(nextState);
+    this.composer.applyEffects(effects);
   };
 
   // --- START TEXT PROCESSING ----

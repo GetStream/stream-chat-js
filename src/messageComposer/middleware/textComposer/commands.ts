@@ -46,7 +46,6 @@ const emptyCommandStateSnapshot: TextComposerStateSnapshot = {
 const createCommandActivationEffect = (
   command: CommandResponse,
 ): TextComposerCommandActivationEffect => ({
-  behavior: 'snapshot-and-clear',
   command,
   stateToRestore: emptyCommandStateSnapshot,
   type: 'command.activate',

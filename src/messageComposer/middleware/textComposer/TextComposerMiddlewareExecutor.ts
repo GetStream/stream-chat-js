@@ -57,7 +57,6 @@ export class TextComposerMiddlewareExecutor<
   }: ExecuteParams<TextComposerMiddlewareExecutorState<T>>): Promise<
     MiddlewareExecutionResult<TextComposerMiddlewareExecutorState<T>>
   > {
-    console.log('EXECUTING LOG');
     const result = await this.executeMiddlewareChain({
       eventName,
       initialValue: initialState,

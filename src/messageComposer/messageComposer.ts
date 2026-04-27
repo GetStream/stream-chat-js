@@ -30,10 +30,8 @@ import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { StreamChat } from '../client';
 import type { MessageComposerConfig } from './configuration/types';
 import type {
-  TextComposerCommandActivationBehavior,
   TextComposerCommandActivationEffect,
   TextComposerEffect,
-  TextComposerState,
   TextComposerStateSnapshot,
 } from './middleware/textComposer/types';
 import type { LocalAttachment } from './types';
@@ -155,8 +153,6 @@ export class MessageComposer extends WithSubscriptions {
   pollComposer: PollComposer;
   locationComposer: LocationComposer;
   customDataManager: CustomDataManager;
-  private activeCommandActivationBehavior: TextComposerCommandActivationBehavior | null =
-    null;
   private preCommandStateSnapshot: PreCommandStateSnapshot | null = null;
   // todo: mediaRecorder: MediaRecorderController;
 
@@ -435,60 +431,28 @@ export class MessageComposer extends WithSubscriptions {
   ) => initEditingAuditState(composition);
 
   clearTextComposerCommandSnapshot = () => {
-    this.activeCommandActivationBehavior = null;
     this.preCommandStateSnapshot = null;
   };
 
-  applyTextComposerEffects = ({
-    effects = [],
-    previousState,
-    state,
-  }: {
-    effects?: TextComposerEffect[];
-    previousState: TextComposerState;
-    state: TextComposerState;
-  }): TextComposerState => {
-    if (!effects.length) return state;
-
-    return effects.reduce<TextComposerState>((nextState, effect) => {
+  applyEffects = (effects: TextComposerEffect[] = []) => {
+    effects.forEach((effect) => {
       if (effect.type === 'command.activate') {
-        return this.applyCommandActivationEffect({
-          effect,
-          previousState,
-          state: nextState,
-        });
+        this.applyCommandActivationEffect(effect);
+        return;
       }
 
       if (effect.type === 'command.clear') {
-        return this.applyCommandClearEffect(nextState);
+        this.applyCommandClearEffect();
       }
-
-      return nextState;
-    }, state);
+    });
   };
 
-  private applyCommandActivationEffect = ({
-    effect,
-    previousState,
-    state,
-  }: {
-    effect: TextComposerCommandActivationEffect;
-    previousState: TextComposerState;
-    state: TextComposerState;
-  }): TextComposerState => {
-    const behavior = effect.behavior ?? 'snapshot-and-clear';
-    this.activeCommandActivationBehavior = behavior;
-
-    if (behavior === 'preserve') {
-      return {
-        ...state,
-        command: effect.command,
-        suggestions: undefined,
-      };
-    }
-
-    if (!this.textComposer.command && !this.preCommandStateSnapshot) {
-      const { mentionedUsers, selection, text } = effect.stateToRestore ?? previousState;
+  private applyCommandActivationEffect = (
+    effect: TextComposerCommandActivationEffect,
+  ) => {
+    if (!this.preCommandStateSnapshot) {
+      const { mentionedUsers, selection, text } =
+        effect.stateToRestore ?? this.textComposer.state.getLatestValue();
       this.preCommandStateSnapshot = {
         attachments: this.attachmentManager.attachments,
         textComposer: { mentionedUsers, selection, text },
@@ -497,56 +461,34 @@ export class MessageComposer extends WithSubscriptions {
 
     this.attachmentManager.clearAttachments();
 
-    return {
-      ...state,
+    this.textComposer.state.partialNext({
       command: effect.command,
       mentionedUsers: [],
       selection: { start: 0, end: 0 },
       suggestions: undefined,
       text: '',
-    };
+    });
   };
 
-  private applyCommandClearEffect = (state: TextComposerState): TextComposerState => {
+  private applyCommandClearEffect = () => {
     const snapshot = this.preCommandStateSnapshot;
-    const behavior = this.activeCommandActivationBehavior;
     this.clearTextComposerCommandSnapshot();
 
     if (snapshot) {
       this.attachmentManager.setAttachments(snapshot.attachments);
-      return {
-        ...state,
+      this.textComposer.state.partialNext({
         command: null,
         mentionedUsers: snapshot.textComposer.mentionedUsers,
         selection: snapshot.textComposer.selection,
         suggestions: undefined,
         text: snapshot.textComposer.text,
-      };
+      });
+      return;
     }
 
-    if (behavior === 'preserve') {
-      return {
-        ...state,
-        command: null,
-        suggestions: undefined,
-      };
-    }
-
-    if (!state.command) {
-      return {
-        ...state,
-        command: null,
-      };
-    }
-
-    return {
-      ...state,
+    this.textComposer.state.partialNext({
       command: null,
-      mentionedUsers: [],
-      selection: { start: 0, end: 0 },
-      suggestions: undefined,
-      text: '',
-    };
+    });
   };
 
   private logStateUpdateTimestamp() {

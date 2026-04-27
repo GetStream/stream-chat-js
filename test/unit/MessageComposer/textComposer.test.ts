@@ -5,6 +5,7 @@ import {
   MessageComposer,
 } from '../../../src/messageComposer/messageComposer';
 import { textIsEmpty } from '../../../src/messageComposer/textComposer';
+import { createCommandStringExtractionMiddleware } from '../../../src/messageComposer/middleware/textComposer/commandStringExtraction';
 import { DraftResponse, LocalMessage } from '../../../src/types';
 import { logChatPromiseExecution } from '../../../src/utils';
 import { TextComposerConfig } from '../../../src/messageComposer/configuration';
@@ -323,34 +324,7 @@ describe('TextComposer', () => {
       expect(messageComposer.attachmentManager.attachments).toEqual([attachment]);
     });
 
-    it('preserves text, mentions, and attachments for preserve command behavior', () => {
-      const {
-        messageComposer,
-        messageComposer: { textComposer },
-      } = setup();
-      textComposer.setText('Hello world');
-      textComposer.setMentionedUsers([{ id: 'user-1' }]);
-      textComposer.setSelection({ start: 5, end: 5 });
-      messageComposer.attachmentManager.state.partialNext({ attachments: [attachment] });
-
-      textComposer.setCommand({ name: 'ban' }, { behavior: 'preserve' });
-
-      expect(textComposer.command?.name).toBe('ban');
-      expect(textComposer.text).toBe('Hello world');
-      expect(textComposer.selection).toEqual({ start: 5, end: 5 });
-      expect(textComposer.mentionedUsers).toEqual([{ id: 'user-1' }]);
-      expect(messageComposer.attachmentManager.attachments).toEqual([attachment]);
-
-      textComposer.clearCommand();
-
-      expect(textComposer.command).toBeNull();
-      expect(textComposer.text).toBe('Hello world');
-      expect(textComposer.selection).toEqual({ start: 5, end: 5 });
-      expect(textComposer.mentionedUsers).toEqual([{ id: 'user-1' }]);
-      expect(messageComposer.attachmentManager.attachments).toEqual([attachment]);
-    });
-
-    it('allows middleware to preserve state for selected commands', async () => {
+    it('allows middleware to opt out of snapshot clearing by removing the command activation effect', async () => {
       const {
         messageComposer,
         messageComposer: { textComposer },
@@ -360,13 +334,13 @@ describe('TextComposer', () => {
         commands: [{ name: 'ban', description: 'Ban a user' }],
       });
       messageComposer.attachmentManager.state.partialNext({ attachments: [attachment] });
+      textComposer.setMentionedUsers([{ id: 'user-1' }]);
 
-      const preserveCommandState = (state: any) => ({
+      const removeCommandActivationEffect = (state: any) => ({
         ...state,
-        effects: state.effects?.map((effect: any) =>
-          effect.type === 'command.activate' && effect.command.name === 'ban'
-            ? { ...effect, behavior: 'preserve' }
-            : effect,
+        effects: state.effects?.filter(
+          (effect: any) =>
+            !(effect.type === 'command.activate' && effect.command.name === 'ban'),
         ),
       });
 
@@ -374,12 +348,13 @@ describe('TextComposer', () => {
         middleware: [
           {
             handlers: {
-              onChange: ({ next, state }) => next(preserveCommandState(state)),
+              onChange: ({ next, state }) => next(removeCommandActivationEffect(state)),
               onSuggestionItemSelect: ({ next, state }) =>
-                next(preserveCommandState(state)),
+                next(removeCommandActivationEffect(state)),
             },
-            id: 'test/preserve-command-state',
+            id: 'test/remove-command-activation-effect',
           },
+          createCommandStringExtractionMiddleware() as any,
         ],
         position: { after: 'stream-io/text-composer/commands-middleware' },
         unique: true,
@@ -396,8 +371,18 @@ describe('TextComposer', () => {
       });
 
       expect(textComposer.command?.name).toBe('ban');
+      expect(textComposer.text).toBe('');
+      expect(textComposer.mentionedUsers).toEqual([{ id: 'user-1' }]);
       expect(messageComposer.attachmentManager.attachments).toEqual([attachment]);
       expect('effects' in textComposer.state.getLatestValue()).toBe(false);
+
+      textComposer.setText('command args');
+      textComposer.clearCommand();
+
+      expect(textComposer.command).toBeNull();
+      expect(textComposer.text).toBe('command args');
+      expect(textComposer.mentionedUsers).toEqual([{ id: 'user-1' }]);
+      expect(messageComposer.attachmentManager.attachments).toEqual([attachment]);
     });
 
     it('does not restore the slash query used to select a command', async () => {
@@ -425,21 +410,23 @@ describe('TextComposer', () => {
       expect(messageComposer.attachmentManager.attachments).toEqual([attachment]);
     });
 
-    it('clears active command text on cancel when there is no restore snapshot', () => {
+    it('only clears command on cancel when there is no restore snapshot', () => {
       const {
         messageComposer: { textComposer },
       } = setup();
       textComposer.state.partialNext({
         command: { name: 'ban' },
-        text: 'command args',
+        mentionedUsers: [{ id: 'user-1' }],
         selection: { start: 12, end: 12 },
+        text: 'command args',
       });
 
       textComposer.clearCommand();
 
       expect(textComposer.command).toBeNull();
-      expect(textComposer.text).toBe('');
-      expect(textComposer.selection).toEqual({ start: 0, end: 0 });
+      expect(textComposer.text).toBe('command args');
+      expect(textComposer.selection).toEqual({ start: 12, end: 12 });
+      expect(textComposer.mentionedUsers).toEqual([{ id: 'user-1' }]);
     });
 
     it('does not set commands while editing a message', () => {
