@@ -51,17 +51,18 @@ const createCommandActivationEffect = (
   type: 'command.activate',
 });
 
+export type CommandSearchSourceOptions = SearchSourceOptions & {
+  composer?: MessageComposer;
+};
+
 export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion> {
   readonly type = 'commands';
   protected channel: Channel;
   protected composer?: MessageComposer;
 
-  constructor(
-    channel: Channel,
-    options?: SearchSourceOptions,
-    composer?: MessageComposer,
-  ) {
-    super(options);
+  constructor(channel: Channel, options?: CommandSearchSourceOptions) {
+    const { composer, ...searchSourceOptions } = options ?? {};
+    super(searchSourceOptions);
     this.channel = channel;
     this.composer = composer;
   }
@@ -162,7 +163,7 @@ export const createCommandsMiddleware = (
   },
 ): CommandsMiddleware => {
   const finalOptions = mergeWith(DEFAULT_OPTIONS, options ?? {});
-  let searchSource = new CommandSearchSource(channel, undefined, options?.composer);
+  let searchSource = new CommandSearchSource(channel, { composer: options?.composer });
   if (options?.searchSource) {
     searchSource = options.searchSource;
     searchSource.resetState();

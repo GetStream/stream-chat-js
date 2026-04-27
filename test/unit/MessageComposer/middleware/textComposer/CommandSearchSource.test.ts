@@ -91,10 +91,12 @@ describe('CommandSearchSource', () => {
       { name: 'moderation_set', description: 'Moderate a user' },
     ];
     getConfigMock.mockReturnValue({ commands: mockCommands });
-    const source = new CommandSearchSource(channel, undefined, {
-      editedMessage: undefined,
-      quotedMessage: { id: 'quoted-message-id' },
-    } as any);
+    const source = new CommandSearchSource(channel, {
+      composer: {
+        editedMessage: undefined,
+        quotedMessage: { id: 'quoted-message-id' },
+      } as any,
+    });
 
     const result = await source.query('');
 
@@ -125,10 +127,12 @@ describe('CommandSearchSource', () => {
   });
 
   it('should mark all commands disabled when composing an edited message', async () => {
-    const source = new CommandSearchSource(channel, undefined, {
-      editedMessage: { id: 'edited-message-id' },
-      quotedMessage: null,
-    } as any);
+    const source = new CommandSearchSource(channel, {
+      composer: {
+        editedMessage: { id: 'edited-message-id' },
+        quotedMessage: null,
+      } as any,
+    });
 
     const result = await source.query('');
 
