@@ -386,6 +386,56 @@ describe('TextComposer', () => {
       expect(messageComposer.attachmentManager.attachments).toEqual([attachment]);
     });
 
+    it('preserves command activation effects when custom middleware preserves state', async () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+        mockChannel,
+      } = setup();
+      mockChannel.getConfig = vi.fn().mockReturnValue({
+        commands: [{ name: 'ban', description: 'Ban a user' }],
+      });
+      messageComposer.attachmentManager.state.partialNext({ attachments: [attachment] });
+      textComposer.setMentionedUsers([{ id: 'user-1' }]);
+
+      let sawCommandActivationEffect = false;
+      textComposer.middlewareExecutor.insert({
+        middleware: [
+          {
+            handlers: {
+              onChange: ({ forward }) => forward(),
+              onSuggestionItemSelect: ({ next, state }) => {
+                sawCommandActivationEffect = !!state.effects?.some(
+                  (effect) => effect.type === 'command.activate',
+                );
+                return next({ ...state });
+              },
+            },
+            id: 'test/preserve-effects',
+          },
+        ],
+        position: { after: 'stream-io/text-composer/commands-middleware' },
+        unique: true,
+      });
+
+      await textComposer.handleChange({
+        text: '/ba',
+        selection: { start: 3, end: 3 },
+      });
+      await textComposer.handleSelect({
+        id: 'ban',
+        name: 'ban',
+        description: 'Ban a user',
+      });
+
+      expect(sawCommandActivationEffect).toBe(true);
+      expect(textComposer.command?.name).toBe('ban');
+      expect(textComposer.text).toBe('');
+      expect(textComposer.mentionedUsers).toEqual([]);
+      expect(messageComposer.attachmentManager.attachments).toEqual([]);
+      expect('effects' in textComposer.state.getLatestValue()).toBe(false);
+    });
+
     it('allows effect handlers to override command activation behavior', () => {
       const {
         messageComposer,
@@ -492,6 +542,33 @@ describe('TextComposer', () => {
       expect(textComposer.mentionedUsers).toEqual([{ id: 'user-1' }]);
     });
 
+    it('does not restore stale command snapshots after composer reinitialization', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+      textComposer.setText('Hello world');
+      textComposer.setMentionedUsers([{ id: 'user-1' }]);
+      textComposer.setSelection({ start: 5, end: 5 });
+      messageComposer.attachmentManager.state.partialNext({ attachments: [attachment] });
+
+      textComposer.setCommand({ name: 'ban' });
+      messageComposer.initState();
+      textComposer.state.partialNext({
+        command: { name: 'ban' },
+        mentionedUsers: [],
+        selection: { start: 12, end: 12 },
+        text: 'command args',
+      });
+      textComposer.clearCommand();
+
+      expect(textComposer.command).toBeNull();
+      expect(textComposer.text).toBe('command args');
+      expect(textComposer.selection).toEqual({ start: 12, end: 12 });
+      expect(textComposer.mentionedUsers).toEqual([]);
+      expect(messageComposer.attachmentManager.attachments).toEqual([]);
+    });
+
     it('does not set commands while editing a message', () => {
       const message: LocalMessage = {
         id: 'test-message',
@@ -519,6 +596,25 @@ describe('TextComposer', () => {
       } as LocalMessage);
 
       textComposer.setCommand({ name: 'ban', set: 'moderation_set' });
+
+      expect(textComposer.command).toBeNull();
+      expect(textComposer.text).toBe('');
+    });
+
+    it('clears active command when editing starts', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+
+      textComposer.setCommand({ name: 'ban' });
+      expect(textComposer.command?.name).toBe('ban');
+
+      messageComposer.setEditedMessage({
+        id: 'edited-message-id',
+        text: 'edited message',
+        type: 'regular',
+      } as LocalMessage);
 
       expect(textComposer.command).toBeNull();
       expect(textComposer.text).toBe('');
