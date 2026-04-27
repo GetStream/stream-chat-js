@@ -83,7 +83,7 @@ describe('CommandSearchSource', () => {
     expect(newState.items).toEqual(initialState.items);
   });
 
-  it('should mark moderation set commands disabled when there is a quoted message', async () => {
+  it('should apply composer disabled reasons to command suggestions', async () => {
     mockCommands = [
       { name: 'ban', description: 'Ban a user', set: 'moderation_set' },
       { name: 'giphy', description: 'Post a random gif', set: 'fun_set' },
@@ -91,10 +91,14 @@ describe('CommandSearchSource', () => {
       { name: 'moderation_set', description: 'Moderate a user' },
     ];
     getConfigMock.mockReturnValue({ commands: mockCommands });
+    const getCommandDisabledReason = vi.fn((command) =>
+      command.set === 'moderation_set' || command.name === 'moderation_set'
+        ? 'quoted_message'
+        : undefined,
+    );
     const source = new CommandSearchSource(channel, {
       composer: {
-        editedMessage: undefined,
-        quotedMessage: { id: 'quoted-message-id' },
+        getCommandDisabledReason,
       } as any,
     });
 
@@ -124,13 +128,14 @@ describe('CommandSearchSource', () => {
         }),
       ]),
     );
+    expect(getCommandDisabledReason).toHaveBeenCalledTimes(mockCommands.length);
   });
 
-  it('should mark all commands disabled when composing an edited message', async () => {
+  it('should mark all commands disabled when the composer returns an editing reason', async () => {
+    const getCommandDisabledReason = vi.fn(() => 'editing');
     const source = new CommandSearchSource(channel, {
       composer: {
-        editedMessage: { id: 'edited-message-id' },
-        quotedMessage: null,
+        getCommandDisabledReason,
       } as any,
     });
 
@@ -141,5 +146,6 @@ describe('CommandSearchSource', () => {
     expect(result.items.every((command) => command.disabledReason === 'editing')).toBe(
       true,
     );
+    expect(getCommandDisabledReason).toHaveBeenCalledTimes(mockCommands.length);
   });
 });

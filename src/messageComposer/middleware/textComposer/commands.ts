@@ -7,7 +7,6 @@ import { mergeWith } from '../../../utils/mergeWith';
 import type { MessageComposer } from '../../messageComposer';
 import type {
   CommandSuggestion,
-  CommandSuggestionDisabledReason,
   TextComposerCommandActivationEffect,
   TextComposerMiddlewareOptions,
   TextComposerStateSnapshot,
@@ -18,24 +17,6 @@ import {
   insertItemWithTrigger,
 } from './textMiddlewareUtils';
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
-
-const getCommandDisabledReason = (
-  command: CommandResponse,
-  composer?: MessageComposer,
-): CommandSuggestionDisabledReason | undefined => {
-  if (!composer) return undefined;
-
-  if (composer.editedMessage) return 'editing';
-
-  if (
-    composer.quotedMessage &&
-    (command.set === 'moderation_set' || command.name === 'moderation_set')
-  ) {
-    return 'quoted_message';
-  }
-
-  return undefined;
-};
 
 const emptyCommandStateSnapshot: TextComposerStateSnapshot = {
   mentionedUsers: [],
@@ -117,7 +98,7 @@ export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion>
 
     return {
       items: selectedCommands.map((command) => {
-        const disabledReason = getCommandDisabledReason(command, this.composer);
+        const disabledReason = this.composer?.getCommandDisabledReason(command);
 
         return {
           ...command,

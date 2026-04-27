@@ -758,6 +758,34 @@ describe('MessageComposer', () => {
       });
     });
 
+    it('should return command disabled reasons', () => {
+      const { messageComposer } = setup();
+
+      expect(messageComposer.getCommandDisabledReason({ name: 'ban' })).toBeUndefined();
+
+      messageComposer.state.partialNext({
+        editedMessage: {
+          id: 'edited-message-id',
+          text: 'edited message',
+          type: 'regular',
+        } as LocalMessage,
+      });
+      expect(messageComposer.getCommandDisabledReason({ name: 'ban' })).toBe('editing');
+      expect(messageComposer.isCommandDisabled({ name: 'ban' })).toBe(true);
+
+      messageComposer.state.partialNext({
+        editedMessage: null,
+        quotedMessage,
+      });
+      expect(
+        messageComposer.getCommandDisabledReason({
+          name: 'ban',
+          set: 'moderation_set',
+        }),
+      ).toBe('quoted_message');
+      expect(messageComposer.getCommandDisabledReason({ name: 'giphy' })).toBeUndefined();
+    });
+
     it('should register subscriptions', () => {
       const { messageComposer } = setup();
       const unsubscribeFunctions = messageComposer[

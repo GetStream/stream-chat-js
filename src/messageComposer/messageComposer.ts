@@ -18,6 +18,7 @@ import { Channel } from '../channel';
 import { Thread } from '../thread';
 import type {
   ChannelAPIResponse,
+  CommandResponse,
   DraftMessage,
   DraftResponse,
   EventTypes,
@@ -30,6 +31,7 @@ import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { StreamChat } from '../client';
 import type { MessageComposerConfig } from './configuration/types';
 import type {
+  CommandSuggestionDisabledReason,
   TextComposerCommandActivationEffect,
   TextComposerEffect,
   TextComposerStateSnapshot,
@@ -271,7 +273,8 @@ export class MessageComposer extends WithSubscriptions {
 
   setEditedMessage = (editedMessage: LocalMessage | null | undefined) => {
     this.state.partialNext({ editedMessage: editedMessage ?? null });
-    if (editedMessage) {
+    const activeCommand = this.textComposer.command;
+    if (editedMessage && activeCommand && this.isCommandDisabled(activeCommand)) {
       this.textComposer.clearCommand();
     }
   };
@@ -330,6 +333,24 @@ export class MessageComposer extends WithSubscriptions {
   get quotedMessage() {
     return this.state.getLatestValue().quotedMessage;
   }
+
+  getCommandDisabledReason = (
+    command: CommandResponse,
+  ): CommandSuggestionDisabledReason | undefined => {
+    if (this.editedMessage) return 'editing';
+
+    if (
+      this.quotedMessage &&
+      (command.set === 'moderation_set' || command.name === 'moderation_set')
+    ) {
+      return 'quoted_message';
+    }
+
+    return undefined;
+  };
+
+  isCommandDisabled = (command: CommandResponse) =>
+    !!this.getCommandDisabledReason(command);
 
   get pollId() {
     return this.state.getLatestValue().pollId;
@@ -743,11 +764,7 @@ export class MessageComposer extends WithSubscriptions {
   setQuotedMessage = (quotedMessage: LocalMessage | null) => {
     this.state.partialNext({ quotedMessage });
     const activeCommand = this.textComposer.command;
-    if (
-      quotedMessage &&
-      activeCommand &&
-      (activeCommand.set === 'moderation_set' || activeCommand.name === 'moderation_set')
-    ) {
+    if (quotedMessage && activeCommand && this.isCommandDisabled(activeCommand)) {
       this.textComposer.clearCommand();
     }
   };

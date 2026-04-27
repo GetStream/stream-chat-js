@@ -190,7 +190,7 @@ export class TextComposer {
       return;
     }
     if (command.name === this.command?.name) return;
-    if (this.isCommandDisabled(command)) return;
+    if (this.composer.isCommandDisabled(command)) return;
 
     this.commitState({
       ...this.state.getLatestValue(),
@@ -296,13 +296,6 @@ export class TextComposer {
     this.state.partialNext({ suggestions: undefined });
   };
   // --- END STATE API ---
-
-  private isCommandDisabled = (command: CommandResponse) =>
-    !!this.composer.editedMessage ||
-    !!(
-      this.composer.quotedMessage &&
-      (command.set === 'moderation_set' || command.name === 'moderation_set')
-    );
 
   private commitState = (state: TextComposerMiddlewareExecutorState) => {
     const { change, effects, ...nextState } = state;

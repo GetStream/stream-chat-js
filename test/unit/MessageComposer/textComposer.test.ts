@@ -460,6 +460,24 @@ describe('TextComposer', () => {
       expect(textComposer.command).toBeNull();
       expect(textComposer.text).toBe('');
     });
+
+    it('clears active moderation set command when setting a quoted message', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+
+      textComposer.setCommand({ name: 'ban', set: 'moderation_set' });
+      expect(textComposer.command?.name).toBe('ban');
+
+      messageComposer.setQuotedMessage({
+        id: 'quoted-message-id',
+        text: 'quoted message',
+      } as LocalMessage);
+
+      expect(textComposer.command).toBeNull();
+      expect(textComposer.text).toBe('');
+    });
   });
 
   describe('upsertMentionedUser', () => {
