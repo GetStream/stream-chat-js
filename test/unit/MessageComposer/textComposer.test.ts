@@ -323,6 +323,83 @@ describe('TextComposer', () => {
       expect(messageComposer.attachmentManager.attachments).toEqual([attachment]);
     });
 
+    it('preserves text, mentions, and attachments for preserve command behavior', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+      textComposer.setText('Hello world');
+      textComposer.setMentionedUsers([{ id: 'user-1' }]);
+      textComposer.setSelection({ start: 5, end: 5 });
+      messageComposer.attachmentManager.state.partialNext({ attachments: [attachment] });
+
+      textComposer.setCommand({ name: 'ban' }, { behavior: 'preserve' });
+
+      expect(textComposer.command?.name).toBe('ban');
+      expect(textComposer.text).toBe('Hello world');
+      expect(textComposer.selection).toEqual({ start: 5, end: 5 });
+      expect(textComposer.mentionedUsers).toEqual([{ id: 'user-1' }]);
+      expect(messageComposer.attachmentManager.attachments).toEqual([attachment]);
+
+      textComposer.clearCommand();
+
+      expect(textComposer.command).toBeNull();
+      expect(textComposer.text).toBe('Hello world');
+      expect(textComposer.selection).toEqual({ start: 5, end: 5 });
+      expect(textComposer.mentionedUsers).toEqual([{ id: 'user-1' }]);
+      expect(messageComposer.attachmentManager.attachments).toEqual([attachment]);
+    });
+
+    it('allows middleware to preserve state for selected commands', async () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+        mockChannel,
+      } = setup();
+      mockChannel.getConfig = vi.fn().mockReturnValue({
+        commands: [{ name: 'ban', description: 'Ban a user' }],
+      });
+      messageComposer.attachmentManager.state.partialNext({ attachments: [attachment] });
+
+      const preserveCommandState = (state: any) => ({
+        ...state,
+        effects: state.effects?.map((effect: any) =>
+          effect.type === 'command.activate' && effect.command.name === 'ban'
+            ? { ...effect, behavior: 'preserve' }
+            : effect,
+        ),
+      });
+
+      textComposer.middlewareExecutor.insert({
+        middleware: [
+          {
+            handlers: {
+              onChange: ({ next, state }) => next(preserveCommandState(state)),
+              onSuggestionItemSelect: ({ next, state }) =>
+                next(preserveCommandState(state)),
+            },
+            id: 'test/preserve-command-state',
+          },
+        ],
+        position: { after: 'stream-io/text-composer/commands-middleware' },
+        unique: true,
+      });
+
+      await textComposer.handleChange({
+        text: '/ba',
+        selection: { start: 3, end: 3 },
+      });
+      await textComposer.handleSelect({
+        id: 'ban',
+        name: 'ban',
+        description: 'Ban a user',
+      });
+
+      expect(textComposer.command?.name).toBe('ban');
+      expect(messageComposer.attachmentManager.attachments).toEqual([attachment]);
+      expect('effects' in textComposer.state.getLatestValue()).toBe(false);
+    });
+
     it('does not restore the slash query used to select a command', async () => {
       const {
         messageComposer,

@@ -23,6 +23,28 @@ export type UserSuggestion = BaseSuggestion & UserResponse & TokenizationPayload
 export type CustomValidSuggestion = BaseSuggestion & CustomTextComposerSuggestion;
 export type Suggestion = CommandSuggestion | UserSuggestion | CustomValidSuggestion;
 
+export type TextComposerCommandActivationBehavior = 'snapshot-and-clear' | 'preserve';
+
+export type TextComposerStateSnapshot = Pick<
+  TextComposerState,
+  'mentionedUsers' | 'selection' | 'text'
+>;
+
+export type TextComposerCommandActivationEffect = {
+  behavior?: TextComposerCommandActivationBehavior;
+  command: CommandResponse;
+  stateToRestore?: TextComposerStateSnapshot;
+  type: 'command.activate';
+};
+
+export type TextComposerCommandClearEffect = {
+  type: 'command.clear';
+};
+
+export type TextComposerEffect =
+  | TextComposerCommandActivationEffect
+  | TextComposerCommandClearEffect;
+
 export type TextComposerMiddlewareOptions = {
   minChars: number;
   trigger: string;

@@ -29,6 +29,14 @@ import type {
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { StreamChat } from '../client';
 import type { MessageComposerConfig } from './configuration/types';
+import type {
+  TextComposerCommandActivationBehavior,
+  TextComposerCommandActivationEffect,
+  TextComposerEffect,
+  TextComposerState,
+  TextComposerStateSnapshot,
+} from './middleware/textComposer/types';
+import type { LocalAttachment } from './types';
 import type { DeepPartial } from '../types.utility';
 import type { MergeWithCustomizer } from '../utils/mergeWith/mergeWithCore';
 
@@ -38,6 +46,11 @@ export type LastComposerChange = { draftUpdate: number | null; stateUpdate: numb
 
 export type EditingAuditState = {
   lastChange: LastComposerChange;
+};
+
+type PreCommandStateSnapshot = {
+  attachments: LocalAttachment[];
+  textComposer: TextComposerStateSnapshot;
 };
 
 export type LocalMessageWithLegacyThreadId = LocalMessage & { legacyThreadId?: string };
@@ -142,6 +155,9 @@ export class MessageComposer extends WithSubscriptions {
   pollComposer: PollComposer;
   locationComposer: LocationComposer;
   customDataManager: CustomDataManager;
+  private activeCommandActivationBehavior: TextComposerCommandActivationBehavior | null =
+    null;
+  private preCommandStateSnapshot: PreCommandStateSnapshot | null = null;
   // todo: mediaRecorder: MediaRecorderController;
 
   constructor({
@@ -377,6 +393,7 @@ export class MessageComposer extends WithSubscriptions {
   initState = ({
     composition,
   }: { composition?: DraftResponse | MessageResponse | LocalMessage } = {}) => {
+    this.clearTextComposerCommandSnapshot();
     this.editingAuditState.partialNext(this.initEditingAuditState(composition));
 
     const message: LocalMessage | DraftMessage | undefined =
@@ -416,6 +433,121 @@ export class MessageComposer extends WithSubscriptions {
   initEditingAuditState = (
     composition?: DraftResponse | MessageResponse | LocalMessage,
   ) => initEditingAuditState(composition);
+
+  clearTextComposerCommandSnapshot = () => {
+    this.activeCommandActivationBehavior = null;
+    this.preCommandStateSnapshot = null;
+  };
+
+  applyTextComposerEffects = ({
+    effects = [],
+    previousState,
+    state,
+  }: {
+    effects?: TextComposerEffect[];
+    previousState: TextComposerState;
+    state: TextComposerState;
+  }): TextComposerState => {
+    if (!effects.length) return state;
+
+    return effects.reduce<TextComposerState>((nextState, effect) => {
+      if (effect.type === 'command.activate') {
+        return this.applyCommandActivationEffect({
+          effect,
+          previousState,
+          state: nextState,
+        });
+      }
+
+      if (effect.type === 'command.clear') {
+        return this.applyCommandClearEffect(nextState);
+      }
+
+      return nextState;
+    }, state);
+  };
+
+  private applyCommandActivationEffect = ({
+    effect,
+    previousState,
+    state,
+  }: {
+    effect: TextComposerCommandActivationEffect;
+    previousState: TextComposerState;
+    state: TextComposerState;
+  }): TextComposerState => {
+    const behavior = effect.behavior ?? 'snapshot-and-clear';
+    this.activeCommandActivationBehavior = behavior;
+
+    if (behavior === 'preserve') {
+      return {
+        ...state,
+        command: effect.command,
+        suggestions: undefined,
+      };
+    }
+
+    if (!this.textComposer.command && !this.preCommandStateSnapshot) {
+      const { mentionedUsers, selection, text } = effect.stateToRestore ?? previousState;
+      this.preCommandStateSnapshot = {
+        attachments: this.attachmentManager.attachments,
+        textComposer: { mentionedUsers, selection, text },
+      };
+    }
+
+    this.attachmentManager.clearAttachments();
+
+    return {
+      ...state,
+      command: effect.command,
+      mentionedUsers: [],
+      selection: { start: 0, end: 0 },
+      suggestions: undefined,
+      text: '',
+    };
+  };
+
+  private applyCommandClearEffect = (state: TextComposerState): TextComposerState => {
+    const snapshot = this.preCommandStateSnapshot;
+    const behavior = this.activeCommandActivationBehavior;
+    this.clearTextComposerCommandSnapshot();
+
+    if (snapshot) {
+      this.attachmentManager.setAttachments(snapshot.attachments);
+      return {
+        ...state,
+        command: null,
+        mentionedUsers: snapshot.textComposer.mentionedUsers,
+        selection: snapshot.textComposer.selection,
+        suggestions: undefined,
+        text: snapshot.textComposer.text,
+      };
+    }
+
+    if (behavior === 'preserve') {
+      return {
+        ...state,
+        command: null,
+        suggestions: undefined,
+      };
+    }
+
+    if (!state.command) {
+      return {
+        ...state,
+        command: null,
+      };
+    }
+
+    return {
+      ...state,
+      command: null,
+      mentionedUsers: [],
+      selection: { start: 0, end: 0 },
+      suggestions: undefined,
+      text: '',
+    };
+  };
 
   private logStateUpdateTimestamp() {
     this.editingAuditState.partialNext({

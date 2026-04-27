@@ -8,7 +8,9 @@ import type { MessageComposer } from '../../messageComposer';
 import type {
   CommandSuggestion,
   CommandSuggestionDisabledReason,
+  TextComposerCommandActivationEffect,
   TextComposerMiddlewareOptions,
+  TextComposerStateSnapshot,
 } from './types';
 import {
   getCompleteCommandInString,
@@ -34,6 +36,21 @@ const getCommandDisabledReason = (
 
   return undefined;
 };
+
+const emptyCommandStateSnapshot: TextComposerStateSnapshot = {
+  mentionedUsers: [],
+  selection: { start: 0, end: 0 },
+  text: '',
+};
+
+const createCommandActivationEffect = (
+  command: CommandResponse,
+): TextComposerCommandActivationEffect => ({
+  behavior: 'snapshot-and-clear',
+  command,
+  stateToRestore: emptyCommandStateSnapshot,
+  type: 'command.activate',
+});
 
 export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion> {
   readonly type = 'commands';
@@ -223,6 +240,10 @@ export const createCommandsMiddleware = (
             trigger: finalOptions.trigger,
           }),
           command: selectedSuggestion,
+          effects: [
+            ...(state.effects ?? []),
+            createCommandActivationEffect(selectedSuggestion),
+          ],
           suggestions: undefined,
         });
       },

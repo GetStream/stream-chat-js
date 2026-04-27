@@ -10,6 +10,7 @@ import type {
 import type {
   Suggestion,
   Suggestions,
+  TextComposerEffect,
   TextComposerMiddlewareExecutorOptions,
   TextComposerState,
 } from './types';
@@ -19,6 +20,7 @@ export type TextComposerMiddlewareExecutorState<T extends Suggestion = Suggestio
     change?: {
       selectedSuggestion?: T;
     };
+    effects?: TextComposerEffect[];
   };
 
 export type TextComposerHandlerNames = 'onChange' | 'onSuggestionItemSelect';
@@ -55,6 +57,7 @@ export class TextComposerMiddlewareExecutor<
   }: ExecuteParams<TextComposerMiddlewareExecutorState<T>>): Promise<
     MiddlewareExecutionResult<TextComposerMiddlewareExecutorState<T>>
   > {
+    console.log('EXECUTING LOG');
     const result = await this.executeMiddlewareChain({
       eventName,
       initialValue: initialState,

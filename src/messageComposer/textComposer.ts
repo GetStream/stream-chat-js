@@ -1,25 +1,22 @@
 import { TextComposerMiddlewareExecutor } from './middleware';
 import { StateStore } from '../store';
 import { logChatPromiseExecution } from '../utils';
-import type { CommandSuggestion } from './middleware/textComposer/types';
+import type { TextComposerMiddlewareExecutorState } from './middleware';
+import type { TextComposerCommandActivationBehavior } from './middleware/textComposer/types';
 import type { TextComposerSuggestion } from './middleware/textComposer/types';
 import type { TextSelection } from './middleware/textComposer/types';
 import type { TextComposerState } from './middleware/textComposer/types';
 import type { Suggestions } from './middleware/textComposer/types';
 import type { MessageComposer } from './messageComposer';
 import type { CommandResponse, DraftMessage, LocalMessage, UserResponse } from '../types';
-import type { LocalAttachment } from './types';
 
 export type TextComposerOptions = {
   composer: MessageComposer;
   message?: DraftMessage | LocalMessage;
 };
 
-type PreCommandStateSnapshot = {
-  attachments: LocalAttachment[];
-  mentionedUsers: UserResponse[];
-  selection: TextSelection;
-  text: string;
+export type SetCommandOptions = {
+  behavior?: TextComposerCommandActivationBehavior;
 };
 
 export const textIsEmpty = (text: string) => {
@@ -66,7 +63,6 @@ export class TextComposer {
   readonly composer: MessageComposer;
   readonly state: StateStore<TextComposerState>;
   middlewareExecutor: TextComposerMiddlewareExecutor;
-  private preCommandStateSnapshot: PreCommandStateSnapshot | null = null;
 
   constructor({ composer, message }: TextComposerOptions) {
     this.composer = composer;
@@ -154,7 +150,7 @@ export class TextComposer {
   }
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
-    this.preCommandStateSnapshot = null;
+    this.composer.clearTextComposerCommandSnapshot();
     this.state.next(initState({ composer: this.composer, message }));
   };
 
@@ -163,35 +159,9 @@ export class TextComposer {
   }
 
   clearCommand() {
-    const snapshot = this.preCommandStateSnapshot;
-    this.preCommandStateSnapshot = null;
-
-    if (!snapshot && !this.command) {
-      this.state.partialNext({ command: null });
-      return;
-    }
-
-    console.log('TEST: SNAPSHOT: ', snapshot);
-    if (snapshot) {
-      this.composer.attachmentManager.state.partialNext({
-        attachments: snapshot.attachments,
-      });
-      this.state.partialNext({
-        command: null,
-        mentionedUsers: snapshot.mentionedUsers,
-        selection: snapshot.selection,
-        suggestions: undefined,
-        text: snapshot.text,
-      });
-      return;
-    }
-
-    this.state.partialNext({
-      command: null,
-      mentionedUsers: [],
-      selection: { start: 0, end: 0 },
-      suggestions: undefined,
-      text: '',
+    this.commitState({
+      ...this.state.getLatestValue(),
+      effects: [{ type: 'command.clear' }],
     });
   }
 
@@ -218,7 +188,7 @@ export class TextComposer {
     this.state.partialNext({ mentionedUsers });
   };
 
-  setCommand = (command: CommandResponse | null) => {
+  setCommand = (command: CommandResponse | null, options?: SetCommandOptions) => {
     if (!command) {
       this.clearCommand();
       return;
@@ -226,11 +196,22 @@ export class TextComposer {
     if (command.name === this.command?.name) return;
     if (this.isCommandDisabled(command)) return;
 
-    this.activateCommand(command, {
-      attachments: this.composer.attachmentManager.attachments,
-      mentionedUsers: this.mentionedUsers,
-      selection: this.selection,
-      text: this.text,
+    this.commitState({
+      ...this.state.getLatestValue(),
+      command,
+      effects: [
+        {
+          behavior: options?.behavior ?? 'snapshot-and-clear',
+          command,
+          stateToRestore: {
+            mentionedUsers: this.mentionedUsers,
+            selection: this.selection,
+            text: this.text,
+          },
+          type: 'command.activate',
+        },
+      ],
+      suggestions: undefined,
     });
   };
 
@@ -328,54 +309,20 @@ export class TextComposer {
       (command.set === 'moderation_set' || command.name === 'moderation_set')
     );
 
-  private activateCommand = (
-    command: CommandResponse,
-    snapshot: PreCommandStateSnapshot,
-  ) => {
-    if (!this.command && !this.preCommandStateSnapshot) {
-      this.preCommandStateSnapshot = snapshot;
-    }
+  private commitState = (state: TextComposerMiddlewareExecutorState) => {
+    const previousState = this.state.getLatestValue();
+    const { effects } = state;
+    const nextState = { ...state };
+    delete nextState.change;
+    delete nextState.effects;
 
-    this.composer.attachmentManager.state.partialNext({ attachments: [] });
-    this.state.partialNext({
-      command,
-      mentionedUsers: [],
-      selection: { start: 0, end: 0 },
-      suggestions: undefined,
-      text: '',
-    });
-  };
-
-  private applySelectedCommandState = (
-    state: TextComposerState<CommandSuggestion>,
-  ): TextComposerState<CommandSuggestion> => {
-    const { command } = state;
-    if (
-      !command ||
-      command.name === this.command?.name ||
-      this.isCommandDisabled(command)
-    ) {
-      return state;
-    }
-
-    if (!this.preCommandStateSnapshot) {
-      this.preCommandStateSnapshot = {
-        attachments: this.composer.attachmentManager.attachments,
-        mentionedUsers: [],
-        selection: { start: 0, end: 0 },
-        text: '',
-      };
-    }
-
-    this.composer.attachmentManager.state.partialNext({ attachments: [] });
-
-    return {
-      ...state,
-      mentionedUsers: [],
-      selection: { start: 0, end: 0 },
-      suggestions: undefined,
-      text: '',
-    };
+    this.state.next(
+      this.composer.applyTextComposerEffects({
+        effects,
+        previousState,
+        state: nextState as TextComposerState,
+      }),
+    );
   };
 
   // --- START TEXT PROCESSING ----
@@ -397,7 +344,7 @@ export class TextComposer {
       },
     });
     if (output.status === 'discard') return;
-    this.state.next(output.state);
+    this.commitState(output.state);
 
     if (this.config.publishTypingEvents && text) {
       logChatPromiseExecution(
@@ -420,11 +367,7 @@ export class TextComposer {
       },
     });
     if (output?.status === 'discard') return;
-    this.state.next(
-      this.applySelectedCommandState(
-        output.state as TextComposerState<CommandSuggestion>,
-      ) as TextComposerState,
-    );
+    this.commitState(output.state);
   };
   // --- END TEXT PROCESSING ----
 }
