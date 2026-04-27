@@ -4,7 +4,12 @@ import type { SearchSourceOptions } from '../../../search';
 import { BaseSearchSourceSync } from '../../../search';
 import type { CommandResponse } from '../../../types';
 import { mergeWith } from '../../../utils/mergeWith';
-import type { CommandSuggestion, TextComposerMiddlewareOptions } from './types';
+import type { MessageComposer } from '../../messageComposer';
+import type {
+  CommandSuggestion,
+  CommandSuggestionDisabledReason,
+  TextComposerMiddlewareOptions,
+} from './types';
 import {
   getCompleteCommandInString,
   getTriggerCharWithToken,
@@ -12,13 +17,37 @@ import {
 } from './textMiddlewareUtils';
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
 
+const getCommandDisabledReason = (
+  command: CommandResponse,
+  composer?: MessageComposer,
+): CommandSuggestionDisabledReason | undefined => {
+  if (!composer) return undefined;
+
+  if (composer.editedMessage) return 'editing';
+
+  if (
+    composer.quotedMessage &&
+    (command.set === 'moderation_set' || command.name === 'moderation_set')
+  ) {
+    return 'quoted_message';
+  }
+
+  return undefined;
+};
+
 export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion> {
   readonly type = 'commands';
   protected channel: Channel;
+  protected composer?: MessageComposer;
 
-  constructor(channel: Channel, options?: SearchSourceOptions) {
+  constructor(
+    channel: Channel,
+    options?: SearchSourceOptions,
+    composer?: MessageComposer,
+  ) {
     super(options);
     this.channel = channel;
+    this.composer = composer;
   }
 
   canExecuteQuery = (newSearchString?: string) => {
@@ -70,7 +99,16 @@ export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion>
     });
 
     return {
-      items: selectedCommands.map((c) => ({ ...c, id: c.name })),
+      items: selectedCommands.map((command) => {
+        const disabledReason = getCommandDisabledReason(command, this.composer);
+
+        return {
+          ...command,
+          disabled: !!disabledReason || undefined,
+          disabledReason,
+          id: command.name,
+        };
+      }),
       next: null,
     };
   }
@@ -103,11 +141,12 @@ export type CommandsMiddleware = Middleware<
 export const createCommandsMiddleware = (
   channel: Channel,
   options?: Partial<TextComposerMiddlewareOptions> & {
+    composer?: MessageComposer;
     searchSource?: CommandSearchSource;
   },
 ): CommandsMiddleware => {
   const finalOptions = mergeWith(DEFAULT_OPTIONS, options ?? {});
-  let searchSource = new CommandSearchSource(channel);
+  let searchSource = new CommandSearchSource(channel, undefined, options?.composer);
   if (options?.searchSource) {
     searchSource = options.searchSource;
     searchSource.resetState();
@@ -123,7 +162,7 @@ export const createCommandsMiddleware = (
         const commandName = getCompleteCommandInString(finalText);
         if (commandName) {
           const command = searchSource?.query(commandName).items[0];
-          if (command) {
+          if (command && !command.disabled) {
             return next({
               ...state,
               command,
@@ -172,6 +211,7 @@ export const createCommandsMiddleware = (
         const { selectedSuggestion } = state.change ?? {};
         if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
           return forward();
+        if (selectedSuggestion.disabled) return next(state);
 
         searchSource.resetStateAndActivate();
         return next({

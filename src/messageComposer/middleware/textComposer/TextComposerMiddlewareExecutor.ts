@@ -43,7 +43,9 @@ export class TextComposerMiddlewareExecutor<
     this.use([
       createTextComposerPreValidationMiddleware(composer) as TextComposerMiddleware<T>,
       createMentionsMiddleware(composer.channel) as TextComposerMiddleware<T>,
-      createCommandsMiddleware(composer.channel) as TextComposerMiddleware<T>,
+      createCommandsMiddleware(composer.channel, {
+        composer,
+      }) as TextComposerMiddleware<T>,
     ]);
   }
 

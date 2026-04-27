@@ -8,6 +8,7 @@ import { textIsEmpty } from '../../../src/messageComposer/textComposer';
 import { DraftResponse, LocalMessage } from '../../../src/types';
 import { logChatPromiseExecution } from '../../../src/utils';
 import { TextComposerConfig } from '../../../src/messageComposer/configuration';
+import type { LocalAttachment } from '../../../src/messageComposer/types';
 
 const textComposerMiddlewareExecuteOutput = {
   state: {
@@ -273,6 +274,127 @@ describe('TextComposer', () => {
       } = setup({ composition: message });
       textComposer.setMentionedUsers(users);
       expect(textComposer.mentionedUsers).toEqual(users);
+    });
+  });
+
+  describe('commands', () => {
+    const attachment = {
+      image_url: 'https://getstream.io/image.png',
+      localMetadata: { id: 'attachment-1', uploadState: 'finished' },
+      type: 'image',
+    } as LocalAttachment;
+
+    it('clears current text and attachments when setting a command directly', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+      textComposer.setText('Hello world');
+      textComposer.setMentionedUsers([{ id: 'user-1' }]);
+      messageComposer.attachmentManager.state.partialNext({ attachments: [attachment] });
+
+      textComposer.setCommand({ name: 'ban' });
+
+      expect(textComposer.command?.name).toBe('ban');
+      expect(textComposer.text).toBe('');
+      expect(textComposer.selection).toEqual({ start: 0, end: 0 });
+      expect(textComposer.mentionedUsers).toEqual([]);
+      expect(messageComposer.attachmentManager.attachments).toEqual([]);
+    });
+
+    it('restores text, mentions, and attachments when canceling a direct command', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+      textComposer.setText('Hello world');
+      textComposer.setMentionedUsers([{ id: 'user-1' }]);
+      textComposer.setSelection({ start: 5, end: 5 });
+      messageComposer.attachmentManager.state.partialNext({ attachments: [attachment] });
+
+      textComposer.setCommand({ name: 'ban' });
+      textComposer.setText('command args');
+      textComposer.clearCommand();
+
+      expect(textComposer.command).toBeNull();
+      expect(textComposer.text).toBe('Hello world');
+      expect(textComposer.selection).toEqual({ start: 5, end: 5 });
+      expect(textComposer.mentionedUsers).toEqual([{ id: 'user-1' }]);
+      expect(messageComposer.attachmentManager.attachments).toEqual([attachment]);
+    });
+
+    it('does not restore the slash query used to select a command', async () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+      messageComposer.attachmentManager.state.partialNext({ attachments: [attachment] });
+
+      await textComposer.handleChange({
+        text: '/ba',
+        selection: { start: 3, end: 3 },
+      });
+      await textComposer.handleSelect({
+        id: 'ban',
+        name: 'ban',
+        description: 'Ban a user',
+      });
+      textComposer.setText('command args');
+      textComposer.clearCommand();
+
+      expect(textComposer.command).toBeNull();
+      expect(textComposer.text).toBe('');
+      expect(textComposer.selection).toEqual({ start: 0, end: 0 });
+      expect(messageComposer.attachmentManager.attachments).toEqual([attachment]);
+    });
+
+    it('clears active command text on cancel when there is no restore snapshot', () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      textComposer.state.partialNext({
+        command: { name: 'ban' },
+        text: 'command args',
+        selection: { start: 12, end: 12 },
+      });
+
+      textComposer.clearCommand();
+
+      expect(textComposer.command).toBeNull();
+      expect(textComposer.text).toBe('');
+      expect(textComposer.selection).toEqual({ start: 0, end: 0 });
+    });
+
+    it('does not set commands while editing a message', () => {
+      const message: LocalMessage = {
+        id: 'test-message',
+        type: 'regular',
+        text: 'Hello world',
+      };
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
+
+      textComposer.setCommand({ name: 'ban' });
+
+      expect(textComposer.command).toBeUndefined();
+      expect(textComposer.text).toBe('Hello world');
+    });
+
+    it('does not set moderation set commands with a quoted message', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+      messageComposer.setQuotedMessage({
+        id: 'quoted-message-id',
+        text: 'quoted message',
+      } as LocalMessage);
+
+      textComposer.setCommand({ name: 'ban', set: 'moderation_set' });
+
+      expect(textComposer.command).toBeNull();
+      expect(textComposer.text).toBe('');
     });
   });
 

@@ -82,4 +82,54 @@ describe('CommandSearchSource', () => {
 
     expect(newState.items).toEqual(initialState.items);
   });
+
+  it('should mark moderation set commands disabled when there is a quoted message', async () => {
+    mockCommands = [
+      { name: 'ban', description: 'Ban a user', set: 'moderation_set' },
+      { name: 'giphy', description: 'Post a random gif', set: 'fun_set' },
+      { name: 'moderation_set', description: 'Moderate a user' },
+    ];
+    getConfigMock.mockReturnValue({ commands: mockCommands });
+    const source = new CommandSearchSource(channel, undefined, {
+      editedMessage: undefined,
+      quotedMessage: { id: 'quoted-message-id' },
+    } as any);
+
+    const result = await source.query('');
+
+    expect(result.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          disabled: true,
+          disabledReason: 'quoted_message',
+          name: 'ban',
+        }),
+        expect.objectContaining({
+          disabled: true,
+          disabledReason: 'quoted_message',
+          name: 'moderation_set',
+        }),
+        expect.objectContaining({
+          disabled: undefined,
+          disabledReason: undefined,
+          name: 'giphy',
+        }),
+      ]),
+    );
+  });
+
+  it('should mark all commands disabled when composing an edited message', async () => {
+    const source = new CommandSearchSource(channel, undefined, {
+      editedMessage: { id: 'edited-message-id' },
+      quotedMessage: null,
+    } as any);
+
+    const result = await source.query('');
+
+    expect(result.items).toHaveLength(mockCommands.length);
+    expect(result.items.every((command) => command.disabled)).toBe(true);
+    expect(result.items.every((command) => command.disabledReason === 'editing')).toBe(
+      true,
+    );
+  });
 });

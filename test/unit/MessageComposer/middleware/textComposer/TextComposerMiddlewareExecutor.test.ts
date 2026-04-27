@@ -209,10 +209,32 @@ describe('TextComposerMiddlewareExecutor', () => {
 
     await textComposer.handleSelect(selectedSuggestion);
 
-    expect(textComposer.text).toBe('/ban ');
+    expect(textComposer.text).toBe('');
     expect(textComposer.suggestions).toBeUndefined();
     expect(textComposer.command).toBeDefined();
     expect(textComposer.command?.name).toBe('ban');
+  });
+
+  it('should ignore disabled command suggestion selection', async () => {
+    const {
+      messageComposer: { textComposer },
+    } = setup();
+    await textComposer.handleChange({
+      text: '/ba',
+      selection: { start: 3, end: 3 },
+    });
+
+    await textComposer.handleSelect({
+      id: 'ban',
+      name: 'ban',
+      description: 'Ban a user',
+      disabled: true,
+      disabledReason: 'editing',
+    } as TextComposerSuggestion<CommandResponse>);
+
+    expect(textComposer.text).toBe('/ba');
+    expect(textComposer.command).toBeNull();
+    expect(textComposer.suggestions).toBeDefined();
   });
 
   it('should not be impacted by errors triggered by search source query', async () => {

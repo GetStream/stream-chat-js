@@ -259,6 +259,9 @@ export class MessageComposer extends WithSubscriptions {
 
   setEditedMessage = (editedMessage: LocalMessage | null | undefined) => {
     this.state.partialNext({ editedMessage: editedMessage ?? null });
+    if (editedMessage) {
+      this.textComposer.clearCommand();
+    }
   };
 
   get contextType() {
@@ -671,6 +674,14 @@ export class MessageComposer extends WithSubscriptions {
 
   setQuotedMessage = (quotedMessage: LocalMessage | null) => {
     this.state.partialNext({ quotedMessage });
+    const activeCommand = this.textComposer.command;
+    if (
+      quotedMessage &&
+      activeCommand &&
+      (activeCommand.set === 'moderation_set' || activeCommand.name === 'moderation_set')
+    ) {
+      this.textComposer.clearCommand();
+    }
   };
 
   toggleShowReplyInChannel = () => {
