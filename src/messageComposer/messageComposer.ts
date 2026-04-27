@@ -33,7 +33,7 @@ import type { MessageComposerConfig } from './configuration/types';
 import type {
   CommandSuggestionDisabledReason,
   TextComposerCommandActivationEffect,
-  TextComposerEffect,
+  TextComposerCommandClearEffect,
   TextComposerStateSnapshot,
 } from './middleware/textComposer/types';
 import type { LocalAttachment } from './types';
@@ -52,6 +52,27 @@ type PreCommandStateSnapshot = {
   attachments: LocalAttachment[];
   textComposer: TextComposerStateSnapshot;
 };
+
+export type BuiltInMessageComposerEffect =
+  | TextComposerCommandActivationEffect
+  | TextComposerCommandClearEffect;
+
+export type CustomMessageComposerEffect = {
+  type: string & {};
+} & Record<string, unknown>;
+
+export type MessageComposerEffect =
+  | BuiltInMessageComposerEffect
+  | CustomMessageComposerEffect;
+
+export type MessageComposerEffectHandler<
+  T extends { type: string } = MessageComposerEffect,
+> = (effect: T, composer: MessageComposer) => void;
+
+type RegisteredMessageComposerEffectHandler = (
+  effect: { type: string },
+  composer: MessageComposer,
+) => void;
 
 export type LocalMessageWithLegacyThreadId = LocalMessage & { legacyThreadId?: string };
 export type CompositionContext = Channel | Thread | LocalMessageWithLegacyThreadId;
@@ -156,6 +177,7 @@ export class MessageComposer extends WithSubscriptions {
   locationComposer: LocationComposer;
   customDataManager: CustomDataManager;
   private preCommandStateSnapshot: PreCommandStateSnapshot | null = null;
+  private effectHandlers = new Map<string, RegisteredMessageComposerEffectHandler>();
   // todo: mediaRecorder: MediaRecorderController;
 
   constructor({
@@ -233,6 +255,7 @@ export class MessageComposer extends WithSubscriptions {
     this.draftCompositionMiddlewareExecutor = new MessageDraftComposerMiddlewareExecutor({
       composer: this,
     });
+    this.registerDefaultEffectHandlers();
   }
 
   static evaluateContextType(compositionContext: CompositionContext) {
@@ -455,17 +478,30 @@ export class MessageComposer extends WithSubscriptions {
     this.preCommandStateSnapshot = null;
   };
 
-  applyEffects = (effects: TextComposerEffect[] = []) => {
-    effects.forEach((effect) => {
-      if (effect.type === 'command.activate') {
-        this.applyCommandActivationEffect(effect);
-        return;
-      }
+  private registerDefaultEffectHandlers = () => {
+    this.registerEffectHandler<TextComposerCommandActivationEffect>(
+      'command.activate',
+      (effect) => this.applyCommandActivationEffect(effect),
+    );
+    this.registerEffectHandler<TextComposerCommandClearEffect>('command.clear', () =>
+      this.applyCommandClearEffect(),
+    );
+  };
 
-      if (effect.type === 'command.clear') {
-        this.applyCommandClearEffect();
-      }
-    });
+  registerEffectHandler = <T extends { type: string }>(
+    type: T['type'],
+    handler: MessageComposerEffectHandler<T>,
+  ): void => {
+    this.effectHandlers.set(type, handler as RegisteredMessageComposerEffectHandler);
+  };
+
+  applyEffects = <T extends { type: string }>(effects: T[] = []) => {
+    effects.forEach((effect) => this.applyEffect(effect));
+  };
+
+  private applyEffect = (effect: { type: string }) => {
+    const handler = this.effectHandlers.get(effect.type);
+    handler?.(effect, this);
   };
 
   private applyCommandActivationEffect = (

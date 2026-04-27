@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../src/client';
 import {
   CompositionContext,
+  MessageComposerEffect,
   MessageComposer,
 } from '../../../src/messageComposer/messageComposer';
 import { textIsEmpty } from '../../../src/messageComposer/textComposer';
@@ -383,6 +384,68 @@ describe('TextComposer', () => {
       expect(textComposer.text).toBe('command args');
       expect(textComposer.mentionedUsers).toEqual([{ id: 'user-1' }]);
       expect(messageComposer.attachmentManager.attachments).toEqual([attachment]);
+    });
+
+    it('allows effect handlers to override command activation behavior', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+      const handler = vi.fn();
+      textComposer.setText('Hello world');
+      textComposer.setMentionedUsers([{ id: 'user-1' }]);
+      textComposer.setSelection({ start: 5, end: 5 });
+      messageComposer.attachmentManager.state.partialNext({ attachments: [attachment] });
+
+      messageComposer.registerEffectHandler('command.activate', handler);
+      textComposer.setCommand({ name: 'ban' });
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: expect.objectContaining({ name: 'ban' }),
+          type: 'command.activate',
+        }),
+        messageComposer,
+      );
+      expect(textComposer.command?.name).toBe('ban');
+      expect(textComposer.text).toBe('Hello world');
+      expect(textComposer.selection).toEqual({ start: 5, end: 5 });
+      expect(textComposer.mentionedUsers).toEqual([{ id: 'user-1' }]);
+      expect(messageComposer.attachmentManager.attachments).toEqual([attachment]);
+    });
+
+    it('allows custom effect handlers to be registered', () => {
+      const { messageComposer } = setup();
+      const handler = vi.fn();
+      const effect: MessageComposerEffect = {
+        type: 'test.effect',
+        payload: 'test-payload',
+      };
+
+      messageComposer.registerEffectHandler('test.effect', handler);
+      messageComposer.applyEffects([effect]);
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledWith(effect, messageComposer);
+    });
+
+    it('overrides effect handlers registered for the same type', () => {
+      const { messageComposer } = setup();
+      const firstHandler = vi.fn();
+      const secondHandler = vi.fn();
+      const effect = {
+        type: 'test.effect',
+        payload: 'test-payload',
+      };
+
+      messageComposer.registerEffectHandler<typeof effect>('test.effect', firstHandler);
+      messageComposer.registerEffectHandler<typeof effect>('test.effect', secondHandler);
+
+      messageComposer.applyEffects([effect]);
+
+      expect(firstHandler).not.toHaveBeenCalled();
+      expect(secondHandler).toHaveBeenCalledTimes(1);
     });
 
     it('does not restore the slash query used to select a command', async () => {

@@ -1,4 +1,5 @@
 import type { MessageComposer } from '../../messageComposer';
+import type { MessageComposerEffect } from '../../messageComposer';
 import type { CommandResponse, UserResponse } from '../../../types';
 import type { TokenizationPayload } from './textMiddlewareUtils';
 import type { SearchSource, SearchSourceSync } from '../../../search';
@@ -34,9 +35,7 @@ export type TextComposerCommandClearEffect = {
   type: 'command.clear';
 };
 
-export type TextComposerEffect =
-  | TextComposerCommandActivationEffect
-  | TextComposerCommandClearEffect;
+export type TextComposerEffect = MessageComposerEffect;
 
 export type TextComposerMiddlewareOptions = {
   minChars: number;
