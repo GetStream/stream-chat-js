@@ -32,20 +32,13 @@ const createCommandActivationEffect = (
   type: 'command.activate',
 });
 
-export type CommandSearchSourceOptions = SearchSourceOptions & {
-  composer?: MessageComposer;
-};
-
 export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion> {
   readonly type = 'commands';
   protected channel: Channel;
-  protected composer?: MessageComposer;
 
-  constructor(channel: Channel, options?: CommandSearchSourceOptions) {
-    const { composer, ...searchSourceOptions } = options ?? {};
-    super(searchSourceOptions);
+  constructor(channel: Channel, options?: SearchSourceOptions) {
+    super(options);
     this.channel = channel;
-    this.composer = composer;
   }
 
   canExecuteQuery = (newSearchString?: string) => {
@@ -97,16 +90,10 @@ export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion>
     });
 
     return {
-      items: selectedCommands.map((command) => {
-        const disabledReason = this.composer?.getCommandDisabledReason(command);
-
-        return {
-          ...command,
-          disabled: !!disabledReason || undefined,
-          disabledReason,
-          id: command.name,
-        };
-      }),
+      items: selectedCommands.map((command) => ({
+        ...command,
+        id: command.name,
+      })),
       next: null,
     };
   }
@@ -144,7 +131,7 @@ export const createCommandsMiddleware = (
   },
 ): CommandsMiddleware => {
   const finalOptions = mergeWith(DEFAULT_OPTIONS, options ?? {});
-  let searchSource = new CommandSearchSource(channel, { composer: options?.composer });
+  let searchSource = new CommandSearchSource(channel);
   if (options?.searchSource) {
     searchSource = options.searchSource;
     searchSource.resetState();
@@ -160,7 +147,8 @@ export const createCommandsMiddleware = (
         const commandName = getCompleteCommandInString(finalText);
         if (commandName) {
           const command = searchSource?.query(commandName).items[0];
-          if (command && !command.disabled) {
+          const composer = options?.composer;
+          if (command && !composer?.isCommandDisabled(command)) {
             return next({
               ...state,
               command,
@@ -209,26 +197,26 @@ export const createCommandsMiddleware = (
         const { selectedSuggestion } = state.change ?? {};
         if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
           return forward();
-        if (selectedSuggestion.disabled) {
-          if (options?.composer && selectedSuggestion.disabledReason) {
-            options.composer.client.notifications.addWarning({
-              message:
-                selectedSuggestion.disabledReason === 'editing'
-                  ? 'Not available while editing'
-                  : 'Not available while replying',
-              origin: {
-                emitter: 'MessageComposer',
-                context: { command: selectedSuggestion, composer: options.composer },
+        const composer = options?.composer;
+        const disabledReason = composer?.getCommandDisabledReason(selectedSuggestion);
+        if (composer && disabledReason) {
+          composer.client.notifications.addWarning({
+            message:
+              disabledReason === 'editing'
+                ? 'Not available while editing'
+                : 'Not available while replying',
+            origin: {
+              emitter: 'MessageComposer',
+              context: { command: selectedSuggestion, composer },
+            },
+            options: {
+              type: 'validation:command:disabled',
+              metadata: {
+                command: selectedSuggestion.name,
+                reason: disabledReason,
               },
-              options: {
-                type: 'validation:command:disabled',
-                metadata: {
-                  command: selectedSuggestion.name,
-                  reason: selectedSuggestion.disabledReason,
-                },
-              },
-            });
-          }
+            },
+          });
           return next(state);
         }
 

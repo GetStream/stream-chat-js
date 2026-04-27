@@ -14,11 +14,7 @@ export type BaseSuggestion = {
 
 export type CommandSuggestionDisabledReason = 'editing' | 'quoted_message';
 
-export type CommandSuggestion = BaseSuggestion &
-  CommandResponse & {
-    disabled?: boolean;
-    disabledReason?: CommandSuggestionDisabledReason;
-  };
+export type CommandSuggestion = BaseSuggestion & CommandResponse;
 export type UserSuggestion = BaseSuggestion & UserResponse & TokenizationPayload;
 export type CustomValidSuggestion = BaseSuggestion & CustomTextComposerSuggestion;
 export type Suggestion = CommandSuggestion | UserSuggestion | CustomValidSuggestion;

@@ -83,7 +83,7 @@ describe('CommandSearchSource', () => {
     expect(newState.items).toEqual(initialState.items);
   });
 
-  it('should apply composer disabled reasons to command suggestions', async () => {
+  it('should not decorate commands with disabled state', async () => {
     mockCommands = [
       { name: 'ban', description: 'Ban a user', set: 'moderation_set' },
       { name: 'giphy', description: 'Post a random gif', set: 'fun_set' },
@@ -91,61 +91,37 @@ describe('CommandSearchSource', () => {
       { name: 'moderation_set', description: 'Moderate a user' },
     ];
     getConfigMock.mockReturnValue({ commands: mockCommands });
-    const getCommandDisabledReason = vi.fn((command) =>
-      command.set === 'moderation_set' || command.name === 'moderation_set'
-        ? 'quoted_message'
-        : undefined,
-    );
-    const source = new CommandSearchSource(channel, {
-      composer: {
-        getCommandDisabledReason,
-      } as any,
-    });
+    const source = new CommandSearchSource(channel);
 
     const result = await source.query('');
 
     expect(result.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          disabled: true,
-          disabledReason: 'quoted_message',
+          id: 'ban',
           name: 'ban',
+          set: 'moderation_set',
         }),
         expect.objectContaining({
-          disabled: true,
-          disabledReason: 'quoted_message',
+          id: 'moderation_set',
           name: 'moderation_set',
         }),
         expect.objectContaining({
-          disabled: undefined,
-          disabledReason: undefined,
+          id: 'mute',
           name: 'mute',
+          set: 'fun_set',
         }),
         expect.objectContaining({
-          disabled: undefined,
-          disabledReason: undefined,
+          id: 'giphy',
           name: 'giphy',
+          set: 'fun_set',
         }),
       ]),
     );
-    expect(getCommandDisabledReason).toHaveBeenCalledTimes(mockCommands.length);
-  });
-
-  it('should mark all commands disabled when the composer returns an editing reason', async () => {
-    const getCommandDisabledReason = vi.fn(() => 'editing');
-    const source = new CommandSearchSource(channel, {
-      composer: {
-        getCommandDisabledReason,
-      } as any,
-    });
-
-    const result = await source.query('');
-
-    expect(result.items).toHaveLength(mockCommands.length);
-    expect(result.items.every((command) => command.disabled)).toBe(true);
-    expect(result.items.every((command) => command.disabledReason === 'editing')).toBe(
-      true,
-    );
-    expect(getCommandDisabledReason).toHaveBeenCalledTimes(mockCommands.length);
+    expect(
+      result.items.some(
+        (command) => 'disabled' in command || 'disabledReason' in command,
+      ),
+    ).toBe(false);
   });
 });

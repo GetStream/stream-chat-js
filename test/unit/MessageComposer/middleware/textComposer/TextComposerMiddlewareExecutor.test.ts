@@ -218,9 +218,15 @@ describe('TextComposerMiddlewareExecutor', () => {
   it('should ignore disabled command suggestion selection', async () => {
     const {
       client,
+      messageComposer,
       messageComposer: { textComposer },
     } = setup();
     const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
+    messageComposer.setEditedMessage({
+      id: 'edited-message-id',
+      text: 'Edited message',
+      type: 'regular',
+    } as LocalMessage);
     await textComposer.handleChange({
       text: '/ba',
       selection: { start: 3, end: 3 },
@@ -230,8 +236,6 @@ describe('TextComposerMiddlewareExecutor', () => {
       id: 'ban',
       name: 'ban',
       description: 'Ban a user',
-      disabled: true,
-      disabledReason: 'editing',
     } as TextComposerSuggestion<CommandResponse>);
 
     expect(textComposer.text).toBe('/ba');
@@ -254,9 +258,14 @@ describe('TextComposerMiddlewareExecutor', () => {
   it('should notify when selecting a command disabled by quoted message', async () => {
     const {
       client,
+      messageComposer,
       messageComposer: { textComposer },
     } = setup();
     const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
+    messageComposer.setQuotedMessage({
+      id: 'quoted-message-id',
+      text: 'Quoted message',
+    } as LocalMessage);
     await textComposer.handleChange({
       text: '/ba',
       selection: { start: 3, end: 3 },
@@ -266,8 +275,7 @@ describe('TextComposerMiddlewareExecutor', () => {
       id: 'ban',
       name: 'ban',
       description: 'Ban a user',
-      disabled: true,
-      disabledReason: 'quoted_message',
+      set: 'moderation_set',
     } as TextComposerSuggestion<CommandResponse>);
 
     expect(textComposer.text).toBe('/ba');
@@ -285,6 +293,28 @@ describe('TextComposerMiddlewareExecutor', () => {
         }),
       }),
     );
+  });
+
+  it('should not activate typed commands disabled by composer state', async () => {
+    const {
+      channel,
+      messageComposer,
+      messageComposer: { textComposer },
+    } = setup();
+    channel.getConfig = vi.fn().mockReturnValue({
+      commands: [{ name: 'ban', description: 'Ban a user', set: 'moderation_set' }],
+    });
+    messageComposer.setQuotedMessage({
+      id: 'quoted-message-id',
+      text: 'Quoted message',
+    } as LocalMessage);
+
+    await textComposer.handleChange({
+      text: '/ban ',
+      selection: { start: 5, end: 5 },
+    });
+
+    expect(textComposer.command).toBeNull();
   });
 
   it('should not be impacted by errors triggered by search source query', async () => {
