@@ -87,6 +87,7 @@ describe('CommandSearchSource', () => {
     mockCommands = [
       { name: 'ban', description: 'Ban a user', set: 'moderation_set' },
       { name: 'giphy', description: 'Post a random gif', set: 'fun_set' },
+      { name: 'mute', description: 'Mute a user', set: 'fun_set' },
       { name: 'moderation_set', description: 'Moderate a user' },
     ];
     getConfigMock.mockReturnValue({ commands: mockCommands });
@@ -108,6 +109,11 @@ describe('CommandSearchSource', () => {
           disabled: true,
           disabledReason: 'quoted_message',
           name: 'moderation_set',
+        }),
+        expect.objectContaining({
+          disabled: undefined,
+          disabledReason: undefined,
+          name: 'mute',
         }),
         expect.objectContaining({
           disabled: undefined,

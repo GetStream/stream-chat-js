@@ -227,7 +227,28 @@ export const createCommandsMiddleware = (
         const { selectedSuggestion } = state.change ?? {};
         if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
           return forward();
-        if (selectedSuggestion.disabled) return next(state);
+        if (selectedSuggestion.disabled) {
+          if (options?.composer && selectedSuggestion.disabledReason) {
+            options.composer.client.notifications.addWarning({
+              message:
+                selectedSuggestion.disabledReason === 'editing'
+                  ? 'Not available while editing'
+                  : 'Not available while replying',
+              origin: {
+                emitter: 'MessageComposer',
+                context: { command: selectedSuggestion, composer: options.composer },
+              },
+              options: {
+                type: 'validation:command:disabled',
+                metadata: {
+                  command: selectedSuggestion.name,
+                  reason: selectedSuggestion.disabledReason,
+                },
+              },
+            });
+          }
+          return next(state);
+        }
 
         searchSource.resetStateAndActivate();
         return next({

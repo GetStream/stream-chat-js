@@ -217,8 +217,10 @@ describe('TextComposerMiddlewareExecutor', () => {
 
   it('should ignore disabled command suggestion selection', async () => {
     const {
+      client,
       messageComposer: { textComposer },
     } = setup();
+    const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
     await textComposer.handleChange({
       text: '/ba',
       selection: { start: 3, end: 3 },
@@ -235,6 +237,54 @@ describe('TextComposerMiddlewareExecutor', () => {
     expect(textComposer.text).toBe('/ba');
     expect(textComposer.command).toBeNull();
     expect(textComposer.suggestions).toBeDefined();
+    expect(addWarningSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Not available while editing',
+        options: expect.objectContaining({
+          metadata: {
+            command: 'ban',
+            reason: 'editing',
+          },
+          type: 'validation:command:disabled',
+        }),
+      }),
+    );
+  });
+
+  it('should notify when selecting a command disabled by quoted message', async () => {
+    const {
+      client,
+      messageComposer: { textComposer },
+    } = setup();
+    const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
+    await textComposer.handleChange({
+      text: '/ba',
+      selection: { start: 3, end: 3 },
+    });
+
+    await textComposer.handleSelect({
+      id: 'ban',
+      name: 'ban',
+      description: 'Ban a user',
+      disabled: true,
+      disabledReason: 'quoted_message',
+    } as TextComposerSuggestion<CommandResponse>);
+
+    expect(textComposer.text).toBe('/ba');
+    expect(textComposer.command).toBeNull();
+    expect(textComposer.suggestions).toBeDefined();
+    expect(addWarningSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Not available while replying',
+        options: expect.objectContaining({
+          metadata: {
+            command: 'ban',
+            reason: 'quoted_message',
+          },
+          type: 'validation:command:disabled',
+        }),
+      }),
+    );
   });
 
   it('should not be impacted by errors triggered by search source query', async () => {
