@@ -10,6 +10,7 @@ import type {
 import type {
   Suggestion,
   Suggestions,
+  TextComposerEffect,
   TextComposerMiddlewareExecutorOptions,
   TextComposerState,
 } from './types';
@@ -19,6 +20,7 @@ export type TextComposerMiddlewareExecutorState<T extends Suggestion = Suggestio
     change?: {
       selectedSuggestion?: T;
     };
+    effects?: TextComposerEffect[];
   };
 
 export type TextComposerHandlerNames = 'onChange' | 'onSuggestionItemSelect';
@@ -43,7 +45,9 @@ export class TextComposerMiddlewareExecutor<
     this.use([
       createTextComposerPreValidationMiddleware(composer) as TextComposerMiddleware<T>,
       createMentionsMiddleware(composer.channel) as TextComposerMiddleware<T>,
-      createCommandsMiddleware(composer.channel) as TextComposerMiddleware<T>,
+      createCommandsMiddleware(composer.channel, {
+        composer,
+      }) as TextComposerMiddleware<T>,
     ]);
   }
 

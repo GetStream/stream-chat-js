@@ -18,6 +18,7 @@ import { Channel } from '../channel';
 import { Thread } from '../thread';
 import type {
   ChannelAPIResponse,
+  CommandResponse,
   DraftMessage,
   DraftResponse,
   EventTypes,
@@ -29,6 +30,13 @@ import type {
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { StreamChat } from '../client';
 import type { MessageComposerConfig } from './configuration/types';
+import type {
+  CommandSuggestionDisabledReason,
+  TextComposerCommandActivationEffect,
+  TextComposerCommandClearEffect,
+  TextComposerStateSnapshot,
+} from './middleware/textComposer/types';
+import type { LocalAttachment } from './types';
 import type { DeepPartial } from '../types.utility';
 import type { MergeWithCustomizer } from '../utils/mergeWith/mergeWithCore';
 
@@ -39,6 +47,32 @@ export type LastComposerChange = { draftUpdate: number | null; stateUpdate: numb
 export type EditingAuditState = {
   lastChange: LastComposerChange;
 };
+
+type PreCommandStateSnapshot = {
+  attachments: LocalAttachment[];
+  textComposer: TextComposerStateSnapshot;
+};
+
+export type BuiltInMessageComposerEffect =
+  | TextComposerCommandActivationEffect
+  | TextComposerCommandClearEffect;
+
+export type CustomMessageComposerEffect = {
+  type: string & {};
+} & Record<string, unknown>;
+
+export type MessageComposerEffect =
+  | BuiltInMessageComposerEffect
+  | CustomMessageComposerEffect;
+
+export type MessageComposerEffectHandler<
+  T extends { type: string } = MessageComposerEffect,
+> = (effect: T, composer: MessageComposer) => void;
+
+type RegisteredMessageComposerEffectHandler = (
+  effect: { type: string },
+  composer: MessageComposer,
+) => void;
 
 export type LocalMessageWithLegacyThreadId = LocalMessage & { legacyThreadId?: string };
 export type CompositionContext = Channel | Thread | LocalMessageWithLegacyThreadId;
@@ -142,6 +176,8 @@ export class MessageComposer extends WithSubscriptions {
   pollComposer: PollComposer;
   locationComposer: LocationComposer;
   customDataManager: CustomDataManager;
+  private preCommandStateSnapshot: PreCommandStateSnapshot | null = null;
+  private effectHandlers = new Map<string, RegisteredMessageComposerEffectHandler>();
   // todo: mediaRecorder: MediaRecorderController;
 
   constructor({
@@ -219,6 +255,7 @@ export class MessageComposer extends WithSubscriptions {
     this.draftCompositionMiddlewareExecutor = new MessageDraftComposerMiddlewareExecutor({
       composer: this,
     });
+    this.registerDefaultEffectHandlers();
   }
 
   static evaluateContextType(compositionContext: CompositionContext) {
@@ -259,6 +296,10 @@ export class MessageComposer extends WithSubscriptions {
 
   setEditedMessage = (editedMessage: LocalMessage | null | undefined) => {
     this.state.partialNext({ editedMessage: editedMessage ?? null });
+    const activeCommand = this.textComposer.command;
+    if (editedMessage && activeCommand && this.isCommandDisabled(activeCommand)) {
+      this.textComposer.clearCommand();
+    }
   };
 
   get contextType() {
@@ -315,6 +356,24 @@ export class MessageComposer extends WithSubscriptions {
   get quotedMessage() {
     return this.state.getLatestValue().quotedMessage;
   }
+
+  getCommandDisabledReason = (
+    command: CommandResponse,
+  ): CommandSuggestionDisabledReason | undefined => {
+    if (this.editedMessage) return 'editing';
+
+    if (
+      this.quotedMessage &&
+      (command.set === 'moderation_set' || command.name === 'moderation_set')
+    ) {
+      return 'quoted_message';
+    }
+
+    return undefined;
+  };
+
+  isCommandDisabled = (command: CommandResponse) =>
+    !!this.getCommandDisabledReason(command);
 
   get pollId() {
     return this.state.getLatestValue().pollId;
@@ -374,6 +433,7 @@ export class MessageComposer extends WithSubscriptions {
   initState = ({
     composition,
   }: { composition?: DraftResponse | MessageResponse | LocalMessage } = {}) => {
+    this.clearTextComposerCommandSnapshot();
     this.editingAuditState.partialNext(this.initEditingAuditState(composition));
 
     const message: LocalMessage | DraftMessage | undefined =
@@ -413,6 +473,74 @@ export class MessageComposer extends WithSubscriptions {
   initEditingAuditState = (
     composition?: DraftResponse | MessageResponse | LocalMessage,
   ) => initEditingAuditState(composition);
+
+  clearTextComposerCommandSnapshot = () => {
+    this.preCommandStateSnapshot = null;
+  };
+
+  private registerDefaultEffectHandlers = () => {
+    this.registerEffectHandler<TextComposerCommandActivationEffect>(
+      'command.activate',
+      (effect) => this.applyCommandActivationEffect(effect),
+    );
+    this.registerEffectHandler<TextComposerCommandClearEffect>('command.clear', () =>
+      this.applyCommandClearEffect(),
+    );
+  };
+
+  registerEffectHandler = <T extends { type: string }>(
+    type: T['type'],
+    handler: MessageComposerEffectHandler<T>,
+  ): void => {
+    this.effectHandlers.set(type, handler as RegisteredMessageComposerEffectHandler);
+  };
+
+  applyEffects = <T extends { type: string }>(effects: T[] = []) => {
+    effects.forEach((effect) => this.applyEffect(effect));
+  };
+
+  private applyEffect = (effect: { type: string }) => {
+    const handler = this.effectHandlers.get(effect.type);
+    handler?.(effect, this);
+  };
+
+  private applyCommandActivationEffect = (
+    effect: TextComposerCommandActivationEffect,
+  ) => {
+    if (!this.preCommandStateSnapshot) {
+      const { mentionedUsers, selection, text } =
+        effect.stateToRestore ?? this.textComposer.state.getLatestValue();
+      this.preCommandStateSnapshot = {
+        attachments: this.attachmentManager.attachments,
+        textComposer: { mentionedUsers, selection, text },
+      };
+    }
+
+    this.attachmentManager.clearAttachments();
+
+    this.textComposer.state.partialNext({
+      command: effect.command,
+      mentionedUsers: [],
+      selection: { start: 0, end: 0 },
+      suggestions: undefined,
+      text: '',
+    });
+  };
+
+  private applyCommandClearEffect = () => {
+    const snapshot = this.preCommandStateSnapshot;
+    this.clearTextComposerCommandSnapshot();
+
+    if (!snapshot) return;
+
+    this.attachmentManager.setAttachments(snapshot.attachments);
+    this.textComposer.state.partialNext({
+      mentionedUsers: snapshot.textComposer.mentionedUsers,
+      selection: snapshot.textComposer.selection,
+      suggestions: undefined,
+      text: snapshot.textComposer.text,
+    });
+  };
 
   private logStateUpdateTimestamp() {
     this.editingAuditState.partialNext({
@@ -671,6 +799,10 @@ export class MessageComposer extends WithSubscriptions {
 
   setQuotedMessage = (quotedMessage: LocalMessage | null) => {
     this.state.partialNext({ quotedMessage });
+    const activeCommand = this.textComposer.command;
+    if (quotedMessage && activeCommand && this.isCommandDisabled(activeCommand)) {
+      this.textComposer.clearCommand();
+    }
   };
 
   toggleShowReplyInChannel = () => {

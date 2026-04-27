@@ -4,13 +4,33 @@ import type { SearchSourceOptions } from '../../../search';
 import { BaseSearchSourceSync } from '../../../search';
 import type { CommandResponse } from '../../../types';
 import { mergeWith } from '../../../utils/mergeWith';
-import type { CommandSuggestion, TextComposerMiddlewareOptions } from './types';
+import type { MessageComposer } from '../../messageComposer';
+import type {
+  CommandSuggestion,
+  TextComposerCommandActivationEffect,
+  TextComposerMiddlewareOptions,
+  TextComposerStateSnapshot,
+} from './types';
 import {
   getCompleteCommandInString,
   getTriggerCharWithToken,
   insertItemWithTrigger,
 } from './textMiddlewareUtils';
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
+
+const emptyCommandStateSnapshot: TextComposerStateSnapshot = {
+  mentionedUsers: [],
+  selection: { start: 0, end: 0 },
+  text: '',
+};
+
+const createCommandActivationEffect = (
+  command: CommandResponse,
+): TextComposerCommandActivationEffect => ({
+  command,
+  stateToRestore: emptyCommandStateSnapshot,
+  type: 'command.activate',
+});
 
 export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion> {
   readonly type = 'commands';
@@ -70,7 +90,10 @@ export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion>
     });
 
     return {
-      items: selectedCommands.map((c) => ({ ...c, id: c.name })),
+      items: selectedCommands.map((command) => ({
+        ...command,
+        id: command.name,
+      })),
       next: null,
     };
   }
@@ -103,6 +126,7 @@ export type CommandsMiddleware = Middleware<
 export const createCommandsMiddleware = (
   channel: Channel,
   options?: Partial<TextComposerMiddlewareOptions> & {
+    composer?: MessageComposer;
     searchSource?: CommandSearchSource;
   },
 ): CommandsMiddleware => {
@@ -123,7 +147,8 @@ export const createCommandsMiddleware = (
         const commandName = getCompleteCommandInString(finalText);
         if (commandName) {
           const command = searchSource?.query(commandName).items[0];
-          if (command) {
+          const composer = options?.composer;
+          if (command && !composer?.isCommandDisabled(command)) {
             return next({
               ...state,
               command,
@@ -172,6 +197,28 @@ export const createCommandsMiddleware = (
         const { selectedSuggestion } = state.change ?? {};
         if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
           return forward();
+        const composer = options?.composer;
+        const disabledReason = composer?.getCommandDisabledReason(selectedSuggestion);
+        if (composer && disabledReason) {
+          composer.client.notifications.addWarning({
+            message:
+              disabledReason === 'editing'
+                ? 'Not available while editing'
+                : 'Not available while replying',
+            origin: {
+              emitter: 'MessageComposer',
+              context: { command: selectedSuggestion, composer },
+            },
+            options: {
+              type: 'validation:command:disabled',
+              metadata: {
+                command: selectedSuggestion.name,
+                reason: disabledReason,
+              },
+            },
+          });
+          return next(state);
+        }
 
         searchSource.resetStateAndActivate();
         return next({
@@ -183,6 +230,10 @@ export const createCommandsMiddleware = (
             trigger: finalOptions.trigger,
           }),
           command: selectedSuggestion,
+          effects: [
+            ...(state.effects ?? []),
+            createCommandActivationEffect(selectedSuggestion),
+          ],
           suggestions: undefined,
         });
       },

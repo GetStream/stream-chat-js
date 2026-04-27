@@ -212,6 +212,15 @@ export class AttachmentManager {
     this.state.next(initState({ message }));
   };
 
+  setAttachments = (attachments: LocalAttachment[]) => {
+    this.state.partialNext({ attachments });
+  };
+
+  clearAttachments = () => {
+    if (!this.attachments.length) return;
+    this.setAttachments([]);
+  };
+
   getAttachmentIndex = (localId: string) => {
     const attachmentsById = this.attachmentsById;
 
