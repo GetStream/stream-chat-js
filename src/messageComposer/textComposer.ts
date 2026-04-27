@@ -156,6 +156,7 @@ export class TextComposer {
   clearCommand() {
     this.commitState({
       ...this.state.getLatestValue(),
+      command: null,
       effects: [{ type: 'command.clear' }],
     });
   }

@@ -474,20 +474,14 @@ export class MessageComposer extends WithSubscriptions {
     const snapshot = this.preCommandStateSnapshot;
     this.clearTextComposerCommandSnapshot();
 
-    if (snapshot) {
-      this.attachmentManager.setAttachments(snapshot.attachments);
-      this.textComposer.state.partialNext({
-        command: null,
-        mentionedUsers: snapshot.textComposer.mentionedUsers,
-        selection: snapshot.textComposer.selection,
-        suggestions: undefined,
-        text: snapshot.textComposer.text,
-      });
-      return;
-    }
+    if (!snapshot) return;
 
+    this.attachmentManager.setAttachments(snapshot.attachments);
     this.textComposer.state.partialNext({
-      command: null,
+      mentionedUsers: snapshot.textComposer.mentionedUsers,
+      selection: snapshot.textComposer.selection,
+      suggestions: undefined,
+      text: snapshot.textComposer.text,
     });
   };
 
