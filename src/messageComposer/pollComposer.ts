@@ -13,6 +13,8 @@ import type {
   UpdateFieldsData,
 } from './middleware/pollComposer';
 
+export type PollComposerSnapshot = PollComposerState;
+
 export type PollComposerOptions = {
   composer: MessageComposer;
 };
@@ -105,6 +107,12 @@ export class PollComposer {
 
   initState = () => {
     this.state.next(this.initialState);
+  };
+
+  getSnapshot = (): PollComposerSnapshot => this.state.getLatestValue();
+
+  restoreSnapshot = (snapshot: PollComposerSnapshot) => {
+    this.state.next(snapshot);
   };
 
   /**

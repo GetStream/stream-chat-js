@@ -24,6 +24,8 @@ export type LocationComposerState = {
   location: StaticLocationPreview | LiveLocationPreview | null;
 };
 
+export type LocationComposerSnapshot = LocationComposerState;
+
 const MIN_LIVE_LOCATION_SHARE_DURATION = 60 * 1000; // 1 minute;
 
 const initState = ({
@@ -77,6 +79,16 @@ export class LocationComposer {
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
     this.state.next(initState({ message }));
+  };
+
+  getSnapshot = (): LocationComposerSnapshot => this.state.getLatestValue();
+
+  restoreSnapshot = (snapshot: LocationComposerSnapshot) => {
+    this.state.next(snapshot);
+  };
+
+  clear = () => {
+    this.state.next({ location: null });
   };
 
   setData = (data: { durationMs?: number } & Coords) => {

@@ -41,6 +41,8 @@ export type AttachmentManagerState = {
   attachments: LocalAttachment[];
 };
 
+export type AttachmentManagerSnapshot = AttachmentManagerState;
+
 export type AttachmentManagerOptions = {
   composer: MessageComposer;
   message?: DraftMessage | LocalMessage;
@@ -210,6 +212,12 @@ export class AttachmentManager {
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
     this.state.next(initState({ message }));
+  };
+
+  getSnapshot = (): AttachmentManagerSnapshot => this.state.getLatestValue();
+
+  restoreSnapshot = (snapshot: AttachmentManagerSnapshot) => {
+    this.state.next(snapshot);
   };
 
   setAttachments = (attachments: LocalAttachment[]) => {

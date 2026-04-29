@@ -2,6 +2,7 @@ import { AttachmentManager } from './attachmentManager';
 import { CustomDataManager } from './CustomDataManager';
 import { LinkPreviewsManager } from './linkPreviewsManager';
 import { LocationComposer } from './LocationComposer';
+import { MessageComposerEffectHandlers } from './MessageComposerEffectHandlers';
 import { PollComposer } from './pollComposer';
 import { TextComposer } from './textComposer';
 import { DEFAULT_COMPOSER_CONFIG } from './configuration';
@@ -34,9 +35,13 @@ import type {
   CommandSuggestionDisabledReason,
   TextComposerCommandActivationEffect,
   TextComposerCommandClearEffect,
-  TextComposerStateSnapshot,
 } from './middleware/textComposer/types';
-import type { LocalAttachment } from './types';
+import type { AttachmentManagerSnapshot } from './attachmentManager';
+import type { CustomDataManagerSnapshot } from './CustomDataManager';
+import type { LinkPreviewsManagerSnapshot } from './linkPreviewsManager';
+import type { LocationComposerSnapshot } from './LocationComposer';
+import type { PollComposerSnapshot } from './pollComposer';
+import type { TextComposerSnapshot } from './textComposer';
 import type { DeepPartial } from '../types.utility';
 import type { MergeWithCustomizer } from '../utils/mergeWith/mergeWithCore';
 
@@ -46,11 +51,6 @@ export type LastComposerChange = { draftUpdate: number | null; stateUpdate: numb
 
 export type EditingAuditState = {
   lastChange: LastComposerChange;
-};
-
-type PreCommandStateSnapshot = {
-  attachments: LocalAttachment[];
-  textComposer: TextComposerStateSnapshot;
 };
 
 export type BuiltInMessageComposerEffect =
@@ -69,10 +69,14 @@ export type MessageComposerEffectHandler<
   T extends { type: string } = MessageComposerEffect,
 > = (effect: T, composer: MessageComposer) => void;
 
-type RegisteredMessageComposerEffectHandler = (
-  effect: { type: string },
-  composer: MessageComposer,
-) => void;
+export type MessageComposerSnapshot = {
+  attachmentManager: AttachmentManagerSnapshot;
+  customDataManager: CustomDataManagerSnapshot;
+  linkPreviewsManager: LinkPreviewsManagerSnapshot;
+  locationComposer: LocationComposerSnapshot;
+  pollComposer: PollComposerSnapshot;
+  textComposer: TextComposerSnapshot;
+};
 
 export type LocalMessageWithLegacyThreadId = LocalMessage & { legacyThreadId?: string };
 export type CompositionContext = Channel | Thread | LocalMessageWithLegacyThreadId;
@@ -176,8 +180,8 @@ export class MessageComposer extends WithSubscriptions {
   pollComposer: PollComposer;
   locationComposer: LocationComposer;
   customDataManager: CustomDataManager;
-  private preCommandStateSnapshot: PreCommandStateSnapshot | null = null;
-  private effectHandlers = new Map<string, RegisteredMessageComposerEffectHandler>();
+  private snapshots: MessageComposerSnapshot[] = [];
+  private effectHandlers: MessageComposerEffectHandlers;
   // todo: mediaRecorder: MediaRecorderController;
 
   constructor({
@@ -255,7 +259,12 @@ export class MessageComposer extends WithSubscriptions {
     this.draftCompositionMiddlewareExecutor = new MessageDraftComposerMiddlewareExecutor({
       composer: this,
     });
-    this.registerDefaultEffectHandlers();
+    this.effectHandlers = new MessageComposerEffectHandlers({
+      composer: this,
+      captureSnapshot: this.captureSnapshot,
+      restoreLatestSnapshot: this.restoreLatestSnapshot,
+      restoreSnapshot: this.restoreSnapshot,
+    });
   }
 
   static evaluateContextType(compositionContext: CompositionContext) {
@@ -433,7 +442,7 @@ export class MessageComposer extends WithSubscriptions {
   initState = ({
     composition,
   }: { composition?: DraftResponse | MessageResponse | LocalMessage } = {}) => {
-    this.clearTextComposerCommandSnapshot();
+    this.clearSnapshots();
     this.editingAuditState.partialNext(this.initEditingAuditState(composition));
 
     const message: LocalMessage | DraftMessage | undefined =
@@ -474,72 +483,44 @@ export class MessageComposer extends WithSubscriptions {
     composition?: DraftResponse | MessageResponse | LocalMessage,
   ) => initEditingAuditState(composition);
 
-  clearTextComposerCommandSnapshot = () => {
-    this.preCommandStateSnapshot = null;
+  clearSnapshots = () => {
+    this.snapshots = [];
   };
 
-  private registerDefaultEffectHandlers = () => {
-    this.registerEffectHandler<TextComposerCommandActivationEffect>(
-      'command.activate',
-      (effect) => this.applyCommandActivationEffect(effect),
-    );
-    this.registerEffectHandler<TextComposerCommandClearEffect>('command.clear', () =>
-      this.applyCommandClearEffect(),
-    );
+  getSnapshot = (): MessageComposerSnapshot => ({
+    attachmentManager: this.attachmentManager.getSnapshot(),
+    customDataManager: this.customDataManager.getSnapshot(),
+    linkPreviewsManager: this.linkPreviewsManager.getSnapshot(),
+    locationComposer: this.locationComposer.getSnapshot(),
+    pollComposer: this.pollComposer.getSnapshot(),
+    textComposer: this.textComposer.getSnapshot(),
+  });
+
+  restoreSnapshot = (snapshot: MessageComposerSnapshot) => {
+    this.attachmentManager.restoreSnapshot(snapshot.attachmentManager);
+    this.linkPreviewsManager.restoreSnapshot(snapshot.linkPreviewsManager);
+    this.locationComposer.restoreSnapshot(snapshot.locationComposer);
+    this.pollComposer.restoreSnapshot(snapshot.pollComposer);
+    this.customDataManager.restoreSnapshot(snapshot.customDataManager);
+    this.textComposer.restoreSnapshot(snapshot.textComposer);
   };
+
+  private captureSnapshot = (snapshot = this.getSnapshot()) => {
+    if (this.snapshots.length) return;
+    this.snapshots.push(snapshot);
+  };
+
+  private restoreLatestSnapshot = () => this.snapshots.pop();
 
   registerEffectHandler = <T extends { type: string }>(
     type: T['type'],
     handler: MessageComposerEffectHandler<T>,
   ): void => {
-    this.effectHandlers.set(type, handler as RegisteredMessageComposerEffectHandler);
+    this.effectHandlers.registerEffectHandler(type, handler);
   };
 
   applyEffects = <T extends { type: string }>(effects: T[] = []) => {
-    effects.forEach((effect) => this.applyEffect(effect));
-  };
-
-  private applyEffect = (effect: { type: string }) => {
-    const handler = this.effectHandlers.get(effect.type);
-    handler?.(effect, this);
-  };
-
-  private applyCommandActivationEffect = (
-    effect: TextComposerCommandActivationEffect,
-  ) => {
-    if (!this.preCommandStateSnapshot) {
-      const { mentionedUsers, selection, text } =
-        effect.stateToRestore ?? this.textComposer.state.getLatestValue();
-      this.preCommandStateSnapshot = {
-        attachments: this.attachmentManager.attachments,
-        textComposer: { mentionedUsers, selection, text },
-      };
-    }
-
-    this.attachmentManager.clearAttachments();
-
-    this.textComposer.state.partialNext({
-      command: effect.command,
-      mentionedUsers: [],
-      selection: { start: 0, end: 0 },
-      suggestions: undefined,
-      text: '',
-    });
-  };
-
-  private applyCommandClearEffect = () => {
-    const snapshot = this.preCommandStateSnapshot;
-    this.clearTextComposerCommandSnapshot();
-
-    if (!snapshot) return;
-
-    this.attachmentManager.setAttachments(snapshot.attachments);
-    this.textComposer.state.partialNext({
-      mentionedUsers: snapshot.textComposer.mentionedUsers,
-      selection: snapshot.textComposer.selection,
-      suggestions: undefined,
-      text: snapshot.textComposer.text,
-    });
+    this.effectHandlers.applyEffects(effects);
   };
 
   private logStateUpdateTimestamp() {

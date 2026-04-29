@@ -1,4 +1,5 @@
 import { createCommandsMiddleware } from './commands';
+import { createCommandEffectsMiddleware } from './commandEffects';
 import { createMentionsMiddleware } from './mentions';
 import { createTextComposerPreValidationMiddleware } from './validation';
 import { MiddlewareExecutor } from '../../../middleware';
@@ -48,6 +49,7 @@ export class TextComposerMiddlewareExecutor<
       createCommandsMiddleware(composer.channel, {
         composer,
       }) as TextComposerMiddleware<T>,
+      createCommandEffectsMiddleware() as TextComposerMiddleware<T>,
     ]);
   }
 

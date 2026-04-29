@@ -14,6 +14,8 @@ export type TextComposerOptions = {
   message?: DraftMessage | LocalMessage;
 };
 
+export type TextComposerSnapshot = TextComposerState;
+
 export const textIsEmpty = (text: string) => {
   const trimmedText = text.trim();
   return (
@@ -145,8 +147,14 @@ export class TextComposer {
   }
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
-    this.composer.clearTextComposerCommandSnapshot();
+    this.composer.clearSnapshots();
     this.state.next(initState({ composer: this.composer, message }));
+  };
+
+  getSnapshot = (state = this.state.getLatestValue()): TextComposerSnapshot => state;
+
+  restoreSnapshot = (snapshot: TextComposerSnapshot) => {
+    this.state.next(snapshot);
   };
 
   setMentionedUsers(users: UserResponse[]) {

@@ -38,6 +38,8 @@ export type LinkPreviewsManagerState = {
   previews: LinkPreviewMap;
 };
 
+export type LinkPreviewsManagerSnapshot = LinkPreviewsManagerState;
+
 export type LinkPreviewsManagerOptions = {
   composer: MessageComposer;
   message?: DraftMessage | LocalMessage;
@@ -189,6 +191,17 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
     this.state.next(initState({ message: this.enabled ? message : undefined }));
   };
 
+  getSnapshot = (): LinkPreviewsManagerSnapshot => this.state.getLatestValue();
+
+  restoreSnapshot = (snapshot: LinkPreviewsManagerSnapshot) => {
+    this.state.next(snapshot);
+  };
+
+  clear = () => {
+    this.cancelURLEnrichment();
+    this.state.next({ previews: new Map() });
+  };
+
   private _findAndEnrichUrls = async (text: string) => {
     if (!this.enabled) return;
     const urls = this.config.findURLFn(text);
@@ -254,8 +267,8 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
   };
 
   cancelURLEnrichment = () => {
-    this.findAndEnrichUrls.cancel();
-    this.findAndEnrichUrls.flush();
+    this.findAndEnrichUrls.cancel?.();
+    this.findAndEnrichUrls.flush?.();
   };
 
   /**
