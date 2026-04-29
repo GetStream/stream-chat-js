@@ -1,3 +1,9 @@
+## [9.42.2](https://github.com/GetStream/stream-chat-js/compare/v9.42.1...v9.42.2) (2026-04-29)
+
+### Bug Fixes
+
+* update RN SDK name ([#1724](https://github.com/GetStream/stream-chat-js/issues/1724)) ([bfea6e5](https://github.com/GetStream/stream-chat-js/commit/bfea6e57785cb32473d9eb1cc1d9c0854a3b237e))
+
 ## [9.42.1](https://github.com/GetStream/stream-chat-js/compare/v9.42.0...v9.42.1) (2026-04-24)
 
 ### Bug Fixes
