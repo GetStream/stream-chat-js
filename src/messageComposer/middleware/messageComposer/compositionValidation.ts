@@ -1,4 +1,5 @@
 import { textIsEmpty } from '../../textComposer';
+import type { CommandResponse } from '../../../types';
 import type {
   MessageComposerMiddlewareState,
   MessageCompositionMiddleware,
@@ -7,6 +8,54 @@ import type {
 } from './types';
 import type { MessageComposer } from '../../messageComposer';
 import type { MiddlewareHandlerParams } from '../../../middleware';
+
+const getRawCommandName = (text?: string) => text?.match(/^\/(\S+)(?:\s.*)?$/)?.[1];
+
+const getCommandByName = (
+  composer: MessageComposer,
+  commandName?: string,
+): CommandResponse | undefined => {
+  if (!commandName) return;
+
+  return composer.channel
+    .getConfig()
+    ?.commands?.find(
+      (command) => command.name?.toLowerCase() === commandName.toLowerCase(),
+    );
+};
+
+const getDisabledRawCommand = (
+  composer: MessageComposer,
+  text?: string,
+): CommandResponse | undefined => {
+  const rawCommand = getCommandByName(composer, getRawCommandName(text));
+  if (rawCommand && composer.isCommandDisabled(rawCommand)) {
+    return rawCommand;
+  }
+};
+
+const notifyCommandDisabled = (composer: MessageComposer, command: CommandResponse) => {
+  const disabledReason = composer.getCommandDisabledReason(command);
+  if (!disabledReason) return;
+
+  composer.client.notifications.addWarning({
+    message:
+      disabledReason === 'editing'
+        ? 'Not available while editing'
+        : 'Not available while replying',
+    origin: {
+      emitter: 'MessageComposer',
+      context: { command, composer },
+    },
+    options: {
+      type: 'validation:command:disabled',
+      metadata: {
+        command: command.name,
+        reason: disabledReason,
+      },
+    },
+  });
+};
 
 export const createCompositionValidationMiddleware = (
   composer: MessageComposer,
@@ -20,6 +69,12 @@ export const createCompositionValidationMiddleware = (
     }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
       const { maxLengthOnSend } = composer.config.text ?? {};
       const inputText = state.message.text ?? '';
+
+      const disabledRawCommand = getDisabledRawCommand(composer, inputText);
+      if (disabledRawCommand) {
+        notifyCommandDisabled(composer, disabledRawCommand);
+        return await discard();
+      }
 
       const hasExceededMaxLength =
         typeof maxLengthOnSend === 'number' && inputText.length > maxLengthOnSend;
