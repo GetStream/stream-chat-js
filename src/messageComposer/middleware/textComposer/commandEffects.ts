@@ -3,7 +3,7 @@ import type { CommandResponse } from '../../../types';
 import type {
   CommandSuggestion,
   TextComposerCommandActivationEffect,
-  TextComposerStateSnapshot,
+  TextComposerCommandActivationStateToRestore,
 } from './types';
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
 
@@ -12,8 +12,7 @@ export type CommandEffectsMiddleware = Middleware<
   'onChange' | 'onSuggestionItemSelect'
 >;
 
-const emptyCommandStateSnapshot: TextComposerStateSnapshot = {
-  mentionedUsers: [],
+const emptyCommandStateToRestore: TextComposerCommandActivationStateToRestore = {
   selection: { start: 0, end: 0 },
   text: '',
 };
@@ -22,7 +21,7 @@ const createCommandActivationEffect = (
   command: CommandResponse,
 ): TextComposerCommandActivationEffect => ({
   command,
-  stateToRestore: emptyCommandStateSnapshot,
+  stateToRestore: emptyCommandStateToRestore,
   type: 'command.activate',
 });
 

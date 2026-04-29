@@ -4,7 +4,11 @@ import { logChatPromiseExecution } from '../utils';
 import type { TextComposerMiddlewareExecutorState } from './middleware';
 import type { TextComposerSuggestion } from './middleware/textComposer/types';
 import type { TextSelection } from './middleware/textComposer/types';
-import type { TextComposerState } from './middleware/textComposer/types';
+import type {
+  TextComposerCommandActivationEffect,
+  TextComposerState,
+  TextComposerStateSnapshot,
+} from './middleware/textComposer/types';
 import type { Suggestions } from './middleware/textComposer/types';
 import type { MessageComposer } from './messageComposer';
 import type { CommandResponse, DraftMessage, LocalMessage, UserResponse } from '../types';
@@ -14,7 +18,7 @@ export type TextComposerOptions = {
   message?: DraftMessage | LocalMessage;
 };
 
-export type TextComposerSnapshot = TextComposerState;
+export type TextComposerSnapshot = TextComposerStateSnapshot;
 
 export const textIsEmpty = (text: string) => {
   const trimmedText = text.trim();
@@ -200,17 +204,17 @@ export class TextComposer {
     if (command.name === this.command?.name) return;
     if (this.composer.isCommandDisabled(command)) return;
 
+    const stateToRestore: TextComposerCommandActivationEffect['stateToRestore'] = {
+      command: null,
+    };
+
     this.commitState({
       ...this.state.getLatestValue(),
       command,
       effects: [
         {
           command,
-          stateToRestore: {
-            mentionedUsers: this.mentionedUsers,
-            selection: this.selection,
-            text: this.text,
-          },
+          stateToRestore,
           type: 'command.activate',
         },
       ],

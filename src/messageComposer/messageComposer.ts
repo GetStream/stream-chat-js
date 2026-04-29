@@ -259,12 +259,7 @@ export class MessageComposer extends WithSubscriptions {
     this.draftCompositionMiddlewareExecutor = new MessageDraftComposerMiddlewareExecutor({
       composer: this,
     });
-    this.effectHandlers = new MessageComposerEffectHandlers({
-      composer: this,
-      captureSnapshot: this.captureSnapshot,
-      restoreLatestSnapshot: this.restoreLatestSnapshot,
-      restoreSnapshot: this.restoreSnapshot,
-    });
+    this.effectHandlers = new MessageComposerEffectHandlers({ composer: this });
   }
 
   static evaluateContextType(compositionContext: CompositionContext) {
@@ -505,12 +500,12 @@ export class MessageComposer extends WithSubscriptions {
     this.textComposer.restoreSnapshot(snapshot.textComposer);
   };
 
-  private captureSnapshot = (snapshot = this.getSnapshot()) => {
+  captureSnapshot = (snapshot = this.getSnapshot()) => {
     if (this.snapshots.length) return;
     this.snapshots.push(snapshot);
   };
 
-  private restoreLatestSnapshot = () => this.snapshots.pop();
+  popSnapshot = () => this.snapshots.pop();
 
   registerEffectHandler = <T extends { type: string }>(
     type: T['type'],

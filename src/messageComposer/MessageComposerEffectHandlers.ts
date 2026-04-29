@@ -1,8 +1,4 @@
-import type {
-  MessageComposer,
-  MessageComposerEffectHandler,
-  MessageComposerSnapshot,
-} from './messageComposer';
+import type { MessageComposer, MessageComposerEffectHandler } from './messageComposer';
 import type {
   TextComposerCommandActivationEffect,
   TextComposerCommandClearEffect,
@@ -15,9 +11,6 @@ type RegisteredMessageComposerEffectHandler = (
 
 export type MessageComposerEffectHandlersOptions = {
   composer: MessageComposer;
-  captureSnapshot: (snapshot?: MessageComposerSnapshot) => void;
-  restoreLatestSnapshot: () => MessageComposerSnapshot | undefined;
-  restoreSnapshot: (snapshot: MessageComposerSnapshot) => void;
 };
 
 export class MessageComposerEffectHandlers {
@@ -58,39 +51,35 @@ export class MessageComposerEffectHandlers {
     (effect, composer) => {
       const snapshot = composer.getSnapshot();
       if (effect.stateToRestore) {
-        snapshot.textComposer = composer.textComposer.getSnapshot({
+        snapshot.textComposer = {
+          ...snapshot.textComposer,
+          ...effect.stateToRestore,
           command: null,
-          mentionedUsers: effect.stateToRestore.mentionedUsers,
-          selection: effect.stateToRestore.selection,
-          text: effect.stateToRestore.text,
-        });
+        };
       }
-      this.options.captureSnapshot(snapshot);
+      composer.captureSnapshot(snapshot);
 
+      // we manually clear because we want the command to still persist
+      composer.textComposer.state.next({
+        command: effect.command,
+        mentionedUsers: [],
+        suggestions: undefined,
+        selection: { start: 0, end: 0 },
+        text: '',
+      });
       composer.attachmentManager.clearAttachments();
       composer.linkPreviewsManager.clear();
       composer.locationComposer.clear();
       composer.pollComposer.initState();
       composer.customDataManager.initState();
-
-      composer.textComposer.state.partialNext({
-        command: effect.command,
-        mentionedUsers: [],
-        selection: { start: 0, end: 0 },
-        suggestions: undefined,
-        text: '',
-      });
     };
 
   private applyCommandClearEffect: MessageComposerEffectHandler<TextComposerCommandClearEffect> =
     (_, composer) => {
-      const snapshot = this.options.restoreLatestSnapshot();
+      const snapshot = composer.popSnapshot();
 
-      if (!snapshot) {
-        composer.textComposer.state.partialNext({ command: null });
-        return;
-      }
+      if (!snapshot) return;
 
-      this.options.restoreSnapshot(snapshot);
+      composer.restoreSnapshot(snapshot);
     };
 }

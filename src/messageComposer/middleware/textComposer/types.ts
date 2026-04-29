@@ -20,14 +20,14 @@ export type UserSuggestion = BaseSuggestion & UserResponse & TokenizationPayload
 export type CustomValidSuggestion = BaseSuggestion & CustomTextComposerSuggestion;
 export type Suggestion = CommandSuggestion | UserSuggestion | CustomValidSuggestion;
 
-export type TextComposerStateSnapshot = Pick<
-  TextComposerState,
-  'mentionedUsers' | 'selection' | 'text'
->;
+export type TextComposerStateSnapshot = TextComposerState;
+
+export type TextComposerCommandActivationStateToRestore =
+  Partial<TextComposerStateSnapshot>;
 
 export type TextComposerCommandActivationEffect = {
   command: CommandResponse;
-  stateToRestore?: TextComposerStateSnapshot;
+  stateToRestore?: TextComposerCommandActivationStateToRestore;
   type: 'command.activate';
 };
 
