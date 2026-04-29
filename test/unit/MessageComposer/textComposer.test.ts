@@ -401,6 +401,38 @@ describe('TextComposer', () => {
       expectChildComposerStateToBeRestored(messageComposer);
     });
 
+    it('restores uploading attachments as failed after canceling a direct command', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+      const uploadingAttachment = {
+        ...attachment,
+        localMetadata: {
+          ...attachment.localMetadata,
+          uploadProgress: 50,
+          uploadState: 'uploading',
+        },
+      } as LocalAttachment;
+
+      messageComposer.attachmentManager.state.partialNext({
+        attachments: [uploadingAttachment],
+      });
+
+      textComposer.setCommand({ name: 'ban' });
+      textComposer.clearCommand();
+
+      expect(messageComposer.attachmentManager.attachments).toEqual([
+        expect.objectContaining({
+          localMetadata: expect.objectContaining({
+            id: 'attachment-1',
+            uploadProgress: undefined,
+            uploadState: 'failed',
+          }),
+        }),
+      ]);
+    });
+
     it('allows middleware to opt out of snapshot clearing by removing the command activation effect', async () => {
       const {
         messageComposer,
