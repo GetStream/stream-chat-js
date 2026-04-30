@@ -10,7 +10,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-node
 
@@ -31,11 +31,11 @@ jobs:
           done
 
       - name: Notify Slack if failed
-        uses: voxmedia/github-action-slack-notify-build@v1
         if: failure()
+        uses: slackapi/slack-github-action@v3
         with:
-          channel_id: C02RPDF7T63
-          color: danger
-          status: FAILED
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_NOTIFICATIONS_BOT_TOKEN }}
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_NOTIFICATIONS_BOT_TOKEN }}
+          payload: |
+            channel: "C02RPDF7T63"
+            text: "Scheduled tests FAILED on ${{ github.repository }}@${{ github.ref_name }} — <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|view run>"
