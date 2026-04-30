@@ -1,3 +1,9 @@
+## [9.43.0](https://github.com/GetStream/stream-chat-js/compare/v9.42.3...v9.43.0) (2026-04-30)
+
+### Features
+
+* advanced commands flow and composer effects ([#1723](https://github.com/GetStream/stream-chat-js/issues/1723)) ([5bcd1e6](https://github.com/GetStream/stream-chat-js/commit/5bcd1e62ee1094a7fa0240538e33baafe2c16a74))
+
 ## [9.42.3](https://github.com/GetStream/stream-chat-js/compare/v9.42.2...v9.42.3) (2026-04-30)
 
 ### Bug Fixes
