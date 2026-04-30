@@ -1,4 +1,5 @@
 import type { TextSelection } from './types';
+import { escapeCommandRegExp } from './commandUtils';
 
 /**
  * For commands, we want to match all patterns except:
@@ -16,7 +17,7 @@ export const getTriggerCharWithToken = ({
   isCommand?: boolean;
   acceptTrailingSpaces?: boolean;
 }) => {
-  const escapedTrigger = escapeRegExp(trigger);
+  const escapedTrigger = escapeCommandRegExp(trigger);
   const triggerNorWhitespace = `[^\\s${escapedTrigger}]*`;
 
   const match = text.match(
@@ -31,14 +32,6 @@ export const getTriggerCharWithToken = ({
   );
 
   return match && match[match.length - 1].trim();
-};
-
-export const getCompleteCommandInString = (text: string) => {
-  // starts with "/" followed by 1+ non-whitespace chars followed by 1+ white-space chars
-  // the comand name is extracted into a separate group
-  const match = text.match(/^\/(\S+)\s+.*/);
-  const commandName = match && match[1];
-  return commandName;
 };
 
 export const insertItemWithTrigger = ({
@@ -93,42 +86,6 @@ export const replaceWordWithEntity = async ({
   return textBeforeWord + newWord + spaces + textAfterCaret;
 };
 
-/**
- * Escapes a string for use in a regular expression
- * @param text - The string to escape
- * @returns The escaped string
- * What does this regex do?
-
- The regex escapes special regex characters by adding a backslash before them. Here's what it matches:
- - dash
- [ ] square brackets
- { } curly braces
- ( ) parentheses
- * asterisk
- + plus
- ? question mark
- . period
- , comma
- / forward slash
- \ backslash
- ^ caret
- $ dollar sign
- | pipe
- # hash
-
- The \\$& replacement adds a backslash before any matched character.
- This is needed when you want to use these characters literally
- in a regex pattern instead of their special regex meanings.
- For example:
- escapeRegExp("hello.world")  // Returns: "hello\.world"
- escapeRegExp("[test]")       // Returns: "\[test\]"
-
- This is commonly used when building dynamic regex patterns from user input to prevent special characters from being interpreted as regex syntax.
- */
-export function escapeRegExp(text: string) {
-  return text.replace(/[-[\]{}()*+?.,/\\^$|#]/g, '\\$&');
-}
-
 export type TokenizationPayload = {
   tokenizedDisplayName: { token: string; parts: string[] };
 };
@@ -144,7 +101,7 @@ export const getTokenizedSuggestionDisplayName = ({
     token: searchToken,
     parts: searchToken
       ? displayName
-          .split(new RegExp(`(${escapeRegExp(searchToken)})`, 'gi'))
+          .split(new RegExp(`(${escapeCommandRegExp(searchToken)})`, 'gi'))
           .filter(Boolean)
       : [displayName],
   },

@@ -6,11 +6,8 @@ import type { CommandResponse } from '../../../types';
 import { mergeWith } from '../../../utils/mergeWith';
 import type { MessageComposer } from '../../messageComposer';
 import type { CommandSuggestion, TextComposerMiddlewareOptions } from './types';
-import {
-  getCompleteCommandInString,
-  getTriggerCharWithToken,
-  insertItemWithTrigger,
-} from './textMiddlewareUtils';
+import { getCompleteCommandInString } from './commandUtils';
+import { getTriggerCharWithToken, insertItemWithTrigger } from './textMiddlewareUtils';
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
 import { notifyCommandDisabled } from '../messageComposer/commandNotification';
 

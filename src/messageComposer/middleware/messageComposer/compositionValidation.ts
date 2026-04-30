@@ -1,6 +1,7 @@
 import { textIsEmpty } from '../../textComposer';
 import type { CommandResponse } from '../../../types';
 import { CommandSearchSource } from '../textComposer/commands';
+import { getRawCommandName } from '../textComposer/commandUtils';
 import type {
   MessageComposerMiddlewareState,
   MessageCompositionMiddleware,
@@ -10,8 +11,6 @@ import type {
 import type { MessageComposer } from '../../messageComposer';
 import type { MiddlewareHandlerParams } from '../../../middleware';
 import { notifyCommandDisabled } from './commandNotification';
-
-const getRawCommandName = (text?: string) => text?.match(/^\/(\S+)(?:\s.*)?$/)?.[1];
 
 const getCommandByName = (
   searchSource: CommandSearchSource,
