@@ -67,12 +67,13 @@ describe('Apply Command Settings Middleware', () => {
       messageComposer: { textComposer },
     } = setup();
     const middleware = textComposer.middlewareExecutor.middleware;
-    expect(middleware.length).toBe(5);
+    expect(middleware.length).toBe(6);
     expect(middleware[0].id).toBe('stream-io/text-composer/pre-validation-middleware');
     expect(middleware[1].id).toBe('stream-io/text-composer/mentions-middleware');
     expect(middleware[2].id).toBe('stream-io/text-composer/active-command-guard');
     expect(middleware[3].id).toBe('stream-io/text-composer/commands-middleware');
     expect(middleware[4].id).toBe('stream-io/text-composer/command-string-extraction');
+    expect(middleware[5].id).toBe('stream-io/text-composer/command-effects-middleware');
   });
 
   it.each([

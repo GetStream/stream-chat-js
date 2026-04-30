@@ -11,7 +11,7 @@ export type LinkPreview = OGAttachment & {
 };
 
 export interface ILinkPreviewsManager {
-  /** Function cancels all the scheduled or in-progress URL enrichment queries and resets the state. */
+  /** Function cancels all scheduled or in-progress URL enrichment queries. */
   cancelURLEnrichment: () => void;
   /** Function that triggers the search for URLs and their enrichment. */
   findAndEnrichUrls?: DebouncedFunc<(text: string) => void>;
@@ -37,6 +37,8 @@ export type LinkPreviewMap = Map<LinkURL, LinkPreview>;
 export type LinkPreviewsManagerState = {
   previews: LinkPreviewMap;
 };
+
+export type LinkPreviewsManagerSnapshot = LinkPreviewsManagerState;
 
 export type LinkPreviewsManagerOptions = {
   composer: MessageComposer;
@@ -186,7 +188,14 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
   }
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
+    this.cancelURLEnrichment();
     this.state.next(initState({ message: this.enabled ? message : undefined }));
+  };
+
+  getSnapshot = (): LinkPreviewsManagerSnapshot => this.state.getLatestValue();
+
+  restoreSnapshot = (snapshot: LinkPreviewsManagerSnapshot) => {
+    this.state.next(snapshot);
   };
 
   private _findAndEnrichUrls = async (text: string) => {
@@ -254,8 +263,8 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
   };
 
   cancelURLEnrichment = () => {
-    this.findAndEnrichUrls.cancel();
-    this.findAndEnrichUrls.flush();
+    this.findAndEnrichUrls.cancel?.();
+    this.findAndEnrichUrls.flush?.();
   };
 
   /**

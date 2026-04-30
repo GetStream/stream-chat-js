@@ -2,6 +2,7 @@ import { AttachmentManager } from './attachmentManager';
 import { CustomDataManager } from './CustomDataManager';
 import { LinkPreviewsManager } from './linkPreviewsManager';
 import { LocationComposer } from './LocationComposer';
+import { MessageComposerEffectHandlers } from './MessageComposerEffectHandlers';
 import { PollComposer } from './pollComposer';
 import { TextComposer } from './textComposer';
 import { DEFAULT_COMPOSER_CONFIG } from './configuration';
@@ -18,6 +19,7 @@ import { Channel } from '../channel';
 import { Thread } from '../thread';
 import type {
   ChannelAPIResponse,
+  CommandResponse,
   DraftMessage,
   DraftResponse,
   EventTypes,
@@ -29,6 +31,17 @@ import type {
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { StreamChat } from '../client';
 import type { MessageComposerConfig } from './configuration/types';
+import type {
+  CommandSuggestionDisabledReason,
+  TextComposerCommandActivationEffect,
+  TextComposerCommandClearEffect,
+} from './middleware/textComposer/types';
+import type { AttachmentManagerSnapshot } from './attachmentManager';
+import type { CustomDataManagerSnapshot } from './CustomDataManager';
+import type { LinkPreviewsManagerSnapshot } from './linkPreviewsManager';
+import type { LocationComposerSnapshot } from './LocationComposer';
+import type { PollComposerSnapshot } from './pollComposer';
+import type { TextComposerSnapshot } from './textComposer';
 import type { DeepPartial } from '../types.utility';
 import type { MergeWithCustomizer } from '../utils/mergeWith/mergeWithCore';
 
@@ -38,6 +51,31 @@ export type LastComposerChange = { draftUpdate: number | null; stateUpdate: numb
 
 export type EditingAuditState = {
   lastChange: LastComposerChange;
+};
+
+export type BuiltInMessageComposerEffect =
+  | TextComposerCommandActivationEffect
+  | TextComposerCommandClearEffect;
+
+export type CustomMessageComposerEffect = {
+  type: string & {};
+} & Record<string, unknown>;
+
+export type MessageComposerEffect =
+  | BuiltInMessageComposerEffect
+  | CustomMessageComposerEffect;
+
+export type MessageComposerEffectHandler<
+  T extends { type: string } = MessageComposerEffect,
+> = (effect: T, composer: MessageComposer) => void;
+
+export type MessageComposerSnapshot = {
+  attachmentManager: AttachmentManagerSnapshot;
+  customDataManager: CustomDataManagerSnapshot;
+  linkPreviewsManager: LinkPreviewsManagerSnapshot;
+  locationComposer: LocationComposerSnapshot;
+  pollComposer: PollComposerSnapshot;
+  textComposer: TextComposerSnapshot;
 };
 
 export type LocalMessageWithLegacyThreadId = LocalMessage & { legacyThreadId?: string };
@@ -142,6 +180,8 @@ export class MessageComposer extends WithSubscriptions {
   pollComposer: PollComposer;
   locationComposer: LocationComposer;
   customDataManager: CustomDataManager;
+  private snapshots: MessageComposerSnapshot[] = [];
+  private effectHandlers: MessageComposerEffectHandlers;
   // todo: mediaRecorder: MediaRecorderController;
 
   constructor({
@@ -219,6 +259,7 @@ export class MessageComposer extends WithSubscriptions {
     this.draftCompositionMiddlewareExecutor = new MessageDraftComposerMiddlewareExecutor({
       composer: this,
     });
+    this.effectHandlers = new MessageComposerEffectHandlers({ composer: this });
   }
 
   static evaluateContextType(compositionContext: CompositionContext) {
@@ -259,6 +300,9 @@ export class MessageComposer extends WithSubscriptions {
 
   setEditedMessage = (editedMessage: LocalMessage | null | undefined) => {
     this.state.partialNext({ editedMessage: editedMessage ?? null });
+    if (editedMessage) {
+      this.textComposer.clearCommand();
+    }
   };
 
   get contextType() {
@@ -315,6 +359,24 @@ export class MessageComposer extends WithSubscriptions {
   get quotedMessage() {
     return this.state.getLatestValue().quotedMessage;
   }
+
+  getCommandDisabledReason = (
+    command: CommandResponse,
+  ): CommandSuggestionDisabledReason | undefined => {
+    if (this.editedMessage) return 'editing';
+
+    if (
+      this.quotedMessage &&
+      (command.set === 'moderation_set' || command.name === 'moderation_set')
+    ) {
+      return 'quoted_message';
+    }
+
+    return undefined;
+  };
+
+  isCommandDisabled = (command: CommandResponse) =>
+    !!this.getCommandDisabledReason(command);
 
   get pollId() {
     return this.state.getLatestValue().pollId;
@@ -374,6 +436,7 @@ export class MessageComposer extends WithSubscriptions {
   initState = ({
     composition,
   }: { composition?: DraftResponse | MessageResponse | LocalMessage } = {}) => {
+    this.clearSnapshots();
     this.editingAuditState.partialNext(this.initEditingAuditState(composition));
 
     const message: LocalMessage | DraftMessage | undefined =
@@ -413,6 +476,46 @@ export class MessageComposer extends WithSubscriptions {
   initEditingAuditState = (
     composition?: DraftResponse | MessageResponse | LocalMessage,
   ) => initEditingAuditState(composition);
+
+  clearSnapshots = () => {
+    this.snapshots = [];
+  };
+
+  getSnapshot = (): MessageComposerSnapshot => ({
+    attachmentManager: this.attachmentManager.getSnapshot(),
+    customDataManager: this.customDataManager.getSnapshot(),
+    linkPreviewsManager: this.linkPreviewsManager.getSnapshot(),
+    locationComposer: this.locationComposer.getSnapshot(),
+    pollComposer: this.pollComposer.getSnapshot(),
+    textComposer: this.textComposer.getSnapshot(),
+  });
+
+  restoreSnapshot = (snapshot: MessageComposerSnapshot) => {
+    this.attachmentManager.restoreSnapshot(snapshot.attachmentManager);
+    this.linkPreviewsManager.restoreSnapshot(snapshot.linkPreviewsManager);
+    this.locationComposer.restoreSnapshot(snapshot.locationComposer);
+    this.pollComposer.restoreSnapshot(snapshot.pollComposer);
+    this.customDataManager.restoreSnapshot(snapshot.customDataManager);
+    this.textComposer.restoreSnapshot(snapshot.textComposer);
+  };
+
+  captureSnapshot = (snapshot = this.getSnapshot()) => {
+    if (this.snapshots.length) return;
+    this.snapshots.push(snapshot);
+  };
+
+  popSnapshot = () => this.snapshots.pop();
+
+  registerEffectHandler = <T extends { type: string }>(
+    type: T['type'],
+    handler: MessageComposerEffectHandler<T>,
+  ): void => {
+    this.effectHandlers.registerEffectHandler(type, handler);
+  };
+
+  applyEffects = <T extends { type: string }>(effects: T[] = []) => {
+    this.effectHandlers.applyEffects(effects);
+  };
 
   private logStateUpdateTimestamp() {
     this.editingAuditState.partialNext({
@@ -671,6 +774,10 @@ export class MessageComposer extends WithSubscriptions {
 
   setQuotedMessage = (quotedMessage: LocalMessage | null) => {
     this.state.partialNext({ quotedMessage });
+    const activeCommand = this.textComposer.command;
+    if (quotedMessage && activeCommand && this.isCommandDisabled(activeCommand)) {
+      this.textComposer.clearCommand();
+    }
   };
 
   toggleShowReplyInChannel = () => {

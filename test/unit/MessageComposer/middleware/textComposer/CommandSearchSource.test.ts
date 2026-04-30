@@ -82,4 +82,46 @@ describe('CommandSearchSource', () => {
 
     expect(newState.items).toEqual(initialState.items);
   });
+
+  it('should not decorate commands with disabled state', async () => {
+    mockCommands = [
+      { name: 'ban', description: 'Ban a user', set: 'moderation_set' },
+      { name: 'giphy', description: 'Post a random gif', set: 'fun_set' },
+      { name: 'mute', description: 'Mute a user', set: 'fun_set' },
+      { name: 'moderation_set', description: 'Moderate a user' },
+    ];
+    getConfigMock.mockReturnValue({ commands: mockCommands });
+    const source = new CommandSearchSource(channel);
+
+    const result = await source.query('');
+
+    expect(result.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'ban',
+          name: 'ban',
+          set: 'moderation_set',
+        }),
+        expect.objectContaining({
+          id: 'moderation_set',
+          name: 'moderation_set',
+        }),
+        expect.objectContaining({
+          id: 'mute',
+          name: 'mute',
+          set: 'fun_set',
+        }),
+        expect.objectContaining({
+          id: 'giphy',
+          name: 'giphy',
+          set: 'fun_set',
+        }),
+      ]),
+    );
+    expect(
+      result.items.some(
+        (command) => 'disabled' in command || 'disabledReason' in command,
+      ),
+    ).toBe(false);
+  });
 });

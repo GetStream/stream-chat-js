@@ -4,12 +4,10 @@ import type { SearchSourceOptions } from '../../../search';
 import { BaseSearchSourceSync } from '../../../search';
 import type { CommandResponse } from '../../../types';
 import { mergeWith } from '../../../utils/mergeWith';
+import type { MessageComposer } from '../../messageComposer';
 import type { CommandSuggestion, TextComposerMiddlewareOptions } from './types';
-import {
-  getCompleteCommandInString,
-  getTriggerCharWithToken,
-  insertItemWithTrigger,
-} from './textMiddlewareUtils';
+import { getCompleteCommandInString, notifyCommandDisabled } from './commandUtils';
+import { getTriggerCharWithToken, insertItemWithTrigger } from './textMiddlewareUtils';
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
 
 export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion> {
@@ -70,7 +68,10 @@ export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion>
     });
 
     return {
-      items: selectedCommands.map((c) => ({ ...c, id: c.name })),
+      items: selectedCommands.map((command) => ({
+        ...command,
+        id: command.name,
+      })),
       next: null,
     };
   }
@@ -103,6 +104,7 @@ export type CommandsMiddleware = Middleware<
 export const createCommandsMiddleware = (
   channel: Channel,
   options?: Partial<TextComposerMiddlewareOptions> & {
+    composer?: MessageComposer;
     searchSource?: CommandSearchSource;
   },
 ): CommandsMiddleware => {
@@ -123,7 +125,8 @@ export const createCommandsMiddleware = (
         const commandName = getCompleteCommandInString(finalText);
         if (commandName) {
           const command = searchSource?.query(commandName).items[0];
-          if (command) {
+          const composer = options?.composer;
+          if (command && !composer?.isCommandDisabled(command)) {
             return next({
               ...state,
               command,
@@ -172,6 +175,11 @@ export const createCommandsMiddleware = (
         const { selectedSuggestion } = state.change ?? {};
         if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
           return forward();
+
+        const composer = options?.composer;
+        if (composer && notifyCommandDisabled(composer, selectedSuggestion)) {
+          return forward();
+        }
 
         searchSource.resetStateAndActivate();
         return next({

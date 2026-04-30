@@ -2,12 +2,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../src/client';
 import {
   CompositionContext,
+  MessageComposerEffect,
   MessageComposer,
 } from '../../../src/messageComposer/messageComposer';
 import { textIsEmpty } from '../../../src/messageComposer/textComposer';
+import { createCommandStringExtractionMiddleware } from '../../../src/messageComposer/middleware/textComposer/commandStringExtraction';
 import { DraftResponse, LocalMessage } from '../../../src/types';
 import { logChatPromiseExecution } from '../../../src/utils';
 import { TextComposerConfig } from '../../../src/messageComposer/configuration';
+import { LinkPreviewStatus } from '../../../src/messageComposer/linkPreviewsManager';
+import type { LocalAttachment } from '../../../src/messageComposer/types';
 
 const textComposerMiddlewareExecuteOutput = {
   state: {
@@ -273,6 +277,599 @@ describe('TextComposer', () => {
       } = setup({ composition: message });
       textComposer.setMentionedUsers(users);
       expect(textComposer.mentionedUsers).toEqual(users);
+    });
+  });
+
+  describe('commands', () => {
+    const attachment = {
+      image_url: 'https://getstream.io/image.png',
+      localMetadata: { id: 'attachment-1', uploadState: 'finished' },
+      type: 'image',
+    } as LocalAttachment;
+    const linkPreview = {
+      og_scrape_url: 'https://getstream.io',
+      status: LinkPreviewStatus.LOADED,
+      title: 'Stream',
+      type: 'link',
+    };
+
+    const setChildComposerState = (messageComposer: MessageComposer) => {
+      messageComposer.attachmentManager.state.partialNext({
+        attachments: [attachment],
+      });
+      messageComposer.linkPreviewsManager.state.next({
+        previews: new Map([[linkPreview.og_scrape_url, linkPreview]]),
+      });
+      messageComposer.locationComposer.state.next({
+        location: {
+          created_by_device_id: 'device-id',
+          latitude: 1,
+          longitude: 1,
+          message_id: messageComposer.id,
+        },
+      });
+      messageComposer.pollComposer.state.next({
+        data: {
+          ...messageComposer.pollComposer.state.getLatestValue().data,
+          name: 'Favorite color?',
+          options: [{ id: 'option-1', text: 'Blue' }],
+        },
+        errors: { name: 'Poll name error' },
+      });
+      messageComposer.customDataManager.setMessageData({
+        priority: 'high',
+      } as any);
+      messageComposer.customDataManager.setCustomData({
+        localOnly: true,
+      } as any);
+    };
+
+    const expectChildComposerStateToBeCleared = (messageComposer: MessageComposer) => {
+      expect(messageComposer.attachmentManager.attachments).toEqual([]);
+      expect(messageComposer.linkPreviewsManager.previews.size).toBe(0);
+      expect(messageComposer.locationComposer.location).toBeNull();
+      expect(messageComposer.pollComposer.name).toBe('');
+      expect(messageComposer.pollComposer.options).toEqual([
+        { id: 'test-uuid', text: '' },
+      ]);
+      expect(messageComposer.customDataManager.customMessageData).toEqual({});
+      expect(messageComposer.customDataManager.customComposerData).toEqual({});
+    };
+
+    const expectChildComposerStateToBeRestored = (messageComposer: MessageComposer) => {
+      expect(messageComposer.attachmentManager.attachments).toEqual([attachment]);
+      expect(messageComposer.linkPreviewsManager.previews).toEqual(
+        new Map([[linkPreview.og_scrape_url, linkPreview]]),
+      );
+      expect(messageComposer.locationComposer.location).toEqual({
+        created_by_device_id: 'device-id',
+        latitude: 1,
+        longitude: 1,
+        message_id: messageComposer.id,
+      });
+      expect(messageComposer.pollComposer.name).toBe('Favorite color?');
+      expect(messageComposer.pollComposer.options).toEqual([
+        { id: 'option-1', text: 'Blue' },
+      ]);
+      expect(messageComposer.pollComposer.state.getLatestValue().errors).toEqual({
+        name: 'Poll name error',
+      });
+      expect(messageComposer.customDataManager.customMessageData).toEqual({
+        priority: 'high',
+      });
+      expect(messageComposer.customDataManager.customComposerData).toEqual({
+        localOnly: true,
+      });
+    };
+
+    it('clears child composer state when setting a command directly', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+      textComposer.setText('Hello world');
+      textComposer.setMentionedUsers([{ id: 'user-1' }]);
+      setChildComposerState(messageComposer);
+
+      textComposer.setCommand({ name: 'ban' });
+
+      expect(textComposer.command?.name).toBe('ban');
+      expect(textComposer.text).toBe('');
+      expect(textComposer.selection).toEqual({ start: 0, end: 0 });
+      expect(textComposer.mentionedUsers).toEqual([]);
+      expectChildComposerStateToBeCleared(messageComposer);
+    });
+
+    it('resets attachments and link previews through initState when setting a command directly', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+        mockClient,
+      } = setup();
+      const attachmentInitStateSpy = vi.spyOn(
+        messageComposer.attachmentManager,
+        'initState',
+      );
+      const attachmentClearSpy = vi.spyOn(
+        messageComposer.attachmentManager,
+        'clearAttachments',
+      );
+      const linkPreviewsInitStateSpy = vi.spyOn(
+        messageComposer.linkPreviewsManager,
+        'initState',
+      );
+      const linkPreviewsCancelSpy = vi.spyOn(
+        messageComposer.linkPreviewsManager,
+        'cancelURLEnrichment',
+      );
+      const deleteUploadRecordSpy = vi.spyOn(
+        mockClient.uploadManager,
+        'deleteUploadRecord',
+      );
+
+      messageComposer.attachmentManager.state.partialNext({
+        attachments: [
+          {
+            ...attachment,
+            localMetadata: { id: 'attachment-1', uploadState: 'pending' },
+          },
+        ],
+      });
+      messageComposer.linkPreviewsManager.state.next({
+        previews: new Map([[linkPreview.og_scrape_url, linkPreview]]),
+      });
+
+      textComposer.setCommand({ name: 'ban' });
+
+      expect(attachmentInitStateSpy).toHaveBeenCalledTimes(1);
+      expect(attachmentClearSpy).not.toHaveBeenCalled();
+      expect(deleteUploadRecordSpy).toHaveBeenCalledWith('attachment-1');
+      expect(linkPreviewsInitStateSpy).toHaveBeenCalledTimes(1);
+      expect(linkPreviewsCancelSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('restores child composer state when canceling a direct command', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+      textComposer.setText('Hello world');
+      textComposer.setMentionedUsers([{ id: 'user-1' }]);
+      textComposer.setSelection({ start: 5, end: 5 });
+      setChildComposerState(messageComposer);
+
+      textComposer.setCommand({ name: 'ban' });
+      textComposer.setText('command args');
+      textComposer.clearCommand();
+
+      expect(textComposer.command).toBeNull();
+      expect(textComposer.text).toBe('Hello world');
+      expect(textComposer.selection).toEqual({ start: 5, end: 5 });
+      expect(textComposer.mentionedUsers).toEqual([{ id: 'user-1' }]);
+      expectChildComposerStateToBeRestored(messageComposer);
+    });
+
+    it('restores uploading attachments as failed after canceling a direct command', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+      const uploadingAttachment = {
+        ...attachment,
+        localMetadata: {
+          ...attachment.localMetadata,
+          uploadProgress: 50,
+          uploadState: 'uploading',
+        },
+      } as LocalAttachment;
+
+      messageComposer.attachmentManager.state.partialNext({
+        attachments: [uploadingAttachment],
+      });
+
+      textComposer.setCommand({ name: 'ban' });
+      textComposer.clearCommand();
+
+      expect(messageComposer.attachmentManager.attachments).toEqual([
+        expect.objectContaining({
+          localMetadata: expect.objectContaining({
+            id: 'attachment-1',
+            uploadProgress: undefined,
+            uploadState: 'failed',
+          }),
+        }),
+      ]);
+    });
+
+    it('allows middleware to opt out of snapshot clearing by removing the command activation effect', async () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+        mockChannel,
+      } = setup();
+      mockChannel.getConfig = vi.fn().mockReturnValue({
+        commands: [{ name: 'ban', description: 'Ban a user' }],
+      });
+      messageComposer.attachmentManager.state.partialNext({ attachments: [attachment] });
+      textComposer.setMentionedUsers([{ id: 'user-1' }]);
+
+      const removeCommandActivationEffect = (state: any) => ({
+        ...state,
+        effects: state.effects?.filter(
+          (effect: any) =>
+            !(effect.type === 'command.activate' && effect.command.name === 'ban'),
+        ),
+      });
+
+      textComposer.middlewareExecutor.insert({
+        middleware: [
+          {
+            handlers: {
+              onChange: ({ next, state }) => next(removeCommandActivationEffect(state)),
+              onSuggestionItemSelect: ({ next, state }) =>
+                next(removeCommandActivationEffect(state)),
+            },
+            id: 'test/remove-command-activation-effect',
+          },
+          createCommandStringExtractionMiddleware() as any,
+        ],
+        position: { after: 'stream-io/text-composer/command-effects-middleware' },
+        unique: true,
+      });
+
+      await textComposer.handleChange({
+        text: '/ba',
+        selection: { start: 3, end: 3 },
+      });
+      await textComposer.handleSelect({
+        id: 'ban',
+        name: 'ban',
+        description: 'Ban a user',
+      });
+
+      expect(textComposer.command?.name).toBe('ban');
+      expect(textComposer.text).toBe('');
+      expect(textComposer.mentionedUsers).toEqual([{ id: 'user-1' }]);
+      expect(messageComposer.attachmentManager.attachments).toEqual([attachment]);
+      expect('effects' in textComposer.state.getLatestValue()).toBe(false);
+
+      textComposer.setText('command args');
+      textComposer.clearCommand();
+
+      expect(textComposer.command).toBeNull();
+      expect(textComposer.text).toBe('command args');
+      expect(textComposer.mentionedUsers).toEqual([{ id: 'user-1' }]);
+      expect(messageComposer.attachmentManager.attachments).toEqual([attachment]);
+    });
+
+    it('preserves command activation effects when custom middleware preserves state', async () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+        mockChannel,
+      } = setup();
+      mockChannel.getConfig = vi.fn().mockReturnValue({
+        commands: [{ name: 'ban', description: 'Ban a user' }],
+      });
+      messageComposer.attachmentManager.state.partialNext({ attachments: [attachment] });
+      textComposer.setMentionedUsers([{ id: 'user-1' }]);
+
+      let sawCommandActivationEffect = false;
+      textComposer.middlewareExecutor.insert({
+        middleware: [
+          {
+            handlers: {
+              onChange: ({ forward }) => forward(),
+              onSuggestionItemSelect: ({ next, state }) => {
+                sawCommandActivationEffect = !!state.effects?.some(
+                  (effect) => effect.type === 'command.activate',
+                );
+                return next({ ...state });
+              },
+            },
+            id: 'test/preserve-effects',
+          },
+        ],
+        position: { after: 'stream-io/text-composer/command-effects-middleware' },
+        unique: true,
+      });
+
+      await textComposer.handleChange({
+        text: '/ba',
+        selection: { start: 3, end: 3 },
+      });
+      await textComposer.handleSelect({
+        id: 'ban',
+        name: 'ban',
+        description: 'Ban a user',
+      });
+
+      expect(sawCommandActivationEffect).toBe(true);
+      expect(textComposer.command?.name).toBe('ban');
+      expect(textComposer.text).toBe('');
+      expect(textComposer.mentionedUsers).toEqual([]);
+      expect(messageComposer.attachmentManager.attachments).toEqual([]);
+      expect('effects' in textComposer.state.getLatestValue()).toBe(false);
+    });
+
+    it('allows middleware before command effects to prevent effect attachment', async () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+        mockChannel,
+      } = setup();
+      mockChannel.getConfig = vi.fn().mockReturnValue({
+        commands: [{ name: 'ban', description: 'Ban a user' }],
+      });
+      textComposer.setText('Hello world');
+      setChildComposerState(messageComposer);
+
+      textComposer.middlewareExecutor.insert({
+        middleware: [
+          {
+            handlers: {
+              onChange: ({ forward }) => forward(),
+              onSuggestionItemSelect: ({ next, state }) =>
+                next({ ...state, command: null }),
+            },
+            id: 'test/prevent-command-effects',
+          },
+        ],
+        position: { after: 'stream-io/text-composer/commands-middleware' },
+        unique: true,
+      });
+
+      await textComposer.handleChange({
+        text: '/ba',
+        selection: { start: 3, end: 3 },
+      });
+      await textComposer.handleSelect({
+        id: 'ban',
+        name: 'ban',
+        description: 'Ban a user',
+      });
+
+      expect(textComposer.command).toBeNull();
+      expect(textComposer.text).toBe('/ban ');
+      expectChildComposerStateToBeRestored(messageComposer);
+    });
+
+    it('allows effect handlers to override command activation behavior', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+      const handler = vi.fn();
+      textComposer.setText('Hello world');
+      textComposer.setMentionedUsers([{ id: 'user-1' }]);
+      textComposer.setSelection({ start: 5, end: 5 });
+      messageComposer.attachmentManager.state.partialNext({ attachments: [attachment] });
+
+      messageComposer.registerEffectHandler('command.activate', handler);
+      textComposer.setCommand({ name: 'ban' });
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: expect.objectContaining({ name: 'ban' }),
+          type: 'command.activate',
+        }),
+        messageComposer,
+      );
+      expect(textComposer.command?.name).toBe('ban');
+      expect(textComposer.text).toBe('Hello world');
+      expect(textComposer.selection).toEqual({ start: 5, end: 5 });
+      expect(textComposer.mentionedUsers).toEqual([{ id: 'user-1' }]);
+      expect(messageComposer.attachmentManager.attachments).toEqual([attachment]);
+    });
+
+    it('allows custom effect handlers to be registered', () => {
+      const { messageComposer } = setup();
+      const handler = vi.fn();
+      const effect: MessageComposerEffect = {
+        type: 'test.effect',
+        payload: 'test-payload',
+      };
+
+      messageComposer.registerEffectHandler('test.effect', handler);
+      messageComposer.applyEffects([effect]);
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledWith(effect, messageComposer);
+    });
+
+    it('overrides effect handlers registered for the same type', () => {
+      const { messageComposer } = setup();
+      const firstHandler = vi.fn();
+      const secondHandler = vi.fn();
+      const effect = {
+        type: 'test.effect',
+        payload: 'test-payload',
+      };
+
+      messageComposer.registerEffectHandler<typeof effect>('test.effect', firstHandler);
+      messageComposer.registerEffectHandler<typeof effect>('test.effect', secondHandler);
+
+      messageComposer.applyEffects([effect]);
+
+      expect(firstHandler).not.toHaveBeenCalled();
+      expect(secondHandler).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not restore message composer state when clearing a command', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+
+      textComposer.setCommand({ name: 'ban' });
+      messageComposer.state.partialNext({
+        draftId: 'draft-after-command-activation',
+        showReplyInChannel: true,
+      });
+      textComposer.clearCommand();
+
+      expect(messageComposer.state.getLatestValue()).toEqual(
+        expect.objectContaining({
+          draftId: 'draft-after-command-activation',
+          showReplyInChannel: true,
+        }),
+      );
+    });
+
+    it('does not restore the slash query used to select a command', async () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+      messageComposer.attachmentManager.state.partialNext({ attachments: [attachment] });
+
+      await textComposer.handleChange({
+        text: '/ba',
+        selection: { start: 3, end: 3 },
+      });
+      await textComposer.handleSelect({
+        id: 'ban',
+        name: 'ban',
+        description: 'Ban a user',
+      });
+      textComposer.setText('command args');
+      textComposer.clearCommand();
+
+      expect(textComposer.command).toBeNull();
+      expect(textComposer.text).toBe('');
+      expect(textComposer.selection).toEqual({ start: 0, end: 0 });
+      expect(messageComposer.attachmentManager.attachments).toEqual([attachment]);
+    });
+
+    it('only clears command on cancel when there is no restore snapshot', () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      textComposer.state.partialNext({
+        command: { name: 'ban' },
+        mentionedUsers: [{ id: 'user-1' }],
+        selection: { start: 12, end: 12 },
+        text: 'command args',
+      });
+
+      textComposer.clearCommand();
+
+      expect(textComposer.command).toBeNull();
+      expect(textComposer.text).toBe('command args');
+      expect(textComposer.selection).toEqual({ start: 12, end: 12 });
+      expect(textComposer.mentionedUsers).toEqual([{ id: 'user-1' }]);
+    });
+
+    it('does nothing when clearing without an active command', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+      textComposer.setText('draft text');
+      const applyEffectsSpy = vi.spyOn(messageComposer, 'applyEffects');
+
+      textComposer.clearCommand();
+
+      expect(applyEffectsSpy).not.toHaveBeenCalled();
+      expect(textComposer.command).toBeNull();
+      expect(textComposer.text).toBe('draft text');
+    });
+
+    it('does not restore stale command snapshots after composer reinitialization', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+      textComposer.setText('Hello world');
+      textComposer.setMentionedUsers([{ id: 'user-1' }]);
+      textComposer.setSelection({ start: 5, end: 5 });
+      messageComposer.attachmentManager.state.partialNext({ attachments: [attachment] });
+
+      textComposer.setCommand({ name: 'ban' });
+      messageComposer.initState();
+      textComposer.state.partialNext({
+        command: { name: 'ban' },
+        mentionedUsers: [],
+        selection: { start: 12, end: 12 },
+        text: 'command args',
+      });
+      textComposer.clearCommand();
+
+      expect(textComposer.command).toBeNull();
+      expect(textComposer.text).toBe('command args');
+      expect(textComposer.selection).toEqual({ start: 12, end: 12 });
+      expect(textComposer.mentionedUsers).toEqual([]);
+      expect(messageComposer.attachmentManager.attachments).toEqual([]);
+    });
+
+    it('does not set commands while editing a message', () => {
+      const message: LocalMessage = {
+        id: 'test-message',
+        type: 'regular',
+        text: 'Hello world',
+      };
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
+
+      textComposer.setCommand({ name: 'ban' });
+
+      expect(textComposer.command).toBeUndefined();
+      expect(textComposer.text).toBe('Hello world');
+    });
+
+    it('does not set moderation set commands with a quoted message', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+      messageComposer.setQuotedMessage({
+        id: 'quoted-message-id',
+        text: 'quoted message',
+      } as LocalMessage);
+
+      textComposer.setCommand({ name: 'ban', set: 'moderation_set' });
+
+      expect(textComposer.command).toBeNull();
+      expect(textComposer.text).toBe('');
+    });
+
+    it('clears active command when editing starts', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+
+      textComposer.setCommand({ name: 'ban' });
+      expect(textComposer.command?.name).toBe('ban');
+
+      messageComposer.setEditedMessage({
+        id: 'edited-message-id',
+        text: 'edited message',
+        type: 'regular',
+      } as LocalMessage);
+
+      expect(textComposer.command).toBeNull();
+      expect(textComposer.text).toBe('');
+    });
+
+    it('clears active moderation set command when setting a quoted message', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+
+      textComposer.setCommand({ name: 'ban', set: 'moderation_set' });
+      expect(textComposer.command?.name).toBe('ban');
+
+      messageComposer.setQuotedMessage({
+        id: 'quoted-message-id',
+        text: 'quoted message',
+      } as LocalMessage);
+
+      expect(textComposer.command).toBeNull();
+      expect(textComposer.text).toBe('');
     });
   });
 

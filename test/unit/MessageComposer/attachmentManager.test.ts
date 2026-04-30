@@ -491,6 +491,7 @@ describe('AttachmentManager', () => {
 
       attachmentManager.initState();
       expect(attachmentManager.attachments).toEqual([]);
+      expect(uploadId! in mockClient.uploadManager.uploads).toBe(false);
 
       mockClient.uploadManager.state.partialNext((current) => ({
         ...current,
@@ -659,6 +660,99 @@ describe('AttachmentManager', () => {
       spy.mockReset();
       attachmentManager.updateAttachment(attachment);
       expect(spy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getSnapshot', () => {
+    it('cancels active uploads and stores uploading attachments as failed', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+        mockClient,
+      } = setup({ config: { trackUploadProgress: true } });
+
+      const file = generateFile({ name: 'x.png', type: 'image/png' });
+      const attachment: LocalUploadAttachment = {
+        type: 'image',
+        mime_type: 'image/png',
+        file_size: file.size,
+        fallback: file.name,
+        localMetadata: {
+          id: 'att-with-upload',
+          file,
+          uploadProgress: 50,
+          uploadState: 'uploading',
+        },
+      };
+
+      attachmentManager.upsertAttachments([attachment]);
+      vi.spyOn(attachmentManager, 'doUploadRequest').mockImplementation(
+        () => new Promise(() => {}),
+      );
+      void mockClient.uploadManager.upload({
+        id: 'att-with-upload',
+        channelCid: mockChannel.cid,
+        file,
+      });
+
+      await Promise.resolve();
+
+      expect('att-with-upload' in mockClient.uploadManager.uploads).toBe(true);
+
+      const snapshot = attachmentManager.getSnapshot();
+
+      expect('att-with-upload' in mockClient.uploadManager.uploads).toBe(false);
+      expect(snapshot.attachments).toEqual([
+        expect.objectContaining({
+          localMetadata: expect.objectContaining({
+            id: 'att-with-upload',
+            uploadProgress: undefined,
+            uploadState: 'failed',
+          }),
+        }),
+      ]);
+    });
+  });
+
+  describe('clearAttachments', () => {
+    it('cancels active uploads when clearing attachments', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+        mockClient,
+      } = setup({ config: { trackUploadProgress: false } });
+
+      const file = generateFile({ name: 'x.png', type: 'image/png' });
+      const attachment: LocalUploadAttachment = {
+        type: 'image',
+        mime_type: 'image/png',
+        file_size: file.size,
+        fallback: file.name,
+        localMetadata: {
+          id: 'att-with-upload',
+          file,
+          uploadState: 'uploading',
+        },
+      };
+
+      attachmentManager.upsertAttachments([attachment]);
+      vi.spyOn(attachmentManager, 'doUploadRequest').mockImplementation(
+        () => new Promise(() => {}),
+      );
+      void mockClient.uploadManager.upload({
+        id: 'att-with-upload',
+        channelCid: mockChannel.cid,
+        file,
+      });
+
+      await Promise.resolve();
+
+      expect('att-with-upload' in mockClient.uploadManager.uploads).toBe(true);
+
+      attachmentManager.clearAttachments();
+
+      expect('att-with-upload' in mockClient.uploadManager.uploads).toBe(false);
+      expect(attachmentManager.attachments).toEqual([]);
     });
   });
 

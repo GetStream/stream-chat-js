@@ -41,6 +41,8 @@ export type AttachmentManagerState = {
   attachments: LocalAttachment[];
 };
 
+export type AttachmentManagerSnapshot = AttachmentManagerState;
+
 export type AttachmentManagerOptions = {
   composer: MessageComposer;
   message?: DraftMessage | LocalMessage;
@@ -208,8 +210,61 @@ export class AttachmentManager {
     );
   }
 
+  private cancelAttachmentUploads = (attachments: LocalAttachment[]) => {
+    for (const { localMetadata } of attachments) {
+      this.client.uploadManager.deleteUploadRecord(localMetadata.id);
+    }
+  };
+
+  private normalizeSnapshotAttachment = (attachment: LocalAttachment) => {
+    if (attachment.localMetadata.uploadState !== 'uploading') return attachment;
+
+    this.client.uploadManager.deleteUploadRecord(attachment.localMetadata.id);
+
+    return {
+      ...attachment,
+      localMetadata: {
+        ...attachment.localMetadata,
+        uploadProgress: undefined,
+        uploadState: 'failed',
+      },
+    } as LocalAttachment;
+  };
+
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
+    this.cancelAttachmentUploads(this.attachments);
     this.state.next(initState({ message }));
+  };
+
+  getSnapshot = (): AttachmentManagerSnapshot => {
+    const state = this.state.getLatestValue();
+    let hasUpdates = false;
+    const attachments = state.attachments.map(this.normalizeSnapshotAttachment);
+
+    for (let i = 0; i < attachments.length; i++) {
+      if (attachments[i] !== state.attachments[i]) {
+        hasUpdates = true;
+        break;
+      }
+    }
+
+    return hasUpdates ? { ...state, attachments } : state;
+  };
+
+  restoreSnapshot = (snapshot: AttachmentManagerSnapshot) => {
+    this.cancelAttachmentUploads(this.attachments);
+    this.state.next(snapshot);
+  };
+
+  setAttachments = (attachments: LocalAttachment[]) => {
+    this.state.partialNext({ attachments });
+  };
+
+  clearAttachments = () => {
+    if (!this.attachments.length) return;
+    this.removeAttachments(
+      this.attachments.map((attachment) => attachment.localMetadata.id),
+    );
   };
 
   getAttachmentIndex = (localId: string) => {

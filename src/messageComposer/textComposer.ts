@@ -1,9 +1,14 @@
 import { TextComposerMiddlewareExecutor } from './middleware';
 import { StateStore } from '../store';
 import { logChatPromiseExecution } from '../utils';
+import type { TextComposerMiddlewareExecutorState } from './middleware';
 import type { TextComposerSuggestion } from './middleware/textComposer/types';
 import type { TextSelection } from './middleware/textComposer/types';
-import type { TextComposerState } from './middleware/textComposer/types';
+import type {
+  TextComposerCommandActivationEffect,
+  TextComposerState,
+  TextComposerStateSnapshot,
+} from './middleware/textComposer/types';
 import type { Suggestions } from './middleware/textComposer/types';
 import type { MessageComposer } from './messageComposer';
 import type { CommandResponse, DraftMessage, LocalMessage, UserResponse } from '../types';
@@ -12,6 +17,8 @@ export type TextComposerOptions = {
   composer: MessageComposer;
   message?: DraftMessage | LocalMessage;
 };
+
+export type TextComposerSnapshot = TextComposerStateSnapshot;
 
 export const textIsEmpty = (text: string) => {
   const trimmedText = text.trim();
@@ -147,12 +154,24 @@ export class TextComposer {
     this.state.next(initState({ composer: this.composer, message }));
   };
 
+  getSnapshot = (state = this.state.getLatestValue()): TextComposerSnapshot => state;
+
+  restoreSnapshot = (snapshot: TextComposerSnapshot) => {
+    this.state.next(snapshot);
+  };
+
   setMentionedUsers(users: UserResponse[]) {
     this.state.partialNext({ mentionedUsers: users });
   }
 
   clearCommand() {
-    this.state.partialNext({ command: null });
+    if (!this.command) return;
+
+    this.commitState({
+      ...this.state.getLatestValue(),
+      command: null,
+      effects: [{ type: 'command.clear' }],
+    });
   }
 
   upsertMentionedUser = (user: UserResponse) => {
@@ -179,8 +198,29 @@ export class TextComposer {
   };
 
   setCommand = (command: CommandResponse | null) => {
-    if (command?.name === this.command?.name) return;
-    this.state.partialNext({ command });
+    if (!command) {
+      this.clearCommand();
+      return;
+    }
+    if (command.name === this.command?.name) return;
+    if (this.composer.isCommandDisabled(command)) return;
+
+    const stateToRestore: TextComposerCommandActivationEffect['stateToRestore'] = {
+      command: null,
+    };
+
+    this.commitState({
+      ...this.state.getLatestValue(),
+      command,
+      effects: [
+        {
+          command,
+          stateToRestore,
+          type: 'command.activate',
+        },
+      ],
+      suggestions: undefined,
+    });
   };
 
   setText = (text: string) => {
@@ -270,6 +310,14 @@ export class TextComposer {
   };
   // --- END STATE API ---
 
+  private commitState = (state: TextComposerMiddlewareExecutorState) => {
+    const { change, effects, ...nextState } = state;
+    void change;
+
+    this.state.next(nextState);
+    this.composer.applyEffects(effects);
+  };
+
   // --- START TEXT PROCESSING ----
 
   handleChange = async ({
@@ -289,7 +337,7 @@ export class TextComposer {
       },
     });
     if (output.status === 'discard') return;
-    this.state.next(output.state);
+    this.commitState(output.state);
 
     if (this.config.publishTypingEvents && text) {
       logChatPromiseExecution(
@@ -312,7 +360,7 @@ export class TextComposer {
       },
     });
     if (output?.status === 'discard') return;
-    this.state.next(output.state);
+    this.commitState(output.state);
   };
   // --- END TEXT PROCESSING ----
 }

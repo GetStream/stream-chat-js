@@ -58,6 +58,31 @@ const setupMiddlewareInputs = (initialState: MessageComposerMiddlewareState) => 
   };
 };
 
+const setupCompositionState = (text = ''): MessageComposerMiddlewareState => ({
+  message: {
+    id: 'test-id',
+    parent_id: undefined,
+    text,
+    type: 'regular',
+  },
+  localMessage: {
+    attachments: [],
+    created_at: new Date(),
+    deleted_at: null,
+    error: undefined,
+    id: 'test-id',
+    mentioned_users: [],
+    parent_id: undefined,
+    pinned_at: null,
+    reaction_groups: null,
+    status: 'sending',
+    text,
+    type: 'regular',
+    updated_at: new Date(),
+  },
+  sendOptions: {},
+});
+
 const setupMiddlewareInputsDraft = (
   initialState: MessageDraftComposerMiddlewareValueState,
 ) => {
@@ -137,6 +162,91 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
     );
 
     expect(result.status).toBeUndefined;
+  });
+
+  it('should discard raw known commands while editing', async () => {
+    const editedMessage: MessageResponse = {
+      attachments: [],
+      created_at: new Date().toISOString(),
+      id: 'edited-message-id',
+      mentioned_users: [],
+      parent_id: undefined,
+      pinned_at: null,
+      reaction_groups: null,
+      status: 'received',
+      text: 'original text',
+      type: 'regular',
+      updated_at: new Date().toISOString(),
+    };
+    const { messageComposer, validationMiddleware } = setupMiddleware({
+      editedMessage,
+    });
+    vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      commands: [{ name: 'ban', description: 'Ban a user' }],
+    });
+    const addWarningSpy = vi.spyOn(messageComposer.client.notifications, 'addWarning');
+
+    const result = await validationMiddleware.handlers.compose(
+      setupMiddlewareInputs(setupCompositionState('/ban user1')),
+    );
+
+    expect(result.status).toBe('discard');
+    expect(addWarningSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          type: 'validation:command:disabled',
+          metadata: {
+            command: 'ban',
+            reason: 'editing',
+          },
+        }),
+      }),
+    );
+  });
+
+  it('should discard raw moderation commands while replying', async () => {
+    const { messageComposer, validationMiddleware } = setupMiddleware();
+    vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      commands: [{ name: 'ban', description: 'Ban a user', set: 'moderation_set' }],
+    });
+    vi.spyOn(messageComposer, 'quotedMessage', 'get').mockReturnValue({
+      id: 'quoted-message-id',
+      text: 'quoted message',
+    } as LocalMessage);
+    const addWarningSpy = vi.spyOn(messageComposer.client.notifications, 'addWarning');
+
+    const result = await validationMiddleware.handlers.compose(
+      setupMiddlewareInputs(setupCompositionState('/ban user1')),
+    );
+
+    expect(result.status).toBe('discard');
+    expect(addWarningSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          type: 'validation:command:disabled',
+          metadata: {
+            command: 'ban',
+            reason: 'quoted_message',
+          },
+        }),
+      }),
+    );
+  });
+
+  it('should allow raw known commands if command is not disabled', async () => {
+    const { messageComposer, validationMiddleware } = setupMiddleware();
+    vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      commands: [{ name: 'giphy', description: 'Post a random gif' }],
+    });
+    vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue('/giphy hello');
+    const addWarningSpy = vi.spyOn(messageComposer.client.notifications, 'addWarning');
+
+    const result = await validationMiddleware.handlers.compose(
+      setupMiddlewareInputs(setupCompositionState('/giphy hello')),
+    );
+
+    expect(result.status).toBeUndefined();
+    expect(addWarningSpy).not.toHaveBeenCalled();
   });
 
   it('should validate message with attachments', async () => {

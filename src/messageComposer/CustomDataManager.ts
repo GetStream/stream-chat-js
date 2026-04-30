@@ -13,6 +13,8 @@ export type CustomDataManagerState = {
   custom: CustomMessageComposerData;
 };
 
+export type CustomDataManagerSnapshot = CustomDataManagerState;
+
 export type CustomDataManagerOptions = {
   composer: MessageComposer;
   message?: DraftMessage | LocalMessage;
@@ -48,6 +50,12 @@ export class CustomDataManager {
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
     this.state.next(initState({ composer: this.composer, message }));
+  };
+
+  getSnapshot = (): CustomDataManagerSnapshot => this.state.getLatestValue();
+
+  restoreSnapshot = (snapshot: CustomDataManagerSnapshot) => {
+    this.state.next(snapshot);
   };
 
   setMessageData(data: DeepPartial<CustomMessageData>) {

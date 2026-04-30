@@ -1,5 +1,6 @@
 export * from './activeCommandGuard';
 export * from './commands';
+export * from './commandEffects';
 export * from './commandStringExtraction';
 export * from './mentions';
 export * from './validation';

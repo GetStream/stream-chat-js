@@ -758,6 +758,34 @@ describe('MessageComposer', () => {
       });
     });
 
+    it('should return command disabled reasons', () => {
+      const { messageComposer } = setup();
+
+      expect(messageComposer.getCommandDisabledReason({ name: 'ban' })).toBeUndefined();
+
+      messageComposer.state.partialNext({
+        editedMessage: {
+          id: 'edited-message-id',
+          text: 'edited message',
+          type: 'regular',
+        } as LocalMessage,
+      });
+      expect(messageComposer.getCommandDisabledReason({ name: 'ban' })).toBe('editing');
+      expect(messageComposer.isCommandDisabled({ name: 'ban' })).toBe(true);
+
+      messageComposer.state.partialNext({
+        editedMessage: null,
+        quotedMessage,
+      });
+      expect(
+        messageComposer.getCommandDisabledReason({
+          name: 'ban',
+          set: 'moderation_set',
+        }),
+      ).toBe('quoted_message');
+      expect(messageComposer.getCommandDisabledReason({ name: 'giphy' })).toBeUndefined();
+    });
+
     it('should register subscriptions', () => {
       const { messageComposer } = setup();
       const unsubscribeFunctions = messageComposer[
@@ -952,6 +980,24 @@ describe('MessageComposer', () => {
       expect(messageComposer.state.getLatestValue().editedMessage?.id).toBe(
         'edited-message-id',
       );
+    });
+
+    it('setEditedMessage should try to clear command when editing starts', () => {
+      const { messageComposer } = setup();
+      const clearCommandSpy = vi.spyOn(messageComposer.textComposer, 'clearCommand');
+      const baseline: LocalMessage = {
+        id: 'edited-message-id',
+        type: 'regular',
+        created_at: new Date(),
+        deleted_at: null,
+        pinned_at: null,
+        status: 'received',
+        updated_at: new Date(),
+      };
+
+      messageComposer.setEditedMessage(baseline);
+
+      expect(clearCommandSpy).toHaveBeenCalledTimes(1);
     });
 
     it('setEditedMessage should clear edited message baseline when set to null', () => {

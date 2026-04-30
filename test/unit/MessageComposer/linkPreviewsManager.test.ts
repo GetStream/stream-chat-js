@@ -377,6 +377,41 @@ describe('LinkPreviewsManager', () => {
       // Check that the state was updated
       expect(linkPreviewsManager.previews.size).toBe(0);
     });
+
+    it('should cancel pending URL enrichment', () => {
+      const {
+        messageComposer: { linkPreviewsManager },
+      } = setup();
+      const cancelSpy = vi.spyOn(linkPreviewsManager, 'cancelURLEnrichment');
+
+      linkPreviewsManager.initState();
+
+      expect(cancelSpy).toHaveBeenCalled();
+    });
+
+    it('should ignore in-flight URL enrichment after reinitializing state', async () => {
+      const {
+        messageComposer: { linkPreviewsManager },
+        mockClient,
+      } = setup();
+      let resolveEnrichment: (value: typeof enrichURLReturnValue) => void = () => {};
+      mockClient.enrichURL = vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveEnrichment = resolve;
+          }),
+      );
+
+      linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(linkPreviewsManager.loadingPreviews).toHaveLength(1);
+
+      linkPreviewsManager.initState();
+      resolveEnrichment(enrichURLReturnValue);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(linkPreviewsManager.previews.size).toBe(0);
+    });
   });
 
   describe('findAndEnrichUrls', () => {
