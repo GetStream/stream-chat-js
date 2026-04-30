@@ -36,8 +36,6 @@ const getDisabledRawCommand = (
   }
 };
 
-export { notifyCommandDisabled };
-
 export const createCompositionValidationMiddleware = (
   composer: MessageComposer,
 ): MessageCompositionMiddleware => {
