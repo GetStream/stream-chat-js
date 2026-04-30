@@ -87,10 +87,6 @@ export class LocationComposer {
     this.state.next(snapshot);
   };
 
-  clear = () => {
-    this.state.next({ location: null });
-  };
-
   setData = (data: { durationMs?: number } & Coords) => {
     if (!this.config.enabled) return;
     if (!data.latitude || !data.longitude) return;

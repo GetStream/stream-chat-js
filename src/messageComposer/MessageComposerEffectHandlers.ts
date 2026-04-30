@@ -36,7 +36,7 @@ const applyCommandActivationEffect: MessageComposerEffectHandler<
   });
   composer.attachmentManager.clearAttachments();
   composer.linkPreviewsManager.clear();
-  composer.locationComposer.clear();
+  composer.locationComposer.initState();
   composer.pollComposer.initState();
   composer.customDataManager.initState();
 };
