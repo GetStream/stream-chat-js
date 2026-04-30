@@ -34,15 +34,18 @@ const getDisabledRawCommand = (
   }
 };
 
-const notifyCommandDisabled = (composer: MessageComposer, command: CommandResponse) => {
+export const notifyCommandDisabled = (
+  composer: MessageComposer,
+  command: CommandResponse,
+) => {
   const disabledReason = composer.getCommandDisabledReason(command);
   if (!disabledReason) return;
 
   composer.client.notifications.addWarning({
     message:
       disabledReason === 'editing'
-        ? 'Not available while editing'
-        : 'Not available while replying',
+        ? 'Command not available while editing'
+        : 'Command not available while replying',
     origin: {
       emitter: 'MessageComposer',
       context: { command, composer },
@@ -55,6 +58,8 @@ const notifyCommandDisabled = (composer: MessageComposer, command: CommandRespon
       },
     },
   });
+
+  return true;
 };
 
 export const createCompositionValidationMiddleware = (

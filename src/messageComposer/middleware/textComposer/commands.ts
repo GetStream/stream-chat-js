@@ -12,6 +12,7 @@ import {
   insertItemWithTrigger,
 } from './textMiddlewareUtils';
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
+import { notifyCommandDisabled } from '../messageComposer';
 
 export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion> {
   readonly type = 'commands';
@@ -178,27 +179,10 @@ export const createCommandsMiddleware = (
         const { selectedSuggestion } = state.change ?? {};
         if (!selectedSuggestion || state.suggestions?.trigger !== finalOptions.trigger)
           return forward();
+
         const composer = options?.composer;
-        const disabledReason = composer?.getCommandDisabledReason(selectedSuggestion);
-        if (composer && disabledReason) {
-          composer.client.notifications.addWarning({
-            message:
-              disabledReason === 'editing'
-                ? 'Not available while editing'
-                : 'Not available while replying',
-            origin: {
-              emitter: 'MessageComposer',
-              context: { command: selectedSuggestion, composer },
-            },
-            options: {
-              type: 'validation:command:disabled',
-              metadata: {
-                command: selectedSuggestion.name,
-                reason: disabledReason,
-              },
-            },
-          });
-          return next(state);
+        if (composer && notifyCommandDisabled(composer, selectedSuggestion)) {
+          return forward();
         }
 
         searchSource.resetStateAndActivate();
