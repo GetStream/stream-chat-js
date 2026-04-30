@@ -1,35 +1,6 @@
-/**
- * Escapes a string for use in a regular expression
- * @param text - The string to escape
- * @returns The escaped string
- * What does this regex do?
+import type { MessageComposer } from '../../messageComposer';
+import type { CommandResponse } from '../../../types';
 
- The regex escapes special regex characters by adding a backslash before them. Here's what it matches:
- - dash
- [ ] square brackets
- { } curly braces
- ( ) parentheses
- * asterisk
- + plus
- ? question mark
- . period
- , comma
- / forward slash
- \ backslash
- ^ caret
- $ dollar sign
- | pipe
- # hash
-
- The \\$& replacement adds a backslash before any matched character.
- This is needed when you want to use these characters literally
- in a regex pattern instead of their special regex meanings.
- For example:
- escapeCommandRegExp("hello.world")  // Returns: "hello\.world"
- escapeCommandRegExp("[test]")       // Returns: "\[test\]"
-
- This is commonly used when building dynamic regex patterns from user input to prevent special characters from being interpreted as regex syntax.
- */
 export function escapeCommandRegExp(text: string) {
   return text.replace(/[-[\]{}()*+?.,/\\^$|#]/g, '\\$&');
 }
@@ -47,3 +18,31 @@ export const getCompleteCommandInString = (text: string) => {
 
 export const stripCommandFromText = (text: string, commandName: string) =>
   text.replace(new RegExp(`^${escapeCommandRegExp(`/${commandName}`)}\\s*`), '');
+
+export const notifyCommandDisabled = (
+  composer: MessageComposer,
+  command: CommandResponse,
+) => {
+  const disabledReason = composer.getCommandDisabledReason(command);
+  if (!disabledReason) return;
+
+  composer.client.notifications.addWarning({
+    message:
+      disabledReason === 'editing'
+        ? 'Command not available while editing'
+        : 'Command not available while replying',
+    origin: {
+      emitter: 'MessageComposer',
+      context: { command, composer },
+    },
+    options: {
+      type: 'validation:command:disabled',
+      metadata: {
+        command: command.name,
+        reason: disabledReason,
+      },
+    },
+  });
+
+  return true;
+};

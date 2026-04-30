@@ -6,10 +6,9 @@ import type { CommandResponse } from '../../../types';
 import { mergeWith } from '../../../utils/mergeWith';
 import type { MessageComposer } from '../../messageComposer';
 import type { CommandSuggestion, TextComposerMiddlewareOptions } from './types';
-import { getCompleteCommandInString } from './commandUtils';
+import { getCompleteCommandInString, notifyCommandDisabled } from './commandUtils';
 import { getTriggerCharWithToken, insertItemWithTrigger } from './textMiddlewareUtils';
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
-import { notifyCommandDisabled } from '../messageComposer/commandNotification';
 
 export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion> {
   readonly type = 'commands';

@@ -1,7 +1,7 @@
 import { textIsEmpty } from '../../textComposer';
 import type { CommandResponse } from '../../../types';
 import { CommandSearchSource } from '../textComposer/commands';
-import { getRawCommandName } from '../textComposer/commandUtils';
+import { getRawCommandName, notifyCommandDisabled } from '../textComposer/commandUtils';
 import type {
   MessageComposerMiddlewareState,
   MessageCompositionMiddleware,
@@ -10,7 +10,6 @@ import type {
 } from './types';
 import type { MessageComposer } from '../../messageComposer';
 import type { MiddlewareHandlerParams } from '../../../middleware';
-import { notifyCommandDisabled } from './commandNotification';
 
 const getCommandByName = (
   searchSource: CommandSearchSource,
