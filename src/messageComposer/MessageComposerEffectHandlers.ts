@@ -13,6 +13,44 @@ export type MessageComposerEffectHandlersOptions = {
   composer: MessageComposer;
 };
 
+const applyCommandActivationEffect: MessageComposerEffectHandler<
+  TextComposerCommandActivationEffect
+> = (effect, composer) => {
+  const snapshot = composer.getSnapshot();
+  if (effect.stateToRestore) {
+    snapshot.textComposer = {
+      ...snapshot.textComposer,
+      ...effect.stateToRestore,
+      command: null,
+    };
+  }
+  composer.captureSnapshot(snapshot);
+
+  // we manually clear because we want the command to still persist
+  composer.textComposer.state.next({
+    command: effect.command,
+    mentionedUsers: [],
+    suggestions: undefined,
+    selection: { start: 0, end: 0 },
+    text: '',
+  });
+  composer.attachmentManager.clearAttachments();
+  composer.linkPreviewsManager.clear();
+  composer.locationComposer.clear();
+  composer.pollComposer.initState();
+  composer.customDataManager.initState();
+};
+
+const applyCommandClearEffect: MessageComposerEffectHandler<
+  TextComposerCommandClearEffect
+> = (_, composer) => {
+  const snapshot = composer.popSnapshot();
+
+  if (!snapshot) return;
+
+  composer.restoreSnapshot(snapshot);
+};
+
 export class MessageComposerEffectHandlers {
   private handlers = new Map<string, RegisteredMessageComposerEffectHandler>();
 
@@ -23,11 +61,11 @@ export class MessageComposerEffectHandlers {
   private registerDefaultHandlers = () => {
     this.registerEffectHandler<TextComposerCommandActivationEffect>(
       'command.activate',
-      this.applyCommandActivationEffect,
+      applyCommandActivationEffect,
     );
     this.registerEffectHandler<TextComposerCommandClearEffect>(
       'command.clear',
-      this.applyCommandClearEffect,
+      applyCommandClearEffect,
     );
   };
 
@@ -46,40 +84,4 @@ export class MessageComposerEffectHandlers {
     const handler = this.handlers.get(effect.type);
     handler?.(effect, this.options.composer);
   };
-
-  private applyCommandActivationEffect: MessageComposerEffectHandler<TextComposerCommandActivationEffect> =
-    (effect, composer) => {
-      const snapshot = composer.getSnapshot();
-      if (effect.stateToRestore) {
-        snapshot.textComposer = {
-          ...snapshot.textComposer,
-          ...effect.stateToRestore,
-          command: null,
-        };
-      }
-      composer.captureSnapshot(snapshot);
-
-      // we manually clear because we want the command to still persist
-      composer.textComposer.state.next({
-        command: effect.command,
-        mentionedUsers: [],
-        suggestions: undefined,
-        selection: { start: 0, end: 0 },
-        text: '',
-      });
-      composer.attachmentManager.clearAttachments();
-      composer.linkPreviewsManager.clear();
-      composer.locationComposer.clear();
-      composer.pollComposer.initState();
-      composer.customDataManager.initState();
-    };
-
-  private applyCommandClearEffect: MessageComposerEffectHandler<TextComposerCommandClearEffect> =
-    (_, composer) => {
-      const snapshot = composer.popSnapshot();
-
-      if (!snapshot) return;
-
-      composer.restoreSnapshot(snapshot);
-    };
 }
