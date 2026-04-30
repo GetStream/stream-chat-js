@@ -151,7 +151,6 @@ export class TextComposer {
   }
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
-    this.composer.clearSnapshots();
     this.state.next(initState({ composer: this.composer, message }));
   };
 
