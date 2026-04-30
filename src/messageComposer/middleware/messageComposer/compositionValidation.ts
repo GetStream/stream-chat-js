@@ -1,5 +1,6 @@
 import { textIsEmpty } from '../../textComposer';
 import type { CommandResponse } from '../../../types';
+import { CommandSearchSource } from '../textComposer/commands';
 import type {
   MessageComposerMiddlewareState,
   MessageCompositionMiddleware,
@@ -8,90 +9,73 @@ import type {
 } from './types';
 import type { MessageComposer } from '../../messageComposer';
 import type { MiddlewareHandlerParams } from '../../../middleware';
+import { notifyCommandDisabled } from './commandNotification';
 
 const getRawCommandName = (text?: string) => text?.match(/^\/(\S+)(?:\s.*)?$/)?.[1];
 
 const getCommandByName = (
-  composer: MessageComposer,
+  searchSource: CommandSearchSource,
   commandName?: string,
 ): CommandResponse | undefined => {
   if (!commandName) return;
 
-  return composer.channel
-    .getConfig()
-    ?.commands?.find(
-      (command) => command.name?.toLowerCase() === commandName.toLowerCase(),
-    );
+  const normalizedCommandName = commandName.toLowerCase();
+  return searchSource
+    .query(normalizedCommandName)
+    .items.find((command) => command.name?.toLowerCase() === normalizedCommandName);
 };
 
 const getDisabledRawCommand = (
   composer: MessageComposer,
+  searchSource: CommandSearchSource,
   text?: string,
 ): CommandResponse | undefined => {
-  const rawCommand = getCommandByName(composer, getRawCommandName(text));
+  const rawCommand = getCommandByName(searchSource, getRawCommandName(text));
   if (rawCommand && composer.isCommandDisabled(rawCommand)) {
     return rawCommand;
   }
 };
 
-export const notifyCommandDisabled = (
-  composer: MessageComposer,
-  command: CommandResponse,
-) => {
-  const disabledReason = composer.getCommandDisabledReason(command);
-  if (!disabledReason) return;
-
-  composer.client.notifications.addWarning({
-    message:
-      disabledReason === 'editing'
-        ? 'Command not available while editing'
-        : 'Command not available while replying',
-    origin: {
-      emitter: 'MessageComposer',
-      context: { command, composer },
-    },
-    options: {
-      type: 'validation:command:disabled',
-      metadata: {
-        command: command.name,
-        reason: disabledReason,
-      },
-    },
-  });
-
-  return true;
-};
+export { notifyCommandDisabled };
 
 export const createCompositionValidationMiddleware = (
   composer: MessageComposer,
-): MessageCompositionMiddleware => ({
-  id: 'stream-io/message-composer-middleware/data-validation',
-  handlers: {
-    compose: async ({
-      state,
-      discard,
-      forward,
-    }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
-      const { maxLengthOnSend } = composer.config.text ?? {};
-      const inputText = state.message.text ?? '';
+): MessageCompositionMiddleware => {
+  const commandSearchSource = new CommandSearchSource(composer.channel);
 
-      const disabledRawCommand = getDisabledRawCommand(composer, inputText);
-      if (disabledRawCommand) {
-        notifyCommandDisabled(composer, disabledRawCommand);
-        return await discard();
-      }
+  return {
+    id: 'stream-io/message-composer-middleware/data-validation',
+    handlers: {
+      compose: async ({
+        state,
+        discard,
+        forward,
+      }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
+        const { maxLengthOnSend } = composer.config.text ?? {};
+        const inputText = state.message.text ?? '';
 
-      const hasExceededMaxLength =
-        typeof maxLengthOnSend === 'number' && inputText.length > maxLengthOnSend;
+        const disabledRawCommand = getDisabledRawCommand(
+          composer,
+          commandSearchSource,
+          inputText,
+        );
+        if (disabledRawCommand) {
+          notifyCommandDisabled(composer, disabledRawCommand);
+          return await discard();
+        }
 
-      if (composer.compositionIsEmpty || hasExceededMaxLength) {
-        return await discard();
-      }
+        const hasExceededMaxLength =
+          typeof maxLengthOnSend === 'number' && inputText.length > maxLengthOnSend;
 
-      return await forward();
+        if (composer.compositionIsEmpty || hasExceededMaxLength) {
+          return await discard();
+        }
+
+        return await forward();
+      },
     },
-  },
-});
+  };
+};
 
 export const createDraftCompositionValidationMiddleware = (
   composer: MessageComposer,

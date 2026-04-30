@@ -12,7 +12,7 @@ import {
   insertItemWithTrigger,
 } from './textMiddlewareUtils';
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
-import { notifyCommandDisabled } from '../messageComposer';
+import { notifyCommandDisabled } from '../messageComposer/commandNotification';
 
 export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion> {
   readonly type = 'commands';
