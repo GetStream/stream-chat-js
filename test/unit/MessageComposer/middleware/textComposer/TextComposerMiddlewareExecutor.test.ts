@@ -244,7 +244,7 @@ describe('TextComposerMiddlewareExecutor', () => {
     expect(textComposer.suggestions).toBeDefined();
     expect(addWarningSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: 'Not available while editing',
+        message: 'Command not available while editing',
         options: expect.objectContaining({
           metadata: {
             command: 'ban',
@@ -284,7 +284,7 @@ describe('TextComposerMiddlewareExecutor', () => {
     expect(textComposer.suggestions).toBeDefined();
     expect(addWarningSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: 'Not available while replying',
+        message: 'Command not available while replying',
         options: expect.objectContaining({
           metadata: {
             command: 'ban',

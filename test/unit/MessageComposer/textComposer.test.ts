@@ -713,6 +713,21 @@ describe('TextComposer', () => {
       expect(textComposer.mentionedUsers).toEqual([{ id: 'user-1' }]);
     });
 
+    it('does nothing when clearing without an active command', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+      } = setup();
+      textComposer.setText('draft text');
+      const applyEffectsSpy = vi.spyOn(messageComposer, 'applyEffects');
+
+      textComposer.clearCommand();
+
+      expect(applyEffectsSpy).not.toHaveBeenCalled();
+      expect(textComposer.command).toBeNull();
+      expect(textComposer.text).toBe('draft text');
+    });
+
     it('does not restore stale command snapshots after composer reinitialization', () => {
       const {
         messageComposer,

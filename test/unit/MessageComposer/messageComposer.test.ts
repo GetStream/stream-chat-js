@@ -982,6 +982,24 @@ describe('MessageComposer', () => {
       );
     });
 
+    it('setEditedMessage should try to clear command when editing starts', () => {
+      const { messageComposer } = setup();
+      const clearCommandSpy = vi.spyOn(messageComposer.textComposer, 'clearCommand');
+      const baseline: LocalMessage = {
+        id: 'edited-message-id',
+        type: 'regular',
+        created_at: new Date(),
+        deleted_at: null,
+        pinned_at: null,
+        status: 'received',
+        updated_at: new Date(),
+      };
+
+      messageComposer.setEditedMessage(baseline);
+
+      expect(clearCommandSpy).toHaveBeenCalledTimes(1);
+    });
+
     it('setEditedMessage should clear edited message baseline when set to null', () => {
       const { messageComposer } = setup({
         composition: {

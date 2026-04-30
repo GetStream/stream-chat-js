@@ -166,6 +166,8 @@ export class TextComposer {
   }
 
   clearCommand() {
+    if (!this.command) return;
+
     this.commitState({
       ...this.state.getLatestValue(),
       command: null,

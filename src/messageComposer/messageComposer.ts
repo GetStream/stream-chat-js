@@ -300,8 +300,7 @@ export class MessageComposer extends WithSubscriptions {
 
   setEditedMessage = (editedMessage: LocalMessage | null | undefined) => {
     this.state.partialNext({ editedMessage: editedMessage ?? null });
-    const activeCommand = this.textComposer.command;
-    if (editedMessage && activeCommand && this.isCommandDisabled(activeCommand)) {
+    if (editedMessage) {
       this.textComposer.clearCommand();
     }
   };
