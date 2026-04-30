@@ -380,6 +380,54 @@ describe('TextComposer', () => {
       expectChildComposerStateToBeCleared(messageComposer);
     });
 
+    it('resets attachments and link previews through initState when setting a command directly', () => {
+      const {
+        messageComposer,
+        messageComposer: { textComposer },
+        mockClient,
+      } = setup();
+      const attachmentInitStateSpy = vi.spyOn(
+        messageComposer.attachmentManager,
+        'initState',
+      );
+      const attachmentClearSpy = vi.spyOn(
+        messageComposer.attachmentManager,
+        'clearAttachments',
+      );
+      const linkPreviewsInitStateSpy = vi.spyOn(
+        messageComposer.linkPreviewsManager,
+        'initState',
+      );
+      const linkPreviewsCancelSpy = vi.spyOn(
+        messageComposer.linkPreviewsManager,
+        'cancelURLEnrichment',
+      );
+      const deleteUploadRecordSpy = vi.spyOn(
+        mockClient.uploadManager,
+        'deleteUploadRecord',
+      );
+
+      messageComposer.attachmentManager.state.partialNext({
+        attachments: [
+          {
+            ...attachment,
+            localMetadata: { id: 'attachment-1', uploadState: 'pending' },
+          },
+        ],
+      });
+      messageComposer.linkPreviewsManager.state.next({
+        previews: new Map([[linkPreview.og_scrape_url, linkPreview]]),
+      });
+
+      textComposer.setCommand({ name: 'ban' });
+
+      expect(attachmentInitStateSpy).toHaveBeenCalledTimes(1);
+      expect(attachmentClearSpy).not.toHaveBeenCalled();
+      expect(deleteUploadRecordSpy).toHaveBeenCalledWith('attachment-1');
+      expect(linkPreviewsInitStateSpy).toHaveBeenCalledTimes(1);
+      expect(linkPreviewsCancelSpy).toHaveBeenCalledTimes(1);
+    });
+
     it('restores child composer state when canceling a direct command', () => {
       const {
         messageComposer,

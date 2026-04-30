@@ -34,8 +34,8 @@ const applyCommandActivationEffect: MessageComposerEffectHandler<
     selection: { start: 0, end: 0 },
     text: '',
   });
-  composer.attachmentManager.clearAttachments();
-  composer.linkPreviewsManager.clear();
+  composer.attachmentManager.initState();
+  composer.linkPreviewsManager.initState();
   composer.locationComposer.initState();
   composer.pollComposer.initState();
   composer.customDataManager.initState();
