@@ -4388,13 +4388,7 @@ export type PromoteChannelParams = {
  * is used to resolve the user agent.
  */
 export type SdkIdentifier = {
-  name:
-    | 'react'
-    | 'react-native-ios'
-    | 'react-native-android'
-    | 'expo-ios'
-    | 'expo-android'
-    | 'angular';
+  name: 'react' | 'react-native' | 'expo' | 'angular';
   version: string;
 };
 
