@@ -487,10 +487,13 @@
 	};
 
 	async function simulateBurst(config = {}) {
-		const channel =
-			config.channel || (typeof window !== 'undefined' ? window.streamChannel : null);
+		const fromWindow =
+			typeof window !== 'undefined' ? (window.streamChannel ?? window.channel) : null;
+		const channel = config.channel || fromWindow;
 		if (!channel || typeof channel.getClient !== 'function') {
-			throw new Error('window.streamChannel is not set or is not a Channel instance');
+			throw new Error(
+				'No Channel instance available — set window.streamChannel or window.channel, or pass { channel } in config',
+			);
 		}
 		const client = channel.getClient();
 		if (!client || typeof client.handleEvent !== 'function') {

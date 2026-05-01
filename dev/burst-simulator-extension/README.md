@@ -21,9 +21,9 @@ On click, it injects [`simulator.js`](./simulator.js) into the active tab's main
 
 The page under test must render the channel UI with React and `stream-chat`. The simulator calls `channel.getClient().handleEvent(...)`.
 
-You don't need to expose `window.streamChannel` yourself — the popup walks the React fiber tree on open, finds the active `Channel` (by duck-typing: any prop whose value has `getClient`, `cid`, `id`, `type`), and binds it to `window.streamChannel` automatically. If multiple Channel-shaped props exist (e.g. a `ChannelList` of previews next to an active `<Channel>`), it picks the one whose owning fiber wraps the largest subtree — typically the active channel.
+You don't need to expose anything yourself — the popup walks the React fiber tree on open, finds the active `Channel` (by duck-typing: any prop whose value has `getClient`, `cid`, `id`, `type` — including the conventional `channel` prop on `<Channel channel={ch}>`), and binds it to `window.streamChannel` automatically. If multiple Channel-shaped props exist (e.g. a `ChannelList` of previews next to an active `<Channel>`), it picks the one whose owning fiber wraps the largest subtree — typically the active channel.
 
-If you've already set `window.streamChannel` manually, the popup honors it and skips the fiber walk.
+If you've already set the channel manually, the popup honors it and skips the fiber walk. Both `window.streamChannel` (canonical) and `window.channel` (alias) are supported, with `window.streamChannel` taking precedence when both are set.
 
 ## Load it
 

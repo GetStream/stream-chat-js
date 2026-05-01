@@ -148,7 +148,7 @@ const readConfig = () => {
 // Runs in the page's main world. Walks the React fiber tree to find a
 // Channel-shaped object, binds it to window.streamChannel, and returns
 // metadata about how it was found. Honors a pre-existing window.streamChannel
-// (for users who set it manually).
+// or window.channel (for users who set one manually).
 const findChannelFn = () => {
 	const isChannelLike = (v) => {
 		if (!v || typeof v !== 'object') return false;
@@ -170,19 +170,29 @@ const findChannelFn = () => {
 		}
 	};
 
-	// Honor a manually-set window.streamChannel.
-	if (window.streamChannel) {
-		if (!isChannelLike(window.streamChannel)) {
+	// Honor a manually-set channel global. window.streamChannel takes
+	// precedence (legacy/canonical name); window.channel is a fallback
+	// alias so apps that already expose the channel under that name
+	// don't need extra plumbing.
+	const presetName = window.streamChannel
+		? 'streamChannel'
+		: window.channel
+			? 'channel'
+			: null;
+	if (presetName) {
+		const preset = window[presetName];
+		if (!isChannelLike(preset)) {
 			return { ok: false, reason: 'preset-not-a-channel' };
 		}
-		const v = validateUsable(window.streamChannel);
+		const v = validateUsable(preset);
 		if (!v.ok) return { ok: false, reason: v.reason };
 		return {
 			ok: true,
 			source: 'preset',
-			cid: window.streamChannel.cid,
-			type: window.streamChannel.type,
-			id: window.streamChannel.id,
+			presetName,
+			cid: preset.cid,
+			type: preset.type,
+			id: preset.id,
 		};
 	}
 
@@ -320,7 +330,8 @@ const findChannelFn = () => {
 };
 
 const REASON_TEXT = {
-	'preset-not-a-channel': 'window.streamChannel is set, but is not a Channel instance',
+	'preset-not-a-channel':
+		'window.streamChannel / window.channel is set but is not a Channel instance',
 	'no-handle-event': 'channel.getClient().handleEvent is unavailable',
 	'getclient-threw': 'channel.getClient() threw',
 	'no-react-root': 'No React root found on this page',
@@ -329,7 +340,7 @@ const REASON_TEXT = {
 
 const formatSuccess = (r) => {
 	if (r.source === 'preset') {
-		return `Ready · ${r.cid} · already bound`;
+		return `Ready · ${r.cid} · bound to window.${r.presetName}`;
 	}
 	const detail = `auto-bound · ${r.via} '${r.propName}' on <${r.componentName}>`;
 	const tail = r.candidates > 1 ? ` · best of ${r.candidates}` : '';
