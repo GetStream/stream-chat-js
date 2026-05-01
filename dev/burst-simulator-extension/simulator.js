@@ -434,8 +434,8 @@
 			throw new Error('window.streamChannel is not set or is not a Channel instance');
 		}
 		const client = channel.getClient();
-		if (!client || typeof client.dispatchEvent !== 'function') {
-			throw new Error('channel.getClient().dispatchEvent is unavailable');
+		if (!client || typeof client.handleEvent !== 'function') {
+			throw new Error('channel.getClient().handleEvent is unavailable');
 		}
 
 		const count = Math.max(0, Number(config.count ?? 200) | 0);
@@ -450,20 +450,28 @@
 		const counters = { dispatched: 0, messages: 0, reactions: 0 };
 		const start = performance.now();
 
+		// Mirror the real receive path: src/connection.ts onmessage parses
+		// the frame locally (health-check / error shortcut), then
+		// src/client.ts handleEvent parses it again before dispatching.
+		// Both parses happen per frame in production — pay both here too.
 		const dispatchOne = () => {
 			const user = pick(users);
 			const wantReaction = Math.random() < reactionRatio && recentMessages.length > 0;
+			let event;
 			if (wantReaction) {
 				const target = pick(recentMessages);
-				client.dispatchEvent(buildReactionNewEvent(channel, target, user));
+				event = buildReactionNewEvent(channel, target, user);
 				counters.reactions++;
 			} else {
 				const message = buildMessage(channel, user);
-				client.dispatchEvent(buildMessageNewEvent(channel, message));
+				event = buildMessageNewEvent(channel, message);
 				recentMessages.push(message);
 				if (recentMessages.length > reactToLastN) recentMessages.shift();
 				counters.messages++;
 			}
+			const jsonString = JSON.stringify(event);
+			JSON.parse(jsonString); // mirrors onmessage's local parse
+			client.handleEvent({ data: jsonString }); // parses again, then dispatches
 			counters.dispatched++;
 		};
 

@@ -11,12 +11,13 @@ On click, it injects [`simulator.js`](./simulator.js) into the active tab's main
 - builds a pool of fake users
 - generates `message.new` events with varied text (3–50 words, occasional emojis / fake URLs / line breaks) so the renderer has real layout work to do
 - generates `reaction.new` events targeting the sliding window of recently-generated messages
+- mirrors the real receive path's per-frame parse cost: stringify once, `JSON.parse` it locally (matches `connection.onmessage`'s local parse), then hand the string to `client.handleEvent` (which parses it a second time before dispatching). Production does both parses per WS frame — the simulator does too.
 - paces dispatch by `ratePerSec`, or fires the whole burst in one `requestAnimationFrame` tick when rate is `0`
 - returns `{ dispatched, durationMs, messages, reactions }` and `console.log`s the same so the result survives the popup closing
 
 ## Prerequisites
 
-The page under test must expose the channel as `window.streamChannel` (a `Channel` instance from `stream-chat`). The simulator calls `channel.getClient().dispatchEvent(...)`.
+The page under test must expose the channel as `window.streamChannel` (a `Channel` instance from `stream-chat`). The simulator calls `channel.getClient().handleEvent(...)`.
 
 ## Load it
 
