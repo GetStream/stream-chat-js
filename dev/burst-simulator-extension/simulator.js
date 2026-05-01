@@ -498,9 +498,9 @@
 		}
 
 		const count = Math.max(0, Number(config.count ?? 1000) | 0);
-		const ratePerSecRaw = config.ratePerSec ?? 50;
+		const ratePerSecRaw = config.ratePerSec ?? 75;
 		const ratePerSec = ratePerSecRaw === Infinity ? Infinity : Number(ratePerSecRaw);
-		const reactionRatio = Math.max(0, Math.min(1, Number(config.reactionRatio ?? 0.5)));
+		const reactionRatio = Math.max(0, Math.min(1, Number(config.reactionRatio ?? 0.25)));
 		const userPoolSize = Math.max(1, Number(config.userPoolSize ?? 10) | 0);
 		const reactToLastN = Math.max(1, Number(config.reactToLastN ?? 20) | 0);
 

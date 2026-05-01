@@ -38,8 +38,8 @@ After editing any file, click the refresh icon for the extension on `chrome://ex
 2. Click the **Burst Simulator** icon.
 3. Configure:
    - **Count** — total events (default `1000`)
-   - **Rate / sec** — pacing; `0` = fire all in one tick (default `50`)
-   - **Reaction ratio** — `0`–`1`, fraction of events that are reactions (default `0.5`)
+   - **Rate / sec** — pacing; `0` = fire all in one tick (default `75`)
+   - **Reaction ratio** — `0`–`1`, fraction of events that are reactions (default `0.25`)
    - **User pool size** — distinct fake users to rotate (default `10`)
    - **React to last N** — sliding window of recent messages reactions can target (default `20`)
 4. Click **Run burst**. Status line updates when the run completes; result is also `console.log`ged in the page's DevTools console.
