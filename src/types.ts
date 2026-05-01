@@ -119,6 +119,13 @@ export type AppSettingsAPIResponse = APIResponse & {
         uploads?: boolean;
         url_enrichment?: boolean;
         user_message_reminders?: boolean;
+        push_level?:
+          | 'all'
+          | 'all_mentions'
+          | 'direct_mentions'
+          | 'mentions'
+          | 'none'
+          | '';
       }
     >;
     reminders_interval: number;
@@ -154,9 +161,11 @@ export type AppSettingsAPIResponse = APIResponse & {
     max_aggregated_activities_length?: number;
     moderation_bulk_submit_action_enabled?: boolean;
     moderation_dashboard_preferences?: Record<string, unknown> | null;
+    moderation_audio_call_moderation_enabled?: boolean;
     moderation_enabled?: boolean;
     moderation_llm_configurability_enabled?: boolean;
     moderation_multitenant_blocklist_enabled?: boolean;
+    moderation_video_call_moderation_enabled?: boolean;
     moderation_webhook_url?: string;
     multi_tenant_enabled?: boolean;
     name?: string;
@@ -535,8 +544,8 @@ export type LocalMessageBase = Omit<
 };
 
 export type LocalMessage = LocalMessageBase & {
-  error?: ErrorFromResponse<APIErrorResponse>;
-  quoted_message?: LocalMessageBase;
+  error?: ErrorFromResponse<APIErrorResponse> | null;
+  quoted_message?: LocalMessageBase | null;
 };
 
 /**
@@ -744,6 +753,8 @@ export type MessageResponseBase = MessageBase & {
   member?: ChannelMemberResponse;
   mentioned_users?: UserResponse[];
   mentioned_channel?: boolean;
+  mentioned_here?: boolean;
+  mentioned_roles?: string[];
   message_text_updated_at?: string;
   moderation?: ModerationResponse; // present only with Moderation v2
   moderation_details?: ModerationDetailsResponse; // present only with Moderation v1
@@ -770,6 +781,13 @@ export type ReactionGroupResponse = {
   sum_scores: number;
   first_reaction_at?: string;
   last_reaction_at?: string;
+  latest_reactions_by?: ReactionGroupUserResponse[];
+};
+
+export type ReactionGroupUserResponse = {
+  created_at: string;
+  user_id: string;
+  user?: UserResponse;
 };
 
 export type ModerationDetailsResponse = {
@@ -2500,6 +2518,7 @@ export type ChannelConfigFields = {
   uploads?: boolean;
   url_enrichment?: boolean;
   user_message_reminders?: boolean; // Feature flag for user message reminders
+  push_level?: 'all' | 'all_mentions' | 'direct_mentions' | 'mentions' | 'none' | '';
 };
 
 export type ChannelConfigWithInfo = ChannelConfigFields &
