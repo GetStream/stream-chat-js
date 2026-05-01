@@ -13,7 +13,9 @@ On click, it injects [`simulator.js`](./simulator.js) into the active tab's main
 - generates `reaction.new` events targeting any of the burst-generated messages, picked at random
 - mirrors the real receive path's per-frame parse cost: stringify once, `JSON.parse` it locally (matches `connection.onmessage`'s local parse), then hand the string to `client.handleEvent` (which parses it a second time before dispatching). Production does both parses per WS frame — the simulator does too.
 - paces dispatch by `ratePerSec`, or fires the whole burst in one `requestAnimationFrame` tick when rate is `0`
-- returns `{ dispatched, durationMs, messages, reactions }` and `console.log`s the same so the result survives the popup closing
+- streams live progress to the popup status line while a paced run is in flight (`Running · 230 / 1000 · 76 eps · 3s`); the **Fire burst** button morphs into a red **Stop** button so you can abort mid-run, returning a partial `{ dispatched, durationMs, messages, reactions, aborted: true }` result
+- preserves run state across popup open/close: closing the popup mid-run doesn't kill the burst — the simulator keeps running in the page main world. Re-opening the popup re-attaches to the in-flight run (or shows the summary if it finished while the popup was closed)
+- returns `{ dispatched, durationMs, messages, reactions, aborted }` and `console.log`s the same so the result survives the popup closing
 
 ## Prerequisites
 

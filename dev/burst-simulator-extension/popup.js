@@ -1,5 +1,7 @@
 const form = document.getElementById('burst-form');
 const button = document.getElementById('run');
+const buttonLabel = button.querySelector('.run__label');
+const buttonGlyph = button.querySelector('.run__chevron');
 const statusWrap = document.getElementById('status-wrap');
 const statusText = document.getElementById('status');
 const recheckBtn = document.getElementById('recheck');
@@ -8,6 +10,129 @@ const setStatus = (text, kind, { showRecheck = false } = {}) => {
 	statusText.textContent = text;
 	statusWrap.className = `status status--${kind}`;
 	recheckBtn.hidden = !showRecheck;
+};
+
+let runState = 'idle'; // 'idle' | 'running'
+let pollTimer = null;
+let pollSamples = []; // [{ at, dispatched }]
+let runningTabId = null;
+let isOwnRun = false; // true if THIS popup session started the run
+
+const formatResult = (r) => {
+	const prefix = r.aborted ? 'Stopped at' : 'Dispatched';
+	return `${prefix} ${r.dispatched} in ${r.durationMs}ms — ${r.messages} messages, ${r.reactions} reactions`;
+};
+
+const readPageStatus = async (tabId) => {
+	try {
+		const [injection] = await chrome.scripting.executeScript({
+			target: { tabId },
+			world: 'MAIN',
+			func: () => {
+				const sim = window.__streamSimulateBurst;
+				if (!sim) return null;
+				return {
+					state: sim.state || null,
+					lastResult: sim.lastResult || null,
+				};
+			},
+		});
+		return injection?.result || null;
+	} catch (e) {
+		return null;
+	}
+};
+
+const setRunButton = (state) => {
+	runState = state;
+	if (state === 'running') {
+		button.classList.add('run--stop');
+		buttonGlyph.textContent = '■';
+		buttonLabel.textContent = 'Stop';
+	} else {
+		button.classList.remove('run--stop');
+		buttonGlyph.textContent = '▸';
+		buttonLabel.textContent = 'Fire burst';
+	}
+};
+
+const stopPolling = () => {
+	if (pollTimer) {
+		clearInterval(pollTimer);
+		pollTimer = null;
+	}
+	pollSamples = [];
+};
+
+const startPolling = (tabId) => {
+	stopPolling();
+	const localTimer = setInterval(async () => {
+		try {
+			const status = await readPageStatus(tabId);
+			// Bail if polling was stopped while we were awaiting executeScript —
+			// avoids clobbering the post-run summary with a stale "Running" line.
+			if (pollTimer !== localTimer) return;
+
+			const state = status?.state;
+			if (!state) return;
+
+			if (state.phase === 'done') {
+				stopPolling();
+				// For resumed runs there's no awaiting handler that will pick up
+				// the result — we have to surface the summary ourselves. For
+				// own runs the form-submit handler is awaiting and will do it,
+				// so leave the status alone here.
+				if (!isOwnRun) {
+					const r = status.lastResult;
+					if (r) {
+						setStatus(formatResult(r), 'ok', { showRecheck: true });
+					}
+					setRunButton('idle');
+					runningTabId = null;
+				}
+				return;
+			}
+
+			const now = performance.now();
+			pollSamples.push({ at: now, dispatched: state.dispatched });
+			while (pollSamples.length > 5) pollSamples.shift();
+
+			let eps = 0;
+			if (pollSamples.length >= 2) {
+				const first = pollSamples[0];
+				const last = pollSamples[pollSamples.length - 1];
+				const dtMs = last.at - first.at;
+				const dDispatched = last.dispatched - first.dispatched;
+				eps = dtMs > 0 ? Math.round((dDispatched / dtMs) * 1000) : 0;
+			}
+
+			const elapsedSec = Math.max(0, Math.floor((Date.now() - state.startWallMs) / 1000));
+			setStatus(
+				`Running · ${state.dispatched} / ${state.target} · ${eps} eps · ${elapsedSec}s`,
+				'running',
+				{ showRecheck: false },
+			);
+		} catch (e) {
+			// Tab navigated away or permission revoked — stop quietly.
+			if (pollTimer === localTimer) stopPolling();
+		}
+	}, 300);
+	pollTimer = localTimer;
+};
+
+const requestAbort = async () => {
+	if (!runningTabId) return;
+	try {
+		await chrome.scripting.executeScript({
+			target: { tabId: runningTabId },
+			world: 'MAIN',
+			func: () => {
+				if (window.__streamSimulateBurst) window.__streamSimulateBurst.abort = true;
+			},
+		});
+	} catch (e) {
+		// best-effort
+	}
 };
 
 const readConfig = () => {
@@ -211,6 +336,26 @@ const formatSuccess = (r) => {
 	return `Ready · ${r.cid} · ${detail}${tail}`;
 };
 
+const maybeResumeRun = async (tabId) => {
+	const status = await readPageStatus(tabId);
+	if (!status) return;
+
+	if (status.state?.phase === 'running') {
+		// A previous popup session (or the same one before close) kicked off
+		// this burst; re-attach to it as a watcher.
+		runningTabId = tabId;
+		isOwnRun = false;
+		setRunButton('running');
+		recheckBtn.hidden = true;
+		setStatus('Re-attached to run…', 'running');
+		startPolling(tabId);
+	} else if (status.lastResult) {
+		// Last run finished while the popup was closed (or before this open).
+		// Show its summary instead of the channel-detection text.
+		setStatus(formatResult(status.lastResult), 'ok', { showRecheck: true });
+	}
+};
+
 const detectChannel = async () => {
 	button.disabled = true;
 	setStatus('Scanning React tree…', 'running');
@@ -228,6 +373,9 @@ const detectChannel = async () => {
 		if (result?.ok) {
 			setStatus(formatSuccess(result), 'ok', { showRecheck: true });
 			button.disabled = false;
+			// If a burst is already running on this tab, or just finished,
+			// surface that instead of leaving the channel-detection text up.
+			await maybeResumeRun(tab.id);
 		} else {
 			setStatus(REASON_TEXT[result?.reason] || 'channel detection failed', 'error', {
 				showRecheck: true,
@@ -249,20 +397,37 @@ recheckBtn.addEventListener('click', () => {
 form.addEventListener('submit', async (e) => {
 	e.preventDefault();
 
+	if (runState === 'running') {
+		// Second click while a run is in flight → request abort. The simulator
+		// resolves on its next tick with `aborted: true`, and the in-flight
+		// `await` below picks up the partial result and reports it.
+		await requestAbort();
+		return;
+	}
+
 	const config = readConfig();
-	button.disabled = true;
 	recheckBtn.hidden = true;
 	setStatus('Running…', 'running');
+	setRunButton('running');
+	isOwnRun = true;
+
+	const isPaced = config.ratePerSec > 0 && Number.isFinite(config.ratePerSec);
 
 	try {
 		const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 		if (!tab?.id) throw new Error('No active tab.');
+		runningTabId = tab.id;
 
 		await chrome.scripting.executeScript({
 			target: { tabId: tab.id },
 			world: 'MAIN',
 			files: ['simulator.js'],
 		});
+
+		// In burst-all mode the entire batch runs in one rAF tick, so polling
+		// would never get a chance to read fresh state. Skip the live readout
+		// and let the post-run summary handle it.
+		if (isPaced) startPolling(tab.id);
 
 		const [injection] = await chrome.scripting.executeScript({
 			target: { tabId: tab.id },
@@ -277,6 +442,8 @@ form.addEventListener('submit', async (e) => {
 			args: [config],
 		});
 
+		stopPolling();
+
 		const payload = injection?.result;
 		if (!payload?.ok) {
 			setStatus(`Error: ${payload?.error || 'unknown failure'}`, 'error', {
@@ -284,8 +451,9 @@ form.addEventListener('submit', async (e) => {
 			});
 		} else {
 			const r = payload.result;
+			const prefix = r.aborted ? 'Stopped at' : 'Dispatched';
 			setStatus(
-				`Dispatched ${r.dispatched} in ${r.durationMs}ms — ${r.messages} messages, ${r.reactions} reactions`,
+				`${prefix} ${r.dispatched} in ${r.durationMs}ms — ${r.messages} messages, ${r.reactions} reactions`,
 				'ok',
 				{ showRecheck: true },
 			);
@@ -293,7 +461,10 @@ form.addEventListener('submit', async (e) => {
 	} catch (err) {
 		setStatus(`Error: ${err?.message || String(err)}`, 'error', { showRecheck: true });
 	} finally {
-		button.disabled = false;
+		stopPolling();
+		setRunButton('idle');
+		runningTabId = null;
+		isOwnRun = false;
 	}
 });
 

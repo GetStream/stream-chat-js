@@ -214,6 +214,22 @@ body {
   cursor: not-allowed;
 }
 
+.run--stop {
+  background: var(--error);
+}
+
+.run--stop:hover:not(:disabled) {
+  background: #b91c1c; /* red-700 */
+}
+
+.run--stop:active:not(:disabled) {
+  background: #991b1b; /* red-800 */
+}
+
+.run--stop:focus-visible {
+  box-shadow: 0 0 0 3px var(--error-soft);
+}
+
 .run__chevron {
   font-size: 12px;
   line-height: 1;

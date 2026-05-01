@@ -507,6 +507,28 @@
 		const messagesPool = [];
 		const counters = { dispatched: 0, messages: 0, reactions: 0 };
 		const start = performance.now();
+		const startWall = Date.now();
+
+		// Reset run-scoped flags on the function object so popup.js can poll
+		// state and signal an abort across the executeScript world boundary.
+		// `phase` is kept around after the run ends so a popup reopened later
+		// can tell whether a run is still in flight or just finished.
+		simulateBurst.abort = false;
+		simulateBurst.state = {
+			phase: 'running',
+			dispatched: 0,
+			messages: 0,
+			reactions: 0,
+			target: count,
+			startMs: start,
+			startWallMs: startWall,
+		};
+
+		const updateState = () => {
+			simulateBurst.state.dispatched = counters.dispatched;
+			simulateBurst.state.messages = counters.messages;
+			simulateBurst.state.reactions = counters.reactions;
+		};
 
 		// Mirror the real receive path: src/connection.ts onmessage parses
 		// the frame locally (health-check / error shortcut), then
@@ -530,15 +552,22 @@
 			JSON.parse(jsonString); // mirrors onmessage's local parse
 			client.handleEvent({ data: jsonString }); // parses again, then dispatches
 			counters.dispatched++;
+			updateState();
 		};
 
 		const burstAll =
 			ratePerSec === 0 || ratePerSec === Infinity || !Number.isFinite(ratePerSec);
 
 		if (burstAll) {
+			// In burst-all mode the entire batch runs inside one rAF callback,
+			// so the abort flag effectively can't toggle mid-run — we still
+			// check it at the boundary in case it was set before the rAF fired.
 			await new Promise((resolve) =>
 				requestAnimationFrame(() => {
-					for (let i = 0; i < count; i++) dispatchOne();
+					for (let i = 0; i < count; i++) {
+						if (simulateBurst.abort) break;
+						dispatchOne();
+					}
 					resolve();
 				}),
 			);
@@ -547,7 +576,7 @@
 			await new Promise((resolve) => {
 				let i = 0;
 				const tick = () => {
-					if (i >= count) {
+					if (i >= count || simulateBurst.abort) {
 						resolve();
 						return;
 					}
@@ -559,12 +588,29 @@
 			});
 		}
 
+		const aborted = simulateBurst.abort === true;
 		const result = {
 			dispatched: counters.dispatched,
 			durationMs: Math.round(performance.now() - start),
 			messages: counters.messages,
 			reactions: counters.reactions,
+			aborted,
 		};
+
+		// Mark the run as finished and stash the result. We keep `state`
+		// around (with phase='done') and `lastResult` populated so a popup
+		// reopened later can recover the summary instead of starting from a
+		// blank slate.
+		simulateBurst.state = {
+			...simulateBurst.state,
+			phase: 'done',
+			dispatched: counters.dispatched,
+			messages: counters.messages,
+			reactions: counters.reactions,
+		};
+		simulateBurst.lastResult = result;
+		simulateBurst.abort = false;
+
 		console.log('[burst-simulator] result', result);
 		return result;
 	}
