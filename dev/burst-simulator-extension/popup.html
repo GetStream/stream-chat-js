@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <!-- preview-refresh: 1 -->
+    <!-- preview-refresh: 2 -->
     <title>Burst Simulator</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -69,7 +69,16 @@
         </button>
       </form>
 
-      <footer class="status status--idle" id="status">Idle</footer>
+      <footer class="status status--idle" id="status-wrap">
+        <span class="status__text" id="status">Detecting…</span>
+        <button
+          type="button"
+          id="recheck"
+          class="status__recheck"
+          title="Re-check window.streamChannel"
+          hidden
+        >↻</button>
+      </footer>
 
       <p class="hint">
         target → <code>window.streamChannel</code><br />

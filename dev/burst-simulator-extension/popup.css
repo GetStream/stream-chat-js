@@ -278,6 +278,35 @@ body {
   flex-shrink: 0;
 }
 
+.status__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.status__recheck {
+  flex-shrink: 0;
+  appearance: none;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.status__recheck:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.status__recheck:active {
+  transform: rotate(90deg);
+}
+
 .status--idle {
   border-left-color: var(--text-faint);
 }
