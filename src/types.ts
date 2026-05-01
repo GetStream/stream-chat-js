@@ -2939,9 +2939,13 @@ export type Mute = {
   user: UserResponse;
 };
 
+export type PartialUpdateChannelFields = Partial<ChannelResponse> & {
+  config_overrides?: Partial<ChannelConfigFields>;
+};
+
 export type PartialUpdateChannel = {
-  set?: Partial<ChannelResponse>;
-  unset?: Array<keyof ChannelResponse>;
+  set?: PartialUpdateChannelFields;
+  unset?: Array<keyof PartialUpdateChannelFields>;
 };
 
 export type PartialUpdateMember = {
