@@ -259,8 +259,22 @@
 		'example',
 	];
 
-	const EMOJIS = ['😀', '🔥', '👀', '🎉', '💀', '✨', '❤️', '🤔', '👍', '😅'];
-	const REACTION_TYPES = ['like', 'love', 'haha', 'wow', 'sad', 'angry'];
+	// Each entry pairs the rendered emoji with its base unicode codepoint
+	// (lowercase hex, no variation selector) — Stream Chat reactions are
+	// keyed as `emoji-<codepoint>` (e.g. 'emoji-1f4af' for 💯).
+	const EMOJIS = [
+		{ char: '😀', code: '1f600' },
+		{ char: '🔥', code: '1f525' },
+		{ char: '👀', code: '1f440' },
+		{ char: '🎉', code: '1f389' },
+		{ char: '💀', code: '1f480' },
+		{ char: '✨', code: '2728' },
+		{ char: '❤️', code: '2764' },
+		{ char: '🤔', code: '1f914' },
+		{ char: '👍', code: '1f44d' },
+		{ char: '😅', code: '1f605' },
+		{ char: '💯', code: '1f4af' },
+	];
 
 	const uuid = () => {
 		if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -305,7 +319,7 @@
 			const numEmojis = 1 + Math.floor(Math.random() * 3);
 			for (let i = 0; i < numEmojis; i++) {
 				const pos = Math.floor(Math.random() * (words.length + 1));
-				words.splice(pos, 0, pick(EMOJIS));
+				words.splice(pos, 0, pick(EMOJIS).char);
 			}
 		}
 
@@ -374,6 +388,7 @@
 			own_reactions: [],
 			reaction_counts: {},
 			reaction_scores: {},
+			reaction_groups: {},
 			reply_count: 0,
 			deleted_reply_count: 0,
 			cid: channel.cid,
@@ -407,22 +422,66 @@
 
 	const buildReactionNewEvent = (channel, message, user) => {
 		const now = new Date().toISOString();
+		const emoji = pick(EMOJIS);
+		const reactionType = `emoji-${emoji.code}`;
+
+		const reaction = {
+			type: reactionType,
+			message_id: message.id,
+			user_id: user.id,
+			user,
+			score: 1,
+			created_at: now,
+			updated_at: now,
+		};
+
+		// channel_state.addReaction (src/channel_state.ts) replaces the
+		// in-state message with a copy of event.message after running
+		// formatMessage on it. Whatever denormalized reaction state lives
+		// on event.message is therefore what the UI ends up rendering —
+		// the backend always pre-applies the reaction before delivering
+		// the event, so we mirror that here.
+		message.latest_reactions = [...(message.latest_reactions ?? []), reaction];
+		const counts = message.reaction_counts ?? {};
+		const scores = message.reaction_scores ?? {};
+		const groups = message.reaction_groups ?? {};
+		const existingGroup = groups[reactionType];
+		message.reaction_counts = {
+			...counts,
+			[reactionType]: (counts[reactionType] ?? 0) + 1,
+		};
+		message.reaction_scores = {
+			...scores,
+			[reactionType]: (scores[reactionType] ?? 0) + 1,
+		};
+		message.reaction_groups = {
+			...groups,
+			[reactionType]: existingGroup
+				? {
+						count: existingGroup.count + 1,
+						sum_scores: existingGroup.sum_scores + 1,
+						first_reaction_at: existingGroup.first_reaction_at,
+						last_reaction_at: now,
+						latest_reactions_by: existingGroup.latest_reactions_by ?? [],
+					}
+				: {
+						count: 1,
+						sum_scores: 1,
+						first_reaction_at: now,
+						last_reaction_at: now,
+						latest_reactions_by: [],
+					},
+		};
+
 		return {
 			type: 'reaction.new',
 			created_at: now,
 			cid: channel.cid,
 			channel_type: channel.type,
 			channel_id: channel.id,
+			message_id: message.id,
 			message,
-			reaction: {
-				type: pick(REACTION_TYPES),
-				message_id: message.id,
-				user_id: user.id,
-				user,
-				score: 1,
-				created_at: now,
-				updated_at: now,
-			},
+			reaction,
 			user,
 		};
 	};
