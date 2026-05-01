@@ -26,7 +26,6 @@ describe('connection', function () {
 		client.clientID = 'clientID';
 		client.insightMetrics = new InsightMetrics();
 		client.dispatchEvent = () => null;
-		client.handleEvent = () => null;
 		client.recoverState = () => null;
 		return client;
 	};
