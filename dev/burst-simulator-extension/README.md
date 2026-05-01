@@ -17,7 +17,11 @@ On click, it injects [`simulator.js`](./simulator.js) into the active tab's main
 
 ## Prerequisites
 
-The page under test must expose the channel as `window.streamChannel` (a `Channel` instance from `stream-chat`). The simulator calls `channel.getClient().handleEvent(...)`.
+The page under test must render the channel UI with React and `stream-chat`. The simulator calls `channel.getClient().handleEvent(...)`.
+
+You don't need to expose `window.streamChannel` yourself — the popup walks the React fiber tree on open, finds the active `Channel` (by duck-typing: any prop whose value has `getClient`, `cid`, `id`, `type`), and binds it to `window.streamChannel` automatically. If multiple Channel-shaped props exist (e.g. a `ChannelList` of previews next to an active `<Channel>`), it picks the one whose owning fiber wraps the largest subtree — typically the active channel.
+
+If you've already set `window.streamChannel` manually, the popup honors it and skips the fiber walk.
 
 ## Load it
 
@@ -30,7 +34,7 @@ After editing any file, click the refresh icon for the extension on `chrome://ex
 
 ## Use it
 
-1. Open a page where `window.streamChannel` is set and the channel UI is mounted.
+1. Open a page where the channel UI is mounted (no manual setup needed — the popup auto-finds the active `Channel`).
 2. Click the **Burst Simulator** icon.
 3. Configure:
    - **Count** — total events (default `200`)
@@ -61,4 +65,5 @@ For a single all-at-once burst, set **Rate / sec** to `0` — every event lands 
 - No mid-run cancel — if a long run is wrong, reload the tab.
 - `message.new` and `reaction.new` only — no typing, edits, deletes, threads, attachments, or mentions.
 - Reactions only target burst-generated messages (not pre-existing channel state).
-- Single-channel only (whatever is on `window.streamChannel`).
+- Single-channel only (whatever is on `window.streamChannel` — auto-bound or manually set).
+- Auto-detection requires the page to be a React app and the `Channel` to be live in the fiber tree. For non-React hosts, set `window.streamChannel` manually before opening the popup.
