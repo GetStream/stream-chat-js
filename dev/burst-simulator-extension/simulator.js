@@ -497,7 +497,7 @@
 			throw new Error('channel.getClient().handleEvent is unavailable');
 		}
 
-		const count = Math.max(0, Number(config.count ?? 200) | 0);
+		const count = Math.max(0, Number(config.count ?? 1000) | 0);
 		const ratePerSecRaw = config.ratePerSec ?? 50;
 		const ratePerSec = ratePerSecRaw === Infinity ? Infinity : Number(ratePerSecRaw);
 		const reactionRatio = Math.max(0, Math.min(1, Number(config.reactionRatio ?? 0.5)));
