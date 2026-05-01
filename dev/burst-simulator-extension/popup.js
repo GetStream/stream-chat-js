@@ -17,7 +17,6 @@ const readConfig = () => {
 		ratePerSec: Number(data.get('ratePerSec')),
 		reactionRatio: Number(data.get('reactionRatio')),
 		userPoolSize: Number(data.get('userPoolSize')),
-		doubleParse: data.get('doubleParse') === 'on',
 	};
 };
 

@@ -502,7 +502,6 @@
 		const ratePerSec = ratePerSecRaw === Infinity ? Infinity : Number(ratePerSecRaw);
 		const reactionRatio = Math.max(0, Math.min(1, Number(config.reactionRatio ?? 0.25)));
 		const userPoolSize = Math.max(1, Number(config.userPoolSize ?? 10) | 0);
-		const doubleParse = config.doubleParse !== false; // default true
 
 		const users = buildUserPool(userPoolSize);
 		const messagesPool = [];
@@ -512,9 +511,7 @@
 		// Mirror the real receive path: src/connection.ts onmessage parses
 		// the frame locally (health-check / error shortcut), then
 		// src/client.ts handleEvent parses it again before dispatching.
-		// `doubleParse: true` (default) pays both parses per frame, matching
-		// today's prod code; set false to pay only handleEvent's parse, to
-		// A/B against an in-flight fix that removes the duplicate.
+		// Both parses happen per frame in production — pay both here too.
 		const dispatchOne = () => {
 			const user = pick(users);
 			const wantReaction = Math.random() < reactionRatio && messagesPool.length > 0;
@@ -530,10 +527,8 @@
 				counters.messages++;
 			}
 			const jsonString = JSON.stringify(event);
-			if (doubleParse) {
-				JSON.parse(jsonString); // mirrors onmessage's local parse
-			}
-			client.handleEvent({ data: jsonString }); // parses, then dispatches
+			JSON.parse(jsonString); // mirrors onmessage's local parse
+			client.handleEvent({ data: jsonString }); // parses again, then dispatches
 			counters.dispatched++;
 		};
 
@@ -569,7 +564,6 @@
 			durationMs: Math.round(performance.now() - start),
 			messages: counters.messages,
 			reactions: counters.reactions,
-			doubleParse,
 		};
 		console.log('[burst-simulator] result', result);
 		return result;

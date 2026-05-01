@@ -2,12 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <!-- preview-refresh: 2 -->
     <title>Burst Simulator</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Major+Mono+Display&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="popup.css" />
@@ -15,26 +14,23 @@
   <body>
     <div class="frame">
       <header class="frame__head">
-        <div class="frame__indicator" aria-hidden="true"></div>
-        <div class="frame__titles">
-          <h1 class="frame__title">burst<span>:</span>simulator</h1>
-          <p class="frame__subtitle">// stream-chat channel pressure test</p>
-        </div>
+        <h1 class="frame__title">Burst Simulator</h1>
+        <p class="frame__subtitle">Stream chat channel pressure test</p>
       </header>
 
       <form id="burst-form" class="form">
         <div class="field">
           <label for="f-count">
-            <span class="field__label">count</span>
-            <span class="field__unit">events</span>
+            <span class="field__label">total events</span>
+            <span class="field__unit">to dispatch</span>
           </label>
           <input id="f-count" type="number" name="count" value="1000" min="0" step="1" />
         </div>
 
         <div class="field">
           <label for="f-rate">
-            <span class="field__label">rate</span>
-            <span class="field__unit">/ sec — 0 = burst</span>
+            <span class="field__label">rate per second</span>
+            <span class="field__unit">0 = burst</span>
           </label>
           <input
             id="f-rate"
@@ -48,8 +44,8 @@
 
         <div class="field">
           <label for="f-react">
-            <span class="field__label">reactions</span>
-            <span class="field__unit">ratio (0–1)</span>
+            <span class="field__label">reactions ratio</span>
+            <span class="field__unit">0 – 1</span>
           </label>
           <input
             id="f-react"
@@ -64,8 +60,8 @@
 
         <div class="field">
           <label for="f-pool">
-            <span class="field__label">users</span>
-            <span class="field__unit">pool size</span>
+            <span class="field__label">user pool size</span>
+            <span class="field__unit">distinct users</span>
           </label>
           <input
             id="f-pool"
@@ -75,14 +71,6 @@
             min="1"
             step="1"
           />
-        </div>
-
-        <div class="field field--toggle">
-          <label for="f-double-parse">
-            <span class="field__label">double parse</span>
-            <span class="field__unit">mirror prod onmessage</span>
-          </label>
-          <input id="f-double-parse" type="checkbox" name="doubleParse" checked />
         </div>
 
         <button type="submit" id="run" class="run">
