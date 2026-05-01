@@ -131,6 +131,20 @@ describe('connection', function () {
 			expect(c.resolvePromise.calledOnce).to.be.true;
 			expect(c.rejectPromise.notCalled).to.be.true;
 		});
+
+		it('onmessage parses event.data once and dispatches the parsed payload', () => {
+			const client = newStreamChat();
+			client.dispatchEvent = sinon.spy();
+			const c = new StableWSConnection({ client });
+			c.isResolved = true;
+			c.scheduleConnectionCheck = () => null;
+
+			const payload = { type: 'message.new', cid: 'messaging:foo' };
+			c.onmessage(c.wsID, { data: JSON.stringify(payload) });
+
+			expect(client.dispatchEvent.calledOnce).to.be.true;
+			expect(client.dispatchEvent.firstCall.args[0]).to.deep.equal(payload);
+		});
 	});
 
 	describe('isConnecting flag', () => {
