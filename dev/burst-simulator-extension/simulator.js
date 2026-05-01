@@ -502,10 +502,9 @@
 		const ratePerSec = ratePerSecRaw === Infinity ? Infinity : Number(ratePerSecRaw);
 		const reactionRatio = Math.max(0, Math.min(1, Number(config.reactionRatio ?? 0.25)));
 		const userPoolSize = Math.max(1, Number(config.userPoolSize ?? 10) | 0);
-		const reactToLastN = Math.max(1, Number(config.reactToLastN ?? 20) | 0);
 
 		const users = buildUserPool(userPoolSize);
-		const recentMessages = [];
+		const messagesPool = [];
 		const counters = { dispatched: 0, messages: 0, reactions: 0 };
 		const start = performance.now();
 
@@ -515,17 +514,16 @@
 		// Both parses happen per frame in production — pay both here too.
 		const dispatchOne = () => {
 			const user = pick(users);
-			const wantReaction = Math.random() < reactionRatio && recentMessages.length > 0;
+			const wantReaction = Math.random() < reactionRatio && messagesPool.length > 0;
 			let event;
 			if (wantReaction) {
-				const target = pick(recentMessages);
+				const target = pick(messagesPool);
 				event = buildReactionNewEvent(channel, target, user);
 				counters.reactions++;
 			} else {
 				const message = buildMessage(channel, user);
 				event = buildMessageNewEvent(channel, message);
-				recentMessages.push(message);
-				if (recentMessages.length > reactToLastN) recentMessages.shift();
+				messagesPool.push(message);
 				counters.messages++;
 			}
 			const jsonString = JSON.stringify(event);

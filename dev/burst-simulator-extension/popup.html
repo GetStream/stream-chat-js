@@ -36,7 +36,14 @@
             <span class="field__label">rate</span>
             <span class="field__unit">/ sec — 0 = burst</span>
           </label>
-          <input id="f-rate" type="number" name="ratePerSec" value="75" min="0" step="1" />
+          <input
+            id="f-rate"
+            type="number"
+            name="ratePerSec"
+            value="75"
+            min="0"
+            step="1"
+          />
         </div>
 
         <div class="field">
@@ -44,7 +51,15 @@
             <span class="field__label">reactions</span>
             <span class="field__unit">ratio (0–1)</span>
           </label>
-          <input id="f-react" type="number" name="reactionRatio" value="0.25" min="0" max="1" step="0.05" />
+          <input
+            id="f-react"
+            type="number"
+            name="reactionRatio"
+            value="0.25"
+            min="0"
+            max="1"
+            step="0.05"
+          />
         </div>
 
         <div class="field">
@@ -52,15 +67,14 @@
             <span class="field__label">users</span>
             <span class="field__unit">pool size</span>
           </label>
-          <input id="f-pool" type="number" name="userPoolSize" value="10" min="1" step="1" />
-        </div>
-
-        <div class="field">
-          <label for="f-window">
-            <span class="field__label">window</span>
-            <span class="field__unit">last n msgs</span>
-          </label>
-          <input id="f-window" type="number" name="reactToLastN" value="20" min="1" step="1" />
+          <input
+            id="f-pool"
+            type="number"
+            name="userPoolSize"
+            value="10"
+            min="1"
+            step="1"
+          />
         </div>
 
         <button type="submit" id="run" class="run">
@@ -77,7 +91,9 @@
           class="status__recheck"
           title="Re-check window.streamChannel"
           hidden
-        >↻</button>
+        >
+          ↻
+        </button>
       </footer>
 
       <p class="hint">
