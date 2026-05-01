@@ -477,12 +477,13 @@ export class StableWSConnection {
     if (this.wsID !== wsID) return;
 
     this._log('onmessage() - onmessage callback', { event, wsID });
-    const data = typeof event.data === 'string' ? JSON.parse(event.data) : null;
+    if (typeof event.data !== 'string') return;
+    const data = JSON.parse(event.data);
 
     // we wait till the first message before we consider the connection open..
     // the reason for this is that auth errors and similar errors trigger a ws.onopen and immediately
     // after that a ws.onclose..
-    if (!this.isResolved && data) {
+    if (!this.isResolved) {
       this.isResolved = true;
       if (data.error) {
         this.rejectPromise?.(this._errorFromWSEvent(data, false));
@@ -496,11 +497,11 @@ export class StableWSConnection {
     // trigger the event..
     this.lastEvent = new Date();
 
-    if (data && data.type === 'health.check') {
+    if (data.type === 'health.check') {
       this.scheduleNextPing();
     }
 
-    this.client.handleEvent(event);
+    this.client.dispatchEvent(data);
     this.scheduleConnectionCheck();
   };
 

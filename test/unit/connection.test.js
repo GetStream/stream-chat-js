@@ -26,7 +26,6 @@ describe('connection', function () {
 		client.clientID = 'clientID';
 		client.insightMetrics = new InsightMetrics();
 		client.dispatchEvent = () => null;
-		client.handleEvent = () => null;
 		client.recoverState = () => null;
 		return client;
 	};
@@ -131,6 +130,20 @@ describe('connection', function () {
 			c.onmessage(c.wsID, { data: '{}' });
 			expect(c.resolvePromise.calledOnce).to.be.true;
 			expect(c.rejectPromise.notCalled).to.be.true;
+		});
+
+		it('onmessage parses event.data once and dispatches the parsed payload', () => {
+			const client = newStreamChat();
+			client.dispatchEvent = sinon.spy();
+			const c = new StableWSConnection({ client });
+			c.isResolved = true;
+			c.scheduleConnectionCheck = () => null;
+
+			const payload = { type: 'message.new', cid: 'messaging:foo' };
+			c.onmessage(c.wsID, { data: JSON.stringify(payload) });
+
+			expect(client.dispatchEvent.calledOnce).to.be.true;
+			expect(client.dispatchEvent.firstCall.args[0]).to.deep.equal(payload);
 		});
 	});
 

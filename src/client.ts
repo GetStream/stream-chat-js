@@ -4,7 +4,6 @@
 import type { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import axios from 'axios';
 import https from 'https';
-import type WebSocket from 'isomorphic-ws';
 
 import { Channel } from './channel';
 import { ClientState } from './client_state';
@@ -1379,13 +1378,6 @@ export class StreamChat {
     this.offlineDb?.executeQuerySafely((db) => db.handleEvent({ event }), {
       method: `handleEvent;${event.type}`,
     });
-  };
-
-  handleEvent = (messageEvent: WebSocket.MessageEvent) => {
-    // dispatch the event to the channel listeners
-    const jsonString = messageEvent.data as string;
-    const event = JSON.parse(jsonString) as Event;
-    this.dispatchEvent(event);
   };
 
   /**
