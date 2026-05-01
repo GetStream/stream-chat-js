@@ -11,7 +11,7 @@ On click, it injects [`simulator.js`](./simulator.js) into the active tab's main
 - builds a pool of fake users
 - generates `message.new` events with varied text (3–50 words, occasional emojis / fake URLs / line breaks) so the renderer has real layout work to do
 - generates `reaction.new` events targeting any of the burst-generated messages, picked at random
-- mirrors the real receive path's per-frame parse cost: stringify once, `JSON.parse` it locally (matches `connection.onmessage`'s local parse), then hand the string to `client.handleEvent` (which parses it a second time before dispatching). Production does both parses per WS frame — the simulator does too.
+- mirrors the real receive path's per-frame parse cost: stringify once, `JSON.parse` it locally (matches `connection.onmessage`'s local parse), then hand the string to `client.handleEvent` (which parses it a second time before dispatching). Production does both parses per WS frame — the simulator does too by default. The local parse can be disabled via the **Double parse** toggle for A/B comparisons against fixes that remove the duplicate.
 - paces dispatch by `ratePerSec`, or fires the whole burst in one `requestAnimationFrame` tick when rate is `0`
 - returns `{ dispatched, durationMs, messages, reactions }` and `console.log`s the same so the result survives the popup closing
 
@@ -41,6 +41,7 @@ After editing any file, click the refresh icon for the extension on `chrome://ex
    - **Rate / sec** — pacing; `0` = fire all in one tick (default `75`)
    - **Reaction ratio** — `0`–`1`, fraction of events that are reactions (default `0.25`)
    - **User pool size** — distinct fake users to rotate (default `10`)
+   - **Double parse** — when on (default), the simulator runs `JSON.parse` on each event twice per dispatch, mirroring today's prod path (`connection.onmessage` parses for the health-check shortcut, then `client.handleEvent` parses again). Toggle off to pay only the single parse and A/B against an in-flight fix that removes the duplicate.
 4. Click **Run burst**. Status line updates when the run completes; result is also `console.log`ged in the page's DevTools console.
 
 ## Recommended profiling workflow
