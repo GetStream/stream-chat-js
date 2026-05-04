@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Stream Chat Burst Simulator",
+  "version": "0.1.0",
+  "description": "Dispatch synthetic message.new + reaction.new bursts at window.streamChannel for stress/perf testing.",
+  "permissions": ["scripting", "activeTab"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Burst Simulator"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["simulator.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;"
+  }
+}
