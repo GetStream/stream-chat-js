@@ -1,3 +1,15 @@
+## [9.43.1](https://github.com/GetStream/stream-chat-js/compare/v9.43.0...v9.43.1) (2026-05-05)
+
+### Bug Fixes
+
+* omit canceling uploads on initState in attachmentManager ([#1733](https://github.com/GetStream/stream-chat-js/issues/1733)) ([79b57a3](https://github.com/GetStream/stream-chat-js/commit/79b57a3f7d14d60c30db5cd0eaa19244170e6246))
+* **types:** align with backend response schema ([#1727](https://github.com/GetStream/stream-chat-js/issues/1727)) ([f148816](https://github.com/GetStream/stream-chat-js/commit/f148816a5d05a578246851d415f4c8daf4c0369c))
+* **types:** restore config_overrides on PartialUpdateChannel ([#1731](https://github.com/GetStream/stream-chat-js/issues/1731)) ([7d8703b](https://github.com/GetStream/stream-chat-js/commit/7d8703bc5c61f54d1a9172f51a5db07a8301d175))
+
+### Performance Improvements
+
+* parse WebSocket events once at the transport boundary ([#1729](https://github.com/GetStream/stream-chat-js/issues/1729)) ([91b8f0d](https://github.com/GetStream/stream-chat-js/commit/91b8f0d8d940b53f705b6c590bc86f7a961d7e11)), closes [#822](https://github.com/GetStream/stream-chat-js/issues/822)
+
 ## [9.43.0](https://github.com/GetStream/stream-chat-js/compare/v9.42.3...v9.43.0) (2026-04-30)
 
 ### Features
