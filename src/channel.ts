@@ -14,7 +14,6 @@ import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import type {
   AIState,
   APIResponse,
-  AscDesc,
   BanUserOptions,
   ChannelAPIResponse,
   ChannelData,
@@ -68,6 +67,7 @@ import type {
   SendMessageAPIResponse,
   SendMessageOptions,
   SendReactionOptions,
+  Sort,
   StaticLocationPayload,
   TruncateChannelAPIResponse,
   TruncateOptions,
@@ -1335,7 +1335,7 @@ export class Channel {
   async getReplies(
     parent_id: string,
     options: MessagePaginationOptions & { user?: UserResponse; user_id?: string },
-    sort?: { created_at: AscDesc }[],
+    sort?: Required<Sort<'created_at'>>[],
   ) {
     const normalizedSort = sort ? normalizeQuerySort(sort) : undefined;
     const data = await this.getClient().get<GetRepliesAPIResponse>(
