@@ -380,7 +380,7 @@ describe('TextComposer', () => {
       expectChildComposerStateToBeCleared(messageComposer);
     });
 
-    it('resets attachments and link previews through initState when setting a command directly', () => {
+    it('resets attachments and link previews while canceling uploads when setting a command directly', () => {
       const {
         messageComposer,
         messageComposer: { textComposer },
@@ -393,6 +393,10 @@ describe('TextComposer', () => {
       const attachmentClearSpy = vi.spyOn(
         messageComposer.attachmentManager,
         'clearAttachments',
+      );
+      const attachmentCancelUploadsSpy = vi.spyOn(
+        messageComposer.attachmentManager,
+        'cancelAttachmentUploads',
       );
       const linkPreviewsInitStateSpy = vi.spyOn(
         messageComposer.linkPreviewsManager,
@@ -423,6 +427,11 @@ describe('TextComposer', () => {
 
       expect(attachmentInitStateSpy).toHaveBeenCalledTimes(1);
       expect(attachmentClearSpy).not.toHaveBeenCalled();
+      expect(attachmentCancelUploadsSpy).toHaveBeenCalledWith([
+        expect.objectContaining({
+          localMetadata: expect.objectContaining({ id: 'attachment-1' }),
+        }),
+      ]);
       expect(deleteUploadRecordSpy).toHaveBeenCalledWith('attachment-1');
       expect(linkPreviewsInitStateSpy).toHaveBeenCalledTimes(1);
       expect(linkPreviewsCancelSpy).toHaveBeenCalledTimes(1);
