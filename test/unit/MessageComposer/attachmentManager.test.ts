@@ -472,7 +472,7 @@ describe('AttachmentManager', () => {
       });
     });
 
-    it('should not apply upload manager progress to composer attachments after re-initializing state', async () => {
+    it('should not cancel uploads or apply upload manager progress to composer attachments after re-initializing state', async () => {
       const { messageComposer, mockClient } = setup();
       const { attachmentManager } = messageComposer;
 
@@ -489,9 +489,15 @@ describe('AttachmentManager', () => {
       const uploadId = Object.keys(mockClient.uploadManager.uploads)[0];
       expect(uploadId).toBeDefined();
 
+      const deleteUploadRecordSpy = vi.spyOn(
+        mockClient.uploadManager,
+        'deleteUploadRecord',
+      );
+
       attachmentManager.initState();
       expect(attachmentManager.attachments).toEqual([]);
-      expect(uploadId! in mockClient.uploadManager.uploads).toBe(false);
+      expect(deleteUploadRecordSpy).not.toHaveBeenCalled();
+      expect(uploadId! in mockClient.uploadManager.uploads).toBe(true);
 
       mockClient.uploadManager.state.partialNext((current) => ({
         ...current,

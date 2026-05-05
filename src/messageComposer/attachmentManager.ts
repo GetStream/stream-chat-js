@@ -210,7 +210,7 @@ export class AttachmentManager {
     );
   }
 
-  private cancelAttachmentUploads = (attachments: LocalAttachment[]) => {
+  cancelAttachmentUploads = (attachments: LocalAttachment[] = this.attachments) => {
     for (const { localMetadata } of attachments) {
       this.client.uploadManager.deleteUploadRecord(localMetadata.id);
     }
@@ -232,7 +232,6 @@ export class AttachmentManager {
   };
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
-    this.cancelAttachmentUploads(this.attachments);
     this.state.next(initState({ message }));
   };
 
