@@ -22,6 +22,7 @@ class Paginator extends BasePaginator<TestItem> {
   queryReject: Function = vi.fn();
   queryPromise: Promise<PaginationQueryReturnValue<TestItem>> | null = null;
   mockClientQuery = vi.fn();
+  protected _isCursorPagination = false;
 
   constructor(options: PaginatorOptions = {}) {
     super(options);
@@ -52,6 +53,7 @@ describe('BasePaginator', () => {
         hasNext: true,
         hasPrev: true,
         isLoading: false,
+        isStateValid: true,
         items: undefined,
         lastQueryError: undefined,
         cursor: undefined,
@@ -66,6 +68,7 @@ describe('BasePaginator', () => {
         hasNext: true,
         hasPrev: true,
         isLoading: false,
+        isStateValid: true,
         items: undefined,
         lastQueryError: undefined,
         cursor: undefined,
@@ -105,7 +108,7 @@ describe('BasePaginator', () => {
       expect(paginator.hasNext).toBe(false);
       expect(paginator.hasPrev).toBe(false);
       expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]);
-      expect(paginator.cursor).toEqual({ next: null, prev: null });
+      expect(paginator.cursor).toEqual({ next: undefined, prev: undefined });
 
       paginator.next();
       expect(paginator.isLoading).toBe(false);
@@ -168,7 +171,7 @@ describe('BasePaginator', () => {
       expect(paginator.hasNext).toBe(false);
       expect(paginator.hasPrev).toBe(false);
       expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]);
-      expect(paginator.cursor).toEqual({ next: null, prev: null });
+      expect(paginator.cursor).toEqual({ next: undefined, prev: undefined });
 
       paginator.prev();
       expect(paginator.isLoading).toBe(false);

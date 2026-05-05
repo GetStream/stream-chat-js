@@ -11,6 +11,7 @@ export class ReminderPaginator extends BasePaginator<ReminderResponse> {
   private client: StreamChat;
   protected _filters: ReminderFilters | undefined;
   protected _sort: ReminderSort | undefined;
+  protected _isCursorPagination = true;
 
   get filters(): ReminderFilters | undefined {
     return this._filters;
