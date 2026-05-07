@@ -1931,6 +1931,9 @@ export class StreamChat {
       payload,
     );
 
+    // FIXME: In the next major release, return the full QueryChannelsAPIResponse
+    // instead of only `data.channels` so top-level metadata such as
+    // `predefined_filter` is not lost.
     return data.channels;
   }
 
