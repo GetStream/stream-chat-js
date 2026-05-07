@@ -361,28 +361,27 @@ export function unformatMessage(message: LocalMessage): MessageResponse {
 }
 
 export const localMessageToNewMessagePayload = (localMessage: LocalMessage): Message => {
-  /* eslint-disable @typescript-eslint/no-unused-vars */
   const {
     // Remove all timestamp fields and client-specific fields.
     // Field pinned_at can therefore be earlier than created_at as new message payload can hold it.
-    created_at,
-    updated_at,
-    deleted_at,
+    created_at: _created_at,
+    updated_at: _updated_at,
+    deleted_at: _deleted_at,
     // Client-specific fields
-    error,
-    status,
+    error: _error,
+    status: _status,
     // Reaction related fields
-    latest_reactions,
-    own_reactions,
-    reaction_counts,
-    reaction_scores,
-    reply_count,
+    latest_reactions: _latest_reactions,
+    own_reactions: _own_reactions,
+    reaction_counts: _reaction_counts,
+    reaction_scores: _reaction_scores,
+    reply_count: _reply_count,
     // Message text related fields that shouldn't be in update
-    command,
-    html,
-    i18n,
-    mentioned_groups,
-    quoted_message,
+    command: _command,
+    html: _html,
+    i18n: _i18n,
+    mentioned_groups: _mentioned_groups,
+    quoted_message: _quoted_message,
     mentioned_users,
     // Message content related fields
     ...messageFields
@@ -673,7 +672,6 @@ function maybeGetReactionGroupsFallback(
   return null;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface DebouncedFunc<T extends (...args: any[]) => any> {
   /**
    * Call the original function, but applying the debounce rules.
@@ -702,7 +700,7 @@ export interface DebouncedFunc<T extends (...args: any[]) => any> {
 }
 
 // works exactly the same as lodash.debounce
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 export const debounce = <T extends (...args: any[]) => any>(
   fn: T,
   timeout = 0,
@@ -750,7 +748,7 @@ export const debounce = <T extends (...args: any[]) => any>(
 };
 
 // works exactly the same as lodash.throttle
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 export const throttle = <T extends (...args: any[]) => any>(
   fn: T,
   timeout = 200,

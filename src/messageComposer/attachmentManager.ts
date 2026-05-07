@@ -551,8 +551,7 @@ export class AttachmentManager {
           mimeType: fileLike.type,
         });
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { duration, ...result } = await this.channel[
+    const { duration: _duration, ...result } = await this.channel[
       isImageFile(fileLike) ? 'sendImage' : 'sendFile'
     ](file, undefined, undefined, undefined, axiosUploadConfig);
     return result;

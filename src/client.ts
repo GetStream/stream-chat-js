@@ -1137,8 +1137,14 @@ export class StreamChat {
       throw e;
     }
     this.anonymous = false;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { created_at, updated_at, last_active, online, ...guestUser } = response.user;
+
+    const {
+      created_at: _created_at,
+      updated_at: _updated_at,
+      last_active: _last_active,
+      online: _online,
+      ...guestUser
+    } = response.user;
     return await this.connectUser(guestUser as UserResponse, response.access_token);
   }
 
@@ -1305,7 +1311,6 @@ export class StreamChat {
       this._logApiResponse<T>(type, url, response);
       this.consecutiveFailures = 0;
       return this.handleResponse(response);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any /**TODO: generalize error types  */) {
       e.client_request_id = requestConfig.headers?.['x-client-request-id'];
       this._logApiError(type, url, e);
@@ -1772,7 +1777,6 @@ export class StreamChat {
           ? this.defaultWSTimeoutWithFallback
           : this.defaultWSTimeout,
       );
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       // run fallback only if it's WS/Network error and not a normal API error
       // make sure browser is online before even trying the longpoll

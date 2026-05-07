@@ -1458,6 +1458,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@stream-io/logger@npm:^2.0.0":
+  version: 2.0.0
+  resolution: "@stream-io/logger@npm:2.0.0"
+  checksum: 10c0/b12b1a8005b99b7fbdcfd91dbda08b5021da9044f861bb574005975d43dcfe9f406795015c6ddadc3a18cb9dda0c949e303b6c454b9f5139fa24701bed5a0bd7
+  languageName: node
+  linkType: hard
+
 "@tufjs/canonical-json@npm:2.0.0":
   version: 2.0.0
   resolution: "@tufjs/canonical-json@npm:2.0.0"
@@ -3241,6 +3248,19 @@ __metadata:
   peerDependencies:
     eslint: ^2 || ^3 || ^4 || ^5 || ^6 || ^7.2.0 || ^8 || ^9
   checksum: 10c0/bfb1b8fc8800398e62ddfefbf3638d185286edfed26dfe00875cc2846d954491b4f5112457831588b757fa789384e1ae585f812614c4797f0499fa234fd4a48b
+  languageName: node
+  linkType: hard
+
+"eslint-plugin-unused-imports@npm:^4.4.1":
+  version: 4.4.1
+  resolution: "eslint-plugin-unused-imports@npm:4.4.1"
+  peerDependencies:
+    "@typescript-eslint/eslint-plugin": ^8.0.0-0 || ^7.0.0 || ^6.0.0 || ^5.0.0
+    eslint: ^10.0.0 || ^9.0.0 || ^8.0.0
+  peerDependenciesMeta:
+    "@typescript-eslint/eslint-plugin":
+      optional: true
+  checksum: 10c0/bef630eedc3c239ca1c0a11c6af60485310e3934bd0819d3eb51e0acabdafc722c97d35457750a957541f5cc6a99aa78abb359eb3837d3702d836b6d24cbd573
   languageName: node
   linkType: hard
 
@@ -7235,6 +7255,7 @@ __metadata:
     "@eslint/js": "npm:^9.39.4"
     "@semantic-release/changelog": "npm:^6.0.3"
     "@semantic-release/git": "npm:^10.0.1"
+    "@stream-io/logger": "npm:^2.0.0"
     "@types/jsonwebtoken": "npm:^9.0.8"
     "@types/node": "npm:^22.19.19"
     "@types/sinon": "npm:^10.0.6"
@@ -7248,6 +7269,7 @@ __metadata:
     esbuild: "npm:^0.28.0"
     eslint: "npm:^9.39.4"
     eslint-plugin-import: "npm:^2.32.0"
+    eslint-plugin-unused-imports: "npm:^4.4.1"
     form-data: "npm:^4.0.5"
     globals: "npm:^17.6.0"
     husky: "npm:^9.1.7"

@@ -1,6 +1,7 @@
 import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+import unusedImports from 'eslint-plugin-unused-imports';
 
 import importPlugin from 'eslint-plugin-import';
 
@@ -18,6 +19,7 @@ export default tseslint.config(
     },
     plugins: {
       import: importPlugin,
+      'unused-imports': unusedImports,
     },
     settings: {
       react: {
@@ -71,9 +73,18 @@ export default tseslint.config(
         },
       ],
       'no-unused-vars': 'off',
-      '@typescript-eslint/no-unused-vars': [
+      '@typescript-eslint/no-unused-vars': 'off',
+      'unused-imports/no-unused-imports': 'warn',
+      'unused-imports/no-unused-vars': [
         'warn',
-        { ignoreRestSiblings: false, caughtErrors: 'none' },
+        {
+          vars: 'all',
+          varsIgnorePattern: '^_',
+          args: 'after-used',
+          argsIgnorePattern: '^_',
+          ignoreRestSiblings: false,
+          caughtErrors: 'none',
+        },
       ],
       '@typescript-eslint/no-unsafe-function-type': 'error',
       '@typescript-eslint/no-wrapper-object-types': 'error',
@@ -83,6 +94,7 @@ export default tseslint.config(
       '@typescript-eslint/no-require-imports': 'off', // TODO: remove this rule once all files are .mjs (and require is not used)
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/no-empty-object-type': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
     },
   },
 );

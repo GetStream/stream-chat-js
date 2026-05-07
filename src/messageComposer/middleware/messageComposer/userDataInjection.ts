@@ -27,9 +27,13 @@ export const createUserDataInjectionMiddleware = (
       // precedence after we connectUser the first time and we get the connection health
       // check event. Due to how liberal the type of client.user is, we have to do it this
       // way to maintain type safety.
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { channel_mutes, devices, mutes, ...messageUser } = composer.client
-        .user as OwnUserResponse;
+
+      const {
+        channel_mutes: _channel_mutes,
+        devices: _devices,
+        mutes: _mutes,
+        ...messageUser
+      } = composer.client.user as OwnUserResponse;
       return next({
         ...state,
         localMessage: {

@@ -58,7 +58,7 @@ export type UR = Record<string, unknown>;
 export type UnknownType = UR; //alias to avoid breaking change
 
 export type Unpacked<T> = T extends (infer U)[]
-  ? U // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ? U
   : T extends (...args: any[]) => infer U
     ? U
     : T extends Promise<infer U>
@@ -84,7 +84,7 @@ export type AppSettingsAPIResponse = APIResponse & {
     id?: string | number;
     allow_multi_user_devices?: boolean;
     // TODO
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     call_types: any;
     channel_configs: Record<
       string,
@@ -3736,7 +3736,7 @@ export type QueryMessageHistoryResponse = {
 // Moderation v2
 export type ModerationPayload = {
   created_at: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   custom?: Record<string, any>;
   images?: string[];
   texts?: string[];
@@ -3747,14 +3747,14 @@ export type ModV2ReviewStatus = 'complete' | 'flagged' | 'partial';
 
 export type ModerationFlag = {
   created_at: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   custom: Record<string, any>;
   entity_creator_id: string;
   entity_id: string;
   entity_type: string;
   id: string;
   reason: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   result: Record<string, any>[];
   review_queue_item_id: string;
   updated_at: string;
@@ -3764,13 +3764,12 @@ export type ModerationFlag = {
 };
 
 export type ReviewQueueItem = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   actions_taken: any[];
   appealed_by: string;
   assigned_to: string;
   completed_at: string;
   config_key: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   context: any[];
   created_at: string;
   created_by: string;
@@ -3784,10 +3783,10 @@ export type ReviewQueueItem = {
   id: string;
   moderation_payload: ModerationPayload;
   moderation_payload_hash: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   options: any;
   recommended_action: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   results: any;
   reviewed_at: string;
   status: string;
@@ -3797,7 +3796,7 @@ export type ReviewQueueItem = {
 
 export type CustomCheckFlag = {
   type: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   custom?: Record<string, any>[];
   labels?: string[];
   reason?: string;
@@ -3830,7 +3829,7 @@ export type SubmitActionOptions = {
   };
   custom?: {
     id: string;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     options?: Record<string, any>;
   };
   delete_activity?: {
@@ -3878,7 +3877,7 @@ export type SubmitActionOptions = {
     entity_creator_id?: string;
     reason?: string;
     moderation_payload?: ModerationPayload;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     custom?: Record<string, any>;
   };
   kick_user?: Record<string, never>;
