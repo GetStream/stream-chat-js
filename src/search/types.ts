@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type SearchSourceState<T = any> = {
   hasNext: boolean;
   isActive: boolean;

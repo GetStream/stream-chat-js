@@ -50,6 +50,7 @@
     "/src"
   ],
   "dependencies": {
+    "@stream-io/logger": "^2.0.0",
     "@types/jsonwebtoken": "^9.0.8",
     "@types/ws": "^8.18.1",
     "axios": "^1.16.1",
@@ -75,6 +76,7 @@
     "esbuild": "^0.28.0",
     "eslint": "^9.39.4",
     "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-unused-imports": "^4.4.1",
     "globals": "^17.6.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.5",
@@ -90,7 +92,7 @@
     "start": "concurrently 'tsc --watch' './scripts/bundle.mjs --watch'",
     "types": "tsc --noEmit",
     "lint": "yarn run prettier && yarn run eslint",
-    "lint-fix": "yarn run prettier-fix && yarn run eslint-fix",
+    "lint-fix": "yarn run eslint-fix; yarn run prettier-fix",
     "prettier": "prettier '**/*.{json,js,mjs,ts,yml,md}' --check",
     "prettier-fix": "yarn run prettier --write",
     "eslint": "eslint --max-warnings 0",
@@ -104,7 +106,8 @@
     "fix-staged": "lint-staged --config .lintstagedrc.fix.json --concurrent 1",
     "semantic-release": "semantic-release",
     "postinstall": "node -e \"require('fs').existsSync('scripts/install-husky.mjs') && import('./scripts/install-husky.mjs')\"",
-    "prepare": "yarn run build"
+    "prepare": "yarn run build",
+    "generate-client": "./scripts/generate-client.sh"
   },
   "engines": {
     "node": ">=18"

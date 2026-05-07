@@ -126,7 +126,6 @@ export class StableWSConnection {
       this.consecutiveFailures = 0;
 
       this._log(`connect() - Established ws connection with healthcheck: ${healthCheck}`);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       this.isHealthy = false;
       this.consecutiveFailures += 1;
@@ -166,7 +165,6 @@ export class StableWSConnection {
         for (let i = 0; i <= timeout; i += interval) {
           try {
             return await this.connectionOpen;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
           } catch (error: any) {
             if (i === timeout) {
               throw new Error(
@@ -343,7 +341,6 @@ export class StableWSConnection {
         }
         return response;
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       this.isConnecting = false;
       this._log(`_connect() - Error - `, error);
@@ -417,7 +414,6 @@ export class StableWSConnection {
       this._log('_reconnect() - Finished recoverCallBack');
 
       this.consecutiveFailures = 0;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       this.isHealthy = false;
       this.consecutiveFailures += 1;
