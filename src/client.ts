@@ -4981,9 +4981,11 @@ export class StreamChat {
    *
    * @return {Promise<PredefinedFilterResponse>} The created predefined filter
    */
-  async createPredefinedFilter(options: CreatePredefinedFilterOptions) {
+  async createPredefinedFilter<
+    F extends Record<string, unknown> = Record<string, unknown>,
+  >(options: CreatePredefinedFilterOptions<F>) {
     this.validateServerSideAuth();
-    return await this.post<PredefinedFilterResponse>(
+    return await this.post<PredefinedFilterResponse<F>>(
       `${this.baseURL}/predefined_filters`,
       options,
     );
@@ -4996,9 +4998,11 @@ export class StreamChat {
    *
    * @return {Promise<PredefinedFilterResponse>} The predefined filter
    */
-  async getPredefinedFilter(name: string) {
+  async getPredefinedFilter<F extends Record<string, unknown> = Record<string, unknown>>(
+    name: string,
+  ) {
     this.validateServerSideAuth();
-    return await this.get<PredefinedFilterResponse>(
+    return await this.get<PredefinedFilterResponse<F>>(
       `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
     );
   }
@@ -5011,9 +5015,11 @@ export class StreamChat {
    *
    * @return {Promise<PredefinedFilterResponse>} The updated predefined filter
    */
-  async updatePredefinedFilter(name: string, options: UpdatePredefinedFilterOptions) {
+  async updatePredefinedFilter<
+    F extends Record<string, unknown> = Record<string, unknown>,
+  >(name: string, options: UpdatePredefinedFilterOptions<F>) {
     this.validateServerSideAuth();
-    return await this.put<PredefinedFilterResponse>(
+    return await this.put<PredefinedFilterResponse<F>>(
       `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
       options,
     );
@@ -5040,10 +5046,12 @@ export class StreamChat {
    *
    * @return {Promise<ListPredefinedFiltersResponse>} The list of predefined filters
    */
-  async listPredefinedFilters(options: ListPredefinedFiltersOptions = {}) {
+  async listPredefinedFilters<
+    F extends Record<string, unknown> = Record<string, unknown>,
+  >(options: ListPredefinedFiltersOptions = {}) {
     this.validateServerSideAuth();
     const { sort, ...paginationOptions } = options;
-    return await this.get<ListPredefinedFiltersResponse>(
+    return await this.get<ListPredefinedFiltersResponse<F>>(
       `${this.baseURL}/predefined_filters`,
       {
         ...paginationOptions,
