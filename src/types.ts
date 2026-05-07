@@ -1060,8 +1060,19 @@ export type ChannelOptions = {
   user_id?: string;
   watch?: boolean;
   /**
-   * Name of a predefined filter to use instead of filter_conditions.
-   * When provided, filter_conditions and sort parameters are ignored.
+   * Name of a predefined filter to use instead of sending raw
+   * `filter_conditions`.
+   *
+   * The backend resolves the filter template by name and interpolates it using
+   * `filter_values`.
+   *
+   * A regular `sort` can still be passed to `queryChannels()`, but backend
+   * precedence rules apply:
+   *
+   * - if the predefined filter has its own stored sort template, that stored
+   *   sort takes precedence and the request `sort` is ignored
+   * - if the predefined filter does not define a sort template, the request
+   *   `sort` can still be used
    */
   predefined_filter?: string;
   /**

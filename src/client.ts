@@ -1907,6 +1907,7 @@ export class StreamChat {
     }
 
     const { predefined_filter, filter_values, sort_values, ...restOptions } = options;
+    const normalizedSort = normalizeQuerySort(sort);
 
     // Build payload based on whether we're using a predefined filter or traditional filters
     const payload = predefined_filter
@@ -1914,12 +1915,13 @@ export class StreamChat {
           predefined_filter,
           filter_values,
           sort_values,
+          sort: normalizedSort,
           ...defaultOptions,
           ...restOptions,
         }
       : {
           filter_conditions: filterConditions,
-          sort: normalizeQuerySort(sort),
+          sort: normalizedSort,
           ...defaultOptions,
           ...restOptions,
         };
