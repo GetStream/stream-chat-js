@@ -15,7 +15,6 @@ type DebouncedExecQueryFunction = DebouncedFunc<
   (params: { direction: PaginationDirection }) => Promise<void>
 >;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type PaginatorState<T = any> = {
   hasNext: boolean;
   hasPrev: boolean;

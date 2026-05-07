@@ -21,7 +21,7 @@ export type PollStateValidationOutput = Partial<
 
 export type PollStateChangeValidator = (params: {
   data: PollComposerState['data'];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   value: any;
   currentError?: PollComposerFieldErrors[keyof PollComposerFieldErrors];
 }) => PollStateValidationOutput;
@@ -95,7 +95,7 @@ export type PollCompositionStateProcessorOutput = Partial<PollComposerState['dat
 
 export type PollCompositionStateProcessor = (params: {
   data: PollComposerState['data'];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   value: any;
 }) => PollCompositionStateProcessorOutput;
 

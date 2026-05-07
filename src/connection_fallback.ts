@@ -97,7 +97,6 @@ export class WSConnectionFallback {
 
       this.consecutiveFailures = 0; // always reset in case of no error
       return res;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       this.consecutiveFailures += 1;
 
@@ -124,7 +123,6 @@ export class WSConnectionFallback {
             this.client.dispatchEvent(data.events[i]);
           }
         }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (error: any) {
         if (axios.isCancel(error)) {
           this._log(`_poll() - axios canceled request`);

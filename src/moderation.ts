@@ -272,7 +272,6 @@ export class Moderation {
     entityID: string,
     entityCreatorID: string,
     moderationPayload: {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       custom?: Record<string, any>;
       images?: string[];
       texts?: string[];

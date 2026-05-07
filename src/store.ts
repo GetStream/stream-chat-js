@@ -23,7 +23,7 @@ export class StateStore<T extends Record<string, unknown>> {
    * @experimental
    * This method is experimental and may change in future versions.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   public merge<Q extends StateStore<any>>(
     stateStore: Q extends StateStore<infer L>
       ? Extract<keyof T, keyof L> extends never

@@ -99,8 +99,7 @@ export class Poll {
   }
 
   private getInitialStateFromPollResponse = (poll: PollInitOptions['poll']) => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { own_votes, id, ...pollResponseForState } = poll;
+    const { own_votes, id: _id, ...pollResponseForState } = poll;
     const { ownAnswer, ownVotes } = own_votes?.reduce<{
       ownVotes: PollVote[];
       ownAnswer?: PollAnswer;
@@ -145,8 +144,8 @@ export class Poll {
   public handlePollUpdated = (event: Event) => {
     if (event.poll?.id && event.poll.id !== this.id) return;
     if (!isPollUpdatedEvent(event)) return;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { id, ...pollData } = extractPollData(event.poll);
+
+    const { id: _id, ...pollData } = extractPollData(event.poll);
     // @ts-expect-error type mismatch
     this.state.partialNext({ ...pollData, lastActivityAt: new Date(event.created_at) });
     this.upsertOfflineDb();
@@ -408,10 +407,9 @@ export function extractPollData(pollResponse: PollResponse): PollData {
 
 export function mapPollStateToResponse(poll: Poll): PollResponse {
   const {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    lastActivityAt,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    maxVotedOptionIds,
+    lastActivityAt: _lastActivityAt,
+
+    maxVotedOptionIds: _maxVotedOptionIds,
     ownVotesByOptionId,
     ownAnswer,
     ...restState
