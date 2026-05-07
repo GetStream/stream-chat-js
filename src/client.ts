@@ -9,7 +9,14 @@ import { Channel } from './channel';
 import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
 import { UploadManager } from './uploadManager';
-import { CheckSignature, DevToken, JWTUserToken } from './signing';
+import {
+  CheckSignature,
+  decompressWebhookBody as decompressWebhookBodyHelper,
+  DevToken,
+  JWTUserToken,
+  verifyAndDecodeWebhookBody,
+  WebhookSignatureError,
+} from './signing';
 import { TokenManager } from './token_manager';
 import { WSConnectionFallback } from './connection_fallback';
 import { Campaign } from './campaign';
@@ -3635,6 +3642,63 @@ export class StreamChat {
    */
   verifyWebhook(requestBody: string | Buffer, xSignature: string) {
     return !!this.secret && CheckSignature(requestBody, this.secret, xSignature);
+  }
+
+  /**
+   * Reverses the encoding wrappers Stream applies to outbound webhook /
+   * SQS / SNS payloads, returning the raw JSON Buffer the server signed.
+   *
+   * Use this when you only need to read the payload (e.g. logging,
+   * fan-out) and the signature has already been verified upstream. Most
+   * integrations should call {@link verifyAndDecodeWebhook} instead so the
+   * decode and HMAC check happen in one step.
+   *
+   * @param rawBody Raw transport bytes (HTTP request body, SQS `Body`, SNS
+   *   `Message`).
+   * @param contentEncoding `'gzip'` when payload compression is enabled,
+   *   otherwise `null` / `undefined`.
+   * @param payloadEncoding `'base64'` (or `'b64'`) for SQS / SNS firehose,
+   *   otherwise `null` / `undefined`.
+   */
+  decompressWebhookBody(
+    rawBody: string | Buffer,
+    contentEncoding?: string | null,
+    payloadEncoding?: string | null,
+  ): Buffer {
+    return decompressWebhookBodyHelper(rawBody, contentEncoding, payloadEncoding);
+  }
+
+  /**
+   * Decompresses (when needed) and verifies the HMAC signature, returning
+   * the uncompressed JSON Buffer. The signature is always computed over the
+   * innermost (uncompressed, base64-decoded) JSON, so the verification rule
+   * is invariant across HTTP webhooks and SQS / SNS firehose delivery.
+   *
+   * Pass `contentEncoding` from the `Content-Encoding` header (HTTP) or from
+   * the SQS / SNS message attributes. Pass `payloadEncoding: 'base64'` when
+   * receiving Stream webhooks via SQS / SNS, since those transports
+   * base64-wrap the compressed bytes so they stay valid UTF-8.
+   *
+   * @throws {WebhookSignatureError} When the signature does not match.
+   */
+  verifyAndDecodeWebhook(
+    rawBody: string | Buffer,
+    xSignature: string,
+    contentEncoding?: string | null,
+    payloadEncoding?: string | null,
+  ): Buffer {
+    if (!this.secret) {
+      throw new WebhookSignatureError(
+        'cannot verify webhook signature without an API secret on the client',
+      );
+    }
+    return verifyAndDecodeWebhookBody(
+      rawBody,
+      xSignature,
+      this.secret,
+      contentEncoding,
+      payloadEncoding,
+    );
   }
 
   /** getPermission - gets the definition for a permission
