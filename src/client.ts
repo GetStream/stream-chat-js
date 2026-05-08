@@ -34,6 +34,8 @@ import {
 
 import type {
   ActiveLiveLocationsAPIResponse,
+  AddUserGroupMembersOptions,
+  AddUserGroupMembersResponse,
   APIErrorResponse,
   APIResponse,
   AppSettings,
@@ -78,12 +80,15 @@ import type {
   CreatePollOptionAPIResponse,
   CreatePredefinedFilterOptions,
   CreateReminderOptions,
+  CreateUserGroupOptions,
+  CreateUserGroupResponse,
   CustomPermissionOptions,
   DeactivateUsersOptions,
   DeleteChannelsResponse,
   DeleteCommandResponse,
   DeleteMessageOptions,
   DeleteRetentionPolicyResponse,
+  DeleteUserGroupOptions,
   DeleteUserOptions,
   Device,
   DeviceIdentifier,
@@ -126,6 +131,8 @@ import type {
   GetThreadOptions,
   GetUnreadCountAPIResponse,
   GetUnreadCountBatchAPIResponse,
+  GetUserGroupOptions,
+  GetUserGroupResponse,
   ListChannelResponse,
   ListCommandsResponse,
   ListImportsPaginationOptions,
@@ -189,6 +196,8 @@ import type {
   QueryTeamUsageStatsResponse,
   QueryThreadsAPIResponse,
   QueryThreadsOptions,
+  QueryUserGroupsOptions,
+  QueryUserGroupsResponse,
   QueryVotesFilters,
   QueryVotesOptions,
   ReactionFilters,
@@ -197,6 +206,8 @@ import type {
   ReactivateUserOptions,
   ReactivateUsersOptions,
   ReminderAPIResponse,
+  RemoveUserGroupMembersOptions,
+  RemoveUserGroupMembersResponse,
   ReviewFlagReportOptions,
   ReviewFlagReportResponse,
   SdkIdentifier,
@@ -204,6 +215,8 @@ import type {
   SearchMessageSortBase,
   SearchOptions,
   SearchPayload,
+  SearchUserGroupsOptions,
+  SearchUserGroupsResponse,
   SegmentData,
   SegmentResponse,
   SegmentTargetsResponse,
@@ -237,6 +250,8 @@ import type {
   UpdatePredefinedFilterOptions,
   UpdateReminderOptions,
   UpdateSegmentData,
+  UpdateUserGroupOptions,
+  UpdateUserGroupResponse,
   UpdateUsersAPIResponse,
   UpsertPushPreferencesResponse,
   UserCustomEvent,
@@ -1817,6 +1832,120 @@ export class StreamChat {
     this.state.updateUsers(data.users);
 
     return data;
+  }
+
+  /**
+   * queryUserGroups - List user groups with cursor-based pagination.
+   *
+   * @param {QueryUserGroupsOptions} options The query options
+   *
+   * @return {Promise<QueryUserGroupsResponse>} User Group Query Response
+   */
+  async queryUserGroups(options: QueryUserGroupsOptions = {}) {
+    return await this.get<QueryUserGroupsResponse>(this.baseURL + '/usergroups', options);
+  }
+
+  /**
+   * createUserGroup - Create a user group
+   *
+   * @param {CreateUserGroupOptions} options The create options
+   *
+   * @return {Promise<CreateUserGroupResponse>} User Group Create Response
+   */
+  async createUserGroup(options: CreateUserGroupOptions) {
+    return await this.post<CreateUserGroupResponse>(
+      this.baseURL + '/usergroups',
+      options,
+    );
+  }
+
+  /**
+   * getUserGroup - Get a user group by ID
+   *
+   * @param {string} id The user group ID
+   * @param {GetUserGroupOptions} options Optional query options
+   *
+   * @return {Promise<GetUserGroupResponse>} User Group Get Response
+   */
+  async getUserGroup(id: string, options: GetUserGroupOptions = {}) {
+    return await this.get<GetUserGroupResponse>(
+      `${this.baseURL}/usergroups/${encodeURIComponent(id)}`,
+      options,
+    );
+  }
+
+  /**
+   * searchUserGroups - Search user groups by prefix for autocomplete
+   *
+   * @param {SearchUserGroupsOptions} options The search options
+   *
+   * @return {Promise<SearchUserGroupsResponse>} User Group Search Response
+   */
+  async searchUserGroups(options: SearchUserGroupsOptions) {
+    return await this.get<SearchUserGroupsResponse>(
+      this.baseURL + '/usergroups/search',
+      options,
+    );
+  }
+
+  /**
+   * updateUserGroup - Update a user group by ID
+   *
+   * @param {string} id The user group ID
+   * @param {UpdateUserGroupOptions} options The update options
+   *
+   * @return {Promise<UpdateUserGroupResponse>} User Group Update Response
+   */
+  async updateUserGroup(id: string, options: UpdateUserGroupOptions) {
+    return await this.put<UpdateUserGroupResponse>(
+      `${this.baseURL}/usergroups/${encodeURIComponent(id)}`,
+      options,
+    );
+  }
+
+  /**
+   * deleteUserGroup - Delete a user group by ID
+   *
+   * @param {string} id The user group ID
+   * @param {DeleteUserGroupOptions} options Optional query options
+   *
+   * @return {Promise<APIResponse>} User Group Delete Response
+   */
+  async deleteUserGroup(id: string, options: DeleteUserGroupOptions = {}) {
+    return await this.delete<APIResponse>(
+      `${this.baseURL}/usergroups/${encodeURIComponent(id)}`,
+      options,
+    );
+  }
+
+  /**
+   * addUserGroupMembers - Add members to a user group
+   *
+   * @param {string} id The user group ID
+   * @param {AddUserGroupMembersOptions} options The add-members options
+   *
+   * @return {Promise<AddUserGroupMembersResponse>} User Group Add Members Response
+   */
+  async addUserGroupMembers(id: string, options: AddUserGroupMembersOptions) {
+    return await this.post<AddUserGroupMembersResponse>(
+      `${this.baseURL}/usergroups/${encodeURIComponent(id)}/members`,
+      options,
+    );
+  }
+
+  /**
+   * removeUserGroupMembers - Remove members from a user group
+   *
+   * @param {string} id The user group ID
+   * @param {RemoveUserGroupMembersOptions} options The remove-members options
+   *
+   * @return {Promise<RemoveUserGroupMembersResponse>} User Group Remove Members Response
+   */
+  async removeUserGroupMembers(id: string, options: RemoveUserGroupMembersOptions) {
+    return await this.post<RemoveUserGroupMembersResponse>(
+      `${this.baseURL}/usergroups/${encodeURIComponent(id)}/members/delete`,
+      options,
+    );
   }
 
   /**

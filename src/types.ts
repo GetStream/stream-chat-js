@@ -754,6 +754,7 @@ export type MessageResponseBase = MessageBase & {
   mentioned_users?: UserResponse[];
   mentioned_channel?: boolean;
   mentioned_here?: boolean;
+  mentioned_group_ids?: string[];
   mentioned_roles?: string[];
   message_text_updated_at?: string;
   moderation?: ModerationResponse; // present only with Moderation v2
@@ -2876,6 +2877,9 @@ export type Message = Partial<
     mentioned_users: string[];
     shared_location?: StaticLocationPayload | LiveLocationPayload;
     mentioned_channel?: boolean;
+    mentioned_here?: boolean;
+    mentioned_group_ids?: string[];
+    mentioned_roles?: string[];
   }
 >;
 
@@ -3148,6 +3152,10 @@ export type ReservedUpdatedMessageFields = keyof typeof RESERVED_UPDATED_MESSAGE
 
 export type UpdatedMessage = Omit<MessageResponse, ReservedUpdatedMessageFields> & {
   mentioned_users?: string[];
+  mentioned_channel?: boolean;
+  mentioned_here?: boolean;
+  mentioned_group_ids?: string[];
+  mentioned_roles?: string[];
   type?: MessageLabel;
 };
 
@@ -4454,6 +4462,10 @@ export type DraftMessage = {
   custom?: {};
   html?: string;
   mentioned_users?: string[];
+  mentioned_channel?: boolean;
+  mentioned_here?: boolean;
+  mentioned_group_ids?: string[];
+  mentioned_roles?: string[];
   mml?: string;
   parent_id?: string;
   poll_id?: string;
@@ -4669,6 +4681,100 @@ export type QueryRemindersResponse = {
   reminders: ReminderResponse[];
   prev?: string;
   next?: string;
+};
+
+export type UserGroupMemberResponse = {
+  group_id: string;
+  user_id: string;
+  is_admin: boolean;
+  created_at: string;
+};
+
+export type UserGroupResponse = {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  description?: string;
+  team_id?: string;
+  members?: UserGroupMemberResponse[];
+  created_by?: string;
+};
+
+export type CreateUserGroupOptions = {
+  name: string;
+  description?: string;
+  id?: string;
+  member_ids?: string[];
+  team_id?: string;
+};
+
+export type CreateUserGroupResponse = APIResponse & {
+  user_group: UserGroupResponse;
+};
+
+export type GetUserGroupOptions = {
+  team_id?: string;
+};
+
+export type GetUserGroupResponse = APIResponse & {
+  user_group: UserGroupResponse;
+};
+
+export type QueryUserGroupsOptions = {
+  limit?: number;
+  id_gt?: string;
+  created_at_gt?: string;
+  team_id?: string;
+};
+
+export type QueryUserGroupsResponse = APIResponse & {
+  user_groups: UserGroupResponse[];
+};
+
+export type SearchUserGroupsOptions = {
+  query: string;
+  limit?: number;
+  id_gt?: string;
+  name_gt?: string;
+  team_id?: string;
+};
+
+export type SearchUserGroupsResponse = APIResponse & {
+  user_groups: UserGroupResponse[];
+};
+
+export type UpdateUserGroupOptions = {
+  description?: string;
+  name?: string;
+  team_id?: string;
+};
+
+export type UpdateUserGroupResponse = APIResponse & {
+  user_group: UserGroupResponse;
+};
+
+export type DeleteUserGroupOptions = {
+  team_id?: string;
+};
+
+export type AddUserGroupMembersOptions = {
+  member_ids: string[];
+  as_admin?: boolean;
+  team_id?: string;
+};
+
+export type AddUserGroupMembersResponse = APIResponse & {
+  user_group: UserGroupResponse;
+};
+
+export type RemoveUserGroupMembersOptions = {
+  member_ids: string[];
+  team_id?: string;
+};
+
+export type RemoveUserGroupMembersResponse = APIResponse & {
+  user_group: UserGroupResponse;
 };
 
 export type HookType = 'webhook' | 'sqs' | 'sns' | 'pending_message';
