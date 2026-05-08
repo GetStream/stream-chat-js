@@ -10,6 +10,13 @@ export { type CooldownTimerState } from './CooldownTimer';
 export * from './events';
 export * from './insights';
 export * from './messageComposer';
+export {
+  escapeCommandRegExp,
+  getCompleteCommandInString,
+  getRawCommandName,
+  notifyCommandDisabled,
+  stripCommandFromText,
+} from './messageComposer/middleware/textComposer/commandUtils';
 export * from './messageDelivery';
 export * from './middleware';
 export * from './moderation';
