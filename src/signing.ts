@@ -133,13 +133,13 @@ export class WebhookSignatureError extends Error {
   }
 }
 
-const GZIP_MAGIC = Buffer.from([0x1f, 0x8b, 0x08]);
+const GZIP_MAGIC = Buffer.from([0x1f, 0x8b]);
 
 /**
- * Returns `body` as a `Buffer`, gzip-decompressed when its first three
- * bytes match the gzip magic (`1f 8b 08`). When the body is plain JSON
- * (no compression, or middleware already decompressed), the bytes are
- * returned unchanged.
+ * Returns `body` as a `Buffer`, gzip-decompressed when its first two
+ * bytes match the gzip magic (`1f 8b`, per RFC 1952). When the body is
+ * plain JSON (no compression, or middleware already decompressed), the
+ * bytes are returned unchanged.
  *
  * Magic-byte detection (rather than relying on a header) keeps the
  * same handler correct when middleware - Express, Next.js, AWS Lambda
@@ -147,7 +147,7 @@ const GZIP_MAGIC = Buffer.from([0x1f, 0x8b, 0x08]);
  */
 export function ungzipPayload(rawBody: string | Buffer): Buffer {
   const body = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(rawBody);
-  if (body.length >= 3 && body.subarray(0, 3).equals(GZIP_MAGIC)) {
+  if (body.length >= 2 && body.subarray(0, 2).equals(GZIP_MAGIC)) {
     try {
       return zlib.gunzipSync(body);
     } catch (err) {
