@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import zlib from 'zlib';
 import { decodeBase64, encodeBase64 } from './base64';
-import type { UR } from './types';
+import type { Event, UR } from './types';
 
 /**
  * Creates the JWT token that can be used for a UserSession
@@ -85,16 +85,24 @@ export function DevToken(userId: string) {
 }
 
 /**
+ * Constant-time HMAC-SHA256 verification of `signature` against the
+ * digest of `body` using `secret` as the key. The signature is always
+ * computed over the **uncompressed** JSON bytes, so callers that
+ * decoded a gzipped or base64-wrapped payload must pass the inflated
+ * bytes here.
  *
- * @param {string | Buffer} body the signed message
- * @param {string} secret the shared secret used to generate the signature (Stream API secret)
- * @param {string} signature the signature to validate
- * @return {boolean}
+ * The legacy `client.verifyWebhook` helper wraps this function, so
+ * callers that have already migrated to `verifyAndParseWebhook` /
+ * `verifyAndParseSqs` / `verifyAndParseSns` rarely need to invoke this
+ * directly.
  */
-export function CheckSignature(body: string | Buffer, secret: string, signature: string) {
+export function verifySignature(
+  body: string | Buffer,
+  signature: string,
+  secret: string,
+): boolean {
   const key = Buffer.from(secret, 'utf8');
   const hash = crypto.createHmac('sha256', key).update(body).digest('hex');
-
   try {
     return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(signature));
   } catch {
@@ -103,10 +111,19 @@ export function CheckSignature(body: string | Buffer, secret: string, signature:
 }
 
 /**
- * Thrown by `verifyAndDecodeWebhookBody` (and the corresponding
- * `StreamChat.verifyAndDecodeWebhook` wrapper) when the supplied
- * `x-signature` does not match the HMAC of the uncompressed payload, or when
- * a `payload_encoding` wrapper such as base64 is malformed.
+ * @deprecated Use {@link verifySignature} - same logic, parameters
+ * reordered to match the cross-SDK contract
+ * (`verifySignature(body, signature, secret)`).
+ */
+export function CheckSignature(body: string | Buffer, secret: string, signature: string) {
+  return verifySignature(body, signature, secret);
+}
+
+/**
+ * Thrown by {@link verifyAndParseWebhook}, {@link verifyAndParseSqs}, and
+ * {@link verifyAndParseSns} when the supplied `x-signature` does not
+ * match the HMAC of the uncompressed payload, or when a gzip / base64
+ * envelope is malformed.
  */
 export class WebhookSignatureError extends Error {
   public name = 'WebhookSignatureError';
@@ -116,112 +133,121 @@ export class WebhookSignatureError extends Error {
   }
 }
 
-const PAYLOAD_ENCODING_BASE64 = new Set(['base64', 'b64']);
-const CONTENT_ENCODING_GZIP = 'gzip';
-
-const normalizeEncoding = (value?: string | null): string =>
-  value == null ? '' : value.trim().toLowerCase();
+const GZIP_MAGIC = Buffer.from([0x1f, 0x8b, 0x08]);
 
 /**
- * Reverses the encoding wrappers Stream applies to outbound webhook / SQS /
- * SNS payloads, returning the raw JSON Buffer the server signed.
+ * Returns `body` as a `Buffer`, gzip-decompressed when its first three
+ * bytes match the gzip magic (`1f 8b 08`). When the body is plain JSON
+ * (no compression, or middleware already decompressed), the bytes are
+ * returned unchanged.
  *
- * Decoding order matches the server's encoding order: first the transport
- * envelope (`payload_encoding`, e.g. base64 for SQS / SNS firehose), then the
- * compression layer (`Content-Encoding`, e.g. gzip).
- *
- * `null`, `undefined`, or empty strings for either argument are treated as a
- * no-op so existing HTTP webhook integrations behave identically to today.
- *
- * @param rawBody Raw transport bytes (HTTP request body, SQS `Body`, SNS
- *   `Message`).
- * @param contentEncoding `'gzip'` when payload compression is enabled,
- *   otherwise `null` / `undefined`.
- * @param payloadEncoding `'base64'` (or alias `'b64'`) for SQS / SNS firehose
- *   delivery, otherwise `null` / `undefined`.
- *
- * @throws {WebhookSignatureError} When `payloadEncoding` is `'base64'` but the
- *   input bytes are not valid canonical base64.
- * @throws {Error} When the body cannot be gunzipped, or when an unsupported
- *   encoding name is supplied.
+ * Magic-byte detection (rather than relying on a header) keeps the
+ * same handler correct when middleware - Express, Next.js, AWS Lambda
+ * - auto-decompresses the request before your code sees it.
  */
-export function decompressWebhookBody(
-  rawBody: string | Buffer,
-  contentEncoding?: string | null,
-  payloadEncoding?: string | null,
-): Buffer {
-  let working: Buffer = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(rawBody);
-
-  const payloadEnc = normalizeEncoding(payloadEncoding);
-  if (payloadEnc) {
-    if (PAYLOAD_ENCODING_BASE64.has(payloadEnc)) {
-      const inputStr = working.toString('ascii');
-      // Reject anything that isn't canonical base64 up front. Node's base64
-      // decoder is permissive (silently strips characters outside the
-      // alphabet, accepts both standard and URL-safe variants), so we have
-      // to be strict here to avoid silently corrupting the body before the
-      // signature check runs.
-      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(inputStr) || inputStr.length % 4 !== 0) {
-        throw new WebhookSignatureError(
-          'invalid webhook payload_encoding: malformed base64 input',
-        );
-      }
-      const decoded = Buffer.from(inputStr, 'base64');
-      if (decoded.toString('base64').length !== inputStr.length) {
-        throw new WebhookSignatureError(
-          'invalid webhook payload_encoding: malformed base64 input',
-        );
-      }
-      working = decoded;
-    } else {
-      throw new Error(
-        `unsupported webhook payload_encoding: ${payloadEncoding}. This SDK only supports base64.`,
-      );
+export function ungzipPayload(rawBody: string | Buffer): Buffer {
+  const body = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(rawBody);
+  if (body.length >= 3 && body.subarray(0, 3).equals(GZIP_MAGIC)) {
+    try {
+      return zlib.gunzipSync(body);
+    } catch (err) {
+      const cause = err instanceof Error ? err.message : String(err);
+      throw new WebhookSignatureError(`failed to decompress gzip payload: ${cause}`);
     }
   }
-
-  const contentEnc = normalizeEncoding(contentEncoding);
-  if (contentEnc) {
-    if (contentEnc === CONTENT_ENCODING_GZIP) {
-      try {
-        working = zlib.gunzipSync(working);
-      } catch (err) {
-        const cause = err instanceof Error ? err.message : String(err);
-        throw new Error(`failed to decompress webhook body: ${cause}`);
-      }
-    } else {
-      throw new Error(
-        `unsupported webhook Content-Encoding: ${contentEncoding}. This SDK only supports gzip; set webhook_compression_algorithm to "gzip" on the app config.`,
-      );
-    }
-  }
-
-  return working;
+  return body;
 }
 
 /**
- * Decompresses (when needed) and verifies the HMAC signature of an outbound
- * Stream webhook payload, returning the uncompressed JSON Buffer.
+ * Reverses the SQS firehose envelope: the message `Body` is
+ * base64-decoded, then the result is gzip-decompressed when it begins
+ * with the gzip magic. Returns the raw JSON `Buffer` Stream signed.
  *
- * The signature is always computed over the innermost (uncompressed,
- * base64-decoded) JSON, so the verification rule is invariant across HTTP
- * webhooks and SQS / SNS firehose delivery.
- *
- * @throws {WebhookSignatureError} When the signature does not match, or when
- *   the `payload_encoding` envelope is malformed.
- * @throws {Error} When the body cannot be gunzipped, or when an unsupported
- *   encoding name is supplied.
+ * SQS bodies are always base64-encoded so they remain valid UTF-8 over
+ * the queue. The same call works whether or not Stream is currently
+ * compressing payloads for this app.
  */
-export function verifyAndDecodeWebhookBody(
-  rawBody: string | Buffer,
-  xSignature: string,
-  secret: string,
-  contentEncoding?: string | null,
-  payloadEncoding?: string | null,
-): Buffer {
-  const decoded = decompressWebhookBody(rawBody, contentEncoding, payloadEncoding);
-  if (!CheckSignature(decoded, secret, xSignature)) {
+export function decodeSqsPayload(body: string): Buffer {
+  // Reject anything that isn't canonical base64 up front. Node's base64
+  // decoder is permissive (silently strips characters outside the
+  // alphabet, accepts both standard and URL-safe variants), so we have
+  // to be strict here to avoid silently corrupting the body before the
+  // signature check runs.
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(body) || body.length % 4 !== 0) {
+    throw new WebhookSignatureError('failed to base64-decode payload: malformed input');
+  }
+  const decoded = Buffer.from(body, 'base64');
+  if (decoded.toString('base64').length !== body.length) {
+    throw new WebhookSignatureError('failed to base64-decode payload: malformed input');
+  }
+  return ungzipPayload(decoded);
+}
+
+/**
+ * Identical to {@link decodeSqsPayload}; exposed under both names so
+ * call sites read intent.
+ */
+export function decodeSnsPayload(message: string): Buffer {
+  return decodeSqsPayload(message);
+}
+
+/**
+ * Parse a JSON-encoded webhook event into a typed {@link Event}. New
+ * event types Stream introduces still parse successfully - the runtime
+ * shape is the JSON Stream sent and the `type` field stays preserved.
+ */
+export function parseEvent(payload: Buffer | string): Event {
+  const text = Buffer.isBuffer(payload) ? payload.toString('utf8') : payload;
+  return JSON.parse(text) as Event;
+}
+
+function verifyAndParse(payload: Buffer, signature: string, secret: string): Event {
+  if (!verifySignature(payload, signature, secret)) {
     throw new WebhookSignatureError();
   }
-  return decoded;
+  return parseEvent(payload);
+}
+
+/**
+ * Decompress (when gzipped), verify the HMAC `signature`, and return
+ * the parsed {@link Event}.
+ *
+ * @param rawBody Raw HTTP request body bytes Stream signed
+ * @param signature Value of the `X-Signature` header
+ * @param secret Your app's API secret
+ * @throws {WebhookSignatureError} When the signature does not match or
+ *   the gzip envelope is malformed.
+ */
+export function verifyAndParseWebhook(
+  rawBody: string | Buffer,
+  signature: string,
+  secret: string,
+): Event {
+  return verifyAndParse(ungzipPayload(rawBody), signature, secret);
+}
+
+/**
+ * Decode the SQS message `Body` (base64, then gzip-if-magic), verify
+ * the HMAC `signature` from the `X-Signature` message attribute, and
+ * return the parsed {@link Event}.
+ */
+export function verifyAndParseSqs(
+  messageBody: string,
+  signature: string,
+  secret: string,
+): Event {
+  return verifyAndParse(decodeSqsPayload(messageBody), signature, secret);
+}
+
+/**
+ * Decode the SNS notification `Message` (identical to SQS handling),
+ * verify the HMAC `signature` from the `X-Signature` message attribute,
+ * and return the parsed {@link Event}.
+ */
+export function verifyAndParseSns(
+  message: string,
+  signature: string,
+  secret: string,
+): Event {
+  return verifyAndParse(decodeSnsPayload(message), signature, secret);
 }

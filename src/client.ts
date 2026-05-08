@@ -10,11 +10,12 @@ import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
 import { UploadManager } from './uploadManager';
 import {
-  CheckSignature,
-  decompressWebhookBody as decompressWebhookBodyHelper,
   DevToken,
   JWTUserToken,
-  verifyAndDecodeWebhookBody,
+  verifyAndParseSns as verifyAndParseSnsHelper,
+  verifyAndParseSqs as verifyAndParseSqsHelper,
+  verifyAndParseWebhook as verifyAndParseWebhookHelper,
+  verifySignature,
   WebhookSignatureError,
 } from './signing';
 import { TokenManager } from './token_manager';
@@ -3641,64 +3642,72 @@ export class StreamChat {
    * @returns {boolean}
    */
   verifyWebhook(requestBody: string | Buffer, xSignature: string) {
-    return !!this.secret && CheckSignature(requestBody, this.secret, xSignature);
+    return !!this.secret && verifySignature(requestBody, xSignature, this.secret);
   }
 
   /**
-   * Reverses the encoding wrappers Stream applies to outbound webhook /
-   * SQS / SNS payloads, returning the raw JSON Buffer the server signed.
+   * Verify and parse an HTTP webhook event.
    *
-   * Use this when you only need to read the payload (e.g. logging,
-   * fan-out) and the signature has already been verified upstream. Most
-   * integrations should call {@link verifyAndDecodeWebhook} instead so the
-   * decode and HMAC check happen in one step.
+   * Decompresses `rawBody` when gzipped (detected from the body bytes),
+   * verifies the `X-Signature` header against the app's API secret, and
+   * returns the parsed `Event`. Works whether or not Stream is currently
+   * compressing payloads for this app, and stays correct behind
+   * middleware that auto-decompresses the request.
    *
-   * @param rawBody Raw transport bytes (HTTP request body, SQS `Body`, SNS
-   *   `Message`).
-   * @param contentEncoding `'gzip'` when payload compression is enabled,
-   *   otherwise `null` / `undefined`.
-   * @param payloadEncoding `'base64'` (or `'b64'`) for SQS / SNS firehose,
-   *   otherwise `null` / `undefined`.
+   * @param rawBody Raw HTTP request body bytes Stream signed
+   * @param signature Value of the `X-Signature` header
+   * @throws {WebhookSignatureError} When the signature does not match or
+   *   the gzip envelope is malformed.
    */
-  decompressWebhookBody(
-    rawBody: string | Buffer,
-    contentEncoding?: string | null,
-    payloadEncoding?: string | null,
-  ): Buffer {
-    return decompressWebhookBodyHelper(rawBody, contentEncoding, payloadEncoding);
-  }
-
-  /**
-   * Decompresses (when needed) and verifies the HMAC signature, returning
-   * the uncompressed JSON Buffer. The signature is always computed over the
-   * innermost (uncompressed, base64-decoded) JSON, so the verification rule
-   * is invariant across HTTP webhooks and SQS / SNS firehose delivery.
-   *
-   * Pass `contentEncoding` from the `Content-Encoding` header (HTTP) or from
-   * the SQS / SNS message attributes. Pass `payloadEncoding: 'base64'` when
-   * receiving Stream webhooks via SQS / SNS, since those transports
-   * base64-wrap the compressed bytes so they stay valid UTF-8.
-   *
-   * @throws {WebhookSignatureError} When the signature does not match.
-   */
-  verifyAndDecodeWebhook(
-    rawBody: string | Buffer,
-    xSignature: string,
-    contentEncoding?: string | null,
-    payloadEncoding?: string | null,
-  ): Buffer {
+  verifyAndParseWebhook(rawBody: string | Buffer, signature: string) {
     if (!this.secret) {
       throw new WebhookSignatureError(
         'cannot verify webhook signature without an API secret on the client',
       );
     }
-    return verifyAndDecodeWebhookBody(
-      rawBody,
-      xSignature,
-      this.secret,
-      contentEncoding,
-      payloadEncoding,
-    );
+    return verifyAndParseWebhookHelper(rawBody, signature, this.secret);
+  }
+
+  /**
+   * Verify and parse an SQS firehose webhook event.
+   *
+   * Reverses the base64 (+ optional gzip) wrapping on the SQS `Body`,
+   * verifies the `X-Signature` message attribute against the app's API
+   * secret, and returns the parsed `Event`.
+   *
+   * @param messageBody SQS message `Body` string
+   * @param signature Value of the `X-Signature` message attribute
+   * @throws {WebhookSignatureError} When the signature does not match or
+   *   the base64 / gzip envelope is malformed.
+   */
+  verifyAndParseSqs(messageBody: string, signature: string) {
+    if (!this.secret) {
+      throw new WebhookSignatureError(
+        'cannot verify webhook signature without an API secret on the client',
+      );
+    }
+    return verifyAndParseSqsHelper(messageBody, signature, this.secret);
+  }
+
+  /**
+   * Verify and parse an SNS firehose webhook event.
+   *
+   * Reverses the base64 (+ optional gzip) wrapping on the SNS
+   * notification `Message`, verifies the `X-Signature` message attribute
+   * against the app's API secret, and returns the parsed `Event`.
+   *
+   * @param message SNS notification `Message` field (string)
+   * @param signature Value of the `X-Signature` message attribute
+   * @throws {WebhookSignatureError} When the signature does not match or
+   *   the base64 / gzip envelope is malformed.
+   */
+  verifyAndParseSns(message: string, signature: string) {
+    if (!this.secret) {
+      throw new WebhookSignatureError(
+        'cannot verify webhook signature without an API secret on the client',
+      );
+    }
+    return verifyAndParseSnsHelper(message, signature, this.secret);
   }
 
   /** getPermission - gets the definition for a permission

@@ -4,7 +4,17 @@ import zlib from 'zlib';
 import { describe, it, expect, beforeEach } from 'vitest';
 
 import { StreamChat } from '../../src/client';
-import { WebhookSignatureError } from '../../src/signing';
+import {
+  decodeSnsPayload,
+  decodeSqsPayload,
+  parseEvent,
+  ungzipPayload,
+  verifyAndParseSns,
+  verifyAndParseSqs,
+  verifyAndParseWebhook,
+  verifySignature,
+  WebhookSignatureError,
+} from '../../src/signing';
 
 const JSON_BODY = '{"type":"message.new","message":{"text":"the quick brown fox"}}';
 const API_SECRET = 'tsec2';
@@ -18,17 +28,16 @@ const gzip = (body: Buffer | string) =>
 const base64 = (body: Buffer | string) =>
   (Buffer.isBuffer(body) ? body : Buffer.from(body)).toString('base64');
 
-describe('Webhook decompression and verification', () => {
+describe('Webhook verification + parsing', () => {
   let client: StreamChat;
 
   beforeEach(() => {
     client = new StreamChat('api_key', API_SECRET);
   });
 
-  describe('verifyWebhook (existing helper, unchanged)', () => {
-    it('still validates a plain JSON body with its HMAC signature', () => {
-      const signature = sign(JSON_BODY);
-      expect(client.verifyWebhook(JSON_BODY, signature)).toBe(true);
+  describe('verifyWebhook (legacy boolean helper, unchanged)', () => {
+    it('validates a plain JSON body with its HMAC signature', () => {
+      expect(client.verifyWebhook(JSON_BODY, sign(JSON_BODY))).toBe(true);
     });
 
     it('rejects when signature is wrong', () => {
@@ -36,148 +45,196 @@ describe('Webhook decompression and verification', () => {
     });
   });
 
-  describe('decompressWebhookBody', () => {
-    it('returns the input unchanged when both encodings are null', () => {
-      const out = client.decompressWebhookBody(JSON_BODY, null, null);
-      expect(out.toString('utf8')).toBe(JSON_BODY);
+  describe('verifySignature', () => {
+    it('returns true for matching HMAC', () => {
+      expect(verifySignature(JSON_BODY, sign(JSON_BODY), API_SECRET)).toBe(true);
     });
 
-    it('returns the input unchanged when both encodings are undefined', () => {
-      const out = client.decompressWebhookBody(JSON_BODY);
-      expect(out.toString('utf8')).toBe(JSON_BODY);
+    it('returns false for mismatched signature', () => {
+      expect(verifySignature(JSON_BODY, '0'.repeat(64), API_SECRET)).toBe(false);
     });
 
-    it('returns the input unchanged when both encodings are empty strings', () => {
-      const out = client.decompressWebhookBody(JSON_BODY, '', '');
-      expect(out.toString('utf8')).toBe(JSON_BODY);
+    it('returns false for wrong secret', () => {
+      const sig = crypto.createHmac('sha256', 'other').update(JSON_BODY).digest('hex');
+      expect(verifySignature(JSON_BODY, sig, API_SECRET)).toBe(false);
     });
 
-    it('returns the input unchanged when given a Buffer with no encodings', () => {
-      const out = client.decompressWebhookBody(Buffer.from(JSON_BODY));
-      expect(out.toString('utf8')).toBe(JSON_BODY);
-    });
-
-    it('round-trips a gzip-compressed payload (Buffer input)', () => {
+    it('rejects signatures computed over compressed bytes', () => {
       const compressed = gzip(JSON_BODY);
-      const out = client.decompressWebhookBody(compressed, 'gzip');
-      expect(out.toString('utf8')).toBe(JSON_BODY);
-    });
-
-    it('round-trips a base64-wrapped payload from a string input', () => {
-      const wrapped = base64(JSON_BODY);
-      const out = client.decompressWebhookBody(wrapped, null, 'base64');
-      expect(out.toString('utf8')).toBe(JSON_BODY);
-    });
-
-    it('round-trips a base64-wrapped payload from a Buffer input', () => {
-      const wrapped = Buffer.from(base64(JSON_BODY), 'ascii');
-      const out = client.decompressWebhookBody(wrapped, null, 'base64');
-      expect(out.toString('utf8')).toBe(JSON_BODY);
-    });
-
-    it('round-trips a base64+gzip payload (SQS / SNS shape)', () => {
-      const wrapped = base64(gzip(JSON_BODY));
-      const out = client.decompressWebhookBody(wrapped, 'gzip', 'base64');
-      expect(out.toString('utf8')).toBe(JSON_BODY);
-    });
-
-    it('treats encoding names case-insensitively (GZIP)', () => {
-      const compressed = gzip(JSON_BODY);
-      const out = client.decompressWebhookBody(compressed, 'GZIP');
-      expect(out.toString('utf8')).toBe(JSON_BODY);
-    });
-
-    it('treats encoding names case-insensitively (BASE64)', () => {
-      const wrapped = base64(JSON_BODY);
-      const out = client.decompressWebhookBody(wrapped, null, 'BASE64');
-      expect(out.toString('utf8')).toBe(JSON_BODY);
-    });
-
-    it('accepts the b64 alias for base64', () => {
-      const wrapped = base64(JSON_BODY);
-      const out = client.decompressWebhookBody(wrapped, null, 'b64');
-      expect(out.toString('utf8')).toBe(JSON_BODY);
-    });
-
-    it.each(['br', 'brotli', 'zstd', 'deflate', 'compress', 'lz4'])(
-      'rejects unsupported contentEncoding %s',
-      (encoding) => {
-        expect(() => client.decompressWebhookBody(JSON_BODY, encoding)).toThrow(
-          /unsupported webhook Content-Encoding/,
-        );
-      },
-    );
-
-    it.each(['hex', 'url', 'binary'])(
-      'rejects unsupported payloadEncoding %s',
-      (encoding) => {
-        expect(() => client.decompressWebhookBody(JSON_BODY, null, encoding)).toThrow(
-          /unsupported webhook payload_encoding/,
-        );
-      },
-    );
-
-    it('throws when gzip bytes are invalid', () => {
-      expect(() =>
-        client.decompressWebhookBody(Buffer.from('not actually gzip'), 'gzip'),
-      ).toThrow(/failed to decompress webhook body/);
-    });
-
-    it('throws WebhookSignatureError when base64 input is malformed', () => {
-      expect(() =>
-        client.decompressWebhookBody('not*valid*base64', null, 'base64'),
-      ).toThrow(WebhookSignatureError);
+      expect(verifySignature(JSON_BODY, sign(compressed), API_SECRET)).toBe(false);
     });
   });
 
-  describe('verifyAndDecodeWebhook', () => {
-    it('returns the body for a plain HTTP webhook with a valid signature', () => {
-      const signature = sign(JSON_BODY);
-      const out = client.verifyAndDecodeWebhook(JSON_BODY, signature);
+  describe('ungzipPayload', () => {
+    it('passes through plain bytes unchanged', () => {
+      const out = ungzipPayload(JSON_BODY);
       expect(out.toString('utf8')).toBe(JSON_BODY);
     });
 
-    it('returns the body for a gzip-compressed HTTP webhook', () => {
-      const compressed = gzip(JSON_BODY);
-      const signature = sign(JSON_BODY);
-      const out = client.verifyAndDecodeWebhook(compressed, signature, 'gzip');
+    it('passes through Buffer input unchanged', () => {
+      const out = ungzipPayload(Buffer.from(JSON_BODY));
       expect(out.toString('utf8')).toBe(JSON_BODY);
     });
 
-    it('returns the body for a base64+gzip SQS / SNS payload', () => {
+    it('inflates gzip-magic bytes', () => {
+      const out = ungzipPayload(gzip(JSON_BODY));
+      expect(out.toString('utf8')).toBe(JSON_BODY);
+    });
+
+    it('returns Buffer in all cases', () => {
+      expect(Buffer.isBuffer(ungzipPayload(JSON_BODY))).toBe(true);
+      expect(Buffer.isBuffer(ungzipPayload(gzip(JSON_BODY)))).toBe(true);
+    });
+
+    it('handles empty input', () => {
+      expect(ungzipPayload(Buffer.alloc(0)).length).toBe(0);
+    });
+
+    it('throws WebhookSignatureError on truncated gzip with magic', () => {
+      const bad = Buffer.concat([
+        Buffer.from([0x1f, 0x8b, 0x08]),
+        Buffer.from([0, 0, 0]),
+      ]);
+      expect(() => ungzipPayload(bad)).toThrow(WebhookSignatureError);
+    });
+  });
+
+  describe('decodeSqsPayload', () => {
+    it('decodes base64 only (no compression)', () => {
+      expect(decodeSqsPayload(base64(JSON_BODY)).toString('utf8')).toBe(JSON_BODY);
+    });
+
+    it('decodes base64 + gzip', () => {
+      expect(decodeSqsPayload(base64(gzip(JSON_BODY))).toString('utf8')).toBe(JSON_BODY);
+    });
+
+    it('throws WebhookSignatureError on malformed base64', () => {
+      expect(() => decodeSqsPayload('!!!not-base64!!!')).toThrow(WebhookSignatureError);
+    });
+  });
+
+  describe('decodeSnsPayload', () => {
+    it('aliases decodeSqsPayload', () => {
       const wrapped = base64(gzip(JSON_BODY));
-      const signature = sign(JSON_BODY);
-      const out = client.verifyAndDecodeWebhook(wrapped, signature, 'gzip', 'base64');
-      expect(out.toString('utf8')).toBe(JSON_BODY);
+      expect(decodeSnsPayload(wrapped).equals(decodeSqsPayload(wrapped))).toBe(true);
+    });
+
+    it('round-trips base64 + gzip', () => {
+      expect(decodeSnsPayload(base64(gzip(JSON_BODY))).toString('utf8')).toBe(JSON_BODY);
+    });
+  });
+
+  describe('parseEvent', () => {
+    it('parses Buffer payload into a typed event', () => {
+      const ev = parseEvent(Buffer.from(JSON_BODY));
+      expect(ev.type).toBe('message.new');
+      expect(ev.message?.text).toBe('the quick brown fox');
+    });
+
+    it('parses string payload', () => {
+      const ev = parseEvent(JSON_BODY);
+      expect(ev.type).toBe('message.new');
+    });
+
+    it('still parses unknown event types at runtime', () => {
+      const ev = parseEvent('{"type":"a.future.event","custom":42}');
+      expect(ev.type).toBe('a.future.event');
+    });
+
+    it('throws on malformed JSON', () => {
+      expect(() => parseEvent('not json')).toThrow(SyntaxError);
+    });
+  });
+
+  describe('verifyAndParseWebhook', () => {
+    it('parses a plain HTTP webhook with a valid signature', () => {
+      const ev = client.verifyAndParseWebhook(JSON_BODY, sign(JSON_BODY));
+      expect(ev.type).toBe('message.new');
+      expect(ev.message?.text).toBe('the quick brown fox');
+    });
+
+    it('parses a gzip-compressed HTTP webhook', () => {
+      const ev = client.verifyAndParseWebhook(gzip(JSON_BODY), sign(JSON_BODY));
+      expect(ev.type).toBe('message.new');
     });
 
     it('throws WebhookSignatureError on signature mismatch', () => {
-      expect(() => client.verifyAndDecodeWebhook(JSON_BODY, 'deadbeef')).toThrow(
+      expect(() => client.verifyAndParseWebhook(JSON_BODY, 'deadbeef')).toThrow(
         WebhookSignatureError,
       );
     });
 
-    it('rejects a gzip body when the signature was computed over the compressed bytes', () => {
+    it('rejects a gzip body when the signature was computed over compressed bytes', () => {
       const compressed = gzip(JSON_BODY);
-      const wrongSignature = sign(compressed);
-      expect(() =>
-        client.verifyAndDecodeWebhook(compressed, wrongSignature, 'gzip'),
-      ).toThrow(WebhookSignatureError);
-    });
-
-    it('rejects a base64+gzip body when the signature was computed over the wrapped bytes', () => {
-      const wrapped = base64(gzip(JSON_BODY));
-      const wrongSignature = sign(wrapped);
-      expect(() =>
-        client.verifyAndDecodeWebhook(wrapped, wrongSignature, 'gzip', 'base64'),
-      ).toThrow(WebhookSignatureError);
+      expect(() => client.verifyAndParseWebhook(compressed, sign(compressed))).toThrow(
+        WebhookSignatureError,
+      );
     });
 
     it('throws WebhookSignatureError when the client has no API secret', () => {
-      const secretlessClient = new StreamChat('api_key');
-      expect(() => secretlessClient.verifyAndDecodeWebhook(JSON_BODY, 'sig')).toThrow(
+      const secretless = new StreamChat('api_key');
+      expect(() => secretless.verifyAndParseWebhook(JSON_BODY, 'sig')).toThrow(
         WebhookSignatureError,
       );
+    });
+
+    it('also works as a package-level function', () => {
+      const ev = verifyAndParseWebhook(JSON_BODY, sign(JSON_BODY), API_SECRET);
+      expect(ev.type).toBe('message.new');
+    });
+  });
+
+  describe('verifyAndParseSqs', () => {
+    it('parses a base64-only SQS body', () => {
+      const ev = client.verifyAndParseSqs(base64(JSON_BODY), sign(JSON_BODY));
+      expect(ev.type).toBe('message.new');
+    });
+
+    it('parses a base64 + gzip SQS body', () => {
+      const wrapped = base64(gzip(JSON_BODY));
+      const ev = client.verifyAndParseSqs(wrapped, sign(JSON_BODY));
+      expect(ev.type).toBe('message.new');
+    });
+
+    it('rejects a wrapped body when the signature was computed over the wrapper', () => {
+      const wrapped = base64(gzip(JSON_BODY));
+      expect(() => client.verifyAndParseSqs(wrapped, sign(wrapped))).toThrow(
+        WebhookSignatureError,
+      );
+    });
+
+    it('also works as a package-level function', () => {
+      const wrapped = base64(gzip(JSON_BODY));
+      const ev = verifyAndParseSqs(wrapped, sign(JSON_BODY), API_SECRET);
+      expect(ev.type).toBe('message.new');
+    });
+
+    it('surfaces malformed base64 as WebhookSignatureError', () => {
+      expect(() => client.verifyAndParseSqs('!!!not-base64!!!', 'sig')).toThrow(
+        WebhookSignatureError,
+      );
+    });
+  });
+
+  describe('verifyAndParseSns', () => {
+    it('parses a base64 + gzip SNS message', () => {
+      const wrapped = base64(gzip(JSON_BODY));
+      const ev = client.verifyAndParseSns(wrapped, sign(JSON_BODY));
+      expect(ev.type).toBe('message.new');
+    });
+
+    it('produces the same event as verifyAndParseSqs', () => {
+      const wrapped = base64(gzip(JSON_BODY));
+      const sig = sign(JSON_BODY);
+      expect(client.verifyAndParseSns(wrapped, sig)).toEqual(
+        client.verifyAndParseSqs(wrapped, sig),
+      );
+    });
+
+    it('also works as a package-level function', () => {
+      const wrapped = base64(gzip(JSON_BODY));
+      const ev = verifyAndParseSns(wrapped, sign(JSON_BODY), API_SECRET);
+      expect(ev.type).toBe('message.new');
     });
   });
 });
