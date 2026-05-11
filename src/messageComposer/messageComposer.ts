@@ -624,6 +624,7 @@ export class MessageComposer extends WithSubscriptions {
         draft.channel_cid !== this.channel.cid
       )
         return;
+      if (this.editedMessage) return;
       this.initState({ composition: draft });
     }).unsubscribe;
 
@@ -637,6 +638,7 @@ export class MessageComposer extends WithSubscriptions {
       ) {
         return;
       }
+      if (this.editedMessage) return;
 
       this.logDraftUpdateTimestamp();
 
