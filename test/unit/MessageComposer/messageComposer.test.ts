@@ -520,6 +520,7 @@ describe('MessageComposer', () => {
       messageComposer.textComposer.state.partialNext({
         text: '',
         mentionedUsers: [],
+        mentions: [],
         selection: { start: 0, end: 0 },
       });
       expect(messageComposer.hasSendableData).toBe(false);
@@ -579,6 +580,7 @@ describe('MessageComposer', () => {
       messageComposer.textComposer.state.partialNext({
         text: '',
         mentionedUsers: [],
+        mentions: [],
         selection: { start: 0, end: 0 },
       });
       expect(messageComposer.compositionIsEmpty).toBe(true);
@@ -631,6 +633,7 @@ describe('MessageComposer', () => {
         messageComposer.textComposer.state.partialNext({
           text: '',
           mentionedUsers: [],
+          mentions: [],
           selection: { start: 0, end: 0 },
         });
         expect(messageComposer.contentIsEmpty).toBe(true);
@@ -641,6 +644,7 @@ describe('MessageComposer', () => {
         messageComposer.textComposer.state.partialNext({
           text: '',
           mentionedUsers: [],
+          mentions: [],
           selection: { start: 0, end: 0 },
         });
 
@@ -670,6 +674,7 @@ describe('MessageComposer', () => {
         messageComposer.textComposer.state.partialNext({
           text: '',
           mentionedUsers: [],
+          mentions: [],
           selection: { start: 0, end: 0 },
         });
         messageComposer.setQuotedMessage({
@@ -2055,6 +2060,7 @@ describe('MessageComposer', () => {
         messageComposer.textComposer.state.next({
           text: 'New text',
           mentionedUsers: [],
+          mentions: [],
           selection: { start: 0, end: 0 },
         });
 
@@ -2077,6 +2083,7 @@ describe('MessageComposer', () => {
         messageComposer.textComposer.state.next({
           text: 'https://example.com',
           mentionedUsers: [],
+          mentions: [],
           selection: { start: 0, end: 0 },
         });
 
@@ -2199,6 +2206,7 @@ describe('MessageComposer', () => {
         messageComposer.textComposer.state.next({
           text: 'Hello world',
           mentionedUsers: [],
+          mentions: [],
           selection: { start: 0, end: 0 },
         });
         expect(spy).not.toHaveBeenCalled();

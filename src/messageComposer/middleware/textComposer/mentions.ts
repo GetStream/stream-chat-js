@@ -3,14 +3,31 @@ import {
   getTriggerCharWithToken,
   insertItemWithTrigger,
 } from './textMiddlewareUtils';
+import {
+  userResponsesToMentionEntities,
+  userSuggestionToMentionEntity,
+  userSuggestionToUserResponse,
+} from './mentionUtils';
 import { BaseSearchSource, type SearchSourceOptions } from '../../../search';
 import { mergeWith } from '../../../utils/mergeWith';
-import type { TextComposerMiddlewareOptions, UserSuggestion } from './types';
+import type {
+  ChannelMentionSuggestion,
+  HereMentionSuggestion,
+  MentionEntity,
+  MentionSuggestion,
+  RoleMentionSuggestion,
+  TextComposerMiddlewareOptions,
+  UserGroupMentionSuggestion,
+  UserSuggestion,
+} from './types';
 import type { StreamChat } from '../../../client';
 import type {
   MemberFilters,
   MemberSort,
+  QueryUserGroupsOptions,
+  SearchUserGroupsOptions,
   UserFilters,
+  UserGroupResponse,
   UserOptions,
   UserResponse,
   UserSort,
@@ -75,17 +92,199 @@ export const calculateLevenshtein = (query: string, name: string) => {
 };
 
 export type MentionsSearchSourceOptions = SearchSourceOptions & {
+  allowedMentionTypes?: Partial<Record<MentionType, boolean>>;
   mentionAllAppUsers?: boolean;
+  suggestionFactoryMappers?: MentionSuggestionFactoryMapperOverrides;
   textComposerText?: string;
   // todo: document that if you want transliteration, you need to provide the function, e.g. import {default: transliterate}  from '@sindresorhus/transliterate';
   // this is now replacing a parameter useMentionsTransliteration
   transliterate?: (text: string) => string;
 };
 
-export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
+type MentionType = MentionSuggestion['mentionType'];
+type MentionSuggestionFactoryInputByType = {
+  channel: 'channel';
+  here: 'here';
+  role: string;
+  user: UserResponse;
+  user_group: UserGroupResponse;
+};
+type MentionSuggestionByType = {
+  channel: ChannelMentionSuggestion;
+  here: HereMentionSuggestion;
+  role: RoleMentionSuggestion;
+  user: UserSuggestion;
+  user_group: UserGroupMentionSuggestion;
+};
+
+export type MentionSuggestionFactoryMapperContext = {
+  searchToken: string;
+  source: MentionsSearchSource;
+};
+
+export type MentionSuggestionFactoryMapper<
+  TMentionType extends MentionType = MentionType,
+> = (
+  value: MentionSuggestionFactoryInputByType[TMentionType],
+  context: MentionSuggestionFactoryMapperContext,
+) => MentionSuggestionByType[TMentionType];
+
+export type MentionSuggestionFactoryMapperOverrides = {
+  [TMentionType in MentionType]?: MentionSuggestionFactoryMapper<TMentionType>;
+};
+
+const DEFAULT_ALLOWED_MENTION_TYPES: Record<MentionType, boolean> = {
+  channel: true,
+  here: true,
+  role: true,
+  user: true,
+  user_group: true,
+};
+
+type UserGroupListCursor = Pick<QueryUserGroupsOptions, 'created_at_gt' | 'id_gt'>;
+type UserGroupSearchCursor = Pick<SearchUserGroupsOptions, 'id_gt' | 'name_gt'>;
+type UserPaginationState = {
+  itemCount: number;
+  nextOffset?: number;
+};
+
+const decodeUserGroupCursor = <TCursor extends object>(cursor?: string | null) => {
+  if (!cursor) return undefined;
+
+  try {
+    return JSON.parse(cursor) as TCursor;
+  } catch {
+    return undefined;
+  }
+};
+
+const upsertUserResponse = (users: UserResponse[], user: UserResponse) => {
+  const existingIndex = users.findIndex((currentUser) => currentUser.id === user.id);
+  if (existingIndex === -1) return users.concat(user);
+
+  const nextUsers = [...users];
+  nextUsers.splice(existingIndex, 1, user);
+  return nextUsers;
+};
+
+const upsertMentionEntity = (mentions: MentionEntity[], entity: MentionEntity) => {
+  const existingIndex = mentions.findIndex(
+    (currentEntity) =>
+      currentEntity.id === entity.id && currentEntity.mentionType === entity.mentionType,
+  );
+  if (existingIndex === -1) return mentions.concat(entity);
+
+  const nextMentions = [...mentions];
+  nextMentions.splice(existingIndex, 1, entity);
+  return nextMentions;
+};
+
+const mentionSuggestionToEntity = (suggestion: MentionSuggestion): MentionEntity => {
+  if (suggestion.mentionType === 'user') {
+    return userSuggestionToMentionEntity(suggestion);
+  } else if (suggestion.mentionType === 'channel') {
+    return {
+      id: 'channel',
+      mentionType: 'channel',
+      name: 'channel',
+    };
+  } else if (suggestion.mentionType === 'here') {
+    return {
+      id: 'here',
+      mentionType: 'here',
+      name: 'here',
+    };
+  } else if (suggestion.mentionType === 'role') {
+    return {
+      id: suggestion.id,
+      mentionType: 'role',
+      name: suggestion.name,
+    };
+  } else if (suggestion.mentionType === 'user_group') {
+    return {
+      id: suggestion.id,
+      mentionType: 'user_group',
+      name: suggestion.name,
+    };
+  }
+
+  throw new Error(`Unsupported mention suggestion type: ${JSON.stringify(suggestion)}`);
+};
+
+const mentionSuggestionToInsertText = (suggestion: MentionSuggestion) =>
+  `@${suggestion.name || suggestion.id} `;
+
+const DEFAULT_SUGGESTION_FACTORY_MAPPERS: {
+  [TMentionType in MentionType]: MentionSuggestionFactoryMapper<TMentionType>;
+} = {
+  channel: (value, { searchToken }) => {
+    const name = String(value);
+    return {
+      id: name,
+      mentionType: 'channel',
+      name: 'channel',
+      ...getTokenizedSuggestionDisplayName({
+        displayName: name,
+        searchToken,
+      }),
+    } satisfies ChannelMentionSuggestion;
+  },
+  here: (value, { searchToken }) => {
+    const name = String(value);
+    return {
+      id: name,
+      mentionType: 'here',
+      name: 'here',
+      ...getTokenizedSuggestionDisplayName({
+        displayName: name,
+        searchToken,
+      }),
+    } satisfies HereMentionSuggestion;
+  },
+  role: (value, { searchToken }) => {
+    const role = String(value);
+    return {
+      id: role,
+      mentionType: 'role',
+      name: role,
+      ...getTokenizedSuggestionDisplayName({
+        displayName: role,
+        searchToken,
+      }),
+    } satisfies RoleMentionSuggestion;
+  },
+  user: (value, { searchToken }) => {
+    const user = value as UserResponse;
+    return {
+      ...user,
+      mentionType: 'user',
+      ...getTokenizedSuggestionDisplayName({
+        displayName: user.name || user.id,
+        searchToken,
+      }),
+    } satisfies UserSuggestion;
+  },
+  user_group: (value, { searchToken }) => {
+    const userGroup = value as UserGroupResponse;
+    return {
+      id: userGroup.id,
+      mentionType: 'user_group',
+      name: userGroup.name,
+      ...getTokenizedSuggestionDisplayName({
+        displayName: userGroup.name || userGroup.id,
+        searchToken,
+      }),
+    } satisfies UserGroupMentionSuggestion;
+  },
+};
+
+export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
   readonly type = 'mentions';
   protected client: StreamChat;
   protected channel: Channel;
+  protected latestUserPaginationState?: UserPaginationState;
+  protected roleNames?: string[];
+  protected userGroupCursor?: string;
   userFilters: UserFilters | undefined;
   memberFilters: MemberFilters | undefined;
   userSort: UserSort | undefined;
@@ -94,12 +293,26 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
   config: MentionsSearchSourceOptions;
 
   constructor(channel: Channel, options?: MentionsSearchSourceOptions) {
-    const { mentionAllAppUsers, textComposerText, transliterate, ...restOptions } =
-      options || {};
+    const {
+      allowedMentionTypes,
+      mentionAllAppUsers,
+      suggestionFactoryMappers,
+      textComposerText,
+      transliterate,
+      ...restOptions
+    } = options || {};
     super(restOptions);
     this.client = channel.getClient();
     this.channel = channel;
-    this.config = { mentionAllAppUsers, textComposerText };
+    this.config = {
+      allowedMentionTypes: {
+        ...DEFAULT_ALLOWED_MENTION_TYPES,
+        ...allowedMentionTypes,
+      },
+      mentionAllAppUsers,
+      suggestionFactoryMappers,
+      textComposerText,
+    };
 
     if (transliterate) {
       this.transliterate = transliterate;
@@ -111,15 +324,62 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
     return countLoadedMembers < MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY;
   }
 
-  toUserSuggestion = (user: UserResponse): UserSuggestion => ({
-    ...user,
-    ...getTokenizedSuggestionDisplayName({
-      displayName: user.name || user.id,
-      searchToken: this.searchQuery,
-    }),
-  });
+  normalizeSearchValue = (value?: string) =>
+    this.transliterate(removeDiacritics(value)).toLowerCase();
+
+  matchesSearchQuery = (value: string | undefined, searchQuery: string) => {
+    if (!searchQuery) return true;
+    return this.normalizeSearchValue(value).includes(
+      this.normalizeSearchValue(searchQuery),
+    );
+  };
+
+  isMentionTypeAllowed = (mentionType: MentionType) =>
+    this.config.allowedMentionTypes?.[mentionType] ?? true;
+
+  protected mapMentionSuggestion = <TMentionType extends MentionType>(
+    mentionType: TMentionType,
+    value: MentionSuggestionFactoryInputByType[TMentionType],
+    searchToken = this.searchQuery,
+  ) => {
+    const mapper =
+      this.config.suggestionFactoryMappers?.[mentionType] ??
+      DEFAULT_SUGGESTION_FACTORY_MAPPERS[mentionType];
+
+    return mapper(value, {
+      searchToken,
+      source: this,
+    }) as MentionSuggestionByType[TMentionType];
+  };
+
+  getChannelTeam = () => this.channel.data?.team;
+
+  toUserSuggestion = (
+    user: UserResponse,
+    searchToken = this.searchQuery,
+  ): UserSuggestion => this.mapMentionSuggestion('user', user, searchToken);
+
+  toChannelMentionSuggestion = (
+    searchToken = this.searchQuery,
+  ): ChannelMentionSuggestion =>
+    this.mapMentionSuggestion('channel', 'channel', searchToken);
+
+  toHereMentionSuggestion = (searchToken = this.searchQuery): HereMentionSuggestion =>
+    this.mapMentionSuggestion('here', 'here', searchToken);
+
+  toRoleMentionSuggestion = (
+    role: string,
+    searchToken = this.searchQuery,
+  ): RoleMentionSuggestion => this.mapMentionSuggestion('role', role, searchToken);
+
+  toUserGroupMentionSuggestion = (
+    userGroup: UserGroupResponse,
+    searchToken = this.searchQuery,
+  ): UserGroupMentionSuggestion =>
+    this.mapMentionSuggestion('user_group', userGroup, searchToken);
 
   getStateBeforeFirstQuery(newSearchString: string) {
+    this.userGroupCursor = undefined;
     const newState = super.getStateBeforeFirstQuery(newSearchString);
     const { items } = this.state.getLatestValue();
     return {
@@ -132,6 +392,18 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
     const hasNewSearchQuery = typeof newSearchString !== 'undefined';
     return this.isActive && !this.isLoading && (hasNewSearchQuery || this.hasNext);
   };
+
+  protected updatePaginationStateFromQuery() {
+    const userPaginationState = this.latestUserPaginationState ?? { itemCount: 0 };
+
+    return {
+      hasNext:
+        typeof userPaginationState.nextOffset !== 'undefined' ||
+        typeof this.userGroupCursor !== 'undefined',
+      next: undefined,
+      offset: (this.offset ?? 0) + userPaginationState.itemCount,
+    };
+  }
 
   transliterate = (text: string) => text;
 
@@ -152,6 +424,35 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
 
     return Object.values(uniqueUsers);
   };
+
+  getAvailableRoles = async () => {
+    if (this.roleNames) return this.roleNames;
+
+    const response = (await this.client.listRoles()) as { roles?: string[] };
+    this.roleNames = [...(response.roles ?? [])].sort((left, right) =>
+      left.localeCompare(right),
+    );
+    return this.roleNames;
+  };
+
+  getBuiltinMentionSuggestions = (searchQuery: string): MentionSuggestion[] =>
+    [
+      ...(this.isMentionTypeAllowed('channel')
+        ? [this.toChannelMentionSuggestion(searchQuery)]
+        : []),
+      ...(this.isMentionTypeAllowed('here')
+        ? [this.toHereMentionSuggestion(searchQuery)]
+        : []),
+    ].filter(({ name }) => this.matchesSearchQuery(name, searchQuery));
+
+  getRoleMentionSuggestions = async (
+    searchQuery: string,
+  ): Promise<RoleMentionSuggestion[]> =>
+    !this.isMentionTypeAllowed('role')
+      ? []
+      : (await this.getAvailableRoles())
+          .filter((role) => this.matchesSearchQuery(role, searchQuery))
+          .map((role) => this.toRoleMentionSuggestion(role, searchQuery));
 
   searchMembersLocally = (searchQuery: string) => {
     const { textComposerText } = this.config;
@@ -204,7 +505,7 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
       });
   };
 
-  prepareQueryUsersParams = (searchQuery: string) => ({
+  prepareQueryUsersParams = (searchQuery: string, offset = 0) => ({
     filters: {
       $or: [
         { id: { $autocomplete: searchQuery } },
@@ -213,10 +514,10 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
       ...this.userFilters,
     } as UserFilters,
     sort: this.userSort ?? ([{ name: 1 }, { id: 1 }] as UserSort), // todo: document the change - the sort is overridden, not merged
-    options: { ...this.searchOptions, limit: this.pageSize, offset: this.offset },
+    options: { ...this.searchOptions, limit: this.pageSize, offset },
   });
 
-  prepareQueryMembersParams = (searchQuery: string) => {
+  prepareQueryMembersParams = (searchQuery: string, offset = 0) => {
     // QueryMembers failed with error: \"sort must contain at maximum 1 item\"
     const maxSortParamsCount = 1;
     let sort: MemberSort = [{ user_id: 1 }];
@@ -232,42 +533,166 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
       filters:
         this.memberFilters ?? ({ name: { $autocomplete: searchQuery } } as MemberFilters), // autocomplete possible only for name
       sort,
-      options: { ...this.searchOptions, limit: this.pageSize, offset: this.offset },
+      options: { ...this.searchOptions, limit: this.pageSize, offset },
     };
   };
 
-  queryUsers = async (searchQuery: string) => {
-    const { filters, sort, options } = this.prepareQueryUsersParams(searchQuery);
+  queryUsers = async (searchQuery: string, offset = 0) => {
+    const { filters, sort, options } = this.prepareQueryUsersParams(searchQuery, offset);
     const { users } = await this.client.queryUsers(filters, sort, options);
     return users;
   };
 
-  queryMembers = async (searchQuery: string) => {
-    const { filters, sort, options } = this.prepareQueryMembersParams(searchQuery);
+  queryMembers = async (searchQuery: string, offset = 0) => {
+    const { filters, sort, options } = this.prepareQueryMembersParams(
+      searchQuery,
+      offset,
+    );
     const response = await this.channel.queryMembers(filters, sort, options);
 
     return response.members.map((member) => member.user) as UserResponse[];
   };
 
-  async query(searchQuery: string) {
+  getUserSuggestionsPage = async (searchQuery: string, userOffset = 0) => {
+    if (!this.isMentionTypeAllowed('user')) {
+      return {
+        items: [],
+        nextOffset: undefined,
+      };
+    }
+
     let users: UserResponse[];
     const shouldSearchLocally =
       this.allMembersLoadedWithInitialChannelQuery || !searchQuery;
 
     if (this.config.mentionAllAppUsers) {
-      users = await this.queryUsers(searchQuery);
+      users = await this.queryUsers(searchQuery, userOffset);
     } else if (shouldSearchLocally) {
-      users = this.searchMembersLocally(searchQuery);
+      const localUsers = this.searchMembersLocally(searchQuery);
+      const items = localUsers
+        .slice(userOffset, userOffset + this.pageSize)
+        .map((user) => this.toUserSuggestion(user, searchQuery));
+      return {
+        items,
+        nextOffset:
+          localUsers.length > userOffset + this.pageSize
+            ? userOffset + items.length
+            : undefined,
+      };
     } else {
-      users = await this.queryMembers(searchQuery);
+      users = await this.queryMembers(searchQuery, userOffset);
     }
 
+    const items = users.map((user) => this.toUserSuggestion(user, searchQuery));
     return {
-      items: users.map(this.toUserSuggestion),
+      items,
+      nextOffset: users.length === this.pageSize ? userOffset + users.length : undefined,
+    };
+  };
+
+  buildUserGroupListCursor = (items: UserGroupResponse[]) => {
+    if (items.length < this.pageSize) return undefined;
+
+    const lastItem = items[items.length - 1];
+    if (!lastItem?.created_at) return undefined;
+
+    return JSON.stringify({
+      created_at_gt: lastItem.created_at,
+      id_gt: lastItem.id,
+    } satisfies UserGroupListCursor);
+  };
+
+  buildUserGroupSearchCursor = (items: UserGroupResponse[]) => {
+    if (items.length < this.pageSize) return undefined;
+
+    const lastItem = items[items.length - 1];
+    if (!lastItem?.name) return undefined;
+
+    return JSON.stringify({
+      id_gt: lastItem.id,
+      name_gt: lastItem.name,
+    } satisfies UserGroupSearchCursor);
+  };
+
+  getUserGroupSuggestionsPage = async (searchQuery: string, cursor?: string) => {
+    if (!this.isMentionTypeAllowed('user_group')) {
+      return {
+        items: [],
+        next: undefined,
+      };
+    }
+
+    const teamId = this.getChannelTeam();
+
+    if (searchQuery) {
+      const userGroupCursor = decodeUserGroupCursor<UserGroupSearchCursor>(cursor);
+      const options: SearchUserGroupsOptions = {
+        query: searchQuery,
+        limit: this.pageSize,
+        ...(teamId ? { team_id: teamId } : {}),
+        ...(userGroupCursor?.id_gt ? { id_gt: userGroupCursor.id_gt } : {}),
+        ...(userGroupCursor?.name_gt ? { name_gt: userGroupCursor.name_gt } : {}),
+      };
+      const { user_groups } = await this.client.searchUserGroups(options);
+
+      return {
+        items: user_groups.map((userGroup) =>
+          this.toUserGroupMentionSuggestion(userGroup, searchQuery),
+        ),
+        next: this.buildUserGroupSearchCursor(user_groups),
+      };
+    }
+
+    const userGroupCursor = decodeUserGroupCursor<UserGroupListCursor>(cursor);
+    const options: QueryUserGroupsOptions = {
+      limit: this.pageSize,
+      ...(teamId ? { team_id: teamId } : {}),
+      ...(userGroupCursor?.id_gt ? { id_gt: userGroupCursor.id_gt } : {}),
+      ...(userGroupCursor?.created_at_gt
+        ? { created_at_gt: userGroupCursor.created_at_gt }
+        : {}),
+    };
+    const { user_groups } = await this.client.queryUserGroups(options);
+
+    return {
+      items: user_groups.map((userGroup) =>
+        this.toUserGroupMentionSuggestion(userGroup, searchQuery),
+      ),
+      next: this.buildUserGroupListCursor(user_groups),
+    };
+  };
+
+  async query(searchQuery: string) {
+    const userOffset = this.offset ?? 0;
+    const isFirstPage = userOffset === 0 && typeof this.userGroupCursor === 'undefined';
+    const [userResults, userGroupResults] = await Promise.all([
+      this.getUserSuggestionsPage(searchQuery, userOffset),
+      this.getUserGroupSuggestionsPage(searchQuery, this.userGroupCursor),
+    ]);
+    const roleSuggestions = isFirstPage
+      ? await this.getRoleMentionSuggestions(searchQuery)
+      : [];
+    const items = [
+      ...(isFirstPage ? this.getBuiltinMentionSuggestions(searchQuery) : []),
+      ...roleSuggestions,
+      ...userGroupResults.items,
+      ...userResults.items,
+    ];
+
+    this.latestUserPaginationState = {
+      itemCount: userResults.items.length,
+      nextOffset: userResults.nextOffset,
+    };
+    this.userGroupCursor = userGroupResults.next;
+
+    return {
+      items,
     };
   }
 
-  filterMutes = (data: UserSuggestion[]) => {
+  filterMutes(data: UserSuggestion[]): UserSuggestion[];
+  filterMutes(data: MentionSuggestion[]): MentionSuggestion[];
+  filterMutes(data: MentionSuggestion[]) {
     const { textComposerText } = this.config;
     if (!textComposerText) return [];
 
@@ -278,27 +703,31 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
     if (!mutedUsers.length) return data;
 
     if (textComposerText.includes('/unmute')) {
-      return data.filter((suggestion) =>
-        mutedUsers.some((mute) => mute.target.id === suggestion.id),
+      return data.filter(
+        (suggestion) =>
+          suggestion.mentionType === 'user' &&
+          mutedUsers.some((mute) => mute.target.id === suggestion.id),
       );
     }
-    return data.filter((suggestion) =>
-      mutedUsers.every((mute) => mute.target.id !== suggestion.id),
+    return data.filter(
+      (suggestion) =>
+        suggestion.mentionType !== 'user' ||
+        mutedUsers.every((mute) => mute.target.id !== suggestion.id),
     );
-  };
+  }
 
-  filterQueryResults(items: UserSuggestion[]) {
+  filterQueryResults(items: MentionSuggestion[]) {
     return this.filterMutes(items);
+  }
+
+  resetState() {
+    this.latestUserPaginationState = undefined;
+    this.userGroupCursor = undefined;
+    super.resetState();
   }
 }
 
 const DEFAULT_OPTIONS: TextComposerMiddlewareOptions = { minChars: 1, trigger: '@' };
-
-const userSuggestionToUserResponse = (suggestion: UserSuggestion): UserResponse => {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { tokenizedDisplayName, ...userResponse } = suggestion;
-  return userResponse;
-};
 
 /**
  * TextComposer middleware for mentions
@@ -320,7 +749,7 @@ const userSuggestionToUserResponse = (suggestion: UserSuggestion): UserResponse 
  */
 
 export type MentionsMiddleware = Middleware<
-  TextComposerMiddlewareExecutorState<UserSuggestion>,
+  TextComposerMiddlewareExecutorState<MentionSuggestion>,
   'onChange' | 'onSuggestionItemSelect'
 >;
 
@@ -386,17 +815,27 @@ export const createMentionsMiddleware = (
           return forward();
 
         searchSource.resetStateAndActivate();
+        const mentionEntity = mentionSuggestionToEntity(selectedSuggestion);
+        const mentions = upsertMentionEntity(
+          state.mentions ?? userResponsesToMentionEntities(state.mentionedUsers),
+          mentionEntity,
+        );
         return complete({
           ...state,
           ...insertItemWithTrigger({
-            insertText: `@${selectedSuggestion.name || selectedSuggestion.id} `,
+            insertText: mentionSuggestionToInsertText(selectedSuggestion),
             selection: state.selection,
             text: state.text,
             trigger: finalOptions.trigger,
           }),
-          mentionedUsers: state.mentionedUsers.concat(
-            userSuggestionToUserResponse(selectedSuggestion),
-          ),
+          mentionedUsers:
+            selectedSuggestion.mentionType === 'user'
+              ? upsertUserResponse(
+                  state.mentionedUsers,
+                  userSuggestionToUserResponse(selectedSuggestion),
+                )
+              : state.mentionedUsers,
+          mentions,
           suggestions: undefined,
         });
       },

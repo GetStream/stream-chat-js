@@ -11,9 +11,9 @@ import type {
   CommandResponse,
   DraftResponse,
   LocalMessage,
-  UserResponse,
 } from '../../../../../src/types';
 import { TextComposerMiddleware } from '../../../../../src';
+import type { UserSuggestion } from '../../../../../src/messageComposer/middleware/textComposer/types';
 
 // Mock dependencies
 vi.mock('../../../src/utils', () => ({
@@ -69,9 +69,10 @@ const setup = ({
 };
 
 const initialValue = {
+  mentionedUsers: [],
+  mentions: [],
   text: '',
   selection: { start: 0, end: 0 },
-  mentionedUsers: [],
 };
 
 describe('TextComposerMiddlewareExecutor', () => {
@@ -183,14 +184,19 @@ describe('TextComposerMiddlewareExecutor', () => {
 
     const selectedSuggestion = {
       id: 'user1',
+      mentionType: 'user',
       name: 'John Doe',
-    } as TextComposerSuggestion<UserResponse>;
+      tokenizedDisplayName: { token: 'jo', parts: ['John Doe'] },
+    } as TextComposerSuggestion<UserSuggestion>;
 
     await textComposer.handleSelect(selectedSuggestion);
 
     expect(textComposer.text).toBe('@John Doe ');
     expect(textComposer.suggestions).toBeUndefined();
-    expect(textComposer.mentionedUsers).toContainEqual(selectedSuggestion);
+    expect(textComposer.mentionedUsers).toContainEqual({
+      id: 'user1',
+      name: 'John Doe',
+    });
   });
 
   it('should handle suggestion selection with commands', async () => {
@@ -369,6 +375,7 @@ describe('TextComposerMiddlewareExecutor', () => {
         text: '/test',
         selection: { start: 0, end: 0 },
         mentionedUsers: [],
+        mentions: [],
       });
     });
 
@@ -389,6 +396,7 @@ describe('TextComposerMiddlewareExecutor', () => {
         text: 'test',
         selection: { start: 0, end: 4 },
         mentionedUsers: [],
+        mentions: [],
       });
     });
 
@@ -468,7 +476,29 @@ describe('TextComposerMiddlewareExecutor', () => {
         text: '@test',
         selection: { start: 0, end: 0 },
         mentionedUsers: [],
+        mentions: [],
       });
+    });
+
+    it('should preserve tracked enhanced mention entities during middleware passes', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
+          mentionedUsers: [],
+          mentions: [{ id: 'channel', mentionType: 'channel', name: 'channel' }],
+          text: 'hello world',
+          selection: { start: 11, end: 11 },
+        },
+      });
+
+      expect(result.state.mentionedUsers).toEqual([]);
+      expect(result.state.mentions).toEqual([
+        { id: 'channel', mentionType: 'channel', name: 'channel' },
+      ]);
     });
 
     it('should handle trigger with token', async () => {

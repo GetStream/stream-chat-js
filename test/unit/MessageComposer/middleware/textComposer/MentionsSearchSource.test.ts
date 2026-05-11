@@ -8,11 +8,17 @@ import { StreamChat } from '../../../../../src/client';
 import { MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY } from '../../../../../src/constants';
 import type {
   ChannelMemberResponse,
+  SearchUserGroupsOptions,
+  QueryUserGroupsOptions,
+  SearchUserGroupsResponse,
+  QueryUserGroupsResponse,
   Mute,
+  UserGroupResponse,
   UserResponse,
   UserFilters,
   MemberFilters,
 } from '../../../../../src/types';
+import type { MentionSuggestion } from '../../../../../src/messageComposer/middleware/textComposer/types';
 
 describe('calculateLevenshtein', () => {
   it('should return length of first string if second is empty', () => {
@@ -61,52 +67,143 @@ describe('MentionsSearchSource', () => {
   let client: StreamChat;
   let mockUsers: UserResponse[];
   let mockMembers: Record<string, ChannelMemberResponse>;
+  let mockUserGroups: UserGroupResponse[];
 
   beforeEach(() => {
     mockUsers = [
-      { id: 'user1', name: 'John Doe' },
-      { id: 'user2', name: 'Jane Smith' },
-      { id: 'user3', name: 'Bob Wilson' },
-      { id: 'currentUser', name: 'Alice Johnson' },
+      {
+        id: 'user1',
+        name: 'John Doe',
+        role: 'user',
+        teams_role: { engineering: 'admin' },
+      },
+      { id: 'user2', name: 'Jane Smith', role: 'moderator' },
+      { id: 'user3', name: 'Bob Wilson', role: 'user' },
+      { id: 'currentUser', name: 'Alice Johnson', role: 'user' },
     ];
 
     mockMembers = {
-      user1: { user: { id: 'user1', name: 'John Doe' } },
-      user2: { user: { id: 'user2', name: 'Jane Smith' } },
-      currentUser: { user: { id: 'currentUser', name: 'Alice Johnson' } },
+      user1: { user: mockUsers[0] },
+      user2: { channel_role: 'channel_moderator', user: mockUsers[1] },
+      currentUser: { user: mockUsers[3] },
     };
+
+    mockUserGroups = [
+      {
+        created_at: '2026-05-08T12:00:00.000Z',
+        id: 'backend-team',
+        members: [],
+        name: 'Backend Team',
+      },
+      {
+        created_at: '2026-05-08T12:01:00.000Z',
+        id: 'admins-group',
+        members: [],
+        name: 'Admins',
+      },
+    ];
 
     client = {
       userID: 'currentUser',
+      listRoles: vi.fn().mockResolvedValue({
+        roles: ['admin', 'channel_moderator', 'moderator'],
+      }),
       queryUsers: vi.fn().mockResolvedValue({ users: mockUsers }),
+      queryUserGroups: vi.fn().mockResolvedValue({
+        user_groups: mockUserGroups,
+      } satisfies QueryUserGroupsResponse),
+      searchUserGroups: vi.fn().mockImplementation(
+        async (options: SearchUserGroupsOptions): Promise<SearchUserGroupsResponse> => ({
+          user_groups: mockUserGroups.filter((group) =>
+            group.name.toLowerCase().includes(options.query.toLowerCase()),
+          ),
+        }),
+      ),
       mutedUsers: [],
-    } as any;
+    } as unknown as StreamChat;
 
     channel = {
+      data: { team: 'engineering' },
       getClient: vi.fn().mockReturnValue(client),
       state: {
         members: mockMembers,
         watchers: {},
       },
       queryMembers: vi.fn().mockResolvedValue({ members: Object.values(mockMembers) }),
-    } as any;
+    } as unknown as Channel;
   });
+
+  const getSuggestion = (
+    suggestions: MentionSuggestion[],
+    mentionType: MentionSuggestion['mentionType'],
+    id: string,
+  ) => suggestions.find((item) => item.mentionType === mentionType && item.id === id);
 
   it('should initialize with correct type', () => {
     const source = new MentionsSearchSource(channel);
     expect(source.type).toBe('mentions');
+    expect(source.config.allowedMentionTypes).toEqual({
+      channel: true,
+      here: true,
+      role: true,
+      user: true,
+      user_group: true,
+    });
     expect(source.config.mentionAllAppUsers).toBeUndefined;
     expect(source.config.textComposerText).toBeUndefined;
     expect(source.config.transliterate).toBeUndefined;
 
     const customizedSource = new MentionsSearchSource(channel, {
+      allowedMentionTypes: { role: false, user_group: false },
       mentionAllAppUsers: true,
+      suggestionFactoryMappers: {
+        role: (value, { searchToken }) => ({
+          id: value,
+          mentionType: 'role',
+          name: `custom-${value}`,
+          tokenizedDisplayName: {
+            parts: [`custom-${value}`],
+            token: searchToken,
+          },
+        }),
+      },
       textComposerText: '@',
       transliterate: (text: string) => text.toLowerCase(),
     });
+    expect(customizedSource.config.allowedMentionTypes).toEqual({
+      channel: true,
+      here: true,
+      role: false,
+      user: true,
+      user_group: false,
+    });
     expect(customizedSource.config.mentionAllAppUsers).toBe(true);
+    expect(customizedSource.config.suggestionFactoryMappers?.role).toBeInstanceOf(
+      Function,
+    );
     expect(customizedSource.config.textComposerText).toBe('@');
     expect(customizedSource.transliterate).toBeInstanceOf(Function);
+  });
+
+  it('should return built-ins, roles, groups, and users on empty query', async () => {
+    const source = new MentionsSearchSource(channel);
+    source.activate();
+    source.config.textComposerText = '@';
+
+    const result = await source.query('');
+
+    expect(client.queryUserGroups).toHaveBeenCalledWith({
+      limit: 10,
+      team_id: 'engineering',
+    } satisfies QueryUserGroupsOptions);
+    expect(client.listRoles).toHaveBeenCalledTimes(1);
+    expect(client.searchUserGroups).not.toHaveBeenCalled();
+    expect(getSuggestion(result.items, 'channel', 'channel')).toBeDefined();
+    expect(getSuggestion(result.items, 'here', 'here')).toBeDefined();
+    expect(getSuggestion(result.items, 'role', 'admin')).toBeDefined();
+    expect(getSuggestion(result.items, 'role', 'channel_moderator')).toBeDefined();
+    expect(getSuggestion(result.items, 'user_group', 'backend-team')).toBeDefined();
+    expect(getSuggestion(result.items, 'user', 'user1')).toBeDefined();
   });
 
   it('should search members locally when all members are loaded', async () => {
@@ -115,15 +212,106 @@ describe('MentionsSearchSource', () => {
     source.config.textComposerText = '@jo';
 
     const result = await source.query('jo');
-    expect(result.items).toHaveLength(1);
-    expect(result.items[0].name).toBe('John Doe');
+    expect(getSuggestion(result.items, 'user', 'user1')?.name).toBe('John Doe');
   });
 
-  it('should query members from API when not all loaded', async () => {
+  it('should search user groups by query and keep mixed result shape', async () => {
     const source = new MentionsSearchSource(channel);
     source.activate();
+    source.config.textComposerText = '@adm';
 
-    // Simulate more members than MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY
+    const result = await source.query('adm');
+
+    expect(client.searchUserGroups).toHaveBeenCalledWith({
+      limit: 10,
+      query: 'adm',
+      team_id: 'engineering',
+    } satisfies SearchUserGroupsOptions);
+    expect(client.listRoles).toHaveBeenCalledTimes(1);
+    expect(getSuggestion(result.items, 'role', 'admin')).toBeDefined();
+    expect(getSuggestion(result.items, 'user_group', 'admins-group')).toBeDefined();
+    expect(getSuggestion(result.items, 'channel', 'channel')).toBeUndefined();
+    expect(getSuggestion(result.items, 'here', 'here')).toBeUndefined();
+  });
+
+  it('should source role suggestions from client.listRoles', async () => {
+    const source = new MentionsSearchSource(channel);
+    source.activate();
+    source.config.textComposerText = '@mod';
+
+    const result = await source.query('mod');
+
+    expect(client.listRoles).toHaveBeenCalledTimes(1);
+    expect(getSuggestion(result.items, 'role', 'moderator')).toBeDefined();
+    expect(getSuggestion(result.items, 'role', 'channel_moderator')).toBeDefined();
+  });
+
+  it('should allow overriding built-in suggestion mappers from options', async () => {
+    const source = new MentionsSearchSource(channel, {
+      suggestionFactoryMappers: {
+        role: (value, { searchToken }) => ({
+          id: value,
+          mentionType: 'role',
+          name: `role:${value}`,
+          tokenizedDisplayName: {
+            parts: [`role:${value}`],
+            token: searchToken,
+          },
+        }),
+      },
+    });
+    source.activate();
+    source.config.textComposerText = '@mod';
+
+    const result = await source.query('mod');
+
+    expect(getSuggestion(result.items, 'role', 'moderator')?.name).toBe('role:moderator');
+    expect(getSuggestion(result.items, 'role', 'channel_moderator')?.name).toBe(
+      'role:channel_moderator',
+    );
+  });
+
+  it('should respect allowedMentionTypes and skip disabled source queries', async () => {
+    const source = new MentionsSearchSource(channel, {
+      allowedMentionTypes: {
+        channel: false,
+        here: false,
+        role: false,
+        user_group: false,
+      },
+    });
+    source.activate();
+    source.config.textComposerText = '@adm';
+
+    const result = await source.query('adm');
+
+    expect(client.listRoles).not.toHaveBeenCalled();
+    expect(client.queryUserGroups).not.toHaveBeenCalled();
+    expect(client.searchUserGroups).not.toHaveBeenCalled();
+    expect(getSuggestion(result.items, 'channel', 'channel')).toBeUndefined();
+    expect(getSuggestion(result.items, 'here', 'here')).toBeUndefined();
+    expect(result.items.every((item) => item.mentionType === 'user')).toBe(true);
+  });
+
+  it('should skip user queries when user mentions are disabled', async () => {
+    const source = new MentionsSearchSource(channel, {
+      allowedMentionTypes: { user: false },
+      mentionAllAppUsers: true,
+    });
+    source.activate();
+    source.config.textComposerText = '@john';
+
+    const result = await source.query('john');
+
+    expect(client.queryUsers).not.toHaveBeenCalled();
+    expect(result.items.some((item) => item.mentionType === 'user')).toBe(false);
+  });
+
+  it('should query members from API when not all members are loaded', async () => {
+    const source = new MentionsSearchSource(channel);
+    source.activate();
+    source.config.textComposerText = '@john';
+
     const manyMembers: Record<string, ChannelMemberResponse> = {};
     for (let i = 0; i < MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY + 1; i++) {
       manyMembers[`user${i}`] = { user: { id: `user${i}`, name: `User ${i}` } };
@@ -131,26 +319,20 @@ describe('MentionsSearchSource', () => {
     channel.state.members = manyMembers;
 
     const result = await source.query('john');
+
     expect(channel.queryMembers).toHaveBeenCalled();
-    expect(result.items).toHaveLength(Object.keys(mockMembers).length);
+    expect(result.items.some((item) => item.mentionType === 'user')).toBe(true);
   });
 
   it('should query all app users when mentionAllAppUsers is true', async () => {
     const source = new MentionsSearchSource(channel, { mentionAllAppUsers: true });
     source.activate();
+    source.config.textComposerText = '@john';
 
     const result = await source.query('john');
+
     expect(client.queryUsers).toHaveBeenCalled();
-    expect(result.items).toHaveLength(mockUsers.length);
-  });
-
-  it('should filter out current user from results', async () => {
-    const source = new MentionsSearchSource(channel);
-    source.activate();
-    source.config.textComposerText = '@';
-
-    const result = await source.query('');
-    expect(result.items.every((item) => item.id !== client.userID)).toBe(true);
+    expect(getSuggestion(result.items, 'user', 'user1')?.name).toBe('John Doe');
   });
 
   it('should handle transliteration when provided', async () => {
@@ -160,14 +342,11 @@ describe('MentionsSearchSource', () => {
     source.config.textComposerText = '@john';
 
     const result = await source.query('john');
-    expect(result.items).toHaveLength(1);
-    expect(result.items[0].name).toBe('John Doe');
+    expect(getSuggestion(result.items, 'user', 'user1')?.name).toBe('John Doe');
   });
 
-  it('should filter muted users correctly', async () => {
+  it('should preserve special mentions while filtering muted users', () => {
     const source = new MentionsSearchSource(channel);
-    source.activate();
-    source.config.textComposerText = '@unmute';
     const mute: Mute = {
       target: { id: 'user1' },
       user: { id: 'currentUser' },
@@ -176,9 +355,37 @@ describe('MentionsSearchSource', () => {
     };
     client.mutedUsers = [mute];
 
-    const result = await source.query('');
-    expect(result.items).toHaveLength(Object.keys(mockMembers).length - 1);
-    expect(result.items[0].id).toBe('user2');
+    source.config.textComposerText = '@john';
+    const result = source.filterMutes([
+      source.toUserSuggestion(mockUsers[0], 'john'),
+      source.toUserSuggestion(mockUsers[1], 'john'),
+      source.toChannelMentionSuggestion('john'),
+    ]);
+
+    expect(result).toEqual([
+      source.toUserSuggestion(mockUsers[1], 'john'),
+      source.toChannelMentionSuggestion('john'),
+    ]);
+  });
+
+  it('should return only muted users for /unmute and hide special mentions', () => {
+    const source = new MentionsSearchSource(channel);
+    const mute: Mute = {
+      target: { id: 'user1' },
+      user: { id: 'currentUser' },
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    client.mutedUsers = [mute];
+
+    source.config.textComposerText = '/unmute @';
+    const result = source.filterMutes([
+      source.toUserSuggestion(mockUsers[0]),
+      source.toUserSuggestion(mockUsers[1]),
+      source.toHereMentionSuggestion(),
+    ]);
+
+    expect(result).toEqual([source.toUserSuggestion(mockUsers[0])]);
   });
 
   it('should preserve items in state before first query', () => {
@@ -203,6 +410,38 @@ describe('MentionsSearchSource', () => {
     expect(source.canExecuteQuery('test')).toBe(false);
   });
 
+  it('should keep public pagination state offset-based while paginating user groups privately', async () => {
+    const source = new MentionsSearchSource(channel, { mentionAllAppUsers: true });
+    source.activate();
+    source.config.textComposerText = '@adm';
+    source.state.partialNext({
+      hasNext: true,
+      offset: 3,
+      searchQuery: 'adm',
+    });
+    (source as unknown as { userGroupCursor?: string }).userGroupCursor = JSON.stringify({
+      id_gt: 'group-0',
+      name_gt: 'Admins',
+    });
+
+    await source.executeQuery();
+
+    expect(client.queryUsers).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.any(Object),
+      expect.objectContaining({ limit: 10, offset: 3 }),
+    );
+    expect(client.searchUserGroups).toHaveBeenCalledWith({
+      id_gt: 'group-0',
+      limit: 10,
+      name_gt: 'Admins',
+      query: 'adm',
+      team_id: 'engineering',
+    } satisfies SearchUserGroupsOptions);
+    expect(source.state.getLatestValue().next).toBeUndefined();
+    expect(source.state.getLatestValue().offset).toBe(7);
+  });
+
   it('should correctly get members and watchers without duplicates', () => {
     const source = new MentionsSearchSource(channel);
     channel.state.watchers = {
@@ -220,12 +459,13 @@ describe('MentionsSearchSource', () => {
     source.userFilters = { id: { $in: ['admin1', 'admin2'] } } as UserFilters;
     source.userSort = [{ created_at: -1 }];
 
-    const params = source.prepareQueryUsersParams('john');
+    const params = source.prepareQueryUsersParams('john', 7);
     expect(params.filters).toEqual({
       $or: [{ id: { $autocomplete: 'john' } }, { name: { $autocomplete: 'john' } }],
       id: { $in: ['admin1', 'admin2'] },
     });
     expect(params.sort).toEqual([{ created_at: -1 }]);
+    expect(params.options).toEqual(expect.objectContaining({ limit: 10, offset: 7 }));
   });
 
   it('should prepare correct query parameters for members search', () => {
@@ -233,9 +473,10 @@ describe('MentionsSearchSource', () => {
     source.memberFilters = { name: { $autocomplete: 'john' } } as MemberFilters;
     source.memberSort = { created_at: -1 };
 
-    const params = source.prepareQueryMembersParams('john');
+    const params = source.prepareQueryMembersParams('john', 5);
     expect(params.filters).toEqual({ name: { $autocomplete: 'john' } });
     expect(params.sort).toEqual({ created_at: -1 });
+    expect(params.options).toEqual(expect.objectContaining({ limit: 10, offset: 5 }));
   });
 
   it('should handle empty or invalid user names in local search', () => {

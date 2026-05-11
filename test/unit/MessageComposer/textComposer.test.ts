@@ -16,6 +16,7 @@ import type { LocalAttachment } from '../../../src/messageComposer/types';
 const textComposerMiddlewareExecuteOutput = {
   state: {
     mentionedUsers: [],
+    mentions: [],
     text: 'Test message',
     selection: { start: 12, end: 12 },
   },
@@ -109,6 +110,7 @@ describe('TextComposer', () => {
       expect(messageComposer.textComposer.state.getLatestValue()).toEqual({
         command: null,
         mentionedUsers: [],
+        mentions: [],
         text: '',
         selection: { start: 0, end: 0 },
       });
@@ -120,6 +122,7 @@ describe('TextComposer', () => {
       expect(messageComposer.textComposer.state.getLatestValue()).toEqual({
         command: null,
         mentionedUsers: [],
+        mentions: [],
         text: defaultValue,
         selection: { start: defaultValue.length, end: defaultValue.length },
       });
@@ -150,6 +153,29 @@ describe('TextComposer', () => {
       expect(textComposer.mentionedUsers).toEqual([
         { id: 'user-1' },
         { id: 'user-2', name: 'User 2' },
+      ]);
+    });
+
+    it('should initialize special mention entities from message payload fields', () => {
+      const message: LocalMessage = {
+        id: 'test-message',
+        type: 'regular',
+        text: 'Hello @channel @here @backend',
+        mentioned_channel: true,
+        mentioned_group_ids: ['backend-team'],
+        mentioned_here: true,
+        mentioned_roles: ['admin'],
+      };
+
+      const {
+        messageComposer: { textComposer },
+      } = setup({ composition: message });
+
+      expect(textComposer.mentions).toEqual([
+        { id: 'channel', mentionType: 'channel', name: 'channel' },
+        { id: 'here', mentionType: 'here', name: 'here' },
+        { id: 'admin', mentionType: 'role', name: 'admin' },
+        { id: 'backend-team', mentionType: 'user_group' },
       ]);
     });
 
@@ -185,6 +211,7 @@ describe('TextComposer', () => {
       } = setup();
       const state = {
         mentionedUsers: [{ id: 'user-1' }],
+        mentions: [{ id: 'user-1', mentionType: 'user' as const }],
         text: 'Hello world',
         selection: { start: 5, end: 5 },
         suggestions: { query: 'test' },
@@ -192,6 +219,7 @@ describe('TextComposer', () => {
       textComposer.state.partialNext(state);
 
       expect(textComposer.mentionedUsers).toEqual([{ id: 'user-1' }]);
+      expect(textComposer.mentions).toEqual([{ id: 'user-1', mentionType: 'user' }]);
       expect(textComposer.text).toBe('Hello world');
       expect(textComposer.selection).toEqual({ start: 5, end: 5 });
       expect(textComposer.suggestions).toEqual({ query: 'test' });
@@ -232,6 +260,7 @@ describe('TextComposer', () => {
       const initialState = {
         command: null,
         mentionedUsers: [],
+        mentions: [],
         text: '',
         selection: { start: 0, end: 0 },
       };
@@ -277,6 +306,23 @@ describe('TextComposer', () => {
       } = setup({ composition: message });
       textComposer.setMentionedUsers(users);
       expect(textComposer.mentionedUsers).toEqual(users);
+    });
+  });
+
+  describe('setMentions', () => {
+    it('should update mentions and deprecated mentionedUsers state', () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const entities = [
+        { id: 'channel', mentionType: 'channel' as const, name: 'channel' },
+        { id: 'admin', mentionType: 'role' as const, name: 'admin' },
+      ];
+
+      textComposer.setMentions(entities);
+
+      expect(textComposer.mentions).toEqual(entities);
+      expect(textComposer.state.getLatestValue().mentionedUsers).toEqual([]);
     });
   });
 
@@ -758,6 +804,7 @@ describe('TextComposer', () => {
       textComposer.state.partialNext({
         command: { name: 'ban' },
         mentionedUsers: [{ id: 'user-1' }],
+        mentions: [{ id: 'user-1', mentionType: 'user' }],
         selection: { start: 12, end: 12 },
         text: 'command args',
       });
@@ -800,6 +847,7 @@ describe('TextComposer', () => {
       textComposer.state.partialNext({
         command: { name: 'ban' },
         mentionedUsers: [],
+        mentions: [],
         selection: { start: 12, end: 12 },
         text: 'command args',
       });
@@ -974,6 +1022,102 @@ describe('TextComposer', () => {
       } = setup({ composition: message });
       textComposer.removeMentionedUser('user-3');
       expect(textComposer.mentionedUsers).toEqual(message.mentioned_users);
+    });
+  });
+
+  describe('upsertMentionEntity', () => {
+    it('should add a new mentioned entity', () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+
+      textComposer.upsertMentionEntity({
+        id: 'backend-team',
+        mentionType: 'user_group',
+        name: 'Backend Team',
+      });
+
+      expect(textComposer.mentions).toEqual([
+        { id: 'backend-team', mentionType: 'user_group', name: 'Backend Team' },
+      ]);
+    });
+
+    it('should update an existing mentioned entity', () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+
+      textComposer.setMentions([{ id: 'admin', mentionType: 'role', name: 'admin' }]);
+
+      textComposer.upsertMentionEntity({
+        id: 'admin',
+        mentionType: 'role',
+        name: 'Administrators',
+      });
+
+      expect(textComposer.mentions).toEqual([
+        { id: 'admin', mentionType: 'role', name: 'Administrators' },
+      ]);
+    });
+  });
+
+  describe('getMentionEntity', () => {
+    it('should return the mentioned entity if found', () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+
+      textComposer.setMentions([
+        { id: 'channel', mentionType: 'channel', name: 'channel' },
+        { id: 'admin', mentionType: 'role', name: 'admin' },
+      ]);
+
+      expect(textComposer.getMentionEntity('role', 'admin')).toEqual({
+        id: 'admin',
+        mentionType: 'role',
+        name: 'admin',
+      });
+    });
+
+    it('should return undefined if mentioned entity is not found', () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+
+      expect(textComposer.getMentionEntity('role', 'admin')).toBeUndefined();
+    });
+  });
+
+  describe('removeMentionEntity', () => {
+    it('should remove the mentioned entity if found', () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+
+      textComposer.setMentions([
+        { id: 'channel', mentionType: 'channel', name: 'channel' },
+        { id: 'admin', mentionType: 'role', name: 'admin' },
+      ]);
+
+      textComposer.removeMentionEntity('channel', 'channel');
+
+      expect(textComposer.mentions).toEqual([
+        { id: 'admin', mentionType: 'role', name: 'admin' },
+      ]);
+    });
+
+    it('should not update state if mentioned entity is not found', () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+
+      textComposer.setMentions([{ id: 'admin', mentionType: 'role', name: 'admin' }]);
+
+      textComposer.removeMentionEntity('here', 'here');
+
+      expect(textComposer.mentions).toEqual([
+        { id: 'admin', mentionType: 'role', name: 'admin' },
+      ]);
     });
   });
 
@@ -1329,6 +1473,7 @@ describe('TextComposer', () => {
   describe('handleChange', () => {
     const initialState = {
       mentionedUsers: [],
+      mentions: [],
       text: '',
       selection: { start: 0, end: 0 },
     };
@@ -1465,6 +1610,7 @@ describe('TextComposer', () => {
   describe('handleSelect', () => {
     const initialState = {
       mentionedUsers: [],
+      mentions: [],
       text: '',
       selection: { start: 0, end: 0 },
     };

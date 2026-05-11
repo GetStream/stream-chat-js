@@ -16,9 +16,71 @@ export type BaseSuggestion = {
 export type CommandSuggestionDisabledReason = 'editing' | 'quoted_message';
 
 export type CommandSuggestion = BaseSuggestion & CommandResponse;
-export type UserSuggestion = BaseSuggestion & UserResponse & TokenizationPayload;
+export type UserSuggestion = BaseSuggestion &
+  UserResponse &
+  TokenizationPayload & {
+    mentionType: 'user';
+  };
+export type ChannelMentionSuggestion = BaseSuggestion &
+  TokenizationPayload & {
+    mentionType: 'channel';
+    name: 'channel';
+  };
+export type HereMentionSuggestion = BaseSuggestion &
+  TokenizationPayload & {
+    mentionType: 'here';
+    name: 'here';
+  };
+export type RoleMentionSuggestion = BaseSuggestion &
+  TokenizationPayload & {
+    mentionType: 'role';
+    name: string;
+  };
+export type UserGroupMentionSuggestion = BaseSuggestion &
+  TokenizationPayload & {
+    mentionType: 'user_group';
+    name: string;
+  };
+export type MentionSuggestion =
+  | UserSuggestion
+  | ChannelMentionSuggestion
+  | HereMentionSuggestion
+  | RoleMentionSuggestion
+  | UserGroupMentionSuggestion;
+
 export type CustomValidSuggestion = BaseSuggestion & CustomTextComposerSuggestion;
-export type Suggestion = CommandSuggestion | UserSuggestion | CustomValidSuggestion;
+export type Suggestion = CommandSuggestion | MentionSuggestion | CustomValidSuggestion;
+
+export type UserMentionEntity = UserResponse & {
+  mentionType: 'user';
+};
+export type ChannelMentionEntity = {
+  id: 'channel';
+  mentionType: 'channel';
+  name: 'channel';
+};
+export type HereMentionEntity = {
+  id: 'here';
+  mentionType: 'here';
+  name: 'here';
+};
+export type RoleMentionEntity = {
+  id: string;
+  mentionType: 'role';
+  name?: string;
+};
+export type UserGroupMentionEntity = {
+  id: string;
+  mentionType: 'user_group';
+  name?: string;
+};
+
+export type MentionEntity =
+  | UserMentionEntity
+  | ChannelMentionEntity
+  | HereMentionEntity
+  | RoleMentionEntity
+  | UserGroupMentionEntity;
 
 export type TextComposerStateSnapshot = TextComposerState;
 
@@ -55,7 +117,11 @@ export type Suggestions<T extends Suggestion = Suggestion> = {
 export type TextSelection = { end: number; start: number };
 
 export type TextComposerState<T extends Suggestion = Suggestion> = {
+  /**
+   * @deprecated Use `mentions` instead.
+   */
   mentionedUsers: UserResponse[];
+  mentions?: MentionEntity[];
   selection: TextSelection;
   text: string;
   command?: CommandResponse | null;

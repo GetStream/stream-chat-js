@@ -5,11 +5,18 @@ import type { TextComposerMiddlewareExecutorState } from './middleware';
 import type { TextComposerSuggestion } from './middleware/textComposer/types';
 import type { TextSelection } from './middleware/textComposer/types';
 import type {
+  MentionEntity,
   TextComposerCommandActivationEffect,
   TextComposerState,
   TextComposerStateSnapshot,
+  UserMentionEntity,
 } from './middleware/textComposer/types';
 import type { Suggestions } from './middleware/textComposer/types';
+import {
+  isUserMentionEntity,
+  mentionEntityToUserResponse,
+  userResponseToMentionEntity,
+} from './middleware/textComposer/mentionUtils';
 import type { MessageComposer } from './messageComposer';
 import type { CommandResponse, DraftMessage, LocalMessage, UserResponse } from '../types';
 
@@ -34,6 +41,60 @@ export const textIsEmpty = (text: string) => {
   );
 };
 
+const getInitialMentions = (message?: DraftMessage | LocalMessage): MentionEntity[] => {
+  if (!message) return [];
+
+  const mentions: MentionEntity[] = (message.mentioned_users ?? []).map(
+    (item: string | UserResponse) =>
+      typeof item === 'string'
+        ? ({ id: item, mentionType: 'user' } as UserMentionEntity)
+        : { ...item, mentionType: 'user' },
+  );
+
+  if (message.mentioned_channel) {
+    mentions.push({
+      id: 'channel',
+      mentionType: 'channel',
+      name: 'channel',
+    });
+  }
+
+  if (message.mentioned_here) {
+    mentions.push({
+      id: 'here',
+      mentionType: 'here',
+      name: 'here',
+    });
+  }
+
+  if (message.mentioned_roles?.length) {
+    mentions.push(
+      ...message.mentioned_roles.map((role) => ({
+        id: role,
+        mentionType: 'role' as const,
+        name: role,
+      })),
+    );
+  }
+
+  if (message.mentioned_group_ids?.length) {
+    mentions.push(
+      ...message.mentioned_group_ids.map((groupId) => ({
+        id: groupId,
+        mentionType: 'user_group' as const,
+      })),
+    );
+  }
+
+  return mentions;
+};
+
+const isSameMentionEntity = (first: MentionEntity, second: MentionEntity) =>
+  first.id === second.id && first.mentionType === second.mentionType;
+
+const getMentionsFromState = (state: TextComposerState) =>
+  state.mentions ?? state.mentionedUsers.map(userResponseToMentionEntity);
+
 const initState = ({
   composer,
   message,
@@ -46,15 +107,20 @@ const initState = ({
     return {
       command: null,
       mentionedUsers: [],
+      mentions: [],
       text,
       selection: { start: text.length, end: text.length },
     };
   }
   const text = message.text ?? '';
-  return {
-    mentionedUsers: (message.mentioned_users ?? []).map((item: string | UserResponse) =>
+  const mentions = getInitialMentions(message);
+  const mentionedUsers = (message.mentioned_users ?? []).map(
+    (item: string | UserResponse) =>
       typeof item === 'string' ? ({ id: item } as UserResponse) : item,
-    ),
+  );
+  return {
+    mentionedUsers,
+    mentions,
     text,
     selection: { start: text.length, end: text.length },
   };
@@ -134,6 +200,10 @@ export class TextComposer {
     return this.state.getLatestValue().mentionedUsers;
   }
 
+  get mentions() {
+    return getMentionsFromState(this.state.getLatestValue());
+  }
+
   get selection() {
     return this.state.getLatestValue().selection;
   }
@@ -161,7 +231,22 @@ export class TextComposer {
   };
 
   setMentionedUsers(users: UserResponse[]) {
-    this.state.partialNext({ mentionedUsers: users });
+    const nonUserMentions = this.mentions.filter(
+      (entity) => !isUserMentionEntity(entity),
+    );
+    this.state.partialNext({
+      mentionedUsers: users,
+      mentions: [...nonUserMentions, ...users.map(userResponseToMentionEntity)],
+    });
+  }
+
+  setMentions(entities: MentionEntity[]) {
+    this.state.partialNext({
+      mentionedUsers: entities
+        .filter(isUserMentionEntity)
+        .map(mentionEntityToUserResponse),
+      mentions: entities,
+    });
   }
 
   clearCommand() {
@@ -174,27 +259,75 @@ export class TextComposer {
     });
   }
 
+  /**
+   * @deprecated Use `upsertMentionEntity({ ...user, mentionType: 'user' })` instead.
+   */
   upsertMentionedUser = (user: UserResponse) => {
     const mentionedUsers = [...this.mentionedUsers];
-    const existingUserIndex = mentionedUsers.findIndex((u) => u.id === user.id);
+    const existingUserIndex = mentionedUsers.findIndex((entity) => entity.id === user.id);
     if (existingUserIndex >= 0) {
       mentionedUsers.splice(existingUserIndex, 1, user);
-      this.state.partialNext({ mentionedUsers });
+      this.setMentionedUsers(mentionedUsers);
     } else {
       mentionedUsers.push(user);
-      this.state.partialNext({ mentionedUsers });
+      this.setMentionedUsers(mentionedUsers);
     }
   };
 
+  /**
+   * @deprecated Use `getMentionEntity('user', userId)` instead.
+   */
   getMentionedUser = (userId: string) =>
-    this.state.getLatestValue().mentionedUsers.find((u: UserResponse) => u.id === userId);
+    this.mentionedUsers.find((user) => user.id === userId);
 
+  /**
+   * @deprecated Use `removeMentionEntity('user', userId)` instead.
+   */
   removeMentionedUser = (userId: string) => {
-    const existingUserIndex = this.mentionedUsers.findIndex((u) => u.id === userId);
+    const existingUserIndex = this.mentionedUsers.findIndex(
+      (entity) => entity.id === userId,
+    );
     if (existingUserIndex === -1) return;
     const mentionedUsers = [...this.mentionedUsers];
     mentionedUsers.splice(existingUserIndex, 1);
-    this.state.partialNext({ mentionedUsers });
+    this.setMentionedUsers(mentionedUsers);
+  };
+
+  upsertMentionEntity = (entity: MentionEntity) => {
+    const mentions = [...this.mentions];
+    const existingEntityIndex = mentions.findIndex((currentEntity) =>
+      isSameMentionEntity(currentEntity, entity),
+    );
+
+    if (existingEntityIndex >= 0) {
+      mentions.splice(existingEntityIndex, 1, entity);
+    } else {
+      mentions.push(entity);
+    }
+
+    this.setMentions(mentions);
+  };
+
+  getMentionEntity = (
+    mentionType: MentionEntity['mentionType'],
+    id: MentionEntity['id'],
+  ) =>
+    this.mentions.find(
+      (entity) => entity.mentionType === mentionType && entity.id === id,
+    );
+
+  removeMentionEntity = (
+    mentionType: MentionEntity['mentionType'],
+    id: MentionEntity['id'],
+  ) => {
+    const existingEntityIndex = this.mentions.findIndex(
+      (entity) => entity.mentionType === mentionType && entity.id === id,
+    );
+    if (existingEntityIndex === -1) return;
+
+    const mentions = [...this.mentions];
+    mentions.splice(existingEntityIndex, 1);
+    this.setMentions(mentions);
   };
 
   setCommand = (command: CommandResponse | null) => {
