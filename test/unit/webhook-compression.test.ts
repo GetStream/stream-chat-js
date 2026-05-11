@@ -28,6 +28,19 @@ const gzip = (body: Buffer | string) =>
 const base64 = (body: Buffer | string) =>
   (Buffer.isBuffer(body) ? body : Buffer.from(body)).toString('base64');
 
+const snsEnvelope = (innerMessage: string) =>
+  JSON.stringify({
+    Type: 'Notification',
+    MessageId: '22b80b92-fdea-4c2c-8f9d-bdfb0c7bf324',
+    TopicArn: 'arn:aws:sns:us-east-1:123456789012:stream-webhooks',
+    Message: innerMessage,
+    Timestamp: '2026-05-11T10:00:00.000Z',
+    SignatureVersion: '1',
+    MessageAttributes: {
+      'X-Signature': { Type: 'String', Value: '<signature placeholder>' },
+    },
+  });
+
 describe('Webhook verification + parsing', () => {
   let client: StreamChat;
 
@@ -114,13 +127,25 @@ describe('Webhook verification + parsing', () => {
   });
 
   describe('decodeSnsPayload', () => {
-    it('aliases decodeSqsPayload', () => {
+    it('treats a pre-extracted Message identically to decodeSqsPayload', () => {
       const wrapped = base64(gzip(JSON_BODY));
       expect(decodeSnsPayload(wrapped).equals(decodeSqsPayload(wrapped))).toBe(true);
     });
 
-    it('round-trips base64 + gzip', () => {
+    it('round-trips base64 + gzip (pre-extracted Message)', () => {
       expect(decodeSnsPayload(base64(gzip(JSON_BODY))).toString('utf8')).toBe(JSON_BODY);
+    });
+
+    it('unwraps a full SNS HTTP notification envelope', () => {
+      const wrapped = base64(gzip(JSON_BODY));
+      const envelope = snsEnvelope(wrapped);
+      expect(decodeSnsPayload(envelope).toString('utf8')).toBe(JSON_BODY);
+    });
+
+    it('handles whitespace before the envelope JSON', () => {
+      const wrapped = base64(gzip(JSON_BODY));
+      const envelope = `\n  ${snsEnvelope(wrapped)}`;
+      expect(decodeSnsPayload(envelope).toString('utf8')).toBe(JSON_BODY);
     });
   });
 
@@ -217,17 +242,32 @@ describe('Webhook verification + parsing', () => {
   });
 
   describe('verifyAndParseSns', () => {
-    it('parses a base64 + gzip SNS message', () => {
+    it('parses a pre-extracted base64 + gzip SNS message', () => {
       const wrapped = base64(gzip(JSON_BODY));
       const ev = client.verifyAndParseSns(wrapped, sign(JSON_BODY));
       expect(ev.type).toBe('message.new');
     });
 
-    it('produces the same event as verifyAndParseSqs', () => {
+    it('produces the same event as verifyAndParseSqs (pre-extracted Message)', () => {
       const wrapped = base64(gzip(JSON_BODY));
       const sig = sign(JSON_BODY);
       expect(client.verifyAndParseSns(wrapped, sig)).toEqual(
         client.verifyAndParseSqs(wrapped, sig),
+      );
+    });
+
+    it('parses a full SNS HTTP notification envelope', () => {
+      const wrapped = base64(gzip(JSON_BODY));
+      const envelope = snsEnvelope(wrapped);
+      const ev = client.verifyAndParseSns(envelope, sign(JSON_BODY));
+      expect(ev.type).toBe('message.new');
+    });
+
+    it('rejects signature computed over the envelope JSON, not the payload', () => {
+      const wrapped = base64(gzip(JSON_BODY));
+      const envelope = snsEnvelope(wrapped);
+      expect(() => client.verifyAndParseSns(envelope, sign(envelope))).toThrow(
+        WebhookSignatureError,
       );
     });
 

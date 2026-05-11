@@ -184,11 +184,38 @@ export function decodeSqsPayload(body: string): Buffer {
 }
 
 /**
- * Identical to {@link decodeSqsPayload}; exposed under both names so
- * call sites read intent.
+ * Reverses an SNS HTTP notification envelope. When `notificationBody`
+ * is a JSON envelope (`{"Type":"Notification","Message":"..."}`), the
+ * inner `Message` field is extracted and run through the SQS pipeline
+ * (base64-decode, then gzip-if-magic). When the input is not a JSON
+ * envelope it is treated as the already-extracted `Message` string,
+ * so call sites that pre-unwrap continue to work.
  */
-export function decodeSnsPayload(message: string): Buffer {
-  return decodeSqsPayload(message);
+export function decodeSnsPayload(notificationBody: string): Buffer {
+  const inner = extractSnsMessage(notificationBody);
+  return decodeSqsPayload(inner ?? notificationBody);
+}
+
+function extractSnsMessage(notificationBody: string): string | null {
+  const trimmed = notificationBody.replace(/^[\s\uFEFF]+/, '');
+  if (!trimmed.startsWith('{')) {
+    return null;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+  if (
+    parsed === null ||
+    typeof parsed !== 'object' ||
+    Array.isArray(parsed) ||
+    typeof (parsed as { Message?: unknown }).Message !== 'string'
+  ) {
+    return null;
+  }
+  return (parsed as { Message: string }).Message;
 }
 
 /**
