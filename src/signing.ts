@@ -145,7 +145,7 @@ const GZIP_MAGIC = Buffer.from([0x1f, 0x8b]);
  * same handler correct when middleware - Express, Next.js, AWS Lambda
  * - auto-decompresses the request before your code sees it.
  */
-export function ungzipPayload(rawBody: string | Buffer): Buffer {
+export function gunzipPayload(rawBody: string | Buffer): Buffer {
   const body = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(rawBody);
   if (body.length >= 2 && body.subarray(0, 2).equals(GZIP_MAGIC)) {
     try {
@@ -180,7 +180,7 @@ export function decodeSqsPayload(body: string): Buffer {
   if (decoded.toString('base64').length !== body.length) {
     throw new WebhookSignatureError('failed to base64-decode payload: malformed input');
   }
-  return ungzipPayload(decoded);
+  return gunzipPayload(decoded);
 }
 
 /**
@@ -250,7 +250,7 @@ export function verifyAndParseWebhook(
   signature: string,
   secret: string,
 ): Event {
-  return verifyAndParse(ungzipPayload(rawBody), signature, secret);
+  return verifyAndParse(gunzipPayload(rawBody), signature, secret);
 }
 
 /**

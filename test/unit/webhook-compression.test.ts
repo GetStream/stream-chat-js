@@ -8,7 +8,7 @@ import {
   decodeSnsPayload,
   decodeSqsPayload,
   parseEvent,
-  ungzipPayload,
+  gunzipPayload,
   verifyAndParseSns,
   verifyAndParseSqs,
   verifyAndParseWebhook,
@@ -78,29 +78,29 @@ describe('Webhook verification + parsing', () => {
     });
   });
 
-  describe('ungzipPayload', () => {
+  describe('gunzipPayload', () => {
     it('passes through plain bytes unchanged', () => {
-      const out = ungzipPayload(JSON_BODY);
+      const out = gunzipPayload(JSON_BODY);
       expect(out.toString('utf8')).toBe(JSON_BODY);
     });
 
     it('passes through Buffer input unchanged', () => {
-      const out = ungzipPayload(Buffer.from(JSON_BODY));
+      const out = gunzipPayload(Buffer.from(JSON_BODY));
       expect(out.toString('utf8')).toBe(JSON_BODY);
     });
 
     it('inflates gzip-magic bytes', () => {
-      const out = ungzipPayload(gzip(JSON_BODY));
+      const out = gunzipPayload(gzip(JSON_BODY));
       expect(out.toString('utf8')).toBe(JSON_BODY);
     });
 
     it('returns Buffer in all cases', () => {
-      expect(Buffer.isBuffer(ungzipPayload(JSON_BODY))).toBe(true);
-      expect(Buffer.isBuffer(ungzipPayload(gzip(JSON_BODY)))).toBe(true);
+      expect(Buffer.isBuffer(gunzipPayload(JSON_BODY))).toBe(true);
+      expect(Buffer.isBuffer(gunzipPayload(gzip(JSON_BODY)))).toBe(true);
     });
 
     it('handles empty input', () => {
-      expect(ungzipPayload(Buffer.alloc(0)).length).toBe(0);
+      expect(gunzipPayload(Buffer.alloc(0)).length).toBe(0);
     });
 
     it('throws WebhookSignatureError on truncated gzip with magic', () => {
@@ -108,7 +108,12 @@ describe('Webhook verification + parsing', () => {
         Buffer.from([0x1f, 0x8b, 0x08]),
         Buffer.from([0, 0, 0]),
       ]);
-      expect(() => ungzipPayload(bad)).toThrow(WebhookSignatureError);
+      expect(() => gunzipPayload(bad)).toThrow(WebhookSignatureError);
+    });
+
+    it("decompresses Tommaso's helloworld gzip fixture", () => {
+      const fixture = Buffer.from('H4sIAGrYAWoAA8tIzcnJL88vykkBAK0g6/kKAAAA', 'base64');
+      expect(gunzipPayload(fixture).equals(Buffer.from('helloworld'))).toBe(true);
     });
   });
 
@@ -123,6 +128,20 @@ describe('Webhook verification + parsing', () => {
 
     it('throws WebhookSignatureError on malformed base64', () => {
       expect(() => decodeSqsPayload('!!!not-base64!!!')).toThrow(WebhookSignatureError);
+    });
+
+    it("decodes Tommaso's plain base64 helloworld fixture", () => {
+      expect(decodeSqsPayload('aGVsbG93b3JsZA==').equals(Buffer.from('helloworld'))).toBe(
+        true,
+      );
+    });
+
+    it("decodes Tommaso's base64+gzip helloworld fixture", () => {
+      expect(
+        decodeSqsPayload('H4sIAGrYAWoAA8tIzcnJL88vykkBAK0g6/kKAAAA').equals(
+          Buffer.from('helloworld'),
+        ),
+      ).toBe(true);
     });
   });
 

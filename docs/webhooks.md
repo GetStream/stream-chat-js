@@ -166,7 +166,7 @@ const event = verifyAndParseSqs(messageBody, signature, apiSecret);
 If you need finer control (for example, to verify a signature without
 parsing the JSON, or to inflate a payload yourself), the SDK also exports:
 
-- `ungzipPayload(body)` — returns the raw body as a `Buffer`, gunzipping
+- `gunzipPayload(body)` — returns the raw body as a `Buffer`, gunzipping
   it when the first two bytes match the gzip magic. Plain bodies pass
   through unchanged.
 - `decodeSqsPayload(body)` / `decodeSnsPayload(body)` — base64-decodes
@@ -189,7 +189,7 @@ parsing the JSON, or to inflate a payload yourself), the SDK also exports:
 | `verifyAndParseSqs(messageBody, sig, secret)` _(standalone)_ | `Event`   | `WebhookSignatureError` for signature mismatch or bad base64 / gzip                   |
 | `verifyAndParseSns(message, sig, secret)` _(standalone)_     | `Event`   | `WebhookSignatureError` for signature mismatch or bad base64 / gzip                   |
 | `verifySignature(body, sig, secret)`                         | `boolean` | never                                                                                 |
-| `ungzipPayload(body)`                                        | `Buffer`  | `WebhookSignatureError` when the body starts with the gzip magic but fails to inflate |
+| `gunzipPayload(body)`                                        | `Buffer`  | `WebhookSignatureError` when the body starts with the gzip magic but fails to inflate |
 | `decodeSqsPayload(body)` / `decodeSnsPayload(body)`          | `Buffer`  | `WebhookSignatureError` for malformed base64 or bad gzip bytes                        |
 | `parseEvent(payload)`                                        | `Event`   | `SyntaxError` when the payload is not valid JSON                                      |
 
