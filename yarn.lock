@@ -1484,15 +1484,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/base64-js@npm:^1.5.0":
-  version: 1.5.0
-  resolution: "@types/base64-js@npm:1.5.0"
-  dependencies:
-    base64-js: "npm:*"
-  checksum: 10c0/ac5c2d984ab74a06f4348af5716fe48794af8979839af4494003425fc10e1ee39e56189972f3b92e7229ab860ce03fe9927ad225252843b6a8baad29ce85260d
-  languageName: node
-  linkType: hard
-
 "@types/chai@npm:^5.2.2":
   version: 5.2.3
   resolution: "@types/chai@npm:5.2.3"
@@ -2142,7 +2133,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"base64-js@npm:*, base64-js@npm:^1.5.1":
+"base64-js@npm:^1.5.1":
   version: 1.5.1
   resolution: "base64-js@npm:1.5.1"
   checksum: 10c0/f23823513b63173a001030fae4f2dabe283b99a9d324ade3ad3d148e218134676f1ee8568c877cd79ec1c53158dcf2d2ba527a97c606618928ba99dd930102bf
@@ -7224,7 +7215,6 @@ __metadata:
     "@eslint/js": "npm:^9.39.4"
     "@semantic-release/changelog": "npm:^6.0.3"
     "@semantic-release/git": "npm:^10.0.1"
-    "@types/base64-js": "npm:^1.5.0"
     "@types/jsonwebtoken": "npm:^9.0.8"
     "@types/node": "npm:^22.19.18"
     "@types/sinon": "npm:^10.0.6"
