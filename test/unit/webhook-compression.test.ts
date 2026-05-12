@@ -365,4 +365,94 @@ describe('Webhook verification + parsing', () => {
       expect(ev.type).toBe('message.new');
     });
   });
+
+  describe('SQS / SNS verification is optional (CHA-3071)', () => {
+    it('verifyAndParseSqs(body) parses a plain JSON body without verification', () => {
+      const ev = verifyAndParseSqs(base64(JSON_BODY));
+      expect(ev.type).toBe('message.new');
+      expect(ev.message?.text).toBe('the quick brown fox');
+    });
+
+    it('verifyAndParseSqs(body) parses a base64-only body without verification', () => {
+      const ev = verifyAndParseSqs(base64(JSON_BODY));
+      expect(ev.type).toBe('message.new');
+    });
+
+    it('verifyAndParseSqs(body) parses a base64 + gzip body without verification', () => {
+      const ev = verifyAndParseSqs(base64(gzip(JSON_BODY)));
+      expect(ev.type).toBe('message.new');
+    });
+
+    it('verifyAndParseSns(envelope) parses a full SNS envelope without verification', () => {
+      const envelope = snsEnvelope(base64(gzip(JSON_BODY)));
+      const ev = verifyAndParseSns(envelope);
+      expect(ev.type).toBe('message.new');
+    });
+
+    it('verifyAndParseSns(message) parses a pre-extracted SNS message without verification', () => {
+      const ev = verifyAndParseSns(base64(gzip(JSON_BODY)));
+      expect(ev.type).toBe('message.new');
+    });
+
+    it('instance method without secret + no signature succeeds (no verification)', () => {
+      const secretless = new StreamChat('api_key');
+      const ev = secretless.verifyAndParseSqs(base64(gzip(JSON_BODY)));
+      expect(ev.type).toBe('message.new');
+      const ev2 = secretless.verifyAndParseSns(snsEnvelope(base64(gzip(JSON_BODY))));
+      expect(ev2.type).toBe('message.new');
+    });
+
+    it('instance method without secret + signature still throws', () => {
+      const secretless = new StreamChat('api_key');
+      expect(() =>
+        secretless.verifyAndParseSqs(base64(JSON_BODY), sign(JSON_BODY)),
+      ).toThrow(InvalidWebhookError);
+      expect(() =>
+        secretless.verifyAndParseSns(base64(JSON_BODY), sign(JSON_BODY)),
+      ).toThrow(InvalidWebhookError);
+    });
+
+    it('verifyAndParseSqs(body, signature) without secret throws InvalidWebhookError', () => {
+      expect(() => verifyAndParseSqs(base64(JSON_BODY), sign(JSON_BODY))).toThrow(
+        InvalidWebhookError,
+      );
+      expect(() => verifyAndParseSqs(base64(JSON_BODY), sign(JSON_BODY))).toThrow(
+        /signature and secret must both be provided/,
+      );
+    });
+
+    it('verifyAndParseSqs(body, undefined, secret) without signature throws InvalidWebhookError', () => {
+      expect(() => verifyAndParseSqs(base64(JSON_BODY), undefined, API_SECRET)).toThrow(
+        InvalidWebhookError,
+      );
+      expect(() => verifyAndParseSqs(base64(JSON_BODY), undefined, API_SECRET)).toThrow(
+        /signature and secret must both be provided/,
+      );
+    });
+
+    it('verifyAndParseSns(body, signature) without secret throws InvalidWebhookError', () => {
+      expect(() => verifyAndParseSns(base64(JSON_BODY), sign(JSON_BODY))).toThrow(
+        InvalidWebhookError,
+      );
+      expect(() => verifyAndParseSns(base64(JSON_BODY), sign(JSON_BODY))).toThrow(
+        /signature and secret must both be provided/,
+      );
+    });
+
+    it('still enforces signature when both signature and secret are provided', () => {
+      expect(() => verifyAndParseSqs(base64(JSON_BODY), 'deadbeef', API_SECRET)).toThrow(
+        /signature mismatch/,
+      );
+      expect(() => verifyAndParseSns(base64(JSON_BODY), 'deadbeef', API_SECRET)).toThrow(
+        /signature mismatch/,
+      );
+    });
+
+    it('still surfaces malformed-envelope errors when verification is skipped', () => {
+      expect(() => verifyAndParseSqs('!!!not-base64!!!')).toThrow(InvalidWebhookError);
+      expect(() => verifyAndParseSqs('!!!not-base64!!!')).toThrow(
+        /invalid base64 encoding/,
+      );
+    });
+  });
 });

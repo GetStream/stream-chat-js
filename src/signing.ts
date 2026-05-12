@@ -287,36 +287,75 @@ export function verifyAndParseWebhook(
   return verifyAndParse(gunzipPayload(rawBody), signature, secret);
 }
 
-/**
- * Decode the SQS message `Body` (base64, then gzip-if-magic), verify
- * the HMAC `signature` from the `X-Signature` message attribute, and
- * return the parsed {@link Event}.
- *
- * @throws {InvalidWebhookError} When the signature does not match, the
- *   base64 / gzip envelope is malformed, or the payload is not valid
- *   JSON.
- */
-export function verifyAndParseSqs(
-  messageBody: string,
-  signature: string,
-  secret: string,
-): Event {
-  return verifyAndParse(decodeSqsPayload(messageBody), signature, secret);
+const MISSING_SQS_SNS_CREDENTIALS_MESSAGE =
+  'signature and secret must both be provided to verify the SQS/SNS payload';
+
+function resolveOptionalVerification(
+  signature: string | undefined,
+  secret: string | undefined,
+): { verify: boolean } {
+  const hasSignature = !!signature;
+  const hasSecret = !!secret;
+  if (hasSignature !== hasSecret) {
+    throw new InvalidWebhookError(MISSING_SQS_SNS_CREDENTIALS_MESSAGE);
+  }
+  return { verify: hasSignature && hasSecret };
 }
 
 /**
- * Decode the SNS notification `Message` (identical to SQS handling),
- * verify the HMAC `signature` from the `X-Signature` message attribute,
- * and return the parsed {@link Event}.
+ * Decode the SQS message `Body` (base64, then gzip-if-magic) and
+ * return the parsed {@link Event}. When both `signature` and `secret`
+ * are provided, the HMAC is verified against the decoded JSON before
+ * parsing.
  *
- * @throws {InvalidWebhookError} When the signature does not match, the
- *   base64 / gzip envelope is malformed, or the payload is not valid
- *   JSON.
+ * Stream does not include an `X-Signature` on SQS deliveries — the AWS
+ * transport (IAM-authenticated queues) is the auth layer. Pass
+ * `signature` and `secret` only if you have configured your own
+ * out-of-band signing on top.
+ *
+ * @throws {InvalidWebhookError} When the base64 / gzip envelope is
+ *   malformed, the payload is not valid JSON, or — when verification
+ *   is requested — the signature does not match. Passing exactly one
+ *   of `signature` / `secret` also throws.
+ */
+export function verifyAndParseSqs(
+  messageBody: string,
+  signature?: string,
+  secret?: string,
+): Event {
+  const { verify } = resolveOptionalVerification(signature, secret);
+  const decoded = decodeSqsPayload(messageBody);
+  if (verify) {
+    return verifyAndParse(decoded, signature as string, secret as string);
+  }
+  return parseEvent(decoded);
+}
+
+/**
+ * Decode the SNS notification `Message` (identical to SQS handling)
+ * and return the parsed {@link Event}. When both `signature` and
+ * `secret` are provided, the HMAC is verified against the decoded JSON
+ * before parsing.
+ *
+ * Stream does not include an `X-Signature` on SNS deliveries — the AWS
+ * transport (AWS-signed SNS notifications) is the auth layer. Pass
+ * `signature` and `secret` only if you have configured your own
+ * out-of-band signing on top.
+ *
+ * @throws {InvalidWebhookError} When the base64 / gzip envelope is
+ *   malformed, the payload is not valid JSON, or — when verification
+ *   is requested — the signature does not match. Passing exactly one
+ *   of `signature` / `secret` also throws.
  */
 export function verifyAndParseSns(
-  message: string,
-  signature: string,
-  secret: string,
+  notificationBody: string,
+  signature?: string,
+  secret?: string,
 ): Event {
-  return verifyAndParse(decodeSnsPayload(message), signature, secret);
+  const { verify } = resolveOptionalVerification(signature, secret);
+  const decoded = decodeSnsPayload(notificationBody);
+  if (verify) {
+    return verifyAndParse(decoded, signature as string, secret as string);
+  }
+  return parseEvent(decoded);
 }
