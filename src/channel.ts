@@ -1438,7 +1438,9 @@ export class Channel {
     }
 
     // FIXME: see #1265, adjust and count new messages even when the channel is muted
-    if (this.muteStatus().muted) return false;
+    // Read mute state directly from the client to avoid _checkInitialized() — this method
+    // is invoked from _handleChannelEvent (e.g. message.new) before .watch() resolves.
+    if (this.getClient()._muteStatus(this.cid).muted) return false;
 
     return true;
   }

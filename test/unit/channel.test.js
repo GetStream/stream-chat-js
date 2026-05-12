@@ -1352,6 +1352,7 @@ describe('Channel _handleChannelEvent', function () {
 
 describe('Uninitialized Channel', () => {
 	const user = { id: 'user' };
+	const otherUser = { id: 'other-user' };
 	let client;
 	let channel;
 
@@ -1371,6 +1372,62 @@ describe('Uninitialized Channel', () => {
 
 	it('reports no lastRead data', () => {
 		expect(channel.lastRead()).to.eq(null);
+	});
+
+	// Regression coverage for https://github.com/GetStream/stream-chat-js/issues/1732
+	// `client.channel(type, id)` registers the channel in `activeChannels` with
+	// `initialized = false`. Before the fix, a `message.new` arriving in that
+	// window went dispatchEvent → _handleChannelEvent → _countMessageAsUnread →
+	// muteStatus() → _checkInitialized() and threw, aborting the rest of the
+	// dispatch cycle (client listeners, channel listeners, offlineDb).
+	describe('regression #1732: dispatchEvent on an uninitialized channel', () => {
+		const buildMessageNewEvent = () => ({
+			type: 'message.new',
+			cid: channel.cid,
+			channel_type: channel.type,
+			channel_id: channel.id,
+			user: otherUser,
+			message: generateMsg({ user: otherUser }),
+			created_at: new Date().toISOString(),
+		});
+
+		it('does not throw and still updates channel state on message.new', () => {
+			expect(() => client.dispatchEvent(buildMessageNewEvent())).not.to.throw();
+			expect(channel.state.unreadCount).to.equal(1);
+		});
+
+		it('does not throw for channels left uninitialized by query({ watch: false })', () => {
+			// Production path called out in the issue: screens that fetch via
+			// `query({ watch: false, state: false })` leave the channel in
+			// activeChannels with initialized=false indefinitely. We simulate
+			// that final state — `initialized` is never flipped to true.
+			expect(channel.initialized).to.be.false;
+			expect(() => client.dispatchEvent(buildMessageNewEvent())).not.to.throw();
+		});
+
+		it('still invokes client and channel listeners (dispatch cycle is not aborted)', () => {
+			const clientListener = vi.fn();
+			const channelListener = vi.fn();
+			client.on('message.new', clientListener);
+			channel.on('message.new', channelListener);
+
+			client.dispatchEvent(buildMessageNewEvent());
+
+			expect(clientListener).toHaveBeenCalledOnce();
+			expect(channelListener).toHaveBeenCalledOnce();
+		});
+
+		it('respects client mute state via _countMessageAsUnread without throwing', () => {
+			expect(() => channel._countMessageAsUnread({ user: otherUser })).not.to.throw();
+			expect(channel._countMessageAsUnread({ user: otherUser })).to.be.true;
+
+			client.mutedChannels = [{ user, channel }];
+			expect(channel._countMessageAsUnread({ user: otherUser })).to.be.false;
+		});
+
+		it('public muteStatus() still throws (intentional API contract)', () => {
+			expect(() => channel.muteStatus()).to.throw(/hasn't been initialized/);
+		});
 	});
 });
 
