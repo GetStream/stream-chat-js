@@ -38,6 +38,7 @@ export type RoleMentionSuggestion = BaseSuggestion &
   };
 export type UserGroupMentionSuggestion = BaseSuggestion &
   TokenizationPayload & {
+    memberCount?: number;
     mentionType: 'user_group';
     name: string;
   };

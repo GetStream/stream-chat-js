@@ -9,9 +9,7 @@ import { MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY } from '../../../../../src/co
 import type {
   ChannelMemberResponse,
   SearchUserGroupsOptions,
-  QueryUserGroupsOptions,
   SearchUserGroupsResponse,
-  QueryUserGroupsResponse,
   Mute,
   UserGroupResponse,
   UserResponse,
@@ -92,13 +90,18 @@ describe('MentionsSearchSource', () => {
       {
         created_at: '2026-05-08T12:00:00.000Z',
         id: 'backend-team',
-        members: [],
+        members: [
+          { created_at: '2026-05-08T12:00:00.000Z', id: 'member-1', is_admin: false },
+        ],
         name: 'Backend Team',
       },
       {
         created_at: '2026-05-08T12:01:00.000Z',
         id: 'admins-group',
-        members: [],
+        members: [
+          { created_at: '2026-05-08T12:00:00.000Z', id: 'member-1', is_admin: false },
+          { created_at: '2026-05-08T12:01:00.000Z', id: 'member-2', is_admin: false },
+        ],
         name: 'Admins',
       },
     ];
@@ -109,9 +112,6 @@ describe('MentionsSearchSource', () => {
         roles: ['admin', 'channel_moderator', 'moderator'],
       }),
       queryUsers: vi.fn().mockResolvedValue({ users: mockUsers }),
-      queryUserGroups: vi.fn().mockResolvedValue({
-        user_groups: mockUserGroups,
-      } satisfies QueryUserGroupsResponse),
       searchUserGroups: vi.fn().mockImplementation(
         async (options: SearchUserGroupsOptions): Promise<SearchUserGroupsResponse> => ({
           user_groups: mockUserGroups.filter((group) =>
@@ -185,24 +185,20 @@ describe('MentionsSearchSource', () => {
     expect(customizedSource.transliterate).toBeInstanceOf(Function);
   });
 
-  it('should return built-ins, roles, groups, and users on empty query', async () => {
+  it('should return built-ins, roles, and users on empty query without user group search', async () => {
     const source = new MentionsSearchSource(channel);
     source.activate();
     source.config.textComposerText = '@';
 
     const result = await source.query('');
 
-    expect(client.queryUserGroups).toHaveBeenCalledWith({
-      limit: 10,
-      team_id: 'engineering',
-    } satisfies QueryUserGroupsOptions);
-    expect(client.listRoles).toHaveBeenCalledTimes(1);
     expect(client.searchUserGroups).not.toHaveBeenCalled();
+    expect(client.listRoles).toHaveBeenCalledTimes(1);
     expect(getSuggestion(result.items, 'channel', 'channel')).toBeDefined();
     expect(getSuggestion(result.items, 'here', 'here')).toBeDefined();
     expect(getSuggestion(result.items, 'role', 'admin')).toBeDefined();
     expect(getSuggestion(result.items, 'role', 'channel_moderator')).toBeDefined();
-    expect(getSuggestion(result.items, 'user_group', 'backend-team')).toBeDefined();
+    expect(getSuggestion(result.items, 'user_group', 'backend-team')).toBeUndefined();
     expect(getSuggestion(result.items, 'user', 'user1')).toBeDefined();
   });
 
@@ -286,7 +282,6 @@ describe('MentionsSearchSource', () => {
     const result = await source.query('adm');
 
     expect(client.listRoles).not.toHaveBeenCalled();
-    expect(client.queryUserGroups).not.toHaveBeenCalled();
     expect(client.searchUserGroups).not.toHaveBeenCalled();
     expect(getSuggestion(result.items, 'channel', 'channel')).toBeUndefined();
     expect(getSuggestion(result.items, 'here', 'here')).toBeUndefined();
@@ -499,12 +494,16 @@ describe('MentionsSearchSource', () => {
     expect(result[0].name).toBe('Valid Name');
   });
 
-  it('should handle errors in API queries', async () => {
+  it('should keep partial mention results when one source query fails', async () => {
     const source = new MentionsSearchSource(channel);
     client.queryUsers = vi.fn().mockRejectedValue(new Error('API Error'));
 
     source.config.mentionAllAppUsers = true;
-    await expect(source.query('test')).rejects.toThrow('API Error');
+    const result = await source.query('adm');
+
+    expect(getSuggestion(result.items, 'role', 'admin')).toBeDefined();
+    expect(getSuggestion(result.items, 'user_group', 'admins-group')).toBeDefined();
+    expect(getSuggestion(result.items, 'user', 'user1')).toBeUndefined();
   });
 
   it('should apply custom search options', async () => {

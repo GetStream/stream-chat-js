@@ -24,7 +24,6 @@ import type { StreamChat } from '../../../client';
 import type {
   MemberFilters,
   MemberSort,
-  QueryUserGroupsOptions,
   SearchUserGroupsOptions,
   UserFilters,
   UserGroupResponse,
@@ -141,7 +140,6 @@ const DEFAULT_ALLOWED_MENTION_TYPES: Record<MentionType, boolean> = {
   user_group: true,
 };
 
-type UserGroupListCursor = Pick<QueryUserGroupsOptions, 'created_at_gt' | 'id_gt'>;
 type UserGroupSearchCursor = Pick<SearchUserGroupsOptions, 'id_gt' | 'name_gt'>;
 type UserPaginationState = {
   itemCount: number;
@@ -268,6 +266,11 @@ const DEFAULT_SUGGESTION_FACTORY_MAPPERS: {
     const userGroup = value as UserGroupResponse;
     return {
       id: userGroup.id,
+      /*
+      Currently, all members of the group are always returned. Groups are limited to 100 members.
+      The memberCount == len(members) will always be true unless we add pagination here in the future
+       */
+      memberCount: userGroup.members?.length,
       mentionType: 'user_group',
       name: userGroup.name,
       ...getTokenizedSuggestionDisplayName({
@@ -590,18 +593,6 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
     };
   };
 
-  buildUserGroupListCursor = (items: UserGroupResponse[]) => {
-    if (items.length < this.pageSize) return undefined;
-
-    const lastItem = items[items.length - 1];
-    if (!lastItem?.created_at) return undefined;
-
-    return JSON.stringify({
-      created_at_gt: lastItem.created_at,
-      id_gt: lastItem.id,
-    } satisfies UserGroupListCursor);
-  };
-
   buildUserGroupSearchCursor = (items: UserGroupResponse[]) => {
     if (items.length < this.pageSize) return undefined;
 
@@ -622,56 +613,62 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
       };
     }
 
-    const teamId = this.getChannelTeam();
-
-    if (searchQuery) {
-      const userGroupCursor = decodeUserGroupCursor<UserGroupSearchCursor>(cursor);
-      const options: SearchUserGroupsOptions = {
-        query: searchQuery,
-        limit: this.pageSize,
-        ...(teamId ? { team_id: teamId } : {}),
-        ...(userGroupCursor?.id_gt ? { id_gt: userGroupCursor.id_gt } : {}),
-        ...(userGroupCursor?.name_gt ? { name_gt: userGroupCursor.name_gt } : {}),
-      };
-      const { user_groups } = await this.client.searchUserGroups(options);
-
+    if (!searchQuery) {
       return {
-        items: user_groups.map((userGroup) =>
-          this.toUserGroupMentionSuggestion(userGroup, searchQuery),
-        ),
-        next: this.buildUserGroupSearchCursor(user_groups),
+        items: [],
+        next: undefined,
       };
     }
 
-    const userGroupCursor = decodeUserGroupCursor<UserGroupListCursor>(cursor);
-    const options: QueryUserGroupsOptions = {
+    const teamId = this.getChannelTeam();
+    const userGroupCursor = decodeUserGroupCursor<UserGroupSearchCursor>(cursor);
+    const options: SearchUserGroupsOptions = {
+      query: searchQuery,
       limit: this.pageSize,
       ...(teamId ? { team_id: teamId } : {}),
       ...(userGroupCursor?.id_gt ? { id_gt: userGroupCursor.id_gt } : {}),
-      ...(userGroupCursor?.created_at_gt
-        ? { created_at_gt: userGroupCursor.created_at_gt }
-        : {}),
+      ...(userGroupCursor?.name_gt ? { name_gt: userGroupCursor.name_gt } : {}),
     };
-    const { user_groups } = await this.client.queryUserGroups(options);
+    const { user_groups } = await this.client.searchUserGroups(options);
 
     return {
       items: user_groups.map((userGroup) =>
         this.toUserGroupMentionSuggestion(userGroup, searchQuery),
       ),
-      next: this.buildUserGroupListCursor(user_groups),
+      next: this.buildUserGroupSearchCursor(user_groups),
     };
   };
 
   async query(searchQuery: string) {
     const userOffset = this.offset ?? 0;
     const isFirstPage = userOffset === 0 && typeof this.userGroupCursor === 'undefined';
-    const [userResults, userGroupResults] = await Promise.all([
-      this.getUserSuggestionsPage(searchQuery, userOffset),
-      this.getUserGroupSuggestionsPage(searchQuery, this.userGroupCursor),
-    ]);
-    const roleSuggestions = isFirstPage
-      ? await this.getRoleMentionSuggestions(searchQuery)
-      : [];
+    const previousUserPaginationState = this.latestUserPaginationState;
+    const previousUserGroupCursor = this.userGroupCursor;
+    const [userResultsState, userGroupResultsState, roleSuggestionsState] =
+      await Promise.allSettled([
+        this.getUserSuggestionsPage(searchQuery, userOffset),
+        this.getUserGroupSuggestionsPage(searchQuery, previousUserGroupCursor),
+        isFirstPage
+          ? this.getRoleMentionSuggestions(searchQuery)
+          : Promise.resolve([] as RoleMentionSuggestion[]),
+      ]);
+
+    const userResults =
+      userResultsState.status === 'fulfilled'
+        ? userResultsState.value
+        : {
+            items: [],
+            nextOffset: isFirstPage ? undefined : previousUserPaginationState?.nextOffset,
+          };
+    const userGroupResults =
+      userGroupResultsState.status === 'fulfilled'
+        ? userGroupResultsState.value
+        : {
+            items: [],
+            next: isFirstPage ? undefined : previousUserGroupCursor,
+          };
+    const roleSuggestions =
+      roleSuggestionsState.status === 'fulfilled' ? roleSuggestionsState.value : [];
     const items = [
       ...(isFirstPage ? this.getBuiltinMentionSuggestions(searchQuery) : []),
       ...roleSuggestions,
