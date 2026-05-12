@@ -5276,3 +5276,30 @@ export interface NetworkChangedEvent {
   type: 'network.changed';
   online: boolean;
 }
+
+/*
+ * temporary helper to merge improperly typed request types which contain filter_conditions: Record<string, any>
+ * and properly generated filter conditions in filter-conditions.ts (using scripts/generate-filter-types.ts) by
+ * accessing x-stream-filter-fields
+ */
+export type WithFilterConditions<
+  Base extends { filter_conditions?: Record<string, any> },
+  FilterConditions extends Record<string, { type: any; operators: string }>,
+> = Omit<Base, 'filter_conditions'> & {
+  filter_conditions: QueryFilters<{
+    [Property in keyof FilterConditions]: FilterConditions[Property]['operators'] extends string
+      ?
+          | RequireAtLeastOne<{
+              [Operator in FilterConditions[Property]['operators']]:
+                | (Operator extends '$in' | '$nin'
+                    ? Array<FilterConditions[Property]['type']>
+                    : Operator extends '$exists'
+                      ? boolean
+                      : FilterConditions[Property]['type'])
+                | null;
+            }>
+          | FilterConditions[Property]['type']
+          | null
+      : undefined;
+  }>;
+};

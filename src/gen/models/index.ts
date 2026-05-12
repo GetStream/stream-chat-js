@@ -802,6 +802,8 @@ export interface BodyguardProfileSummary {
   name: string;
 
   display_name?: string;
+
+  text_type?: string;
 }
 
 export interface BodyguardRule {
