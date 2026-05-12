@@ -11,12 +11,12 @@ import { StableWSConnection } from './connection';
 import { UploadManager } from './uploadManager';
 import {
   DevToken,
+  InvalidWebhookError,
   JWTUserToken,
   parseSns as parseSnsHelper,
   parseSqs as parseSqsHelper,
   verifyAndParseWebhook as verifyAndParseWebhookHelper,
   verifySignature,
-  WebhookSignatureError,
 } from './signing';
 import { TokenManager } from './token_manager';
 import { WSConnectionFallback } from './connection_fallback';
@@ -3656,12 +3656,12 @@ export class StreamChat {
    *
    * @param rawBody Raw HTTP request body bytes Stream signed
    * @param signature Value of the `X-Signature` header
-   * @throws {WebhookSignatureError} When the signature does not match or
+   * @throws {InvalidWebhookError} When the signature does not match or
    *   the gzip envelope is malformed.
    */
   verifyAndParseWebhook(rawBody: string | Buffer, signature: string) {
     if (!this.secret) {
-      throw new WebhookSignatureError(
+      throw new InvalidWebhookError(
         'cannot verify webhook signature without an API secret on the client',
       );
     }
@@ -3674,7 +3674,7 @@ export class StreamChat {
    * (Stream does not sign SQS bodies).
    *
    * @param messageBody SQS message `Body` string
-   * @throws {WebhookSignatureError} When the base64 / gzip envelope is malformed.
+   * @throws {InvalidWebhookError} When the base64 / gzip envelope is malformed.
    */
   parseSqs(messageBody: string) {
     return parseSqsHelper(messageBody);
@@ -3685,7 +3685,7 @@ export class StreamChat {
    * same decode path as SQS). No HMAC verification.
    *
    * @param notificationBody Raw SNS POST body or pre-extracted `Message` string
-   * @throws {WebhookSignatureError} When the envelope cannot be decoded.
+   * @throws {InvalidWebhookError} When the envelope cannot be decoded.
    */
   parseSns(notificationBody: string) {
     return parseSnsHelper(notificationBody);
