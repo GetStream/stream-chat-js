@@ -19,6 +19,5 @@ jobs:
       - uses: preactjs/compressed-size-action@v2
         env:
           NODE_OPTIONS: --max_old_space_size=4096
-          YARN_IGNORE_ENGINES: 'true' # Skip validation for node20 requirement
         with:
           repo-token: '${{ secrets.GITHUB_TOKEN }}'
