@@ -62,11 +62,15 @@ Before enabling compression, make sure that:
 
 `verifyAndParseWebhook` is the recommended helper for HTTP webhooks. It
 gunzips the body when needed, verifies the HMAC signature, parses the JSON,
-and returns the typed `Event`. It throws `WebhookSignatureError` when the
-signature does not match or the gzip envelope is malformed.
+and returns the typed `Event`. Every failure mode (signature mismatch,
+malformed gzip, malformed base64 on the SQS/SNS variants, invalid JSON)
+is surfaced through a single unified error class - `InvalidWebhookError` -
+so a single `catch` arm covers all of them. Use `err.message` (or the
+exported `InvalidWebhookErrorMessages` constants) when you need to
+distinguish between failure modes.
 
 ```js
-const { StreamChat, WebhookSignatureError } = require('stream-chat');
+const { StreamChat, InvalidWebhookError } = require('stream-chat');
 
 const client = new StreamChat('api_key', 'api_secret');
 
@@ -77,7 +81,7 @@ app.post('/webhooks/stream', express.raw({ type: '*/*' }), (req, res) => {
     // ...handle the event (event.type, event.message, etc.)
     res.sendStatus(200);
   } catch (err) {
-    if (err instanceof WebhookSignatureError) {
+    if (err instanceof InvalidWebhookError) {
       return res.sendStatus(401);
     }
     throw err;
@@ -109,7 +113,7 @@ signature from the `x-signature` message attribute, and returns the parsed
 `Event`.
 
 ```js
-const { StreamChat, WebhookSignatureError } = require('stream-chat');
+const { StreamChat, InvalidWebhookError } = require('stream-chat');
 
 const client = new StreamChat('api_key', 'api_secret');
 
@@ -122,7 +126,7 @@ async function handleSqsMessage(message) {
     const event = client.verifyAndParseSqs(message.Body, signature);
     // ...handle the event
   } catch (err) {
-    if (err instanceof WebhookSignatureError) {
+    if (err instanceof InvalidWebhookError) {
       // drop the message or move it to a dead-letter queue
       return;
     }
@@ -135,7 +139,7 @@ For SNS, unwrap the SNS notification envelope first and pass the inner
 `Message` field to `verifyAndParseSns`:
 
 ```js
-const { StreamChat, WebhookSignatureError } = require('stream-chat');
+const { StreamChat, InvalidWebhookError } = require('stream-chat');
 
 const client = new StreamChat('api_key', 'api_secret');
 
@@ -171,7 +175,7 @@ parsing the JSON, or to inflate a payload yourself), the SDK also exports:
   through unchanged.
 - `decodeSqsPayload(body)` / `decodeSnsPayload(body)` — base64-decodes
   the SQS/SNS body and then gunzips if needed. Throws
-  `WebhookSignatureError` on malformed base64.
+  `InvalidWebhookError` on malformed base64.
 - `parseEvent(payload)` — `JSON.parse` plus the `Event` type cast.
 - `verifySignature(body, signature, secret)` — constant-time HMAC-SHA256
   comparison. The signature must be computed over the uncompressed,
@@ -179,20 +183,40 @@ parsing the JSON, or to inflate a payload yourself), the SDK also exports:
 
 ## API reference
 
-| Method                                                       | Returns   | Throws                                                                                |
-| ------------------------------------------------------------ | --------- | ------------------------------------------------------------------------------------- |
-| `client.verifyWebhook(body, sig)`                            | `boolean` | never                                                                                 |
-| `client.verifyAndParseWebhook(rawBody, sig)`                 | `Event`   | `WebhookSignatureError` for signature mismatch, missing secret, or bad gzip envelope  |
-| `client.verifyAndParseSqs(messageBody, sig)`                 | `Event`   | `WebhookSignatureError` for signature mismatch, missing secret, or bad base64 / gzip  |
-| `client.verifyAndParseSns(message, sig)`                     | `Event`   | `WebhookSignatureError` for signature mismatch, missing secret, or bad base64 / gzip  |
-| `verifyAndParseWebhook(rawBody, sig, secret)` _(standalone)_ | `Event`   | `WebhookSignatureError` for signature mismatch or bad gzip envelope                   |
-| `verifyAndParseSqs(messageBody, sig, secret)` _(standalone)_ | `Event`   | `WebhookSignatureError` for signature mismatch or bad base64 / gzip                   |
-| `verifyAndParseSns(message, sig, secret)` _(standalone)_     | `Event`   | `WebhookSignatureError` for signature mismatch or bad base64 / gzip                   |
-| `verifySignature(body, sig, secret)`                         | `boolean` | never                                                                                 |
-| `gunzipPayload(body)`                                        | `Buffer`  | `WebhookSignatureError` when the body starts with the gzip magic but fails to inflate |
-| `decodeSqsPayload(body)` / `decodeSnsPayload(body)`          | `Buffer`  | `WebhookSignatureError` for malformed base64 or bad gzip bytes                        |
-| `parseEvent(payload)`                                        | `Event`   | `SyntaxError` when the payload is not valid JSON                                      |
+| Method                                                       | Returns   | Throws                                                                              |
+| ------------------------------------------------------------ | --------- | ----------------------------------------------------------------------------------- |
+| `client.verifyWebhook(body, sig)`                            | `boolean` | never                                                                               |
+| `client.verifyAndParseWebhook(rawBody, sig)`                 | `Event`   | `InvalidWebhookError` for signature mismatch, missing secret, or bad gzip envelope  |
+| `client.verifyAndParseSqs(messageBody, sig)`                 | `Event`   | `InvalidWebhookError` for signature mismatch, missing secret, or bad base64 / gzip  |
+| `client.verifyAndParseSns(message, sig)`                     | `Event`   | `InvalidWebhookError` for signature mismatch, missing secret, or bad base64 / gzip  |
+| `verifyAndParseWebhook(rawBody, sig, secret)` _(standalone)_ | `Event`   | `InvalidWebhookError` for signature mismatch or bad gzip envelope                   |
+| `verifyAndParseSqs(messageBody, sig, secret)` _(standalone)_ | `Event`   | `InvalidWebhookError` for signature mismatch or bad base64 / gzip                   |
+| `verifyAndParseSns(message, sig, secret)` _(standalone)_     | `Event`   | `InvalidWebhookError` for signature mismatch or bad base64 / gzip                   |
+| `verifySignature(body, sig, secret)`                         | `boolean` | never                                                                               |
+| `gunzipPayload(body)`                                        | `Buffer`  | `InvalidWebhookError` when the body starts with the gzip magic but fails to inflate |
+| `decodeSqsPayload(body)` / `decodeSnsPayload(body)`          | `Buffer`  | `InvalidWebhookError` for malformed base64 or bad gzip bytes                        |
+| `parseEvent(payload)`                                        | `Event`   | `InvalidWebhookError` when the payload is not valid JSON                            |
 
-`WebhookSignatureError` is exported from the package root and from
-`stream-chat/dist/types/signing`. Catch it to convert auth failures into a
-`401`/`403` response (HTTP) or a drop / dead-letter decision (SQS / SNS).
+`InvalidWebhookError` (and the `InvalidWebhookErrorMessages` constants) is
+exported from the package root and from `stream-chat/dist/types/signing`.
+Every webhook verification + parsing path in this SDK terminates at this
+single error class, so a single `catch` arm is enough to convert auth and
+format failures into a `401` / `403` response (HTTP) or a drop /
+dead-letter decision (SQS / SNS). Filter on `err.message` when you need
+mode-specific behaviour:
+
+```js
+const { InvalidWebhookError, InvalidWebhookErrorMessages } = require('stream-chat');
+
+try {
+  const event = client.verifyAndParseWebhook(req.body, req.headers['x-signature']);
+} catch (err) {
+  if (err instanceof InvalidWebhookError) {
+    if (err.message === InvalidWebhookErrorMessages.signatureMismatch) {
+      return res.sendStatus(401);
+    }
+    return res.sendStatus(400);
+  }
+  throw err;
+}
+```

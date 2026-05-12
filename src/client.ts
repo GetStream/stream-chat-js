@@ -11,12 +11,12 @@ import { StableWSConnection } from './connection';
 import { UploadManager } from './uploadManager';
 import {
   DevToken,
+  InvalidWebhookError,
   JWTUserToken,
   verifyAndParseSns as verifyAndParseSnsHelper,
   verifyAndParseSqs as verifyAndParseSqsHelper,
   verifyAndParseWebhook as verifyAndParseWebhookHelper,
   verifySignature,
-  WebhookSignatureError,
 } from './signing';
 import { TokenManager } from './token_manager';
 import { WSConnectionFallback } from './connection_fallback';
@@ -3656,12 +3656,12 @@ export class StreamChat {
    *
    * @param rawBody Raw HTTP request body bytes Stream signed
    * @param signature Value of the `X-Signature` header
-   * @throws {WebhookSignatureError} When the signature does not match or
+   * @throws {InvalidWebhookError} When the signature does not match or
    *   the gzip envelope is malformed.
    */
   verifyAndParseWebhook(rawBody: string | Buffer, signature: string) {
     if (!this.secret) {
-      throw new WebhookSignatureError(
+      throw new InvalidWebhookError(
         'cannot verify webhook signature without an API secret on the client',
       );
     }
@@ -3677,12 +3677,12 @@ export class StreamChat {
    *
    * @param messageBody SQS message `Body` string
    * @param signature Value of the `X-Signature` message attribute
-   * @throws {WebhookSignatureError} When the signature does not match or
+   * @throws {InvalidWebhookError} When the signature does not match or
    *   the base64 / gzip envelope is malformed.
    */
   verifyAndParseSqs(messageBody: string, signature: string) {
     if (!this.secret) {
-      throw new WebhookSignatureError(
+      throw new InvalidWebhookError(
         'cannot verify webhook signature without an API secret on the client',
       );
     }
@@ -3698,12 +3698,12 @@ export class StreamChat {
    *
    * @param message SNS notification `Message` field (string)
    * @param signature Value of the `X-Signature` message attribute
-   * @throws {WebhookSignatureError} When the signature does not match or
+   * @throws {InvalidWebhookError} When the signature does not match or
    *   the base64 / gzip envelope is malformed.
    */
   verifyAndParseSns(message: string, signature: string) {
     if (!this.secret) {
-      throw new WebhookSignatureError(
+      throw new InvalidWebhookError(
         'cannot verify webhook signature without an API secret on the client',
       );
     }

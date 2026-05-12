@@ -13,7 +13,8 @@ import {
   verifyAndParseSqs,
   verifyAndParseWebhook,
   verifySignature,
-  WebhookSignatureError,
+  InvalidWebhookError,
+  InvalidWebhookErrorMessages,
 } from '../../src/signing';
 
 const JSON_BODY = '{"type":"message.new","message":{"text":"the quick brown fox"}}';
@@ -78,6 +79,17 @@ describe('Webhook verification + parsing', () => {
     });
   });
 
+  describe('InvalidWebhookErrorMessages', () => {
+    it('exposes the cross-SDK failure-mode messages', () => {
+      expect(InvalidWebhookErrorMessages).toEqual({
+        signatureMismatch: 'signature mismatch',
+        invalidBase64: 'invalid base64 encoding',
+        gzipFailed: 'gzip decompression failed',
+        invalidJson: 'invalid JSON payload',
+      });
+    });
+  });
+
   describe('gunzipPayload', () => {
     it('passes through plain bytes unchanged', () => {
       const out = gunzipPayload(JSON_BODY);
@@ -103,12 +115,27 @@ describe('Webhook verification + parsing', () => {
       expect(gunzipPayload(Buffer.alloc(0)).length).toBe(0);
     });
 
-    it('throws WebhookSignatureError on truncated gzip with magic', () => {
+    it('throws InvalidWebhookError on truncated gzip with magic', () => {
       const bad = Buffer.concat([
         Buffer.from([0x1f, 0x8b, 0x08]),
         Buffer.from([0, 0, 0]),
       ]);
-      expect(() => gunzipPayload(bad)).toThrow(WebhookSignatureError);
+      expect(() => gunzipPayload(bad)).toThrow(InvalidWebhookError);
+      expect(() => gunzipPayload(bad)).toThrow(/gzip decompression failed/);
+    });
+
+    it('preserves the underlying zlib error as `cause` on truncated gzip', () => {
+      const bad = Buffer.concat([
+        Buffer.from([0x1f, 0x8b, 0x08]),
+        Buffer.from([0, 0, 0]),
+      ]);
+      try {
+        gunzipPayload(bad);
+        throw new Error('expected gunzipPayload to throw');
+      } catch (err) {
+        expect(err).toBeInstanceOf(InvalidWebhookError);
+        expect((err as InvalidWebhookError).cause).toBeInstanceOf(Error);
+      }
     });
 
     it("decompresses Tommaso's helloworld gzip fixture", () => {
@@ -126,8 +153,11 @@ describe('Webhook verification + parsing', () => {
       expect(decodeSqsPayload(base64(gzip(JSON_BODY))).toString('utf8')).toBe(JSON_BODY);
     });
 
-    it('throws WebhookSignatureError on malformed base64', () => {
-      expect(() => decodeSqsPayload('!!!not-base64!!!')).toThrow(WebhookSignatureError);
+    it('throws InvalidWebhookError on malformed base64', () => {
+      expect(() => decodeSqsPayload('!!!not-base64!!!')).toThrow(InvalidWebhookError);
+      expect(() => decodeSqsPayload('!!!not-base64!!!')).toThrow(
+        /invalid base64 encoding/,
+      );
     });
 
     it("decodes Tommaso's plain base64 helloworld fixture", () => {
@@ -185,8 +215,19 @@ describe('Webhook verification + parsing', () => {
       expect(ev.type).toBe('a.future.event');
     });
 
-    it('throws on malformed JSON', () => {
-      expect(() => parseEvent('not json')).toThrow(SyntaxError);
+    it('throws InvalidWebhookError on malformed JSON', () => {
+      expect(() => parseEvent('not json')).toThrow(InvalidWebhookError);
+      expect(() => parseEvent('not json')).toThrow(/invalid JSON payload/);
+    });
+
+    it('preserves the underlying SyntaxError as `cause` on malformed JSON', () => {
+      try {
+        parseEvent('not json');
+        throw new Error('expected parseEvent to throw');
+      } catch (err) {
+        expect(err).toBeInstanceOf(InvalidWebhookError);
+        expect((err as InvalidWebhookError).cause).toBeInstanceOf(SyntaxError);
+      }
     });
   });
 
@@ -202,23 +243,48 @@ describe('Webhook verification + parsing', () => {
       expect(ev.type).toBe('message.new');
     });
 
-    it('throws WebhookSignatureError on signature mismatch', () => {
+    it('throws InvalidWebhookError with "signature mismatch" on signature mismatch', () => {
       expect(() => client.verifyAndParseWebhook(JSON_BODY, 'deadbeef')).toThrow(
-        WebhookSignatureError,
+        InvalidWebhookError,
+      );
+      expect(() => client.verifyAndParseWebhook(JSON_BODY, 'deadbeef')).toThrow(
+        /signature mismatch/,
       );
     });
 
     it('rejects a gzip body when the signature was computed over compressed bytes', () => {
       const compressed = gzip(JSON_BODY);
       expect(() => client.verifyAndParseWebhook(compressed, sign(compressed))).toThrow(
-        WebhookSignatureError,
+        InvalidWebhookError,
       );
     });
 
-    it('throws WebhookSignatureError when the client has no API secret', () => {
+    it('throws InvalidWebhookError when the client has no API secret', () => {
       const secretless = new StreamChat('api_key');
       expect(() => secretless.verifyAndParseWebhook(JSON_BODY, 'sig')).toThrow(
-        WebhookSignatureError,
+        InvalidWebhookError,
+      );
+    });
+
+    it('throws InvalidWebhookError with "gzip decompression failed" on truncated gzip', () => {
+      const bad = Buffer.concat([
+        Buffer.from([0x1f, 0x8b, 0x08]),
+        Buffer.from([0, 0, 0]),
+      ]);
+      expect(() => client.verifyAndParseWebhook(bad, 'sig')).toThrow(InvalidWebhookError);
+      expect(() => client.verifyAndParseWebhook(bad, 'sig')).toThrow(
+        /gzip decompression failed/,
+      );
+    });
+
+    it('throws InvalidWebhookError with "invalid JSON payload" on non-JSON after verification', () => {
+      const nonJson = 'not a json document';
+      const sig = sign(nonJson);
+      expect(() => client.verifyAndParseWebhook(nonJson, sig)).toThrow(
+        InvalidWebhookError,
+      );
+      expect(() => client.verifyAndParseWebhook(nonJson, sig)).toThrow(
+        /invalid JSON payload/,
       );
     });
 
@@ -243,7 +309,7 @@ describe('Webhook verification + parsing', () => {
     it('rejects a wrapped body when the signature was computed over the wrapper', () => {
       const wrapped = base64(gzip(JSON_BODY));
       expect(() => client.verifyAndParseSqs(wrapped, sign(wrapped))).toThrow(
-        WebhookSignatureError,
+        InvalidWebhookError,
       );
     });
 
@@ -253,9 +319,12 @@ describe('Webhook verification + parsing', () => {
       expect(ev.type).toBe('message.new');
     });
 
-    it('surfaces malformed base64 as WebhookSignatureError', () => {
+    it('throws InvalidWebhookError with "invalid base64 encoding" on malformed SQS body', () => {
       expect(() => client.verifyAndParseSqs('!!!not-base64!!!', 'sig')).toThrow(
-        WebhookSignatureError,
+        InvalidWebhookError,
+      );
+      expect(() => client.verifyAndParseSqs('!!!not-base64!!!', 'sig')).toThrow(
+        /invalid base64 encoding/,
       );
     });
   });
@@ -286,7 +355,7 @@ describe('Webhook verification + parsing', () => {
       const wrapped = base64(gzip(JSON_BODY));
       const envelope = snsEnvelope(wrapped);
       expect(() => client.verifyAndParseSns(envelope, sign(envelope))).toThrow(
-        WebhookSignatureError,
+        InvalidWebhookError,
       );
     });
 
