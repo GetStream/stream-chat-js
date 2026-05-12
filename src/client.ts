@@ -1915,6 +1915,7 @@ export class StreamChat {
     }
 
     const { predefined_filter, filter_values, sort_values, ...restOptions } = options;
+    const normalizedSort = normalizeQuerySort(sort);
 
     // Build payload based on whether we're using a predefined filter or traditional filters
     const payload = predefined_filter
@@ -1922,12 +1923,13 @@ export class StreamChat {
           predefined_filter,
           filter_values,
           sort_values,
+          sort: normalizedSort,
           ...defaultOptions,
           ...restOptions,
         }
       : {
           filter_conditions: filterConditions,
-          sort: normalizeQuerySort(sort),
+          sort: normalizedSort,
           ...defaultOptions,
           ...restOptions,
         };
@@ -1937,6 +1939,9 @@ export class StreamChat {
       payload,
     );
 
+    // FIXME: In the next major release, return the full QueryChannelsAPIResponse
+    // instead of only `data.channels` so top-level metadata such as
+    // `predefined_filter` is not lost.
     return data.channels;
   }
 
@@ -5035,9 +5040,11 @@ export class StreamChat {
    *
    * @return {Promise<PredefinedFilterResponse>} The created predefined filter
    */
-  async createPredefinedFilter(options: CreatePredefinedFilterOptions) {
+  async createPredefinedFilter<
+    F extends Record<string, unknown> = Record<string, unknown>,
+  >(options: CreatePredefinedFilterOptions<F>) {
     this.validateServerSideAuth();
-    return await this.post<PredefinedFilterResponse>(
+    return await this.post<PredefinedFilterResponse<F>>(
       `${this.baseURL}/predefined_filters`,
       options,
     );
@@ -5050,9 +5057,11 @@ export class StreamChat {
    *
    * @return {Promise<PredefinedFilterResponse>} The predefined filter
    */
-  async getPredefinedFilter(name: string) {
+  async getPredefinedFilter<F extends Record<string, unknown> = Record<string, unknown>>(
+    name: string,
+  ) {
     this.validateServerSideAuth();
-    return await this.get<PredefinedFilterResponse>(
+    return await this.get<PredefinedFilterResponse<F>>(
       `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
     );
   }
@@ -5065,9 +5074,11 @@ export class StreamChat {
    *
    * @return {Promise<PredefinedFilterResponse>} The updated predefined filter
    */
-  async updatePredefinedFilter(name: string, options: UpdatePredefinedFilterOptions) {
+  async updatePredefinedFilter<
+    F extends Record<string, unknown> = Record<string, unknown>,
+  >(name: string, options: UpdatePredefinedFilterOptions<F>) {
     this.validateServerSideAuth();
-    return await this.put<PredefinedFilterResponse>(
+    return await this.put<PredefinedFilterResponse<F>>(
       `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
       options,
     );
@@ -5094,10 +5105,12 @@ export class StreamChat {
    *
    * @return {Promise<ListPredefinedFiltersResponse>} The list of predefined filters
    */
-  async listPredefinedFilters(options: ListPredefinedFiltersOptions = {}) {
+  async listPredefinedFilters<
+    F extends Record<string, unknown> = Record<string, unknown>,
+  >(options: ListPredefinedFiltersOptions = {}) {
     this.validateServerSideAuth();
     const { sort, ...paginationOptions } = options;
-    return await this.get<ListPredefinedFiltersResponse>(
+    return await this.get<ListPredefinedFiltersResponse<F>>(
       `${this.baseURL}/predefined_filters`,
       {
         ...paginationOptions,

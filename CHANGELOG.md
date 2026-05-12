@@ -1,3 +1,10 @@
+## [9.43.2](https://github.com/GetStream/stream-chat-js/compare/v9.43.1...v9.43.2) (2026-05-08)
+
+### Bug Fixes
+
+* add command utils to public exports ([#1738](https://github.com/GetStream/stream-chat-js/issues/1738)) ([30a7ece](https://github.com/GetStream/stream-chat-js/commit/30a7ece0154162da4b7af304e4a118565233f2b2))
+* make predefined filters API generic and prevent dropping regular sort params if provided ([#1737](https://github.com/GetStream/stream-chat-js/issues/1737)) ([c68915c](https://github.com/GetStream/stream-chat-js/commit/c68915c2315b6f7fe8bfdd9888abd6c10c6264d0))
+
 ## [9.43.1](https://github.com/GetStream/stream-chat-js/compare/v9.43.0...v9.43.1) (2026-05-05)
 
 ### Bug Fixes

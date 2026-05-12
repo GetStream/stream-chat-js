@@ -479,7 +479,7 @@ export const deleteUserMessages = ({
           : (toDeletedMessage({ message, hardDelete, deletedAt }) as LocalMessage);
     }
 
-    if (message.quoted_message?.user?.id === user.id) {
+    if (messages[i].quoted_message && message.quoted_message?.user?.id === user.id) {
       messages[i].quoted_message =
         message.quoted_message.type === 'deleted'
           ? message.quoted_message

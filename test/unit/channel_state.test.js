@@ -1547,6 +1547,152 @@ describe('deleteUserMessages', () => {
 	});
 });
 
+// Regression tests for GetStream/stream-chat-js#1736:
+// deleteUserMessages crashed with "Cannot read property 'cid' of undefined" when
+// hard-deleting a message that quotes another message from the same user. The first
+// branch replaced messages[i] with the stripped hard-delete placeholder (no
+// quoted_message field); the second branch then read messages[i].quoted_message as
+// undefined and passed it into toDeletedMessage, which dereferences message.cid.
+describe('deleteUserMessages — quoted_message regression (#1736)', () => {
+	let state;
+
+	beforeEach(() => {
+		const client = new StreamChat();
+		client.userID = 'userId';
+		const channel = new Channel(client, 'type', 'id', {});
+		client._addChannelConfig({ cid: channel.cid, config: {} });
+		state = new ChannelState(channel);
+	});
+
+	it('does not throw when hard-deleting a message that quotes another message from the same user', () => {
+		const user1 = generateUser();
+		const m1 = generateMsg({ user: user1 });
+		const m2 = generateMsg({
+			user: user1,
+			quoted_message: m1,
+			quoted_message_id: m1.id,
+		});
+
+		state.addMessagesSorted([m1, m2]);
+
+		expect(() => state.deleteUserMessages(user1, true)).not.to.throw();
+
+		expect(state.messages).to.have.length(2);
+		expect(state.messages[0].type).to.be.equal('deleted');
+		expect(state.messages[1].type).to.be.equal('deleted');
+		// Hard-deleted parent retains the stripped shape (no quoted_message field).
+		expect(state.messages[1].text).to.be.equal(undefined);
+		expect(state.messages[1].quoted_message).to.be.equal(undefined);
+	});
+
+	it('does not throw when hard-deleting a thread reply that quotes another same-user reply', () => {
+		const user1 = generateUser();
+		const parent = generateMsg({ user: user1, id: 'parent-id' });
+		const reply1 = generateMsg({
+			user: user1,
+			parent_id: parent.id,
+			date: '2020-01-01T00:00:01.000Z',
+		});
+		const reply2 = generateMsg({
+			user: user1,
+			parent_id: parent.id,
+			date: '2020-01-01T00:00:02.000Z',
+			quoted_message: reply1,
+			quoted_message_id: reply1.id,
+		});
+
+		state.addMessagesSorted([parent, reply1, reply2]);
+		expect(state.threads[parent.id]).to.have.length(2);
+
+		expect(() => state.deleteUserMessages(user1, true)).not.to.throw();
+
+		const thread = state.threads[parent.id];
+		expect(thread).to.have.length(2);
+		expect(thread[0].type).to.be.equal('deleted');
+		expect(thread[1].type).to.be.equal('deleted');
+		expect(thread[1].quoted_message).to.be.equal(undefined);
+	});
+
+	it('does not throw when hard-deleting a pinned message that quotes another same-user pinned message', () => {
+		const user1 = generateUser();
+		const m1 = generateMsg({
+			user: user1,
+			pinned: true,
+			pinned_at: new Date('2022-01-01T00:00:00.001Z'),
+		});
+		const m2 = generateMsg({
+			user: user1,
+			pinned: true,
+			pinned_at: new Date('2022-01-01T00:00:00.002Z'),
+			quoted_message: m1,
+			quoted_message_id: m1.id,
+		});
+
+		state.addMessagesSorted([m1, m2]);
+		state.addPinnedMessages([m1, m2]);
+		expect(state.pinnedMessages).to.have.length(2);
+
+		expect(() => state.deleteUserMessages(user1, true)).not.to.throw();
+
+		expect(state.pinnedMessages).to.have.length(2);
+		state.pinnedMessages.forEach((message) => {
+			expect(message.type).to.be.equal('deleted');
+		});
+		const pinnedQuoter = state.pinnedMessages.find((m) => m.id === m2.id);
+		expect(pinnedQuoter.quoted_message).to.be.equal(undefined);
+	});
+
+	it('soft-deletes a message that quotes another same-user message and marks the quoted_message as deleted', () => {
+		const user1 = generateUser();
+		const m1 = generateMsg({ user: user1 });
+		const m2 = generateMsg({
+			user: user1,
+			quoted_message: m1,
+			quoted_message_id: m1.id,
+		});
+
+		state.addMessagesSorted([m1, m2]);
+
+		expect(() => state.deleteUserMessages(user1, false)).not.to.throw();
+
+		expect(state.messages[0].type).to.be.equal('deleted');
+		expect(state.messages[1].type).to.be.equal('deleted');
+		// Soft-delete preserves message content via the spread path.
+		expect(state.messages[1].text).to.be.equal(m2.text);
+		// quoted_message reference is replaced with a deleted placeholder.
+		expect(state.messages[1].quoted_message).to.not.be.equal(undefined);
+		expect(state.messages[1].quoted_message.id).to.be.equal(m1.id);
+		expect(state.messages[1].quoted_message.type).to.be.equal('deleted');
+	});
+
+	it('continues processing later messages after encountering a self-quote on hard-delete', () => {
+		const user1 = generateUser();
+		const user2 = generateUser();
+		const mA = generateMsg({ user: user2, date: '2020-01-01T00:00:01.000Z' });
+		const m1 = generateMsg({ user: user1, date: '2020-01-01T00:00:02.000Z' });
+		const m2 = generateMsg({
+			user: user1,
+			date: '2020-01-01T00:00:03.000Z',
+			quoted_message: m1,
+			quoted_message_id: m1.id,
+		});
+		const mB = generateMsg({ user: user1, date: '2020-01-01T00:00:04.000Z' });
+		const mC = generateMsg({ user: user2, date: '2020-01-01T00:00:05.000Z' });
+
+		state.addMessagesSorted([mA, m1, m2, mB, mC]);
+
+		expect(() => state.deleteUserMessages(user1, true)).not.to.throw();
+
+		const byId = (id) => state.messages.find((m) => m.id === id);
+		expect(byId(mA.id).type).to.be.equal('regular');
+		expect(byId(m1.id).type).to.be.equal('deleted');
+		expect(byId(m2.id).type).to.be.equal('deleted');
+		// mB sits after the self-quote pair — previously the throw aborted the loop here.
+		expect(byId(mB.id).type).to.be.equal('deleted');
+		expect(byId(mC.id).type).to.be.equal('regular');
+	});
+});
+
 describe('updateUserMessages', () => {
 	let state;
 
