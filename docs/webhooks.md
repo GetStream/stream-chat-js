@@ -1,15 +1,24 @@
 # Webhooks
 
 Stream chat can deliver real-time events to your backend over HTTP webhooks
-or via SQS / SNS firehose. Every payload is signed with HMAC-SHA256 using
-your app's API secret so you can verify it actually came from Stream.
+or via SQS / SNS firehose. HTTP webhook payloads are signed with
+HMAC-SHA256 using your app's API secret so you can verify they actually
+came from Stream. SQS / SNS deliveries ride AWS-internal transports
+(IAM-authenticated queues, AWS-signed SNS notifications) and are not
+HMAC-signed by Stream — the AWS transport itself is the auth layer.
 
-The SDK exposes three transport-specific helpers — `verifyAndParseWebhook`,
-`verifyAndParseSqs`, and `verifyAndParseSns` — that decode the envelope
-(when needed), verify the signature, and return the parsed `Event` in one
-call. Each helper exists both as a method on `StreamChat` (uses
-`client.secret`) and as a standalone function (takes the secret explicitly,
-useful in serverless handlers where you don't keep a client around).
+The SDK exposes three transport-specific helpers:
+
+- `verifyAndParseWebhook` — gunzips, verifies the `X-Signature` header,
+  and returns the parsed `Event` for HTTP webhooks.
+- `parseSqs` — base64-decodes (and gunzips, if needed) an SQS message
+  body and returns the parsed `Event`. No HMAC step.
+- `parseSns` — same as `parseSqs`, but also unwraps the SNS HTTP
+  notification envelope when given the full envelope JSON. No HMAC step.
+
+Each helper exists both as a method on `StreamChat` and as a standalone
+function (useful in serverless handlers where you don't keep a client
+around).
 
 ## Verifying an HTTP webhook (legacy boolean helper)
 
@@ -105,16 +114,16 @@ transports require valid UTF-8 message bodies, so the JSON (or its gzipped
 bytes when compression is enabled) is base64-encoded before being placed in
 the message.
 
-Stream does not include an `X-Signature` on SQS / SNS deliveries — the AWS
-transport is the auth layer (IAM-authenticated queues for SQS, AWS-signed
-notifications for SNS), so HMAC verification on top is unnecessary. If you
-have configured your own out-of-band signing, pass `signature` (and
-`secret` to the standalone function) and the SDK will run the HMAC check
-against the uncompressed, base64-decoded JSON, exactly like the HTTP path.
+Stream does not include an `X-Signature` on SQS or SNS deliveries — those
+rely on the AWS transport's own authentication (IAM-authenticated queues
+for SQS, AWS-signed SNS notifications). `parseSqs` and `parseSns` are
+decode-and-parse helpers; there is no HMAC step. The HTTP webhook path
+(`verifyAndParseWebhook`) keeps signature verification because that's the
+only surface where `X-Signature` actually arrives.
 
-Use `verifyAndParseSqs` for SQS messages. It base64-decodes the body,
-gunzips when the decoded bytes start with the gzip magic, and returns the
-parsed `Event`.
+Use `parseSqs` for SQS messages. It base64-decodes the body, gunzips when
+the decoded bytes start with the gzip magic, and returns the parsed
+`Event`.
 
 ```js
 const { StreamChat, InvalidWebhookError } = require('stream-chat');
@@ -123,7 +132,7 @@ const client = new StreamChat('api_key', 'api_secret');
 
 async function handleSqsMessage(message) {
   try {
-    const event = client.verifyAndParseSqs(message.Body);
+    const event = client.parseSqs(message.Body);
     // ...handle the event
   } catch (err) {
     if (err instanceof InvalidWebhookError) {
@@ -136,7 +145,7 @@ async function handleSqsMessage(message) {
 ```
 
 For SNS, pass either the full notification envelope JSON or the
-pre-extracted `Message` field to `verifyAndParseSns`:
+pre-extracted `Message` field to `parseSns`:
 
 ```js
 const { StreamChat, InvalidWebhookError } = require('stream-chat');
@@ -146,31 +155,19 @@ const client = new StreamChat('api_key', 'api_secret');
 async function handleSnsNotification(envelopeBody) {
   // `envelopeBody` is the JSON SNS posts to your HTTPS endpoint, or the
   // record you pull off SQS-via-SNS.
-  const event = client.verifyAndParseSns(envelopeBody);
+  const event = client.parseSns(envelopeBody);
   // ...handle the event
 }
 ```
 
-`verifyAndParseSqs` and `verifyAndParseSns` are also exported as
-standalone, stateless functions:
+`parseSqs` and `parseSns` are also exported as standalone, stateless
+functions:
 
 ```js
-const { verifyAndParseSqs, verifyAndParseSns } = require('stream-chat');
+const { parseSqs, parseSns } = require('stream-chat');
 
-const event = verifyAndParseSqs(messageBody);
+const event = parseSqs(messageBody);
 ```
-
-If you have configured your own signing on top, pass both `signature` and
-`secret` to opt back into HMAC verification:
-
-```js
-const event = verifyAndParseSqs(messageBody, signature, apiSecret);
-```
-
-Passing only one of `signature` / `secret` to the standalone helper throws
-`InvalidWebhookError` — it's a programmer error. On the instance method,
-passing `signature` without a configured client secret throws the same
-error.
 
 ## Lower-level building blocks
 
@@ -190,25 +187,27 @@ parsing the JSON, or to inflate a payload yourself), the SDK also exports:
 
 ## API reference
 
-| Method                                                              | Returns   | Throws                                                                              |
-| ------------------------------------------------------------------- | --------- | ----------------------------------------------------------------------------------- |
-| `client.verifyWebhook(body, sig)`                                   | `boolean` | never                                                                               |
-| `client.verifyAndParseWebhook(rawBody, sig)`                        | `Event`   | `InvalidWebhookError` for signature mismatch, missing secret, or bad gzip envelope  |
-| `client.verifyAndParseSqs(messageBody, sig?)`                       | `Event`   | `InvalidWebhookError` for bad base64 / gzip; on verification: mismatch or no secret |
-| `client.verifyAndParseSns(notificationBody, sig?)`                  | `Event`   | `InvalidWebhookError` for bad base64 / gzip; on verification: mismatch or no secret |
-| `verifyAndParseWebhook(rawBody, sig, secret)` _(standalone)_        | `Event`   | `InvalidWebhookError` for signature mismatch or bad gzip envelope                   |
-| `verifyAndParseSqs(messageBody, sig?, secret?)` _(standalone)_      | `Event`   | `InvalidWebhookError` for bad base64 / gzip, or — on verification — mismatch        |
-| `verifyAndParseSns(notificationBody, sig?, secret?)` _(standalone)_ | `Event`   | `InvalidWebhookError` for bad base64 / gzip, or — on verification — mismatch        |
-| `verifySignature(body, sig, secret)`                                | `boolean` | never                                                                               |
-| `gunzipPayload(body)`                                               | `Buffer`  | `InvalidWebhookError` when the body starts with the gzip magic but fails to inflate |
-| `decodeSqsPayload(body)` / `decodeSnsPayload(body)`                 | `Buffer`  | `InvalidWebhookError` for malformed base64 or bad gzip bytes                        |
-| `parseEvent(payload)`                                               | `Event`   | `InvalidWebhookError` when the payload is not valid JSON                            |
+| Method                                                       | Returns   | Throws                                                                              |
+| ------------------------------------------------------------ | --------- | ----------------------------------------------------------------------------------- |
+| `client.verifyWebhook(body, sig)`                            | `boolean` | never                                                                               |
+| `client.verifyAndParseWebhook(rawBody, sig)`                 | `Event`   | `InvalidWebhookError` for signature mismatch, missing secret, or bad gzip envelope  |
+| `client.parseSqs(messageBody)`                               | `Event`   | `InvalidWebhookError` for bad base64 / gzip or invalid JSON                         |
+| `client.parseSns(notificationBody)`                          | `Event`   | `InvalidWebhookError` for bad base64 / gzip or invalid JSON                         |
+| `verifyAndParseWebhook(rawBody, sig, secret)` _(standalone)_ | `Event`   | `InvalidWebhookError` for signature mismatch or bad gzip envelope                   |
+| `parseSqs(messageBody)` _(standalone)_                       | `Event`   | `InvalidWebhookError` for bad base64 / gzip or invalid JSON                         |
+| `parseSns(notificationBody)` _(standalone)_                  | `Event`   | `InvalidWebhookError` for bad base64 / gzip or invalid JSON                         |
+| `verifySignature(body, sig, secret)`                         | `boolean` | never                                                                               |
+| `gunzipPayload(body)`                                        | `Buffer`  | `InvalidWebhookError` when the body starts with the gzip magic but fails to inflate |
+| `decodeSqsPayload(body)` / `decodeSnsPayload(body)`          | `Buffer`  | `InvalidWebhookError` for malformed base64 or bad gzip bytes                        |
+| `parseEvent(payload)`                                        | `Event`   | `InvalidWebhookError` when the payload is not valid JSON                            |
 
-`sig` and `secret` are optional on `verifyAndParseSqs` /
-`verifyAndParseSns` only. When both are provided the SDK runs the HMAC
-check; when both are omitted it decodes and parses without verification.
-Passing exactly one of the pair to the standalone helper throws
-`InvalidWebhookError` — it's a programmer error.
+`parseSqs` and `parseSns` take a single argument (the message body or SNS
+envelope / pre-extracted message). They never accept a signature: Stream
+does not ship an `X-Signature` on SQS or SNS deliveries — those rely on
+the AWS transport's own authentication (IAM-authenticated queues,
+AWS-signed SNS notifications). The HTTP webhook path
+(`verifyAndParseWebhook`) keeps signature verification because that's the
+only surface where `X-Signature` actually arrives.
 
 `InvalidWebhookError` (and the `InvalidWebhookErrorMessages` constants) is
 exported from the package root and from `stream-chat/dist/types/signing`.

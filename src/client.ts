@@ -11,12 +11,12 @@ import { StableWSConnection } from './connection';
 import { UploadManager } from './uploadManager';
 import {
   DevToken,
-  InvalidWebhookError,
   JWTUserToken,
-  verifyAndParseSns as verifyAndParseSnsHelper,
-  verifyAndParseSqs as verifyAndParseSqsHelper,
+  parseSns as parseSnsHelper,
+  parseSqs as parseSqsHelper,
   verifyAndParseWebhook as verifyAndParseWebhookHelper,
   verifySignature,
+  WebhookSignatureError,
 } from './signing';
 import { TokenManager } from './token_manager';
 import { WSConnectionFallback } from './connection_fallback';
@@ -3656,12 +3656,12 @@ export class StreamChat {
    *
    * @param rawBody Raw HTTP request body bytes Stream signed
    * @param signature Value of the `X-Signature` header
-   * @throws {InvalidWebhookError} When the signature does not match or
+   * @throws {WebhookSignatureError} When the signature does not match or
    *   the gzip envelope is malformed.
    */
   verifyAndParseWebhook(rawBody: string | Buffer, signature: string) {
     if (!this.secret) {
-      throw new InvalidWebhookError(
+      throw new WebhookSignatureError(
         'cannot verify webhook signature without an API secret on the client',
       );
     }
@@ -3669,65 +3669,26 @@ export class StreamChat {
   }
 
   /**
-   * Decode an SQS firehose webhook message and return the parsed `Event`.
-   *
-   * Reverses the base64 (+ optional gzip) wrapping on the SQS `Body`. When
-   * `signature` is supplied, the HMAC is also verified against the app's
-   * API secret before parsing.
-   *
-   * Stream does not include an `X-Signature` on SQS deliveries — the AWS
-   * transport (IAM-authenticated queues) is the auth layer. Pass
-   * `signature` only if you have configured your own out-of-band signing.
+   * Parse an SQS firehose event: decodes the message `Body` (base64 +
+   * optional gzip) and returns the parsed `Event`. No HMAC verification
+   * (Stream does not sign SQS bodies).
    *
    * @param messageBody SQS message `Body` string
-   * @param signature Optional `X-Signature` message attribute value
-   * @throws {InvalidWebhookError} When the base64 / gzip envelope is
-   *   malformed, the payload is not valid JSON, or — when verification is
-   *   requested — the signature does not match or the client has no
-   *   secret.
+   * @throws {WebhookSignatureError} When the base64 / gzip envelope is malformed.
    */
-  verifyAndParseSqs(messageBody: string, signature?: string) {
-    if (signature === undefined) {
-      return verifyAndParseSqsHelper(messageBody);
-    }
-    if (!this.secret) {
-      throw new InvalidWebhookError(
-        'cannot verify webhook signature without an API secret on the client',
-      );
-    }
-    return verifyAndParseSqsHelper(messageBody, signature, this.secret);
+  parseSqs(messageBody: string) {
+    return parseSqsHelper(messageBody);
   }
 
   /**
-   * Decode an SNS firehose webhook notification and return the parsed
-   * `Event`.
+   * Parse an SNS-delivered event (unwraps envelope JSON when needed, then
+   * same decode path as SQS). No HMAC verification.
    *
-   * Reverses the base64 (+ optional gzip) wrapping on the SNS notification
-   * `Message`. When `signature` is supplied, the HMAC is also verified
-   * against the app's API secret before parsing.
-   *
-   * Stream does not include an `X-Signature` on SNS deliveries — the AWS
-   * transport (AWS-signed SNS notifications) is the auth layer. Pass
-   * `signature` only if you have configured your own out-of-band signing.
-   *
-   * @param notificationBody SNS notification `Message` field (string), or
-   *   the full SNS envelope JSON
-   * @param signature Optional `X-Signature` message attribute value
-   * @throws {InvalidWebhookError} When the base64 / gzip envelope is
-   *   malformed, the payload is not valid JSON, or — when verification is
-   *   requested — the signature does not match or the client has no
-   *   secret.
+   * @param notificationBody Raw SNS POST body or pre-extracted `Message` string
+   * @throws {WebhookSignatureError} When the envelope cannot be decoded.
    */
-  verifyAndParseSns(notificationBody: string, signature?: string) {
-    if (signature === undefined) {
-      return verifyAndParseSnsHelper(notificationBody);
-    }
-    if (!this.secret) {
-      throw new InvalidWebhookError(
-        'cannot verify webhook signature without an API secret on the client',
-      );
-    }
-    return verifyAndParseSnsHelper(notificationBody, signature, this.secret);
+  parseSns(notificationBody: string) {
+    return parseSnsHelper(notificationBody);
   }
 
   /** getPermission - gets the definition for a permission
