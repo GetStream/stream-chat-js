@@ -149,8 +149,6 @@ export class InvalidWebhookError extends Error {
   }
 }
 
-const GZIP_MAGIC = Buffer.from([0x1f, 0x8b]);
-
 /**
  * Returns `body` as a `Buffer`, gzip-decompressed when its first two
  * bytes match the gzip magic (`1f 8b`, per RFC 1952). When the body is
@@ -162,6 +160,8 @@ const GZIP_MAGIC = Buffer.from([0x1f, 0x8b]);
  * - auto-decompresses the request before your code sees it.
  */
 export function gunzipPayload(rawBody: string | Buffer): Buffer {
+  const GZIP_MAGIC = Buffer.from([0x1f, 0x8b]);
+
   const body = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(rawBody);
   if (body.length >= 2 && body.subarray(0, 2).equals(GZIP_MAGIC)) {
     try {
