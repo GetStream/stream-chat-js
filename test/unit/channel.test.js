@@ -644,6 +644,46 @@ describe('Channel _handleChannelEvent', function () {
 		});
 	});
 
+	// Regression coverage for GetStream/stream-chat-js#1736 at the per-channel event entry point
+	// (channel.ts → _handleChannelEvent → state.deleteUserMessages). Mirrors the global-event
+	// regression suite in client.test.js but exercises the channel-scoped user.messages.deleted
+	// event (one carrying a cid).
+	describe('user.messages.deleted — quoted_message regression (#1736)', () => {
+		const bannedUser = { id: 'banned-user' };
+
+		it('does not throw on channel-scoped hard-delete when channel contains a same-user self-quote', () => {
+			const m1 = generateMsg({
+				created_at: '2020-01-01T00:00:01.000Z',
+				user: bannedUser,
+			});
+			const m2 = generateMsg({
+				created_at: '2020-01-01T00:00:02.000Z',
+				user: bannedUser,
+				quoted_message: m1,
+				quoted_message_id: m1.id,
+			});
+			channel.state.addMessagesSorted([m1, m2]);
+
+			const event = {
+				type: 'user.messages.deleted',
+				cid: channel.cid,
+				channel_type: channel.type,
+				channel_id: channel.id,
+				user: bannedUser,
+				hard_delete: true,
+				created_at: '2025-02-01T14:01:30.000Z',
+			};
+
+			expect(() => channel._handleChannelEvent(event)).not.to.throw();
+
+			const messages = channel.state.messageSets[0].messages;
+			expect(messages.find((m) => m.id === m1.id).type).to.equal('deleted');
+			const quoter = messages.find((m) => m.id === m2.id);
+			expect(quoter.type).to.equal('deleted');
+			expect(quoter.quoted_message).to.equal(undefined);
+		});
+	});
+
 	describe('notification.mark_unread', () => {
 		let initialCountUnread;
 		let initialReadState;
