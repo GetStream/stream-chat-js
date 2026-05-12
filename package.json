@@ -29,11 +29,11 @@
     }
   },
   "browser": {
-    "https": false,
     "crypto": false,
-    "zlib": false,
+    "https": false,
     "jsonwebtoken": false,
-    "ws": false
+    "ws": false,
+    "zlib": false
   },
   "license": "SEE LICENSE IN LICENSE",
   "keywords": [
@@ -105,10 +105,19 @@
     "test-coverage": "vitest run --coverage",
     "fix-staged": "lint-staged --config .lintstagedrc.fix.json --concurrent 1",
     "semantic-release": "semantic-release",
-    "prepare": "husky; yarn run build"
+    "postinstall": "husky",
+    "prepare": "yarn run build"
   },
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "yarn@1.22.21+sha1.1959a18351b811cdeedbd484a8f86c3cc3bbaf72"
+  "packageManager": "yarn@4.14.1",
+  "dependenciesMeta": {
+    "esbuild": {
+      "built": true
+    },
+    "husky": {
+      "built": true
+    }
+  }
 }
