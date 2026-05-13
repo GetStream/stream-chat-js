@@ -22,5 +22,5 @@ runs:
       run: echo "NODE_VERSION=$(node --version)" >> $GITHUB_ENV
 
     - name: Install dependencies
-      run: yarn install --immutable
+      run: yarn install
       shell: bash
