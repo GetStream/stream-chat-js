@@ -239,7 +239,16 @@ export class MessageComposer extends WithSubscriptions {
       );
     }
 
-    const mergeChannelConfigCustomizer: MergeWithCustomizer<
+    /**
+     * Customizes config merges for the composer constructor.
+     *
+     * It catches two scalar override cases that should not use the default deep merge:
+     * - client-disabled `enabled` flags stay disabled even if the channel config tries to re-enable them
+     * - scalar channel-config values replace client defaults for matching config keys
+     *
+     * All other values fall back to the normal `mergeWith` behavior.
+     */
+    const mergeMessageComposerConfigCustomizer: MergeWithCustomizer<
       DeepPartial<MessageComposerConfig>
     > = (originalVal, channelConfigVal, key) =>
       typeof originalVal === 'object'
@@ -262,7 +271,7 @@ export class MessageComposer extends WithSubscriptions {
               enabled: this.channel.getConfig()?.shared_locations,
             },
           },
-          mergeChannelConfigCustomizer,
+          mergeMessageComposerConfigCustomizer,
         ),
         config,
       ),
