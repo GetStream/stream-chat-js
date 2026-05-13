@@ -4702,10 +4702,15 @@ export type UserGroupResponse = {
 };
 
 export type CreateUserGroupOptions = {
+  /** Human-readable user group name */
   name: string;
+  /** Optional user group description shown to members */
   description?: string;
+  /** Optional custom user group ID. If omitted, the backend generates one */
   id?: string;
+  /** Optional list of user IDs to add as members when the group is created */
   member_ids?: string[];
+  /** Optional team ID that scopes the user group to a specific team */
   team_id?: string;
 };
 
