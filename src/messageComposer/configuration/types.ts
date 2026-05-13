@@ -1,7 +1,8 @@
 import type { LinkPreview } from '../linkPreviewsManager';
 import type { FileUploadFilter } from '../attachmentManager';
 import type { MessageComposer } from '../messageComposer';
-import type { CommandResponse, FileLike, FileReference, UserResponse } from '../../types';
+import type { FileLike, FileReference } from '../types';
+import type { CommandResponse, UserResponse } from '../../types';
 
 export type MinimumUploadRequestResult = { file: string; thumb_url?: string } & Partial<
   Record<string, unknown>

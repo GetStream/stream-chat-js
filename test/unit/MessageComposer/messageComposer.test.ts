@@ -614,6 +614,28 @@ describe('MessageComposer', () => {
       );
     });
 
+    it('should apply the default ban command validator', () => {
+      const { messageComposer } = setup();
+
+      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+        commands: [{ name: 'ban', description: 'Ban a user' }],
+      });
+
+      messageComposer.textComposer.state.partialNext({
+        mentionedUsers: [{ id: 'target-user', name: 'Target User' }],
+        selection: { start: 16, end: 16 },
+        text: '/ban @target-user',
+      });
+      expect(messageComposer.hasSendableData).toBe(false);
+
+      messageComposer.textComposer.state.partialNext({
+        mentionedUsers: [{ id: 'target-user', name: 'Target User' }],
+        selection: { start: 23, end: 23 },
+        text: '/ban @target-user rude',
+      });
+      expect(messageComposer.hasSendableData).toBe(true);
+    });
+
     it('should return the correct compositionIsEmpty', () => {
       const { messageComposer } = setup();
 
@@ -862,6 +884,44 @@ describe('MessageComposer', () => {
         ready: false,
         reason: 'missing_args',
       });
+    });
+
+    it('should allow overriding default command validators via config', () => {
+      const validator = vi.fn(({ mentionedUsersInText }) =>
+        mentionedUsersInText.length > 0
+          ? { ready: true as const }
+          : { ready: false as const, reason: 'missing_user' as const },
+      );
+      const { messageComposer } = setup({
+        config: {
+          commands: {
+            validators: [validator],
+          },
+        },
+      });
+
+      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+        commands: [{ name: 'ban', description: 'Ban a user' }],
+      });
+      messageComposer.textComposer.state.partialNext({
+        mentionedUsers: [{ id: 'target-user', name: 'Target User' }],
+        selection: { start: 16, end: 16 },
+        text: '/ban @target-user',
+      });
+
+      expect(
+        messageComposer.getCommandSendability(
+          messageComposer.getCurrentCommand('/ban @target-user')!,
+          '/ban @target-user',
+        ),
+      ).toEqual({ ready: true });
+      expect(validator).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: expect.objectContaining({ name: 'ban' }),
+          commandArgsText: '@target-user',
+          rawText: '/ban @target-user',
+        }),
+      );
     });
 
     it('should register subscriptions', () => {

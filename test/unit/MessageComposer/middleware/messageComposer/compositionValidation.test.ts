@@ -281,6 +281,56 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
     );
   });
 
+  it('should discard ban commands without a reason by default', async () => {
+    const { messageComposer, validationMiddleware } = setupMiddleware();
+    vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      commands: [{ name: 'ban', description: 'Ban a user' }],
+    });
+    vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue('/ban @user1');
+    vi.spyOn(messageComposer.textComposer, 'mentionedUsers', 'get').mockReturnValue([
+      { id: 'user1', name: 'User One' },
+    ]);
+    const addWarningSpy = vi.spyOn(messageComposer.client.notifications, 'addWarning');
+
+    const result = await validationMiddleware.handlers.compose(
+      setupMiddlewareInputs(setupCompositionState('/ban @user1')),
+    );
+
+    expect(result.status).toBe('discard');
+    expect(addWarningSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          metadata: expect.objectContaining({
+            command: 'ban',
+            reason: 'missing_reason',
+          }),
+          type: 'validation:command:not-ready',
+        }),
+      }),
+    );
+  });
+
+  it('should allow ban commands with mention and reason by default', async () => {
+    const { messageComposer, validationMiddleware } = setupMiddleware();
+    vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      commands: [{ name: 'ban', description: 'Ban a user' }],
+    });
+    vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue(
+      '/ban @user1 rude behavior',
+    );
+    vi.spyOn(messageComposer.textComposer, 'mentionedUsers', 'get').mockReturnValue([
+      { id: 'user1', name: 'User One' },
+    ]);
+    const addWarningSpy = vi.spyOn(messageComposer.client.notifications, 'addWarning');
+
+    const result = await validationMiddleware.handlers.compose(
+      setupMiddlewareInputs(setupCompositionState('/ban @user1 rude behavior')),
+    );
+
+    expect(result.status).toBeUndefined();
+    expect(addWarningSpy).not.toHaveBeenCalled();
+  });
+
   it('should allow raw known commands if command is not disabled', async () => {
     const { messageComposer, validationMiddleware } = setupMiddleware();
     vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({

@@ -36,6 +36,7 @@ import type {
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { StreamChat } from '../client';
 import type {
+  CommandSendValidator,
   CommandSendValidationContext,
   CommandSendability,
   MessageComposerConfig,
@@ -174,6 +175,27 @@ const initState = (
   };
 };
 
+const applyCommandValidatorOverride = (
+  targetConfig: MessageComposerConfig,
+  sourceConfig?: DeepPartial<MessageComposerConfig>,
+) => {
+  const overrideValidators = sourceConfig?.commands?.validators as
+    | CommandSendValidator[]
+    | undefined;
+
+  if (typeof overrideValidators === 'undefined') {
+    return targetConfig;
+  }
+
+  return {
+    ...targetConfig,
+    commands: {
+      ...targetConfig.commands,
+      validators: overrideValidators,
+    },
+  };
+};
+
 export class MessageComposer extends WithSubscriptions {
   readonly channel: Channel;
   readonly state: StateStore<MessageComposerState>;
@@ -232,14 +254,17 @@ export class MessageComposer extends WithSubscriptions {
             : originalVal;
 
     this.configState = new StateStore<MessageComposerConfig>(
-      mergeWith(
-        mergeWith(DEFAULT_COMPOSER_CONFIG, config ?? {}),
-        {
-          location: {
-            enabled: this.channel.getConfig()?.shared_locations,
+      applyCommandValidatorOverride(
+        mergeWith(
+          mergeWith(DEFAULT_COMPOSER_CONFIG, config ?? {}),
+          {
+            location: {
+              enabled: this.channel.getConfig()?.shared_locations,
+            },
           },
-        },
-        mergeChannelConfigCustomizer,
+          mergeChannelConfigCustomizer,
+        ),
+        config,
       ),
     );
 
@@ -498,7 +523,9 @@ export class MessageComposer extends WithSubscriptions {
   }
 
   updateConfig(config: DeepPartial<MessageComposerConfig>) {
-    this.configState.partialNext(mergeWith(this.config, config));
+    this.configState.partialNext(
+      applyCommandValidatorOverride(mergeWith(this.config, config), config),
+    );
   }
 
   refreshId = () => {
