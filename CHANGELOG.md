@@ -1,3 +1,15 @@
+## [9.44.0](https://github.com/GetStream/stream-chat-js/compare/v9.43.2...v9.44.0) (2026-05-13)
+
+### Bug Fixes
+
+* ignore draft WS events while editing messages ([#1739](https://github.com/GetStream/stream-chat-js/issues/1739)) ([31e66f3](https://github.com/GetStream/stream-chat-js/commit/31e66f31dce354e3630c935d1a82d8bfadb39f4c))
+* prevent deleteUserMessages crash when hard-deleting a self-quoting message ([#1741](https://github.com/GetStream/stream-chat-js/issues/1741)) ([b2a00bb](https://github.com/GetStream/stream-chat-js/commit/b2a00bb2cc384373cfb6c1ef7cc94343813bf282)), closes [#1736](https://github.com/GetStream/stream-chat-js/issues/1736)
+* prevent dispatchEvent crash on uninitialized channels via muteStatus ([#1740](https://github.com/GetStream/stream-chat-js/issues/1740)) ([eea0a47](https://github.com/GetStream/stream-chat-js/commit/eea0a4746be0a83f161aafcc35a9272b9675cb3d)), closes [#1732](https://github.com/GetStream/stream-chat-js/issues/1732)
+
+### Features
+
+* **webhooks:** verifyAndParse* API for compressed payloads (CHA-3071) ([#1735](https://github.com/GetStream/stream-chat-js/issues/1735)) ([288a34c](https://github.com/GetStream/stream-chat-js/commit/288a34ca2ee22f5e72937d42ebb690fd5b40ec69))
+
 ## [9.43.2](https://github.com/GetStream/stream-chat-js/compare/v9.43.1...v9.43.2) (2026-05-08)
 
 ### Bug Fixes
