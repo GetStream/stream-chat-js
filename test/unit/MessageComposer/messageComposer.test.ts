@@ -573,6 +573,47 @@ describe('MessageComposer', () => {
       expect(messageComposer.hasSendableData).toBe(false);
     });
 
+    it('should account for command sendability in hasSendableData', () => {
+      const validator = vi.fn(({ mentionedUsersInText }) =>
+        mentionedUsersInText.length > 0
+          ? undefined
+          : { ready: false as const, reason: 'missing_user' as const },
+      );
+      const { messageComposer } = setup({
+        config: {
+          commands: {
+            validators: [validator],
+          },
+        },
+      });
+
+      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+        commands: [{ name: 'ban', description: 'Ban a user' }],
+      });
+
+      messageComposer.textComposer.state.partialNext({
+        mentionedUsers: [],
+        selection: { start: 4, end: 4 },
+        text: '/ban',
+      });
+      expect(messageComposer.hasSendableData).toBe(false);
+
+      messageComposer.textComposer.state.partialNext({
+        mentionedUsers: [{ id: 'target-user', name: 'Target User' }],
+        selection: { start: 16, end: 16 },
+        text: '/ban @target-user',
+      });
+      expect(messageComposer.hasSendableData).toBe(true);
+      expect(validator).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          command: expect.objectContaining({ name: 'ban' }),
+          commandArgsText: '@target-user',
+          mentionedUsersInText: [{ id: 'target-user', name: 'Target User' }],
+          rawText: '/ban @target-user',
+        }),
+      );
+    });
+
     it('should return the correct compositionIsEmpty', () => {
       const { messageComposer } = setup();
 
@@ -784,6 +825,43 @@ describe('MessageComposer', () => {
         }),
       ).toBe('quoted_message');
       expect(messageComposer.getCommandDisabledReason({ name: 'giphy' })).toBeUndefined();
+    });
+
+    it('should return command sendability for current raw commands', () => {
+      const validator = vi.fn(({ commandArgsText }) =>
+        commandArgsText.length > 0
+          ? undefined
+          : {
+              metadata: { expected: 'args' },
+              ready: false as const,
+              reason: 'missing_args',
+            },
+      );
+      const { messageComposer } = setup({
+        config: {
+          commands: {
+            validators: [validator],
+          },
+        },
+      });
+
+      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+        commands: [{ name: 'custom', description: 'Custom command' }],
+      });
+
+      expect(messageComposer.getCurrentCommand('/custom')).toEqual(
+        expect.objectContaining({ name: 'custom' }),
+      );
+      expect(
+        messageComposer.getCommandSendability(
+          messageComposer.getCurrentCommand('/custom')!,
+          '/custom',
+        ),
+      ).toEqual({
+        metadata: { expected: 'args' },
+        ready: false,
+        reason: 'missing_args',
+      });
     });
 
     it('should register subscriptions', () => {

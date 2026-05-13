@@ -1,6 +1,5 @@
 import { textIsEmpty } from '../../textComposer';
 import type { CommandResponse } from '../../../types';
-import { CommandSearchSource } from '../textComposer/commands';
 import { getRawCommandName, notifyCommandDisabled } from '../textComposer/commandUtils';
 import type {
   MessageComposerMiddlewareState,
@@ -11,24 +10,11 @@ import type {
 import type { MessageComposer } from '../../messageComposer';
 import type { MiddlewareHandlerParams } from '../../../middleware';
 
-const getCommandByName = (
-  searchSource: CommandSearchSource,
-  commandName?: string,
-): CommandResponse | undefined => {
-  if (!commandName) return;
-
-  const normalizedCommandName = commandName.toLowerCase();
-  return searchSource
-    .query(normalizedCommandName)
-    .items.find((command) => command.name?.toLowerCase() === normalizedCommandName);
-};
-
 const getDisabledRawCommand = (
   composer: MessageComposer,
-  searchSource: CommandSearchSource,
   text?: string,
 ): CommandResponse | undefined => {
-  const rawCommand = getCommandByName(searchSource, getRawCommandName(text));
+  const rawCommand = composer.getKnownCommand(getRawCommandName(text));
   if (rawCommand && composer.isCommandDisabled(rawCommand)) {
     return rawCommand;
   }
@@ -37,8 +23,6 @@ const getDisabledRawCommand = (
 export const createCompositionValidationMiddleware = (
   composer: MessageComposer,
 ): MessageCompositionMiddleware => {
-  const commandSearchSource = new CommandSearchSource(composer.channel);
-
   return {
     id: 'stream-io/message-composer-middleware/data-validation',
     handlers: {
@@ -50,14 +34,34 @@ export const createCompositionValidationMiddleware = (
         const { maxLengthOnSend } = composer.config.text ?? {};
         const inputText = state.message.text ?? '';
 
-        const disabledRawCommand = getDisabledRawCommand(
-          composer,
-          commandSearchSource,
-          inputText,
-        );
+        const disabledRawCommand = getDisabledRawCommand(composer, inputText);
         if (disabledRawCommand) {
           notifyCommandDisabled(composer, disabledRawCommand);
           return await discard();
+        }
+
+        const currentCommand = composer.getCurrentCommand(inputText);
+        if (currentCommand) {
+          const sendability = composer.getCommandSendability(currentCommand, inputText);
+
+          if (!sendability.ready) {
+            composer.client.notifications.addWarning({
+              message: 'Command not ready to be sent',
+              origin: {
+                emitter: 'MessageComposer',
+                context: { command: currentCommand, composer },
+              },
+              options: {
+                type: 'validation:command:not-ready',
+                metadata: {
+                  command: currentCommand.name,
+                  ...(sendability.reason ? { reason: sendability.reason } : {}),
+                  ...(sendability.metadata ?? {}),
+                },
+              },
+            });
+            return await discard();
+          }
         }
 
         const hasExceededMaxLength =

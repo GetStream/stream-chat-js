@@ -17,6 +17,10 @@ import { formatMessage, generateUUIDv4, isLocalMessage, unformatMessage } from '
 import { mergeWith } from '../utils/mergeWith';
 import { Channel } from '../channel';
 import { Thread } from '../thread';
+import {
+  getRawCommandName,
+  stripCommandFromText,
+} from './middleware/textComposer/commandUtils';
 import type {
   ChannelAPIResponse,
   CommandResponse,
@@ -27,10 +31,15 @@ import type {
   LocalMessageBase,
   MessageResponse,
   MessageResponseBase,
+  UserResponse,
 } from '../types';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { StreamChat } from '../client';
-import type { MessageComposerConfig } from './configuration/types';
+import type {
+  CommandSendValidationContext,
+  CommandSendability,
+  MessageComposerConfig,
+} from './configuration/types';
 import type {
   CommandSuggestionDisabledReason,
   TextComposerCommandActivationEffect,
@@ -378,6 +387,63 @@ export class MessageComposer extends WithSubscriptions {
   isCommandDisabled = (command: CommandResponse) =>
     !!this.getCommandDisabledReason(command);
 
+  getKnownCommand = (commandName?: string): CommandResponse | undefined => {
+    if (!commandName) return;
+
+    const normalizedCommandName = commandName.toLowerCase();
+    return (this.channel.getConfig()?.commands ?? []).find(
+      (command) => command.name?.toLowerCase() === normalizedCommandName,
+    );
+  };
+
+  getCurrentCommand = (text = this.textComposer.text): CommandResponse | undefined =>
+    this.textComposer.command ?? this.getKnownCommand(getRawCommandName(text));
+
+  getMentionedUsersInText = (
+    text = this.textComposer.text,
+    mentionedUsers = this.textComposer.mentionedUsers,
+  ): UserResponse[] =>
+    Array.from(
+      new Set(
+        mentionedUsers.filter(
+          ({ id, name }) =>
+            text.includes(`@${id}`) || (!!name && text.includes(`@${name}`)),
+        ),
+      ),
+    );
+
+  getCommandSendValidationContext = (
+    command: CommandResponse,
+    text = this.textComposer.text,
+  ): CommandSendValidationContext => ({
+    command,
+    commandArgsText: command.name
+      ? stripCommandFromText(text, command.name).trim()
+      : text.trim(),
+    composer: this,
+    mentionedUsersInText: this.getMentionedUsersInText(text),
+    rawText: text,
+  });
+
+  getCommandSendability = (
+    command: CommandResponse,
+    text = this.textComposer.text,
+  ): CommandSendability => {
+    const validationContext = this.getCommandSendValidationContext(command, text);
+
+    for (const validator of this.config.commands.validators) {
+      const result = validator(validationContext);
+      if (result && !result.ready) {
+        return result;
+      }
+    }
+
+    return { ready: true };
+  };
+
+  isCommandSendable = (command: CommandResponse, text = this.textComposer.text) =>
+    this.getCommandSendability(command, text).ready;
+
   get pollId() {
     return this.state.getLatestValue().pollId;
   }
@@ -387,12 +453,18 @@ export class MessageComposer extends WithSubscriptions {
   }
 
   get hasSendableData() {
-    return !!(
-      (!this.attachmentManager.uploadsInProgressCount &&
-        (!this.textComposer.textIsEmpty ||
-          this.attachmentManager.successfulUploadsCount > 0)) ||
-      this.pollId ||
-      !!this.locationComposer.validLocation
+    const currentCommand = this.getCurrentCommand();
+    const commandIsSendable = !currentCommand || this.isCommandSendable(currentCommand);
+
+    return (
+      commandIsSendable &&
+      !!(
+        (!this.attachmentManager.uploadsInProgressCount &&
+          (!this.textComposer.textIsEmpty ||
+            this.attachmentManager.successfulUploadsCount > 0)) ||
+        this.pollId ||
+        !!this.locationComposer.validLocation
+      )
     );
   }
 

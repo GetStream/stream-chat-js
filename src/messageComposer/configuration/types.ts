@@ -1,6 +1,7 @@
 import type { LinkPreview } from '../linkPreviewsManager';
 import type { FileUploadFilter } from '../attachmentManager';
-import type { FileLike, FileReference } from '../types';
+import type { MessageComposer } from '../messageComposer';
+import type { CommandResponse, FileLike, FileReference, UserResponse } from '../../types';
 
 export type MinimumUploadRequestResult = { file: string; thumb_url?: string } & Partial<
   Record<string, unknown>
@@ -36,6 +37,28 @@ export type TextComposerConfig = {
   maxLengthOnEdit?: number;
   /** Prevents sending a message longer than this length */
   maxLengthOnSend?: number;
+};
+
+export type CommandSendability = {
+  ready: boolean;
+  reason?: string & {};
+  metadata?: Record<string, unknown>;
+};
+
+export type CommandSendValidationContext = {
+  command: CommandResponse;
+  composer: MessageComposer;
+  commandArgsText: string;
+  mentionedUsersInText: UserResponse[];
+  rawText: string;
+};
+
+export type CommandSendValidator = (
+  context: CommandSendValidationContext,
+) => CommandSendability | undefined;
+
+export type CommandsConfig = {
+  validators: CommandSendValidator[];
 };
 
 export type AttachmentManagerConfig = {
@@ -86,6 +109,8 @@ export type LocationComposerConfig = {
 export type MessageComposerConfig = {
   /** If true, enables creating drafts on the server */
   drafts: DraftsConfiguration;
+  /** Configuration for command sendability validation */
+  commands: CommandsConfig;
   /** Configuration for the attachment manager */
   attachments: AttachmentManagerConfig;
   /** Configuration for the link previews manager */

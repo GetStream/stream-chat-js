@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Channel } from '../../../../../src/channel';
 import { StreamChat } from '../../../../../src/client';
+import type { MessageComposerConfig } from '../../../../../src/messageComposer';
 import { MessageComposer } from '../../../../../src/messageComposer/messageComposer';
 import {
   createCompositionValidationMiddleware,
@@ -14,10 +15,15 @@ import { MiddlewareStatus } from '../../../../../src/middleware';
 import { MessageComposerMiddlewareState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
 import { MessageDraftComposerMiddlewareValueState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
 import { LocalMessage, MessageResponse } from '../../../../../src';
+import type { DeepPartial } from '../../../../../src/types.utility';
 import { generateChannel } from '../../../test-utils/generateChannel';
 
 const setupMiddleware = (
-  custom: { composer?: MessageComposer; editedMessage?: MessageResponse } = {},
+  custom: {
+    composer?: MessageComposer;
+    config?: DeepPartial<MessageComposerConfig>;
+    editedMessage?: MessageResponse;
+  } = {},
 ) => {
   const user = { id: 'user' };
   const client = new StreamChat('apiKey');
@@ -36,6 +42,7 @@ const setupMiddleware = (
     new MessageComposer({
       client,
       compositionContext: channel,
+      config: custom.config,
       composition: custom.editedMessage,
     });
 
@@ -228,6 +235,47 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
             command: 'ban',
             reason: 'quoted_message',
           },
+        }),
+      }),
+    );
+  });
+
+  it('should discard commands that are not ready to send', async () => {
+    const validator = vi.fn(({ mentionedUsersInText }) =>
+      mentionedUsersInText.length > 0
+        ? undefined
+        : {
+            metadata: { source: 'test-validator' },
+            ready: false as const,
+            reason: 'missing_user' as const,
+          },
+    );
+    const { messageComposer, validationMiddleware } = setupMiddleware({
+      config: {
+        commands: {
+          validators: [validator],
+        },
+      },
+    });
+    vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      commands: [{ name: 'ban', description: 'Ban a user' }],
+    });
+    const addWarningSpy = vi.spyOn(messageComposer.client.notifications, 'addWarning');
+
+    const result = await validationMiddleware.handlers.compose(
+      setupMiddlewareInputs(setupCompositionState('/ban')),
+    );
+
+    expect(result.status).toBe('discard');
+    expect(addWarningSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          metadata: expect.objectContaining({
+            command: 'ban',
+            reason: 'missing_user',
+            source: 'test-validator',
+          }),
+          type: 'validation:command:not-ready',
         }),
       }),
     );

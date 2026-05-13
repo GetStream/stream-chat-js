@@ -2,6 +2,7 @@ import { find } from 'linkifyjs';
 import { API_MAX_FILES_ALLOWED_PER_MESSAGE } from '../../constants';
 import type {
   AttachmentManagerConfig,
+  CommandsConfig,
   LinkPreviewsManagerConfig,
   LocationComposerConfig,
   MessageComposerConfig,
@@ -39,6 +40,10 @@ export const DEFAULT_TEXT_COMPOSER_CONFIG: TextComposerConfig = {
   publishTypingEvents: true,
 };
 
+export const DEFAULT_COMMANDS_CONFIG: CommandsConfig = {
+  validators: [],
+};
+
 export const DEFAULT_LOCATION_COMPOSER_CONFIG: LocationComposerConfig = {
   enabled: true,
   getDeviceId: () => generateUUIDv4(),
@@ -46,6 +51,7 @@ export const DEFAULT_LOCATION_COMPOSER_CONFIG: LocationComposerConfig = {
 
 export const DEFAULT_COMPOSER_CONFIG: MessageComposerConfig = {
   attachments: DEFAULT_ATTACHMENT_MANAGER_CONFIG,
+  commands: DEFAULT_COMMANDS_CONFIG,
   drafts: { enabled: false },
   linkPreviews: DEFAULT_LINK_PREVIEW_MANAGER_CONFIG,
   location: DEFAULT_LOCATION_COMPOSER_CONFIG,
