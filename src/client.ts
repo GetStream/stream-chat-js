@@ -281,6 +281,13 @@ function isString(x: unknown): x is string {
 
 type MessageComposerTearDownFunction = () => void;
 
+export type QueryChannelsResponseWithChannels = Omit<
+  QueryChannelsAPIResponse,
+  'channels'
+> & {
+  channels: Channel[];
+};
+
 type MessageComposerSetupFunction = ({
   composer,
 }: {
@@ -1888,20 +1895,20 @@ export class StreamChat {
   }
 
   /**
-   * queryChannelsRequest - Queries channels and returns the raw response
+   * queryChannelsRequestWithResponse - Queries channels and returns the full API response
    *
    * @param {ChannelFilters} filterConditions object MongoDB style filters. Can be empty object when using predefined_filter in options.
    * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
    * @param {ChannelOptions} [options] Options object. Can include predefined_filter, filter_values, and sort_values for using predefined filters.
    *
-   * @return {Promise<Array<ChannelAPIResponse>>} search channels response
+   * @return {Promise<QueryChannelsAPIResponse>} full search channels response
    */
-  async queryChannelsRequest(
+  async queryChannelsRequestWithResponse(
     filterConditions: ChannelFilters,
     sort: ChannelSort = [],
     options: ChannelOptions = {},
-  ) {
+  ): Promise<QueryChannelsAPIResponse> {
     const defaultOptions: ChannelOptions = {
       state: true,
       watch: true,
@@ -1934,9 +1941,28 @@ export class StreamChat {
           ...restOptions,
         };
 
-    const data = await this.post<QueryChannelsAPIResponse>(
-      this.baseURL + '/channels',
-      payload,
+    return await this.post<QueryChannelsAPIResponse>(this.baseURL + '/channels', payload);
+  }
+
+  /**
+   * queryChannelsRequest - Queries channels and returns the raw channel response list.
+   *
+   * @param {ChannelFilters} filterConditions object MongoDB style filters. Can be empty object when using predefined_filter in options.
+   * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
+   * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
+   * @param {ChannelOptions} [options] Options object. Can include predefined_filter, filter_values, and sort_values for using predefined filters.
+   *
+   * @return {Promise<Array<ChannelAPIResponse>>} search channels response
+   */
+  async queryChannelsRequest(
+    filterConditions: ChannelFilters,
+    sort: ChannelSort = [],
+    options: ChannelOptions = {},
+  ) {
+    const data = await this.queryChannelsRequestWithResponse(
+      filterConditions,
+      sort,
+      options,
     );
 
     // FIXME: In the next major release, return the full QueryChannelsAPIResponse
@@ -1960,11 +1986,28 @@ export class StreamChat {
    */
   async queryChannels(
     filterConditions: ChannelFilters,
+    sort: ChannelSort,
+    options: ChannelOptions,
+    stateOptions: ChannelStateOptions & { withResponse: true },
+  ): Promise<QueryChannelsResponseWithChannels>;
+  async queryChannels(
+    filterConditions?: ChannelFilters,
+    sort?: ChannelSort,
+    options?: ChannelOptions,
+    stateOptions?: ChannelStateOptions,
+  ): Promise<Channel[]>;
+  async queryChannels(
+    filterConditions: ChannelFilters,
     sort: ChannelSort = [],
     options: ChannelOptions = {},
     stateOptions: ChannelStateOptions = {},
-  ) {
-    const channels = await this.queryChannelsRequest(filterConditions, sort, options);
+  ): Promise<Channel[] | QueryChannelsResponseWithChannels> {
+    const queryChannelsResponse = await this.queryChannelsRequestWithResponse(
+      filterConditions,
+      sort,
+      options,
+    );
+    const channels = queryChannelsResponse.channels;
 
     this.dispatchEvent({
       type: 'channels.queried',
@@ -1980,7 +2023,16 @@ export class StreamChat {
       });
     }
 
-    return this.hydrateActiveChannels(channels, stateOptions, options);
+    const hydratedChannels = this.hydrateActiveChannels(channels, stateOptions, options);
+
+    if (stateOptions.withResponse) {
+      return {
+        ...queryChannelsResponse,
+        channels: hydratedChannels,
+      };
+    }
+
+    return hydratedChannels;
   }
 
   /**

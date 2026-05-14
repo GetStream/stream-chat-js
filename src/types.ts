@@ -1111,6 +1111,7 @@ export type ChannelStateOptions = {
   offlineMode?: boolean;
   skipInitialization?: string[];
   skipHydration?: boolean;
+  withResponse?: boolean;
 };
 
 export type CreateChannelOptions = {
