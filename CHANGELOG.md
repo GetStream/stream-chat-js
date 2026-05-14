@@ -1,3 +1,9 @@
+## [9.44.1](https://github.com/GetStream/stream-chat-js/compare/v9.44.0...v9.44.1) (2026-05-14)
+
+### Bug Fixes
+
+* trigger release for 1744 ([#1745](https://github.com/GetStream/stream-chat-js/issues/1745)) ([f4fcfdd](https://github.com/GetStream/stream-chat-js/commit/f4fcfdd506e4171246b3d928fcf1b2655f147f11))
+
 ## [9.44.0](https://github.com/GetStream/stream-chat-js/compare/v9.43.2...v9.44.0) (2026-05-13)
 
 ### Bug Fixes
