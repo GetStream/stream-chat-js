@@ -73,24 +73,43 @@ const typeMapping = {
   date: 'Date',
 };
 
+const snakeToCamelCase = (snakeCaseString: string) =>
+  snakeCaseString
+    .split('_')
+    .map((wordSegment) => wordSegment.slice(0, 1).toUpperCase() + wordSegment.slice(1))
+    .join('');
+
 for (const [schemaName, schema] of Object.entries(schemas)) {
-  const filterFields = schema?.properties?.filter_conditions?.['x-stream-filter-fields'];
-  if (!filterFields) continue;
+  if (!schema.properties) {
+    console.log(schemaName, 'missing');
+    continue;
+  }
 
-  const typeName = `${schemaName}FilterConditions`;
+  for (const [propertyName, propertyDef] of Object.entries(schema.properties)) {
+    if (!propertyDef?.['x-stream-filter-fields']) continue;
 
-  const fieldEntries = Object.entries(filterFields).map(
-    ([fieldName, fieldDefinition]) => {
-      const operators = fieldDefinition.operators.length
-        ? fieldDefinition.operators.map((operator) => `"${operator}"`).join(' | ')
-        : 'never';
-      return `  "${fieldName}": { type: ${typeMapping[fieldDefinition.type as keyof typeof typeMapping] ?? `"${fieldDefinition.type}"`}; operators: ${operators} };`;
-    },
-  );
+    const filterFields = propertyDef['x-stream-filter-fields'];
 
-  lines.push(`export type ${typeName} = {`);
-  lines.push(...fieldEntries);
-  lines.push(`};\n`);
+    let typeName = `${schemaName}${snakeToCamelCase(propertyName)}`;
+
+    const fieldEntries = Object.entries(filterFields).map(
+      ([fieldName, fieldDefinition]) => {
+        // TODO: add support for such properties later on (custom/nested filters)
+        if (fieldDefinition.type === 'object' || fieldName.startsWith('_')) {
+          return '';
+        }
+
+        const operators = fieldDefinition.operators.length
+          ? fieldDefinition.operators.map((operator) => `"${operator}"`).join(' | ')
+          : 'never';
+        return `  "${fieldName}": { type: ${typeMapping[fieldDefinition.type as keyof typeof typeMapping] ?? `"${fieldDefinition.type}"`}; operators: ${operators} };`;
+      },
+    );
+
+    lines.push(`export type ${typeName} = {`);
+    lines.push(...fieldEntries);
+    lines.push(`};\n`);
+  }
 }
 
 if (lines.length > 0) {

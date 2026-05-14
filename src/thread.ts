@@ -7,7 +7,6 @@ import {
 } from './utils';
 import type {
   AscDesc,
-  EventTypes,
   LocalMessage,
   MessagePaginationOptions,
   MessageResponse,
@@ -16,7 +15,7 @@ import type {
   UserResponse,
 } from './types';
 import type { Channel } from './channel';
-import type { StreamChat } from './client';
+import type { ListenerKeys, StreamChat } from './client';
 import type { CustomThreadData } from './custom_types';
 import { MessageComposer } from './messageComposer';
 import { WithSubscriptions } from './utils/WithSubscriptions';
@@ -70,44 +69,6 @@ export type ThreadReadState = Record<string, ThreadUserReadState | undefined>;
 const DEFAULT_PAGE_LIMIT = 50;
 const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
 const MARK_AS_READ_THROTTLE_TIMEOUT = 1000;
-// TODO: remove this once we move to API v2
-export const THREAD_RESPONSE_RESERVED_KEYS: Record<keyof ThreadResponse, true> = {
-  active_participant_count: true,
-  channel: true,
-  channel_cid: true,
-  created_at: true,
-  created_by: true,
-  created_by_user_id: true,
-  deleted_at: true,
-  draft: true,
-  last_message_at: true,
-  latest_replies: true,
-  parent_message: true,
-  parent_message_id: true,
-  participant_count: true,
-  read: true,
-  reply_count: true,
-  thread_participants: true,
-  title: true,
-  updated_at: true,
-};
-
-// TODO: remove this once we move to API v2
-const constructCustomDataObject = <T extends ThreadResponse>(threadData: T) => {
-  const custom: CustomThreadData = {};
-
-  for (const key in threadData) {
-    if (THREAD_RESPONSE_RESERVED_KEYS[key as keyof ThreadResponse]) {
-      continue;
-    }
-
-    const customKey = key as keyof CustomThreadData;
-
-    custom[customKey] = threadData[customKey];
-  }
-
-  return custom;
-};
 
 export class Thread extends WithSubscriptions {
   public readonly state: StateStore<ThreadState>;
@@ -126,23 +87,26 @@ export class Thread extends WithSubscriptions {
   }) {
     super();
 
-    const channel = client.channel(threadData.channel.type, threadData.channel.id, {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const channelResponseData = threadData.channel!;
+
+    const channel = client.channel(channelResponseData.type, channelResponseData.id, {
       // @ts-expect-error name is a "custom" property
       name: threadData.channel.name,
     });
     channel._hydrateMembers({
-      members: threadData.channel.members ?? [],
+      members: channelResponseData.members ?? [],
       overrideCurrentState: false,
     });
 
     // For when read object is undefined and due to that unreadMessageCount for
     // the current user isn't being incremented on message.new
-    const placeholderReadResponse: ReadResponse[] = client.userID
+    const placeholderReadResponse: ReadResponse[] = client.userId
       ? [
           {
-            user: { id: client.userID },
+            user: { id: client.userId } as UserResponse,
             unread_messages: 0,
-            last_read: new Date().toISOString(),
+            last_read: new Date(),
           },
         ]
       : [];
@@ -158,7 +122,8 @@ export class Thread extends WithSubscriptions {
       // rest
       deletedAt: threadData.deleted_at ? new Date(threadData.deleted_at) : null,
       pagination: repliesPaginationFromInitialThread(threadData),
-      parentMessage: formatMessage(threadData.parent_message),
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      parentMessage: formatMessage(threadData.parent_message!),
       participants: threadData.thread_participants,
       read: formatReadState(
         !threadData.read || threadData.read.length === 0
@@ -169,7 +134,7 @@ export class Thread extends WithSubscriptions {
       replyCount: threadData.reply_count ?? 0,
       updatedAt: threadData.updated_at ? new Date(threadData.updated_at) : null,
       title: threadData.title,
-      custom: constructCustomDataObject(threadData),
+      custom: threadData.custom,
     });
 
     this.id = threadData.parent_message_id;
@@ -191,7 +156,7 @@ export class Thread extends WithSubscriptions {
   }
 
   get ownUnreadCount() {
-    return ownUnreadCountSelector(this.client.userID)(this.state.getLatestValue());
+    return ownUnreadCountSelector(this.client.userId)(this.state.getLatestValue());
   }
 
   public activate = () => {
@@ -288,8 +253,7 @@ export class Thread extends WithSubscriptions {
         title: threadData.title,
         updatedAt: new Date(threadData.updated_at),
         deletedAt: threadData.deleted_at ? new Date(threadData.deleted_at) : null,
-        // TODO: use threadData.custom once we move to API v2
-        custom: constructCustomDataObject(threadData),
+        custom: threadData.custom,
       });
     }).unsubscribe;
 
@@ -297,7 +261,7 @@ export class Thread extends WithSubscriptions {
     this.state.subscribeWithSelector(
       (nextValue) => ({
         active: nextValue.active,
-        unreadMessageCount: ownUnreadCountSelector(this.client.userID)(nextValue),
+        unreadMessageCount: ownUnreadCountSelector(this.client.userId)(nextValue),
       }),
       ({ active, unreadMessageCount }) => {
         if (!active || !unreadMessageCount) return;
@@ -320,9 +284,9 @@ export class Thread extends WithSubscriptions {
       const { channel } = this.state.getLatestValue();
 
       if (
-        !this.client.userID ||
-        this.client.userID !== event.user?.id ||
-        event.channel?.cid !== channel.cid
+        !this.client.userId ||
+        this.client.userId !== event.user?.id ||
+        event.cid !== channel.cid
       ) {
         return;
       }
@@ -332,11 +296,11 @@ export class Thread extends WithSubscriptions {
 
   private subscribeNewReplies = () =>
     this.client.on('message.new', (event) => {
-      if (!this.client.userID || event.message?.parent_id !== this.id) {
+      if (!this.client.userId || event.message?.parent_id !== this.id) {
         return;
       }
 
-      const isOwnMessage = event.message.user?.id === this.client.userID;
+      const isOwnMessage = event.message.user?.id === this.client.userId;
       const { active, read } = this.state.getLatestValue();
 
       this.upsertReplyLocally({
@@ -367,7 +331,7 @@ export class Thread extends WithSubscriptions {
               user: event.user,
               unreadMessageCount: 0,
             };
-          } else if (active && userId === this.client.userID) {
+          } else if (active && userId === this.client.userId) {
             // Do not increment unread count for the current user in an active thread
           } else {
             // Increment unread count for all users except the author of the new message
@@ -428,12 +392,12 @@ export class Thread extends WithSubscriptions {
     }).unsubscribe;
 
   private subscribeMessageUpdated = () => {
-    const eventTypes: EventTypes[] = [
+    const eventTypes = [
       'message.updated',
       'reaction.new',
       'reaction.deleted',
       'reaction.updated',
-    ];
+    ] satisfies ListenerKeys[];
 
     const unsubscribeFunctions = eventTypes.map(
       (eventType) =>
@@ -489,7 +453,7 @@ export class Thread extends WithSubscriptions {
 
     const formattedMessage = formatMessage(message);
 
-    if (message.status === 'failed') {
+    if (formattedMessage.status === 'failed') {
       // store failed reply so that it's not lost when reloading or hydrating
       this.failedRepliesMap.set(formattedMessage.id, formattedMessage);
     } else if (this.failedRepliesMap.has(message.id)) {
@@ -512,7 +476,7 @@ export class Thread extends WithSubscriptions {
 
       return {
         ...current,
-        deletedAt: formattedMessage.deleted_at,
+        deletedAt: formattedMessage.deleted_at ?? null,
         parentMessage: formattedMessage,
         replyCount: message.reply_count ?? current.replyCount,
       };

@@ -130,11 +130,11 @@ export class MessageSearchSource<
   }
 
   protected async query(searchQuery: string) {
-    if (!this.client.userID || this.next === null) return { items: [] };
+    if (!this.client.userId || this.next === null) return { items: [] };
 
     const channelFilters = this.messageSearchChannelFilterBuilder.buildFilters({
       baseFilters: {
-        ...(this.client.userID ? { members: { $in: [this.client.userID] } } : {}),
+        ...(this.client.userId ? { members: { $in: [this.client.userId] } } : {}),
         ...this.messageSearchChannelFilters,
       },
       context: { searchQuery } as Partial<

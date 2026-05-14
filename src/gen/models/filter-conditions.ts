@@ -336,6 +336,42 @@ export type QueryMessageFlagsPayloadFilterConditions = {
   user_id: { type: string; operators: '$eq' | '$in' };
 };
 
+export type QueryReactionsRequestFilter = {
+  created_at: {
+    type: Date;
+    operators:
+      | '$eq'
+      | '$exists'
+      | '$gt'
+      | '$gte'
+      | '$in'
+      | '$lt'
+      | '$lte'
+      | '$ne'
+      | '$nin';
+  };
+  type: { type: string; operators: '$eq' | '$in' };
+  user_id: { type: string; operators: '$eq' | '$in' };
+};
+
+export type QueryThreadsRequestFilter = {
+  active_participant_count: {
+    type: number;
+    operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte';
+  };
+  'channel.disabled': { type: boolean; operators: '$eq' };
+  'channel.team': { type: string; operators: '$eq' | '$in' };
+  channel_cid: { type: string; operators: '$eq' | '$in' };
+  created_at: { type: Date; operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte' };
+  created_by_user_id: { type: string; operators: '$eq' | '$in' };
+  has_unread: { type: boolean; operators: '$eq' };
+  last_message_at: { type: Date; operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte' };
+  parent_message_id: { type: string; operators: '$eq' | '$in' };
+  participant_count: { type: number; operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte' };
+  reply_count: { type: number; operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte' };
+  updated_at: { type: Date; operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte' };
+};
+
 export type QueryUsersPayloadFilterConditions = {
   banned: { type: boolean; operators: '$eq' };
   bypass_moderation: { type: boolean; operators: '$eq' | '$ne' };
@@ -613,4 +649,108 @@ export type SearchPayloadFilterConditions = {
       | '$ne'
       | '$nin';
   };
+};
+
+export type SearchPayloadMessageFilterConditions = {
+  attachments: { type: boolean; operators: '$exists' };
+  'attachments.type': { type: string; operators: '$eq' | '$in' };
+  created_at: {
+    type: Date;
+    operators:
+      | '$eq'
+      | '$exists'
+      | '$gt'
+      | '$gte'
+      | '$in'
+      | '$lt'
+      | '$lte'
+      | '$ne'
+      | '$nin';
+  };
+  id: {
+    type: string;
+    operators:
+      | '$eq'
+      | '$exists'
+      | '$gt'
+      | '$gte'
+      | '$in'
+      | '$lt'
+      | '$lte'
+      | '$ne'
+      | '$nin';
+  };
+  'mentioned_users.id': { type: string; operators: '$contains' };
+  parent_id: {
+    type: string;
+    operators:
+      | '$eq'
+      | '$exists'
+      | '$gt'
+      | '$gte'
+      | '$in'
+      | '$lt'
+      | '$lte'
+      | '$ne'
+      | '$nin';
+  };
+  pinned: { type: boolean; operators: '$eq' };
+  relevance: { type: number; operators: never };
+  reply_count: {
+    type: number;
+    operators:
+      | '$eq'
+      | '$exists'
+      | '$gt'
+      | '$gte'
+      | '$in'
+      | '$lt'
+      | '$lte'
+      | '$ne'
+      | '$nin';
+  };
+  text: {
+    type: string;
+    operators:
+      | '$any'
+      | '$autocomplete'
+      | '$eq'
+      | '$exists'
+      | '$gt'
+      | '$gte'
+      | '$in'
+      | '$lt'
+      | '$lte'
+      | '$ne'
+      | '$nin'
+      | '$q';
+  };
+  type: {
+    type: string;
+    operators:
+      | '$eq'
+      | '$exists'
+      | '$gt'
+      | '$gte'
+      | '$in'
+      | '$lt'
+      | '$lte'
+      | '$ne'
+      | '$nin';
+  };
+  updated_at: {
+    type: Date;
+    operators:
+      | '$eq'
+      | '$exists'
+      | '$gt'
+      | '$gte'
+      | '$in'
+      | '$lt'
+      | '$lte'
+      | '$ne'
+      | '$nin';
+  };
+  'user.id': { type: string; operators: '$eq' | '$in' | '$ne' | '$nin' };
+  user_id: { type: string; operators: '$eq' | '$in' | '$ne' | '$nin' };
 };

@@ -486,7 +486,7 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
 
     return this.getMembersAndWatchers()
       .filter((user) => {
-        if (user.id === this.client.userID) return false;
+        if (user.id === this.client.userId) return false;
         if (!searchQuery) return true;
 
         const updatedId = this.transliterate(removeDiacritics(user.id)).toLowerCase();

@@ -1,7 +1,7 @@
 /* eslint no-unused-vars: "off" */
 /* global process */
 
-import type { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import type { AxiosInstance, AxiosRequestConfig } from 'axios';
 import axios from 'axios';
 import https from 'https';
 
@@ -18,51 +18,42 @@ import {
   verifyAndParseWebhook as verifyAndParseWebhookHelper,
   verifySignature,
 } from './signing';
-import { TokenManager } from './token_manager';
+import { TokenManager, type TokenManagerMinimalUser } from './token_manager';
 import { WSConnectionFallback } from './connection_fallback';
-import { Campaign } from './campaign';
 import { ChannelBatchUpdater } from './channel_batch_updater';
 import { Segment } from './segment';
-import { isErrorResponse, isWSFailure } from './errors';
+import { isWSFailure } from './errors';
+import { ApiClient } from './api-client';
 import {
-  addFileToFormData,
   axiosParamsSerializer,
-  chatCodes,
   generateChannelTempCid,
+  getEnv,
   isFunction,
   isOnline,
   isOwnUserBaseProperty,
   messageSetPagination,
   normalizeQuerySort,
   randomId,
-  retryInterval,
-  sleep,
-  toUpdatedMessagePayload,
 } from './utils';
 
 import type {
   ActiveLiveLocationsAPIResponse,
   AddUserGroupMembersOptions,
   AddUserGroupMembersResponse,
-  APIErrorResponse,
   APIResponse,
   AppSettings,
-  AppSettingsAPIResponse,
   BannedUsersFilters,
   BannedUsersPaginationOptions,
-  BannedUsersResponse,
   BannedUsersSort,
   BanUserOptions,
   BaseDeviceFields,
   BlockList,
   BlockListResponse,
-  BlockUserAPIResponse,
   CampaignData,
   CampaignFilters,
   CampaignQueryOptions,
   CampaignResponse,
   CampaignSort,
-  CastVoteAPIResponse,
   ChannelAPIResponse,
   ChannelData,
   ChannelFilters,
@@ -74,6 +65,7 @@ import type {
   CheckPushResponse,
   CheckSNSResponse,
   CheckSQSResponse,
+  CombinedEvents,
   Configs,
   ConnectAPIResponse,
   CreateChannelOptions,
@@ -83,9 +75,7 @@ import type {
   CreateImportOptions,
   CreateImportResponse,
   CreateImportURLResponse,
-  CreatePollAPIResponse,
   CreatePollData,
-  CreatePollOptionAPIResponse,
   CreatePredefinedFilterOptions,
   CreateReminderOptions,
   CreateRoleAPIResponse,
@@ -93,19 +83,15 @@ import type {
   CreateUserGroupResponse,
   CustomPermissionOptions,
   DeactivateUsersOptions,
-  DeleteChannelsResponse,
   DeleteCommandResponse,
   DeleteMessageOptions,
   DeleteRetentionPolicyResponse,
   DeleteUserGroupOptions,
   DeleteUserOptions,
-  Device,
   DeviceIdentifier,
   DraftFilters,
   DraftSort,
   EndpointName,
-  Event,
-  EventAPIResponse,
   EventHandler,
   ExportChannelOptions,
   ExportChannelRequest,
@@ -121,24 +107,18 @@ import type {
   FlagsPaginationOptions,
   FlagsResponse,
   FlagUserResponse,
-  FutureChannelBansResponse,
-  GetBlockedUsersAPIResponse,
   GetCampaignOptions,
   GetChannelTypeResponse,
   GetCommandResponse,
   GetHookEventsResponse,
   GetImportResponse,
-  GetMessageAPIResponse,
   GetMessageOptions,
-  GetPollAPIResponse,
-  GetPollOptionAPIResponse,
   GetRateLimitsResponse,
   GetRetentionPolicyResponse,
   GetRetentionPolicyRunsOptions,
   GetRetentionPolicyRunsResponse,
   GetThreadAPIResponse,
   GetThreadOptions,
-  GetUnreadCountAPIResponse,
   GetUnreadCountBatchAPIResponse,
   GetUserGroupOptions,
   GetUserGroupResponse,
@@ -156,13 +136,11 @@ import type {
   MessageFilters,
   MessageFlagsFilters,
   MessageFlagsPaginationOptions,
-  MessageFlagsResponse,
   MessageResponse,
   Mute,
   MuteUserOptions,
   MuteUserResponse,
   NewMemberPayload,
-  OGAttachment,
   OwnUserResponse,
   Pager,
   PartialMessageUpdate,
@@ -175,9 +153,7 @@ import type {
   PollData,
   PollOptionData,
   PollSort,
-  PollVote,
   PollVoteData,
-  PollVotesAPIResponse,
   PredefinedFilterResponse,
   Product,
   PushPreference,
@@ -187,7 +163,6 @@ import type {
   PushProviderListResponse,
   PushProviderUpsertResponse,
   QueryChannelsAPIResponse,
-  QueryDraftsResponse,
   QueryFutureChannelBansOptions,
   QueryMessageHistoryFilters,
   QueryMessageHistoryOptions,
@@ -195,16 +170,13 @@ import type {
   QueryMessageHistorySort,
   QueryPollsFilters,
   QueryPollsOptions,
-  QueryPollsResponse,
   QueryReactionsAPIResponse,
   QueryReactionsOptions,
   QueryRemindersOptions,
-  QueryRemindersResponse,
   QuerySegmentsOptions,
   QuerySegmentTargetsFilter,
   QueryTeamUsageStatsOptions,
   QueryTeamUsageStatsResponse,
-  QueryThreadsAPIResponse,
   QueryThreadsOptions,
   QueryUserGroupsOptions,
   QueryUserGroupsResponse,
@@ -218,6 +190,7 @@ import type {
   ReminderAPIResponse,
   RemoveUserGroupMembersOptions,
   RemoveUserGroupMembersResponse,
+  RequireLiteral,
   ReviewFlagReportOptions,
   ReviewFlagReportResponse,
   SdkIdentifier,
@@ -233,9 +206,7 @@ import type {
   SegmentResponse,
   SegmentTargetsResponse,
   SegmentType,
-  SendFileAPIResponse,
   SetRetentionPolicyResponse,
-  SharedLocationResponse,
   SortParam,
   StreamChatOptions,
   SyncOptions,
@@ -258,22 +229,20 @@ import type {
   UpdateMessageAPIResponse,
   UpdateMessageOptions,
   UpdatePollAPIResponse,
-  UpdatePollOptionAPIResponse,
   UpdatePredefinedFilterOptions,
   UpdateReminderOptions,
   UpdateSegmentData,
   UpdateUserGroupOptions,
   UpdateUserGroupResponse,
-  UpdateUsersAPIResponse,
   UpsertPushPreferencesResponse,
   UserCustomEvent,
   UserFilters,
   UserOptions,
   UserResponse,
   UserSort,
+  UserUpdate,
   VoteSort,
 } from './types';
-import { ErrorFromResponse } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
 import { Moderation } from './moderation';
@@ -294,9 +263,18 @@ import type { MessageComposer } from './messageComposer';
 import type { AbstractOfflineDB } from './offline-support';
 import { getPendingTaskChannelData } from './offline-support/util';
 import { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
+import type {
+  PushPreferenceInput,
+  TranslateMessageRequest,
+  UpdateMessageRequest,
+  WSEvent,
+} from './gen/models';
+import { ChatApi } from './gen-imports';
+import type { StreamResponse } from './types';
+import type { GetApplicationResponse } from './gen/models';
 
-function isString(x: unknown): x is string {
-  return typeof x === 'string' || x instanceof String;
+function isString(value: unknown): value is string {
+  return typeof value === 'string' || value instanceof String;
 }
 
 type MessageComposerTearDownFunction = () => void;
@@ -328,15 +306,21 @@ export type MessageComposerSetupState = {
   setupFunction: MessageComposerSetupFunction | null;
 };
 
+export type ListenerKeys = CombinedEvents['type'] | 'all';
+
+type ClientUser = RequireLiteral<Partial<OwnUserResponse>, 'id'> & { anon?: boolean };
+
 export class StreamChat {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
+  api: ApiClient;
+  chatApi: ChatApi;
   messageDeliveryReporter: MessageDeliveryReporter;
   /**
    * @internal
    */
   uploadManager: UploadManager;
-  _user?: OwnUserResponse | UserResponse;
-  appSettingsPromise?: Promise<AppSettingsAPIResponse>;
+  _user?: ClientUser;
+  appSettingsPromise?: Promise<StreamResponse<GetApplicationResponse>>;
   activeChannels: {
     [key: string]: Channel;
   };
@@ -345,7 +329,6 @@ export class StreamChat {
   offlineDb?: AbstractOfflineDB;
   notifications: NotificationManager;
   reminders: ReminderManager;
-  anonymous: boolean;
   persistUserOnConnectionFailure?: boolean;
   axiosInstance: AxiosInstance;
   baseURL?: string;
@@ -354,7 +337,7 @@ export class StreamChat {
   clientID?: string;
   configs: Configs;
   key: string;
-  listeners: Record<string, Array<(event: Event) => void>>;
+  listeners: Map<ListenerKeys, Set<EventHandler>>;
   logger: Logger;
   /**
    * When network is recovered, we re-query the active channels on client. But in single query, you can recover
@@ -381,21 +364,24 @@ export class StreamChat {
   setUserPromise: ConnectAPIResponse | null;
   state: ClientState;
   tokenManager: TokenManager;
-  user?: OwnUserResponse | UserResponse;
+  user?: ClientUser;
   userAgent?: string;
-  userID?: string;
   wsBaseURL?: string;
   wsConnection: StableWSConnection | null;
   wsFallback?: WSConnectionFallback;
   wsPromise: ConnectAPIResponse | null;
-  consecutiveFailures: number;
+  get anonymous(): boolean {
+    return this.user?.anon ?? false;
+  }
+  get userId(): string | undefined {
+    return this.user?.id;
+  }
   insightMetrics: InsightMetrics;
   defaultWSTimeoutWithFallback: number;
   defaultWSTimeout: number;
   sdkIdentifier?: SdkIdentifier;
   deviceIdentifier?: DeviceIdentifier;
   readonly messageComposerCache: FixedSizeQueueCache<string, MessageComposer>;
-  private nextRequestAbortController: AbortController | null = null;
   /**
    * @private
    */
@@ -431,7 +417,7 @@ export class StreamChat {
   ) {
     // set the key
     this.key = key;
-    this.listeners = {};
+    this.listeners = new Map();
     this.state = new ClientState({ client: this });
     // a list of channels to hide ws events from
     this.mutedChannels = [];
@@ -462,8 +448,6 @@ export class StreamChat {
     this.node = !this.browser;
 
     this.options = {
-      timeout: 3000,
-      withCredentials: false, // making sure cookies are not sent
       warmUp: false,
       recoverStateOnReconnect: true,
       disableCache: false,
@@ -471,31 +455,25 @@ export class StreamChat {
       ...inputOptions,
     };
 
-    if (this.node && !this.options.httpsAgent) {
-      this.options.httpsAgent = new https.Agent({
-        keepAlive: true,
-        keepAliveMsecs: 3000,
-      });
-    }
-
-    this.axiosInstance = axios.create(this.options);
+    this.axiosInstance = axios.create({
+      timeout: 3000,
+      withCredentials: false,
+      httpsAgent: this.node
+        ? new https.Agent({ keepAlive: true, keepAliveMsecs: 3000 })
+        : undefined,
+      ...this.options.axiosRequestConfig,
+      paramsSerializer: axiosParamsSerializer,
+    });
 
     this.setBaseURL(this.options.baseURL || 'https://chat.stream-io-api.com');
 
-    if (
-      typeof process !== 'undefined' &&
-      'env' in process &&
-      process.env.STREAM_LOCAL_TEST_RUN
-    ) {
+    const streamLocalTestRun = getEnv('STREAM_LOCAL_TEST_RUN');
+    const streamLocalTestHost = getEnv('STREAM_LOCAL_TEST_HOST');
+    if (streamLocalTestRun) {
       this.setBaseURL('http://localhost:3030');
     }
-
-    if (
-      typeof process !== 'undefined' &&
-      'env' in process &&
-      process.env.STREAM_LOCAL_TEST_HOST
-    ) {
-      this.setBaseURL('http://' + process.env.STREAM_LOCAL_TEST_HOST);
+    if (streamLocalTestHost) {
+      this.setBaseURL(`http://${streamLocalTestHost}`);
     }
 
     // WS connection is initialized when setUser is called
@@ -507,19 +485,19 @@ export class StreamChat {
 
     // mapping between channel groups and configs
     this.configs = {};
-    this.anonymous = false;
     this.persistUserOnConnectionFailure = this.options?.persistUserOnConnectionFailure;
 
     // If its a server-side client, then lets initialize the tokenManager, since token will be
     // generated from secret.
     this.tokenManager = new TokenManager(this.secret);
-    this.consecutiveFailures = 0;
     this.insightMetrics = new InsightMetrics();
 
     this.defaultWSTimeoutWithFallback = 6 * 1000;
     this.defaultWSTimeout = 15 * 1000;
 
-    this.axiosInstance.defaults.paramsSerializer = axiosParamsSerializer;
+    this.api = new ApiClient(this);
+
+    this.chatApi = new ChatApi(this.api);
 
     /**
      * logger function should accept 3 parameters:
@@ -674,14 +652,14 @@ export class StreamChat {
      * Calling connectUser multiple times is potentially the result of a  bad integration, however,
      * If the user id remains the same we don't throw error
      */
-    if (this.userID === user.id && this.setUserPromise) {
+    if (this.userId === user.id && this.setUserPromise) {
       console.warn(
         'Consecutive calls to connectUser is detected, ideally you should only call this function once in your app.',
       );
       return this.setUserPromise;
     }
 
-    if (this.userID) {
+    if (this.userId) {
       throw new Error(
         'Use client.disconnect() before trying to connect as a different user. connectUser was called twice.',
       );
@@ -695,10 +673,6 @@ export class StreamChat {
         'Please do not use connectUser server side. connectUser impacts MAU and concurrent connection usage and thus your bill. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
       );
     }
-
-    // we generate the client id client side
-    this.userID = user.id;
-    this.anonymous = false;
 
     const setTokenPromise = this._setToken(user, userTokenOrProvider);
     this._setUser(user);
@@ -734,16 +708,15 @@ export class StreamChat {
    */
   setUser = this.connectUser;
 
-  _setToken = (user: UserResponse, userTokenOrProvider: TokenOrProvider) =>
+  _setToken = (user: TokenManagerMinimalUser, userTokenOrProvider: TokenOrProvider) =>
     this.tokenManager.setTokenOrProvider(userTokenOrProvider, user);
 
-  _setUser(user: OwnUserResponse | UserResponse) {
+  _setUser(user: TokenManagerMinimalUser) {
     /**
      * This one is used by the frontend. This is a copy of the current user object stored on backend.
      * It contains reserved properties and own user properties which are not present in `this._user`.
      */
     this.user = user;
-    this.userID = user.id;
     // this one is actually used for requests. This is a copy of current user provided to `connectUser` function.
     this._user = { ...user };
   }
@@ -774,9 +747,9 @@ export class StreamChat {
 
     this.offlineDb?.executeQuerySafely(
       async (db) => {
-        if (this.userID) {
+        if (this.userId) {
           await db.upsertUserSyncStatus({
-            userId: this.userID,
+            userId: this.userId,
             lastSyncedAt: new Date().toString(),
           });
         }
@@ -815,7 +788,7 @@ export class StreamChat {
    * Creates a new WebSocket connection with the current user. Returns empty promise, if there is an active connection
    */
   openConnection = () => {
-    if (!this.userID) {
+    if (!this.userId) {
       throw Error(
         'User is not set on client, use client.connectUser or client.connectAnonymousUser instead',
       );
@@ -843,19 +816,11 @@ export class StreamChat {
       return;
     }
 
-    this.clientID = `${this.userID}--${randomId()}`;
+    this.clientID = `${this.userId}--${randomId()}`;
     this.wsPromise = this.connect();
     this._startCleaning();
     return this.wsPromise;
   };
-
-  /**
-   * @deprecated Please use client.openConnction instead.
-   * @private
-   *
-   * Creates a new websocket connection with current user.
-   */
-  _setupConnection = this.openConnection;
 
   /**
    * updateAppSettings - updates application settings
@@ -911,7 +876,7 @@ export class StreamChat {
         },
       };
     }
-    return await this.patch<APIResponse>(this.baseURL + '/app', options);
+    return await this.api.patch<APIResponse>(this.baseURL + '/app', options);
   }
 
   _normalizeDate = (before: Date | string | null): string | null => {
@@ -940,25 +905,23 @@ export class StreamChat {
   /**
    * Revokes token for a user issued before given time
    */
-  async revokeUserToken(userID: string, before?: Date | string | null) {
+  async revokeUserToken(userID: string, before?: Date | null) {
     return await this.revokeUsersToken([userID], before);
   }
 
   /**
    * Revokes tokens for a list of users issued before given time
    */
-  async revokeUsersToken(userIDs: string[], before?: Date | string | null) {
-    if (before === undefined) {
-      before = new Date().toISOString();
-    } else {
-      before = this._normalizeDate(before);
+  async revokeUsersToken(userIds: string[], before?: Date | null) {
+    if (!before) {
+      before = new Date();
     }
 
     const users: PartialUserUpdate[] = [];
-    for (const userID of userIDs) {
+    for (const userId of userIds) {
       users.push({
-        id: userID,
-        set: <Partial<UserResponse>>{
+        id: userId,
+        set: {
           revoke_tokens_issued_before: before,
         },
       });
@@ -971,8 +934,7 @@ export class StreamChat {
    * getAppSettings - retrieves application settings
    */
   async getAppSettings() {
-    this.appSettingsPromise = this.get<AppSettingsAPIResponse>(this.baseURL + '/app');
-    return await this.appSettingsPromise;
+    return await (this.appSettingsPromise = this.chatApi.getApp());
   }
 
   /**
@@ -991,7 +953,7 @@ export class StreamChat {
    }
    */
   async testPushSettings(userID: string, data: TestPushDataInput = {}) {
-    return await this.post<CheckPushResponse>(this.baseURL + '/check_push', {
+    return await this.api.post<CheckPushResponse>(this.baseURL + '/check_push', {
       user_id: userID,
       ...(data.messageID ? { message_id: data.messageID } : {}),
       ...(data.apnTemplate ? { apn_template: data.apnTemplate } : {}),
@@ -1016,7 +978,7 @@ export class StreamChat {
    }
    */
   async testSQSSettings(data: TestSQSDataInput = {}) {
-    return await this.post<CheckSQSResponse>(this.baseURL + '/check_sqs', data);
+    return await this.api.post<CheckSQSResponse>(this.baseURL + '/check_sqs', data);
   }
 
   /**
@@ -1030,7 +992,7 @@ export class StreamChat {
    }
    */
   async testSNSSettings(data: TestSNSDataInput = {}) {
-    return await this.post<CheckSNSResponse>(this.baseURL + '/check_sns', data);
+    return await this.api.post<CheckSNSResponse>(this.baseURL + '/check_sns', data);
   }
 
   /**
@@ -1047,9 +1009,6 @@ export class StreamChat {
     // remove the user specific fields
     delete this.user;
     delete this._user;
-    delete this.userID;
-
-    this.anonymous = false;
 
     const closePromise = this.closeConnection(timeout);
 
@@ -1097,23 +1056,16 @@ export class StreamChat {
       );
     }
 
-    this.anonymous = true;
-    this.userID = randomId();
     const anonymousUser = {
-      id: this.userID,
+      id: randomId(),
       anon: true,
-    } as UserResponse;
+    } satisfies TokenManagerMinimalUser;
 
     this._setToken(anonymousUser, '');
     this._setUser(anonymousUser);
 
-    return this._setupConnection();
+    return this.openConnection();
   };
-
-  /**
-   * @deprecated Please use connectAnonymousUser. Its naming is more consistent with its functionality.
-   */
-  setAnonymousUser = this.connectAnonymousUser;
 
   /**
    * setGuestUser - Setup a temporary guest user
@@ -1123,20 +1075,7 @@ export class StreamChat {
    * @return {ConnectAPIResponse} Returns a promise that resolves when the connection is setup
    */
   async setGuestUser(user: UserResponse) {
-    let response: { access_token: string; user: UserResponse } | undefined;
-    this.anonymous = true;
-    try {
-      response = await this.post<
-        APIResponse & {
-          access_token: string;
-          user: UserResponse;
-        }
-      >(this.baseURL + '/guest', { user });
-    } catch (e) {
-      this.anonymous = false;
-      throw e;
-    }
-    this.anonymous = false;
+    const response = await this.chatApi.createGuest({ user });
 
     const {
       created_at: _created_at,
@@ -1187,28 +1126,39 @@ export class StreamChat {
    * @return {{ unsubscribe: () => void }} Description
    */
   on(callback: EventHandler): { unsubscribe: () => void };
-  on(eventType: string, callback: EventHandler): { unsubscribe: () => void };
+  on<T extends ListenerKeys | string>(
+    eventType: T,
+    callback: EventHandler<T>,
+  ): { unsubscribe: () => void };
   on(
     callbackOrString: EventHandler | string,
     callbackOrNothing?: EventHandler,
   ): { unsubscribe: () => void } {
-    const key = callbackOrNothing ? (callbackOrString as string) : 'all';
+    const key = callbackOrNothing ? (callbackOrString as ListenerKeys) : 'all';
     const callback = callbackOrNothing
       ? callbackOrNothing
       : (callbackOrString as EventHandler);
-    if (!(key in this.listeners)) {
-      this.listeners[key] = [];
-    }
+
+    const set = this.listeners.get(key) ?? new Set();
+
     this.logger('info', `Attaching listener for ${key} event`, {
       tags: ['event', 'client'],
     });
-    this.listeners[key].push(callback);
+    set.add(callback);
+
+    if (!this.listeners.has(key)) {
+      this.listeners.set(key, set);
+    }
+
     return {
       unsubscribe: () => {
         this.logger('info', `Removing listener for ${key} event`, {
           tags: ['event', 'client'],
         });
-        this.listeners[key] = this.listeners[key].filter((el) => el !== callback);
+        set.delete(callback);
+        if (!set.size) {
+          this.listeners.delete(key);
+        }
       },
     };
   }
@@ -1220,200 +1170,41 @@ export class StreamChat {
   off(callback: EventHandler): void;
   off(eventType: string, callback: EventHandler): void;
   off(callbackOrString: EventHandler | string, callbackOrNothing?: EventHandler) {
-    const key = callbackOrNothing ? (callbackOrString as string) : 'all';
+    const key = callbackOrNothing ? (callbackOrString as ListenerKeys) : 'all';
     const callback = callbackOrNothing
       ? callbackOrNothing
       : (callbackOrString as EventHandler);
-    if (!(key in this.listeners)) {
-      this.listeners[key] = [];
-    }
 
     this.logger('info', `Removing listener for ${key} event`, {
       tags: ['event', 'client'],
     });
-    this.listeners[key] = this.listeners[key].filter((value) => value !== callback);
-  }
 
-  _logApiRequest(
-    type: string,
-    url: string,
-    data: unknown,
-    config: AxiosRequestConfig & {
-      config?: AxiosRequestConfig & { maxBodyLength?: number };
-    },
-  ) {
-    this.logger('info', `client: ${type} - Request - ${url}`, {
-      tags: ['api', 'api_request', 'client'],
-      url,
-      payload: data,
-      config,
-    });
-  }
+    const set = this.listeners.get(key);
 
-  _logApiResponse<T>(type: string, url: string, response: AxiosResponse<T>) {
-    this.logger(
-      'info',
-      `client:${type} - Response - url: ${url} > status ${response.status}`,
-      {
-        tags: ['api', 'api_response', 'client'],
-        url,
-        response,
-      },
-    );
-  }
+    set?.delete(callback);
 
-  _logApiError(type: string, url: string, error: unknown) {
-    this.logger('error', `client:${type} - Error - url: ${url}`, {
-      tags: ['api', 'api_response', 'client'],
-      url,
-      error,
-    });
-  }
-
-  doAxiosRequest = async <T>(
-    type: string,
-    url: string,
-    data?: unknown,
-    options: AxiosRequestConfig & {
-      config?: AxiosRequestConfig & { maxBodyLength?: number };
-    } = {},
-  ): Promise<T> => {
-    await this.tokenManager.tokenReady();
-    const requestConfig = this._enrichAxiosOptions(options);
-    try {
-      let response: AxiosResponse<T>;
-      this._logApiRequest(type, url, data, requestConfig);
-      switch (type) {
-        case 'get':
-          response = await this.axiosInstance.get(url, requestConfig);
-          break;
-        case 'delete':
-          response = await this.axiosInstance.delete(url, requestConfig);
-          break;
-        case 'post':
-          response = await this.axiosInstance.post(url, data, requestConfig);
-          break;
-        case 'postForm':
-          response = await this.axiosInstance.postForm(url, data, requestConfig);
-          break;
-        case 'put':
-          response = await this.axiosInstance.put(url, data, requestConfig);
-          break;
-        case 'patch':
-          response = await this.axiosInstance.patch(url, data, requestConfig);
-          break;
-        case 'options':
-          response = await this.axiosInstance.options(url, requestConfig);
-          break;
-        default:
-          throw new Error('Invalid request type');
-      }
-      this._logApiResponse<T>(type, url, response);
-      this.consecutiveFailures = 0;
-      return this.handleResponse(response);
-    } catch (e: any /**TODO: generalize error types  */) {
-      e.client_request_id = requestConfig.headers?.['x-client-request-id'];
-      this._logApiError(type, url, e);
-      this.consecutiveFailures += 1;
-      if (e.response) {
-        /** connection_fallback depends on this token expiration logic */
-        if (
-          e.response.data.code === chatCodes.TOKEN_EXPIRED &&
-          !this.tokenManager.isStatic()
-        ) {
-          if (this.consecutiveFailures > 1) {
-            await sleep(retryInterval(this.consecutiveFailures));
-          }
-          this.tokenManager.loadToken();
-          return await this.doAxiosRequest<T>(type, url, data, options);
-        }
-        return this.handleResponse(e.response);
-      } else {
-        throw e as AxiosError<APIErrorResponse>;
-      }
+    if (!set?.size) {
+      this.listeners.delete(key);
     }
-  };
-
-  get<T>(url: string, params?: AxiosRequestConfig['params']) {
-    return this.doAxiosRequest<T>('get', url, null, { params });
   }
 
-  put<T>(url: string, data?: unknown) {
-    return this.doAxiosRequest<T>('put', url, data);
-  }
-
-  post<T>(url: string, data?: unknown) {
-    return this.doAxiosRequest<T>('post', url, data);
-  }
-
-  patch<T>(url: string, data?: unknown) {
-    return this.doAxiosRequest<T>('patch', url, data);
-  }
-
-  delete<T>(url: string, params?: AxiosRequestConfig['params']) {
-    return this.doAxiosRequest<T>('delete', url, null, { params });
-  }
-
-  sendFile(
-    url: string,
-    uri: string | NodeJS.ReadableStream | Buffer | File,
-    name?: string,
-    contentType?: string,
-    user?: UserResponse,
-    axiosRequestConfig?: AxiosRequestConfig,
-  ) {
-    const data = addFileToFormData(uri, name, contentType || 'multipart/form-data');
-    if (user != null) data.append('user', JSON.stringify(user));
-
-    return this.doAxiosRequest<SendFileAPIResponse>('postForm', url, data, {
-      headers: data.getHeaders ? data.getHeaders() : {}, // node vs browser
-      config: {
-        timeout: 0,
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-        ...axiosRequestConfig,
-      },
-    });
-  }
-
-  errorFromResponse(response: AxiosResponse<APIErrorResponse>) {
-    const message =
-      typeof response.data.code !== 'undefined'
-        ? `StreamChat error code ${response.data.code}: ${response.data.message}`
-        : `StreamChat error HTTP code: ${response.status}`;
-
-    return new ErrorFromResponse<APIErrorResponse>(message, {
-      code: response.data.code ?? null,
-      response,
-      status: response.status,
-    });
-  }
-
-  handleResponse<T>(response: AxiosResponse<T>) {
-    const data = response.data;
-    if (isErrorResponse(response)) {
-      throw this.errorFromResponse(response);
-    }
-    return data;
-  }
-
-  dispatchEvent = (event: Event) => {
+  dispatchEvent = (event: CombinedEvents) => {
     if (!event.received_at) event.received_at = new Date();
 
     // client event handlers
-    const postListenerCallbacks = this._handleClientEvent(event);
+    const postListenerCallbacks = this._handleClientEvent(event as WSEvent);
 
     // channel event handlers
-    const cid = event.cid;
+    const cid = (event as Extract<CombinedEvents, { cid?: any }>).cid;
     const channel = cid ? this.activeChannels[cid] : undefined;
     if (channel) {
-      channel._handleChannelEvent(event);
+      channel._handleChannelEvent(event as WSEvent);
     }
 
     this._callClientListeners(event);
 
     if (channel) {
-      channel._callChannelListeners(event);
+      channel._callChannelListeners(event as WSEvent);
     }
 
     postListenerCallbacks.forEach((c) => c());
@@ -1514,14 +1305,19 @@ export class StreamChat {
    *
    * @param {Event} event
    */
-  _handleUserEvent = (event: Event) => {
+  _handleUserEvent = (
+    event: Extract<
+      WSEvent,
+      { type: 'user.presence.changed' | 'user.updated' | 'user.deleted' }
+    >,
+  ) => {
     if (!event.user) {
       return;
     }
 
     /** update the client.state with any changes to users */
     if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
-      if (event.user.id === this.userID) {
+      if (event.user.id === this.userId) {
         const user = { ...this.user } as NonNullable<StreamChat['user']>;
         const _user = { ...this._user } as NonNullable<StreamChat['_user']>;
 
@@ -1567,12 +1363,12 @@ export class StreamChat {
       this._deleteUserMessageReference(
         event.user,
         event.hard_delete,
-        event.user.deleted_at ? new Date(event.user.deleted_at) : null,
+        event.user.deleted_at,
       );
     }
   };
 
-  _handleClientEvent(event: Event) {
+  _handleClientEvent(event: WSEvent) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const client = this;
     const postListenerCallbacks = [];
@@ -1594,11 +1390,7 @@ export class StreamChat {
     }
 
     if (event.type === 'user.messages.deleted' && !event.cid && event.user) {
-      this._deleteUserMessageReference(
-        event.user,
-        event.hard_delete,
-        event.created_at ? new Date(event.created_at) : null,
-      );
+      this._deleteUserMessageReference(event.user, event.hard_delete, event.created_at);
     }
 
     if (event.type === 'health.check' && event.me) {
@@ -1609,7 +1401,7 @@ export class StreamChat {
       client.blockedUsers.partialNext({ userIds: event.me.blocked_user_ids ?? [] });
     }
 
-    if (event.channel && event.type === 'notification.message_new') {
+    if (event.type === 'notification.message_new' && event.channel) {
       const { channel } = event;
       this._addChannelConfig(channel);
     }
@@ -1676,22 +1468,13 @@ export class StreamChat {
     };
   }
 
-  _callClientListeners = (event: Event) => {
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const client = this;
-    // gather and call the listeners
-    const listeners: Array<(event: Event) => void> = [];
-    if (client.listeners.all) {
-      listeners.push(...client.listeners.all);
-    }
-    if (client.listeners[event.type]) {
-      listeners.push(...client.listeners[event.type]);
-    }
+  _callClientListeners = (event: CombinedEvents) => {
+    const allSet = this.listeners.get('all');
+    const targetSet = this.listeners.get(event.type);
 
-    // call the event and send it to the listeners
-    for (const listener of listeners) {
-      listener(event);
-    }
+    [allSet, targetSet].forEach((set) =>
+      set?.forEach((handleEvent) => handleEvent(event)),
+    );
   };
 
   recoverState = async () => {
@@ -1724,11 +1507,11 @@ export class StreamChat {
       });
       this.dispatchEvent({
         type: 'connection.recovered',
-      } as Event);
+      });
     } else {
       this.dispatchEvent({
         type: 'connection.recovered',
-      } as Event);
+      });
     }
 
     this.wsPromise = Promise.resolve();
@@ -1739,7 +1522,7 @@ export class StreamChat {
    * @private
    */
   async connect() {
-    if (!this.userID || !this._user) {
+    if (!this.userId || !this._user) {
       throw Error(
         'Call connectUser or connectAnonymousUser before starting the connection',
       );
@@ -1806,7 +1589,7 @@ export class StreamChat {
   _sayHi() {
     const client_request_id = randomId();
     const opts = { headers: { 'x-client-request-id': client_request_id } };
-    this.doAxiosRequest('get', this.baseURL + '/hi', null, opts).catch((e) => {
+    this.api.doAxiosRequest('get', this.baseURL + '/hi', null, opts).catch((e) => {
       if (this.options.enableInsights) {
         postInsights('http_hi_failed', {
           api_key: this.key,
@@ -1844,17 +1627,14 @@ export class StreamChat {
     }
 
     // Return a list of users
-    const data = await this.get<APIResponse & { users: Array<UserResponse> }>(
-      this.baseURL + '/users',
-      {
-        payload: {
-          filter_conditions: filterConditions,
-          sort: normalizeQuerySort(sort),
-          ...defaultOptions,
-          ...options,
-        },
+    const data = await this.chatApi.queryUsers({
+      payload: {
+        filter_conditions: filterConditions,
+        sort: normalizeQuerySort(sort),
+        ...defaultOptions,
+        ...options,
       },
-    );
+    });
 
     this.state.updateUsers(data.users);
 
@@ -1869,7 +1649,10 @@ export class StreamChat {
    * @return {Promise<QueryUserGroupsResponse>} User Group Query Response
    */
   async queryUserGroups(options: QueryUserGroupsOptions = {}) {
-    return await this.get<QueryUserGroupsResponse>(this.baseURL + '/usergroups', options);
+    return await this.api.get<QueryUserGroupsResponse>(
+      this.baseURL + '/usergroups',
+      options,
+    );
   }
 
   /**
@@ -1880,7 +1663,7 @@ export class StreamChat {
    * @return {Promise<CreateUserGroupResponse>} User Group Create Response
    */
   async createUserGroup(options: CreateUserGroupOptions) {
-    return await this.post<CreateUserGroupResponse>(
+    return await this.api.post<CreateUserGroupResponse>(
       this.baseURL + '/usergroups',
       options,
     );
@@ -1895,7 +1678,7 @@ export class StreamChat {
    * @return {Promise<GetUserGroupResponse>} User Group Get Response
    */
   async getUserGroup(id: string, options: GetUserGroupOptions = {}) {
-    return await this.get<GetUserGroupResponse>(
+    return await this.api.get<GetUserGroupResponse>(
       `${this.baseURL}/usergroups/${encodeURIComponent(id)}`,
       options,
     );
@@ -1909,7 +1692,7 @@ export class StreamChat {
    * @return {Promise<SearchUserGroupsResponse>} User Group Search Response
    */
   async searchUserGroups(options: SearchUserGroupsOptions) {
-    return await this.get<SearchUserGroupsResponse>(
+    return await this.api.get<SearchUserGroupsResponse>(
       this.baseURL + '/usergroups/search',
       options,
     );
@@ -1924,7 +1707,7 @@ export class StreamChat {
    * @return {Promise<UpdateUserGroupResponse>} User Group Update Response
    */
   async updateUserGroup(id: string, options: UpdateUserGroupOptions) {
-    return await this.put<UpdateUserGroupResponse>(
+    return await this.api.put<UpdateUserGroupResponse>(
       `${this.baseURL}/usergroups/${encodeURIComponent(id)}`,
       options,
     );
@@ -1939,7 +1722,7 @@ export class StreamChat {
    * @return {Promise<APIResponse>} User Group Delete Response
    */
   async deleteUserGroup(id: string, options: DeleteUserGroupOptions = {}) {
-    return await this.delete<APIResponse>(
+    return await this.api.delete<APIResponse>(
       `${this.baseURL}/usergroups/${encodeURIComponent(id)}`,
       options,
     );
@@ -1954,7 +1737,7 @@ export class StreamChat {
    * @return {Promise<AddUserGroupMembersResponse>} User Group Add Members Response
    */
   async addUserGroupMembers(id: string, options: AddUserGroupMembersOptions) {
-    return await this.post<AddUserGroupMembersResponse>(
+    return await this.api.post<AddUserGroupMembersResponse>(
       `${this.baseURL}/usergroups/${encodeURIComponent(id)}/members`,
       options,
     );
@@ -1969,7 +1752,7 @@ export class StreamChat {
    * @return {Promise<RemoveUserGroupMembersResponse>} User Group Remove Members Response
    */
   async removeUserGroupMembers(id: string, options: RemoveUserGroupMembersOptions) {
-    return await this.post<RemoveUserGroupMembersResponse>(
+    return await this.api.post<RemoveUserGroupMembersResponse>(
       `${this.baseURL}/usergroups/${encodeURIComponent(id)}/members/delete`,
       options,
     );
@@ -1990,7 +1773,7 @@ export class StreamChat {
     options: BannedUsersPaginationOptions = {},
   ) {
     // Return a list of user bans
-    return await this.get<BannedUsersResponse>(this.baseURL + '/query_banned_users', {
+    return await this.chatApi.queryBannedUsers({
       payload: {
         filter_conditions: filterConditions,
         sort: normalizeQuerySort(sort),
@@ -2006,12 +1789,9 @@ export class StreamChat {
    * @returns {Promise<FutureChannelBansResponse>} Future Channel Bans Response
    */
   async queryFutureChannelBans(options: QueryFutureChannelBansOptions = {}) {
-    return await this.get<FutureChannelBansResponse>(
-      this.baseURL + '/query_future_channel_bans',
-      {
-        payload: options,
-      },
-    );
+    return await this.chatApi.queryFutureChannelBans({
+      payload: options,
+    });
   }
 
   /**
@@ -2027,12 +1807,12 @@ export class StreamChat {
     options: MessageFlagsPaginationOptions = {},
   ) {
     // Return a list of message flags
-    return await this.get<MessageFlagsResponse>(
-      this.baseURL + '/moderation/flags/message',
-      {
-        payload: { filter_conditions: filterConditions, ...options },
+    return await this.chatApi.queryMessageFlags({
+      payload: {
+        filter_conditions: filterConditions,
+        ...options,
       },
-    );
+    });
   }
 
   /**
@@ -2055,7 +1835,7 @@ export class StreamChat {
     filterConditions: ChannelFilters,
     sort: ChannelSort = [],
     options: ChannelOptions = {},
-  ): Promise<QueryChannelsAPIResponse> {
+  ) {
     const defaultOptions: ChannelOptions = {
       state: true,
       watch: true,
@@ -2088,7 +1868,7 @@ export class StreamChat {
           ...restOptions,
         };
 
-    return await this.post<QueryChannelsAPIResponse>(this.baseURL + '/channels', payload);
+    return await this.chatApi.queryChannels(payload);
   }
 
   /**
@@ -2198,7 +1978,7 @@ export class StreamChat {
    * @return {Promise<{ QueryReactionsAPIResponse } search channels response
    */
   async queryReactions(
-    messageID: string,
+    messageId: string,
     filter: ReactionFilters,
     sort: ReactionSort = [],
     options: QueryReactionsOptions = {},
@@ -2212,7 +1992,7 @@ export class StreamChat {
     if (this.offlineDb?.getReactions && !options.next) {
       try {
         const reactionsFromDb = await this.offlineDb.getReactions({
-          messageId: messageID,
+          messageId,
           filters: filter,
           sort,
           limit: options.limit,
@@ -2234,10 +2014,10 @@ export class StreamChat {
     // Make sure we wait for the connect promise if there is a pending one
     await this.wsPromise;
 
-    return await this.post<QueryReactionsAPIResponse>(
-      this.baseURL + '/messages/' + encodeURIComponent(messageID) + '/reactions',
-      payload,
-    );
+    return await this.chatApi.queryReactions({
+      id: messageId,
+      ...payload,
+    });
   }
 
   hydrateActiveChannels(
@@ -2249,6 +2029,8 @@ export class StreamChat {
     const channels: Channel[] = [];
 
     for (const channelState of channelsFromApi) {
+      if (!channelState.channel) continue;
+
       this._addChannelConfig(channelState.channel);
       const c = this.channel(channelState.channel.type, channelState.channel.id);
       c.data = channelState.channel;
@@ -2308,7 +2090,7 @@ export class StreamChat {
    * @return {Promise<SearchAPIResponse>} search messages response
    */
   async search(
-    filterConditions: ChannelFilters,
+    filterConditions: SearchPayload['filter_conditions'],
     query: string | MessageFilters,
     options: SearchOptions = {},
   ) {
@@ -2333,7 +2115,7 @@ export class StreamChat {
     // Make sure we wait for the connect promise if there is a pending one
     await this.wsPromise;
 
-    return await this.get<SearchAPIResponse>(this.baseURL + '/search', { payload });
+    return await this.api.get<SearchAPIResponse>(this.baseURL + '/search', { payload });
   }
 
   /**
@@ -2360,64 +2142,47 @@ export class StreamChat {
    * addDevice - Adds a push device for a user.
    *
    * @param {string} id the device id
-   * @param {PushProvider} push_provider the push provider
-   * @param {string} [userID] the user id (defaults to current user)
-   * @param {string} [push_provider_name] user provided push provider name for multi bundle support
+   * @param {PushProvider} pushProvider the push provider
+   * @param {string} [pushProviderName] user provided push provider name for multi bundle support
    *
    */
-  async addDevice(
-    id: string,
-    push_provider: PushProvider,
-    userID?: string,
-    push_provider_name?: string,
-  ) {
-    return await this.post<APIResponse>(this.baseURL + '/devices', {
+  async addDevice(id: string, pushProvider: PushProvider, pushProviderName?: string) {
+    return await this.chatApi.createDevice({
       id,
-      push_provider,
-      ...(userID != null ? { user_id: userID } : {}),
-      ...(push_provider_name != null ? { push_provider_name } : {}),
+      push_provider: pushProvider,
+      ...(pushProviderName != null ? { push_provider_name: pushProviderName } : {}),
     });
   }
 
   /**
    * getDevices - Returns the devices associated with a current user
    *
-   * @param {string} [userID] User ID. Only works on serverside
-   *
    * @return {Device[]} Array of devices
    */
-  async getDevices(userID?: string) {
-    return await this.get<APIResponse & { devices?: Device[] }>(
-      this.baseURL + '/devices',
-      userID ? { user_id: userID } : {},
-    );
+  async getDevices() {
+    return await this.chatApi.listDevices();
   }
 
   /**
    * getUnreadCount - Returns unread counts for a single user
    *
-   * @param {string} [userID] User ID.
-   *
    * @return {<GetUnreadCountAPIResponse>}
    */
-  async getUnreadCount(userID?: string) {
-    return await this.get<GetUnreadCountAPIResponse>(
-      this.baseURL + '/unread',
-      userID ? { user_id: userID } : {},
-    );
+  async getUnreadCount() {
+    return await this.chatApi.unreadCounts();
   }
 
   /**
    * getUnreadCountBatch - Returns unread counts for multiple users at once. Only works server side.
    *
-   * @param {string[]} [userIDs] List of user IDs to fetch unread counts for.
+   * @param {string[]} [userIds] List of user IDs to fetch unread counts for.
    *
    * @return {<GetUnreadCountBatchAPIResponse>}
    */
-  async getUnreadCountBatch(userIDs: string[]) {
-    return await this.post<GetUnreadCountBatchAPIResponse>(
+  async getUnreadCountBatch(userIds: string[]) {
+    return await this.api.post<GetUnreadCountBatchAPIResponse>(
       this.baseURL + '/unread_batch',
-      { user_ids: userIDs },
+      { user_ids: userIds },
     );
   }
 
@@ -2428,11 +2193,10 @@ export class StreamChat {
    *
    * @return {<UpsertPushPreferencesResponse>}
    */
-  async setPushPreferences(preferences: PushPreference[]) {
-    return await this.post<UpsertPushPreferencesResponse>(
-      this.baseURL + '/push_preferences',
-      { preferences },
-    );
+  async setPushPreferences(preferences: PushPreferenceInput[]) {
+    return await this.chatApi.updatePushNotificationPreferences({
+      preferences,
+    });
   }
 
   /**
@@ -2442,11 +2206,8 @@ export class StreamChat {
    * @param {string} [userID] The user id. Only specify this for serverside requests
    *
    */
-  async removeDevice(id: string, userID?: string) {
-    return await this.delete<APIResponse>(this.baseURL + '/devices', {
-      id,
-      ...(userID ? { user_id: userID } : {}),
-    });
+  async removeDevice(id: string) {
+    return await this.chatApi.deleteDevice({ id });
   }
 
   /**
@@ -2464,7 +2225,7 @@ export class StreamChat {
     web?: boolean;
   }) {
     const { serverSide, web, android, ios, endpoints } = params || {};
-    return this.get<GetRateLimitsResponse>(this.baseURL + '/rate_limits', {
+    return this.api.get<GetRateLimitsResponse>(this.baseURL + '/rate_limits', {
       server_side: serverSide,
       web,
       android,
@@ -2481,7 +2242,10 @@ export class StreamChat {
    */
   async getHookEvents(products?: Product[]) {
     const params = products && products.length > 0 ? { product: products.join(',') } : {};
-    return await this.get<GetHookEventsResponse>(this.baseURL + '/hook/events', params);
+    return await this.api.get<GetHookEventsResponse>(
+      this.baseURL + '/hook/events',
+      params,
+    );
   }
 
   _addChannelConfig({ cid, config }: ChannelResponse) {
@@ -2504,14 +2268,14 @@ export class StreamChat {
    *
    * @return {channel} The channel object, initialize it using channel.watch()
    */
-  channel(channelType: string, channelID?: string | null, custom?: ChannelData): Channel;
+  channel(channelType: string, channelId?: string | null, custom?: ChannelData): Channel;
   channel(channelType: string, custom?: ChannelData): Channel;
   channel(
     channelType: string,
-    channelIDOrCustom?: string | ChannelData | null,
+    channelIdOrCustom?: string | ChannelData | null,
     custom: ChannelData = {},
   ) {
-    if (!this.userID && !this._isUsingServerAuth()) {
+    if (!this.userId && !this._isUsingServerAuth()) {
       throw Error('Call connectUser or connectAnonymousUser before creating a channel');
     }
 
@@ -2522,23 +2286,23 @@ export class StreamChat {
     }
 
     // support channel("messaging", {options})
-    if (channelIDOrCustom && typeof channelIDOrCustom === 'object') {
-      return this.getChannelByMembers(channelType, channelIDOrCustom);
+    if (channelIdOrCustom && typeof channelIdOrCustom === 'object') {
+      return this.getChannelByMembers(channelType, channelIdOrCustom);
     }
 
     // support channel("messaging", undefined, {options})
-    if (!channelIDOrCustom && typeof custom === 'object' && custom.members?.length) {
+    if (!channelIdOrCustom && typeof custom === 'object' && custom.members?.length) {
       return this.getChannelByMembers(channelType, custom);
     }
 
     // support channel("messaging", null, {options})
     // support channel("messaging", undefined, {options})
     // support channel("messaging", "", {options})
-    if (!channelIDOrCustom) {
+    if (!channelIdOrCustom) {
       return new Channel(this, channelType, undefined, custom);
     }
 
-    return this.getChannelById(channelType, channelIDOrCustom, custom);
+    return this.getChannelById(channelType, channelIdOrCustom, custom);
   }
 
   /**
@@ -2622,13 +2386,13 @@ export class StreamChat {
    *
    * @return {channel} The channel object, initialize it using channel.watch()
    */
-  getChannelById = (channelType: string, channelID: string, custom: ChannelData) => {
-    if (typeof channelID === 'string' && ~channelID.indexOf(':')) {
-      throw Error(`Invalid channel id ${channelID}, can't contain the : character`);
+  getChannelById = (channelType: string, channelId: string, custom: ChannelData) => {
+    if (typeof channelId === 'string' && ~channelId.indexOf(':')) {
+      throw Error(`Invalid channel id ${channelId}, can't contain the : character`);
     }
 
     // only allow 1 channel object per cid
-    const cid = `${channelType}:${channelID}`;
+    const cid = `${channelType}:${channelId}`;
     if (
       cid in this.activeChannels &&
       this.activeChannels[cid] &&
@@ -2641,7 +2405,7 @@ export class StreamChat {
       }
       return channel;
     }
-    const channel = new Channel(this, channelType, channelID, custom);
+    const channel = new Channel(this, channelType, channelId, custom);
     if (this._cacheEnabled()) {
       this.activeChannels[channel.cid] = channel;
     }
@@ -2662,14 +2426,14 @@ export class StreamChat {
   }
 
   /**
-   * upsertUsers - Batch upsert the list of users
+   * updateUsers - Batch update the list of users
    *
    * @param {UserResponse[]} users list of users
    *
    * @return {Promise<{ users: { [key: string]: UserResponse } }>}
    */
-  async upsertUsers(users: UserResponse[]) {
-    const userMap: { [key: string]: UserResponse } = {};
+  async updateUsers(users: UserUpdate[]) {
+    const userMap: Record<string, UserUpdate> = {};
     for (const userObject of users) {
       if (!userObject.id) {
         throw Error('User ID is required when updating a user');
@@ -2677,41 +2441,19 @@ export class StreamChat {
       userMap[userObject.id] = userObject;
     }
 
-    return await this.post<UpdateUsersAPIResponse>(this.baseURL + '/users', {
-      users: userMap,
-    });
+    return await this.chatApi.updateUsers({ users: userMap });
   }
 
   /**
-   * @deprecated Please use upsertUsers() function instead.
-   *
-   * updateUsers - Batch update the list of users
-   *
-   * @param {UserResponse[]} users list of users
-   * @return {Promise<{ users: { [key: string]: UserResponse } }>}
-   */
-  updateUsers = this.upsertUsers;
-
-  /**
-   * upsertUser - Update or Create the given user object
-   *
-   * @param {UserResponse} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
-   *
-   * @return {Promise<{ users: { [key: string]: UserResponse } }>}
-   */
-  upsertUser(userObject: UserResponse) {
-    return this.upsertUsers([userObject]);
-  }
-
-  /**
-   * @deprecated Please use upsertUser() function instead.
    *
    * updateUser - Update or Create the given user object
    *
    * @param {UserResponse} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
    * @return {Promise<{ users: { [key: string]: UserResponse } }>}
    */
-  updateUser = this.upsertUser;
+  updateUser(userObject: UserResponse) {
+    return this.updateUsers([userObject]);
+  }
 
   /**
    * partialUpdateUsers - Batch partial update of users
@@ -2727,48 +2469,48 @@ export class StreamChat {
       }
     }
 
-    return await this.patch<UpdateUsersAPIResponse>(this.baseURL + '/users', { users });
+    return await this.chatApi.updateUsersPartial({ users });
   }
 
   async deleteUser(
-    userID: string,
+    userId: string,
     params?: {
       delete_conversation_channels?: boolean;
       hard_delete?: boolean;
       mark_messages_deleted?: boolean;
     },
   ) {
-    return await this.delete<
+    return await this.api.delete<
       APIResponse & { user: UserResponse } & {
         task_id?: string;
       }
-    >(this.baseURL + `/users/${encodeURIComponent(userID)}`, params);
+    >(this.baseURL + `/users/${encodeURIComponent(userId)}`, params);
   }
 
   /**
    * restoreUsers - Restore soft deleted users
    *
-   * @param {string[]} user_ids which users to restore
+   * @param {string[]} userIds which users to restore
    *
    * @return {APIResponse} An API response
    */
-  async restoreUsers(user_ids: string[]) {
-    return await this.post<APIResponse>(this.baseURL + `/users/restore`, {
-      user_ids,
+  async restoreUsers(userIds: string[]) {
+    return await this.api.post<APIResponse>(this.baseURL + `/users/restore`, {
+      user_ids: userIds,
     });
   }
 
   /**
    * reactivateUser - Reactivate one user
    *
-   * @param {string} userID which user to reactivate
+   * @param {string} userId which user to reactivate
    * @param {ReactivateUserOptions} [options]
    *
    * @return {UserResponse} Reactivated user
    */
-  async reactivateUser(userID: string, options?: ReactivateUserOptions) {
-    return await this.post<APIResponse & { user: UserResponse }>(
-      this.baseURL + `/users/${encodeURIComponent(userID)}/reactivate`,
+  async reactivateUser(userId: string, options?: ReactivateUserOptions) {
+    return await this.api.post<APIResponse & { user: UserResponse }>(
+      this.baseURL + `/users/${encodeURIComponent(userId)}/reactivate`,
       { ...options },
     );
   }
@@ -2776,29 +2518,29 @@ export class StreamChat {
   /**
    * reactivateUsers - Reactivate many users asynchronously
    *
-   * @param {string[]} user_ids which users to reactivate
+   * @param {string[]} userIds which users to reactivate
    * @param {ReactivateUsersOptions} [options]
    *
    * @return {TaskResponse} A task ID
    */
-  async reactivateUsers(user_ids: string[], options?: ReactivateUsersOptions) {
-    return await this.post<APIResponse & TaskResponse>(
+  async reactivateUsers(userIds: string[], options?: ReactivateUsersOptions) {
+    return await this.api.post<APIResponse & TaskResponse>(
       this.baseURL + `/users/reactivate`,
-      { user_ids, ...options },
+      { user_ids: userIds, ...options },
     );
   }
 
   /**
    * deactivateUser - Deactivate one user
    *
-   * @param {string} userID which user to deactivate
+   * @param {string} userId which user to deactivate
    * @param {DeactivateUsersOptions} [options]
    *
    * @return {UserResponse} Deactivated user
    */
-  async deactivateUser(userID: string, options?: DeactivateUsersOptions) {
-    return await this.post<APIResponse & { user: UserResponse }>(
-      this.baseURL + `/users/${encodeURIComponent(userID)}/deactivate`,
+  async deactivateUser(userId: string, options?: DeactivateUsersOptions) {
+    return await this.api.post<APIResponse & { user: UserResponse }>(
+      this.baseURL + `/users/${encodeURIComponent(userId)}/deactivate`,
       { ...options },
     );
   }
@@ -2806,62 +2548,62 @@ export class StreamChat {
   /**
    * deactivateUsers - Deactivate many users asynchronously
    *
-   * @param {string[]} user_ids which users to deactivate
+   * @param {string[]} userIds which users to deactivate
    * @param {DeactivateUsersOptions} [options]
    *
    * @return {TaskResponse} A task ID
    */
-  async deactivateUsers(user_ids: string[], options?: DeactivateUsersOptions) {
-    return await this.post<APIResponse & TaskResponse>(
+  async deactivateUsers(userIds: string[], options?: DeactivateUsersOptions) {
+    return await this.api.post<APIResponse & TaskResponse>(
       this.baseURL + `/users/deactivate`,
-      { user_ids, ...options },
+      { user_ids: userIds, ...options },
     );
   }
 
-  async exportUser(userID: string, options?: Record<string, string>) {
-    return await this.get<
+  async exportUser(userId: string, options?: Record<string, string>) {
+    return await this.api.get<
       APIResponse & {
         messages: MessageResponse[];
         reactions: ReactionResponse[];
         user: UserResponse;
       }
-    >(this.baseURL + `/users/${encodeURIComponent(userID)}/export`, { ...options });
+    >(this.baseURL + `/users/${encodeURIComponent(userId)}/export`, { ...options });
   }
 
   /** banUser - bans a user from all channels
    *
-   * @param {string} targetUserID
+   * @param {string} targetUserId
    * @param {BanUserOptions} [options]
    * @returns {Promise<APIResponse>}
    */
-  async banUser(targetUserID: string, options?: BanUserOptions) {
-    return await this.post<APIResponse>(this.baseURL + '/moderation/ban', {
-      target_user_id: targetUserID,
+  async banUser(targetUserId: string, options?: BanUserOptions) {
+    return await this.api.post<APIResponse>(this.baseURL + '/moderation/ban', {
+      target_user_id: targetUserId,
       ...options,
     });
   }
 
   /** unbanUser - revoke global ban for a user
    *
-   * @param {string} targetUserID
+   * @param {string} targetUserId
    * @param {UnBanUserOptions} [options]
    * @returns {Promise<APIResponse>}
    */
-  async unbanUser(targetUserID: string, options?: UnBanUserOptions) {
-    return await this.delete<APIResponse>(this.baseURL + '/moderation/ban', {
-      target_user_id: targetUserID,
+  async unbanUser(targetUserId: string, options?: UnBanUserOptions) {
+    return await this.api.delete<APIResponse>(this.baseURL + '/moderation/ban', {
+      target_user_id: targetUserId,
       ...options,
     });
   }
 
   /** shadowBan - shadow bans a user from all channels
    *
-   * @param {string} targetUserID
+   * @param {string} targetUserId
    * @param {BanUserOptions} [options]
    * @returns {Promise<APIResponse>}
    */
-  async shadowBan(targetUserID: string, options?: BanUserOptions) {
-    return await this.banUser(targetUserID, {
+  async shadowBan(targetUserId: string, options?: BanUserOptions) {
+    return await this.banUser(targetUserId, {
       shadow: true,
       ...options,
     });
@@ -2869,36 +2611,30 @@ export class StreamChat {
 
   /** removeShadowBan - revoke global shadow ban for a user
    *
-   * @param {string} targetUserID
+   * @param {string} targetUserId
    * @param {UnBanUserOptions} [options]
    * @returns {Promise<APIResponse>}
    */
-  async removeShadowBan(targetUserID: string, options?: UnBanUserOptions) {
-    return await this.unbanUser(targetUserID, {
+  async removeShadowBan(targetUserId: string, options?: UnBanUserOptions) {
+    return await this.unbanUser(targetUserId, {
       shadow: true,
       ...options,
     });
   }
-  async blockUser(blockedUserID: string, user_id?: string) {
-    const result = await this.post<BlockUserAPIResponse>(this.baseURL + '/users/block', {
-      blocked_user_id: blockedUserID,
-      ...(user_id ? { user_id } : {}),
+  async blockUser(blockedUserId: string) {
+    const result = await this.chatApi.blockUsers({
+      blocked_user_id: blockedUserId,
     });
     if (this._cacheEnabled()) {
       this.blockedUsers.next(({ userIds }) => ({
-        userIds: userIds.concat(blockedUserID),
+        userIds: userIds.concat(blockedUserId),
       }));
     }
     return result;
   }
 
-  async getBlockedUsers(user_id?: string) {
-    const result = await this.get<GetBlockedUsersAPIResponse>(
-      this.baseURL + '/users/block',
-      {
-        ...(user_id ? { user_id } : {}),
-      },
-    );
+  async getBlockedUsers() {
+    const result = await this.chatApi.getBlockedUsers();
     if (this._cacheEnabled()) {
       this.blockedUsers.partialNext({
         userIds: result.blocks.map(({ blocked_user_id }) => blocked_user_id),
@@ -2907,14 +2643,13 @@ export class StreamChat {
     return result;
   }
 
-  async unBlockUser(blockedUserID: string, userID?: string) {
-    const result = await this.post<APIResponse>(this.baseURL + '/users/unblock', {
-      blocked_user_id: blockedUserID,
-      ...(userID ? { user_id: userID } : {}),
+  async unBlockUser(blockedUserId: string) {
+    const result = await this.chatApi.unblockUsers({
+      blocked_user_id: blockedUserId,
     });
     if (this._cacheEnabled()) {
       this.blockedUsers.next(({ userIds }) => ({
-        userIds: userIds.filter((id) => id !== blockedUserID),
+        userIds: userIds.filter((id) => id !== blockedUserId),
       }));
     }
     return result;
@@ -2926,106 +2661,104 @@ export class StreamChat {
    *
    */
   async getSharedLocations() {
-    return await this.get<ActiveLiveLocationsAPIResponse>(
-      this.baseURL + `/users/live_locations`,
-    );
+    return await this.chatApi.getUserLiveLocations();
   }
 
   /** muteUser - mutes a user
    *
-   * @param {string} targetID
-   * @param {string} [userID] Only used with serverside auth
+   * @param {string} targetId
+   * @param {string} [userId] Only used with serverside auth
    * @param {MuteUserOptions} [options]
    * @returns {Promise<MuteUserResponse>}
    */
-  async muteUser(targetID: string, userID?: string, options: MuteUserOptions = {}) {
-    return await this.post<MuteUserResponse>(this.baseURL + '/moderation/mute', {
-      target_id: targetID,
-      ...(userID ? { user_id: userID } : {}),
+  async muteUser(targetId: string, userId?: string, options: MuteUserOptions = {}) {
+    return await this.api.post<MuteUserResponse>(this.baseURL + '/moderation/mute', {
+      target_id: targetId,
+      ...(userId ? { user_id: userId } : {}),
       ...options,
     });
   }
 
   /** unmuteUser - unmutes a user
    *
-   * @param {string} targetID
-   * @param {string} [currentUserID] Only used with serverside auth
+   * @param {string} targetId
+   * @param {string} [currentUserId] Only used with serverside auth
    * @returns {Promise<APIResponse>}
    */
-  async unmuteUser(targetID: string, currentUserID?: string) {
-    return await this.post<APIResponse>(this.baseURL + '/moderation/unmute', {
-      target_id: targetID,
-      ...(currentUserID ? { user_id: currentUserID } : {}),
+  async unmuteUser(targetId: string, currentUserId?: string) {
+    return await this.api.post<APIResponse>(this.baseURL + '/moderation/unmute', {
+      target_id: targetId,
+      ...(currentUserId ? { user_id: currentUserId } : {}),
     });
   }
 
   /** userMuteStatus - check if a user is muted or not, can be used after connectUser() is called
    *
-   * @param {string} targetID
+   * @param {string} targetId
    * @returns {boolean}
    */
-  userMuteStatus(targetID: string) {
+  userMuteStatus(targetId: string) {
     if (!this.user || !this.wsPromise) {
       throw new Error('Make sure to await connectUser() first.');
     }
 
     for (let i = 0; i < this.mutedUsers.length; i += 1) {
-      if (this.mutedUsers[i].target.id === targetID) return true;
+      if (this.mutedUsers[i].target?.id === targetId) return true;
     }
     return false;
   }
 
   /**
    * flagMessage - flag a message
-   * @param {string} targetMessageID
+   * @param {string} targetMessageId
    * @param {string} [options.user_id] currentUserID, only used with serverside auth
    * @returns {Promise<APIResponse>}
    */
   async flagMessage(
-    targetMessageID: string,
+    targetMessageId: string,
     options: { reason?: string; user_id?: string } = {},
   ) {
-    return await this.post<FlagMessageResponse>(this.baseURL + '/moderation/flag', {
-      target_message_id: targetMessageID,
+    return await this.api.post<FlagMessageResponse>(this.baseURL + '/moderation/flag', {
+      target_message_id: targetMessageId,
       ...options,
     });
   }
 
   /**
    * flagUser - flag a user
-   * @param {string} targetID
+   * @param {string} targetId
    * @param {string} [options.user_id] currentUserID, only used with serverside auth
    * @returns {Promise<APIResponse>}
    */
-  async flagUser(targetID: string, options: { reason?: string; user_id?: string } = {}) {
-    return await this.post<FlagUserResponse>(this.baseURL + '/moderation/flag', {
-      target_user_id: targetID,
+  async flagUser(targetId: string, options: { reason?: string; user_id?: string } = {}) {
+    return await this.api.post<FlagUserResponse>(this.baseURL + '/moderation/flag', {
+      target_user_id: targetId,
       ...options,
     });
   }
 
   /**
    * unflagMessage - unflag a message
-   * @param {string} targetMessageID
+   * @param {string} targetMessageId
    * @param {string} [options.user_id] currentUserID, only used with serverside auth
    * @returns {Promise<APIResponse>}
    */
-  async unflagMessage(targetMessageID: string, options: { user_id?: string } = {}) {
-    return await this.post<FlagMessageResponse>(this.baseURL + '/moderation/unflag', {
-      target_message_id: targetMessageID,
+  async unflagMessage(targetMessageId: string, options: { user_id?: string } = {}) {
+    return await this.api.post<FlagMessageResponse>(this.baseURL + '/moderation/unflag', {
+      target_message_id: targetMessageId,
       ...options,
     });
   }
 
   /**
    * unflagUser - unflag a user
-   * @param {string} targetID
+   * @param {string} targetId
    * @param {string} [options.user_id] currentUserID, only used with serverside auth
    * @returns {Promise<APIResponse>}
    */
-  async unflagUser(targetID: string, options: { user_id?: string } = {}) {
-    return await this.post<FlagUserResponse>(this.baseURL + '/moderation/unflag', {
-      target_user_id: targetID,
+  async unflagUser(targetId: string, options: { user_id?: string } = {}) {
+    return await this.api.post<FlagUserResponse>(this.baseURL + '/moderation/unflag', {
+      target_user_id: targetId,
       ...options,
     });
   }
@@ -3048,7 +2781,7 @@ export class StreamChat {
     options: FlagsPaginationOptions = {},
   ) {
     // Return a list of flags
-    return await this.post<FlagsResponse>(this.baseURL + '/moderation/flags', {
+    return await this.api.post<FlagsResponse>(this.baseURL + '/moderation/flags', {
       filter_conditions: filterConditions,
       ...options,
     });
@@ -3072,10 +2805,13 @@ export class StreamChat {
     options: FlagReportsPaginationOptions = {},
   ) {
     // Return a list of message flags
-    return await this.post<FlagReportsResponse>(this.baseURL + '/moderation/reports', {
-      filter_conditions: filterConditions,
-      ...options,
-    });
+    return await this.api.post<FlagReportsResponse>(
+      this.baseURL + '/moderation/reports',
+      {
+        filter_conditions: filterConditions,
+        ...options,
+      },
+    );
   }
 
   /**
@@ -3097,7 +2833,7 @@ export class StreamChat {
     reviewResult: string,
     options: ReviewFlagReportOptions = {},
   ) {
-    return await this.patch<ReviewFlagReportResponse>(
+    return await this.api.patch<ReviewFlagReportResponse>(
       this.baseURL + `/moderation/reports/${encodeURIComponent(id)}`,
       {
         review_result: reviewResult,
@@ -3110,15 +2846,18 @@ export class StreamChat {
    * unblockMessage - unblocks message blocked by automod
    *
    *
-   * @param {string} targetMessageID
+   * @param {string} targetMessageId
    * @param {string} [options.user_id] currentUserID, only used with serverside auth
    * @returns {Promise<APIResponse>}
    */
-  async unblockMessage(targetMessageID: string, options: { user_id?: string } = {}) {
-    return await this.post<APIResponse>(this.baseURL + '/moderation/unblock_message', {
-      target_message_id: targetMessageID,
-      ...options,
-    });
+  async unblockMessage(targetMessageId: string, options: { user_id?: string } = {}) {
+    return await this.api.post<APIResponse>(
+      this.baseURL + '/moderation/unblock_message',
+      {
+        target_message_id: targetMessageId,
+        ...options,
+      },
+    );
   }
 
   // alias for backwards compatibility
@@ -3143,62 +2882,65 @@ export class StreamChat {
    * @return {Promise<APIResponse>}
    */
   async markChannelsRead(data: MarkChannelsReadOptions = {}) {
-    await this.post<APIResponse>(this.baseURL + '/channels/read', { ...data });
+    await this.chatApi.markChannelsRead(data);
   }
 
   createCommand(data: CreateCommandOptions) {
-    return this.post<CreateCommandResponse>(this.baseURL + '/commands', data);
+    return this.api.post<CreateCommandResponse>(this.baseURL + '/commands', data);
   }
 
   getCommand(name: string) {
-    return this.get<GetCommandResponse>(
+    return this.api.get<GetCommandResponse>(
       this.baseURL + `/commands/${encodeURIComponent(name)}`,
     );
   }
 
   updateCommand(name: string, data: UpdateCommandOptions) {
-    return this.put<UpdateCommandResponse>(
+    return this.api.put<UpdateCommandResponse>(
       this.baseURL + `/commands/${encodeURIComponent(name)}`,
       data,
     );
   }
 
   deleteCommand(name: string) {
-    return this.delete<DeleteCommandResponse>(
+    return this.api.delete<DeleteCommandResponse>(
       this.baseURL + `/commands/${encodeURIComponent(name)}`,
     );
   }
 
   listCommands() {
-    return this.get<ListCommandsResponse>(this.baseURL + `/commands`);
+    return this.api.get<ListCommandsResponse>(this.baseURL + `/commands`);
   }
 
   createChannelType(data: CreateChannelOptions) {
     const channelData = Object.assign({}, { commands: ['all'] }, data);
-    return this.post<CreateChannelResponse>(this.baseURL + '/channeltypes', channelData);
+    return this.api.post<CreateChannelResponse>(
+      this.baseURL + '/channeltypes',
+      channelData,
+    );
   }
 
   getChannelType(channelType: string) {
-    return this.get<GetChannelTypeResponse>(
+    return this.api.get<GetChannelTypeResponse>(
       this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`,
     );
   }
 
   updateChannelType(channelType: string, data: UpdateChannelTypeRequest) {
-    return this.put<UpdateChannelTypeResponse>(
+    return this.api.put<UpdateChannelTypeResponse>(
       this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`,
       data,
     );
   }
 
   deleteChannelType(channelType: string) {
-    return this.delete<APIResponse>(
+    return this.api.delete<APIResponse>(
       this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`,
     );
   }
 
   listChannelTypes() {
-    return this.get<ListChannelResponse>(this.baseURL + `/channeltypes`);
+    return this.api.get<ListChannelResponse>(this.baseURL + `/channeltypes`);
   }
 
   /**
@@ -3209,28 +2951,34 @@ export class StreamChat {
    *
    * @return {MessageResponse} Response that includes the message
    */
-  async translateMessage(messageId: string, language: string) {
-    return await this.post<APIResponse & MessageResponse>(
-      this.baseURL + `/messages/${encodeURIComponent(messageId)}/translate`,
-      { language },
-    );
+  async translateMessage(
+    messageId: string,
+    language: TranslateMessageRequest['language'],
+  ) {
+    return await this.chatApi.translateMessage({
+      id: messageId,
+      language,
+    });
   }
 
   /**
    * translate - translates the given text to provided language
    *
    * @param {string} text
-   * @param {string} destination_language
-   * @param {string} source_language
+   * @param {string} destinationLanguage
+   * @param {string} sourceLanguage
    *
    * @return {TranslateResponse} Response that includes the message
    */
-  async translate(text: string, destination_language: string, source_language: string) {
-    return await this.post<APIResponse & TranslateResponse>(this.baseURL + `/translate`, {
-      text,
-      source_language,
-      destination_language,
-    });
+  async translate(text: string, destinationLanguage: string, sourceLanguage: string) {
+    return await this.api.post<APIResponse & TranslateResponse>(
+      this.baseURL + `/translate`,
+      {
+        text,
+        source_language: sourceLanguage,
+        destination_language: destinationLanguage,
+      },
+    );
   }
 
   /**
@@ -3328,14 +3076,12 @@ export class StreamChat {
    * updateMessage - Update the given message
    *
    * @param {Omit<MessageResponse, 'mentioned_users'> & { mentioned_users?: string[] }} message object, id needs to be specified
-   * @param {string | { id: string }} [partialUserOrUserId]
    * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
    *
    * @return {{ message: LocalMessage | MessageResponse }} Response that includes the message
    */
   async updateMessage(
-    message: LocalMessage | Partial<MessageResponse>,
-    partialUserOrUserId?: string | { id: string },
+    message: UpdateMessageRequest['message'] & { cid?: string },
     options?: UpdateMessageOptions,
   ) {
     if (!message.id) {
@@ -3350,7 +3096,7 @@ export class StreamChat {
           task: {
             ...getPendingTaskChannelData(message.cid),
             messageId,
-            payload: [message, partialUserOrUserId, options],
+            payload: [message, options],
             type: 'update-message',
           },
         });
@@ -3362,35 +3108,18 @@ export class StreamChat {
       });
     }
 
-    return await this._updateMessage(message, partialUserOrUserId, options);
+    return await this._updateMessage(message, options);
   }
 
   async _updateMessage(
-    message: LocalMessage | Partial<MessageResponse>,
-    partialUserOrUserId?: string | { id: string },
+    message: UpdateMessageRequest['message'],
     options?: UpdateMessageOptions,
   ) {
     if (!message.id) {
       throw Error('Please specify the message.id when calling updateMessage');
     }
 
-    // should not include user object
-    const payload = toUpdatedMessagePayload(message);
-
-    // add user_id (if exists)
-    if (typeof partialUserOrUserId === 'string') {
-      payload.user_id = partialUserOrUserId;
-    } else if (typeof partialUserOrUserId?.id === 'string') {
-      payload.user_id = partialUserOrUserId.id;
-    }
-
-    return await this.post<UpdateMessageAPIResponse>(
-      this.baseURL + `/messages/${encodeURIComponent(message.id as string)}`,
-      {
-        message: payload,
-        ...options,
-      },
-    );
+    return await this.chatApi.updateMessage({ id: message.id, message, ...options });
   }
 
   /**
@@ -3424,7 +3153,7 @@ export class StreamChat {
       user = { id: partialUserOrUserId.id };
     }
 
-    return await this.put<UpdateMessageAPIResponse>(
+    return await this.api.put<UpdateMessageAPIResponse>(
       this.baseURL + `/messages/${encodeURIComponent(id)}`,
       {
         ...partialMessageObject,
@@ -3459,7 +3188,7 @@ export class StreamChat {
       user = { id: partialUserOrUserId.id };
     }
 
-    return await this.patch<UpdateMessageAPIResponse>(
+    return await this.api.patch<UpdateMessageAPIResponse>(
       `${this.baseURL}/messages/${encodeURIComponent(messageId)}/ephemeral`,
       {
         ...partialMessageObject,
@@ -3472,13 +3201,13 @@ export class StreamChat {
   /**
    * deleteMessage - Delete a message
    *
-   * @param {string} messageID The id of the message to delete
+   * @param {string} messageId The id of the message to delete
    * @param {boolean | DeleteMessageOptions | undefined} [optionsOrHardDelete]
    * @return {Promise<APIResponse & { message: MessageResponse }>} The API response
    */
   // fixme: remove the signature with optionsOrHardDelete boolean with the next major release
   async deleteMessage(
-    messageID: string,
+    messageId: string,
     optionsOrHardDelete?: DeleteMessageOptions | boolean,
   ): Promise<APIResponse & { message: MessageResponse }> {
     let options: DeleteMessageOptions = {};
@@ -3493,18 +3222,18 @@ export class StreamChat {
     try {
       if (this.offlineDb) {
         if (options.hardDelete) {
-          await this.offlineDb.hardDeleteMessage({ id: messageID });
+          await this.offlineDb.hardDeleteMessage({ id: messageId });
         } else {
           await this.offlineDb.softDeleteMessage({
-            id: messageID,
+            id: messageId,
             deleteForMe: options.deleteForMe,
           });
         }
         return await this.offlineDb.queueTask<APIResponse & { message: MessageResponse }>(
           {
             task: {
-              messageId: messageID,
-              payload: [messageID, options],
+              messageId,
+              payload: [messageId, options],
               type: 'delete-message',
             },
           },
@@ -3517,12 +3246,12 @@ export class StreamChat {
       });
     }
 
-    return this._deleteMessage(messageID, options);
+    return this._deleteMessage(messageId, options);
   }
 
   // fixme: remove the signature with optionsOrHardDelete boolean with the next major release
   async _deleteMessage(
-    messageID: string,
+    messageId: string,
     optionsOrHardDelete?: DeleteMessageOptions | boolean,
   ): Promise<APIResponse & { message: MessageResponse }> {
     // this is a API call method, we do not route hardDelete: true and deleteForMe: true to deleteForMe: true
@@ -3540,8 +3269,8 @@ export class StreamChat {
     if (deleteForMe) {
       params = { ...params, delete_for_me: true };
     }
-    const result = await this.delete<APIResponse & { message: MessageResponse }>(
-      this.baseURL + `/messages/${encodeURIComponent(messageID)}`,
+    const result = await this.api.delete<APIResponse & { message: MessageResponse }>(
+      this.baseURL + `/messages/${encodeURIComponent(messageId)}`,
       params,
     );
 
@@ -3560,25 +3289,21 @@ export class StreamChat {
    * cannot be undeleted. This is only allowed to be called from server-side
    * clients.
    *
-   * @param {string} messageID The id of the message to undelete
-   * @param {string} userID The id of the user who undeleted the message
+   * @param {string} messageId The id of the message to undelete
+   * @param {string} userId The id of the user who undeleted the message
    *
    * @return {{ message: MessageResponse }} Response that includes the message
    */
-  async undeleteMessage(messageID: string, userID: string) {
-    return await this.post<APIResponse & { message: MessageResponse }>(
-      this.baseURL + `/messages/${encodeURIComponent(messageID)}/undelete`,
-      { undeleted_by: userID },
+  async undeleteMessage(messageId: string, userId: string) {
+    return await this.api.post<APIResponse & { message: MessageResponse }>(
+      this.baseURL + `/messages/${encodeURIComponent(messageId)}/undelete`,
+      { undeleted_by: userId },
     );
   }
 
-  async getMessage(messageID: string, options?: GetMessageOptions) {
-    return await this.get<GetMessageAPIResponse>(
-      this.baseURL + `/messages/${encodeURIComponent(messageID)}`,
-      {
-        ...options,
-      },
-    );
+  async getMessage(messageId: string, options?: GetMessageOptions) {
+    // TODO: geberated ChatApi.getMessage options do not support show_deleted_message - oapi gap?
+    return await this.chatApi.getMessage({ id: messageId, ...options });
   }
 
   /**
@@ -3623,13 +3348,11 @@ export class StreamChat {
       requestBody.sort = normalizeQuerySort(optionsWithDefaults.sort);
     }
 
-    const response = await this.post<QueryThreadsAPIResponse>(
-      `${this.baseURL}/threads`,
-      requestBody,
-    );
+    const response = await this.chatApi.queryThreads(requestBody);
 
     // Hydrate the polls for the parent messages of the threads
-    const parentMessages = response.threads.map((thread) => thread.parent_message);
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const parentMessages = response.threads.map((thread) => thread.parent_message!);
     this.polls.hydratePollCache(parentMessages);
 
     return {
@@ -3663,10 +3386,10 @@ export class StreamChat {
       ...options,
     };
 
-    const response = await this.get<GetThreadAPIResponse>(
-      `${this.baseURL}/threads/${encodeURIComponent(messageId)}`,
-      optionsWithDefaults,
-    );
+    const response = await this.chatApi.getThread({
+      message_id: messageId,
+      ...optionsWithDefaults,
+    });
 
     return new Thread({ client: this, threadData: response.thread });
   }
@@ -3707,7 +3430,7 @@ export class StreamChat {
       }
     }
 
-    return await this.patch<GetThreadAPIResponse>(
+    return await this.api.patch<GetThreadAPIResponse>(
       `${this.baseURL}/threads/${encodeURIComponent(messageId)}`,
       partialThreadObject,
     );
@@ -3763,61 +3486,6 @@ export class StreamChat {
 
   _cacheEnabled = () => !this._isUsingServerAuth() || !this.options.disableCache;
 
-  _enrichAxiosOptions(
-    options: AxiosRequestConfig & { config?: AxiosRequestConfig } = {
-      params: {},
-      headers: {},
-      config: {},
-    },
-  ): AxiosRequestConfig {
-    const token = this._getToken();
-    const authorization = token ? { Authorization: token } : undefined;
-    let signal: AbortSignal | null = null;
-    if (this.nextRequestAbortController !== null) {
-      signal = this.nextRequestAbortController.signal;
-      this.nextRequestAbortController = null;
-    }
-
-    if (!options.headers?.['x-client-request-id']) {
-      options.headers = {
-        ...options.headers,
-        'x-client-request-id': randomId(),
-      };
-    }
-
-    const {
-      params: axiosRequestConfigParams,
-      headers: axiosRequestConfigHeaders,
-      ...axiosRequestConfigRest
-    } = this.options.axiosRequestConfig || {};
-
-    return {
-      params: {
-        user_id: this.userID,
-        connection_id: this._getConnectionID(),
-        api_key: this.key,
-        ...options.params,
-        ...(axiosRequestConfigParams || {}),
-      },
-      headers: {
-        ...authorization,
-        'stream-auth-type': this.getAuthType(),
-        'X-Stream-Client': this.getUserAgent(),
-        ...options.headers,
-        ...(axiosRequestConfigHeaders || {}),
-      },
-      ...(signal ? { signal } : {}),
-      ...options.config,
-      ...(axiosRequestConfigRest || {}),
-    };
-  }
-
-  _getToken() {
-    if (!this.tokenManager || this.anonymous) return null;
-
-    return this.tokenManager.getToken();
-  }
-
   _startCleaning() {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const that = this;
@@ -3839,7 +3507,7 @@ export class StreamChat {
    */
   _buildWSPayload = (client_request_id?: string) =>
     JSON.stringify({
-      user_id: this.userID,
+      user_id: this.userId,
       user_details: this._user,
       device: this.options.device,
       client_request_id,
@@ -3907,7 +3575,7 @@ export class StreamChat {
    * @returns {Promise<PermissionAPIResponse>}
    */
   getPermission(name: string) {
-    return this.get<PermissionAPIResponse>(
+    return this.api.get<PermissionAPIResponse>(
       `${this.baseURL}/permissions/${encodeURIComponent(name)}`,
     );
   }
@@ -3918,7 +3586,7 @@ export class StreamChat {
    * @returns {Promise<APIResponse>}
    */
   createPermission(permissionData: CustomPermissionOptions) {
-    return this.post<APIResponse>(`${this.baseURL}/permissions`, {
+    return this.api.post<APIResponse>(`${this.baseURL}/permissions`, {
       ...permissionData,
     });
   }
@@ -3930,7 +3598,7 @@ export class StreamChat {
    * @returns {Promise<APIResponse>}
    */
   updatePermission(id: string, permissionData: Omit<CustomPermissionOptions, 'id'>) {
-    return this.put<APIResponse>(
+    return this.api.put<APIResponse>(
       `${this.baseURL}/permissions/${encodeURIComponent(id)}`,
       {
         ...permissionData,
@@ -3944,7 +3612,7 @@ export class StreamChat {
    * @returns {Promise<APIResponse>}
    */
   deletePermission(name: string) {
-    return this.delete<APIResponse>(
+    return this.api.delete<APIResponse>(
       `${this.baseURL}/permissions/${encodeURIComponent(name)}`,
     );
   }
@@ -3954,7 +3622,7 @@ export class StreamChat {
    * @returns {Promise<APIResponse>}
    */
   listPermissions() {
-    return this.get<PermissionsAPIResponse>(`${this.baseURL}/permissions`);
+    return this.api.get<PermissionsAPIResponse>(`${this.baseURL}/permissions`);
   }
 
   /** createRole - creates a custom role
@@ -3963,7 +3631,7 @@ export class StreamChat {
    * @returns {Promise<APIResponse>}
    */
   createRole(name: string) {
-    return this.post<CreateRoleAPIResponse>(`${this.baseURL}/roles`, { name });
+    return this.api.post<CreateRoleAPIResponse>(`${this.baseURL}/roles`, { name });
   }
 
   /** listRoles - returns the list of all roles for this application
@@ -3971,7 +3639,7 @@ export class StreamChat {
    * @returns {Promise<APIResponse>}
    */
   listRoles() {
-    return this.get<ListRolesAPIResponse>(`${this.baseURL}/roles`);
+    return this.api.get<ListRolesAPIResponse>(`${this.baseURL}/roles`);
   }
 
   /** listRoles - returns the list of all roles for this application
@@ -3979,7 +3647,7 @@ export class StreamChat {
    * @returns {Promise<APIResponse>}
    */
   searchRoles(options: SearchRolesOptions) {
-    return this.get<SearchRolesAPIResponse>(`${this.baseURL}/roles/search`, options);
+    return this.api.get<SearchRolesAPIResponse>(`${this.baseURL}/roles/search`, options);
   }
 
   /** deleteRole - deletes a custom role
@@ -3988,7 +3656,9 @@ export class StreamChat {
    * @returns {Promise<APIResponse>}
    */
   deleteRole(name: string) {
-    return this.delete<APIResponse>(`${this.baseURL}/roles/${encodeURIComponent(name)}`);
+    return this.api.delete<APIResponse>(
+      `${this.baseURL}/roles/${encodeURIComponent(name)}`,
+    );
   }
 
   /** sync - returns all events that happened for a list of channels since last sync
@@ -3999,7 +3669,7 @@ export class StreamChat {
    * @returns {Promise<SyncResponse>}
    */
   sync(channel_cids: string[], last_sync_at: string, options: SyncOptions = {}) {
-    return this.post<SyncResponse>(`${this.baseURL}/sync`, {
+    return this.api.post<SyncResponse>(`${this.baseURL}/sync`, {
       channel_cids,
       last_sync_at,
       ...options,
@@ -4015,7 +3685,7 @@ export class StreamChat {
    * @return {Promise<APIResponse>} The Server Response
    */
   async sendUserCustomEvent(targetUserID: string, event: UserCustomEvent) {
-    return await this.post<APIResponse>(
+    return await this.api.post<APIResponse>(
       `${this.baseURL}/users/${encodeURIComponent(targetUserID)}/event`,
       {
         event,
@@ -4034,7 +3704,7 @@ export class StreamChat {
    * @returns {Promise<APIResponse>} The server response
    */
   createBlockList(blockList: BlockList) {
-    return this.post<APIResponse>(`${this.baseURL}/blocklists`, blockList);
+    return this.api.post<APIResponse>(`${this.baseURL}/blocklists`, blockList);
   }
 
   /**
@@ -4046,7 +3716,7 @@ export class StreamChat {
    * @returns {Promise<APIResponse & {blocklists: BlockListResponse[]}>} Response containing array of block lists
    */
   listBlockLists(data?: { team?: string }) {
-    return this.get<APIResponse & { blocklists: BlockListResponse[] }>(
+    return this.api.get<APIResponse & { blocklists: BlockListResponse[] }>(
       `${this.baseURL}/blocklists`,
       data,
     );
@@ -4062,7 +3732,7 @@ export class StreamChat {
    * @returns {Promise<APIResponse & {blocklist: BlockListResponse}>} Response containing the block list
    */
   getBlockList(name: string, data?: { team?: string }) {
-    return this.get<APIResponse & { blocklist: BlockListResponse }>(
+    return this.api.get<APIResponse & { blocklist: BlockListResponse }>(
       `${this.baseURL}/blocklists/${encodeURIComponent(name)}`,
       data,
     );
@@ -4079,7 +3749,7 @@ export class StreamChat {
    * @returns {Promise<APIResponse>} The server response
    */
   updateBlockList(name: string, data: { words: string[]; team?: string }) {
-    return this.put<APIResponse>(
+    return this.api.put<APIResponse>(
       `${this.baseURL}/blocklists/${encodeURIComponent(name)}`,
       data,
     );
@@ -4095,7 +3765,7 @@ export class StreamChat {
    * @returns {Promise<APIResponse>} The server response
    */
   deleteBlockList(name: string, data?: { team?: string }) {
-    return this.delete<APIResponse>(
+    return this.api.delete<APIResponse>(
       `${this.baseURL}/blocklists/${encodeURIComponent(name)}`,
       data,
     );
@@ -4106,14 +3776,14 @@ export class StreamChat {
     options: ExportChannelOptions = {},
   ) {
     const payload = { channels: request, ...options };
-    return this.post<APIResponse & ExportChannelResponse>(
+    return this.api.post<APIResponse & ExportChannelResponse>(
       `${this.baseURL}/export_channels`,
       payload,
     );
   }
 
   exportUsers(request: ExportUsersRequest) {
-    return this.post<APIResponse & ExportUsersResponse>(
+    return this.api.post<APIResponse & ExportUsersResponse>(
       `${this.baseURL}/export/users`,
       request,
     );
@@ -4124,7 +3794,7 @@ export class StreamChat {
   }
 
   getExportChannelStatus(id: string) {
-    return this.get<APIResponse & ExportChannelStatusResponse>(
+    return this.api.get<APIResponse & ExportChannelStatusResponse>(
       `${this.baseURL}/export_channels/${encodeURIComponent(id)}`,
     );
   }
@@ -4180,7 +3850,7 @@ export class StreamChat {
       type,
       ...data,
     };
-    return this.post<{ segment: SegmentResponse }>(this.baseURL + `/segments`, body);
+    return this.api.post<{ segment: SegmentResponse }>(this.baseURL + `/segments`, body);
   }
 
   /**
@@ -4213,7 +3883,7 @@ export class StreamChat {
 
   getSegment(id: string) {
     this.validateServerSideAuth();
-    return this.get<{ segment: SegmentResponse } & APIResponse>(
+    return this.api.get<{ segment: SegmentResponse } & APIResponse>(
       this.baseURL + `/segments/${encodeURIComponent(id)}`,
     );
   }
@@ -4228,7 +3898,7 @@ export class StreamChat {
    */
   updateSegment(id: string, data: Partial<UpdateSegmentData>) {
     this.validateServerSideAuth();
-    return this.put<{ segment: SegmentResponse }>(
+    return this.api.put<{ segment: SegmentResponse }>(
       this.baseURL + `/segments/${encodeURIComponent(id)}`,
       data,
     );
@@ -4245,7 +3915,7 @@ export class StreamChat {
   addSegmentTargets(id: string, targets: string[]) {
     this.validateServerSideAuth();
     const body = { target_ids: targets };
-    return this.post<APIResponse>(
+    return this.api.post<APIResponse>(
       this.baseURL + `/segments/${encodeURIComponent(id)}/addtargets`,
       body,
     );
@@ -4258,14 +3928,13 @@ export class StreamChat {
     options = {},
   ) {
     this.validateServerSideAuth();
-    return this.post<{ targets: SegmentTargetsResponse[]; next?: string } & APIResponse>(
-      this.baseURL + `/segments/${encodeURIComponent(id)}/targets/query`,
-      {
-        filter: filter || {},
-        sort: sort || [],
-        ...options,
-      },
-    );
+    return this.api.post<
+      { targets: SegmentTargetsResponse[]; next?: string } & APIResponse
+    >(this.baseURL + `/segments/${encodeURIComponent(id)}/targets/query`, {
+      filter: filter || {},
+      sort: sort || [],
+      ...options,
+    });
   }
   /**
    * removeSegmentTargets - Remove targets from a segment
@@ -4278,7 +3947,7 @@ export class StreamChat {
   removeSegmentTargets(id: string, targets: string[]) {
     this.validateServerSideAuth();
     const body = { target_ids: targets };
-    return this.post<APIResponse>(
+    return this.api.post<APIResponse>(
       this.baseURL + `/segments/${encodeURIComponent(id)}/deletetargets`,
       body,
     );
@@ -4294,7 +3963,7 @@ export class StreamChat {
    */
   querySegments(filter: {}, sort?: SortParam[], options: QuerySegmentsOptions = {}) {
     this.validateServerSideAuth();
-    return this.post<
+    return this.api.post<
       {
         segments: SegmentResponse[];
         next?: string;
@@ -4316,7 +3985,9 @@ export class StreamChat {
    */
   deleteSegment(id: string) {
     this.validateServerSideAuth();
-    return this.delete<APIResponse>(this.baseURL + `/segments/${encodeURIComponent(id)}`);
+    return this.api.delete<APIResponse>(
+      this.baseURL + `/segments/${encodeURIComponent(id)}`,
+    );
   }
 
   /**
@@ -4329,7 +4000,7 @@ export class StreamChat {
    */
   segmentTargetExists(segmentId: string, targetId: string) {
     this.validateServerSideAuth();
-    return this.get<APIResponse>(
+    return this.api.get<APIResponse>(
       this.baseURL +
         `/segments/${encodeURIComponent(segmentId)}/target/${encodeURIComponent(targetId)}`,
     );
@@ -4344,7 +4015,7 @@ export class StreamChat {
    */
   createCampaign(params: CampaignData) {
     this.validateServerSideAuth();
-    return this.post<
+    return this.api.post<
       {
         campaign: CampaignResponse;
         users: {
@@ -4357,7 +4028,7 @@ export class StreamChat {
 
   getCampaign(id: string, options?: GetCampaignOptions) {
     this.validateServerSideAuth();
-    return this.get<
+    return this.api.get<
       {
         campaign: CampaignResponse;
         users: {
@@ -4370,7 +4041,7 @@ export class StreamChat {
 
   startCampaign(id: string, options?: { scheduledFor?: string; stopAt?: string }) {
     this.validateServerSideAuth();
-    return this.post<
+    return this.api.post<
       {
         campaign: CampaignResponse;
         users: {
@@ -4396,7 +4067,7 @@ export class StreamChat {
     options?: CampaignQueryOptions,
   ) {
     this.validateServerSideAuth();
-    return await this.post<
+    return await this.api.post<
       {
         campaigns: CampaignResponse[];
         next?: string;
@@ -4419,7 +4090,7 @@ export class StreamChat {
    */
   updateCampaign(id: string, params: Partial<CampaignData>) {
     this.validateServerSideAuth();
-    return this.put<{
+    return this.api.put<{
       campaign: CampaignResponse;
       users: {
         next?: string;
@@ -4437,7 +4108,7 @@ export class StreamChat {
    */
   deleteCampaign(id: string) {
     this.validateServerSideAuth();
-    return this.delete<APIResponse>(
+    return this.api.delete<APIResponse>(
       this.baseURL + `/campaigns/${encodeURIComponent(id)}`,
     );
   }
@@ -4451,7 +4122,7 @@ export class StreamChat {
    */
   stopCampaign(id: string) {
     this.validateServerSideAuth();
-    return this.post<{ campaign: CampaignResponse }>(
+    return this.api.post<{ campaign: CampaignResponse }>(
       this.baseURL + `/campaigns/${encodeURIComponent(id)}/stop`,
     );
   }
@@ -4463,7 +4134,7 @@ export class StreamChat {
    * @return {OGAttachment} OG Attachment
    */
   enrichURL(url: string) {
-    return this.get<APIResponse & OGAttachment>(this.baseURL + `/og`, { url });
+    return this.chatApi.getOG({ url });
   }
 
   /**
@@ -4474,7 +4145,7 @@ export class StreamChat {
    * @return {TaskStatus} The task status
    */
   getTask(id: string) {
-    return this.get<APIResponse & TaskStatus>(
+    return this.api.get<APIResponse & TaskStatus>(
       `${this.baseURL}/tasks/${encodeURIComponent(id)}`,
     );
   }
@@ -4488,24 +4159,21 @@ export class StreamChat {
    * @return {DeleteChannelsResponse} Result of the soft deletion, if server-side, it holds the task ID as well
    */
   async deleteChannels(cids: string[], options: { hard_delete?: boolean } = {}) {
-    return await this.post<APIResponse & DeleteChannelsResponse>(
-      this.baseURL + `/channels/delete`,
-      {
-        cids,
-        ...options,
-      },
-    );
+    return await this.chatApi.deleteChannels({
+      cids,
+      ...options,
+    });
   }
 
   /**
    * deleteUsers - Batch Delete Users
    *
-   * @param {string[]} user_ids which users to delete
+   * @param {string[]} userIds which users to delete
    * @param {DeleteUserOptions} options Configuration how to delete users
    *
    * @return {TaskResponse} A task ID
    */
-  async deleteUsers(user_ids: string[], options: DeleteUserOptions = {}) {
+  async deleteUsers(userIds: string[], options: DeleteUserOptions = {}) {
     if (
       typeof options.user !== 'undefined' &&
       !['soft', 'hard', 'pruning'].includes(options.user)
@@ -4530,10 +4198,13 @@ export class StreamChat {
         'Invalid delete user options. messages must be one of [soft hard pruning]',
       );
     }
-    return await this.post<APIResponse & TaskResponse>(this.baseURL + `/users/delete`, {
-      user_ids,
-      ...options,
-    });
+    return await this.api.post<APIResponse & TaskResponse>(
+      this.baseURL + `/users/delete`,
+      {
+        user_ids: userIds,
+        ...options,
+      },
+    );
   }
 
   /**
@@ -4548,7 +4219,7 @@ export class StreamChat {
    * @return {APIResponse & CreateImportResponse} An ImportTask
    */
   async _createImportURL(filename: string) {
-    return await this.post<APIResponse & CreateImportURLResponse>(
+    return await this.api.post<APIResponse & CreateImportURLResponse>(
       this.baseURL + `/import_urls`,
       {
         filename,
@@ -4569,7 +4240,7 @@ export class StreamChat {
    * @return {APIResponse & CreateImportResponse} An ImportTask
    */
   async _createImport(path: string, options: CreateImportOptions = { mode: 'upsert' }) {
-    return await this.post<APIResponse & CreateImportResponse>(
+    return await this.api.post<APIResponse & CreateImportResponse>(
       this.baseURL + `/imports`,
       {
         path,
@@ -4591,7 +4262,7 @@ export class StreamChat {
    * @return {APIResponse & GetImportResponse} An ImportTask
    */
   async _getImport(id: string) {
-    return await this.get<APIResponse & GetImportResponse>(
+    return await this.api.get<APIResponse & GetImportResponse>(
       this.baseURL + `/imports/${encodeURIComponent(id)}`,
     );
   }
@@ -4609,7 +4280,7 @@ export class StreamChat {
    * @return {APIResponse & ListImportsResponse} An ImportTask
    */
   async _listImports(options: ListImportsPaginationOptions) {
-    return await this.get<APIResponse & ListImportsResponse>(
+    return await this.api.get<APIResponse & ListImportsResponse>(
       this.baseURL + `/imports`,
       options,
     );
@@ -4625,7 +4296,7 @@ export class StreamChat {
    * @return {APIResponse & PushProviderUpsertResponse} A push provider
    */
   async upsertPushProvider(pushProvider: PushProviderConfig) {
-    return await this.post<APIResponse & PushProviderUpsertResponse>(
+    return await this.api.post<APIResponse & PushProviderUpsertResponse>(
       this.baseURL + `/push_providers`,
       {
         push_provider: pushProvider,
@@ -4643,7 +4314,7 @@ export class StreamChat {
    * @return {APIResponse} An API response
    */
   async deletePushProvider({ type, name }: PushProviderID) {
-    return await this.delete<APIResponse>(
+    return await this.api.delete<APIResponse>(
       this.baseURL +
         `/push_providers/${encodeURIComponent(type)}/${encodeURIComponent(name)}`,
     );
@@ -4657,16 +4328,9 @@ export class StreamChat {
    * @return {APIResponse & PushProviderListResponse} A push provider
    */
   async listPushProviders() {
-    return await this.get<APIResponse & PushProviderListResponse>(
+    return await this.api.get<APIResponse & PushProviderListResponse>(
       this.baseURL + `/push_providers`,
     );
-  }
-
-  /**
-   * creates an abort controller that will be used by the next HTTP Request.
-   */
-  createAbortControllerForNextRequest() {
-    return (this.nextRequestAbortController = new AbortController());
   }
 
   /**
@@ -4676,7 +4340,7 @@ export class StreamChat {
    * @return {APIResponse & MessageResponse} The message
    */
   async commitMessage(id: string) {
-    return await this.post<APIResponse & MessageResponse>(
+    return await this.api.post<APIResponse & MessageResponse>(
       this.baseURL + `/messages/${encodeURIComponent(id)}/commit`,
     );
   }
@@ -4684,159 +4348,122 @@ export class StreamChat {
   /**
    * Creates a poll
    * @param poll PollData The poll that will be created
-   * @param userId string The user id (only serverside)
    * @returns {APIResponse & CreatePollAPIResponse} The poll
    */
-  async createPoll(poll: CreatePollData, userId?: string) {
-    return await this.post<APIResponse & CreatePollAPIResponse>(this.baseURL + `/polls`, {
+  async createPoll(poll: CreatePollData) {
+    return await this.chatApi.createPoll({
       ...poll,
-      ...(userId ? { user_id: userId } : {}),
     });
   }
 
   /**
    * Retrieves a poll
    * @param id string The poll id
-   *  @param userId string The user id (only serverside)
    * @returns {APIResponse & GetPollAPIResponse} The poll
    */
-  async getPoll(id: string, userId?: string): Promise<APIResponse & GetPollAPIResponse> {
-    return await this.get<APIResponse & GetPollAPIResponse>(
-      this.baseURL + `/polls/${encodeURIComponent(id)}`,
-      userId ? { user_id: userId } : {},
-    );
+  async getPoll(id: string) {
+    return await this.chatApi.getPoll({
+      poll_id: id,
+    });
   }
 
   /**
    * Updates a poll
    * @param poll PollData The poll that will be updated
-   * @param userId string The user id (only serverside)
    * @returns {APIResponse & PollResponse} The poll
    */
-  async updatePoll(poll: PollData, userId?: string) {
-    return await this.put<APIResponse & UpdatePollAPIResponse>(this.baseURL + `/polls`, {
-      ...poll,
-      ...(userId ? { user_id: userId } : {}),
-    });
+  async updatePoll(poll: PollData) {
+    return await this.chatApi.updatePoll(poll);
   }
 
   /**
    * Partially updates a poll
    * @param id string The poll id
    * @param {PartialPollUpdate} partialPollObject which should contain id and any of "set" or "unset" params;
-   * @param userId string The user id (only serverside)
    * example: {id: "44f26af5-f2be-4fa7-9dac-71cf893781de", set:{field: value}, unset:["field2"]}
    * @returns {APIResponse & UpdatePollAPIResponse} The poll
    */
-  async partialUpdatePoll(
-    id: string,
-    partialPollObject: PartialPollUpdate,
-    userId?: string,
-  ): Promise<APIResponse & UpdatePollAPIResponse> {
-    return await this.patch<APIResponse & UpdatePollAPIResponse>(
-      this.baseURL + `/polls/${encodeURIComponent(id)}`,
-      {
-        ...partialPollObject,
-        ...(userId ? { user_id: userId } : {}),
-      },
-    );
+  async partialUpdatePoll(id: string, partialPollObject: PartialPollUpdate) {
+    return await this.chatApi.updatePollPartial({
+      poll_id: id,
+      ...partialPollObject,
+    });
   }
 
   /**
    * Delete a poll
    * @param id string The poll id
-   * @param userId string The user id (only serverside)
    * @returns
    */
-  async deletePoll(id: string, userId?: string): Promise<APIResponse> {
-    return await this.delete<APIResponse>(
-      this.baseURL + `/polls/${encodeURIComponent(id)}`,
-      {
-        ...(userId ? { user_id: userId } : {}),
-      },
-    );
+  async deletePoll(id: string) {
+    return await this.chatApi.deletePoll({
+      poll_id: id,
+    });
   }
 
   /**
    * Close a poll
    * @param id string The poll id
-   * @param userId string The user id (only serverside)
    * @returns {APIResponse & UpdatePollAPIResponse} The poll
    */
-  closePoll(id: string, userId?: string): Promise<APIResponse & UpdatePollAPIResponse> {
-    return this.partialUpdatePoll(
-      id,
-      {
-        set: {
-          is_closed: true,
-        } as PartialPollUpdate['set'],
+  closePoll(id: string): Promise<APIResponse & UpdatePollAPIResponse> {
+    return this.partialUpdatePoll(id, {
+      set: {
+        is_closed: true,
       },
-      userId,
-    );
+    });
   }
 
   /**
    * Creates a poll option
    * @param pollId string The poll id
    * @param option PollOptionData The poll option that will be created
-   * @param userId string The user id (only serverside)
    * @returns {APIResponse & PollOptionResponse} The poll option
    */
-  async createPollOption(pollId: string, option: PollOptionData, userId?: string) {
-    return await this.post<APIResponse & CreatePollOptionAPIResponse>(
-      this.baseURL + `/polls/${encodeURIComponent(pollId)}/options`,
-      {
-        ...option,
-        ...(userId ? { user_id: userId } : {}),
-      },
-    );
+  async createPollOption(pollId: string, option: PollOptionData) {
+    return await this.chatApi.createPollOption({
+      poll_id: pollId,
+      ...option,
+    });
   }
 
   /**
    * Retrieves a poll option
    * @param pollId string The poll id
    * @param optionId string The poll option id
-   * @param userId string The user id (only serverside)
    * @returns {APIResponse & PollOptionResponse} The poll option
    */
-  async getPollOption(pollId: string, optionId: string, userId?: string) {
-    return await this.get<APIResponse & GetPollOptionAPIResponse>(
-      this.baseURL +
-        `/polls/${encodeURIComponent(pollId)}/options/${encodeURIComponent(optionId)}`,
-      userId ? { user_id: userId } : {},
-    );
+  async getPollOption(pollId: string, optionId: string) {
+    return await this.chatApi.getPollOption({
+      poll_id: pollId,
+      option_id: optionId,
+    });
   }
 
   /**
    * Updates a poll option
    * @param pollId string The poll id
    * @param option PollOptionData The poll option that will be updated
-   * @param userId string The user id (only serverside)
    * @returns
    */
-  async updatePollOption(pollId: string, option: PollOptionData, userId?: string) {
-    return await this.put<APIResponse & UpdatePollOptionAPIResponse>(
-      this.baseURL + `/polls/${encodeURIComponent(pollId)}/options`,
-      {
-        ...option,
-        ...(userId ? { user_id: userId } : {}),
-      },
-    );
+  async updatePollOption(pollId: string, option: PollOptionData) {
+    return await this.chatApi.updatePollOption({
+      poll_id: pollId,
+      ...option,
+    });
   }
 
   /**
    * Delete a poll option
    * @param pollId string The poll id
    * @param optionId string The poll option id
-   * @param userId string The user id (only serverside)
    * @returns {APIResponse} The poll option
    */
-  async deletePollOption(pollId: string, optionId: string, userId?: string) {
-    return await this.delete<APIResponse>(
-      this.baseURL +
-        `/polls/${encodeURIComponent(pollId)}/options/${encodeURIComponent(optionId)}`,
-      userId ? { user_id: userId } : {},
-    );
+  async deletePollOption(pollId: string, optionId: string) {
+    return await this.chatApi.deletePollOption({
+      poll_id: pollId,
+      option_id: optionId,
+    });
   }
 
   /**
@@ -4844,23 +4471,14 @@ export class StreamChat {
    * @param messageId string The message id
    * @param pollId string The poll id
    * @param vote PollVoteData The vote that will be casted
-   * @param userId string The user id (only serverside)
    * @returns {APIResponse & CastVoteAPIResponse} The poll vote
    */
-  async castPollVote(
-    messageId: string,
-    pollId: string,
-    vote: PollVoteData,
-    userId?: string,
-  ) {
-    return await this.post<APIResponse & CastVoteAPIResponse>(
-      this.baseURL +
-        `/messages/${encodeURIComponent(messageId)}/polls/${encodeURIComponent(pollId)}/vote`,
-      {
-        vote,
-        ...(userId ? { user_id: userId } : {}),
-      },
-    );
+  async castPollVote(messageId: string, pollId: string, vote: PollVoteData) {
+    return await this.chatApi.castPollVote({
+      message_id: messageId,
+      poll_id: pollId,
+      vote,
+    });
   }
 
   /**
@@ -4868,34 +4486,19 @@ export class StreamChat {
    * @param messageId string The message id
    * @param pollId string The poll id
    * @param answerText string The answer text
-   * @param userId string The user id (only serverside)
    */
-  addPollAnswer(messageId: string, pollId: string, answerText: string, userId?: string) {
-    return this.castPollVote(
-      messageId,
-      pollId,
-      {
-        answer_text: answerText,
-      },
-      userId,
-    );
+  addPollAnswer(messageId: string, pollId: string, answerText: string) {
+    return this.castPollVote(messageId, pollId, {
+      answer_text: answerText,
+    });
   }
 
-  async removePollVote(
-    messageId: string,
-    pollId: string,
-    voteId: string,
-    userId?: string,
-  ) {
-    return await this.delete<APIResponse & { vote: PollVote }>(
-      this.baseURL +
-        `/messages/${encodeURIComponent(messageId)}/polls/${encodeURIComponent(pollId)}/vote/${encodeURIComponent(
-          voteId,
-        )}`,
-      {
-        ...(userId ? { user_id: userId } : {}),
-      },
-    );
+  async removePollVote(messageId: string, pollId: string, voteId: string) {
+    return await this.chatApi.deletePollVote({
+      message_id: messageId,
+      poll_id: pollId,
+      vote_id: voteId,
+    });
   }
 
   /**
@@ -4903,24 +4506,18 @@ export class StreamChat {
    * @param filter
    * @param sort
    * @param options Option object, {limit: 10, offset:0}
-   * @param userId string The user id (only serverside)
    * @returns {APIResponse & QueryPollsResponse} The polls
    */
   async queryPolls(
     filter: QueryPollsFilters = {},
     sort: PollSort = [],
     options: QueryPollsOptions = {},
-    userId?: string,
-  ): Promise<APIResponse & QueryPollsResponse> {
-    const q = userId ? `?user_id=${userId}` : '';
-    return await this.post<APIResponse & QueryPollsResponse>(
-      this.baseURL + `/polls/query${q}`,
-      {
-        filter,
-        sort: normalizeQuerySort(sort),
-        ...options,
-      },
-    );
+  ) {
+    return await this.chatApi.queryPolls({
+      filter,
+      sort: normalizeQuerySort(sort),
+      ...options,
+    });
   }
 
   /**
@@ -4937,17 +4534,13 @@ export class StreamChat {
     filter: QueryVotesFilters = {},
     sort: VoteSort = [],
     options: QueryVotesOptions = {},
-    userId?: string,
-  ): Promise<APIResponse & PollVotesAPIResponse> {
-    const q = userId ? `?user_id=${userId}` : '';
-    return await this.post<APIResponse & PollVotesAPIResponse>(
-      this.baseURL + `/polls/${encodeURIComponent(pollId)}/votes${q}`,
-      {
-        filter,
-        sort: normalizeQuerySort(sort),
-        ...options,
-      },
-    );
+  ) {
+    return await this.chatApi.queryPollVotes({
+      poll_id: pollId,
+      filter,
+      sort: normalizeQuerySort(sort),
+      ...options,
+    });
   }
 
   /**
@@ -4967,7 +4560,7 @@ export class StreamChat {
     userId?: string,
   ): Promise<APIResponse & PollAnswersAPIResponse> {
     const q = userId ? `?user_id=${userId}` : '';
-    return await this.post<APIResponse & PollAnswersAPIResponse>(
+    return await this.api.post<APIResponse & PollAnswersAPIResponse>(
       this.baseURL + `/polls/${encodeURIComponent(pollId)}/votes${q}`,
       {
         filter: { ...filter, is_answer: true },
@@ -4989,7 +4582,7 @@ export class StreamChat {
     sort: QueryMessageHistorySort = [],
     options: QueryMessageHistoryOptions = {},
   ): Promise<APIResponse & QueryMessageHistoryResponse> {
-    return await this.post<APIResponse & QueryMessageHistoryResponse>(
+    return await this.api.post<APIResponse & QueryMessageHistoryResponse>(
       this.baseURL + '/messages/history',
       {
         filter,
@@ -5012,7 +4605,7 @@ export class StreamChat {
     reviewed_by: string,
     options: { user_id?: string } = {},
   ) {
-    return await this.post<APIResponse>(
+    return await this.api.post<APIResponse>(
       this.baseURL + '/automod/v1/moderation/update_flags',
       {
         message_ids,
@@ -5042,12 +4635,10 @@ export class StreamChat {
       user_id?: string;
     } = {},
   ) {
-    const payload = {
+    return await this.chatApi.queryDrafts({
       ...options,
       sort: options.sort ? normalizeQuerySort(options.sort) : undefined,
-    };
-
-    return await this.post<QueryDraftsResponse>(this.baseURL + '/drafts/query', payload);
+    });
   }
 
   /**
@@ -5056,11 +4647,8 @@ export class StreamChat {
    * @param {CreateReminderOptions} options The options for creating the reminder
    * @returns {Promise<ReminderAPIResponse>}
    */
-  async createReminder({ messageId, ...options }: CreateReminderOptions) {
-    return await this.post<ReminderAPIResponse>(
-      `${this.baseURL}/messages/${messageId}/reminders`,
-      options,
-    );
+  async createReminder(data: CreateReminderOptions) {
+    return await this.chatApi.createReminder(data);
   }
 
   /**
@@ -5069,25 +4657,20 @@ export class StreamChat {
    * @param {UpdateReminderOptions} options The options for updating the reminder
    * @returns {Promise<ReminderAPIResponse>}
    */
-  async updateReminder({ messageId, ...options }: UpdateReminderOptions) {
-    return await this.patch<ReminderAPIResponse>(
-      `${this.baseURL}/messages/${messageId}/reminders`,
-      options,
-    );
+  async updateReminder(data: UpdateReminderOptions) {
+    return await this.chatApi.updateReminder(data);
   }
 
   /**
    * deleteReminder - Deletes a reminder for a message
    *
    * @param {string} messageId The ID of the message whose reminder to delete
-   * @param {string} [userId] Optional user ID, required for server-side operations
    * @returns {Promise<APIResponse>}
    */
-  async deleteReminder(messageId: string, userId?: string): Promise<APIResponse> {
-    return await this.delete<APIResponse>(
-      `${this.baseURL}/messages/${messageId}/reminders`,
-      userId ? { user_id: userId } : {},
-    );
+  async deleteReminder(messageId: string) {
+    return await this.chatApi.deleteReminder({
+      message_id: messageId,
+    });
   }
 
   /**
@@ -5097,7 +4680,7 @@ export class StreamChat {
    * @returns {Promise<QueryRemindersResponse>}
    */
   async queryReminders({ filter, sort, ...rest }: QueryRemindersOptions = {}) {
-    return await this.post<QueryRemindersResponse>(`${this.baseURL}/reminders/query`, {
+    return await this.chatApi.queryReminders({
       filter,
       sort: sort && normalizeQuerySort(sort),
       ...rest,
@@ -5120,7 +4703,7 @@ export class StreamChat {
    * @returns {Promise<QueryTeamUsageStatsResponse>}
    */
   async queryTeamUsageStats(options: QueryTeamUsageStatsOptions = {}) {
-    return await this.post<QueryTeamUsageStatsResponse>(
+    return await this.api.post<QueryTeamUsageStatsResponse>(
       `${this.baseURL}/stats/team_usage`,
       options,
     );
@@ -5134,10 +4717,7 @@ export class StreamChat {
    * @returns {Promise<SharedLocationResponse>} The server response
    */
   async updateLocation(location: UpdateLocationPayload) {
-    return await this.put<SharedLocationResponse>(
-      this.baseURL + `/users/live_locations`,
-      location,
-    );
+    return await this.chatApi.updateLiveLocation(location);
   }
 
   /**
@@ -5158,7 +4738,7 @@ export class StreamChat {
     user?: UserResponse,
     axiosRequestConfig?: AxiosRequestConfig,
   ) {
-    return this.sendFile(
+    return this.api.sendFile(
       `${this.baseURL}/uploads/file`,
       uri,
       name,
@@ -5186,7 +4766,7 @@ export class StreamChat {
     user?: UserResponse,
     axiosRequestConfig?: AxiosRequestConfig,
   ) {
-    return this.sendFile(
+    return this.api.sendFile(
       `${this.baseURL}/uploads/image`,
       uri,
       name,
@@ -5204,7 +4784,7 @@ export class StreamChat {
    * @return {Promise<APIResponse>} The server response
    */
   deleteFile(url: string) {
-    return this.delete<APIResponse>(`${this.baseURL}/uploads/file`, { url });
+    return this.api.delete<APIResponse>(`${this.baseURL}/uploads/file`, { url });
   }
 
   /**
@@ -5215,7 +4795,7 @@ export class StreamChat {
    * @return {Promise<APIResponse>} The server response
    */
   deleteImage(url: string) {
-    return this.delete<APIResponse>(`${this.baseURL}/uploads/image`, { url });
+    return this.api.delete<APIResponse>(`${this.baseURL}/uploads/image`, { url });
   }
 
   /**
@@ -5226,7 +4806,7 @@ export class StreamChat {
    */
   async markChannelsDelivered(data: MarkDeliveredOptions) {
     if (!data?.latest_delivered_messages?.length) return;
-    return await this.post<EventAPIResponse>(this.baseURL + '/channels/delivered', data);
+    return await this.chatApi.markDelivered(data);
   }
 
   syncDeliveredCandidates(collections: Channel[]) {
@@ -5240,7 +4820,7 @@ export class StreamChat {
    *  @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
    */
   async updateChannelsBatch(payload: UpdateChannelsBatchOptions) {
-    return await this.put<APIResponse & UpdateChannelsBatchResponse>(
+    return await this.api.put<APIResponse & UpdateChannelsBatchResponse>(
       this.baseURL + `/channels/batch`,
       payload,
     );
@@ -5257,7 +4837,7 @@ export class StreamChat {
     F extends Record<string, unknown> = Record<string, unknown>,
   >(options: CreatePredefinedFilterOptions<F>) {
     this.validateServerSideAuth();
-    return await this.post<PredefinedFilterResponse<F>>(
+    return await this.api.post<PredefinedFilterResponse<F>>(
       `${this.baseURL}/predefined_filters`,
       options,
     );
@@ -5274,7 +4854,7 @@ export class StreamChat {
     name: string,
   ) {
     this.validateServerSideAuth();
-    return await this.get<PredefinedFilterResponse<F>>(
+    return await this.api.get<PredefinedFilterResponse<F>>(
       `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
     );
   }
@@ -5291,7 +4871,7 @@ export class StreamChat {
     F extends Record<string, unknown> = Record<string, unknown>,
   >(name: string, options: UpdatePredefinedFilterOptions<F>) {
     this.validateServerSideAuth();
-    return await this.put<PredefinedFilterResponse<F>>(
+    return await this.api.put<PredefinedFilterResponse<F>>(
       `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
       options,
     );
@@ -5306,7 +4886,7 @@ export class StreamChat {
    */
   async deletePredefinedFilter(name: string) {
     this.validateServerSideAuth();
-    return await this.delete<APIResponse>(
+    return await this.api.delete<APIResponse>(
       `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
     );
   }
@@ -5323,7 +4903,7 @@ export class StreamChat {
   >(options: ListPredefinedFiltersOptions = {}) {
     this.validateServerSideAuth();
     const { sort, ...paginationOptions } = options;
-    return await this.get<ListPredefinedFiltersResponse<F>>(
+    return await this.api.get<ListPredefinedFiltersResponse<F>>(
       `${this.baseURL}/predefined_filters`,
       {
         ...paginationOptions,
@@ -5342,7 +4922,7 @@ export class StreamChat {
    */
   async setRetentionPolicy(policy: string, maxAgeHours: number) {
     this.validateServerSideAuth();
-    return await this.post<SetRetentionPolicyResponse>(
+    return await this.api.post<SetRetentionPolicyResponse>(
       this.baseURL + '/retention_policy',
       { policy, max_age_hours: maxAgeHours },
     );
@@ -5357,7 +4937,7 @@ export class StreamChat {
    */
   async deleteRetentionPolicy(policy: string) {
     this.validateServerSideAuth();
-    return await this.post<DeleteRetentionPolicyResponse>(
+    return await this.api.post<DeleteRetentionPolicyResponse>(
       this.baseURL + '/retention_policy/delete',
       { policy },
     );
@@ -5371,7 +4951,9 @@ export class StreamChat {
    */
   async getRetentionPolicy() {
     this.validateServerSideAuth();
-    return await this.get<GetRetentionPolicyResponse>(this.baseURL + '/retention_policy');
+    return await this.api.get<GetRetentionPolicyResponse>(
+      this.baseURL + '/retention_policy',
+    );
   }
 
   /**
@@ -5384,7 +4966,7 @@ export class StreamChat {
    */
   async getRetentionPolicyRuns(options: GetRetentionPolicyRunsOptions = {}) {
     this.validateServerSideAuth();
-    return await this.post<GetRetentionPolicyRunsResponse>(
+    return await this.api.post<GetRetentionPolicyRunsResponse>(
       this.baseURL + '/retention_policy/runs',
       options,
     );

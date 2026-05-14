@@ -1,10 +1,9 @@
 import type { Channel } from './channel';
 import type {
   ChannelMemberResponse,
-  Event,
+  EventPayload,
   LocalMessage,
   MessageResponse,
-  MessageResponseBase,
   MessageSet,
   MessageSetType,
   PendingMessageResponse,
@@ -18,11 +17,12 @@ import {
   isBlockedMessage,
 } from './utils';
 import { DEFAULT_MESSAGE_SET_PAGINATION } from './constants';
+import { UserResponseCommonFields as Gen_UserResponseCommonFields } from './gen/models';
 
 type ChannelReadStatus = Record<
   string,
   {
-    last_read: Date;
+    last_read: Date | undefined;
     unread_messages: number;
     user: UserResponse;
     first_unread_message_id?: string;
@@ -70,7 +70,7 @@ const messageSetsOverlapByTimestamp = (a: LocalMessage[], b: LocalMessage[]) =>
 export class ChannelState {
   _channel: Channel;
   watcher_count: number;
-  typing: Record<string, Event>;
+  typing: Record<string, EventPayload<'typing.start' | 'typing.stop'>>;
   read: ChannelReadStatus;
   pinnedMessages: Array<ReturnType<ChannelState['formatMessage']>>;
   pending_messages: Array<PendingMessageResponse>;
@@ -191,8 +191,7 @@ export class ChannelState {
    *
    * @param {MessageResponse} message `MessageResponse` object
    */
-  formatMessage = (message: MessageResponse | MessageResponseBase | LocalMessage) =>
-    formatMessage(message);
+  formatMessage = (message: MessageResponse | LocalMessage) => formatMessage(message);
 
   /**
    * addMessagesSorted - Add the list of messages to state and resorts the messages
@@ -228,7 +227,8 @@ export class ChannelState {
       // If message is already formatted we can skip the tasks below
       // This will be true for messages that are already present at the state -> this happens when we perform merging of message sets
       // This will be also true for message previews used by some SDKs
-      const isMessageFormatted = messagesToAdd[i].created_at instanceof Date;
+      const isMessageFormatted =
+        typeof (messagesToAdd[i] as LocalMessage).status === 'string';
       let message: ReturnType<ChannelState['formatMessage']>;
       if (isMessageFormatted) {
         message = messagesToAdd[i] as ReturnType<ChannelState['formatMessage']>;
@@ -392,7 +392,7 @@ export class ChannelState {
         // own_reactions as normal so we can use that, otherwise we fallback
         // to whatever state we had.
         updatedMessage.own_reactions =
-          this._channel.getClient().userID === reaction.user_id
+          this._channel.getClient().userId === reaction.user_id
             ? messageWithReaction.own_reactions
             : msg.own_reactions;
         return this.formatMessage(updatedMessage);
@@ -461,7 +461,7 @@ export class ChannelState {
 
     // 4. Finally, update the latest_reactions with the new reaction,
     //    while respecting enforce_unique.
-    const userId = this._channel.getClient().userID;
+    const userId = this._channel.getClient().userId;
     messageFromState.latest_reactions = enforce_unique
       ? [
           ...(messageFromState.latest_reactions || []).filter(
@@ -486,7 +486,7 @@ export class ChannelState {
     }
 
     ownReactions = ownReactions || [];
-    if (this._channel.getClient().userID === reaction.user_id) {
+    if (this._channel.getClient().userId === reaction.user_id) {
       ownReactions.push(reaction);
     }
 
@@ -496,13 +496,13 @@ export class ChannelState {
   _removeOwnReactionFromMessage(
     ownReactions: ReactionResponse[] | null | undefined,
     reaction: ReactionResponse,
-  ) {
+  ): ReactionResponse[] {
     if (ownReactions) {
       return ownReactions.filter(
         (item) => item.user_id !== reaction.user_id || item.type !== reaction.type,
       );
     }
-    return ownReactions;
+    return [];
   }
 
   removeReaction(reaction: ReactionResponse, message?: MessageResponse) {
@@ -560,7 +560,7 @@ export class ChannelState {
     messageFromState.own_reactions = messageFromState.own_reactions?.filter(
       (r) => r.type !== reaction.type,
     );
-    const userId = this._channel.getClient().userID;
+    const userId = this._channel.getClient().userId;
     messageFromState.latest_reactions = messageFromState.latest_reactions?.filter(
       (r) => !(r.user_id === userId && r.type === reaction.type),
     );
@@ -779,7 +779,7 @@ export class ChannelState {
     deletedAt?: LocalMessage['deleted_at'],
   ) => {
     this.messageSets.forEach(({ messages }) =>
-      _deleteUserMessages({ messages, user, hardDelete, deletedAt: deletedAt ?? null }),
+      _deleteUserMessages({ messages, user, hardDelete, deletedAt }),
     );
 
     for (const parentId in this.threads) {
@@ -787,7 +787,7 @@ export class ChannelState {
         messages: this.threads[parentId],
         user,
         hardDelete,
-        deletedAt: deletedAt ?? null,
+        deletedAt,
       });
     }
 
@@ -795,7 +795,7 @@ export class ChannelState {
       messages: this.pinnedMessages,
       user,
       hardDelete,
-      deletedAt: deletedAt ?? null,
+      deletedAt,
     });
   };
 
@@ -823,18 +823,20 @@ export class ChannelState {
   clean() {
     const now = new Date();
     // prevent old users from showing up as typing
-    for (const [userID, lastEvent] of Object.entries(this.typing)) {
+    for (const [userId, lastEvent] of Object.entries(this.typing)) {
       const receivedAt =
         typeof lastEvent.received_at === 'string'
           ? new Date(lastEvent.received_at)
           : lastEvent.received_at || new Date();
       if (now.getTime() - receivedAt.getTime() > 7000) {
-        delete this.typing[userID];
+        delete this.typing[userId];
         this._channel.getClient().dispatchEvent({
           cid: this._channel.cid,
           type: 'typing.stop',
-          user: { id: userID },
-        } as Event);
+          user: { id: userId } as Gen_UserResponseCommonFields,
+          custom: {},
+          created_at: new Date(),
+        });
       }
     }
   }
