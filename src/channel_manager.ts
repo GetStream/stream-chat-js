@@ -231,13 +231,14 @@ export class ChannelManager extends WithSubscriptions {
     });
     const {
       channels,
-      pagination: { filters, sort },
+      pagination: { filters, options, sort },
     } = this.state.getLatestValue();
     this.client.offlineDb?.executeQuerySafely(
       (db) =>
         db.upsertCidsForQuery({
           cids: channels.map((channel) => channel.cid),
           filters,
+          options,
           sort,
         }),
       { method: 'upsertCidsForQuery' },
@@ -304,6 +305,7 @@ export class ChannelManager extends WithSubscriptions {
           db.upsertCidsForQuery({
             cids: channels.map((channel) => channel.cid),
             filters: pagination.filters,
+            options,
             sort: pagination.sort,
           }),
         { method: 'upsertCidsForQuery' },
@@ -381,6 +383,7 @@ export class ChannelManager extends WithSubscriptions {
           const channelsFromDB = await this.client.offlineDb.getChannelsForQuery({
             userId: this.client.user.id,
             filters,
+            options,
             sort,
           });
 
