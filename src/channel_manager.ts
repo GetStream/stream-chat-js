@@ -358,6 +358,11 @@ export class ChannelManager extends WithSubscriptions {
       this.state.partialNext({
         channels,
         pagination: {
+          // Drop response derived filter/sort from the previous query before applying
+          // the current response. Non predefined queries do not return this metadata,
+          // so keeping the old values would make later WS mutations use stale
+          // predefined filter semantics. Also the predefined_filter might change, producing
+          // a different combination as well so we always need to first clean up.
           ...paginationWithoutResponseParams,
           hasNext: (channels?.length ?? 0) >= (limit ?? 1),
           isLoading: false,

@@ -1896,6 +1896,12 @@ export class StreamChat {
 
   /**
    * queryChannelsRequestWithResponse - Queries channels and returns the full API response
+   * including top-level metadata such as `predefined_filter`.
+   *
+   * This exists as a compatibility bridge, as changing `queryChannelsRequest()` to return
+   * `QueryChannelsAPIResponse` would be a breaking change because it currently returns
+   * only the channel list. In the next major release, the request/response APIs should
+   * be consolidated so callers can access the full response through the primary API.
    *
    * @param {ChannelFilters} filterConditions object MongoDB style filters. Can be empty object when using predefined_filter in options.
    * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
@@ -1947,6 +1953,11 @@ export class StreamChat {
   /**
    * queryChannelsRequest - Queries channels and returns the raw channel response list.
    *
+   * This preserves the historical return shape for backwards compatibility. Use
+   * `queryChannelsRequestWithResponse()` when response level metadata such as
+   * `predefined_filter` is needed. In the next major release these APIs should be
+   * consolidated into a single full-response API.
+   *
    * @param {ChannelFilters} filterConditions object MongoDB style filters. Can be empty object when using predefined_filter in options.
    * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
@@ -1981,6 +1992,7 @@ export class StreamChat {
    * @param {ChannelStateOptions} [stateOptions] State options object. These options will only be used for state management and won't be sent in the request.
    * - stateOptions.skipInitialization - Skips the initialization of the state for the channels matching the ids in the list.
    * - stateOptions.skipHydration - Skips returning the channels as instances of the Channel class and rather returns the raw query response.
+   * - stateOptions.withResponse - Returns the full query response with hydrated channels. This is a compatibility bridge for internal callers that need response-level metadata while the default return value remains `Channel[]`.
    *
    * @return {Promise<Array<Channel>>} search channels response
    */

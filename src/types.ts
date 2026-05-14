@@ -1111,6 +1111,14 @@ export type ChannelStateOptions = {
   offlineMode?: boolean;
   skipInitialization?: string[];
   skipHydration?: boolean;
+  /**
+   * Returns the full query response with hydrated channels from `queryChannels()`.
+   *
+   * This is a compatibility bridge for internal callers that need response level
+   * metadata such as `predefined_filter`. The default `queryChannels()` return value
+   * remains `Channel[]` to avoid a breaking change. This should be folded into a
+   * single full response API in the next major release.
+   */
   withResponse?: boolean;
 };
 
