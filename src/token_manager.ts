@@ -2,8 +2,9 @@ import type jwt from 'jsonwebtoken';
 
 import { JWTServerToken, JWTUserToken, UserFromToken } from './signing';
 import { isFunction } from './utils';
-import type { TokenOrProvider, UserResponse } from './types';
+import type { TokenOrProvider } from './types';
 
+export type TokenManagerMinimalUser = { id: string; anon?: boolean };
 /**
  * TokenManager
  *
@@ -15,7 +16,7 @@ export class TokenManager {
   secret?: jwt.Secret;
   token?: string;
   tokenProvider?: TokenOrProvider;
-  user?: UserResponse;
+  user?: TokenManagerMinimalUser;
   /**
    * Constructor
    *
@@ -41,7 +42,10 @@ export class TokenManager {
    * @param {TokenOrProvider} tokenOrProvider
    * @param {UserResponse} user
    */
-  setTokenOrProvider = async (tokenOrProvider: TokenOrProvider, user: UserResponse) => {
+  setTokenOrProvider = async (
+    tokenOrProvider: TokenOrProvider,
+    user: TokenManagerMinimalUser,
+  ) => {
     this.validateToken(tokenOrProvider, user);
     this.user = user;
 
@@ -76,7 +80,7 @@ export class TokenManager {
   };
 
   // Validates the user token.
-  validateToken = (tokenOrProvider: TokenOrProvider, user: UserResponse) => {
+  validateToken = (tokenOrProvider: TokenOrProvider, user: TokenManagerMinimalUser) => {
     // allow empty token for anon user
     if (user && user.anon && !tokenOrProvider) return;
 

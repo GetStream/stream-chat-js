@@ -4,7 +4,7 @@ import type {
   MessageCompositionMiddleware,
 } from './types';
 import type { MiddlewareHandlerParams } from '../../../middleware';
-import type { OwnUserResponse } from '../../../types';
+import type { OwnUserResponse, RequireLiteral } from '../../../types';
 
 export const createUserDataInjectionMiddleware = (
   composer: MessageComposer,
@@ -33,13 +33,12 @@ export const createUserDataInjectionMiddleware = (
         devices: _devices,
         mutes: _mutes,
         ...messageUser
-      } = composer.client.user as OwnUserResponse;
+      } = composer.client.user as RequireLiteral<OwnUserResponse, 'blocked_user_ids'>; // TODO: drop RequireLiteral once the oapi spec is adjusted
       return next({
         ...state,
         localMessage: {
           ...state.localMessage,
           user: messageUser,
-          user_id: messageUser.id,
         },
       });
     },

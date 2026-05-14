@@ -54,7 +54,7 @@ export class ChannelSearchSource<
   protected async query(searchQuery: string) {
     const filters = this.filterBuilder.buildFilters({
       baseFilters: {
-        ...(this.client.userID ? { members: { $in: [this.client.userID] } } : {}),
+        ...(this.client.userId ? { members: { $in: [this.client.userId] } } : {}),
         ...this.filters,
       },
       context: { searchQuery } as Partial<

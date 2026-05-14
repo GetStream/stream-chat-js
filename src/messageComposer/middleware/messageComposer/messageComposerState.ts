@@ -5,7 +5,7 @@ import type {
   MessageDraftCompositionMiddleware,
 } from './types';
 import type { MessageComposer } from '../../messageComposer';
-import type { LocalMessage, LocalMessageBase } from '../../../types';
+import type { LocalMessage } from '../../../types';
 import type { MiddlewareHandlerParams } from '../../../middleware';
 
 export const createMessageComposerStateCompositionMiddleware = (
@@ -37,7 +37,7 @@ export const createMessageComposerStateCompositionMiddleware = (
         localMessage: {
           ...state.localMessage,
           ...payload,
-          quoted_message: (composer.quotedMessage as LocalMessageBase) ?? undefined,
+          quoted_message: (composer.quotedMessage as LocalMessage) ?? undefined,
         },
         message: {
           ...state.message,

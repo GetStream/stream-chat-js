@@ -1,10 +1,12 @@
 import type {
   APIErrorResponse,
   ChannelResponse,
-  Event,
+  EventPayload,
   LocalMessage,
   Message,
   MessageResponse,
+  OwnUserResponse,
+  RequireLiteral,
 } from '../types';
 
 import type {
@@ -14,7 +16,7 @@ import type {
   PrepareBatchDBQueries,
 } from './types';
 import { OfflineError } from './types';
-import type { StreamChat } from '../client';
+import type { ListenerKeys, StreamChat } from '../client';
 import type { AxiosError } from 'axios';
 import { OfflineDBSyncManager } from './offline_sync_manager';
 import { StateStore } from '../store';
@@ -25,6 +27,8 @@ import {
   runDetached,
 } from '../utils';
 import { isMessageUpdateReplayable } from './util';
+import type { WSEvent } from '../gen/models';
+import events from 'node:events';
 
 /**
  * Abstract base class for an offline database implementation used with StreamChat.
@@ -45,7 +49,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     this.syncManager = new OfflineDBSyncManager({ client, offlineDb: this });
     this.state = new StateStore<OfflineDBState>({
       initialized: false,
-      userId: this.client.userID,
+      userId: this.client.userId,
     });
   }
 
@@ -525,11 +529,18 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       event,
       execute = true,
       forceUpdate = false,
-    }: { event: Event; execute?: boolean; forceUpdate?: boolean },
+    }: {
+      event: Extract<
+        WSEvent,
+        { channel?: any; cid?: any; channel_type?: any; channel_id?: any }
+      >;
+      execute?: boolean;
+      forceUpdate?: boolean;
+    },
     createQueries: (executeOverride?: boolean) => Promise<PrepareBatchDBQueries[]>,
   ) => {
-    const channelFromEvent = event.channel;
-    const cid = event.cid || channelFromEvent?.cid;
+    const channelFromEvent = (event as Extract<WSEvent, { channel?: any }>).channel;
+    const cid = (event as Extract<WSEvent, { cid?: any }>).cid || channelFromEvent?.cid;
     const type = event.type;
 
     if (!cid) {
@@ -542,11 +553,13 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     // This can happen for example when a message.new event is received for a channel that is not in the db due to a channel being hidden.
     const shouldUpsertChannelData = forceUpdate || !(await this.channelExists({ cid }));
     if (shouldUpsertChannelData) {
+      const event_ = event as Extract<WSEvent, { channel_type?: any }>;
+
       let channelData = channelFromEvent;
-      if (!channelData && event.channel_type && event.channel_id) {
+      if (!channelData && event_.channel_type && event_.channel_id) {
         const channelFromState = this.client.channel(
-          event.channel_type,
-          event.channel_id,
+          event_.channel_type,
+          event_.channel_id,
         );
         if (channelFromState.initialized && !channelFromState.disconnected) {
           channelData = channelFromState.data as unknown as ChannelResponse;
@@ -594,7 +607,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     event,
     execute = true,
   }: {
-    event: Event;
+    event: EventPayload<'message.new'>;
     execute?: boolean;
   }) => {
     const client = this.client;
@@ -628,10 +641,13 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
               execute: false,
               reads: [
                 {
-                  last_read: (ownReads?.last_read ?? new Date(0)).toISOString() as string,
+                  last_read: ownReads?.last_read ?? new Date(0),
                   last_read_message_id: ownReads?.last_read_message_id,
                   unread_messages: unreadCount,
-                  user: client.user,
+                  user: client.user as RequireLiteral<
+                    OwnUserResponse,
+                    'blocked_user_ids'
+                  >, // TODO: drop RequireLiteral once the oapi spec is adjusted
                 },
               ],
             });
@@ -659,7 +675,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     event,
     execute = true,
   }: {
-    event: Event;
+    event: EventPayload<'message.deleted'>;
     execute?: boolean;
   }) => {
     const { message, deleted_for_me, hard_delete = false } = event;
@@ -726,13 +742,16 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     unreadMessages,
     execute = true,
   }: {
-    event: Event;
+    event: EventPayload<
+      'message.read' | 'notification.mark_read' | 'notification.mark_unread'
+    >;
     unreadMessages?: number;
     execute?: boolean;
   }) => {
     const {
-      received_at: last_read,
+      received_at: last_read = new Date(),
       last_read_message_id,
+      // @ts-expect-error property missing
       unread_messages = 0,
       user,
       cid,
@@ -747,7 +766,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
           execute: executeOverride,
           reads: [
             {
-              last_read: last_read as string,
+              last_read,
               last_read_message_id,
               unread_messages: overriddenUnreadMessages,
               user,
@@ -771,7 +790,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     event,
     execute = true,
   }: {
-    event: Event;
+    event: EventPayload<`member.${string}`>;
     execute?: boolean;
   }) => {
     const { member, cid, type } = event;
@@ -809,7 +828,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     event,
     execute = true,
   }: {
-    event: Event;
+    event: EventPayload<'message.updated' | 'message.undeleted'>;
     execute?: boolean;
   }) => {
     const { message } = event;
@@ -838,7 +857,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     event,
     execute = true,
   }: {
-    event: Event;
+    event: EventPayload<'channel.visible' | 'channel.hidden'>;
     execute?: boolean;
   }) => {
     const { type, channel } = event;
@@ -865,7 +884,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     event,
     execute = true,
   }: {
-    event: Event;
+    event: EventPayload<'channel.truncated'>;
     execute?: boolean;
   }) => {
     const { channel } = event;
@@ -900,10 +919,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
           execute: false,
           reads: [
             {
-              last_read: (ownReads?.last_read ?? new Date(0)).toString() as string,
+              last_read: ownReads?.last_read ?? new Date(0),
               last_read_message_id: ownReads?.last_read_message_id,
               unread_messages: unreadCount,
-              user: ownUser,
+              user: ownUser as RequireLiteral<OwnUserResponse, 'blocked_user_ids'>, // TODO: drop RequireLiteral once the oapi spec is adjusted
             },
           ],
         });
@@ -933,7 +952,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     event,
     execute = true,
   }: {
-    event: Event;
+    event: EventPayload<`reaction.${string}`>;
     execute?: boolean;
   }) => {
     const { type, message, reaction } = event;
@@ -942,7 +961,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       return [];
     }
 
-    const getReactionMethod = (type: Event['type']) => {
+    const getReactionMethod = (type: ListenerKeys) => {
       switch (type) {
         case 'reaction.new':
           return this.insertReaction;
@@ -975,7 +994,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     event,
     execute = true,
   }: {
-    event: Event;
+    event: EventPayload<`draft.${string}`>;
     execute?: boolean;
   }) => {
     const { cid, draft, type } = event;
@@ -1013,13 +1032,16 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     event,
     execute = true,
   }: {
-    event: Event;
+    event: WSEvent;
     execute?: boolean;
   }) => {
-    const { type, channel } = event;
+    const { type } = event;
 
     if (type.startsWith('reaction')) {
-      return await this.handleReactionEvent({ event, execute });
+      return await this.handleReactionEvent({
+        event: event as EventPayload<`reaction.${string}`>,
+        execute,
+      });
     }
 
     if (type === 'message.new') {
@@ -1055,7 +1077,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     }
 
     if (type.startsWith('member.')) {
-      return await this.handleMemberEvent({ event, execute });
+      return await this.handleMemberEvent({
+        event: event as EventPayload<`member.${string}`>,
+        execute,
+      });
     }
 
     if (type === 'channel.hidden' || type === 'channel.visible') {
@@ -1077,18 +1102,18 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       (type === 'channel.updated' ||
         type === 'notification.message_new' ||
         type === 'notification.added_to_channel') &&
-      channel
+      event.channel
     ) {
-      return await this.upsertChannelData({ channel, execute });
+      return await this.upsertChannelData({ channel: event.channel, execute });
     }
 
     if (
       (type === 'channel.deleted' ||
         type === 'notification.channel_deleted' ||
         type === 'notification.removed_from_channel') &&
-      channel
+      event.channel
     ) {
-      return await this.deleteChannel({ cid: channel.cid, execute });
+      return await this.deleteChannel({ cid: event.channel.cid, execute });
     }
 
     if (type === 'channel.truncated') {
@@ -1150,7 +1175,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       ...editedMessage,
     } as LocalMessage & { message_text_updated_at?: string };
 
-    if (editedMessage.status === 'failed') {
+    if ((editedMessage as LocalMessage).status === 'failed') {
       delete normalizedEditedMessageSource.message_text_updated_at;
     }
 
@@ -1226,7 +1251,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     if (
       task.type === 'update-message' &&
       !this.client.wsConnection?.isHealthy &&
-      task.payload[0].status === 'failed'
+      (task.payload[0] as LocalMessage).status === 'failed'
     ) {
       await this.handleOfflineFailedUpdateMessagePendingTask(task);
       return;

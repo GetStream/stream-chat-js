@@ -182,13 +182,13 @@ export class MessageReceiptsTracker {
     lastDeliveredMessageId,
   }: {
     user: UserResponse;
-    deliveredAt: string;
+    deliveredAt: Date;
     lastDeliveredMessageId?: string;
   }) {
-    const timestampMs = new Date(deliveredAt).getTime();
+    const timestampMs = deliveredAt.getTime();
     const msgRef = lastDeliveredMessageId
       ? { timestampMs, msgId: lastDeliveredMessageId }
-      : this.locateMessage(new Date(deliveredAt).getTime());
+      : this.locateMessage(deliveredAt.getTime());
     if (!msgRef) return;
     const userProgress = this.ensureUser(user);
 
@@ -216,10 +216,10 @@ export class MessageReceiptsTracker {
     lastReadMessageId,
   }: {
     user: UserResponse;
-    readAt: string;
+    readAt: Date;
     lastReadMessageId?: string;
   }) {
-    const timestampMs = new Date(readAt).getTime();
+    const timestampMs = readAt.getTime();
     const msgRef = lastReadMessageId
       ? { timestampMs, msgId: lastReadMessageId }
       : this.locateMessage(timestampMs);
@@ -263,13 +263,13 @@ export class MessageReceiptsTracker {
     lastReadMessageId,
   }: {
     user: UserResponse;
-    lastReadAt?: string;
+    lastReadAt?: Date;
     lastReadMessageId?: string;
   }) {
     const userProgress = this.ensureUser(user);
 
     const newReadRef: MsgRef = lastReadAt
-      ? { timestampMs: new Date(lastReadAt).getTime(), msgId: lastReadMessageId ?? '' }
+      ? { timestampMs: lastReadAt.getTime(), msgId: lastReadMessageId ?? '' }
       : { ...MIN_REF };
 
     // If no change, exit early.
