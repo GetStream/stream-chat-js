@@ -10,7 +10,7 @@ import {
   messageSetPagination,
   normalizeQuerySort,
 } from './utils';
-import type { StreamChat } from './client';
+import type { ListenerKeys, StreamChat } from './client';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import type {
   AIState,
@@ -19,24 +19,19 @@ import type {
   BanUserOptions,
   ChannelAPIResponse,
   ChannelData,
-  ChannelFilters,
-  ChannelMemberAPIResponse,
   ChannelMemberResponse,
   ChannelPushPreference,
   ChannelQueryOptions,
   ChannelResponse,
   ChannelUpdateOptions,
+  CombinedEvents,
   CreateDraftResponse,
-  DeleteChannelAPIResponse,
   DraftMessagePayload,
-  Event,
-  EventAPIResponse,
   EventHandler,
-  EventTypes,
-  GetDraftResponse,
-  GetMultipleMessagesAPIResponse,
-  GetReactionsAPIResponse,
+  EventPayload,
   GetRepliesAPIResponse,
+  GetRepliesOptions,
+  GetRepliesRequest,
   LiveLocationPayload,
   LocalMessage,
   MarkReadOptions,
@@ -46,23 +41,19 @@ import type {
   Message,
   MessageFilters,
   MessageOptions,
-  MessagePaginationOptions,
   MessageResponse,
   MessageSetType,
-  MuteChannelAPIResponse,
-  NewMemberPayload,
   PartialUpdateChannel,
-  PartialUpdateChannelAPIResponse,
   PartialUpdateMember,
   PartialUpdateMemberAPIResponse,
   PinnedMessagePaginationOptions,
   PinnedMessagesSort,
   PollVoteData,
+  PushPreference,
   QueryChannelAPIResponse,
   QueryMembersOptions,
   Reaction,
   ReactionAPIResponse,
-  SearchAPIResponse,
   SearchMessageSortBase,
   SearchOptions,
   SearchPayload,
@@ -70,16 +61,21 @@ import type {
   SendMessageOptions,
   SendReactionOptions,
   StaticLocationPayload,
-  TruncateChannelAPIResponse,
   TruncateOptions,
   UnBanUserOptions,
-  UpdateChannelAPIResponse,
-  UpdateChannelOptions,
   UpdateLocationPayload,
   UserResponse,
 } from './types';
 import type { Role } from './permissions';
-import type { CustomChannelData } from './custom_types';
+import type {
+  ChannelGetOrCreateRequest as Gen_ChannelGetOrCreateRequest,
+  ChannelInputRequest as Gen_ChannelInputRequest,
+  ChannelMemberRequest as Gen_ChannelMemberRequest,
+  SendMessageRequest as Gen_SendMessageRequest,
+  UpdateChannelRequest as Gen_UpdateChannelRequest,
+  WSEvent,
+} from './gen/models';
+import { ChannelApi } from './gen/chat/ChannelApi';
 
 /**
  * Channel - The Channel class manages it's own state.
@@ -88,11 +84,11 @@ export class Channel {
   _client: StreamChat;
   type: string;
   id: string | undefined;
-  data: Partial<ChannelData & ChannelResponse> | undefined;
-  _data: Partial<ChannelData & ChannelResponse>;
+  data: ChannelResponse | undefined;
+  _data: ChannelData;
   cid: string;
   /**  */
-  listeners: { [key: string]: (string | EventHandler)[] };
+  listeners: Map<ListenerKeys, Set<EventHandler>>;
   state: ChannelState;
   /**
    * This boolean is a vague indication of weather the channel exists on chat backend.
@@ -117,6 +113,7 @@ export class Channel {
   public readonly messageComposer: MessageComposer;
   public readonly messageReceiptsTracker: MessageReceiptsTracker;
   public readonly cooldownTimer: CooldownTimer;
+  public readonly channelApi: ChannelApi;
 
   /**
    * constructor - Create a channel
@@ -144,15 +141,17 @@ export class Channel {
       throw new Error(`Invalid chat id ${id}, letters, numbers and "!-_" are allowed`);
     }
 
+    this.channelApi = new ChannelApi(client.chatApi, type, id);
+
     this._client = client;
     this.type = type;
     this.id = id;
     // used by the frontend, gets updated:
-    this.data = data;
+    // this.data = data;
     // this._data is used for the requests...
-    this._data = { ...data };
+    this._data = data;
     this.cid = `${type}:${id}`;
-    this.listeners = {};
+    this.listeners = new Map();
     // perhaps the state variable should be private
     this.state = new ChannelState(this);
     this.initialized = false;
@@ -211,17 +210,20 @@ export class Channel {
    *
    * @return {Promise<SendMessageAPIResponse>} The Server Response
    */
-  async _sendMessage(message: Message, options?: SendMessageOptions) {
-    return await this.getClient().post<SendMessageAPIResponse>(
-      this._channelURL() + '/message',
-      {
-        message,
-        ...options,
-      },
-    );
+  async _sendMessage(
+    message: Gen_SendMessageRequest['message'],
+    options?: SendMessageOptions,
+  ) {
+    return await this.channelApi.sendMessage({
+      message,
+      ...options,
+    });
   }
 
-  async sendMessage(message: Message, options?: SendMessageOptions) {
+  async sendMessage(
+    message: Gen_SendMessageRequest['message'],
+    options?: SendMessageOptions,
+  ) {
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
@@ -264,7 +266,7 @@ export class Channel {
     user?: UserResponse,
     axiosRequestConfig?: AxiosRequestConfig,
   ) {
-    return this.getClient().sendFile(
+    return this.getClient().api.sendFile(
       `${this._channelURL()}/file`,
       uri,
       name,
@@ -291,7 +293,7 @@ export class Channel {
     user?: UserResponse,
     axiosRequestConfig?: AxiosRequestConfig,
   ) {
-    return this.getClient().sendFile(
+    return this.getClient().api.sendFile(
       `${this._channelURL()}/image`,
       uri,
       name,
@@ -302,11 +304,11 @@ export class Channel {
   }
 
   deleteFile(url: string) {
-    return this.getClient().delete<APIResponse>(`${this._channelURL()}/file`, { url });
+    return this.channelApi.deleteChannelFile({ url });
   }
 
   deleteImage(url: string) {
-    return this.getClient().delete<APIResponse>(`${this._channelURL()}/image`, { url });
+    return this.channelApi.deleteChannelImage({ url });
   }
 
   /**
@@ -316,11 +318,9 @@ export class Channel {
    *
    * @return {Promise<EventAPIResponse>} The Server Response
    */
-  async sendEvent(event: Event) {
+  async sendEvent(event: CombinedEvents) {
     this._checkInitialized();
-    return await this.getClient().post<EventAPIResponse>(this._channelURL() + '/event', {
-      event,
-    });
+    return await this.channelApi.sendEvent({ event });
   }
 
   /**
@@ -346,7 +346,7 @@ export class Channel {
     }
     // Return a list of channels
     const payload: SearchPayload = {
-      filter_conditions: { cid: this.cid } as ChannelFilters,
+      filter_conditions: { cid: this.cid },
       ...options,
       sort: options.sort
         ? normalizeQuerySort<SearchMessageSortBase>(options.sort)
@@ -362,12 +362,7 @@ export class Channel {
     // Make sure we wait for the connect promise if there is a pending one
     await this.getClient().wsPromise;
 
-    return await this.getClient().get<SearchAPIResponse>(
-      this.getClient().baseURL + '/search',
-      {
-        payload,
-      },
-    );
+    return await this.getClient().chatApi.search({ payload });
   }
 
   /**
@@ -385,49 +380,43 @@ export class Channel {
     sort: MemberSort = [],
     options: QueryMembersOptions = {},
   ) {
-    let id: string | undefined;
+    let id: QueryMembersOptions['id'];
     const type = this.type;
-    let members: string[] | ChannelMemberResponse[] | undefined;
+    let members: QueryMembersOptions['members'];
     if (this.id) {
       id = this.id;
     } else if (this.data?.members && Array.isArray(this.data.members)) {
-      members = this.data.members;
+      // TODO: this should not be needed Gen_QueryMembersResponse should not come with user_id as optinal
+      members = this.data.members.map((m) => ({
+        ...m,
+        user_id: m.user_id ?? m.user?.id,
+      })) as QueryMembersOptions['members'];
     }
     // Return a list of members
-    return await this.getClient().get<ChannelMemberAPIResponse>(
-      this.getClient().baseURL + '/members',
-      {
-        payload: {
-          type,
-          id,
-          members,
-          sort: normalizeQuerySort(sort),
-          filter_conditions: filterConditions,
-          ...options,
-        },
+    return await this.getClient().chatApi.queryMembers({
+      payload: {
+        type,
+        id,
+        members,
+        sort: normalizeQuerySort(sort),
+        filter_conditions: filterConditions,
+        ...options,
       },
-    );
+    });
   }
 
   /**
    * updateMemberPartial - Partial update a member
    *
-   * @param {PartialUpdateMember}  updates
+   * @param {PartialUpdateMember}  request
    * @param {{ user_id?: string }} [options] Option object, {user_id: 'jane'} to optionally specify the user id
 
    * @return {Promise<ChannelMemberResponse>} Updated member
    */
-  async updateMemberPartial(updates: PartialUpdateMember, options?: { userId?: string }) {
-    const url = new URL(`${this._channelURL()}/member`);
-
-    if (options?.userId) {
-      url.searchParams.append('user_id', options.userId);
-    }
-
-    return await this.getClient().patch<PartialUpdateMemberAPIResponse>(
-      url.toString(),
-      updates,
-    );
+  async updateMemberPartial(request: PartialUpdateMember) {
+    return await this.channelApi.updateMemberPartial({
+      ...request,
+    });
   }
 
   /**
@@ -444,7 +433,7 @@ export class Channel {
       throw Error('Please specify the user id');
     }
 
-    return await this.getClient().patch<PartialUpdateMemberAPIResponse>(
+    return await this.getClient().api.patch<PartialUpdateMemberAPIResponse>(
       this._channelURL() + `/member/${encodeURIComponent(user_id)}`,
       updates,
     );
@@ -499,31 +488,29 @@ export class Channel {
   /**
    * sendReaction - Send a reaction about a message
    *
-   * @param {string} messageID the message id
+   * @param {string} messageId the message id
    * @param {Reaction} reaction the reaction object for instance {type: 'love'}
    * @param {{ enforce_unique?: boolean, skip_push?: boolean }} [options] Option object, {enforce_unique: true, skip_push: true} to override any existing reaction or skip sending push notifications
    *
    * @return {Promise<ReactionAPIResponse>} The Server Response
    */
   async _sendReaction(
-    messageID: string,
+    messageId: string,
     reaction: Reaction,
     options?: SendReactionOptions,
   ) {
-    if (!messageID) {
+    if (!messageId) {
       throw Error(`Message id is missing`);
     }
     if (!reaction || Object.keys(reaction).length === 0) {
       throw Error(`Reaction object is missing`);
     }
 
-    return await this.getClient().post<ReactionAPIResponse>(
-      this.getClient().baseURL + `/messages/${encodeURIComponent(messageID)}/reaction`,
-      {
-        reaction,
-        ...options,
-      },
-    );
+    return await this.getClient().chatApi.sendReaction({
+      id: messageId,
+      reaction,
+      ...options,
+    });
   }
 
   async deleteReaction(messageID: string, reactionType: string, user_id?: string) {
@@ -543,7 +530,7 @@ export class Channel {
           updated_at: '',
           message_id: messageID,
           type: reactionType,
-          user_id: (this.getClient().userID as string) ?? user_id,
+          user_id: (this.getClient().userId as string) ?? user_id,
         };
 
         if (message) {
@@ -576,31 +563,24 @@ export class Channel {
   /**
    * deleteReaction - Delete a reaction by user and type
    *
-   * @param {string} messageID the id of the message from which te remove the reaction
+   * @param {string} messageId the id of the message from which te remove the reaction
    * @param {string} reactionType the type of reaction that should be removed
    * @param {string} [user_id] the id of the user (used only for server side request) default null
    *
    * @return {Promise<ReactionAPIResponse>} The Server Response
    */
-  async _deleteReaction(messageID: string, reactionType: string, user_id?: string) {
+  async _deleteReaction(messageId: string, reactionType: string) {
     this._checkInitialized();
-    if (!reactionType || !messageID) {
+    if (!reactionType || !messageId) {
       throw Error(
         'Deleting a reaction requires specifying both the message and reaction type',
       );
     }
 
-    const url =
-      this.getClient().baseURL +
-      `/messages/${encodeURIComponent(messageID)}/reaction/${encodeURIComponent(
-        reactionType,
-      )}`;
-    //provided when server side request
-    if (user_id) {
-      return await this.getClient().delete<ReactionAPIResponse>(url, { user_id });
-    }
-
-    return await this.getClient().delete<ReactionAPIResponse>(url, {});
+    return await this.getClient().chatApi.deleteReaction({
+      id: messageId,
+      type: reactionType,
+    });
   }
 
   /**
@@ -612,31 +592,31 @@ export class Channel {
    * @return {Promise<UpdateChannelAPIResponse>} The server response
    */
   async update(
-    channelData: Partial<ChannelData & ChannelResponse> = {},
+    channelData: Gen_ChannelInputRequest = {},
     updateMessage?: Message,
     options?: ChannelUpdateOptions,
   ) {
     // Strip out reserved names that will result in API errors.
     // TODO: this needs to be typed better
-    const reserved: Exclude<
-      keyof (ChannelResponse & ChannelData),
-      keyof CustomChannelData
-    >[] = [
-      'config',
-      'cid',
-      'created_by',
-      'id',
-      'member_count',
-      'type',
-      'created_at',
-      'updated_at',
-      'last_message_at',
-      'own_capabilities',
-    ];
+    // const reserved: Exclude<
+    //   keyof (ChannelResponse & ChannelData),
+    //   keyof CustomChannelData
+    // >[] = [
+    //   'config',
+    //   'cid',
+    //   'created_by',
+    //   'id',
+    //   'member_count',
+    //   'type',
+    //   'created_at',
+    //   'updated_at',
+    //   'last_message_at',
+    //   'own_capabilities',
+    // ];
 
-    reserved.forEach((key) => {
-      delete channelData[key];
-    });
+    // reserved.forEach((key) => {
+    //   delete channelData[key];
+    // });
 
     return await this._update({
       message: updateMessage,
@@ -653,29 +633,28 @@ export class Channel {
    * @return {Promise<PartialUpdateChannelAPIResponse>}
    */
   async updatePartial(update: PartialUpdateChannel) {
-    const data = await this.getClient().patch<PartialUpdateChannelAPIResponse>(
-      this._channelURL(),
-      update,
-    );
+    const data = await this.channelApi.updateChannelPartial(update);
 
-    const areCapabilitiesChanged =
-      [...(data.channel.own_capabilities || [])].sort().join() !==
-      [
-        ...(Array.isArray(this.data?.own_capabilities)
-          ? (this.data?.own_capabilities as string[])
-          : []),
-      ]
-        .sort()
-        .join();
-    this.data = data.channel;
+    if (!this.getClient()._cacheEnabled) return data;
+
+    const channel = data.channel;
+    const currentCapabilities = this.data?.own_capabilities ?? [];
+    const newCapabilities = channel?.own_capabilities;
+
+    const capabilitiesChanged =
+      newCapabilities &&
+      [...currentCapabilities].sort().join() !== [...newCapabilities].sort().join();
+
+    this.data = channel;
     // If the capabiltities are changed, we trigger the `capabilities.changed` event.
-    if (areCapabilitiesChanged) {
+    if (capabilitiesChanged) {
       this.getClient().dispatchEvent({
         type: 'capabilities.changed',
         cid: this.cid,
-        own_capabilities: data.channel.own_capabilities,
+        own_capabilities: newCapabilities,
       });
     }
+
     return data;
   }
 
@@ -686,12 +665,9 @@ export class Channel {
    * @return {Promise<UpdateChannelAPIResponse>} The server response
    */
   async enableSlowMode(coolDownInterval: number) {
-    const data = await this.getClient().post<UpdateChannelAPIResponse>(
-      this._channelURL(),
-      {
-        cooldown: coolDownInterval,
-      },
-    );
+    const data = await this.channelApi.update({
+      cooldown: coolDownInterval,
+    });
     this.data = data.channel;
     return data;
   }
@@ -702,27 +678,22 @@ export class Channel {
    * @return {Promise<UpdateChannelAPIResponse>} The server response
    */
   async disableSlowMode() {
-    const data = await this.getClient().post<UpdateChannelAPIResponse>(
-      this._channelURL(),
-      {
-        cooldown: 0,
-      },
-    );
+    const data = await this.channelApi.update({
+      cooldown: 0,
+    });
     this.data = data.channel;
     return data;
   }
 
   public async sendSharedLocation(
-    location: StaticLocationPayload | LiveLocationPayload,
-    userId?: string,
+    location: (StaticLocationPayload | LiveLocationPayload) & { message_id?: string },
   ) {
     const result = await this.sendMessage({
       id: location.message_id,
       shared_location: location,
-      user: userId ? { id: userId } : undefined,
     });
 
-    if ((location as LiveLocationPayload).end_at) {
+    if (location.end_at) {
       this.getClient().dispatchEvent({
         message: result.message,
         type: 'live_location_sharing.started',
@@ -735,7 +706,7 @@ export class Channel {
   public async stopLiveLocationSharing(payload: UpdateLocationPayload) {
     const location = await this.getClient().updateLocation({
       ...payload,
-      end_at: new Date().toISOString(),
+      end_at: new Date(),
     });
     this.getClient().dispatchEvent({
       live_location: location,
@@ -751,9 +722,7 @@ export class Channel {
    * @return {Promise<DeleteChannelAPIResponse>} The server response
    */
   async delete(options: { hard_delete?: boolean } = {}) {
-    return await this.getClient().delete<DeleteChannelAPIResponse>(this._channelURL(), {
-      ...options,
-    });
+    return await this.channelApi.delete(options);
   }
 
   /**
@@ -762,31 +731,28 @@ export class Channel {
    * @return {Promise<TruncateChannelAPIResponse>} The server response
    */
   async truncate(options: TruncateOptions = {}) {
-    return await this.getClient().post<TruncateChannelAPIResponse>(
-      this._channelURL() + '/truncate',
-      options,
-    );
+    return await this.channelApi.truncate(options);
   }
 
   /**
    * acceptInvite - accept invitation to the channel
    *
-   * @param {UpdateChannelOptions} [options] The object to update the custom properties of this channel with
+   * @param {ChannelUpdateOptions} [options] The object to update the custom properties of this channel with
    *
    * @return {Promise<UpdateChannelAPIResponse>} The server response
    */
-  async acceptInvite(options: UpdateChannelOptions = {}) {
+  async acceptInvite(options: ChannelUpdateOptions = {}) {
     return await this._update({ accept_invite: true, ...options });
   }
 
   /**
    * rejectInvite - reject invitation to the channel
    *
-   * @param {UpdateChannelOptions} [options] The object to update the custom properties of this channel with
+   * @param {ChannelUpdateOptions} [options] The object to update the custom properties of this channel with
    *
    * @return {Promise<UpdateChannelAPIResponse>} The server response
    */
-  async rejectInvite(options: UpdateChannelOptions = {}) {
+  async rejectInvite(options: ChannelUpdateOptions = {}) {
     return await this._update({ reject_invite: true, ...options });
   }
 
@@ -799,11 +765,17 @@ export class Channel {
    * @return {Promise<UpdateChannelAPIResponse>} The server response
    */
   async addMembers(
-    members: string[] | Array<NewMemberPayload>,
+    members: string[] | Gen_ChannelMemberRequest[],
     message?: Message,
     options: ChannelUpdateOptions = {},
   ) {
-    return await this._update({ add_members: members, message, ...options });
+    const adjustedMembers = members.map(
+      (memberOrId) =>
+        ({
+          user_id: typeof memberOrId === 'string' ? memberOrId : memberOrId.user_id,
+        }) satisfies Gen_ChannelMemberRequest,
+    );
+    return await this._update({ add_members: adjustedMembers, message, ...options });
   }
 
   /**
@@ -879,11 +851,18 @@ export class Channel {
    * @return {Promise<UpdateChannelAPIResponse>} The server response
    */
   async inviteMembers(
-    members: string[] | Required<Omit<NewMemberPayload, 'channel_role'>>[],
+    members: string[] | Gen_ChannelMemberRequest[],
     message?: Message,
     options: ChannelUpdateOptions = {},
   ) {
-    return await this._update({ invites: members, message, ...options });
+    const adjustedMembers = members.map(
+      (memberOrId) =>
+        ({
+          user_id: typeof memberOrId === 'string' ? memberOrId : memberOrId.user_id,
+        }) satisfies Gen_ChannelMemberRequest,
+    );
+
+    return await this._update({ invites: adjustedMembers, message, ...options });
   }
 
   /**
@@ -924,18 +903,15 @@ export class Channel {
    * @return {Promise<UpdateChannelAPIResponse>} The server response
    * TODO: introduce new type instead of Object in the next major update
    */
-  async _update(payload: object) {
-    const data = await this.getClient().post<UpdateChannelAPIResponse>(
-      this._channelURL(),
-      payload,
-    );
+  async _update(payload: Gen_UpdateChannelRequest) {
+    const data = await this.channelApi.update(payload);
     this.data = data.channel;
     return data;
   }
 
   /**
    * mute - mutes the current channel
-   * @param {{ user_id?: string, expiration?: string }} opts expiration in minutes or user_id
+   * @param {{ user_id?: string, expiration?: string }} options expiration in minutes or user_id
    * @return {Promise<MuteChannelAPIResponse>} The server response
    *
    * example with expiration:
@@ -945,14 +921,11 @@ export class Channel {
    * await channel.mute({user_id: userId});
    *
    */
-  async mute(opts: { expiration?: number; user_id?: string } = {}) {
-    return await this.getClient().post<MuteChannelAPIResponse>(
-      this.getClient().baseURL + '/moderation/mute/channel',
-      {
-        channel_cid: this.cid,
-        ...opts,
-      },
-    );
+  async mute(options: { expiration?: number } = {}) {
+    return await this.getClient().chatApi.muteChannel({
+      channel_cids: [this.cid],
+      ...options,
+    });
   }
 
   /**
@@ -964,13 +937,10 @@ export class Channel {
    * await channel.unmute({user_id: userId});
    */
   async unmute(opts: { user_id?: string } = {}) {
-    return await this.getClient().post<APIResponse>(
-      this.getClient().baseURL + '/moderation/unmute/channel',
-      {
-        channel_cid: this.cid,
-        ...opts,
-      },
-    );
+    return await this.getClient().chatApi.unmuteChannel({
+      channel_cids: [this.cid],
+      ...opts,
+    });
   }
 
   /**
@@ -987,7 +957,7 @@ export class Channel {
    */
   async archive(opts: { user_id?: string } = {}) {
     const cli = this.getClient();
-    const uid = opts.user_id || cli.userID;
+    const uid = opts.user_id || cli.userId;
     if (!uid) {
       throw Error('A user_id is required for archiving a channel');
     }
@@ -1009,7 +979,7 @@ export class Channel {
    */
   async unarchive(opts: { user_id?: string } = {}) {
     const cli = this.getClient();
-    const uid = opts.user_id || cli.userID;
+    const uid = opts.user_id || cli.userId;
     if (!uid) {
       throw Error('A user_id is required for unarchiving a channel');
     }
@@ -1031,7 +1001,7 @@ export class Channel {
    */
   async pin(opts: { user_id?: string } = {}) {
     const cli = this.getClient();
-    const uid = opts.user_id || cli.userID;
+    const uid = opts.user_id || cli.userId;
     if (!uid) {
       throw new Error('A user_id is required for pinning a channel');
     }
@@ -1053,7 +1023,7 @@ export class Channel {
    */
   async unpin(opts: { user_id?: string } = {}) {
     const cli = this.getClient();
-    const uid = opts.user_id || cli.userID;
+    const uid = opts.user_id || cli.userId;
     if (!uid) {
       throw new Error('A user_id is required for unpinning a channel');
     }
@@ -1074,20 +1044,15 @@ export class Channel {
     return this.getClient()._muteStatus(this.cid);
   }
 
-  sendAction(messageID: string, formData: Record<string, string>) {
+  sendAction(messageId: string, formData: Record<string, string>) {
     this._checkInitialized();
-    if (!messageID) {
+    if (!messageId) {
       throw Error(`Message id is missing`);
     }
-    return this.getClient().post<SendMessageAPIResponse>(
-      this.getClient().baseURL + `/messages/${encodeURIComponent(messageID)}/action`,
-      {
-        message_id: messageID,
-        form_data: formData,
-        id: this.id,
-        type: this.type,
-      },
-    );
+    return this.getClient().chatApi.runMessageAction({
+      id: messageId,
+      form_data: formData,
+    });
   }
 
   /**
@@ -1111,7 +1076,9 @@ export class Channel {
         type: 'typing.start',
         parent_id,
         ...(options || {}),
-      } as Event);
+        created_at: new Date(),
+        custom: {},
+      });
     }
   }
 
@@ -1133,7 +1100,9 @@ export class Channel {
       type: 'ai_indicator.update',
       message_id: messageId,
       ai_state: state,
-    } as Event);
+      created_at: new Date(),
+      custom: {},
+    });
   }
 
   /**
@@ -1143,7 +1112,9 @@ export class Channel {
   async clearAIIndicator() {
     await this.sendEvent({
       type: 'ai_indicator.clear',
-    } as Event);
+      created_at: new Date(),
+      custom: {},
+    });
   }
 
   /**
@@ -1153,7 +1124,9 @@ export class Channel {
   async stopAIResponse() {
     await this.sendEvent({
       type: 'ai_indicator.stop',
-    } as Event);
+      created_at: new Date(),
+      custom: {},
+    });
   }
 
   /**
@@ -1171,7 +1144,9 @@ export class Channel {
       type: 'typing.stop',
       parent_id,
       ...(options || {}),
-    } as Event);
+      created_at: new Date(),
+      custom: {},
+    });
   }
 
   _isTypingIndicatorsEnabled(): boolean {
@@ -1225,9 +1200,7 @@ export class Channel {
       return null;
     }
 
-    return await this.getClient().post<EventAPIResponse>(this._channelURL() + '/read', {
-      ...data,
-    });
+    return await this.channelApi.markRead({ ...data });
   }
 
   /**
@@ -1240,12 +1213,10 @@ export class Channel {
     this._checkInitialized();
 
     if (!this.getConfig()?.read_events && !this.getClient()._isUsingServerAuth()) {
-      return Promise.resolve(null);
+      return null;
     }
 
-    return await this.getClient().post<APIResponse>(this._channelURL() + '/unread', {
-      ...data,
-    });
+    return await this.channelApi.markUnread({ ...data });
   }
 
   /**
@@ -1336,10 +1307,7 @@ export class Channel {
    * @return {Promise<APIResponse>} The server response
    */
   async stopWatching() {
-    const response = await this.getClient().post<APIResponse>(
-      this._channelURL() + '/stop-watching',
-      {},
-    );
+    const response = await this.channelApi.stopWatching();
 
     this._client.logger(
       'info',
@@ -1358,24 +1326,22 @@ export class Channel {
    *
    * The recommended way of working with threads is to use the Thread class.
    *
-   * @param {string} parent_id The message parent id, ie the top of the thread
+   * @param {string} parentId The message parent id, ie the top of the thread
    * @param {MessagePaginationOptions & { user?: UserResponse; user_id?: string }} options Pagination params, ie {limit:10, id_lte: 10}
    *
    * @return {Promise<GetRepliesAPIResponse>} A response with a list of messages
    */
   async getReplies(
-    parent_id: string,
-    options: MessagePaginationOptions & { user?: UserResponse; user_id?: string },
+    parentId: GetRepliesRequest['parent_id'],
+    options: GetRepliesOptions,
     sort?: { created_at: AscDesc }[],
   ) {
     const normalizedSort = sort ? normalizeQuerySort(sort) : undefined;
-    const data = await this.getClient().get<GetRepliesAPIResponse>(
-      this.getClient().baseURL + `/messages/${encodeURIComponent(parent_id)}/replies`,
-      {
-        sort: normalizedSort,
-        ...options,
-      },
-    );
+    const data = await this.getClient().chatApi.getReplies({
+      parent_id: parentId,
+      sort: normalizedSort,
+      ...options,
+    });
 
     // add any messages to our thread state
     if (data.messages) {
@@ -1397,7 +1363,7 @@ export class Channel {
     options: PinnedMessagePaginationOptions & { user?: UserResponse; user_id?: string },
     sort: PinnedMessagesSort = [],
   ) {
-    return await this.getClient().get<GetRepliesAPIResponse>(
+    return await this.getClient().api.get<GetRepliesAPIResponse>(
       this._channelURL() + '/pinned_messages',
       {
         payload: {
@@ -1411,18 +1377,16 @@ export class Channel {
   /**
    * getReactions - List the reactions, supports pagination
    *
-   * @param {string} message_id The message id
+   * @param {string} messageId The message id
    * @param {{ limit?: number; offset?: number }} options The pagination options
    *
    * @return {Promise<GetReactionsAPIResponse>} Server response
    */
-  getReactions(message_id: string, options: { limit?: number; offset?: number }) {
-    return this.getClient().get<GetReactionsAPIResponse>(
-      this.getClient().baseURL + `/messages/${encodeURIComponent(message_id)}/reactions`,
-      {
-        ...options,
-      },
-    );
+  getReactions(messageId: string, options: { limit?: number; offset?: number }) {
+    return this.getClient().chatApi.getReactions({
+      id: messageId,
+      ...options,
+    });
   }
 
   /**
@@ -1433,12 +1397,7 @@ export class Channel {
    * @return {Promise<GetMultipleMessagesAPIResponse>} Server response
    */
   getMessagesById(messageIds: string[]) {
-    return this.getClient().get<GetMultipleMessagesAPIResponse>(
-      this._channelURL() + '/messages',
-      {
-        ids: messageIds.join(','),
-      },
-    );
+    return this.channelApi.getManyMessages({ ids: messageIds });
   }
 
   /**
@@ -1446,7 +1405,7 @@ export class Channel {
    * @return {Date | null | undefined}
    */
   lastRead() {
-    const { userID } = this.getClient();
+    const { userId: userID } = this.getClient();
     if (userID) {
       return this.state.read[userID] ? this.state.read[userID].last_read : null;
     }
@@ -1456,7 +1415,7 @@ export class Channel {
     if (message.shadowed) return false;
     if (message.silent) return false;
     if (message.parent_id && !message.show_in_channel) return false;
-    if (message.user?.id === this.getClient().userID) return false;
+    if (message.user?.id === this.getClient().userId) return false;
     if (message.user?.id && this.getClient().userMuteStatus(message.user.id))
       return false;
 
@@ -1504,7 +1463,7 @@ export class Channel {
    */
   countUnreadMentions() {
     const lastRead = this.lastRead();
-    const userID = this.getClient().userID;
+    const userID = this.getClient().userId;
 
     let count = 0;
     for (let i = 0; i < this.state.latestMessages.length; i += 1) {
@@ -1545,17 +1504,14 @@ export class Channel {
    * @return {Promise<QueryChannelAPIResponse>} Returns a query response
    */
   async query(
-    options: ChannelQueryOptions = {},
+    options: ChannelQueryOptions & { created_by_id?: string } = {},
     messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
   ) {
     // Make sure we wait for the connect promise if there is a pending one
     await this.getClient().wsPromise;
 
-    const createdById =
-      options.created_by?.id ??
-      options.created_by_id ??
-      this._data?.created_by?.id ??
-      this._data?.created_by_id;
+    const createdById = options.created_by_id ?? this._data?.created_by?.id;
+    // this._data?.created_by_id;
 
     if (this.getClient()._isUsingServerAuth() && typeof createdById !== 'string') {
       this.getClient().logger(
@@ -1564,26 +1520,26 @@ export class Channel {
       );
     }
 
-    let queryURL = `${this.getClient().baseURL}/channels/${encodeURIComponent(
-      this.type,
-    )}`;
-    if (this.id) {
-      queryURL += `/${encodeURIComponent(this.id)}`;
-    }
+    const queryPayload: Gen_ChannelGetOrCreateRequest = {
+      data: this._data,
+      state: true,
+      ...options,
+    };
 
-    const state = await this.getClient().post<QueryChannelAPIResponse>(
-      queryURL + '/query',
-      {
-        data: this._data,
-        state: true,
-        ...options,
-      },
-    );
+    const state = this.id
+      ? await this.channelApi.getOrCreate(queryPayload)
+      : await this.getClient().chatApi.getOrCreateDistinctChannel({
+          type: this.type,
+          ...queryPayload,
+        });
+
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const channel = state.channel!;
 
     // update the channel id if it was missing
     if (!this.id) {
-      this.id = state.channel.id;
-      this.cid = state.channel.cid;
+      this.id = channel.id;
+      this.cid = channel.cid;
       // set the channel as active...
 
       const tempChannelCid = generateChannelTempCid(
@@ -1605,12 +1561,12 @@ export class Channel {
       }
     }
 
-    this.getClient()._addChannelConfig(state.channel);
+    this.getClient()._addChannelConfig(channel);
 
     // the only config param that is necessary to be updated based on server config soon as the config is delivered
-    if (typeof state.channel.config?.shared_locations !== 'undefined') {
+    if (typeof channel.config?.shared_locations !== 'undefined') {
       this.messageComposer.updateConfig({
-        location: { enabled: state.channel.config.shared_locations },
+        location: { enabled: channel.config.shared_locations },
       });
     }
 
@@ -1640,7 +1596,7 @@ export class Channel {
     this.messageComposer.initStateFromChannelResponse(state);
 
     const areCapabilitiesChanged =
-      [...(state.channel.own_capabilities || [])].sort().join() !==
+      [...(channel.own_capabilities || [])].sort().join() !==
       [
         ...(this.data && Array.isArray(this.data?.own_capabilities)
           ? this.data.own_capabilities
@@ -1648,7 +1604,7 @@ export class Channel {
       ]
         .sort()
         .join();
-    this.data = state.channel;
+    this.data = channel;
     this.offlineMode = false;
     this.cooldownTimer.refresh();
 
@@ -1656,7 +1612,7 @@ export class Channel {
       this.getClient().dispatchEvent({
         type: 'capabilities.changed',
         cid: this.cid,
-        own_capabilities: state.channel.own_capabilities,
+        own_capabilities: channel.own_capabilities ?? [],
       });
     }
 
@@ -1704,11 +1660,10 @@ export class Channel {
    * @param {boolean} clearHistory
    * @returns {Promise<APIResponse>}
    */
-  async hide(userId: string | null = null, clearHistory = false) {
+  async hide(clearHistory = false) {
     this._checkInitialized();
 
-    return await this.getClient().post<APIResponse>(`${this._channelURL()}/hide`, {
-      user_id: userId,
+    return await this.channelApi.hide({
       clear_history: clearHistory,
     });
   }
@@ -1719,11 +1674,9 @@ export class Channel {
    * @param {string | null} userId
    * @returns {Promise<APIResponse>}
    */
-  async show(userId: string | null = null) {
+  async show() {
     this._checkInitialized();
-    return await this.getClient().post<APIResponse>(`${this._channelURL()}/show`, {
-      user_id: userId,
-    });
+    return await this.channelApi.show();
   }
 
   /**
@@ -1794,12 +1747,7 @@ export class Channel {
    * @return {Promise<CreateDraftResponse>} Response containing the created draft
    */
   async _createDraft(message: DraftMessagePayload) {
-    return await this.getClient().post<CreateDraftResponse>(
-      this._channelURL() + '/draft',
-      {
-        message,
-      },
-    );
+    return await this.channelApi.createDraft({ message });
   }
 
   /**
@@ -1844,9 +1792,7 @@ export class Channel {
    * @return {Promise<APIResponse>} API response
    */
   async _deleteDraft({ parent_id }: { parent_id?: string } = {}) {
-    return await this.getClient().delete<APIResponse>(this._channelURL() + '/draft', {
-      parent_id,
-    });
+    return await this.channelApi.deleteDraft({ parent_id });
   }
 
   /**
@@ -1893,9 +1839,7 @@ export class Channel {
    * @return {Promise<GetDraftResponse>} Response containing the draft
    */
   async getDraft({ parent_id }: { parent_id?: string } = {}) {
-    return await this.getClient().get<GetDraftResponse>(this._channelURL() + '/draft', {
-      parent_id,
-    });
+    return await this.channelApi.getDraft({ parent_id });
   }
 
   /**
@@ -1908,27 +1852,34 @@ export class Channel {
    * @param {EventHandler | EventTypes} callbackOrString  The event type to listen for (optional)
    * @param {EventHandler} [callbackOrNothing] The callback to call
    */
-  on(eventType: EventTypes, callback: EventHandler): { unsubscribe: () => void };
+  on<T extends ListenerKeys | string>(
+    eventType: T,
+    callback: EventHandler<T>,
+  ): { unsubscribe: () => void };
   on(callback: EventHandler): { unsubscribe: () => void };
   on(
-    callbackOrString: EventHandler | EventTypes,
+    callbackOrString: EventHandler | string,
     callbackOrNothing?: EventHandler,
   ): { unsubscribe: () => void } {
-    const key = callbackOrNothing ? (callbackOrString as string) : 'all';
-    const callback = callbackOrNothing ? callbackOrNothing : callbackOrString;
-    if (!(key in this.listeners)) {
-      this.listeners[key] = [];
-    }
+    const key = callbackOrNothing ? (callbackOrString as ListenerKeys) : 'all';
+    const callback = callbackOrNothing
+      ? callbackOrNothing
+      : (callbackOrString as EventHandler);
+
+    const set = this.listeners.get(key) ?? new Set();
+
     this._client.logger(
       'info',
       `Attaching listener for ${key} event on channel ${this.cid}`,
       {
         tags: ['event', 'channel'],
-        channel: this,
       },
     );
+    set.add(callback);
 
-    this.listeners[key].push(callback);
+    if (!this.listeners.has(key)) {
+      this.listeners.set(key, set);
+    }
 
     return {
       unsubscribe: () => {
@@ -1937,11 +1888,12 @@ export class Channel {
           `Removing listener for ${key} event from channel ${this.cid}`,
           {
             tags: ['event', 'channel'],
-            channel: this,
           },
         );
-
-        this.listeners[key] = this.listeners[key].filter((el) => el !== callback);
+        set.delete(callback);
+        if (!set.size) {
+          this.listeners.delete(key);
+        }
       },
     };
   }
@@ -1950,17 +1902,13 @@ export class Channel {
    * off - Remove the event handler
    *
    */
-  off(eventType: EventTypes, callback: EventHandler): void;
+  off<T extends ListenerKeys | string>(eventType: T, callback: EventHandler): void;
   off(callback: EventHandler): void;
-  off(
-    callbackOrString: EventHandler | EventTypes,
-    callbackOrNothing?: EventHandler,
-  ): void {
-    const key = callbackOrNothing ? (callbackOrString as string) : 'all';
-    const callback = callbackOrNothing ? callbackOrNothing : callbackOrString;
-    if (!(key in this.listeners)) {
-      this.listeners[key] = [];
-    }
+  off(callbackOrString: EventHandler | string, callbackOrNothing?: EventHandler): void {
+    const key = callbackOrNothing ? (callbackOrString as ListenerKeys) : 'all';
+    const callback = callbackOrNothing
+      ? callbackOrNothing
+      : (callbackOrString as EventHandler);
 
     this._client.logger(
       'info',
@@ -1970,10 +1918,17 @@ export class Channel {
         channel: this,
       },
     );
-    this.listeners[key] = this.listeners[key].filter((value) => value !== callback);
+
+    const set = this.listeners.get(key);
+
+    set?.delete(callback);
+
+    if (!set?.size) {
+      this.listeners.delete(key);
+    }
   }
 
-  _handleChannelEvent(event: Event) {
+  _handleChannelEvent(event: CombinedEvents) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const channel = this;
     this._client.logger(
@@ -2123,10 +2078,10 @@ export class Channel {
             for (const userId in channelState.read) {
               if (userId === event.user.id) {
                 channelState.read[event.user.id] = {
-                  last_read: new Date(event.created_at as string),
+                  last_read: event.created_at,
                   user: event.user,
                   unread_messages: 0,
-                  last_delivered_at: new Date(event.created_at as string),
+                  last_delivered_at: event.created_at,
                   last_delivered_message_id: event.message.id,
                 };
               } else {
@@ -2208,7 +2163,7 @@ export class Channel {
           };
         }
 
-        const currentUserId = this.getClient().userID;
+        const currentUserId = this.getClient().userId;
         if (
           typeof currentUserId === 'string' &&
           typeof memberCopy?.user?.id === 'string' &&
@@ -2241,7 +2196,7 @@ export class Channel {
           // keep the message delivery info
           ...currentState,
           first_unread_message_id: event.first_unread_message_id,
-          last_read: new Date(event.last_read_at as string),
+          last_read: event.last_read_at,
           last_read_message_id: event.last_read_message_id,
           user: event.user,
           unread_messages: unreadCount,
@@ -2298,8 +2253,9 @@ export class Channel {
         break;
       case 'channel.hidden':
         channel.data = {
-          ...channel.data,
-          blocked: !!event.channel?.blocked,
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          ...channel.data!,
+          blocked: event.channel?.blocked ?? false,
           hidden: true,
         };
         if (event.clear_history) {
@@ -2308,8 +2264,9 @@ export class Channel {
         break;
       case 'channel.visible':
         channel.data = {
-          ...channel.data,
-          blocked: !!event.channel?.blocked,
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          ...channel.data!,
+          blocked: event.channel?.blocked ?? false,
           hidden: false,
         };
         this.getClient().offlineDb?.handleChannelVisibilityEvent({ event });
@@ -2335,30 +2292,20 @@ export class Channel {
       default:
     }
 
+    const typedEvent = event as Extract<WSEvent, { watcher_count?: any }>;
     // any event can send over the online count
-    if (event.watcher_count !== undefined) {
-      channel.state.watcher_count = event.watcher_count;
+    if (typeof typedEvent.watcher_count !== 'undefined') {
+      channel.state.watcher_count = typedEvent.watcher_count;
     }
   }
 
-  _callChannelListeners = (event: Event) => {
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const channel = this;
-    // gather and call the listeners
-    const listeners = [];
-    if (channel.listeners.all) {
-      listeners.push(...channel.listeners.all);
-    }
-    if (channel.listeners[event.type]) {
-      listeners.push(...channel.listeners[event.type]);
-    }
+  _callChannelListeners = (event: WSEvent) => {
+    const allSet = this.listeners.get('all');
+    const targetSet = this.listeners.get(event.type);
 
-    // call the event and send it to the listeners
-    for (const listener of listeners) {
-      if (typeof listener !== 'string') {
-        listener(event);
-      }
-    }
+    [allSet, targetSet].forEach((set) =>
+      set?.forEach((handleEvent) => handleEvent(event)),
+    );
   };
 
   /**
@@ -2391,7 +2338,7 @@ export class Channel {
     state: ChannelAPIResponse,
     messageSetToAddToIfDoesNotExist: MessageSetType = 'latest',
   ) {
-    const { state: clientState, user, userID } = this.getClient();
+    const { state: clientState, user, userId } = this.getClient();
 
     // add the members and users
     if (state.members) {
@@ -2404,7 +2351,9 @@ export class Channel {
       }
     }
 
-    this.state.membership = state.membership || {};
+    if (state.membership) {
+      this.state.membership = state.membership;
+    }
 
     const messages = state.messages || [];
     if (!this.state.messages) {
@@ -2441,11 +2390,11 @@ export class Channel {
     // initialize read state to last message or current time if the channel is empty
     // if the user is a member, this value will be overwritten later on otherwise this ensures
     // that everything up to this point is not marked as unread
-    if (userID != null) {
+    if (userId != null) {
       const last_read = this.state.last_message_at || new Date();
       if (user) {
         this.state.read[user.id] = {
-          user,
+          user: user as UserResponse,
           last_read,
           unread_messages: 0,
         };
@@ -2480,7 +2429,9 @@ export class Channel {
     };
   }
 
-  _extendEventWithOwnReactions(event: Event) {
+  _extendEventWithOwnReactions(
+    event: EventPayload<'message.undeleted' | 'message.updated' | 'message.deleted'>,
+  ) {
     if (!event.message) {
       return;
     }
