@@ -5,7 +5,7 @@ import { LocationComposer } from './LocationComposer';
 import { MessageComposerEffectHandlers } from './MessageComposerEffectHandlers';
 import { PollComposer } from './pollComposer';
 import { TextComposer } from './textComposer';
-import { DEFAULT_COMPOSER_CONFIG } from './configuration';
+import { applyCommandValidatorOverride, DEFAULT_COMPOSER_CONFIG } from './configuration';
 import type { MessageComposerMiddlewareValue } from './middleware';
 import {
   MessageComposerMiddlewareExecutor,
@@ -17,10 +17,6 @@ import { formatMessage, generateUUIDv4, isLocalMessage, unformatMessage } from '
 import { mergeWith } from '../utils/mergeWith';
 import { Channel } from '../channel';
 import { Thread } from '../thread';
-import {
-  getRawCommandName,
-  stripCommandFromText,
-} from './middleware/textComposer/commandUtils';
 import type {
   ChannelAPIResponse,
   CommandResponse,
@@ -31,16 +27,10 @@ import type {
   LocalMessageBase,
   MessageResponse,
   MessageResponseBase,
-  UserResponse,
 } from '../types';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { StreamChat } from '../client';
-import type {
-  CommandSendValidator,
-  CommandSendValidationContext,
-  CommandSendability,
-  MessageComposerConfig,
-} from './configuration/types';
+import type { CommandSendability, MessageComposerConfig } from './configuration/types';
 import type {
   CommandSuggestionDisabledReason,
   TextComposerCommandActivationEffect,
@@ -54,6 +44,10 @@ import type { PollComposerSnapshot } from './pollComposer';
 import type { TextComposerSnapshot } from './textComposer';
 import type { DeepPartial } from '../types.utility';
 import type { MergeWithCustomizer } from '../utils/mergeWith/mergeWithCore';
+import {
+  getMentionedUsersInText,
+  stripCommandFromText,
+} from './middleware/textComposer/commandUtils';
 
 type UnregisterSubscriptions = Unsubscribe;
 
@@ -172,27 +166,6 @@ const initState = (
       : null,
     showReplyInChannel: false,
     editedMessage,
-  };
-};
-
-const applyCommandValidatorOverride = (
-  targetConfig: MessageComposerConfig,
-  sourceConfig?: DeepPartial<MessageComposerConfig>,
-) => {
-  const overrideValidators = sourceConfig?.commands?.validators as
-    | CommandSendValidator[]
-    | undefined;
-
-  if (typeof overrideValidators === 'undefined') {
-    return targetConfig;
-  }
-
-  return {
-    ...targetConfig,
-    commands: {
-      ...targetConfig.commands,
-      validators: overrideValidators,
-    },
   };
 };
 
@@ -403,6 +376,14 @@ export class MessageComposer extends WithSubscriptions {
     return this.state.getLatestValue().quotedMessage;
   }
 
+  get pollId() {
+    return this.state.getLatestValue().pollId;
+  }
+
+  get showReplyInChannel() {
+    return this.state.getLatestValue().showReplyInChannel;
+  }
+
   getCommandDisabledReason = (
     command: CommandResponse,
   ): CommandSuggestionDisabledReason | undefined => {
@@ -421,73 +402,38 @@ export class MessageComposer extends WithSubscriptions {
   isCommandDisabled = (command: CommandResponse) =>
     !!this.getCommandDisabledReason(command);
 
-  getKnownCommand = (commandName?: string): CommandResponse | undefined => {
-    if (!commandName) return;
-
-    const normalizedCommandName = commandName.toLowerCase();
-    return (this.channel.getConfig()?.commands ?? []).find(
-      (command) => command.name?.toLowerCase() === normalizedCommandName,
-    );
-  };
-
-  getCurrentCommand = (text = this.textComposer.text): CommandResponse | undefined =>
-    this.textComposer.command ?? this.getKnownCommand(getRawCommandName(text));
-
-  getMentionedUsersInText = (
-    text = this.textComposer.text,
-    mentionedUsers = this.textComposer.mentionedUsers,
-  ): UserResponse[] =>
-    Array.from(
-      new Set(
-        mentionedUsers.filter(
-          ({ id, name }) =>
-            text.includes(`@${id}`) || (!!name && text.includes(`@${name}`)),
-        ),
-      ),
-    );
-
-  getCommandSendValidationContext = (
-    command: CommandResponse,
-    text = this.textComposer.text,
-  ): CommandSendValidationContext => ({
-    command,
-    commandArgsText: command.name
-      ? stripCommandFromText(text, command.name).trim()
-      : text.trim(),
-    composer: this,
-    mentionedUsersInText: this.getMentionedUsersInText(text),
-    rawText: text,
-  });
-
-  getCommandSendability = (
+  validateCommandSendability = (
     command: CommandResponse,
     text = this.textComposer.text,
   ): CommandSendability => {
-    const validationContext = this.getCommandSendValidationContext(command, text);
+    const validationContext = {
+      command,
+      commandArgsText: command.name
+        ? stripCommandFromText(text, command.name).trim()
+        : text.trim(),
+      composer: this,
+      mentionedUsersInText: getMentionedUsersInText(
+        text,
+        this.textComposer.mentionedUsers,
+      ),
+      rawText: text,
+    };
 
-    for (const validator of this.config.commands.validators) {
+    for (const validator of this.config.commands.sendValidators) {
       const result = validator(validationContext);
       if (result && !result.ready) {
         return result;
       }
     }
 
-    return { ready: true };
+    return { command, ready: true };
   };
 
   isCommandSendable = (command: CommandResponse, text = this.textComposer.text) =>
-    this.getCommandSendability(command, text).ready;
-
-  get pollId() {
-    return this.state.getLatestValue().pollId;
-  }
-
-  get showReplyInChannel() {
-    return this.state.getLatestValue().showReplyInChannel;
-  }
+    this.validateCommandSendability(command, text).ready;
 
   get hasSendableData() {
-    const currentCommand = this.getCurrentCommand();
+    const currentCommand = this.textComposer.command;
     const commandIsSendable = !currentCommand || this.isCommandSendable(currentCommand);
 
     return (
@@ -732,6 +678,7 @@ export class MessageComposer extends WithSubscriptions {
         draft.channel_cid !== this.channel.cid
       )
         return;
+      if (this.editedMessage) return;
       this.initState({ composition: draft });
     }).unsubscribe;
 
@@ -745,6 +692,7 @@ export class MessageComposer extends WithSubscriptions {
       ) {
         return;
       }
+      if (this.editedMessage) return;
 
       this.logDraftUpdateTimestamp();
 

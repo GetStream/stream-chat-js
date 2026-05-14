@@ -2,15 +2,13 @@ import { find } from 'linkifyjs';
 import { API_MAX_FILES_ALLOWED_PER_MESSAGE } from '../../constants';
 import type {
   AttachmentManagerConfig,
-  CommandSendValidator,
-  CommandsConfig,
   LinkPreviewsManagerConfig,
   LocationComposerConfig,
   MessageComposerConfig,
+  TextComposerConfig,
 } from './types';
-import type { TextComposerConfig } from './types';
-import type { UserResponse } from '../../types';
 import { generateUUIDv4 } from '../../utils';
+import { DEFAULT_COMMANDS_CONFIG } from './commands.configuration';
 
 export const DEFAULT_LINK_PREVIEW_MANAGER_CONFIG: LinkPreviewsManagerConfig = {
   debounceURLEnrichmentMs: 1500,
@@ -40,41 +38,6 @@ export const DEFAULT_ATTACHMENT_MANAGER_CONFIG: AttachmentManagerConfig = {
 export const DEFAULT_TEXT_COMPOSER_CONFIG: TextComposerConfig = {
   enabled: true,
   publishTypingEvents: true,
-};
-
-const stripMentionTokens = (text: string, mentionedUsersInText: UserResponse[]) =>
-  mentionedUsersInText.reduce((value, user) => {
-    let next = value.replace(`@${user.id}`, '');
-
-    if (user.name) {
-      next = next.replace(`@${user.name}`, '');
-    }
-
-    return next.trim();
-  }, text.trim());
-
-export const defaultCommandSendabilityValidator: CommandSendValidator = ({
-  command,
-  commandArgsText,
-  mentionedUsersInText,
-}) => {
-  if (command.name !== 'ban') return;
-
-  if (mentionedUsersInText.length === 0) {
-    return { ready: false, reason: 'missing_mention' };
-  }
-
-  const reason = stripMentionTokens(commandArgsText, mentionedUsersInText);
-
-  if (!reason.length) {
-    return { ready: false, reason: 'missing_reason' };
-  }
-
-  return { ready: true };
-};
-
-export const DEFAULT_COMMANDS_CONFIG: CommandsConfig = {
-  validators: [defaultCommandSendabilityValidator],
 };
 
 export const DEFAULT_LOCATION_COMPOSER_CONFIG: LocationComposerConfig = {

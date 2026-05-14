@@ -1,6 +1,12 @@
 import { textIsEmpty } from '../../textComposer';
 import type { CommandResponse } from '../../../types';
-import { getRawCommandName, notifyCommandDisabled } from '../textComposer/commandUtils';
+import { CommandSearchSource } from '../textComposer/commands';
+import {
+  getCommandByName,
+  getRawCommandName,
+  notifyCommandDisabled,
+  notifyCommandNotReady,
+} from '../textComposer/commandUtils';
 import type {
   MessageComposerMiddlewareState,
   MessageCompositionMiddleware,
@@ -12,9 +18,10 @@ import type { MiddlewareHandlerParams } from '../../../middleware';
 
 const getDisabledRawCommand = (
   composer: MessageComposer,
+  searchSource: Pick<CommandSearchSource, 'query'>,
   text?: string,
 ): CommandResponse | undefined => {
-  const rawCommand = composer.getKnownCommand(getRawCommandName(text));
+  const rawCommand = getCommandByName(searchSource, getRawCommandName(text));
   if (rawCommand && composer.isCommandDisabled(rawCommand)) {
     return rawCommand;
   }
@@ -22,7 +29,11 @@ const getDisabledRawCommand = (
 
 export const createCompositionValidationMiddleware = (
   composer: MessageComposer,
+  commandSearchSource?: Pick<CommandSearchSource, 'query'>,
 ): MessageCompositionMiddleware => {
+  const effectiveCommandSearchSource =
+    commandSearchSource ?? new CommandSearchSource(composer.channel);
+
   return {
     id: 'stream-io/message-composer-middleware/data-validation',
     handlers: {
@@ -34,32 +45,26 @@ export const createCompositionValidationMiddleware = (
         const { maxLengthOnSend } = composer.config.text ?? {};
         const inputText = state.message.text ?? '';
 
-        const disabledRawCommand = getDisabledRawCommand(composer, inputText);
+        const disabledRawCommand = getDisabledRawCommand(
+          composer,
+          effectiveCommandSearchSource,
+          inputText,
+        );
         if (disabledRawCommand) {
           notifyCommandDisabled(composer, disabledRawCommand);
           return await discard();
         }
 
-        const currentCommand = composer.getCurrentCommand(inputText);
+        const currentCommand =
+          composer.textComposer.command ??
+          getCommandByName(effectiveCommandSearchSource, getRawCommandName(inputText));
         if (currentCommand) {
-          const sendability = composer.getCommandSendability(currentCommand, inputText);
-
-          if (!sendability.ready) {
-            composer.client.notifications.addWarning({
-              message: 'Command not ready to be sent',
-              origin: {
-                emitter: 'MessageComposer',
-                context: { command: currentCommand, composer },
-              },
-              options: {
-                type: 'validation:command:not-ready',
-                metadata: {
-                  command: currentCommand.name,
-                  ...(sendability.reason ? { reason: sendability.reason } : {}),
-                  ...(sendability.metadata ?? {}),
-                },
-              },
-            });
+          if (
+            notifyCommandNotReady({
+              composer,
+              sendability: composer.validateCommandSendability(currentCommand, inputText),
+            })
+          ) {
             return await discard();
           }
         }

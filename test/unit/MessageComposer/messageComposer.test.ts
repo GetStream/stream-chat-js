@@ -12,9 +12,11 @@ import {
   Thread,
 } from '../../../src';
 import { DeepPartial } from '../../../src/types.utility';
+import { CommandSearchSource } from '../../../src/messageComposer/middleware/textComposer/commands';
 import { MessageComposer } from '../../../src/messageComposer/messageComposer';
 import { DraftResponse, MessageResponse } from '../../../src/types';
 import { MockOfflineDB } from '../offline-support/MockOfflineDB';
+import { getCommandByName } from '../../../src/messageComposer/middleware/textComposer/commandUtils';
 
 const generateUuidV4Output = 'test-uuid';
 // Mock dependencies
@@ -574,15 +576,15 @@ describe('MessageComposer', () => {
     });
 
     it('should account for command sendability in hasSendableData', () => {
-      const validator = vi.fn(({ mentionedUsersInText }) =>
+      const validator = vi.fn(({ command, mentionedUsersInText }) =>
         mentionedUsersInText.length > 0
           ? undefined
-          : { ready: false as const, reason: 'missing_user' as const },
+          : { command, ready: false as const, reason: 'missing_user' as const },
       );
       const { messageComposer } = setup({
         config: {
           commands: {
-            validators: [validator],
+            sendValidators: [validator],
           },
         },
       });
@@ -592,6 +594,7 @@ describe('MessageComposer', () => {
       });
 
       messageComposer.textComposer.state.partialNext({
+        command: { description: 'Ban a user', name: 'ban' },
         mentionedUsers: [],
         selection: { start: 4, end: 4 },
         text: '/ban',
@@ -599,6 +602,7 @@ describe('MessageComposer', () => {
       expect(messageComposer.hasSendableData).toBe(false);
 
       messageComposer.textComposer.state.partialNext({
+        command: { description: 'Ban a user', name: 'ban' },
         mentionedUsers: [{ id: 'target-user', name: 'Target User' }],
         selection: { start: 16, end: 16 },
         text: '/ban @target-user',
@@ -622,6 +626,7 @@ describe('MessageComposer', () => {
       });
 
       messageComposer.textComposer.state.partialNext({
+        command: { description: 'Ban a user', name: 'ban' },
         mentionedUsers: [{ id: 'target-user', name: 'Target User' }],
         selection: { start: 16, end: 16 },
         text: '/ban @target-user',
@@ -629,11 +634,42 @@ describe('MessageComposer', () => {
       expect(messageComposer.hasSendableData).toBe(false);
 
       messageComposer.textComposer.state.partialNext({
+        command: { description: 'Ban a user', name: 'ban' },
         mentionedUsers: [{ id: 'target-user', name: 'Target User' }],
         selection: { start: 23, end: 23 },
         text: '/ban @target-user rude',
       });
       expect(messageComposer.hasSendableData).toBe(true);
+    });
+
+    it('should require mentions for default moderation target commands', () => {
+      const { messageComposer } = setup();
+
+      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+        commands: [
+          { name: 'mute', description: 'Mute a user' },
+          { name: 'unmute', description: 'Unmute a user' },
+          { name: 'unban', description: 'Unban a user' },
+        ],
+      });
+
+      for (const commandName of ['mute', 'unmute', 'unban'] as const) {
+        messageComposer.textComposer.state.partialNext({
+          command: { description: `${commandName} a user`, name: commandName },
+          mentionedUsers: [],
+          selection: { start: commandName.length + 1, end: commandName.length + 1 },
+          text: `/${commandName}`,
+        });
+        expect(messageComposer.hasSendableData).toBe(false);
+
+        messageComposer.textComposer.state.partialNext({
+          command: { description: `${commandName} a user`, name: commandName },
+          mentionedUsers: [{ id: 'target-user', name: 'Target User' }],
+          selection: { start: commandName.length + 14, end: commandName.length + 14 },
+          text: `/${commandName} @target-user`,
+        });
+        expect(messageComposer.hasSendableData).toBe(true);
+      }
     });
 
     it('should return the correct compositionIsEmpty', () => {
@@ -850,10 +886,11 @@ describe('MessageComposer', () => {
     });
 
     it('should return command sendability for current raw commands', () => {
-      const validator = vi.fn(({ commandArgsText }) =>
+      const validator = vi.fn(({ command, commandArgsText }) =>
         commandArgsText.length > 0
           ? undefined
           : {
+              command,
               metadata: { expected: 'args' },
               ready: false as const,
               reason: 'missing_args',
@@ -862,7 +899,7 @@ describe('MessageComposer', () => {
       const { messageComposer } = setup({
         config: {
           commands: {
-            validators: [validator],
+            sendValidators: [validator],
           },
         },
       });
@@ -870,16 +907,12 @@ describe('MessageComposer', () => {
       vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
         commands: [{ name: 'custom', description: 'Custom command' }],
       });
+      const customCommand = { description: 'Custom command', name: 'custom' };
 
-      expect(messageComposer.getCurrentCommand('/custom')).toEqual(
-        expect.objectContaining({ name: 'custom' }),
-      );
       expect(
-        messageComposer.getCommandSendability(
-          messageComposer.getCurrentCommand('/custom')!,
-          '/custom',
-        ),
+        messageComposer.validateCommandSendability(customCommand, '/custom'),
       ).toEqual({
+        command: customCommand,
         metadata: { expected: 'args' },
         ready: false,
         reason: 'missing_args',
@@ -887,15 +920,15 @@ describe('MessageComposer', () => {
     });
 
     it('should allow overriding default command validators via config', () => {
-      const validator = vi.fn(({ mentionedUsersInText }) =>
+      const validator = vi.fn(({ command, mentionedUsersInText }) =>
         mentionedUsersInText.length > 0
-          ? { ready: true as const }
-          : { ready: false as const, reason: 'missing_user' as const },
+          ? { command, ready: true as const }
+          : { command, ready: false as const, reason: 'missing_user' as const },
       );
       const { messageComposer } = setup({
         config: {
           commands: {
-            validators: [validator],
+            sendValidators: [validator],
           },
         },
       });
@@ -904,17 +937,21 @@ describe('MessageComposer', () => {
         commands: [{ name: 'ban', description: 'Ban a user' }],
       });
       messageComposer.textComposer.state.partialNext({
+        command: { description: 'Ban a user', name: 'ban' },
         mentionedUsers: [{ id: 'target-user', name: 'Target User' }],
         selection: { start: 16, end: 16 },
         text: '/ban @target-user',
       });
 
       expect(
-        messageComposer.getCommandSendability(
-          messageComposer.getCurrentCommand('/ban @target-user')!,
+        messageComposer.validateCommandSendability(
+          messageComposer.textComposer.command!,
           '/ban @target-user',
         ),
-      ).toEqual({ ready: true });
+      ).toEqual({
+        command: messageComposer.textComposer.command!,
+        ready: true,
+      });
       expect(validator).toHaveBeenCalledWith(
         expect.objectContaining({
           command: expect.objectContaining({ name: 'ban' }),
@@ -922,6 +959,36 @@ describe('MessageComposer', () => {
           rawText: '/ban @target-user',
         }),
       );
+    });
+
+    it('should resolve raw commands from the registered command source', () => {
+      const validator = vi.fn(({ command, commandArgsText }) =>
+        commandArgsText.length > 0
+          ? undefined
+          : { command, ready: false as const, reason: 'missing_args' as const },
+      );
+      const { messageComposer } = setup({
+        config: {
+          commands: {
+            sendValidators: [validator],
+          },
+        },
+      });
+      const customSearchSource = new CommandSearchSource(messageComposer.channel);
+      vi.spyOn(customSearchSource, 'query').mockReturnValue({
+        items: [{ description: 'Custom command', id: 'custom', name: 'custom' }],
+        next: null,
+      });
+      const customCommand = getCommandByName(customSearchSource, 'custom');
+
+      expect(customCommand).toEqual(expect.objectContaining({ name: 'custom' }));
+      expect(
+        messageComposer.validateCommandSendability(customCommand!, '/custom'),
+      ).toEqual({
+        command: customCommand!,
+        ready: false,
+        reason: 'missing_args',
+      });
     });
 
     it('should register subscriptions', () => {

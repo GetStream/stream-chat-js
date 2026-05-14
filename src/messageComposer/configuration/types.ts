@@ -41,6 +41,7 @@ export type TextComposerConfig = {
 };
 
 export type CommandSendability = {
+  command: CommandResponse;
   ready: boolean;
   reason?: string & {};
   metadata?: Record<string, unknown>;
@@ -59,7 +60,7 @@ export type CommandSendValidator = (
 ) => CommandSendability | undefined;
 
 export type CommandsConfig = {
-  validators: CommandSendValidator[];
+  sendValidators: CommandSendValidator[];
 };
 
 export type AttachmentManagerConfig = {

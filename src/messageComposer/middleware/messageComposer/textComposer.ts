@@ -4,6 +4,7 @@ import type {
   MessageDraftComposerMiddlewareValueState,
   MessageDraftCompositionMiddleware,
 } from './types';
+import { getMentionedUsersInText } from '../textComposer/commandUtils';
 import type { MessageComposer } from '../../messageComposer';
 import type { MiddlewareHandlerParams } from '../../../middleware';
 
@@ -22,13 +23,7 @@ export const createTextComposerCompositionMiddleware = (
       // Instead of checking if a user is still mentioned every time the text changes,
       // just filter out non-mentioned users before submit, which is cheaper
       // and allows users to easily undo any accidental deletion
-      const mentioned_users = Array.from(
-        new Set(
-          mentionedUsers.filter(
-            ({ id, name }) => text.includes(`@${id}`) || text.includes(`@${name}`),
-          ),
-        ),
-      );
+      const mentioned_users = getMentionedUsersInText(text, mentionedUsers);
 
       // prevent introducing text and mentioned_users array into the payload sent to the server
       if (!text && mentioned_users.length === 0) return forward();
@@ -67,14 +62,7 @@ export const createDraftTextComposerCompositionMiddleware = (
       // just filter out non-mentioned users before submit, which is cheaper
       // and allows users to easily undo any accidental deletion
       const mentioned_users = mentionedUsers.length
-        ? Array.from(
-            new Set(
-              mentionedUsers.filter(
-                ({ id, name }) =>
-                  inputText.includes(`@${id}`) || inputText.includes(`@${name}`),
-              ),
-            ),
-          )
+        ? getMentionedUsersInText(inputText, mentionedUsers)
         : undefined;
 
       const text =

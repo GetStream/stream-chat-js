@@ -77,6 +77,7 @@ export const calculateLevenshtein = (query: string, name: string) => {
 export type MentionsSearchSourceOptions = SearchSourceOptions & {
   mentionAllAppUsers?: boolean;
   textComposerText?: string;
+  trigger?: string;
   // todo: document that if you want transliteration, you need to provide the function, e.g. import {default: transliterate}  from '@sindresorhus/transliterate';
   // this is now replacing a parameter useMentionsTransliteration
   transliterate?: (text: string) => string;
@@ -94,12 +95,17 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
   config: MentionsSearchSourceOptions;
 
   constructor(channel: Channel, options?: MentionsSearchSourceOptions) {
-    const { mentionAllAppUsers, textComposerText, transliterate, ...restOptions } =
-      options || {};
+    const {
+      mentionAllAppUsers,
+      textComposerText,
+      transliterate,
+      trigger,
+      ...restOptions
+    } = options || {};
     super(restOptions);
     this.client = channel.getClient();
     this.channel = channel;
-    this.config = { mentionAllAppUsers, textComposerText };
+    this.config = { mentionAllAppUsers, textComposerText, trigger };
 
     if (transliterate) {
       this.transliterate = transliterate;
@@ -169,7 +175,8 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
         ).toLowerCase();
 
         const maxDistance = 3;
-        const lastDigits = textComposerText.slice(-(maxDistance + 1)).includes('@');
+        const trigger = this.config.trigger ?? '@';
+        const lastDigits = textComposerText.slice(-(maxDistance + 1)).includes(trigger);
 
         if (updatedName) {
           const levenshtein = calculateLevenshtein(updatedQuery, updatedName);
@@ -336,7 +343,7 @@ export const createMentionsMiddleware = (
     searchSource = options.searchSource;
     searchSource.resetState();
   } else {
-    searchSource = new MentionsSearchSource(channel);
+    searchSource = new MentionsSearchSource(channel, { trigger: finalOptions.trigger });
   }
   searchSource.activate();
   return {
@@ -389,7 +396,9 @@ export const createMentionsMiddleware = (
         return complete({
           ...state,
           ...insertItemWithTrigger({
-            insertText: `@${selectedSuggestion.name || selectedSuggestion.id} `,
+            insertText: `${searchSource.config.trigger ?? finalOptions.trigger}${
+              selectedSuggestion.name || selectedSuggestion.id
+            } `,
             selection: state.selection,
             text: state.text,
             trigger: finalOptions.trigger,

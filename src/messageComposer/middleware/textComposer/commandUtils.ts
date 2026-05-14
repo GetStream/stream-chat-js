@@ -1,5 +1,7 @@
 import type { MessageComposer } from '../../messageComposer';
-import type { CommandResponse } from '../../../types';
+import type { CommandResponse, UserResponse } from '../../../types';
+import type { CommandSendability } from '../../configuration';
+import type { CommandSearchSource } from './commands';
 
 export function escapeCommandRegExp(text: string) {
   return text.replace(/[-[\]{}()*+?.,/\\^$|#]/g, '\\$&');
@@ -18,6 +20,43 @@ export const getCompleteCommandInString = (text: string) => {
 
 export const stripCommandFromText = (text: string, commandName: string) =>
   text.replace(new RegExp(`^${escapeCommandRegExp(`/${commandName}`)}\\s*`), '');
+
+export const stripMentionTokens = (
+  text: string,
+  mentionedUsersInText: UserResponse[],
+  trigger = '@',
+) =>
+  mentionedUsersInText.reduce((value, user) => {
+    let next = value.replace(`${trigger}${user.id}`, '');
+
+    if (user.name) {
+      next = next.replace(`${trigger}${user.name}`, '');
+    }
+
+    return next.trim();
+  }, text.trim());
+
+export const getMentionedUsersInText = (text: string, mentionedUsers: UserResponse[]) =>
+  Array.from(
+    new Set(
+      mentionedUsers.filter(
+        ({ id, name }) =>
+          text.includes(`@${id}`) || (!!name && text.includes(`@${name}`)),
+      ),
+    ),
+  );
+
+export const getCommandByName = (
+  searchSource: Pick<CommandSearchSource, 'query'>,
+  commandName?: string,
+): CommandResponse | undefined => {
+  if (!commandName) return;
+
+  const normalizedCommandName = commandName.toLowerCase();
+  return searchSource
+    .query(normalizedCommandName)
+    .items.find((command) => command.name?.toLowerCase() === normalizedCommandName);
+};
 
 export const notifyCommandDisabled = (
   composer: MessageComposer,
@@ -40,6 +79,34 @@ export const notifyCommandDisabled = (
       metadata: {
         command: command.name,
         reason: disabledReason,
+      },
+    },
+  });
+
+  return true;
+};
+
+export const notifyCommandNotReady = ({
+  composer,
+  sendability,
+}: {
+  composer: MessageComposer;
+  sendability: CommandSendability;
+}) => {
+  if (sendability.ready) return;
+
+  composer.client.notifications.addWarning({
+    message: 'Command not ready to be sent',
+    origin: {
+      emitter: 'MessageComposer',
+      context: { command: sendability.command, composer },
+    },
+    options: {
+      type: 'validation:command:not-ready',
+      metadata: {
+        command: sendability.command.name,
+        ...(sendability.reason ? { reason: sendability.reason } : {}),
+        ...(sendability.metadata ?? {}),
       },
     },
   });
