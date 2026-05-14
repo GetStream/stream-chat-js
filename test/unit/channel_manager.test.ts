@@ -1535,7 +1535,7 @@ describe('ChannelManager', () => {
       sinon.reset();
     });
 
-    describe('predefined filter mutation metadata', () => {
+    describe('predefined filter response metadata', () => {
       it('does not promote an archived channel into a resolved non-archived list on message.new', async () => {
         await queryChannelsWithPredefinedFilterResponse({
           filter: { archived: false },
@@ -1674,7 +1674,7 @@ describe('ChannelManager', () => {
         ).to.deep.equal(['channel3', 'channel1', 'channel2']);
       });
 
-      it('keeps non-predefined query mutation behavior based on caller filters and sort', async () => {
+      it('keeps non-predefined query behavior based on caller filters and sort', async () => {
         vi.spyOn(client, 'post').mockResolvedValueOnce({
           duration: '0.01s',
           channels: channelsResponse,
@@ -1694,7 +1694,7 @@ describe('ChannelManager', () => {
         expect(setChannelsStub).toHaveBeenCalledTimes(0);
       });
 
-      it('preserves resolved predefined mutation metadata after loading the next page', async () => {
+      it('preserves resolved predefined response metadata after loading the next page', async () => {
         vi.spyOn(client, 'post')
           .mockResolvedValueOnce({
             duration: '0.01s',
@@ -1738,7 +1738,7 @@ describe('ChannelManager', () => {
         expect(setChannelsStub).toHaveBeenCalledTimes(0);
       });
 
-      it('clears resolved predefined mutation metadata when switching to a non-predefined query', async () => {
+      it('clears resolved predefined response metadata when switching to a non-predefined query', async () => {
         vi.spyOn(client, 'post')
           .mockResolvedValueOnce({
             duration: '0.01s',

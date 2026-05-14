@@ -34,9 +34,9 @@ export type ChannelManagerPagination = {
   hasNext: boolean;
   isLoading: boolean;
   isLoadingNext: boolean;
-  mutationFilters?: ChannelFilters;
-  mutationSort?: ChannelSort;
   options: ChannelOptions;
+  responseFilters?: ChannelFilters;
+  responseSort?: ChannelSort;
   sort: ChannelSort;
 };
 
@@ -167,13 +167,13 @@ const mapPredefinedFilterSortToChannelSort = (
     [field]: direction,
   })) as ChannelSort;
 
-const getMutationPaginationParams = ({
+const getResponsePaginationParams = ({
   queryChannelsResponse,
   sort,
 }: {
   queryChannelsResponse?: Pick<QueryChannelsAPIResponse, 'predefined_filter'>;
   sort: ChannelSort;
-}): Pick<ChannelManagerPagination, 'mutationFilters' | 'mutationSort'> => {
+}): Pick<ChannelManagerPagination, 'responseFilters' | 'responseSort'> => {
   const predefinedFilter = queryChannelsResponse?.predefined_filter;
 
   if (!predefinedFilter) {
@@ -181,27 +181,27 @@ const getMutationPaginationParams = ({
   }
 
   return {
-    mutationFilters: predefinedFilter.filter as ChannelFilters,
-    mutationSort:
+    responseFilters: predefinedFilter.filter as ChannelFilters,
+    responseSort:
       predefinedFilter.sort !== undefined
         ? mapPredefinedFilterSortToChannelSort(predefinedFilter.sort)
         : sort,
   };
 };
 
-const getMutationFiltersAndSort = (
+const getResponseFiltersAndSort = (
   pagination: ChannelManagerPagination,
 ): Pick<ChannelManagerPagination, 'filters' | 'sort'> => ({
-  filters: pagination.mutationFilters ?? pagination.filters,
-  sort: pagination.mutationSort ?? pagination.sort,
+  filters: pagination.responseFilters ?? pagination.filters,
+  sort: pagination.responseSort ?? pagination.sort,
 });
 
-const omitMutationPaginationParams = (pagination: ChannelManagerPagination) => {
-  const paginationWithoutMutationParams = { ...pagination };
-  delete paginationWithoutMutationParams.mutationFilters;
-  delete paginationWithoutMutationParams.mutationSort;
+const omitResponsePaginationParams = (pagination: ChannelManagerPagination) => {
+  const paginationWithoutResponseParams = { ...pagination };
+  delete paginationWithoutResponseParams.responseFilters;
+  delete paginationWithoutResponseParams.responseSort;
 
-  return paginationWithoutMutationParams;
+  return paginationWithoutResponseParams;
 };
 
 const isQueryChannelsResponseWithChannels = (
@@ -347,22 +347,22 @@ export class ChannelManager extends WithSubscriptions {
       const newOffset = offset + (channels?.length ?? 0);
       const newOptions = { ...options, offset: newOffset };
       const { pagination } = this.state.getLatestValue();
-      const mutationPaginationParams = getMutationPaginationParams({
+      const responsePaginationParams = getResponsePaginationParams({
         queryChannelsResponse: isQueryChannelsResponseWithChannels(queryChannelsResponse)
           ? queryChannelsResponse
           : undefined,
         sort,
       });
-      const paginationWithoutMutationParams = omitMutationPaginationParams(pagination);
+      const paginationWithoutResponseParams = omitResponsePaginationParams(pagination);
 
       this.state.partialNext({
         channels,
         pagination: {
-          ...paginationWithoutMutationParams,
+          ...paginationWithoutResponseParams,
           hasNext: (channels?.length ?? 0) >= (limit ?? 1),
           isLoading: false,
           options: newOptions,
-          ...mutationPaginationParams,
+          ...responsePaginationParams,
         },
         initialized: true,
         error: undefined,
@@ -435,7 +435,7 @@ export class ChannelManager extends WithSubscriptions {
       this.state.next((currentState) => ({
         ...currentState,
         pagination: {
-          ...omitMutationPaginationParams(currentState.pagination),
+          ...omitResponsePaginationParams(currentState.pagination),
           isLoading: true,
           isLoadingNext: false,
           filters,
@@ -568,7 +568,7 @@ export class ChannelManager extends WithSubscriptions {
       return;
     }
 
-    const { sort } = getMutationFiltersAndSort(pagination);
+    const { sort } = getResponseFiltersAndSort(pagination);
 
     this.setChannels(
       promoteChannel({
@@ -605,7 +605,7 @@ export class ChannelManager extends WithSubscriptions {
     if (!channels) {
       return;
     }
-    const { filters, sort } = getMutationFiltersAndSort(pagination);
+    const { filters, sort } = getResponseFiltersAndSort(pagination);
 
     const channelType = event.channel_type;
     const channelId = event.channel_id;
@@ -664,7 +664,7 @@ export class ChannelManager extends WithSubscriptions {
     });
 
     const { channels, pagination } = this.state.getLatestValue();
-    const { filters, sort } = getMutationFiltersAndSort(pagination);
+    const { filters, sort } = getResponseFiltersAndSort(pagination);
 
     const considerArchivedChannels = shouldConsiderArchivedChannels(filters);
     const isTargetChannelArchived = isChannelArchived(channel);
@@ -701,7 +701,7 @@ export class ChannelManager extends WithSubscriptions {
     });
 
     const { channels, pagination } = this.state.getLatestValue();
-    const { filters, sort } = getMutationFiltersAndSort(pagination);
+    const { filters, sort } = getResponseFiltersAndSort(pagination);
 
     const considerArchivedChannels = shouldConsiderArchivedChannels(filters);
     const isTargetChannelArchived = isChannelArchived(channel);
@@ -728,7 +728,7 @@ export class ChannelManager extends WithSubscriptions {
 
   private memberUpdatedHandler = (event: Event) => {
     const { pagination, channels } = this.state.getLatestValue();
-    const { filters, sort } = getMutationFiltersAndSort(pagination);
+    const { filters, sort } = getResponseFiltersAndSort(pagination);
     if (
       !event.member?.user ||
       event.member.user.id !== this.client.userID ||
