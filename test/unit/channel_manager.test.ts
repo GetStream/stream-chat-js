@@ -272,6 +272,48 @@ describe('ChannelManager', () => {
         expect(newChannels.map((c) => c.id)).to.deep.equal(prevChannels.map((c) => c.id));
         expect(newChannels).to.equal(prevChannels);
       });
+
+      it('passes full predefined-filter query options when upserting CIDs', async () => {
+        client.setOfflineDBApi(new MockOfflineDB({ client }));
+        await client.offlineDb!.init(client.userID as string);
+        client.offlineDb!.state.partialNext({
+          initialized: true,
+          userId: client.userID,
+        });
+        (
+          client.offlineDb!.upsertCidsForQuery as unknown as MockInstance
+        ).mockResolvedValue([]);
+
+        const { channels, pagination } = channelManager.state.getLatestValue();
+        const options = {
+          predefined_filter: 'user_messaging',
+          filter_values: { user_id: 'user123' },
+          sort_values: { sort_field: 'last_message_at' },
+          limit: 10,
+          offset: 20,
+          presence: true,
+          state: true,
+          watch: true,
+        };
+
+        channelManager.state.partialNext({
+          pagination: {
+            ...pagination,
+            filters: { team: 'blue' },
+            options,
+            sort: { last_message_at: -1 },
+          },
+        });
+
+        channelManager.setChannels(channels);
+
+        expect(client.offlineDb!.upsertCidsForQuery).toHaveBeenCalledExactlyOnceWith({
+          cids: channels.map((channel) => channel.cid),
+          filters: { team: 'blue' },
+          options,
+          sort: { last_message_at: -1 },
+        });
+      });
     });
   });
 
@@ -533,6 +575,7 @@ describe('ChannelManager', () => {
           expect(client.offlineDb!.getChannelsForQuery).toHaveBeenCalledExactlyOnceWith({
             userId: client.userID,
             filters: { filterA: true },
+            options: {},
             sort: { asc: 1 },
           });
 
@@ -546,6 +589,24 @@ describe('ChannelManager', () => {
           expect(stateChangeSpy.calledOnceWithExactly(channels));
           expect(executeChannelsQuerySpy.called).to.be.false;
           expect(scheduleSyncStatusCallbackSpy.called).to.be.true;
+        });
+
+        it('passes full predefined-filter query options when hydrating channels from DB', async () => {
+          const options = {
+            predefined_filter: 'user_messaging',
+            filter_values: { user_id: 'dan' },
+            sort_values: { sort_field: 'last_message_at' },
+            limit: 20,
+          };
+
+          await channelManager.queryChannels({}, [], options);
+
+          expect(client.offlineDb!.getChannelsForQuery).toHaveBeenCalledExactlyOnceWith({
+            userId: client.userID,
+            filters: {},
+            options,
+            sort: [],
+          });
         });
 
         it('does NOT hydrate from DB if already initialized', async () => {
@@ -751,6 +812,52 @@ describe('ChannelManager', () => {
             },
           });
           expect(channels.length).to.equal(10);
+        });
+
+        it('passes full predefined-filter query options when upserting CIDs after query', async () => {
+          client.setOfflineDBApi(new MockOfflineDB({ client }));
+          await client.offlineDb!.init(client.userID as string);
+          client.offlineDb!.state.partialNext({
+            initialized: true,
+            userId: client.userID,
+          });
+          (
+            client.offlineDb!.upsertCidsForQuery as unknown as MockInstance
+          ).mockResolvedValue([]);
+
+          const queryOptions = {
+            predefined_filter: 'user_messaging',
+            filter_values: { user_id: 'user123' },
+            sort_values: { sort_field: 'last_message_at' },
+            limit: 10,
+            offset: 0,
+            presence: true,
+            state: true,
+            watch: true,
+          };
+          const { pagination } = channelManager.state.getLatestValue();
+          channelManager.state.partialNext({
+            pagination: {
+              ...pagination,
+              filters: { filterA: true },
+              options: queryOptions,
+              sort: { asc: 1 },
+            },
+          });
+
+          await channelManager['executeChannelsQuery']({
+            filters: { filterA: true },
+            sort: { asc: 1 },
+            options: queryOptions,
+            stateOptions: {},
+          });
+
+          expect(client.offlineDb!.upsertCidsForQuery).toHaveBeenCalledExactlyOnceWith({
+            cids: mockChannelPages[0].map((channel) => channel.cid),
+            filters: { filterA: true },
+            options: queryOptions,
+            sort: { asc: 1 },
+          });
         });
 
         it('should properly update hasNext and offset after executeChannelsQuery if the first returned page is less than the limit', async () => {
