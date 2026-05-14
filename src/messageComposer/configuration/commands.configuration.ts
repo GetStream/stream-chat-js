@@ -6,7 +6,7 @@ import type {
 import type { DeepPartial } from '../../types.utility';
 import { stripMentionTokens } from '../middleware';
 
-const MENTION_ONLY_COMMANDS = new Set(['mute', 'unmute', 'unban']);
+export const MENTION_ONLY_COMMANDS = new Set(['mute', 'unmute', 'unban']);
 export const defaultCommandSendabilityValidator: CommandSendValidator = ({
   command,
   commandArgsText,

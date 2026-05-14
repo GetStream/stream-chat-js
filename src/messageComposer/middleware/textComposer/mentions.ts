@@ -352,7 +352,16 @@ export const createMentionsMiddleware = (
     handlers: {
       onChange: ({ state, next, complete, forward }) => {
         if (!state.selection) return forward();
-        const currentMentions = getMentionedUsersInText(state.text, state.mentionedUsers);
+        // Only prune stale mentions during normal text editing. Entering command mode
+        // clears text/mentions through the `command.activate` effect, which first
+        // snapshots the previous TextComposer state so it can be restored on
+        // `clearCommand()`. Custom middleware is allowed to remove that effect,
+        // though, and in that opt-out case we must not silently drop mentions
+        // here just because the user typed a raw command like `/ban`.
+        const currentMentions =
+          state.command || state.text.trimStart().startsWith('/')
+            ? state.mentionedUsers
+            : getMentionedUsersInText(state.text, state.mentionedUsers);
         const mentionedUsersChanged =
           currentMentions.length !== state.mentionedUsers.length ||
           currentMentions.some(
