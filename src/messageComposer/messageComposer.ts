@@ -406,16 +406,16 @@ export class MessageComposer extends WithSubscriptions {
     command: CommandResponse,
     text = this.textComposer.text,
   ): CommandSendability => {
+    const currentMentionedUsers = this.textComposer.mentionedUsers;
+    const mentionedUsersInText = getMentionedUsersInText(text, currentMentionedUsers);
+
     const validationContext = {
       command,
       commandArgsText: command.name
         ? stripCommandFromText(text, command.name).trim()
         : text.trim(),
       composer: this,
-      mentionedUsersInText: getMentionedUsersInText(
-        text,
-        this.textComposer.mentionedUsers,
-      ),
+      mentionedUsersInText,
       rawText: text,
     };
 

@@ -193,6 +193,31 @@ describe('TextComposerMiddlewareExecutor', () => {
     expect(textComposer.mentionedUsers).toContainEqual(selectedSuggestion);
   });
 
+  it('should prune stale mentions on change', async () => {
+    const {
+      messageComposer: { textComposer },
+    } = setup();
+    await textComposer.handleChange({
+      text: '@jo',
+      selection: { start: 3, end: 3 },
+    });
+
+    const selectedSuggestion = {
+      id: 'user1',
+      name: 'John Doe',
+    } as TextComposerSuggestion<UserResponse>;
+
+    await textComposer.handleSelect(selectedSuggestion);
+    expect(textComposer.mentionedUsers).toContainEqual(selectedSuggestion);
+
+    await textComposer.handleChange({
+      text: '',
+      selection: { start: 0, end: 0 },
+    });
+
+    expect(textComposer.mentionedUsers).toEqual([]);
+  });
+
   it('should handle suggestion selection with commands', async () => {
     const {
       messageComposer: { textComposer },

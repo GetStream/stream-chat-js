@@ -3,6 +3,7 @@ import {
   getTriggerCharWithToken,
   insertItemWithTrigger,
 } from './textMiddlewareUtils';
+import { getMentionedUsersInText } from './commandUtils';
 import { BaseSearchSource, type SearchSourceOptions } from '../../../search';
 import { mergeWith } from '../../../utils/mergeWith';
 import type { TextComposerMiddlewareOptions, UserSuggestion } from './types';
@@ -351,10 +352,19 @@ export const createMentionsMiddleware = (
     handlers: {
       onChange: ({ state, next, complete, forward }) => {
         if (!state.selection) return forward();
+        const currentMentions = getMentionedUsersInText(state.text, state.mentionedUsers);
+        const mentionedUsersChanged =
+          currentMentions.length !== state.mentionedUsers.length ||
+          currentMentions.some(
+            (user, index) => user.id !== state.mentionedUsers[index]?.id,
+          );
+        const stateWithMentions = mentionedUsersChanged
+          ? { ...state, mentionedUsers: currentMentions }
+          : state;
 
         const triggerWithToken = getTriggerCharWithToken({
           trigger: finalOptions.trigger,
-          text: state.text.slice(0, state.selection.end),
+          text: stateWithMentions.text.slice(0, stateWithMentions.selection.end),
         });
 
         const newSearchTriggered =
@@ -368,18 +378,19 @@ export const createMentionsMiddleware = (
           !triggerWithToken || triggerWithToken.length < finalOptions.minChars;
 
         if (triggerWasRemoved) {
-          const hasStaleSuggestions = state.suggestions?.trigger === finalOptions.trigger;
-          const newState = { ...state };
+          const hasStaleSuggestions =
+            stateWithMentions.suggestions?.trigger === finalOptions.trigger;
+          const newState = { ...stateWithMentions };
           if (hasStaleSuggestions) {
             delete newState.suggestions;
           }
           return next(newState);
         }
 
-        searchSource.config.textComposerText = state.text;
+        searchSource.config.textComposerText = stateWithMentions.text;
 
         return complete({
-          ...state,
+          ...stateWithMentions,
           suggestions: {
             query: triggerWithToken.slice(1),
             searchSource,
