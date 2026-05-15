@@ -1,10 +1,11 @@
-import type { StreamChat } from './client';
+import type { QueryChannelsResponseWithChannels, StreamChat } from './client';
 import type {
   ChannelFilters,
   ChannelOptions,
   ChannelSort,
   ChannelStateOptions,
   Event,
+  QueryChannelsAPIResponse,
 } from './types';
 import type { ValueOrPatch } from './store';
 import { isPatch, StateStore } from './store';
@@ -34,6 +35,8 @@ export type ChannelManagerPagination = {
   isLoading: boolean;
   isLoadingNext: boolean;
   options: ChannelOptions;
+  responseFilters?: ChannelFilters;
+  responseSort?: ChannelSort;
   sort: ChannelSort;
 };
 
@@ -133,9 +136,14 @@ export type ChannelManagerOptions = {
   lockChannelOrder?: boolean;
 };
 
+export type QueryChannelsRequestOutput = Channel[] | QueryChannelsResponseWithChannels;
+
 export type QueryChannelsRequestType = (
-  ...params: Parameters<StreamChat['queryChannels']>
-) => Promise<Channel[]>;
+  filters: ChannelFilters,
+  sort?: ChannelSort,
+  options?: ChannelOptions,
+  stateOptions?: ChannelStateOptions,
+) => Promise<QueryChannelsRequestOutput>;
 
 export const DEFAULT_CHANNEL_MANAGER_OPTIONS = {
   abortInFlightQuery: false,
@@ -151,6 +159,54 @@ export const DEFAULT_CHANNEL_MANAGER_OPTIONS = {
 export const DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS = {
   offset: 0,
 };
+
+const mapPredefinedFilterSortToChannelSort = (
+  sort: NonNullable<QueryChannelsAPIResponse['predefined_filter']>['sort'],
+): ChannelSort =>
+  (sort ?? []).map(({ direction = 1, field }) => ({
+    [field]: direction,
+  })) as ChannelSort;
+
+const getResponsePaginationParams = ({
+  queryChannelsResponse,
+  sort,
+}: {
+  queryChannelsResponse?: Pick<QueryChannelsAPIResponse, 'predefined_filter'>;
+  sort: ChannelSort;
+}): Pick<ChannelManagerPagination, 'responseFilters' | 'responseSort'> => {
+  const predefinedFilter = queryChannelsResponse?.predefined_filter;
+
+  if (!predefinedFilter) {
+    return {};
+  }
+
+  return {
+    responseFilters: predefinedFilter.filter as ChannelFilters,
+    responseSort:
+      predefinedFilter.sort !== undefined
+        ? mapPredefinedFilterSortToChannelSort(predefinedFilter.sort)
+        : sort,
+  };
+};
+
+const getResponseFiltersAndSort = (
+  pagination: ChannelManagerPagination,
+): Pick<ChannelManagerPagination, 'filters' | 'sort'> => ({
+  filters: pagination.responseFilters ?? pagination.filters,
+  sort: pagination.responseSort ?? pagination.sort,
+});
+
+const omitResponsePaginationParams = (pagination: ChannelManagerPagination) => {
+  const paginationWithoutResponseParams = { ...pagination };
+  delete paginationWithoutResponseParams.responseFilters;
+  delete paginationWithoutResponseParams.responseSort;
+
+  return paginationWithoutResponseParams;
+};
+
+const isQueryChannelsResponseWithChannels = (
+  response: QueryChannelsRequestOutput,
+): response is QueryChannelsResponseWithChannels => !Array.isArray(response);
 
 /**
  * A class that manages a list of channels and changes it based on configuration and WS events. The
@@ -279,23 +335,39 @@ export class ChannelManager extends WithSubscriptions {
       ...options,
     };
     try {
-      const channels = await this.queryChannelsRequest(
+      const queryChannelsResponse = await this.queryChannelsRequest(
         filters,
         sort,
         options,
-        stateOptions,
+        { ...stateOptions, withResponse: true },
       );
+      const channels = isQueryChannelsResponseWithChannels(queryChannelsResponse)
+        ? queryChannelsResponse.channels
+        : queryChannelsResponse;
       const newOffset = offset + (channels?.length ?? 0);
       const newOptions = { ...options, offset: newOffset };
       const { pagination } = this.state.getLatestValue();
+      const responsePaginationParams = getResponsePaginationParams({
+        queryChannelsResponse: isQueryChannelsResponseWithChannels(queryChannelsResponse)
+          ? queryChannelsResponse
+          : undefined,
+        sort,
+      });
+      const paginationWithoutResponseParams = omitResponsePaginationParams(pagination);
 
       this.state.partialNext({
         channels,
         pagination: {
-          ...pagination,
+          // Drop response derived filter/sort from the previous query before applying
+          // the current response. Non predefined queries do not return this metadata,
+          // so keeping the old values would make later WS mutations use stale
+          // predefined filter semantics. Also the predefined_filter might change, producing
+          // a different combination as well so we always need to first clean up.
+          ...paginationWithoutResponseParams,
           hasNext: (channels?.length ?? 0) >= (limit ?? 1),
           isLoading: false,
           options: newOptions,
+          ...responsePaginationParams,
         },
         initialized: true,
         error: undefined,
@@ -368,7 +440,7 @@ export class ChannelManager extends WithSubscriptions {
       this.state.next((currentState) => ({
         ...currentState,
         pagination: {
-          ...currentState.pagination,
+          ...omitResponsePaginationParams(currentState.pagination),
           isLoading: true,
           isLoadingNext: false,
           filters,
@@ -434,12 +506,15 @@ export class ChannelManager extends WithSubscriptions {
       this.state.partialNext({
         pagination: { ...pagination, isLoading: false, isLoadingNext: true },
       });
-      const nextChannels = await this.queryChannelsRequest(
+      const queryChannelsResponse = await this.queryChannelsRequest(
         filters,
         sort,
         options,
         this.stateOptions,
       );
+      const nextChannels = isQueryChannelsResponseWithChannels(queryChannelsResponse)
+        ? queryChannelsResponse.channels
+        : queryChannelsResponse;
       const { channels } = this.state.getLatestValue();
       const newOffset = offset + (nextChannels?.length ?? 0);
       const newOptions = { ...options, offset: newOffset };
@@ -498,7 +573,7 @@ export class ChannelManager extends WithSubscriptions {
       return;
     }
 
-    const { sort } = pagination ?? {};
+    const { sort } = getResponseFiltersAndSort(pagination);
 
     this.setChannels(
       promoteChannel({
@@ -535,7 +610,7 @@ export class ChannelManager extends WithSubscriptions {
     if (!channels) {
       return;
     }
-    const { filters, sort } = pagination ?? {};
+    const { filters, sort } = getResponseFiltersAndSort(pagination);
 
     const channelType = event.channel_type;
     const channelId = event.channel_id;
@@ -594,7 +669,7 @@ export class ChannelManager extends WithSubscriptions {
     });
 
     const { channels, pagination } = this.state.getLatestValue();
-    const { filters, sort } = pagination ?? {};
+    const { filters, sort } = getResponseFiltersAndSort(pagination);
 
     const considerArchivedChannels = shouldConsiderArchivedChannels(filters);
     const isTargetChannelArchived = isChannelArchived(channel);
@@ -631,7 +706,7 @@ export class ChannelManager extends WithSubscriptions {
     });
 
     const { channels, pagination } = this.state.getLatestValue();
-    const { sort, filters } = pagination ?? {};
+    const { filters, sort } = getResponseFiltersAndSort(pagination);
 
     const considerArchivedChannels = shouldConsiderArchivedChannels(filters);
     const isTargetChannelArchived = isChannelArchived(channel);
@@ -658,7 +733,7 @@ export class ChannelManager extends WithSubscriptions {
 
   private memberUpdatedHandler = (event: Event) => {
     const { pagination, channels } = this.state.getLatestValue();
-    const { filters, sort } = pagination;
+    const { filters, sort } = getResponseFiltersAndSort(pagination);
     if (
       !event.member?.user ||
       event.member.user.id !== this.client.userID ||

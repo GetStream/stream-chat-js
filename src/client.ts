@@ -281,6 +281,13 @@ function isString(x: unknown): x is string {
 
 type MessageComposerTearDownFunction = () => void;
 
+export type QueryChannelsResponseWithChannels = Omit<
+  QueryChannelsAPIResponse,
+  'channels'
+> & {
+  channels: Channel[];
+};
+
 type MessageComposerSetupFunction = ({
   composer,
 }: {
@@ -1888,20 +1895,26 @@ export class StreamChat {
   }
 
   /**
-   * queryChannelsRequest - Queries channels and returns the raw response
+   * queryChannelsRequestWithResponse - Queries channels and returns the full API response
+   * including top-level metadata such as `predefined_filter`.
+   *
+   * This exists as a compatibility bridge, as changing `queryChannelsRequest()` to return
+   * `QueryChannelsAPIResponse` would be a breaking change because it currently returns
+   * only the channel list. In the next major release, the request/response APIs should
+   * be consolidated so callers can access the full response through the primary API.
    *
    * @param {ChannelFilters} filterConditions object MongoDB style filters. Can be empty object when using predefined_filter in options.
    * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
    * @param {ChannelOptions} [options] Options object. Can include predefined_filter, filter_values, and sort_values for using predefined filters.
    *
-   * @return {Promise<Array<ChannelAPIResponse>>} search channels response
+   * @return {Promise<QueryChannelsAPIResponse>} full search channels response
    */
-  async queryChannelsRequest(
+  async queryChannelsRequestWithResponse(
     filterConditions: ChannelFilters,
     sort: ChannelSort = [],
     options: ChannelOptions = {},
-  ) {
+  ): Promise<QueryChannelsAPIResponse> {
     const defaultOptions: ChannelOptions = {
       state: true,
       watch: true,
@@ -1934,9 +1947,33 @@ export class StreamChat {
           ...restOptions,
         };
 
-    const data = await this.post<QueryChannelsAPIResponse>(
-      this.baseURL + '/channels',
-      payload,
+    return await this.post<QueryChannelsAPIResponse>(this.baseURL + '/channels', payload);
+  }
+
+  /**
+   * queryChannelsRequest - Queries channels and returns the raw channel response list.
+   *
+   * This preserves the historical return shape for backwards compatibility. Use
+   * `queryChannelsRequestWithResponse()` when response level metadata such as
+   * `predefined_filter` is needed. In the next major release these APIs should be
+   * consolidated into a single full-response API.
+   *
+   * @param {ChannelFilters} filterConditions object MongoDB style filters. Can be empty object when using predefined_filter in options.
+   * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
+   * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
+   * @param {ChannelOptions} [options] Options object. Can include predefined_filter, filter_values, and sort_values for using predefined filters.
+   *
+   * @return {Promise<Array<ChannelAPIResponse>>} search channels response
+   */
+  async queryChannelsRequest(
+    filterConditions: ChannelFilters,
+    sort: ChannelSort = [],
+    options: ChannelOptions = {},
+  ) {
+    const data = await this.queryChannelsRequestWithResponse(
+      filterConditions,
+      sort,
+      options,
     );
 
     // FIXME: In the next major release, return the full QueryChannelsAPIResponse
@@ -1955,16 +1992,34 @@ export class StreamChat {
    * @param {ChannelStateOptions} [stateOptions] State options object. These options will only be used for state management and won't be sent in the request.
    * - stateOptions.skipInitialization - Skips the initialization of the state for the channels matching the ids in the list.
    * - stateOptions.skipHydration - Skips returning the channels as instances of the Channel class and rather returns the raw query response.
+   * - stateOptions.withResponse - Returns the full query response with hydrated channels. This is a compatibility bridge for internal callers that need response-level metadata while the default return value remains `Channel[]`.
    *
    * @return {Promise<Array<Channel>>} search channels response
    */
   async queryChannels(
     filterConditions: ChannelFilters,
+    sort: ChannelSort,
+    options: ChannelOptions,
+    stateOptions: ChannelStateOptions & { withResponse: true },
+  ): Promise<QueryChannelsResponseWithChannels>;
+  async queryChannels(
+    filterConditions?: ChannelFilters,
+    sort?: ChannelSort,
+    options?: ChannelOptions,
+    stateOptions?: ChannelStateOptions,
+  ): Promise<Channel[]>;
+  async queryChannels(
+    filterConditions: ChannelFilters,
     sort: ChannelSort = [],
     options: ChannelOptions = {},
     stateOptions: ChannelStateOptions = {},
-  ) {
-    const channels = await this.queryChannelsRequest(filterConditions, sort, options);
+  ): Promise<Channel[] | QueryChannelsResponseWithChannels> {
+    const queryChannelsResponse = await this.queryChannelsRequestWithResponse(
+      filterConditions,
+      sort,
+      options,
+    );
+    const channels = queryChannelsResponse.channels;
 
     this.dispatchEvent({
       type: 'channels.queried',
@@ -1980,7 +2035,16 @@ export class StreamChat {
       });
     }
 
-    return this.hydrateActiveChannels(channels, stateOptions, options);
+    const hydratedChannels = this.hydrateActiveChannels(channels, stateOptions, options);
+
+    if (stateOptions.withResponse) {
+      return {
+        ...queryChannelsResponse,
+        channels: hydratedChannels,
+      };
+    }
+
+    return hydratedChannels;
   }
 
   /**
