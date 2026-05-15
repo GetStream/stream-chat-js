@@ -1,3 +1,9 @@
+## [9.44.2](https://github.com/GetStream/stream-chat-js/compare/v9.44.1...v9.44.2) (2026-05-15)
+
+### Bug Fixes
+
+* channels sorting with predefined filters ([#1747](https://github.com/GetStream/stream-chat-js/issues/1747)) ([5ee79f7](https://github.com/GetStream/stream-chat-js/commit/5ee79f75a5f713b68fa9e912dcdb7305cc4c4b8d))
+
 ## [9.44.1](https://github.com/GetStream/stream-chat-js/compare/v9.44.0...v9.44.1) (2026-05-14)
 
 ### Bug Fixes
