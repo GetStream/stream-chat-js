@@ -369,9 +369,8 @@ describe('PollComposerStateMiddleware', () => {
       expect(result.status).toBeUndefined;
     });
 
-    it('should remove an option when it is empty and there are more options after it', async () => {
+    it('should preserve the cleared option id while keeping following empty options', async () => {
       const stateMiddleware = setup();
-      // Set up initial state with two options
       const initialState = getInitialState();
       initialState.data.options = [
         { id: 'option-1', text: 'Option 1' },
@@ -380,8 +379,8 @@ describe('PollComposerStateMiddleware', () => {
 
       const result = await stateMiddleware.handlers.handleFieldChange(
         setupHandlerParams({
-          nextState: { ...getInitialState() },
-          previousState: { ...getInitialState() },
+          nextState: { ...initialState },
+          previousState: { ...initialState },
           targetFields: {
             options: {
               index: 0,
@@ -391,8 +390,70 @@ describe('PollComposerStateMiddleware', () => {
         }),
       );
 
-      expect(result.state.nextState.data.options.length).toBe(1);
+      expect(result.state.nextState.data.options.length).toBe(2);
+      expect(result.state.nextState.data.options[0].id).toBe('option-1');
       expect(result.state.nextState.data.options[0].text).toBe('');
+      expect(result.state.nextState.data.options[1]).toEqual({
+        id: 'option-2',
+        text: '',
+      });
+      expect(result.status).toBeUndefined;
+    });
+
+    it('should not preserve the option when clearing it if a following option has text', async () => {
+      const stateMiddleware = setup();
+      const initialState = getInitialState();
+      initialState.data.options = [
+        { id: 'option-1', text: 'Option 1' },
+        { id: 'option-2', text: 'Option 2' },
+        { id: 'option-3', text: '' },
+      ];
+
+      const result = await stateMiddleware.handlers.handleFieldChange(
+        setupHandlerParams({
+          nextState: { ...initialState },
+          previousState: { ...initialState },
+          targetFields: {
+            options: {
+              index: 0,
+              text: '',
+            },
+          },
+        }),
+      );
+
+      expect(result.state.nextState.data.options).toEqual([
+        { id: 'option-2', text: 'Option 2' },
+        { id: 'option-3', text: '' },
+      ]);
+      expect(result.status).toBeUndefined;
+    });
+
+    it('should not preserve trailing empty options for whitespace-only option text', async () => {
+      const stateMiddleware = setup();
+      const initialState = getInitialState();
+      initialState.data.options = [
+        { id: 'option-1', text: 'Option 1' },
+        { id: 'option-2', text: '' },
+      ];
+
+      const result = await stateMiddleware.handlers.handleFieldChange(
+        setupHandlerParams({
+          nextState: { ...initialState },
+          previousState: { ...initialState },
+          targetFields: {
+            options: {
+              index: 0,
+              text: '   ',
+            },
+          },
+        }),
+      );
+
+      expect(result.state.nextState.data.options).toEqual([
+        { id: 'option-1', text: '   ' },
+        { id: 'option-2', text: '' },
+      ]);
       expect(result.status).toBeUndefined;
     });
 
