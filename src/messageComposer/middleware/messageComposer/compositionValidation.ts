@@ -18,7 +18,7 @@ import type { MiddlewareHandlerParams } from '../../../middleware';
 
 const getDisabledRawCommand = (
   composer: MessageComposer,
-  searchSource: Pick<CommandSearchSource, 'query'>,
+  searchSource: CommandSearchSource,
   text?: string,
 ): CommandResponse | undefined => {
   const rawCommand = getCommandByName(searchSource, getRawCommandName(text));
@@ -29,7 +29,7 @@ const getDisabledRawCommand = (
 
 export const createCompositionValidationMiddleware = (
   composer: MessageComposer,
-  commandSearchSource?: Pick<CommandSearchSource, 'query'>,
+  commandSearchSource?: CommandSearchSource,
 ): MessageCompositionMiddleware => {
   const effectiveCommandSearchSource =
     commandSearchSource ?? new CommandSearchSource(composer.channel);

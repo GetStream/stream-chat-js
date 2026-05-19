@@ -47,7 +47,7 @@ export const getMentionedUsersInText = (text: string, mentionedUsers: UserRespon
   );
 
 export const getCommandByName = (
-  searchSource: Pick<CommandSearchSource, 'query'>,
+  searchSource: CommandSearchSource,
   commandName?: string,
 ): CommandResponse | undefined => {
   if (!commandName) return;
