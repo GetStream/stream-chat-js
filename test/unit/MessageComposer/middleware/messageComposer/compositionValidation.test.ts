@@ -380,7 +380,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
         options: expect.objectContaining({
           metadata: expect.objectContaining({
             command: 'ban',
-            reason: 'missing_reason',
+            reason: 'missing-ban-reason',
           }),
           type: 'validation:command:not-ready',
         }),
@@ -431,7 +431,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
           options: expect.objectContaining({
             metadata: expect.objectContaining({
               command: commandName,
-              reason: 'missing_mention',
+              reason: 'missing-mention',
             }),
             type: 'validation:command:not-ready',
           }),

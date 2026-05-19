@@ -15,17 +15,17 @@ export const defaultCommandSendabilityValidator: CommandSendValidator = ({
   if (command.name !== 'ban' && !MENTION_ONLY_COMMANDS.has(command.name ?? '')) return;
 
   if (mentionedUsersInText.length === 0) {
-    return { command, ready: false, reason: 'missing_mention' };
+    return { command, ready: false, reason: 'missing-mention' };
   }
 
   if (command.name !== 'ban') {
     return { command, ready: true };
   }
 
-  const reason = stripMentionTokens(commandArgsText, mentionedUsersInText);
+  const banReason = stripMentionTokens(commandArgsText, mentionedUsersInText);
 
-  if (!reason.length) {
-    return { command, ready: false, reason: 'missing_reason' };
+  if (!banReason.length) {
+    return { command, ready: false, reason: 'missing-ban-reason' };
   }
 
   return { command, ready: true };

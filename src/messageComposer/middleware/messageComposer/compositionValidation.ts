@@ -58,15 +58,14 @@ export const createCompositionValidationMiddleware = (
         const currentCommand =
           composer.textComposer.command ??
           getCommandByName(effectiveCommandSearchSource, getRawCommandName(inputText));
-        if (currentCommand) {
-          if (
-            notifyCommandNotReady({
-              composer,
-              sendability: composer.validateCommandSendability(currentCommand, inputText),
-            })
-          ) {
-            return await discard();
-          }
+        if (
+          currentCommand &&
+          notifyCommandNotReady({
+            composer,
+            sendability: composer.validateCommandSendability(currentCommand, inputText),
+          })
+        ) {
+          return await discard();
         }
 
         const hasExceededMaxLength =
