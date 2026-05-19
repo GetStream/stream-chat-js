@@ -906,6 +906,35 @@ export type SearchAPIResponse = APIResponse & {
   results_warning?: SearchWarning | null;
 };
 
+export type RoleResponse = {
+  name: Role;
+  custom: boolean;
+  scopes: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreateRoleAPIResponse = APIResponse & {
+  role: RoleResponse;
+};
+
+export type ListRolesAPIResponse = APIResponse & {
+  roles: RoleResponse[];
+};
+
+export type SearchRolesAPIResponse = APIResponse & {
+  roles: RoleResponse[];
+};
+
+export type SearchRolesOptions = {
+  query: string;
+  include_global_roles?: boolean;
+  limit?: number;
+  name_gt?: string;
+  // If not provided, the default is search performed both in user-assignable + channel-assignable roles
+  role_type?: 'user' | 'channel';
+};
+
 export type SearchWarning = {
   channel_search_cids: string[];
   channel_search_count: number;

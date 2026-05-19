@@ -108,9 +108,13 @@ describe('MentionsSearchSource', () => {
 
     client = {
       userID: 'currentUser',
-      listRoles: vi.fn().mockResolvedValue({
-        roles: ['admin', 'channel_moderator', 'moderator'],
-      }),
+      searchRoles: vi.fn().mockImplementation(async ({ query }: { query: string }) => ({
+        roles: [
+          { name: 'admin' },
+          { name: 'channel_moderator' },
+          { name: 'moderator' },
+        ].filter((role) => role.name.includes(query)),
+      })),
       queryUsers: vi.fn().mockResolvedValue({ users: mockUsers }),
       searchUserGroups: vi.fn().mockImplementation(
         async (options: SearchUserGroupsOptions): Promise<SearchUserGroupsResponse> => ({
@@ -185,7 +189,7 @@ describe('MentionsSearchSource', () => {
     expect(customizedSource.transliterate).toBeInstanceOf(Function);
   });
 
-  it('should return built-ins, roles, and users on empty query without user group search', async () => {
+  it('should return built-ins and users on empty query without role or user group search', async () => {
     const source = new MentionsSearchSource(channel);
     source.activate();
     source.config.textComposerText = '@';
@@ -193,11 +197,10 @@ describe('MentionsSearchSource', () => {
     const result = await source.query('');
 
     expect(client.searchUserGroups).not.toHaveBeenCalled();
-    expect(client.listRoles).toHaveBeenCalledTimes(1);
+    expect(client.searchRoles).not.toHaveBeenCalled();
     expect(getSuggestion(result.items, 'channel', 'channel')).toBeDefined();
     expect(getSuggestion(result.items, 'here', 'here')).toBeDefined();
-    expect(getSuggestion(result.items, 'role', 'admin')).toBeDefined();
-    expect(getSuggestion(result.items, 'role', 'channel_moderator')).toBeDefined();
+    expect(result.items.some((item) => item.mentionType === 'role')).toBe(false);
     expect(getSuggestion(result.items, 'user_group', 'backend-team')).toBeUndefined();
     expect(getSuggestion(result.items, 'user', 'user1')).toBeDefined();
   });
@@ -223,23 +226,39 @@ describe('MentionsSearchSource', () => {
       query: 'adm',
       team_id: 'engineering',
     } satisfies SearchUserGroupsOptions);
-    expect(client.listRoles).toHaveBeenCalledTimes(1);
+    expect(client.searchRoles).toHaveBeenCalledWith({ query: 'adm' });
     expect(getSuggestion(result.items, 'role', 'admin')).toBeDefined();
     expect(getSuggestion(result.items, 'user_group', 'admins-group')).toBeDefined();
     expect(getSuggestion(result.items, 'channel', 'channel')).toBeUndefined();
     expect(getSuggestion(result.items, 'here', 'here')).toBeUndefined();
   });
 
-  it('should source role suggestions from client.listRoles', async () => {
+  it('should source role suggestions from client.searchRoles', async () => {
     const source = new MentionsSearchSource(channel);
     source.activate();
     source.config.textComposerText = '@mod';
 
     const result = await source.query('mod');
 
-    expect(client.listRoles).toHaveBeenCalledTimes(1);
+    expect(client.searchRoles).toHaveBeenCalledWith({ query: 'mod' });
     expect(getSuggestion(result.items, 'role', 'moderator')).toBeDefined();
     expect(getSuggestion(result.items, 'role', 'channel_moderator')).toBeDefined();
+  });
+
+  it('should not cache role names across different search queries', async () => {
+    const source = new MentionsSearchSource(channel);
+    source.activate();
+    source.config.textComposerText = '@adm';
+
+    const firstResult = await source.query('adm');
+    const secondResult = await source.query('mod');
+
+    expect(client.searchRoles).toHaveBeenNthCalledWith(1, { query: 'adm' });
+    expect(client.searchRoles).toHaveBeenNthCalledWith(2, { query: 'mod' });
+    expect(getSuggestion(firstResult.items, 'role', 'admin')).toBeDefined();
+    expect(getSuggestion(firstResult.items, 'role', 'moderator')).toBeUndefined();
+    expect(getSuggestion(secondResult.items, 'role', 'moderator')).toBeDefined();
+    expect(getSuggestion(secondResult.items, 'role', 'admin')).toBeUndefined();
   });
 
   it('should allow overriding built-in suggestion mappers from options', async () => {
@@ -281,7 +300,7 @@ describe('MentionsSearchSource', () => {
 
     const result = await source.query('adm');
 
-    expect(client.listRoles).not.toHaveBeenCalled();
+    expect(client.searchRoles).not.toHaveBeenCalled();
     expect(client.searchUserGroups).not.toHaveBeenCalled();
     expect(getSuggestion(result.items, 'channel', 'channel')).toBeUndefined();
     expect(getSuggestion(result.items, 'here', 'here')).toBeUndefined();

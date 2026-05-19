@@ -286,7 +286,6 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
   protected client: StreamChat;
   protected channel: Channel;
   protected latestUserPaginationState?: UserPaginationState;
-  protected roleNames?: string[];
   protected userGroupCursor?: string;
   userFilters: UserFilters | undefined;
   memberFilters: MemberFilters | undefined;
@@ -428,16 +427,6 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
     return Object.values(uniqueUsers);
   };
 
-  getAvailableRoles = async () => {
-    if (this.roleNames) return this.roleNames;
-
-    const response = (await this.client.listRoles()) as { roles?: string[] };
-    this.roleNames = [...(response.roles ?? [])].sort((left, right) =>
-      left.localeCompare(right),
-    );
-    return this.roleNames;
-  };
-
   getBuiltinMentionSuggestions = (searchQuery: string): MentionSuggestion[] =>
     [
       ...(this.isMentionTypeAllowed('channel')
@@ -448,14 +437,14 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
         : []),
     ].filter(({ name }) => this.matchesSearchQuery(name, searchQuery));
 
-  getRoleMentionSuggestions = async (
-    searchQuery: string,
-  ): Promise<RoleMentionSuggestion[]> =>
-    !this.isMentionTypeAllowed('role')
-      ? []
-      : (await this.getAvailableRoles())
-          .filter((role) => this.matchesSearchQuery(role, searchQuery))
-          .map((role) => this.toRoleMentionSuggestion(role, searchQuery));
+  getRoleMentionSuggestions = async (query: string): Promise<RoleMentionSuggestion[]> => {
+    if (!this.isMentionTypeAllowed('role')) return [];
+    if (!query) return [];
+    const { roles } = await this.client.searchRoles({ query });
+    return [...(roles?.map((role) => role.name) ?? [])]
+      .sort((left, right) => left.localeCompare(right))
+      .map((role) => this.toRoleMentionSuggestion(role, query));
+  };
 
   searchMembersLocally = (searchQuery: string) => {
     const { textComposerText } = this.config;

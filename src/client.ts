@@ -80,6 +80,7 @@ import type {
   CreatePollOptionAPIResponse,
   CreatePredefinedFilterOptions,
   CreateReminderOptions,
+  CreateRoleAPIResponse,
   CreateUserGroupOptions,
   CreateUserGroupResponse,
   CustomPermissionOptions,
@@ -139,6 +140,7 @@ import type {
   ListImportsResponse,
   ListPredefinedFiltersOptions,
   ListPredefinedFiltersResponse,
+  ListRolesAPIResponse,
   LocalMessage,
   Logger,
   MarkChannelsReadOptions,
@@ -215,6 +217,8 @@ import type {
   SearchMessageSortBase,
   SearchOptions,
   SearchPayload,
+  SearchRolesAPIResponse,
+  SearchRolesOptions,
   SearchUserGroupsOptions,
   SearchUserGroupsResponse,
   SegmentData,
@@ -3828,7 +3832,7 @@ export class StreamChat {
    * @returns {Promise<APIResponse>}
    */
   createRole(name: string) {
-    return this.post<APIResponse>(`${this.baseURL}/roles`, { name });
+    return this.post<CreateRoleAPIResponse>(`${this.baseURL}/roles`, { name });
   }
 
   /** listRoles - returns the list of all roles for this application
@@ -3836,7 +3840,15 @@ export class StreamChat {
    * @returns {Promise<APIResponse>}
    */
   listRoles() {
-    return this.get<APIResponse>(`${this.baseURL}/roles`);
+    return this.get<ListRolesAPIResponse>(`${this.baseURL}/roles`);
+  }
+
+  /** listRoles - returns the list of all roles for this application
+   *
+   * @returns {Promise<APIResponse>}
+   */
+  searchRoles(options: SearchRolesOptions) {
+    return this.get<SearchRolesAPIResponse>(`${this.baseURL}/roles/search`, options);
   }
 
   /** deleteRole - deletes a custom role
