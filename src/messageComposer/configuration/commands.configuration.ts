@@ -31,17 +31,17 @@ export const defaultCommandSendabilityValidator: CommandSendValidator = ({
   return { command, ready: true };
 };
 export const DEFAULT_COMMANDS_CONFIG: CommandsConfig = {
-  sendValidators: [defaultCommandSendabilityValidator],
+  sendValidator: defaultCommandSendabilityValidator,
 };
 export const applyCommandValidatorOverride = (
   targetConfig: MessageComposerConfig,
   sourceConfig?: DeepPartial<MessageComposerConfig>,
 ) => {
-  const overrideValidators = sourceConfig?.commands?.sendValidators as
-    | CommandSendValidator[]
+  const overrideValidator = sourceConfig?.commands?.sendValidator as
+    | CommandSendValidator
     | undefined;
 
-  if (typeof overrideValidators === 'undefined') {
+  if (typeof overrideValidator === 'undefined') {
     return targetConfig;
   }
 
@@ -49,7 +49,7 @@ export const applyCommandValidatorOverride = (
     ...targetConfig,
     commands: {
       ...targetConfig.commands,
-      sendValidators: overrideValidators,
+      sendValidator: overrideValidator,
     },
   };
 };

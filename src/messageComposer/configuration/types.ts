@@ -60,7 +60,7 @@ export type CommandSendValidator = (
 ) => CommandSendability | undefined;
 
 export type CommandsConfig = {
-  sendValidators: CommandSendValidator[];
+  sendValidator: CommandSendValidator;
 };
 
 export type AttachmentManagerConfig = {

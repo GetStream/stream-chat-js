@@ -419,11 +419,9 @@ export class MessageComposer extends WithSubscriptions {
       rawText: text,
     };
 
-    for (const validator of this.config.commands.sendValidators) {
-      const result = validator(validationContext);
-      if (result && !result.ready) {
-        return result;
-      }
+    const result = this.config.commands.sendValidator(validationContext);
+    if (result && !result.ready) {
+      return result;
     }
 
     return { command, ready: true };

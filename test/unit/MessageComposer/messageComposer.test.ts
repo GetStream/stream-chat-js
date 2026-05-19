@@ -584,7 +584,7 @@ describe('MessageComposer', () => {
       const { messageComposer } = setup({
         config: {
           commands: {
-            sendValidators: [validator],
+            sendValidator: validator,
           },
         },
       });
@@ -899,7 +899,7 @@ describe('MessageComposer', () => {
       const { messageComposer } = setup({
         config: {
           commands: {
-            sendValidators: [validator],
+            sendValidator: validator,
           },
         },
       });
@@ -928,7 +928,7 @@ describe('MessageComposer', () => {
       const { messageComposer } = setup({
         config: {
           commands: {
-            sendValidators: [validator],
+            sendValidator: validator,
           },
         },
       });
@@ -970,7 +970,7 @@ describe('MessageComposer', () => {
       const { messageComposer } = setup({
         config: {
           commands: {
-            sendValidators: [validator],
+            sendValidator: validator,
           },
         },
       });

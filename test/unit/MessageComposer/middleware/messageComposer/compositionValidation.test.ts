@@ -261,7 +261,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
     const { messageComposer, validationMiddleware } = setupMiddleware({
       config: {
         commands: {
-          sendValidators: [validator],
+          sendValidator: validator,
         },
       },
     });
@@ -302,7 +302,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
     const { messageComposer, commandSearchSource } = setupMiddleware({
       config: {
         commands: {
-          sendValidators: [validator],
+          sendValidator: validator,
         },
       },
     });
@@ -338,7 +338,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
     const { messageComposer } = setupMiddleware({
       config: {
         commands: {
-          sendValidators: [validator],
+          sendValidator: validator,
         },
       },
     });
