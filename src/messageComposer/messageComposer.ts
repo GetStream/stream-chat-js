@@ -429,15 +429,14 @@ export class MessageComposer extends WithSubscriptions {
     return { command, ready: true };
   };
 
-  isCommandSendable = (command: CommandResponse, text = this.textComposer.text) =>
-    this.validateCommandSendability(command, text).ready;
+  get isCommandSendable() {
+    const currentCommand = this.textComposer.command;
+    return !currentCommand || this.validateCommandSendability(currentCommand).ready;
+  }
 
   get hasSendableData() {
-    const currentCommand = this.textComposer.command;
-    const commandIsSendable = !currentCommand || this.isCommandSendable(currentCommand);
-
     return (
-      commandIsSendable &&
+      this.isCommandSendable &&
       !!(
         (!this.attachmentManager.uploadsInProgressCount &&
           (!this.textComposer.textIsEmpty ||
