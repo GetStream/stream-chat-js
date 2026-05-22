@@ -133,6 +133,7 @@ export type AppSettingsAPIResponse = APIResponse & {
     async_url_enrich_enabled?: boolean;
     auto_translation_enabled?: boolean;
     before_message_send_hook_url?: string;
+    before_message_send_hook_attempt_timeout_ms?: number;
     campaign_enabled?: boolean;
     cdn_expiration_seconds?: number;
     custom_action_handler_url?: string;
@@ -2403,6 +2404,7 @@ export type AppSettings = {
   async_url_enrich_enabled?: boolean;
   auto_translation_enabled?: boolean;
   before_message_send_hook_url?: string;
+  before_message_send_hook_attempt_timeout_ms?: number;
   cdn_expiration_seconds?: number;
   custom_action_handler_url?: string;
   disable_auth_checks?: boolean;
