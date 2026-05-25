@@ -69,3 +69,12 @@ typings/
 .envrc
 
 test/typescript/data.*
+
+# Yarn Berry — keep releases/patches/plugins/sdks/versions, ignore caches
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.pnp.*

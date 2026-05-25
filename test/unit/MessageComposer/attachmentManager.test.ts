@@ -100,10 +100,10 @@ const setup = ({
   mockClient.appSettingsPromise = Promise.resolve(
     appSettings ? { app: appSettings } : defaultAppSettings,
   );
-  (mockClient.getAppSettings = vi
+  ((mockClient.getAppSettings = vi
     .fn()
     .mockResolvedValue(appSettings ? { app: appSettings } : defaultAppSettings)),
-    (mockClient.notifications = { addError: vi.fn() });
+    (mockClient.notifications = { addError: vi.fn() }));
 
   mockClient.user = { id: 'user-id', name: 'Test User' };
 

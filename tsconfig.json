@@ -21,6 +21,7 @@
     "declaration": true,
     "emitDeclarationOnly": true,
     "outDir": "./dist/types",
+    "rootDir": "./src",
 
     "lib": ["ES2020", "DOM", "ES2022.Error"],
     "moduleResolution": "bundler",
