@@ -1,3 +1,27 @@
+## [9.44.2](https://github.com/GetStream/stream-chat-js/compare/v9.44.1...v9.44.2) (2026-05-15)
+
+### Bug Fixes
+
+* channels sorting with predefined filters ([#1747](https://github.com/GetStream/stream-chat-js/issues/1747)) ([5ee79f7](https://github.com/GetStream/stream-chat-js/commit/5ee79f75a5f713b68fa9e912dcdb7305cc4c4b8d))
+
+## [9.44.1](https://github.com/GetStream/stream-chat-js/compare/v9.44.0...v9.44.1) (2026-05-14)
+
+### Bug Fixes
+
+* trigger release for 1744 ([#1745](https://github.com/GetStream/stream-chat-js/issues/1745)) ([f4fcfdd](https://github.com/GetStream/stream-chat-js/commit/f4fcfdd506e4171246b3d928fcf1b2655f147f11))
+
+## [9.44.0](https://github.com/GetStream/stream-chat-js/compare/v9.43.2...v9.44.0) (2026-05-13)
+
+### Bug Fixes
+
+* ignore draft WS events while editing messages ([#1739](https://github.com/GetStream/stream-chat-js/issues/1739)) ([31e66f3](https://github.com/GetStream/stream-chat-js/commit/31e66f31dce354e3630c935d1a82d8bfadb39f4c))
+* prevent deleteUserMessages crash when hard-deleting a self-quoting message ([#1741](https://github.com/GetStream/stream-chat-js/issues/1741)) ([b2a00bb](https://github.com/GetStream/stream-chat-js/commit/b2a00bb2cc384373cfb6c1ef7cc94343813bf282)), closes [#1736](https://github.com/GetStream/stream-chat-js/issues/1736)
+* prevent dispatchEvent crash on uninitialized channels via muteStatus ([#1740](https://github.com/GetStream/stream-chat-js/issues/1740)) ([eea0a47](https://github.com/GetStream/stream-chat-js/commit/eea0a4746be0a83f161aafcc35a9272b9675cb3d)), closes [#1732](https://github.com/GetStream/stream-chat-js/issues/1732)
+
+### Features
+
+* **webhooks:** verifyAndParse* API for compressed payloads (CHA-3071) ([#1735](https://github.com/GetStream/stream-chat-js/issues/1735)) ([288a34c](https://github.com/GetStream/stream-chat-js/commit/288a34ca2ee22f5e72937d42ebb690fd5b40ec69))
+
 ## [9.43.2](https://github.com/GetStream/stream-chat-js/compare/v9.43.1...v9.43.2) (2026-05-08)
 
 ### Bug Fixes
@@ -476,6 +500,7 @@
 
 * broken delete channel type api ([#1556](https://github.com/GetStream/stream-chat-js/issues/1556)) ([f5b0d9c](https://github.com/GetStream/stream-chat-js/commit/f5b0d9ca897445363f03254f29517b3ae42081ec))
 * prevent poll creation with options with white spaces only ([#1555](https://github.com/GetStream/stream-chat-js/issues/1555)) ([786de82](https://github.com/GetStream/stream-chat-js/commit/786de82751f439db6ae8be225653910f5f178b66))
+
 
 ## [9.5.0](https://github.com/GetStream/stream-chat-js/compare/v9.4.0...v9.5.0) (2025-06-04)
 
