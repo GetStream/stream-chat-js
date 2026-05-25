@@ -52,23 +52,23 @@
   "dependencies": {
     "@types/jsonwebtoken": "^9.0.8",
     "@types/ws": "^8.18.1",
-    "axios": "^1.15.1",
+    "axios": "^1.16.1",
     "base64-js": "^1.5.1",
     "form-data": "^4.0.5",
     "isomorphic-ws": "^5.0.0",
     "jsonwebtoken": "^9.0.3",
     "linkifyjs": "^4.3.2",
-    "ws": "^8.18.1"
+    "ws": "^8.20.1"
   },
   "devDependencies": {
-    "@commitlint/cli": "^21.0.0",
-    "@commitlint/config-conventional": "^21.0.0",
+    "@commitlint/cli": "^21.0.1",
+    "@commitlint/config-conventional": "^21.0.1",
     "@eslint/js": "^9.39.4",
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/git": "^10.0.1",
-    "@types/node": "^22.19.18",
+    "@types/node": "^22.19.19",
     "@types/sinon": "^10.0.6",
-    "@vitest/coverage-v8": "4.1.6",
+    "@vitest/coverage-v8": "^4.1.7",
     "concurrently": "^9.2.1",
     "conventional-changelog-conventionalcommits": "^9.3.1",
     "dotenv": "^8.2.0",
@@ -77,13 +77,13 @@
     "eslint-plugin-import": "^2.32.0",
     "globals": "^17.6.0",
     "husky": "^9.1.7",
-    "lint-staged": "^17.0.4",
+    "lint-staged": "^17.0.5",
     "prettier": "^3.8.3",
     "semantic-release": "^25.0.3",
     "sinon": "^12.0.1",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.59.3",
-    "vitest": "^4.1.6"
+    "typescript-eslint": "^8.59.4",
+    "vitest": "^4.1.7"
   },
   "scripts": {
     "build": "rm -rf dist && concurrently 'tsc' './scripts/bundle.mjs'",
@@ -109,7 +109,7 @@
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "yarn@4.14.1",
+  "packageManager": "yarn@4.15.0",
   "dependenciesMeta": {
     "esbuild": {
       "built": true
