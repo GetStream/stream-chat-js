@@ -57,7 +57,7 @@
     "form-data": "^4.0.5",
     "isomorphic-ws": "^5.0.0",
     "jsonwebtoken": "^9.0.3",
-    "linkifyjs": "^4.3.2",
+    "linkifyjs": "^4.3.3",
     "ws": "^8.20.1"
   },
   "devDependencies": {
