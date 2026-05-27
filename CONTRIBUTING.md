@@ -6,8 +6,10 @@ We welcome code changes that improve this library or fix a problem, please make 
 
 ### Install dependencies
 
+This repo uses Yarn 4 (Berry). The Yarn 4 binary is committed to `.yarn/releases/`; any globally installed Yarn launcher delegates to it via `yarnPath`. No Corepack setup needed.
+
 ```shell
-$ yarn install --frozen-lockfile --ignore-engines
+$ yarn install --immutable
 ```
 
 ### Run tests

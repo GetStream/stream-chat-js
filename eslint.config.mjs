@@ -6,7 +6,7 @@ import importPlugin from 'eslint-plugin-import';
 
 export default tseslint.config(
   {
-    ignores: ['dist', 'src/@types', '*.{js,ts}'],
+    ignores: ['dist', 'coverage', '.yarn', '.claude', 'src/@types', '*.{js,ts}'],
   },
   {
     name: 'default',

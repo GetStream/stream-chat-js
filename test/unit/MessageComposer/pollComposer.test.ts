@@ -9,48 +9,52 @@ vi.mock('../../../src/utils', () => ({
 }));
 
 vi.mock('../../../src/messageComposer/middleware/pollComposer', () => ({
-  PollComposerCompositionMiddlewareExecutor: vi.fn().mockImplementation(() => ({
-    execute: vi.fn().mockResolvedValue({
-      state: {
-        data: {
-          allow_answers: false,
-          allow_user_suggested_options: false,
-          description: '',
-          enforce_unique_vote: true,
-          id: 'test-id',
-          max_votes_allowed: 5,
-          name: 'Test Poll',
-          options: [{ text: 'Option 1' }, { text: 'Option 2' }],
-          user_id: 'user-id',
-          voting_visibility: VotingVisibility.public,
-        },
-        errors: {},
-      },
-      status: 'success',
-    }),
-  })),
-  PollComposerStateMiddlewareExecutor: vi.fn().mockImplementation(() => ({
-    execute: vi.fn().mockResolvedValue({
-      state: {
-        nextState: {
+  PollComposerCompositionMiddlewareExecutor: vi.fn().mockImplementation(function () {
+    return {
+      execute: vi.fn().mockResolvedValue({
+        state: {
           data: {
             allow_answers: false,
             allow_user_suggested_options: false,
             description: '',
             enforce_unique_vote: true,
             id: 'test-id',
-            max_votes_allowed: '',
+            max_votes_allowed: 5,
             name: 'Test Poll',
-            options: [{ id: 'option-id', text: 'Option 1' }],
+            options: [{ text: 'Option 1' }, { text: 'Option 2' }],
             user_id: 'user-id',
             voting_visibility: VotingVisibility.public,
           },
           errors: {},
         },
-      },
-      status: 'success',
-    }),
-  })),
+        status: 'success',
+      }),
+    };
+  }),
+  PollComposerStateMiddlewareExecutor: vi.fn().mockImplementation(function () {
+    return {
+      execute: vi.fn().mockResolvedValue({
+        state: {
+          nextState: {
+            data: {
+              allow_answers: false,
+              allow_user_suggested_options: false,
+              description: '',
+              enforce_unique_vote: true,
+              id: 'test-id',
+              max_votes_allowed: '',
+              name: 'Test Poll',
+              options: [{ id: 'option-id', text: 'Option 1' }],
+              user_id: 'user-id',
+              voting_visibility: VotingVisibility.public,
+            },
+            errors: {},
+          },
+        },
+        status: 'success',
+      }),
+    };
+  }),
   VALID_MAX_VOTES_VALUE_REGEX: /^([2-9]|10)$/,
 }));
 
