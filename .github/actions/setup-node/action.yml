@@ -13,6 +13,7 @@ runs:
     - name: Setup Node
       uses: actions/setup-node@v6
       with:
+        cache: 'yarn'
         node-version: ${{ inputs.node-version }}
         node-version-file: '.nvmrc'
 
@@ -20,12 +21,6 @@ runs:
       shell: bash
       run: echo "NODE_VERSION=$(node --version)" >> $GITHUB_ENV
 
-    - name: Cache dependencies
-      uses: actions/cache@v5
-      with:
-        path: ./node_modules
-        key: ${{ runner.os }}-${{ env.NODE_VERSION }}-modules-${{ hashFiles('./yarn.lock') }}
-
     - name: Install dependencies
-      run: yarn install --frozen-lockfile
+      run: yarn install
       shell: bash

@@ -1596,6 +1596,92 @@ describe('user.messages.deleted', () => {
 	});
 });
 
+// Regression coverage for GetStream/stream-chat-js#1736.
+// Hard-deleting a user whose cached messages include a self-quote (a message that
+// quotes another message from the same user) used to throw inside
+// _deleteUserMessages, aborting the entire dispatchEvent chain — downstream
+// listeners and offline-DB writes silently dropped. These tests exercise both
+// event entry points that funnel into _deleteUserMessageReference.
+describe('user.messages.deleted — quoted_message regression (#1736)', () => {
+	let client;
+	const bannedUser = { id: 'banned-user' };
+
+	beforeEach(async () => {
+		client = await getClientWithUser();
+	});
+
+	const setupChannelWithSelfQuote = (type, id) => {
+		const m1 = generateMsg({
+			created_at: '2020-01-01T00:00:01.000Z',
+			user: bannedUser,
+		});
+		const m2 = generateMsg({
+			created_at: '2020-01-01T00:00:02.000Z',
+			user: bannedUser,
+			quoted_message: m1,
+			quoted_message_id: m1.id,
+		});
+		const channel = client.channel(type, id);
+		channel.state.addMessagesSorted([m1, m2]);
+		return { channel, m1, m2 };
+	};
+
+	it('does not throw on user.messages.deleted hard-delete when cached channel contains a same-user self-quote', () => {
+		const { channel, m1, m2 } = setupChannelWithSelfQuote('messaging', 'self-quote-1');
+
+		const event = {
+			type: 'user.messages.deleted',
+			user: bannedUser,
+			hard_delete: true,
+			created_at: '2025-02-01T14:01:30.000Z',
+		};
+
+		expect(() => client._handleClientEvent(event)).not.toThrow();
+
+		const messages = channel.state.messageSets[0].messages;
+		expect(messages).toHaveLength(2);
+		expect(messages.find((m) => m.id === m1.id).type).toBe('deleted');
+		const quoter = messages.find((m) => m.id === m2.id);
+		expect(quoter.type).toBe('deleted');
+		// Hard-delete strips the parent — no quoted_message field remains on it.
+		expect(quoter.quoted_message).toBeUndefined();
+	});
+
+	it('still fires downstream client listeners after the self-quote encounter on hard-delete', () => {
+		setupChannelWithSelfQuote('messaging', 'self-quote-listener');
+
+		const listener = vi.fn();
+		client.on('user.messages.deleted', listener);
+
+		const event = {
+			type: 'user.messages.deleted',
+			user: bannedUser,
+			hard_delete: true,
+			created_at: '2025-02-01T14:01:30.000Z',
+		};
+
+		expect(() => client.dispatchEvent(event)).not.toThrow();
+		expect(listener).toHaveBeenCalledTimes(1);
+	});
+
+	it('does not throw on user.deleted hard-delete when cached channel contains a same-user self-quote', () => {
+		const { channel, m1, m2 } = setupChannelWithSelfQuote('messaging', 'self-quote-2');
+
+		const event = {
+			type: 'user.deleted',
+			user: { ...bannedUser, deleted_at: '2025-02-01T14:01:30.000Z' },
+			hard_delete: true,
+			created_at: '2025-02-01T14:01:30.000Z',
+		};
+
+		expect(() => client._handleClientEvent(event)).not.toThrow();
+
+		const messages = channel.state.messageSets[0].messages;
+		expect(messages.find((m) => m.id === m1.id).type).toBe('deleted');
+		expect(messages.find((m) => m.id === m2.id).type).toBe('deleted');
+	});
+});
+
 describe('dispatchEvent: offlineDb.executeQuerySafely', () => {
 	let client;
 	let executeQuerySafelySpy;

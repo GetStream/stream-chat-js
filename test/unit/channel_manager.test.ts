@@ -10,6 +10,7 @@ import {
   channelManagerEventToHandlerMapping,
   DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS,
   QueryChannelsRequestType,
+  QueryChannelsAPIResponse,
 } from '../../src';
 
 import { generateChannel } from './test-utils/generateChannel';
@@ -272,6 +273,48 @@ describe('ChannelManager', () => {
         expect(newChannels.map((c) => c.id)).to.deep.equal(prevChannels.map((c) => c.id));
         expect(newChannels).to.equal(prevChannels);
       });
+
+      it('passes full predefined-filter query options when upserting CIDs', async () => {
+        client.setOfflineDBApi(new MockOfflineDB({ client }));
+        await client.offlineDb!.init(client.userID as string);
+        client.offlineDb!.state.partialNext({
+          initialized: true,
+          userId: client.userID,
+        });
+        (
+          client.offlineDb!.upsertCidsForQuery as unknown as MockInstance
+        ).mockResolvedValue([]);
+
+        const { channels, pagination } = channelManager.state.getLatestValue();
+        const options = {
+          predefined_filter: 'user_messaging',
+          filter_values: { user_id: 'user123' },
+          sort_values: { sort_field: 'last_message_at' },
+          limit: 10,
+          offset: 20,
+          presence: true,
+          state: true,
+          watch: true,
+        };
+
+        channelManager.state.partialNext({
+          pagination: {
+            ...pagination,
+            filters: { team: 'blue' },
+            options,
+            sort: { last_message_at: -1 },
+          },
+        });
+
+        channelManager.setChannels(channels);
+
+        expect(client.offlineDb!.upsertCidsForQuery).toHaveBeenCalledExactlyOnceWith({
+          cids: channels.map((channel) => channel.cid),
+          filters: { team: 'blue' },
+          options,
+          sort: { last_message_at: -1 },
+        });
+      });
     });
   });
 
@@ -533,6 +576,7 @@ describe('ChannelManager', () => {
           expect(client.offlineDb!.getChannelsForQuery).toHaveBeenCalledExactlyOnceWith({
             userId: client.userID,
             filters: { filterA: true },
+            options: {},
             sort: { asc: 1 },
           });
 
@@ -546,6 +590,24 @@ describe('ChannelManager', () => {
           expect(stateChangeSpy.calledOnceWithExactly(channels));
           expect(executeChannelsQuerySpy.called).to.be.false;
           expect(scheduleSyncStatusCallbackSpy.called).to.be.true;
+        });
+
+        it('passes full predefined-filter query options when hydrating channels from DB', async () => {
+          const options = {
+            predefined_filter: 'user_messaging',
+            filter_values: { user_id: 'dan' },
+            sort_values: { sort_field: 'last_message_at' },
+            limit: 20,
+          };
+
+          await channelManager.queryChannels({}, [], options);
+
+          expect(client.offlineDb!.getChannelsForQuery).toHaveBeenCalledExactlyOnceWith({
+            userId: client.userID,
+            filters: {},
+            options,
+            sort: [],
+          });
         });
 
         it('does NOT hydrate from DB if already initialized', async () => {
@@ -751,6 +813,52 @@ describe('ChannelManager', () => {
             },
           });
           expect(channels.length).to.equal(10);
+        });
+
+        it('passes full predefined-filter query options when upserting CIDs after query', async () => {
+          client.setOfflineDBApi(new MockOfflineDB({ client }));
+          await client.offlineDb!.init(client.userID as string);
+          client.offlineDb!.state.partialNext({
+            initialized: true,
+            userId: client.userID,
+          });
+          (
+            client.offlineDb!.upsertCidsForQuery as unknown as MockInstance
+          ).mockResolvedValue([]);
+
+          const queryOptions = {
+            predefined_filter: 'user_messaging',
+            filter_values: { user_id: 'user123' },
+            sort_values: { sort_field: 'last_message_at' },
+            limit: 10,
+            offset: 0,
+            presence: true,
+            state: true,
+            watch: true,
+          };
+          const { pagination } = channelManager.state.getLatestValue();
+          channelManager.state.partialNext({
+            pagination: {
+              ...pagination,
+              filters: { filterA: true },
+              options: queryOptions,
+              sort: { asc: 1 },
+            },
+          });
+
+          await channelManager['executeChannelsQuery']({
+            filters: { filterA: true },
+            sort: { asc: 1 },
+            options: queryOptions,
+            stateOptions: {},
+          });
+
+          expect(client.offlineDb!.upsertCidsForQuery).toHaveBeenCalledExactlyOnceWith({
+            cids: mockChannelPages[0].map((channel) => channel.cid),
+            filters: { filterA: true },
+            options: queryOptions,
+            sort: { asc: 1 },
+          });
         });
 
         it('should properly update hasNext and offset after executeChannelsQuery if the first returned page is less than the limit', async () => {
@@ -1370,6 +1478,41 @@ describe('ChannelManager', () => {
       (typeof utils)['findLastPinnedChannelIndex']
     >;
     let extractSortValueStub: MockInstance<(typeof utils)['extractSortValue']>;
+    const setChannelMembership = (
+      channelId: string,
+      membership: Record<string, unknown>,
+    ) => {
+      const channel = client.channel('messaging', channelId);
+      channel.state.membership = {
+        user: { id: client.userID },
+        user_id: client.userID,
+        ...membership,
+      } as never;
+
+      return channel;
+    };
+    const queryChannelsWithPredefinedFilterResponse = async ({
+      filter,
+      sort,
+    }: {
+      filter: Record<string, unknown>;
+      sort?: NonNullable<QueryChannelsAPIResponse['predefined_filter']>['sort'];
+    }) => {
+      vi.spyOn(client, 'post').mockResolvedValueOnce({
+        duration: '0.01s',
+        channels: channelsResponse,
+        predefined_filter: {
+          name: 'messaging_channels',
+          filter,
+          sort,
+        },
+      } satisfies QueryChannelsAPIResponse);
+
+      await channelManager.queryChannels({}, [], {
+        predefined_filter: 'messaging_channels',
+      });
+      setChannelsStub.mockClear();
+    };
 
     beforeEach(() => {
       setChannelsStub = vi.spyOn(channelManager, 'setChannels');
@@ -1390,6 +1533,247 @@ describe('ChannelManager', () => {
       vi.resetAllMocks();
       sinon.restore();
       sinon.reset();
+    });
+
+    describe('predefined filter response metadata', () => {
+      it('does not promote an archived channel into a resolved non-archived list on message.new', async () => {
+        await queryChannelsWithPredefinedFilterResponse({
+          filter: { archived: false },
+        });
+        setChannelMembership('channel2', {
+          archived_at: '2024-01-15T10:30:00Z',
+        });
+
+        client.dispatchEvent({
+          type: 'message.new',
+          channel_type: 'messaging',
+          channel_id: 'channel2',
+        });
+
+        expect(setChannelsStub).toHaveBeenCalledTimes(0);
+      });
+
+      it('does not promote an unarchived channel into a resolved archived list on message.new', async () => {
+        await queryChannelsWithPredefinedFilterResponse({
+          filter: { archived: true },
+        });
+
+        client.dispatchEvent({
+          type: 'message.new',
+          channel_type: 'messaging',
+          channel_id: 'channel2',
+        });
+
+        expect(setChannelsStub).toHaveBeenCalledTimes(0);
+      });
+
+      it('does not move a pinned channel when resolved predefined sort considers pinned_at', async () => {
+        await queryChannelsWithPredefinedFilterResponse({
+          filter: {},
+          sort: [{ field: 'pinned_at', direction: -1 }],
+        });
+        setChannelMembership('channel2', {
+          pinned_at: '2024-01-15T10:30:00Z',
+        });
+
+        client.dispatchEvent({
+          type: 'message.new',
+          channel_type: 'messaging',
+          channel_id: 'channel2',
+        });
+
+        expect(setChannelsStub).toHaveBeenCalledTimes(0);
+      });
+
+      it('does not promote an archived channel into a resolved non-archived list on notification.message_new', async () => {
+        const clock = sinon.useFakeTimers();
+        await queryChannelsWithPredefinedFilterResponse({
+          filter: { archived: false },
+        });
+        const channel = setChannelMembership('channel4', {
+          archived_at: '2024-01-15T10:30:00Z',
+        });
+        getAndWatchChannelStub.mockResolvedValueOnce(channel);
+
+        client.dispatchEvent({
+          type: 'notification.message_new',
+          channel: { type: 'messaging', id: 'channel4' } as unknown as ChannelResponse,
+        });
+
+        await clock.runAllAsync();
+        clock.restore();
+
+        expect(setChannelsStub).toHaveBeenCalledTimes(0);
+      });
+
+      it('does not add an archived channel into a resolved non-archived list on channel.visible', async () => {
+        const clock = sinon.useFakeTimers();
+        await queryChannelsWithPredefinedFilterResponse({
+          filter: { archived: false },
+        });
+        const channel = setChannelMembership('channel4', {
+          archived_at: '2024-01-15T10:30:00Z',
+        });
+        getAndWatchChannelStub.mockResolvedValueOnce(channel);
+
+        client.dispatchEvent({
+          type: 'channel.visible',
+          channel_id: 'channel4',
+          channel_type: 'messaging',
+        });
+
+        await clock.runAllAsync();
+        clock.restore();
+
+        expect(setChannelsStub).toHaveBeenCalledTimes(0);
+      });
+
+      it('uses resolved predefined filter metadata when handling member.updated archive changes', async () => {
+        await queryChannelsWithPredefinedFilterResponse({
+          filter: { archived: false },
+        });
+        setChannelMembership('channel2', {
+          archived_at: '2024-01-15T10:30:00Z',
+        });
+
+        client.dispatchEvent({
+          type: 'member.updated',
+          channel_id: 'channel2',
+          channel_type: 'messaging',
+          member: { user: { id: client.userID } },
+        });
+
+        expect(setChannelsStub).toHaveBeenCalledOnce();
+        expect(
+          (setChannelsStub.mock.calls[0][0] as Channel[]).map((c) => c.id),
+        ).to.deep.equal(['channel1', 'channel3']);
+      });
+
+      it('uses resolved predefined sort metadata when handling member.updated pin changes', async () => {
+        await queryChannelsWithPredefinedFilterResponse({
+          filter: {},
+          sort: [{ field: 'pinned_at', direction: -1 }],
+        });
+        setChannelMembership('channel1', {
+          pinned_at: '2024-01-15T10:30:00Z',
+        });
+        setChannelMembership('channel3', {
+          pinned_at: '2024-01-15T10:30:00Z',
+        });
+
+        client.dispatchEvent({
+          type: 'member.updated',
+          channel_id: 'channel3',
+          channel_type: 'messaging',
+          member: { user: { id: client.userID } },
+        });
+
+        expect(setChannelsStub).toHaveBeenCalledOnce();
+        expect(
+          (setChannelsStub.mock.calls[0][0] as Channel[]).map((c) => c.id),
+        ).to.deep.equal(['channel3', 'channel1', 'channel2']);
+      });
+
+      it('keeps non-predefined query behavior based on caller filters and sort', async () => {
+        vi.spyOn(client, 'post').mockResolvedValueOnce({
+          duration: '0.01s',
+          channels: channelsResponse,
+        } satisfies QueryChannelsAPIResponse);
+        await channelManager.queryChannels({ archived: false }, [], { limit: 10 });
+        setChannelsStub.mockClear();
+        setChannelMembership('channel2', {
+          archived_at: '2024-01-15T10:30:00Z',
+        });
+
+        client.dispatchEvent({
+          type: 'message.new',
+          channel_type: 'messaging',
+          channel_id: 'channel2',
+        });
+
+        expect(setChannelsStub).toHaveBeenCalledTimes(0);
+      });
+
+      it('preserves resolved predefined response metadata after loading the next page', async () => {
+        vi.spyOn(client, 'post')
+          .mockResolvedValueOnce({
+            duration: '0.01s',
+            channels: channelsResponse,
+            predefined_filter: {
+              name: 'messaging_channels',
+              filter: { archived: false },
+              sort: [{ field: 'pinned_at', direction: -1 }],
+            },
+          } satisfies QueryChannelsAPIResponse)
+          .mockResolvedValueOnce({
+            duration: '0.01s',
+            channels: [
+              generateChannel({ channel: { id: 'channel4' } }),
+              generateChannel({ channel: { id: 'channel5' } }),
+            ],
+            predefined_filter: {
+              name: 'messaging_channels',
+              filter: { archived: false },
+              sort: [{ field: 'pinned_at', direction: -1 }],
+            },
+          } satisfies QueryChannelsAPIResponse);
+
+        await channelManager.queryChannels({}, [], {
+          predefined_filter: 'messaging_channels',
+          limit: 2,
+          offset: 0,
+        });
+        await channelManager.loadNext();
+        setChannelsStub.mockClear();
+        setChannelMembership('channel2', {
+          archived_at: '2024-01-15T10:30:00Z',
+        });
+
+        client.dispatchEvent({
+          type: 'message.new',
+          channel_type: 'messaging',
+          channel_id: 'channel2',
+        });
+
+        expect(setChannelsStub).toHaveBeenCalledTimes(0);
+      });
+
+      it('clears resolved predefined response metadata when switching to a non-predefined query', async () => {
+        vi.spyOn(client, 'post')
+          .mockResolvedValueOnce({
+            duration: '0.01s',
+            channels: channelsResponse,
+            predefined_filter: {
+              name: 'messaging_channels',
+              filter: { archived: false },
+              sort: [{ field: 'pinned_at', direction: -1 }],
+            },
+          } satisfies QueryChannelsAPIResponse)
+          .mockResolvedValueOnce({
+            duration: '0.01s',
+            channels: channelsResponse,
+          } satisfies QueryChannelsAPIResponse);
+
+        await channelManager.queryChannels({}, [], {
+          predefined_filter: 'messaging_channels',
+        });
+        await channelManager.queryChannels({}, [], { limit: 10 });
+        setChannelsStub.mockClear();
+        setChannelMembership('channel2', {
+          archived_at: '2024-01-15T10:30:00Z',
+        });
+
+        client.dispatchEvent({
+          type: 'message.new',
+          channel_type: 'messaging',
+          channel_id: 'channel2',
+        });
+
+        expect(setChannelsStub).toHaveBeenCalledOnce();
+        expect(
+          (setChannelsStub.mock.calls[0][0] as Channel[]).map((c) => c.id),
+        ).to.deep.equal(['channel2', 'channel1', 'channel3']);
+      });
     });
 
     describe('channelDeletedHandler, channelHiddenHandler and notificationRemovedFromChannelHandler', () => {

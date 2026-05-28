@@ -9,7 +9,15 @@ import { Channel } from './channel';
 import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
 import { UploadManager } from './uploadManager';
-import { CheckSignature, DevToken, JWTUserToken } from './signing';
+import {
+  DevToken,
+  InvalidWebhookError,
+  JWTUserToken,
+  parseSns as parseSnsHelper,
+  parseSqs as parseSqsHelper,
+  verifyAndParseWebhook as verifyAndParseWebhookHelper,
+  verifySignature,
+} from './signing';
 import { TokenManager } from './token_manager';
 import { WSConnectionFallback } from './connection_fallback';
 import { Campaign } from './campaign';
@@ -291,6 +299,13 @@ function isString(x: unknown): x is string {
 }
 
 type MessageComposerTearDownFunction = () => void;
+
+export type QueryChannelsResponseWithChannels = Omit<
+  QueryChannelsAPIResponse,
+  'channels'
+> & {
+  channels: Channel[];
+};
 
 type MessageComposerSetupFunction = ({
   composer,
@@ -2013,20 +2028,26 @@ export class StreamChat {
   }
 
   /**
-   * queryChannelsRequest - Queries channels and returns the raw response
+   * queryChannelsRequestWithResponse - Queries channels and returns the full API response
+   * including top-level metadata such as `predefined_filter`.
+   *
+   * This exists as a compatibility bridge, as changing `queryChannelsRequest()` to return
+   * `QueryChannelsAPIResponse` would be a breaking change because it currently returns
+   * only the channel list. In the next major release, the request/response APIs should
+   * be consolidated so callers can access the full response through the primary API.
    *
    * @param {ChannelFilters} filterConditions object MongoDB style filters. Can be empty object when using predefined_filter in options.
    * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
    * @param {ChannelOptions} [options] Options object. Can include predefined_filter, filter_values, and sort_values for using predefined filters.
    *
-   * @return {Promise<Array<ChannelAPIResponse>>} search channels response
+   * @return {Promise<QueryChannelsAPIResponse>} full search channels response
    */
-  async queryChannelsRequest(
+  async queryChannelsRequestWithResponse(
     filterConditions: ChannelFilters,
     sort: ChannelSort = [],
     options: ChannelOptions = {},
-  ) {
+  ): Promise<QueryChannelsAPIResponse> {
     const defaultOptions: ChannelOptions = {
       state: true,
       watch: true,
@@ -2040,6 +2061,7 @@ export class StreamChat {
     }
 
     const { predefined_filter, filter_values, sort_values, ...restOptions } = options;
+    const normalizedSort = normalizeQuerySort(sort);
 
     // Build payload based on whether we're using a predefined filter or traditional filters
     const payload = predefined_filter
@@ -2047,21 +2069,49 @@ export class StreamChat {
           predefined_filter,
           filter_values,
           sort_values,
+          sort: normalizedSort,
           ...defaultOptions,
           ...restOptions,
         }
       : {
           filter_conditions: filterConditions,
-          sort: normalizeQuerySort(sort),
+          sort: normalizedSort,
           ...defaultOptions,
           ...restOptions,
         };
 
-    const data = await this.post<QueryChannelsAPIResponse>(
-      this.baseURL + '/channels',
-      payload,
+    return await this.post<QueryChannelsAPIResponse>(this.baseURL + '/channels', payload);
+  }
+
+  /**
+   * queryChannelsRequest - Queries channels and returns the raw channel response list.
+   *
+   * This preserves the historical return shape for backwards compatibility. Use
+   * `queryChannelsRequestWithResponse()` when response level metadata such as
+   * `predefined_filter` is needed. In the next major release these APIs should be
+   * consolidated into a single full-response API.
+   *
+   * @param {ChannelFilters} filterConditions object MongoDB style filters. Can be empty object when using predefined_filter in options.
+   * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
+   * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
+   * @param {ChannelOptions} [options] Options object. Can include predefined_filter, filter_values, and sort_values for using predefined filters.
+   *
+   * @return {Promise<Array<ChannelAPIResponse>>} search channels response
+   */
+  async queryChannelsRequest(
+    filterConditions: ChannelFilters,
+    sort: ChannelSort = [],
+    options: ChannelOptions = {},
+  ) {
+    const data = await this.queryChannelsRequestWithResponse(
+      filterConditions,
+      sort,
+      options,
     );
 
+    // FIXME: In the next major release, return the full QueryChannelsAPIResponse
+    // instead of only `data.channels` so top-level metadata such as
+    // `predefined_filter` is not lost.
     return data.channels;
   }
 
@@ -2075,16 +2125,34 @@ export class StreamChat {
    * @param {ChannelStateOptions} [stateOptions] State options object. These options will only be used for state management and won't be sent in the request.
    * - stateOptions.skipInitialization - Skips the initialization of the state for the channels matching the ids in the list.
    * - stateOptions.skipHydration - Skips returning the channels as instances of the Channel class and rather returns the raw query response.
+   * - stateOptions.withResponse - Returns the full query response with hydrated channels. This is a compatibility bridge for internal callers that need response-level metadata while the default return value remains `Channel[]`.
    *
    * @return {Promise<Array<Channel>>} search channels response
    */
   async queryChannels(
     filterConditions: ChannelFilters,
+    sort: ChannelSort,
+    options: ChannelOptions,
+    stateOptions: ChannelStateOptions & { withResponse: true },
+  ): Promise<QueryChannelsResponseWithChannels>;
+  async queryChannels(
+    filterConditions?: ChannelFilters,
+    sort?: ChannelSort,
+    options?: ChannelOptions,
+    stateOptions?: ChannelStateOptions,
+  ): Promise<Channel[]>;
+  async queryChannels(
+    filterConditions: ChannelFilters,
     sort: ChannelSort = [],
     options: ChannelOptions = {},
     stateOptions: ChannelStateOptions = {},
-  ) {
-    const channels = await this.queryChannelsRequest(filterConditions, sort, options);
+  ): Promise<Channel[] | QueryChannelsResponseWithChannels> {
+    const queryChannelsResponse = await this.queryChannelsRequestWithResponse(
+      filterConditions,
+      sort,
+      options,
+    );
+    const channels = queryChannelsResponse.channels;
 
     this.dispatchEvent({
       type: 'channels.queried',
@@ -2100,7 +2168,16 @@ export class StreamChat {
       });
     }
 
-    return this.hydrateActiveChannels(channels, stateOptions, options);
+    const hydratedChannels = this.hydrateActiveChannels(channels, stateOptions, options);
+
+    if (stateOptions.withResponse) {
+      return {
+        ...queryChannelsResponse,
+        channels: hydratedChannels,
+      };
+    }
+
+    return hydratedChannels;
   }
 
   /**
@@ -3767,7 +3844,53 @@ export class StreamChat {
    * @returns {boolean}
    */
   verifyWebhook(requestBody: string | Buffer, xSignature: string) {
-    return !!this.secret && CheckSignature(requestBody, this.secret, xSignature);
+    return !!this.secret && verifySignature(requestBody, xSignature, this.secret);
+  }
+
+  /**
+   * Verify and parse an HTTP webhook event.
+   *
+   * Decompresses `rawBody` when gzipped (detected from the body bytes),
+   * verifies the `X-Signature` header against the app's API secret, and
+   * returns the parsed `Event`. Works whether or not Stream is currently
+   * compressing payloads for this app, and stays correct behind
+   * middleware that auto-decompresses the request.
+   *
+   * @param rawBody Raw HTTP request body bytes Stream signed
+   * @param signature Value of the `X-Signature` header
+   * @throws {InvalidWebhookError} When the signature does not match or
+   *   the gzip envelope is malformed.
+   */
+  verifyAndParseWebhook(rawBody: string | Buffer, signature: string) {
+    if (!this.secret) {
+      throw new InvalidWebhookError(
+        'cannot verify webhook signature without an API secret on the client',
+      );
+    }
+    return verifyAndParseWebhookHelper(rawBody, signature, this.secret);
+  }
+
+  /**
+   * Parse an SQS firehose event: decodes the message `Body` (base64 +
+   * optional gzip) and returns the parsed `Event`. No HMAC verification
+   * (Stream does not sign SQS bodies).
+   *
+   * @param messageBody SQS message `Body` string
+   * @throws {InvalidWebhookError} When the base64 / gzip envelope is malformed.
+   */
+  parseSqs(messageBody: string) {
+    return parseSqsHelper(messageBody);
+  }
+
+  /**
+   * Parse an SNS-delivered event (unwraps envelope JSON when needed, then
+   * same decode path as SQS). No HMAC verification.
+   *
+   * @param notificationBody Raw SNS POST body or pre-extracted `Message` string
+   * @throws {InvalidWebhookError} When the envelope cannot be decoded.
+   */
+  parseSns(notificationBody: string) {
+    return parseSnsHelper(notificationBody);
   }
 
   /** getPermission - gets the definition for a permission
@@ -5122,9 +5245,11 @@ export class StreamChat {
    *
    * @return {Promise<PredefinedFilterResponse>} The created predefined filter
    */
-  async createPredefinedFilter(options: CreatePredefinedFilterOptions) {
+  async createPredefinedFilter<
+    F extends Record<string, unknown> = Record<string, unknown>,
+  >(options: CreatePredefinedFilterOptions<F>) {
     this.validateServerSideAuth();
-    return await this.post<PredefinedFilterResponse>(
+    return await this.post<PredefinedFilterResponse<F>>(
       `${this.baseURL}/predefined_filters`,
       options,
     );
@@ -5137,9 +5262,11 @@ export class StreamChat {
    *
    * @return {Promise<PredefinedFilterResponse>} The predefined filter
    */
-  async getPredefinedFilter(name: string) {
+  async getPredefinedFilter<F extends Record<string, unknown> = Record<string, unknown>>(
+    name: string,
+  ) {
     this.validateServerSideAuth();
-    return await this.get<PredefinedFilterResponse>(
+    return await this.get<PredefinedFilterResponse<F>>(
       `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
     );
   }
@@ -5152,9 +5279,11 @@ export class StreamChat {
    *
    * @return {Promise<PredefinedFilterResponse>} The updated predefined filter
    */
-  async updatePredefinedFilter(name: string, options: UpdatePredefinedFilterOptions) {
+  async updatePredefinedFilter<
+    F extends Record<string, unknown> = Record<string, unknown>,
+  >(name: string, options: UpdatePredefinedFilterOptions<F>) {
     this.validateServerSideAuth();
-    return await this.put<PredefinedFilterResponse>(
+    return await this.put<PredefinedFilterResponse<F>>(
       `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
       options,
     );
@@ -5181,10 +5310,12 @@ export class StreamChat {
    *
    * @return {Promise<ListPredefinedFiltersResponse>} The list of predefined filters
    */
-  async listPredefinedFilters(options: ListPredefinedFiltersOptions = {}) {
+  async listPredefinedFilters<
+    F extends Record<string, unknown> = Record<string, unknown>,
+  >(options: ListPredefinedFiltersOptions = {}) {
     this.validateServerSideAuth();
     const { sort, ...paginationOptions } = options;
-    return await this.get<ListPredefinedFiltersResponse>(
+    return await this.get<ListPredefinedFiltersResponse<F>>(
       `${this.baseURL}/predefined_filters`,
       {
         ...paginationOptions,

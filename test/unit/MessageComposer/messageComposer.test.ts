@@ -2012,6 +2012,37 @@ describe('MessageComposer', () => {
         expect(messageComposer.state.getLatestValue().draftId).toBe('test-draft-id');
       });
 
+      it('should ignore draft.updated while editing a message', () => {
+        const editedMessage = {
+          id: 'edited-message-id',
+          type: 'regular' as const,
+          text: 'Original message',
+          attachments: [],
+          mentioned_users: [],
+        };
+        const { messageComposer, mockChannel, mockClient } = setup({
+          composition: editedMessage,
+          config: { drafts: { enabled: true } },
+        });
+        const draft = {
+          message: {
+            id: 'test-draft-id',
+            text: 'Draft message',
+            attachments: [],
+            mentioned_users: [],
+          },
+          channel_cid: mockChannel.cid,
+        };
+
+        messageComposer.textComposer.setText('Editing in progress');
+        messageComposer.registerSubscriptions();
+        mockClient.dispatchEvent({ type: 'draft.updated', draft });
+
+        expect(messageComposer.editedMessage?.id).toBe('edited-message-id');
+        expect(messageComposer.textComposer.text).toBe('Editing in progress');
+        expect(messageComposer.state.getLatestValue().draftId).toBeNull();
+      });
+
       it('should only update the corresponding threadComposer when draft.updated is fired with a parent_id', () => {
         const { mockChannel, mockClient } = setup();
         const mockThread1 = getThread(mockChannel, mockClient, 'test-thread-id1');
@@ -2082,6 +2113,34 @@ describe('MessageComposer', () => {
         mockClient.dispatchEvent({ type: 'draft.deleted', draft });
 
         expect(messageComposer.state.getLatestValue().draftId).toBeNull();
+      });
+
+      it('should ignore draft.deleted while editing a message', () => {
+        const editedMessage = {
+          id: 'edited-message-id',
+          type: 'regular' as const,
+          text: 'Original message',
+          attachments: [],
+          mentioned_users: [],
+        };
+        const { messageComposer, mockChannel, mockClient } = setup({
+          composition: editedMessage,
+          config: { drafts: { enabled: true } },
+        });
+        const draft = {
+          message: {
+            id: 'test-draft-id',
+          },
+          channel_cid: mockChannel.cid,
+        };
+
+        messageComposer.textComposer.setText('Editing in progress');
+        messageComposer.registerSubscriptions();
+        mockClient.dispatchEvent({ type: 'draft.deleted', draft });
+
+        expect(messageComposer.editedMessage?.id).toBe('edited-message-id');
+        expect(messageComposer.textComposer.text).toBe('Editing in progress');
+        expect(messageComposer.id).toBe('edited-message-id');
       });
 
       it('should only update the corresponding threadComposer when draft.deleted is fired with a parent_id', () => {

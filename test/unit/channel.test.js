@@ -644,6 +644,46 @@ describe('Channel _handleChannelEvent', function () {
 		});
 	});
 
+	// Regression coverage for GetStream/stream-chat-js#1736 at the per-channel event entry point
+	// (channel.ts → _handleChannelEvent → state.deleteUserMessages). Mirrors the global-event
+	// regression suite in client.test.js but exercises the channel-scoped user.messages.deleted
+	// event (one carrying a cid).
+	describe('user.messages.deleted — quoted_message regression (#1736)', () => {
+		const bannedUser = { id: 'banned-user' };
+
+		it('does not throw on channel-scoped hard-delete when channel contains a same-user self-quote', () => {
+			const m1 = generateMsg({
+				created_at: '2020-01-01T00:00:01.000Z',
+				user: bannedUser,
+			});
+			const m2 = generateMsg({
+				created_at: '2020-01-01T00:00:02.000Z',
+				user: bannedUser,
+				quoted_message: m1,
+				quoted_message_id: m1.id,
+			});
+			channel.state.addMessagesSorted([m1, m2]);
+
+			const event = {
+				type: 'user.messages.deleted',
+				cid: channel.cid,
+				channel_type: channel.type,
+				channel_id: channel.id,
+				user: bannedUser,
+				hard_delete: true,
+				created_at: '2025-02-01T14:01:30.000Z',
+			};
+
+			expect(() => channel._handleChannelEvent(event)).not.to.throw();
+
+			const messages = channel.state.messageSets[0].messages;
+			expect(messages.find((m) => m.id === m1.id).type).to.equal('deleted');
+			const quoter = messages.find((m) => m.id === m2.id);
+			expect(quoter.type).to.equal('deleted');
+			expect(quoter.quoted_message).to.equal(undefined);
+		});
+	});
+
 	describe('notification.mark_unread', () => {
 		let initialCountUnread;
 		let initialReadState;
@@ -1352,6 +1392,7 @@ describe('Channel _handleChannelEvent', function () {
 
 describe('Uninitialized Channel', () => {
 	const user = { id: 'user' };
+	const otherUser = { id: 'other-user' };
 	let client;
 	let channel;
 
@@ -1371,6 +1412,62 @@ describe('Uninitialized Channel', () => {
 
 	it('reports no lastRead data', () => {
 		expect(channel.lastRead()).to.eq(null);
+	});
+
+	// Regression coverage for https://github.com/GetStream/stream-chat-js/issues/1732
+	// `client.channel(type, id)` registers the channel in `activeChannels` with
+	// `initialized = false`. Before the fix, a `message.new` arriving in that
+	// window went dispatchEvent → _handleChannelEvent → _countMessageAsUnread →
+	// muteStatus() → _checkInitialized() and threw, aborting the rest of the
+	// dispatch cycle (client listeners, channel listeners, offlineDb).
+	describe('regression #1732: dispatchEvent on an uninitialized channel', () => {
+		const buildMessageNewEvent = () => ({
+			type: 'message.new',
+			cid: channel.cid,
+			channel_type: channel.type,
+			channel_id: channel.id,
+			user: otherUser,
+			message: generateMsg({ user: otherUser }),
+			created_at: new Date().toISOString(),
+		});
+
+		it('does not throw and still updates channel state on message.new', () => {
+			expect(() => client.dispatchEvent(buildMessageNewEvent())).not.to.throw();
+			expect(channel.state.unreadCount).to.equal(1);
+		});
+
+		it('does not throw for channels left uninitialized by query({ watch: false })', () => {
+			// Production path called out in the issue: screens that fetch via
+			// `query({ watch: false, state: false })` leave the channel in
+			// activeChannels with initialized=false indefinitely. We simulate
+			// that final state — `initialized` is never flipped to true.
+			expect(channel.initialized).to.be.false;
+			expect(() => client.dispatchEvent(buildMessageNewEvent())).not.to.throw();
+		});
+
+		it('still invokes client and channel listeners (dispatch cycle is not aborted)', () => {
+			const clientListener = vi.fn();
+			const channelListener = vi.fn();
+			client.on('message.new', clientListener);
+			channel.on('message.new', channelListener);
+
+			client.dispatchEvent(buildMessageNewEvent());
+
+			expect(clientListener).toHaveBeenCalledOnce();
+			expect(channelListener).toHaveBeenCalledOnce();
+		});
+
+		it('respects client mute state via _countMessageAsUnread without throwing', () => {
+			expect(() => channel._countMessageAsUnread({ user: otherUser })).not.to.throw();
+			expect(channel._countMessageAsUnread({ user: otherUser })).to.be.true;
+
+			client.mutedChannels = [{ user, channel }];
+			expect(channel._countMessageAsUnread({ user: otherUser })).to.be.false;
+		});
+
+		it('public muteStatus() still throws (intentional API contract)', () => {
+			expect(() => channel.muteStatus()).to.throw(/hasn't been initialized/);
+		});
 	});
 });
 

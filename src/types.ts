@@ -133,6 +133,7 @@ export type AppSettingsAPIResponse = APIResponse & {
     async_url_enrich_enabled?: boolean;
     auto_translation_enabled?: boolean;
     before_message_send_hook_url?: string;
+    before_message_send_hook_attempt_timeout_ms?: number;
     campaign_enabled?: boolean;
     cdn_expiration_seconds?: number;
     custom_action_handler_url?: string;
@@ -1090,13 +1091,29 @@ export type ChannelOptions = {
   user_id?: string;
   watch?: boolean;
   /**
-   * Name of a predefined filter to use instead of filter_conditions.
-   * When provided, filter_conditions and sort parameters are ignored.
+   * Name of a predefined filter to use instead of sending raw
+   * `filter_conditions`.
+   *
+   * The backend resolves the filter template by name and interpolates it using
+   * `filter_values`.
+   *
+   * A regular `sort` can still be passed to `queryChannels()`, but backend
+   * precedence rules apply:
+   *
+   * - if the predefined filter has its own stored sort template, that stored
+   *   sort takes precedence and the request `sort` is ignored
+   * - if the predefined filter does not define a sort template, the request
+   *   `sort` can still be used
    */
   predefined_filter?: string;
   /**
-   * Values to interpolate into the predefined filter template placeholders.
-   * Only used when predefined_filter is provided.
+   * Values used to interpolate placeholders inside the predefined filter's
+   * `filter` template.
+   *
+   * Example: a template value like `{{user_id}}` can be resolved with
+   * `{ user_id: 'alice' }`.
+   *
+   * Only used when `predefined_filter` is provided.
    */
   filter_values?: Record<string, unknown>;
   /**
@@ -1125,6 +1142,15 @@ export type ChannelStateOptions = {
   offlineMode?: boolean;
   skipInitialization?: string[];
   skipHydration?: boolean;
+  /**
+   * Returns the full query response with hydrated channels from `queryChannels()`.
+   *
+   * This is a compatibility bridge for internal callers that need response level
+   * metadata such as `predefined_filter`. The default `queryChannels()` return value
+   * remains `Channel[]` to avoid a breaking change. This should be folded into a
+   * single full response API in the next major release.
+   */
+  withResponse?: boolean;
 };
 
 export type CreateChannelOptions = {
@@ -2408,6 +2434,7 @@ export type AppSettings = {
   async_url_enrich_enabled?: boolean;
   auto_translation_enabled?: boolean;
   before_message_send_hook_url?: string;
+  before_message_send_hook_attempt_timeout_ms?: number;
   cdn_expiration_seconds?: number;
   custom_action_handler_url?: string;
   disable_auth_checks?: boolean;
@@ -4895,38 +4922,129 @@ export type UpdateChannelsBatchResponse = {
 export type PredefinedFilterOperation = 'QueryChannels';
 
 export type PredefinedFilterSortParam = {
+  /**
+   * Field name to sort by.
+   *
+   * This may be a literal field name such as `created_at`, or a placeholder
+   * template such as `{{sort_field}}` that will be interpolated server-side.
+   */
   field: string;
+  /**
+   * Sort direction. `1` means ascending and `-1` means descending.
+   *
+   * The backend defaults this to `1` when omitted.
+   */
   direction?: AscDesc;
+  /**
+   * Optional server-side hint describing how the sort field value should be
+   * interpreted.
+   *
+   * This is mainly relevant for predefined-filter sort templates and is not
+   * part of the regular `queryChannels()` sort shape. Omitting it uses the
+   * backend default string behavior. Known backend values include:
+   *
+   * - `number`: cast custom-field values to numeric before sorting
+   * - `boolean`: cast custom-field values to boolean before sorting
+   *
+   * Other values are backend-defined. In most cases this should be omitted
+   * unless you are sorting by a custom field whose stored JSON value is not
+   * string-like.
+   */
   type?: string;
 };
 
-export type PredefinedFilter = {
+/**
+ * Stored predefined filter definition as returned by the server.
+ *
+ * `F` represents the raw filter template shape. It defaults to a generic record
+ * because predefined filters are server-managed templates and may include
+ * placeholders or app-specific structures.
+ */
+export type PredefinedFilter<
+  F extends Record<string, unknown> = Record<string, unknown>,
+> = {
+  /**
+   * Unique predefined filter name within the app.
+   */
   name: string;
+  /**
+   * Operation this predefined filter is valid for.
+   */
   operation: PredefinedFilterOperation;
-  filter: Record<string, unknown>;
+  /**
+   * Filter template stored on the server.
+   *
+   * This is not necessarily the fully interpolated runtime filter; placeholder
+   * values such as `{{user_id}}` may still be present.
+   */
+  filter: F;
+  /**
+   * Server creation timestamp in ISO-8601 format.
+   */
   created_at: string;
+  /**
+   * Server update timestamp in ISO-8601 format.
+   */
   updated_at: string;
+  /**
+   * Optional human-readable description.
+   */
   description?: string;
+  /**
+   * Optional sort template stored with the predefined filter.
+   */
   sort?: PredefinedFilterSortParam[];
+  /**
+   * Query identifier generated by the backend for the filter/sort pattern.
+   *
+   * The exact value is backend-generated and primarily useful for correlating
+   * predefined filters with query analysis / query performance data.
+   */
   query_id?: number;
 };
 
-export type CreatePredefinedFilterOptions = {
+export type CreatePredefinedFilterOptions<
+  F extends Record<string, unknown> = Record<string, unknown>,
+> = {
+  /**
+   * Unique predefined filter name.
+   */
   name: string;
+  /**
+   * Operation this predefined filter will be used with.
+   */
   operation: PredefinedFilterOperation;
-  filter: Record<string, unknown>;
+  /**
+   * Filter template to store on the server.
+   */
+  filter: F;
+  /**
+   * Optional human-readable description.
+   */
   description?: string;
+  /**
+   * Optional sort template stored with the predefined filter.
+   */
   sort?: PredefinedFilterSortParam[];
 };
 
-export type UpdatePredefinedFilterOptions = Omit<CreatePredefinedFilterOptions, 'name'>;
+export type UpdatePredefinedFilterOptions<
+  F extends Record<string, unknown> = Record<string, unknown>,
+> = Omit<CreatePredefinedFilterOptions<F>, 'name'>;
 
-export type PredefinedFilterResponse = APIResponse & {
-  predefined_filter: PredefinedFilter;
+export type PredefinedFilterResponse<
+  F extends Record<string, unknown> = Record<string, unknown>,
+> = APIResponse & {
+  predefined_filter: PredefinedFilter<F>;
 };
 
-export type ListPredefinedFiltersResponse = APIResponse & {
-  predefined_filters: PredefinedFilter[];
+/**
+ * Paginated response returned when listing predefined filters.
+ */
+export type ListPredefinedFiltersResponse<
+  F extends Record<string, unknown> = Record<string, unknown>,
+> = APIResponse & {
+  predefined_filters: PredefinedFilter<F>[];
   next?: string;
   prev?: string;
 };
@@ -4935,9 +5053,20 @@ export type ListPredefinedFiltersResponse = APIResponse & {
  * Contains the interpolated filter and sort from a predefined filter.
  * This is returned in the QueryChannels response when using a predefined filter.
  */
-export type ParsedPredefinedFilterResponse = {
+export type ParsedPredefinedFilterResponse<
+  F extends Record<string, unknown> = Record<string, unknown>,
+> = {
+  /**
+   * Name of the predefined filter that was resolved.
+   */
   name: string;
-  filter: Record<string, unknown>;
+  /**
+   * Fully interpolated filter that the backend executed.
+   */
+  filter: F;
+  /**
+   * Fully interpolated sort parameters resolved from the predefined filter.
+   */
   sort?: PredefinedFilterSortParam[];
 };
 

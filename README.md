@@ -151,7 +151,7 @@ yarn start
 
 ## 📚 More Code Examples
 
-Read up more on [Logging](./docs/logging.md) and [User Token](./docs/userToken.md) or visit our [documentation](https://getstream.io/chat/docs/) for more examples.
+Read up more on [Logging](./docs/logging.md), [User Token](./docs/userToken.md), and [Webhooks](./docs/webhooks.md) (including compressed payloads and SQS / SNS delivery) or visit our [documentation](https://getstream.io/chat/docs/) for more examples.
 
 ## ✍️ Contributing
 

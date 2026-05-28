@@ -3,6 +3,7 @@ import type {
   ChannelAPIResponse,
   ChannelFilters,
   ChannelMemberResponse,
+  ChannelOptions,
   ChannelResponse,
   ChannelSort,
   DraftResponse,
@@ -41,6 +42,8 @@ export type DBUpsertCidsForQueryType = {
   cids: string[];
   /** Optional filters for the channels. */
   filters?: ChannelFilters;
+  /** Optional full query options for the channels. */
+  options?: ChannelOptions;
   /** Whether to immediately execute the operation. */
   execute?: boolean;
   /** Optional sorting applied to the channels. */
@@ -177,6 +180,8 @@ export type DBGetChannelsForQueryType = {
   userId: string;
   /** Optional filters for channels. */
   filters?: ChannelFilters;
+  /** Optional full query options for channels. */
+  options?: ChannelOptions;
   /** Optional sorting for the channels. */
   sort?: ChannelSort;
 };

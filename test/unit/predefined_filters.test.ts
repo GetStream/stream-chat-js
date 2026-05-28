@@ -327,6 +327,40 @@ describe('Predefined Filters', () => {
       );
     });
 
+    it('should include traditional sort when using a predefined filter', async () => {
+      const mockResponse: QueryChannelsAPIResponse = {
+        duration: '0.01s',
+        channels: [],
+      };
+
+      const postSpy = vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+
+      await client.queryChannels({}, [{ last_message_at: -1 }, { created_at: 1 }], {
+        predefined_filter: 'user_messaging',
+        filter_values: { user_id: 'user123' },
+        limit: 20,
+      });
+
+      expect(postSpy).toHaveBeenCalledWith(
+        `${client.baseURL}/channels`,
+        expect.objectContaining({
+          predefined_filter: 'user_messaging',
+          filter_values: { user_id: 'user123' },
+          sort: [
+            { field: 'last_message_at', direction: -1 },
+            { field: 'created_at', direction: 1 },
+          ],
+          limit: 20,
+        }),
+      );
+      expect(postSpy).toHaveBeenCalledWith(
+        `${client.baseURL}/channels`,
+        expect.not.objectContaining({
+          filter_conditions: expect.anything(),
+        }),
+      );
+    });
+
     it('should use traditional filter_conditions when no predefined_filter is provided', async () => {
       const mockResponse: QueryChannelsAPIResponse = {
         duration: '0.01s',
