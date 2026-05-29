@@ -77,7 +77,18 @@ const getInitialMentions = (message?: DraftMessage | LocalMessage): MentionEntit
     );
   }
 
-  if (message.mentioned_group_ids?.length) {
+  if (message.mentioned_groups?.length) {
+    mentions.push(
+      ...message.mentioned_groups.map((group) => ({
+        id: group.id,
+        mentionType: 'user_group' as const,
+        name: group.name,
+      })),
+    );
+  } else if (message.mentioned_group_ids?.length) {
+    // Composer rehydration can still receive draft/local request-shaped data, where
+    // group mentions are represented only by ids even though response/render paths use
+    // `mentioned_groups` for presentation metadata.
     mentions.push(
       ...message.mentioned_group_ids.map((groupId) => ({
         id: groupId,

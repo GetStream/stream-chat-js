@@ -160,9 +160,16 @@ describe('TextComposer', () => {
       const message: LocalMessage = {
         id: 'test-message',
         type: 'regular',
-        text: 'Hello @channel @here @backend',
+        text: 'Hello @channel @here @Backend Team',
         mentioned_channel: true,
-        mentioned_group_ids: ['backend-team'],
+        mentioned_groups: [
+          {
+            created_at: '2026-05-28T00:00:00.000Z',
+            id: 'backend-team',
+            name: 'Backend Team',
+            updated_at: '2026-05-28T00:00:00.000Z',
+          },
+        ],
         mentioned_here: true,
         mentioned_roles: ['admin'],
       };
@@ -175,7 +182,7 @@ describe('TextComposer', () => {
         { id: 'channel', mentionType: 'channel', name: 'channel' },
         { id: 'here', mentionType: 'here', name: 'here' },
         { id: 'admin', mentionType: 'role', name: 'admin' },
-        { id: 'backend-team', mentionType: 'user_group' },
+        { id: 'backend-team', mentionType: 'user_group', name: 'Backend Team' },
       ]);
     });
 

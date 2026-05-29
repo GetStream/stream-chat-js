@@ -336,6 +336,35 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
     );
   };
 
+  matchesPrefixSearchQuery = (value: string | undefined, searchQuery: string) => {
+    if (!searchQuery) return true;
+
+    return this.normalizeSearchValue(value).startsWith(
+      this.normalizeSearchValue(searchQuery),
+    );
+  };
+
+  matchesUserNameSearchQuery = (value: string | undefined, searchQuery: string) => {
+    if (!searchQuery) return true;
+
+    const normalizedValueWords = this.normalizeSearchValue(value)
+      .split(/\s+/)
+      .filter(Boolean);
+    const normalizedQueryWords = this.normalizeSearchValue(searchQuery)
+      .split(/\s+/)
+      .filter(Boolean);
+
+    if (!normalizedValueWords.length || !normalizedQueryWords.length) return false;
+
+    const fullMatchWords = normalizedQueryWords.slice(0, -1);
+    const finalQueryWord = normalizedQueryWords[normalizedQueryWords.length - 1];
+
+    return (
+      fullMatchWords.every((queryWord) => normalizedValueWords.includes(queryWord)) &&
+      normalizedValueWords.some((valueWord) => valueWord.startsWith(finalQueryWord))
+    );
+  };
+
   isMentionTypeAllowed = (mentionType: MentionType) =>
     this.config.allowedMentionTypes?.[mentionType] ?? true;
 
@@ -435,7 +464,7 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
       ...(this.isMentionTypeAllowed('here')
         ? [this.toHereMentionSuggestion(searchQuery)]
         : []),
-    ].filter(({ name }) => this.matchesSearchQuery(name, searchQuery));
+    ].filter(({ name }) => this.matchesPrefixSearchQuery(name, searchQuery));
 
   getRoleMentionSuggestions = async (query: string): Promise<RoleMentionSuggestion[]> => {
     if (!this.isMentionTypeAllowed('role')) return [];
@@ -456,7 +485,6 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
         if (!searchQuery) return true;
 
         const updatedId = this.transliterate(removeDiacritics(user.id)).toLowerCase();
-        const updatedName = this.transliterate(removeDiacritics(user.name)).toLowerCase();
         const updatedQuery = this.transliterate(
           removeDiacritics(searchQuery),
         ).toLowerCase();
@@ -464,14 +492,8 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
         const maxDistance = 3;
         const lastDigits = textComposerText.slice(-(maxDistance + 1)).includes('@');
 
-        if (updatedName) {
-          const levenshtein = calculateLevenshtein(updatedQuery, updatedName);
-          if (
-            updatedName.includes(updatedQuery) ||
-            (levenshtein <= maxDistance && lastDigits)
-          ) {
-            return true;
-          }
+        if (this.matchesUserNameSearchQuery(user.name, updatedQuery)) {
+          return true;
         }
 
         const levenshtein = calculateLevenshtein(updatedQuery, updatedId);

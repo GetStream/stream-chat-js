@@ -756,6 +756,7 @@ export type MessageResponseBase = MessageBase & {
   mentioned_channel?: boolean;
   mentioned_here?: boolean;
   mentioned_group_ids?: string[];
+  mentioned_groups?: UserGroupResponse[];
   mentioned_roles?: string[];
   message_text_updated_at?: string;
   moderation?: ModerationResponse; // present only with Moderation v2
@@ -3206,7 +3207,10 @@ export type TypingStartEvent = Event;
 
 export type ReservedUpdatedMessageFields = keyof typeof RESERVED_UPDATED_MESSAGE_FIELDS;
 
-export type UpdatedMessage = Omit<MessageResponse, ReservedUpdatedMessageFields> & {
+export type UpdatedMessage = Omit<
+  MessageResponse,
+  ReservedUpdatedMessageFields | 'mentioned_groups'
+> & {
   mentioned_users?: string[];
   mentioned_channel?: boolean;
   mentioned_here?: boolean;
@@ -4507,7 +4511,10 @@ export type QueryDraftsResponse = APIResponse & {
   drafts: DraftResponse[];
 } & Omit<Pager, 'limit'>;
 
-export type DraftMessagePayload = PartializeKeys<DraftMessage, 'id'> & {
+export type DraftMessagePayload = PartializeKeys<
+  Omit<DraftMessage, 'mentioned_groups'>,
+  'id'
+> & {
   user_id?: string;
 };
 
@@ -4521,6 +4528,7 @@ export type DraftMessage = {
   mentioned_channel?: boolean;
   mentioned_here?: boolean;
   mentioned_group_ids?: string[];
+  mentioned_groups?: UserGroupResponse[];
   mentioned_roles?: string[];
   mml?: string;
   parent_id?: string;

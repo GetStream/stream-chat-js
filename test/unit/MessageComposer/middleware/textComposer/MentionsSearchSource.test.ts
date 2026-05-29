@@ -214,6 +214,102 @@ describe('MentionsSearchSource', () => {
     expect(getSuggestion(result.items, 'user', 'user1')?.name).toBe('John Doe');
   });
 
+  it('should match broadcast mentions by prefix only', async () => {
+    const source = new MentionsSearchSource(channel);
+    source.activate();
+    source.config.textComposerText = '@a';
+
+    const noPrefixMatchResult = await source.query('a');
+
+    expect(
+      getSuggestion(noPrefixMatchResult.items, 'channel', 'channel'),
+    ).toBeUndefined();
+    expect(getSuggestion(noPrefixMatchResult.items, 'here', 'here')).toBeUndefined();
+
+    source.config.textComposerText = '@ch';
+    const prefixMatchResult = await source.query('ch');
+
+    expect(getSuggestion(prefixMatchResult.items, 'channel', 'channel')).toBeDefined();
+  });
+
+  it('should match multi-word user names by exact words plus final-word prefix', async () => {
+    const source = new MentionsSearchSource(channel);
+    source.activate();
+    source.config.textComposerText = '@john do';
+
+    const result = await source.query('john do');
+
+    expect(getSuggestion(result.items, 'user', 'user1')?.name).toBe('John Doe');
+  });
+
+  it('should allow repeated non-final query words to match the same name word', async () => {
+    const source = new MentionsSearchSource(channel);
+    source.activate();
+    source.config.textComposerText = '@john john do';
+
+    const result = await source.query('john john do');
+
+    expect(getSuggestion(result.items, 'user', 'user1')?.name).toBe('John Doe');
+  });
+
+  it('should allow repeated non-final query words to match the same name word', async () => {
+    const source = new MentionsSearchSource(channel);
+    source.activate();
+    source.config.textComposerText = '@john john do';
+
+    const result = await source.query('john john do');
+
+    expect(getSuggestion(result.items, 'user', 'user1')?.name).toBe('John Doe');
+  });
+
+  it('should not prefix-match non-final user-name words during local search', async () => {
+    const source = new MentionsSearchSource(channel);
+    source.activate();
+    source.config.textComposerText = '@jo do';
+
+    const result = await source.query('jo do');
+
+    expect(getSuggestion(result.items, 'user', 'user1')).toBeUndefined();
+  });
+
+  it('should match broadcast mentions by prefix only', async () => {
+    const source = new MentionsSearchSource(channel);
+    source.activate();
+    source.config.textComposerText = '@a';
+
+    const noPrefixMatchResult = await source.query('a');
+
+    expect(
+      getSuggestion(noPrefixMatchResult.items, 'channel', 'channel'),
+    ).toBeUndefined();
+    expect(getSuggestion(noPrefixMatchResult.items, 'here', 'here')).toBeUndefined();
+
+    source.config.textComposerText = '@ch';
+    const prefixMatchResult = await source.query('ch');
+
+    expect(getSuggestion(prefixMatchResult.items, 'channel', 'channel')).toBeDefined();
+  });
+
+  it('should match multi-word user names by exact words plus final-word prefix', async () => {
+    const source = new MentionsSearchSource(channel);
+    source.activate();
+    source.config.textComposerText = '@john do';
+
+    const result = await source.query('john do');
+
+    expect(getSuggestion(result.items, 'user', 'user1')?.name).toBe('John Doe');
+  });
+
+  it('should not prefix-match non-final user-name words during local search', async () => {
+    const source = new MentionsSearchSource(channel);
+    source.activate();
+    source.config.textComposerText = '@jo do';
+
+    const result = await source.query('jo do');
+
+    expect(getSuggestion(result.items, 'user', 'user1')).toBeUndefined();
+  });
+
   it('should search user groups by query and keep mixed result shape', async () => {
     const source = new MentionsSearchSource(channel);
     source.activate();
