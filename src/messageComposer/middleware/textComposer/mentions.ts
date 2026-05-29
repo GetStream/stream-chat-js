@@ -3,6 +3,7 @@ import {
   getTriggerCharWithToken,
   insertItemWithTrigger,
 } from './textMiddlewareUtils';
+import { getMentionedUsersInText } from './commandUtils';
 import { BaseSearchSource, type SearchSourceOptions } from '../../../search';
 import { mergeWith } from '../../../utils/mergeWith';
 import type { TextComposerMiddlewareOptions, UserSuggestion } from './types';
@@ -77,6 +78,7 @@ export const calculateLevenshtein = (query: string, name: string) => {
 export type MentionsSearchSourceOptions = SearchSourceOptions & {
   mentionAllAppUsers?: boolean;
   textComposerText?: string;
+  trigger?: string;
   // todo: document that if you want transliteration, you need to provide the function, e.g. import {default: transliterate}  from '@sindresorhus/transliterate';
   // this is now replacing a parameter useMentionsTransliteration
   transliterate?: (text: string) => string;
@@ -94,12 +96,17 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
   config: MentionsSearchSourceOptions;
 
   constructor(channel: Channel, options?: MentionsSearchSourceOptions) {
-    const { mentionAllAppUsers, textComposerText, transliterate, ...restOptions } =
-      options || {};
+    const {
+      mentionAllAppUsers,
+      textComposerText,
+      transliterate,
+      trigger,
+      ...restOptions
+    } = options || {};
     super(restOptions);
     this.client = channel.getClient();
     this.channel = channel;
-    this.config = { mentionAllAppUsers, textComposerText };
+    this.config = { mentionAllAppUsers, textComposerText, trigger };
 
     if (transliterate) {
       this.transliterate = transliterate;
@@ -169,7 +176,8 @@ export class MentionsSearchSource extends BaseSearchSource<UserSuggestion> {
         ).toLowerCase();
 
         const maxDistance = 3;
-        const lastDigits = textComposerText.slice(-(maxDistance + 1)).includes('@');
+        const trigger = this.config.trigger ?? '@';
+        const lastDigits = textComposerText.slice(-(maxDistance + 1)).includes(trigger);
 
         if (updatedName) {
           const levenshtein = calculateLevenshtein(updatedQuery, updatedName);
@@ -336,7 +344,7 @@ export const createMentionsMiddleware = (
     searchSource = options.searchSource;
     searchSource.resetState();
   } else {
-    searchSource = new MentionsSearchSource(channel);
+    searchSource = new MentionsSearchSource(channel, { trigger: finalOptions.trigger });
   }
   searchSource.activate();
   return {
@@ -344,10 +352,28 @@ export const createMentionsMiddleware = (
     handlers: {
       onChange: ({ state, next, complete, forward }) => {
         if (!state.selection) return forward();
+        // Only prune stale mentions during normal text editing. Entering command mode
+        // clears text/mentions through the `command.activate` effect, which first
+        // snapshots the previous TextComposer state so it can be restored on
+        // `clearCommand()`. Custom middleware is allowed to remove that effect,
+        // though, and in that opt-out case we must not silently drop mentions
+        // here just because the user typed a raw command like `/ban`.
+        const currentMentions =
+          state.command || state.text.trimStart().startsWith('/')
+            ? state.mentionedUsers
+            : getMentionedUsersInText(state.text, state.mentionedUsers);
+        const mentionedUsersChanged =
+          currentMentions.length !== state.mentionedUsers.length ||
+          currentMentions.some(
+            (user, index) => user.id !== state.mentionedUsers[index]?.id,
+          );
+        const stateWithMentions = mentionedUsersChanged
+          ? { ...state, mentionedUsers: currentMentions }
+          : state;
 
         const triggerWithToken = getTriggerCharWithToken({
           trigger: finalOptions.trigger,
-          text: state.text.slice(0, state.selection.end),
+          text: stateWithMentions.text.slice(0, stateWithMentions.selection.end),
         });
 
         const newSearchTriggered =
@@ -361,18 +387,19 @@ export const createMentionsMiddleware = (
           !triggerWithToken || triggerWithToken.length < finalOptions.minChars;
 
         if (triggerWasRemoved) {
-          const hasStaleSuggestions = state.suggestions?.trigger === finalOptions.trigger;
-          const newState = { ...state };
+          const hasStaleSuggestions =
+            stateWithMentions.suggestions?.trigger === finalOptions.trigger;
+          const newState = { ...stateWithMentions };
           if (hasStaleSuggestions) {
             delete newState.suggestions;
           }
           return next(newState);
         }
 
-        searchSource.config.textComposerText = state.text;
+        searchSource.config.textComposerText = stateWithMentions.text;
 
         return complete({
-          ...state,
+          ...stateWithMentions,
           suggestions: {
             query: triggerWithToken.slice(1),
             searchSource,
@@ -389,7 +416,9 @@ export const createMentionsMiddleware = (
         return complete({
           ...state,
           ...insertItemWithTrigger({
-            insertText: `@${selectedSuggestion.name || selectedSuggestion.id} `,
+            insertText: `${searchSource.config.trigger ?? finalOptions.trigger}${
+              selectedSuggestion.name || selectedSuggestion.id
+            } `,
             selection: state.selection,
             text: state.text,
             trigger: finalOptions.trigger,
