@@ -210,8 +210,10 @@ describe('TextComposerMiddlewareExecutor', () => {
 
     const selectedSuggestion = {
       id: 'user1',
+      mentionType: 'user',
       name: 'John Doe',
-    } as TextComposerSuggestion<UserResponse>;
+      tokenizedDisplayName: { token: 'jo', parts: ['John Doe'] },
+    } as TextComposerSuggestion<UserSuggestion>;
 
     await textComposer.handleSelect(selectedSuggestion);
     expect(textComposer.mentionedUsers).toContainEqual(selectedSuggestion);
