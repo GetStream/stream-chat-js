@@ -6,7 +6,11 @@ import type { CommandResponse } from '../../../types';
 import { mergeWith } from '../../../utils/mergeWith';
 import type { MessageComposer } from '../../messageComposer';
 import type { CommandSuggestion, TextComposerMiddlewareOptions } from './types';
-import { getCompleteCommandInString, notifyCommandDisabled } from './commandUtils';
+import {
+  getCommandByName,
+  getCompleteCommandInString,
+  notifyCommandDisabled,
+} from './commandUtils';
 import { getTriggerCharWithToken, insertItemWithTrigger } from './textMiddlewareUtils';
 import type { TextComposerMiddlewareExecutorState } from './TextComposerMiddlewareExecutor';
 
@@ -124,7 +128,7 @@ export const createCommandsMiddleware = (
         const finalText = state.text.slice(0, state.selection.end);
         const commandName = getCompleteCommandInString(finalText);
         if (commandName) {
-          const command = searchSource?.query(commandName).items[0];
+          const command = getCommandByName(searchSource, commandName);
           const composer = options?.composer;
           if (command && !composer?.isCommandDisabled(command)) {
             return next({

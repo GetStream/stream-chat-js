@@ -5,9 +5,10 @@ import type {
   LinkPreviewsManagerConfig,
   LocationComposerConfig,
   MessageComposerConfig,
+  TextComposerConfig,
 } from './types';
-import type { TextComposerConfig } from './types';
 import { generateUUIDv4 } from '../../utils';
+import { DEFAULT_COMMANDS_CONFIG } from './commands.configuration';
 
 export const DEFAULT_LINK_PREVIEW_MANAGER_CONFIG: LinkPreviewsManagerConfig = {
   debounceURLEnrichmentMs: 1500,
@@ -46,6 +47,7 @@ export const DEFAULT_LOCATION_COMPOSER_CONFIG: LocationComposerConfig = {
 
 export const DEFAULT_COMPOSER_CONFIG: MessageComposerConfig = {
   attachments: DEFAULT_ATTACHMENT_MANAGER_CONFIG,
+  commands: DEFAULT_COMMANDS_CONFIG,
   drafts: { enabled: false },
   linkPreviews: DEFAULT_LINK_PREVIEW_MANAGER_CONFIG,
   location: DEFAULT_LOCATION_COMPOSER_CONFIG,

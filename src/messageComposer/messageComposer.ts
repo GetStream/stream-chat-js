@@ -5,7 +5,7 @@ import { LocationComposer } from './LocationComposer';
 import { MessageComposerEffectHandlers } from './MessageComposerEffectHandlers';
 import { PollComposer } from './pollComposer';
 import { TextComposer } from './textComposer';
-import { DEFAULT_COMPOSER_CONFIG } from './configuration';
+import { applyCommandValidatorOverride, DEFAULT_COMPOSER_CONFIG } from './configuration';
 import type { MessageComposerMiddlewareValue } from './middleware';
 import {
   MessageComposerMiddlewareExecutor,
@@ -30,7 +30,7 @@ import type {
 } from '../types';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { StreamChat } from '../client';
-import type { MessageComposerConfig } from './configuration/types';
+import type { CommandSendability, MessageComposerConfig } from './configuration/types';
 import type {
   CommandSuggestionDisabledReason,
   TextComposerCommandActivationEffect,
@@ -44,6 +44,10 @@ import type { PollComposerSnapshot } from './pollComposer';
 import type { TextComposerSnapshot } from './textComposer';
 import type { DeepPartial } from '../types.utility';
 import type { MergeWithCustomizer } from '../utils/mergeWith/mergeWithCore';
+import {
+  getMentionedUsersInText,
+  stripCommandFromText,
+} from './middleware/textComposer/commandUtils';
 
 type UnregisterSubscriptions = Unsubscribe;
 
@@ -208,7 +212,16 @@ export class MessageComposer extends WithSubscriptions {
       );
     }
 
-    const mergeChannelConfigCustomizer: MergeWithCustomizer<
+    /**
+     * Customizes config merges for the composer constructor.
+     *
+     * It catches two scalar override cases that should not use the default deep merge:
+     * - client-disabled `enabled` flags stay disabled even if the channel config tries to re-enable them
+     * - scalar channel-config values replace client defaults for matching config keys
+     *
+     * All other values fall back to the normal `mergeWith` behavior.
+     */
+    const mergeMessageComposerConfigCustomizer: MergeWithCustomizer<
       DeepPartial<MessageComposerConfig>
     > = (originalVal, channelConfigVal, key) =>
       typeof originalVal === 'object'
@@ -223,14 +236,17 @@ export class MessageComposer extends WithSubscriptions {
             : originalVal;
 
     this.configState = new StateStore<MessageComposerConfig>(
-      mergeWith(
-        mergeWith(DEFAULT_COMPOSER_CONFIG, config ?? {}),
-        {
-          location: {
-            enabled: this.channel.getConfig()?.shared_locations,
+      applyCommandValidatorOverride(
+        mergeWith(
+          mergeWith(DEFAULT_COMPOSER_CONFIG, config ?? {}),
+          {
+            location: {
+              enabled: this.channel.getConfig()?.shared_locations,
+            },
           },
-        },
-        mergeChannelConfigCustomizer,
+          mergeMessageComposerConfigCustomizer,
+        ),
+        config,
       ),
     );
 
@@ -360,6 +376,14 @@ export class MessageComposer extends WithSubscriptions {
     return this.state.getLatestValue().quotedMessage;
   }
 
+  get pollId() {
+    return this.state.getLatestValue().pollId;
+  }
+
+  get showReplyInChannel() {
+    return this.state.getLatestValue().showReplyInChannel;
+  }
+
   getCommandDisabledReason = (
     command: CommandResponse,
   ): CommandSuggestionDisabledReason | undefined => {
@@ -378,21 +402,46 @@ export class MessageComposer extends WithSubscriptions {
   isCommandDisabled = (command: CommandResponse) =>
     !!this.getCommandDisabledReason(command);
 
-  get pollId() {
-    return this.state.getLatestValue().pollId;
-  }
+  validateCommandSendability = (
+    command: CommandResponse,
+    text = this.textComposer.text,
+  ): CommandSendability => {
+    const currentMentionedUsers = this.textComposer.mentionedUsers;
+    const mentionedUsersInText = getMentionedUsersInText(text, currentMentionedUsers);
 
-  get showReplyInChannel() {
-    return this.state.getLatestValue().showReplyInChannel;
+    const validationContext = {
+      command,
+      commandArgsText: command.name
+        ? stripCommandFromText(text, command.name).trim()
+        : text.trim(),
+      composer: this,
+      mentionedUsersInText,
+      rawText: text,
+    };
+
+    const result = this.config.commands.sendValidator(validationContext);
+    if (result && !result.ready) {
+      return result;
+    }
+
+    return { command, ready: true };
+  };
+
+  get isCommandSendable() {
+    const currentCommand = this.textComposer.command;
+    return !currentCommand || this.validateCommandSendability(currentCommand).ready;
   }
 
   get hasSendableData() {
-    return !!(
-      (!this.attachmentManager.uploadsInProgressCount &&
-        (!this.textComposer.textIsEmpty ||
-          this.attachmentManager.successfulUploadsCount > 0)) ||
-      this.pollId ||
-      !!this.locationComposer.validLocation
+    return (
+      this.isCommandSendable &&
+      !!(
+        (!this.attachmentManager.uploadsInProgressCount &&
+          (!this.textComposer.textIsEmpty ||
+            this.attachmentManager.successfulUploadsCount > 0)) ||
+        this.pollId ||
+        !!this.locationComposer.validLocation
+      )
     );
   }
 
@@ -426,7 +475,9 @@ export class MessageComposer extends WithSubscriptions {
   }
 
   updateConfig(config: DeepPartial<MessageComposerConfig>) {
-    this.configState.partialNext(mergeWith(this.config, config));
+    this.configState.partialNext(
+      applyCommandValidatorOverride(mergeWith(this.config, config), config),
+    );
   }
 
   refreshId = () => {

@@ -1,7 +1,12 @@
 import { textIsEmpty } from '../../textComposer';
 import type { CommandResponse } from '../../../types';
 import { CommandSearchSource } from '../textComposer/commands';
-import { getRawCommandName, notifyCommandDisabled } from '../textComposer/commandUtils';
+import {
+  getCommandByName,
+  getRawCommandName,
+  notifyCommandDisabled,
+  notifyCommandNotReady,
+} from '../textComposer/commandUtils';
 import type {
   MessageComposerMiddlewareState,
   MessageCompositionMiddleware,
@@ -10,18 +15,6 @@ import type {
 } from './types';
 import type { MessageComposer } from '../../messageComposer';
 import type { MiddlewareHandlerParams } from '../../../middleware';
-
-const getCommandByName = (
-  searchSource: CommandSearchSource,
-  commandName?: string,
-): CommandResponse | undefined => {
-  if (!commandName) return;
-
-  const normalizedCommandName = commandName.toLowerCase();
-  return searchSource
-    .query(normalizedCommandName)
-    .items.find((command) => command.name?.toLowerCase() === normalizedCommandName);
-};
 
 const getDisabledRawCommand = (
   composer: MessageComposer,
@@ -36,8 +29,10 @@ const getDisabledRawCommand = (
 
 export const createCompositionValidationMiddleware = (
   composer: MessageComposer,
+  commandSearchSource?: CommandSearchSource,
 ): MessageCompositionMiddleware => {
-  const commandSearchSource = new CommandSearchSource(composer.channel);
+  const effectiveCommandSearchSource =
+    commandSearchSource ?? new CommandSearchSource(composer.channel);
 
   return {
     id: 'stream-io/message-composer-middleware/data-validation',
@@ -52,11 +47,24 @@ export const createCompositionValidationMiddleware = (
 
         const disabledRawCommand = getDisabledRawCommand(
           composer,
-          commandSearchSource,
+          effectiveCommandSearchSource,
           inputText,
         );
         if (disabledRawCommand) {
           notifyCommandDisabled(composer, disabledRawCommand);
+          return await discard();
+        }
+
+        const currentCommand =
+          composer.textComposer.command ??
+          getCommandByName(effectiveCommandSearchSource, getRawCommandName(inputText));
+        if (
+          currentCommand &&
+          notifyCommandNotReady({
+            composer,
+            sendability: composer.validateCommandSendability(currentCommand, inputText),
+          })
+        ) {
           return await discard();
         }
 
