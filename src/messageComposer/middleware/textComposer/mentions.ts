@@ -265,6 +265,7 @@ const DEFAULT_SUGGESTION_FACTORY_MAPPERS: {
   user_group: (value, { searchToken }) => {
     const userGroup = value as UserGroupResponse;
     return {
+      description: userGroup.description,
       id: userGroup.id,
       /*
       Currently, all members of the group are always returned. Groups are limited to 100 members.
