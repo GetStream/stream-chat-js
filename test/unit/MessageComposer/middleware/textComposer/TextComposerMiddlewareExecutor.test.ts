@@ -216,7 +216,10 @@ describe('TextComposerMiddlewareExecutor', () => {
     } as TextComposerSuggestion<UserSuggestion>;
 
     await textComposer.handleSelect(selectedSuggestion);
-    expect(textComposer.mentionedUsers).toContainEqual(selectedSuggestion);
+    expect(textComposer.mentionedUsers).toContainEqual({
+      id: 'user1',
+      name: 'John Doe',
+    });
 
     await textComposer.handleChange({
       text: '',
