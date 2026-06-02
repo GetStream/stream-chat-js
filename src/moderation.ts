@@ -3,7 +3,6 @@ import type {
   CheckResponse,
   CustomCheckFlag,
   CustomCheckResponse,
-  GetConfigResponse,
   GetUserModerationReportOptions,
   GetUserModerationReportResponse,
   ModerationConfig,
@@ -11,7 +10,6 @@ import type {
   ModerationMuteOptions,
   ModerationRule,
   ModerationRuleRequest,
-  MuteUserResponse,
   Pager,
   QueryConfigsResponse,
   QueryModerationConfigsFilters,
@@ -27,10 +25,10 @@ import type {
   SubmitActionOptions,
   SubmitActionResponse,
   UnmuteUserResponse,
-  UpsertConfigResponse,
   UpsertModerationRuleResponse,
 } from './types';
 import type { StreamChat } from './client';
+import { ModerationApi } from './gen/moderation/ModerationApi';
 import { normalizeQuerySort } from './utils';
 
 export const MODERATION_ENTITY_TYPES = {
@@ -42,9 +40,11 @@ export const MODERATION_ENTITY_TYPES = {
 // Moderation class provides all the endpoints related to moderation v2.
 export class Moderation {
   client: StreamChat;
+  private moderationApi: ModerationApi;
 
   constructor(client: StreamChat) {
     this.client = client;
+    this.moderationApi = new ModerationApi(client.api);
   }
 
   /**
@@ -76,7 +76,7 @@ export class Moderation {
   }
 
   /**
-   * Flag a user
+   * Flag an entity
    *
    * @param {string} entityType Entity type to be flagged
    * @param {string} entityId Entity ID to be flagged
@@ -95,16 +95,13 @@ export class Moderation {
     reason: string,
     options: ModerationFlagOptions = {},
   ) {
-    return await this.client.post<{ item_id: string } & APIResponse>(
-      this.client.baseURL + '/api/v2/moderation/flag',
-      {
-        entity_type: entityType,
-        entity_id: entityId,
-        entity_creator_id: entityCreatorID,
-        reason,
-        ...options,
-      },
-    );
+    return await this.moderationApi.flag({
+      entity_type: entityType,
+      entity_id: entityId,
+      entity_creator_id: entityCreatorID,
+      reason,
+      ...options,
+    });
   }
 
   /**
@@ -116,13 +113,10 @@ export class Moderation {
    * @returns
    */
   async muteUser(targetID: string, options: ModerationMuteOptions = {}) {
-    return await this.client.post<MuteUserResponse & APIResponse>(
-      this.client.baseURL + '/api/v2/moderation/mute',
-      {
-        target_ids: [targetID],
-        ...options,
-      },
-    );
+    return await this.moderationApi.mute({
+      target_ids: [targetID],
+      ...options,
+    });
   }
 
   /**
@@ -138,7 +132,7 @@ export class Moderation {
       user_id?: string;
     },
   ) {
-    return await this.client.post<UnmuteUserResponse>(
+    return await this.client.api.post<UnmuteUserResponse>(
       this.client.baseURL + '/api/v2/moderation/unmute',
       {
         target_ids: [targetID],
@@ -159,7 +153,7 @@ export class Moderation {
     userID: string,
     options: GetUserModerationReportOptions = {},
   ) {
-    return await this.client.get<GetUserModerationReportResponse>(
+    return await this.client.api.get<GetUserModerationReportResponse>(
       this.client.baseURL + `/api/v2/moderation/user_report`,
       {
         user_id: userID,
@@ -179,7 +173,7 @@ export class Moderation {
     sort: ReviewQueueSort = [],
     options: ReviewQueuePaginationOptions = {},
   ) {
-    return await this.client.post<ReviewQueueResponse>(
+    return await this.client.api.post<ReviewQueueResponse>(
       this.client.baseURL + '/api/v2/moderation/review_queue',
       {
         filter: filterConditions,
@@ -194,10 +188,7 @@ export class Moderation {
    * @param {Object} config Moderation config to be upserted
    */
   async upsertConfig(config: ModerationConfig) {
-    return await this.client.post<UpsertConfigResponse>(
-      this.client.baseURL + '/api/v2/moderation/config',
-      config,
-    );
+    return await this.moderationApi.upsertConfig(config);
   }
 
   /**
@@ -205,17 +196,11 @@ export class Moderation {
    * @param {string} key Key for which moderation config is to be fetched
    */
   async getConfig(key: string, data?: { team?: string }) {
-    return await this.client.get<GetConfigResponse>(
-      this.client.baseURL + '/api/v2/moderation/config/' + key,
-      data,
-    );
+    return await this.moderationApi.getConfig({ key, ...data });
   }
 
   async deleteConfig(key: string, data?: { team?: string }) {
-    return await this.client.delete<APIResponse>(
-      this.client.baseURL + '/api/v2/moderation/config/' + key,
-      data,
-    );
+    return await this.moderationApi.deleteConfig({ key, ...data });
   }
 
   /**
@@ -229,7 +214,7 @@ export class Moderation {
     sort: QueryModerationConfigsSort,
     options: Pager = {},
   ) {
-    return await this.client.post<QueryConfigsResponse>(
+    return await this.client.api.post<QueryConfigsResponse>(
       this.client.baseURL + '/api/v2/moderation/configs',
       {
         filter: filterConditions,
@@ -244,7 +229,7 @@ export class Moderation {
     itemID: string,
     options: SubmitActionOptions = {},
   ) {
-    return await this.client.post<SubmitActionResponse>(
+    return await this.client.api.post<SubmitActionResponse>(
       this.client.baseURL + '/api/v2/moderation/submit_action',
       {
         action_type: actionType,
@@ -283,7 +268,7 @@ export class Moderation {
     },
     testMode?: boolean,
   ) {
-    return await this.client.post<CheckResponse>(
+    return await this.client.api.post<CheckResponse>(
       this.client.baseURL + `/api/v2/moderation/check`,
       {
         entity_type: entityType,
@@ -377,7 +362,7 @@ export class Moderation {
     },
     flags: CustomCheckFlag[],
   ) {
-    return await this.client.post<CustomCheckResponse>(
+    return await this.client.api.post<CustomCheckResponse>(
       this.client.baseURL + `/api/v2/moderation/custom_check`,
       {
         entity_type: entityType,
@@ -411,7 +396,7 @@ export class Moderation {
    * @returns
    */
   async upsertModerationRule(rule: ModerationRuleRequest) {
-    return await this.client.post<UpsertModerationRuleResponse>(
+    return await this.client.api.post<UpsertModerationRuleResponse>(
       this.client.baseURL + '/api/v2/moderation/moderation_rule',
       rule,
     );
@@ -429,7 +414,7 @@ export class Moderation {
     sort: QueryModerationRulesSort = [],
     options: Pager = {},
   ) {
-    return await this.client.post<QueryModerationRulesResponse>(
+    return await this.client.api.post<QueryModerationRulesResponse>(
       this.client.baseURL + '/api/v2/moderation/moderation_rules',
       {
         filter: filterConditions,
@@ -445,7 +430,7 @@ export class Moderation {
    * @returns
    */
   async getModerationRule(id: string) {
-    return await this.client.get<{ rule: ModerationRule }>(
+    return await this.client.api.get<{ rule: ModerationRule }>(
       this.client.baseURL + '/api/v2/moderation/moderation_rule/' + id,
     );
   }
@@ -456,7 +441,7 @@ export class Moderation {
    * @returns
    */
   async deleteModerationRule(id: string) {
-    return await this.client.delete<APIResponse>(
+    return await this.client.api.delete<APIResponse>(
       this.client.baseURL + '/api/v2/moderation/moderation_rule/' + id,
     );
   }

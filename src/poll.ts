@@ -14,7 +14,7 @@ import type {
   VoteSort,
   VotingVisibility,
 } from './types';
-import type { PollResponseData, WSEvent } from './gen/models';
+import type { PollResponseData as Gen_PollResponseData, WSEvent } from './gen/models';
 
 const isPollUpdatedEvent = (e: WSEvent): e is EventPayload<'poll.updated'> =>
   e.type === 'poll.updated';
@@ -54,7 +54,7 @@ export type PollState = Omit<PollResponse, 'own_votes' | 'id'> & {
 
 type PollInitOptions = {
   client: StreamChat;
-  poll: PollResponseData;
+  poll: Gen_PollResponseData;
 };
 
 export class Poll {
@@ -359,7 +359,7 @@ function getOwnVotesByOptionId(ownVotes: PollVote[]) {
       }, {});
 }
 
-export function extractPollData(pollResponse: PollResponseData): PollData {
+export function extractPollData(pollResponse: Gen_PollResponseData): PollData {
   return {
     allow_answers: pollResponse.allow_answers,
     allow_user_suggested_options: pollResponse.allow_user_suggested_options,
@@ -396,7 +396,7 @@ export function mapPollStateToResponse(poll: Poll): PollResponse {
 }
 
 export function extractPollEnrichedData(
-  pollResponse: PollResponseData,
+  pollResponse: Gen_PollResponseData,
 ): Omit<PollEnrichData, 'own_votes' | 'latest_answers'> {
   return {
     answers_count: pollResponse.answers_count,

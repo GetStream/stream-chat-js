@@ -13,9 +13,17 @@ import {
   buildWsSuccessAfterFailureInsight,
   postInsights,
 } from './insights';
-import type { ConnectAPIResponse, ConnectionOpen, LogLevel, UR } from './types';
+import type {
+  ConnectAPIResponse,
+  ConnectionOpen,
+  EventPayload,
+  LogLevel,
+  UR,
+} from './types';
 import type { StreamChat } from './client';
 import type { APIError } from './errors';
+import { decodeWSEvent } from './gen/model-decoders/event-decoder-mapping';
+import type { WSEvent } from './gen/models';
 
 // Type guards to check WebSocket error type
 const isCloseEvent = (
@@ -463,18 +471,19 @@ export class StableWSConnection {
     }
   };
 
-  onopen = (wsID: number) => {
-    if (this.wsID !== wsID) return;
+  onopen = (wsId: number) => {
+    if (this.wsID !== wsId) return;
 
-    this._log('onopen() - onopen callback', { wsID });
+    this._log('onopen() - onopen callback', { wsID: wsId });
   };
 
-  onmessage = (wsID: number, event: WebSocket.MessageEvent) => {
-    if (this.wsID !== wsID) return;
+  onmessage = (wsId: number, event: WebSocket.MessageEvent) => {
+    if (this.wsID !== wsId) return;
 
-    this._log('onmessage() - onmessage callback', { event, wsID });
+    this._log('onmessage() - onmessage callback', { event, wsID: wsId });
     if (typeof event.data !== 'string') return;
     const data = JSON.parse(event.data);
+    const decodedData = decodeWSEvent(data) as WSEvent;
 
     // we wait till the first message before we consider the connection open..
     // the reason for this is that auth errors and similar errors trigger a ws.onopen and immediately
@@ -486,7 +495,7 @@ export class StableWSConnection {
         return;
       }
 
-      this.resolvePromise?.(data);
+      this.resolvePromise?.(decodedData as EventPayload<'health.check'>);
       this._setHealth(true);
     }
 
@@ -497,14 +506,14 @@ export class StableWSConnection {
       this.scheduleNextPing();
     }
 
-    this.client.dispatchEvent(data);
+    this.client.dispatchEvent(decodedData);
     this.scheduleConnectionCheck();
   };
 
-  onclose = (wsID: number, event: WebSocket.CloseEvent) => {
-    if (this.wsID !== wsID) return;
+  onclose = (wsId: number, event: WebSocket.CloseEvent) => {
+    if (this.wsID !== wsId) return;
 
-    this._log('onclose() - onclose callback - ' + event.code, { event, wsID });
+    this._log('onclose() - onclose callback - ' + event.code, { event, wsID: wsId });
 
     if (event.code === chatCodes.WS_CLOSED_SUCCESS) {
       // this is a permanent error raised by stream..
@@ -535,8 +544,8 @@ export class StableWSConnection {
     }
   };
 
-  onerror = (wsID: number, event: WebSocket.ErrorEvent) => {
-    if (this.wsID !== wsID) return;
+  onerror = (wsId: number, event: WebSocket.ErrorEvent) => {
+    if (this.wsID !== wsId) return;
 
     this.consecutiveFailures += 1;
     this.totalFailures += 1;

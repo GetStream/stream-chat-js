@@ -13,7 +13,7 @@ import {
 } from './middleware';
 import type { Unsubscribe } from '../store';
 import { StateStore } from '../store';
-import { formatMessage, generateUUIDv4, isLocalMessage, unformatMessage } from '../utils';
+import { formatMessage, generateUUIDv4, isLocalMessage } from '../utils';
 import { mergeWith } from '../utils/mergeWith';
 import { Channel } from '../channel';
 import { Thread } from '../thread';
@@ -891,7 +891,12 @@ export class MessageComposer extends WithSubscriptions {
     const { state, status } = await this.draftCompositionMiddlewareExecutor.execute({
       eventName: 'compose',
       initialValue: {
-        draft: { id: this.id, parent_id: this.threadId ?? undefined, text: '' },
+        draft: {
+          id: this.id,
+          parent_id: this.threadId ?? undefined,
+          text: '',
+          custom: {},
+        },
       },
     });
     if (status === 'discard') return;
@@ -911,12 +916,10 @@ export class MessageComposer extends WithSubscriptions {
       try {
         const optimisticDraftResponse = {
           channel_cid: this.channel.cid,
-          created_at: new Date().toISOString(),
+          created_at: new Date(),
           message: draft as DraftMessage,
           parent_id: draft.parent_id,
-          quoted_message: this.quotedMessage
-            ? unformatMessage(this.quotedMessage)
-            : undefined,
+          quoted_message: this.quotedMessage ?? undefined,
         };
         await this.client.offlineDb.upsertDraft({ draft: optimisticDraftResponse });
       } catch (error) {

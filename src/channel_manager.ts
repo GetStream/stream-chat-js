@@ -163,7 +163,8 @@ const mapPredefinedFilterSortToChannelSort = (
   sort: NonNullable<QueryChannelsAPIResponse['predefined_filter']>['sort'],
 ): ChannelSort =>
   (sort ?? []).map(({ direction = 1, field }) => ({
-    [field]: direction,
+    // TODO: OAPI discrepancy, should not be optional (both direction and field)
+    [field as string]: direction,
   })) as ChannelSort;
 
 const getResponsePaginationParams = ({

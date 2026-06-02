@@ -20,7 +20,6 @@ import type {
   ChannelAPIResponse,
   ChannelData,
   ChannelMemberResponse,
-  ChannelPushPreference,
   ChannelQueryOptions,
   ChannelResponse,
   ChannelUpdateOptions,
@@ -54,6 +53,7 @@ import type {
   QueryMembersOptions,
   Reaction,
   ReactionAPIResponse,
+  ReactionResponse,
   SearchMessageSortBase,
   SearchOptions,
   SearchPayload,
@@ -71,6 +71,7 @@ import type {
   ChannelGetOrCreateRequest as Gen_ChannelGetOrCreateRequest,
   ChannelInputRequest as Gen_ChannelInputRequest,
   ChannelMemberRequest as Gen_ChannelMemberRequest,
+  ChannelPushPreferencesResponse as Gen_ChannelPushPreferencesResponse,
   SendMessageRequest as Gen_SendMessageRequest,
   UpdateChannelRequest as Gen_UpdateChannelRequest,
   WSEvent,
@@ -84,7 +85,7 @@ export class Channel {
   _client: StreamChat;
   type: string;
   id: string | undefined;
-  data: ChannelResponse | undefined;
+  data: Partial<ChannelResponse> | undefined;
   _data: ChannelData;
   cid: string;
   /**  */
@@ -109,7 +110,7 @@ export class Channel {
   lastTypingEvent: Date | null;
   isTyping: boolean;
   disconnected: boolean;
-  push_preferences?: ChannelPushPreference;
+  push_preferences?: Gen_ChannelPushPreferencesResponse;
   public readonly messageComposer: MessageComposer;
   public readonly messageReceiptsTracker: MessageReceiptsTracker;
   public readonly cooldownTimer: CooldownTimer;
@@ -513,9 +514,9 @@ export class Channel {
     });
   }
 
-  async deleteReaction(messageID: string, reactionType: string, user_id?: string) {
+  async deleteReaction(messageId: string, reactionType: string) {
     this._checkInitialized();
-    if (!reactionType || !messageID) {
+    if (!reactionType || !messageId) {
       throw Error(
         'Deleting a reaction requires specifying both the message and reaction type',
       );
@@ -524,14 +525,11 @@ export class Channel {
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
-        const message = this.state.messages.find(({ id }) => id === messageID);
+        const message = this.state.messages.find(({ id }) => id === messageId);
         const reaction = {
-          created_at: '',
-          updated_at: '',
-          message_id: messageID,
+          message_id: messageId,
           type: reactionType,
-          user_id: (this.getClient().userId as string) ?? user_id,
-        };
+        } as ReactionResponse;
 
         if (message) {
           await offlineDb.deleteReaction({
@@ -544,8 +542,8 @@ export class Channel {
           task: {
             channelId: this.id as string,
             channelType: this.type,
-            messageId: messageID,
-            payload: [messageID, reactionType],
+            messageId,
+            payload: [messageId, reactionType],
             type: 'delete-reaction',
           },
         });
@@ -557,7 +555,7 @@ export class Channel {
       });
     }
 
-    return await this._deleteReaction(messageID, reactionType, user_id);
+    return await this._deleteReaction(messageId, reactionType);
   }
 
   /**
@@ -1059,9 +1057,9 @@ export class Channel {
    * keystroke - First of the typing.start and typing.stop events based on the users keystrokes.
    * Call this on every keystroke
    * @see {@link https://getstream.io/chat/docs/typing_indicators/?language=js|Docs}
-   * @param {string} [parent_id] set this field to `message.id` to indicate that typing event is happening in a thread
+   * @param {string} [parentId] set this field to `message.id` to indicate that typing event is happening in a thread
    */
-  async keystroke(parent_id?: string, options?: { user_id: string }) {
+  async keystroke(parentId?: string, options?: { user_id: string }) {
     if (!this._isTypingIndicatorsEnabled()) {
       return;
     }
@@ -1074,7 +1072,7 @@ export class Channel {
       this.lastTypingEvent = new Date();
       await this.sendEvent({
         type: 'typing.start',
-        parent_id,
+        parent_id: parentId,
         ...(options || {}),
         created_at: new Date(),
         custom: {},
@@ -1132,9 +1130,9 @@ export class Channel {
   /**
    * stopTyping - Sets last typing to null and sends the typing.stop event
    * @see {@link https://getstream.io/chat/docs/typing_indicators/?language=js|Docs}
-   * @param {string} [parent_id] set this field to `message.id` to indicate that typing event is happening in a thread
+   * @param {string} [parentId] set this field to `message.id` to indicate that typing event is happening in a thread
    */
-  async stopTyping(parent_id?: string, options?: { user_id: string }) {
+  async stopTyping(parentId?: string, options?: { user_id: string }) {
     if (!this._isTypingIndicatorsEnabled()) {
       return;
     }
@@ -1142,7 +1140,7 @@ export class Channel {
     this.isTyping = false;
     await this.sendEvent({
       type: 'typing.stop',
-      parent_id,
+      parent_id: parentId,
       ...(options || {}),
       created_at: new Date(),
       custom: {},
@@ -1463,7 +1461,7 @@ export class Channel {
    */
   countUnreadMentions() {
     const lastRead = this.lastRead();
-    const userID = this.getClient().userId;
+    const userId = this.getClient().userId;
 
     let count = 0;
     for (let i = 0; i < this.state.latestMessages.length; i += 1) {
@@ -1471,7 +1469,7 @@ export class Channel {
       if (
         this._countMessageAsUnread(message) &&
         (!lastRead || message.created_at > lastRead) &&
-        message.mentioned_users?.some((user) => user.id === userID)
+        message.mentioned_users?.some((user) => user.id === userId)
       ) {
         count++;
       }
@@ -1539,6 +1537,7 @@ export class Channel {
     // update the channel id if it was missing
     if (!this.id) {
       this.id = channel.id;
+      this.channelApi.id = channel.id;
       this.cid = channel.cid;
       // set the channel as active...
 
@@ -1639,13 +1638,13 @@ export class Channel {
   /**
    * banUser - Bans a user from a channel
    *
-   * @param {string} targetUserID
+   * @param {string} targetUserId
    * @param {BanUserOptions} options
    * @returns {Promise<APIResponse>}
    */
-  async banUser(targetUserID: string, options: BanUserOptions) {
+  async banUser(targetUserId: string, options: BanUserOptions) {
     this._checkInitialized();
-    return await this.getClient().banUser(targetUserID, {
+    return await this.getClient().banUser(targetUserId, {
       ...options,
       type: this.type,
       id: this.id,
@@ -1682,13 +1681,13 @@ export class Channel {
   /**
    * unbanUser - Removes the bans for a user on a channel
    *
-   * @param {string} targetUserID
+   * @param {string} targetUserId
    * @param {UnBanUserOptions} options
    * @returns {Promise<APIResponse>}
    */
-  async unbanUser(targetUserID: string, options?: UnBanUserOptions) {
+  async unbanUser(targetUserId: string, options?: UnBanUserOptions) {
     this._checkInitialized();
-    return await this.getClient().unbanUser(targetUserID, {
+    return await this.getClient().unbanUser(targetUserId, {
       ...options,
       type: this.type,
       id: this.id,
@@ -1698,13 +1697,13 @@ export class Channel {
   /**
    * shadowBan - Shadow bans a user from a channel
    *
-   * @param {string} targetUserID
+   * @param {string} targetUserId
    * @param {BanUserOptions} options
    * @returns {Promise<APIResponse>}
    */
-  async shadowBan(targetUserID: string, options: BanUserOptions) {
+  async shadowBan(targetUserId: string, options: BanUserOptions) {
     this._checkInitialized();
-    return await this.getClient().shadowBan(targetUserID, {
+    return await this.getClient().shadowBan(targetUserId, {
       ...options,
       type: this.type,
       id: this.id,
@@ -1714,12 +1713,12 @@ export class Channel {
   /**
    * removeShadowBan - Removes the shadow ban for a user on a channel
    *
-   * @param {string} targetUserID
+   * @param {string} targetUserId
    * @returns {Promise<APIResponse>}
    */
-  async removeShadowBan(targetUserID: string) {
+  async removeShadowBan(targetUserId: string) {
     this._checkInitialized();
-    return await this.getClient().removeShadowBan(targetUserID, {
+    return await this.getClient().removeShadowBan(targetUserId, {
       type: this.type,
       id: this.id,
     });
@@ -2196,7 +2195,8 @@ export class Channel {
           // keep the message delivery info
           ...currentState,
           first_unread_message_id: event.first_unread_message_id,
-          last_read: event.last_read_at,
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          last_read: event.last_read_at!, // TODO: see why this is optional in OAPI spec
           last_read_message_id: event.last_read_message_id,
           user: event.user,
           unread_messages: unreadCount,

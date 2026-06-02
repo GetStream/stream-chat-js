@@ -19,8 +19,6 @@ export type UpdateFieldsData = Partial<Omit<PollComposerState['data'], 'options'
   options?: PollComposerOptionUpdate;
 };
 
-type Id = string;
-
 export type PollComposerFieldErrors = Partial<
   Omit<Record<keyof CreatePollData, string>, 'options'> & {
     options?: Record<string, string>;
@@ -29,7 +27,7 @@ export type PollComposerFieldErrors = Partial<
 
 export type PollComposerState = {
   data: {
-    id: Id;
+    id: string;
     max_votes_allowed: string;
     name: string;
     options: PollComposerOption[];
@@ -38,7 +36,6 @@ export type PollComposerState = {
     description?: string;
     enforce_unique_vote?: boolean;
     is_closed?: boolean;
-    user_id?: string;
     voting_visibility?: VotingVisibility;
   };
   errors: PollComposerFieldErrors;

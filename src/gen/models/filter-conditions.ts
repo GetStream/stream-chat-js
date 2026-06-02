@@ -373,7 +373,7 @@ export type QueryThreadsRequestFilter = {
 };
 
 export type QueryUsersPayloadFilterConditions = {
-  banned: { type: boolean; operators: '$eq' };
+  banned: { type: boolean; operators: '$eq' | '$ne' };
   bypass_moderation: { type: boolean; operators: '$eq' | '$ne' };
   created_at: {
     type: Date;
@@ -667,6 +667,7 @@ export type SearchPayloadMessageFilterConditions = {
       | '$ne'
       | '$nin';
   };
+
   id: {
     type: string;
     operators:
