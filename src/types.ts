@@ -41,15 +41,14 @@ import type {
   ChannelMemberResponse as Gen_ChannelMemberResponse,
   ChannelMute as Gen_ChannelMute,
   ChannelOwnCapability as Gen_ChannelOwnCapability,
-  ChannelPushPreferencesResponse as Gen_ChannelPushPreferencesResponse,
   ChannelResponse as Gen_ChannelResponse,
   ChannelStateResponse as Gen_ChannelStateResponse,
   ChannelStateResponseFields as Gen_ChannelStateResponseFields,
   Command as Gen_Command,
   ContentCountRuleParameters as Gen_ContentCountRuleParameters,
   CreateDeviceRequest as Gen_CreateDeviceRequest,
-  CreateDraftRequest as Gen_CreateDraftRequest,
   CreatePollRequest as Gen_CreatePollRequest,
+  DraftPayloadResponse as Gen_DraftPayloadResponse,
   DraftResponse as Gen_DraftResponse,
   Field as Gen_Field,
   FileUploadConfig as Gen_FileUploadConfig,
@@ -70,7 +69,6 @@ import type {
   MessageResponse as Gen_MessageResponse,
   ModerationPayload as Gen_ModerationPayload,
   OwnUserResponse as Gen_OwnUserResponse,
-  ParsedPredefinedFilterResponse as Gen_ParsedPredefinedFilterResponse,
   PendingMessageResponse as Gen_PendingMessageResponse,
   PollResponseData as Gen_PollResponseData,
   PollVoteResponseData as Gen_PollVoteResponseData,
@@ -91,6 +89,7 @@ import type {
   ReactionRequest as Gen_ReactionRequest,
   ReactionResponse as Gen_ReactionResponse,
   ReadStateResponse as Gen_ReadStateResponse,
+  ReminderResponseData as Gen_ReminderResponseData,
   RuleBuilderAction as Gen_RuleBuilderAction,
   RuleBuilderCondition as Gen_RuleBuilderCondition,
   RuleBuilderConditionGroup as Gen_RuleBuilderConditionGroup,
@@ -113,6 +112,7 @@ import type {
   UpdatePollRequest as Gen_UpdatePollRequest,
   UpdateUserPartialRequest as Gen_UpdateUserPartialRequest,
   UpsertConfigResponse as Gen_UpsertConfigResponse,
+  UpsertPushPreferencesResponse as Gen_UpsertPushPreferencesResponse,
   UserCreatedWithinParameters as Gen_UserCreatedWithinParameters,
   UserCustomPropertyParameters as Gen_UserCustomPropertyParameters,
   UserMuteResponse as Gen_UserMuteResponse,
@@ -487,12 +487,7 @@ export type CheckSNSResponse = APIResponse & {
   error?: string;
 };
 
-export type CommandResponse = Partial<CreatedAtUpdatedAt> & {
-  args?: string;
-  description?: string;
-  name?: CommandVariants;
-  set?: CommandVariants;
-};
+export type CommandResponse = Gen_Command;
 
 export type ConnectAPIResponse = Promise<void | ConnectionOpen>;
 
@@ -568,15 +563,13 @@ export type FlagUserResponse = APIResponse & {
   review_queue_item_id?: string;
 };
 
-export type LocalMessage = Gen_MessageResponse &
-  CustomMessageData & {
-    /** SDK-only field: message delivery status (e.g. 'sending', 'received', 'failed') */
-    status: string;
-    error?: ErrorFromResponse<APIErrorResponse> | null;
-    /** Moderation v1 details (legacy, used by isBlockedMessage/isBouncedMessage) */
-    // moderation_details?: ModerationDetailsResponse;
-    quoted_message?: LocalMessage | null;
-  };
+export type LocalMessage = ReplaceCustom<Gen_MessageResponse, CustomMessageData> & {
+  /** SDK-only field: message delivery status (e.g. 'sending', 'received', 'failed') */
+  status: string;
+  error?: ErrorFromResponse<APIErrorResponse>;
+  quoted_message?: LocalMessage | undefined;
+  user_id?: string;
+};
 
 export type GetCommandResponse = APIResponse & CreateCommandOptions & CreatedAtUpdatedAt;
 
@@ -668,61 +661,9 @@ export type GetUnreadCountAPIResponse = APIResponse & {
   total_unread_count_by_team?: Record<string, number>;
 };
 
-export type ChatLevelPushPreference =
-  | 'all'
-  | 'mentions' // deprecated by the API in favor of 'direct_mentions'
-  | 'direct_mentions'
-  | 'all_mentions'
-  | 'none'
-  | 'default'
-  | (string & {});
+export type PushPreference = Gen_PushPreferenceInput;
 
-export type CallLevelPushPreference = 'all' | 'none' | 'default' | (string & {});
-
-/** Granular all/none toggle used by the chat sub-preferences. */
-export type PushPreferenceLevel = 'all' | 'none' | (string & {});
-
-/** Per-mention-type chat push preferences (matches OpenAPI `ChatPreferencesInput`). */
-export type ChatPreferences = {
-  channel_mentions?: PushPreferenceLevel;
-  default_preference?: PushPreferenceLevel;
-  direct_mentions?: PushPreferenceLevel;
-  group_mentions?: PushPreferenceLevel;
-  here_mentions?: PushPreferenceLevel;
-  role_mentions?: PushPreferenceLevel;
-  thread_replies?: PushPreferenceLevel;
-};
-
-export type PushPreference = Gen_ChannelPushPreferencesResponse; // Gen_ChannelPushPreferencesResponse;
-
-/**
- * Input accepted by {@link StreamChat.setPushPreferences} (matches OpenAPI `PushPreferenceInput`).
- *
- * Set `channel_cid` to scope the preference to a single channel; leave it empty to
- * set the user-level default. `user_id` is required for server-side auth and
- * defaults to the connected user for client-side auth.
- */
-
-/** Per-user push preferences returned by the API (matches OpenAPI `PushPreferencesResponse`). */
-export type PushPreferencesResponse = {
-  call_level?: CallLevelPushPreference;
-  chat_level?: ChatLevelPushPreference;
-  chat_preferences?: ChatPreferences;
-  disabled_until?: string;
-};
-
-/** Per-channel push preferences returned by the API (matches OpenAPI `ChannelPushPreferencesResponse`). */
-export type ChannelPushPreference = {
-  chat_level?: ChatLevelPushPreference; // "all", "mentions", "direct_mentions", "all_mentions", "none", "default" or other custom strings
-  disabled_until?: string;
-};
-
-export type UpsertPushPreferencesResponse = APIResponse & {
-  // Mapping of user id -> channel cid -> channel push preferences
-  user_channel_preferences: Record<string, Record<string, ChannelPushPreference>>;
-  // Mapping of user id -> user push preferences
-  user_preferences: Record<string, PushPreferencesResponse>;
-};
+export type UpsertPushPreferencesResponse = Gen_UpsertPushPreferencesResponse;
 
 export type GetUnreadCountBatchAPIResponse = APIResponse & {
   counts_by_user: { [userId: string]: GetUnreadCountAPIResponse };
@@ -824,7 +765,7 @@ export type OwnUserBase = {
   total_unread_count_by_team?: Record<string, number> | null;
 };
 
-export type OwnUserResponse = Gen_OwnUserResponse & CustomUserData; // UserResponse & OwnUserBase;
+export type OwnUserResponse = ReplaceCustom<Gen_OwnUserResponse, CustomUserData>;
 
 export type PartialUpdateChannelAPIResponse = APIResponse & {
   channel: ChannelResponse;
@@ -844,7 +785,7 @@ export type ReactionAPIResponse = APIResponse & {
   reaction: ReactionResponse;
 };
 
-export type ReactionResponse = Gen_ReactionResponse;
+export type ReactionResponse = ReplaceCustom<Gen_ReactionResponse, CustomReactionData>;
 
 export type ReadResponse = Gen_ReadStateResponse;
 
@@ -897,7 +838,7 @@ export type SendMessageAPIResponse = APIResponse & {
 };
 
 export type SyncResponse = APIResponse & {
-  events: Event[];
+  events: WSEvent[];
   inaccessible_cids?: string[];
 };
 
@@ -939,6 +880,7 @@ export type UpdateUsersAPIResponse = APIResponse & {
   membership_deletion_task_id?: string;
 };
 
+// FIXME: possibly missing properties from OwnUserResponse (push_preferences, privacy_settings) & from ChannelMemberResponse (notifications_muted)
 export type UserResponse = ReplaceCustom<Gen_UserResponse, CustomUserData>;
 
 export type TeamsRole = { [team: string]: string };
@@ -1044,7 +986,11 @@ export type ChannelOptions = {
   sort_values?: Record<string, unknown>;
 };
 
-export type ChannelQueryOptions = Gen_ChannelGetOrCreateRequest;
+export type ChannelQueryOptions = ReplacePropertyType<
+  Gen_ChannelGetOrCreateRequest,
+  'data',
+  ReplaceCustom<Gen_ChannelInput, CustomChannelData>
+>;
 
 export type ChannelStateOptions = {
   offlineMode?: boolean;
@@ -1668,10 +1614,12 @@ export type ReactionFilters = WithTypedFilters<
   { filter: Gen_QueryReactionsRequestFilter }
 >['filter'];
 
-export type ChannelFilters = WithTypedFilters<
-  Gen_QueryChannelsRequest,
-  { filter_conditions: Gen_QueryChannelsRequestFilterConditions }
->['filter_conditions'];
+export type ChannelFilters = NonNullable<
+  WithTypedFilters<
+    Gen_QueryChannelsRequest,
+    { filter_conditions: Gen_QueryChannelsRequestFilterConditions }
+  >['filter_conditions']
+>;
 
 export type DraftFilters = {
   channel_cid?:
@@ -2066,20 +2014,12 @@ export type AppSettings = {
   };
 };
 
-export type Attachment = CustomAttachmentData & Gen_Attachment;
+export type Attachment = ReplaceCustom<
+  Gen_Attachment,
+  CustomAttachmentData & { file_size?: number; mime_type?: string }
+>;
 
-export type OGAttachment = {
-  og_scrape_url: string;
-  asset_url?: string; // og:video | og:audio
-  author_link?: string; // og:site
-  author_name?: string; // og:site_name
-  image_url?: string; // og:image
-  text?: string; // og:description
-  thumb_url?: string; // og:image
-  title?: string; // og:title
-  title_link?: string; // og:url
-  type?: string | 'video' | 'audio' | 'image';
-};
+export type OGAttachment = RequireLiteral<Attachment, 'og_scrape_url'>;
 
 export type BlockList = {
   name: string;
@@ -2224,18 +2164,11 @@ export type CommandVariants =
 
 export type Configs = Record<string, ChannelConfigWithInfo | undefined>;
 
-export type ConnectionOpen = {
-  connection_id: string;
-  cid?: string;
-  created_at?: string;
-  received_at?: string;
-  me?: OwnUserResponse;
-  type?: string;
-};
+export type ConnectionOpen = EventPayload<'health.check'>;
 
 export type CreatedAtUpdatedAt = {
-  created_at: string;
-  updated_at: string;
+  created_at: Date;
+  updated_at: Date;
 };
 
 export type Device = DeviceFields & {
@@ -2515,7 +2448,7 @@ export type PartialMessageUpdate = {
   unset?: Array<keyof MessageUpdatableFields>;
 };
 
-export type PendingMessageResponse = Gen_PendingMessageResponse;
+export type PendingMessageResponse = Gen_PendingMessageResponse; //Gen_SendMessageResponse;
 
 export type PermissionAPIObject = {
   action?: string;
@@ -2673,7 +2606,7 @@ export type TranslationLanguages =
   | 'zh-TW'
   | (string & {});
 
-export type TypingStartEvent = Event;
+export type TypingStartEvent = EventPayload<'typing.start'>;
 
 export type ReservedUpdatedMessageFields = keyof typeof RESERVED_UPDATED_MESSAGE_FIELDS;
 
@@ -2999,7 +2932,8 @@ export type UpdatePollAPIResponse = {
   poll: PollResponse;
 };
 
-export type PollResponse = CustomPollData & PollEnrichData & Gen_PollResponseData;
+export type PollResponse = ReplaceCustom<Gen_PollResponseData, CustomPollData> &
+  PollEnrichData;
 
 export type PollOption = {
   created_at: string;
@@ -3761,28 +3695,10 @@ export type QueryDraftsResponse = APIResponse & {
   drafts: DraftResponse[];
 } & Omit<Pager, 'limit'>;
 
-export type DraftMessagePayload = Gen_CreateDraftRequest['message'];
+export type DraftMessagePayload = Gen_MessageRequest;
 
-export type DraftMessage = {
-  id: string;
-  text: string;
-  attachments?: Attachment[];
-  custom?: {};
-  html?: string;
-  mentioned_users?: string[];
-  mentioned_channel?: boolean;
-  mentioned_here?: boolean;
-  mentioned_group_ids?: string[];
-  mentioned_groups?: UserGroupResponse[];
-  mentioned_roles?: string[];
-  mml?: string;
-  parent_id?: string;
-  poll_id?: string;
-  quoted_message_id?: string;
+export type DraftMessage = ReplaceCustom<Gen_DraftPayloadResponse, CustomMessageData> & {
   shared_location?: StaticLocationPayload | LiveLocationPayload; // todo: live-location verify if possible
-  show_in_channel?: boolean;
-  silent?: boolean;
-  type?: MessageLabel;
 };
 
 export type ActiveLiveLocationsAPIResponse = APIResponse & {
@@ -3815,20 +3731,9 @@ export type ThreadSortBase = {
 
 export type ThreadFilters = NonNullable<QueryThreadsOptions['filter']>;
 
-export type ReminderResponseBase = {
-  channel_cid: string;
-  created_at: string;
-  message_id: string;
-  updated_at: string;
-  user_id: string;
-  remind_at?: string;
-};
+export type ReminderResponseBase = Gen_ReminderResponseData;
 
-export type ReminderResponse = ReminderResponseBase & {
-  user: UserResponse;
-  message: MessageResponse;
-  channel?: ChannelResponse;
-};
+export type ReminderResponse = Gen_ReminderResponseData;
 
 export type ReminderAPIResponse = APIResponse & {
   reminder: ReminderResponse;
@@ -4472,5 +4377,10 @@ export type EventPayload<T extends CombinedEvents['type'] | (string & {})> = Ext
 
 export type RequireLiteral<L, T extends keyof L> = Omit<L, T> & Required<Pick<L, T>>;
 
-export type ReplaceCustom<T extends { custom?: any }, L> = Omit<T, 'custom'> &
-  (undefined extends T['custom'] ? { custom?: L } : { custom: L });
+export type ReplacePropertyType<T, V extends keyof T, L> = Omit<T, V> &
+  (undefined extends T[V] ? { [key in V]?: L } : { [key in V]: L });
+export type ReplaceCustom<T extends { custom?: any }, L> = ReplacePropertyType<
+  T,
+  'custom',
+  L
+>;

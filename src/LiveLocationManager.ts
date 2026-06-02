@@ -123,7 +123,7 @@ export class LiveLocationManager extends WithSubscriptions {
     const { active_live_locations } = await this.client.getSharedLocations();
     this.state.next({
       messages: new Map(
-        active_live_locations
+        (active_live_locations as SharedLiveLocationResponse[])
           .filter((location) => !isExpiredLocation(location))
           .map((location) => [
             location.message_id,
@@ -189,7 +189,8 @@ export class LiveLocationManager extends WithSubscriptions {
           if (location.latitude === latitude && location.longitude === longitude)
             continue;
           const promise = this.client.updateLocation({
-            created_by_device_id: location.created_by_device_id,
+            // TODO: this is missing from the OAPI spec
+            // created_by_device_id: location.created_by_device_id,
             message_id: messageId,
             latitude,
             longitude,

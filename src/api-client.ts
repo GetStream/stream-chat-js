@@ -94,7 +94,7 @@ export class ApiClient {
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
       ...axiosRequestConfig,
-    }).then((r) => r.body);
+    }).then((response) => response.body);
   }
 
   // --- private ---

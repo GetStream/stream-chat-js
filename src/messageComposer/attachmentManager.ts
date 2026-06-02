@@ -426,8 +426,10 @@ export class AttachmentManager {
           });
 
     const localAttachment: LocalUploadAttachment = {
-      file_size: file.size,
-      mime_type: file.type,
+      custom: {
+        file_size: file.size,
+        mime_type: file.type,
+      },
       localMetadata: {
         file,
         id: generateUUIDv4(),
@@ -456,8 +458,12 @@ export class AttachmentManager {
       localAttachment.thumb_url = fileLike.thumb_url;
     }
 
-    if (isFileReference(fileLike) && fileLike.duration) {
-      localAttachment.duration = fileLike.duration;
+    if (
+      isFileReference(fileLike) &&
+      fileLike.duration &&
+      localAttachment.type === 'voiceRecording'
+    ) {
+      localAttachment.custom.duration = fileLike.duration;
     }
 
     return localAttachment;

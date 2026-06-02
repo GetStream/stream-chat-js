@@ -301,6 +301,7 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
         ...finalPreview,
         og_scrape_url: url,
         status,
+        custom: {},
       }),
     });
   };

@@ -33,8 +33,10 @@ export const isFileAttachment = (
 ): attachment is FileAttachment =>
   attachment.type === 'file' ||
   !!(
-    attachment.mime_type &&
-    supportedVideoFormat.indexOf(attachment.mime_type) === -1 &&
+    (attachment as FileAttachment).custom?.mime_type &&
+    supportedVideoFormat.indexOf(
+      (attachment as FileAttachment).custom?.mime_type as string,
+    ) === -1 &&
     attachment.type !== 'video'
   );
 
@@ -76,7 +78,12 @@ export const isVideoAttachment = (
   supportedVideoFormat: string[] = [],
 ): attachment is VideoAttachment =>
   attachment.type === 'video' ||
-  !!(attachment.mime_type && supportedVideoFormat.indexOf(attachment.mime_type) !== -1);
+  !!(
+    (attachment as VideoAttachment).custom?.mime_type &&
+    supportedVideoFormat.indexOf(
+      (attachment as VideoAttachment).custom?.mime_type as string,
+    ) !== -1
+  );
 
 export const isLocalVideoAttachment = (
   attachment: Attachment | LocalAttachment,
