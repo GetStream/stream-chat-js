@@ -40,8 +40,8 @@ export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion>
   query(searchQuery: string) {
     const channelConfig = this.channel.getConfig();
     const commands = channelConfig?.commands || [];
-    const selectedCommands: (CommandResponse & { name: string })[] = commands.filter(
-      (command): command is CommandResponse & { name: string } =>
+    const selectedCommands: CommandResponse[] = commands.filter(
+      (command): command is CommandResponse =>
         !!(
           command.name &&
           command.name.toLowerCase().indexOf(searchQuery.toLowerCase()) !== -1
@@ -75,7 +75,7 @@ export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion>
       items: selectedCommands.map((command) => ({
         ...command,
         id: command.name,
-      })),
+      })) as CommandSuggestion[],
       next: null,
     };
   }

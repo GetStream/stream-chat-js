@@ -1,4 +1,5 @@
-import type { Attachment, FileUploadConfig, GiphyData } from '../types';
+import type { CustomAttachmentData } from '../custom_types';
+import type { Attachment, FileUploadConfig } from '../types';
 
 export type LocalAttachment = AnyLocalAttachment | LocalUploadAttachment;
 
@@ -57,54 +58,31 @@ export type UploadedAttachment =
   | VoiceRecordingAttachment;
 
 export type VoiceRecordingAttachment = Attachment & {
-  asset_url: string;
   type: 'voiceRecording';
-  duration?: number;
-  file_size?: number;
-  mime_type?: string;
-  title?: string;
-  waveform_data?: Array<number>;
+  custom: CustomAttachmentData & {
+    duration?: number;
+    waveform_data?: Array<number>;
+  };
 };
 
 export type FileAttachment = Attachment & {
   type: 'file';
-  asset_url?: string;
-  file_size?: number;
-  mime_type?: string;
-  title?: string;
 };
 
 export type AudioAttachment = Attachment & {
   type: 'audio';
-  asset_url?: string;
-  file_size?: number;
-  mime_type?: string;
-  title?: string;
 };
 
 export type VideoAttachment = Attachment & {
   type: 'video';
-  asset_url?: string;
-  file_size?: number;
-  mime_type?: string;
-  thumb_url?: string;
-  title?: string;
 };
 
 export type ImageAttachment = Attachment & {
   type: 'image';
-  fallback?: string;
-  image_url?: string;
-  original_height?: number;
-  original_width?: number;
 };
 
 export type GiphyAttachment = Attachment & {
   type: 'giphy';
-  giphy?: GiphyData;
-  title?: string;
-  title_link?: string;
-  thumbnail_url?: string;
 };
 
 export type BaseLocalAttachmentMetadata = {

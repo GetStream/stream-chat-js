@@ -14,10 +14,13 @@ export type LocationComposerOptions = {
   message?: DraftMessage | LocalMessage;
 };
 
-export type StaticLocationPreview = StaticLocationPayload;
+export type StaticLocationPreview = StaticLocationPayload & {
+  message_id?: string;
+};
 
 export type LiveLocationPreview = Omit<LiveLocationPayload, 'end_at'> & {
   durationMs?: number;
+  message_id?: string;
 };
 
 export type LocationComposerState = {

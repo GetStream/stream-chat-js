@@ -39,6 +39,7 @@ export const createUserDataInjectionMiddleware = (
         localMessage: {
           ...state.localMessage,
           user: messageUser,
+          user_id: messageUser.id,
         },
       });
     },

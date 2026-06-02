@@ -8,10 +8,12 @@ import type {
   LocalMessage,
   MarkDeliveredOptions,
   MarkReadOptions,
+  StreamResponse,
 } from '../types';
 import { type APIErrorResponse } from '../types';
 import { throttle } from '../utils';
 import { isAPIError, isErrorRetryable } from '../errors';
+import type { MarkReadResponse as Gen_MarkReadResponse } from '../gen/models';
 
 const MAX_DELIVERED_MESSAGE_COUNT_IN_PAYLOAD = 100 as const;
 const MARK_AS_DELIVERED_BUFFER_TIMEOUT = 1000 as const;
@@ -279,7 +281,7 @@ export class MessageDeliveryReporter {
    * @param options
    */
   public markRead = async (collection: Channel | Thread, options?: MarkReadOptions) => {
-    let result: EventAPIResponse | null = null;
+    let result: StreamResponse<Gen_MarkReadResponse> | null = null;
     if (isChannel(collection)) {
       result = await collection.markAsReadRequest(options);
     } else if (isThread(collection)) {

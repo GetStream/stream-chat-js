@@ -301,34 +301,22 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
  * @param {MessageResponse | LocalMessage} message message object
  */
 export function formatMessage(message: MessageResponse | LocalMessage): LocalMessage {
-  if (isLocalMessage(message)) return message;
-
   return {
     ...message,
+    created_at: message.created_at ?? new Date(),
+    updated_at: message.updated_at ?? new Date(),
     reaction_groups: maybeGetReactionGroupsFallback(
       message.reaction_groups,
       message.reaction_counts,
       message.reaction_scores,
     ),
-    status: 'received',
-    error: null,
+    status: (message as LocalMessage).status || 'received',
+    error: (message as LocalMessage).error ?? undefined,
     quoted_message: message.quoted_message
       ? formatMessage(message.quoted_message)
       : undefined,
+    user_id: message?.user?.id,
   } satisfies LocalMessage;
-}
-
-/**
- * @private
- *
- * Takes a LocalMessage and strips SDK-specific fields,
- * converting it back to a MessageResponse.
- *
- * @param {LocalMessage} message `LocalMessage` object
- */
-export function unformatMessage(message: LocalMessage): MessageResponse {
-  const { status: _status, error: _error, ...rest } = message;
-  return rest;
 }
 
 export const localMessageToNewMessagePayload = (localMessage: LocalMessage): Message => {
@@ -362,7 +350,7 @@ export const localMessageToNewMessagePayload = (localMessage: LocalMessage): Mes
     ...messageFields,
     pinned_at: messageFields.pinned_at,
     mentioned_users: mentioned_users?.map((user) => user.id),
-  };
+  } as Message;
 };
 
 export const toUpdatedMessagePayload = (
@@ -1079,8 +1067,12 @@ export const getAndWatchChannel = async ({
   }
 
   // unfortunately typescript is not able to infer that if (!channel && !type) === false, then channel or type has to be truthy
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const channelToWatch = channel || client.channel(type!, id, { members });
+  const channelToWatch =
+    channel ||
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    client.channel(type!, id, {
+      members: members?.map((userId) => ({ user_id: userId })),
+    });
 
   // need to keep as with call to channel.watch the id can be changed from undefined to an actual ID generated server-side
   const originalCid = channelToWatch.id
@@ -1334,14 +1326,10 @@ export const runDetached = <T>(
 };
 
 export const isBlockedMessage = (message: LocalMessage) =>
-  message.type === 'error' &&
-  (message.moderation_details?.action === 'MESSAGE_RESPONSE_ACTION_REMOVE' ||
-    message.moderation?.action === 'remove');
+  message.type === 'error' && message.moderation?.action === 'remove';
 
 export const isBouncedMessage = (message: LocalMessage) =>
-  message.type === 'error' &&
-  (message?.moderation_details?.action === 'MESSAGE_RESPONSE_ACTION_BOUNCE' ||
-    message?.moderation?.action === 'bounce');
+  message.type === 'error' && message?.moderation?.action === 'bounce';
 
 export const getEnv = (envKey: keyof NodeJS.ProcessEnv) => {
   if (

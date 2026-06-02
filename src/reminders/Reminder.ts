@@ -5,10 +5,7 @@ import type { MessageResponse, ReminderResponseBase, UserResponse } from '../typ
 
 export const timeLeftMs = (remindAt: number) => remindAt - new Date().getTime();
 
-export type ReminderResponseBaseOrResponse = ReminderResponseBase & {
-  user?: UserResponse;
-  message?: MessageResponse;
-};
+export type ReminderResponseBaseOrResponse = ReminderResponseBase;
 
 export type ReminderState = {
   channel_cid: string;

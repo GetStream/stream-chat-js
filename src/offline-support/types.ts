@@ -217,7 +217,7 @@ export type DBGetReactionsType = {
   /** ID of the message. */
   messageId: string;
   /** Optional filter to apply to reactions. */
-  filters?: Pick<ReactionFilters, 'type'>;
+  filters?: ReactionFilters;
   /** Optional sorting for reactions. */
   sort?: ReactionSort;
   /** Optional maximum number of reactions to return. */

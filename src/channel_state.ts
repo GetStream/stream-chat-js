@@ -17,18 +17,15 @@ import {
   isBlockedMessage,
 } from './utils';
 import { DEFAULT_MESSAGE_SET_PAGINATION } from './constants';
-import { UserResponseCommonFields as Gen_UserResponseCommonFields } from './gen/models';
+import type {
+  ReadStateResponse as Gen_ReadStateResponse,
+  UserResponseCommonFields as Gen_UserResponseCommonFields,
+} from './gen/models';
 
 type ChannelReadStatus = Record<
   string,
-  {
-    last_read: Date | undefined;
-    unread_messages: number;
-    user: UserResponse;
+  Gen_ReadStateResponse & {
     first_unread_message_id?: string;
-    last_read_message_id?: string;
-    last_delivered_at?: Date;
-    last_delivered_message_id?: string;
   }
 >;
 
@@ -79,7 +76,7 @@ export class ChannelState {
   watchers: Record<string, UserResponse>;
   members: Record<string, ChannelMemberResponse>;
   unreadCount: number;
-  membership: ChannelMemberResponse;
+  membership: ChannelMemberResponse | undefined;
   last_message_at: Date | null;
   /**
    * Flag which indicates if channel state contain latest/recent messages or no.
@@ -109,7 +106,7 @@ export class ChannelState {
     this.mutedUsers = [];
     this.watchers = {};
     this.members = {};
-    this.membership = {};
+    this.membership = undefined;
     this.unreadCount = 0;
     /**
      * Flag which indicates if channel state contain latest/recent messages or no.
@@ -234,42 +231,42 @@ export class ChannelState {
         message = messagesToAdd[i] as ReturnType<ChannelState['formatMessage']>;
       } else {
         message = this.formatMessage(messagesToAdd[i]);
+      }
 
-        if (message.user && this._channel?.cid) {
-          /**
-           * Store the reference to user for this channel, so that when we have to
-           * handle updates to user, we can use the reference map, to determine which
-           * channels need to be updated with updated user object.
-           */
-          this._channel
-            .getClient()
-            .state.updateUserReference(message.user, this._channel.cid);
-        }
+      if (message.user && this._channel?.cid) {
+        /**
+         * Store the reference to user for this channel, so that when we have to
+         * handle updates to user, we can use the reference map, to determine which
+         * channels need to be updated with updated user object.
+         */
+        this._channel
+          .getClient()
+          .state.updateUserReference(message.user, this._channel.cid);
+      }
 
-        if (
-          initializing &&
-          message.id &&
-          this.threads[message.id] &&
-          !this._channel.getClient().preventThreadCleanup
-        ) {
-          // If we are initializing the state of channel (e.g., in case of connection recovery),
-          // then in that case we remove thread related to this message from threads object.
-          // This way we can ensure that we don't have any stale data in thread object
-          // and consumer can refetch the replies.
-          delete this.threads[message.id];
-        }
+      if (
+        initializing &&
+        message.id &&
+        this.threads[message.id] &&
+        !this._channel.getClient().preventThreadCleanup
+      ) {
+        // If we are initializing the state of channel (e.g., in case of connection recovery),
+        // then in that case we remove thread related to this message from threads object.
+        // This way we can ensure that we don't have any stale data in thread object
+        // and consumer can refetch the replies.
+        delete this.threads[message.id];
+      }
 
-        const shouldSkipLastMessageAtUpdate =
-          this._channel.getConfig()?.skip_last_msg_update_for_system_msgs &&
-          message.type === 'system';
+      const shouldSkipLastMessageAtUpdate =
+        this._channel.getConfig()?.skip_last_msg_update_for_system_msgs &&
+        message.type === 'system';
 
-        if (
-          !shouldSkipLastMessageAtUpdate &&
-          (!this.last_message_at ||
-            message.created_at.getTime() > this.last_message_at.getTime())
-        ) {
-          this.last_message_at = new Date(message.created_at.getTime());
-        }
+      if (
+        !shouldSkipLastMessageAtUpdate &&
+        (!this.last_message_at ||
+          message.created_at.getTime() > this.last_message_at.getTime())
+      ) {
+        this.last_message_at = new Date(message.created_at.getTime());
       }
 
       // update or append the messages...
@@ -444,12 +441,14 @@ export class ChannelState {
           count: oldReactionTypeData.count + 1,
           sum_scores: oldReactionTypeData.sum_scores + score,
           last_reaction_at: reaction.created_at,
+          latest_reactions_by: [],
         }
       : {
           count: 1,
           first_reaction_at: reaction.created_at,
           last_reaction_at: reaction.created_at,
           sum_scores: score,
+          latest_reactions_by: [],
         };
 
     // 3. Update the own_reactions with the new reaction.
@@ -574,19 +573,11 @@ export class ChannelState {
     message: MessageResponse;
     remove?: boolean;
   }) {
-    const parseMessage = (m: ReturnType<ChannelState['formatMessage']>) =>
-      ({
-        ...m,
-        created_at: m.created_at.toISOString(),
-        pinned_at: m.pinned_at?.toISOString(),
-        updated_at: m.updated_at?.toISOString(),
-      }) as unknown as MessageResponse;
-
     const update = (messages: LocalMessage[]) => {
       const updatedMessages = messages.reduce<MessageResponse[]>((acc, msg) => {
         if (msg.quoted_message_id === message.id) {
           acc.push({
-            ...parseMessage(msg),
+            ...msg,
             quoted_message: remove ? { ...message, attachments: [] } : message,
           });
         }

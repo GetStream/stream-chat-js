@@ -140,7 +140,6 @@ import type {
   Mute,
   MuteUserOptions,
   MuteUserResponse,
-  NewMemberPayload,
   OwnUserResponse,
   Pager,
   PartialMessageUpdate,
@@ -264,14 +263,13 @@ import type { AbstractOfflineDB } from './offline-support';
 import { getPendingTaskChannelData } from './offline-support/util';
 import { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
 import type {
-  PushPreferenceInput,
-  TranslateMessageRequest,
-  UpdateMessageRequest,
+  GetApplicationResponse as Gen_GetApplicationResponse,
+  TranslateMessageRequest as Gen_TranslateMessageRequest,
+  UpdateMessageRequest as Gen_UpdateMessageRequest,
   WSEvent,
 } from './gen/models';
 import { ChatApi } from './gen-imports';
 import type { StreamResponse } from './types';
-import type { GetApplicationResponse } from './gen/models';
 
 function isString(value: unknown): value is string {
   return typeof value === 'string' || value instanceof String;
@@ -320,7 +318,7 @@ export class StreamChat {
    */
   uploadManager: UploadManager;
   _user?: ClientUser;
-  appSettingsPromise?: Promise<StreamResponse<GetApplicationResponse>>;
+  appSettingsPromise?: Promise<StreamResponse<Gen_GetApplicationResponse>>;
   activeChannels: {
     [key: string]: Channel;
   };
@@ -374,6 +372,12 @@ export class StreamChat {
     return this.user?.anon ?? false;
   }
   get userId(): string | undefined {
+    return this.user?.id;
+  }
+  /**
+   * @deprecated Use `userId` instead.
+   */
+  get userID(): string | undefined {
     return this.user?.id;
   }
   insightMetrics: InsightMetrics;
@@ -496,7 +500,6 @@ export class StreamChat {
     this.defaultWSTimeout = 15 * 1000;
 
     this.api = new ApiClient(this);
-
     this.chatApi = new ChatApi(this.api);
 
     /**
@@ -608,8 +611,8 @@ export class StreamChat {
     this.offlineDb = offlineDBInstance;
   }
 
-  devToken(userID: string) {
-    return DevToken(userID);
+  devToken(userId: string) {
+    return DevToken(userId);
   }
 
   getAuthType() {
@@ -2193,7 +2196,7 @@ export class StreamChat {
    *
    * @return {<UpsertPushPreferencesResponse>}
    */
-  async setPushPreferences(preferences: PushPreferenceInput[]) {
+  async setPushPreferences(preferences: PushPreference[]) {
     return await this.chatApi.updatePushNotificationPreferences({
       preferences,
     });
@@ -2324,8 +2327,8 @@ export class StreamChat {
   getChannelByMembers = (channelType: string, custom: ChannelData) => {
     // Check if the channel already exists.
     // Only allow 1 channel object per cid
-    const memberIds = (custom.members ?? []).map((member: string | NewMemberPayload) =>
-      typeof member === 'string' ? member : (member.user_id ?? ''),
+    const memberIds = (custom.members ?? []).map((member) =>
+      typeof member === 'string' ? member : member.user_id,
     );
     const membersStr = memberIds.sort().join(',');
     const tempCid = generateChannelTempCid(channelType, memberIds);
@@ -2400,7 +2403,7 @@ export class StreamChat {
     ) {
       const channel = this.activeChannels[cid];
       if (Object.keys(custom).length > 0) {
-        channel.data = { ...channel.data, ...custom };
+        channel.data = { ...channel.data, custom: custom.custom };
         channel._data = { ...channel._data, ...custom };
       }
       return channel;
@@ -2953,7 +2956,7 @@ export class StreamChat {
    */
   async translateMessage(
     messageId: string,
-    language: TranslateMessageRequest['language'],
+    language: Gen_TranslateMessageRequest['language'],
   ) {
     return await this.chatApi.translateMessage({
       id: messageId,
@@ -3081,7 +3084,7 @@ export class StreamChat {
    * @return {{ message: LocalMessage | MessageResponse }} Response that includes the message
    */
   async updateMessage(
-    message: UpdateMessageRequest['message'] & { cid?: string },
+    message: Gen_UpdateMessageRequest['message'] & { cid?: string; status?: string },
     options?: UpdateMessageOptions,
   ) {
     if (!message.id) {
@@ -3112,7 +3115,7 @@ export class StreamChat {
   }
 
   async _updateMessage(
-    message: UpdateMessageRequest['message'],
+    message: Gen_UpdateMessageRequest['message'],
     options?: UpdateMessageOptions,
   ) {
     if (!message.id) {

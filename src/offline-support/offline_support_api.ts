@@ -1,6 +1,7 @@
 import type {
   APIErrorResponse,
   ChannelResponse,
+  CombinedEvents,
   EventPayload,
   LocalMessage,
   Message,
@@ -23,7 +24,6 @@ import { StateStore } from '../store';
 import { localMessageToNewMessagePayload, runDetached } from '../utils';
 import { isMessageUpdateReplayable } from './util';
 import type { WSEvent } from '../gen/models';
-import events from 'node:events';
 
 /**
  * Abstract base class for an offline database implementation used with StreamChat.
@@ -1015,7 +1015,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     event,
     execute = true,
   }: {
-    event: WSEvent;
+    event: CombinedEvents;
     execute?: boolean;
   }) => {
     const { type } = event;
@@ -1186,7 +1186,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
     const updatedPendingSendMessage = this.mergeFailedMessageUpdateIntoPendingSendMessage(
       {
-        editedMessage: message,
+        // TODO: this is not good, we have too many message types, should probably only have two (request, response)
+        editedMessage: message as unknown as LocalMessage,
         pendingMessage: pendingSendMessageTask.payload[0],
       },
     );
@@ -1222,7 +1223,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     if (
       task.type === 'update-message' &&
       !this.client.wsConnection?.isHealthy &&
-      (task.payload[0] as LocalMessage).status === 'failed'
+      task.payload[0].status === 'failed'
     ) {
       await this.handleOfflineFailedUpdateMessagePendingTask(task);
       return;
