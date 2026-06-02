@@ -16,10 +16,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: preactjs/compressed-size-action@v2
+      - uses: preactjs/compressed-size-action@v3
         env:
           NODE_OPTIONS: --max_old_space_size=4096
           YARN_IGNORE_ENGINES: 'true'
         with:
           repo-token: '${{ secrets.GITHUB_TOKEN }}'
-          install-command: 'yarn install'
+          install-script: 'yarn install'
