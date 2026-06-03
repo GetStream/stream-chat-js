@@ -806,9 +806,14 @@ export const createMentionsMiddleware = (
           ? { ...state, mentionedUsers: currentMentions }
           : state;
 
+        const textBeforeCursor = stateWithMentions.text.slice(
+          0,
+          stateWithMentions.selection.end,
+        );
+
         const triggerWithToken = getTriggerCharWithToken({
           trigger: finalOptions.trigger,
-          text: stateWithMentions.text.slice(0, stateWithMentions.selection.end),
+          text: textBeforeCursor,
         });
 
         const newSearchTriggered =
@@ -818,10 +823,30 @@ export const createMentionsMiddleware = (
           searchSource.resetStateAndActivate();
         }
 
+        // The trigger detection regex above also accepts `@<token><trailing-space>`
+        // as "active" so users can keep refining a partial mention they typed by
+        // hand. That falsely reopens the dropdown when the cursor sits at the
+        // trailing space boundary of a mention the user has already committed
+        // (post suggestion select or manual cursor placement back into that slot).
+        // Discriminate against that case by requiring both: (a) the cursor to be at a
+        // trailingwhitespace boundary and (b) the matched token string to equal an
+        // entity already in `state.mentions`. A typed but not selected (i.e `@jane ` for
+        // the user "Jane Doe" ) is unaffected because no entity has been committed yet.
+        const triggerMatchesCommittedMention =
+          !!triggerWithToken &&
+          /\s$/.test(textBeforeCursor) &&
+          (stateWithMentions.mentions ?? []).some((entity) => {
+            const token = triggerWithToken.slice(1);
+            const candidates = [entity.name, entity.id].filter((value): value is string =>
+              Boolean(value),
+            );
+            return candidates.includes(token);
+          });
+
         const triggerWasRemoved =
           !triggerWithToken || triggerWithToken.length < finalOptions.minChars;
 
-        if (triggerWasRemoved) {
+        if (triggerWasRemoved || triggerMatchesCommittedMention) {
           const hasStaleSuggestions =
             stateWithMentions.suggestions?.trigger === finalOptions.trigger;
           const newState = { ...stateWithMentions };
