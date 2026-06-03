@@ -587,6 +587,78 @@ describe('TextComposerMiddlewareExecutor', () => {
 
       expect(result.state.suggestions).toBeUndefined();
     });
+
+    it('should suppress suggestions when the cursor sits at the trailing space boundary of a committed broadcast mention', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
+          mentions: [{ id: 'channel', mentionType: 'channel', name: 'channel' }],
+          text: '@channel ',
+          selection: { start: 9, end: 9 },
+        },
+      });
+
+      expect(result.state.suggestions).toBeUndefined();
+    });
+
+    it('should suppress suggestions when the cursor sits at the trailing space boundary of a committed single word user mention', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
+          mentionedUsers: [{ id: 'ivan-id', name: 'ivan' }],
+          mentions: [{ id: 'ivan-id', mentionType: 'user', name: 'ivan' }],
+          text: '@ivan ',
+          selection: { start: 6, end: 6 },
+        },
+      });
+
+      expect(result.state.suggestions).toBeUndefined();
+    });
+
+    it('should still open suggestions for a typed but not yet selected `@jane ` (no entity in state.mentions)', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
+          text: '@jane ',
+          selection: { start: 6, end: 6 },
+        },
+      });
+
+      expect(result.state.suggestions).toBeDefined();
+      expect(result.state.suggestions?.trigger).toBe('@');
+      expect(result.state.suggestions?.query).toBe('jane');
+    });
+
+    it('should still open suggestions when the cursor matches a committed entity but is NOT on a trailing space boundary (manual retag)', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
+          mentions: [{ id: 'channel', mentionType: 'channel', name: 'channel' }],
+          text: '@channel hey @channel',
+          selection: { start: 21, end: 21 },
+        },
+      });
+
+      expect(result.state.suggestions).toBeDefined();
+      expect(result.state.suggestions?.trigger).toBe('@');
+      expect(result.state.suggestions?.query).toBe('channel');
+    });
   });
 
   it('should handle combination of commands and mentions', async () => {
