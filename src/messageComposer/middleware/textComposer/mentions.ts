@@ -782,11 +782,22 @@ export const createMentionsMiddleware = (
     searchSource = new MentionsSearchSource(channel, { trigger: finalOptions.trigger });
   }
   searchSource.activate();
+  // Tracks the cursor position of the most recently inserted mention so the
+  // VERY NEXT change (typically a controlled value echo on some platforms)
+  // can suppress the dropdown even when the text shape heuristic in `onChange`
+  // would otherwise let it reopen (which is wrong). Consumed on the first
+  // `onChange` after it's set, so any user driven event that triggers it would
+  // clear it.
+  let lastInsertedMentionEndOffset: number | undefined;
   return {
     id: 'stream-io/text-composer/mentions-middleware',
     handlers: {
       onChange: ({ state, next, complete, forward }) => {
         if (!state.selection) return forward();
+        const cursorJustInsertedAMention =
+          lastInsertedMentionEndOffset !== undefined &&
+          state.selection.end === lastInsertedMentionEndOffset;
+        lastInsertedMentionEndOffset = undefined;
         // Only prune stale mentions during normal text editing. Entering command mode
         // clears text/mentions through the `command.activate` effect, which first
         // snapshots the previous TextComposer state so it can be restored on
@@ -828,20 +839,36 @@ export const createMentionsMiddleware = (
         // hand. That falsely reopens the dropdown when the cursor sits at the
         // trailing space boundary of a mention the user has already committed
         // (post suggestion select or manual cursor placement back into that slot).
-        // Discriminate against that case by requiring both: (a) the cursor to be at a
-        // trailingwhitespace boundary and (b) the matched token string to equal an
-        // entity already in `state.mentions`. A typed but not selected (i.e `@jane ` for
-        // the user "Jane Doe" ) is unaffected because no entity has been committed yet.
+        //
+        // Discriminate that case by checking, for each entity in
+        // `state.mentions`, whether the text immediately before the cursor
+        // ends with the entity's actual inserted textual form (`@<name|id> `)
+        // AND that form appears exactly once in the prefix. This:
+        //   - avoids false positives when an entity's `id` happens to match a
+        //     different `@<token>` the user just typed (e.g. user "John Doe"
+        //     whose id is "john" and the user types a fresh `@ivan ` later);
+        //   - avoids false positives when the user is refining a brand new
+        //     mention whose query equals an already committed mention name
+        //     (text has two `@<name> ` occurrences; only one is committed, the
+        //     cursor is most likely on the new one being typed).
         const triggerMatchesCommittedMention =
           !!triggerWithToken &&
           /\s$/.test(textBeforeCursor) &&
-          (stateWithMentions.mentions ?? []).some((entity) => {
-            const token = triggerWithToken.slice(1);
-            const candidates = [entity.name, entity.id].filter((value): value is string =>
-              Boolean(value),
-            );
-            return candidates.includes(token);
-          });
+          (cursorJustInsertedAMention ||
+            (stateWithMentions.mentions ?? []).some((entity) => {
+              const insertedToken = entity.name ?? entity.id;
+              if (!insertedToken) return false;
+              const insertedForm = `@${insertedToken} `;
+              if (!textBeforeCursor.endsWith(insertedForm)) return false;
+              const escapedInsertedForm = insertedForm.replace(
+                /[.*+?^${}()|[\]\\]/g,
+                '\\$&',
+              );
+              const occurrences = textBeforeCursor.match(
+                new RegExp(escapedInsertedForm, 'g'),
+              );
+              return (occurrences?.length ?? 0) === 1;
+            }));
 
         const triggerWasRemoved =
           !triggerWithToken || triggerWithToken.length < finalOptions.minChars;
@@ -878,14 +905,20 @@ export const createMentionsMiddleware = (
           state.mentions ?? userResponsesToMentionEntities(state.mentionedUsers),
           mentionEntity,
         );
+        const insertResult = insertItemWithTrigger({
+          insertText: mentionSuggestionToInsertText(selectedSuggestion),
+          selection: state.selection,
+          text: state.text,
+          trigger: finalOptions.trigger,
+        });
+        // Hand off the just inserted cursor position to the next `onChange`
+        // so it can suppress the dropdown even when the text shape heuristic
+        // doesn't catch a reselection of the same entity (multiple
+        // occurrences of `@<name> ` in the text for exammple).
+        lastInsertedMentionEndOffset = insertResult.selection.end;
         return complete({
           ...state,
-          ...insertItemWithTrigger({
-            insertText: mentionSuggestionToInsertText(selectedSuggestion),
-            selection: state.selection,
-            text: state.text,
-            trigger: finalOptions.trigger,
-          }),
+          ...insertResult,
           mentionedUsers:
             selectedSuggestion.mentionType === 'user'
               ? upsertUserResponse(
