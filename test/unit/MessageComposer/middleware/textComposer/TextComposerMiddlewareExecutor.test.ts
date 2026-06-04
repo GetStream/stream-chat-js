@@ -11,9 +11,9 @@ import type {
   CommandResponse,
   DraftResponse,
   LocalMessage,
-  UserResponse,
 } from '../../../../../src/types';
 import { TextComposerMiddleware } from '../../../../../src';
+import type { UserSuggestion } from '../../../../../src/messageComposer/middleware/textComposer/types';
 
 // Mock dependencies
 vi.mock('../../../src/utils', () => ({
@@ -69,9 +69,10 @@ const setup = ({
 };
 
 const initialValue = {
+  mentionedUsers: [],
+  mentions: [],
   text: '',
   selection: { start: 0, end: 0 },
-  mentionedUsers: [],
 };
 
 describe('TextComposerMiddlewareExecutor', () => {
@@ -183,14 +184,19 @@ describe('TextComposerMiddlewareExecutor', () => {
 
     const selectedSuggestion = {
       id: 'user1',
+      mentionType: 'user',
       name: 'John Doe',
-    } as TextComposerSuggestion<UserResponse>;
+      tokenizedDisplayName: { token: 'jo', parts: ['John Doe'] },
+    } as TextComposerSuggestion<UserSuggestion>;
 
     await textComposer.handleSelect(selectedSuggestion);
 
     expect(textComposer.text).toBe('@John Doe ');
     expect(textComposer.suggestions).toBeUndefined();
-    expect(textComposer.mentionedUsers).toContainEqual(selectedSuggestion);
+    expect(textComposer.mentionedUsers).toContainEqual({
+      id: 'user1',
+      name: 'John Doe',
+    });
   });
 
   it('should prune stale mentions on change', async () => {
@@ -204,11 +210,16 @@ describe('TextComposerMiddlewareExecutor', () => {
 
     const selectedSuggestion = {
       id: 'user1',
+      mentionType: 'user',
       name: 'John Doe',
-    } as TextComposerSuggestion<UserResponse>;
+      tokenizedDisplayName: { token: 'jo', parts: ['John Doe'] },
+    } as TextComposerSuggestion<UserSuggestion>;
 
     await textComposer.handleSelect(selectedSuggestion);
-    expect(textComposer.mentionedUsers).toContainEqual(selectedSuggestion);
+    expect(textComposer.mentionedUsers).toContainEqual({
+      id: 'user1',
+      name: 'John Doe',
+    });
 
     await textComposer.handleChange({
       text: '',
@@ -394,6 +405,7 @@ describe('TextComposerMiddlewareExecutor', () => {
         text: '/test',
         selection: { start: 0, end: 0 },
         mentionedUsers: [],
+        mentions: [],
       });
     });
 
@@ -414,6 +426,7 @@ describe('TextComposerMiddlewareExecutor', () => {
         text: 'test',
         selection: { start: 0, end: 4 },
         mentionedUsers: [],
+        mentions: [],
       });
     });
 
@@ -493,7 +506,29 @@ describe('TextComposerMiddlewareExecutor', () => {
         text: '@test',
         selection: { start: 0, end: 0 },
         mentionedUsers: [],
+        mentions: [],
       });
+    });
+
+    it('should preserve tracked enhanced mention entities during middleware passes', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
+          mentionedUsers: [],
+          mentions: [{ id: 'channel', mentionType: 'channel', name: 'channel' }],
+          text: 'hello world',
+          selection: { start: 11, end: 11 },
+        },
+      });
+
+      expect(result.state.mentionedUsers).toEqual([]);
+      expect(result.state.mentions).toEqual([
+        { id: 'channel', mentionType: 'channel', name: 'channel' },
+      ]);
     });
 
     it('should handle trigger with token', async () => {
@@ -551,6 +586,242 @@ describe('TextComposerMiddlewareExecutor', () => {
       });
 
       expect(result.state.suggestions).toBeUndefined();
+    });
+
+    it('should suppress suggestions when the cursor sits at the trailing space boundary of a committed broadcast mention', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
+          mentions: [{ id: 'channel', mentionType: 'channel', name: 'channel' }],
+          text: '@channel ',
+          selection: { start: 9, end: 9 },
+        },
+      });
+
+      expect(result.state.suggestions).toBeUndefined();
+    });
+
+    it('should suppress suggestions when the cursor sits at the trailing space boundary of a committed single word user mention', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
+          mentionedUsers: [{ id: 'ivan-id', name: 'ivan' }],
+          mentions: [{ id: 'ivan-id', mentionType: 'user', name: 'ivan' }],
+          text: '@ivan ',
+          selection: { start: 6, end: 6 },
+        },
+      });
+
+      expect(result.state.suggestions).toBeUndefined();
+    });
+
+    it('should still open suggestions for a typed but not yet selected `@jane ` (no entity in state.mentions)', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
+          text: '@jane ',
+          selection: { start: 6, end: 6 },
+        },
+      });
+
+      expect(result.state.suggestions).toBeDefined();
+      expect(result.state.suggestions?.trigger).toBe('@');
+      expect(result.state.suggestions?.query).toBe('jane');
+    });
+
+    it('should still open suggestions when the cursor matches a committed entity but is NOT on a trailing space boundary (manual retag)', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
+          mentions: [{ id: 'channel', mentionType: 'channel', name: 'channel' }],
+          text: '@channel hey @channel',
+          selection: { start: 21, end: 21 },
+        },
+      });
+
+      expect(result.state.suggestions).toBeDefined();
+      expect(result.state.suggestions?.trigger).toBe('@');
+      expect(result.state.suggestions?.query).toBe('channel');
+    });
+
+    // `triggerMatchesCommittedMention` must verify that the trailing-space
+    // boundary actually belongs to a previously committed mention slot, not
+    // just that the matched token equals an entity's name/id. When the user
+    // refines a NEW mention whose query happens to equal an already-committed
+    // mention's single-token name (e.g. composing `@ivan @ivan ` while only
+    // the first occurrence is committed), the suppression must NOT fire.
+    it('should still open suggestions when typing a new mention whose query equals an already committed single-token mention name (refining `@ivan ` to look up `ivan the terrible`)', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
+          mentionedUsers: [{ id: 'ivan-id', name: 'ivan' }],
+          mentions: [{ id: 'ivan-id', mentionType: 'user', name: 'ivan' }],
+          text: '@ivan @ivan ',
+          selection: { start: 12, end: 12 },
+        },
+      });
+
+      expect(result.state.suggestions).toBeDefined();
+      expect(result.state.suggestions?.trigger).toBe('@');
+      expect(result.state.suggestions?.query).toBe('ivan');
+    });
+
+    // same as above but the committed entity is referenced via its
+    // `id` rather than `name`. The textual form actually inserted into the
+    // document is `@<name> ` (`@Ivan Petrov ` here), so a fresh `@ivan `
+    // typed later by the user MUST NOT collide with the committed slot via
+    // an id-equality shortcut.
+    it('should still open suggestions when typing a new mention whose query equals an already committed mention id', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+      const result = await textComposer.middlewareExecutor.execute({
+        eventName: 'onChange',
+        initialValue: {
+          ...initialValue,
+          mentionedUsers: [{ id: 'ivan', name: 'Ivan Petrov' }],
+          mentions: [{ id: 'ivan', mentionType: 'user', name: 'Ivan Petrov' }],
+          text: '@Ivan Petrov @ivan ',
+          selection: { start: 19, end: 19 },
+        },
+      });
+
+      expect(result.state.suggestions).toBeDefined();
+      expect(result.state.suggestions?.trigger).toBe('@');
+      expect(result.state.suggestions?.query).toBe('ivan');
+    });
+
+    it('should suppress suggestions on the next change after reselecting the same entity', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+
+      const ivanSuggestion = {
+        id: 'user1',
+        mentionType: 'user',
+        name: 'Ivan',
+        tokenizedDisplayName: { token: 'iv', parts: ['Ivan'] },
+      } as TextComposerSuggestion<UserSuggestion>;
+
+      await textComposer.handleChange({
+        text: '@iv',
+        selection: { start: 3, end: 3 },
+      });
+      await textComposer.handleSelect(ivanSuggestion);
+      // First selection: text is now '@Ivan ' (cursor after the inserted
+      // trailing space); the next `onChange` must close suggestions because
+      // we just inserted.
+      await textComposer.handleChange({
+        text: textComposer.text,
+        selection: textComposer.selection,
+      });
+      expect(textComposer.suggestions).toBeUndefined();
+
+      // Type more, then retrigger the mention search for the same name.
+      await textComposer.handleChange({
+        text: '@Ivan hey @iv',
+        selection: { start: 13, end: 13 },
+      });
+      expect(textComposer.suggestions).toBeDefined();
+      expect(textComposer.suggestions?.query).toBe('iv');
+
+      // Reselect the same entity. Text becomes '@Ivan hey @Ivan ' and the
+      // textual form '@Ivan ' now appears twice — the count heuristic alone
+      // would NOT suppress here, so the closure flag has to.
+      await textComposer.handleSelect(ivanSuggestion);
+      await textComposer.handleChange({
+        text: textComposer.text,
+        selection: textComposer.selection,
+      });
+      expect(textComposer.suggestions).toBeUndefined();
+    });
+
+    // Same suppression must hold when the reselection of an existing entity
+    // happens AFTER one or more other mentions have been selected in between
+    // (e.g. composing `@channel @member @channel `). The closure flag must
+    // fire on every handleSelect, not only on consecutive ones.
+    it('should suppress suggestions on the next change when reselecting the same entity with other mentions in between', async () => {
+      const {
+        messageComposer: { textComposer },
+      } = setup();
+
+      const channelSuggestion = {
+        id: 'channel',
+        mentionType: 'channel',
+        name: 'channel',
+        tokenizedDisplayName: { token: 'ch', parts: ['channel'] },
+      } as unknown as TextComposerSuggestion<UserSuggestion>;
+      const memberSuggestion = {
+        id: 'user42',
+        mentionType: 'user',
+        name: 'member',
+        tokenizedDisplayName: { token: 'me', parts: ['member'] },
+      } as TextComposerSuggestion<UserSuggestion>;
+
+      // 1) Trigger and select @channel.
+      await textComposer.handleChange({
+        text: '@ch',
+        selection: { start: 3, end: 3 },
+      });
+      await textComposer.handleSelect(channelSuggestion);
+      await textComposer.handleChange({
+        text: textComposer.text,
+        selection: textComposer.selection,
+      });
+      expect(textComposer.suggestions).toBeUndefined();
+
+      // 2) Trigger and select @member.
+      await textComposer.handleChange({
+        text: textComposer.text + '@me',
+        selection: {
+          start: textComposer.text.length + 3,
+          end: textComposer.text.length + 3,
+        },
+      });
+      await textComposer.handleSelect(memberSuggestion);
+      await textComposer.handleChange({
+        text: textComposer.text,
+        selection: textComposer.selection,
+      });
+      expect(textComposer.suggestions).toBeUndefined();
+
+      // 3) Re-trigger and re-select @channel. Text now contains two
+      // `@channel ` occurrences, but the closure flag must still fire and
+      // close the dropdown after the second selection.
+      await textComposer.handleChange({
+        text: textComposer.text + '@ch',
+        selection: {
+          start: textComposer.text.length + 3,
+          end: textComposer.text.length + 3,
+        },
+      });
+      expect(textComposer.suggestions).toBeDefined();
+      await textComposer.handleSelect(channelSuggestion);
+      await textComposer.handleChange({
+        text: textComposer.text,
+        selection: textComposer.selection,
+      });
+      expect(textComposer.suggestions).toBeUndefined();
     });
   });
 

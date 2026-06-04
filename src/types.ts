@@ -755,6 +755,8 @@ export type MessageResponseBase = MessageBase & {
   mentioned_users?: UserResponse[];
   mentioned_channel?: boolean;
   mentioned_here?: boolean;
+  mentioned_group_ids?: string[];
+  mentioned_groups?: UserGroupResponse[];
   mentioned_roles?: string[];
   message_text_updated_at?: string;
   moderation?: ModerationResponse; // present only with Moderation v2
@@ -904,6 +906,35 @@ export type SearchAPIResponse = APIResponse & {
   next?: string;
   previous?: string;
   results_warning?: SearchWarning | null;
+};
+
+export type RoleResponse = {
+  name: Role;
+  custom: boolean;
+  scopes: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreateRoleAPIResponse = APIResponse & {
+  role: RoleResponse;
+};
+
+export type ListRolesAPIResponse = APIResponse & {
+  roles: RoleResponse[];
+};
+
+export type SearchRolesAPIResponse = APIResponse & {
+  roles: RoleResponse[];
+};
+
+export type SearchRolesOptions = {
+  query: string;
+  include_global_roles?: boolean;
+  limit?: number;
+  name_gt?: string;
+  // If not provided, the default is search performed both in user-assignable + channel-assignable roles
+  role_type?: 'user' | 'channel';
 };
 
 export type SearchWarning = {
@@ -2903,6 +2934,9 @@ export type Message = Partial<
     mentioned_users: string[];
     shared_location?: StaticLocationPayload | LiveLocationPayload;
     mentioned_channel?: boolean;
+    mentioned_here?: boolean;
+    mentioned_group_ids?: string[];
+    mentioned_roles?: string[];
   }
 >;
 
@@ -3173,8 +3207,15 @@ export type TypingStartEvent = Event;
 
 export type ReservedUpdatedMessageFields = keyof typeof RESERVED_UPDATED_MESSAGE_FIELDS;
 
-export type UpdatedMessage = Omit<MessageResponse, ReservedUpdatedMessageFields> & {
+export type UpdatedMessage = Omit<
+  MessageResponse,
+  ReservedUpdatedMessageFields | 'mentioned_groups'
+> & {
   mentioned_users?: string[];
+  mentioned_channel?: boolean;
+  mentioned_here?: boolean;
+  mentioned_group_ids?: string[];
+  mentioned_roles?: string[];
   type?: MessageLabel;
 };
 
@@ -4470,7 +4511,10 @@ export type QueryDraftsResponse = APIResponse & {
   drafts: DraftResponse[];
 } & Omit<Pager, 'limit'>;
 
-export type DraftMessagePayload = PartializeKeys<DraftMessage, 'id'> & {
+export type DraftMessagePayload = PartializeKeys<
+  Omit<DraftMessage, 'mentioned_groups'>,
+  'id'
+> & {
   user_id?: string;
 };
 
@@ -4481,6 +4525,11 @@ export type DraftMessage = {
   custom?: {};
   html?: string;
   mentioned_users?: string[];
+  mentioned_channel?: boolean;
+  mentioned_here?: boolean;
+  mentioned_group_ids?: string[];
+  mentioned_groups?: UserGroupResponse[];
+  mentioned_roles?: string[];
   mml?: string;
   parent_id?: string;
   poll_id?: string;
@@ -4696,6 +4745,105 @@ export type QueryRemindersResponse = {
   reminders: ReminderResponse[];
   prev?: string;
   next?: string;
+};
+
+export type UserGroupMemberResponse = {
+  group_id: string;
+  user_id: string;
+  is_admin: boolean;
+  created_at: string;
+};
+
+export type UserGroupResponse = {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  description?: string;
+  team_id?: string;
+  members?: UserGroupMemberResponse[];
+  created_by?: string;
+};
+
+export type CreateUserGroupOptions = {
+  /** Human-readable user group name */
+  name: string;
+  /** Optional user group description shown to members */
+  description?: string;
+  /** Optional custom user group ID. If omitted, the backend generates one */
+  id?: string;
+  /** Optional list of user IDs to add as members when the group is created */
+  member_ids?: string[];
+  /** Optional team ID that scopes the user group to a specific team */
+  team_id?: string;
+};
+
+export type CreateUserGroupResponse = APIResponse & {
+  user_group: UserGroupResponse;
+};
+
+export type GetUserGroupOptions = {
+  team_id?: string;
+};
+
+export type GetUserGroupResponse = APIResponse & {
+  user_group: UserGroupResponse;
+};
+
+export type QueryUserGroupsOptions = {
+  limit?: number;
+  id_gt?: string;
+  created_at_gt?: string;
+  team_id?: string;
+};
+
+export type QueryUserGroupsResponse = APIResponse & {
+  user_groups: UserGroupResponse[];
+};
+
+export type SearchUserGroupsOptions = {
+  query: string;
+  limit?: number;
+  id_gt?: string;
+  name_gt?: string;
+  team_id?: string;
+};
+
+export type SearchUserGroupsResponse = APIResponse & {
+  user_groups: UserGroupResponse[];
+};
+
+export type UpdateUserGroupOptions = {
+  description?: string;
+  name?: string;
+  team_id?: string;
+};
+
+export type UpdateUserGroupResponse = APIResponse & {
+  user_group: UserGroupResponse;
+};
+
+export type DeleteUserGroupOptions = {
+  team_id?: string;
+};
+
+export type AddUserGroupMembersOptions = {
+  member_ids: string[];
+  as_admin?: boolean;
+  team_id?: string;
+};
+
+export type AddUserGroupMembersResponse = APIResponse & {
+  user_group: UserGroupResponse;
+};
+
+export type RemoveUserGroupMembersOptions = {
+  member_ids: string[];
+  team_id?: string;
+};
+
+export type RemoveUserGroupMembersResponse = APIResponse & {
+  user_group: UserGroupResponse;
 };
 
 export type HookType = 'webhook' | 'sqs' | 'sns' | 'pending_message';

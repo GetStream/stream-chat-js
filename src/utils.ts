@@ -381,6 +381,7 @@ export const localMessageToNewMessagePayload = (localMessage: LocalMessage): Mes
     command,
     html,
     i18n,
+    mentioned_groups,
     quoted_message,
     mentioned_users,
     // Message content related fields
