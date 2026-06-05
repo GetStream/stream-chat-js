@@ -103,7 +103,7 @@
     "test-coverage": "vitest run --coverage",
     "fix-staged": "lint-staged --config .lintstagedrc.fix.json --concurrent 1",
     "semantic-release": "semantic-release",
-    "postinstall": "husky",
+    "postinstall": "node -e \"require('fs').existsSync('scripts/install-husky.mjs') && import('./scripts/install-husky.mjs')\"",
     "prepare": "yarn run build"
   },
   "engines": {
