@@ -1,3 +1,9 @@
+## [9.45.1](https://github.com/GetStream/stream-chat-js/compare/v9.45.0...v9.45.1) (2026-06-05)
+
+### Bug Fixes
+
+* only run husky in a git checkout so npm consumers don't break ([#1764](https://github.com/GetStream/stream-chat-js/issues/1764)) ([88dbdb6](https://github.com/GetStream/stream-chat-js/commit/88dbdb69989ff3829948c3cf8e7abb512a0b2c5d))
+
 ## [9.45.0](https://github.com/GetStream/stream-chat-js/compare/v9.44.2...v9.45.0) (2026-06-04)
 
 ### Features
