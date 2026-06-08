@@ -1,3 +1,9 @@
+## [9.45.2](https://github.com/GetStream/stream-chat-js/compare/v9.45.1...v9.45.2) (2026-06-08)
+
+### Bug Fixes
+
+* **search:** extend search source options ([#1765](https://github.com/GetStream/stream-chat-js/issues/1765)) ([7e3e458](https://github.com/GetStream/stream-chat-js/commit/7e3e458ef3a2f4b69c1b5353ce5fba72e42d38eb)), closes [feeds-js#104](https://github.com/GetStream/feeds-js/issues/104)
+
 ## [9.45.1](https://github.com/GetStream/stream-chat-js/compare/v9.45.0...v9.45.1) (2026-06-05)
 
 ### Bug Fixes
