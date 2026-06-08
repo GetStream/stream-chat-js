@@ -447,6 +447,123 @@ describe('BaseSearchSource and implementations', () => {
 			});
 		});
 
+		describe('allowEmptySearchString', () => {
+			it('defaults to false and rejects empty-string queries via canExecuteQuery', () => {
+				searchSource.activate();
+				expect(searchSource.canExecuteQuery('')).to.be.false;
+			});
+
+			it('skips the query and leaves state untouched for an empty search by default', async () => {
+				searchSource.activate();
+				const querySpy = sinon.spy(searchSource, 'query');
+				await searchSource.executeQuery('');
+				sinon.assert.notCalled(querySpy);
+				expect(searchSource.searchQuery).to.equal('');
+				expect(searchSource.items).to.be.undefined;
+				expect(searchSource.isLoading).to.be.false;
+			});
+
+			it('when enabled, canExecuteQuery accepts an empty search string', () => {
+				searchSource = new TestSearchSource({ allowEmptySearchString: true });
+				searchSource.activate();
+				expect(searchSource.canExecuteQuery('')).to.be.true;
+			});
+
+			it('when enabled, executeQuery runs the query with an empty search string', async () => {
+				searchSource = new TestSearchSource({ allowEmptySearchString: true });
+				searchSource.activate();
+				const querySpy = sinon.spy(searchSource, 'query');
+				await searchSource.executeQuery('');
+				sinon.assert.calledOnceWithExactly(querySpy, '');
+				expect(searchSource.searchQuery).to.equal('');
+				expect(searchSource.items).to.be.eql(items);
+			});
+
+			it('when enabled, can paginate after an empty-string first query', async () => {
+				searchSource = new TestSearchSource({ allowEmptySearchString: true });
+				searchSource.pageSize = 1;
+				searchSource.activate();
+
+				const queryStub = sinon.stub(searchSource, 'query');
+				queryStub.onFirstCall().resolves({ items: ['page1'] });
+				queryStub.onSecondCall().resolves({ items: ['page2'] });
+
+				await searchSource.executeQuery('');
+				expect(searchSource.searchQuery).to.equal('');
+				expect(searchSource.items).to.deep.equal(['page1']);
+				expect(searchSource.hasNext).to.be.true;
+
+				// No args pagination path. searchQuery is '', which would have been rejected
+				// by canExecuteQuery without allowEmptySearchString.
+				await searchSource.executeQuery();
+				expect(queryStub.callCount).to.equal(2);
+				expect(queryStub.secondCall.args[0]).to.equal('');
+				expect(searchSource.items).to.deep.equal(['page1', 'page2']);
+			});
+		});
+
+		describe('resetOnNewSearchQuery', () => {
+			it('clears items and flips isLoading to true on a new query by default', async () => {
+				searchSource.activate();
+				const previous = ['previous'];
+				searchSource.state.partialNext({ items: previous, hasNext: true });
+
+				const observed = [];
+				const unsubscribe = searchSource.state.subscribe((state) =>
+					observed.push({ items: state.items, isLoading: state.isLoading }),
+				);
+				await searchSource.executeQuery('new query');
+				unsubscribe();
+
+				// After the new query reset and before the query resolves, items should be cleared
+				// and isLoading true, keeping it an intermediate state.
+				const reset = observed.find(
+					(snap) => snap.isLoading === true && snap.items === undefined,
+				);
+				expect(reset, 'expected an intermediate "reset" state').to.exist;
+				expect(searchSource.items).to.be.eql(items);
+			});
+
+			it('when disabled, preserves previous items and keeps isLoading false during the new query', async () => {
+				searchSource = new TestSearchSource({ resetOnNewSearchQuery: false });
+				searchSource.activate();
+				const previous = ['previous'];
+				searchSource.state.partialNext({ items: previous, hasNext: true });
+
+				const observed = [];
+				const unsubscribe = searchSource.state.subscribe((state) =>
+					observed.push({ items: state.items, isLoading: state.isLoading }),
+				);
+				await searchSource.executeQuery('new query');
+				unsubscribe();
+
+				// The intermediate state for a new query should keep the old items and not show loading.
+				const intermediate = observed.find(
+					(snap) => snap.items === previous && snap.isLoading === false,
+				);
+				expect(intermediate, 'expected an intermediate "preserve" state').to.exist;
+				expect(searchSource.items).to.be.eql(items);
+			});
+
+			it('when disabled and no prior items exist, isLoading still flips true while the query runs', async () => {
+				searchSource = new TestSearchSource({ resetOnNewSearchQuery: false });
+				searchSource.activate();
+
+				const observed = [];
+				const unsubscribe = searchSource.state.subscribe((state) =>
+					observed.push({ items: state.items, isLoading: state.isLoading }),
+				);
+				await searchSource.executeQuery('new query');
+				unsubscribe();
+
+				const intermediate = observed.find(
+					(snap) => snap.items === undefined && snap.isLoading === true,
+				);
+				expect(intermediate, 'expected an intermediate "loading" state').to.exist;
+				expect(searchSource.items).to.be.eql(items);
+			});
+		});
+
 		describe('search debounce', () => {
 			const defaultDebounceTimeMs = 300;
 			let executeQueryStub;
@@ -606,6 +723,120 @@ describe('BaseSearchSource and implementations', () => {
 
 				searchSource.executeQuery();
 				expect(searchSource.items).to.deep.equal(['item1', 'item2']);
+			});
+		});
+
+		describe('allowEmptySearchString', () => {
+			it('defaults to false and rejects empty-string queries via canExecuteQuery', () => {
+				searchSource.activate();
+				expect(searchSource.canExecuteQuery('')).to.be.false;
+			});
+
+			it('skips the query and leaves state untouched for an empty search by default', () => {
+				searchSource.activate();
+				const querySpy = sinon.spy(searchSource, 'query');
+				searchSource.executeQuery('');
+				sinon.assert.notCalled(querySpy);
+				expect(searchSource.searchQuery).to.equal('');
+				expect(searchSource.items).to.be.undefined;
+				expect(searchSource.isLoading).to.be.false;
+			});
+
+			it('when enabled, canExecuteQuery accepts an empty search string', () => {
+				searchSource = new TestSearchSource({ allowEmptySearchString: true });
+				searchSource.activate();
+				expect(searchSource.canExecuteQuery('')).to.be.true;
+			});
+
+			it('when enabled, executeQuery runs the query with an empty search string', () => {
+				searchSource = new TestSearchSource({ allowEmptySearchString: true });
+				searchSource.activate();
+				const querySpy = sinon.spy(searchSource, 'query');
+				searchSource.executeQuery('');
+				sinon.assert.calledOnceWithExactly(querySpy, '');
+				expect(searchSource.searchQuery).to.equal('');
+				expect(searchSource.items).to.be.eql(items);
+			});
+
+			it('when enabled, can paginate after an empty-string first query', () => {
+				searchSource = new TestSearchSource({ allowEmptySearchString: true });
+				searchSource.pageSize = 1;
+				searchSource.activate();
+
+				const queryStub = sinon.stub(searchSource, 'query');
+				queryStub.onFirstCall().returns({ items: ['page1'] });
+				queryStub.onSecondCall().returns({ items: ['page2'] });
+
+				searchSource.executeQuery('');
+				expect(searchSource.searchQuery).to.equal('');
+				expect(searchSource.items).to.deep.equal(['page1']);
+				expect(searchSource.hasNext).to.be.true;
+
+				// No args pagination path. searchQuery is '', which would have been rejected
+				// by canExecuteQuery without allowEmptySearchString.
+				searchSource.executeQuery();
+				expect(queryStub.callCount).to.equal(2);
+				expect(queryStub.secondCall.args[0]).to.equal('');
+				expect(searchSource.items).to.deep.equal(['page1', 'page2']);
+			});
+		});
+
+		describe('resetOnNewSearchQuery', () => {
+			it('clears items and flips isLoading to true on a new query by default', () => {
+				searchSource.activate();
+				const previous = ['previous'];
+				searchSource.state.partialNext({ items: previous, hasNext: true });
+
+				const observed = [];
+				const unsubscribe = searchSource.state.subscribe((state) =>
+					observed.push({ items: state.items, isLoading: state.isLoading }),
+				);
+				searchSource.executeQuery('new query');
+				unsubscribe();
+
+				const reset = observed.find(
+					(snap) => snap.isLoading === true && snap.items === undefined,
+				);
+				expect(reset, 'expected an intermediate "reset" state').to.exist;
+				expect(searchSource.items).to.be.eql(items);
+			});
+
+			it('when disabled, preserves previous items and keeps isLoading false during the new query', () => {
+				searchSource = new TestSearchSource({ resetOnNewSearchQuery: false });
+				searchSource.activate();
+				const previous = ['previous'];
+				searchSource.state.partialNext({ items: previous, hasNext: true });
+
+				const observed = [];
+				const unsubscribe = searchSource.state.subscribe((state) =>
+					observed.push({ items: state.items, isLoading: state.isLoading }),
+				);
+				searchSource.executeQuery('new query');
+				unsubscribe();
+
+				const intermediate = observed.find(
+					(snap) => snap.items === previous && snap.isLoading === false,
+				);
+				expect(intermediate, 'expected an intermediate "preserve" state').to.exist;
+				expect(searchSource.items).to.be.eql(items);
+			});
+
+			it('when disabled and no prior items exist, isLoading still flips true while the query runs', () => {
+				searchSource = new TestSearchSource({ resetOnNewSearchQuery: false });
+				searchSource.activate();
+
+				const observed = [];
+				const unsubscribe = searchSource.state.subscribe((state) =>
+					observed.push({ items: state.items, isLoading: state.isLoading }),
+				);
+				searchSource.executeQuery('new query');
+				unsubscribe();
+
+				const intermediate = observed.find(
+					(snap) => snap.items === undefined && snap.isLoading === true,
+				);
+				expect(intermediate, 'expected an intermediate "loading" state').to.exist;
+				expect(searchSource.items).to.be.eql(items);
 			});
 		});
 
