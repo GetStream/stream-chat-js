@@ -281,8 +281,8 @@ export class Moderation {
     configKey: string,
     options?: {
       force_sync?: boolean;
-      test_mode?: boolean;
     },
+    testMode?: boolean,
   ) {
     return await this.client.post<CheckResponse>(
       this.client.baseURL + `/api/v2/moderation/check`,
@@ -293,6 +293,7 @@ export class Moderation {
         moderation_payload: moderationPayload,
         config_key: configKey,
         options,
+        test_mode: testMode,
       },
     );
   }
@@ -346,8 +347,8 @@ export class Moderation {
       'user_profile:default',
       {
         force_sync: true,
-        test_mode: true,
       },
+      true,
     );
   }
 
