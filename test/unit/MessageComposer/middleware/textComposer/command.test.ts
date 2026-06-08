@@ -59,6 +59,7 @@ const initialValue = {
   text: '',
   selection: { start: 0, end: 0 },
   mentionedUsers: [],
+  mentions: [],
 };
 
 describe('Apply Command Settings Middleware', () => {

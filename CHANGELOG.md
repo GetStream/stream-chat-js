@@ -1,3 +1,30 @@
+## [9.45.2](https://github.com/GetStream/stream-chat-js/compare/v9.45.1...v9.45.2) (2026-06-08)
+
+### Bug Fixes
+
+* **search:** extend search source options ([#1765](https://github.com/GetStream/stream-chat-js/issues/1765)) ([7e3e458](https://github.com/GetStream/stream-chat-js/commit/7e3e458ef3a2f4b69c1b5353ce5fba72e42d38eb)), closes [feeds-js#104](https://github.com/GetStream/feeds-js/issues/104)
+
+## [9.45.1](https://github.com/GetStream/stream-chat-js/compare/v9.45.0...v9.45.1) (2026-06-05)
+
+### Bug Fixes
+
+* only run husky in a git checkout so npm consumers don't break ([#1764](https://github.com/GetStream/stream-chat-js/issues/1764)) ([88dbdb6](https://github.com/GetStream/stream-chat-js/commit/88dbdb69989ff3829948c3cf8e7abb512a0b2c5d))
+
+## [9.45.0](https://github.com/GetStream/stream-chat-js/compare/v9.44.2...v9.45.0) (2026-06-04)
+
+### Features
+
+* [CHA-3267] before_message_send_hook_attempt_timeout_ms ([#1755](https://github.com/GetStream/stream-chat-js/issues/1755)) ([da02271](https://github.com/GetStream/stream-chat-js/commit/da022710189703dc208b8eb844ca96c13731fd8e))
+* add enhanced mentions ([#1743](https://github.com/GetStream/stream-chat-js/issues/1743)) ([4892d10](https://github.com/GetStream/stream-chat-js/commit/4892d10ff5e5bc3362e267b46ef846585654d54f))
+* **MessageComposer:** control command sendability ([#1746](https://github.com/GetStream/stream-chat-js/issues/1746)) ([79d3af8](https://github.com/GetStream/stream-chat-js/commit/79d3af8af5d4ccf2e892ee82feb108eb6e6e34ea))
+
+### Chores
+
+* **deps:** bump fast-uri from 3.0.6 to 3.1.2 ([#1753](https://github.com/GetStream/stream-chat-js/issues/1753)) ([d4e74de](https://github.com/GetStream/stream-chat-js/commit/d4e74defe5967a24e6a8bf5f07a2a2c67b6c2ae2))
+* **deps:** bump handlebars from 4.7.7 to 4.7.9 ([#1757](https://github.com/GetStream/stream-chat-js/issues/1757)) ([9dc1fb6](https://github.com/GetStream/stream-chat-js/commit/9dc1fb6cb14b5bdcea79aed627bf592b5e3f2101))
+* **deps:** bump lodash from 4.17.21 to 4.18.1 ([#1751](https://github.com/GetStream/stream-chat-js/issues/1751)) ([05495fe](https://github.com/GetStream/stream-chat-js/commit/05495fed0d9543594e82a5c92ff0fe7dd2c8247e))
+* **deps:** bump lodash-es from 4.17.21 to 4.18.1 ([#1756](https://github.com/GetStream/stream-chat-js/issues/1756)) ([fa95e18](https://github.com/GetStream/stream-chat-js/commit/fa95e18b40e15151e2abb729fb31b77b2600a93c))
+
 ## [9.44.2](https://github.com/GetStream/stream-chat-js/compare/v9.44.1...v9.44.2) (2026-05-15)
 
 ### Bug Fixes

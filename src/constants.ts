@@ -15,6 +15,7 @@ export const RESERVED_UPDATED_MESSAGE_FIELDS = Object.freeze({
   updated_at: true,
   command: true,
   // Back-end enriches these fields
+  mentioned_groups: true,
   mentioned_users: true,
   quoted_message: true,
   // Client-specific fields

@@ -522,6 +522,7 @@ describe('MessageComposer', () => {
       messageComposer.textComposer.state.partialNext({
         text: '',
         mentionedUsers: [],
+        mentions: [],
         selection: { start: 0, end: 0 },
       });
       expect(messageComposer.hasSendableData).toBe(false);
@@ -678,6 +679,7 @@ describe('MessageComposer', () => {
       messageComposer.textComposer.state.partialNext({
         text: '',
         mentionedUsers: [],
+        mentions: [],
         selection: { start: 0, end: 0 },
       });
       expect(messageComposer.compositionIsEmpty).toBe(true);
@@ -730,6 +732,7 @@ describe('MessageComposer', () => {
         messageComposer.textComposer.state.partialNext({
           text: '',
           mentionedUsers: [],
+          mentions: [],
           selection: { start: 0, end: 0 },
         });
         expect(messageComposer.contentIsEmpty).toBe(true);
@@ -740,6 +743,7 @@ describe('MessageComposer', () => {
         messageComposer.textComposer.state.partialNext({
           text: '',
           mentionedUsers: [],
+          mentions: [],
           selection: { start: 0, end: 0 },
         });
 
@@ -769,6 +773,7 @@ describe('MessageComposer', () => {
         messageComposer.textComposer.state.partialNext({
           text: '',
           mentionedUsers: [],
+          mentions: [],
           selection: { start: 0, end: 0 },
         });
         messageComposer.setQuotedMessage({
@@ -1247,6 +1252,10 @@ describe('MessageComposer', () => {
           deleted_at: null,
           error: null,
           id: 'test-uuid',
+          mentioned_channel: false,
+          mentioned_group_ids: [],
+          mentioned_here: false,
+          mentioned_roles: [],
           mentioned_users: [],
           parent_id: undefined,
           pinned_at: null,
@@ -1264,6 +1273,10 @@ describe('MessageComposer', () => {
         },
         message: {
           id: 'test-uuid',
+          mentioned_channel: false,
+          mentioned_group_ids: [],
+          mentioned_here: false,
+          mentioned_roles: [],
           mentioned_users: [],
           parent_id: undefined,
           text: 'Test message',
@@ -1314,6 +1327,10 @@ describe('MessageComposer', () => {
           deleted_at: null,
           error: null,
           id: 'test-uuid',
+          mentioned_channel: false,
+          mentioned_group_ids: [],
+          mentioned_here: false,
+          mentioned_roles: [],
           mentioned_users: [],
           parent_id: undefined,
           pinned: true,
@@ -1343,6 +1360,10 @@ describe('MessageComposer', () => {
             },
           ],
           id: 'test-uuid',
+          mentioned_channel: false,
+          mentioned_group_ids: [],
+          mentioned_here: false,
+          mentioned_roles: [],
           mentioned_users: [],
           parent_id: undefined,
           pinned: true,
@@ -1362,6 +1383,42 @@ describe('MessageComposer', () => {
         },
         sendOptions: {},
       });
+    });
+
+    it('should compose enhanced mention payload fields', async () => {
+      const { messageComposer } = setup();
+      messageComposer.textComposer.setText(
+        '@user-id @channel @here @admin @Backend Team',
+      );
+      messageComposer.textComposer.setMentions([
+        { id: 'user-id', mentionType: 'user', name: 'User Name' },
+        { id: 'channel', mentionType: 'channel', name: 'channel' },
+        { id: 'here', mentionType: 'here', name: 'here' },
+        { id: 'admin', mentionType: 'role', name: 'admin' },
+        { id: 'backend-team', mentionType: 'user_group', name: 'Backend Team' },
+      ]);
+
+      const result = await messageComposer.compose();
+
+      expect(result?.message).toEqual(
+        expect.objectContaining({
+          mentioned_channel: true,
+          mentioned_group_ids: ['backend-team'],
+          mentioned_here: true,
+          mentioned_roles: ['admin'],
+          mentioned_users: ['user-id'],
+          text: '@user-id @channel @here @admin @Backend Team',
+        }),
+      );
+      expect(result?.localMessage).toEqual(
+        expect.objectContaining({
+          mentioned_channel: true,
+          mentioned_group_ids: ['backend-team'],
+          mentioned_here: true,
+          mentioned_roles: ['admin'],
+          mentioned_users: [{ id: 'user-id', name: 'User Name' }],
+        }),
+      );
     });
 
     it('should return undefined when compose middleware returns discard status', async () => {
@@ -1411,6 +1468,35 @@ describe('MessageComposer', () => {
         initialValue: expect.any(Object),
       });
       expect(result).toEqual(mockResult.state);
+    });
+
+    it('should compose draft with enhanced mention payload fields', async () => {
+      const { messageComposer } = setup();
+      messageComposer.textComposer.setText(
+        '@user-id @channel @here @admin @Backend Team',
+      );
+      messageComposer.textComposer.setMentions([
+        { id: 'user-id', mentionType: 'user', name: 'User Name' },
+        { id: 'channel', mentionType: 'channel', name: 'channel' },
+        { id: 'here', mentionType: 'here', name: 'here' },
+        { id: 'admin', mentionType: 'role', name: 'admin' },
+        { id: 'backend-team', mentionType: 'user_group', name: 'Backend Team' },
+      ]);
+
+      const result = await messageComposer.composeDraft();
+
+      expect(result?.draft).toEqual(
+        expect.objectContaining({
+          id: 'test-uuid',
+          mentioned_channel: true,
+          mentioned_group_ids: ['backend-team'],
+          mentioned_here: true,
+          mentioned_roles: ['admin'],
+          mentioned_users: ['user-id'],
+          parent_id: undefined,
+          text: '@user-id @channel @here @admin @Backend Team',
+        }),
+      );
     });
 
     it('should return undefined when draft compose middleware returns discard status', async () => {
@@ -2319,6 +2405,7 @@ describe('MessageComposer', () => {
         messageComposer.textComposer.state.next({
           text: 'New text',
           mentionedUsers: [],
+          mentions: [],
           selection: { start: 0, end: 0 },
         });
 
@@ -2341,6 +2428,7 @@ describe('MessageComposer', () => {
         messageComposer.textComposer.state.next({
           text: 'https://example.com',
           mentionedUsers: [],
+          mentions: [],
           selection: { start: 0, end: 0 },
         });
 
@@ -2463,6 +2551,7 @@ describe('MessageComposer', () => {
         messageComposer.textComposer.state.next({
           text: 'Hello world',
           mentionedUsers: [],
+          mentions: [],
           selection: { start: 0, end: 0 },
         });
         expect(spy).not.toHaveBeenCalled();

@@ -30,6 +30,7 @@ const applyCommandActivationEffect: MessageComposerEffectHandler<
   composer.textComposer.state.next({
     command: effect.command,
     mentionedUsers: [],
+    mentions: [],
     suggestions: undefined,
     selection: { start: 0, end: 0 },
     text: '',

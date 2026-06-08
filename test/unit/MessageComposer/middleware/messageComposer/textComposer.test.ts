@@ -58,6 +58,9 @@ describe('stream-io/message-composer-middleware/text-composition', () => {
     } as any;
 
     const textComposer = {
+      get mentions() {
+        return [];
+      },
       get text() {
         return '';
       },
@@ -196,9 +199,9 @@ describe('stream-io/message-composer-middleware/text-composition', () => {
     vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue(
       '@user1 @user2',
     );
-    vi.spyOn(messageComposer.textComposer, 'mentionedUsers', 'get').mockReturnValue([
-      { id: 'user1', name: 'User 1' },
-      { id: 'user2', name: 'User 2' },
+    vi.spyOn(messageComposer.textComposer, 'mentions', 'get').mockReturnValue([
+      { id: 'user1', mentionType: 'user', name: 'User 1' },
+      { id: 'user2', mentionType: 'user', name: 'User 2' },
     ]);
 
     const result = await textComposerMiddleware.handlers.compose(
@@ -240,9 +243,9 @@ describe('stream-io/message-composer-middleware/text-composition', () => {
 
   it('should remove stale mentions', async () => {
     vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue('@user1');
-    vi.spyOn(messageComposer.textComposer, 'mentionedUsers', 'get').mockReturnValue([
-      { id: 'user1', name: 'User 1' },
-      { id: 'user2', name: 'User 2' },
+    vi.spyOn(messageComposer.textComposer, 'mentions', 'get').mockReturnValue([
+      { id: 'user1', mentionType: 'user', name: 'User 1' },
+      { id: 'user2', mentionType: 'user', name: 'User 2' },
     ]);
 
     const result = await textComposerMiddleware.handlers.compose(
@@ -279,6 +282,103 @@ describe('stream-io/message-composer-middleware/text-composition', () => {
     expect(result.state.localMessage.mentioned_users).toHaveLength(1);
     expect(result.state.message.mentioned_users).toEqual(['user1']);
     expect(result.state.localMessage.mentioned_users?.[0]?.id).toBe('user1');
+  });
+
+  it('should map mixed enhanced mentions into message payloads', async () => {
+    vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue(
+      '@user1 @channel @here @admin @Backend Team',
+    );
+    vi.spyOn(messageComposer.textComposer, 'mentions', 'get').mockReturnValue([
+      { id: 'user1', mentionType: 'user', name: 'User 1' },
+      { id: 'channel', mentionType: 'channel', name: 'channel' },
+      { id: 'here', mentionType: 'here', name: 'here' },
+      { id: 'admin', mentionType: 'role', name: 'admin' },
+      { id: 'backend-team', mentionType: 'user_group', name: 'Backend Team' },
+    ]);
+
+    const result = await textComposerMiddleware.handlers.compose(
+      setup({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
+          mentioned_users: [] as string[],
+        },
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [] as Array<{ id: string; name: string }>,
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
+
+    expect(result.state.message.mentioned_users).toEqual(['user1']);
+    expect(result.state.message.mentioned_channel).toBe(true);
+    expect(result.state.message.mentioned_here).toBe(true);
+    expect(result.state.message.mentioned_roles).toEqual(['admin']);
+    expect(result.state.message.mentioned_group_ids).toEqual(['backend-team']);
+    expect(result.state.localMessage.mentioned_users?.[0]?.id).toBe('user1');
+    expect(result.state.localMessage.mentioned_channel).toBe(true);
+    expect(result.state.localMessage.mentioned_here).toBe(true);
+    expect(result.state.localMessage.mentioned_roles).toEqual(['admin']);
+    expect(result.state.localMessage.mentioned_group_ids).toEqual(['backend-team']);
+  });
+
+  it('should remove stale enhanced mentions and keep user groups without display names', async () => {
+    vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue(
+      '@user1 @channel @Backend Team',
+    );
+    vi.spyOn(messageComposer.textComposer, 'mentions', 'get').mockReturnValue([
+      { id: 'user1', mentionType: 'user', name: 'User 1' },
+      { id: 'channel', mentionType: 'channel', name: 'channel' },
+      { id: 'here', mentionType: 'here', name: 'here' },
+      { id: 'admin', mentionType: 'role', name: 'admin' },
+      { id: 'backend-team', mentionType: 'user_group' },
+    ]);
+
+    const result = await textComposerMiddleware.handlers.compose(
+      setup({
+        message: {
+          id: 'test-id',
+          parent_id: undefined,
+          type: 'regular',
+          mentioned_users: [] as string[],
+        },
+        localMessage: {
+          attachments: [],
+          created_at: new Date(),
+          deleted_at: null,
+          error: undefined,
+          id: 'test-id',
+          mentioned_users: [] as Array<{ id: string; name: string }>,
+          parent_id: undefined,
+          pinned_at: null,
+          reaction_groups: null,
+          status: 'sending',
+          text: '',
+          type: 'regular',
+          updated_at: new Date(),
+        },
+        sendOptions: {},
+      }),
+    );
+
+    expect(result.state.message.mentioned_users).toEqual(['user1']);
+    expect(result.state.message.mentioned_channel).toBe(true);
+    expect(result.state.message.mentioned_here).toBe(false);
+    expect(result.state.message.mentioned_roles).toEqual([]);
+    expect(result.state.message.mentioned_group_ids).toEqual(['backend-team']);
   });
 
   it('should handle message with commands', async () => {
@@ -374,6 +474,9 @@ describe('stream-io/message-composer-middleware/draft-text-composition', () => {
     } as any;
 
     const textComposer = {
+      get mentions() {
+        return [];
+      },
       get text() {
         return '';
       },
@@ -482,9 +585,9 @@ describe('stream-io/message-composer-middleware/draft-text-composition', () => {
     vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue(
       '@user1 @user2',
     );
-    vi.spyOn(messageComposer.textComposer, 'mentionedUsers', 'get').mockReturnValue([
-      { id: 'user1', name: 'User 1' },
-      { id: 'user2', name: 'User 2' },
+    vi.spyOn(messageComposer.textComposer, 'mentions', 'get').mockReturnValue([
+      { id: 'user1', mentionType: 'user', name: 'User 1' },
+      { id: 'user2', mentionType: 'user', name: 'User 2' },
     ]);
 
     const result = await draftTextComposerMiddleware.handlers.compose(
@@ -504,9 +607,9 @@ describe('stream-io/message-composer-middleware/draft-text-composition', () => {
 
   it('should remove stale mentions', async () => {
     vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue('@user1');
-    vi.spyOn(messageComposer.textComposer, 'mentionedUsers', 'get').mockReturnValue([
-      { id: 'user1', name: 'User 1' },
-      { id: 'user2', name: 'User 2' },
+    vi.spyOn(messageComposer.textComposer, 'mentions', 'get').mockReturnValue([
+      { id: 'user1', mentionType: 'user', name: 'User 1' },
+      { id: 'user2', mentionType: 'user', name: 'User 2' },
     ]);
 
     const result = await draftTextComposerMiddleware.handlers.compose(
@@ -522,6 +625,64 @@ describe('stream-io/message-composer-middleware/draft-text-composition', () => {
     expect(result.status).toBeUndefined();
     expect(result.state.draft.text).toBe('@user1');
     expect(result.state.draft.mentioned_users).toEqual(['user1']);
+  });
+
+  it('should map mixed enhanced mentions into draft payloads', async () => {
+    vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue(
+      '@user1 @channel @here @admin @Backend Team',
+    );
+    vi.spyOn(messageComposer.textComposer, 'mentions', 'get').mockReturnValue([
+      { id: 'user1', mentionType: 'user', name: 'User 1' },
+      { id: 'channel', mentionType: 'channel', name: 'channel' },
+      { id: 'here', mentionType: 'here', name: 'here' },
+      { id: 'admin', mentionType: 'role', name: 'admin' },
+      { id: 'backend-team', mentionType: 'user_group', name: 'Backend Team' },
+    ]);
+
+    const result = await draftTextComposerMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          id: 'test-id',
+          parent_id: undefined,
+          text: '',
+        },
+      }),
+    );
+
+    expect(result.state.draft.mentioned_users).toEqual(['user1']);
+    expect(result.state.draft.mentioned_channel).toBe(true);
+    expect(result.state.draft.mentioned_here).toBe(true);
+    expect(result.state.draft.mentioned_roles).toEqual(['admin']);
+    expect(result.state.draft.mentioned_group_ids).toEqual(['backend-team']);
+  });
+
+  it('should remove stale enhanced mentions from drafts', async () => {
+    vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue(
+      '@user1 @channel',
+    );
+    vi.spyOn(messageComposer.textComposer, 'mentions', 'get').mockReturnValue([
+      { id: 'user1', mentionType: 'user', name: 'User 1' },
+      { id: 'channel', mentionType: 'channel', name: 'channel' },
+      { id: 'here', mentionType: 'here', name: 'here' },
+      { id: 'admin', mentionType: 'role', name: 'admin' },
+      { id: 'backend-team', mentionType: 'user_group', name: 'Backend Team' },
+    ]);
+
+    const result = await draftTextComposerMiddleware.handlers.compose(
+      setupDraft({
+        draft: {
+          id: 'test-id',
+          parent_id: undefined,
+          text: '',
+        },
+      }),
+    );
+
+    expect(result.state.draft.mentioned_users).toEqual(['user1']);
+    expect(result.state.draft.mentioned_channel).toBe(true);
+    expect(result.state.draft.mentioned_here).toBeUndefined();
+    expect(result.state.draft.mentioned_roles).toBeUndefined();
+    expect(result.state.draft.mentioned_group_ids).toBeUndefined();
   });
 
   it('should handle empty mentionedUsers array', async () => {
