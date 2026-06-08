@@ -14,6 +14,10 @@ export type SearchSourceOptions = {
   /** The number of milliseconds to debounce the search query. The default interval is 300ms. */
   debounceMs?: number;
   pageSize?: number;
+  /** When true, the source can execute queries with an empty search string. Defaults to false. */
+  allowEmptySearchString?: boolean;
+  /** When true, previously loaded items are cleared at the start of a new search query. Defaults to true. */
+  resetOnNewSearchQuery?: boolean;
 };
 
 export type SearchSourceType = 'channels' | 'users' | 'messages' | (string & {});
