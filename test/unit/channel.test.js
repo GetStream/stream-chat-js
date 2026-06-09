@@ -277,6 +277,28 @@ describe('Channel _handleChannelEvent', function () {
 		expect(channel.state.membership).to.equal(channel.state.members[user.id]);
 	});
 
+	it('does not change channel.data.member_count on member.added or member.removed', () => {
+		channel.data = { member_count: 5 };
+
+		const newMember = generateMember({ user: { id: 'user-new' } });
+
+		channel._handleChannelEvent({
+			type: 'member.added',
+			user: newMember.user,
+			member: newMember,
+		});
+
+		expect(channel.data.member_count).to.equal(5);
+
+		channel._handleChannelEvent({
+			type: 'member.removed',
+			user: newMember.user,
+			member: newMember,
+		});
+
+		expect(channel.data.member_count).to.equal(5);
+	});
+
 	it('message.new does not reset the unreadCount for current user messages', function () {
 		channel.state.unreadCount = 100;
 		channel._handleChannelEvent({
@@ -1258,6 +1280,17 @@ describe('Channel _handleChannelEvent', function () {
 		expect(channelQuerySpy).toHaveBeenCalledTimes(1);
 
 		// Make sure that we don't wipe out any data
+	});
+
+	it('channel.updated updates member_count from the event channel data', () => {
+		channel.data = { member_count: 5 };
+
+		channel._handleChannelEvent({
+			type: 'channel.updated',
+			channel: { member_count: 10 },
+		});
+
+		expect(channel.data.member_count).to.equal(10);
 	});
 
 	it(`should make sure that state reload doesn't wipe out existing data`, async () => {
