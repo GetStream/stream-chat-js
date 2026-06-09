@@ -1,3 +1,9 @@
+## [9.45.4](https://github.com/GetStream/stream-chat-js/compare/v9.45.3...v9.45.4) (2026-06-09)
+
+### Bug Fixes
+
+* move testmode on check endpoint ([#1767](https://github.com/GetStream/stream-chat-js/issues/1767)) ([c040a7e](https://github.com/GetStream/stream-chat-js/commit/c040a7e14864e807d3a393c13894508232bc634c))
+
 ## [9.45.3](https://github.com/GetStream/stream-chat-js/compare/v9.45.2...v9.45.3) (2026-06-09)
 
 ### Bug Fixes
