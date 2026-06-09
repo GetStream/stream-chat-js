@@ -361,6 +361,7 @@ export class Moderation {
    * @param {Array} moderationPayload.texts array Array of texts to be checked for moderation
    * @param {Array} moderationPayload.images array Array of images to be checked for moderation
    * @param {Array} moderationPayload.videos array Array of videos to be checked for moderation
+   * @param {object} moderationPayload.custom object Additional custom data to attach to the moderation review queue item
    * @param {Array<CustomCheckFlag>} flags Array of CustomCheckFlag to be passed to flag the entity
    * @returns
    */
@@ -369,6 +370,8 @@ export class Moderation {
     entityID: string,
     entityCreatorID: string,
     moderationPayload: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      custom?: Record<string, any>;
       images?: string[];
       texts?: string[];
       videos?: string[];
