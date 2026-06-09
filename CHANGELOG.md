@@ -1,3 +1,10 @@
+## [9.45.3](https://github.com/GetStream/stream-chat-js/compare/v9.45.2...v9.45.3) (2026-06-09)
+
+### Bug Fixes
+
+* increasing/decreasing member count on member event cause incorrect member count ([#1761](https://github.com/GetStream/stream-chat-js/issues/1761)) ([c94c86f](https://github.com/GetStream/stream-chat-js/commit/c94c86f40b6fdde0028a25e569d987abeebdabc6))
+* support array in sort param for UserSearchSource ([#1766](https://github.com/GetStream/stream-chat-js/issues/1766)) ([8f95cd7](https://github.com/GetStream/stream-chat-js/commit/8f95cd78a8be62792b4d34f977c9327a759e546b))
+
 ## [9.45.2](https://github.com/GetStream/stream-chat-js/compare/v9.45.1...v9.45.2) (2026-06-08)
 
 ### Bug Fixes
