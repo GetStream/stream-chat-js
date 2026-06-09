@@ -177,6 +177,46 @@ describe('UserSearchSource', () => {
     );
   });
 
+  it('appends a default id sort when sort is an array without an id key', async () => {
+    searchSource.sort = [{ created_at: -1 }] as UserSort;
+
+    // @ts-expect-error accessing protected method
+    await searchSource.query('John');
+
+    expect(queryUsersMock).toHaveBeenCalledWith(
+      expect.anything(),
+      [{ created_at: -1 }, { id: 1 }],
+      expect.anything(),
+    );
+  });
+
+  it('leaves the sort array unchanged when it already contains an id key', async () => {
+    const sort = [{ id: -1 }, { created_at: -1 }] as UserSort;
+    searchSource.sort = sort;
+
+    // @ts-expect-error accessing protected method
+    await searchSource.query('John');
+
+    expect(queryUsersMock).toHaveBeenCalledWith(
+      expect.anything(),
+      [{ id: -1 }, { created_at: -1 }],
+      expect.anything(),
+    );
+  });
+
+  it('uses only the default id sort when sort is an empty array', async () => {
+    searchSource.sort = [] as UserSort;
+
+    // @ts-expect-error accessing protected method
+    await searchSource.query('John');
+
+    expect(queryUsersMock).toHaveBeenCalledWith(
+      expect.anything(),
+      [{ id: 1 }],
+      expect.anything(),
+    );
+  });
+
   it('returns items from query', async () => {
     // @ts-expect-error accessing protected method
     const result = await searchSource.query('any');
