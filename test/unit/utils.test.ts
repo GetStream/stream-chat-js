@@ -361,10 +361,9 @@ describe('getAndWatchChannel', () => {
       ...Array.from({ length: 2 }, () => generateChannel()),
       generateChannel({ channel: { type: 'messaging' }, members: mockedMembers }),
     ];
-    const mock = sandbox.mock(client);
-    mock
-      .expects('post')
-      .returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
+    sandbox
+      .stub(client.chatApi, 'queryChannels')
+      .resolves({ channels: mockedChannelsQueryResponse });
   });
 
   afterEach(() => {
@@ -436,8 +435,11 @@ describe('getAndWatchChannel', () => {
       options: {},
     });
     expect(channelSpy.calledOnce).to.be.true;
-    // @ts-ignore
-    expect(channelSpy.calledWith(type, undefined, { members })).to.be.true;
+    expect(
+      channelSpy.calledWith(type, undefined, {
+        members: members.map((userId) => ({ user_id: userId })),
+      }),
+    ).to.be.true;
     expect(watchStub.calledOnce).to.be.true;
     expect(result).to.equal(channel);
   });

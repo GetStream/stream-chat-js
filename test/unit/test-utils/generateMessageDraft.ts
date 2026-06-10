@@ -12,7 +12,7 @@ export const generateMessageDraft = ({
   return {
     channel,
     channel_cid: channel.cid,
-    created_at: new Date().toISOString(),
+    created_at: new Date(),
     message: generateMsg(),
     ...customMsgDraft,
   } as DraftResponse;

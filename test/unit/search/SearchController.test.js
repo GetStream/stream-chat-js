@@ -11,7 +11,7 @@ import { generateUser } from '../test-utils/generateUser';
 import { generateChannel } from '../test-utils/generateChannel';
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ErrorFromResponse } from '../../../src';
+import { ErrorFromResponse, StreamChat } from '../../../src';
 import { APIErrorCodes } from '../../../src/errors';
 
 describe('SearchController', () => {
@@ -229,14 +229,11 @@ describe('BaseSearchSource and implementations', () => {
 	const results = [{ id: 'result' }];
 
 	beforeEach(() => {
-		mockClient = {
-			user: { id: 'current-user' },
-			userID: 'current-user',
-			queryUsers: sinon.stub().resolves({ users }),
-			queryChannels: sinon.stub().resolves(channels),
-			search: sinon.stub().resolves({ results, next: null }),
-			activeChannels: {},
-		};
+		mockClient = new StreamChat('');
+		mockClient.user = { id: 'current-user' };
+		sinon.stub(mockClient, 'queryUsers').resolves({ users });
+		sinon.stub(mockClient, 'queryChannels').resolves(channels);
+		sinon.stub(mockClient, 'search').resolves({ results, next: null });
 	});
 
 	describe('BaseSearchSource', () => {
@@ -977,7 +974,7 @@ describe('BaseSearchSource and implementations', () => {
 		});
 
 		it('returns empty results if no user ID', async () => {
-			mockClient.userID = null;
+			mockClient.user = undefined;
 			messageSource.activate();
 			await messageSource.executeQuery('test');
 			expect(messageSource.items).to.be.empty;

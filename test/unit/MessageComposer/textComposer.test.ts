@@ -45,6 +45,7 @@ vi.mock('../../../src/utils', () => ({
   isLocalMessage: vi.fn().mockReturnValue(true),
   formatMessage: vi.fn().mockImplementation((msg) => msg),
   throttle: vi.fn().mockImplementation((fn) => fn),
+  getEnv: vi.fn(),
 }));
 
 const setup = ({

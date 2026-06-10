@@ -1264,7 +1264,7 @@ describe('OfflineSupportApi', () => {
             execute: false,
             reads: [
               {
-                last_read: lastReadDate.toString(),
+                last_read: lastReadDate,
                 last_read_message_id: lastReadMessageId,
                 unread_messages: 2,
                 user: client.user,
@@ -1295,7 +1295,7 @@ describe('OfflineSupportApi', () => {
             execute: false,
             reads: [
               {
-                last_read: lastReadDate.toString(),
+                last_read: lastReadDate,
                 last_read_message_id: lastReadMessageId,
                 unread_messages: 0,
                 user: client.user,
@@ -1337,7 +1337,7 @@ describe('OfflineSupportApi', () => {
             execute: false,
             reads: [
               {
-                last_read: lastReadDate.toString(),
+                last_read: lastReadDate,
                 last_read_message_id: lastReadMessageId,
                 unread_messages: 0,
                 user: client.user,

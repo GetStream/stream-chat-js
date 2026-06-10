@@ -27,8 +27,6 @@ const makeLocator = () => (timestampMs?: number) => {
   return m ? { timestampMs: m.ts, msgId: m.id } : null;
 };
 
-// ISO builders (service parses Date strings)
-const iso = (ts: number) => new Date(ts).toISOString();
 
 // Extract ids from user arrays for easier assertions
 const ids = (users: any[]) => users.map((u) => u.id);
@@ -52,13 +50,13 @@ describe('MessageDeliveryReadTracker', () => {
       const snapshot: ReadResponse[] = [
         {
           user: alice,
-          last_read: iso(2000),
-          last_delivered_at: iso(1000),
+          last_read: new Date(2000),
+          last_delivered_at: new Date(1000),
         },
         {
           user: bob,
-          last_read: iso(500),
-          last_delivered_at: iso(3000),
+          last_read: new Date(500),
+          last_delivered_at: new Date(3000),
         },
       ];
 
@@ -87,8 +85,8 @@ describe('MessageDeliveryReadTracker', () => {
       const snapshot: ReadResponse[] = [
         {
           user: ownUser,
-          last_read: iso(2000),
-          last_delivered_at: iso(1000),
+          last_read: new Date(2000),
+          last_delivered_at: new Date(1000),
         },
       ];
 
@@ -105,21 +103,21 @@ describe('MessageDeliveryReadTracker', () => {
       expect(p0).toBeNull();
 
       // first read at m3
-      tracker.onMessageRead({ user: carol, readAt: iso(3000) });
+      tracker.onMessageRead({ user: carol, readAt: new Date(3000) });
 
       const p1 = tracker.getUserProgress('carol')!;
       expect(p1.lastReadRef).toEqual(ref(3000));
       expect(p1.lastDeliveredRef).toEqual(ref(3000)); // bumped
 
       // older/equal reads are no-ops
-      tracker.onMessageRead({ user: carol, readAt: iso(2000) });
-      tracker.onMessageRead({ user: carol, readAt: iso(3000) });
+      tracker.onMessageRead({ user: carol, readAt: new Date(2000) });
+      tracker.onMessageRead({ user: carol, readAt: new Date(3000) });
       const p2 = tracker.getUserProgress('carol')!;
       expect(p2.lastReadRef).toEqual(ref(3000));
       expect(p2.lastDeliveredRef).toEqual(ref(3000));
 
       // later read moves forward and bumps delivered
-      tracker.onMessageRead({ user: carol, readAt: iso(4000) });
+      tracker.onMessageRead({ user: carol, readAt: new Date(4000) });
       const p3 = tracker.getUserProgress('carol')!;
       expect(p3.lastReadRef).toEqual(ref(4000));
       expect(p3.lastDeliveredRef).toEqual(ref(4000));
@@ -132,11 +130,11 @@ describe('MessageDeliveryReadTracker', () => {
       tracker = new MessageReceiptsTracker({ locateMessage: locator });
 
       const dave = U('dave');
-      tracker.onMessageRead({ user: dave, readAt: iso(4000) }); // unknown -> ignored
+      tracker.onMessageRead({ user: dave, readAt: new Date(4000) }); // unknown -> ignored
       expect(tracker.getUserProgress('dave')).toBeNull();
 
       // but a known read creates progress
-      tracker.onMessageRead({ user: dave, readAt: iso(2000) });
+      tracker.onMessageRead({ user: dave, readAt: new Date(2000) });
       const pd = tracker.getUserProgress('dave')!;
       expect(pd.lastReadRef).toEqual(ref(2000));
       expect(pd.lastDeliveredRef).toEqual(ref(2000));
@@ -146,7 +144,11 @@ describe('MessageDeliveryReadTracker', () => {
       const locator = vi.fn().mockImplementation(() => {});
       tracker = new MessageReceiptsTracker({ locateMessage: locator });
       const user = U('frank');
-      tracker.onMessageRead({ user, readAt: iso(3000), lastReadMessageId: 'X' }); // unknown -> ignored
+      tracker.onMessageRead({
+        user,
+        readAt: new Date(3000),
+        lastReadMessageId: 'X',
+      }); // unknown -> ignored
       expect(locator).not.toHaveBeenCalled();
       expect(tracker.getUserProgress('frank')).toStrictEqual({
         lastDeliveredRef: {
@@ -166,7 +168,7 @@ describe('MessageDeliveryReadTracker', () => {
 
     it('does not ignore own message.read events', () => {
       const ownUser = U(ownUserId);
-      tracker.onMessageRead({ user: ownUser, readAt: iso(2000) });
+      tracker.onMessageRead({ user: ownUser, readAt: new Date(2000) });
       expect(tracker.getUserProgress(ownUserId)!.user).toStrictEqual(ownUser);
     });
   });
@@ -175,26 +177,26 @@ describe('MessageDeliveryReadTracker', () => {
     it('creates user on first delivered; uses max(read, delivered)', () => {
       const eve = U('eve');
 
-      tracker.onMessageDelivered({ user: eve, deliveredAt: iso(2000) });
+      tracker.onMessageDelivered({ user: eve, deliveredAt: new Date(2000) });
       let progressEve = tracker.getUserProgress('eve')!;
       expect(progressEve.lastDeliveredRef).toEqual(ref(2000));
       expect(progressEve.lastReadRef.timestampMs).toBe(Number.NEGATIVE_INFINITY);
 
       // deliver older/equal -> no-op
-      tracker.onMessageDelivered({ user: eve, deliveredAt: iso(1000) });
-      tracker.onMessageDelivered({ user: eve, deliveredAt: iso(2000) });
+      tracker.onMessageDelivered({ user: eve, deliveredAt: new Date(1000) });
+      tracker.onMessageDelivered({ user: eve, deliveredAt: new Date(2000) });
       progressEve = tracker.getUserProgress('eve')!;
       expect(progressEve.lastDeliveredRef).toEqual(ref(2000));
 
       // if read goes ahead to m3, and a delivery arrives for m2,
       // newDelivered = max(read, deliveredEvent) = read (m3)
-      tracker.onMessageRead({ user: eve, readAt: iso(3000) });
+      tracker.onMessageRead({ user: eve, readAt: new Date(3000) });
       progressEve = tracker.getUserProgress('eve')!;
       expect(progressEve.lastReadRef).toEqual(ref(3000));
       expect(progressEve.lastDeliveredRef).toEqual(ref(3000)); // bumped by read
 
       // deliver at m4 -> moves forward
-      tracker.onMessageDelivered({ user: eve, deliveredAt: iso(4000) });
+      tracker.onMessageDelivered({ user: eve, deliveredAt: new Date(4000) });
       progressEve = tracker.getUserProgress('eve')!;
       expect(progressEve.lastDeliveredRef).toEqual(ref(4000));
       expect(progressEve.lastReadRef).toEqual(ref(3000));
@@ -206,10 +208,10 @@ describe('MessageDeliveryReadTracker', () => {
       tracker = new MessageReceiptsTracker({ locateMessage: locator });
 
       const frank = U('frank');
-      tracker.onMessageDelivered({ user: frank, deliveredAt: iso(3000) }); // unknown -> ignored
+      tracker.onMessageDelivered({ user: frank, deliveredAt: new Date(3000) }); // unknown -> ignored
       expect(tracker.getUserProgress('frank')).toBeNull();
 
-      tracker.onMessageDelivered({ user: frank, deliveredAt: iso(2000) }); // known -> creates
+      tracker.onMessageDelivered({ user: frank, deliveredAt: new Date(2000) }); // known -> creates
       const pf = tracker.getUserProgress('frank')!;
       expect(pf.lastDeliveredRef).toEqual(ref(2000));
     });
@@ -220,7 +222,7 @@ describe('MessageDeliveryReadTracker', () => {
       const user = U('frank');
       tracker.onMessageDelivered({
         user,
-        deliveredAt: iso(3000),
+        deliveredAt: new Date(3000),
         lastDeliveredMessageId: 'X',
       }); // unknown -> ignored
       expect(locator).not.toHaveBeenCalled();
@@ -242,7 +244,7 @@ describe('MessageDeliveryReadTracker', () => {
 
     it('does not ignore own message.delivered events', () => {
       const ownUser = U(ownUserId);
-      tracker.onMessageDelivered({ user: ownUser, deliveredAt: iso(2000) });
+      tracker.onMessageDelivered({ user: ownUser, deliveredAt: new Date(2000) });
       expect(tracker.getUserProgress(ownUserId)!.user).toStrictEqual(ownUser);
     });
   });
@@ -250,11 +252,15 @@ describe('MessageDeliveryReadTracker', () => {
   describe('onNotificationMarkUnread', () => {
     const user = U('u');
     it('moves lastRead backward to the event boundary and keeps delivered unchanged (no backward move)', () => {
-      tracker.onMessageRead({ user, readAt: iso(3000), lastReadMessageId: 'm3' });
+      tracker.onMessageRead({
+        user,
+        readAt: new Date(3000),
+        lastReadMessageId: 'm3',
+      });
 
       tracker.onNotificationMarkUnread({
         user,
-        lastReadAt: iso(2000),
+        lastReadAt: new Date(2000),
         lastReadMessageId: 'm2',
       });
 
@@ -274,10 +280,14 @@ describe('MessageDeliveryReadTracker', () => {
       // v delivered m4 and read m2
       tracker.onMessageDelivered({
         user,
-        deliveredAt: iso(4000),
+        deliveredAt: new Date(4000),
         lastDeliveredMessageId: 'm4',
       });
-      tracker.onMessageRead({ user, readAt: iso(2000), lastReadMessageId: 'm2' });
+      tracker.onMessageRead({
+        user,
+        readAt: new Date(2000),
+        lastReadMessageId: 'm2',
+      });
 
       let userProgress = tracker.getUserProgress(user.id)!;
       expect(userProgress.lastReadRef).toEqual(ref(2000));
@@ -296,12 +306,12 @@ describe('MessageDeliveryReadTracker', () => {
     });
 
     it('is a no-op when the provided last_read equals current lastReadRef', () => {
-      tracker.onMessageRead({ user, readAt: iso(3000) });
+      tracker.onMessageRead({ user, readAt: new Date(3000) });
       const before = structuredClone(tracker.getUserProgress(user.id)!);
 
       tracker.onNotificationMarkUnread({
         user,
-        lastReadAt: iso(3000),
+        lastReadAt: new Date(3000),
         lastReadMessageId: 'm3',
       });
 
@@ -316,7 +326,7 @@ describe('MessageDeliveryReadTracker', () => {
 
       tracker.onNotificationMarkUnread({
         user,
-        lastReadAt: iso(2000),
+        lastReadAt: new Date(2000),
         lastReadMessageId: 'm2',
       });
 
@@ -336,11 +346,11 @@ describe('MessageDeliveryReadTracker', () => {
       const c = U('c');
 
       // a: read m3, delivered m3
-      tracker.onMessageRead({ user: a, readAt: iso(3000) });
+      tracker.onMessageRead({ user: a, readAt: new Date(3000) });
       // b: delivered m3 only (not read)
-      tracker.onMessageDelivered({ user: b, deliveredAt: iso(3000) });
+      tracker.onMessageDelivered({ user: b, deliveredAt: new Date(3000) });
       // c: read m4, delivered m4
-      tracker.onMessageRead({ user: c, readAt: iso(4000) });
+      tracker.onMessageRead({ user: c, readAt: new Date(4000) });
 
       // Readers of m2 => a, c
       expect(ids(tracker.readersForMessage(ref(2000)))).toEqual(['a', 'c']);
@@ -356,8 +366,8 @@ describe('MessageDeliveryReadTracker', () => {
       const u1 = U('u1');
       const u2 = U('u2');
 
-      tracker.onMessageDelivered({ user: u1, deliveredAt: iso(2000) }); // delivered m2
-      tracker.onMessageRead({ user: u2, readAt: iso(3000) }); // read m3 (delivered m3)
+      tracker.onMessageDelivered({ user: u1, deliveredAt: new Date(2000) }); // delivered m2
+      tracker.onMessageRead({ user: u2, readAt: new Date(3000) }); // read m3 (delivered m3)
 
       // For m2:
       expect(tracker.hasUserDelivered(ref(2000), 'u1')).toBe(true);
@@ -383,21 +393,25 @@ describe('MessageDeliveryReadTracker', () => {
         const e = U('e'); // same for delivered side
 
         // a: read m2 -> delivered m2
-        tracker.onMessageRead({ user: a, readAt: iso(2000) });
+        tracker.onMessageRead({ user: a, readAt: new Date(2000) });
 
         // b: read m3 -> delivered m3
-        tracker.onMessageRead({ user: b, readAt: iso(3000) });
+        tracker.onMessageRead({ user: b, readAt: new Date(3000) });
 
         // c: delivered m3 only
-        tracker.onMessageDelivered({ user: c, deliveredAt: iso(3000) });
+        tracker.onMessageDelivered({ user: c, deliveredAt: new Date(3000) });
 
         // d: read at ts=3000 but with a different msgId "X" (tests plateau filtering by msgId)
-        tracker.onMessageRead({ user: d, readAt: iso(3000), lastReadMessageId: 'X' });
+        tracker.onMessageRead({
+          user: d,
+          readAt: new Date(3000),
+          lastReadMessageId: 'X',
+        });
 
         // e: delivered at ts=3000 but with a different msgId "X"
         tracker.onMessageDelivered({
           user: e,
-          deliveredAt: iso(3000),
+          deliveredAt: new Date(3000),
           lastDeliveredMessageId: 'X',
         });
 
@@ -418,12 +432,12 @@ describe('MessageDeliveryReadTracker', () => {
         const user = U('x');
 
         // x reads m2 -> last read m2 (and delivered m2)
-        tracker.onMessageRead({ user, readAt: iso(2000) });
+        tracker.onMessageRead({ user, readAt: new Date(2000) });
         expect(ids(tracker.usersWhoseLastReadIs(ref(2000)))).toEqual(['x']);
         expect(ids(tracker.usersWhoseLastDeliveredIs(ref(2000)))).toEqual(['x']);
 
         // x later reads m4 -> moves out of m2 group and into m4 group
-        tracker.onMessageRead({ user, readAt: iso(4000) });
+        tracker.onMessageRead({ user, readAt: new Date(4000) });
         expect(ids(tracker.usersWhoseLastReadIs(ref(2000)))).toEqual([]);
         expect(ids(tracker.usersWhoseLastReadIs(ref(4000)))).toEqual(['x']);
 
@@ -447,14 +461,14 @@ describe('MessageDeliveryReadTracker', () => {
       const y = U('y');
 
       // x reads m2, y reads m3
-      tracker.onMessageRead({ user: x, readAt: iso(2000) });
-      tracker.onMessageRead({ user: y, readAt: iso(3000) });
+      tracker.onMessageRead({ user: x, readAt: new Date(2000) });
+      tracker.onMessageRead({ user: y, readAt: new Date(3000) });
 
       // Readers of m2 -> x, y
       expect(ids(tracker.readersForMessage(ref(2000)))).toEqual(['x', 'y']);
 
       // now x reads m4 (moves past y)
-      tracker.onMessageRead({ user: x, readAt: iso(4000) });
+      tracker.onMessageRead({ user: x, readAt: new Date(4000) });
       // Readers of m3 -> x, y? Actually only x (m4) and y (m3) both >= m3
       expect(ids(tracker.readersForMessage(ref(3000)))).toEqual(['y', 'x']);
       // and of m4 -> x only

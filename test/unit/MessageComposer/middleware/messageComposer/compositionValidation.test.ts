@@ -29,7 +29,6 @@ const setupMiddleware = (
   const user = { id: 'user' };
   const client = new StreamChat('apiKey');
   client.user = user;
-  client.userID = user.id;
 
   const channelResponse = generateChannel();
   const channel = client.channel(

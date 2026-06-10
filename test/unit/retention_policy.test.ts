@@ -26,7 +26,7 @@ describe('Retention Policy Runs', () => {
         ],
       };
 
-      const postSpy = vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+      const postSpy = vi.spyOn(client.api, 'post').mockResolvedValue(mockResponse);
 
       const result = await client.getRetentionPolicyRuns();
 
@@ -55,7 +55,7 @@ describe('Retention Policy Runs', () => {
         ],
       };
 
-      const postSpy = vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+      const postSpy = vi.spyOn(client.api, 'post').mockResolvedValue(mockResponse);
 
       const options: GetRetentionPolicyRunsOptions = {
         filter_conditions: { policy: { $eq: 'inactive-channels' } },
@@ -83,7 +83,7 @@ describe('Retention Policy Runs', () => {
         ],
       };
 
-      const postSpy = vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+      const postSpy = vi.spyOn(client.api, 'post').mockResolvedValue(mockResponse);
 
       const options: GetRetentionPolicyRunsOptions = {
         filter_conditions: {
@@ -127,7 +127,7 @@ describe('Retention Policy Runs', () => {
         ],
       };
 
-      const postSpy = vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+      const postSpy = vi.spyOn(client.api, 'post').mockResolvedValue(mockResponse);
 
       const options: GetRetentionPolicyRunsOptions = {
         sort: [{ field: 'date', direction: -1 }],
@@ -155,7 +155,7 @@ describe('Retention Policy Runs', () => {
         next: 'next_cursor_value',
       };
 
-      const postSpy = vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+      const postSpy = vi.spyOn(client.api, 'post').mockResolvedValue(mockResponse);
 
       const options: GetRetentionPolicyRunsOptions = {
         limit: 1,
@@ -184,7 +184,7 @@ describe('Retention Policy Runs', () => {
         prev: 'prev_cursor_value',
       };
 
-      const postSpy = vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+      const postSpy = vi.spyOn(client.api, 'post').mockResolvedValue(mockResponse);
 
       const options: GetRetentionPolicyRunsOptions = {
         limit: 1,
@@ -215,7 +215,7 @@ describe('Retention Policy Runs', () => {
         next: 'abc123',
       };
 
-      const postSpy = vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+      const postSpy = vi.spyOn(client.api, 'post').mockResolvedValue(mockResponse);
 
       const options: GetRetentionPolicyRunsOptions = {
         filter_conditions: { policy: { $eq: 'old-messages' } },
@@ -240,7 +240,7 @@ describe('Retention Policy Runs', () => {
         runs: [],
       };
 
-      const postSpy = vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+      const postSpy = vi.spyOn(client.api, 'post').mockResolvedValue(mockResponse);
 
       const options: GetRetentionPolicyRunsOptions = {
         filter_conditions: { policy: { $eq: 'old-messages' } },

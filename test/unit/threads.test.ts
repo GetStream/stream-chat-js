@@ -17,7 +17,6 @@ import {
   ThreadFilters,
   ThreadSort,
 } from '../../src';
-import { THREAD_RESPONSE_RESERVED_KEYS } from '../../src/thread';
 
 import { describe, it, beforeEach, expect, afterEach } from 'vitest';
 
@@ -78,7 +77,7 @@ describe('Threads 2.0', () => {
       expect(thread.channel.state.members).to.have.keys([TEST_USER_ID]);
       expect(thread.id).to.equal(parentMessageResponse.id);
       // @ts-expect-error `name` is a custom property
-      expect(thread.channel.data?.name).to.equal(channelResponse.name);
+      expect(thread.channel._data?.name).to.equal(channelResponse.name);
     });
 
     describe('Methods', () => {
@@ -126,13 +125,13 @@ describe('Threads 2.0', () => {
           const optimisticMessage = generateMsg({
             parent_id: parentMessageResponse.id,
             text: 'aaa',
-            created_at: '2020-01-01T00:00:00Z',
+            created_at: new Date('2020-01-01T00:00:00Z'),
           }) as MessageResponse;
 
           const message = generateMsg({
             parent_id: parentMessageResponse.id,
             text: 'bbb',
-            created_at: '2020-01-01T00:00:10Z',
+            created_at: new Date('2020-01-01T00:00:10Z'),
           }) as MessageResponse;
 
           const thread = createTestThread({
@@ -141,7 +140,7 @@ describe('Threads 2.0', () => {
           const updatedMessage: MessageResponse = {
             ...optimisticMessage,
             text: 'ccc',
-            created_at: '2020-01-01T00:00:20Z',
+            created_at: new Date('2020-01-01T00:00:20Z'),
           };
 
           const stateBefore = thread.state.getLatestValue();
@@ -179,14 +178,16 @@ describe('Threads 2.0', () => {
             id: parentMessageResponse.id,
             text: 'aaa',
             reply_count: 10,
-            deleted_at: new Date().toISOString(),
+            deleted_at: new Date(),
           }) as MessageResponse;
 
           thread.updateParentMessageLocally({ message: updatedMessage });
 
           const stateAfter = thread.state.getLatestValue();
           expect(stateAfter.deletedAt).to.be.not.null;
-          expect(stateAfter.deletedAt!.toISOString()).to.equal(updatedMessage.deleted_at);
+          expect(stateAfter.deletedAt!.toISOString()).to.equal(
+            updatedMessage.deleted_at!.toISOString(),
+          );
           expect(stateAfter.replyCount).to.equal(updatedMessage.reply_count);
           expect(stateAfter.parentMessage.text).to.equal(updatedMessage.text);
         });
@@ -295,7 +296,7 @@ describe('Threads 2.0', () => {
             { length: 5 },
             (_, i) =>
               generateMsg({
-                created_at: new Date(createdAt + 1000 * i).toISOString(),
+                created_at: new Date(createdAt + 1000 * i),
               }) as MessageResponse,
           );
           const thread = createTestThread({ latest_replies: messages });
@@ -675,14 +676,13 @@ describe('Threads 2.0', () => {
           const customKey1 = uuidv4();
           const customKey2 = uuidv4();
 
-          const thread = createTestThread({ [customKey1]: 1, [customKey2]: { key: 1 } });
+          const thread = createTestThread({
+            custom: { [customKey1]: 1, [customKey2]: { key: 1 } },
+          });
           thread.registerSubscriptions();
 
           const stateBefore = thread.state.getLatestValue();
 
-          expect(stateBefore.custom).to.not.have.keys(
-            Object.keys(THREAD_RESPONSE_RESERVED_KEYS),
-          );
           expect(stateBefore.custom).to.have.keys([customKey1, customKey2]);
           expect(stateBefore.custom[customKey1]).to.equal(1);
 
@@ -692,16 +692,13 @@ describe('Threads 2.0', () => {
               channelResponse,
               generateMsg({ id: parentMessageResponse.id }),
               {
-                [customKey1]: 2,
+                custom: { [customKey1]: 2 },
               },
             ),
           });
 
           const stateAfter = thread.state.getLatestValue();
 
-          expect(stateAfter.custom).to.not.have.keys(
-            Object.keys(THREAD_RESPONSE_RESERVED_KEYS),
-          );
           expect(stateAfter.custom).to.not.have.property(customKey2);
           expect(stateAfter.custom[customKey1]).to.equal(2);
         });
@@ -737,6 +734,7 @@ describe('Threads 2.0', () => {
 
           client.dispatchEvent({
             type: 'user.watching.stop',
+            cid: channelResponse.cid,
             channel: channelResponse,
             user: { id: TEST_USER_ID },
           });
@@ -978,7 +976,7 @@ describe('Threads 2.0', () => {
             (_, i) =>
               generateMsg({
                 parent_id: parentMessageResponse.id,
-                created_at: new Date(createdAt + 1000 * i).toISOString(),
+                created_at: new Date(createdAt + 1000 * i),
               }) as MessageResponse,
           );
           const thread = createTestThread({ latest_replies: messages });
@@ -1008,7 +1006,7 @@ describe('Threads 2.0', () => {
             (_, i) =>
               generateMsg({
                 parent_id: parentMessageResponse.id,
-                created_at: new Date(createdAt + 1000 * i).toISOString(),
+                created_at: new Date(createdAt + 1000 * i),
               }) as MessageResponse,
           );
           const thread = createTestThread({ latest_replies: messages });
@@ -1024,7 +1022,7 @@ describe('Threads 2.0', () => {
             message: {
               ...messageToDelete,
               type: 'deleted',
-              deleted_at: deletedAt.toISOString(),
+              deleted_at: deletedAt,
             },
           });
 
@@ -1049,7 +1047,7 @@ describe('Threads 2.0', () => {
 
           const parentMessage = generateMsg({
             id: thread.id,
-            deleted_at: new Date().toISOString(),
+            deleted_at: new Date(),
             type: 'deleted',
           }) as MessageResponse;
 
@@ -1061,10 +1059,12 @@ describe('Threads 2.0', () => {
           const stateAfter = thread.state.getLatestValue();
 
           expect(stateAfter.deletedAt).to.be.a('date');
-          expect(stateAfter.deletedAt!.toISOString()).to.equal(parentMessage.deleted_at);
+          expect(stateAfter.deletedAt!.toISOString()).to.equal(
+            parentMessage.deleted_at!.toISOString(),
+          );
           expect(stateAfter.parentMessage.deleted_at).to.be.a('date');
           expect(stateAfter.parentMessage.deleted_at!.toISOString()).to.equal(
-            parentMessage.deleted_at,
+            parentMessage.deleted_at!.toISOString(),
           );
         });
       });
