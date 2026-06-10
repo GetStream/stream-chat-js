@@ -665,7 +665,7 @@ export class StableWSConnection {
     // 30 seconds is the recommended interval (messenger uses this)
     this.healthCheckTimeoutRef = setTimeout(() => {
       // send the healthcheck.., server replies with a health check event
-      const data = [{ type: 'health.check', client_id: this.client.clientID }];
+      const data = [{ type: 'health.check', client_id: this.client.clientId }];
       // try to send on the connection
       try {
         this.ws?.send(JSON.stringify(data));

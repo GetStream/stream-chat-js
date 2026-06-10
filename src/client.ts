@@ -9,19 +9,8 @@ import { Channel } from './channel';
 import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
 import { UploadManager } from './uploadManager';
-import {
-  DevToken,
-  InvalidWebhookError,
-  JWTUserToken,
-  parseSns as parseSnsHelper,
-  parseSqs as parseSqsHelper,
-  verifyAndParseWebhook as verifyAndParseWebhookHelper,
-  verifySignature,
-} from './signing';
 import { TokenManager, type TokenManagerMinimalUser } from './token_manager';
 import { WSConnectionFallback } from './connection_fallback';
-import { ChannelBatchUpdater } from './channel_batch_updater';
-import { Segment } from './segment';
 import { isWSFailure } from './errors';
 import { ApiClient } from './api-client';
 import {
@@ -41,19 +30,11 @@ import type {
   AddUserGroupMembersOptions,
   AddUserGroupMembersResponse,
   APIResponse,
-  AppSettings,
   BannedUsersFilters,
   BannedUsersPaginationOptions,
   BannedUsersSort,
   BanUserOptions,
   BaseDeviceFields,
-  BlockList,
-  BlockListResponse,
-  CampaignData,
-  CampaignFilters,
-  CampaignQueryOptions,
-  CampaignResponse,
-  CampaignSort,
   ChannelAPIResponse,
   ChannelData,
   ChannelFilters,
@@ -62,73 +43,26 @@ import type {
   ChannelResponse,
   ChannelSort,
   ChannelStateOptions,
-  CheckPushResponse,
-  CheckSNSResponse,
-  CheckSQSResponse,
   CombinedEvents,
   Configs,
   ConnectAPIResponse,
-  CreateChannelOptions,
-  CreateChannelResponse,
-  CreateCommandOptions,
-  CreateCommandResponse,
-  CreateImportOptions,
-  CreateImportResponse,
-  CreateImportURLResponse,
   CreatePollData,
-  CreatePredefinedFilterOptions,
   CreateReminderOptions,
-  CreateRoleAPIResponse,
   CreateUserGroupOptions,
   CreateUserGroupResponse,
-  CustomPermissionOptions,
-  DeactivateUsersOptions,
-  DeleteCommandResponse,
   DeleteMessageOptions,
-  DeleteRetentionPolicyResponse,
   DeleteUserGroupOptions,
-  DeleteUserOptions,
   DeviceIdentifier,
   DraftFilters,
   DraftSort,
-  EndpointName,
   EventHandler,
-  ExportChannelOptions,
-  ExportChannelRequest,
-  ExportChannelResponse,
-  ExportChannelStatusResponse,
-  ExportUsersRequest,
-  ExportUsersResponse,
   FlagMessageResponse,
-  FlagReportsFilters,
-  FlagReportsPaginationOptions,
-  FlagReportsResponse,
-  FlagsFilters,
-  FlagsPaginationOptions,
-  FlagsResponse,
   FlagUserResponse,
-  GetCampaignOptions,
-  GetChannelTypeResponse,
-  GetCommandResponse,
-  GetHookEventsResponse,
-  GetImportResponse,
   GetMessageOptions,
-  GetRateLimitsResponse,
-  GetRetentionPolicyResponse,
-  GetRetentionPolicyRunsOptions,
-  GetRetentionPolicyRunsResponse,
   GetThreadAPIResponse,
   GetThreadOptions,
-  GetUnreadCountBatchAPIResponse,
   GetUserGroupOptions,
   GetUserGroupResponse,
-  ListChannelResponse,
-  ListCommandsResponse,
-  ListImportsPaginationOptions,
-  ListImportsResponse,
-  ListPredefinedFiltersOptions,
-  ListPredefinedFiltersResponse,
-  ListRolesAPIResponse,
   LocalMessage,
   Logger,
   MarkChannelsReadOptions,
@@ -146,36 +80,20 @@ import type {
   PartialPollUpdate,
   PartialThreadUpdate,
   PartialUserUpdate,
-  PermissionAPIResponse,
-  PermissionsAPIResponse,
   PollAnswersAPIResponse,
   PollData,
   PollOptionData,
   PollSort,
   PollVoteData,
-  PredefinedFilterResponse,
-  Product,
   PushPreference,
   PushProvider,
-  PushProviderConfig,
-  PushProviderID,
-  PushProviderListResponse,
-  PushProviderUpsertResponse,
   QueryChannelsAPIResponse,
   QueryFutureChannelBansOptions,
-  QueryMessageHistoryFilters,
-  QueryMessageHistoryOptions,
-  QueryMessageHistoryResponse,
-  QueryMessageHistorySort,
   QueryPollsFilters,
   QueryPollsOptions,
   QueryReactionsAPIResponse,
   QueryReactionsOptions,
   QueryRemindersOptions,
-  QuerySegmentsOptions,
-  QuerySegmentTargetsFilter,
-  QueryTeamUsageStatsOptions,
-  QueryTeamUsageStatsResponse,
   QueryThreadsOptions,
   QueryUserGroupsOptions,
   QueryUserGroupsResponse,
@@ -184,57 +102,30 @@ import type {
   ReactionFilters,
   ReactionResponse,
   ReactionSort,
-  ReactivateUserOptions,
-  ReactivateUsersOptions,
   ReminderAPIResponse,
   RemoveUserGroupMembersOptions,
   RemoveUserGroupMembersResponse,
   RequireLiteral,
-  ReviewFlagReportOptions,
-  ReviewFlagReportResponse,
   SdkIdentifier,
   SearchAPIResponse,
   SearchMessageSortBase,
   SearchOptions,
   SearchPayload,
-  SearchRolesAPIResponse,
-  SearchRolesOptions,
   SearchUserGroupsOptions,
   SearchUserGroupsResponse,
-  SegmentData,
-  SegmentResponse,
-  SegmentTargetsResponse,
-  SegmentType,
-  SetRetentionPolicyResponse,
-  SortParam,
   StreamChatOptions,
   SyncOptions,
   SyncResponse,
-  TaskResponse,
-  TaskStatus,
-  TestPushDataInput,
-  TestSNSDataInput,
-  TestSQSDataInput,
   TokenOrProvider,
-  TranslateResponse,
   UnBanUserOptions,
-  UpdateChannelsBatchOptions,
-  UpdateChannelsBatchResponse,
-  UpdateChannelTypeRequest,
-  UpdateChannelTypeResponse,
-  UpdateCommandOptions,
-  UpdateCommandResponse,
   UpdateLocationPayload,
   UpdateMessageAPIResponse,
   UpdateMessageOptions,
   UpdatePollAPIResponse,
-  UpdatePredefinedFilterOptions,
   UpdateReminderOptions,
-  UpdateSegmentData,
   UpdateUserGroupOptions,
   UpdateUserGroupResponse,
   UpsertPushPreferencesResponse,
-  UserCustomEvent,
   UserFilters,
   UserOptions,
   UserResponse,
@@ -317,6 +208,9 @@ export class StreamChat {
    * @internal
    */
   uploadManager: UploadManager;
+  /**
+   * @private
+   */
   _user?: ClientUser;
   appSettingsPromise?: Promise<StreamResponse<Gen_GetApplicationResponse>>;
   activeChannels: {
@@ -332,7 +226,7 @@ export class StreamChat {
   baseURL?: string;
   browser: boolean;
   cleaningIntervalRef?: NodeJS.Timeout;
-  clientID?: string;
+  clientId?: string;
   configs: Configs;
   key: string;
   listeners: Map<ListenerKeys, Set<EventHandler>>;
@@ -371,14 +265,23 @@ export class StreamChat {
   get anonymous(): boolean {
     return this.user?.anon ?? false;
   }
-  get userId(): string | undefined {
+  get userId() {
     return this.user?.id;
   }
   /**
    * @deprecated Use `userId` instead.
    */
-  get userID(): string | undefined {
+  get userID() {
     return this.user?.id;
+  }
+  /**
+   * @deprecated Use `clientId` instead.
+   */
+  get clientID() {
+    return this.clientId;
+  }
+  set clientID(id: string | undefined) {
+    this.clientId = id;
   }
   insightMetrics: InsightMetrics;
   defaultWSTimeoutWithFallback: number;
@@ -611,10 +514,6 @@ export class StreamChat {
     this.offlineDb = offlineDBInstance;
   }
 
-  devToken(userId: string) {
-    return DevToken(userId);
-  }
-
   getAuthType() {
     return this.anonymous ? 'anonymous' : 'jwt';
   }
@@ -819,116 +718,28 @@ export class StreamChat {
       return;
     }
 
-    this.clientID = `${this.userId}--${randomId()}`;
+    this.clientId = `${this.userId}--${randomId()}`;
     this.wsPromise = this.connect();
     this._startCleaning();
     return this.wsPromise;
   };
-
   /**
-   * updateAppSettings - updates application settings
-   *
-   * @param {AppSettings} options App settings.
-   * IE: {
-      'apn_config': {
-        'auth_type': 'token',
-        'auth_key": fs.readFileSync(
-          './apn-push-auth-key.p8',
-          'utf-8',
-        ),
-        'key_id': 'keyid',
-        'team_id': 'teamid',
-        'notification_template": 'notification handlebars template',
-        'bundle_id': 'com.apple.your.app',
-        'development': true
-      },
-      'firebase_config': {
-        'server_key': 'server key from fcm',
-        'notification_template': 'notification handlebars template',
-        'data_template': 'data handlebars template',
-        'apn_template': 'apn notification handlebars template under v2'
-      },
-      'webhook_url': 'https://acme.com/my/awesome/webhook/',
-      'event_hooks': [
-        {
-          'hook_type': 'webhook',
-          'enabled': true,
-          'event_types': ['message.new'],
-          'webhook_url': 'https://acme.com/my/awesome/webhook/'
-        },
-        {
-          'hook_type': 'sqs',
-          'enabled': true,
-          'event_types': ['message.new'],
-          'sqs_url': 'https://sqs.us-east-1.amazonaws.com/1234567890/my-queue',
-          'sqs_auth_type': 'key',
-          'sqs_key': 'my-access-key',
-          'sqs_secret': 'my-secret-key'
-        }
-      ]
-    }
+   * Revokes tokens for a connected user issued before given time
    */
-  async updateAppSettings(options: AppSettings) {
-    const apn_config = options.apn_config;
-    if (apn_config?.p12_cert) {
-      options = {
-        ...options,
-        apn_config: {
-          ...apn_config,
-          p12_cert: Buffer.from(apn_config.p12_cert).toString('base64'),
-        },
-      };
-    }
-    return await this.api.patch<APIResponse>(this.baseURL + '/app', options);
-  }
-
-  _normalizeDate = (before: Date | string | null): string | null => {
-    if (before instanceof Date) {
-      before = before.toISOString();
-    }
-
-    if (before === '') {
-      throw new Error(
-        "Don't pass blank string for since, use null instead if resetting the token revoke",
-      );
-    }
-
-    return before;
-  };
-
-  /**
-   * Revokes all tokens on application level issued before given time
-   */
-  async revokeTokens(before: Date | string | null) {
-    return await this.updateAppSettings({
-      revoke_tokens_issued_before: this._normalizeDate(before),
-    });
-  }
-
-  /**
-   * Revokes token for a user issued before given time
-   */
-  async revokeUserToken(userID: string, before?: Date | null) {
-    return await this.revokeUsersToken([userID], before);
-  }
-
-  /**
-   * Revokes tokens for a list of users issued before given time
-   */
-  async revokeUsersToken(userIds: string[], before?: Date | null) {
+  async revokeTokens(before?: Date | null) {
     if (!before) {
       before = new Date();
     }
 
-    const users: PartialUserUpdate[] = [];
-    for (const userId of userIds) {
-      users.push({
-        id: userId,
+    const users: PartialUserUpdate[] = [
+      {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        id: this.userId!,
         set: {
           revoke_tokens_issued_before: before,
         },
-      });
-    }
+      },
+    ];
 
     return await this.partialUpdateUsers(users);
   }
@@ -938,64 +749,6 @@ export class StreamChat {
    */
   async getAppSettings() {
     return await (this.appSettingsPromise = this.chatApi.getApp());
-  }
-
-  /**
-   * testPushSettings - Tests the push settings for a user with a random chat message and the configured push templates
-   *
-   * @param {string} userID User ID. If user has no devices, it will error
-   * @param {TestPushDataInput} [data] Overrides for push templates/message used
-   *  IE: {
-   messageID: 'id-of-message', // will error if message does not exist
-   apnTemplate: '{}', // if app doesn't have apn configured it will error
-   firebaseTemplate: '{}', // if app doesn't have firebase configured it will error
-   firebaseDataTemplate: '{}', // if app doesn't have firebase configured it will error
-   skipDevices: true, // skip config/device checks and sending to real devices
-   pushProviderName: 'staging' // one of your configured push providers
-   pushProviderType: 'apn' // one of supported provider types
-   }
-   */
-  async testPushSettings(userID: string, data: TestPushDataInput = {}) {
-    return await this.api.post<CheckPushResponse>(this.baseURL + '/check_push', {
-      user_id: userID,
-      ...(data.messageID ? { message_id: data.messageID } : {}),
-      ...(data.apnTemplate ? { apn_template: data.apnTemplate } : {}),
-      ...(data.firebaseTemplate ? { firebase_template: data.firebaseTemplate } : {}),
-      ...(data.firebaseDataTemplate
-        ? { firebase_data_template: data.firebaseDataTemplate }
-        : {}),
-      ...(data.skipDevices ? { skip_devices: true } : {}),
-      ...(data.pushProviderName ? { push_provider_name: data.pushProviderName } : {}),
-      ...(data.pushProviderType ? { push_provider_type: data.pushProviderType } : {}),
-    });
-  }
-
-  /**
-   * testSQSSettings - Tests that the given or configured SQS configuration is valid
-   *
-   * @param {TestSQSDataInput} [data] Overrides SQS settings for testing if needed
-   *  IE: {
-   sqs_key: 'auth_key',
-   sqs_secret: 'auth_secret',
-   sqs_url: 'url_to_queue',
-   }
-   */
-  async testSQSSettings(data: TestSQSDataInput = {}) {
-    return await this.api.post<CheckSQSResponse>(this.baseURL + '/check_sqs', data);
-  }
-
-  /**
-   * testSNSSettings - Tests that the given or configured SNS configuration is valid
-   *
-   * @param {TestSNSDataInput} [data] Overrides SNS settings for testing if needed
-   *  IE: {
-   sns_key: 'auth_key',
-   sns_secret: 'auth_secret',
-   sns_topic_arn: 'topic_to_publish_to',
-   }
-   */
-  async testSNSSettings(data: TestSNSDataInput = {}) {
-    return await this.api.post<CheckSNSResponse>(this.baseURL + '/check_sns', data);
   }
 
   /**
@@ -1088,32 +841,6 @@ export class StreamChat {
       ...guestUser
     } = response.user;
     return await this.connectUser(guestUser as UserResponse, response.access_token);
-  }
-
-  /**
-   * createToken - Creates a token to authenticate this user. This function is used server side.
-   * The resulting token should be passed to the client side when the users registers or logs in.
-   *
-   * @param {string} userID The User ID
-   * @param {number} [exp] The expiration time for the token expressed in the number of seconds since the epoch
-   *
-   * @return {string} Returns a token
-   */
-  createToken(userID: string, exp?: number, iat?: number) {
-    if (this.secret == null) {
-      throw Error(`tokens can only be created server-side using the API Secret`);
-    }
-    const extra: { exp?: number; iat?: number } = {};
-
-    if (exp) {
-      extra.exp = exp;
-    }
-
-    if (iat) {
-      extra.iat = iat;
-    }
-
-    return JWTUserToken(this.secret, userID, extra, {});
   }
 
   /**
@@ -1531,10 +1258,10 @@ export class StreamChat {
       );
     }
     if (!this.wsBaseURL) {
-      throw Error('Websocket base url not set');
+      throw Error('Property wsBaseURL is not set');
     }
-    if (!this.clientID) {
-      throw Error('clientID is not set');
+    if (!this.clientId) {
+      throw Error('Property clientId is not set');
     }
 
     if (!this.wsConnection && (this.options.warmUp || this.options.enableInsights)) {
@@ -2176,20 +1903,6 @@ export class StreamChat {
   }
 
   /**
-   * getUnreadCountBatch - Returns unread counts for multiple users at once. Only works server side.
-   *
-   * @param {string[]} [userIds] List of user IDs to fetch unread counts for.
-   *
-   * @return {<GetUnreadCountBatchAPIResponse>}
-   */
-  async getUnreadCountBatch(userIds: string[]) {
-    return await this.api.post<GetUnreadCountBatchAPIResponse>(
-      this.baseURL + '/unread_batch',
-      { user_ids: userIds },
-    );
-  }
-
-  /**
    * setPushPreferences - Applies the list of push preferences.
    *
    * @param {PushPreference[]} A list of push preferences.
@@ -2211,44 +1924,6 @@ export class StreamChat {
    */
   async removeDevice(id: string) {
     return await this.chatApi.deleteDevice({ id });
-  }
-
-  /**
-   * getRateLimits - Returns the rate limits quota and usage for the current app, possibly filter for a specific platform and/or endpoints.
-   * Only available server-side.
-   *
-   * @param {object} [params] The params for the call. If none of the params are set, all limits for all platforms are returned.
-   * @returns {Promise<GetRateLimitsResponse>}
-   */
-  getRateLimits(params?: {
-    android?: boolean;
-    endpoints?: EndpointName[];
-    ios?: boolean;
-    serverSide?: boolean;
-    web?: boolean;
-  }) {
-    const { serverSide, web, android, ios, endpoints } = params || {};
-    return this.api.get<GetRateLimitsResponse>(this.baseURL + '/rate_limits', {
-      server_side: serverSide,
-      web,
-      android,
-      ios,
-      endpoints: endpoints ? endpoints.join(',') : undefined,
-    });
-  }
-
-  /**
-   * getHookEvents - Get available events for hooks (webhook, SQS, and SNS)
-   *
-   * @param {Product[]} [products] Optional array of products to filter events by (e.g., [Product.Chat, Product.Video])
-   * @returns {Promise<GetHookEventsResponse>} Response containing available hook events
-   */
-  async getHookEvents(products?: Product[]) {
-    const params = products && products.length > 0 ? { product: products.join(',') } : {};
-    return await this.api.get<GetHookEventsResponse>(
-      this.baseURL + '/hook/events',
-      params,
-    );
   }
 
   _addChannelConfig({ cid, config }: ChannelResponse) {
@@ -2475,104 +2150,6 @@ export class StreamChat {
     return await this.chatApi.updateUsersPartial({ users });
   }
 
-  async deleteUser(
-    userId: string,
-    params?: {
-      delete_conversation_channels?: boolean;
-      hard_delete?: boolean;
-      mark_messages_deleted?: boolean;
-    },
-  ) {
-    return await this.api.delete<
-      APIResponse & { user: UserResponse } & {
-        task_id?: string;
-      }
-    >(this.baseURL + `/users/${encodeURIComponent(userId)}`, params);
-  }
-
-  /**
-   * restoreUsers - Restore soft deleted users
-   *
-   * @param {string[]} userIds which users to restore
-   *
-   * @return {APIResponse} An API response
-   */
-  async restoreUsers(userIds: string[]) {
-    return await this.api.post<APIResponse>(this.baseURL + `/users/restore`, {
-      user_ids: userIds,
-    });
-  }
-
-  /**
-   * reactivateUser - Reactivate one user
-   *
-   * @param {string} userId which user to reactivate
-   * @param {ReactivateUserOptions} [options]
-   *
-   * @return {UserResponse} Reactivated user
-   */
-  async reactivateUser(userId: string, options?: ReactivateUserOptions) {
-    return await this.api.post<APIResponse & { user: UserResponse }>(
-      this.baseURL + `/users/${encodeURIComponent(userId)}/reactivate`,
-      { ...options },
-    );
-  }
-
-  /**
-   * reactivateUsers - Reactivate many users asynchronously
-   *
-   * @param {string[]} userIds which users to reactivate
-   * @param {ReactivateUsersOptions} [options]
-   *
-   * @return {TaskResponse} A task ID
-   */
-  async reactivateUsers(userIds: string[], options?: ReactivateUsersOptions) {
-    return await this.api.post<APIResponse & TaskResponse>(
-      this.baseURL + `/users/reactivate`,
-      { user_ids: userIds, ...options },
-    );
-  }
-
-  /**
-   * deactivateUser - Deactivate one user
-   *
-   * @param {string} userId which user to deactivate
-   * @param {DeactivateUsersOptions} [options]
-   *
-   * @return {UserResponse} Deactivated user
-   */
-  async deactivateUser(userId: string, options?: DeactivateUsersOptions) {
-    return await this.api.post<APIResponse & { user: UserResponse }>(
-      this.baseURL + `/users/${encodeURIComponent(userId)}/deactivate`,
-      { ...options },
-    );
-  }
-
-  /**
-   * deactivateUsers - Deactivate many users asynchronously
-   *
-   * @param {string[]} userIds which users to deactivate
-   * @param {DeactivateUsersOptions} [options]
-   *
-   * @return {TaskResponse} A task ID
-   */
-  async deactivateUsers(userIds: string[], options?: DeactivateUsersOptions) {
-    return await this.api.post<APIResponse & TaskResponse>(
-      this.baseURL + `/users/deactivate`,
-      { user_ids: userIds, ...options },
-    );
-  }
-
-  async exportUser(userId: string, options?: Record<string, string>) {
-    return await this.api.get<
-      APIResponse & {
-        messages: MessageResponse[];
-        reactions: ReactionResponse[];
-        user: UserResponse;
-      }
-    >(this.baseURL + `/users/${encodeURIComponent(userId)}/export`, { ...options });
-  }
-
   /** banUser - bans a user from all channels
    *
    * @param {string} targetUserId
@@ -2670,14 +2247,12 @@ export class StreamChat {
   /** muteUser - mutes a user
    *
    * @param {string} targetId
-   * @param {string} [userId] Only used with serverside auth
    * @param {MuteUserOptions} [options]
    * @returns {Promise<MuteUserResponse>}
    */
-  async muteUser(targetId: string, userId?: string, options: MuteUserOptions = {}) {
+  async muteUser(targetId: string, options: MuteUserOptions = {}) {
     return await this.api.post<MuteUserResponse>(this.baseURL + '/moderation/mute', {
       target_id: targetId,
-      ...(userId ? { user_id: userId } : {}),
       ...options,
     });
   }
@@ -2685,13 +2260,11 @@ export class StreamChat {
   /** unmuteUser - unmutes a user
    *
    * @param {string} targetId
-   * @param {string} [currentUserId] Only used with serverside auth
    * @returns {Promise<APIResponse>}
    */
-  async unmuteUser(targetId: string, currentUserId?: string) {
+  async unmuteUser(targetId: string) {
     return await this.api.post<APIResponse>(this.baseURL + '/moderation/unmute', {
       target_id: targetId,
-      ...(currentUserId ? { user_id: currentUserId } : {}),
     });
   }
 
@@ -2714,13 +2287,11 @@ export class StreamChat {
   /**
    * flagMessage - flag a message
    * @param {string} targetMessageId
-   * @param {string} [options.user_id] currentUserID, only used with serverside auth
+   * @param {object} [options]
+   * @param {string} [options.reason] reason for flagging
    * @returns {Promise<APIResponse>}
    */
-  async flagMessage(
-    targetMessageId: string,
-    options: { reason?: string; user_id?: string } = {},
-  ) {
+  async flagMessage(targetMessageId: string, options: { reason?: string } = {}) {
     return await this.api.post<FlagMessageResponse>(this.baseURL + '/moderation/flag', {
       target_message_id: targetMessageId,
       ...options,
@@ -2730,10 +2301,11 @@ export class StreamChat {
   /**
    * flagUser - flag a user
    * @param {string} targetId
-   * @param {string} [options.user_id] currentUserID, only used with serverside auth
+   * @param {object} [options]
+   * @param {string} [options.reason] reason for flagging
    * @returns {Promise<APIResponse>}
    */
-  async flagUser(targetId: string, options: { reason?: string; user_id?: string } = {}) {
+  async flagUser(targetId: string, options: { reason?: string } = {}) {
     return await this.api.post<FlagUserResponse>(this.baseURL + '/moderation/flag', {
       target_user_id: targetId,
       ...options,
@@ -2743,128 +2315,39 @@ export class StreamChat {
   /**
    * unflagMessage - unflag a message
    * @param {string} targetMessageId
-   * @param {string} [options.user_id] currentUserID, only used with serverside auth
    * @returns {Promise<APIResponse>}
    */
-  async unflagMessage(targetMessageId: string, options: { user_id?: string } = {}) {
+  async unflagMessage(targetMessageId: string) {
     return await this.api.post<FlagMessageResponse>(this.baseURL + '/moderation/unflag', {
       target_message_id: targetMessageId,
-      ...options,
     });
   }
 
   /**
    * unflagUser - unflag a user
    * @param {string} targetId
-   * @param {string} [options.user_id] currentUserID, only used with serverside auth
    * @returns {Promise<APIResponse>}
    */
-  async unflagUser(targetId: string, options: { user_id?: string } = {}) {
+  async unflagUser(targetId: string) {
     return await this.api.post<FlagUserResponse>(this.baseURL + '/moderation/unflag', {
       target_user_id: targetId,
-      ...options,
     });
-  }
-
-  /**
-   * _queryFlags - Query flags.
-   *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
-   *
-   * @private
-   * @param {FlagsFilters} filterConditions MongoDB style filter conditions
-   * @param {FlagsPaginationOptions} options Option object, {limit: 10, offset:0}
-   *
-   * @return {Promise<FlagsResponse>} Flags Response
-   */
-  async _queryFlags(
-    filterConditions: FlagsFilters = {},
-    options: FlagsPaginationOptions = {},
-  ) {
-    // Return a list of flags
-    return await this.api.post<FlagsResponse>(this.baseURL + '/moderation/flags', {
-      filter_conditions: filterConditions,
-      ...options,
-    });
-  }
-
-  /**
-   * _queryFlagReports - Query flag reports.
-   *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
-   *
-   * @private
-   * @param {FlagReportsFilters} filterConditions MongoDB style filter conditions
-   * @param {FlagReportsPaginationOptions} options Option object, {limit: 10, offset:0}
-   *
-   * @return {Promise<FlagReportsResponse>} Flag Reports Response
-   */
-  async _queryFlagReports(
-    filterConditions: FlagReportsFilters = {},
-    options: FlagReportsPaginationOptions = {},
-  ) {
-    // Return a list of message flags
-    return await this.api.post<FlagReportsResponse>(
-      this.baseURL + '/moderation/reports',
-      {
-        filter_conditions: filterConditions,
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * _reviewFlagReport - review flag report
-   *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
-   *
-   * @private
-   * @param {string} [id] flag report to review
-   * @param {string} [reviewResult] flag report review result
-   * @param {string} [options.user_id] currentUserID, only used with serverside auth
-   * @param {string} [options.review_details] custom information about review result
-   * @returns {Promise<ReviewFlagReportResponse>>}
-   */
-  async _reviewFlagReport(
-    id: string,
-    reviewResult: string,
-    options: ReviewFlagReportOptions = {},
-  ) {
-    return await this.api.patch<ReviewFlagReportResponse>(
-      this.baseURL + `/moderation/reports/${encodeURIComponent(id)}`,
-      {
-        review_result: reviewResult,
-        ...options,
-      },
-    );
   }
 
   /**
    * unblockMessage - unblocks message blocked by automod
    *
-   *
    * @param {string} targetMessageId
-   * @param {string} [options.user_id] currentUserID, only used with serverside auth
    * @returns {Promise<APIResponse>}
    */
-  async unblockMessage(targetMessageId: string, options: { user_id?: string } = {}) {
+  async unblockMessage(targetMessageId: string) {
     return await this.api.post<APIResponse>(
       this.baseURL + '/moderation/unblock_message',
       {
         target_message_id: targetMessageId,
-        ...options,
       },
     );
   }
-
-  // alias for backwards compatibility
-  _unblockMessage = this.unblockMessage;
 
   /**
    * @deprecated use markChannelsRead instead
@@ -2888,64 +2371,6 @@ export class StreamChat {
     await this.chatApi.markChannelsRead(data);
   }
 
-  createCommand(data: CreateCommandOptions) {
-    return this.api.post<CreateCommandResponse>(this.baseURL + '/commands', data);
-  }
-
-  getCommand(name: string) {
-    return this.api.get<GetCommandResponse>(
-      this.baseURL + `/commands/${encodeURIComponent(name)}`,
-    );
-  }
-
-  updateCommand(name: string, data: UpdateCommandOptions) {
-    return this.api.put<UpdateCommandResponse>(
-      this.baseURL + `/commands/${encodeURIComponent(name)}`,
-      data,
-    );
-  }
-
-  deleteCommand(name: string) {
-    return this.api.delete<DeleteCommandResponse>(
-      this.baseURL + `/commands/${encodeURIComponent(name)}`,
-    );
-  }
-
-  listCommands() {
-    return this.api.get<ListCommandsResponse>(this.baseURL + `/commands`);
-  }
-
-  createChannelType(data: CreateChannelOptions) {
-    const channelData = Object.assign({}, { commands: ['all'] }, data);
-    return this.api.post<CreateChannelResponse>(
-      this.baseURL + '/channeltypes',
-      channelData,
-    );
-  }
-
-  getChannelType(channelType: string) {
-    return this.api.get<GetChannelTypeResponse>(
-      this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`,
-    );
-  }
-
-  updateChannelType(channelType: string, data: UpdateChannelTypeRequest) {
-    return this.api.put<UpdateChannelTypeResponse>(
-      this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`,
-      data,
-    );
-  }
-
-  deleteChannelType(channelType: string) {
-    return this.api.delete<APIResponse>(
-      this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`,
-    );
-  }
-
-  listChannelTypes() {
-    return this.api.get<ListChannelResponse>(this.baseURL + `/channeltypes`);
-  }
-
   /**
    * translateMessage - adds the translation to the message
    *
@@ -2962,26 +2387,6 @@ export class StreamChat {
       id: messageId,
       language,
     });
-  }
-
-  /**
-   * translate - translates the given text to provided language
-   *
-   * @param {string} text
-   * @param {string} destinationLanguage
-   * @param {string} sourceLanguage
-   *
-   * @return {TranslateResponse} Response that includes the message
-   */
-  async translate(text: string, destinationLanguage: string, sourceLanguage: string) {
-    return await this.api.post<APIResponse & TranslateResponse>(
-      this.baseURL + `/translate`,
-      {
-        text,
-        source_language: sourceLanguage,
-        destination_language: destinationLanguage,
-      },
-    );
   }
 
   /**
@@ -3027,52 +2432,38 @@ export class StreamChat {
    * pinMessage - pins the message
    * @param {string | { id: string }} messageOrMessageId message object or message id
    * @param {undefined|null|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
-   * @param {undefined|string | { id: string }} [pinnedBy] who will appear as a user who pinned a message. Only for server-side use. Provide `undefined` when pinning message client-side
    * @param {undefined|number|string|Date} pinnedAt date when message should be pinned. It affects the order of pinned messages. Use negative number to set relative time in the past, string or Date to set exact date of pin
    */
   pinMessage(
     messageOrMessageId: string | { id: string },
     timeoutOrExpirationDate?: null | number | string | Date,
-    pinnedBy?: string | { id: string },
     pinnedAt?: number | string | Date,
   ) {
     const messageId = this._validateAndGetMessageId(
       messageOrMessageId,
-      'Please specify the message id when calling unpinMessage',
+      'Please specify the message id when calling pinMessage',
     );
-    return this.partialUpdateMessage(
-      messageId,
-      {
-        set: {
-          pinned: true,
-          pin_expires: this._normalizeExpiration(timeoutOrExpirationDate),
-          pinned_at: this._normalizeExpiration(pinnedAt),
-        },
-      } as unknown as PartialMessageUpdate,
-      pinnedBy,
-    );
+    return this.partialUpdateMessage(messageId, {
+      set: {
+        pinned: true,
+        pin_expires: this._normalizeExpiration(timeoutOrExpirationDate),
+        pinned_at: this._normalizeExpiration(pinnedAt),
+      },
+    } as unknown as PartialMessageUpdate);
   }
 
   /**
    * unpinMessage - unpins the message that was previously pinned
    * @param {string | { id: string }} messageOrMessageId message object or message id
-   * @param {string | { id: string }} [userId]
    */
-  unpinMessage(
-    messageOrMessageId: string | { id: string },
-    userId?: string | { id: string },
-  ) {
+  unpinMessage(messageOrMessageId: string | { id: string }) {
     const messageId = this._validateAndGetMessageId(
       messageOrMessageId,
       'Please specify the message id when calling unpinMessage',
     );
-    return this.partialUpdateMessage(
-      messageId,
-      {
-        set: { pinned: false },
-      } as unknown as PartialMessageUpdate,
-      userId,
-    );
+    return this.partialUpdateMessage(messageId, {
+      set: { pinned: false },
+    } as unknown as PartialMessageUpdate);
   }
 
   /**
@@ -3141,64 +2532,17 @@ export class StreamChat {
   async partialUpdateMessage(
     id: string,
     partialMessageObject: PartialMessageUpdate,
-    partialUserOrUserId?: string | { id: string },
     options?: UpdateMessageOptions,
   ) {
     if (!id) {
       throw Error('Please specify the message.id when calling partialUpdateMessage');
     }
 
-    let user: { id: string } | undefined = undefined;
-
-    if (typeof partialUserOrUserId === 'string') {
-      user = { id: partialUserOrUserId };
-    } else if (typeof partialUserOrUserId?.id === 'string') {
-      user = { id: partialUserOrUserId.id };
-    }
-
-    return await this.api.put<UpdateMessageAPIResponse>(
-      this.baseURL + `/messages/${encodeURIComponent(id)}`,
-      {
-        ...partialMessageObject,
-        ...options,
-        user,
-      },
-    );
-  }
-
-  /**
-   * Updates message fields without storing them in the database, only sends update event.
-   *
-   * Available only on the server-side.
-   *
-   * @param messageId the message id to update.
-   * @param partialMessageObject the message payload.
-   * @param partialUserOrUserId the user id linked to this action.
-   * @param options additional options.
-   */
-  async ephemeralUpdateMessage(
-    messageId: string,
-    partialMessageObject: PartialMessageUpdate,
-    partialUserOrUserId?: string | { id: string },
-    options?: UpdateMessageOptions,
-  ) {
-    if (!messageId) throw Error('messageId is required');
-
-    let user: { id: string } | undefined = undefined;
-    if (typeof partialUserOrUserId === 'string') {
-      user = { id: partialUserOrUserId };
-    } else if (typeof partialUserOrUserId?.id === 'string') {
-      user = { id: partialUserOrUserId.id };
-    }
-
-    return await this.api.patch<UpdateMessageAPIResponse>(
-      `${this.baseURL}/messages/${encodeURIComponent(messageId)}/ephemeral`,
-      {
-        ...partialMessageObject,
-        ...options,
-        user,
-      },
-    );
+    return await this.chatApi.updateMessagePartial({
+      id,
+      ...partialMessageObject,
+      ...options,
+    });
   }
 
   /**
@@ -3265,17 +2609,11 @@ export class StreamChat {
         : (optionsOrHardDelete ?? {})
     ) as DeleteMessageOptions;
 
-    let params = {};
-    if (hardDelete) {
-      params = { hard: true };
-    }
-    if (deleteForMe) {
-      params = { ...params, delete_for_me: true };
-    }
-    const result = await this.api.delete<APIResponse & { message: MessageResponse }>(
-      this.baseURL + `/messages/${encodeURIComponent(messageId)}`,
-      params,
-    );
+    const result = await this.chatApi.deleteMessage({
+      id: messageId,
+      hard: hardDelete,
+      delete_for_me: deleteForMe,
+    });
 
     // necessary to populate the below values as the server does not return the message in the response as deleted
     if (deleteForMe) {
@@ -3283,25 +2621,6 @@ export class StreamChat {
       result.message.type = 'deleted';
     }
     return result;
-  }
-
-  /**
-   * undeleteMessage - Undelete a message
-   *
-   * undeletes a message that was previous soft deleted. Hard deleted messages
-   * cannot be undeleted. This is only allowed to be called from server-side
-   * clients.
-   *
-   * @param {string} messageId The id of the message to undelete
-   * @param {string} userId The id of the user who undeleted the message
-   *
-   * @return {{ message: MessageResponse }} Response that includes the message
-   */
-  async undeleteMessage(messageId: string, userId: string) {
-    return await this.api.post<APIResponse & { message: MessageResponse }>(
-      this.baseURL + `/messages/${encodeURIComponent(messageId)}/undelete`,
-      { undeleted_by: userId },
-    );
   }
 
   async getMessage(messageId: string, options?: GetMessageOptions) {
@@ -3433,10 +2752,10 @@ export class StreamChat {
       }
     }
 
-    return await this.api.patch<GetThreadAPIResponse>(
-      `${this.baseURL}/threads/${encodeURIComponent(messageId)}`,
-      partialThreadObject,
-    );
+    return await this.chatApi.updateThreadPartial({
+      message_id: messageId,
+      ...partialThreadObject,
+    });
   }
 
   getUserAgent() {
@@ -3516,154 +2835,6 @@ export class StreamChat {
       client_request_id,
     });
 
-  /**
-   * checks signature of a request
-   * @param {string | Buffer} rawBody
-   * @param {string} signature from HTTP header
-   * @returns {boolean}
-   */
-  verifyWebhook(requestBody: string | Buffer, xSignature: string) {
-    return !!this.secret && verifySignature(requestBody, xSignature, this.secret);
-  }
-
-  /**
-   * Verify and parse an HTTP webhook event.
-   *
-   * Decompresses `rawBody` when gzipped (detected from the body bytes),
-   * verifies the `X-Signature` header against the app's API secret, and
-   * returns the parsed `Event`. Works whether or not Stream is currently
-   * compressing payloads for this app, and stays correct behind
-   * middleware that auto-decompresses the request.
-   *
-   * @param rawBody Raw HTTP request body bytes Stream signed
-   * @param signature Value of the `X-Signature` header
-   * @throws {InvalidWebhookError} When the signature does not match or
-   *   the gzip envelope is malformed.
-   */
-  verifyAndParseWebhook(rawBody: string | Buffer, signature: string) {
-    if (!this.secret) {
-      throw new InvalidWebhookError(
-        'cannot verify webhook signature without an API secret on the client',
-      );
-    }
-    return verifyAndParseWebhookHelper(rawBody, signature, this.secret);
-  }
-
-  /**
-   * Parse an SQS firehose event: decodes the message `Body` (base64 +
-   * optional gzip) and returns the parsed `Event`. No HMAC verification
-   * (Stream does not sign SQS bodies).
-   *
-   * @param messageBody SQS message `Body` string
-   * @throws {InvalidWebhookError} When the base64 / gzip envelope is malformed.
-   */
-  parseSqs(messageBody: string) {
-    return parseSqsHelper(messageBody);
-  }
-
-  /**
-   * Parse an SNS-delivered event (unwraps envelope JSON when needed, then
-   * same decode path as SQS). No HMAC verification.
-   *
-   * @param notificationBody Raw SNS POST body or pre-extracted `Message` string
-   * @throws {InvalidWebhookError} When the envelope cannot be decoded.
-   */
-  parseSns(notificationBody: string) {
-    return parseSnsHelper(notificationBody);
-  }
-
-  /** getPermission - gets the definition for a permission
-   *
-   * @param {string} name
-   * @returns {Promise<PermissionAPIResponse>}
-   */
-  getPermission(name: string) {
-    return this.api.get<PermissionAPIResponse>(
-      `${this.baseURL}/permissions/${encodeURIComponent(name)}`,
-    );
-  }
-
-  /** createPermission - creates a custom permission
-   *
-   * @param {CustomPermissionOptions} permissionData the permission data
-   * @returns {Promise<APIResponse>}
-   */
-  createPermission(permissionData: CustomPermissionOptions) {
-    return this.api.post<APIResponse>(`${this.baseURL}/permissions`, {
-      ...permissionData,
-    });
-  }
-
-  /** updatePermission - updates an existing custom permission
-   *
-   * @param {string} id
-   * @param {Omit<CustomPermissionOptions, 'id'>} permissionData the permission data
-   * @returns {Promise<APIResponse>}
-   */
-  updatePermission(id: string, permissionData: Omit<CustomPermissionOptions, 'id'>) {
-    return this.api.put<APIResponse>(
-      `${this.baseURL}/permissions/${encodeURIComponent(id)}`,
-      {
-        ...permissionData,
-      },
-    );
-  }
-
-  /** deletePermission - deletes a custom permission
-   *
-   * @param {string} name
-   * @returns {Promise<APIResponse>}
-   */
-  deletePermission(name: string) {
-    return this.api.delete<APIResponse>(
-      `${this.baseURL}/permissions/${encodeURIComponent(name)}`,
-    );
-  }
-
-  /** listPermissions - returns the list of all permissions for this application
-   *
-   * @returns {Promise<APIResponse>}
-   */
-  listPermissions() {
-    return this.api.get<PermissionsAPIResponse>(`${this.baseURL}/permissions`);
-  }
-
-  /** createRole - creates a custom role
-   *
-   * @param {string} name the new role name
-   * @returns {Promise<APIResponse>}
-   */
-  createRole(name: string) {
-    return this.api.post<CreateRoleAPIResponse>(`${this.baseURL}/roles`, { name });
-  }
-
-  /** listRoles - returns the list of all roles for this application
-   *
-   * @returns {Promise<APIResponse>}
-   */
-  listRoles() {
-    return this.api.get<ListRolesAPIResponse>(`${this.baseURL}/roles`);
-  }
-
-  /** listRoles - returns the list of all roles for this application
-   *
-   * @returns {Promise<APIResponse>}
-   */
-  searchRoles(options: SearchRolesOptions) {
-    return this.api.get<SearchRolesAPIResponse>(`${this.baseURL}/roles/search`, options);
-  }
-
-  /** deleteRole - deletes a custom role
-   *
-   * @param {string} name the role name
-   * @returns {Promise<APIResponse>}
-   */
-  deleteRole(name: string) {
-    return this.api.delete<APIResponse>(
-      `${this.baseURL}/roles/${encodeURIComponent(name)}`,
-    );
-  }
-
   /** sync - returns all events that happened for a list of channels since last sync
    * @param {string[]} channel_cids list of channel CIDs
    * @param {string} last_sync_at last time the user was online and in sync. RFC3339 ie. "2020-05-06T15:05:01.207Z"
@@ -3672,462 +2843,11 @@ export class StreamChat {
    * @returns {Promise<SyncResponse>}
    */
   sync(channel_cids: string[], last_sync_at: string, options: SyncOptions = {}) {
-    return this.api.post<SyncResponse>(`${this.baseURL}/sync`, {
+    return this.chatApi.sync({
       channel_cids,
-      last_sync_at,
+      last_sync_at: new Date(last_sync_at),
       ...options,
     });
-  }
-
-  /**
-   * sendUserCustomEvent - Send a custom event to a user
-   *
-   * @param {string} targetUserID target user id
-   * @param {UserCustomEvent} event for example {type: 'friendship-request'}
-   *
-   * @return {Promise<APIResponse>} The Server Response
-   */
-  async sendUserCustomEvent(targetUserID: string, event: UserCustomEvent) {
-    return await this.api.post<APIResponse>(
-      `${this.baseURL}/users/${encodeURIComponent(targetUserID)}/event`,
-      {
-        event,
-      },
-    );
-  }
-
-  /**
-   * Creates a new block list
-   *
-   * @param {BlockList} blockList - The block list to create
-   * @param {string} blockList.name - The name of the block list
-   * @param {string[]} blockList.words - List of words to block
-   * @param {string} [blockList.team] - Team ID the block list belongs to
-   *
-   * @returns {Promise<APIResponse>} The server response
-   */
-  createBlockList(blockList: BlockList) {
-    return this.api.post<APIResponse>(`${this.baseURL}/blocklists`, blockList);
-  }
-
-  /**
-   * Lists all block lists
-   *
-   * @param {Object} [data] - Query parameters
-   * @param {string} [data.team] - Team ID to filter block lists by
-   *
-   * @returns {Promise<APIResponse & {blocklists: BlockListResponse[]}>} Response containing array of block lists
-   */
-  listBlockLists(data?: { team?: string }) {
-    return this.api.get<APIResponse & { blocklists: BlockListResponse[] }>(
-      `${this.baseURL}/blocklists`,
-      data,
-    );
-  }
-
-  /**
-   * Gets a specific block list
-   *
-   * @param {string} name - The name of the block list to retrieve
-   * @param {Object} [data] - Query parameters
-   * @param {string} [data.team] - Team ID that blocklist belongs to
-   *
-   * @returns {Promise<APIResponse & {blocklist: BlockListResponse}>} Response containing the block list
-   */
-  getBlockList(name: string, data?: { team?: string }) {
-    return this.api.get<APIResponse & { blocklist: BlockListResponse }>(
-      `${this.baseURL}/blocklists/${encodeURIComponent(name)}`,
-      data,
-    );
-  }
-
-  /**
-   * Updates an existing block list
-   *
-   * @param {string} name - The name of the block list to update
-   * @param {Object} data - The update data
-   * @param {string[]} data.words - New list of words to block
-   * @param {string} [data.team] - Team ID that blocklist belongs to
-   *
-   * @returns {Promise<APIResponse>} The server response
-   */
-  updateBlockList(name: string, data: { words: string[]; team?: string }) {
-    return this.api.put<APIResponse>(
-      `${this.baseURL}/blocklists/${encodeURIComponent(name)}`,
-      data,
-    );
-  }
-
-  /**
-   * Deletes a block list
-   *
-   * @param {string} name - The name of the block list to delete
-   * @param {Object} [data] - Query parameters
-   * @param {string} [data.team] - Team ID that blocklist belongs to
-   *
-   * @returns {Promise<APIResponse>} The server response
-   */
-  deleteBlockList(name: string, data?: { team?: string }) {
-    return this.api.delete<APIResponse>(
-      `${this.baseURL}/blocklists/${encodeURIComponent(name)}`,
-      data,
-    );
-  }
-
-  exportChannels(
-    request: Array<ExportChannelRequest>,
-    options: ExportChannelOptions = {},
-  ) {
-    const payload = { channels: request, ...options };
-    return this.api.post<APIResponse & ExportChannelResponse>(
-      `${this.baseURL}/export_channels`,
-      payload,
-    );
-  }
-
-  exportUsers(request: ExportUsersRequest) {
-    return this.api.post<APIResponse & ExportUsersResponse>(
-      `${this.baseURL}/export/users`,
-      request,
-    );
-  }
-
-  exportChannel(request: ExportChannelRequest, options?: ExportChannelOptions) {
-    return this.exportChannels([request], options);
-  }
-
-  getExportChannelStatus(id: string) {
-    return this.api.get<APIResponse & ExportChannelStatusResponse>(
-      `${this.baseURL}/export_channels/${encodeURIComponent(id)}`,
-    );
-  }
-
-  campaign(idOrData: string | CampaignData, data?: CampaignData) {
-    if (idOrData && typeof idOrData === 'object') {
-      return new Campaign(this, null, idOrData);
-    }
-
-    return new Campaign(this, idOrData, data);
-  }
-
-  /**
-   * channelBatchUpdater - Returns a ChannelBatchUpdater instance for batch channel operations
-   *
-   * @return {ChannelBatchUpdater} A ChannelBatchUpdater instance
-   */
-  channelBatchUpdater() {
-    return new ChannelBatchUpdater(this);
-  }
-
-  segment(type: SegmentType, idOrData: string | SegmentData, data?: SegmentData) {
-    if (typeof idOrData === 'string') {
-      return new Segment(this, type, idOrData, data);
-    }
-
-    return new Segment(this, type, null, idOrData);
-  }
-
-  validateServerSideAuth() {
-    if (!this.secret) {
-      throw new Error(
-        'This feature can be used server-side only. Please initialize the client with a secret to use this feature.',
-      );
-    }
-  }
-
-  /**
-   * createSegment - Creates a segment
-   *
-   * @private
-   * @param {SegmentType} type Segment type
-   * @param {string} id Segment ID
-   * @param {string} name Segment name
-   * @param {SegmentData} params Segment data
-   *
-   * @return {{segment: SegmentResponse} & APIResponse} The created Segment
-   */
-  createSegment(type: SegmentType, id: string | null, data?: SegmentData) {
-    this.validateServerSideAuth();
-    const body = {
-      id,
-      type,
-      ...data,
-    };
-    return this.api.post<{ segment: SegmentResponse }>(this.baseURL + `/segments`, body);
-  }
-
-  /**
-   * createUserSegment - Creates a user segment
-   *
-   * @param {string} id Segment ID
-   * @param {string} name Segment name
-   * @param {SegmentData} data Segment data
-   *
-   * @return {Segment} The created Segment
-   */
-  createUserSegment(id: string | null, data?: SegmentData) {
-    this.validateServerSideAuth();
-    return this.createSegment('user', id, data);
-  }
-
-  /**
-   * createChannelSegment - Creates a channel segment
-   *
-   * @param {string} id Segment ID
-   * @param {string} name Segment name
-   * @param {SegmentData} data Segment data
-   *
-   * @return {Segment} The created Segment
-   */
-  createChannelSegment(id: string | null, data?: SegmentData) {
-    this.validateServerSideAuth();
-    return this.createSegment('channel', id, data);
-  }
-
-  getSegment(id: string) {
-    this.validateServerSideAuth();
-    return this.api.get<{ segment: SegmentResponse } & APIResponse>(
-      this.baseURL + `/segments/${encodeURIComponent(id)}`,
-    );
-  }
-
-  /**
-   * updateSegment - Update a segment
-   *
-   * @param {string} id Segment ID
-   * @param {Partial<UpdateSegmentData>} data Data to update
-   *
-   * @return {Segment} Updated Segment
-   */
-  updateSegment(id: string, data: Partial<UpdateSegmentData>) {
-    this.validateServerSideAuth();
-    return this.api.put<{ segment: SegmentResponse }>(
-      this.baseURL + `/segments/${encodeURIComponent(id)}`,
-      data,
-    );
-  }
-
-  /**
-   * addSegmentTargets - Add targets to a segment
-   *
-   * @param {string} id Segment ID
-   * @param {string[]} targets Targets to add to the segment
-   *
-   * @return {APIResponse} API response
-   */
-  addSegmentTargets(id: string, targets: string[]) {
-    this.validateServerSideAuth();
-    const body = { target_ids: targets };
-    return this.api.post<APIResponse>(
-      this.baseURL + `/segments/${encodeURIComponent(id)}/addtargets`,
-      body,
-    );
-  }
-
-  querySegmentTargets(
-    id: string,
-    filter: QuerySegmentTargetsFilter | null = {},
-    sort: SortParam[] | null | [] = [],
-    options = {},
-  ) {
-    this.validateServerSideAuth();
-    return this.api.post<
-      { targets: SegmentTargetsResponse[]; next?: string } & APIResponse
-    >(this.baseURL + `/segments/${encodeURIComponent(id)}/targets/query`, {
-      filter: filter || {},
-      sort: sort || [],
-      ...options,
-    });
-  }
-  /**
-   * removeSegmentTargets - Remove targets from a segment
-   *
-   * @param {string} id Segment ID
-   * @param {string[]} targets Targets to add to the segment
-   *
-   * @return {APIResponse} API response
-   */
-  removeSegmentTargets(id: string, targets: string[]) {
-    this.validateServerSideAuth();
-    const body = { target_ids: targets };
-    return this.api.post<APIResponse>(
-      this.baseURL + `/segments/${encodeURIComponent(id)}/deletetargets`,
-      body,
-    );
-  }
-
-  /**
-   * querySegments - Query Segments
-   *
-   * @param {filter} filter MongoDB style filter conditions
-   * @param {QuerySegmentsOptions} options Options for sorting/paginating the results
-   *
-   * @return {Segment[]} Segments
-   */
-  querySegments(filter: {}, sort?: SortParam[], options: QuerySegmentsOptions = {}) {
-    this.validateServerSideAuth();
-    return this.api.post<
-      {
-        segments: SegmentResponse[];
-        next?: string;
-        prev?: string;
-      } & APIResponse
-    >(this.baseURL + `/segments/query`, {
-      filter,
-      sort,
-      ...options,
-    });
-  }
-
-  /**
-   * deleteSegment - Delete a Campaign Segment
-   *
-   * @param {string} id Segment ID
-   *
-   * @return {Promise<APIResponse>} The Server Response
-   */
-  deleteSegment(id: string) {
-    this.validateServerSideAuth();
-    return this.api.delete<APIResponse>(
-      this.baseURL + `/segments/${encodeURIComponent(id)}`,
-    );
-  }
-
-  /**
-   * segmentTargetExists - Check if a target exists in a segment
-   *
-   * @param {string} segmentId Segment ID
-   * @param {string} targetId Target ID
-   *
-   * @return {Promise<APIResponse>} The Server Response
-   */
-  segmentTargetExists(segmentId: string, targetId: string) {
-    this.validateServerSideAuth();
-    return this.api.get<APIResponse>(
-      this.baseURL +
-        `/segments/${encodeURIComponent(segmentId)}/target/${encodeURIComponent(targetId)}`,
-    );
-  }
-
-  /**
-   * createCampaign - Creates a Campaign
-   *
-   * @param {CampaignData} params Campaign data
-   *
-   * @return {Campaign} The Created Campaign
-   */
-  createCampaign(params: CampaignData) {
-    this.validateServerSideAuth();
-    return this.api.post<
-      {
-        campaign: CampaignResponse;
-        users: {
-          next?: string;
-          prev?: string;
-        };
-      } & APIResponse
-    >(this.baseURL + `/campaigns`, { ...params });
-  }
-
-  getCampaign(id: string, options?: GetCampaignOptions) {
-    this.validateServerSideAuth();
-    return this.api.get<
-      {
-        campaign: CampaignResponse;
-        users: {
-          next?: string;
-          prev?: string;
-        };
-      } & APIResponse
-    >(this.baseURL + `/campaigns/${encodeURIComponent(id)}`, { ...options?.users });
-  }
-
-  startCampaign(id: string, options?: { scheduledFor?: string; stopAt?: string }) {
-    this.validateServerSideAuth();
-    return this.api.post<
-      {
-        campaign: CampaignResponse;
-        users: {
-          next?: string;
-          prev?: string;
-        };
-      } & APIResponse
-    >(this.baseURL + `/campaigns/${encodeURIComponent(id)}/start`, {
-      scheduled_for: options?.scheduledFor,
-      stop_at: options?.stopAt,
-    });
-  }
-
-  /**
-   * queryCampaigns - Query Campaigns
-   *
-   *
-   * @return {Campaign[]} Campaigns
-   */
-  async queryCampaigns(
-    filter: CampaignFilters,
-    sort?: CampaignSort,
-    options?: CampaignQueryOptions,
-  ) {
-    this.validateServerSideAuth();
-    return await this.api.post<
-      {
-        campaigns: CampaignResponse[];
-        next?: string;
-        prev?: string;
-      } & APIResponse
-    >(this.baseURL + `/campaigns/query`, {
-      filter,
-      sort,
-      ...(options || {}),
-    });
-  }
-
-  /**
-   * updateCampaign - Update a Campaign
-   *
-   * @param {string} id Campaign ID
-   * @param {Partial<CampaignData>} params Campaign data
-   *
-   * @return {Campaign} Updated Campaign
-   */
-  updateCampaign(id: string, params: Partial<CampaignData>) {
-    this.validateServerSideAuth();
-    return this.api.put<{
-      campaign: CampaignResponse;
-      users: {
-        next?: string;
-        prev?: string;
-      };
-    }>(this.baseURL + `/campaigns/${encodeURIComponent(id)}`, params);
-  }
-
-  /**
-   * deleteCampaign - Delete a Campaign
-   *
-   * @param {string} id Campaign ID
-   *
-   * @return {Promise<APIResponse>} The Server Response
-   */
-  deleteCampaign(id: string) {
-    this.validateServerSideAuth();
-    return this.api.delete<APIResponse>(
-      this.baseURL + `/campaigns/${encodeURIComponent(id)}`,
-    );
-  }
-
-  /**
-   * stopCampaign - Stop a Campaign
-   *
-   * @param {string} id Campaign ID
-   *
-   * @return {Campaign} Stopped Campaign
-   */
-  stopCampaign(id: string) {
-    this.validateServerSideAuth();
-    return this.api.post<{ campaign: CampaignResponse }>(
-      this.baseURL + `/campaigns/${encodeURIComponent(id)}/stop`,
-    );
   }
 
   /**
@@ -4138,19 +2858,6 @@ export class StreamChat {
    */
   enrichURL(url: string) {
     return this.chatApi.getOG({ url });
-  }
-
-  /**
-   * getTask - Gets status of a long running task
-   *
-   * @param {string} id Task ID
-   *
-   * @return {TaskStatus} The task status
-   */
-  getTask(id: string) {
-    return this.api.get<APIResponse & TaskStatus>(
-      `${this.baseURL}/tasks/${encodeURIComponent(id)}`,
-    );
   }
 
   /**
@@ -4166,186 +2873,6 @@ export class StreamChat {
       cids,
       ...options,
     });
-  }
-
-  /**
-   * deleteUsers - Batch Delete Users
-   *
-   * @param {string[]} userIds which users to delete
-   * @param {DeleteUserOptions} options Configuration how to delete users
-   *
-   * @return {TaskResponse} A task ID
-   */
-  async deleteUsers(userIds: string[], options: DeleteUserOptions = {}) {
-    if (
-      typeof options.user !== 'undefined' &&
-      !['soft', 'hard', 'pruning'].includes(options.user)
-    ) {
-      throw new Error(
-        'Invalid delete user options. user must be one of [soft hard pruning]',
-      );
-    }
-    if (
-      typeof options.conversations !== 'undefined' &&
-      !['soft', 'hard'].includes(options.conversations)
-    ) {
-      throw new Error(
-        'Invalid delete user options. conversations must be one of [soft hard]',
-      );
-    }
-    if (
-      typeof options.messages !== 'undefined' &&
-      !['soft', 'hard', 'pruning'].includes(options.messages)
-    ) {
-      throw new Error(
-        'Invalid delete user options. messages must be one of [soft hard pruning]',
-      );
-    }
-    return await this.api.post<APIResponse & TaskResponse>(
-      this.baseURL + `/users/delete`,
-      {
-        user_ids: userIds,
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * _createImportURL - Create an Import upload url.
-   *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
-   *
-   * @private
-   * @param {string} filename filename of uploaded data
-   * @return {APIResponse & CreateImportResponse} An ImportTask
-   */
-  async _createImportURL(filename: string) {
-    return await this.api.post<APIResponse & CreateImportURLResponse>(
-      this.baseURL + `/import_urls`,
-      {
-        filename,
-      },
-    );
-  }
-
-  /**
-   * _createImport - Create an Import Task.
-   *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
-   *
-   * @private
-   * @param {string} path path of uploaded data
-   * @param {CreateImportOptions} options import options
-   * @return {APIResponse & CreateImportResponse} An ImportTask
-   */
-  async _createImport(path: string, options: CreateImportOptions = { mode: 'upsert' }) {
-    return await this.api.post<APIResponse & CreateImportResponse>(
-      this.baseURL + `/imports`,
-      {
-        path,
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * _getImport - Get an Import Task.
-   *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
-   *
-   * @private
-   * @param {string} id id of Import Task
-   *
-   * @return {APIResponse & GetImportResponse} An ImportTask
-   */
-  async _getImport(id: string) {
-    return await this.api.get<APIResponse & GetImportResponse>(
-      this.baseURL + `/imports/${encodeURIComponent(id)}`,
-    );
-  }
-
-  /**
-   * _listImports - Lists Import Tasks.
-   *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
-   *
-   * @private
-   * @param {ListImportsPaginationOptions} options pagination options
-   *
-   * @return {APIResponse & ListImportsResponse} An ImportTask
-   */
-  async _listImports(options: ListImportsPaginationOptions) {
-    return await this.api.get<APIResponse & ListImportsResponse>(
-      this.baseURL + `/imports`,
-      options,
-    );
-  }
-
-  /**
-   * upsertPushProvider - Create or Update a push provider
-   *
-   * Note: Works only for v2 push version is enabled on app settings.
-   *
-   * @param {PushProviderConfig} configuration of the provider you want to create or update
-   *
-   * @return {APIResponse & PushProviderUpsertResponse} A push provider
-   */
-  async upsertPushProvider(pushProvider: PushProviderConfig) {
-    return await this.api.post<APIResponse & PushProviderUpsertResponse>(
-      this.baseURL + `/push_providers`,
-      {
-        push_provider: pushProvider,
-      },
-    );
-  }
-
-  /**
-   * deletePushProvider - Delete a push provider
-   *
-   * Note: Works only for v2 push version is enabled on app settings.
-   *
-   * @param {PushProviderID} type and foreign id of the push provider to be deleted
-   *
-   * @return {APIResponse} An API response
-   */
-  async deletePushProvider({ type, name }: PushProviderID) {
-    return await this.api.delete<APIResponse>(
-      this.baseURL +
-        `/push_providers/${encodeURIComponent(type)}/${encodeURIComponent(name)}`,
-    );
-  }
-
-  /**
-   * listPushProviders - Get all push providers in the app
-   *
-   * Note: Works only for v2 push version is enabled on app settings.
-   *
-   * @return {APIResponse & PushProviderListResponse} A push provider
-   */
-  async listPushProviders() {
-    return await this.api.get<APIResponse & PushProviderListResponse>(
-      this.baseURL + `/push_providers`,
-    );
-  }
-
-  /**
-   * commits a pending message, making it visible in the channel and for other users
-   * @param id the message id
-   *
-   * @return {APIResponse & MessageResponse} The message
-   */
-  async commitMessage(id: string) {
-    return await this.api.post<APIResponse & MessageResponse>(
-      this.baseURL + `/messages/${encodeURIComponent(id)}/commit`,
-    );
   }
 
   /**
@@ -4552,7 +3079,6 @@ export class StreamChat {
    * @param filter
    * @param sort
    * @param options Option object, {limit: 10, offset:0}
-   * @param userId string The user id (only serverside)
    * @returns {APIResponse & PollAnswersAPIResponse} The poll votes
    */
   async queryPollAnswers(
@@ -4560,62 +3086,16 @@ export class StreamChat {
     filter: QueryVotesFilters = {},
     sort: VoteSort = [],
     options: QueryVotesOptions = {},
-    userId?: string,
   ): Promise<APIResponse & PollAnswersAPIResponse> {
-    const q = userId ? `?user_id=${userId}` : '';
-    return await this.api.post<APIResponse & PollAnswersAPIResponse>(
-      this.baseURL + `/polls/${encodeURIComponent(pollId)}/votes${q}`,
-      {
-        filter: { ...filter, is_answer: true },
-        sort: normalizeQuerySort(sort),
-        ...options,
+    return await this.chatApi.queryPollVotes({
+      poll_id: pollId,
+      sort: normalizeQuerySort(sort),
+      filter: {
+        ...filter,
+        is_answer: true,
       },
-    );
-  }
-
-  /**
-   * Query message history
-   * @param filter
-   * @param sort
-   * @param options Option object, {limit: 10}
-   * @returns {APIResponse & QueryMessageHistoryResponse} The message histories
-   */
-  async queryMessageHistory(
-    filter: QueryMessageHistoryFilters = {},
-    sort: QueryMessageHistorySort = [],
-    options: QueryMessageHistoryOptions = {},
-  ): Promise<APIResponse & QueryMessageHistoryResponse> {
-    return await this.api.post<APIResponse & QueryMessageHistoryResponse>(
-      this.baseURL + '/messages/history',
-      {
-        filter,
-        sort: normalizeQuerySort(sort),
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * updateFlags - reviews/unflags flagged message
-   *
-   * @param {string[]} message_ids list of message IDs
-   * @param {string} options Option object in case user ID is set to review all the flagged messages by the user
-   * @param {string} reviewed_by user ID who reviewed the flagged message
-   * @returns {APIResponse}
-   */
-  async updateFlags(
-    message_ids: string[],
-    reviewed_by: string,
-    options: { user_id?: string } = {},
-  ) {
-    return await this.api.post<APIResponse>(
-      this.baseURL + '/automod/v1/moderation/update_flags',
-      {
-        message_ids,
-        reviewed_by,
-        ...options,
-      },
-    );
+      ...options,
+    });
   }
 
   /**
@@ -4688,28 +3168,6 @@ export class StreamChat {
       sort: sort && normalizeQuerySort(sort),
       ...rest,
     });
-  }
-
-  /**
-   * queryTeamUsageStats - Queries team-level usage statistics from the warehouse database
-   *
-   * Returns all 16 metrics grouped by team with cursor-based pagination.
-   *
-   * Date Range Options (mutually exclusive):
-   * - Use 'month' parameter (YYYY-MM format) for monthly aggregated values
-   * - Use 'start_date'/'end_date' parameters (YYYY-MM-DD format) for daily breakdown
-   * - If neither provided, defaults to current month (monthly mode)
-   *
-   * This endpoint is server-side only.
-   *
-   * @param {QueryTeamUsageStatsOptions} options The options for querying team usage stats
-   * @returns {Promise<QueryTeamUsageStatsResponse>}
-   */
-  async queryTeamUsageStats(options: QueryTeamUsageStatsOptions = {}) {
-    return await this.api.post<QueryTeamUsageStatsResponse>(
-      `${this.baseURL}/stats/team_usage`,
-      options,
-    );
   }
 
   /**
@@ -4787,7 +3245,7 @@ export class StreamChat {
    * @return {Promise<APIResponse>} The server response
    */
   deleteFile(url: string) {
-    return this.api.delete<APIResponse>(`${this.baseURL}/uploads/file`, { url });
+    return this.chatApi.deleteFile({ url });
   }
 
   /**
@@ -4798,7 +3256,7 @@ export class StreamChat {
    * @return {Promise<APIResponse>} The server response
    */
   deleteImage(url: string) {
-    return this.api.delete<APIResponse>(`${this.baseURL}/uploads/image`, { url });
+    return this.chatApi.deleteImage({ url });
   }
 
   /**
@@ -4814,164 +3272,5 @@ export class StreamChat {
 
   syncDeliveredCandidates(collections: Channel[]) {
     this.messageDeliveryReporter.syncDeliveredCandidates(collections);
-  }
-
-  /**
-   *  Update Channels Batch
-   *
-   *  @param {UpdateChannelsBatchOptions} payload for updating channels in batch
-   *  @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
-   */
-  async updateChannelsBatch(payload: UpdateChannelsBatchOptions) {
-    return await this.api.put<APIResponse & UpdateChannelsBatchResponse>(
-      this.baseURL + `/channels/batch`,
-      payload,
-    );
-  }
-
-  /**
-   * createPredefinedFilter - Creates a new predefined filter (server-side only)
-   *
-   * @param {CreatePredefinedFilterOptions} options Predefined filter options
-   *
-   * @return {Promise<PredefinedFilterResponse>} The created predefined filter
-   */
-  async createPredefinedFilter<
-    F extends Record<string, unknown> = Record<string, unknown>,
-  >(options: CreatePredefinedFilterOptions<F>) {
-    this.validateServerSideAuth();
-    return await this.api.post<PredefinedFilterResponse<F>>(
-      `${this.baseURL}/predefined_filters`,
-      options,
-    );
-  }
-
-  /**
-   * getPredefinedFilter - Gets a predefined filter by name (server-side only)
-   *
-   * @param {string} name Predefined filter name
-   *
-   * @return {Promise<PredefinedFilterResponse>} The predefined filter
-   */
-  async getPredefinedFilter<F extends Record<string, unknown> = Record<string, unknown>>(
-    name: string,
-  ) {
-    this.validateServerSideAuth();
-    return await this.api.get<PredefinedFilterResponse<F>>(
-      `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
-    );
-  }
-
-  /**
-   * updatePredefinedFilter - Updates a predefined filter (server-side only)
-   *
-   * @param {string} name Predefined filter name
-   * @param {UpdatePredefinedFilterOptions} options Predefined filter options
-   *
-   * @return {Promise<PredefinedFilterResponse>} The updated predefined filter
-   */
-  async updatePredefinedFilter<
-    F extends Record<string, unknown> = Record<string, unknown>,
-  >(name: string, options: UpdatePredefinedFilterOptions<F>) {
-    this.validateServerSideAuth();
-    return await this.api.put<PredefinedFilterResponse<F>>(
-      `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
-      options,
-    );
-  }
-
-  /**
-   * deletePredefinedFilter - Deletes a predefined filter (server-side only)
-   *
-   * @param {string} name Predefined filter name
-   *
-   * @return {Promise<APIResponse>} The server response
-   */
-  async deletePredefinedFilter(name: string) {
-    this.validateServerSideAuth();
-    return await this.api.delete<APIResponse>(
-      `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
-    );
-  }
-
-  /**
-   * listPredefinedFilters - Lists all predefined filters (server-side only)
-   *
-   * @param {ListPredefinedFiltersOptions} options Query options
-   *
-   * @return {Promise<ListPredefinedFiltersResponse>} The list of predefined filters
-   */
-  async listPredefinedFilters<
-    F extends Record<string, unknown> = Record<string, unknown>,
-  >(options: ListPredefinedFiltersOptions = {}) {
-    this.validateServerSideAuth();
-    const { sort, ...paginationOptions } = options;
-    return await this.api.get<ListPredefinedFiltersResponse<F>>(
-      `${this.baseURL}/predefined_filters`,
-      {
-        ...paginationOptions,
-        ...(sort ? { sort: JSON.stringify(sort) } : {}),
-      },
-    );
-  }
-
-  /**
-   * setRetentionPolicy - Creates or updates a retention policy for the app.
-   * Server-side only.
-   *
-   * @param {string} policy The policy type ('old-messages' or 'inactive-channels')
-   * @param {number} maxAgeHours Max age in hours (24-43800)
-   * @returns {Promise<SetRetentionPolicyResponse>}
-   */
-  async setRetentionPolicy(policy: string, maxAgeHours: number) {
-    this.validateServerSideAuth();
-    return await this.api.post<SetRetentionPolicyResponse>(
-      this.baseURL + '/retention_policy',
-      { policy, max_age_hours: maxAgeHours },
-    );
-  }
-
-  /**
-   * deleteRetentionPolicy - Deletes a retention policy for the app.
-   * Server-side only.
-   *
-   * @param {string} policy The policy type ('old-messages' or 'inactive-channels')
-   * @returns {Promise<DeleteRetentionPolicyResponse>}
-   */
-  async deleteRetentionPolicy(policy: string) {
-    this.validateServerSideAuth();
-    return await this.api.post<DeleteRetentionPolicyResponse>(
-      this.baseURL + '/retention_policy/delete',
-      { policy },
-    );
-  }
-
-  /**
-   * getRetentionPolicy - Returns all retention policies configured for the app.
-   * Server-side only.
-   *
-   * @returns {Promise<GetRetentionPolicyResponse>}
-   */
-  async getRetentionPolicy() {
-    this.validateServerSideAuth();
-    return await this.api.get<GetRetentionPolicyResponse>(
-      this.baseURL + '/retention_policy',
-    );
-  }
-
-  /**
-   * getRetentionPolicyRuns - Returns filtered and sorted retention cleanup run history.
-   * Supports filter_conditions on 'policy' and 'date' fields.
-   * Server-side only.
-   *
-   * @param {GetRetentionPolicyRunsOptions} options Filter, sort, and pagination options
-   * @returns {Promise<GetRetentionPolicyRunsResponse>}
-   */
-  async getRetentionPolicyRuns(options: GetRetentionPolicyRunsOptions = {}) {
-    this.validateServerSideAuth();
-    return await this.api.post<GetRetentionPolicyRunsResponse>(
-      this.baseURL + '/retention_policy/runs',
-      options,
-    );
   }
 }

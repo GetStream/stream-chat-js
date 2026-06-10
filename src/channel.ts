@@ -43,7 +43,6 @@ import type {
   MessageSetType,
   PartialUpdateChannel,
   PartialUpdateMember,
-  PartialUpdateMemberAPIResponse,
   PinnedMessagePaginationOptions,
   PinnedMessagesSort,
   PollVoteData,
@@ -415,26 +414,6 @@ export class Channel {
     return await this.channelApi.updateMemberPartial({
       ...request,
     });
-  }
-
-  /**
-   * @deprecated Use `updateMemberPartial` instead
-   * partialUpdateMember - Partial update a member
-   *
-   * @param {string} user_id member user id
-   * @param {PartialUpdateMember}  updates
-   *
-   * @return {Promise<ChannelMemberResponse>} Updated member
-   */
-  async partialUpdateMember(user_id: string, updates: PartialUpdateMember) {
-    if (!user_id) {
-      throw Error('Please specify the user id');
-    }
-
-    return await this.getClient().api.patch<PartialUpdateMemberAPIResponse>(
-      this._channelURL() + `/member/${encodeURIComponent(user_id)}`,
-      updates,
-    );
   }
 
   /**
@@ -950,79 +929,47 @@ export class Channel {
    * await channel.archive({user_id: userId});
    *
    */
-  async archive(opts: { user_id?: string } = {}) {
-    const cli = this.getClient();
-    const uid = opts.user_id || cli.userId;
-    if (!uid) {
-      throw Error('A user_id is required for archiving a channel');
-    }
-    const resp = await this.partialUpdateMember(uid, { set: { archived: true } });
+  async archive() {
+    const resp = await this.updateMemberPartial({ set: { archived: true } });
     return resp.channel_member;
   }
 
   /**
    * unarchive - unarchives the current channel
-   * @param {{ user_id?: string }} opts user_id if called server side
    * @return {Promise<ChannelMemberResponse>} The server response
    *
    * example:
    * await channel.unarchive();
    *
-   * example server side:
-   * await channel.unarchive({user_id: userId});
-   *
    */
-  async unarchive(opts: { user_id?: string } = {}) {
-    const cli = this.getClient();
-    const uid = opts.user_id || cli.userId;
-    if (!uid) {
-      throw Error('A user_id is required for unarchiving a channel');
-    }
-    const resp = await this.partialUpdateMember(uid, { set: { archived: false } });
+  async unarchive() {
+    const resp = await this.updateMemberPartial({ set: { archived: false } });
     return resp.channel_member;
   }
 
   /**
    * pin - pins the current channel
-   * @param {{ user_id?: string }} opts user_id if called server side
    * @return {Promise<ChannelMemberResponse>} The server response
    *
    * example:
    * await channel.pin();
    *
-   * example server side:
-   * await channel.pin({user_id: userId});
-   *
    */
-  async pin(opts: { user_id?: string } = {}) {
-    const cli = this.getClient();
-    const uid = opts.user_id || cli.userId;
-    if (!uid) {
-      throw new Error('A user_id is required for pinning a channel');
-    }
-    const resp = await this.partialUpdateMember(uid, { set: { pinned: true } });
+  async pin() {
+    const resp = await this.updateMemberPartial({ set: { pinned: true } });
     return resp.channel_member;
   }
 
   /**
    * unpin - unpins the current channel
-   * @param {{ user_id?: string }} opts user_id if called server side
    * @return {Promise<ChannelMemberResponse>} The server response
    *
    * example:
    * await channel.unpin();
    *
-   * example server side:
-   * await channel.unpin({user_id: userId});
-   *
    */
-  async unpin(opts: { user_id?: string } = {}) {
-    const cli = this.getClient();
-    const uid = opts.user_id || cli.userId;
-    if (!uid) {
-      throw new Error('A user_id is required for unpinning a channel');
-    }
-    const resp = await this.partialUpdateMember(uid, { set: { pinned: false } });
+  async unpin() {
+    const resp = await this.updateMemberPartial({ set: { pinned: false } });
     return resp.channel_member;
   }
 
@@ -1319,13 +1266,13 @@ export class Channel {
   /**
    * getPinnedMessages - List list pinned messages of the channel
    *
-   * @param {PinnedMessagePaginationOptions & { user?: UserResponse; user_id?: string }} options Pagination params, ie {limit:10, id_lte: 10}
+   * @param {PinnedMessagePaginationOptions} options Pagination params, ie {limit:10, id_lte: 10}
    * @param {PinnedMessagesSort} sort defines sorting direction of pinned messages
    *
    * @return {Promise<GetRepliesAPIResponse>} A response with a list of messages
    */
   async getPinnedMessages(
-    options: PinnedMessagePaginationOptions & { user?: UserResponse; user_id?: string },
+    options: PinnedMessagePaginationOptions,
     sort: PinnedMessagesSort = [],
   ) {
     return await this.getClient().api.get<GetRepliesAPIResponse>(

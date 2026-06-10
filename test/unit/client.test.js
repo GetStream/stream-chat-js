@@ -110,15 +110,6 @@ describe('StreamChat getInstance', () => {
 		expect(requestSpy.mock.calls[0][0].headers).to.haveOwnProperty('Pragma', 'no-cache');
 	});
 
-	it('app settings do not mutate', async () => {
-		const client = new StreamChat('key', 'secret');
-		const cert = Buffer.from('test');
-		const options = { apn_config: { p12_cert: cert } };
-		await expect(client.updateAppSettings(options)).rejects.toThrow(/.*/);
-
-		expect(options.apn_config.p12_cert).to.be.eql(cert);
-	});
-
 	it('should correctly resolve _cacheEnabled', async () => {
 		const client1 = new StreamChat('key', 'secret', {
 			disableCache: true,
@@ -429,51 +420,6 @@ describe('Detect node environment', () => {
 		expect(warning).to.equal('');
 
 		console.warn = _warn;
-	});
-});
-
-describe('Client deleteUsers', () => {
-	it('should allow completely optional options', async () => {
-		const client = await getClientWithUser();
-
-		client.api.post = () => Promise.resolve();
-
-		await expect(client.deleteUsers(['_'])).resolves.toEqual();
-	});
-
-	it('delete types - options.conversations', async () => {
-		const client = await getClientWithUser();
-
-		client.api.post = () => Promise.resolve();
-
-		await expect(client.deleteUsers(['_'], { conversations: 'hard' })).resolves.toEqual();
-		await expect(client.deleteUsers(['_'], { conversations: 'soft' })).resolves.toEqual();
-		await expect(
-			client.deleteUsers(['_'], { conversations: 'pruning' }),
-		).rejects.toThrow();
-		await expect(client.deleteUsers(['_'], { conversations: '' })).rejects.toThrow();
-	});
-
-	it('delete types - options.messages', async () => {
-		const client = await getClientWithUser();
-
-		client.api.post = () => Promise.resolve();
-
-		await expect(client.deleteUsers(['_'], { messages: 'hard' })).resolves.toEqual();
-		await expect(client.deleteUsers(['_'], { messages: 'soft' })).resolves.toEqual();
-		await expect(client.deleteUsers(['_'], { messages: 'pruning' })).resolves.toEqual();
-		await expect(client.deleteUsers(['_'], { messages: '' })).rejects.toThrow();
-	});
-
-	it('delete types - options.user', async () => {
-		const client = await getClientWithUser();
-
-		client.api.post = () => Promise.resolve();
-
-		await expect(client.deleteUsers(['_'], { user: 'hard' })).resolves.toEqual();
-		await expect(client.deleteUsers(['_'], { user: 'soft' })).resolves.toEqual();
-		await expect(client.deleteUsers(['_'], { user: 'pruning' })).resolves.toEqual();
-		await expect(client.deleteUsers(['_'], { user: '' })).rejects.toThrow();
 	});
 });
 
@@ -1165,7 +1111,9 @@ describe('message deletion', () => {
 		await client.offlineDb.init(client.userID);
 
 		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
-		clientDeleteSpy = vi.spyOn(client.api, 'delete').mockResolvedValue({ message: {} });
+		clientDeleteSpy = vi
+			.spyOn(client.chatApi, 'deleteMessage')
+			.mockResolvedValue({ message: {} });
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
 	});
 
@@ -1295,79 +1243,51 @@ describe('message deletion', () => {
 	});
 
 	describe('_deleteMessage', () => {
-		it('should call delete with correct URL and no params when hardDelete is false/undefined', async () => {
+		it('should call deleteMessage with correct params when hardDelete is false/undefined', async () => {
 			await client._deleteMessage(messageId);
 
 			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
-			expect(clientDeleteSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/messages/${encodeURIComponent(messageId)}`,
-				{},
-			);
+			expect(clientDeleteSpy).toHaveBeenCalledWith({
+				id: messageId,
+				hard: undefined,
+				delete_for_me: undefined,
+			});
 		});
 
-		it('should call delete with hard=true param when hardDelete is true', async () => {
+		it('should call deleteMessage with hard=true when hardDelete is true', async () => {
 			await client._deleteMessage(messageId, true);
 
 			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
-			expect(clientDeleteSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/messages/${encodeURIComponent(messageId)}`,
-				{ hard: true },
-			);
+			expect(clientDeleteSpy).toHaveBeenCalledWith({
+				id: messageId,
+				hard: true,
+				delete_for_me: undefined,
+			});
 		});
 
-		it.each([
-			['{}', {}],
-			['{ hardDelete: true }', { hardDelete: true }],
-			['{ hardDelete: false }', { hardDelete: false }],
-			['{ deleteForMe: true }', { deleteForMe: true }],
-			['{ deleteForMe: false }', { deleteForMe: false }],
-			[
-				'{ hardDelete: false, deleteForMe: true }',
-				{ hardDelete: false, deleteForMe: true },
-			],
-			[
-				'{ hardDelete: true, deleteForMe: true }',
-				{ hardDelete: true, deleteForMe: true },
-			],
-			[
-				'{ hardDelete: false, deleteForMe: false }',
-				{ hardDelete: false, deleteForMe: false },
-			],
-			[
-				'{ hardDelete: false, deleteForMe: false }',
-				{ hardDelete: false, deleteForMe: false },
-			],
-		])('should parse delete options %s accordingly', async (_, options) => {
-			await client._deleteMessage(messageId, options);
+		it('should call deleteMessage with delete_for_me=true', async () => {
+			await client._deleteMessage(messageId, { deleteForMe: true });
 
-			const expectedParams =
-				Object.values(options).length === 2 && Object.values(options).every((val) => val)
-					? { delete_for_me: true, hard: true }
-					: Object.keys(options).length === 0
-						? {}
-						: options.deleteForMe
-							? { delete_for_me: true }
-							: options.hardDelete
-								? { hard: true }
-								: {};
 			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
-			expect(clientDeleteSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/messages/${encodeURIComponent(messageId)}`,
-				expectedParams,
-			);
+			expect(clientDeleteSpy).toHaveBeenCalledWith({
+				id: messageId,
+				hard: undefined,
+				delete_for_me: true,
+			});
 		});
 
-		it('should call delete with both hard and delete_for_me params when both are true', async () => {
+		it('should call deleteMessage with both hard and delete_for_me when both are true', async () => {
 			await client._deleteMessage(messageId, { deleteForMe: true, hardDelete: true });
 
 			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
-			expect(clientDeleteSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/messages/${encodeURIComponent(messageId)}`,
-				{ hard: true, delete_for_me: true },
-			);
+			expect(clientDeleteSpy).toHaveBeenCalledWith({
+				id: messageId,
+				hard: true,
+				delete_for_me: true,
+			});
 		});
 
-		it('should return the response from delete', async () => {
+		it('should return the response from deleteMessage', async () => {
 			clientDeleteSpy.mockResolvedValue({
 				message: { id: messageId },
 			});
@@ -1819,68 +1739,6 @@ describe('X-Stream-Client header', () => {
 		const userAgent = client.getUserAgent();
 
 		expect(userAgent).toMatchInlineSnapshot(`"deprecated"`);
-	});
-
-	describe('getHookEvents', () => {
-		let clientGetSpy;
-
-		beforeEach(() => {
-			clientGetSpy = vi.spyOn(client.api, 'get').mockResolvedValue({});
-		});
-
-		it('should call get with correct URL and no params when no products specified', async () => {
-			await client.getHookEvents();
-
-			expect(clientGetSpy).toHaveBeenCalledTimes(1);
-			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/hook/events`, {});
-		});
-
-		it('should call get with correct URL and empty params when empty products array specified', async () => {
-			await client.getHookEvents([]);
-
-			expect(clientGetSpy).toHaveBeenCalledTimes(1);
-			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/hook/events`, {});
-		});
-
-		it('should call get with product params when products specified', async () => {
-			await client.getHookEvents(['chat', 'video']);
-
-			expect(clientGetSpy).toHaveBeenCalledTimes(1);
-			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/hook/events`, {
-				product: 'chat,video',
-			});
-		});
-
-		it('should call get with single product param', async () => {
-			await client.getHookEvents(['chat']);
-
-			expect(clientGetSpy).toHaveBeenCalledTimes(1);
-			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/hook/events`, {
-				product: 'chat',
-			});
-		});
-
-		it('should return the response from get', async () => {
-			const mockResponse = {
-				events: [
-					{
-						name: 'message.new',
-						description: 'When a new message is added',
-						products: ['chat'],
-					},
-					{
-						name: 'call.created',
-						description: 'The call was created',
-						products: ['video'],
-					},
-				],
-			};
-			clientGetSpy.mockResolvedValue(mockResponse);
-
-			const result = await client.getHookEvents(['chat', 'video']);
-
-			expect(result).toEqual(mockResponse);
-		});
 	});
 });
 
