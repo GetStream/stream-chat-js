@@ -132,7 +132,7 @@ describe('reaction groups fallback', () => {
 			reaction_scores: scores,
 		});
 
-		expect(message.reaction_groups).to.deep.equal({
+		expect(message.reaction_groups).toMatchObject({
 			love: {
 				count: 1,
 				sum_scores: 1,

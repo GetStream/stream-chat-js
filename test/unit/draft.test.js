@@ -41,7 +41,7 @@ describe('Draft Messages', () => {
 
 	beforeEach(() => {
 		client = new StreamChat(apiKey);
-		client.userID = userID;
+		client.user = { id: userID };
 		let channelResponse = generateChannel({
 			channel: { id: channelID, name: 'Test channel', members: [] },
 		}).channel;
@@ -150,7 +150,7 @@ describe('create draft flow', () => {
 	let channel;
 	let loggerSpy;
 	let queueTaskSpy;
-	let postSpy;
+	let requestSpy;
 
 	beforeEach(async () => {
 		client = await getClientWithUser();
@@ -165,7 +165,9 @@ describe('create draft flow', () => {
 		queueTaskSpy = vi
 			.spyOn(client.offlineDb, 'queueTask')
 			.mockResolvedValue({ draft: draftMessage });
-		postSpy = vi.spyOn(client, 'post').mockResolvedValue({ draft: draftMessage });
+		requestSpy = vi
+			.spyOn(client.axiosInstance, 'request')
+			.mockResolvedValue({ data: { draft: draftMessage } });
 	});
 
 	afterEach(() => {
@@ -220,19 +222,20 @@ describe('create draft flow', () => {
 		it('calls post with correct URL and message payload', async () => {
 			await channel._createDraft(draftMessage);
 
-			expect(postSpy).toHaveBeenCalledTimes(1);
-			expect(postSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/channels/messaging/test/draft`,
-				{ message: draftMessage },
-			);
+			expect(requestSpy).toHaveBeenCalledTimes(1);
+			expect(requestSpy.mock.calls[0][0]).toMatchObject({
+				method: 'POST',
+				url: `${client.baseURL}/api/v2/chat/channels/messaging/test/draft`,
+				data: { message: draftMessage },
+			});
 		});
 
 		it('returns the response from post', async () => {
-			postSpy.mockResolvedValue({ draft: draftMessage });
+			requestSpy.mockResolvedValue({ data: { draft: draftMessage } });
 
 			const result = await channel._createDraft(draftMessage);
 
-			expect(result).toEqual({ draft: draftMessage });
+			expect(result).toMatchObject({ draft: draftMessage });
 		});
 	});
 });
@@ -244,7 +247,7 @@ describe('delete draft flow', () => {
 	let channel;
 	let loggerSpy;
 	let queueTaskSpy;
-	let deleteSpy;
+	let requestSpy;
 
 	beforeEach(async () => {
 		client = await getClientWithUser();
@@ -257,7 +260,9 @@ describe('delete draft flow', () => {
 
 		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
-		deleteSpy = vi.spyOn(client, 'delete').mockResolvedValue({});
+		requestSpy = vi
+			.spyOn(client.axiosInstance, 'request')
+			.mockResolvedValue({ data: {} });
 	});
 
 	afterEach(() => {
@@ -312,28 +317,31 @@ describe('delete draft flow', () => {
 		it('calls delete with correct URL and params', async () => {
 			await channel._deleteDraft({ parent_id });
 
-			expect(deleteSpy).toHaveBeenCalledTimes(1);
-			expect(deleteSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/channels/messaging/test/draft`,
-				{ parent_id },
-			);
+			expect(requestSpy).toHaveBeenCalledTimes(1);
+			expect(requestSpy.mock.calls[0][0]).toMatchObject({
+				method: 'DELETE',
+				url: `${client.baseURL}/api/v2/chat/channels/messaging/test/draft`,
+				params: { parent_id },
+			});
 		});
 
 		it('calls delete with undefined parent_id if none provided', async () => {
 			await channel._deleteDraft();
 
-			expect(deleteSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/channels/messaging/test/draft`,
-				{ parent_id: undefined },
-			);
+			expect(requestSpy).toHaveBeenCalledTimes(1);
+			expect(requestSpy.mock.calls[0][0]).toMatchObject({
+				method: 'DELETE',
+				url: `${client.baseURL}/api/v2/chat/channels/messaging/test/draft`,
+			});
+			expect(requestSpy.mock.calls[0][0].params.parent_id).toBeUndefined();
 		});
 
 		it('returns the response from delete', async () => {
-			deleteSpy.mockResolvedValue({ success: true });
+			requestSpy.mockResolvedValue({ data: { success: true } });
 
 			const result = await channel._deleteDraft({ parent_id });
 
-			expect(result).toEqual({ success: true });
+			expect(result).toMatchObject({ success: true });
 		});
 	});
 });

@@ -36,7 +36,7 @@ describe('Predefined Filters', () => {
         },
       };
 
-      const postSpy = vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+      const postSpy = vi.spyOn(client.api, 'post').mockResolvedValue(mockResponse);
 
       const options: CreatePredefinedFilterOptions = {
         name: 'user_messaging',
@@ -85,7 +85,7 @@ describe('Predefined Filters', () => {
         },
       };
 
-      const getSpy = vi.spyOn(client, 'get').mockResolvedValue(mockResponse);
+      const getSpy = vi.spyOn(client.api, 'get').mockResolvedValue(mockResponse);
 
       const result = await client.getPredefinedFilter('user_messaging');
 
@@ -107,7 +107,7 @@ describe('Predefined Filters', () => {
         },
       };
 
-      const getSpy = vi.spyOn(client, 'get').mockResolvedValue(mockResponse);
+      const getSpy = vi.spyOn(client.api, 'get').mockResolvedValue(mockResponse);
 
       await client.getPredefinedFilter('filter-with-dash');
 
@@ -131,7 +131,7 @@ describe('Predefined Filters', () => {
         },
       };
 
-      const putSpy = vi.spyOn(client, 'put').mockResolvedValue(mockResponse);
+      const putSpy = vi.spyOn(client.api, 'put').mockResolvedValue(mockResponse);
 
       const options: UpdatePredefinedFilterOptions = {
         operation: 'QueryChannels',
@@ -155,7 +155,7 @@ describe('Predefined Filters', () => {
         duration: '0.01s',
       };
 
-      const deleteSpy = vi.spyOn(client, 'delete').mockResolvedValue(mockResponse);
+      const deleteSpy = vi.spyOn(client.api, 'delete').mockResolvedValue(mockResponse);
 
       const result = await client.deletePredefinedFilter('user_messaging');
 
@@ -188,7 +188,7 @@ describe('Predefined Filters', () => {
         ],
       };
 
-      const getSpy = vi.spyOn(client, 'get').mockResolvedValue(mockResponse);
+      const getSpy = vi.spyOn(client.api, 'get').mockResolvedValue(mockResponse);
 
       const result = await client.listPredefinedFilters();
 
@@ -203,7 +203,7 @@ describe('Predefined Filters', () => {
         next: 'next_cursor',
       };
 
-      const getSpy = vi.spyOn(client, 'get').mockResolvedValue(mockResponse);
+      const getSpy = vi.spyOn(client.api, 'get').mockResolvedValue(mockResponse);
 
       const options: ListPredefinedFiltersOptions = {
         limit: 10,
@@ -224,7 +224,7 @@ describe('Predefined Filters', () => {
         predefined_filters: [],
       };
 
-      const getSpy = vi.spyOn(client, 'get').mockResolvedValue(mockResponse);
+      const getSpy = vi.spyOn(client.api, 'get').mockResolvedValue(mockResponse);
 
       const options: ListPredefinedFiltersOptions = {
         sort: [{ field: 'created_at', direction: -1 }],
@@ -268,7 +268,7 @@ describe('Predefined Filters', () => {
         ],
       };
 
-      const postSpy = vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+      const postSpy = vi.spyOn(client.api, 'post').mockResolvedValue(mockResponse);
 
       const options: ChannelOptions = {
         predefined_filter: 'user_messaging',
@@ -305,7 +305,7 @@ describe('Predefined Filters', () => {
         channels: [],
       };
 
-      const postSpy = vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+      const postSpy = vi.spyOn(client.api, 'post').mockResolvedValue(mockResponse);
 
       const options: ChannelOptions = {
         predefined_filter: 'team_channels',
@@ -333,7 +333,7 @@ describe('Predefined Filters', () => {
         channels: [],
       };
 
-      const postSpy = vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+      const postSpy = vi.spyOn(client.api, 'post').mockResolvedValue(mockResponse);
 
       await client.queryChannels({}, [{ last_message_at: -1 }, { created_at: 1 }], {
         predefined_filter: 'user_messaging',
@@ -367,7 +367,7 @@ describe('Predefined Filters', () => {
         channels: [],
       };
 
-      const postSpy = vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+      const postSpy = vi.spyOn(client.api, 'post').mockResolvedValue(mockResponse);
 
       await client.queryChannels(
         { type: 'messaging', members: { $in: ['user123'] } },
@@ -400,7 +400,7 @@ describe('Predefined Filters', () => {
         channels: [],
       };
 
-      const postSpy = vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+      const postSpy = vi.spyOn(client.api, 'post').mockResolvedValue(mockResponse);
 
       await client.queryChannels({}, [], {
         predefined_filter: 'user_messaging',
@@ -435,7 +435,7 @@ describe('Predefined Filters', () => {
         ],
       };
 
-      vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+      vi.spyOn(client.api, 'post').mockResolvedValue(mockResponse);
       const dispatchSpy = vi.spyOn(client, 'dispatchEvent');
 
       await client.queryChannels({}, [], {

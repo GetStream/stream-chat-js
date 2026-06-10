@@ -26,7 +26,7 @@ describe('Channel count unread', function () {
 
 		client = new StreamChat('apiKey');
 		client.user = user;
-		client.userID = 'user';
+
 		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
 
 		channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
@@ -347,7 +347,7 @@ describe('Channel _handleChannelEvent', function () {
 	beforeEach(() => {
 		client = new StreamChat('apiKey');
 		client.user = user;
-		client.userID = user.id;
+
 		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
 		channel = client.channel('messaging', 'id');
 		channel.initialized = true;
@@ -1421,7 +1421,7 @@ describe('Channel _handleChannelEvent', function () {
 	});
 
 	it(`should make sure that state reload doesn't wipe out existing data`, async () => {
-		const mock = sinon.mock(client);
+		const mock = sinon.mock(client.api);
 		mock.expects('post').returns(Promise.resolve(mockChannelQueryResponse));
 
 		channel.state.members = {
@@ -1448,7 +1448,7 @@ describe('Channel _handleChannelEvent', function () {
 	});
 
 	it('should dispatch "capabilities.changed" event', async () => {
-		const mock = sinon.mock(client);
+		const mock = sinon.mock(client.api);
 		const response = mockChannelQueryResponse;
 		channel.data.own_capabilities = response.channel.own_capabilities.slice(0, 1);
 		mock.expects('post').returns(Promise.resolve(response));
@@ -1559,7 +1559,7 @@ describe('Uninitialized Channel', () => {
 	beforeEach(() => {
 		client = new StreamChat('apiKey');
 		client.user = user;
-		client.userID = user.id;
+
 		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
 		channel = client.channel('messaging', 'id');
 		channel.initialized = false;
@@ -1705,7 +1705,6 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 
 	clientVish.connectUser = () => {
 		clientVish.user = user;
-		clientVish.userID = user.id;
 		clientVish.wsPromise = Promise.resolve();
 	};
 
@@ -1722,7 +1721,8 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		});
 
 		// to mock the channel.watch call
-		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+		clientVish.api.post = () =>
+			getOrCreateChannelApi(mockedChannelResponse).response.data;
 		const channelVish_copy1 = clientVish.channel('messaging', channelVishId);
 
 		const cid = `${channelType}:${channelVishId}`;
@@ -1746,7 +1746,8 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		});
 
 		// to mock the channel.watch call
-		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+		clientVish.api.post = () =>
+			getOrCreateChannelApi(mockedChannelResponse).response.data;
 
 		const channelVish_copy1 = clientVish.channel('messaging', channelVishId);
 
@@ -1777,7 +1778,8 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		const mockedChannelResponse = generateChannel({
 			members: [memberVish, memberAmin],
 		});
-		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+		clientVish.api.post = () =>
+			getOrCreateChannelApi(mockedChannelResponse).response.data;
 
 		// Lets start testing
 		const channelVish_copy1 = clientVish.channel('messaging', {
@@ -1825,7 +1827,8 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		});
 
 		// to mock the channel.watch call
-		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+		clientVish.api.post = () =>
+			getOrCreateChannelApi(mockedChannelResponse).response.data;
 
 		// Case 1 =======================>
 		const channelVish_copy1 = clientVish.channel('messaging', {
@@ -1863,7 +1866,8 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		const mockedChannelResponse = generateChannel({
 			members: [memberVish, memberAmin],
 		});
-		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+		clientVish.api.post = () =>
+			getOrCreateChannelApi(mockedChannelResponse).response.data;
 
 		// Lets start testing
 		const channelVish_copy1 = clientVish.channel('messaging', undefined, {
@@ -1911,7 +1915,8 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		});
 
 		// to mock the channel.watch call
-		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+		clientVish.api.post = () =>
+			getOrCreateChannelApi(mockedChannelResponse).response.data;
 
 		// Case 1 =======================>
 		const channelVish_copy1 = clientVish.channel('messaging', undefined, {
@@ -1953,7 +1958,8 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		});
 
 		// to mock the channel.watch call
-		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+		clientVish.api.post = () =>
+			getOrCreateChannelApi(mockedChannelResponse).response.data;
 
 		// Case 1 =======================>
 		const channelVish_copy1 = clientVish.channel('messaging', undefined, {
@@ -2009,13 +2015,13 @@ describe('Channel search', async () => {
 	const channel = client.channel('messaging', uuidv4());
 
 	it('search with sorting by defined field', async () => {
-		client.get = (url, config) => {
+		client.api.get = (url, config) => {
 			expect(config.payload.sort).to.be.eql([{ field: 'updated_at', direction: -1 }]);
 		};
 		await channel.search('query', { sort: [{ updated_at: -1 }] });
 	});
 	it('search with sorting by custom field', async () => {
-		client.get = (url, config) => {
+		client.api.get = (url, config) => {
 			expect(config.payload.sort).to.be.eql([{ field: 'custom_field', direction: -1 }]);
 		};
 		await channel.search('query', { sort: [{ custom_field: -1 }] });
@@ -2162,7 +2168,7 @@ describe('Channel.query', async () => {
 				generateMsg,
 			),
 		};
-		const mock = sinon.mock(client);
+		const mock = sinon.mock(client.api);
 		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
 		await channel.query();
 		expect(Object.keys(client.activeChannels).length).to.be.equal(0);
@@ -2179,7 +2185,7 @@ describe('Channel.query', async () => {
 				generateMsg,
 			),
 		};
-		const mock = sinon.mock(client);
+		const mock = sinon.mock(client.api);
 		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
 		await channel.query();
 		expect(channel.state.messageSets.length).to.be.equal(1);
@@ -2200,7 +2206,7 @@ describe('Channel.query', async () => {
 				generateMsg,
 			),
 		};
-		const mock = sinon.mock(client);
+		const mock = sinon.mock(client.api);
 		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
 		await channel.query();
 		expect(channel.state.messageSets.length).to.be.equal(1);
@@ -2216,7 +2222,7 @@ describe('Channel.query', async () => {
 		const channel = client.channel('messaging', uuidv4());
 		expect(channel.messageComposer.config.location.enabled).toBe(true);
 
-		const postStub = sinon.stub(client, 'post');
+		const postStub = sinon.stub(client.api, 'post');
 		postStub.onFirstCall().resolves({
 			...mockChannelQueryResponse,
 			channel: {
@@ -2263,7 +2269,7 @@ describe('send reaction flow', () => {
 
 		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
-		postSpy = vi.spyOn(client, 'post').mockResolvedValue({});
+		postSpy = vi.spyOn(client.api, 'post').mockResolvedValue({});
 	});
 
 	afterEach(() => {
@@ -2395,7 +2401,7 @@ describe('delete reaction flow', () => {
 		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
 		deleteReactionSpy = vi.spyOn(client.offlineDb, 'deleteReaction').mockResolvedValue();
-		deleteSpy = vi.spyOn(client, 'delete').mockResolvedValue({});
+		deleteSpy = vi.spyOn(client.api, 'delete').mockResolvedValue({});
 	});
 
 	afterEach(() => {
@@ -2568,7 +2574,7 @@ describe('message sending flow', () => {
 
 		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
-		postSpy = vi.spyOn(client, 'post').mockResolvedValue({});
+		postSpy = vi.spyOn(client.api, 'post').mockResolvedValue({});
 	});
 
 	afterEach(() => {

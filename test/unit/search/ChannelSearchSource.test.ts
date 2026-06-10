@@ -171,7 +171,7 @@ describe('ChannelSearchSource', () => {
   });
 
   it('works without client.userID', async () => {
-    searchSource.client.userID = undefined;
+    searchSource.client.user = undefined;
     const spyBuildFilters = vi
       .spyOn(searchSource.filterBuilder, 'buildFilters')
       .mockReturnValue({});

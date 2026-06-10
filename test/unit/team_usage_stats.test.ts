@@ -39,7 +39,7 @@ describe('Team Usage Stats', () => {
         ],
       };
 
-      const postSpy = vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+      const postSpy = vi.spyOn(client.api, 'post').mockResolvedValue(mockResponse);
 
       const result = await client.queryTeamUsageStats();
 
@@ -75,7 +75,7 @@ describe('Team Usage Stats', () => {
         ],
       };
 
-      const postSpy = vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+      const postSpy = vi.spyOn(client.api, 'post').mockResolvedValue(mockResponse);
 
       const options: QueryTeamUsageStatsOptions = {
         month: '2026-01',
@@ -129,7 +129,7 @@ describe('Team Usage Stats', () => {
         ],
       };
 
-      const postSpy = vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+      const postSpy = vi.spyOn(client.api, 'post').mockResolvedValue(mockResponse);
 
       const options: QueryTeamUsageStatsOptions = {
         start_date: '2026-01-01',
@@ -175,7 +175,7 @@ describe('Team Usage Stats', () => {
         next: 'next_cursor_value',
       };
 
-      const postSpy = vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+      const postSpy = vi.spyOn(client.api, 'post').mockResolvedValue(mockResponse);
 
       const options: QueryTeamUsageStatsOptions = {
         limit: 10,
@@ -257,7 +257,7 @@ describe('Team Usage Stats', () => {
         next: 'next_page_cursor',
       };
 
-      const postSpy = vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+      const postSpy = vi.spyOn(client.api, 'post').mockResolvedValue(mockResponse);
 
       const result = await client.queryTeamUsageStats({ limit: 30 });
 
@@ -277,7 +277,7 @@ describe('Team Usage Stats', () => {
         teams: [],
       };
 
-      const postSpy = vi.spyOn(client, 'post').mockResolvedValue(mockResponse);
+      const postSpy = vi.spyOn(client.api, 'post').mockResolvedValue(mockResponse);
 
       const result = await client.queryTeamUsageStats({ month: '2020-01' });
 
