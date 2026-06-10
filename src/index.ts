@@ -1,6 +1,4 @@
 export * from './base64';
-export * from './campaign';
-export * from './channel_batch_updater';
 export * from './client';
 export * from './client_state';
 export * from './channel';
@@ -19,7 +17,6 @@ export * from './poll';
 export * from './poll_manager';
 export * from './reminders';
 export * from './search';
-export * from './segment';
 export * from './signing';
 export * from './store';
 export { Thread } from './thread';
