@@ -1,3 +1,9 @@
+## [9.45.5](https://github.com/GetStream/stream-chat-js/compare/v9.45.4...v9.45.5) (2026-06-10)
+
+### Bug Fixes
+
+* add custom in moderation_payload on /check ([#1768](https://github.com/GetStream/stream-chat-js/issues/1768)) ([41fbad2](https://github.com/GetStream/stream-chat-js/commit/41fbad2ea81ce79161fb7905e9ce1f04b0f746e3))
+
 ## [9.45.4](https://github.com/GetStream/stream-chat-js/compare/v9.45.3...v9.45.4) (2026-06-09)
 
 ### Bug Fixes
