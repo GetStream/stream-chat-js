@@ -203,11 +203,10 @@ describe('PollManager', () => {
           generateChannel({ channel: { id: uuidv4() }, messages }),
         );
       }
-      const mock = sinon.mock(client);
       const spy = sinon.spy(client.polls, 'hydratePollCache');
-      mock
-        .expects('post')
-        .returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
+      sinon
+        .stub(client.chatApi, 'queryChannels')
+        .resolves({ channels: mockedChannelsQueryResponse });
       await client.queryChannels({});
       expect(client.polls.data.size).to.equal(pollMessages.length);
       expect(spy.callCount).to.be.equal(5);
@@ -241,10 +240,9 @@ describe('PollManager', () => {
         const channelResponse = { ...channels[ci], messages };
         mockedChannelsQueryResponse.push(channelResponse);
       }
-      const mock = sinon.mock(client);
-      mock
-        .expects('post')
-        .returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
+      sinon
+        .stub(client.chatApi, 'queryChannels')
+        .resolves({ channels: mockedChannelsQueryResponse });
       await client.queryChannels({});
       expect(client.polls.data.size).to.equal(pollMessages.length);
       expect(spy.callCount).to.be.equal(10);
@@ -267,9 +265,8 @@ describe('PollManager', () => {
         ...mockChannelQueryResponse,
         messages,
       };
-      const mock = sinon.mock(client);
       const spy = sinon.spy(client.polls, 'hydratePollCache');
-      mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
+      sinon.stub(channel.channelApi, 'getOrCreate').resolves(mockedChannelQueryResponse);
       await channel.query();
       expect(client.polls.data.size).to.equal(pollMessages.length);
       expect(spy.calledOnce).to.be.true;
@@ -286,9 +283,8 @@ describe('PollManager', () => {
         ...mockChannelQueryResponse,
         messages,
       };
-      const mock = sinon.mock(client);
       const spy = sinon.spy(client.polls, 'hydratePollCache');
-      mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
+      sinon.stub(channel.channelApi, 'getOrCreate').resolves(mockedChannelQueryResponse);
       client.polls.hydratePollCache(prevMessages);
       await channel.query();
       expect(client.polls.data.size).to.equal(

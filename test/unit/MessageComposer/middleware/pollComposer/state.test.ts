@@ -27,6 +27,7 @@ const setupHandlerParams = (initialState: PollComposerStateChangeMiddlewareValue
 // Mock dependencies
 vi.mock('../../../../../src/utils', () => ({
   generateUUIDv4: vi.fn().mockReturnValue('test-uuid'),
+  getEnv: vi.fn(),
 }));
 
 const getInitialState = (): PollComposerState => ({
@@ -39,7 +40,6 @@ const getInitialState = (): PollComposerState => ({
     max_votes_allowed: '',
     name: '',
     options: [{ id: 'option-id', text: '' }],
-    user_id: 'user-id',
     voting_visibility: VotingVisibility.public,
   },
   errors: {},

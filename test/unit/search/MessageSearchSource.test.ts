@@ -203,7 +203,7 @@ describe('MessageSearchSource', () => {
   });
 
   it('returns empty items when client.userID is missing', async () => {
-    searchSource['client'].userID = undefined;
+    searchSource['client'].user = undefined;
     // @ts-expect-error protected access
     const result = await searchSource.query('test');
     expect(result).toEqual({ items: [] });

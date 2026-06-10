@@ -146,7 +146,7 @@ const pollResponse = {
 // const client = sinon.createStubInstance(StreamChat);
 const client = new StreamChat('apiKey');
 client.user = user1;
-client.userID = user1.id;
+
 describe('Poll', () => {
 	afterEach(() => {
 		sinon.reset();
@@ -303,7 +303,7 @@ describe('Poll', () => {
 	});
 
 	it('should add own vote when handleVoteCasted is called', () => {
-		client.userID = user1.id;
+		client.user = user1;
 		const poll = new Poll({ client, poll: pollResponse });
 		const originalState = poll.data;
 		const castedVote = {
@@ -383,7 +383,7 @@ describe('Poll', () => {
 	});
 
 	it('should add own answer when handleVoteCasted is called', () => {
-		client.userID = user1.id;
+		client.user = user1;
 		const poll = new Poll({ client, poll: pollResponse });
 		const originalState = poll.data;
 		const castedVote = {
@@ -457,7 +457,7 @@ describe('Poll', () => {
 	});
 
 	it('should change own vote when handleVoteChanged is called', () => {
-		client.userID = user1.id;
+		client.user = user1;
 		const poll = new Poll({ client, poll: pollResponse });
 		const originalState = poll.data;
 		const changedToOptionId = 'dc22dcd6-4fc8-4c92-92c2-bfd63245724c';
@@ -504,7 +504,7 @@ describe('Poll', () => {
 	});
 
 	it('should change an answer when handleVoteChanged is called', () => {
-		client.userID = user2.id;
+		client.user = user2;
 		const poll = new Poll({ client, poll: pollResponse });
 		const originalState = poll.data;
 		const changedAnswer = {
@@ -529,7 +529,7 @@ describe('Poll', () => {
 	});
 
 	it('should change own answer when handleVoteChanged is called', () => {
-		client.userID = user1.id;
+		client.user = user1;
 		const poll = new Poll({ client, poll: pollResponse });
 		const originalState = poll.data;
 		const changedAnswer = {
@@ -554,7 +554,7 @@ describe('Poll', () => {
 	});
 
 	it('should remove a vote when handleVoteRemoved is called', () => {
-		client.userID = user1.id;
+		client.user = user1;
 		const poll = new Poll({ client, poll: pollResponse });
 		const originalState = poll.data;
 		const vote_counts_by_option = {
@@ -593,7 +593,7 @@ describe('Poll', () => {
 	});
 
 	it('should remove own vote when handleVoteRemoved is called', () => {
-		client.userID = user1.id;
+		client.user = user1;
 		const poll = new Poll({ client, poll: pollResponse });
 		const originalState = poll.data;
 		const removedVote = user1Votes[0];
@@ -635,7 +635,7 @@ describe('Poll', () => {
 	});
 
 	it('should remove an answer when handleVoteRemoved is called', () => {
-		client.userID = user1.id;
+		client.user = user1;
 		const poll = new Poll({ client, poll: pollResponse });
 		const originalState = poll.data;
 		const removedAnswer = user2Answer;
@@ -656,7 +656,7 @@ describe('Poll', () => {
 	});
 
 	it('should remove own answer when handleVoteRemoved is called', () => {
-		client.userID = user1.id;
+		client.user = user1;
 		const poll = new Poll({ client, poll: pollResponse });
 		const originalState = poll.data;
 		const removedAnswer = user1Answer;
