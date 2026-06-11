@@ -210,6 +210,26 @@ describe('MessageSearchSource', () => {
     expect(searchMock).not.toHaveBeenCalled();
   });
 
+  it('returns empty items when searchQuery is empty and allowEmptySearchString is false', async () => {
+    // @ts-expect-error protected access
+    const result = await searchSource.query('');
+    expect(result).toEqual({ items: [] });
+    expect(searchMock).not.toHaveBeenCalled();
+  });
+
+  it('queries with an empty searchQuery when allowEmptySearchString is true', async () => {
+    const searchSource = new MessageSearchSource(client, {
+      allowEmptySearchString: true,
+    });
+
+    // @ts-expect-error protected access
+    const result = await searchSource.query('');
+
+    expect(searchMock).toHaveBeenCalledTimes(1);
+    expect(result.items).toEqual(messages);
+    expect(result.next).toBe('next-token');
+  });
+
   it('builds filters and calls client.search with correct args', async () => {
     searchSource.messageSearchFilters = { 'mentioned_users.id': { $contains: 'abc' } };
     searchSource.messageSearchChannelFilters = { type: 'messaging' };
