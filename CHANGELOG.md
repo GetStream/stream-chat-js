@@ -1,3 +1,9 @@
+## [9.46.0](https://github.com/GetStream/stream-chat-js/compare/v9.45.6...v9.46.0) (2026-06-12)
+
+### Features
+
+* **search:** add ChannelMemberSearchSource ([#1770](https://github.com/GetStream/stream-chat-js/issues/1770)) ([9523e32](https://github.com/GetStream/stream-chat-js/commit/9523e32a2d0987526745d88dbe34726245d50b81))
+
 ## [9.45.6](https://github.com/GetStream/stream-chat-js/compare/v9.45.5...v9.45.6) (2026-06-12)
 
 ### Bug Fixes
