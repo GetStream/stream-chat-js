@@ -77,9 +77,7 @@ export class FixedSizeQueueCache<K, T> {
    */
   clear() {
     if (this.dispose) {
-      for (const [key, entry] of this.map.entries()) {
-        this.dispose(key, entry);
-      }
+      this.map.forEach((entry, key) => this.dispose?.(key, entry));
     }
     this.map.clear();
     this.keys = [];
