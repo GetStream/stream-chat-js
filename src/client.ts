@@ -293,6 +293,7 @@ import { StateStore } from './store';
 import type { MessageComposer } from './messageComposer';
 import type { AbstractOfflineDB } from './offline-support';
 import { getPendingTaskChannelData } from './offline-support/util';
+import { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string' || x instanceof String;
@@ -393,6 +394,7 @@ export class StreamChat {
   defaultWSTimeout: number;
   sdkIdentifier?: SdkIdentifier;
   deviceIdentifier?: DeviceIdentifier;
+  messageComposerFixedSizeQueue: FixedSizeQueueCache<string, MessageComposer>;
   private nextRequestAbortController: AbortController | null = null;
   /**
    * @private
@@ -573,6 +575,9 @@ export class StreamChat {
     this.polls = new PollManager({ client: this });
     this.reminders = new ReminderManager({ client: this });
     this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });
+    this.messageComposerFixedSizeQueue = new FixedSizeQueueCache<string, MessageComposer>(
+      64,
+    );
   }
 
   /**
@@ -1060,6 +1065,7 @@ export class StreamChat {
     // reset thread manager
     this.threads.resetState();
     this.uploadManager.reset();
+    this.messageComposerFixedSizeQueue.clear();
 
     // Since we wipe all user data already, we should reset token manager as well
     closePromise
