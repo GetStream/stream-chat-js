@@ -368,16 +368,16 @@ describe('Client disconnectUser', () => {
 
 	it('should clear the message composer cache', async () => {
 		const client = new StreamChat('', '');
-		client.messageComposerFixedSizeQueue.add('cid:a', {});
-		client.messageComposerFixedSizeQueue.add('cid:b', {});
+		client.messageComposerCache.add('cid:a', {});
+		client.messageComposerCache.add('cid:b', {});
 
 		const { resolve, promise } = Promise.withResolvers();
 		client.wsConnection = { disconnect: () => promise };
 		client.wsFallback = null;
 		const disconnectPromise = client.disconnectUser();
 
-		expect(client.messageComposerFixedSizeQueue.peek('cid:a')).to.be.undefined;
-		expect(client.messageComposerFixedSizeQueue.peek('cid:b')).to.be.undefined;
+		expect(client.messageComposerCache.peek('cid:a')).to.be.undefined;
+		expect(client.messageComposerCache.peek('cid:b')).to.be.undefined;
 
 		resolve();
 		await disconnectPromise;

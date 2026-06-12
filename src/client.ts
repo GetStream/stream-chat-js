@@ -394,7 +394,7 @@ export class StreamChat {
   defaultWSTimeout: number;
   sdkIdentifier?: SdkIdentifier;
   deviceIdentifier?: DeviceIdentifier;
-  messageComposerFixedSizeQueue: FixedSizeQueueCache<string, MessageComposer>;
+  messageComposerCache: FixedSizeQueueCache<string, MessageComposer>;
   private nextRequestAbortController: AbortController | null = null;
   /**
    * @private
@@ -575,9 +575,7 @@ export class StreamChat {
     this.polls = new PollManager({ client: this });
     this.reminders = new ReminderManager({ client: this });
     this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });
-    this.messageComposerFixedSizeQueue = new FixedSizeQueueCache<string, MessageComposer>(
-      64,
-    );
+    this.messageComposerCache = new FixedSizeQueueCache<string, MessageComposer>(64);
   }
 
   /**
@@ -1065,7 +1063,7 @@ export class StreamChat {
     // reset thread manager
     this.threads.resetState();
     this.uploadManager.reset();
-    this.messageComposerFixedSizeQueue.clear();
+    this.messageComposerCache.clear();
 
     // Since we wipe all user data already, we should reset token manager as well
     closePromise
