@@ -210,6 +210,35 @@ describe('MessageSearchSource', () => {
     expect(searchMock).not.toHaveBeenCalled();
   });
 
+  it('returns empty items when next is null', async () => {
+    searchSource.state.partialNext({ next: null });
+
+    // @ts-expect-error protected access
+    const result = await searchSource.query('test');
+
+    expect(result).toEqual({ items: [] });
+    expect(searchMock).not.toHaveBeenCalled();
+  });
+
+  it('executes search with empty search query', async () => {
+    // @ts-expect-error protected access
+    const result = await searchSource.query('');
+
+    expect(searchMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        members: { $in: [user.id] },
+      }),
+      { type: 'regular' },
+      expect.objectContaining({
+        limit: searchSource.pageSize,
+        next: undefined,
+        sort: { created_at: -1 },
+      }),
+    );
+    expect(result.items).toEqual(messages);
+    expect(result.next).toBe('next-token');
+  });
+
   it('builds filters and calls client.search with correct args', async () => {
     searchSource.messageSearchFilters = { 'mentioned_users.id': { $contains: 'abc' } };
     searchSource.messageSearchChannelFilters = { type: 'messaging' };

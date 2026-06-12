@@ -1,4 +1,5 @@
 export * from './BaseSearchSource';
+export * from './ChannelMemberSearchSource';
 export * from './SearchController';
 export * from './UserSearchSource';
 export * from './ChannelSearchSource';

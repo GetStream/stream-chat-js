@@ -130,7 +130,7 @@ export class MessageSearchSource<
   }
 
   protected async query(searchQuery: string) {
-    if (!this.client.userID || !searchQuery || this.next === null) return { items: [] };
+    if (!this.client.userID || this.next === null) return { items: [] };
 
     const channelFilters = this.messageSearchChannelFilterBuilder.buildFilters({
       baseFilters: {
