@@ -92,7 +92,6 @@ export const calculateLevenshtein = (query: string, name: string) => {
 };
 
 export type MentionsSearchSourceOptions = SearchSourceOptions & {
-  allowedMentionTypes?: Partial<Record<MentionType, boolean>>;
   mentionAllAppUsers?: boolean;
   suggestionFactoryMappers?: MentionSuggestionFactoryMapperOverrides;
   textComposerText?: string;
@@ -134,13 +133,18 @@ export type MentionSuggestionFactoryMapperOverrides = {
   [TMentionType in MentionType]?: MentionSuggestionFactoryMapper<TMentionType>;
 };
 
-const DEFAULT_ALLOWED_MENTION_TYPES: Record<MentionType, boolean> = {
-  channel: true,
-  here: true,
-  role: true,
+const hasOwnCapability = (ownCapabilities: string[] | undefined, capability: string) =>
+  ownCapabilities?.includes(capability) ?? false;
+
+export const getAllowedMentionTypesFromCapabilities = (
+  ownCapabilities?: string[],
+): Record<MentionType, boolean> => ({
+  channel: hasOwnCapability(ownCapabilities, 'notify-channel'),
+  here: hasOwnCapability(ownCapabilities, 'notify-here'),
+  role: hasOwnCapability(ownCapabilities, 'notify-role'),
   user: true,
-  user_group: true,
-};
+  user_group: hasOwnCapability(ownCapabilities, 'notify-group'),
+});
 
 type UserGroupSearchCursor = Pick<SearchUserGroupsOptions, 'id_gt' | 'name_gt'>;
 type UserPaginationState = {
@@ -299,7 +303,6 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
 
   constructor(channel: Channel, options?: MentionsSearchSourceOptions) {
     const {
-      allowedMentionTypes,
       mentionAllAppUsers,
       suggestionFactoryMappers,
       textComposerText,
@@ -311,10 +314,6 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
     this.client = channel.getClient();
     this.channel = channel;
     this.config = {
-      allowedMentionTypes: {
-        ...DEFAULT_ALLOWED_MENTION_TYPES,
-        ...allowedMentionTypes,
-      },
       mentionAllAppUsers,
       suggestionFactoryMappers,
       textComposerText,
@@ -371,7 +370,9 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
   };
 
   isMentionTypeAllowed = (mentionType: MentionType) =>
-    this.config.allowedMentionTypes?.[mentionType] ?? true;
+    getAllowedMentionTypesFromCapabilities(this.channel.data?.own_capabilities)[
+      mentionType
+    ];
 
   protected mapMentionSuggestion = <TMentionType extends MentionType>(
     mentionType: TMentionType,

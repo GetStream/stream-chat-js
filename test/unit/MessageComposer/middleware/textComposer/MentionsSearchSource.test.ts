@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
+  getAllowedMentionTypesFromCapabilities,
   MentionsSearchSource,
   calculateLevenshtein,
 } from '../../../../../src/messageComposer/middleware/textComposer/mentions';
@@ -59,6 +60,13 @@ describe('calculateLevenshtein', () => {
     expect(calculateLevenshtein('test!', 'test?')).toBe(1);
   });
 });
+
+const ALL_NOTIFY_MENTION_CAPABILITIES = [
+  'notify-channel',
+  'notify-group',
+  'notify-here',
+  'notify-role',
+] as const;
 
 describe('MentionsSearchSource', () => {
   let channel: Channel;
@@ -127,7 +135,10 @@ describe('MentionsSearchSource', () => {
     } as unknown as StreamChat;
 
     channel = {
-      data: { team: 'engineering' },
+      data: {
+        own_capabilities: [...ALL_NOTIFY_MENTION_CAPABILITIES],
+        team: 'engineering',
+      },
       getClient: vi.fn().mockReturnValue(client),
       state: {
         members: mockMembers,
@@ -146,19 +157,11 @@ describe('MentionsSearchSource', () => {
   it('should initialize with correct type', () => {
     const source = new MentionsSearchSource(channel);
     expect(source.type).toBe('mentions');
-    expect(source.config.allowedMentionTypes).toEqual({
-      channel: true,
-      here: true,
-      role: true,
-      user: true,
-      user_group: true,
-    });
     expect(source.config.mentionAllAppUsers).toBeUndefined;
     expect(source.config.textComposerText).toBeUndefined;
     expect(source.config.transliterate).toBeUndefined;
 
     const customizedSource = new MentionsSearchSource(channel, {
-      allowedMentionTypes: { role: false, user_group: false },
       mentionAllAppUsers: true,
       suggestionFactoryMappers: {
         role: (value, { searchToken }) => ({
@@ -174,19 +177,38 @@ describe('MentionsSearchSource', () => {
       textComposerText: '@',
       transliterate: (text: string) => text.toLowerCase(),
     });
-    expect(customizedSource.config.allowedMentionTypes).toEqual({
-      channel: true,
-      here: true,
-      role: false,
-      user: true,
-      user_group: false,
-    });
     expect(customizedSource.config.mentionAllAppUsers).toBe(true);
     expect(customizedSource.config.suggestionFactoryMappers?.role).toBeInstanceOf(
       Function,
     );
     expect(customizedSource.config.textComposerText).toBe('@');
     expect(customizedSource.transliterate).toBeInstanceOf(Function);
+  });
+
+  it('should derive allowed mention types from channel own_capabilities', () => {
+    expect(getAllowedMentionTypesFromCapabilities(undefined)).toEqual({
+      channel: false,
+      here: false,
+      role: false,
+      user: true,
+      user_group: false,
+    });
+    expect(
+      getAllowedMentionTypesFromCapabilities([...ALL_NOTIFY_MENTION_CAPABILITIES]),
+    ).toEqual({
+      channel: true,
+      here: true,
+      role: true,
+      user: true,
+      user_group: true,
+    });
+    expect(getAllowedMentionTypesFromCapabilities(['notify-role'])).toEqual({
+      channel: false,
+      here: false,
+      role: true,
+      user: true,
+      user_group: false,
+    });
   });
 
   it('should return built-ins and users on empty query without role or user group search', async () => {
@@ -382,15 +404,9 @@ describe('MentionsSearchSource', () => {
     );
   });
 
-  it('should respect allowedMentionTypes and skip disabled source queries', async () => {
-    const source = new MentionsSearchSource(channel, {
-      allowedMentionTypes: {
-        channel: false,
-        here: false,
-        role: false,
-        user_group: false,
-      },
-    });
+  it('should skip special mention queries when own_capabilities are missing', async () => {
+    channel.data = { team: 'engineering' };
+    const source = new MentionsSearchSource(channel);
     source.activate();
     source.config.textComposerText = '@adm';
 
@@ -403,18 +419,43 @@ describe('MentionsSearchSource', () => {
     expect(result.items.every((item) => item.mentionType === 'user')).toBe(true);
   });
 
-  it('should skip user queries when user mentions are disabled', async () => {
-    const source = new MentionsSearchSource(channel, {
-      allowedMentionTypes: { user: false },
-      mentionAllAppUsers: true,
-    });
+  it('should only query mention sources allowed by own_capabilities', async () => {
+    channel.data = {
+      own_capabilities: ['notify-role'],
+      team: 'engineering',
+    };
+    const source = new MentionsSearchSource(channel);
     source.activate();
-    source.config.textComposerText = '@john';
+    source.config.textComposerText = '@adm';
 
-    const result = await source.query('john');
+    const result = await source.query('adm');
 
-    expect(client.queryUsers).not.toHaveBeenCalled();
-    expect(result.items.some((item) => item.mentionType === 'user')).toBe(false);
+    expect(client.searchRoles).toHaveBeenCalledWith({ query: 'adm' });
+    expect(client.searchUserGroups).not.toHaveBeenCalled();
+    expect(getSuggestion(result.items, 'role', 'admin')).toBeDefined();
+    expect(getSuggestion(result.items, 'user_group', 'admins-group')).toBeUndefined();
+    expect(getSuggestion(result.items, 'channel', 'channel')).toBeUndefined();
+    expect(getSuggestion(result.items, 'here', 'here')).toBeUndefined();
+  });
+
+  it('should react to own_capabilities changes without recreating the source', async () => {
+    channel.data = { team: 'engineering' };
+    const source = new MentionsSearchSource(channel);
+    source.activate();
+    source.config.textComposerText = '@ch';
+
+    const withoutCapabilities = await source.query('ch');
+    expect(
+      getSuggestion(withoutCapabilities.items, 'channel', 'channel'),
+    ).toBeUndefined();
+
+    channel.data = {
+      own_capabilities: ['notify-channel'],
+      team: 'engineering',
+    };
+
+    const withCapabilities = await source.query('ch');
+    expect(getSuggestion(withCapabilities.items, 'channel', 'channel')).toBeDefined();
   });
 
   it('should query members from API when not all members are loaded', async () => {
