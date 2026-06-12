@@ -23,7 +23,7 @@ const createChannel = () =>
   }) as unknown as Channel;
 
 const getAutocompleteFilters = (searchQuery: string): Partial<MemberFilters> => ({
-  $or: [{ id: { $eq: searchQuery } }, { name: { $autocomplete: searchQuery } }],
+  $or: [{ name: { $autocomplete: searchQuery } }, { id: { $eq: searchQuery } }],
 });
 
 describe('ChannelMemberSearchSource', () => {
