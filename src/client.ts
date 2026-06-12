@@ -394,7 +394,7 @@ export class StreamChat {
   defaultWSTimeout: number;
   sdkIdentifier?: SdkIdentifier;
   deviceIdentifier?: DeviceIdentifier;
-  messageComposerCache: FixedSizeQueueCache<string, MessageComposer>;
+  readonly messageComposerCache: FixedSizeQueueCache<string, MessageComposer>;
   private nextRequestAbortController: AbortController | null = null;
   /**
    * @private
