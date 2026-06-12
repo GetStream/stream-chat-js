@@ -1,3 +1,9 @@
+## [9.45.6](https://github.com/GetStream/stream-chat-js/compare/v9.45.5...v9.45.6) (2026-06-12)
+
+### Bug Fixes
+
+* include fixed queue cache in client ([#1771](https://github.com/GetStream/stream-chat-js/issues/1771)) ([2de864e](https://github.com/GetStream/stream-chat-js/commit/2de864e96ade46527566a2e5964f50a003068154))
+
 ## [9.45.5](https://github.com/GetStream/stream-chat-js/compare/v9.45.4...v9.45.5) (2026-06-10)
 
 ### Bug Fixes
