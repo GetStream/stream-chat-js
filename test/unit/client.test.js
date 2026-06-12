@@ -365,6 +365,23 @@ describe('Client disconnectUser', () => {
 		await disconnectPromise;
 		expect(client.uploadManager.uploads).to.deep.equal({});
 	});
+
+	it('should clear the message composer cache', async () => {
+		const client = new StreamChat('', '');
+		client.messageComposerCache.add('cid:a', {});
+		client.messageComposerCache.add('cid:b', {});
+
+		const { resolve, promise } = Promise.withResolvers();
+		client.wsConnection = { disconnect: () => promise };
+		client.wsFallback = null;
+		const disconnectPromise = client.disconnectUser();
+
+		expect(client.messageComposerCache.peek('cid:a')).to.be.undefined;
+		expect(client.messageComposerCache.peek('cid:b')).to.be.undefined;
+
+		resolve();
+		await disconnectPromise;
+	});
 });
 
 describe('Detect node environment', () => {

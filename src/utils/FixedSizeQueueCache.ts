@@ -71,4 +71,15 @@ export class FixedSizeQueueCache<K, T> {
 
     return foundItem;
   }
+
+  /**
+   * Clears queue entirely and disposes of each item individually.
+   */
+  clear() {
+    if (this.dispose) {
+      this.map.forEach((entry, key) => this.dispose?.(key, entry));
+    }
+    this.map.clear();
+    this.keys = [];
+  }
 }
