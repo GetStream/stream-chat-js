@@ -385,16 +385,70 @@ export interface AppealItemResponse {
   updated_at: Date;
 
   /**
+   * Text severity level assigned by the AI provider
+   */
+  ai_text_severity?: string;
+
+  /**
+   * CID of the channel the entity belongs to, if applicable
+   */
+  channel_cid?: string;
+
+  /**
+   * Moderation policy key that was applied
+   */
+  config_key?: string;
+
+  /**
    * Decision Reason of the Appeal Item
    */
   decision_reason?: string;
+
+  /**
+   * Action recommended by the automated moderation system (e.g. flag, remove, shadow)
+   */
+  recommended_action?: string;
+
+  /**
+   * ID of the review queue item linked to this appeal, if the appeal was submitted with one
+   */
+  review_queue_item_id?: string;
+
+  /**
+   * Overall content severity score (1–100)
+   */
+  severity?: number;
+
+  /**
+   * Full chronological history of all moderation actions on the review queue item
+   */
+  actions?: Array<ActionLogResponse>;
 
   /**
    * Attachments(e.g. Images) of the Appeal Item
    */
   attachments?: Array<string>;
 
+  /**
+   * Classification labels from automated and manual review
+   */
+  flag_labels?: Array<string>;
+
+  /**
+   * Types of flags applied to the entity (e.g. user_report, bodyguard)
+   */
+  flag_types?: Array<string>;
+
+  /**
+   * Per-provider flag records explaining why the action was taken
+   */
+  flags?: Array<ModerationFlagResponse>;
+
   entity_content?: ModerationPayload;
+
+  moderation_action?: ActionLogResponse;
+
+  original_moderation_action?: ActionLogResponse;
 
   user?: UserResponse;
 }
@@ -414,6 +468,11 @@ export interface AppealRequest {
    * Type of entity being appealed (e.g., message, user)
    */
   entity_type: string;
+
+  /**
+   * ID of the review queue item (flagged message) that triggered the ban. Applicable only for user ban appeals.
+   */
+  review_queue_item_id?: string;
 
   /**
    * Array of Attachment URLs(e.g., images)
@@ -702,6 +761,8 @@ export interface BlockListOptions {
 }
 
 export interface BlockListResponse {
+  is_confusable_folding_enabled: boolean;
+
   is_leet_check_enabled: boolean;
 
   is_plural_check_enabled: boolean;
@@ -739,6 +800,7 @@ export interface BlockListResponse {
 export interface BlockListRule {
   action:
     | 'flag'
+    | 'mask'
     | 'mask_flag'
     | 'shadow'
     | 'remove'
@@ -810,6 +872,8 @@ export interface BodyguardRule {
   action:
     | 'keep'
     | 'flag'
+    | 'mask'
+    | 'mask_flag'
     | 'shadow'
     | 'remove'
     | 'bounce'
@@ -822,9 +886,66 @@ export interface BodyguardRule {
 }
 
 export interface BodyguardSeverityRule {
-  action: 'flag' | 'shadow' | 'remove' | 'bounce' | 'bounce_flag' | 'bounce_remove';
+  action:
+    | 'keep'
+    | 'flag'
+    | 'mask'
+    | 'shadow'
+    | 'remove'
+    | 'bounce'
+    | 'bounce_flag'
+    | 'bounce_remove';
 
   severity: 'low' | 'medium' | 'high' | 'critical';
+}
+
+export interface BulkActionAppealsRequest {
+  /**
+   * Action to apply: unban, restore, unblock, mark_reviewed, or reject_appeal
+   */
+
+  action_type: 'unban' | 'restore' | 'unblock' | 'mark_reviewed' | 'reject_appeal';
+
+  /**
+   * List of appeal UUIDs to process
+   */
+  appeal_ids: Array<string>;
+
+  mark_reviewed?: MarkReviewedRequestPayload;
+
+  reject_appeal?: RejectAppealRequestPayload;
+
+  restore?: RestoreActionRequestPayload;
+
+  unban?: UnbanActionRequestPayload;
+
+  unblock?: UnblockActionRequestPayload;
+}
+
+export interface BulkActionAppealsResponse {
+  duration: string;
+
+  /**
+   * Appeals that could not be processed, with per-item error messages
+   */
+  errors: Array<BulkAppealError>;
+
+  /**
+   * Successfully processed appeals
+   */
+  results: Array<BulkAppealResult>;
+}
+
+export interface BulkAppealError {
+  appeal_id: string;
+
+  error: string;
+}
+
+export interface BulkAppealResult {
+  appeal_id: string;
+
+  appeal_item?: AppealItemResponse;
 }
 
 export interface BulkDeleteActionConfigRequest {
@@ -1547,6 +1668,10 @@ export const ChannelOwnCapability = {
   JOIN_CHANNEL: 'join-channel',
   LEAVE_CHANNEL: 'leave-channel',
   MUTE_CHANNEL: 'mute-channel',
+  NOTIFY_CHANNEL: 'notify-channel',
+  NOTIFY_GROUP: 'notify-group',
+  NOTIFY_HERE: 'notify-here',
+  NOTIFY_ROLE: 'notify-role',
   PIN_MESSAGE: 'pin-message',
   QUERY_POLL_VOTES: 'query-poll-votes',
   QUOTE_MESSAGE: 'quote-message',
@@ -2111,6 +2236,8 @@ export interface ChatMessageResponse {
 
   mentioned_group_ids?: Array<string>;
 
+  mentioned_groups?: Array<UserGroupResponse>;
+
   mentioned_roles?: Array<string>;
 
   thread_participants?: Array<UserResponse>;
@@ -2287,6 +2414,8 @@ export interface ChatSharedLocationResponseData {
 export interface ClosedCaptionRuleParameters {
   threshold?: number;
 
+  time_window?: string;
+
   harm_labels?: Array<string>;
 
   llm_harm_labels?: Record<string, string>;
@@ -2458,6 +2587,8 @@ export interface ConfigResponse {
 
   block_list_config?: BlockListConfig;
 
+  flood_config?: FloodConfig;
+
   llm_config?: LLMConfig;
 
   velocity_filter_config?: VelocityFilterConfig;
@@ -2487,6 +2618,22 @@ export interface ContentCountRuleParameters {
   time_window?: string;
 }
 
+export interface ContentCustomPropertyCountParameters {
+  operator?: string;
+
+  property_key?: string;
+
+  threshold?: number;
+
+  time_window?: string;
+}
+
+export interface ContentCustomPropertyParameters {
+  operator?: string;
+
+  property_key?: string;
+}
+
 export interface CreateBlockListRequest {
   /**
    * Block list name
@@ -2497,6 +2644,8 @@ export interface CreateBlockListRequest {
    * List of words to block
    */
   words: Array<string>;
+
+  is_confusable_folding_enabled?: boolean;
 
   is_leet_check_enabled?: boolean;
 
@@ -2531,6 +2680,11 @@ export interface CreateDeviceRequest {
    */
 
   push_provider: 'firebase' | 'apn' | 'huawei' | 'xiaomi';
+
+  /**
+   * Stable physical device identifier used to deduplicate pushes across push providers (e.g. APNs VoIP and Firebase on the same iOS device). Distinct from 'id', which is the push token.
+   */
+  hardware_id?: string;
 
   /**
    * Push provider name
@@ -2934,6 +3088,11 @@ export interface DeviceResponse {
    * Reason explaining why device had been disabled
    */
   disabled_reason?: string;
+
+  /**
+   * Stable physical device identifier used to deduplicate pushes across push providers
+   */
+  hardware_id?: string;
 
   /**
    * Push provider name
@@ -3652,11 +3811,25 @@ export interface FileUploadResponse {
 }
 
 export interface FilterConfigResponse {
+  /**
+   * LLM moderation labels available as filter values
+   */
   llm_labels: Array<string>;
 
+  /**
+   * AI text moderation labels available as filter values
+   */
   ai_text_labels?: Array<string>;
 
+  /**
+   * Moderation config keys present in the queue, available as filter values
+   */
   config_keys?: Array<string>;
+
+  /**
+   * The moderation_payload.custom keys the app has configured as review-queue filter chips (via moderation_dashboard_preferences.filterable_custom_keys). Discovery hint for the dashboard only — the filter accepts any custom key regardless of this list.
+   */
+  filterable_custom_keys?: Array<string>;
 }
 
 export interface FlagCountRuleParameters {
@@ -3729,6 +3902,34 @@ export interface FlagResponse {
 
 export interface FlagUserOptions {
   reason?: string;
+}
+
+export interface FloodConfig {
+  identical?: FloodIdenticalConfig;
+
+  similar?: FloodSimilarConfig;
+}
+
+export interface FloodIdenticalConfig {
+  action: string;
+
+  enabled: boolean;
+
+  threshold: number;
+
+  time_window: string;
+}
+
+export interface FloodSimilarConfig {
+  action: string;
+
+  enabled: boolean;
+
+  similarity_distance: number;
+
+  threshold: number;
+
+  time_window: string;
 }
 
 export interface FullUserResponse {
@@ -3997,14 +4198,32 @@ export interface GroupedChannelsBucket {
   channels: Array<ChannelStateResponseFields>;
 
   /**
+   * Cursor for the next page of this group
+   */
+  next?: string;
+
+  /**
+   * Cursor for the previous page of this group
+   */
+  prev?: string;
+
+  /**
    * Unread channels currently classified into this bucket
    */
   unread_channels?: number;
 }
 
+export interface GroupedChannelsGroupRequest {
+  limit?: number;
+
+  next?: string;
+
+  prev?: string;
+}
+
 export interface GroupedQueryChannelsRequest {
   /**
-   * Max channels per bucket (default 10)
+   * Default max channels per group (default 10)
    */
   limit?: number;
 
@@ -4017,6 +4236,11 @@ export interface GroupedQueryChannelsRequest {
    * Whether to start watching found channels or not
    */
   watch?: boolean;
+
+  /**
+   * Groups to return, keyed by group name. Each group can define limit, next, or prev. 'next' and 'prev' cursors are only allowed when the request contains exactly one group; multi-group pagination is rejected.
+   */
+  groups?: Record<string, GroupedChannelsGroupRequest>;
 }
 
 export interface GroupedQueryChannelsResponse {
@@ -4168,10 +4392,20 @@ export interface Images {
   original: ImageData;
 }
 
+export interface KeyframeOCRRuleParameters {
+  threshold?: number;
+
+  time_window?: string;
+
+  harm_labels?: Array<string>;
+}
+
 export interface KeyframeRuleParameters {
   min_confidence?: number;
 
   threshold?: number;
+
+  time_window?: string;
 
   harm_labels?: Array<string>;
 }
@@ -5227,6 +5461,11 @@ export interface MessageResponse {
   mentioned_group_ids?: Array<string>;
 
   /**
+   * List of mentioned user group objects.
+   */
+  mentioned_groups?: Array<UserGroupResponse>;
+
+  /**
    * List of roles mentioned in the message (e.g. admin, channel_moderator, custom roles). Members with matching roles will receive push notifications based on their push preferences. Max 10 roles
    */
   mentioned_roles?: Array<string>;
@@ -5538,6 +5777,11 @@ export interface MessageWithChannelResponse {
    * List of user group IDs mentioned in the message. Group members who are also channel members will receive push notifications based on their push preferences. Max 10 groups
    */
   mentioned_group_ids?: Array<string>;
+
+  /**
+   * List of mentioned user group objects.
+   */
+  mentioned_groups?: Array<UserGroupResponse>;
 
   /**
    * List of roles mentioned in the message (e.g. admin, channel_moderator, custom roles). Members with matching roles will receive push notifications based on their push preferences. Max 10 roles
@@ -7539,7 +7783,7 @@ export interface QueryReviewQueueRequest {
   sort?: Array<SortParamRequest>;
 
   /**
-   * Filter conditions for review queue items
+   * Filter conditions for review queue items. Accepts built-in fields (e.g. status, channel_cid, severity, recommended_action) and customer-supplied moderation_payload.custom keys: any key that is not a built-in field is matched against the item's custom moderation data (e.g. {"location_id": "loc-42"}). Use filter_config.filterable_custom_keys to discover which custom keys the app exposes as chips.
    */
   filter?: Record<string, any>;
 }
@@ -8340,7 +8584,36 @@ export interface ReviewQueueItemResponse {
   reaction?: Reaction;
 }
 
+export interface Role {
+  /**
+   * Date/time of creation
+   */
+  created_at: Date;
+
+  /**
+   * Whether this is a custom role or built-in
+   */
+  custom: boolean;
+
+  /**
+   * Unique role name
+   */
+  name: string;
+
+  /**
+   * Date/time of the last update
+   */
+  updated_at: Date;
+
+  /**
+   * List of scopes where this role is currently present. `.app` means that role is present in app-level grants
+   */
+  scopes: Array<string>;
+}
+
 export interface RuleBuilderAction {
+  reason?: string;
+
   skip_inbox?: boolean;
 
   type?:
@@ -8386,11 +8659,17 @@ export interface RuleBuilderCondition {
 
   content_count_rule_params?: ContentCountRuleParameters;
 
+  content_custom_property_count_params?: ContentCustomPropertyCountParameters;
+
+  content_custom_property_params?: ContentCustomPropertyParameters;
+
   content_flag_count_rule_params?: FlagCountRuleParameters;
 
   image_content_params?: ImageContentParameters;
 
   image_rule_params?: ImageRuleParameters;
+
+  keyframe_ocr_rule_params?: KeyframeOCRRuleParameters;
 
   keyframe_rule_params?: KeyframeRuleParameters;
 
@@ -8587,6 +8866,8 @@ export interface SearchResultMessage {
 
   mentioned_group_ids?: Array<string>;
 
+  mentioned_groups?: Array<UserGroupResponse>;
+
   mentioned_roles?: Array<string>;
 
   thread_participants?: Array<UserResponse>;
@@ -8614,6 +8895,15 @@ export interface SearchResultMessage {
   reminder?: ReminderResponseData;
 
   shared_location?: SharedLocationResponseData;
+}
+
+export interface SearchRolesResponse {
+  duration: string;
+
+  /**
+   * Matching roles, sorted ascending by name
+   */
+  roles: Array<Role>;
 }
 
 export interface SearchUserGroupsResponse {
@@ -8901,6 +9191,11 @@ export interface SubmitActionRequest {
 
 export interface SubmitActionResponse {
   duration: string;
+
+  /**
+   * Present when the appeal was accepted but the entity could not be restored automatically. The moderator should restore it manually.
+   */
+  auto_restore_warning?: string;
 
   appeal_item?: AppealItemResponse;
 
@@ -9447,6 +9742,8 @@ export interface UnreadCountsThread {
 }
 
 export interface UpdateBlockListRequest {
+  is_confusable_folding_enabled?: boolean;
+
   is_leet_check_enabled?: boolean;
 
   is_plural_check_enabled?: boolean;
@@ -10000,6 +10297,8 @@ export interface UpsertConfigRequest {
 
   bodyguard_config?: AITextConfig;
 
+  flood_config?: FloodConfig;
+
   google_vision_config?: GoogleVisionConfig;
 
   llm_config?: LLMConfig;
@@ -10035,7 +10334,7 @@ export interface UpsertPushPreferencesResponse {
    */
   user_channel_preferences: Record<
     string,
-    Record<string, ChannelPushPreferencesResponse | null>
+    Record<string, ChannelPushPreferencesResponse>
   >;
 
   /**
@@ -10095,6 +10394,11 @@ export interface UserBannedEvent {
   reason?: string;
 
   received_at?: Date;
+
+  /**
+   * ID of the review queue item (flagged message) that triggered the ban, if the ban was applied from the moderation review queue
+   */
+  review_queue_item_id?: string;
 
   /**
    * Whether the user was shadow banned
@@ -10327,8 +10631,6 @@ export interface UserGroupResponse {
   description?: string;
 
   team_id?: string;
-
-  members?: Array<UserGroupMember>;
 }
 
 export interface UserGroupUpdatedEvent {

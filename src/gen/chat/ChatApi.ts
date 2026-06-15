@@ -91,6 +91,7 @@ import type {
   Response,
   SearchPayload,
   SearchResponse,
+  SearchRolesResponse,
   SearchUserGroupsResponse,
   SendEventRequest,
   SendMessageRequest,
@@ -182,6 +183,7 @@ export class ChatApi {
     const body = {
       name: request?.name,
       words: request?.words,
+      is_confusable_folding_enabled: request?.is_confusable_folding_enabled,
       is_leet_check_enabled: request?.is_leet_check_enabled,
       is_plural_check_enabled: request?.is_plural_check_enabled,
       team: request?.team,
@@ -227,6 +229,7 @@ export class ChatApi {
       name: request?.name,
     };
     const body = {
+      is_confusable_folding_enabled: request?.is_confusable_folding_enabled,
       is_leet_check_enabled: request?.is_leet_check_enabled,
       is_plural_check_enabled: request?.is_plural_check_enabled,
       team: request?.team,
@@ -336,6 +339,7 @@ export class ChatApi {
       limit: request?.limit,
       presence: request?.presence,
       watch: request?.watch,
+      groups: request?.groups,
     };
 
     const response = await this.apiClient.sendRequest<
@@ -1751,6 +1755,7 @@ export class ChatApi {
     const body = {
       id: request?.id,
       push_provider: request?.push_provider,
+      hardware_id: request?.hardware_id,
       push_provider_name: request?.push_provider_name,
       voip_token: request?.voip_token,
     };
@@ -2124,6 +2129,30 @@ export class ChatApi {
     >('POST', '/api/v2/push_preferences', undefined, undefined, body, 'application/json');
 
     decoders['UpsertPushPreferencesResponse']?.(response.body);
+
+    return { ...response.body, metadata: response.metadata };
+  }
+
+  async searchRoles(request: {
+    query: string;
+    limit?: number;
+    name_gt?: string;
+    role_type?: string;
+    include_global_roles?: boolean;
+  }): Promise<StreamResponse<SearchRolesResponse>> {
+    const queryParams = {
+      query: request?.query,
+      limit: request?.limit,
+      name_gt: request?.name_gt,
+      role_type: request?.role_type,
+      include_global_roles: request?.include_global_roles,
+    };
+
+    const response = await this.apiClient.sendRequest<
+      StreamResponse<SearchRolesResponse>
+    >('GET', '/api/v2/roles/search', undefined, queryParams);
+
+    decoders['SearchRolesResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
