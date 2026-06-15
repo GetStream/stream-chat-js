@@ -94,6 +94,14 @@ decoders['AppealItemResponse'] = (input?: { [key: string]: any }) => {
 
     updated_at: { type: 'DatetimeType', isSingle: true },
 
+    actions: { type: 'ActionLogResponse', isSingle: false },
+
+    flags: { type: 'ModerationFlagResponse', isSingle: false },
+
+    moderation_action: { type: 'ActionLogResponse', isSingle: true },
+
+    original_moderation_action: { type: 'ActionLogResponse', isSingle: true },
+
     user: { type: 'UserResponse', isSingle: true },
   };
   return decode(typeMappings, input);
@@ -157,6 +165,20 @@ decoders['BlockedUserResponse'] = (input?: { [key: string]: any }) => {
     blocked_user: { type: 'UserResponse', isSingle: true },
 
     user: { type: 'UserResponse', isSingle: true },
+  };
+  return decode(typeMappings, input);
+};
+
+decoders['BulkActionAppealsResponse'] = (input?: { [key: string]: any }) => {
+  const typeMappings: TypeMapping = {
+    results: { type: 'BulkAppealResult', isSingle: false },
+  };
+  return decode(typeMappings, input);
+};
+
+decoders['BulkAppealResult'] = (input?: { [key: string]: any }) => {
+  const typeMappings: TypeMapping = {
+    appeal_item: { type: 'AppealItemResponse', isSingle: true },
   };
   return decode(typeMappings, input);
 };
@@ -471,6 +493,8 @@ decoders['ChatMessageResponse'] = (input?: { [key: string]: any }) => {
     pin_expires: { type: 'DatetimeType', isSingle: true },
 
     pinned_at: { type: 'DatetimeType', isSingle: true },
+
+    mentioned_groups: { type: 'UserGroupResponse', isSingle: false },
 
     thread_participants: { type: 'UserResponse', isSingle: false },
 
@@ -1187,6 +1211,8 @@ decoders['MessageResponse'] = (input?: { [key: string]: any }) => {
 
     pinned_at: { type: 'DatetimeType', isSingle: true },
 
+    mentioned_groups: { type: 'UserGroupResponse', isSingle: false },
+
     thread_participants: { type: 'UserResponse', isSingle: false },
 
     draft: { type: 'DraftResponse', isSingle: true },
@@ -1255,6 +1281,8 @@ decoders['MessageWithChannelResponse'] = (input?: { [key: string]: any }) => {
     pin_expires: { type: 'DatetimeType', isSingle: true },
 
     pinned_at: { type: 'DatetimeType', isSingle: true },
+
+    mentioned_groups: { type: 'UserGroupResponse', isSingle: false },
 
     thread_participants: { type: 'UserResponse', isSingle: false },
 
@@ -2009,6 +2037,15 @@ decoders['ReviewQueueItemResponse'] = (input?: { [key: string]: any }) => {
   return decode(typeMappings, input);
 };
 
+decoders['Role'] = (input?: { [key: string]: any }) => {
+  const typeMappings: TypeMapping = {
+    created_at: { type: 'DatetimeType', isSingle: true },
+
+    updated_at: { type: 'DatetimeType', isSingle: true },
+  };
+  return decode(typeMappings, input);
+};
+
 decoders['SearchResponse'] = (input?: { [key: string]: any }) => {
   const typeMappings: TypeMapping = {
     results: { type: 'SearchResult', isSingle: false },
@@ -2045,6 +2082,8 @@ decoders['SearchResultMessage'] = (input?: { [key: string]: any }) => {
 
     pinned_at: { type: 'DatetimeType', isSingle: true },
 
+    mentioned_groups: { type: 'UserGroupResponse', isSingle: false },
+
     thread_participants: { type: 'UserResponse', isSingle: false },
 
     channel: { type: 'ChannelResponse', isSingle: true },
@@ -2064,6 +2103,13 @@ decoders['SearchResultMessage'] = (input?: { [key: string]: any }) => {
     reminder: { type: 'ReminderResponseData', isSingle: true },
 
     shared_location: { type: 'SharedLocationResponseData', isSingle: true },
+  };
+  return decode(typeMappings, input);
+};
+
+decoders['SearchRolesResponse'] = (input?: { [key: string]: any }) => {
+  const typeMappings: TypeMapping = {
+    roles: { type: 'Role', isSingle: false },
   };
   return decode(typeMappings, input);
 };
@@ -2407,13 +2453,6 @@ decoders['UserGroupDeletedEvent'] = (input?: { [key: string]: any }) => {
   return decode(typeMappings, input);
 };
 
-decoders['UserGroupMember'] = (input?: { [key: string]: any }) => {
-  const typeMappings: TypeMapping = {
-    created_at: { type: 'DatetimeType', isSingle: true },
-  };
-  return decode(typeMappings, input);
-};
-
 decoders['UserGroupMemberAddedEvent'] = (input?: { [key: string]: any }) => {
   const typeMappings: TypeMapping = {
     created_at: { type: 'DatetimeType', isSingle: true },
@@ -2441,8 +2480,6 @@ decoders['UserGroupResponse'] = (input?: { [key: string]: any }) => {
     created_at: { type: 'DatetimeType', isSingle: true },
 
     updated_at: { type: 'DatetimeType', isSingle: true },
-
-    members: { type: 'UserGroupMember', isSingle: false },
   };
   return decode(typeMappings, input);
 };
