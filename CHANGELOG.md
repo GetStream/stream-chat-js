@@ -1,3 +1,9 @@
+## [9.47.0](https://github.com/GetStream/stream-chat-js/compare/v9.46.0...v9.47.0) (2026-06-15)
+
+### Features
+
+* control mention type usage in MessageComposer via channel permissions ([#1772](https://github.com/GetStream/stream-chat-js/issues/1772)) ([be4e7fe](https://github.com/GetStream/stream-chat-js/commit/be4e7fe7f342a0a5ec80992b0748097b6cb45c95))
+
 ## [9.46.0](https://github.com/GetStream/stream-chat-js/compare/v9.45.6...v9.46.0) (2026-06-12)
 
 ### Features
