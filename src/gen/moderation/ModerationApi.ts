@@ -4,6 +4,8 @@ import type {
   AppealResponse,
   BanRequest,
   BanResponse,
+  BulkActionAppealsRequest,
+  BulkActionAppealsResponse,
   BulkDeleteActionConfigRequest,
   BulkDeleteActionConfigResponse,
   BulkUpsertActionConfigRequest,
@@ -154,6 +156,7 @@ export class ModerationApi {
       appeal_reason: request?.appeal_reason,
       entity_id: request?.entity_id,
       entity_type: request?.entity_type,
+      review_queue_item_id: request?.review_queue_item_id,
       attachments: request?.attachments,
     };
 
@@ -215,6 +218,35 @@ export class ModerationApi {
     return { ...response.body, metadata: response.metadata };
   }
 
+  async bulkActionAppeals(
+    request: BulkActionAppealsRequest,
+  ): Promise<StreamResponse<BulkActionAppealsResponse>> {
+    const body = {
+      action_type: request?.action_type,
+      appeal_ids: request?.appeal_ids,
+      mark_reviewed: request?.mark_reviewed,
+      reject_appeal: request?.reject_appeal,
+      restore: request?.restore,
+      unban: request?.unban,
+      unblock: request?.unblock,
+    };
+
+    const response = await this.apiClient.sendRequest<
+      StreamResponse<BulkActionAppealsResponse>
+    >(
+      'POST',
+      '/api/v2/moderation/appeals/bulk_action',
+      undefined,
+      undefined,
+      body,
+      'application/json',
+    );
+
+    decoders['BulkActionAppealsResponse']?.(response.body);
+
+    return { ...response.body, metadata: response.metadata };
+  }
+
   async ban(request: BanRequest): Promise<StreamResponse<BanResponse>> {
     const body = {
       target_user_id: request?.target_user_id,
@@ -259,6 +291,7 @@ export class ModerationApi {
       aws_rekognition_config: request?.aws_rekognition_config,
       block_list_config: request?.block_list_config,
       bodyguard_config: request?.bodyguard_config,
+      flood_config: request?.flood_config,
       google_vision_config: request?.google_vision_config,
       llm_config: request?.llm_config,
       rule_builder_config: request?.rule_builder_config,
