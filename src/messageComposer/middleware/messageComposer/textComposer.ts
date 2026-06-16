@@ -1,5 +1,5 @@
 import type { MiddlewareHandlerParams } from '../../../middleware';
-import type { DraftMessage, LocalMessage, UserResponse } from '../../../types';
+import type { LocalMessage, Message, UserResponse } from '../../../types';
 import type { MessageComposer } from '../../messageComposer';
 import { mentionEntityToUserResponse } from '../textComposer/mentionUtils';
 import type { MentionEntity } from '../textComposer/types';
@@ -30,7 +30,7 @@ type BuildMentionCompositionMetadataParams = {
 };
 
 type DraftMentionPayload = Pick<
-  DraftMessage,
+  Message,
   | 'mentioned_channel'
   | 'mentioned_group_ids'
   | 'mentioned_here'

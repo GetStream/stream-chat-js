@@ -8,7 +8,7 @@ import type {
   SendFileAPIResponse,
   UserResponse,
 } from './types';
-import { ErrorFromResponse } from './types';
+import { StreamAPIError } from './types';
 import { addFileToFormData, chatCodes, randomId, retryInterval } from './utils';
 import type { StreamChat } from './client';
 import { runWithRetry } from './utils/retryable';
@@ -177,19 +177,6 @@ export class ApiClient {
     };
   }
 
-  private errorFromResponse(response: AxiosResponse<APIErrorResponse>) {
-    const message =
-      typeof response.data.code !== 'undefined'
-        ? `StreamChat error code ${response.data.code}: ${response.data.message}`
-        : `StreamChat error HTTP code: ${response.status}`;
-
-    return new ErrorFromResponse<APIErrorResponse>(message, {
-      code: response.data.code ?? null,
-      response,
-      status: response.status,
-    });
-  }
-
   private async _doRequest<T>(
     type: Method,
     url: string,
@@ -254,8 +241,12 @@ export class ApiClient {
         metadata: this.extractMetadata(response, clientRequestId),
       };
     } catch (error) {
-      if (error instanceof AxiosError && error.response) {
-        throw this.errorFromResponse(error.response);
+      if (errorIsApiError(error)) {
+        throw new StreamAPIError(error.response?.data.message ?? error.message, {
+          code: error.response?.data.code,
+          status: error.status,
+          response: error.response,
+        });
       } else {
         throw error;
       }
