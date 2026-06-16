@@ -48,6 +48,26 @@ describe('Threads 2.0', () => {
     });
   }
 
+  function createMinimalThread({
+    parentMessageOverrides = {},
+    draft,
+  }: {
+    parentMessageOverrides?: Partial<MessageResponse>;
+    draft?: {
+      channel_cid: string;
+      created_at: string;
+      message: { id: string; text: string; parent_id?: string };
+      parent_id?: string;
+    };
+  } = {}) {
+    return new Thread({
+      client,
+      channel,
+      parentMessage: { ...parentMessageResponse, ...parentMessageOverrides },
+      draft,
+    });
+  }
+
   beforeEach(() => {
     client = new StreamChat('apiKey');
     client._setUser({ id: TEST_USER_ID });
@@ -71,6 +91,7 @@ describe('Threads 2.0', () => {
       const thread = new Thread({ client, threadData: threadResponse });
       const state = thread.state.getLatestValue();
 
+      expect(state.displayName).to.equal(thread.getDisplayName());
       expect(threadResponse.channel.members).to.have.lengthOf(0);
       expect(threadResponse.read).to.have.lengthOf(0);
       expect(state.read).to.have.keys([TEST_USER_ID]);
@@ -81,7 +102,135 @@ describe('Threads 2.0', () => {
       expect(thread.channel.data?.name).to.equal(channelResponse.name);
     });
 
+    it('initializes properly without threadData', () => {
+      const thread = createMinimalThread();
+      const state = thread.state.getLatestValue();
+
+      expect(thread.id).to.equal(parentMessageResponse.id);
+      expect(thread.channel.cid).to.equal(channel.cid);
+      expect(state.parentMessage.id).to.equal(parentMessageResponse.id);
+      expect(state.replies).to.deep.equal([]);
+      expect(state.participants).to.deep.equal([]);
+      expect(state.custom).to.deep.equal({});
+      expect(state.pagination.prevCursor).to.be.null;
+      expect(state.pagination.nextCursor).to.be.null;
+      expect(state.read).to.have.keys([TEST_USER_ID]);
+    });
+
+    it('throws if minimal init parent message id is missing', () => {
+      expect(() =>
+        createMinimalThread({
+          parentMessageOverrides: { id: '' },
+        }),
+      ).to.throw();
+    });
+
+    it('accepts draft in minimal init path', () => {
+      const draftId = uuidv4();
+      const thread = createMinimalThread({
+        draft: {
+          channel_cid: channel.cid,
+          created_at: new Date().toISOString(),
+          message: {
+            id: draftId,
+            text: 'draft text',
+            parent_id: parentMessageResponse.id,
+          },
+          parent_id: parentMessageResponse.id,
+        },
+      });
+
+      expect(thread.messageComposer.draftId).to.equal(draftId);
+    });
+
     describe('Methods', () => {
+      describe('getDisplayName', () => {
+        describe('fallback 1: customDisplayNameGenerator', () => {
+          it('returns custom value when generator returns a string', () => {
+            const thread = createTestThread({ title: 'Thread Title' });
+            thread.customDisplayNameGenerator = () => 'Custom Title';
+            expect(thread.getDisplayName()).to.equal('Custom Title');
+          });
+
+          it('passes current ThreadState to generator', () => {
+            const thread = createTestThread({ title: 'My Title' });
+            let receivedState: unknown;
+            thread.customDisplayNameGenerator = (state) => {
+              receivedState = state;
+              return null;
+            };
+            thread.getDisplayName();
+            expect(receivedState).to.equal(thread.state.getLatestValue());
+          });
+
+          it('falls through when generator returns null', () => {
+            const thread = createTestThread({ title: 'Thread Title' });
+            thread.customDisplayNameGenerator = () => null;
+            expect(thread.getDisplayName()).to.equal('Test channel');
+          });
+
+          it('falls through when generator returns empty string', () => {
+            const thread = createTestThread({ title: 'Thread Title' });
+            thread.customDisplayNameGenerator = () => '';
+            expect(thread.getDisplayName()).to.equal('Test channel');
+          });
+        });
+
+        describe('fallback 2: channel display name', () => {
+          it('returns channel display name when no custom generator', () => {
+            const thread = createTestThread({ title: '', thread_participants: [] });
+            expect(thread.getDisplayName()).to.equal('Test channel');
+          });
+
+          it('ignores thread.title and uses channel display name', () => {
+            const thread = createTestThread({ title: 'My Thread' });
+            expect(thread.getDisplayName()).to.equal('Test channel');
+          });
+
+          it('ignores participants and uses channel display name', () => {
+            const thread = createTestThread({
+              title: '',
+              thread_participants: [
+                {
+                  channel_cid: 'messaging:test',
+                  created_at: '',
+                  last_read_at: '',
+                  user: { id: 'u1', name: 'Alice' },
+                },
+              ],
+            });
+            expect(thread.getDisplayName()).to.equal('Test channel');
+          });
+        });
+
+        describe('fallback 3: no value', () => {
+          it('returns null when no custom and channel has no display name', () => {
+            const thread = createTestThread({
+              title: '',
+              thread_participants: [],
+              channelOverrides: { name: '' },
+            });
+            expect(thread.getDisplayName()).to.be.null;
+          });
+
+          it('returns null when no custom, channel has no display name, and participants exist', () => {
+            const thread = createTestThread({
+              title: '',
+              thread_participants: [
+                {
+                  channel_cid: 'messaging:test',
+                  created_at: '',
+                  last_read_at: '',
+                  user: { id: 'u1', name: 'Alice' },
+                },
+              ],
+              channelOverrides: { name: '' },
+            });
+            expect(thread.getDisplayName()).to.be.null;
+          });
+        });
+      });
+
       describe('upsertReplyLocally', () => {
         it('prevents inserting a new message that does not belong to the associated thread', () => {
           const thread = createTestThread();
@@ -265,6 +414,30 @@ describe('Threads 2.0', () => {
           expect(stateAfter.participants).to.equal(hydrationState.participants);
         });
 
+        it('copies pagination state during hydration', () => {
+          const thread = createMinimalThread();
+          const hydrationThread = createTestThread({
+            latest_replies: [
+              generateMsg({ parent_id: parentMessageResponse.id }) as MessageResponse,
+            ],
+            reply_count: 3,
+          });
+
+          hydrationThread.state.next((current) => ({
+            ...current,
+            pagination: {
+              ...current.pagination,
+              nextCursor: 'next-cursor',
+            },
+          }));
+
+          thread.hydrateState(hydrationThread);
+
+          const stateAfter = thread.state.getLatestValue();
+          expect(stateAfter.pagination.prevCursor).to.not.be.null;
+          expect(stateAfter.pagination.nextCursor).to.equal('next-cursor');
+        });
+
         it('retains failed replies after hydration', () => {
           const thread = createTestThread();
           const hydrationThread = createTestThread({
@@ -284,6 +457,37 @@ describe('Threads 2.0', () => {
           const stateAfter = thread.state.getLatestValue();
           expect(stateAfter.replies).to.have.lengthOf(2);
           expect(stateAfter.replies[1].id).to.equal(failedMessage.id);
+        });
+      });
+
+      describe('reload', () => {
+        it('bootstraps pagination for minimally initialized threads', async () => {
+          const minimalThread = createMinimalThread();
+          const hydratedThread = createTestThread({
+            latest_replies: [
+              generateMsg({ parent_id: parentMessageResponse.id }) as MessageResponse,
+            ],
+            reply_count: 3,
+          });
+          hydratedThread.state.next((current) => ({
+            ...current,
+            pagination: {
+              ...current.pagination,
+              nextCursor: 'next-cursor',
+            },
+          }));
+
+          sinon.stub(client, 'getThread').resolves(hydratedThread);
+
+          const stateBefore = minimalThread.state.getLatestValue();
+          expect(stateBefore.pagination.prevCursor).to.be.null;
+          expect(stateBefore.pagination.nextCursor).to.be.null;
+
+          await minimalThread.reload();
+
+          const stateAfter = minimalThread.state.getLatestValue();
+          expect(stateAfter.pagination.prevCursor).to.not.be.null;
+          expect(stateAfter.pagination.nextCursor).to.equal('next-cursor');
         });
       });
 
