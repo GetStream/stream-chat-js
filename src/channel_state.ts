@@ -350,9 +350,19 @@ export class ChannelState {
 
   addReaction(
     reaction: ReactionResponse,
+    message: MessageResponse,
+    enforce_unique?: boolean,
+  ): MessageResponse;
+  addReaction(
+    reaction: ReactionResponse,
+    message?: undefined,
+    enforce_unique?: boolean,
+  ): LocalMessage | undefined;
+  addReaction(
+    reaction: ReactionResponse,
     message?: MessageResponse,
     enforce_unique?: boolean,
-  ) {
+  ): MessageResponse | LocalMessage | undefined {
     const messageWithReaction = message;
     let messageFromState: LocalMessage | undefined;
     if (!messageWithReaction) {
@@ -504,7 +514,15 @@ export class ChannelState {
     return [];
   }
 
-  removeReaction(reaction: ReactionResponse, message?: MessageResponse) {
+  removeReaction(reaction: ReactionResponse, message: MessageResponse): MessageResponse;
+  removeReaction(
+    reaction: ReactionResponse,
+    message?: undefined,
+  ): LocalMessage | undefined;
+  removeReaction(
+    reaction: ReactionResponse,
+    message?: MessageResponse,
+  ): MessageResponse | LocalMessage | undefined {
     const messageWithRemovedReaction = message;
     let messageFromState: LocalMessage | undefined;
     if (!messageWithRemovedReaction) {
@@ -574,7 +592,7 @@ export class ChannelState {
     remove?: boolean;
   }) {
     const update = (messages: LocalMessage[]) => {
-      const updatedMessages = messages.reduce<MessageResponse[]>((acc, msg) => {
+      const updatedMessages = messages.reduce<LocalMessage[]>((acc, msg) => {
         if (msg.quoted_message_id === message.id) {
           acc.push({
             ...msg,

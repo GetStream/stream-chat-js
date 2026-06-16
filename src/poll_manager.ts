@@ -2,6 +2,7 @@ import type { StreamChat } from './client';
 import type {
   CreatePollData,
   LocalMessage,
+  MessageResponse,
   PollResponse,
   PollSort,
   QueryPollsFilters,
@@ -10,7 +11,6 @@ import type {
 import { Poll } from './poll';
 import { formatMessage } from './utils';
 import { WithSubscriptions } from './utils/WithSubscriptions';
-import type { MessageResponse as Gen_MessageResponse } from './gen/models';
 
 export class PollManager extends WithSubscriptions {
   private client: StreamChat;
@@ -94,7 +94,7 @@ export class PollManager extends WithSubscriptions {
   };
 
   public hydratePollCache = (
-    messages: LocalMessage[] | Gen_MessageResponse[],
+    messages: LocalMessage[] | MessageResponse[],
     overwriteState?: boolean,
   ) => {
     for (const message of messages) {
