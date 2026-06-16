@@ -160,7 +160,7 @@ const initState = (
     draftId,
     id,
     pollId: message.poll_id ?? null,
-    quotedMessage: quotedMessage ? formatMessage(quotedMessage as MessageResponse) : null,
+    quotedMessage: quotedMessage ? formatMessage(quotedMessage) : null,
     showReplyInChannel: false,
     editedMessage,
   };
@@ -503,10 +503,7 @@ export class MessageComposer extends WithSubscriptions {
   };
 
   initStateFromChannelResponse = (channelApiResponse: ChannelAPIResponse) => {
-    if (
-      channelApiResponse.channel?.cid &&
-      this.channel.cid !== channelApiResponse.channel.cid
-    ) {
+    if (this.channel.cid !== channelApiResponse.channel?.cid) {
       return;
     }
     if (channelApiResponse.draft) {

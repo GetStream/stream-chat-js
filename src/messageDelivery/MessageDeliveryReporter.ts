@@ -3,14 +3,12 @@ import { Channel } from '../channel';
 import type { ThreadUserReadState } from '../thread';
 import { Thread } from '../thread';
 import type {
-  ErrorFromResponse,
-  EventAPIResponse,
   LocalMessage,
   MarkDeliveredOptions,
   MarkReadOptions,
+  StreamAPIError,
   StreamResponse,
 } from '../types';
-import { type APIErrorResponse } from '../types';
 import { throttle } from '../utils';
 import { isAPIError, isErrorRetryable } from '../errors';
 import type { MarkReadResponse as Gen_MarkReadResponse } from '../gen/models';
@@ -43,7 +41,7 @@ export class MessageDeliveryReporter {
   protected nextDeliveryReportCandidates: Map<ChannelThreadCompositeId, MessageId> =
     new Map();
 
-  protected markDeliveredRequestPromise: Promise<EventAPIResponse | void> | null = null;
+  protected markDeliveredRequestPromise: Promise<void> | null = null;
   protected markDeliveredTimeout: ReturnType<typeof setTimeout> | null = null;
 
   protected requestTimeoutMs: number = MARK_AS_DELIVERED_BUFFER_TIMEOUT;
@@ -242,7 +240,7 @@ export class MessageDeliveryReporter {
       postFlightReconcile();
     };
 
-    const handleError = (error: ErrorFromResponse<APIErrorResponse> | Error) => {
+    const handleError = (error: StreamAPIError | Error) => {
       // re-populate relevant candidates for the next report
       // but make sure to keep the items that failed to be reported the first next time
       const newDeliveryReportCandidates = new Map(sendBuffer);
@@ -253,7 +251,9 @@ export class MessageDeliveryReporter {
 
       if (
         (isAPIError(error) && isErrorRetryable(error)) ||
-        (error as ErrorFromResponse<APIErrorResponse>).status >= 500
+        (typeof (error as StreamAPIError).status === 'number' &&
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          (error as StreamAPIError).status! >= 500)
       ) {
         this.increaseBackOff();
         postFlightReconcile();

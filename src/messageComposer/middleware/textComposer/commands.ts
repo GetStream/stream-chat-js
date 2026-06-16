@@ -75,7 +75,7 @@ export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion>
       items: selectedCommands.map((command) => ({
         ...command,
         id: command.name,
-      })) as CommandSuggestion[],
+      })),
       next: null,
     };
   }

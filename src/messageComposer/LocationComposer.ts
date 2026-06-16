@@ -74,8 +74,9 @@ export class LocationComposer {
     ) {
       return {
         ...location,
-        end_at: durationMs && new Date(Date.now() + durationMs).toISOString(),
-      } as StaticLocationPayload | LiveLocationPayload;
+        end_at:
+          typeof durationMs === 'number' ? new Date(Date.now() + durationMs) : undefined,
+      };
     }
     return null;
   }

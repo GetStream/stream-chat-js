@@ -6,7 +6,6 @@ import type {
   CustomAttachmentData,
   CustomChannelData,
   CustomCommandData,
-  CustomEventData,
   CustomMemberData,
   CustomMessageData,
   CustomPollData,
@@ -19,21 +18,9 @@ import type { NotificationManager } from './notifications';
 import type { RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
 import type {
   Action as Gen_Action,
-  AIImageConfig as Gen_AIImageConfig,
-  AITextConfig as Gen_AITextConfig,
-  AIVideoConfig as Gen_AIVideoConfig,
   APIError as Gen_APIError,
   Attachment as Gen_Attachment,
   AutomodDetailsResponse as Gen_AutomodDetailsResponse,
-  AutomodPlatformCircumventionConfig as Gen_AutomodPlatformCircumventionConfig,
-  AutomodRule as Gen_AutomodRule,
-  AutomodSemanticFiltersConfig as Gen_AutomodSemanticFiltersConfig,
-  AutomodSemanticFiltersRule as Gen_AutomodSemanticFiltersRule,
-  AutomodToxicityConfig as Gen_AutomodToxicityConfig,
-  BanOptions as Gen_BanOptions,
-  BlockListConfig as Gen_BlockListConfig,
-  BlockListOptions as Gen_BlockListOptions,
-  BlockListRule as Gen_BlockListRule,
   ChannelConfigWithInfo as Gen_ChannelConfigWithInfo,
   ChannelGetOrCreateRequest as Gen_ChannelGetOrCreateRequest,
   ChannelInput as Gen_ChannelInput,
@@ -44,20 +31,12 @@ import type {
   ChannelStateResponse as Gen_ChannelStateResponse,
   ChannelStateResponseFields as Gen_ChannelStateResponseFields,
   Command as Gen_Command,
-  ContentCountRuleParameters as Gen_ContentCountRuleParameters,
   CreateDeviceRequest as Gen_CreateDeviceRequest,
   CreatePollRequest as Gen_CreatePollRequest,
   DraftPayloadResponse as Gen_DraftPayloadResponse,
   DraftResponse as Gen_DraftResponse,
   Field as Gen_Field,
   FileUploadConfig as Gen_FileUploadConfig,
-  FilterConfigResponse as Gen_FilterConfigResponse,
-  FlagUserOptions as Gen_FlagUserOptions,
-  GetConfigResponse as Gen_GetConfigResponse,
-  ImageContentParameters as Gen_ImageContentParameters,
-  ImageRuleParameters as Gen_ImageRuleParameters,
-  LLMConfig as Gen_LLMConfig,
-  LLMRule as Gen_LLMRule,
   MarkChannelsReadRequest as Gen_MarkChannelsReadRequest,
   MarkDeliveredRequest as Gen_MarkDeliveredRequest,
   MarkReadRequest as Gen_MarkReadRequest,
@@ -71,6 +50,7 @@ import type {
   PendingMessageResponse as Gen_PendingMessageResponse,
   PollResponseData as Gen_PollResponseData,
   PollVoteResponseData as Gen_PollVoteResponseData,
+  PrivacySettingsResponse as Gen_PrivacySettingsResponse,
   PushPreferenceInput as Gen_PushPreferenceInput,
   QueryBannedUsersPayload as Gen_QueryBannedUsersPayload,
   QueryChannelsRequest as Gen_QueryChannelsRequest,
@@ -84,23 +64,16 @@ import type {
   QueryThreadsRequest as Gen_QueryThreadsRequest,
   QueryUsersPayload as Gen_QueryUsersPayload,
   ReactionGroupResponse as Gen_ReactionGroupResponse,
-  ReactionGroupUserResponse as Gen_ReactionGroupUserResponse,
   ReactionRequest as Gen_ReactionRequest,
   ReactionResponse as Gen_ReactionResponse,
   ReadStateResponse as Gen_ReadStateResponse,
   ReminderResponseData as Gen_ReminderResponseData,
-  RuleBuilderAction as Gen_RuleBuilderAction,
-  RuleBuilderCondition as Gen_RuleBuilderCondition,
-  RuleBuilderConditionGroup as Gen_RuleBuilderConditionGroup,
-  RuleBuilderRule as Gen_RuleBuilderRule,
   SearchPayload as Gen_SearchPayload,
   SearchWarning as Gen_SearchWarning,
   SendMessageRequest as Gen_SendMessageRequest,
   SendReactionRequest as Gen_SendReactionRequest,
   SharedLocation as Gen_SharedLocation,
   SharedLocationResponseData as Gen_SharedLocationResponseData,
-  TextContentParameters as Gen_TextContentParameters,
-  TextRuleParameters as Gen_TextRuleParameters,
   ThreadStateResponse as Gen_ThreadStateResponse,
   TruncateChannelRequest as Gen_TruncateChannelRequest,
   UpdateChannelPartialRequest as Gen_UpdateChannelPartialRequest,
@@ -110,18 +83,10 @@ import type {
   UpdatePollOptionRequest as Gen_UpdatePollOptionRequest,
   UpdatePollRequest as Gen_UpdatePollRequest,
   UpdateUserPartialRequest as Gen_UpdateUserPartialRequest,
-  UpsertConfigResponse as Gen_UpsertConfigResponse,
   UpsertPushPreferencesResponse as Gen_UpsertPushPreferencesResponse,
-  UserCreatedWithinParameters as Gen_UserCreatedWithinParameters,
-  UserCustomPropertyParameters as Gen_UserCustomPropertyParameters,
   UserMuteResponse as Gen_UserMuteResponse,
   UserRequest as Gen_UserRequest,
   UserResponse as Gen_UserResponse,
-  UserRuleParameters as Gen_UserRuleParameters,
-  VelocityFilterConfig as Gen_VelocityFilterConfig,
-  VelocityFilterConfigRule as Gen_VelocityFilterConfigRule,
-  VideoContentParameters as Gen_VideoContentParameters,
-  VideoRuleParameters as Gen_VideoRuleParameters,
   VoteData as Gen_VoteData,
   WSEvent,
 } from './gen/models';
@@ -141,10 +106,6 @@ import type { ChatApi } from './gen-imports';
  * Utility Types
  */
 
-export type Readable<T> = {
-  [key in keyof T]: T[key];
-} & {};
-
 export type ArrayOneOrMore<T> = {
   0: T;
 } & Array<T>;
@@ -153,12 +114,6 @@ export type ArrayTwoOrMore<T> = {
   0: T;
   1: T;
 } & Array<T>;
-
-export type KnownKeys<T> = {
-  [K in keyof T]: string extends K ? never : number extends K ? never : K;
-} extends { [_ in keyof T]: infer U }
-  ? U
-  : never;
 
 export type RequireAtLeastOne<T> = {
   [K in keyof T]-?: Required<Pick<T, K>> & Partial<Omit<T, K>>;
@@ -169,11 +124,7 @@ export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Omit<T, Keys> &
     [K in Keys]-?: Required<Pick<T, K>> & Partial<Record<Exclude<Keys, K>, undefined>>;
   }[Keys];
 
-export type PartializeKeys<T, K extends keyof T> = Partial<Pick<T, K>> & Omit<T, K>;
-
-/* Unknown Record */
 export type UR = Record<string, unknown>;
-export type UnknownType = UR; //alias to avoid breaking change
 
 export type Unpacked<T> = T extends (infer U)[]
   ? U
@@ -190,11 +141,6 @@ export type Unpacked<T> = T extends (infer U)[]
 export type APIResponse = {
   duration: string;
   blocklist?: BlockListResponse;
-};
-
-export type TranslateResponse = {
-  language: string;
-  translated_text: string;
 };
 
 export type AppSettingsAPIResponse = APIResponse & {
@@ -344,10 +290,6 @@ export type Flag = {
   user?: UserResponse;
 };
 
-export type FlagsResponse = APIResponse & {
-  flags?: Array<Flag>;
-};
-
 export type MessageFlagsResponse = APIResponse & {
   flags?: Array<{
     message: MessageResponse;
@@ -361,28 +303,6 @@ export type MessageFlagsResponse = APIResponse & {
     reviewed_by?: UserResponse;
     updated_at?: string;
   }>;
-};
-
-export type FlagReport = {
-  flags_count: number;
-  id: string;
-  message: MessageResponse;
-  user: UserResponse;
-  created_at?: string;
-  details?: FlagDetails;
-  first_reporter?: UserResponse;
-  review_result?: string;
-  reviewed_at?: string;
-  reviewed_by?: UserResponse;
-  updated_at?: string;
-};
-
-export type FlagReportsResponse = APIResponse & {
-  flag_reports: Array<FlagReport>;
-};
-
-export type ReviewFlagReportResponse = APIResponse & {
-  flag_report: FlagReport;
 };
 
 export type BannedUsersResponse = APIResponse & {
@@ -417,7 +337,10 @@ export type BlockListResponse = BlockList & {
   updated_at?: string;
 };
 
-export type ChannelResponse = ReplaceCustom<Gen_ChannelResponse, CustomChannelData>;
+export type ChannelResponse = ReplacePropertyTypes<
+  Gen_ChannelResponse,
+  { custom: CustomChannelData }
+>;
 
 export type QueryReactionsOptions = Pager;
 
@@ -448,82 +371,17 @@ export type ChannelMemberUpdates = CustomMemberData & {
   pinned?: boolean;
 };
 
-export type ChannelMemberResponse = ReplaceCustom<
+export type ChannelMemberResponse = ReplacePropertyTypes<
   Gen_ChannelMemberResponse,
-  CustomMemberData
+  { custom: CustomMemberData }
 >;
-
-export type PartialUpdateMemberAPIResponse = APIResponse & {
-  channel_member: ChannelMemberResponse;
-};
-
-export type CheckPushResponse = APIResponse & {
-  device_errors?: {
-    [deviceID: string]: {
-      error_message?: string;
-      provider?: PushProvider;
-      provider_name?: string;
-    };
-  };
-  general_errors?: string[];
-  rendered_apn_template?: string;
-  rendered_firebase_template?: string;
-  rendered_message?: {};
-  skip_devices?: boolean;
-};
-
-export type CheckSQSResponse = APIResponse & {
-  status: string;
-  data?: {};
-  error?: string;
-};
-
-export type CheckSNSResponse = APIResponse & {
-  status: string;
-  data?: {};
-  error?: string;
-};
 
 export type CommandResponse = Gen_Command;
 
 export type ConnectAPIResponse = Promise<void | ConnectionOpen>;
 
-export type CreateChannelResponse = APIResponse &
-  Omit<CreateChannelOptions, 'client_id' | 'connection_id'> & {
-    created_at: string;
-    updated_at: string;
-    grants?: Record<string, string[]>;
-  };
-
-export type CreateCommandResponse = APIResponse & {
-  command: CreateCommandOptions & CreatedAtUpdatedAt;
-};
-
 export type DeleteChannelAPIResponse = APIResponse & {
   channel: ChannelResponse;
-};
-
-export type DeleteCommandResponse = APIResponse & {
-  name?: CommandVariants;
-};
-
-export type EventAPIResponse = APIResponse & {
-  event: Event;
-};
-
-export type ExportChannelResponse = {
-  task_id: string;
-};
-
-export type ExportUsersResponse = {
-  task_id: string;
-};
-
-export type ExportChannelStatusResponse = {
-  created_at?: string;
-  error?: {};
-  result?: {};
-  updated_at?: string;
 };
 
 export type FlagMessageResponse = APIResponse & {
@@ -560,17 +418,11 @@ export type FlagUserResponse = APIResponse & {
   review_queue_item_id?: string;
 };
 
-export type LocalMessage = ReplaceCustom<Gen_MessageResponse, CustomMessageData> & {
-  /** SDK-only field: message delivery status (e.g. 'sending', 'received', 'failed') */
+export type LocalMessage = MessageResponse & {
   status: string;
-  error?: ErrorFromResponse<APIErrorResponse>;
-  quoted_message?: LocalMessage | undefined;
+  error?: StreamAPIError;
   user_id?: string;
 };
-
-export type GetCommandResponse = APIResponse & CreateCommandOptions & CreatedAtUpdatedAt;
-
-export type GetMessageAPIResponse = SendMessageAPIResponse;
 
 export type ThreadResponse = CustomThreadData & Gen_ThreadStateResponse;
 
@@ -589,11 +441,6 @@ export type QueryThreadsOptions = WithTypedFilters<
   }
 >;
 
-export type QueryThreadsAPIResponse = APIResponse & {
-  threads: ThreadResponse[];
-  next?: string;
-};
-
 export type GetThreadOptions = Omit<Parameters<ChatApi['getThread']>[0], 'message_id'>;
 
 export type GetThreadAPIResponse = APIResponse & {
@@ -604,29 +451,12 @@ export type GetMultipleMessagesAPIResponse = APIResponse & {
   messages: MessageResponse[];
 };
 
-export type GetRateLimitsResponse = APIResponse & {
-  android?: RateLimitsMap;
-  ios?: RateLimitsMap;
-  server_side?: RateLimitsMap;
-  web?: RateLimitsMap;
-};
-
 export enum Product {
   Chat = 'chat',
   Video = 'video',
   Moderation = 'moderation',
   Feeds = 'feeds',
 }
-
-export type HookEvent = {
-  name: string;
-  description: string;
-  products: Product[];
-};
-
-export type GetHookEventsResponse = APIResponse & {
-  events: HookEvent[];
-};
 
 export type GetReactionsAPIResponse = APIResponse & {
   reactions: ReactionResponse[];
@@ -662,28 +492,6 @@ export type PushPreference = Gen_PushPreferenceInput;
 
 export type UpsertPushPreferencesResponse = Gen_UpsertPushPreferencesResponse;
 
-export type GetUnreadCountBatchAPIResponse = APIResponse & {
-  counts_by_user: { [userId: string]: GetUnreadCountAPIResponse };
-};
-
-export type ListChannelResponse = APIResponse & {
-  channel_types: Record<
-    string,
-    Omit<CreateChannelOptions, 'client_id' | 'connection_id' | 'commands'> & {
-      commands: CommandResponse[];
-      created_at: string;
-      updated_at: string;
-      grants?: Record<string, string[]>;
-    }
-  >;
-};
-
-export type ListChannelTypesAPIResponse = ListChannelResponse;
-
-export type ListCommandsResponse = APIResponse & {
-  commands: Array<CreateCommandOptions & Partial<CreatedAtUpdatedAt>>;
-};
-
 export type MuteChannelAPIResponse = APIResponse & {
   channel_mute: ChannelMute;
   own_user: OwnUserResponse;
@@ -691,30 +499,23 @@ export type MuteChannelAPIResponse = APIResponse & {
   mute?: MuteResponse;
 };
 
-export type MessageResponse = Gen_MessageResponse;
+export type MessageResponse = ReplacePropertyTypes<
+  Gen_MessageResponse,
+  {
+    custom: CustomMessageData;
+    attachments: Attachment[];
+    latest_reactions: ReactionResponse[];
+    mentioned_users: UserResponse[];
+    own_reactions: ReactionResponse[];
+    pinned_by: UserResponse;
+    thread_participants: UserResponse[];
+    quoted_message: MessageResponse;
+    poll: PollResponse;
+    user: UserResponse;
+  }
+>;
 
 export type ReactionGroupResponse = Gen_ReactionGroupResponse;
-
-export type ReactionGroupUserResponse = Gen_ReactionGroupUserResponse;
-
-export type ModerationDetailsResponse = {
-  action: 'MESSAGE_RESPONSE_ACTION_BOUNCE' | (string & {});
-  error_msg: string;
-  harms: ModerationHarmResponse[];
-  original_text: string;
-};
-
-export type ModerationHarmResponse = {
-  name: string;
-  phrase_list_ids: number[];
-};
-
-export type ModerationAction = 'bounce' | 'flag' | 'remove' | 'shadow';
-
-export type ModerationResponse = {
-  action: ModerationAction;
-  original_text: string;
-};
 
 export type MuteResponse = Gen_UserMuteResponse;
 
@@ -727,24 +528,6 @@ export type MuteUserResponse = APIResponse & {
 
 export type UnmuteUserResponse = APIResponse & {
   non_existing_users?: string[];
-};
-
-export type BlockUserAPIResponse = APIResponse & {
-  blocked_at: string;
-  blocked_by_user_id: string;
-  blocked_user_id: string;
-};
-
-export type GetBlockedUsersAPIResponse = APIResponse & {
-  blocks: BlockedUserDetails[];
-};
-
-export type BlockedUserDetails = APIResponse & {
-  blocked_user: UserResponse;
-  blocked_user_id: string;
-  created_at: string;
-  user: UserResponse;
-  user_id: string;
 };
 
 export type OwnUserBase = {
@@ -762,19 +545,14 @@ export type OwnUserBase = {
   total_unread_count_by_team?: Record<string, number> | null;
 };
 
-export type OwnUserResponse = ReplaceCustom<Gen_OwnUserResponse, CustomUserData>;
+export type OwnUserResponse = ReplacePropertyTypes<
+  Gen_OwnUserResponse,
+  { custom: CustomUserData }
+>;
 
 export type PartialUpdateChannelAPIResponse = APIResponse & {
   channel: ChannelResponse;
   members: ChannelMemberResponse[];
-};
-
-export type PermissionAPIResponse = APIResponse & {
-  permission?: PermissionAPIObject;
-};
-
-export type PermissionsAPIResponse = APIResponse & {
-  permissions?: PermissionAPIObject[];
 };
 
 export type ReactionAPIResponse = APIResponse & {
@@ -782,7 +560,10 @@ export type ReactionAPIResponse = APIResponse & {
   reaction: ReactionResponse;
 };
 
-export type ReactionResponse = ReplaceCustom<Gen_ReactionResponse, CustomReactionData>;
+export type ReactionResponse = ReplacePropertyTypes<
+  Gen_ReactionResponse,
+  { custom: CustomReactionData }
+>;
 
 export type ReadResponse = Gen_ReadStateResponse;
 
@@ -801,14 +582,6 @@ export type RoleResponse = {
   scopes: string[];
   created_at: string;
   updated_at: string;
-};
-
-export type CreateRoleAPIResponse = APIResponse & {
-  role: RoleResponse;
-};
-
-export type ListRolesAPIResponse = APIResponse & {
-  roles: RoleResponse[];
 };
 
 export type SearchRolesAPIResponse = APIResponse & {
@@ -850,19 +623,6 @@ export type UpdateChannelAPIResponse = APIResponse & {
   message?: MessageResponse;
 };
 
-export type UpdateChannelResponse = APIResponse &
-  Omit<CreateChannelOptions, 'client_id' | 'connection_id'> & {
-    created_at: string;
-    updated_at: string;
-  };
-
-export type UpdateCommandResponse = APIResponse & {
-  command: UpdateCommandOptions &
-    CreatedAtUpdatedAt & {
-      name: CommandVariants;
-    };
-};
-
 export type UpdateMessageAPIResponse = APIResponse & {
   message: MessageResponse;
 };
@@ -872,55 +632,16 @@ export type UsersAPIResponse = APIResponse & {
   membership_deletion_task_id?: string;
 };
 
-export type UpdateUsersAPIResponse = APIResponse & {
-  users: { [key: string]: UserResponse };
-  membership_deletion_task_id?: string;
-};
+export type UserResponse = ReplacePropertyTypes<
+  Gen_UserResponse,
+  { custom: CustomUserData }
+>;
 
-// FIXME: possibly missing properties from OwnUserResponse (push_preferences, privacy_settings) & from ChannelMemberResponse (notifications_muted)
-export type UserResponse = ReplaceCustom<Gen_UserResponse, CustomUserData>;
-
-export type TeamsRole = { [team: string]: string };
-
-export type PrivacySettings = {
-  read_receipts?: {
-    enabled?: boolean;
-  };
-  typing_indicators?: {
-    enabled?: boolean;
-  };
-  delivery_receipts?: {
-    enabled?: boolean;
-  };
-};
-
-export type PushNotificationSettings = {
-  disabled?: boolean;
-  disabled_until?: string | null;
-};
-
-/**
- * Option Types
- */
+export type PrivacySettings = Gen_PrivacySettingsResponse;
 
 export type MessageFlagsPaginationOptions = {
   limit?: number;
   offset?: number;
-};
-
-export type FlagsPaginationOptions = {
-  limit?: number;
-  offset?: number;
-};
-
-export type FlagReportsPaginationOptions = {
-  limit?: number;
-  offset?: number;
-};
-
-export type ReviewFlagReportOptions = {
-  review_details?: object;
-  user_id?: string;
 };
 
 export type BannedUsersPaginationOptions = Omit<
@@ -983,10 +704,9 @@ export type ChannelOptions = {
   sort_values?: Record<string, unknown>;
 };
 
-export type ChannelQueryOptions = ReplacePropertyType<
+export type ChannelQueryOptions = ReplacePropertyTypes<
   Gen_ChannelGetOrCreateRequest,
-  'data',
-  ReplaceCustom<Gen_ChannelInput, CustomChannelData>
+  { data: ChannelData }
 >;
 
 export type ChannelStateOptions = {
@@ -1004,73 +724,12 @@ export type ChannelStateOptions = {
   withResponse?: boolean;
 };
 
-export type CreateChannelOptions = {
-  automod?: ChannelConfigAutomod;
-  automod_behavior?: ChannelConfigAutomodBehavior;
-  automod_thresholds?: ChannelConfigAutomodThresholds;
-  blocklist?: string;
-  blocklist_behavior?: ChannelConfigAutomodBehavior;
-  client_id?: string;
-  commands?: CommandVariants[];
-  connect_events?: boolean;
-  connection_id?: string;
-  custom_events?: boolean;
-  delivery_events?: boolean;
-  grants?: Record<string, string[]>;
-  mark_messages_pending?: boolean;
-  max_message_length?: number;
-  message_retention?: string;
-  mutes?: boolean;
-  name?: string;
-  permissions?: PermissionObject[];
-  polls?: boolean;
-  push_notifications?: boolean;
-  quotes?: boolean;
-  reactions?: boolean;
-  read_events?: boolean;
-  reminders?: boolean;
-  replies?: boolean;
-  search?: boolean;
-  shared_locations?: boolean;
-  skip_last_msg_update_for_system_msgs?: boolean;
-  typing_events?: boolean;
-  uploads?: boolean;
-  url_enrichment?: boolean;
-  user_message_reminders?: boolean;
-  count_messages?: boolean;
-  push_level?: 'all' | 'all_mentions' | 'direct_mentions' | 'mentions' | 'none';
-};
-
-export type CreateCommandOptions = {
-  description: string;
-  name: CommandVariants;
-  args?: string;
-  set?: CommandVariants;
-};
-
-export type CustomPermissionOptions = {
-  action: string;
-  condition: object;
-  id: string;
-  name: string;
-  description?: string;
-  owner?: boolean;
-  same_team?: boolean;
-};
-
-export type DeactivateUsersOptions = {
-  created_by_id?: string;
-  mark_messages_deleted?: boolean;
-};
-
 export type NewMemberPayload = CustomMemberData &
   Pick<ChannelMemberResponse, 'user_id' | 'channel_role'>;
 
 export type Thresholds = Partial<
   Record<'explicit' | 'spam' | 'toxic', Partial<{ block: number; flag: number }>>
 >;
-
-export type BlockListOptions = Gen_BlockListOptions;
 
 export type PolicyRequest = {
   action: 'Deny' | 'Allow' | (string & {});
@@ -1095,145 +754,13 @@ export type PolicyRequest = {
 
 export type Automod = 'disabled' | 'simple' | 'AI' | (string & {});
 export type AutomodBehavior = 'flag' | 'block' | 'shadow_block' | (string & {});
-export type BlocklistBehavior = AutomodBehavior;
 export type Command = Gen_Command;
-
-export type UpdateChannelTypeRequest =
-  // these three properties are required in OpenAPI spec but omitted in some QA tests
-  Partial<{
-    automod: Automod;
-    automod_behavior: AutomodBehavior;
-    max_message_length: number;
-  }> & {
-    allowed_flag_reasons?: string[];
-    automod_thresholds?: Thresholds;
-    blocklist?: string;
-    blocklist_behavior?: BlocklistBehavior;
-    blocklists?: BlockListOptions[];
-    commands?: CommandVariants[];
-    connect_events?: boolean;
-    custom_events?: boolean;
-    delivery_events?: boolean;
-    grants?: Record<string, string[]>;
-    mark_messages_pending?: boolean;
-    mutes?: boolean;
-    partition_size?: number;
-    /**
-     * @example 24h
-     */
-    partition_ttl?: string | null;
-    permissions?: PolicyRequest[];
-    polls?: boolean;
-    push_notifications?: boolean;
-    quotes?: boolean;
-    reactions?: boolean;
-    read_events?: boolean;
-    reminders?: boolean;
-    replies?: boolean;
-    search?: boolean;
-    skip_last_msg_update_for_system_msgs?: boolean;
-    typing_events?: boolean;
-    uploads?: boolean;
-    url_enrichment?: boolean;
-    count_messages?: boolean;
-    push_level?: 'all' | 'all_mentions' | 'direct_mentions' | 'mentions' | 'none';
-  };
-
-export type UpdateChannelTypeResponse = {
-  automod: Automod;
-  automod_behavior: AutomodBehavior;
-  commands: CommandVariants[];
-  connect_events: boolean;
-  created_at: string;
-  custom_events: boolean;
-  delivery_events: boolean;
-  duration: string;
-  grants: Record<string, string[]>;
-  mark_messages_pending: boolean;
-  max_message_length: number;
-  mutes: boolean;
-  name: string;
-  permissions: PolicyRequest[];
-  polls: boolean;
-  push_notifications: boolean;
-  quotes: boolean;
-  reactions: boolean;
-  read_events: boolean;
-  reminders: boolean;
-  replies: boolean;
-  search: boolean;
-  shared_locations: boolean;
-  skip_last_msg_update_for_system_msgs: boolean;
-  typing_events: boolean;
-  updated_at: string;
-  uploads: boolean;
-  url_enrichment: boolean;
-  allowed_flag_reasons?: string[];
-  automod_thresholds?: Thresholds;
-  blocklist?: string;
-  blocklist_behavior?: BlocklistBehavior;
-  blocklists?: BlockListOptions[];
-  message_retention?: string;
-  partition_size?: number;
-  partition_ttl?: string;
-  count_messages?: boolean;
-  user_message_reminders?: boolean;
-  push_level?: string;
-};
-
-export type GetChannelTypeResponse = {
-  automod: Automod;
-  automod_behavior: AutomodBehavior;
-  commands: Command[];
-  connect_events: boolean;
-  created_at: string;
-  custom_events: boolean;
-  delivery_events: boolean;
-  duration: string;
-  grants: Record<string, string[]>;
-  mark_messages_pending: boolean;
-  max_message_length: number;
-  mutes: boolean;
-  name: string;
-  permissions: PolicyRequest[];
-  polls: boolean;
-  push_notifications: boolean;
-  quotes: boolean;
-  reactions: boolean;
-  read_events: boolean;
-  reminders: boolean;
-  replies: boolean;
-  search: boolean;
-  shared_locations: boolean;
-  skip_last_msg_update_for_system_msgs: boolean;
-  typing_events: boolean;
-  updated_at: string;
-  uploads: boolean;
-  url_enrichment: boolean;
-  allowed_flag_reasons?: string[];
-  automod_thresholds?: Thresholds;
-  blocklist?: string;
-  blocklist_behavior?: BlocklistBehavior;
-  blocklists?: BlockListOptions[];
-  message_retention?: string;
-  partition_size?: number;
-  partition_ttl?: string;
-  count_messages?: boolean;
-  user_message_reminders?: boolean;
-  push_level?: string;
-};
 
 export type MarkChannelsReadOptions = Gen_MarkChannelsReadRequest;
 
 export type MarkReadOptions = Gen_MarkReadRequest;
 
 export type MarkUnreadOptions = Gen_MarkUnreadRequest;
-
-export type DeliveredMessageConfirmation = {
-  cid: string;
-  id: string;
-  parent_id?: string; // todo: should we include parent_id if thread delivery receipts are not yet supported?
-};
 
 export type MarkDeliveredOptions = Gen_MarkDeliveredRequest;
 
@@ -1288,17 +815,6 @@ export type GetRepliesOptions = Omit<GetRepliesRequest, 'parent_id' | 'sort'>;
 export type QueryMembersOptions = Partial<
   Omit<Gen_QueryMembersPayload, 'sort' | 'filter_conditions'>
 >;
-
-export type ReactivateUserOptions = {
-  created_by_id?: string;
-  name?: string;
-  restore_messages?: boolean;
-};
-
-export type ReactivateUsersOptions = {
-  created_by_id?: string;
-  restore_messages?: boolean;
-};
 
 export type SearchOptions = {
   limit?: number;
@@ -1392,21 +908,11 @@ export type UnBanUserOptions = {
   type?: string;
 };
 
-export type UpdateCommandOptions = {
-  description: string;
-  args?: string;
-  set?: CommandVariants;
-};
-
 export type UserOptions = {
   include_deactivated_users?: boolean;
   limit?: number;
   offset?: number;
   presence?: boolean;
-};
-
-export type UserCustomEvent = CustomEventData & {
-  type: string;
 };
 
 type LocalEvent = (
@@ -1479,122 +985,6 @@ export type MessageFlagsFilters = QueryFilters<
   }
 >;
 
-export type FlagsFiltersOptions = {
-  channel_cid?: string;
-  message_id?: string;
-  message_user_id?: string;
-  reporter_id?: string;
-  team?: string;
-  user_id?: string;
-};
-
-export type FlagsFilters = QueryFilters<
-  {
-    user_id?:
-      | RequireOnlyOne<Pick<QueryFilter<FlagsFiltersOptions['user_id']>, '$eq' | '$in'>>
-      | PrimitiveFilter<FlagsFiltersOptions['user_id']>;
-  } & {
-    message_id?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<FlagsFiltersOptions['message_id']>, '$eq' | '$in'>
-        >
-      | PrimitiveFilter<FlagsFiltersOptions['message_id']>;
-  } & {
-    message_user_id?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<FlagsFiltersOptions['message_user_id']>, '$eq' | '$in'>
-        >
-      | PrimitiveFilter<FlagsFiltersOptions['message_user_id']>;
-  } & {
-    channel_cid?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<FlagsFiltersOptions['channel_cid']>, '$eq' | '$in'>
-        >
-      | PrimitiveFilter<FlagsFiltersOptions['channel_cid']>;
-  } & {
-    reporter_id?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<FlagsFiltersOptions['reporter_id']>, '$eq' | '$in'>
-        >
-      | PrimitiveFilter<FlagsFiltersOptions['reporter_id']>;
-  } & {
-    team?:
-      | RequireOnlyOne<Pick<QueryFilter<FlagsFiltersOptions['team']>, '$eq' | '$in'>>
-      | PrimitiveFilter<FlagsFiltersOptions['team']>;
-  }
->;
-
-export type FlagReportsFiltersOptions = {
-  channel_cid?: string;
-  is_reviewed?: boolean;
-  message_id?: string;
-  message_user_id?: string;
-  report_id?: string;
-  review_result?: string;
-  reviewed_by?: string;
-  team?: string;
-  user_id?: string;
-};
-
-export type FlagReportsFilters = QueryFilters<
-  {
-    report_id?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<FlagReportsFiltersOptions['report_id']>, '$eq' | '$in'>
-        >
-      | PrimitiveFilter<FlagReportsFiltersOptions['report_id']>;
-  } & {
-    review_result?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<FlagReportsFiltersOptions['review_result']>, '$eq' | '$in'>
-        >
-      | PrimitiveFilter<FlagReportsFiltersOptions['review_result']>;
-  } & {
-    reviewed_by?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<FlagReportsFiltersOptions['reviewed_by']>, '$eq' | '$in'>
-        >
-      | PrimitiveFilter<FlagReportsFiltersOptions['reviewed_by']>;
-  } & {
-    user_id?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<FlagReportsFiltersOptions['user_id']>, '$eq' | '$in'>
-        >
-      | PrimitiveFilter<FlagReportsFiltersOptions['user_id']>;
-  } & {
-    message_id?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<FlagReportsFiltersOptions['message_id']>, '$eq' | '$in'>
-        >
-      | PrimitiveFilter<FlagReportsFiltersOptions['message_id']>;
-  } & {
-    message_user_id?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<FlagReportsFiltersOptions['message_user_id']>, '$eq' | '$in'>
-        >
-      | PrimitiveFilter<FlagReportsFiltersOptions['message_user_id']>;
-  } & {
-    channel_cid?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<FlagReportsFiltersOptions['channel_cid']>, '$eq' | '$in'>
-        >
-      | PrimitiveFilter<FlagReportsFiltersOptions['channel_cid']>;
-  } & {
-    team?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<FlagReportsFiltersOptions['team']>, '$eq' | '$in'>
-        >
-      | PrimitiveFilter<FlagReportsFiltersOptions['team']>;
-  } & {
-    [Key in keyof Omit<
-      FlagReportsFiltersOptions,
-      'report_id' | 'user_id' | 'message_id' | 'review_result' | 'reviewed_by'
-    >]:
-      | RequireOnlyOne<QueryFilter<FlagReportsFiltersOptions[Key]>>
-      | PrimitiveFilter<FlagReportsFiltersOptions[Key]>;
-  }
->;
-
 export type BannedUsersFilters = WithTypedFilters<
   Gen_QueryBannedUsersPayload,
   { filter_conditions: Gen_QueryBannedUsersPayloadFilterConditions }
@@ -1629,12 +1019,6 @@ export type DraftFilters = {
         Pick<QueryFilter<DraftResponse['created_at']>, '$in' | '$eq' | '$exists'>
       >
     | PrimitiveFilter<DraftResponse['parent_id']>;
-};
-
-export type QueryPollsParams = {
-  filter?: QueryPollsFilters;
-  options?: QueryPollsOptions;
-  sort?: PollSort;
 };
 
 export type QueryPollsOptions = Pager;
@@ -1754,20 +1138,6 @@ export type QueryVotesFilters = QueryFilters<
   }
 >;
 
-export type ContainsOperator<CustomType = {}> = {
-  [Key in keyof CustomType]?: CustomType[Key] extends (infer ContainType)[]
-    ?
-        | RequireOnlyOne<
-            {
-              $contains?: ContainType extends object
-                ? PrimitiveFilter<RequireAtLeastOne<ContainType>>
-                : PrimitiveFilter<ContainType>;
-            } & QueryFilter<PrimitiveFilter<ContainType>[]>
-          >
-        | PrimitiveFilter<PrimitiveFilter<ContainType>[]>
-    : RequireOnlyOne<QueryFilter<CustomType[Key]>> | PrimitiveFilter<CustomType[Key]>;
-};
-
 export type MessageFilters = NonNullable<SearchPayload['message_filter_conditions']>;
 
 export type MessageOptions = Gen_MessageOptions;
@@ -1806,9 +1176,6 @@ export type UserFilters = WithTypedFilters<
   { filter_conditions: Gen_QueryUsersPayloadFilterConditions }
 >['filter_conditions'];
 
-export type InviteStatus = 'pending' | 'accepted' | 'rejected' | 'member';
-
-// https://getstream.io/chat/docs/react/channel_member/#update-channel-members
 export type MemberFilters = WithTypedFilters<
   Gen_QueryMembersPayload,
   { filter_conditions: Gen_QueryMembersPayloadFilterConditions }
@@ -1882,8 +1249,6 @@ export type SearchMessageSortBase = Sort<CustomMessageData> & {
 
 export type SearchMessageSort = SearchMessageSortBase | Array<SearchMessageSortBase>;
 
-export type QuerySort = BannedUsersSort | ChannelSort | SearchMessageSort | UserSort;
-
 export type DraftSortBase = {
   created_at?: AscDesc;
 };
@@ -1915,8 +1280,6 @@ export type VoteSortBase = {
  */
 
 export type Action = Gen_Action;
-
-export type AnonUserType = {};
 
 export type APNConfig = {
   auth_key?: string;
@@ -2005,9 +1368,9 @@ export type AppSettings = {
   };
 };
 
-export type Attachment = ReplaceCustom<
+export type Attachment = ReplacePropertyTypes<
   Gen_Attachment,
-  CustomAttachmentData & { file_size?: number; mime_type?: string }
+  { custom: CustomAttachmentData & { file_size?: number; mime_type?: string } }
 >;
 
 export type OGAttachment = RequireLiteral<Attachment, 'og_scrape_url'>;
@@ -2022,72 +1385,20 @@ export type BlockList = {
   is_plural_check_enabled?: boolean;
 };
 
-export type ChannelConfig = ChannelConfigFields &
-  CreatedAtUpdatedAt & {
-    commands?: CommandVariants[];
-  };
-
 export type ChannelConfigAutomod = Automod;
 
 export type ChannelConfigAutomodBehavior = AutomodBehavior;
 
 export type ChannelConfigAutomodThresholds = null | Thresholds;
 
-export type ChannelConfigFields = {
-  reminders: boolean;
-  automod?: ChannelConfigAutomod;
-  automod_behavior?: ChannelConfigAutomodBehavior;
-  automod_thresholds?: ChannelConfigAutomodThresholds;
-  blocklist_behavior?: ChannelConfigAutomodBehavior;
-  connect_events?: boolean;
-  custom_events?: boolean;
-  delivery_events?: boolean;
-  mark_messages_pending?: boolean;
-  max_message_length?: number;
-  message_retention?: string;
-  mutes?: boolean;
-  name?: string;
-  polls?: boolean;
-  push_notifications?: boolean;
-  quotes?: boolean;
-  reactions?: boolean;
-  read_events?: boolean;
-  replies?: boolean;
-  search?: boolean;
-  shared_locations?: boolean;
-  skip_last_msg_update_for_system_msgs?: boolean;
-  count_messages?: boolean;
-  typing_events?: boolean;
-  uploads?: boolean;
-  url_enrichment?: boolean;
-  user_message_reminders?: boolean; // Feature flag for user message reminders
-  push_level?: 'all' | 'all_mentions' | 'direct_mentions' | 'mentions' | 'none' | '';
-} & GetConfigResponse;
-
 export type ChannelConfigWithInfo = Gen_ChannelConfigWithInfo;
 
-export type ChannelData = ReplaceCustom<Gen_ChannelInput, CustomChannelData>;
+export type ChannelData = ReplacePropertyTypes<
+  Gen_ChannelInput,
+  { custom: CustomChannelData }
+>;
 
 export type ChannelMute = Gen_ChannelMute;
-
-export type ChannelRole = {
-  custom?: boolean;
-  name?: string;
-  owner?: boolean;
-  resource?: string;
-  same_team?: boolean;
-};
-
-export type CheckPushInput = {
-  apn_template?: string;
-  client_id?: string;
-  connection_id?: string;
-  firebase_data_template?: string;
-  firebase_template?: string;
-  message_id?: string;
-  user?: UserResponse;
-  user_id?: string;
-};
 
 export type PushProvider = Gen_CreateDeviceRequest['push_provider'];
 
@@ -2156,11 +1467,6 @@ export type Configs = Record<string, ChannelConfigWithInfo | undefined>;
 
 export type ConnectionOpen = EventPayload<'health.check'>;
 
-export type CreatedAtUpdatedAt = {
-  created_at: Date;
-  updated_at: Date;
-};
-
 export type Device = DeviceFields & {
   provider?: string;
   user?: UserResponse;
@@ -2179,150 +1485,6 @@ export type DeviceFields = BaseDeviceFields & {
   disabled_reason?: string;
 };
 
-export type EndpointName =
-  | 'Connect'
-  | 'LongPoll'
-  | 'DeleteFile'
-  | 'DeleteImage'
-  | 'DeleteMessage'
-  | 'DeleteUser'
-  | 'DeleteUsers'
-  | 'DeactivateUser'
-  | 'ExportUser'
-  | 'DeleteReaction'
-  | 'UpdateChannel'
-  | 'UpdateChannelPartial'
-  | 'UpdateMessage'
-  | 'UpdateMessagePartial'
-  | 'GetMessage'
-  | 'GetManyMessages'
-  | 'UpdateUsers'
-  | 'UpdateUsersPartial'
-  | 'CreateGuest'
-  | 'GetOrCreateChannel'
-  | 'StopWatchingChannel'
-  | 'QueryChannels'
-  | 'Search'
-  | 'QueryUsers'
-  | 'QueryMembers'
-  | 'QueryBannedUsers'
-  | 'QueryFlags'
-  | 'QueryMessageFlags'
-  | 'GetReactions'
-  | 'GetReplies'
-  | 'GetPinnedMessages'
-  | 'Ban'
-  | 'Unban'
-  | 'MuteUser'
-  | 'MuteChannel'
-  | 'UnmuteChannel'
-  | 'UnmuteUser'
-  | 'RunMessageAction'
-  | 'SendEvent'
-  | 'SendUserCustomEvent'
-  | 'MarkRead'
-  | 'MarkChannelsRead'
-  | 'SendMessage'
-  | 'ImportChannelMessages'
-  | 'UploadFile'
-  | 'UploadImage'
-  | 'UpdateApp'
-  | 'GetApp'
-  | 'CreateDevice'
-  | 'DeleteDevice'
-  | 'SendReaction'
-  | 'Flag'
-  | 'Unflag'
-  | 'Unblock'
-  | 'QueryFlagReports'
-  | 'FlagReportReview'
-  | 'CreateChannelType'
-  | 'DeleteChannel'
-  | 'DeleteChannels'
-  | 'DBDeleteChannelType'
-  | 'GetChannelType'
-  | 'ListChannelTypes'
-  | 'ListDevices'
-  | 'TruncateChannel'
-  | 'UpdateChannelType'
-  | 'CheckPush'
-  | 'PrivateSubmitModeration'
-  | 'ReactivateUser'
-  | 'HideChannel'
-  | 'ShowChannel'
-  | 'CreatePermission'
-  | 'UpdatePermission'
-  | 'GetPermission'
-  | 'DeletePermission'
-  | 'ListPermissions'
-  | 'CreateRole'
-  | 'DeleteRole'
-  | 'ListRoles'
-  | 'ListCustomRoles'
-  | 'Sync'
-  | 'TranslateMessage'
-  | 'CreateCommand'
-  | 'GetCommand'
-  | 'UpdateCommand'
-  | 'DeleteCommand'
-  | 'ListCommands'
-  | 'CreateBlockList'
-  | 'UpdateBlockList'
-  | 'GetBlockList'
-  | 'ListBlockLists'
-  | 'DeleteBlockList'
-  | 'ExportChannels'
-  | 'GetExportChannelsStatus'
-  | 'CheckSQS'
-  | 'GetRateLimits'
-  | 'CreateSegment'
-  | 'GetSegment'
-  | 'QuerySegments'
-  | 'UpdateSegment'
-  | 'DeleteSegment'
-  | 'CreateCampaign'
-  | 'GetCampaign'
-  | 'ListCampaigns'
-  | 'UpdateCampaign'
-  | 'DeleteCampaign'
-  | 'ScheduleCampaign'
-  | 'StopCampaign'
-  | 'ResumeCampaign'
-  | 'TestCampaign'
-  | 'GetOG'
-  | 'GetTask'
-  | 'ExportUsers'
-  | 'CreateImport'
-  | 'CreateImportURL'
-  | 'GetImport'
-  | 'ListImports'
-  | 'UpsertPushProvider'
-  | 'DeletePushProvider'
-  | 'ListPushProviders'
-  | 'CreatePoll';
-
-export type ExportChannelRequest = (
-  | {
-      id: string;
-      type: string;
-    }
-  | {
-      cid: string;
-    }
-) & { messages_since?: Date; messages_until?: Date };
-
-export type ExportChannelOptions = {
-  clear_deleted_message_text?: boolean;
-  export_users?: boolean;
-  include_soft_deleted_channels?: boolean;
-  include_truncated_messages?: boolean;
-  version?: string;
-};
-
-export type ExportUsersRequest = {
-  user_ids: string[];
-};
-
 export type Field = Gen_Field;
 
 export type FileUploadConfig = Gen_FileUploadConfig;
@@ -2334,27 +1496,6 @@ export type FirebaseConfig = {
   enabled?: boolean;
   notification_template?: string;
   server_key?: string;
-};
-
-type GiphyVersionInfo = {
-  height: string;
-  url: string;
-  width: string;
-  frames?: string;
-  size?: string;
-};
-
-export type GiphyVersions =
-  | 'original'
-  | 'fixed_height'
-  | 'fixed_height_still'
-  | 'fixed_height_downsampled'
-  | 'fixed_width'
-  | 'fixed_width_still'
-  | 'fixed_width_downsampled';
-
-export type GiphyData = {
-  [key in GiphyVersions]: GiphyVersionInfo;
 };
 
 export type HuaweiConfig = {
@@ -2369,8 +1510,6 @@ export type XiaomiConfig = {
   secret?: string;
 };
 
-export type LiteralStringForUnion = string & {};
-
 export type LogLevel = 'info' | 'error' | 'warn';
 
 export type Logger = (
@@ -2379,16 +1518,9 @@ export type Logger = (
   extraData?: Record<string, unknown>,
 ) => void;
 
-export type Message = Partial<
-  Gen_MessageRequest &
-    CustomMessageData & {
-      mentioned_users: string[];
-      shared_location: StaticLocationPayload | LiveLocationPayload;
-      mentioned_channel: boolean;
-      mentioned_here?: boolean;
-      mentioned_group_ids?: string[];
-      mentioned_roles?: string[];
-    }
+export type Message = ReplacePropertyTypes<
+  Gen_MessageRequest,
+  { custom: CustomMessageData }
 >;
 
 export type MessageLabel =
@@ -2411,10 +1543,6 @@ export type GetMessageOptions = {
 
 export type Mute = Gen_UserMuteResponse;
 
-export type PartialUpdateChannelFields = Partial<ChannelResponse> & {
-  config_overrides?: Partial<ChannelConfigFields>;
-};
-
 export type PartialUpdateChannel = Gen_UpdateChannelPartialRequest;
 
 export type PartialUpdateMember = {
@@ -2426,7 +1554,10 @@ export type PartialUpdateMember = {
 export type PartialUserUpdate = Gen_UpdateUserPartialRequest;
 
 // TODO: new type, naming sucks - rename to something that makes sense
-export type UserUpdate = ReplaceCustom<Gen_UserRequest, CustomUserData>;
+export type UserUpdate = ReplacePropertyTypes<
+  Gen_UserRequest,
+  { custom: CustomUserData }
+>;
 
 export type MessageUpdatableFields = Omit<
   MessageResponse,
@@ -2439,19 +1570,6 @@ export type PartialMessageUpdate = {
 };
 
 export type PendingMessageResponse = Gen_PendingMessageResponse; //Gen_SendMessageResponse;
-
-export type PermissionAPIObject = {
-  action?: string;
-  condition?: object;
-  custom?: boolean;
-  description?: string;
-  id?: string;
-  level?: string;
-  name?: string;
-  owner?: boolean;
-  same_team?: boolean;
-  tags?: string[];
-};
 
 export type PermissionObject = {
   action?: 'Deny' | 'Allow';
@@ -2473,35 +1591,10 @@ export type Policy = {
   updated_at?: string;
 };
 
-export type RateLimitsInfo = {
-  limit: number;
-  remaining: number;
-  reset: number;
-};
-
-export type RateLimitsMap = Record<EndpointName, RateLimitsInfo>;
-
-export type Reaction = ReplaceCustom<Gen_ReactionRequest, CustomReactionData>;
-
-export type Resource =
-  | 'AddLinks'
-  | 'BanUser'
-  | 'CreateChannel'
-  | 'CreateMessage'
-  | 'CreateReaction'
-  | 'DeleteAttachment'
-  | 'DeleteChannel'
-  | 'DeleteMessage'
-  | 'DeleteReaction'
-  | 'EditUser'
-  | 'MuteUser'
-  | 'ReadChannel'
-  | 'RunMessageAction'
-  | 'UpdateChannel'
-  | 'UpdateChannelMembers'
-  | 'UpdateMessage'
-  | 'UpdateUser'
-  | 'UploadAttachment';
+export type Reaction = ReplacePropertyTypes<
+  Gen_ReactionRequest,
+  { custom: CustomReactionData }
+>;
 
 export type SearchPayload = WithTypedFilters<
   Gen_SearchPayload,
@@ -2511,92 +1604,9 @@ export type SearchPayload = WithTypedFilters<
   }
 >;
 
-export type TestPushDataInput = {
-  apnTemplate?: string;
-  firebaseDataTemplate?: string;
-  firebaseTemplate?: string;
-  messageID?: string;
-  pushProviderName?: string;
-  pushProviderType?: PushProvider;
-  skipDevices?: boolean;
-};
-
-export type TestSQSDataInput = {
-  sqs_key?: string;
-  sqs_secret?: string;
-  sqs_url?: string;
-};
-
-export type TestSNSDataInput = {
-  sns_key?: string;
-  sns_secret?: string;
-  sns_topic_arn?: string;
-};
-
 export type TokenOrProvider = null | string | TokenProvider | undefined;
 
 export type TokenProvider = () => Promise<string>;
-
-export type TranslationLanguages =
-  | 'af'
-  | 'am'
-  | 'ar'
-  | 'az'
-  | 'bg'
-  | 'bn'
-  | 'bs'
-  | 'cs'
-  | 'da'
-  | 'de'
-  | 'el'
-  | 'en'
-  | 'es'
-  | 'es-MX'
-  | 'et'
-  | 'fa'
-  | 'fa-AF'
-  | 'fi'
-  | 'fr'
-  | 'fr-CA'
-  | 'ha'
-  | 'he'
-  | 'hi'
-  | 'hr'
-  | 'hu'
-  | 'id'
-  | 'it'
-  | 'ja'
-  | 'ka'
-  | 'ko'
-  | 'lt'
-  | 'lv'
-  | 'ms'
-  | 'nl'
-  | 'no'
-  | 'pl'
-  | 'ps'
-  | 'pt'
-  | 'ro'
-  | 'ru'
-  | 'sk'
-  | 'sl'
-  | 'so'
-  | 'sq'
-  | 'sr'
-  | 'sv'
-  | 'sw'
-  | 'ta'
-  | 'th'
-  | 'tl'
-  | 'tr'
-  | 'uk'
-  | 'ur'
-  | 'vi'
-  | 'zh'
-  | 'zh-TW'
-  | (string & {});
-
-export type TypingStartEvent = EventPayload<'typing.start'>;
 
 export type ReservedUpdatedMessageFields = keyof typeof RESERVED_UPDATED_MESSAGE_FIELDS;
 
@@ -2625,220 +1635,13 @@ export type DeleteChannelsResponse = {
   result: Record<string, string>;
 } & Partial<TaskResponse>;
 
-export type DeleteType = 'soft' | 'hard' | 'pruning';
-
-/*
-  DeleteUserOptions specifies a collection of one or more `user_ids` to be deleted.
-
-  `user`:
-    - soft: marks user as deleted and retains all user data
-    - pruning: marks user as deleted and nullifies user information
-    - hard: deletes user completely - this requires hard option for messages and conversation as well
-  `conversations`:
-    - soft: marks all conversation channels as deleted (same effect as Delete Channels with 'hard' option disabled)
-    - hard: deletes channel and all its data completely including messages (same effect as Delete Channels with 'hard' option enabled)
-  `messages`:
-    - soft: marks all user messages as deleted without removing any related message data
-    - pruning: marks all user messages as deleted, nullifies message information and removes some message data such as reactions and flags
-    - hard: deletes messages completely with all related information
-  `new_channel_owner_id`: any channels owned by the hard-deleted user will be transferred to this user ID
- */
-export type DeleteUserOptions = {
-  conversations?: Exclude<DeleteType, 'pruning'>;
-  messages?: DeleteType;
-  new_channel_owner_id?: string;
-  user?: DeleteType;
-};
-
-export type SegmentType = 'channel' | 'user';
-
-export type SegmentData = {
-  all_sender_channels?: boolean;
-  all_users?: boolean;
-  description?: string;
-  filter?: {};
-  name?: string;
-};
-
-export type SegmentResponse = {
-  created_at: string;
-  deleted_at: string;
-  id: string;
-  locked: boolean;
-  size: number;
-  task_id: string;
-  type: SegmentType;
-  updated_at: string;
-} & SegmentData;
-
-export type UpdateSegmentData = {
-  name: string;
-} & SegmentData;
-
-export type SegmentTargetsResponse = {
-  created_at: string;
-  segment_id: string;
-  target_id: string;
-};
-
-export type SortParam = {
-  field: string;
-  direction?: AscDesc;
-};
-
 export type Pager = {
   limit?: number;
   next?: string;
   prev?: string;
 };
 
-export type QuerySegmentsOptions = Pager;
-
-export type QuerySegmentTargetsFilter = {
-  target_id?: {
-    $eq?: string;
-    $gte?: string;
-    $in?: string[];
-    $lte?: string;
-  };
-};
-export type QuerySegmentTargetsOptions = Pick<Pager, 'next' | 'limit'>;
-
-export type GetCampaignOptions = {
-  users?: { limit?: number; next?: string; prev?: string };
-};
-
-export type CampaignSort = {
-  field: string;
-  direction?: number;
-}[];
-
-export type CampaignQueryOptions = {
-  limit?: number;
-  next?: string;
-  prev?: string;
-  sort?: CampaignSort;
-  user_limit?: number;
-};
-
-export type SegmentQueryOptions = CampaignQueryOptions;
-
-// TODO: add better typing
-export type CampaignFilters = {};
-
-export type CampaignData = {
-  channel_template?: {
-    type: string;
-    custom?: {};
-    id?: string;
-    members?: string[];
-    members_template?: Array<{
-      user_id: string;
-      channel_role?: string;
-      custom?: Record<string, unknown>;
-    }>;
-    team?: string;
-  };
-  create_channels?: boolean;
-  deleted_at?: string;
-  description?: string;
-  id?: string | null;
-  message_template?: {
-    text: string;
-    attachments?: Attachment[];
-    custom?: {};
-    poll_id?: string;
-  };
-  name?: string;
-  segment_ids?: string[];
-  sender_id?: string;
-  sender_mode?: 'exclude' | 'include' | null;
-  sender_visibility?: 'hidden' | 'archived' | null;
-  show_channels?: boolean;
-  skip_push?: boolean;
-  skip_webhook?: boolean;
-  user_ids?: string[];
-};
-
-export type CampaignStats = {
-  progress?: number;
-  stats_channels_created?: number;
-  stats_completed_at?: string;
-  stats_messages_sent?: number;
-  stats_started_at?: string;
-  stats_users_read?: number;
-  stats_users_sent?: number;
-};
-export type CampaignResponse = {
-  created_at: string;
-  id: string;
-  segments: SegmentResponse[];
-  sender: UserResponse;
-  stats: CampaignStats;
-  status: 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'stopped';
-  updated_at: string;
-  users: UserResponse[];
-  scheduled_for?: string;
-} & CampaignData;
-
-export type DeleteCampaignOptions = {};
-
-export type TaskStatus = {
-  created_at: string;
-  status: string;
-  task_id: string;
-  updated_at: string;
-  error?: {
-    description: string;
-    type: string;
-  };
-  result?: UR;
-};
-
 export type TruncateOptions = Gen_TruncateChannelRequest;
-
-export type CreateImportURLResponse = {
-  path: string;
-  upload_url: string;
-};
-
-export type CreateImportResponse = {
-  import_task: ImportTask;
-};
-
-export type GetImportResponse = {
-  import_task: ImportTask;
-};
-
-export type CreateImportOptions = {
-  mode: 'insert' | 'upsert';
-};
-
-export type ListImportsPaginationOptions = {
-  limit?: number;
-  offset?: number;
-};
-
-export type ListImportsResponse = {
-  import_tasks: ImportTask[];
-};
-
-export type ImportTaskHistory = {
-  created_at: string;
-  next_state: string;
-  prev_state: string;
-};
-
-export type ImportTask = {
-  created_at: string;
-  history: ImportTaskHistory[];
-  id: string;
-  path: string;
-  state: string;
-  updated_at: string;
-  result?: UR;
-  size?: number;
-};
 
 export type MessageSetType = 'latest' | 'current' | 'new';
 export type MessageSet = {
@@ -2848,21 +1651,12 @@ export type MessageSet = {
   pagination: { hasNext: boolean; hasPrev: boolean };
 };
 
-export type PushProviderUpsertResponse = {
-  push_provider: PushProvider;
-};
-
-export type PushProviderListResponse = {
-  push_providers: PushProvider[];
-};
-
 export type APIErrorResponse = Gen_APIError;
 
-export class ErrorFromResponse<T> extends Error {
-  public code: number | null;
-  public status: number;
-  public response: AxiosResponse<T>;
-  public name = 'ErrorFromResponse';
+export class StreamAPIError<T = APIErrorResponse> extends Error {
+  public code: number | undefined;
+  public status: number | undefined;
+  public response: AxiosResponse<T> | undefined;
 
   constructor(
     message: string,
@@ -2871,9 +1665,15 @@ export class ErrorFromResponse<T> extends Error {
       status,
       response,
     }: {
-      code: ErrorFromResponse<T>['code'];
-      response: ErrorFromResponse<T>['response'];
-      status: ErrorFromResponse<T>['status'];
+      /**
+       * Stream error code (`APIError.code`)
+       */
+      code: StreamAPIError<T>['code'];
+      /**
+       * HTTP status code
+       */
+      status: StreamAPIError<T>['status'];
+      response: StreamAPIError<T>['response'];
     },
   ) {
     super(message);
@@ -2882,24 +1682,35 @@ export class ErrorFromResponse<T> extends Error {
     this.status = status;
   }
 
-  // Vitest helper (serialized errors are too large to read)
-  // https://github.com/vitest-dev/vitest/blob/v3.1.3/packages/utils/src/error.ts#L60-L62
-  toJSON() {
-    const extra = [
-      ['status', this.status],
-      ['code', this.code],
-    ] as const;
+  get name() {
+    let tags = StreamAPIError.withMetadata({ status: this.status, code: this.code });
+
+    if (tags.length) {
+      tags = `(${tags})`;
+    }
+
+    return `StreamAPIError${tags}`;
+  }
+
+  static withMetadata(metadata: Record<string, any>) {
+    const extra = Object.entries(metadata);
 
     const joinable = [];
 
     for (const [key, value] of extra) {
-      if (typeof value !== 'undefined' && value !== null) {
+      if (typeof value !== 'undefined' && value !== null && `${value}`.length) {
         joinable.push(`${key}: ${value}`);
       }
     }
 
+    return `${joinable.join(', ')}`;
+  }
+
+  // Vitest helper (serialized errors are too large to read)
+  // https://github.com/vitest-dev/vitest/blob/v3.1.3/packages/utils/src/error.ts#L60-L62
+  toJSON() {
     return {
-      message: `(${joinable.join(', ')}) - ${this.message}`,
+      message: this.message,
       stack: this.stack,
       name: this.name,
       code: this.code,
@@ -2907,6 +1718,11 @@ export class ErrorFromResponse<T> extends Error {
     } as const;
   }
 }
+
+/**
+ * @deprecated Use `StreamAPIError` instead.
+ */
+export const ErrorFromResponse = StreamAPIError;
 
 export type QueryPollsResponse = Gen_QueryPollsResponse;
 
@@ -2922,18 +1738,11 @@ export type UpdatePollAPIResponse = {
   poll: PollResponse;
 };
 
-export type PollResponse = ReplaceCustom<Gen_PollResponseData, CustomPollData> &
+export type PollResponse = ReplacePropertyTypes<
+  Gen_PollResponseData,
+  { custom: CustomPollData }
+> &
   PollEnrichData;
-
-export type PollOption = {
-  created_at: string;
-  id: string;
-  poll_id: string;
-  text: string;
-  updated_at: string;
-  vote_count: number;
-  votes?: PollVote[];
-};
 
 export enum VotingVisibility {
   anonymous = 'anonymous',
@@ -2949,42 +1758,31 @@ export type PollEnrichData = {
   own_votes?: PollVote[]; // not updated with WS events
 };
 
-export type PollData = ReplaceCustom<Gen_UpdatePollRequest, CustomPollData>;
+export type PollData = ReplacePropertyTypes<
+  Gen_UpdatePollRequest,
+  { custom: CustomPollData }
+>;
 
-export type CreatePollData = ReplaceCustom<Gen_CreatePollRequest, CustomPollData>;
+export type CreatePollData = ReplacePropertyTypes<
+  Gen_CreatePollRequest,
+  { custom: CustomPollData }
+>;
 
 export type PartialPollUpdate = {
   set?: Partial<PollData>;
   unset?: Array<keyof PollData>;
 };
 
-export type PollOptionData = ReplaceCustom<
+export type PollOptionData = ReplacePropertyTypes<
   Gen_UpdatePollOptionRequest,
-  CustomPollOptionData
+  { custom: CustomPollOptionData }
 > & {
   position?: number;
-};
-
-export type PartialPollOptionUpdate = {
-  set?: Partial<PollOptionResponse>;
-  unset?: Array<keyof PollOptionResponse>;
 };
 
 export type PollVoteData = Gen_VoteData & {
   is_answer?: boolean;
 };
-
-export type PollPaginationOptions = {
-  limit?: number;
-  next?: string;
-};
-
-export type CreatePollOptionAPIResponse = {
-  poll_option: PollOptionResponse;
-};
-
-export type GetPollOptionAPIResponse = CreatePollOptionAPIResponse;
-export type UpdatePollOptionAPIResponse = CreatePollOptionAPIResponse;
 
 export type PollOptionResponse = CustomPollData & {
   created_at: string;
@@ -3013,539 +1811,14 @@ export type CastVoteAPIResponse = {
   vote: PollVote;
 };
 
-export type QueryMessageHistoryFilters = QueryFilters<
-  {
-    message_id?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<MessageHistoryEntry['message_id']>, '$eq' | '$in'>
-        >
-      | PrimitiveFilter<MessageHistoryEntry['message_id']>;
-  } & {
-    user_id?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<MessageHistoryEntry['message_updated_by_id']>, '$eq' | '$in'>
-        >
-      | PrimitiveFilter<MessageHistoryEntry['message_updated_by_id']>;
-  } & {
-    created_at?:
-      | RequireOnlyOne<
-          Pick<
-            QueryFilter<MessageHistoryEntry['message_updated_at']>,
-            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
-          >
-        >
-      | PrimitiveFilter<MessageHistoryEntry['message_updated_at']>;
-  }
->;
-
-export type QueryMessageHistorySort =
-  | QueryMessageHistorySortBase
-  | Array<QueryMessageHistorySortBase>;
-
-export type QueryMessageHistorySortBase = {
-  message_updated_at?: AscDesc;
-  message_updated_by_id?: AscDesc;
-};
-
-export type QueryMessageHistoryOptions = Pager;
-
-export type MessageHistoryEntry = {
-  message_id: string;
-  message_updated_at: string;
-  attachments?: Attachment[];
-  message_updated_by_id?: string;
-  text?: string;
-};
-
-export type QueryMessageHistoryResponse = {
-  message_history: MessageHistoryEntry[];
-  next?: string;
-  prev?: string;
-};
-
-// Moderation v2
 export type ModerationPayload = Gen_ModerationPayload;
-
-export type ModV2ReviewStatus = 'complete' | 'flagged' | 'partial';
-
-export type ModerationFlag = {
-  created_at: string;
-
-  custom: Record<string, any>;
-  entity_creator_id: string;
-  entity_id: string;
-  entity_type: string;
-  id: string;
-  reason: string;
-
-  result: Record<string, any>[];
-  review_queue_item_id: string;
-  updated_at: string;
-  user: UserResponse;
-  moderation_payload?: ModerationPayload;
-  moderation_payload_hash?: string;
-};
-
-export type ReviewQueueItem = {
-  actions_taken: any[];
-  appealed_by: string;
-  assigned_to: string;
-  completed_at: string;
-  config_key: string;
-
-  context: any[];
-  created_at: string;
-  created_by: string;
-  entity_id: string;
-  entity_type: string;
-  entity_creator_id?: string;
-  flags: ModerationFlag[];
-  has_image: boolean;
-  has_text: boolean;
-  has_video: boolean;
-  id: string;
-  moderation_payload: ModerationPayload;
-  moderation_payload_hash: string;
-
-  options: any;
-  recommended_action: string;
-
-  results: any;
-  reviewed_at: string;
-  status: string;
-  updated_at: string;
-  latest_moderator_action?: string;
-};
-
-export type CustomCheckFlag = {
-  type: string;
-
-  custom?: Record<string, any>[];
-  labels?: string[];
-  reason?: string;
-};
 
 export type MessageDeletionStrategy = 'soft' | 'hard' | 'pruning';
 // @deprecated use type MessageDeletionStrategy instead
-export type DeleteMessagesOptions = MessageDeletionStrategy;
 
 export type DeleteMessageOptions = {
   deleteForMe?: boolean;
   hardDelete?: boolean;
-};
-
-export type SubmitActionOptions = {
-  appeal_id?: string;
-  ban?: {
-    target_user_id?: string;
-    shadow?: boolean;
-    reason?: string;
-    channel_ban_only?: boolean;
-    channel_cid?: string;
-    ip_ban?: boolean;
-    delete_messages?: MessageDeletionStrategy;
-    delete_reactions?: boolean;
-    timeout?: number;
-  };
-  block?: {
-    reason?: string;
-  };
-  custom?: {
-    id: string;
-
-    options?: Record<string, any>;
-  };
-  delete_activity?: {
-    hard_delete?: boolean;
-    reason?: string;
-    entity_id?: string;
-    entity_type?: string;
-  };
-  delete_comment?: {
-    hard_delete?: boolean;
-    reason?: string;
-    entity_id?: string;
-    entity_type?: string;
-  };
-  delete_message?: {
-    hard_delete?: boolean;
-    reason?: string;
-    entity_id?: string;
-    entity_type?: string;
-  };
-  delete_reaction?: {
-    hard_delete?: boolean;
-    reason?: string;
-    entity_id?: string;
-    entity_type?: string;
-  };
-  delete_user?: {
-    hard_delete?: boolean;
-    reason?: string;
-    mark_messages_deleted?: boolean;
-    delete_conversation_channels?: boolean;
-    delete_feeds_content?: boolean;
-    entity_id?: string;
-    entity_type?: string;
-  };
-  end_call?: Record<string, never>;
-  escalate?: {
-    reason: string;
-    category: string;
-    priority: string;
-  };
-  flag?: {
-    entity_type: string;
-    entity_id: string;
-    entity_creator_id?: string;
-    reason?: string;
-    moderation_payload?: ModerationPayload;
-
-    custom?: Record<string, any>;
-  };
-  kick_user?: Record<string, never>;
-  mark_reviewed?: {
-    disable_marking_content_as_reviewed?: boolean;
-    content_to_mark_as_reviewed_limit?: number;
-    decision_reason?: string;
-  };
-  reject_appeal?: {
-    decision_reason: string;
-  };
-  restore?: {
-    decision_reason?: string;
-  };
-  shadow_block?: {
-    reason?: string;
-  };
-  unban?: {
-    channel_cid?: string;
-    decision_reason?: string;
-  };
-  unblock?: {
-    decision_reason?: string;
-  };
-  user_id?: string;
-};
-
-export type SubmitActionResponse = APIResponse & {
-  item?: ReviewQueueItem;
-};
-
-export type GetUserModerationReportResponse = {
-  user: UserResponse;
-  user_blocks?: Array<{
-    blocked_at: string;
-    blocked_by_user_id: string;
-    blocked_user_id: string;
-  }>;
-  user_mutes?: Mute[];
-};
-
-export type CheckResponse = APIResponse & {
-  status: string;
-  task_id?: string;
-  recommended_action: string;
-  item?: ReviewQueueItem;
-};
-
-export type CustomCheckResponse = APIResponse & {
-  id: string;
-  item: ReviewQueueItem;
-  status: string;
-};
-
-export type QueryModerationConfigsFilters = QueryFilters<
-  {
-    key?: string;
-  } & {
-    created_at?: PrimitiveFilter<string>;
-  } & {
-    updated_at?: PrimitiveFilter<string>;
-  } & {
-    team?: string;
-  }
->;
-
-export type ReviewQueueFilters = QueryFilters<
-  {
-    assigned_to?:
-      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['assigned_to']>, '$eq' | '$in'>>
-      | PrimitiveFilter<ReviewQueueItem['assigned_to']>;
-  } & {
-    completed_at?:
-      | RequireOnlyOne<
-          Pick<
-            QueryFilter<ReviewQueueItem['completed_at']>,
-            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
-          >
-        >
-      | PrimitiveFilter<ReviewQueueItem['completed_at']>;
-  } & {
-    config_key?:
-      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['config_key']>, '$eq' | '$in'>>
-      | PrimitiveFilter<ReviewQueueItem['config_key']>;
-  } & {
-    entity_type?:
-      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['entity_type']>, '$eq' | '$in'>>
-      | PrimitiveFilter<ReviewQueueItem['entity_type']>;
-  } & {
-    created_at?:
-      | RequireOnlyOne<
-          Pick<
-            QueryFilter<ReviewQueueItem['created_at']>,
-            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
-          >
-        >
-      | PrimitiveFilter<ReviewQueueItem['created_at']>;
-  } & {
-    id?:
-      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['id']>, '$eq' | '$in'>>
-      | PrimitiveFilter<ReviewQueueItem['id']>;
-  } & {
-    entity_id?:
-      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['entity_id']>, '$eq' | '$in'>>
-      | PrimitiveFilter<ReviewQueueItem['entity_id']>;
-  } & {
-    entity_creator_id?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<ReviewQueueItem['entity_creator_id']>, '$eq' | '$in'>
-        >
-      | PrimitiveFilter<ReviewQueueItem['entity_creator_id']>;
-  } & {
-    reviewed?: boolean;
-  } & {
-    reviewed_at?:
-      | RequireOnlyOne<
-          Pick<
-            QueryFilter<ReviewQueueItem['reviewed_at']>,
-            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
-          >
-        >
-      | PrimitiveFilter<ReviewQueueItem['reviewed_at']>;
-  } & {
-    status?:
-      | RequireOnlyOne<Pick<QueryFilter<ReviewQueueItem['status']>, '$eq' | '$in'>>
-      | PrimitiveFilter<ReviewQueueItem['status']>;
-  } & {
-    updated_at?:
-      | RequireOnlyOne<
-          Pick<
-            QueryFilter<ReviewQueueItem['updated_at']>,
-            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
-          >
-        >
-      | PrimitiveFilter<ReviewQueueItem['updated_at']>;
-  } & {
-    has_image?: boolean;
-  } & {
-    has_text?: boolean;
-  } & {
-    has_video?: boolean;
-  } & {
-    has_media?: boolean;
-  } & {
-    language?: RequireOnlyOne<{
-      $contains?: string;
-      $eq?: string;
-      $in?: string[];
-    }>;
-  } & {
-    teams?:
-      | RequireOnlyOne<{
-          $contains?: PrimitiveFilter<string>;
-          $eq?: PrimitiveFilter<string>;
-          $in?: PrimitiveFilter<string>;
-        }>
-      | PrimitiveFilter<string>;
-  } & {
-    user_report_reason?: RequireOnlyOne<{
-      $eq?: string;
-    }>;
-  } & {
-    recommended_action?: RequireOnlyOne<{
-      $eq?: string;
-      $in?: string[];
-    }>;
-  } & {
-    flagged_user_id?: RequireOnlyOne<{
-      $eq?: string;
-    }>;
-  } & {
-    category?: RequireOnlyOne<{
-      $eq?: string;
-    }>;
-  } & {
-    label?: RequireOnlyOne<{
-      $eq?: string;
-      $in?: string[];
-    }>;
-  } & {
-    reporter_type?: RequireOnlyOne<{
-      $eq?: 'automod' | 'user' | 'moderator' | 'admin' | 'velocity_filter';
-    }>;
-  } & {
-    reporter_id?: RequireOnlyOne<{
-      $eq?: string;
-      $in?: string[];
-    }>;
-  } & {
-    date_range?: RequireOnlyOne<{
-      $eq?: string; // Format: "date1_date2"
-    }>;
-  } & {
-    latest_moderator_action?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<ReviewQueueItem['latest_moderator_action']>, '$eq' | '$in'>
-        >
-      | PrimitiveFilter<ReviewQueueItem['latest_moderator_action']>;
-  } & {
-    flags_count?: RequireOnlyOne<{
-      $eq?: number;
-    }>;
-  } & {
-    ai_text_severity?: RequireOnlyOne<{
-      $eq?: string;
-    }>;
-  } & {
-    channel_cid?: RequireOnlyOne<{
-      $eq?: string;
-    }>;
-  }
->;
-
-export type ReviewQueueSort =
-  | Sort<Pick<ReviewQueueItem, 'id' | 'created_at' | 'updated_at'>>
-  | Array<Sort<Pick<ReviewQueueItem, 'id' | 'created_at' | 'updated_at'>>>;
-
-export type QueryModerationConfigsSort = Array<Sort<'key' | 'created_at' | 'updated_at'>>;
-
-export type ReviewQueuePaginationOptions = Pager;
-
-export type FilterConfigResponse = Gen_FilterConfigResponse;
-
-export type ModerationActionConfig = {
-  entity_type: string;
-  order: number;
-  action: string;
-  icon: string;
-  description: string;
-  custom?: Record<string, unknown>;
-};
-
-export type ReviewQueueResponse = {
-  items: ReviewQueueItem[];
-  action_config?: Record<string, ModerationActionConfig[]>;
-  filter_config?: FilterConfigResponse;
-  stats?: Record<string, unknown>;
-  next?: string;
-  prev?: string;
-};
-
-export type ModerationConfig = {
-  key: string;
-  ai_image_config?: AIImageConfig;
-  ai_text_config?: AITextConfig;
-  ai_video_config?: AIVideoConfig;
-  automod_platform_circumvention_config?: AutomodPlatformCircumventionConfig;
-  automod_semantic_filters_config?: AutomodSemanticFiltersConfig;
-  automod_toxicity_config?: AutomodToxicityConfig;
-  block_list_config?: BlockListConfig;
-  llm_config?: LLMConfig;
-  team?: string;
-};
-
-export type ModerationConfigResponse = ModerationConfig & {
-  created_at: string;
-  updated_at: string;
-};
-
-export type GetConfigResponse = Gen_GetConfigResponse;
-
-export type QueryConfigsResponse = {
-  configs: ModerationConfigResponse[];
-  next?: string;
-  prev?: string;
-};
-
-export type UpsertConfigResponse = Gen_UpsertConfigResponse;
-
-// Moderation Rule Builder Types
-export type ModerationRule = {
-  id: string;
-  name: string;
-  description: string;
-  config_keys: string[];
-  team: string;
-  rule: RuleBuilderRule;
-  enabled: boolean;
-  created_at: string;
-  updated_at: string;
-};
-
-export type ModerationRuleRequest = {
-  name: string;
-  description: string;
-  config_keys: string[];
-  team: string;
-  rule: RuleBuilderRule;
-  enabled: boolean;
-};
-
-export type RuleBuilderRule = Gen_RuleBuilderRule;
-
-export type RuleBuilderCondition = Gen_RuleBuilderCondition;
-
-export type RuleBuilderConditionGroup = Gen_RuleBuilderConditionGroup;
-
-export type RuleBuilderAction = Gen_RuleBuilderAction;
-
-export type TextRuleParameters = Gen_TextRuleParameters;
-
-export type ImageRuleParameters = Gen_ImageRuleParameters;
-
-export type VideoRuleParameters = Gen_VideoRuleParameters;
-
-export type UserRuleParameters = Gen_UserRuleParameters;
-
-export type ContentCountRuleParameters = Gen_ContentCountRuleParameters;
-
-export type TextContentParameters = Gen_TextContentParameters;
-
-export type ImageContentParameters = Gen_ImageContentParameters;
-
-export type VideoContentParameters = Gen_VideoContentParameters;
-
-export type UserCreatedWithinParameters = Gen_UserCreatedWithinParameters;
-
-export type UserCustomPropertyParameters = Gen_UserCustomPropertyParameters;
-
-export type BanOptions = Gen_BanOptions;
-
-export type FlagUserOptions = Gen_FlagUserOptions;
-
-export type QueryModerationRulesFilters = QueryFilters<{
-  name?: string;
-  team?: string;
-  enabled?: boolean;
-  rule_type?: string;
-  created_at?: PrimitiveFilter<string>;
-  updated_at?: PrimitiveFilter<string>;
-}>;
-
-export type QueryModerationRulesSort = Array<
-  Sort<'name' | 'enabled' | 'team' | 'created_at' | 'updated_at'>
->;
-
-export type QueryModerationRulesResponse = {
-  rules: ModerationRule[];
-  default_llm_labels: Record<string, string>;
-  next?: string;
-  prev?: string;
-};
-
-export type UpsertModerationRuleResponse = {
-  rule: ModerationRule;
 };
 
 export type ModerationFlagOptions = {
@@ -3558,11 +1831,6 @@ export type ModerationMuteOptions = {
   timeout?: number;
   user_id?: string;
 };
-export type GetUserModerationReportOptions = {
-  create_user_if_not_exists?: boolean;
-  include_user_blocks?: boolean;
-  include_user_mutes?: boolean;
-};
 
 export type AIState =
   | 'AI_STATE_ERROR'
@@ -3570,72 +1838,6 @@ export type AIState =
   | 'AI_STATE_THINKING'
   | 'AI_STATE_GENERATING'
   | (string & {});
-
-export type ModerationActionType =
-  | 'flag'
-  | 'shadow'
-  | 'remove'
-  | 'bounce'
-  | 'bounce_flag'
-  | 'bounce_remove';
-
-export type ModerationSeverity = 'low' | 'medium' | 'high' | 'critical';
-
-export type AutomodRule = Gen_AutomodRule;
-
-export type BlockListRule = Gen_BlockListRule;
-
-export type BlockListConfig = Gen_BlockListConfig;
-
-export type LLMConfig = Gen_LLMConfig;
-
-export type LLMRule = Gen_LLMRule;
-
-export type LLMSeverityRule = {
-  severity: ModerationSeverity;
-  action: ModerationActionType;
-};
-
-export type AutomodToxicityConfig = Gen_AutomodToxicityConfig;
-
-export type AutomodPlatformCircumventionConfig = Gen_AutomodPlatformCircumventionConfig;
-
-export type AutomodSemanticFiltersRule = Gen_AutomodSemanticFiltersRule;
-
-export type AutomodSemanticFiltersConfig = Gen_AutomodSemanticFiltersConfig;
-
-export type AITextSeverityRule = {
-  action: ModerationActionType;
-  severity: ModerationSeverity;
-};
-
-export type AITextRule = {
-  label: string;
-  action?: ModerationActionType;
-  severity_rules?: AITextSeverityRule[];
-};
-
-export type AITextConfig = Gen_AITextConfig;
-
-export type AIImageRule = {
-  action: ModerationActionType;
-  label: string;
-  min_confidence?: number;
-};
-
-export type AIImageConfig = Gen_AIImageConfig;
-
-export type AIVideoRule = {
-  action: ModerationActionType;
-  label: string;
-  min_confidence?: number;
-};
-
-export type AIVideoConfig = Gen_AIVideoConfig;
-
-export type VelocityFilterConfigRule = Gen_VelocityFilterConfigRule;
-
-export type VelocityFilterConfig = Gen_VelocityFilterConfig;
 
 export type PromoteChannelParams = {
   channels: Array<Channel>;
@@ -3663,7 +1865,14 @@ export type SdkIdentifier = {
  */
 export type DeviceIdentifier = { os: string; model?: string };
 
-export type DraftResponse = Gen_DraftResponse;
+export type DraftResponse = ReplacePropertyTypes<
+  Gen_DraftResponse,
+  {
+    message: DraftMessage;
+    parent_message?: MessageResponse | LocalMessage;
+    quoted_message?: MessageResponse | LocalMessage;
+  }
+>;
 
 export type CreateDraftResponse = APIResponse & {
   draft: DraftResponse;
@@ -3672,16 +1881,23 @@ export type CreateDraftResponse = APIResponse & {
 export type GetDraftResponse = APIResponse & {
   draft: DraftResponse;
 };
+export type DraftMessagePayload = Message;
 
-export type QueryDraftsResponse = APIResponse & {
-  drafts: DraftResponse[];
-} & Omit<Pager, 'limit'>;
-
-export type DraftMessagePayload = Gen_MessageRequest;
-
-export type DraftMessage = ReplaceCustom<Gen_DraftPayloadResponse, CustomMessageData> & {
-  shared_location?: StaticLocationPayload | LiveLocationPayload; // todo: live-location verify if possible
-};
+export type DraftMessage = ReplacePropertyTypes<
+  Gen_DraftPayloadResponse,
+  { custom: CustomMessageData }
+> &
+  Partial<
+    Pick<
+      Gen_MessageResponse,
+      | 'shared_location'
+      | 'mentioned_channel'
+      | 'mentioned_group_ids'
+      | 'mentioned_groups'
+      | 'mentioned_here'
+      | 'mentioned_roles'
+    >
+  >;
 
 export type ActiveLiveLocationsAPIResponse = APIResponse & {
   active_live_locations: SharedLiveLocationResponse[];
@@ -3689,15 +1905,13 @@ export type ActiveLiveLocationsAPIResponse = APIResponse & {
 
 export type SharedLocationResponse = Gen_SharedLocationResponseData;
 
-export type SharedStaticLocationResponse = Omit<SharedLocationResponse, 'end_at'>;
-
 export type SharedLiveLocationResponse = RequireLiteral<SharedLocationResponse, 'end_at'>;
 
 export type UpdateLocationPayload = Gen_UpdateLiveLocationRequest;
 
 export type StaticLocationPayload = Gen_SharedLocation;
 
-export type LiveLocationPayload = Gen_SharedLocation;
+export type LiveLocationPayload = RequireLiteral<Gen_SharedLocation, 'end_at'>;
 
 export type ThreadSort = ThreadSortBase | Array<ThreadSortBase>;
 
@@ -3713,8 +1927,6 @@ export type ThreadSortBase = {
 
 export type ThreadFilters = NonNullable<QueryThreadsOptions['filter']>;
 
-export type ReminderResponseBase = Gen_ReminderResponseData;
-
 export type ReminderResponse = Gen_ReminderResponseData;
 
 export type ReminderAPIResponse = APIResponse & {
@@ -3727,47 +1939,39 @@ export type UpdateReminderOptions = Parameters<ChatApi['updateReminder']>[0];
 
 export type ReminderFilters = QueryFilters<{
   channel_cid?:
-    | RequireOnlyOne<
-        Pick<QueryFilter<ReminderResponseBase['channel_cid']>, '$eq' | '$in'>
-      >
-    | PrimitiveFilter<ReminderResponseBase['channel_cid']>;
+    | RequireOnlyOne<Pick<QueryFilter<ReminderResponse['channel_cid']>, '$eq' | '$in'>>
+    | PrimitiveFilter<ReminderResponse['channel_cid']>;
   created_at?:
     | RequireOnlyOne<
         Pick<
-          QueryFilter<ReminderResponseBase['created_at']>,
+          QueryFilter<ReminderResponse['created_at']>,
           '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
         >
       >
-    | PrimitiveFilter<ReminderResponseBase['created_at']>;
+    | PrimitiveFilter<ReminderResponse['created_at']>;
   message_id?:
-    | RequireOnlyOne<Pick<QueryFilter<ReminderResponseBase['message_id']>, '$eq' | '$in'>>
-    | PrimitiveFilter<ReminderResponseBase['message_id']>;
+    | RequireOnlyOne<Pick<QueryFilter<ReminderResponse['message_id']>, '$eq' | '$in'>>
+    | PrimitiveFilter<ReminderResponse['message_id']>;
   remind_at?:
     | RequireOnlyOne<
         Pick<
-          QueryFilter<ReminderResponseBase['remind_at']>,
+          QueryFilter<ReminderResponse['remind_at']>,
           '$exists' | '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
         >
       >
-    | PrimitiveFilter<ReminderResponseBase['remind_at']>;
+    | PrimitiveFilter<ReminderResponse['remind_at']>;
   user_id?:
-    | RequireOnlyOne<Pick<QueryFilter<ReminderResponseBase['user_id']>, '$eq' | '$in'>>
-    | PrimitiveFilter<ReminderResponseBase['user_id']>;
+    | RequireOnlyOne<Pick<QueryFilter<ReminderResponse['user_id']>, '$eq' | '$in'>>
+    | PrimitiveFilter<ReminderResponse['user_id']>;
 }>;
 
 export type ReminderSort =
   | Sort<
-      Pick<
-        ReminderResponseBase,
-        'channel_cid' | 'created_at' | 'remind_at' | 'updated_at'
-      >
+      Pick<ReminderResponse, 'channel_cid' | 'created_at' | 'remind_at' | 'updated_at'>
     >
   | Array<
       Sort<
-        Pick<
-          ReminderResponseBase,
-          'channel_cid' | 'created_at' | 'remind_at' | 'updated_at'
-        >
+        Pick<ReminderResponse, 'channel_cid' | 'created_at' | 'remind_at' | 'updated_at'>
       >
     >;
 
@@ -3796,31 +2000,6 @@ export type UserGroupResponse = {
   created_by?: string;
 };
 
-export type CreateUserGroupOptions = {
-  /** Human-readable user group name */
-  name: string;
-  /** Optional user group description shown to members */
-  description?: string;
-  /** Optional custom user group ID. If omitted, the backend generates one */
-  id?: string;
-  /** Optional list of user IDs to add as members when the group is created */
-  member_ids?: string[];
-  /** Optional team ID that scopes the user group to a specific team */
-  team_id?: string;
-};
-
-export type CreateUserGroupResponse = APIResponse & {
-  user_group: UserGroupResponse;
-};
-
-export type GetUserGroupOptions = {
-  team_id?: string;
-};
-
-export type GetUserGroupResponse = APIResponse & {
-  user_group: UserGroupResponse;
-};
-
 export type QueryUserGroupsOptions = {
   limit?: number;
   id_gt?: string;
@@ -3842,39 +2021,6 @@ export type SearchUserGroupsOptions = {
 
 export type SearchUserGroupsResponse = APIResponse & {
   user_groups: UserGroupResponse[];
-};
-
-export type UpdateUserGroupOptions = {
-  description?: string;
-  name?: string;
-  team_id?: string;
-};
-
-export type UpdateUserGroupResponse = APIResponse & {
-  user_group: UserGroupResponse;
-};
-
-export type DeleteUserGroupOptions = {
-  team_id?: string;
-};
-
-export type AddUserGroupMembersOptions = {
-  member_ids: string[];
-  as_admin?: boolean;
-  team_id?: string;
-};
-
-export type AddUserGroupMembersResponse = APIResponse & {
-  user_group: UserGroupResponse;
-};
-
-export type RemoveUserGroupMembersOptions = {
-  member_ids: string[];
-  team_id?: string;
-};
-
-export type RemoveUserGroupMembersResponse = APIResponse & {
-  user_group: UserGroupResponse;
 };
 
 export type HookType = 'webhook' | 'sqs' | 'sns' | 'pending_message';
@@ -3911,371 +2057,6 @@ export type EventHook = {
   updated_at?: string;
 };
 
-export type BatchUpdateOperation =
-  | 'addMembers'
-  | 'removeMembers'
-  | 'inviteMembers'
-  | 'assignRoles'
-  | 'addModerators'
-  | 'demoteModerators'
-  | 'hide'
-  | 'show'
-  | 'archive'
-  | 'unarchive'
-  | 'updateData';
-
-export type BatchChannelDataUpdate = {
-  frozen?: boolean;
-  disabled?: boolean;
-  custom?: Record<string, unknown>;
-  team?: string;
-  config_overrides?: Record<string, unknown>;
-  auto_translation_enabled?: boolean;
-  auto_translation_language?: string;
-};
-
-export type UpdateChannelsBatchOptions = {
-  operation: BatchUpdateOperation;
-  filter: UpdateChannelsBatchFilters;
-  members?: string[] | Array<NewMemberPayload>;
-  data?: BatchChannelDataUpdate;
-};
-
-export type UpdateChannelsBatchFilters = QueryFilters<{
-  cids?:
-    | RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$eq'>>
-    | PrimitiveFilter<string[]>;
-  types?:
-    | RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$eq'>>
-    | PrimitiveFilter<string[]>;
-}>;
-
-export type UpdateChannelsBatchResponse = {
-  result: Record<string, string>;
-} & Partial<TaskResponse>;
-
-/**
- * Predefined Filter Types
- */
-
-export type PredefinedFilterOperation = 'QueryChannels';
-
-export type PredefinedFilterSortParam = {
-  /**
-   * Field name to sort by.
-   *
-   * This may be a literal field name such as `created_at`, or a placeholder
-   * template such as `{{sort_field}}` that will be interpolated server-side.
-   */
-  field: string;
-  /**
-   * Sort direction. `1` means ascending and `-1` means descending.
-   *
-   * The backend defaults this to `1` when omitted.
-   */
-  direction?: AscDesc;
-  /**
-   * Optional server-side hint describing how the sort field value should be
-   * interpreted.
-   *
-   * This is mainly relevant for predefined-filter sort templates and is not
-   * part of the regular `queryChannels()` sort shape. Omitting it uses the
-   * backend default string behavior. Known backend values include:
-   *
-   * - `number`: cast custom-field values to numeric before sorting
-   * - `boolean`: cast custom-field values to boolean before sorting
-   *
-   * Other values are backend-defined. In most cases this should be omitted
-   * unless you are sorting by a custom field whose stored JSON value is not
-   * string-like.
-   */
-  type?: string;
-};
-
-/**
- * Stored predefined filter definition as returned by the server.
- *
- * `F` represents the raw filter template shape. It defaults to a generic record
- * because predefined filters are server-managed templates and may include
- * placeholders or app-specific structures.
- */
-export type PredefinedFilter<
-  F extends Record<string, unknown> = Record<string, unknown>,
-> = {
-  /**
-   * Unique predefined filter name within the app.
-   */
-  name: string;
-  /**
-   * Operation this predefined filter is valid for.
-   */
-  operation: PredefinedFilterOperation;
-  /**
-   * Filter template stored on the server.
-   *
-   * This is not necessarily the fully interpolated runtime filter; placeholder
-   * values such as `{{user_id}}` may still be present.
-   */
-  filter: F;
-  /**
-   * Server creation timestamp in ISO-8601 format.
-   */
-  created_at: string;
-  /**
-   * Server update timestamp in ISO-8601 format.
-   */
-  updated_at: string;
-  /**
-   * Optional human-readable description.
-   */
-  description?: string;
-  /**
-   * Optional sort template stored with the predefined filter.
-   */
-  sort?: PredefinedFilterSortParam[];
-  /**
-   * Query identifier generated by the backend for the filter/sort pattern.
-   *
-   * The exact value is backend-generated and primarily useful for correlating
-   * predefined filters with query analysis / query performance data.
-   */
-  query_id?: number;
-};
-
-export type CreatePredefinedFilterOptions<
-  F extends Record<string, unknown> = Record<string, unknown>,
-> = {
-  /**
-   * Unique predefined filter name.
-   */
-  name: string;
-  /**
-   * Operation this predefined filter will be used with.
-   */
-  operation: PredefinedFilterOperation;
-  /**
-   * Filter template to store on the server.
-   */
-  filter: F;
-  /**
-   * Optional human-readable description.
-   */
-  description?: string;
-  /**
-   * Optional sort template stored with the predefined filter.
-   */
-  sort?: PredefinedFilterSortParam[];
-};
-
-export type UpdatePredefinedFilterOptions<
-  F extends Record<string, unknown> = Record<string, unknown>,
-> = Omit<CreatePredefinedFilterOptions<F>, 'name'>;
-
-export type PredefinedFilterResponse<
-  F extends Record<string, unknown> = Record<string, unknown>,
-> = APIResponse & {
-  predefined_filter: PredefinedFilter<F>;
-};
-
-/**
- * Paginated response returned when listing predefined filters.
- */
-export type ListPredefinedFiltersResponse<
-  F extends Record<string, unknown> = Record<string, unknown>,
-> = APIResponse & {
-  predefined_filters: PredefinedFilter<F>[];
-  next?: string;
-  prev?: string;
-};
-
-/**
- * Contains the interpolated filter and sort from a predefined filter.
- * This is returned in the QueryChannels response when using a predefined filter.
- */
-export type ParsedPredefinedFilterResponse<
-  F extends Record<string, unknown> = Record<string, unknown>,
-> = {
-  /**
-   * Name of the predefined filter that was resolved.
-   */
-  name: string;
-  /**
-   * Fully interpolated filter that the backend executed.
-   */
-  filter: F;
-  /**
-   * Fully interpolated sort parameters resolved from the predefined filter.
-   */
-  sort?: PredefinedFilterSortParam[];
-};
-// export type ParsedPredefinedFilterResponse = Gen_ParsedPredefinedFilterResponse;
-
-export type PredefinedFilterSort = SortParam[];
-
-export type ListPredefinedFiltersOptions = Pager & {
-  sort?: PredefinedFilterSort;
-};
-
-/**
- * Team Usage Stats Types
- */
-
-/**
- * Represents a metric value for a specific date
- */
-export type DailyValue = {
-  /** Date in YYYY-MM-DD format */
-  date: string;
-  /** Metric value for this date */
-  value: number;
-};
-
-/**
- * Statistics for a single metric with optional daily breakdown
- */
-export type MetricStats = {
-  /** Per-day values (only present in daily mode) */
-  daily?: DailyValue[];
-  /** Aggregated total value */
-  total: number;
-};
-
-/**
- * Usage statistics for a single team containing all 16 metrics
- */
-export type TeamUsageStats = {
-  /** Team identifier (empty string for users not assigned to any team) */
-  team: string;
-
-  // Daily activity metrics (total = SUM of daily values)
-  /** Daily active users */
-  users_daily: MetricStats;
-  /** Daily messages sent */
-  messages_daily: MetricStats;
-  /** Daily translations */
-  translations_daily: MetricStats;
-  /** Daily image moderations */
-  image_moderations_daily: MetricStats;
-
-  // Peak metrics (total = MAX of daily values)
-  /** Peak concurrent users */
-  concurrent_users: MetricStats;
-  /** Peak concurrent connections */
-  concurrent_connections: MetricStats;
-
-  // Rolling/cumulative metrics (total = LATEST daily value)
-  /** Total users */
-  users_total: MetricStats;
-  /** Users active in last 24 hours */
-  users_last_24_hours: MetricStats;
-  /** MAU - users active in last 30 days */
-  users_last_30_days: MetricStats;
-  /** Users active this month */
-  users_month_to_date: MetricStats;
-  /** Engaged MAU */
-  users_engaged_last_30_days: MetricStats;
-  /** Engaged users this month */
-  users_engaged_month_to_date: MetricStats;
-  /** Total messages */
-  messages_total: MetricStats;
-  /** Messages in last 24 hours */
-  messages_last_24_hours: MetricStats;
-  /** Messages in last 30 days */
-  messages_last_30_days: MetricStats;
-  /** Messages this month */
-  messages_month_to_date: MetricStats;
-};
-
-/**
- * Options for querying team-level usage statistics
- */
-export type QueryTeamUsageStatsOptions = {
-  /**
-   * Month in YYYY-MM format (e.g., '2026-01').
-   * Mutually exclusive with start_date/end_date.
-   * Returns aggregated monthly values.
-   */
-  month?: string;
-  /**
-   * Start date in YYYY-MM-DD format.
-   * Used with end_date for custom date range.
-   * Returns daily breakdown.
-   */
-  start_date?: string;
-  /**
-   * End date in YYYY-MM-DD format.
-   * Used with start_date for custom date range.
-   * Returns daily breakdown.
-   */
-  end_date?: string;
-  /** Maximum number of teams to return per page (default: 30, max: 30) */
-  limit?: number;
-  /** Cursor for pagination to fetch next page of teams */
-  next?: string;
-};
-
-/**
- * Response containing team-level usage statistics
- */
-export type QueryTeamUsageStatsResponse = APIResponse & {
-  /** Array of team usage statistics */
-  teams: TeamUsageStats[];
-  /** Cursor for pagination to fetch next page */
-  next?: string;
-};
-
-export type RetentionPolicyConfig = {
-  max_age_hours: number;
-};
-
-export type RetentionPolicy = {
-  app_pk: number;
-  policy: string;
-  config: RetentionPolicyConfig;
-  enabled_at: string;
-};
-
-export type SetRetentionPolicyResponse = APIResponse & {
-  policy: RetentionPolicy;
-};
-
-export type DeleteRetentionPolicyResponse = APIResponse;
-
-export type GetRetentionPolicyResponse = APIResponse & {
-  policies: RetentionPolicy[];
-};
-
-export type RetentionRunStats = {
-  channels_deleted?: number;
-  messages_deleted?: number;
-};
-
-export type RetentionRunResponse = {
-  app_pk: number;
-  policy: string;
-  date: string;
-  stats: RetentionRunStats;
-};
-
-export type GetRetentionPolicyRunsOptions = {
-  filter_conditions?: Record<string, unknown>;
-  sort?: Array<{ field: string; direction: 1 | -1 }>;
-  next?: string;
-  prev?: string;
-  limit?: number;
-};
-
-export type GetRetentionPolicyRunsResponse = APIResponse & {
-  runs: RetentionRunResponse[];
-  next?: string;
-  prev?: string;
-};
-
-export type ApiClientOptions = {
-  base_url?: string;
-  timeout?: number;
-};
-
 export type RateLimit = {
   rate_limit?: number;
   rate_limit_remaining?: number;
@@ -4293,30 +2074,6 @@ export type StreamResponse<T> = T & {
   metadata: RequestMetadata;
 };
 
-export class StreamApiError extends Error {
-  public name = 'StreamApiError';
-  constructor(
-    message: string,
-    public metadata?: Partial<RequestMetadata>,
-    public code?: number,
-    errorOptions?: ErrorOptions,
-  ) {
-    super(message, errorOptions);
-  }
-}
-
-export interface NetworkChangedEvent {
-  type: 'network.changed';
-  online: boolean;
-}
-
-/*
- * Helper to merge improperly typed request types which contain filter_conditions: Record<string, any>
- * and properly generated filter conditions in filter-conditions.ts (using scripts/generate-filter-types.ts) by
- * accessing x-stream-filter-fields.
- *
- * TODO: add support for `custom` field
- */
 export type WithTypedFilters<
   Base,
   FilterConditions extends RequireAtLeastOne<
@@ -4359,10 +2116,13 @@ export type EventPayload<T extends CombinedEvents['type'] | (string & {})> = Ext
 
 export type RequireLiteral<L, T extends keyof L> = Omit<L, T> & Required<Pick<L, T>>;
 
-export type ReplacePropertyType<T, V extends keyof T, L> = Omit<T, V> &
-  (undefined extends T[V] ? { [key in V]?: L } : { [key in V]: L });
-export type ReplaceCustom<T extends { custom?: any }, L> = ReplacePropertyType<
-  T,
-  'custom',
-  L
->;
+export type ReplacePropertyTypes<
+  Base,
+  Replacement extends RequireAtLeastOne<Record<keyof Base, any>>,
+> = keyof Replacement extends keyof Base
+  ? Omit<Base, keyof Replacement> & {
+      [K in keyof Replacement as undefined extends Base[K] ? never : K]: Replacement[K];
+    } & {
+      [K in keyof Replacement as undefined extends Base[K] ? K : never]?: Replacement[K];
+    }
+  : never;
