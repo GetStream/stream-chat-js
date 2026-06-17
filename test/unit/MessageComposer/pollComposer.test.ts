@@ -6,6 +6,7 @@ import { VotingVisibility } from '../../../src/types';
 // Mock dependencies
 vi.mock('../../../src/utils', () => ({
   generateUUIDv4: vi.fn().mockReturnValue('test-uuid'),
+  getEnv: vi.fn(),
 }));
 
 vi.mock('../../../src/messageComposer/middleware/pollComposer', () => ({
@@ -93,7 +94,6 @@ describe('PollComposer', () => {
       expect(initialState.data.max_votes_allowed).toBe('');
       expect(initialState.data.name).toBe('');
       expect(initialState.data.options).toEqual([{ id: 'test-uuid', text: '' }]);
-      expect(initialState.data.user_id).toBe('user-id');
       expect(initialState.data.voting_visibility).toBe(VotingVisibility.public);
       expect(initialState.errors).toEqual({});
     });
@@ -112,7 +112,6 @@ describe('PollComposer', () => {
           max_votes_allowed: '',
           name: '',
           options: [{ id: 'option-id', text: '' }],
-          user_id: 'user-id',
           voting_visibility: VotingVisibility.anonymous,
         },
         errors: {},
@@ -126,7 +125,6 @@ describe('PollComposer', () => {
       expect(pollComposer.max_votes_allowed).toBe('');
       expect(pollComposer.name).toBe('');
       expect(pollComposer.options).toEqual([{ id: 'option-id', text: '' }]);
-      expect(pollComposer.user_id).toBe('user-id');
       expect(pollComposer.voting_visibility).toBe(VotingVisibility.anonymous);
     });
   });
@@ -139,7 +137,6 @@ describe('PollComposer', () => {
           name: 'Test Poll',
           max_votes_allowed: '',
           id: 'test-id',
-          user_id: 'user-id',
           voting_visibility: VotingVisibility.public,
         },
         errors: {},
@@ -155,7 +152,6 @@ describe('PollComposer', () => {
           name: '',
           max_votes_allowed: '',
           id: 'test-id',
-          user_id: 'user-id',
           voting_visibility: VotingVisibility.public,
         },
         errors: {},
@@ -171,7 +167,6 @@ describe('PollComposer', () => {
           name: 'Test Poll',
           max_votes_allowed: '1', // Less than 2
           id: 'test-id',
-          user_id: 'user-id',
           voting_visibility: VotingVisibility.public,
         },
         errors: {},
@@ -187,7 +182,6 @@ describe('PollComposer', () => {
           name: 'Test Poll',
           max_votes_allowed: '',
           id: 'test-id',
-          user_id: 'user-id',
           voting_visibility: VotingVisibility.public,
         },
         errors: { name: 'Name is required' },
@@ -203,7 +197,6 @@ describe('PollComposer', () => {
           name: 'Test Poll',
           max_votes_allowed: '',
           id: 'test-id',
-          user_id: 'user-id',
           voting_visibility: VotingVisibility.public,
         },
         errors: {},
@@ -218,7 +211,6 @@ describe('PollComposer', () => {
           name: 'Test Poll',
           max_votes_allowed: '',
           id: 'test-id',
-          user_id: 'user-id',
           voting_visibility: VotingVisibility.public,
         },
         errors: { name: undefined, options: undefined },
@@ -241,7 +233,6 @@ describe('PollComposer', () => {
           max_votes_allowed: '5',
           name: 'Different Name',
           options: [{ id: 'different-option-id', text: 'Different Option' }],
-          user_id: 'different-user-id',
           voting_visibility: VotingVisibility.anonymous,
         },
         errors: { name: 'Error' },
@@ -260,7 +251,6 @@ describe('PollComposer', () => {
       expect(currentState.data.max_votes_allowed).toBe('');
       expect(currentState.data.name).toBe('');
       expect(currentState.data.options).toEqual([{ id: 'test-uuid', text: '' }]);
-      expect(currentState.data.user_id).toBe('user-id');
       expect(currentState.data.voting_visibility).toBe(VotingVisibility.public);
       expect(currentState.errors).toEqual({});
     });

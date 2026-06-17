@@ -30,10 +30,12 @@ vi.mock('../../src/utils', () => ({
     debouncedFn.flush = vi.fn();
     return debouncedFn;
   }),
+  getEnv: vi.fn(),
 }));
 
 vi.mock('../../src/utils/mergeWith', () => ({
   mergeWith: vi.fn().mockImplementation((target, source) => ({ ...target, ...source })),
+  getEnv: vi.fn(),
 }));
 
 vi.mock('linkifyjs', () => ({
@@ -606,7 +608,10 @@ describe('LinkPreviewsManager', () => {
       } = setup();
       linkPreviewsManager.state.partialNext({
         previews: new Map([
-          [linkUrl, { og_scrape_url: linkUrl, status: LinkPreviewStatus.LOADED }],
+          [
+            linkUrl,
+            { og_scrape_url: linkUrl, status: LinkPreviewStatus.LOADED, custom: {} },
+          ],
         ]),
       });
       const onLinkPreviewDismissed = vi.fn();

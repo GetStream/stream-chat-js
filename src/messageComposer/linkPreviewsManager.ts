@@ -238,8 +238,7 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
     await Promise.all(
       newLinkPreviews.map(async (linkPreview) => {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { duration, ...ogAttachment } = await this.client.enrichURL(
+          const { duration: _duration, ...ogAttachment } = await this.client.enrichURL(
             linkPreview.og_scrape_url,
           );
           if (this.shouldDiscardEnrichQueries) return;
@@ -302,6 +301,7 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
         ...finalPreview,
         og_scrape_url: url,
         status,
+        custom: {},
       }),
     });
   };
@@ -330,8 +330,7 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
     preview.status === LinkPreviewStatus.PENDING;
 
   static getPreviewData = (preview: LinkPreview) => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { status, ...data } = preview;
+    const { status: _status, ...data } = preview;
     return data;
   };
 }

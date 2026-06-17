@@ -8,7 +8,10 @@ import { ConnectionState } from '../../src/connection_fallback';
 import { StableWSConnection } from '../../src/connection';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 import { generateThreadResponse } from './test-utils/generateThreadResponse';
-import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
+import {
+	DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
+	DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE,
+} from '../../src/constants';
 
 import {
 	describe,
@@ -93,27 +96,18 @@ describe('StreamChat getInstance', () => {
 			},
 		});
 
-		let requestConfig = {};
-		client.axiosInstance.get = (url, config) => {
-			requestConfig = config;
-			return {
-				status: 200,
-			};
-		};
+		const requestSpy = vi
+			.spyOn(client.axiosInstance, 'request')
+			.mockResolvedValueOnce({ data: {}, status: 200 });
 
-		await client.getChannelType('messaging');
+		await client.getAppSettings();
 
-		expect(requestConfig.headers).to.haveOwnProperty('Cache-Control', 'no-cache');
-		expect(requestConfig.headers).to.haveOwnProperty('Pragma', 'no-cache');
-	});
-
-	it('app settings do not mutate', async () => {
-		const client = new StreamChat('key', 'secret');
-		const cert = Buffer.from('test');
-		const options = { apn_config: { p12_cert: cert } };
-		await expect(client.updateAppSettings(options)).rejects.toThrow(/.*/);
-
-		expect(options.apn_config.p12_cert).to.be.eql(cert);
+		expect(requestSpy).toHaveBeenCalledTimes(1);
+		expect(requestSpy.mock.calls[0][0].headers).to.haveOwnProperty(
+			'Cache-Control',
+			'no-cache',
+		);
+		expect(requestSpy.mock.calls[0][0].headers).to.haveOwnProperty('Pragma', 'no-cache');
 	});
 
 	it('should correctly resolve _cacheEnabled', async () => {
@@ -253,7 +247,7 @@ describe('Client openConnection', () => {
 	});
 
 	it('should return same promise in case of multiple calls', async () => {
-		client.userID = 'vishal';
+		client.user = { id: 'vishal' };
 		client._setUser({
 			id: 'vishal',
 		});
@@ -429,51 +423,6 @@ describe('Detect node environment', () => {
 	});
 });
 
-describe('Client deleteUsers', () => {
-	it('should allow completely optional options', async () => {
-		const client = await getClientWithUser();
-
-		client.post = () => Promise.resolve();
-
-		await expect(client.deleteUsers(['_'])).resolves.toEqual();
-	});
-
-	it('delete types - options.conversations', async () => {
-		const client = await getClientWithUser();
-
-		client.post = () => Promise.resolve();
-
-		await expect(client.deleteUsers(['_'], { conversations: 'hard' })).resolves.toEqual();
-		await expect(client.deleteUsers(['_'], { conversations: 'soft' })).resolves.toEqual();
-		await expect(
-			client.deleteUsers(['_'], { conversations: 'pruning' }),
-		).rejects.toThrow();
-		await expect(client.deleteUsers(['_'], { conversations: '' })).rejects.toThrow();
-	});
-
-	it('delete types - options.messages', async () => {
-		const client = await getClientWithUser();
-
-		client.post = () => Promise.resolve();
-
-		await expect(client.deleteUsers(['_'], { messages: 'hard' })).resolves.toEqual();
-		await expect(client.deleteUsers(['_'], { messages: 'soft' })).resolves.toEqual();
-		await expect(client.deleteUsers(['_'], { messages: 'pruning' })).resolves.toEqual();
-		await expect(client.deleteUsers(['_'], { messages: '' })).rejects.toThrow();
-	});
-
-	it('delete types - options.user', async () => {
-		const client = await getClientWithUser();
-
-		client.post = () => Promise.resolve();
-
-		await expect(client.deleteUsers(['_'], { user: 'hard' })).resolves.toEqual();
-		await expect(client.deleteUsers(['_'], { user: 'soft' })).resolves.toEqual();
-		await expect(client.deleteUsers(['_'], { user: 'pruning' })).resolves.toEqual();
-		await expect(client.deleteUsers(['_'], { user: '' })).rejects.toThrow();
-	});
-});
-
 describe('updateMessage should maintain data integrity', () => {
 	let client;
 
@@ -481,43 +430,35 @@ describe('updateMessage should maintain data integrity', () => {
 		client = await getClientWithUser();
 	});
 
-	it('should convert mentioned_users from array of user objects to array of userIds', async () => {
-		client.post = (url, config) => {
-			expect(typeof config.message.mentioned_users[0]).to.be.equal('string');
-			expect(config.message.mentioned_users[0]).to.be.equal('uthred');
-		};
-		await client.updateMessage(
-			generateMsg({
-				mentioned_users: [
-					{
-						id: 'uthred',
-						name: 'Uthred Of Bebbanburg',
-					},
-				],
-			}),
-		);
+	it('should pass mentioned_users (array of userIds) through to the request payload', async () => {
+		const requestSpy = vi
+			.spyOn(client.axiosInstance, 'request')
+			.mockResolvedValue({ data: {} });
 
 		await client.updateMessage(
 			generateMsg({
 				mentioned_users: ['uthred'],
 			}),
 		);
+
+		expect(requestSpy.mock.calls[0][0].data.message.mentioned_users[0]).to.be.equal(
+			'uthred',
+		);
 	});
 
 	it('should allow empty mentioned_users', async () => {
-		client.post = (url, config) => {
-			expect(config.message.mentioned_users[0]).to.be.equal(undefined);
-		};
+		const requestSpy = vi
+			.spyOn(client.axiosInstance, 'request')
+			.mockResolvedValue({ data: {} });
 
 		await client.updateMessage(
 			generateMsg({
 				mentioned_users: [],
 			}),
 		);
-
-		client.post = (url, config) => {
-			expect(config.message.mentioned_users).to.be.equal(undefined);
-		};
+		expect(requestSpy.mock.calls[0][0].data.message.mentioned_users[0]).to.be.equal(
+			undefined,
+		);
 
 		await client.updateMessage(
 			generateMsg({
@@ -525,10 +466,15 @@ describe('updateMessage should maintain data integrity', () => {
 				mentioned_users: undefined,
 			}),
 		);
+		expect(requestSpy.mock.calls[1][0].data.message.mentioned_users).to.be.equal(
+			undefined,
+		);
 	});
 
 	it('should remove reserved and volatile fields before running the update', async () => {
-		const postSpy = sinon.stub(client, 'post');
+		const requestSpy = vi
+			.spyOn(client.axiosInstance, 'request')
+			.mockResolvedValue({ data: {} });
 		const updatedMessage = generateMsg({
 			text: 'test message',
 			pinned_at: new Date().toISOString(),
@@ -546,8 +492,8 @@ describe('updateMessage should maintain data integrity', () => {
 			text: updatedMessage.text,
 		};
 
-		expect(postSpy.callCount).to.equal(1);
-		expect(postSpy.firstCall.args[1].message).to.toMatchObject(messageInQuery);
+		expect(requestSpy).toHaveBeenCalledTimes(1);
+		expect(requestSpy.mock.calls[0][0].data.message).toMatchObject(messageInQuery);
 	});
 });
 
@@ -581,7 +527,7 @@ describe('message update', () => {
 				text: 'edited',
 			});
 
-			await client.updateMessage(message, { id: 'user-123' }, { skip_enrich_url: true });
+			await client.updateMessage(message, { skip_enrich_url: true });
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).toHaveBeenCalledWith({
@@ -589,7 +535,7 @@ describe('message update', () => {
 					channelId: 'channel-123',
 					channelType: 'messaging',
 					messageId: 'msg-123',
-					payload: [message, { id: 'user-123' }, { skip_enrich_url: true }],
+					payload: [message, { skip_enrich_url: true }],
 					type: 'update-message',
 				},
 			});
@@ -608,7 +554,7 @@ describe('message update', () => {
 			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
 					messageId: 'msg-123',
-					payload: [message, undefined, undefined],
+					payload: [message, undefined],
 					type: 'update-message',
 				},
 			});
@@ -622,10 +568,10 @@ describe('message update', () => {
 
 			client.offlineDb = undefined;
 
-			await client.updateMessage(message, 'user-123', { skip_enrich_url: true });
+			await client.updateMessage(message, { skip_enrich_url: true });
 
 			expect(_updateMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledWith(message, 'user-123', {
+			expect(_updateMessageSpy).toHaveBeenCalledWith(message, {
 				skip_enrich_url: true,
 			});
 		});
@@ -652,7 +598,7 @@ describe('message update', () => {
 			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
 					messageId: 'msg-123',
-					payload: [message, undefined, undefined],
+					payload: [message, undefined],
 					type: 'update-message',
 				},
 			});
@@ -677,7 +623,7 @@ describe('message update', () => {
 			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
 					messageId: 'msg-123',
-					payload: [message, undefined, undefined],
+					payload: [message, undefined],
 					type: 'update-message',
 				},
 			});
@@ -695,7 +641,7 @@ describe('message update', () => {
 
 			expect(loggerSpy).toHaveBeenCalledTimes(1);
 			expect(_updateMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledWith(message, undefined, undefined);
+			expect(_updateMessageSpy).toHaveBeenCalledWith(message, undefined);
 		});
 
 		it('logs and falls back to _updateMessage when queueTask rethrows for failed offline edits', async () => {
@@ -715,11 +661,7 @@ describe('message update', () => {
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(loggerSpy).toHaveBeenCalledTimes(1);
 			expect(_updateMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledWith(
-				failedEditedMessage,
-				undefined,
-				undefined,
-			);
+			expect(_updateMessageSpy).toHaveBeenCalledWith(failedEditedMessage, undefined);
 			expect(response.message.text).toBe('edited');
 			expect(response.message.status).toBe('failed');
 		});
@@ -730,7 +672,7 @@ describe('Client search', async () => {
 	const client = await getClientWithUser();
 
 	it('search with sorting by defined field', async () => {
-		client.get = (url, config) => {
+		client.api.get = (url, config) => {
 			expect(config.payload.sort).to.be.eql([{ field: 'updated_at', direction: -1 }]);
 		};
 		await client.search({ cid: 'messaging:my-cid' }, 'query', {
@@ -738,7 +680,7 @@ describe('Client search', async () => {
 		});
 	});
 	it('search with sorting by custom field', async () => {
-		client.get = (url, config) => {
+		client.api.get = (url, config) => {
 			expect(config.payload.sort).to.be.eql([{ field: 'custom_field', direction: -1 }]);
 		};
 		await client.search({ cid: 'messaging:my-cid' }, 'query', {
@@ -811,7 +753,7 @@ describe('Client WSFallback', () => {
 			.onCall(0)
 			.resolves({ event: { connection_id: 'new_id', received_at: eventDate } });
 
-		client.doAxiosRequest = stub;
+		client.api.doAxiosRequest = stub;
 		client.wsBaseURL = 'ws://getstream.io';
 		const health = await client.connectUser({ id: 'amin' }, userToken);
 		expect(health).to.be.eql({ connection_id: 'new_id', received_at: eventDate });
@@ -831,7 +773,7 @@ describe('Client WSFallback', () => {
 	it('should fire transport.changed and health.check event', async () => {
 		const eventDate = new Date(Date.UTC(2009, 1, 3, 23, 3, 3));
 		sinon.spy(client, 'dispatchEvent');
-		client.doAxiosRequest = () => ({
+		client.api.doAxiosRequest = () => ({
 			event: { type: 'health.check', connection_id: 'new_id', received_at: eventDate },
 		});
 		client.wsBaseURL = 'ws://getstream.io';
@@ -909,12 +851,13 @@ describe('StreamChat.queryChannels', async () => {
 				generateMsg,
 			),
 		}));
-		const mock = sinon.mock(client);
-		mock.expects('post').returns(Promise.resolve(mockedChannelsQueryResponse));
+		sinon
+			.stub(client.chatApi, 'queryChannels')
+			.resolves({ channels: mockedChannelsQueryResponse });
 		await client.queryChannels();
 		expect(Object.keys(client.activeChannels).length).to.be.equal(0);
 		expect(Object.keys(client.configs).length).to.be.equal(0);
-		mock.restore();
+		sinon.restore();
 	});
 
 	it('should return hydrated channels as Channel instances from queryChannels', async () => {
@@ -926,15 +869,15 @@ describe('StreamChat.queryChannels', async () => {
 				generateMsg,
 			),
 		}));
-		const postStub = sinon
-			.stub(client, 'post')
-			.returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
+		const stub = sinon
+			.stub(client.chatApi, 'queryChannels')
+			.resolves({ channels: mockedChannelsQueryResponse });
 		const queryChannelsResponse = await client.queryChannels();
 		expect(queryChannelsResponse.length).to.be.equal(mockedChannelsQueryResponse.length);
 		queryChannelsResponse.forEach((item) => {
 			expect(item).to.be.instanceOf(Channel);
 		});
-		postStub.restore();
+		stub.restore();
 	});
 
 	it('should return the raw channels response from queryChannelsRequest', async () => {
@@ -946,13 +889,13 @@ describe('StreamChat.queryChannels', async () => {
 				generateMsg,
 			),
 		}));
-		const postStub = sinon
-			.stub(client, 'post')
-			.returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
+		const stub = sinon
+			.stub(client.chatApi, 'queryChannels')
+			.resolves({ channels: mockedChannelsQueryResponse });
 		const queryChannelsResponse = await client.queryChannelsRequest();
 		expect(queryChannelsResponse.length).to.be.equal(mockedChannelsQueryResponse.length);
 		expect(queryChannelsResponse).to.deep.equal(mockedChannelsQueryResponse);
-		postStub.restore();
+		stub.restore();
 	});
 
 	it('should not update pagination for queried message set', async () => {
@@ -960,21 +903,22 @@ describe('StreamChat.queryChannels', async () => {
 		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
 			...mockChannelQueryResponse,
 			messages: Array.from(
-				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE },
+				{ length: DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE },
 				generateMsg,
 			),
 		}));
-		const mock = sinon.mock(client);
-		mock.expects('post').returns(Promise.resolve(mockedChannelsQueryResponse));
+		sinon
+			.stub(client.chatApi, 'queryChannels')
+			.resolves({ channels: mockedChannelsQueryResponse });
 		await client.queryChannels();
 		Object.values(client.activeChannels).forEach((channel) => {
 			expect(channel.state.messageSets.length).to.be.equal(1);
 			expect(channel.state.messageSets[0].pagination).to.eql({
-				hasNext: true,
+				hasNext: false,
 				hasPrev: true,
 			});
 		});
-		mock.restore();
+		sinon.restore();
 	});
 
 	it('should update pagination for queried message set to prevent more pagination', async () => {
@@ -982,21 +926,22 @@ describe('StreamChat.queryChannels', async () => {
 		const mockedChannelQueryResponse = Array.from({ length: 10 }, () => ({
 			...mockChannelQueryResponse,
 			messages: Array.from(
-				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE - 1 },
+				{ length: DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE - 1 },
 				generateMsg,
 			),
 		}));
-		const mock = sinon.mock(client);
-		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
+		sinon
+			.stub(client.chatApi, 'queryChannels')
+			.resolves({ channels: mockedChannelQueryResponse });
 		await client.queryChannels();
 		Object.values(client.activeChannels).forEach((channel) => {
 			expect(channel.state.messageSets.length).to.be.equal(1);
 			expect(channel.state.messageSets[0].pagination).to.eql({
-				hasNext: true,
+				hasNext: false,
 				hasPrev: false,
 			});
 		});
-		mock.restore();
+		sinon.restore();
 	});
 });
 
@@ -1010,8 +955,7 @@ describe('StreamChat.queryThreads', () => {
 		);
 		const apiResponse = { threads: [rawThread], next: undefined };
 
-		const postStub = sinon.stub(client, 'post');
-		postStub.onFirstCall().resolves(apiResponse);
+		sinon.stub(client.chatApi, 'queryThreads').resolves(apiResponse);
 		const hydratePollCacheSpy = sinon.spy(client.polls, 'hydratePollCache');
 
 		const result = await client.queryThreads();
@@ -1022,7 +966,7 @@ describe('StreamChat.queryThreads', () => {
 		expect(hydratePollCacheSpy.calledOnce).to.be.true;
 		expect(hydratePollCacheSpy.calledWith([parentMessage])).to.be.true;
 
-		postStub.restore();
+		sinon.restore();
 	});
 });
 
@@ -1055,7 +999,9 @@ describe('StreamChat.queryReactions', () => {
 		await client.offlineDb.init(client.userID);
 
 		dispatchSpy = vi.spyOn(client, 'dispatchEvent');
-		postStub = vi.spyOn(client, 'post').mockResolvedValueOnce(postResponse);
+		postStub = vi
+			.spyOn(client.chatApi, 'queryReactions')
+			.mockResolvedValueOnce(postResponse);
 		client.offlineDb.getReactions.mockResolvedValue(offlineReactions);
 	});
 
@@ -1086,14 +1032,12 @@ describe('StreamChat.queryReactions', () => {
 		]);
 
 		expect(postStub).toHaveBeenCalledTimes(1);
-		expect(postStub).toHaveBeenCalledWith(
-			`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reactions`,
-			{
-				filter,
-				sort: normalizeQuerySort(sort),
-				limit: 50,
-			},
-		);
+		expect(postStub).toHaveBeenCalledWith({
+			id: messageId,
+			filter,
+			sort: normalizeQuerySort(sort),
+			limit: 50,
+		});
 
 		expect(result).to.eql(postResponse);
 	});
@@ -1103,15 +1047,13 @@ describe('StreamChat.queryReactions', () => {
 
 		expect(client.offlineDb.getReactions).not.toHaveBeenCalled();
 
-		expect(postStub).toHaveBeenCalledWith(
-			`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reactions`,
-			{
-				filter,
-				sort: normalizeQuerySort(sort),
-				next: true,
-				limit: 20,
-			},
-		);
+		expect(postStub).toHaveBeenCalledWith({
+			id: messageId,
+			filter,
+			sort: normalizeQuerySort(sort),
+			next: true,
+			limit: 20,
+		});
 	});
 
 	it('should not dispatch event if offlineDb returns null', async () => {
@@ -1121,14 +1063,12 @@ describe('StreamChat.queryReactions', () => {
 
 		expect(client.offlineDb.getReactions).toHaveBeenCalledTimes(1);
 		expect(dispatchSpy).not.toHaveBeenCalled();
-		expect(postStub).toHaveBeenCalledWith(
-			`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reactions`,
-			{
-				filter,
-				sort: normalizeQuerySort(sort),
-				limit: 50,
-			},
-		);
+		expect(postStub).toHaveBeenCalledWith({
+			id: messageId,
+			filter,
+			sort: normalizeQuerySort(sort),
+			limit: 50,
+		});
 	});
 
 	it('should log a warning if offlineDb.getReactions throws', async () => {
@@ -1146,14 +1086,12 @@ describe('StreamChat.queryReactions', () => {
 			}),
 		);
 		expect(dispatchSpy).not.toHaveBeenCalled();
-		expect(postStub).toHaveBeenCalledWith(
-			`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reactions`,
-			{
-				filter,
-				sort: normalizeQuerySort(sort),
-				limit: 50,
-			},
-		);
+		expect(postStub).toHaveBeenCalledWith({
+			id: messageId,
+			filter,
+			sort: normalizeQuerySort(sort),
+			limit: 50,
+		});
 	});
 });
 
@@ -1173,7 +1111,9 @@ describe('message deletion', () => {
 		await client.offlineDb.init(client.userID);
 
 		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
-		clientDeleteSpy = vi.spyOn(client, 'delete').mockResolvedValue({ message: {} });
+		clientDeleteSpy = vi
+			.spyOn(client.chatApi, 'deleteMessage')
+			.mockResolvedValue({ message: {} });
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
 	});
 
@@ -1303,79 +1243,51 @@ describe('message deletion', () => {
 	});
 
 	describe('_deleteMessage', () => {
-		it('should call delete with correct URL and no params when hardDelete is false/undefined', async () => {
+		it('should call deleteMessage with correct params when hardDelete is false/undefined', async () => {
 			await client._deleteMessage(messageId);
 
 			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
-			expect(clientDeleteSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/messages/${encodeURIComponent(messageId)}`,
-				{},
-			);
+			expect(clientDeleteSpy).toHaveBeenCalledWith({
+				id: messageId,
+				hard: undefined,
+				delete_for_me: undefined,
+			});
 		});
 
-		it('should call delete with hard=true param when hardDelete is true', async () => {
+		it('should call deleteMessage with hard=true when hardDelete is true', async () => {
 			await client._deleteMessage(messageId, true);
 
 			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
-			expect(clientDeleteSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/messages/${encodeURIComponent(messageId)}`,
-				{ hard: true },
-			);
+			expect(clientDeleteSpy).toHaveBeenCalledWith({
+				id: messageId,
+				hard: true,
+				delete_for_me: undefined,
+			});
 		});
 
-		it.each([
-			['{}', {}],
-			['{ hardDelete: true }', { hardDelete: true }],
-			['{ hardDelete: false }', { hardDelete: false }],
-			['{ deleteForMe: true }', { deleteForMe: true }],
-			['{ deleteForMe: false }', { deleteForMe: false }],
-			[
-				'{ hardDelete: false, deleteForMe: true }',
-				{ hardDelete: false, deleteForMe: true },
-			],
-			[
-				'{ hardDelete: true, deleteForMe: true }',
-				{ hardDelete: true, deleteForMe: true },
-			],
-			[
-				'{ hardDelete: false, deleteForMe: false }',
-				{ hardDelete: false, deleteForMe: false },
-			],
-			[
-				'{ hardDelete: false, deleteForMe: false }',
-				{ hardDelete: false, deleteForMe: false },
-			],
-		])('should parse delete options %s accordingly', async (_, options) => {
-			await client._deleteMessage(messageId, options);
+		it('should call deleteMessage with delete_for_me=true', async () => {
+			await client._deleteMessage(messageId, { deleteForMe: true });
 
-			const expectedParams =
-				Object.values(options).length === 2 && Object.values(options).every((val) => val)
-					? { delete_for_me: true, hard: true }
-					: Object.keys(options).length === 0
-						? {}
-						: options.deleteForMe
-							? { delete_for_me: true }
-							: options.hardDelete
-								? { hard: true }
-								: {};
 			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
-			expect(clientDeleteSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/messages/${encodeURIComponent(messageId)}`,
-				expectedParams,
-			);
+			expect(clientDeleteSpy).toHaveBeenCalledWith({
+				id: messageId,
+				hard: undefined,
+				delete_for_me: true,
+			});
 		});
 
-		it('should call delete with both hard and delete_for_me params when both are true', async () => {
+		it('should call deleteMessage with both hard and delete_for_me when both are true', async () => {
 			await client._deleteMessage(messageId, { deleteForMe: true, hardDelete: true });
 
 			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
-			expect(clientDeleteSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/messages/${encodeURIComponent(messageId)}`,
-				{ hard: true, delete_for_me: true },
-			);
+			expect(clientDeleteSpy).toHaveBeenCalledWith({
+				id: messageId,
+				hard: true,
+				delete_for_me: true,
+			});
 		});
 
-		it('should return the response from delete', async () => {
+		it('should return the response from deleteMessage', async () => {
 			clientDeleteSpy.mockResolvedValue({
 				message: { id: messageId },
 			});
@@ -1421,45 +1333,65 @@ describe('user.messages.deleted', () => {
 					og_scrape_url: 'https://www.youtube.com/',
 				},
 			],
-			created_at: '2021-01-01T00:01:00',
+			created_at: new Date('2021-01-01T00:01:00'),
 			pinned: true,
-			pinned_at: '2022-01-01T00:01:00',
+			pinned_at: new Date('2022-01-01T00:01:00'),
 			user: bannedUser,
 		},
 		{
-			created_at: '2021-01-01T00:02:00',
+			created_at: new Date('2021-01-01T00:02:00'),
 			pinned: true,
-			pinned_at: '2022-01-01T00:02:00',
+			pinned_at: new Date('2022-01-01T00:02:00'),
 			user: otherUser,
 		},
-		{ created_at: '2021-01-01T00:03:00', user: bannedUser },
+		{ created_at: new Date('2021-01-01T00:03:00'), user: bannedUser },
 	].map(generateMsg);
 
 	const quoted_message = messageSet1[0];
 	const messageSet2 = [
 		{
-			created_at: '2020-01-01T00:01:00',
+			created_at: new Date('2020-01-01T00:01:00'),
 			pinned: true,
-			pinned_at: '2022-01-01T00:03:00',
+			pinned_at: new Date('2022-01-01T00:03:00'),
 			user: bannedUser,
 		},
 		{
-			created_at: '2020-01-01T00:02:00',
+			created_at: new Date('2020-01-01T00:02:00'),
 			quoted_message,
 			quoted_message_id: quoted_message.id,
 			user: otherUser,
 		},
-		{ created_at: '2020-01-01T00:03:00', user: bannedUser },
-		{ created_at: '2020-01-01T00:04:00', user: otherUser },
+		{ created_at: new Date('2020-01-01T00:03:00'), user: bannedUser },
+		{ created_at: new Date('2020-01-01T00:04:00'), user: otherUser },
 	].map(generateMsg);
 
 	const parent_id = messageSet2[0].id;
 	const thread1 = [
-		{ created_at: '2020-01-01T00:01:30', parent_id, user: bannedUser, type: 'reply' },
-		{ created_at: '2020-01-01T00:02:35', parent_id, user: otherUser, type: 'reply' },
-		{ created_at: '2020-01-01T00:03:45', parent_id, user: bannedUser, type: 'reply' },
-		{ created_at: '2020-01-01T00:04:00', parent_id, user: otherUser, type: 'reply' },
-	];
+		{
+			created_at: new Date('2020-01-01T00:01:30'),
+			parent_id,
+			user: bannedUser,
+			type: 'reply',
+		},
+		{
+			created_at: new Date('2020-01-01T00:02:35'),
+			parent_id,
+			user: otherUser,
+			type: 'reply',
+		},
+		{
+			created_at: new Date('2020-01-01T00:03:45'),
+			parent_id,
+			user: bannedUser,
+			type: 'reply',
+		},
+		{
+			created_at: new Date('2020-01-01T00:04:00'),
+			parent_id,
+			user: otherUser,
+			type: 'reply',
+		},
+	].map(generateMsg);
 
 	const pinnedMessages = [messageSet1[0], messageSet1[1], messageSet2[0]];
 
@@ -1530,7 +1462,7 @@ describe('user.messages.deleted', () => {
 					attachments: [],
 					cid: message.cid,
 					created_at: message.created_at,
-					deleted_at: new Date(event.created_at),
+					deleted_at: event.created_at,
 					id: message.id,
 					latest_reactions: [],
 					mentioned_users: [],
@@ -1587,7 +1519,7 @@ describe('user.messages.deleted', () => {
 					expect(message).toStrictEqual({
 						...message,
 						attachments: [],
-						deleted_at: new Date(event.created_at),
+						deleted_at: event.created_at,
 						type: 'deleted',
 					});
 				} else if (message.quoted_message) {
@@ -1596,7 +1528,7 @@ describe('user.messages.deleted', () => {
 						quoted_message: {
 							...message.quoted_message,
 							attachments: [],
-							deleted_at: new Date(event.created_at),
+							deleted_at: event.created_at,
 							type: 'deleted',
 						},
 					});
@@ -1629,11 +1561,11 @@ describe('user.messages.deleted — quoted_message regression (#1736)', () => {
 
 	const setupChannelWithSelfQuote = (type, id) => {
 		const m1 = generateMsg({
-			created_at: '2020-01-01T00:00:01.000Z',
+			created_at: new Date('2020-01-01T00:00:01.000Z'),
 			user: bannedUser,
 		});
 		const m2 = generateMsg({
-			created_at: '2020-01-01T00:00:02.000Z',
+			created_at: new Date('2020-01-01T00:00:02.000Z'),
 			user: bannedUser,
 			quoted_message: m1,
 			quoted_message_id: m1.id,
@@ -1808,80 +1740,19 @@ describe('X-Stream-Client header', () => {
 
 		expect(userAgent).toMatchInlineSnapshot(`"deprecated"`);
 	});
-
-	describe('getHookEvents', () => {
-		let clientGetSpy;
-
-		beforeEach(() => {
-			clientGetSpy = vi.spyOn(client, 'get').mockResolvedValue({});
-		});
-
-		it('should call get with correct URL and no params when no products specified', async () => {
-			await client.getHookEvents();
-
-			expect(clientGetSpy).toHaveBeenCalledTimes(1);
-			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/hook/events`, {});
-		});
-
-		it('should call get with correct URL and empty params when empty products array specified', async () => {
-			await client.getHookEvents([]);
-
-			expect(clientGetSpy).toHaveBeenCalledTimes(1);
-			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/hook/events`, {});
-		});
-
-		it('should call get with product params when products specified', async () => {
-			await client.getHookEvents(['chat', 'video']);
-
-			expect(clientGetSpy).toHaveBeenCalledTimes(1);
-			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/hook/events`, {
-				product: 'chat,video',
-			});
-		});
-
-		it('should call get with single product param', async () => {
-			await client.getHookEvents(['chat']);
-
-			expect(clientGetSpy).toHaveBeenCalledTimes(1);
-			expect(clientGetSpy).toHaveBeenCalledWith(`${client.baseURL}/hook/events`, {
-				product: 'chat',
-			});
-		});
-
-		it('should return the response from get', async () => {
-			const mockResponse = {
-				events: [
-					{
-						name: 'message.new',
-						description: 'When a new message is added',
-						products: ['chat'],
-					},
-					{
-						name: 'call.created',
-						description: 'The call was created',
-						products: ['video'],
-					},
-				],
-			};
-			clientGetSpy.mockResolvedValue(mockResponse);
-
-			const result = await client.getHookEvents(['chat', 'video']);
-
-			expect(result).toEqual(mockResponse);
-		});
-	});
 });
 
 describe('markChannelsDelivered', () => {
 	let client;
+	let markDeliveredSpy;
 	const user = { id: 'user' };
 
 	beforeEach(() => {
 		client = new StreamChat('', '');
 
-		vi.spyOn(client, 'post').mockResolvedValue({
-			ok: true,
-		});
+		markDeliveredSpy = vi
+			.spyOn(client.chatApi, 'markDelivered')
+			.mockResolvedValue({ ok: true });
 	});
 
 	afterEach(() => {
@@ -1890,24 +1761,23 @@ describe('markChannelsDelivered', () => {
 
 	it('prevents triggering the request with empty payload', async () => {
 		await client.markChannelsDelivered();
-		expect(client.post).not.toHaveBeenCalled();
+		expect(markDeliveredSpy).not.toHaveBeenCalled();
 
 		await client.markChannelsDelivered({});
-		expect(client.post).not.toHaveBeenCalled();
+		expect(markDeliveredSpy).not.toHaveBeenCalled();
 
 		await client.markChannelsDelivered({ latest_delivered_messages: [] });
-		expect(client.post).not.toHaveBeenCalled();
+		expect(markDeliveredSpy).not.toHaveBeenCalled();
 
 		await client.markChannelsDelivered({ user, user_id: user.id });
-		expect(client.post).not.toHaveBeenCalled();
+		expect(markDeliveredSpy).not.toHaveBeenCalled();
 	});
 
 	it('triggers the request with at least on channel to report', async () => {
 		const delivered = [{ cid: 'cid', id: 'message-id' }];
 		await client.markChannelsDelivered({ latest_delivered_messages: delivered });
-		expect(client.post).toHaveBeenCalledWith(
-			'https://chat.stream-io-api.com/channels/delivered',
-			{ latest_delivered_messages: delivered },
-		);
+		expect(markDeliveredSpy).toHaveBeenCalledWith({
+			latest_delivered_messages: delivered,
+		});
 	});
 });

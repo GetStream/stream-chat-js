@@ -487,7 +487,7 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
 
     return this.getMembersAndWatchers()
       .filter((user) => {
-        if (user.id === this.client.userID) return false;
+        if (user.id === this.client.userId) return false;
         if (!searchQuery) return true;
 
         const updatedId = this.transliterate(removeDiacritics(user.id)).toLowerCase();
@@ -721,13 +721,15 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
       return data.filter(
         (suggestion) =>
           suggestion.mentionType === 'user' &&
-          mutedUsers.some((mute) => mute.target.id === suggestion.id),
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          mutedUsers.some((mute) => mute.target!.id === suggestion.id),
       );
     }
     return data.filter(
       (suggestion) =>
         suggestion.mentionType !== 'user' ||
-        mutedUsers.every((mute) => mute.target.id !== suggestion.id),
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        mutedUsers.every((mute) => mute.target!.id !== suggestion.id),
     );
   }
 

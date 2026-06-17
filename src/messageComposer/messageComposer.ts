@@ -13,23 +13,22 @@ import {
 } from './middleware';
 import type { Unsubscribe } from '../store';
 import { StateStore } from '../store';
-import { formatMessage, generateUUIDv4, isLocalMessage, unformatMessage } from '../utils';
+import { formatMessage, generateUUIDv4, isLocalMessage } from '../utils';
 import { mergeWith } from '../utils/mergeWith';
 import { Channel } from '../channel';
 import { Thread } from '../thread';
 import type {
+  Attachment,
   ChannelAPIResponse,
   CommandResponse,
   DraftMessage,
   DraftResponse,
-  EventTypes,
   LocalMessage,
-  LocalMessageBase,
   MessageResponse,
-  MessageResponseBase,
+  UserResponse,
 } from '../types';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
-import type { StreamChat } from '../client';
+import type { ListenerKeys, StreamChat } from '../client';
 import type { CommandSendability, MessageComposerConfig } from './configuration/types';
 import type {
   CommandSuggestionDisabledReason,
@@ -89,7 +88,7 @@ export type MessageComposerState = {
   id: string;
   draftId: string | null;
   pollId: string | null;
-  quotedMessage: LocalMessageBase | null;
+  quotedMessage: LocalMessage | null;
   showReplyInChannel: boolean;
   /**
    * Baseline snapshot of the message being edited (if any).
@@ -161,9 +160,7 @@ const initState = (
     draftId,
     id,
     pollId: message.poll_id ?? null,
-    quotedMessage: quotedMessage
-      ? formatMessage(quotedMessage as MessageResponseBase)
-      : null,
+    quotedMessage: quotedMessage ? formatMessage(quotedMessage) : null,
     showReplyInChannel: false,
     editedMessage,
   };
@@ -506,7 +503,7 @@ export class MessageComposer extends WithSubscriptions {
   };
 
   initStateFromChannelResponse = (channelApiResponse: ChannelAPIResponse) => {
-    if (this.channel.cid !== channelApiResponse.channel.cid) {
+    if (this.channel.cid !== channelApiResponse.channel?.cid) {
       return;
     }
     if (channelApiResponse.draft) {
@@ -615,12 +612,12 @@ export class MessageComposer extends WithSubscriptions {
 
   private subscribeMessageUpdated = () => {
     // todo: test the impact of 'reaction.new', 'reaction.deleted', 'reaction.updated'
-    const eventTypes: EventTypes[] = [
+    const eventTypes = [
       'message.updated',
       'reaction.new',
       'reaction.deleted', // todo: do we need to subscribe to this especially when the whole state is overriden?
       'reaction.updated', // todo: do we need to subscribe to this especially when the whole state is overriden?
-    ];
+    ] satisfies ListenerKeys[];
 
     const unsubscribeFunctions = eventTypes.map(
       (eventType) =>
@@ -864,20 +861,20 @@ export class MessageComposer extends WithSubscriptions {
           type: 'regular',
         },
         localMessage: {
-          attachments: [],
+          attachments: [] as Attachment[],
           created_at, // only assigned to localMessage as this is used for optimistic update
-          deleted_at: null,
+          deleted_at: undefined,
           error: undefined,
           id: this.id,
-          mentioned_users: [],
+          mentioned_users: [] as UserResponse[],
           parent_id: this.threadId ?? undefined,
-          pinned_at: this.editedMessage?.pinned_at || null,
-          reaction_groups: null,
+          pinned_at: this.editedMessage?.pinned_at || undefined,
+          reaction_groups: undefined,
           status: this.editedMessage ? this.editedMessage.status : 'sending',
           text,
           type: 'regular',
           updated_at: created_at,
-        },
+        } as LocalMessage,
         sendOptions: {},
       },
     });
@@ -891,7 +888,12 @@ export class MessageComposer extends WithSubscriptions {
     const { state, status } = await this.draftCompositionMiddlewareExecutor.execute({
       eventName: 'compose',
       initialValue: {
-        draft: { id: this.id, parent_id: this.threadId ?? undefined, text: '' },
+        draft: {
+          id: this.id,
+          parent_id: this.threadId ?? undefined,
+          text: '',
+          custom: {},
+        },
       },
     });
     if (status === 'discard') return;
@@ -911,12 +913,10 @@ export class MessageComposer extends WithSubscriptions {
       try {
         const optimisticDraftResponse = {
           channel_cid: this.channel.cid,
-          created_at: new Date().toISOString(),
+          created_at: new Date(),
           message: draft as DraftMessage,
           parent_id: draft.parent_id,
-          quoted_message: this.quotedMessage
-            ? unformatMessage(this.quotedMessage)
-            : undefined,
+          quoted_message: this.quotedMessage ?? undefined,
         };
         await this.client.offlineDb.upsertDraft({ draft: optimisticDraftResponse });
       } catch (error) {
@@ -952,11 +952,11 @@ export class MessageComposer extends WithSubscriptions {
   };
 
   getDraft = async () => {
-    if (this.editedMessage || !this.config.drafts.enabled || !this.client.userID) return;
+    if (this.editedMessage || !this.config.drafts.enabled || !this.client.userId) return;
 
     const draftFromOfflineDB = await this.client.offlineDb?.getDraft({
       cid: this.channel.cid,
-      userId: this.client.userID,
+      userId: this.client.userId,
       parent_id: this.threadId ?? undefined,
     });
 

@@ -6,12 +6,10 @@ import type {
   ChannelSort,
   ChannelSortBase,
   LocalMessage,
-  LocalMessageBase,
   Logger,
   Message,
   MessagePaginationOptions,
   MessageResponse,
-  MessageResponseBase,
   MessageSet,
   OwnUserBase,
   OwnUserResponse,
@@ -297,92 +295,52 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
 };
 
 /**
- * Takes the message object, parses the dates, sets `__html`
- * and sets the status to `received` if missing; returns a new LocalMessage object.
+ * Takes the message object, adds SDK-specific fields (status, error),
+ * and returns a new LocalMessage object.
  *
- * @param {LocalMessage} message `LocalMessage` object
+ * @param {MessageResponse | LocalMessage} message message object
  */
-export function formatMessage(
-  message: MessageResponse | MessageResponseBase | LocalMessage,
-): LocalMessage {
-  const toLocalMessageBase = (
-    msg: MessageResponse | MessageResponseBase | LocalMessage | null | undefined,
-  ): LocalMessageBase | null => {
-    if (!msg) return null;
-    return {
-      ...msg,
-      created_at: msg.created_at ? new Date(msg.created_at) : new Date(),
-      deleted_at: msg.deleted_at ? new Date(msg.deleted_at) : null,
-      pinned_at: msg.pinned_at ? new Date(msg.pinned_at) : null,
-      reaction_groups: maybeGetReactionGroupsFallback(
-        msg.reaction_groups,
-        msg.reaction_counts,
-        msg.reaction_scores,
-      ),
-      status: msg.status || 'received',
-      updated_at: msg.updated_at ? new Date(msg.updated_at) : new Date(),
-    };
-  };
-
+export function formatMessage(message: MessageResponse | LocalMessage): LocalMessage {
   return {
-    ...toLocalMessageBase(message),
-    error: (message as LocalMessage).error ?? null,
-    quoted_message: toLocalMessageBase((message as MessageResponse).quoted_message),
-  } as LocalMessage;
-}
-
-/**
- * @private
- *
- * Takes a LocalMessage, parses the dates back to strings,
- * and converts the message back to a MessageResponse.
- *
- * @param {MessageResponse} message `MessageResponse` object
- */
-export function unformatMessage(message: LocalMessage): MessageResponse {
-  const toMessageResponseBase = (
-    msg: LocalMessage | null | undefined,
-  ): MessageResponseBase | null => {
-    if (!msg) return null;
-    const newDateString = new Date().toISOString();
-    return {
-      ...msg,
-      created_at: message.created_at ? message.created_at.toISOString() : newDateString,
-      deleted_at: message.deleted_at ? message.deleted_at.toISOString() : undefined,
-      pinned_at: message.pinned_at ? message.pinned_at.toISOString() : undefined,
-      updated_at: message.updated_at ? message.updated_at.toISOString() : newDateString,
-    };
-  };
-
-  return {
-    ...toMessageResponseBase(message),
-    quoted_message: toMessageResponseBase((message as LocalMessage).quoted_message),
-  } as MessageResponse;
+    ...message,
+    created_at: message.created_at ?? new Date(),
+    updated_at: message.updated_at ?? new Date(),
+    reaction_groups: maybeGetReactionGroupsFallback(
+      message.reaction_groups,
+      message.reaction_counts,
+      message.reaction_scores,
+    ),
+    status: (message as LocalMessage).status || 'received',
+    error: (message as LocalMessage).error ?? undefined,
+    quoted_message: message.quoted_message
+      ? formatMessage(message.quoted_message)
+      : undefined,
+    user_id: message?.user?.id,
+  } satisfies LocalMessage;
 }
 
 export const localMessageToNewMessagePayload = (localMessage: LocalMessage): Message => {
-  /* eslint-disable @typescript-eslint/no-unused-vars */
   const {
     // Remove all timestamp fields and client-specific fields.
     // Field pinned_at can therefore be earlier than created_at as new message payload can hold it.
-    created_at,
-    updated_at,
-    deleted_at,
+    created_at: _created_at,
+    updated_at: _updated_at,
+    deleted_at: _deleted_at,
     // Client-specific fields
-    error,
-    status,
+    error: _error,
+    status: _status,
     // Reaction related fields
-    latest_reactions,
-    own_reactions,
-    reaction_counts,
-    reaction_scores,
-    reply_count,
+    latest_reactions: _latest_reactions,
+    own_reactions: _own_reactions,
+    reaction_counts: _reaction_counts,
+    reaction_scores: _reaction_scores,
+    reply_count: _reply_count,
     // Message text related fields that shouldn't be in update
-    command,
-    html,
-    i18n,
-    mentioned_groups,
-    quoted_message,
+    command: _command,
+    html: _html,
+    i18n: _i18n,
+    mentioned_groups: _mentioned_groups,
+    quoted_message: _quoted_message,
     mentioned_users,
     // Message content related fields
     ...messageFields
@@ -390,9 +348,9 @@ export const localMessageToNewMessagePayload = (localMessage: LocalMessage): Mes
 
   return {
     ...messageFields,
-    pinned_at: messageFields.pinned_at?.toISOString(),
+    pinned_at: messageFields.pinned_at,
     mentioned_users: mentioned_users?.map((user) => user.id),
-  };
+  } as Message;
 };
 
 export const toUpdatedMessagePayload = (
@@ -423,7 +381,7 @@ export const toDeletedMessage = ({
   deletedAt,
   hardDelete = false,
 }: {
-  message: LocalMessage | LocalMessageBase;
+  message: LocalMessage;
   deletedAt: LocalMessage['deleted_at'];
   hardDelete: boolean;
 }) => {
@@ -485,7 +443,7 @@ export const deleteUserMessages = ({
         message.quoted_message.type === 'deleted'
           ? message.quoted_message
           : (toDeletedMessage({
-              message: messages[i].quoted_message as LocalMessageBase,
+              message: messages[i].quoted_message as LocalMessage,
               hardDelete,
               deletedAt,
             }) as LocalMessage);
@@ -652,7 +610,7 @@ function maybeGetReactionGroupsFallback(
   groups: { [key: string]: ReactionGroupResponse } | null | undefined,
   counts: { [key: string]: number } | null | undefined,
   scores: { [key: string]: number } | null | undefined,
-): { [key: string]: ReactionGroupResponse } | null {
+): { [key: string]: ReactionGroupResponse } | undefined {
   if (groups) {
     return groups;
   }
@@ -664,16 +622,19 @@ function maybeGetReactionGroupsFallback(
       fallback[type] = {
         count: counts[type],
         sum_scores: scores[type],
+        // empty
+        first_reaction_at: new Date(),
+        last_reaction_at: new Date(),
+        latest_reactions_by: [],
       };
     }
 
     return fallback;
   }
 
-  return null;
+  return undefined;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface DebouncedFunc<T extends (...args: any[]) => any> {
   /**
    * Call the original function, but applying the debounce rules.
@@ -702,7 +663,7 @@ export interface DebouncedFunc<T extends (...args: any[]) => any> {
 }
 
 // works exactly the same as lodash.debounce
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 export const debounce = <T extends (...args: any[]) => any>(
   fn: T,
   timeout = 0,
@@ -750,7 +711,7 @@ export const debounce = <T extends (...args: any[]) => any>(
 };
 
 // works exactly the same as lodash.throttle
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 export const throttle = <T extends (...args: any[]) => any>(
   fn: T,
   timeout = 200,
@@ -819,7 +780,7 @@ type MessagePaginationUpdatedParams = {
 
 export function binarySearchByDateEqualOrNearestGreater(
   array: {
-    created_at?: string;
+    created_at?: string | Date;
   }[],
   targetDate: Date,
 ): number {
@@ -833,7 +794,7 @@ export function binarySearchByDateEqualOrNearestGreater(
       left += 1;
       continue;
     }
-    const midDate = new Date(midCreatedAt);
+    const midDate = midCreatedAt instanceof Date ? midCreatedAt : new Date(midCreatedAt);
 
     if (midDate.getTime() === targetDate.getTime()) {
       return mid;
@@ -1106,8 +1067,12 @@ export const getAndWatchChannel = async ({
   }
 
   // unfortunately typescript is not able to infer that if (!channel && !type) === false, then channel or type has to be truthy
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const channelToWatch = channel || client.channel(type!, id, { members });
+  const channelToWatch =
+    channel ||
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    client.channel(type!, id, {
+      members: members?.map((userId) => ({ user_id: userId })),
+    });
 
   // need to keep as with call to channel.watch the id can be changed from undefined to an actual ID generated server-side
   const originalCid = channelToWatch.id
@@ -1335,7 +1300,7 @@ export const promoteChannel = ({
 export const isDate = (value: unknown): value is Date => !!(value as Date).getTime;
 
 export const isLocalMessage = (message: unknown): message is LocalMessage =>
-  isDate((message as LocalMessage).created_at);
+  typeof (message as LocalMessage | undefined)?.status === 'string';
 
 export const runDetached = <T>(
   callback: Promise<void | T>,
@@ -1361,11 +1326,18 @@ export const runDetached = <T>(
 };
 
 export const isBlockedMessage = (message: LocalMessage) =>
-  message.type === 'error' &&
-  (message.moderation_details?.action === 'MESSAGE_RESPONSE_ACTION_REMOVE' ||
-    message.moderation?.action === 'remove');
+  message.type === 'error' && message.moderation?.action === 'remove';
 
 export const isBouncedMessage = (message: LocalMessage) =>
-  message.type === 'error' &&
-  (message?.moderation_details?.action === 'MESSAGE_RESPONSE_ACTION_BOUNCE' ||
-    message?.moderation?.action === 'bounce');
+  message.type === 'error' && message?.moderation?.action === 'bounce';
+
+export const getEnv = (envKey: keyof NodeJS.ProcessEnv) => {
+  if (
+    typeof process !== 'undefined' &&
+    (Object.hasOwn(process, 'env') || 'env' in process)
+  ) {
+    return process.env[envKey];
+  }
+
+  return undefined;
+};

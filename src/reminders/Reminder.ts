@@ -1,14 +1,15 @@
 import { ReminderTimer } from './ReminderTimer';
 import { StateStore } from '../store';
 import type { ReminderTimerConfig } from './ReminderTimer';
-import type { MessageResponse, ReminderResponseBase, UserResponse } from '../types';
+import type {
+  MessageResponse,
+  ReminderResponse,
+  UserResponse,
+} from '../types';
 
 export const timeLeftMs = (remindAt: number) => remindAt - new Date().getTime();
 
-export type ReminderResponseBaseOrResponse = ReminderResponseBase & {
-  user?: UserResponse;
-  message?: MessageResponse;
-};
+export type ReminderResponseBaseOrResponse = ReminderResponse;
 
 export type ReminderState = {
   channel_cid: string;

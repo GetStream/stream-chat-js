@@ -14,7 +14,6 @@ export type DebounceOptions = {
 };
 type DebouncedExecQueryFunction = DebouncedFunc<(searchString?: string) => Promise<void>>;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface ISearchSource<T = any> {
   activate(): void;
 
@@ -40,14 +39,12 @@ interface ISearchSource<T = any> {
   readonly type: SearchSourceType;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface SearchSource<T = any> extends ISearchSource<T> {
   cancelScheduledQuery(): void;
   setDebounceOptions(options: DebounceOptions): void;
   search(text?: string): Promise<void> | undefined;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface SearchSourceSync<T = any> extends ISearchSource<T> {
   cancelScheduledQuery(): void;
   setDebounceOptions(options: DebounceOptions): void;

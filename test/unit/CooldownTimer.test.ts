@@ -25,8 +25,8 @@ describe('CooldownTimer', () => {
     const lastOwnMessageAt = new Date('2026-01-01T00:00:00.000Z');
     channel.state.addMessageSorted(
       generateMsg({
-        created_at: lastOwnMessageAt.toISOString(),
-        updated_at: lastOwnMessageAt.toISOString(),
+        created_at: lastOwnMessageAt,
+        updated_at: lastOwnMessageAt,
         user: { id: client.userID as string },
       }),
     );
@@ -61,8 +61,8 @@ describe('CooldownTimer', () => {
 
     channel.state.addMessageSorted(
       generateMsg({
-        created_at: now.toISOString(),
-        updated_at: now.toISOString(),
+        created_at: now,
+        updated_at: now,
         user: { id: client.userID as string },
       }),
     );
@@ -75,8 +75,8 @@ describe('CooldownTimer', () => {
 
     channel.state.addMessageSorted(
       generateMsg({
-        created_at: now.toISOString(),
-        updated_at: now.toISOString(),
+        created_at: now,
+        updated_at: now,
         user: { id: client.userID as string },
       }),
     );
@@ -89,8 +89,8 @@ describe('CooldownTimer', () => {
 
     channel.state.addMessageSorted(
       generateMsg({
-        created_at: now.toISOString(),
-        updated_at: now.toISOString(),
+        created_at: now,
+        updated_at: now,
         user: { id: client.userID as string },
       }),
     );
@@ -121,8 +121,8 @@ describe('CooldownTimer', () => {
     const lastOwnMessageAt = new Date('2026-01-01T00:00:00.000Z'); // 10s ago
     channel.state.addMessageSorted(
       generateMsg({
-        created_at: lastOwnMessageAt.toISOString(),
-        updated_at: lastOwnMessageAt.toISOString(),
+        created_at: lastOwnMessageAt,
+        updated_at: lastOwnMessageAt,
         user: { id: client.userID as string },
       }),
     );
@@ -147,8 +147,8 @@ describe('CooldownTimer', () => {
 
     channel.state.addMessageSorted(
       generateMsg({
-        created_at: now.toISOString(),
-        updated_at: now.toISOString(),
+        created_at: now,
+        updated_at: now,
         user: { id: client.userID as string },
       }),
     );
@@ -170,8 +170,8 @@ describe('CooldownTimer', () => {
     const lastOwnMessageAt = new Date('2026-01-01T00:00:08.000Z');
     channel.state.addMessageSorted(
       generateMsg({
-        created_at: lastOwnMessageAt.toISOString(),
-        updated_at: lastOwnMessageAt.toISOString(),
+        created_at: lastOwnMessageAt,
+        updated_at: lastOwnMessageAt,
         user: { id: client.userID as string },
       }),
     );
@@ -204,8 +204,8 @@ describe('CooldownTimer', () => {
     const lastOwnMessageAt = new Date('2026-01-01T00:00:08.000Z');
     channel.state.addMessageSorted(
       generateMsg({
-        created_at: lastOwnMessageAt.toISOString(),
-        updated_at: lastOwnMessageAt.toISOString(),
+        created_at: lastOwnMessageAt,
+        updated_at: lastOwnMessageAt,
         user: { id: client.userID as string },
       }),
     );
@@ -238,8 +238,8 @@ describe('CooldownTimer', () => {
     const lastOwnMessageAt = new Date('2026-01-01T00:00:08.000Z');
     channel.state.addMessageSorted(
       generateMsg({
-        created_at: lastOwnMessageAt.toISOString(),
-        updated_at: lastOwnMessageAt.toISOString(),
+        created_at: lastOwnMessageAt,
+        updated_at: lastOwnMessageAt,
         user: { id: client.userID as string },
       }),
     );
@@ -275,8 +275,8 @@ describe('CooldownTimer', () => {
       type: 'message.new',
       user: { id: client.userID as string },
       message: generateMsg({
-        created_at: now.toISOString(),
-        updated_at: now.toISOString(),
+        created_at: now,
+        updated_at: now,
         user: { id: client.userID as string },
       }),
     } as Event);

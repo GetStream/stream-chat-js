@@ -14,10 +14,13 @@ export type LocationComposerOptions = {
   message?: DraftMessage | LocalMessage;
 };
 
-export type StaticLocationPreview = StaticLocationPayload;
+export type StaticLocationPreview = StaticLocationPayload & {
+  message_id?: string;
+};
 
 export type LiveLocationPreview = Omit<LiveLocationPayload, 'end_at'> & {
   durationMs?: number;
+  message_id?: string;
 };
 
 export type LocationComposerState = {
@@ -71,8 +74,9 @@ export class LocationComposer {
     ) {
       return {
         ...location,
-        end_at: durationMs && new Date(Date.now() + durationMs).toISOString(),
-      } as StaticLocationPayload | LiveLocationPayload;
+        end_at:
+          typeof durationMs === 'number' ? new Date(Date.now() + durationMs) : undefined,
+      };
     }
     return null;
   }

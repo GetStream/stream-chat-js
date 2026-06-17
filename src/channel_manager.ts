@@ -4,7 +4,8 @@ import type {
   ChannelOptions,
   ChannelSort,
   ChannelStateOptions,
-  Event,
+  CombinedEvents,
+  EventPayload,
   QueryChannelsAPIResponse,
 } from './types';
 import type { ValueOrPatch } from './store';
@@ -56,12 +57,10 @@ export type ChannelManagerState = {
 export type ChannelSetterParameterType = ValueOrPatch<ChannelManagerState['channels']>;
 export type ChannelSetterType = (arg: ChannelSetterParameterType) => void;
 
-export type GenericEventHandlerType<T extends unknown[]> = (
-  ...args: T
-) => void | (() => void) | ((...args: T) => Promise<void>) | Promise<void>;
-export type EventHandlerType = GenericEventHandlerType<[Event]>;
+export type GenericEventHandlerType<T extends unknown[]> = (...args: T) => any;
+export type EventHandlerType = GenericEventHandlerType<[CombinedEvents]>;
 export type EventHandlerOverrideType = GenericEventHandlerType<
-  [ChannelSetterType, Event]
+  [ChannelSetterType, CombinedEvents]
 >;
 
 export type ChannelManagerEventTypes =
@@ -164,7 +163,8 @@ const mapPredefinedFilterSortToChannelSort = (
   sort: NonNullable<QueryChannelsAPIResponse['predefined_filter']>['sort'],
 ): ChannelSort =>
   (sort ?? []).map(({ direction = 1, field }) => ({
-    [field]: direction,
+    // TODO: OAPI discrepancy, should not be optional (both direction and field)
+    [field as string]: direction,
   })) as ChannelSort;
 
 const getResponsePaginationParams = ({
@@ -543,7 +543,8 @@ export class ChannelManager extends WithSubscriptions {
     }
   };
 
-  private notificationAddedToChannelHandler = async (event: Event) => {
+  private notificationAddedToChannelHandler = async (event_: CombinedEvents) => {
+    const event = event_ as EventPayload<'notification.added_to_channel'>;
     const { id, type, members } = event?.channel ?? {};
 
     if (
@@ -584,7 +585,11 @@ export class ChannelManager extends WithSubscriptions {
     );
   };
 
-  private channelDeletedHandler = (event: Event) => {
+  private channelDeletedHandler = (event_: CombinedEvents) => {
+    const event = event_ as EventPayload<
+      'channel.deleted' | 'channel.hidden' | 'notification.removed_from_channel'
+    >;
+
     const { channels } = this.state.getLatestValue();
     if (!channels) {
       return;
@@ -605,7 +610,9 @@ export class ChannelManager extends WithSubscriptions {
 
   private channelHiddenHandler = this.channelDeletedHandler;
 
-  private newMessageHandler = (event: Event) => {
+  private newMessageHandler = (event_: CombinedEvents) => {
+    const event = event_ as EventPayload<'message.new'>;
+
     const { pagination, channels } = this.state.getLatestValue();
     if (!channels) {
       return;
@@ -655,7 +662,9 @@ export class ChannelManager extends WithSubscriptions {
     );
   };
 
-  private notificationNewMessageHandler = async (event: Event) => {
+  private notificationNewMessageHandler = async (event_: CombinedEvents) => {
+    const event = event_ as EventPayload<'notification.message_new'>;
+
     const { id, type } = event?.channel ?? {};
 
     if (!id || !type) {
@@ -692,7 +701,8 @@ export class ChannelManager extends WithSubscriptions {
     );
   };
 
-  private channelVisibleHandler = async (event: Event) => {
+  private channelVisibleHandler = async (event_: CombinedEvents) => {
+    const event = event_ as EventPayload<'channel.visible' | 'channel.hidden'>;
     const { channel_type: channelType, channel_id: channelId } = event;
 
     if (!channelType || !channelId) {
@@ -731,12 +741,13 @@ export class ChannelManager extends WithSubscriptions {
 
   private notificationRemovedFromChannelHandler = this.channelDeletedHandler;
 
-  private memberUpdatedHandler = (event: Event) => {
+  private memberUpdatedHandler = (event_: CombinedEvents) => {
+    const event = event_ as EventPayload<'member.updated'>;
     const { pagination, channels } = this.state.getLatestValue();
     const { filters, sort } = getResponseFiltersAndSort(pagination);
     if (
       !event.member?.user ||
-      event.member.user.id !== this.client.userID ||
+      event.member.user.id !== this.client.userId ||
       !event.channel_type ||
       !event.channel_id
     ) {
@@ -800,7 +811,7 @@ export class ChannelManager extends WithSubscriptions {
     this.setChannels(newChannels);
   };
 
-  private subscriptionOrOverride = (event: Event) => {
+  private subscriptionOrOverride = (event: CombinedEvents) => {
     const handlerName =
       channelManagerEventToHandlerMapping[event.type as ChannelManagerEventTypes];
     const defaultEventHandler = this.eventHandlers.get(handlerName);

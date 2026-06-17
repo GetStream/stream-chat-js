@@ -4,7 +4,7 @@ import type {
   MessageCompositionMiddleware,
 } from './types';
 import type { MiddlewareHandlerParams } from '../../../middleware';
-import type { OwnUserResponse } from '../../../types';
+import type { OwnUserResponse, RequireLiteral } from '../../../types';
 
 export const createUserDataInjectionMiddleware = (
   composer: MessageComposer,
@@ -27,9 +27,13 @@ export const createUserDataInjectionMiddleware = (
       // precedence after we connectUser the first time and we get the connection health
       // check event. Due to how liberal the type of client.user is, we have to do it this
       // way to maintain type safety.
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { channel_mutes, devices, mutes, ...messageUser } = composer.client
-        .user as OwnUserResponse;
+
+      const {
+        channel_mutes: _channel_mutes,
+        devices: _devices,
+        mutes: _mutes,
+        ...messageUser
+      } = composer.client.user as RequireLiteral<OwnUserResponse, 'blocked_user_ids'>; // TODO: drop RequireLiteral once the oapi spec is adjusted
       return next({
         ...state,
         localMessage: {

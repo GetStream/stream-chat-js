@@ -7,16 +7,19 @@ import { ConnectionState, WSConnectionFallback } from '../../src/connection_fall
 import { describe, it, expect, afterEach, vi, beforeAll, beforeEach } from 'vitest';
 
 describe('connection_fallback', () => {
-	const newClient = (overrides) => ({
-		baseURL: '',
-		logger: () => null,
-		doAxiosRequest: sinon.spy(),
-		_buildWSPayload: sinon.stub().returns('payload'),
-		dispatchEvent: sinon.spy(),
-		handleEvent: sinon.spy(),
-		recoverState: sinon.spy(),
-		...overrides,
-	});
+	const newClient = (overrides) => {
+		const doAxiosRequest = overrides?.doAxiosRequest ?? sinon.spy();
+		return {
+			baseURL: '',
+			logger: () => null,
+			api: { doAxiosRequest },
+			_buildWSPayload: sinon.stub().returns('payload'),
+			dispatchEvent: sinon.spy(),
+			handleEvent: sinon.spy(),
+			recoverState: sinon.spy(),
+			...overrides,
+		};
+	};
 
 	afterEach(() => {
 		vi.restoreAllMocks();
@@ -221,9 +224,10 @@ describe('connection_fallback', () => {
 			const config = { timeout: 100 };
 			await c._req(params, config);
 			expect(
-				c.client.doAxiosRequest.calledOnceWithExactly('get', '/longpoll', undefined, {
+				c.client.api.doAxiosRequest.calledOnceWithExactly('get', '/longpoll', undefined, {
+					...config,
+					cancelToken: c.cancelToken.token,
 					params,
-					config: { ...config, cancelToken: c.cancelToken.token },
 				}),
 			).to.be.true;
 		});

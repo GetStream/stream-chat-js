@@ -10,8 +10,7 @@ import type {
 } from './types';
 
 const localAttachmentToAttachment = (localAttachment: LocalAttachment) => {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { localMetadata, ...attachment } = localAttachment;
+  const { localMetadata: _localMetadata, ...attachment } = localAttachment;
   return attachment as Attachment;
 };
 

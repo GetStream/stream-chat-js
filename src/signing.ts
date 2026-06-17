@@ -2,7 +2,8 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import zlib from 'zlib';
 import { decodeBase64, encodeBase64 } from './base64';
-import type { Event, UR } from './types';
+import type { UR } from './types';
+import type { WSEvent } from './gen/models';
 
 /**
  * Creates the JWT token that can be used for a UserSession
@@ -238,16 +239,16 @@ function extractSnsMessage(notificationBody: string): string | null {
  * event types Stream introduces still parse successfully - the runtime
  * shape is the JSON Stream sent and the `type` field stays preserved.
  */
-export function parseEvent(payload: Buffer | string): Event {
+export function parseEvent(payload: Buffer | string): WSEvent {
   const text = Buffer.isBuffer(payload) ? payload.toString('utf8') : payload;
   try {
-    return JSON.parse(text) as Event;
+    return JSON.parse(text) as WSEvent;
   } catch {
     throw new InvalidWebhookError(InvalidWebhookErrorMessages.invalidJson);
   }
 }
 
-function verifyAndParse(payload: Buffer, signature: string, secret: string): Event {
+function verifyAndParse(payload: Buffer, signature: string, secret: string): WSEvent {
   if (!verifySignature(payload, signature, secret)) {
     throw new InvalidWebhookError(InvalidWebhookErrorMessages.signatureMismatch);
   }
@@ -268,7 +269,7 @@ export function verifyAndParseWebhook(
   rawBody: string | Buffer,
   signature: string,
   secret: string,
-): Event {
+): WSEvent {
   return verifyAndParse(gunzipPayload(rawBody), signature, secret);
 }
 
@@ -277,7 +278,7 @@ export function verifyAndParseWebhook(
  * the parsed {@link Event}. Stream does not attach an application-level HMAC
  * to SQS deliveries — use {@link verifyAndParseWebhook} for HTTP webhooks.
  */
-export function parseSqs(messageBody: string): Event {
+export function parseSqs(messageBody: string): WSEvent {
   return parseEvent(decodeSqsPayload(messageBody));
 }
 
@@ -285,6 +286,6 @@ export function parseSqs(messageBody: string): Event {
  * Decode an SNS notification (unwrap the JSON envelope when needed; same
  * inner format as SQS). No application-level HMAC verification.
  */
-export function parseSns(notificationBody: string): Event {
+export function parseSns(notificationBody: string): WSEvent {
   return parseEvent(decodeSnsPayload(notificationBody));
 }

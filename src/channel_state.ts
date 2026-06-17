@@ -1,10 +1,9 @@
 import type { Channel } from './channel';
 import type {
   ChannelMemberResponse,
-  Event,
+  EventPayload,
   LocalMessage,
   MessageResponse,
-  MessageResponseBase,
   MessageSet,
   MessageSetType,
   PendingMessageResponse,
@@ -18,17 +17,15 @@ import {
   isBlockedMessage,
 } from './utils';
 import { DEFAULT_MESSAGE_SET_PAGINATION } from './constants';
+import type {
+  ReadStateResponse as Gen_ReadStateResponse,
+  UserResponseCommonFields as Gen_UserResponseCommonFields,
+} from './gen/models';
 
 type ChannelReadStatus = Record<
   string,
-  {
-    last_read: Date;
-    unread_messages: number;
-    user: UserResponse;
+  Gen_ReadStateResponse & {
     first_unread_message_id?: string;
-    last_read_message_id?: string;
-    last_delivered_at?: Date;
-    last_delivered_message_id?: string;
   }
 >;
 
@@ -70,7 +67,7 @@ const messageSetsOverlapByTimestamp = (a: LocalMessage[], b: LocalMessage[]) =>
 export class ChannelState {
   _channel: Channel;
   watcher_count: number;
-  typing: Record<string, Event>;
+  typing: Record<string, EventPayload<'typing.start' | 'typing.stop'>>;
   read: ChannelReadStatus;
   pinnedMessages: Array<ReturnType<ChannelState['formatMessage']>>;
   pending_messages: Array<PendingMessageResponse>;
@@ -79,7 +76,7 @@ export class ChannelState {
   watchers: Record<string, UserResponse>;
   members: Record<string, ChannelMemberResponse>;
   unreadCount: number;
-  membership: ChannelMemberResponse;
+  membership: ChannelMemberResponse | undefined;
   last_message_at: Date | null;
   /**
    * Flag which indicates if channel state contain latest/recent messages or no.
@@ -109,7 +106,7 @@ export class ChannelState {
     this.mutedUsers = [];
     this.watchers = {};
     this.members = {};
-    this.membership = {};
+    this.membership = undefined;
     this.unreadCount = 0;
     /**
      * Flag which indicates if channel state contain latest/recent messages or no.
@@ -191,8 +188,7 @@ export class ChannelState {
    *
    * @param {MessageResponse} message `MessageResponse` object
    */
-  formatMessage = (message: MessageResponse | MessageResponseBase | LocalMessage) =>
-    formatMessage(message);
+  formatMessage = (message: MessageResponse | LocalMessage) => formatMessage(message);
 
   /**
    * addMessagesSorted - Add the list of messages to state and resorts the messages
@@ -228,48 +224,49 @@ export class ChannelState {
       // If message is already formatted we can skip the tasks below
       // This will be true for messages that are already present at the state -> this happens when we perform merging of message sets
       // This will be also true for message previews used by some SDKs
-      const isMessageFormatted = messagesToAdd[i].created_at instanceof Date;
+      const isMessageFormatted =
+        typeof (messagesToAdd[i] as LocalMessage).status === 'string';
       let message: ReturnType<ChannelState['formatMessage']>;
       if (isMessageFormatted) {
         message = messagesToAdd[i] as ReturnType<ChannelState['formatMessage']>;
       } else {
         message = this.formatMessage(messagesToAdd[i]);
+      }
 
-        if (message.user && this._channel?.cid) {
-          /**
-           * Store the reference to user for this channel, so that when we have to
-           * handle updates to user, we can use the reference map, to determine which
-           * channels need to be updated with updated user object.
-           */
-          this._channel
-            .getClient()
-            .state.updateUserReference(message.user, this._channel.cid);
-        }
+      if (message.user && this._channel?.cid) {
+        /**
+         * Store the reference to user for this channel, so that when we have to
+         * handle updates to user, we can use the reference map, to determine which
+         * channels need to be updated with updated user object.
+         */
+        this._channel
+          .getClient()
+          .state.updateUserReference(message.user, this._channel.cid);
+      }
 
-        if (
-          initializing &&
-          message.id &&
-          this.threads[message.id] &&
-          !this._channel.getClient().preventThreadCleanup
-        ) {
-          // If we are initializing the state of channel (e.g., in case of connection recovery),
-          // then in that case we remove thread related to this message from threads object.
-          // This way we can ensure that we don't have any stale data in thread object
-          // and consumer can refetch the replies.
-          delete this.threads[message.id];
-        }
+      if (
+        initializing &&
+        message.id &&
+        this.threads[message.id] &&
+        !this._channel.getClient().preventThreadCleanup
+      ) {
+        // If we are initializing the state of channel (e.g., in case of connection recovery),
+        // then in that case we remove thread related to this message from threads object.
+        // This way we can ensure that we don't have any stale data in thread object
+        // and consumer can refetch the replies.
+        delete this.threads[message.id];
+      }
 
-        const shouldSkipLastMessageAtUpdate =
-          this._channel.getConfig()?.skip_last_msg_update_for_system_msgs &&
-          message.type === 'system';
+      const shouldSkipLastMessageAtUpdate =
+        this._channel.getConfig()?.skip_last_msg_update_for_system_msgs &&
+        message.type === 'system';
 
-        if (
-          !shouldSkipLastMessageAtUpdate &&
-          (!this.last_message_at ||
-            message.created_at.getTime() > this.last_message_at.getTime())
-        ) {
-          this.last_message_at = new Date(message.created_at.getTime());
-        }
+      if (
+        !shouldSkipLastMessageAtUpdate &&
+        (!this.last_message_at ||
+          message.created_at.getTime() > this.last_message_at.getTime())
+      ) {
+        this.last_message_at = new Date(message.created_at.getTime());
       }
 
       // update or append the messages...
@@ -353,9 +350,19 @@ export class ChannelState {
 
   addReaction(
     reaction: ReactionResponse,
+    message: MessageResponse,
+    enforce_unique?: boolean,
+  ): MessageResponse;
+  addReaction(
+    reaction: ReactionResponse,
+    message?: undefined,
+    enforce_unique?: boolean,
+  ): LocalMessage | undefined;
+  addReaction(
+    reaction: ReactionResponse,
     message?: MessageResponse,
     enforce_unique?: boolean,
-  ) {
+  ): MessageResponse | LocalMessage | undefined {
     const messageWithReaction = message;
     let messageFromState: LocalMessage | undefined;
     if (!messageWithReaction) {
@@ -392,7 +399,7 @@ export class ChannelState {
         // own_reactions as normal so we can use that, otherwise we fallback
         // to whatever state we had.
         updatedMessage.own_reactions =
-          this._channel.getClient().userID === reaction.user_id
+          this._channel.getClient().userId === reaction.user_id
             ? messageWithReaction.own_reactions
             : msg.own_reactions;
         return this.formatMessage(updatedMessage);
@@ -444,12 +451,14 @@ export class ChannelState {
           count: oldReactionTypeData.count + 1,
           sum_scores: oldReactionTypeData.sum_scores + score,
           last_reaction_at: reaction.created_at,
+          latest_reactions_by: [],
         }
       : {
           count: 1,
           first_reaction_at: reaction.created_at,
           last_reaction_at: reaction.created_at,
           sum_scores: score,
+          latest_reactions_by: [],
         };
 
     // 3. Update the own_reactions with the new reaction.
@@ -461,7 +470,7 @@ export class ChannelState {
 
     // 4. Finally, update the latest_reactions with the new reaction,
     //    while respecting enforce_unique.
-    const userId = this._channel.getClient().userID;
+    const userId = this._channel.getClient().userId;
     messageFromState.latest_reactions = enforce_unique
       ? [
           ...(messageFromState.latest_reactions || []).filter(
@@ -486,7 +495,7 @@ export class ChannelState {
     }
 
     ownReactions = ownReactions || [];
-    if (this._channel.getClient().userID === reaction.user_id) {
+    if (this._channel.getClient().userId === reaction.user_id) {
       ownReactions.push(reaction);
     }
 
@@ -496,16 +505,24 @@ export class ChannelState {
   _removeOwnReactionFromMessage(
     ownReactions: ReactionResponse[] | null | undefined,
     reaction: ReactionResponse,
-  ) {
+  ): ReactionResponse[] {
     if (ownReactions) {
       return ownReactions.filter(
         (item) => item.user_id !== reaction.user_id || item.type !== reaction.type,
       );
     }
-    return ownReactions;
+    return [];
   }
 
-  removeReaction(reaction: ReactionResponse, message?: MessageResponse) {
+  removeReaction(reaction: ReactionResponse, message: MessageResponse): MessageResponse;
+  removeReaction(
+    reaction: ReactionResponse,
+    message?: undefined,
+  ): LocalMessage | undefined;
+  removeReaction(
+    reaction: ReactionResponse,
+    message?: MessageResponse,
+  ): MessageResponse | LocalMessage | undefined {
     const messageWithRemovedReaction = message;
     let messageFromState: LocalMessage | undefined;
     if (!messageWithRemovedReaction) {
@@ -560,7 +577,7 @@ export class ChannelState {
     messageFromState.own_reactions = messageFromState.own_reactions?.filter(
       (r) => r.type !== reaction.type,
     );
-    const userId = this._channel.getClient().userID;
+    const userId = this._channel.getClient().userId;
     messageFromState.latest_reactions = messageFromState.latest_reactions?.filter(
       (r) => !(r.user_id === userId && r.type === reaction.type),
     );
@@ -574,19 +591,11 @@ export class ChannelState {
     message: MessageResponse;
     remove?: boolean;
   }) {
-    const parseMessage = (m: ReturnType<ChannelState['formatMessage']>) =>
-      ({
-        ...m,
-        created_at: m.created_at.toISOString(),
-        pinned_at: m.pinned_at?.toISOString(),
-        updated_at: m.updated_at?.toISOString(),
-      }) as unknown as MessageResponse;
-
     const update = (messages: LocalMessage[]) => {
-      const updatedMessages = messages.reduce<MessageResponse[]>((acc, msg) => {
+      const updatedMessages = messages.reduce<LocalMessage[]>((acc, msg) => {
         if (msg.quoted_message_id === message.id) {
           acc.push({
-            ...parseMessage(msg),
+            ...msg,
             quoted_message: remove ? { ...message, attachments: [] } : message,
           });
         }
@@ -779,7 +788,7 @@ export class ChannelState {
     deletedAt?: LocalMessage['deleted_at'],
   ) => {
     this.messageSets.forEach(({ messages }) =>
-      _deleteUserMessages({ messages, user, hardDelete, deletedAt: deletedAt ?? null }),
+      _deleteUserMessages({ messages, user, hardDelete, deletedAt }),
     );
 
     for (const parentId in this.threads) {
@@ -787,7 +796,7 @@ export class ChannelState {
         messages: this.threads[parentId],
         user,
         hardDelete,
-        deletedAt: deletedAt ?? null,
+        deletedAt,
       });
     }
 
@@ -795,7 +804,7 @@ export class ChannelState {
       messages: this.pinnedMessages,
       user,
       hardDelete,
-      deletedAt: deletedAt ?? null,
+      deletedAt,
     });
   };
 
@@ -823,18 +832,20 @@ export class ChannelState {
   clean() {
     const now = new Date();
     // prevent old users from showing up as typing
-    for (const [userID, lastEvent] of Object.entries(this.typing)) {
+    for (const [userId, lastEvent] of Object.entries(this.typing)) {
       const receivedAt =
         typeof lastEvent.received_at === 'string'
           ? new Date(lastEvent.received_at)
           : lastEvent.received_at || new Date();
       if (now.getTime() - receivedAt.getTime() > 7000) {
-        delete this.typing[userID];
+        delete this.typing[userId];
         this._channel.getClient().dispatchEvent({
           cid: this._channel.cid,
           type: 'typing.stop',
-          user: { id: userID },
-        } as Event);
+          user: { id: userId } as Gen_UserResponseCommonFields,
+          custom: {},
+          created_at: new Date(),
+        });
       }
     }
   }

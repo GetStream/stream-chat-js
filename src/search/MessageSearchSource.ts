@@ -7,6 +7,7 @@ import type {
   MessageResponse,
   SearchMessageSort,
   SearchOptions,
+  SearchPayload,
 } from '../types';
 import type { StreamChat } from '../client';
 import type { SearchSourceOptions } from './types';
@@ -60,7 +61,7 @@ export class MessageSearchSource<
   readonly type = 'messages';
   private client: StreamChat;
 
-  messageSearchChannelFilters: ChannelFilters | undefined;
+  messageSearchChannelFilters: SearchPayload['filter_conditions'] | undefined;
   messageSearchFilters: MessageFilters | undefined;
   messageSearchSort: SearchMessageSort | undefined;
 
@@ -69,7 +70,7 @@ export class MessageSearchSource<
   channelQueryOptions: Omit<ChannelOptions, 'limit' | 'offset'> | undefined;
 
   messageSearchChannelFilterBuilder: FilterBuilder<
-    ChannelFilters,
+    SearchPayload['filter_conditions'],
     MergeContext<
       BuiltInContexts['messageSearchChannel'],
       TContexts['messageSearchChannelContext']
@@ -130,11 +131,11 @@ export class MessageSearchSource<
   }
 
   protected async query(searchQuery: string) {
-    if (!this.client.userID || this.next === null) return { items: [] };
+    if (!this.client.userId || this.next === null) return { items: [] };
 
     const channelFilters = this.messageSearchChannelFilterBuilder.buildFilters({
       baseFilters: {
-        ...(this.client.userID ? { members: { $in: [this.client.userID] } } : {}),
+        ...(this.client.userId ? { members: { $in: [this.client.userId] } } : {}),
         ...this.messageSearchChannelFilters,
       },
       context: { searchQuery } as Partial<

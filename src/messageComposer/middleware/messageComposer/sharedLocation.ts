@@ -1,4 +1,5 @@
 import type { MiddlewareHandlerParams } from '../../../middleware';
+import type { SharedLocationResponseData as Gen_SharedLocationResponseData } from '../../../gen/models';
 import type { MessageComposer } from '../../messageComposer';
 import type {
   MessageComposerMiddlewareState,
@@ -18,7 +19,7 @@ export const createSharedLocationCompositionMiddleware = (
       const { locationComposer } = composer;
       const location = locationComposer.validLocation;
       if (!locationComposer || !location || !composer.client.user) return forward();
-      const timestamp = new Date().toISOString();
+      const timestamp = new Date();
 
       return next({
         ...state,
@@ -30,12 +31,12 @@ export const createSharedLocationCompositionMiddleware = (
             created_at: timestamp,
             updated_at: timestamp,
             user_id: composer.client.user.id,
-          },
+          } as Gen_SharedLocationResponseData,
         },
         message: {
           ...state.message,
           shared_location: location,
-        },
+        } as typeof state.message,
       });
     },
   },

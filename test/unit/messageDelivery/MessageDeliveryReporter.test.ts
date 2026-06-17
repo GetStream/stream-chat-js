@@ -529,7 +529,7 @@ describe('MessageDeliveryReporter', () => {
     // simulate incoming message.new event
     const ev: Event = {
       type: 'message.new',
-      created_at: new Date('2025-01-01T10:00:00Z').toISOString(),
+      created_at: new Date('2025-01-01T10:00:00Z'),
       user: otherUser,
       message: mkMsg('m1', '2025-01-01T10:00:00Z') as any,
     };
@@ -560,7 +560,7 @@ describe('MessageDeliveryReporter', () => {
     // simulate incoming message.new event
     const ev: Event = {
       type: 'message.new',
-      created_at: new Date('2025-01-01T10:00:00Z').toISOString(),
+      created_at: new Date('2025-01-01T10:00:00Z'),
       user: ownUser,
       message: mkMsg('m1', '2025-01-01T10:00:00Z') as any,
     };
@@ -584,7 +584,7 @@ describe('MessageDeliveryReporter', () => {
 
     const ev: Event = {
       type: 'message.read',
-      created_at: new Date('2025-01-01T10:00:00Z').toISOString(),
+      created_at: new Date('2025-01-01T10:00:00Z'),
       last_read_message_id: 'm1',
       message: mkMsg('m1', '2025-01-01T10:00:00Z') as any,
       user: ownUser,
@@ -609,7 +609,7 @@ describe('MessageDeliveryReporter', () => {
 
     const ev: Event = {
       type: 'message.read',
-      created_at: new Date('2025-01-01T10:00:00Z').toISOString(),
+      created_at: new Date('2025-01-01T10:00:00Z'),
       last_read_message_id: 'm1',
       message: mkMsg('m1', '2025-01-01T10:00:00Z') as any,
       user: otherUser,

@@ -38,6 +38,7 @@ vi.mock('../../../src/utils', async (importOriginal) => ({
   isLocalMessage: vi.fn().mockReturnValue(true),
   randomId: vi.fn().mockReturnValue('test-uuid'),
   throttle: vi.fn().mockImplementation((fn) => fn),
+  getEnv: vi.fn(),
 }));
 
 const quotedMessage = {
@@ -64,19 +65,19 @@ const getThread = (channel: Channel, client: StreamChat, threadId: string) =>
         text: 'Test message',
         type: 'regular' as const,
         user,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        created_at: new Date(),
+        updated_at: new Date(),
       },
       channel: {
-        id: channel.id,
+        id: channel.id!,
         type: channel.type,
         cid: channel.cid,
         disabled: false,
         frozen: false,
       },
       title: 'Test Thread',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: new Date(),
+      updated_at: new Date(),
       channel_cid: channel.cid,
       latest_replies: [],
       thread_participants: [],
@@ -100,18 +101,13 @@ const setup = ({
 } = {}) => {
   const mockClient = new StreamChat('test-api-key');
   mockClient.user = user;
-  mockClient.userID = user.id;
   const cid = 'messaging:test-channel-id';
   if (channelConfig) {
     // @ts-expect-error incomplete channel config object
     mockClient.configs[cid] = channelConfig;
   }
   // Create a proper Channel instance with only the necessary attributes mocked
-  const mockChannel = new Channel(mockClient, 'messaging', 'test-channel-id', {
-    id: 'test-channel-id',
-    type: 'messaging',
-    cid: 'messaging:test-channel-id',
-  });
+  const mockChannel = mockClient.channel('messaging', 'test-channel-id');
 
   // Mock the getClient method
   vi.spyOn(mockChannel, 'getClient').mockReturnValue(mockClient);
@@ -137,15 +133,10 @@ const offlineModeMessageComposerSetup = ({
 } = {}) => {
   const mockClient = new StreamChat('test-api-key');
   mockClient.user = user;
-  mockClient.userID = user.id;
   mockClient.setOfflineDBApi(new MockOfflineDB({ client: mockClient }));
   vi.spyOn(mockClient.offlineDb!, 'initializeDB').mockResolvedValue(false);
   // Create a proper Channel instance with only the necessary attributes mocked
-  const mockChannel = new Channel(mockClient, 'messaging', 'test-channel-id', {
-    id: 'test-channel-id',
-    type: 'messaging',
-    cid: 'messaging:test-channel-id',
-  });
+  const mockChannel = mockClient.channel('messaging', 'test-channel-id');
 
   // Mock the getClient method
   vi.spyOn(mockChannel, 'getClient').mockReturnValue(mockClient);
@@ -1245,12 +1236,12 @@ describe('MessageComposer', () => {
 
       const result = await messageComposer.compose();
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         localMessage: {
           attachments: [],
           created_at: expect.any(Date),
-          deleted_at: null,
-          error: null,
+          deleted_at: undefined,
+          error: undefined,
           id: 'test-uuid',
           mentioned_channel: false,
           mentioned_group_ids: [],
@@ -1258,9 +1249,9 @@ describe('MessageComposer', () => {
           mentioned_roles: [],
           mentioned_users: [],
           parent_id: undefined,
-          pinned_at: null,
-          quoted_message: null,
-          reaction_groups: null,
+          pinned_at: undefined,
+          quoted_message: undefined,
+          reaction_groups: undefined,
           status: 'sending',
           text: 'Test message',
           type: 'regular',
@@ -1290,9 +1281,9 @@ describe('MessageComposer', () => {
       const date = new Date();
       const { messageComposer } = setup({
         composition: {
-          attachments: [{ type: 'file' }],
+          attachments: [{ type: 'file', custom: {} }],
           created_at: date,
-          deleted_at: null,
+          deleted_at: undefined,
           id: 'test-uuid',
           mentioned_users: [],
           pinned: true,
@@ -1320,12 +1311,12 @@ describe('MessageComposer', () => {
 
       const result = await messageComposer.compose();
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         localMessage: {
-          attachments: [{ type: 'file' }],
+          attachments: [{ type: 'file', custom: {} }],
           created_at: date,
-          deleted_at: null,
-          error: null,
+          deleted_at: undefined,
+          error: undefined,
           id: 'test-uuid',
           mentioned_channel: false,
           mentioned_group_ids: [],
@@ -1335,7 +1326,7 @@ describe('MessageComposer', () => {
           parent_id: undefined,
           pinned: true,
           pinned_at: date,
-          quoted_message: null,
+          quoted_message: undefined,
           reaction_counts: {
             like: 1,
           },

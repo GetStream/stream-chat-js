@@ -139,7 +139,7 @@ export class CooldownTimer extends WithSubscriptions {
 
   private getOwnUserId() {
     const client = this.channel.getClient();
-    return client.userID ?? client.user?.id;
+    return client.userId ?? client.user?.id;
   }
 
   private findOwnLatestMessageDate({

@@ -1,10 +1,19 @@
 import { StateStore } from './store';
 import { throttle } from './utils';
 
-import type { StreamChat } from './client';
+import type { ListenerKeys, StreamChat } from './client';
 import type { Thread } from './thread';
-import type { Event, OwnUserResponse, QueryThreadsOptions } from './types';
+import type {
+  CombinedEvents,
+  EventPayload,
+  OwnUserResponse,
+  QueryThreadsOptions,
+} from './types';
 import { WithSubscriptions } from './utils/WithSubscriptions';
+
+const eventIsHealthCheck = (
+  event: CombinedEvents,
+): event is EventPayload<'health.check'> => Object.hasOwn(event, 'me');
 
 const DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION = 1000;
 const MAX_QUERY_THREADS_LIMIT = 25;
@@ -114,15 +123,20 @@ export class ThreadManager extends WithSubscriptions {
       (this.client.user as OwnUserResponse) ?? {};
     this.state.partialNext({ unreadThreadCount });
 
-    const unsubscribeFunctions = [
-      'health.check',
-      'notification.mark_read',
-      'notification.thread_message_new',
-      'notification.channel_deleted',
-    ].map(
+    const unsubscribeFunctions = (
+      [
+        'health.check',
+        'notification.mark_read',
+        'notification.thread_message_new',
+        'notification.channel_deleted',
+      ] as const satisfies ListenerKeys[]
+    ).map(
       (eventType) =>
         this.client.on(eventType, (event) => {
-          const { unread_threads: unreadThreadCount } = event.me ?? event;
+          const { unread_threads: unreadThreadCount } =
+            (eventIsHealthCheck(event) && event.me) ||
+            (event as Extract<typeof event, { unread_threads?: any }>);
+
           if (typeof unreadThreadCount === 'number') {
             this.state.partialNext({ unreadThreadCount });
           }
@@ -166,7 +180,7 @@ export class ThreadManager extends WithSubscriptions {
     );
 
   private subscribeNewReplies = () =>
-    this.client.on('notification.thread_message_new', (event: Event) => {
+    this.client.on('notification.thread_message_new', (event) => {
       const parentId = event.message?.parent_id;
       if (!parentId) return;
 

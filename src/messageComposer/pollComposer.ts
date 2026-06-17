@@ -45,7 +45,6 @@ export class PollComposer {
         max_votes_allowed: '',
         name: '',
         options: [{ id: generateUUIDv4(), text: '' }],
-        user_id: this.composer.client.user?.id,
         voting_visibility: VotingVisibility.public,
       },
       errors: {},
@@ -76,9 +75,6 @@ export class PollComposer {
   get options() {
     return this.state.getLatestValue().data.options;
   }
-  get user_id() {
-    return this.state.getLatestValue().data.user_id;
-  }
   get voting_visibility() {
     return this.state.getLatestValue().data.voting_visibility;
   }
@@ -86,7 +82,7 @@ export class PollComposer {
   get canCreatePoll() {
     const { data, errors } = this.state.getLatestValue();
     const hasAtLeastOneNonEmptyOption =
-      data.options.filter((o) => !!o.text.trim()).length > 0;
+      Array.isArray(data.options) && data.options.some((o) => !!o.text?.trim());
     const hasName = !!data.name;
     const maxVotesAllowedNumber = parseInt(
       data.max_votes_allowed?.match(VALID_MAX_VOTES_VALUE_REGEX)?.[0] || '',

@@ -8,7 +8,8 @@ import {
   sleep,
 } from './utils';
 import { isAPIError, isConnectionIDError, isErrorRetryable } from './errors';
-import type { ConnectionOpen, Event, LogLevel, UR } from './types';
+import type { ConnectionOpen, LogLevel, UR } from './types';
+import type { WSEvent } from './gen/models';
 
 export enum ConnectionState {
   Closed = 'CLOSED',
@@ -85,19 +86,15 @@ export class WSConnectionFallback {
     }
 
     try {
-      const res = await this.client.doAxiosRequest<T>(
+      const res = await this.client.api.doAxiosRequest<T>(
         'get',
         (this.client.baseURL as string).replace(':3030', ':8900') + '/longpoll', // replace port if present for testing with local API
         undefined,
-        {
-          config: { ...config, cancelToken: this.cancelToken?.token },
-          params,
-        },
+        { ...config, cancelToken: this.cancelToken?.token, params },
       );
 
       this.consecutiveFailures = 0; // always reset in case of no error
       return res;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       this.consecutiveFailures += 1;
 
@@ -116,7 +113,7 @@ export class WSConnectionFallback {
     while (this.state === ConnectionState.Connected) {
       try {
         const data = await this._req<{
-          events: Event[];
+          events: WSEvent[];
         }>({}, { timeout: 30000 }, true); // 30s => API responds in 20s if there is no event
 
         if (data.events?.length) {
@@ -124,7 +121,6 @@ export class WSConnectionFallback {
             this.client.dispatchEvent(data.events[i]);
           }
         }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (error: any) {
         if (axios.isCancel(error)) {
           this._log(`_poll() - axios canceled request`);
@@ -175,7 +171,6 @@ export class WSConnectionFallback {
 
       this._setState(ConnectionState.Connected);
       this.connectionID = event.connection_id;
-      // @ts-expect-error type mismatch
       this.client.dispatchEvent(event);
       this._poll();
       if (reconnect) {
