@@ -1,9 +1,13 @@
 import { StateStore } from '../store';
 import { debounce, type DebouncedFunc } from '../utils';
 
-type PaginationDirection = 'next' | 'prev';
-type Cursor = { next: string | null; prev: string | null };
-export type PaginationQueryParams = { direction: PaginationDirection };
+type PaginationDirection = PaginationDirectionNext | PaginationDirectionPrev;
+type PaginationDirectionPrev = 'prev';
+type PaginationDirectionNext = 'next';
+type Cursor = { next?: string; prev?: string };
+export type PaginationQueryParams =
+  | { direction: PaginationDirectionNext; next?: Cursor['next']; offset?: number }
+  | { direction: PaginationDirectionPrev; prev?: Cursor['prev']; offset?: number };
 export type PaginationQueryReturnValue<T> = { items: T[] } & {
   next?: string;
   prev?: string;
@@ -24,6 +28,7 @@ export type PaginatorState<T = any> = {
   lastQueryError?: Error;
   cursor?: Cursor;
   offset?: number;
+  isStateValid: boolean;
 };
 
 export type PaginatorOptions = {
@@ -40,12 +45,16 @@ export abstract class BasePaginator<T> {
   state: StateStore<PaginatorState<T>>;
   pageSize: number;
   protected _executeQueryDebounced!: DebouncedExecQueryFunction;
-  protected _isCursorPagination = false;
+  // in cases where particular combination of filters would return only one item, the cursors
+  // (`next`/`prev`) won't be included in the response - in such cases it's better to build
+  // BasePaginator inheritors with this value already pre-defined
+  protected abstract _isCursorPagination: boolean;
 
   protected constructor(options?: PaginatorOptions) {
     const { debounceMs, pageSize } = { ...DEFAULT_PAGINATION_OPTIONS, ...options };
     this.pageSize = pageSize;
     this.state = new StateStore<PaginatorState<T>>(this.initialState);
+
     this.setDebounceOptions({ debounceMs });
   }
 
@@ -78,11 +87,16 @@ export abstract class BasePaginator<T> {
       lastQueryError: undefined,
       cursor: undefined,
       offset: 0,
+      isStateValid: true,
     };
   }
 
   get items() {
     return this.state.getLatestValue().items;
+  }
+
+  get isStateValid() {
+    return this.state.getLatestValue().isStateValid;
   }
 
   get cursor() {
@@ -102,8 +116,10 @@ export abstract class BasePaginator<T> {
   };
 
   canExecuteQuery = (direction: PaginationDirection) =>
-    (!this.isLoading && direction === 'next' && this.hasNext) ||
-    (direction === 'prev' && this.hasPrev);
+    !this.isLoading &&
+    ((direction === 'next' && this.hasNext) ||
+      (direction === 'prev' && this.hasPrev) ||
+      !this.isStateValid);
 
   protected getStateBeforeFirstQuery(): PaginatorState<T> {
     return {
@@ -124,30 +140,45 @@ export abstract class BasePaginator<T> {
       isLoading: false,
       items: isFirstPage
         ? stateUpdate.items
-        : [...(this.items ?? []), ...(stateUpdate.items || [])],
+        : [...(current.items ?? []), ...(stateUpdate.items ?? [])],
     };
   }
 
   async executeQuery({ direction }: { direction: PaginationDirection }) {
     if (!this.canExecuteQuery(direction)) return;
-    const isFirstPage = typeof this.items === 'undefined';
-    if (isFirstPage) {
-      this.state.next(this.getStateBeforeFirstQuery());
-    } else {
-      this.state.partialNext({ isLoading: true });
-    }
 
-    const stateUpdate: Partial<PaginatorState<T>> = {};
+    const isFirstPage = typeof this.items === 'undefined' || !this.isStateValid;
+
+    this.state.partialNext({ isLoading: true });
+
+    const stateUpdate: Partial<PaginatorState<T>> = isFirstPage
+      ? this.getStateBeforeFirstQuery()
+      : {};
+
     try {
-      const results = await this.query({ direction });
+      const queryParams: PaginationQueryParams = { direction };
+
+      if (!isFirstPage) {
+        if (this._isCursorPagination) {
+          // @ts-expect-error this is perfectly valid
+          queryParams[queryParams.direction] = this.cursor?.[queryParams.direction];
+        } else {
+          queryParams['offset'] = this.offset;
+        }
+      }
+
+      const results = await this.query(queryParams);
+
       if (!results) return;
+
       const { items, next, prev } = results;
+
       if (isFirstPage && (next || prev)) {
         this._isCursorPagination = true;
       }
 
       if (this._isCursorPagination) {
-        stateUpdate.cursor = { next: next || null, prev: prev || null };
+        stateUpdate.cursor = { next, prev };
         stateUpdate.hasNext = !!next;
         stateUpdate.hasPrev = !!prev;
       } else {
@@ -156,8 +187,8 @@ export abstract class BasePaginator<T> {
       }
 
       stateUpdate.items = await this.filterQueryResults(items);
-    } catch (e) {
-      stateUpdate.lastQueryError = e as Error;
+    } catch (error) {
+      stateUpdate.lastQueryError = error as Error;
     } finally {
       this.state.next(this.getStateAfterQuery(stateUpdate, isFirstPage));
     }
@@ -180,5 +211,9 @@ export abstract class BasePaginator<T> {
   };
   prevDebounced = () => {
     this._executeQueryDebounced({ direction: 'prev' });
+  };
+
+  invalidate = () => {
+    this.state.partialNext({ isStateValid: false });
   };
 }
