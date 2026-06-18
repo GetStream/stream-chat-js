@@ -61,7 +61,8 @@ describe('calculateLevenshtein', () => {
   });
 });
 
-const ALL_NOTIFY_MENTION_CAPABILITIES = [
+const ALL_MENTION_CAPABILITIES = [
+  'create-mention',
   'notify-channel',
   'notify-group',
   'notify-here',
@@ -136,7 +137,7 @@ describe('MentionsSearchSource', () => {
 
     channel = {
       data: {
-        own_capabilities: [...ALL_NOTIFY_MENTION_CAPABILITIES],
+        own_capabilities: [...ALL_MENTION_CAPABILITIES],
         team: 'engineering',
       },
       getClient: vi.fn().mockReturnValue(client),
@@ -190,22 +191,29 @@ describe('MentionsSearchSource', () => {
       channel: false,
       here: false,
       role: false,
-      user: true,
+      user: false,
       user_group: false,
     });
-    expect(
-      getAllowedMentionTypesFromCapabilities([...ALL_NOTIFY_MENTION_CAPABILITIES]),
-    ).toEqual({
-      channel: true,
-      here: true,
-      role: true,
-      user: true,
-      user_group: true,
-    });
+    expect(getAllowedMentionTypesFromCapabilities([...ALL_MENTION_CAPABILITIES])).toEqual(
+      {
+        channel: true,
+        here: true,
+        role: true,
+        user: true,
+        user_group: true,
+      },
+    );
     expect(getAllowedMentionTypesFromCapabilities(['notify-role'])).toEqual({
       channel: false,
       here: false,
       role: true,
+      user: false,
+      user_group: false,
+    });
+    expect(getAllowedMentionTypesFromCapabilities(['create-mention'])).toEqual({
+      channel: false,
+      here: false,
+      role: false,
       user: true,
       user_group: false,
     });
@@ -404,7 +412,7 @@ describe('MentionsSearchSource', () => {
     );
   });
 
-  it('should skip special mention queries when own_capabilities are missing', async () => {
+  it('should skip mention queries when own_capabilities are missing', async () => {
     channel.data = { team: 'engineering' };
     const source = new MentionsSearchSource(channel);
     source.activate();
@@ -416,12 +424,12 @@ describe('MentionsSearchSource', () => {
     expect(client.searchUserGroups).not.toHaveBeenCalled();
     expect(getSuggestion(result.items, 'channel', 'channel')).toBeUndefined();
     expect(getSuggestion(result.items, 'here', 'here')).toBeUndefined();
-    expect(result.items.every((item) => item.mentionType === 'user')).toBe(true);
+    expect(result.items).toEqual([]);
   });
 
   it('should only query mention sources allowed by own_capabilities', async () => {
     channel.data = {
-      own_capabilities: ['notify-role'],
+      own_capabilities: ['notify-role', 'create-mention'],
       team: 'engineering',
     };
     const source = new MentionsSearchSource(channel);

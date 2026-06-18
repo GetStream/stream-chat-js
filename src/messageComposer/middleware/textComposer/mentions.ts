@@ -142,7 +142,7 @@ export const getAllowedMentionTypesFromCapabilities = (
   channel: hasOwnCapability(ownCapabilities, 'notify-channel'),
   here: hasOwnCapability(ownCapabilities, 'notify-here'),
   role: hasOwnCapability(ownCapabilities, 'notify-role'),
-  user: true,
+  user: hasOwnCapability(ownCapabilities, 'create-mention'),
   user_group: hasOwnCapability(ownCapabilities, 'notify-group'),
 });
 
