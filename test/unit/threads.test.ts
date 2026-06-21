@@ -814,6 +814,118 @@ describe('Threads 2.0', () => {
         });
       });
 
+      describe('Event: notification.mark_unread', () => {
+        it('does not update read state with events from other threads', () => {
+          const thread = createTestThread({
+            read: [
+              {
+                last_read: new Date().toISOString(),
+                user: { id: TEST_USER_ID },
+                unread_messages: 0,
+              },
+            ],
+          });
+          thread.registerSubscriptions();
+
+          const stateBefore = thread.state.getLatestValue();
+          expect(stateBefore.read[TEST_USER_ID]?.unreadMessageCount).to.equal(0);
+
+          client.dispatchEvent({
+            type: 'notification.mark_unread',
+            user: { id: TEST_USER_ID },
+            unread_messages: 5,
+            last_read_at: new Date().toISOString(),
+            thread: generateThreadResponse(
+              channelResponse,
+              generateMsg(), // Different parent message ID
+            ) as ThreadResponse,
+          });
+
+          const stateAfter = thread.state.getLatestValue();
+          expect(stateAfter.read[TEST_USER_ID]?.unreadMessageCount).to.equal(0);
+
+          thread.unregisterSubscriptions();
+        });
+
+        it('does not update read state when event is for a different user', () => {
+          const thread = createTestThread({
+            read: [
+              {
+                last_read: new Date().toISOString(),
+                user: { id: TEST_USER_ID },
+                unread_messages: 0,
+                last_read_message_id: 'msg-1',
+              },
+            ],
+          });
+          thread.registerSubscriptions();
+
+          const stateBefore = thread.state.getLatestValue();
+          expect(stateBefore.read[TEST_USER_ID]?.unreadMessageCount).to.equal(0);
+
+          // Dispatch event for a DIFFERENT user (bob), not the current user
+          client.dispatchEvent({
+            type: 'notification.mark_unread',
+            user: { id: 'bob' }, // bob is NOT the current user (TEST_USER_ID)
+            unread_messages: 5,
+            last_read_at: new Date().toISOString(),
+            last_read_message_id: 'msg-4',
+            thread: generateThreadResponse(
+              channelResponse,
+              generateMsg({ id: parentMessageResponse.id }),
+            ) as ThreadResponse,
+          });
+
+          const stateAfter = thread.state.getLatestValue();
+          // TEST_USER_ID's state should remain unchanged because event was for 'bob'
+          expect(stateAfter.read[TEST_USER_ID]?.unreadMessageCount).to.equal(0);
+          expect(stateAfter.read[TEST_USER_ID]?.lastReadMessageId).to.equal('msg-1');
+
+          thread.unregisterSubscriptions();
+        });
+
+        it('correctly updates unread count for current user', () => {
+          const lastReadAt = new Date();
+          const thread = createTestThread({
+            read: [
+              {
+                last_read: lastReadAt.toISOString(),
+                last_read_message_id: 'msg-1',
+                unread_messages: 0,
+                user: { id: TEST_USER_ID },
+              },
+            ],
+          });
+          thread.registerSubscriptions();
+
+          const stateBefore = thread.state.getLatestValue();
+          expect(stateBefore.read[TEST_USER_ID]?.unreadMessageCount).to.equal(0);
+
+          const newLastReadAt = new Date(lastReadAt.getTime() - 60000); // 1 minute earlier
+
+          client.dispatchEvent({
+            type: 'notification.mark_unread',
+            user: { id: TEST_USER_ID },
+            unread_messages: 5,
+            last_read_at: newLastReadAt.toISOString(),
+            last_read_message_id: 'msg-4',
+            thread: generateThreadResponse(
+              channelResponse,
+              generateMsg({ id: parentMessageResponse.id }),
+            ) as ThreadResponse,
+          });
+
+          const stateAfter = thread.state.getLatestValue();
+          expect(stateAfter.read[TEST_USER_ID]?.unreadMessageCount).to.equal(5);
+          expect(stateAfter.read[TEST_USER_ID]?.lastReadAt.toISOString()).to.equal(
+            newLastReadAt.toISOString(),
+          );
+          expect(stateAfter.read[TEST_USER_ID]?.lastReadMessageId).to.equal('msg-4');
+
+          thread.unregisterSubscriptions();
+        });
+      });
+
       describe('Event: message.new', () => {
         it('ignores a reply if it does not belong to the associated thread', () => {
           const thread = createTestThread();

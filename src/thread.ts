@@ -272,6 +272,7 @@ export class Thread extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeMarkThreadStale());
     this.addUnsubscribeFunction(this.subscribeNewReplies());
     this.addUnsubscribeFunction(this.subscribeRepliesRead());
+    this.addUnsubscribeFunction(this.subscribeRepliesMarkUnread());
     this.addUnsubscribeFunction(this.subscribeMessageDeleted());
     this.addUnsubscribeFunction(this.subscribeMessageUpdated());
   };
@@ -402,6 +403,35 @@ export class Thread extends WithSubscriptions {
             user,
             lastReadMessageId: event.last_read_message_id,
             unreadMessageCount: 0,
+          },
+        },
+      }));
+    }).unsubscribe;
+
+  private subscribeRepliesMarkUnread = () =>
+    this.client.on('notification.mark_unread', (event) => {
+      // Filter: must have required fields and match this thread
+      if (!event.user || !event.last_read_at || !event.thread) return;
+      if (event.thread.parent_message_id !== this.id) return;
+
+      // Filter: only process own user's events (can't mark unread for others)
+      const ownMessage = event.user.id === this.client.user?.id;
+      if (!ownMessage) return;
+
+      const userId = event.user.id;
+      const user = event.user;
+      const lastReadAt = event.last_read_at;
+      const unreadCount = event.unread_messages ?? 0;
+
+      this.state.next((current) => ({
+        ...current,
+        read: {
+          ...current.read,
+          [userId]: {
+            lastReadAt: new Date(lastReadAt),
+            user,
+            lastReadMessageId: event.last_read_message_id,
+            unreadMessageCount: unreadCount,
           },
         },
       }));
