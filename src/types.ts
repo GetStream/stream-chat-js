@@ -84,6 +84,7 @@ export type AppSettingsAPIResponse = APIResponse & {
     id?: string | number;
     allow_multi_user_devices?: boolean;
     feed_audit_logs_enabled?: boolean;
+    moderation_onboarding_complete?: boolean | null;
     // TODO
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     call_types: any;
