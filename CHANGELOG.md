@@ -1,3 +1,10 @@
+## [9.47.1](https://github.com/GetStream/stream-chat-js/compare/v9.47.0...v9.47.1) (2026-06-22)
+
+### Bug Fixes
+
+* avoid sorting unless we match a command ([#1775](https://github.com/GetStream/stream-chat-js/issues/1775)) ([b9acab4](https://github.com/GetStream/stream-chat-js/commit/b9acab4bfed43c1187577c9ee28749d25f0cebcd))
+* run type tests under TypeScript 6 and add missing response fields ([#1780](https://github.com/GetStream/stream-chat-js/issues/1780)) ([8e49611](https://github.com/GetStream/stream-chat-js/commit/8e4961111d2dd89f877f6dec6afae02f73f7a9f0))
+
 ## [9.47.0](https://github.com/GetStream/stream-chat-js/compare/v9.46.0...v9.47.0) (2026-06-15)
 
 ### Features
