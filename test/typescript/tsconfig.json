@@ -1,8 +1,17 @@
 {
+  // Type-checks the generated API response fixtures (data.ts) and the
+  // hand-written unit-test.ts against the built declarations in dist/types.
+  //
+  // Extends the root config so module resolution, lib and strictness (notably
+  // moduleResolution "bundler" and skipLibCheck) match what `yarn build`
+  // emits. Invoked via `tsc -p` (see the run-types-gen script): passing the
+  // files on the command line instead trips TypeScript 6's error TS5112
+  // ("tsconfig.json is present but will not be loaded if files are specified
+  // on commandline").
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "esModuleInterop": true,
-    "noImplicitAny": true,
-    "strict": true,
-    "strictNullChecks": true
-  }
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["./*.ts"]
 }
