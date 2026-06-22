@@ -83,6 +83,7 @@ export type AppSettingsAPIResponse = APIResponse & {
   app?: {
     id?: string | number;
     allow_multi_user_devices?: boolean;
+    feed_audit_logs_enabled?: boolean;
     // TODO
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     call_types: any;
@@ -2533,6 +2534,7 @@ export type BlockList = {
   team?: string;
   type?: string;
   validate?: boolean;
+  is_confusable_folding_enabled?: boolean;
   is_leet_check_enabled?: boolean;
   is_plural_check_enabled?: boolean;
 };
@@ -2692,6 +2694,7 @@ export type ConnectionOpen = {
   connection_id: string;
   cid?: string;
   created_at?: string;
+  received_at?: string;
   me?: OwnUserResponse;
   type?: string;
 };
