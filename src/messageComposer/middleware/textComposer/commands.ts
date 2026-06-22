@@ -48,28 +48,30 @@ export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion>
         ),
     );
 
-    // sort alphabetically unless you're matching the first char
-    selectedCommands.sort((a, b) => {
-      let nameA = a.name?.toLowerCase();
-      let nameB = b.name?.toLowerCase();
-      if (nameA?.indexOf(searchQuery) === 0) {
-        nameA = `0${nameA}`;
-      }
-      if (nameB?.indexOf(searchQuery) === 0) {
-        nameB = `0${nameB}`;
-      }
-      // Should confirm possible null / undefined when TS is fully implemented
-      if (nameA != null && nameB != null) {
-        if (nameA < nameB) {
-          return -1;
+    if (searchQuery) {
+      // sort alphabetically unless you're matching the first char
+      selectedCommands.sort((a, b) => {
+        let nameA = a.name?.toLowerCase();
+        let nameB = b.name?.toLowerCase();
+        if (nameA?.indexOf(searchQuery) === 0) {
+          nameA = `0${nameA}`;
         }
-        if (nameA > nameB) {
-          return 1;
+        if (nameB?.indexOf(searchQuery) === 0) {
+          nameB = `0${nameB}`;
         }
-      }
+        // Should confirm possible null / undefined when TS is fully implemented
+        if (nameA != null && nameB != null) {
+          if (nameA < nameB) {
+            return -1;
+          }
+          if (nameA > nameB) {
+            return 1;
+          }
+        }
 
-      return 0;
-    });
+        return 0;
+      });
+    }
 
     return {
       items: selectedCommands.map((command) => ({
