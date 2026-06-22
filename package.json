@@ -98,7 +98,7 @@
     "test": "yarn test-unit",
     "test-types": "yarn run-test-types && yarn run-types-gen",
     "run-test-types": "node test/typescript/index.js",
-    "run-types-gen": "tsc --esModuleInterop true --noEmit true --strictNullChecks true --noImplicitAny true --strict true test/typescript/*.ts",
+    "run-types-gen": "tsc -p test/typescript/tsconfig.json",
     "test-unit": "vitest",
     "test-coverage": "vitest run --coverage",
     "fix-staged": "lint-staged --config .lintstagedrc.fix.json --concurrent 1",
