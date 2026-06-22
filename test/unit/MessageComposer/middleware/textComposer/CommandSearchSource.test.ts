@@ -83,6 +83,53 @@ describe('CommandSearchSource', () => {
     expect(newState.items).toEqual(initialState.items);
   });
 
+  describe('sorting', () => {
+    it('preserves the configured command order when the search query is empty', async () => {
+      const source = new CommandSearchSource(channel);
+      source.activate();
+
+      // The configured order (giphy, ban, mute, unmute) is intentionally not
+      // alphabetical. With an empty query every command matches, and the result
+      // must keep the configured order rather than being sorted alphabetically
+      // (which would be ban, giphy, mute, unmute).
+      const result = await source.query('');
+
+      expect(result.items.map((item) => item.name)).toEqual([
+        'giphy',
+        'ban',
+        'mute',
+        'unmute',
+      ]);
+    });
+
+    it('does not sort when the query is empty even if the config order is already non-alphabetical', async () => {
+      mockCommands = [
+        { name: 'zeta', description: '' },
+        { name: 'alpha', description: '' },
+        { name: 'gamma', description: '' },
+      ];
+      getConfigMock.mockReturnValue({ commands: mockCommands });
+      const source = new CommandSearchSource(channel);
+      source.activate();
+
+      const result = await source.query('');
+
+      expect(result.items.map((item) => item.name)).toEqual(['zeta', 'alpha', 'gamma']);
+    });
+
+    it('still sorts matches (prefix first, then alphabetical) when a query is provided', async () => {
+      const source = new CommandSearchSource(channel);
+      source.activate();
+
+      // 'u' matches 'mute' (config index 2) and 'unmute' (config index 3).
+      // 'unmute' is a prefix match, so it floats above 'mute' despite appearing
+      // later in the configured order.
+      const result = await source.query('u');
+
+      expect(result.items.map((item) => item.name)).toEqual(['unmute', 'mute']);
+    });
+  });
+
   it('should not decorate commands with disabled state', async () => {
     mockCommands = [
       { name: 'ban', description: 'Ban a user', set: 'moderation_set' },
