@@ -21,102 +21,50 @@ import {
   isOnline,
   isOwnUserBaseProperty,
   messageSetPagination,
-  normalizeQuerySort,
   randomId,
 } from './utils';
 
 import type {
   APIResponse,
-  BannedUsersFilters,
-  BannedUsersPaginationOptions,
-  BannedUsersSort,
   BanUserOptions,
   BaseDeviceFields,
   ChannelAPIResponse,
   ChannelData,
-  ChannelFilters,
   ChannelMute,
   ChannelOptions,
   ChannelResponse,
-  ChannelSort,
   ChannelStateOptions,
   CombinedEvents,
   Configs,
   ConnectAPIResponse,
-  CreatePollData,
-  CreateReminderOptions,
-  DeleteMessageOptions,
   DeviceIdentifier,
-  DraftFilters,
-  DraftSort,
   EventHandler,
   FlagMessageResponse,
   FlagUserResponse,
-  GetMessageOptions,
   GetThreadOptions,
   LocalMessage,
   Logger,
-  MarkChannelsReadOptions,
-  MarkDeliveredOptions,
-  MessageFilters,
-  MessageFlagsFilters,
-  MessageFlagsPaginationOptions,
-  MessageResponse,
   Mute,
   MuteUserOptions,
   MuteUserResponse,
   OwnUserResponse,
-  Pager,
-  PartialMessageUpdate,
-  PartialPollUpdate,
   PartialThreadUpdate,
   PartialUserUpdate,
-  PollAnswersAPIResponse,
-  PollData,
-  PollOptionData,
-  PollSort,
-  PollVoteData,
-  PushPreference,
-  PushProvider,
+  QueryBannedUsersPayload,
   QueryChannelsAPIResponse,
-  QueryFutureChannelBansOptions,
-  QueryPollsFilters,
-  QueryPollsOptions,
-  QueryReactionsOptions,
-  QueryRemindersOptions,
+  QueryChannelsRequest,
+  QueryReactionsRequest,
   QueryThreadsOptions,
   QueryUserGroupsOptions,
   QueryUserGroupsResponse,
-  QueryVotesFilters,
-  QueryVotesOptions,
-  ReactionFilters,
   ReactionResponse,
-  ReactionSort,
   RequireLiteral,
   SdkIdentifier,
-  SearchAPIResponse,
-  SearchMessageSortBase,
-  SearchOptions,
   SearchPayload,
-  SearchRolesAPIResponse,
-  SearchRolesOptions,
-  SearchUserGroupsOptions,
-  SearchUserGroupsResponse,
   StreamChatOptions,
-  SyncOptions,
   TokenOrProvider,
   UnBanUserOptions,
-  UpdateLocationPayload,
-  UpdateMessageAPIResponse,
-  UpdateMessageOptions,
-  UpdatePollAPIResponse,
-  UpdateReminderOptions,
-  UserFilters,
-  UserOptions,
   UserResponse,
-  UserSort,
-  UserUpdate,
-  VoteSort,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { Thread } from './thread';
@@ -140,8 +88,8 @@ import { getPendingTaskChannelData } from './offline-support/util';
 import { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
 import type {
   GetApplicationResponse as Gen_GetApplicationResponse,
-  TranslateMessageRequest as Gen_TranslateMessageRequest,
-  UpdateMessageRequest as Gen_UpdateMessageRequest,
+  MarkDeliveredRequest as Gen_MarkDeliveredRequest,
+  QueryUsersPayload as Gen_QueryUsersPayload,
   WSEvent,
 } from './gen/models';
 import { ChatApi } from './gen-imports';
@@ -184,10 +132,8 @@ export type ListenerKeys = CombinedEvents['type'] | 'all';
 
 type ClientUser = RequireLiteral<Partial<OwnUserResponse>, 'id'> & { anon?: boolean };
 
-export class StreamChat {
+export class StreamChat extends ChatApi {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
-  api: ApiClient;
-  chatApi: ChatApi;
   messageDeliveryReporter: MessageDeliveryReporter;
   /**
    * @internal
@@ -268,6 +214,9 @@ export class StreamChat {
   set clientID(id: string | undefined) {
     this.clientId = id;
   }
+  get api() {
+    return this.apiClient;
+  }
   insightMetrics: InsightMetrics;
   defaultWSTimeoutWithFallback: number;
   defaultWSTimeout: number;
@@ -309,6 +258,11 @@ export class StreamChat {
     secretOrOptions?: StreamChatOptions | string,
     options?: StreamChatOptions,
   ) {
+    // generated client requires ApiClient right away
+    super(new ApiClient());
+    // but ApiClient relies on properties defined here so we set it after (can't pass `this` in super call)
+    this.apiClient.client = this;
+
     // set the key
     this.key = key;
     this.listeners = new Map();
@@ -388,9 +342,6 @@ export class StreamChat {
 
     this.defaultWSTimeoutWithFallback = 6 * 1000;
     this.defaultWSTimeout = 15 * 1000;
-
-    this.api = new ApiClient(this);
-    this.chatApi = new ChatApi(this.api);
 
     /**
      * logger function should accept 3 parameters:
@@ -735,7 +686,7 @@ export class StreamChat {
       },
     ];
 
-    return await this.partialUpdateUsers(users);
+    return await this.updateUsersPartial({ users });
   }
 
   /**
@@ -744,7 +695,7 @@ export class StreamChat {
    * @returns The application settings response.
    */
   async getAppSettings() {
-    return await (this.appSettingsPromise = this.chatApi.getApp());
+    return await (this.appSettingsPromise = this.getApp());
   }
 
   /**
@@ -829,7 +780,7 @@ export class StreamChat {
    * @returns A promise that resolves when the connection is set up.
    */
   async setGuestUser(user: UserResponse) {
-    const response = await this.chatApi.createGuest({ user });
+    const response = await this.createGuest({ user });
 
     const {
       created_at: _created_at,
@@ -838,6 +789,7 @@ export class StreamChat {
       online: _online,
       ...guestUser
     } = response.user;
+
     return await this.connectUser(guestUser as UserResponse, response.access_token);
   }
 
@@ -1231,11 +1183,13 @@ export class StreamChat {
         },
       );
 
-      await this.queryChannels(
-        { cid: { $in: cids } } as ChannelFilters,
-        { last_message_at: -1 },
-        { limit: 30 },
-      );
+      await this.queryChannelsAndHydrate({
+        filter_conditions: {
+          cid: { $in: cids },
+        },
+        limit: 30,
+        sort: [{ field: 'last_message_at', direction: -1 }],
+      });
 
       this.logger('info', 'client:recoverState() - Querying channels finished', {
         tags: ['connection', 'client'],
@@ -1339,38 +1293,18 @@ export class StreamChat {
    * Query users and watch user presence.
    *
    * @param filterConditions MongoDB style filter conditions.
-   * @param sort Sort options, for instance `[{ last_active: -1 }]`. When using multiple fields,
-   *   make sure you use an array of objects to guarantee field order, for instance
-   *   `[{ last_active: -1 }, { created_at: 1 }]` (optional, defaults to `[]`).
+   * @param sort Sort options, for instance `[{ field: 'last_active', direction: -1 }]`.
+   *   To sort by multiple fields, append more entries to the array, e.g.
+   *   `[{ field: 'last_active', direction: -1 }, { field: 'created_at', direction: 1 }]`
+   *   (optional, defaults to `[]`).
    * @param options Option object, e.g. `{ presence: true }` (optional, defaults to `{}`).
    * @returns User query response.
    */
-  async queryUsers(
-    filterConditions: UserFilters,
-    sort: UserSort = [],
-    options: UserOptions = {},
-  ) {
-    const defaultOptions = {
-      presence: false,
-    };
-
+  override async queryUsers(request?: { payload?: Gen_QueryUsersPayload }) {
     // Make sure we wait for the connect promise if there is a pending one
     await this.wsPromise;
 
-    if (!this._hasConnectionID()) {
-      defaultOptions.presence = false;
-    }
-
-    // Return a list of users
-    const data = await this.chatApi.queryUsers({
-      payload: {
-        filter_conditions: filterConditions,
-        sort: normalizeQuerySort(sort),
-        ...defaultOptions,
-        ...options,
-      },
-    });
-
+    const data = await super.queryUsers(request);
     this.state.updateUsers(data.users);
 
     return data;
@@ -1388,75 +1322,19 @@ export class StreamChat {
       options,
     );
   }
-
-  /**
-   * Search user groups by prefix for autocomplete.
-   *
-   * @param options The search options.
-   * @returns User group search response.
-   */
-  async searchUserGroups(options: SearchUserGroupsOptions) {
-    return await this.api.get<SearchUserGroupsResponse>(
-      this.baseURL + '/usergroups/search',
-      options,
-    );
-  }
-
   /**
    * Query user bans.
    *
    * @param filterConditions MongoDB style filter conditions (optional, defaults to `{}`).
-   * @param sort Sort options, e.g. `[{ created_at: 1 }]` (optional, defaults to `[]`).
+   * @param sort Sort options, e.g. `[{ field: 'created_at', direction: 1 }]` (optional,
+   *   defaults to `[]`).
    * @param options Option object, e.g. `{ limit: 10, offset: 0, exclude_expired_bans: true }`
    *   (optional, defaults to `{}`).
    * @returns Ban query response.
    */
-  async queryBannedUsers(
-    filterConditions: BannedUsersFilters = {},
-    sort: BannedUsersSort = [],
-    options: BannedUsersPaginationOptions = {},
-  ) {
+  async queryBannedUsers(request?: { payload?: QueryBannedUsersPayload }) {
     // Return a list of user bans
-    return await this.chatApi.queryBannedUsers({
-      payload: {
-        filter_conditions: filterConditions,
-        sort: normalizeQuerySort(sort),
-        ...options,
-      },
-    });
-  }
-
-  /**
-   * Query future channel bans created by a user.
-   *
-   * @param options Option object with `user_id`, `exclude_expired_bans`, `limit`, `offset`
-   *   (optional, defaults to `{}`).
-   * @returns Future channel bans response.
-   */
-  async queryFutureChannelBans(options: QueryFutureChannelBansOptions = {}) {
-    return await this.chatApi.queryFutureChannelBans({
-      payload: options,
-    });
-  }
-
-  /**
-   * Query message flags.
-   *
-   * @param filterConditions MongoDB style filter conditions (optional, defaults to `{}`).
-   * @param options Option object, e.g. `{ limit: 10, offset: 0 }` (optional, defaults to `{}`).
-   * @returns Message flags response.
-   */
-  async queryMessageFlags(
-    filterConditions: MessageFlagsFilters = {},
-    options: MessageFlagsPaginationOptions = {},
-  ) {
-    // Return a list of message flags
-    return await this.chatApi.queryMessageFlags({
-      payload: {
-        filter_conditions: filterConditions,
-        ...options,
-      },
-    });
+    return await super.queryBannedUsers(request);
   }
 
   /**
@@ -1470,18 +1348,15 @@ export class StreamChat {
    *
    * @param filterConditions Object MongoDB style filters. Can be an empty object when using
    *   `predefined_filter` in options.
-   * @param sort Sort options, for instance `{ created_at: -1 }`. When using multiple fields,
-   *   make sure you use an array of objects to guarantee field order, for instance
-   *   `[{ last_updated: -1 }, { created_at: 1 }]` (optional, defaults to `[]`).
-   * @param options Options object. Can include `predefined_filter`, `filter_values`, and
+   * @param sort Sort options, for instance `[{ field: 'created_at', direction: -1 }]`.
+   *   To sort by multiple fields, append more entries to the array, e.g.
+   *   `[{ field: 'last_updated', direction: -1 }, { field: 'created_at', direction: 1 }]`
+   *   (optional, defaults to `[]`).
+   * @param request Options object. Can include `predefined_filter`, `filter_values`, and
    *   `sort_values` for using predefined filters (optional, defaults to `{}`).
    * @returns Full search channels response.
    */
-  async queryChannelsRequestWithResponse(
-    filterConditions: ChannelFilters,
-    sort: ChannelSort = [],
-    options: ChannelOptions = {},
-  ) {
+  override async queryChannels(request?: QueryChannelsRequest) {
     const defaultOptions: ChannelOptions = {
       state: true,
       watch: true,
@@ -1490,74 +1365,50 @@ export class StreamChat {
 
     // Make sure we wait for the connect promise if there is a pending one
     await this.wsPromise;
+
+    // TODO: probably serverside only thing, remove at some point
     if (!this._hasConnectionID()) {
       defaultOptions.watch = false;
     }
 
-    const { predefined_filter, filter_values, sort_values, ...restOptions } = options;
-    const normalizedSort = normalizeQuerySort(sort);
+    const {
+      predefined_filter,
+      filter_values,
+      sort_values,
+      filter_conditions,
+      ...restOptions
+    } = request ?? {};
 
     // Build payload based on whether we're using a predefined filter or traditional filters
-    const payload = predefined_filter
+    const payload: QueryChannelsRequest = predefined_filter
       ? {
           predefined_filter,
           filter_values,
           sort_values,
-          sort: normalizedSort,
           ...defaultOptions,
           ...restOptions,
         }
       : {
-          filter_conditions: filterConditions,
-          sort: normalizedSort,
+          filter_conditions,
           ...defaultOptions,
           ...restOptions,
         };
 
-    return await this.chatApi.queryChannels(payload);
+    return await super.queryChannels(payload);
   }
 
   /**
-   * Queries channels and returns the raw channel response list.
+   * Query channels and hydrate them into `Channel` instances on this client.
    *
-   * This preserves the historical return shape for backwards compatibility. Use
-   * `queryChannelsRequestWithResponse()` when response level metadata such as
-   * `predefined_filter` is needed. In the next major release these APIs should be
-   * consolidated into a single full-response API.
-   *
-   * @param filterConditions Object MongoDB style filters. Can be an empty object when using
-   *   `predefined_filter` in options.
-   * @param sort Sort options, for instance `{ created_at: -1 }`. When using multiple fields,
-   *   make sure you use an array of objects to guarantee field order, for instance
-   *   `[{ last_updated: -1 }, { created_at: 1 }]` (optional, defaults to `[]`).
-   * @param options Options object. Can include `predefined_filter`, `filter_values`, and
-   *   `sort_values` for using predefined filters (optional, defaults to `{}`).
-   * @returns Search channels response.
-   */
-  async queryChannelsRequest(
-    filterConditions: ChannelFilters,
-    sort: ChannelSort = [],
-    options: ChannelOptions = {},
-  ) {
-    const data = await this.queryChannelsRequestWithResponse(
-      filterConditions,
-      sort,
-      options,
-    );
-
-    // FIXME: In the next major release, return the full QueryChannelsAPIResponse
-    // instead of only `data.channels` so top-level metadata such as
-    // `predefined_filter` is not lost.
-    return data.channels;
-  }
-
-  /**
-   * Query channels.
+   * Use the inherited `queryChannels()` from `ChatApi` when only the raw API response
+   * is needed; this method wraps it with state hydration, `channels.queried` dispatch,
+   * and offline-db sync.
    *
    * @param filterConditions Object MongoDB style filters.
-   * @param sort Sort options, for instance `{ created_at: -1 }`. When using multiple fields,
-   *   make sure you use an array of objects to guarantee field order, for instance
-   *   `[{ last_updated: -1 }, { created_at: 1 }]` (optional, defaults to `[]`).
+   * @param sort Sort options, for instance `[{ field: 'created_at', direction: -1 }]`.
+   *   To sort by multiple fields, append more entries to the array, e.g.
+   *   `[{ field: 'last_updated', direction: -1 }, { field: 'created_at', direction: 1 }]`
+   *   (optional, defaults to `[]`).
    * @param options Options object (optional, defaults to `{}`).
    * @param stateOptions State options object. These options will only be used for state
    *   management and won't be sent in the request (optional, defaults to `{}`).
@@ -1570,29 +1421,19 @@ export class StreamChat {
    *   while the default return value remains `Channel[]`.
    * @returns Search channels response.
    */
-  async queryChannels(
-    filterConditions: ChannelFilters,
-    sort: ChannelSort,
-    options: ChannelOptions,
-    stateOptions: ChannelStateOptions & { withResponse: true },
+  async queryChannelsAndHydrate(
+    options?: QueryChannelsRequest,
+    stateOptions?: ChannelStateOptions & { withResponse: true },
   ): Promise<QueryChannelsResponseWithChannels>;
-  async queryChannels(
-    filterConditions?: ChannelFilters,
-    sort?: ChannelSort,
-    options?: ChannelOptions,
+  async queryChannelsAndHydrate(
+    options?: QueryChannelsRequest,
     stateOptions?: ChannelStateOptions,
   ): Promise<Channel[]>;
-  async queryChannels(
-    filterConditions: ChannelFilters,
-    sort: ChannelSort = [],
-    options: ChannelOptions = {},
+  async queryChannelsAndHydrate(
+    options?: QueryChannelsRequest,
     stateOptions: ChannelStateOptions = {},
   ): Promise<Channel[] | QueryChannelsResponseWithChannels> {
-    const queryChannelsResponse = await this.queryChannelsRequestWithResponse(
-      filterConditions,
-      sort,
-      options,
-    );
+    const queryChannelsResponse = await this.queryChannels(options);
     const channels = queryChannelsResponse.channels;
 
     this.dispatchEvent({
@@ -1622,33 +1463,26 @@ export class StreamChat {
   }
 
   /**
-   * Query reactions.
+   * Query reactions for a message and hydrate any cached offline reactions before
+   * the network request.
    *
    * @param messageId The message ID.
    * @param filter Object MongoDB style filters.
-   * @param sort Sort options, for instance `{ created_at: -1 }` (optional, defaults to `[]`).
+   * @param sort Sort options, for instance `[{ field: 'created_at', direction: -1 }]`
+   *   (optional, defaults to `[]`).
    * @param options Pagination object (optional, defaults to `{}`).
    * @returns Query reactions response.
    */
-  async queryReactions(
-    messageId: string,
-    filter: ReactionFilters,
-    sort: ReactionSort = [],
-    options: QueryReactionsOptions = {},
-  ) {
-    const payload = {
-      filter,
-      sort: normalizeQuerySort(sort),
-      ...options,
-    };
+  async queryReactionsAndHydrate(request: QueryReactionsRequest) {
+    const { filter, next, id: messageId, sort, limit } = request;
 
-    if (this.offlineDb?.getReactions && !options.next) {
+    if (this.offlineDb?.getReactions && !next) {
       try {
         const reactionsFromDb = await this.offlineDb.getReactions({
           messageId,
           filters: filter,
           sort,
-          limit: options.limit,
+          limit,
         });
 
         if (reactionsFromDb) {
@@ -1667,10 +1501,7 @@ export class StreamChat {
     // Make sure we wait for the connect promise if there is a pending one
     await this.wsPromise;
 
-    return await this.chatApi.queryReactions({
-      id: messageId,
-      ...payload,
-    });
+    return await this.queryReactions(request);
   }
 
   hydrateActiveChannels(
@@ -1738,36 +1569,18 @@ export class StreamChat {
    *
    * @param filterConditions MongoDB style filter conditions.
    * @param query Search query or object MongoDB style filters.
-   * @param options Option object, e.g. `{ user_id: 'tommaso' }` (optional, defaults to `{}`).
+   * @param payload Option object, e.g. `{ user_id: 'tommaso' }` (optional, defaults to `{}`).
    * @returns Search messages response.
    */
-  async search(
-    filterConditions: SearchPayload['filter_conditions'],
-    query: string | MessageFilters,
-    options: SearchOptions = {},
-  ) {
-    if (options.offset && options.next) {
-      throw Error(`Cannot specify offset with next`);
-    }
-    const payload: SearchPayload = {
-      filter_conditions: filterConditions,
-      ...options,
-      sort: options.sort
-        ? normalizeQuerySort<SearchMessageSortBase>(options.sort)
-        : undefined,
-    };
-    if (typeof query === 'string') {
-      payload.query = query;
-    } else if (typeof query === 'object') {
-      payload.message_filter_conditions = query;
-    } else {
-      throw Error(`Invalid type ${typeof query} for query parameter`);
+  override async search(request?: { payload?: SearchPayload }) {
+    if (request?.payload?.offset && request?.payload?.next) {
+      throw Error(`Cannot specify "offset" with "next"`);
     }
 
     // Make sure we wait for the connect promise if there is a pending one
     await this.wsPromise;
 
-    return await this.api.get<SearchAPIResponse>(this.baseURL + '/search', { payload });
+    return await super.search(request);
   }
 
   /**
@@ -1783,66 +1596,10 @@ export class StreamChat {
       ((this.wsConnection?.isHealthy || this.wsFallback?.isHealthy()) &&
         this._hasConnectionID())
     ) {
-      throw new Error('you can only set device before opening a websocket connection');
+      throw new Error('Device cannot be set before opening a WebSocket connection');
     }
 
     this.options.device = device;
-  }
-
-  /**
-   * Adds a push device for a user.
-   *
-   * @param id The device ID.
-   * @param pushProvider The push provider.
-   * @param pushProviderName User-provided push provider name for multi-bundle support (optional).
-   * @returns The server response.
-   */
-  async addDevice(id: string, pushProvider: PushProvider, pushProviderName?: string) {
-    return await this.chatApi.createDevice({
-      id,
-      push_provider: pushProvider,
-      ...(pushProviderName != null ? { push_provider_name: pushProviderName } : {}),
-    });
-  }
-
-  /**
-   * Returns the devices associated with a current user.
-   *
-   * @returns Array of devices.
-   */
-  async getDevices() {
-    return await this.chatApi.listDevices();
-  }
-
-  /**
-   * Returns unread counts for a single user.
-   *
-   * @returns The unread counts response.
-   */
-  async getUnreadCount() {
-    return await this.chatApi.unreadCounts();
-  }
-
-  /**
-   * Applies the list of push preferences.
-   *
-   * @param preferences A list of push preferences.
-   * @returns The upsert push preferences response.
-   */
-  async setPushPreferences(preferences: PushPreference[]) {
-    return await this.chatApi.updatePushNotificationPreferences({
-      preferences,
-    });
-  }
-
-  /**
-   * Removes the device with the given ID. Clientside users can only delete their own devices.
-   *
-   * @param id The device ID.
-   * @returns The server response.
-   */
-  async removeDevice(id: string) {
-    return await this.chatApi.deleteDevice({ id });
   }
 
   _addChannelConfig({ cid, config }: ChannelResponse) {
@@ -1997,7 +1754,7 @@ export class StreamChat {
       const channel = this.activeChannels[cid];
       if (Object.keys(custom).length > 0) {
         channel.data = { ...channel.data, custom: custom.custom };
-        channel._data = { ...channel._data, ...custom };
+        channel._data = { ...channel._data, custom: custom.custom };
       }
       return channel;
     }
@@ -2008,61 +1765,6 @@ export class StreamChat {
 
     return channel;
   };
-
-  /**
-   * Update the given user object.
-   *
-   * @param partialUserObject Should contain `id` and any of `set` or `unset` params, e.g.
-   *   `{ id: 'user1', set: { field: value }, unset: ['field2'] }`.
-   * @returns List of updated users.
-   */
-  async partialUpdateUser(partialUserObject: PartialUserUpdate) {
-    return await this.partialUpdateUsers([partialUserObject]);
-  }
-
-  /**
-   * Batch update the list of users.
-   *
-   * @param users List of users.
-   * @returns The updated users response.
-   */
-  async updateUsers(users: UserUpdate[]) {
-    const userMap: Record<string, UserUpdate> = {};
-    for (const userObject of users) {
-      if (!userObject.id) {
-        throw Error('User ID is required when updating a user');
-      }
-      userMap[userObject.id] = userObject;
-    }
-
-    return await this.chatApi.updateUsers({ users: userMap });
-  }
-
-  /**
-   * Update or create the given user object.
-   *
-   * @param userObject User object; the only required field is the user ID, e.g. `{ id: 'myuser' }` is valid.
-   * @returns The updated users response.
-   */
-  updateUser(userObject: UserResponse) {
-    return this.updateUsers([userObject]);
-  }
-
-  /**
-   * Batch partial update of users.
-   *
-   * @param users List of partial update requests.
-   * @returns The updated users response.
-   */
-  async partialUpdateUsers(users: PartialUserUpdate[]) {
-    for (const userObject of users) {
-      if (!userObject.id) {
-        throw Error('User ID is required when updating a user');
-      }
-    }
-
-    return await this.chatApi.updateUsersPartial({ users });
-  }
 
   /**
    * Bans a user from all channels.
@@ -2120,7 +1822,7 @@ export class StreamChat {
     });
   }
   async blockUser(blockedUserId: string) {
-    const result = await this.chatApi.blockUsers({
+    const result = await this.blockUsers({
       blocked_user_id: blockedUserId,
     });
     if (this._cacheEnabled()) {
@@ -2131,8 +1833,8 @@ export class StreamChat {
     return result;
   }
 
-  async getBlockedUsers() {
-    const result = await this.chatApi.getBlockedUsers();
+  override async getBlockedUsers() {
+    const result = await super.getBlockedUsers();
     if (this._cacheEnabled()) {
       this.blockedUsers.partialNext({
         userIds: result.blocks.map(({ blocked_user_id }) => blocked_user_id),
@@ -2141,8 +1843,8 @@ export class StreamChat {
     return result;
   }
 
-  async unBlockUser(blockedUserId: string) {
-    const result = await this.chatApi.unblockUsers({
+  async unblockUser(blockedUserId: string) {
+    const result = await this.unblockUsers({
       blocked_user_id: blockedUserId,
     });
     if (this._cacheEnabled()) {
@@ -2151,15 +1853,6 @@ export class StreamChat {
       }));
     }
     return result;
-  }
-
-  /**
-   * Get the current user's active shared live locations.
-   *
-   * @returns The server response.
-   */
-  async getSharedLocations() {
-    return await this.chatApi.getUserLiveLocations();
   }
 
   /**
@@ -2275,41 +1968,6 @@ export class StreamChat {
   }
 
   /**
-   * Marks all channels for this user as read.
-   *
-   * @deprecated Use `markChannelsRead` instead.
-   */
-  markAllRead = this.markChannelsRead;
-
-  /**
-   * Marks channels read.
-   *
-   * Accepts a map of `cid:messageId` pairs; if `messageId` is empty, the whole channel will be marked as read.
-   *
-   * @param data Mark-channels-read options (optional, defaults to `{}`).
-   */
-  async markChannelsRead(data: MarkChannelsReadOptions = {}) {
-    await this.chatApi.markChannelsRead(data);
-  }
-
-  /**
-   * Adds the translation to the message.
-   *
-   * @param messageId The message ID.
-   * @param language The target language.
-   * @returns Response that includes the message.
-   */
-  async translateMessage(
-    messageId: string,
-    language: Gen_TranslateMessageRequest['language'],
-  ) {
-    return await this.chatApi.translateMessage({
-      id: messageId,
-      language,
-    });
-  }
-
-  /**
    * Transforms an expiration value into an ISO string.
    *
    * @param timeoutOrExpirationDate Expiration date or timeout. Use `number` to set the timeout
@@ -2369,17 +2027,18 @@ export class StreamChat {
     timeoutOrExpirationDate?: null | number | string | Date,
     pinnedAt?: number | string | Date,
   ) {
-    const messageId = this._validateAndGetMessageId(
+    const id = this._validateAndGetMessageId(
       messageOrMessageId,
       'Please specify the message id when calling pinMessage',
     );
-    return this.partialUpdateMessage(messageId, {
+    return this.updateMessagePartial({
+      id,
       set: {
         pinned: true,
         pin_expires: this._normalizeExpiration(timeoutOrExpirationDate),
         pinned_at: this._normalizeExpiration(pinnedAt),
       },
-    } as unknown as PartialMessageUpdate);
+    });
   }
 
   /**
@@ -2389,40 +2048,32 @@ export class StreamChat {
    * @returns The updated message response.
    */
   unpinMessage(messageOrMessageId: string | { id: string }) {
-    const messageId = this._validateAndGetMessageId(
+    const id = this._validateAndGetMessageId(
       messageOrMessageId,
       'Please specify the message id when calling unpinMessage',
     );
-    return this.partialUpdateMessage(messageId, {
+    return this.updateMessagePartial({
+      id,
       set: { pinned: false },
-    } as unknown as PartialMessageUpdate);
+    });
   }
 
   /**
-   * Update the given message.
-   *
-   * @param message Message object; `id` needs to be specified.
-   * @param options Update options (optional).
-   * @param options.skip_enrich_url Do not try to enrich the URLs within message (optional).
-   * @returns Response that includes the message.
+   * Update the given message. When an `offlineDb` is registered the call is queued
+   * so it is replayed on reconnect.
    */
-  async updateMessage(
-    message: Gen_UpdateMessageRequest['message'] & { cid?: string; status?: string },
-    options?: UpdateMessageOptions,
+  override async updateMessage(
+    request: Parameters<ChatApi['updateMessage']>[0] & { message: { cid?: string } },
   ) {
-    if (!message.id) {
-      throw Error('Please specify the message.id when calling updateMessage');
-    }
-
-    const messageId = message.id as string;
-
     try {
       if (this.offlineDb) {
-        return await this.offlineDb.queueTask<UpdateMessageAPIResponse>({
+        return await this.offlineDb.queueTask<
+          Awaited<ReturnType<ChatApi['updateMessage']>>
+        >({
           task: {
-            ...getPendingTaskChannelData(message.cid),
-            messageId,
-            payload: [message, options],
+            ...getPendingTaskChannelData(request.message?.cid),
+            messageId: request.id,
+            payload: [request],
             type: 'update-message',
           },
         });
@@ -2434,86 +2085,37 @@ export class StreamChat {
       });
     }
 
-    return await this._updateMessage(message, options);
+    return await this._updateMessage(request);
   }
 
-  async _updateMessage(
-    message: Gen_UpdateMessageRequest['message'],
-    options?: UpdateMessageOptions,
-  ) {
-    if (!message.id) {
-      throw Error('Please specify the message.id when calling updateMessage');
-    }
-
-    return await this.chatApi.updateMessage({ id: message.id, message, ...options });
+  async _updateMessage(request: Parameters<ChatApi['updateMessage']>[0]) {
+    return await super.updateMessage(request);
   }
 
   /**
-   * Update the given message ID while retaining additional properties.
-   *
-   * @param id The message ID.
-   * @param partialMessageObject Should contain `id` and any of `set` or `unset` params, e.g.
-   *   `{ id: 'user1', set: { text: 'hi' }, unset: ['color'] }`.
-   * @param options Update options (optional).
-   * @param options.skip_enrich_url Do not try to enrich the URLs within message (optional).
-   * @returns Response that includes the updated message.
+   * Delete a message. When an `offlineDb` is registered the call is queued so it
+   * is replayed on reconnect.
    */
-  async partialUpdateMessage(
-    id: string,
-    partialMessageObject: PartialMessageUpdate,
-    options?: UpdateMessageOptions,
-  ) {
-    if (!id) {
-      throw Error('Please specify the message.id when calling partialUpdateMessage');
-    }
-
-    return await this.chatApi.updateMessagePartial({
-      id,
-      ...partialMessageObject,
-      ...options,
-    });
-  }
-
-  /**
-   * Delete a message.
-   *
-   * @param messageId The ID of the message to delete.
-   * @param optionsOrHardDelete Delete options, or a boolean for hard-delete (optional).
-   * @returns The API response.
-   */
-  // fixme: remove the signature with optionsOrHardDelete boolean with the next major release
-  async deleteMessage(
-    messageId: string,
-    optionsOrHardDelete?: DeleteMessageOptions | boolean,
-  ): Promise<APIResponse & { message: MessageResponse }> {
-    let options: DeleteMessageOptions = {};
-    if (typeof optionsOrHardDelete === 'boolean') {
-      options = optionsOrHardDelete ? { hardDelete: true } : {};
-    } else if (optionsOrHardDelete?.deleteForMe) {
-      options = { deleteForMe: true };
-    } else if (optionsOrHardDelete?.hardDelete) {
-      options = { hardDelete: true };
-    }
-
+  override async deleteMessage(request: Parameters<ChatApi['deleteMessage']>[0]) {
     try {
       if (this.offlineDb) {
-        if (options.hardDelete) {
-          await this.offlineDb.hardDeleteMessage({ id: messageId });
+        if (request.hard) {
+          await this.offlineDb.hardDeleteMessage({ id: request.id });
         } else {
           await this.offlineDb.softDeleteMessage({
-            id: messageId,
-            deleteForMe: options.deleteForMe,
+            id: request.id,
+            deleteForMe: request.delete_for_me,
           });
         }
-        return await this.offlineDb.queueTask<APIResponse & { message: MessageResponse }>(
-          {
-            task: {
-              messageId,
-              payload: [messageId, options],
-              type: 'delete-message',
-            },
+        return await this.offlineDb.queueTask<
+          Awaited<ReturnType<ChatApi['deleteMessage']>>
+        >({
+          task: {
+            messageId: request.id,
+            payload: [request],
+            type: 'delete-message',
           },
-        );
+        });
       }
     } catch (error) {
       this.logger('error', `offlineDb:deleteMessage`, {
@@ -2522,39 +2124,19 @@ export class StreamChat {
       });
     }
 
-    return this._deleteMessage(messageId, options);
+    return this._deleteMessage(request);
   }
 
-  // fixme: remove the signature with optionsOrHardDelete boolean with the next major release
-  async _deleteMessage(
-    messageId: string,
-    optionsOrHardDelete?: DeleteMessageOptions | boolean,
-  ): Promise<APIResponse & { message: MessageResponse }> {
-    // this is a API call method, we do not route hardDelete: true and deleteForMe: true to deleteForMe: true
-    // and expect to receive error response from the server
-    const { deleteForMe, hardDelete } = (
-      typeof optionsOrHardDelete === 'boolean'
-        ? { hardDelete: optionsOrHardDelete }
-        : (optionsOrHardDelete ?? {})
-    ) as DeleteMessageOptions;
-
-    const result = await this.chatApi.deleteMessage({
-      id: messageId,
-      hard: hardDelete,
-      delete_for_me: deleteForMe,
-    });
+  async _deleteMessage(request: Parameters<ChatApi['deleteMessage']>[0]) {
+    const result = await super.deleteMessage(request);
 
     // necessary to populate the below values as the server does not return the message in the response as deleted
-    if (deleteForMe) {
+    if (request.delete_for_me) {
       result.message.deleted_for_me = true;
       result.message.type = 'deleted';
     }
-    return result;
-  }
 
-  async getMessage(messageId: string, options?: GetMessageOptions) {
-    // TODO: geberated ChatApi.getMessage options do not support show_deleted_message - oapi gap?
-    return await this.chatApi.getMessage({ id: messageId, ...options });
+    return result;
   }
 
   /**
@@ -2570,7 +2152,7 @@ export class StreamChat {
    * @param options.sort MongoDB style sort for threads (optional).
    * @returns The list of threads and the next cursor.
    */
-  async queryThreads(options: QueryThreadsOptions = {}) {
+  async queryThreadsAndHydrate(options: QueryThreadsOptions = {}) {
     const optionsWithDefaults = {
       limit: 10,
       participant_limit: 10,
@@ -2590,16 +2172,11 @@ export class StreamChat {
       requestBody.filter = optionsWithDefaults.filter;
     }
 
-    if (
-      optionsWithDefaults.sort &&
-      (Array.isArray(optionsWithDefaults.sort)
-        ? optionsWithDefaults.sort.length > 0
-        : Object.keys(optionsWithDefaults.sort).length > 0)
-    ) {
-      requestBody.sort = normalizeQuerySort(optionsWithDefaults.sort);
+    if (optionsWithDefaults.sort && optionsWithDefaults.sort.length > 0) {
+      requestBody.sort = optionsWithDefaults.sort;
     }
 
-    const response = await this.chatApi.queryThreads(requestBody);
+    const response = await this.queryThreads(requestBody);
 
     // Hydrate the polls for the parent messages of the threads
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -2615,7 +2192,7 @@ export class StreamChat {
   }
 
   /**
-   * Returns the thread of a message by its ID.
+   * Returns the thread of a message by its ID, wrapped in a hydrated `Thread` instance.
    *
    * @param messageId The message ID.
    * @param options Options object for pagination and limiting the participants and replies
@@ -2625,9 +2202,9 @@ export class StreamChat {
    * @param options.reply_limit Limits the number of replies returned per thread (optional).
    * @returns The thread.
    */
-  async getThread(messageId: string, options: GetThreadOptions = {}) {
+  async getThreadAndHydrate(messageId: string, options: GetThreadOptions = {}) {
     if (!messageId) {
-      throw new Error('Please specify the messageId when calling getThread');
+      throw new Error('Please specify the messageId when calling getThreadAndHydrate');
     }
 
     const optionsWithDefaults = {
@@ -2637,7 +2214,7 @@ export class StreamChat {
       ...options,
     };
 
-    const response = await this.chatApi.getThread({
+    const response = await this.getThread({
       message_id: messageId,
       ...optionsWithDefaults,
     });
@@ -2680,7 +2257,7 @@ export class StreamChat {
       }
     }
 
-    return await this.chatApi.updateThreadPartial({
+    return await this.updateThreadPartial({
       message_id: messageId,
       ...partialThreadObject,
     });
@@ -2772,269 +2349,6 @@ export class StreamChat {
     });
 
   /**
-   * Search roles for this application.
-   *
-   * @param options The search options.
-   * @returns The search roles response.
-   */
-  searchRoles(options: SearchRolesOptions) {
-    return this.api.get<SearchRolesAPIResponse>(`${this.baseURL}/roles/search`, options);
-  }
-
-  /**
-   * Returns all events that happened for a list of channels since last sync.
-   *
-   * @param channel_cids List of channel CIDs.
-   * @param last_sync_at Last time the user was online and in sync, RFC3339, e.g. `"2020-05-06T15:05:01.207Z"`.
-   * @param options See JSDoc in the type fields for more info (optional, defaults to `{}`).
-   * @returns The sync response.
-   */
-  sync(channel_cids: string[], last_sync_at: string, options: SyncOptions = {}) {
-    return this.chatApi.sync({
-      channel_cids,
-      last_sync_at: new Date(last_sync_at),
-      ...options,
-    });
-  }
-
-  /**
-   * Get OpenGraph data of the given link.
-   *
-   * @param url Link.
-   * @returns OG attachment.
-   */
-  enrichURL(url: string) {
-    return this.chatApi.getOG({ url });
-  }
-
-  /**
-   * Deletes a list of channels.
-   *
-   * @param cids Channel CIDs.
-   * @param options Delete options (optional, defaults to `{}`).
-   * @param options.hard_delete Defines if the channel is hard deleted or not (optional).
-   * @returns Result of the soft deletion; if server-side, it holds the task ID as well.
-   */
-  async deleteChannels(cids: string[], options: { hard_delete?: boolean } = {}) {
-    return await this.chatApi.deleteChannels({
-      cids,
-      ...options,
-    });
-  }
-
-  /**
-   * Creates a poll.
-   *
-   * @param poll The poll that will be created.
-   * @returns The poll.
-   */
-  async createPoll(poll: CreatePollData) {
-    return await this.chatApi.createPoll({
-      ...poll,
-    });
-  }
-
-  /**
-   * Retrieves a poll.
-   *
-   * @param id The poll ID.
-   * @returns The poll.
-   */
-  async getPoll(id: string) {
-    return await this.chatApi.getPoll({
-      poll_id: id,
-    });
-  }
-
-  /**
-   * Updates a poll.
-   *
-   * @param poll The poll that will be updated.
-   * @returns The poll.
-   */
-  async updatePoll(poll: PollData) {
-    return await this.chatApi.updatePoll(poll);
-  }
-
-  /**
-   * Partially updates a poll.
-   *
-   * @param id The poll ID.
-   * @param partialPollObject Should contain `id` and any of `set` or `unset` params, e.g.
-   *   `{ id: '44f26af5-f2be-4fa7-9dac-71cf893781de', set: { field: value }, unset: ['field2'] }`.
-   * @returns The poll.
-   */
-  async partialUpdatePoll(id: string, partialPollObject: PartialPollUpdate) {
-    return await this.chatApi.updatePollPartial({
-      poll_id: id,
-      ...partialPollObject,
-    });
-  }
-
-  /**
-   * Delete a poll.
-   *
-   * @param id The poll ID.
-   * @returns The server response.
-   */
-  async deletePoll(id: string) {
-    return await this.chatApi.deletePoll({
-      poll_id: id,
-    });
-  }
-
-  /**
-   * Close a poll.
-   *
-   * @param id The poll ID.
-   * @returns The poll.
-   */
-  closePoll(id: string): Promise<APIResponse & UpdatePollAPIResponse> {
-    return this.partialUpdatePoll(id, {
-      set: {
-        is_closed: true,
-      },
-    });
-  }
-
-  /**
-   * Creates a poll option.
-   *
-   * @param pollId The poll ID.
-   * @param option The poll option that will be created.
-   * @returns The poll option.
-   */
-  async createPollOption(pollId: string, option: PollOptionData) {
-    return await this.chatApi.createPollOption({
-      poll_id: pollId,
-      ...option,
-    });
-  }
-
-  /**
-   * Retrieves a poll option.
-   *
-   * @param pollId The poll ID.
-   * @param optionId The poll option ID.
-   * @returns The poll option.
-   */
-  async getPollOption(pollId: string, optionId: string) {
-    return await this.chatApi.getPollOption({
-      poll_id: pollId,
-      option_id: optionId,
-    });
-  }
-
-  /**
-   * Updates a poll option.
-   *
-   * @param pollId The poll ID.
-   * @param option The poll option that will be updated.
-   * @returns The poll option.
-   */
-  async updatePollOption(pollId: string, option: PollOptionData) {
-    return await this.chatApi.updatePollOption({
-      poll_id: pollId,
-      ...option,
-    });
-  }
-
-  /**
-   * Delete a poll option.
-   *
-   * @param pollId The poll ID.
-   * @param optionId The poll option ID.
-   * @returns The server response.
-   */
-  async deletePollOption(pollId: string, optionId: string) {
-    return await this.chatApi.deletePollOption({
-      poll_id: pollId,
-      option_id: optionId,
-    });
-  }
-
-  /**
-   * Cast a vote on a poll.
-   *
-   * @param messageId The message ID.
-   * @param pollId The poll ID.
-   * @param vote The vote that will be cast.
-   * @returns The poll vote.
-   */
-  async castPollVote(messageId: string, pollId: string, vote: PollVoteData) {
-    return await this.chatApi.castPollVote({
-      message_id: messageId,
-      poll_id: pollId,
-      vote,
-    });
-  }
-
-  /**
-   * Add a poll answer.
-   *
-   * @param messageId The message ID.
-   * @param pollId The poll ID.
-   * @param answerText The answer text.
-   * @returns The poll vote.
-   */
-  addPollAnswer(messageId: string, pollId: string, answerText: string) {
-    return this.castPollVote(messageId, pollId, {
-      answer_text: answerText,
-    });
-  }
-
-  async removePollVote(messageId: string, pollId: string, voteId: string) {
-    return await this.chatApi.deletePollVote({
-      message_id: messageId,
-      poll_id: pollId,
-      vote_id: voteId,
-    });
-  }
-
-  /**
-   * Queries polls.
-   *
-   * @param filter Poll filter conditions (optional, defaults to `{}`).
-   * @param sort Sort options (optional, defaults to `[]`).
-   * @param options Option object, e.g. `{ limit: 10, offset: 0 }` (optional, defaults to `{}`).
-   * @returns The polls.
-   */
-  async queryPolls(
-    filter: QueryPollsFilters = {},
-    sort: PollSort = [],
-    options: QueryPollsOptions = {},
-  ) {
-    return await this.chatApi.queryPolls({
-      filter,
-      sort: normalizeQuerySort(sort),
-      ...options,
-    });
-  }
-
-  /**
-   * Queries poll votes.
-   *
-   * @param pollId The poll ID.
-   * @param filter Vote filter conditions (optional, defaults to `{}`).
-   * @param sort Sort options (optional, defaults to `[]`).
-   * @param options Option object, e.g. `{ limit: 10, offset: 0 }` (optional, defaults to `{}`).
-   * @returns The poll votes.
-   */
-  async queryPollVotes(
-    pollId: string,
-    filter: QueryVotesFilters = {},
-    sort: VoteSort = [],
-    options: QueryVotesOptions = {},
-  ) {
-    return await this.chatApi.queryPollVotes({
-      poll_id: pollId,
-      filter,
-      sort: normalizeQuerySort(sort),
-      ...options,
-    });
-  }
-
-  /**
    * Queries poll answers.
    *
    * @param pollId The poll ID.
@@ -3043,102 +2357,19 @@ export class StreamChat {
    * @param options Option object, e.g. `{ limit: 10, offset: 0 }` (optional, defaults to `{}`).
    * @returns The poll answers.
    */
-  async queryPollAnswers(
-    pollId: string,
-    filter: QueryVotesFilters = {},
-    sort: VoteSort = [],
-    options: QueryVotesOptions = {},
-  ): Promise<APIResponse & PollAnswersAPIResponse> {
-    return await this.chatApi.queryPollVotes({
-      poll_id: pollId,
-      sort: normalizeQuerySort(sort),
+  async queryPollAnswers({
+    poll_id,
+    filter,
+    ...options
+  }: Parameters<ChatApi['queryPollVotes']>[0]) {
+    return await this.queryPollVotes({
+      poll_id,
       filter: {
         ...filter,
         is_answer: true,
       },
       ...options,
     });
-  }
-
-  /**
-   * Queries drafts for the current user.
-   *
-   * @param options Query options (optional, defaults to `{}`).
-   * @param options.filter Filters for the query (optional).
-   * @param options.sort Sort parameters (optional).
-   * @param options.limit Limit the number of results (optional).
-   * @param options.next Pagination parameter (optional).
-   * @param options.prev Pagination parameter (optional).
-   * @param options.user_id Has to be provided when called server-side (optional).
-   * @returns Response containing the drafts.
-   */
-  async queryDrafts(
-    options: Pager & {
-      filter?: DraftFilters;
-      sort?: DraftSort;
-      user_id?: string;
-    } = {},
-  ) {
-    return await this.chatApi.queryDrafts({
-      ...options,
-      sort: options.sort ? normalizeQuerySort(options.sort) : undefined,
-    });
-  }
-
-  /**
-   * Creates a reminder for a message.
-   *
-   * @param data The options for creating the reminder.
-   * @returns The reminder response.
-   */
-  async createReminder(data: CreateReminderOptions) {
-    return await this.chatApi.createReminder(data);
-  }
-
-  /**
-   * Updates an existing reminder for a message.
-   *
-   * @param data The options for updating the reminder.
-   * @returns The reminder response.
-   */
-  async updateReminder(data: UpdateReminderOptions) {
-    return await this.chatApi.updateReminder(data);
-  }
-
-  /**
-   * Deletes a reminder for a message.
-   *
-   * @param messageId The ID of the message whose reminder to delete.
-   * @returns The server response.
-   */
-  async deleteReminder(messageId: string) {
-    return await this.chatApi.deleteReminder({
-      message_id: messageId,
-    });
-  }
-
-  /**
-   * Queries reminders based on given filters.
-   *
-   * @param options The options for querying reminders (optional, defaults to `{}`).
-   * @returns The query reminders response.
-   */
-  async queryReminders({ filter, sort, ...rest }: QueryRemindersOptions = {}) {
-    return await this.chatApi.queryReminders({
-      filter,
-      sort: sort && normalizeQuerySort(sort),
-      ...rest,
-    });
-  }
-
-  /**
-   * Updates a location.
-   *
-   * @param location The location data to update.
-   * @returns The server response.
-   */
-  async updateLocation(location: UpdateLocationPayload) {
-    return await this.chatApi.updateLiveLocation(location);
   }
 
   /**
@@ -3151,7 +2382,7 @@ export class StreamChat {
    * @param axiosRequestConfig Axios config, e.g. `onUploadProgress` for progress tracking (optional).
    * @returns Response containing the file URL.
    */
-  uploadFile(
+  uploadFile_(
     uri: string | NodeJS.ReadableStream | Buffer | File,
     name?: string,
     contentType?: string,
@@ -3178,7 +2409,7 @@ export class StreamChat {
    * @param axiosRequestConfig Axios config, e.g. `onUploadProgress` for progress tracking (optional).
    * @returns Response containing the image URL.
    */
-  uploadImage(
+  uploadImage_(
     uri: string | NodeJS.ReadableStream | File,
     name?: string,
     contentType?: string,
@@ -3194,36 +2425,15 @@ export class StreamChat {
       axiosRequestConfig,
     );
   }
-
-  /**
-   * Deletes a file from the configured storage.
-   *
-   * @param url The URL of the file to delete.
-   * @returns The server response.
-   */
-  deleteFile(url: string) {
-    return this.chatApi.deleteFile({ url });
-  }
-
-  /**
-   * Deletes an image from the configured storage.
-   *
-   * @param url The URL of the image to delete.
-   * @returns The server response.
-   */
-  deleteImage(url: string) {
-    return this.chatApi.deleteImage({ url });
-  }
-
   /**
    * Mark the channels delivered for the given messages and the user.
    *
-   * @param data Mark delivered options.
+   * @param request Mark delivered options.
    * @returns The server response, or `undefined` if there are no messages to mark.
    */
-  async markChannelsDelivered(data: MarkDeliveredOptions) {
-    if (!data?.latest_delivered_messages?.length) return;
-    return await this.chatApi.markDelivered(data);
+  async markChannelsDelivered(request?: Gen_MarkDeliveredRequest) {
+    if (!request?.latest_delivered_messages?.length) return;
+    return await this.markDelivered(request);
   }
 
   syncDeliveredCandidates(collections: Channel[]) {

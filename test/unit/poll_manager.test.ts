@@ -205,9 +205,9 @@ describe('PollManager', () => {
       }
       const spy = sinon.spy(client.polls, 'hydratePollCache');
       sinon
-        .stub(client.chatApi, 'queryChannels')
+        .stub(client, 'queryChannels')
         .resolves({ channels: mockedChannelsQueryResponse });
-      await client.queryChannels({});
+      await client.queryChannelsAndHydrate({});
       expect(client.polls.data.size).to.equal(pollMessages.length);
       expect(spy.callCount).to.be.equal(5);
       for (let i = 0; i < 5; i++) {
@@ -241,9 +241,9 @@ describe('PollManager', () => {
         mockedChannelsQueryResponse.push(channelResponse);
       }
       sinon
-        .stub(client.chatApi, 'queryChannels')
+        .stub(client, 'queryChannels')
         .resolves({ channels: mockedChannelsQueryResponse });
-      await client.queryChannels({});
+      await client.queryChannelsAndHydrate({});
       expect(client.polls.data.size).to.equal(pollMessages.length);
       expect(spy.callCount).to.be.equal(10);
       for (let i = 0; i < 5; i++) {
@@ -266,7 +266,7 @@ describe('PollManager', () => {
         messages,
       };
       const spy = sinon.spy(client.polls, 'hydratePollCache');
-      sinon.stub(channel.channelApi, 'getOrCreate').resolves(mockedChannelQueryResponse);
+      sinon.stub(channel, 'getOrCreate').resolves(mockedChannelQueryResponse);
       await channel.query();
       expect(client.polls.data.size).to.equal(pollMessages.length);
       expect(spy.calledOnce).to.be.true;
@@ -284,7 +284,7 @@ describe('PollManager', () => {
         messages,
       };
       const spy = sinon.spy(client.polls, 'hydratePollCache');
-      sinon.stub(channel.channelApi, 'getOrCreate').resolves(mockedChannelQueryResponse);
+      sinon.stub(channel, 'getOrCreate').resolves(mockedChannelQueryResponse);
       client.polls.hydratePollCache(prevMessages);
       await channel.query();
       expect(client.polls.data.size).to.equal(

@@ -321,12 +321,12 @@ describe('Threads 2.0', () => {
 
       describe('markAsRead', () => {
         let stubbedChannelMarkRead: sinon.SinonStub<
-          Parameters<Channel['markAsReadRequest']>,
-          ReturnType<Channel['markAsReadRequest']>
+          Parameters<Channel['markRead']>,
+          ReturnType<Channel['markRead']>
         >;
 
         beforeEach(() => {
-          stubbedChannelMarkRead = sinon.stub(channel, 'markAsReadRequest').resolves();
+          stubbedChannelMarkRead = sinon.stub(channel, 'markRead').resolves();
         });
 
         it('does nothing if unread count of the current user is zero', async () => {
@@ -611,7 +611,7 @@ describe('Threads 2.0', () => {
 
         const stateBefore = thread.state.getLatestValue();
         const stubbedGetThread = sinon
-          .stub(client, 'getThread')
+          .stub(client, 'getThreadAndHydrate')
           .resolves(
             createTestThread({ latest_replies: [generateMsg() as MessageResponse] }),
           );
@@ -1268,7 +1268,7 @@ describe('Threads 2.0', () => {
         const thread = createTestThread();
         threadManager.state.partialNext({ threads: [thread] });
         threadManager.registerSubscriptions();
-        const stub = sinon.stub(client, 'queryThreads').resolves({
+        const stub = sinon.stub(client, 'queryThreadsAndHydrate').resolves({
           threads: [],
           next: undefined,
         });
@@ -1340,7 +1340,7 @@ describe('Threads 2.0', () => {
       >;
 
       beforeEach(() => {
-        stubbedQueryThreads = sinon.stub(client, 'queryThreads').resolves({
+        stubbedQueryThreads = sinon.stub(client, 'queryThreadsAndHydrate').resolves({
           threads: [],
           next: undefined,
         });
@@ -1664,7 +1664,10 @@ describe('Threads 2.0', () => {
         });
 
         it('applies sort parameters correctly', async () => {
-          const sort: ThreadSort = [{ created_at: -1 }, { last_message_at: 1 }];
+          const sort: ThreadSort = [
+            { field: 'created_at', direction: -1 },
+            { field: 'last_message_at', direction: 1 },
+          ];
 
           await threadManager.queryThreads({ sort });
 
@@ -1684,7 +1687,7 @@ describe('Threads 2.0', () => {
             created_by_user_id: { $eq: 'user1' },
             updated_at: { $gte: '2024-01-01T00:00:00Z' },
           };
-          const sort: ThreadSort = [{ last_message_at: -1 }];
+          const sort: ThreadSort = [{ field: 'last_message_at', direction: -1 }];
 
           await threadManager.queryThreads({ filter, sort });
 

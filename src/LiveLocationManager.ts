@@ -120,7 +120,7 @@ export class LiveLocationManager extends WithSubscriptions {
 
   private async assureStateInit() {
     if (this.stateIsReady) return;
-    const { active_live_locations } = await this.client.getSharedLocations();
+    const { active_live_locations } = await this.client.getUserLiveLocations();
     this.state.next({
       messages: new Map(
         (active_live_locations as SharedLiveLocationResponse[])
@@ -188,7 +188,7 @@ export class LiveLocationManager extends WithSubscriptions {
           }
           if (location.latitude === latitude && location.longitude === longitude)
             continue;
-          const promise = this.client.updateLocation({
+          const promise = this.client.updateLiveLocation({
             // TODO: this is missing from the OAPI spec
             // created_by_device_id: location.created_by_device_id,
             message_id: messageId,

@@ -27,7 +27,6 @@ const makeLocator = () => (timestampMs?: number) => {
   return m ? { timestampMs: m.ts, msgId: m.id } : null;
 };
 
-
 // Extract ids from user arrays for easier assertions
 const ids = (users: any[]) => users.map((u) => u.id);
 

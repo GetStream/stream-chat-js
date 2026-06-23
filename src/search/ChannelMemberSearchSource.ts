@@ -75,7 +75,13 @@ export class ChannelMemberSearchSource<
     });
     const sort = this.sort ?? [];
     const options = { ...this.searchOptions, limit: this.pageSize, offset: this.offset };
-    const { members } = await this.channel.queryMembers(filters ?? {}, sort, options);
+    const { members } = await this.channel.queryMembers({
+      payload: {
+        filter_conditions: filters ?? {},
+        sort,
+        ...options,
+      },
+    });
     return { items: members };
   }
 

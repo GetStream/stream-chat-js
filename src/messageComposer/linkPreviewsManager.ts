@@ -238,9 +238,9 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
     await Promise.all(
       newLinkPreviews.map(async (linkPreview) => {
         try {
-          const { duration: _duration, ...ogAttachment } = await this.client.enrichURL(
-            linkPreview.og_scrape_url,
-          );
+          const { duration: _duration, ...ogAttachment } = await this.client.getOG({
+            url: linkPreview.og_scrape_url,
+          });
           if (this.shouldDiscardEnrichQueries) return;
           // due to typing and text changes, the URL may not be anymore in the store
           if (this.previews.has(linkPreview.og_scrape_url)) {

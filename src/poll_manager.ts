@@ -63,11 +63,13 @@ export class PollManager extends WithSubscriptions {
 
     // optimistically return the cached poll if it exists and update in the background
     if (cachedPoll) {
-      this.client.getPoll(id).then(({ poll }) => this.setOrOverwriteInCache(poll, true));
+      this.client
+        .getPoll({ poll_id: id })
+        .then(({ poll }) => this.setOrOverwriteInCache(poll, true));
       return cachedPoll;
     }
     // fetch it, write to the cache and return otherwise
-    const { poll } = await this.client.getPoll(id);
+    const { poll } = await this.client.getPoll({ poll_id: id });
 
     this.setOrOverwriteInCache(poll);
 
@@ -79,7 +81,11 @@ export class PollManager extends WithSubscriptions {
     sort: PollSort = [],
     options: QueryPollsOptions = {},
   ) => {
-    const { polls, next } = await this.client.queryPolls(filter, sort, options);
+    const { polls, next } = await this.client.queryPolls({
+      filter,
+      sort,
+      ...options,
+    });
 
     const pollInstances = polls.map((poll) => {
       this.setOrOverwriteInCache(poll, true);

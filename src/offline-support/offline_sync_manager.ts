@@ -159,7 +159,10 @@ export class OfflineDBSyncManager {
           // In that case reset the entire DB and start fresh.
           await this.offlineDb.resetDB();
         } else {
-          const result = await this.client.sync(cids, lastSyncedAtDate.toISOString());
+          const result = await this.client.sync({
+            channel_cids: cids,
+            last_sync_at: lastSyncedAtDate,
+          });
           const queryPromises = result.events.map((event) =>
             this.offlineDb.handleEvent({ event, execute: false }),
           );

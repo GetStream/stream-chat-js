@@ -512,7 +512,7 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
         if (!this.memberSort) return (a.name || '').localeCompare(b.name || '');
 
         // Apply each sort criteria in order
-        for (const [field, direction] of Object.entries(this.memberSort)) {
+        for (const { field, direction } of this.memberSort) {
           const aValue = a[field as keyof UserResponse];
           const bValue = b[field as keyof UserResponse];
 
@@ -533,20 +533,22 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
       ],
       ...this.userFilters,
     } as UserFilters,
-    sort: this.userSort ?? ([{ name: 1 }, { id: 1 }] as UserSort), // todo: document the change - the sort is overridden, not merged
+    sort:
+      this.userSort ??
+      ([
+        { field: 'name', direction: 1 },
+        { field: 'id', direction: 1 },
+      ] satisfies UserSort), // todo: document the change - the sort is overridden, not merged
     options: { ...this.searchOptions, limit: this.pageSize, offset },
   });
 
   prepareQueryMembersParams = (searchQuery: string, offset = 0) => {
     // QueryMembers failed with error: \"sort must contain at maximum 1 item\"
-    const maxSortParamsCount = 1;
-    let sort: MemberSort = [{ user_id: 1 }];
-    if (!this.memberSort) {
-      sort = [{ user_id: 1 }];
-    } else if (Array.isArray(this.memberSort)) {
-      sort = this.memberSort[0];
-    } else if (Object.keys(this.memberSort).length === maxSortParamsCount) {
-      sort = this.memberSort;
+    let sort: MemberSort = [{ field: 'user_id', direction: 1 }];
+    if (!this.memberSort || !this.memberSort.length) {
+      sort = [{ field: 'user_id', direction: 1 }];
+    } else {
+      sort = this.memberSort.slice(0, 1);
     } // todo: document the change - the sort is overridden, not merged
     return {
       // todo: document the change - the filter is overridden, not merged
@@ -559,7 +561,13 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
 
   queryUsers = async (searchQuery: string, offset = 0) => {
     const { filters, sort, options } = this.prepareQueryUsersParams(searchQuery, offset);
-    const { users } = await this.client.queryUsers(filters, sort, options);
+    const { users } = await this.client.queryUsers({
+      payload: {
+        filter_conditions: filters,
+        sort,
+        ...options,
+      },
+    });
     return users;
   };
 
@@ -568,7 +576,13 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
       searchQuery,
       offset,
     );
-    const response = await this.channel.queryMembers(filters, sort, options);
+    const response = await this.channel.queryMembers({
+      payload: {
+        filter_conditions: filters,
+        sort,
+        ...options,
+      },
+    });
 
     return response.members.map((member) => member.user) as UserResponse[];
   };
@@ -650,9 +664,14 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
 
     return {
       items: user_groups.map((userGroup) =>
-        this.toUserGroupMentionSuggestion(userGroup, searchQuery),
+        this.toUserGroupMentionSuggestion(
+          userGroup as unknown as UserGroupResponse,
+          searchQuery,
+        ),
       ),
-      next: this.buildUserGroupSearchCursor(user_groups),
+      next: this.buildUserGroupSearchCursor(
+        user_groups as unknown as UserGroupResponse[],
+      ),
     };
   };
 

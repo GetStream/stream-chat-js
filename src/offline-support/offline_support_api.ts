@@ -1172,12 +1172,12 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   private handleOfflineFailedUpdateMessagePendingTask = async (
     task: Extract<PendingTask, { type: 'update-message' }>,
   ) => {
-    const [message] = task.payload;
-    if (!message.id) {
+    const [{ id, message }] = task.payload;
+    if (!id) {
       return;
     }
 
-    const pendingTasks = await this.getPendingTasks({ messageId: message.id });
+    const pendingTasks = await this.getPendingTasks({ messageId: id });
     const pendingSendMessageTask = pendingTasks.find(this.isPendingSendMessageTask);
 
     if (!pendingSendMessageTask) {
@@ -1188,13 +1188,18 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       {
         // TODO: this is not good, we have too many message types, should probably only have two (request, response)
         editedMessage: message as unknown as LocalMessage,
-        pendingMessage: pendingSendMessageTask.payload[0],
+        pendingMessage: pendingSendMessageTask.payload[0].message as Message,
       },
     );
 
     const updatedPendingTask: Extract<PendingTask, { type: 'send-message' }> = {
       ...pendingSendMessageTask,
-      payload: [updatedPendingSendMessage, pendingSendMessageTask.payload[1]],
+      payload: [
+        {
+          ...pendingSendMessageTask.payload[0],
+          message: updatedPendingSendMessage,
+        },
+      ],
     };
 
     if (pendingSendMessageTask.id) {
@@ -1216,14 +1221,17 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * or rewrites an existing pending `send-message` task for offline edits of failed messages.
    */
   public handleAddPendingTask = async ({ task }: { task: PendingTask }) => {
-    if (task.type === 'update-message' && !isMessageUpdateReplayable(task.payload[0])) {
+    if (
+      task.type === 'update-message' &&
+      !isMessageUpdateReplayable(task.payload[0].message ?? {})
+    ) {
       return;
     }
 
     if (
       task.type === 'update-message' &&
       !this.client.wsConnection?.isHealthy &&
-      task.payload[0].status === 'failed'
+      (task.payload[0].message as { status?: string } | undefined)?.status === 'failed'
     ) {
       await this.handleOfflineFailedUpdateMessagePendingTask(task);
       return;

@@ -81,17 +81,17 @@ describe('attachmentIdentity', () => {
     });
 
     it('should return true for attachments with mime_type not in supportedVideoFormat', () => {
-      const attachment = { custom: { mime_type: 'application/pdf' }, type: 'audio' };
+      const attachment = { custom: {}, mime_type: 'application/pdf', type: 'audio' };
       expect(isFileAttachment(attachment, ['video/mp4'])).toBe(true);
     });
 
     it('should return false for attachments with mime_type not in supportedVideoFormat but declared as video type', () => {
-      const attachment = { custom: { mime_type: 'application/pdf' }, type: 'video' };
+      const attachment = { custom: {}, mime_type: 'application/pdf', type: 'video' };
       expect(isFileAttachment(attachment, ['video/mp4'])).toBe(false);
     });
 
     it('should return false for attachments with mime_type in supportedVideoFormat', () => {
-      const attachment = { custom: { mime_type: 'video/mp4' }, type: 'video' };
+      const attachment = { custom: {}, mime_type: 'video/mp4', type: 'video' };
       expect(isFileAttachment(attachment, ['video/mp4'])).toBe(false);
     });
   });
@@ -212,12 +212,12 @@ describe('attachmentIdentity', () => {
     });
 
     it('should return true for attachments with mime_type in supportedVideoFormat', () => {
-      const attachment = { custom: { mime_type: 'video/mp4' } };
+      const attachment = { custom: {}, mime_type: 'video/mp4' };
       expect(isVideoAttachment(attachment, ['video/mp4'])).toBe(true);
     });
 
     it('should return false for attachments with mime_type not in supportedVideoFormat', () => {
-      const attachment = { custom: { mime_type: 'application/pdf' } };
+      const attachment = { custom: {}, mime_type: 'application/pdf' };
       expect(isVideoAttachment(attachment, ['video/mp4'])).toBe(false);
     });
   });

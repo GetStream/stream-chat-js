@@ -6,7 +6,6 @@ import {
   throttle,
 } from './utils';
 import type {
-  AscDesc,
   LocalMessage,
   MessagePaginationOptions,
   MessageResponse,
@@ -14,6 +13,7 @@ import type {
   ThreadResponse,
   UserResponse,
 } from './types';
+import type { SortParamRequest as Gen_SortParamRequest } from './gen/models';
 import type { Channel } from './channel';
 import type { ListenerKeys, StreamChat } from './client';
 import type { CustomThreadData } from './custom_types';
@@ -21,7 +21,7 @@ import { MessageComposer } from './messageComposer';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 
 type QueryRepliesOptions = {
-  sort?: { created_at: AscDesc }[];
+  sort?: Gen_SortParamRequest[];
 } & MessagePaginationOptions & { user?: UserResponse; user_id?: string };
 
 export type ThreadState = {
@@ -67,7 +67,7 @@ export type ThreadUserReadState = {
 export type ThreadReadState = Record<string, ThreadUserReadState | undefined>;
 
 const DEFAULT_PAGE_LIMIT = 50;
-const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
+const DEFAULT_SORT: Gen_SortParamRequest[] = [{ field: 'created_at', direction: -1 }];
 const MARK_AS_READ_THROTTLE_TIMEOUT = 1000;
 
 export class Thread extends WithSubscriptions {
@@ -175,7 +175,7 @@ export class Thread extends WithSubscriptions {
     this.state.partialNext({ isLoading: true });
 
     try {
-      const thread = await this.client.getThread(this.id, { watch: true });
+      const thread = await this.client.getThreadAndHydrate(this.id, { watch: true });
       this.hydrateState(thread);
     } finally {
       this.state.partialNext({ isLoading: false });
@@ -512,7 +512,12 @@ export class Thread extends WithSubscriptions {
     sort = DEFAULT_SORT,
     ...otherOptions
   }: QueryRepliesOptions = {}) =>
-    this.channel.getReplies(this.id, { limit, ...otherOptions }, sort);
+    this.channel.getReplies({
+      parent_id: this.id,
+      limit,
+      ...otherOptions,
+      sort,
+    });
 
   public loadNextPage = ({ limit = DEFAULT_PAGE_LIMIT }: { limit?: number } = {}) =>
     this.loadPage(limit);

@@ -1,10 +1,8 @@
 import FormData from 'form-data';
 import type {
-  AscDesc,
   ChannelFilters,
   ChannelQueryOptions,
   ChannelSort,
-  ChannelSortBase,
   LocalMessage,
   Logger,
   Message,
@@ -128,24 +126,6 @@ export function addFileToFormData(
   }
 
   return data;
-}
-export function normalizeQuerySort<T extends Record<string, AscDesc | undefined>>(
-  sort: T | T[],
-) {
-  const sortFields: Array<{ direction: AscDesc; field: keyof T }> = [];
-  const sortArr = Array.isArray(sort) ? sort : [sort];
-  for (const item of sortArr) {
-    const entries = Object.entries(item) as [keyof T, AscDesc][];
-    if (entries.length > 1) {
-      console.warn(
-        "client._buildSort() - multiple fields in a single sort object detected. Object's field order is not guaranteed",
-      );
-    }
-    for (const [field, direction] of entries) {
-      sortFields.push({ field, direction });
-    }
-  }
-  return sortFields;
 }
 
 /**
@@ -1146,7 +1126,7 @@ export const isChannelArchived = (channel: Channel) => {
  * on filters. Will return true only if filters.archived exists and is a boolean value.
  * @param filters
  */
-export const shouldConsiderArchivedChannels = (filters: ChannelFilters) => {
+export const shouldConsiderArchivedChannels = (filters?: ChannelFilters) => {
   if (!filters) return false;
 
   return typeof filters.archived === 'boolean';
@@ -1166,33 +1146,16 @@ export const extractSortValue = ({
   targetKey,
 }: {
   atIndex: number;
-  targetKey: keyof ChannelSortBase;
+  targetKey: string;
   sort?: ChannelSort;
 }) => {
   if (!sort) return null;
-  let option: null | ChannelSortBase = null;
 
-  if (Array.isArray(sort)) {
-    option = sort[atIndex] ?? null;
-  } else {
-    let index = 0;
-    for (const key in sort) {
-      if (index !== atIndex) {
-        index++;
-        continue;
-      }
+  const option = sort[atIndex] ?? null;
 
-      if (key !== targetKey) {
-        return null;
-      }
+  if (option?.field !== targetKey) return null;
 
-      option = sort;
-
-      break;
-    }
-  }
-
-  return option?.[targetKey] ?? null;
+  return option.direction ?? null;
 };
 
 /**

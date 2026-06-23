@@ -1,7 +1,7 @@
 import type { Channel } from './channel';
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { StableWSConnection } from './connection';
-import type { Role } from './permissions';
+import type { RoleName } from './permissions';
 import type {
   CustomAttachmentData,
   CustomChannelData,
@@ -58,7 +58,6 @@ import type {
   QueryFutureChannelBansPayload as Gen_QueryFutureChannelBansPayload,
   QueryMembersPayload as Gen_QueryMembersPayload,
   QueryPollsResponse as Gen_QueryPollsResponse,
-  QueryReactionsRequest as Gen_QueryReactionsRequest,
   QueryReactionsResponse as Gen_QueryReactionsResponse,
   QueryRemindersResponse as Gen_QueryRemindersResponse,
   QueryThreadsRequest as Gen_QueryThreadsRequest,
@@ -71,9 +70,11 @@ import type {
   SearchPayload as Gen_SearchPayload,
   SearchWarning as Gen_SearchWarning,
   SendMessageRequest as Gen_SendMessageRequest,
+  SendMessageResponse as Gen_SendMessageResponse,
   SendReactionRequest as Gen_SendReactionRequest,
   SharedLocation as Gen_SharedLocation,
   SharedLocationResponseData as Gen_SharedLocationResponseData,
+  SortParamRequest as Gen_SortParamRequest,
   ThreadStateResponse as Gen_ThreadStateResponse,
   TruncateChannelRequest as Gen_TruncateChannelRequest,
   UpdateChannelPartialRequest as Gen_UpdateChannelPartialRequest,
@@ -93,12 +94,12 @@ import type {
 import type {
   QueryBannedUsersPayloadFilterConditions as Gen_QueryBannedUsersPayloadFilterConditions,
   QueryChannelsRequestFilterConditions as Gen_QueryChannelsRequestFilterConditions,
-  QueryMembersPayloadFilterConditions as Gen_QueryMembersPayloadFilterConditions,
   QueryReactionsRequestFilter as Gen_QueryReactionsRequestFilter,
   QueryThreadsRequestFilter as Gen_QueryThreadsRequestFilter,
-  QueryUsersPayloadFilterConditions as Gen_QueryUsersPayloadFilterConditions,
   SearchPayloadFilterConditions as Gen_SearchPayloadFilterConditions,
   SearchPayloadMessageFilterConditions as Gen_SearchPayloadMessageFilterConditions,
+  QueryMembersPayloadFilterConditions,
+  QueryUsersPayloadFilterConditions,
 } from './gen/models/filter-conditions';
 import type { ChatApi } from './gen-imports';
 
@@ -367,7 +368,7 @@ export type ChannelMemberAPIResponse = APIResponse & {
 
 export type ChannelMemberUpdates = CustomMemberData & {
   archived?: boolean;
-  channel_role?: Role;
+  channel_role?: RoleName;
   pinned?: boolean;
 };
 
@@ -577,7 +578,7 @@ export type SearchAPIResponse = APIResponse & {
 };
 
 export type RoleResponse = {
-  name: Role;
+  name: RoleName;
   custom: boolean;
   scopes: string[];
   created_at: string;
@@ -602,10 +603,7 @@ export type SearchWarning = Gen_SearchWarning;
 // Thumb URL(thumb_url) is added considering video attachments as the backend will return the thumbnail in the response.
 export type SendFileAPIResponse = APIResponse & { file: string; thumb_url?: string };
 
-export type SendMessageAPIResponse = APIResponse & {
-  message: MessageResponse;
-  pending_message_metadata?: Record<string, string> | null;
-};
+export type SendMessageAPIResponse = Gen_SendMessageResponse;
 
 export type SyncResponse = APIResponse & {
   events: WSEvent[];
@@ -813,7 +811,14 @@ export type GetRepliesRequest = Parameters<ChatApi['getReplies']>[0];
 export type GetRepliesOptions = Omit<GetRepliesRequest, 'parent_id' | 'sort'>;
 
 export type QueryMembersOptions = Partial<
-  Omit<Gen_QueryMembersPayload, 'sort' | 'filter_conditions'>
+  Omit<Gen_QueryMembersPayload, 'filter_conditions'>
+>;
+
+export type QueryMembersPayload = WithTypedFilters<
+  Gen_QueryMembersPayload,
+  {
+    filter_conditions: QueryMembersPayloadFilterConditions;
+  }
 >;
 
 export type SearchOptions = {
@@ -947,8 +952,6 @@ export type EventHandler<T = string> = (
  * Filter Types
  */
 
-export type AscDesc = 1 | -1;
-
 export type MessageFlagsFiltersOptions = {
   channel_cid?: string;
   is_reviewed?: boolean;
@@ -985,22 +988,33 @@ export type MessageFlagsFilters = QueryFilters<
   }
 >;
 
-export type BannedUsersFilters = WithTypedFilters<
+export type QueryBannedUsersPayload = WithTypedFilters<
   Gen_QueryBannedUsersPayload,
   { filter_conditions: Gen_QueryBannedUsersPayloadFilterConditions }
->['filter_conditions'];
-
-export type ReactionFilters = WithTypedFilters<
-  Gen_QueryReactionsRequest,
-  { filter: Gen_QueryReactionsRequestFilter }
->['filter'];
-
-export type ChannelFilters = NonNullable<
-  WithTypedFilters<
-    Gen_QueryChannelsRequest,
-    { filter_conditions: Gen_QueryChannelsRequestFilterConditions }
-  >['filter_conditions']
 >;
+
+export type BannedUsersFilters = QueryBannedUsersPayload['filter_conditions'];
+
+export type ReactionFilters = NonNullable<QueryReactionsRequest['filter']>;
+
+export type QueryReactionsRequest = WithTypedFilters<
+  Parameters<ChatApi['queryReactions']>[0],
+  { filter: Gen_QueryReactionsRequestFilter }
+>;
+
+type QueryUsersPayload = WithTypedFilters<
+  Gen_QueryUsersPayload,
+  {
+    filter_conditions: QueryUsersPayloadFilterConditions;
+  }
+>;
+
+export type QueryChannelsRequest = WithTypedFilters<
+  Gen_QueryChannelsRequest,
+  { filter_conditions: Gen_QueryChannelsRequestFilterConditions }
+>;
+
+export type ChannelFilters = NonNullable<QueryChannelsRequest['filter_conditions']>;
 
 export type DraftFilters = {
   channel_cid?:
@@ -1171,109 +1185,33 @@ export type QueryLogicalOperators<Operators> = {
   $or?: ArrayTwoOrMore<QueryFilters<Operators>>;
 };
 
-export type UserFilters = WithTypedFilters<
-  Gen_QueryUsersPayload,
-  { filter_conditions: Gen_QueryUsersPayloadFilterConditions }
->['filter_conditions'];
+export type UserFilters = QueryUsersPayload['filter_conditions'];
 
-export type MemberFilters = WithTypedFilters<
-  Gen_QueryMembersPayload,
-  { filter_conditions: Gen_QueryMembersPayloadFilterConditions }
->['filter_conditions'];
+export type MemberFilters = QueryMembersPayload['filter_conditions'];
 
 /**
  * Sort Types
  */
 
-export type BannedUsersSort = BannedUsersSortBase | Array<BannedUsersSortBase>;
+export type BannedUsersSort = Gen_SortParamRequest[];
 
-export type BannedUsersSortBase = { created_at?: AscDesc };
+export type ReactionSort = Gen_SortParamRequest[];
 
-export type ReactionSort = ReactionSortBase | Array<ReactionSortBase>;
+export type ChannelSort = Gen_SortParamRequest[];
 
-export type ReactionSortBase = Sort<CustomReactionData> & {
-  created_at?: AscDesc;
-};
+export type PinnedMessagesSort = Gen_SortParamRequest[];
 
-export type ChannelSort = ChannelSortBase | Array<ChannelSortBase>;
+export type UserSort = Gen_SortParamRequest[];
 
-export type ChannelSortBase = Sort<CustomChannelData> & {
-  created_at?: AscDesc;
-  has_unread?: AscDesc;
-  last_message_at?: AscDesc;
-  last_updated?: AscDesc;
-  member_count?: AscDesc;
-  pinned_at?: AscDesc;
-  unread_count?: AscDesc;
-  updated_at?: AscDesc;
-};
+export type MemberSort = Gen_SortParamRequest[];
 
-export type PinnedMessagesSort = PinnedMessagesSortBase | Array<PinnedMessagesSortBase>;
-export type PinnedMessagesSortBase = { pinned_at?: AscDesc };
+export type SearchMessageSort = Gen_SortParamRequest[];
 
-export type Sort<T> = {
-  [P in keyof T]?: AscDesc;
-};
+export type DraftSort = Gen_SortParamRequest[];
 
-export type UserSort = Sort<UserResponse> | Array<Sort<UserResponse>>;
+export type PollSort = Gen_SortParamRequest[];
 
-export type MemberSort =
-  | Sort<
-      Pick<UserResponse, 'created_at' | 'last_active' | 'name' | 'updated_at'> & {
-        user_id?: string;
-      }
-    >
-  | Array<
-      Sort<
-        Pick<UserResponse, 'created_at' | 'last_active' | 'name' | 'updated_at'> & {
-          user_id?: string;
-        }
-      >
-    >;
-
-export type SearchMessageSortBase = Sort<CustomMessageData> & {
-  attachments?: AscDesc;
-  'attachments.type'?: AscDesc;
-  created_at?: AscDesc;
-  id?: AscDesc;
-  'mentioned_users.id'?: AscDesc;
-  parent_id?: AscDesc;
-  pinned?: AscDesc;
-  relevance?: AscDesc;
-  reply_count?: AscDesc;
-  text?: AscDesc;
-  type?: AscDesc;
-  updated_at?: AscDesc;
-  'user.id'?: AscDesc;
-};
-
-export type SearchMessageSort = SearchMessageSortBase | Array<SearchMessageSortBase>;
-
-export type DraftSortBase = {
-  created_at?: AscDesc;
-};
-
-export type DraftSort = DraftSortBase | Array<DraftSortBase>;
-
-export type PollSort = PollSortBase | Array<PollSortBase>;
-
-export type PollSortBase = {
-  created_at?: AscDesc;
-  id?: AscDesc;
-  is_closed?: AscDesc;
-  name?: AscDesc;
-  updated_at?: AscDesc;
-};
-
-export type VoteSort = VoteSortBase | Array<VoteSortBase>;
-
-export type VoteSortBase = {
-  created_at?: AscDesc;
-  id?: AscDesc;
-  is_closed?: AscDesc;
-  name?: AscDesc;
-  updated_at?: AscDesc;
-};
+export type VoteSort = Gen_SortParamRequest[];
 
 /**
  * Base Types
@@ -1913,17 +1851,7 @@ export type StaticLocationPayload = Gen_SharedLocation;
 
 export type LiveLocationPayload = RequireLiteral<Gen_SharedLocation, 'end_at'>;
 
-export type ThreadSort = ThreadSortBase | Array<ThreadSortBase>;
-
-export type ThreadSortBase = {
-  active_participant_count?: AscDesc;
-  created_at?: AscDesc;
-  last_message_at?: AscDesc;
-  parent_message_id?: AscDesc;
-  participant_count?: AscDesc;
-  reply_count?: AscDesc;
-  updated_at?: AscDesc;
-};
+export type ThreadSort = Gen_SortParamRequest[];
 
 export type ThreadFilters = NonNullable<QueryThreadsOptions['filter']>;
 
@@ -1965,15 +1893,7 @@ export type ReminderFilters = QueryFilters<{
     | PrimitiveFilter<ReminderResponse['user_id']>;
 }>;
 
-export type ReminderSort =
-  | Sort<
-      Pick<ReminderResponse, 'channel_cid' | 'created_at' | 'remind_at' | 'updated_at'>
-    >
-  | Array<
-      Sort<
-        Pick<ReminderResponse, 'channel_cid' | 'created_at' | 'remind_at' | 'updated_at'>
-      >
-    >;
+export type ReminderSort = Gen_SortParamRequest[];
 
 export type QueryRemindersOptions = Pager & {
   filter?: ReminderFilters;

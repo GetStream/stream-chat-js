@@ -180,7 +180,7 @@ describe('create draft flow', () => {
 		});
 
 		it('queues task if offlineDb exists', async () => {
-			await channel.createDraft(draftMessage);
+			await channel.createDraft({ message: draftMessage });
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 
@@ -190,7 +190,7 @@ describe('create draft flow', () => {
 					channelId: 'test',
 					channelType: 'messaging',
 					threadId: draftMessage.parent_id,
-					payload: [draftMessage],
+					payload: [{ message: draftMessage }],
 					type: 'create-draft',
 				},
 			});
@@ -201,26 +201,26 @@ describe('create draft flow', () => {
 		it('falls back to _createDraft if offlineDb throws', async () => {
 			client.offlineDb.queueTask.mockRejectedValue(new Error('Offline failure'));
 
-			await channel.createDraft(draftMessage);
+			await channel.createDraft({ message: draftMessage });
 
 			expect(loggerSpy).toHaveBeenCalledTimes(1);
 			expect(channel._createDraft).toHaveBeenCalledTimes(1);
-			expect(channel._createDraft).toHaveBeenCalledWith(draftMessage);
+			expect(channel._createDraft).toHaveBeenCalledWith({ message: draftMessage });
 		});
 
 		it('falls back to _createDraft if offlineDb is undefined', async () => {
 			client.offlineDb = undefined;
 
-			await channel.createDraft(draftMessage);
+			await channel.createDraft({ message: draftMessage });
 
 			expect(channel._createDraft).toHaveBeenCalledTimes(1);
-			expect(channel._createDraft).toHaveBeenCalledWith(draftMessage);
+			expect(channel._createDraft).toHaveBeenCalledWith({ message: draftMessage });
 		});
 	});
 
 	describe('_createDraft', () => {
 		it('calls post with correct URL and message payload', async () => {
-			await channel._createDraft(draftMessage);
+			await channel._createDraft({ message: draftMessage });
 
 			expect(requestSpy).toHaveBeenCalledTimes(1);
 			expect(requestSpy.mock.calls[0][0]).toMatchObject({
@@ -233,7 +233,7 @@ describe('create draft flow', () => {
 		it('returns the response from post', async () => {
 			requestSpy.mockResolvedValue({ data: { draft: draftMessage } });
 
-			const result = await channel._createDraft(draftMessage);
+			const result = await channel._createDraft({ message: draftMessage });
 
 			expect(result).toMatchObject({ draft: draftMessage });
 		});

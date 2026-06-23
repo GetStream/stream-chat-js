@@ -1362,14 +1362,14 @@ describe('AttachmentManager', () => {
         ),
       ).resolves.toEqual({
         fallback: 'test.jpg',
-        custom: {
-          file_size: 0,
-          mime_type: 'image/jpeg',
-        },
+        custom: {},
+        file_size: 0,
+        mime_type: 'image/jpeg',
         localMetadata: {
           id: expect.any(String),
           file,
           uploadState: 'failed',
+          uploadProgress: undefined,
           previewUri: expect.any(String),
           uploadPermissionCheck: {
             uploadBlocked: false,
@@ -1968,14 +1968,14 @@ describe('AttachmentManager', () => {
       await expect(attachmentManager.uploadFiles([file])).resolves.toEqual([
         {
           fallback: 'test.jpg',
-          custom: {
-            file_size: 0,
-            mime_type: 'image/jpeg',
-          },
+          custom: {},
+          file_size: 0,
+          mime_type: 'image/jpeg',
           localMetadata: {
             id: expect.any(String),
             file,
             uploadState: 'failed',
+            uploadProgress: undefined,
             previewUri: expect.any(String),
             uploadPermissionCheck: {
               uploadBlocked: false,
@@ -2279,7 +2279,9 @@ describe('AttachmentManager', () => {
       const file = new File([fileContent], 'test.jpg', { type: 'image/jpeg' });
       const result = await attachmentManager.fileToLocalUploadAttachment(file);
       expect(result).toMatchObject({
-        custom: { file_size: 1234, mime_type: 'image/jpeg' },
+        custom: {},
+        file_size: 1234,
+        mime_type: 'image/jpeg',
         type: 'image',
         localMetadata: expect.objectContaining({
           file,
@@ -2315,7 +2317,9 @@ describe('AttachmentManager', () => {
 
       expect(createObjectURLSpy).toHaveBeenCalledWith(file);
       expect(result).toMatchObject({
-        custom: { file_size: 3, mime_type: 'application/pdf' },
+        custom: {},
+        file_size: 3,
+        mime_type: 'application/pdf',
         type: 'file',
         localMetadata: expect.objectContaining({
           file,
@@ -2350,7 +2354,9 @@ describe('AttachmentManager', () => {
       };
       const result = await attachmentManager.fileToLocalUploadAttachment(fileReference);
       expect(result).toMatchObject({
-        custom: { file_size: 1234, mime_type: 'image/jpeg' },
+        custom: {},
+        file_size: 1234,
+        mime_type: 'image/jpeg',
         type: 'image',
         localMetadata: expect.objectContaining({
           file: fileReference,
@@ -2390,7 +2396,9 @@ describe('AttachmentManager', () => {
       };
       const result = await attachmentManager.fileToLocalUploadAttachment(fileReference);
       expect(result).toMatchObject({
-        custom: { file_size: 4321, mime_type: 'video/mp4' },
+        custom: {},
+        file_size: 4321,
+        mime_type: 'video/mp4',
         type: 'video',
         localMetadata: expect.objectContaining({
           file: fileReference,

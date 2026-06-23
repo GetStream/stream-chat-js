@@ -24,7 +24,6 @@ import {
 	vi,
 } from 'vitest';
 import { Channel } from '../../src';
-import { normalizeQuerySort } from '../../src/utils';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
 
 describe('StreamChat getInstance', () => {
@@ -852,9 +851,9 @@ describe('StreamChat.queryChannels', async () => {
 			),
 		}));
 		sinon
-			.stub(client.chatApi, 'queryChannels')
+			.stub(client, 'queryChannels')
 			.resolves({ channels: mockedChannelsQueryResponse });
-		await client.queryChannels();
+		await client.queryChannelsAndHydrate();
 		expect(Object.keys(client.activeChannels).length).to.be.equal(0);
 		expect(Object.keys(client.configs).length).to.be.equal(0);
 		sinon.restore();
@@ -870,9 +869,9 @@ describe('StreamChat.queryChannels', async () => {
 			),
 		}));
 		const stub = sinon
-			.stub(client.chatApi, 'queryChannels')
+			.stub(client, 'queryChannels')
 			.resolves({ channels: mockedChannelsQueryResponse });
-		const queryChannelsResponse = await client.queryChannels();
+		const queryChannelsResponse = await client.queryChannelsAndHydrate();
 		expect(queryChannelsResponse.length).to.be.equal(mockedChannelsQueryResponse.length);
 		queryChannelsResponse.forEach((item) => {
 			expect(item).to.be.instanceOf(Channel);
@@ -890,7 +889,7 @@ describe('StreamChat.queryChannels', async () => {
 			),
 		}));
 		const stub = sinon
-			.stub(client.chatApi, 'queryChannels')
+			.stub(client, 'queryChannels')
 			.resolves({ channels: mockedChannelsQueryResponse });
 		const queryChannelsResponse = await client.queryChannelsRequest();
 		expect(queryChannelsResponse.length).to.be.equal(mockedChannelsQueryResponse.length);
@@ -908,9 +907,9 @@ describe('StreamChat.queryChannels', async () => {
 			),
 		}));
 		sinon
-			.stub(client.chatApi, 'queryChannels')
+			.stub(client, 'queryChannels')
 			.resolves({ channels: mockedChannelsQueryResponse });
-		await client.queryChannels();
+		await client.queryChannelsAndHydrate();
 		Object.values(client.activeChannels).forEach((channel) => {
 			expect(channel.state.messageSets.length).to.be.equal(1);
 			expect(channel.state.messageSets[0].pagination).to.eql({
@@ -931,9 +930,9 @@ describe('StreamChat.queryChannels', async () => {
 			),
 		}));
 		sinon
-			.stub(client.chatApi, 'queryChannels')
+			.stub(client, 'queryChannels')
 			.resolves({ channels: mockedChannelQueryResponse });
-		await client.queryChannels();
+		await client.queryChannelsAndHydrate();
 		Object.values(client.activeChannels).forEach((channel) => {
 			expect(channel.state.messageSets.length).to.be.equal(1);
 			expect(channel.state.messageSets[0].pagination).to.eql({
@@ -955,10 +954,10 @@ describe('StreamChat.queryThreads', () => {
 		);
 		const apiResponse = { threads: [rawThread], next: undefined };
 
-		sinon.stub(client.chatApi, 'queryThreads').resolves(apiResponse);
+		sinon.stub(client, 'queryThreads').resolves(apiResponse);
 		const hydratePollCacheSpy = sinon.spy(client.polls, 'hydratePollCache');
 
-		const result = await client.queryThreads();
+		const result = await client.queryThreadsAndHydrate();
 
 		expect(result.threads).to.have.lengthOf(1);
 		expect(result.threads[0].id).to.equal(parentMessage.id);
@@ -976,7 +975,7 @@ describe('StreamChat.queryReactions', () => {
 	let postStub;
 	const messageId = 'msg-1';
 	const filter = { type: { $in: ['like', 'love'] } };
-	const sort = [{ created_at: -1 }];
+	const sort = [{ field: 'created_at', direction: -1 }];
 	const options = { limit: 50 };
 
 	const offlineReactions = [
@@ -999,9 +998,7 @@ describe('StreamChat.queryReactions', () => {
 		await client.offlineDb.init(client.userID);
 
 		dispatchSpy = vi.spyOn(client, 'dispatchEvent');
-		postStub = vi
-			.spyOn(client.chatApi, 'queryReactions')
-			.mockResolvedValueOnce(postResponse);
+		postStub = vi.spyOn(client, 'queryReactions').mockResolvedValueOnce(postResponse);
 		client.offlineDb.getReactions.mockResolvedValue(offlineReactions);
 	});
 
@@ -1010,7 +1007,13 @@ describe('StreamChat.queryReactions', () => {
 	});
 
 	it('should query reactions from offlineDb and dispatch offline_reactions.queried event', async () => {
-		const result = await client.queryReactions(messageId, filter, sort, options);
+		const request = {
+			id: messageId,
+			filter,
+			sort,
+			limit: options.limit,
+		};
+		const result = await client.queryReactionsAndHydrate(request);
 
 		expect(client.offlineDb.getReactions).toHaveBeenCalledWith({
 			messageId,
@@ -1032,43 +1035,39 @@ describe('StreamChat.queryReactions', () => {
 		]);
 
 		expect(postStub).toHaveBeenCalledTimes(1);
-		expect(postStub).toHaveBeenCalledWith({
-			id: messageId,
-			filter,
-			sort: normalizeQuerySort(sort),
-			limit: 50,
-		});
+		expect(postStub).toHaveBeenCalledWith(request);
 
 		expect(result).to.eql(postResponse);
 	});
 
 	it('should skip querying offlineDb if options.next is true', async () => {
-		await client.queryReactions(messageId, filter, sort, { next: true, limit: 20 });
-
-		expect(client.offlineDb.getReactions).not.toHaveBeenCalled();
-
-		expect(postStub).toHaveBeenCalledWith({
+		const request = {
 			id: messageId,
 			filter,
-			sort: normalizeQuerySort(sort),
+			sort,
 			next: true,
 			limit: 20,
-		});
+		};
+		await client.queryReactionsAndHydrate(request);
+
+		expect(client.offlineDb.getReactions).not.toHaveBeenCalled();
+		expect(postStub).toHaveBeenCalledWith(request);
 	});
 
 	it('should not dispatch event if offlineDb returns null', async () => {
 		client.offlineDb.getReactions.mockResolvedValue(null);
 
-		await client.queryReactions(messageId, filter, sort, options);
+		const request = {
+			id: messageId,
+			filter,
+			sort,
+			limit: 50,
+		};
+		await client.queryReactionsAndHydrate(request);
 
 		expect(client.offlineDb.getReactions).toHaveBeenCalledTimes(1);
 		expect(dispatchSpy).not.toHaveBeenCalled();
-		expect(postStub).toHaveBeenCalledWith({
-			id: messageId,
-			filter,
-			sort: normalizeQuerySort(sort),
-			limit: 50,
-		});
+		expect(postStub).toHaveBeenCalledWith(request);
 	});
 
 	it('should log a warning if offlineDb.getReactions throws', async () => {
@@ -1076,7 +1075,12 @@ describe('StreamChat.queryReactions', () => {
 		const loggerSpy = vi.fn();
 		client.logger = loggerSpy;
 
-		await client.queryReactions(messageId, filter, sort, options);
+		await client.queryReactionsAndHydrate({
+			id: messageId,
+			filter,
+			sort,
+			limit: options.limit,
+		});
 
 		expect(loggerSpy).toHaveBeenCalledWith(
 			'warn',
@@ -1089,7 +1093,7 @@ describe('StreamChat.queryReactions', () => {
 		expect(postStub).toHaveBeenCalledWith({
 			id: messageId,
 			filter,
-			sort: normalizeQuerySort(sort),
+			sort,
 			limit: 50,
 		});
 	});
@@ -1112,7 +1116,7 @@ describe('message deletion', () => {
 
 		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
 		clientDeleteSpy = vi
-			.spyOn(client.chatApi, 'deleteMessage')
+			.spyOn(client, 'deleteMessage')
 			.mockResolvedValue({ message: {} });
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
 	});
@@ -1742,42 +1746,5 @@ describe('X-Stream-Client header', () => {
 	});
 });
 
-describe('markChannelsDelivered', () => {
-	let client;
-	let markDeliveredSpy;
-	const user = { id: 'user' };
-
-	beforeEach(() => {
-		client = new StreamChat('', '');
-
-		markDeliveredSpy = vi
-			.spyOn(client.chatApi, 'markDelivered')
-			.mockResolvedValue({ ok: true });
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-	});
-
-	it('prevents triggering the request with empty payload', async () => {
-		await client.markChannelsDelivered();
-		expect(markDeliveredSpy).not.toHaveBeenCalled();
-
-		await client.markChannelsDelivered({});
-		expect(markDeliveredSpy).not.toHaveBeenCalled();
-
-		await client.markChannelsDelivered({ latest_delivered_messages: [] });
-		expect(markDeliveredSpy).not.toHaveBeenCalled();
-
-		await client.markChannelsDelivered({ user, user_id: user.id });
-		expect(markDeliveredSpy).not.toHaveBeenCalled();
-	});
-
-	it('triggers the request with at least on channel to report', async () => {
-		const delivered = [{ cid: 'cid', id: 'message-id' }];
-		await client.markChannelsDelivered({ latest_delivered_messages: delivered });
-		expect(markDeliveredSpy).toHaveBeenCalledWith({
-			latest_delivered_messages: delivered,
-		});
-	});
-});
+// markChannelsDelivered was removed; the empty-payload guard moved to
+// MessageDeliveryReporter (see messageDelivery/MessageDeliveryReporter.test.ts).

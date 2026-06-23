@@ -280,7 +280,7 @@ export class ReminderManager extends WithSubscriptions {
   };
 
   deleteReminder = async (messageId: MessageId) => {
-    await this.client.deleteReminder(messageId);
+    await this.client.deleteReminder({ message_id: messageId });
     this.removeFromState(messageId);
   };
 

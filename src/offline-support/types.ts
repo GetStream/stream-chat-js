@@ -10,6 +10,7 @@ import type {
   LocalMessage,
   MessageResponse,
   PollResponse,
+  QueryChannelsRequest,
   ReactionFilters,
   ReactionResponse,
   ReactionSort,
@@ -179,11 +180,7 @@ export type DBGetChannelsForQueryType = {
   /** ID of the user. */
   userId: string;
   /** Optional filters for channels. */
-  filters?: ChannelFilters;
-  /** Optional full query options for channels. */
-  options?: ChannelOptions;
-  /** Optional sorting for the channels. */
-  sort?: ChannelSort;
+  options?: QueryChannelsRequest;
 };
 
 /**

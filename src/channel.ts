@@ -7,14 +7,12 @@ import {
   generateChannelTempCid,
   logChatPromiseExecution,
   messageSetPagination,
-  normalizeQuerySort,
 } from './utils';
 import type { ListenerKeys, StreamChat } from './client';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import type {
   AIState,
   APIResponse,
-  AscDesc,
   BanUserOptions,
   ChannelAPIResponse,
   ChannelData,
@@ -24,63 +22,52 @@ import type {
   ChannelUpdateOptions,
   CombinedEvents,
   CreateDraftResponse,
-  DraftMessagePayload,
   EventHandler,
   EventPayload,
-  GetDraftResponse,
   GetRepliesAPIResponse,
-  GetRepliesOptions,
   GetRepliesRequest,
   LiveLocationPayload,
   LocalMessage,
   MarkReadOptions,
   MarkUnreadOptions,
-  MemberFilters,
-  MemberSort,
   Message,
-  MessageFilters,
-  MessageOptions,
   MessageResponse,
   MessageSetType,
   PartialUpdateChannel,
-  PartialUpdateMember,
   PinnedMessagePaginationOptions,
   PinnedMessagesSort,
-  PollVoteData,
-  QueryMembersOptions,
-  Reaction,
+  QueryMembersPayload,
   ReactionAPIResponse,
   ReactionResponse,
-  SearchMessageSortBase,
-  SearchOptions,
   SearchPayload,
-  SendMessageAPIResponse,
-  SendMessageOptions,
-  SendReactionOptions,
   StaticLocationPayload,
-  TruncateOptions,
   UnBanUserOptions,
   UpdateLocationPayload,
   UserResponse,
 } from './types';
-import type { Role } from './permissions';
+import type { RoleName } from './permissions';
 import type {
   ChannelGetOrCreateRequest as Gen_ChannelGetOrCreateRequest,
-  ChannelInputRequest as Gen_ChannelInputRequest,
   ChannelMemberRequest as Gen_ChannelMemberRequest,
   ChannelPushPreferencesResponse as Gen_ChannelPushPreferencesResponse,
+  ChannelStopWatchingRequest as Gen_ChannelStopWatchingRequest,
+  CreateDraftRequest as Gen_CreateDraftRequest,
+  HideChannelRequest as Gen_HideChannelRequest,
+  MuteChannelRequest as Gen_MuteChannelRequest,
+  SendMessageRequest as Gen_SendMessageRequest,
+  ShowChannelRequest as Gen_ShowChannelRequest,
+  UnmuteChannelRequest as Gen_UnmuteChannelRequest,
   UpdateChannelRequest as Gen_UpdateChannelRequest,
   WSEvent,
 } from './gen/models';
+import type { ChatApi } from './gen/chat/ChatApi';
 import { ChannelApi } from './gen/chat/ChannelApi';
 
 /**
  * Channel - The Channel class manages its own state.
  */
-export class Channel {
+export class Channel extends ChannelApi {
   _client: StreamChat;
-  type: string;
-  id: string | undefined;
   data: Partial<ChannelResponse> | undefined;
   _data: ChannelData;
   cid: string;
@@ -110,7 +97,6 @@ export class Channel {
   public readonly messageComposer: MessageComposer;
   public readonly messageReceiptsTracker: MessageReceiptsTracker;
   public readonly cooldownTimer: CooldownTimer;
-  public readonly channelApi: ChannelApi;
 
   /**
    * Create a channel.
@@ -137,11 +123,9 @@ export class Channel {
       throw new Error(`Invalid chat id ${id}, letters, numbers and "!-_" are allowed`);
     }
 
-    this.channelApi = new ChannelApi(client.chatApi, type, id);
+    super(client, type, id);
 
     this._client = client;
-    this.type = type;
-    this.id = id;
     // used by the frontend, gets updated:
     // this.data = data;
     // this._data is used for the requests...
@@ -193,6 +177,10 @@ export class Channel {
     return client.configs[this.cid];
   }
 
+  _sendMessage(request: Gen_SendMessageRequest) {
+    return super.sendMessage(request);
+  }
+
   /**
    * Send a message to this channel.
    *
@@ -206,29 +194,20 @@ export class Channel {
    * @param options.force_moderation Apply force moderation for server-side requests (optional).
    * @returns The server response.
    */
-  async _sendMessage(message: Message, options?: SendMessageOptions) {
-    return await this.channelApi.sendMessage({
-      message,
-      ...options,
-    });
-  }
-
-  async sendMessage(message: Message, options?: SendMessageOptions) {
+  override async sendMessage(request: Gen_SendMessageRequest) {
     try {
       const offlineDb = this.getClient().offlineDb;
-      if (offlineDb) {
-        const messageId = message.id;
-        if (messageId) {
-          return await offlineDb.queueTask<SendMessageAPIResponse>({
-            task: {
-              channelId: this.id as string,
-              channelType: this.type,
-              messageId,
-              payload: [message, options],
-              type: 'send-message',
-            },
-          });
-        }
+      const messageId = request.message?.id;
+      if (offlineDb && messageId) {
+        return await offlineDb.queueTask<Awaited<ReturnType<ChatApi['sendMessage']>>>({
+          task: {
+            channelId: this.id as string,
+            channelType: this.type,
+            messageId,
+            payload: [request],
+            type: 'send-message',
+          },
+        });
       }
     } catch (error) {
       this._client.logger('error', `offlineDb:send-message`, {
@@ -236,7 +215,7 @@ export class Channel {
         error,
       });
     }
-    return await this._sendMessage(message, options);
+    return await this._sendMessage(request);
   }
 
   /**
@@ -294,11 +273,11 @@ export class Channel {
   }
 
   deleteFile(url: string) {
-    return this.channelApi.deleteChannelFile({ url });
+    return this.deleteChannelFile({ url });
   }
 
   deleteImage(url: string) {
-    return this.channelApi.deleteChannelImage({ url });
+    return this.deleteChannelImage({ url });
   }
 
   /**
@@ -307,9 +286,9 @@ export class Channel {
    * @param event For example `{ type: 'message.read' }`.
    * @returns The server response.
    */
-  async sendEvent(event: CombinedEvents) {
+  override async sendEvent(request: { event: CombinedEvents }) {
     this._checkInitialized();
-    return await this.channelApi.sendEvent({ event });
+    return await super.sendEvent(request);
   }
 
   /**
@@ -319,89 +298,43 @@ export class Channel {
    * @param options Option object, e.g. `{ user_id: 'tommaso' }` (optional, defaults to `{}`).
    * @returns Search messages response.
    */
-  async search(
-    query: MessageFilters | string,
-    options: SearchOptions & {
-      client_id?: string;
-      connection_id?: string;
-      message_filter_conditions?: MessageFilters;
-      message_options?: MessageOptions;
-      query?: string;
-    } = {},
-  ) {
-    if (options.offset && options.next) {
-      throw Error(`Cannot specify offset with next`);
-    }
-    // Return a list of channels
-    const payload: SearchPayload = {
-      filter_conditions: { cid: this.cid },
-      ...options,
-      sort: options.sort
-        ? normalizeQuerySort<SearchMessageSortBase>(options.sort)
-        : undefined,
-    };
-    if (typeof query === 'string') {
-      payload.query = query;
-    } else if (typeof query === 'object') {
-      payload.message_filter_conditions = query;
-    } else {
-      throw Error(`Invalid type ${typeof query} for query parameter`);
-    }
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.getClient().wsPromise;
-
-    return await this.getClient().chatApi.search({ payload });
+  async search(request?: { payload?: SearchPayload }) {
+    return await this.getClient().search(request);
   }
 
   /**
    * Query members.
    *
-   * @param filterConditions Object MongoDB style filters.
-   * @param sort Sort options, for instance `[{ created_at: -1 }]`. When using multiple fields,
-   *   make sure you use an array of objects to guarantee field order, for instance
-   *   `[{ name: -1 }, { created_at: 1 }]` (optional, defaults to `[]`).
+   * @param filter Object MongoDB style filters.
+   * @param sort Sort options, for instance `[{ field: 'created_at', direction: -1 }]`.
+   *   To sort by multiple fields, append more entries to the array, e.g.
+   *   `[{ field: 'name', direction: -1 }, { field: 'created_at', direction: 1 }]`
+   *   (optional, defaults to `[]`).
    * @param options Option object, e.g. `{ limit: 10, offset: 10 }` (optional, defaults to `{}`).
    * @returns Query members response.
    */
-  async queryMembers(
-    filterConditions: MemberFilters,
-    sort: MemberSort = [],
-    options: QueryMembersOptions = {},
-  ) {
-    let id: QueryMembersOptions['id'];
-    const type = this.type;
-    let members: QueryMembersOptions['members'];
+  async queryMembers(request?: { payload?: Partial<QueryMembersPayload> }) {
+    const payload = {
+      type: this.type,
+      // TODO: these should be probably optional in the OAPI spec
+      // filter_conditions: ...
+    } as QueryMembersPayload;
+
     if (this.id) {
-      id = this.id;
-    } else if (this.data?.members && Array.isArray(this.data.members)) {
-      // TODO: this should not be needed Gen_QueryMembersResponse should not come with user_id as optinal
-      members = this.data.members.map((m) => ({
+      payload.id = this.id;
+    } else if (Array.isArray(this.data?.members)) {
+      payload.members = this.data.members.map((m) => ({
         ...m,
-        user_id: m.user_id ?? m.user?.id,
-      })) as QueryMembersOptions['members'];
+        // TODO: this should not be needed Gen_QueryMembersResponse should not come with user_id as optinal
+        user_id: (m.user_id ?? m.user?.id) as string,
+      }));
     }
     // Return a list of members
-    return await this.getClient().chatApi.queryMembers({
+    return await this.getClient().queryMembers({
       payload: {
-        type,
-        id,
-        members,
-        sort: normalizeQuerySort(sort),
-        filter_conditions: filterConditions,
-        ...options,
+        ...payload,
+        ...request?.payload,
       },
-    });
-  }
-
-  /**
-   * Partial update of a member.
-   *
-   * @param request The partial update payload.
-   * @returns The updated member.
-   */
-  async updateMemberPartial(request: PartialUpdateMember) {
-    return await this.channelApi.updateMemberPartial({
-      ...request,
     });
   }
 
@@ -416,17 +349,8 @@ export class Channel {
    *   any existing reaction or skip sending push notifications (optional).
    * @returns The server response.
    */
-  async sendReaction(
-    messageId: string,
-    reaction: Reaction,
-    options?: SendReactionOptions,
-  ) {
-    if (!messageId) {
-      throw Error(`Message id is missing`);
-    }
-    if (!reaction || Object.keys(reaction).length === 0) {
-      throw Error(`Reaction object is missing`);
-    }
+  async sendReaction(request: Parameters<ChatApi['sendReaction']>[0]) {
+    const { id: messageId } = request;
 
     try {
       const offlineDb = this.getClient().offlineDb;
@@ -436,7 +360,7 @@ export class Channel {
             channelId: this.id as string,
             channelType: this.type,
             messageId,
-            payload: [messageId, reaction, options],
+            payload: [request],
             type: 'send-reaction',
           },
         });
@@ -448,52 +372,23 @@ export class Channel {
       });
     }
 
-    return this._sendReaction(messageId, reaction, options);
+    return this._sendReaction(request);
   }
 
-  /**
-   * Send a reaction about a message.
-   *
-   * @param messageId The message ID.
-   * @param reaction The reaction object, for instance `{ type: 'love' }`.
-   * @param options Option object, e.g. `{ enforce_unique: true, skip_push: true }` to override
-   *   any existing reaction or skip sending push notifications (optional).
-   * @returns The server response.
-   */
-  async _sendReaction(
-    messageId: string,
-    reaction: Reaction,
-    options?: SendReactionOptions,
-  ) {
-    if (!messageId) {
-      throw Error(`Message id is missing`);
-    }
-    if (!reaction || Object.keys(reaction).length === 0) {
-      throw Error(`Reaction object is missing`);
-    }
-
-    return await this.getClient().chatApi.sendReaction({
-      id: messageId,
-      reaction,
-      ...options,
-    });
+  _sendReaction(request: Parameters<ChatApi['sendReaction']>[0]) {
+    return this.getClient().sendReaction(request);
   }
 
-  async deleteReaction(messageId: string, reactionType: string) {
+  async deleteReaction(request: Parameters<ChatApi['deleteReaction']>[0]) {
     this._checkInitialized();
-    if (!reactionType || !messageId) {
-      throw Error(
-        'Deleting a reaction requires specifying both the message and reaction type',
-      );
-    }
 
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
-        const message = this.state.messages.find(({ id }) => id === messageId);
+        const message = this.state.messages.find(({ id }) => id === request.id);
         const reaction = {
-          message_id: messageId,
-          type: reactionType,
+          message_id: request.id,
+          type: request.type,
         } as ReactionResponse;
 
         if (message) {
@@ -507,8 +402,8 @@ export class Channel {
           task: {
             channelId: this.id as string,
             channelType: this.type,
-            messageId,
-            payload: [messageId, reactionType],
+            messageId: request.id,
+            payload: [request],
             type: 'delete-reaction',
           },
         });
@@ -520,7 +415,7 @@ export class Channel {
       });
     }
 
-    return await this._deleteReaction(messageId, reactionType);
+    return await this._deleteReaction(request);
   }
 
   /**
@@ -530,60 +425,21 @@ export class Channel {
    * @param reactionType The type of reaction that should be removed.
    * @returns The server response.
    */
-  async _deleteReaction(messageId: string, reactionType: string) {
-    this._checkInitialized();
-    if (!reactionType || !messageId) {
-      throw Error(
-        'Deleting a reaction requires specifying both the message and reaction type',
-      );
-    }
-
-    return await this.getClient().chatApi.deleteReaction({
-      id: messageId,
-      type: reactionType,
-    });
+  async _deleteReaction(request: Parameters<ChatApi['deleteReaction']>[0]) {
+    return await this.getClient().deleteReaction(request);
   }
 
   /**
-   * Edit the channel's custom properties.
+   * Edit the channel using the inherited `update()` from `ChannelApi`. Caches the
+   * server-returned channel onto `this.data`.
    *
-   * @param channelData The object to update the custom properties of this channel with (optional, defaults to `{}`).
-   * @param updateMessage Message object for channel members notification (optional).
-   * @param options Configuration to control the behavior while updating (optional).
+   * @param request Channel update payload, e.g. `{ data: { name: 'foo' }, message }`.
    * @returns The server response.
    */
-  async update(
-    channelData: Gen_ChannelInputRequest = {},
-    updateMessage?: Message,
-    options?: ChannelUpdateOptions,
-  ) {
-    // Strip out reserved names that will result in API errors.
-    // TODO: this needs to be typed better
-    // const reserved: Exclude<
-    //   keyof (ChannelResponse & ChannelData),
-    //   keyof CustomChannelData
-    // >[] = [
-    //   'config',
-    //   'cid',
-    //   'created_by',
-    //   'id',
-    //   'member_count',
-    //   'type',
-    //   'created_at',
-    //   'updated_at',
-    //   'last_message_at',
-    //   'own_capabilities',
-    // ];
-
-    // reserved.forEach((key) => {
-    //   delete channelData[key];
-    // });
-
-    return await this._update({
-      message: updateMessage,
-      data: channelData,
-      ...options,
-    });
+  override async update(request?: Gen_UpdateChannelRequest) {
+    const data = await super.update(request);
+    this.data = data.channel;
+    return data;
   }
 
   /**
@@ -593,7 +449,7 @@ export class Channel {
    * @returns The server response.
    */
   async updatePartial(update: PartialUpdateChannel) {
-    const data = await this.channelApi.updateChannelPartial(update);
+    const data = await this.updateChannelPartial(update);
 
     if (!this.getClient()._cacheEnabled) return data;
 
@@ -625,11 +481,7 @@ export class Channel {
    * @returns The server response.
    */
   async enableSlowMode(coolDownInterval: number) {
-    const data = await this.channelApi.update({
-      cooldown: coolDownInterval,
-    });
-    this.data = data.channel;
-    return data;
+    return await this.update({ cooldown: coolDownInterval });
   }
 
   /**
@@ -638,19 +490,17 @@ export class Channel {
    * @returns The server response.
    */
   async disableSlowMode() {
-    const data = await this.channelApi.update({
-      cooldown: 0,
-    });
-    this.data = data.channel;
-    return data;
+    return await this.update({ cooldown: 0 });
   }
 
   public async sendSharedLocation(
     location: (StaticLocationPayload | LiveLocationPayload) & { message_id?: string },
   ) {
     const result = await this.sendMessage({
-      id: location.message_id,
-      shared_location: location,
+      message: {
+        id: location.message_id,
+        shared_location: location,
+      },
     });
 
     if (location.end_at) {
@@ -664,7 +514,7 @@ export class Channel {
   }
 
   public async stopLiveLocationSharing(payload: UpdateLocationPayload) {
-    const location = await this.getClient().updateLocation({
+    const location = await this.getClient().updateLiveLocation({
       ...payload,
       end_at: new Date(),
     });
@@ -675,34 +525,13 @@ export class Channel {
   }
 
   /**
-   * Delete the channel. Messages are permanently removed.
-   *
-   * @param options Delete options (optional, defaults to `{}`).
-   * @param options.hard_delete Defines if the channel is hard deleted or not (optional).
-   * @returns The server response.
-   */
-  async delete(options: { hard_delete?: boolean } = {}) {
-    return await this.channelApi.delete(options);
-  }
-
-  /**
-   * Removes all messages from the channel.
-   *
-   * @param options Truncation options (optional, defaults to `{}`).
-   * @returns The server response.
-   */
-  async truncate(options: TruncateOptions = {}) {
-    return await this.channelApi.truncate(options);
-  }
-
-  /**
    * Accept invitation to the channel.
    *
    * @param options The object to update the custom properties of this channel with (optional, defaults to `{}`).
    * @returns The server response.
    */
   async acceptInvite(options: ChannelUpdateOptions = {}) {
-    return await this._update({ accept_invite: true, ...options });
+    return await this.update({ accept_invite: true, ...options });
   }
 
   /**
@@ -712,7 +541,7 @@ export class Channel {
    * @returns The server response.
    */
   async rejectInvite(options: ChannelUpdateOptions = {}) {
-    return await this._update({ reject_invite: true, ...options });
+    return await this.update({ reject_invite: true, ...options });
   }
 
   /**
@@ -734,7 +563,7 @@ export class Channel {
           user_id: typeof memberOrId === 'string' ? memberOrId : memberOrId.user_id,
         }) satisfies Gen_ChannelMemberRequest,
     );
-    return await this._update({ add_members: adjustedMembers, message, ...options });
+    return await this.update({ add_members: adjustedMembers, message, ...options });
   }
 
   /**
@@ -750,7 +579,7 @@ export class Channel {
     message?: Message,
     options: ChannelUpdateOptions = {},
   ) {
-    return await this._update({ add_filter_tags: tags, message, ...options });
+    return await this.update({ add_filter_tags: tags, message, ...options });
   }
 
   /**
@@ -766,7 +595,7 @@ export class Channel {
     message?: Message,
     options: ChannelUpdateOptions = {},
   ) {
-    return await this._update({ remove_filter_tags: tags, message, ...options });
+    return await this.update({ remove_filter_tags: tags, message, ...options });
   }
 
   /**
@@ -782,7 +611,7 @@ export class Channel {
     message?: Message,
     options: ChannelUpdateOptions = {},
   ) {
-    return await this._update({ add_moderators: members, message, ...options });
+    return await this.update({ add_moderators: members, message, ...options });
   }
 
   /**
@@ -794,11 +623,11 @@ export class Channel {
    * @returns The server response.
    */
   async assignRoles(
-    roles: { channel_role: Role; user_id: string }[],
+    roles: { channel_role: RoleName; user_id: string }[],
     message?: Message,
     options: ChannelUpdateOptions = {},
   ) {
-    return await this._update({ assign_roles: roles, message, ...options });
+    return await this.update({ assign_roles: roles, message, ...options });
   }
 
   /**
@@ -821,7 +650,7 @@ export class Channel {
         }) satisfies Gen_ChannelMemberRequest,
     );
 
-    return await this._update({ invites: adjustedMembers, message, ...options });
+    return await this.update({ invites: adjustedMembers, message, ...options });
   }
 
   /**
@@ -837,7 +666,7 @@ export class Channel {
     message?: Message,
     options: ChannelUpdateOptions = {},
   ) {
-    return await this._update({ remove_members: members, message, ...options });
+    return await this.update({ remove_members: members, message, ...options });
   }
 
   /**
@@ -853,23 +682,7 @@ export class Channel {
     message?: Message,
     options: ChannelUpdateOptions = {},
   ) {
-    return await this._update({ demote_moderators: members, message, ...options });
-  }
-
-  /**
-   * Executes channel update request.
-   *
-   * TODO: introduce new type instead of `Object` in the next major update.
-   *
-   * @param payload Update channel payload.
-   * @returns The server response.
-   */
-  async _update(
-    payload: Omit<Gen_UpdateChannelRequest, 'message'> & { message?: Message },
-  ) {
-    const data = await this.channelApi.update(payload);
-    this.data = data.channel;
-    return data;
+    return await this.update({ demote_moderators: members, message, ...options });
   }
 
   /**
@@ -887,8 +700,8 @@ export class Channel {
    * @param options.expiration Expiration in minutes (optional).
    * @returns The server response.
    */
-  async mute(options: { expiration?: number } = {}) {
-    return await this.getClient().chatApi.muteChannel({
+  async mute(options?: Gen_MuteChannelRequest) {
+    return await this.getClient().muteChannel({
       channel_cids: [this.cid],
       ...options,
     });
@@ -901,14 +714,14 @@ export class Channel {
    * // server side
    * await channel.unmute({ user_id: userId });
    *
-   * @param opts Unmute options (optional, defaults to `{}`).
+   * @param options Unmute options (optional, defaults to `{}`).
    * @param opts.user_id User ID (optional).
    * @returns The server response.
    */
-  async unmute(opts: { user_id?: string } = {}) {
-    return await this.getClient().chatApi.unmuteChannel({
+  async unmute(options?: Gen_UnmuteChannelRequest) {
+    return await this.getClient().unmuteChannel({
       channel_cids: [this.cid],
-      ...opts,
+      ...options,
     });
   }
 
@@ -918,15 +731,10 @@ export class Channel {
    * @example
    * await channel.archive();
    *
-   * @example
-   * // server side
-   * await channel.archive({ user_id: userId });
-   *
    * @returns The server response.
    */
   async archive() {
-    const resp = await this.updateMemberPartial({ set: { archived: true } });
-    return resp.channel_member;
+    return await this.updateMemberPartial({ set: { archived: true } });
   }
 
   /**
@@ -938,8 +746,7 @@ export class Channel {
    * @returns The server response.
    */
   async unarchive() {
-    const resp = await this.updateMemberPartial({ set: { archived: false } });
-    return resp.channel_member;
+    return await this.updateMemberPartial({ set: { archived: false } });
   }
 
   /**
@@ -951,8 +758,7 @@ export class Channel {
    * @returns The server response.
    */
   async pin() {
-    const resp = await this.updateMemberPartial({ set: { pinned: true } });
-    return resp.channel_member;
+    return await this.updateMemberPartial({ set: { pinned: true } });
   }
 
   /**
@@ -964,8 +770,7 @@ export class Channel {
    * @returns The server response.
    */
   async unpin() {
-    const resp = await this.updateMemberPartial({ set: { pinned: false } });
-    return resp.channel_member;
+    return await this.updateMemberPartial({ set: { pinned: false } });
   }
 
   /**
@@ -973,11 +778,7 @@ export class Channel {
    *
    * @returns An object of the form `{ muted: true | false, createdAt: Date | null, expiresAt: Date | null }`.
    */
-  muteStatus(): {
-    createdAt: Date | null;
-    expiresAt: Date | null;
-    muted: boolean;
-  } {
+  muteStatus() {
     this._checkInitialized();
     return this.getClient()._muteStatus(this.cid);
   }
@@ -987,7 +788,7 @@ export class Channel {
     if (!messageId) {
       throw Error(`Message id is missing`);
     }
-    return this.getClient().chatApi.runMessageAction({
+    return this.getClient().runMessageAction({
       id: messageId,
       form_data: formData,
     });
@@ -1014,11 +815,13 @@ export class Channel {
     if (diff === null || diff > 2000) {
       this.lastTypingEvent = new Date();
       await this.sendEvent({
-        type: 'typing.start',
-        parent_id: parentId,
-        ...(options || {}),
-        created_at: new Date(),
-        custom: {},
+        event: {
+          type: 'typing.start',
+          parent_id: parentId,
+          ...(options || {}),
+          created_at: new Date(),
+          custom: {},
+        },
       });
     }
   }
@@ -1038,12 +841,14 @@ export class Channel {
     options: { ai_message?: string } = {},
   ) {
     await this.sendEvent({
-      ...options,
-      type: 'ai_indicator.update',
-      message_id: messageId,
-      ai_state: state,
-      created_at: new Date(),
-      custom: {},
+      event: {
+        ...options,
+        type: 'ai_indicator.update',
+        message_id: messageId,
+        ai_state: state,
+        created_at: new Date(),
+        custom: {},
+      },
     });
   }
 
@@ -1053,9 +858,11 @@ export class Channel {
    */
   async clearAIIndicator() {
     await this.sendEvent({
-      type: 'ai_indicator.clear',
-      created_at: new Date(),
-      custom: {},
+      event: {
+        type: 'ai_indicator.clear',
+        created_at: new Date(),
+        custom: {},
+      },
     });
   }
 
@@ -1065,9 +872,11 @@ export class Channel {
    */
   async stopAIResponse() {
     await this.sendEvent({
-      type: 'ai_indicator.stop',
-      created_at: new Date(),
-      custom: {},
+      event: {
+        type: 'ai_indicator.stop',
+        created_at: new Date(),
+        custom: {},
+      },
     });
   }
 
@@ -1086,11 +895,13 @@ export class Channel {
     this.lastTypingEvent = null;
     this.isTyping = false;
     await this.sendEvent({
-      type: 'typing.stop',
-      parent_id: parentId,
-      ...(options || {}),
-      created_at: new Date(),
-      custom: {},
+      event: {
+        type: 'typing.stop',
+        parent_id: parentId,
+        ...(options || {}),
+        created_at: new Date(),
+        custom: {},
+      },
     });
   }
 
@@ -1123,30 +934,33 @@ export class Channel {
   }
 
   /**
-   * Send the mark read event for this user; only works if the `read_events` setting is enabled.
-   * Syncs the message delivery report candidates local state.
+   * Run this user's mark-read reporter for this channel. Delegates to
+   * `MessageDeliveryReporter`, which batches the underlying `markRead` request
+   * with the user's read receipts state.
+   *
+   * Use the inherited `markRead()` from `ChannelApi` for a direct, unbatched call.
    *
    * @param data Mark read options (optional, defaults to `{}`).
-   * @returns The server response.
    */
-  async markRead(data: MarkReadOptions = {}) {
+  async markReadViaReporter(data: MarkReadOptions = {}) {
     return await this.getClient().messageDeliveryReporter.markRead(this, data);
   }
 
   /**
-   * Send the mark read event for this user; only works if the `read_events` setting is enabled.
+   * Override of the inherited `markRead()` from `ChannelApi` that requires the
+   * channel to be initialized and respects the `read_events` channel config.
    *
    * @param data Mark read options (optional, defaults to `{}`).
    * @returns The server response, or `null` if the request was skipped.
    */
-  async markAsReadRequest(data: MarkReadOptions = {}) {
+  override async markRead(data?: MarkReadOptions) {
     this._checkInitialized();
 
-    if (!this.getConfig()?.read_events && !this.getClient()._isUsingServerAuth()) {
-      return null;
+    if (!this.getConfig()?.read_events) {
+      throw new Error('Read events are disabled for this application');
     }
 
-    return await this.channelApi.markRead({ ...data });
+    return await super.markRead(data);
   }
 
   /**
@@ -1155,14 +969,14 @@ export class Channel {
    * @param data Mark unread options.
    * @returns An API response, or `null` if the request was skipped.
    */
-  async markUnread(data: MarkUnreadOptions) {
+  override async markUnread(data?: MarkUnreadOptions) {
     this._checkInitialized();
 
-    if (!this.getConfig()?.read_events && !this.getClient()._isUsingServerAuth()) {
-      return null;
+    if (!this.getConfig()?.read_events) {
+      throw new Error('Read events are disabled for this application');
     }
 
-    return await this.channelApi.markUnread({ ...data });
+    return await super.markUnread(data);
   }
 
   /**
@@ -1221,8 +1035,8 @@ export class Channel {
    *
    * @returns The server response.
    */
-  async stopWatching() {
-    const response = await this.channelApi.stopWatching();
+  override async stopWatching(request?: Gen_ChannelStopWatchingRequest) {
+    const response = await super.stopWatching(request);
 
     this._client.logger(
       'info',
@@ -1246,17 +1060,8 @@ export class Channel {
    * @param sort Sort directions for `created_at` (optional).
    * @returns A response with a list of messages.
    */
-  async getReplies(
-    parentId: GetRepliesRequest['parent_id'],
-    options: GetRepliesOptions,
-    sort?: { created_at: AscDesc }[],
-  ) {
-    const normalizedSort = sort ? normalizeQuerySort(sort) : undefined;
-    const data = await this.getClient().chatApi.getReplies({
-      parent_id: parentId,
-      sort: normalizedSort,
-      ...options,
-    });
+  async getReplies(request: GetRepliesRequest) {
+    const data = await this.getClient().getReplies(request);
 
     // add any messages to our thread state
     if (data.messages) {
@@ -1266,6 +1071,7 @@ export class Channel {
     return data;
   }
 
+  // TODO: find out v2 equivalent
   /**
    * List pinned messages of the channel.
    *
@@ -1282,7 +1088,7 @@ export class Channel {
       {
         payload: {
           ...options,
-          sort: normalizeQuerySort(sort),
+          sort,
         },
       },
     );
@@ -1297,11 +1103,8 @@ export class Channel {
    * @param options.offset Offset to start the page at (optional).
    * @returns Server response.
    */
-  getReactions(messageId: string, options: { limit?: number; offset?: number }) {
-    return this.getClient().chatApi.getReactions({
-      id: messageId,
-      ...options,
-    });
+  getReactions(request: Parameters<ChatApi['getReactions']>[0]) {
+    return this.getClient().getReactions(request);
   }
 
   /**
@@ -1311,7 +1114,7 @@ export class Channel {
    * @returns Server response.
    */
   getMessagesById(messageIds: string[]) {
-    return this.channelApi.getManyMessages({ ids: messageIds });
+    return this.getManyMessages({ ids: messageIds });
   }
 
   /**
@@ -1442,8 +1245,8 @@ export class Channel {
     };
 
     const state = this.id
-      ? await this.channelApi.getOrCreate(queryPayload)
-      : await this.getClient().chatApi.getOrCreateDistinctChannel({
+      ? await this.getOrCreate(queryPayload)
+      : await this.getClient().getOrCreateDistinctChannel({
           type: this.type,
           ...queryPayload,
         });
@@ -1454,7 +1257,6 @@ export class Channel {
     // update the channel id if it was missing
     if (!this.id) {
       this.id = channel.id;
-      this.channelApi.id = channel.id;
       this.cid = channel.cid;
       // set the channel as active...
 
@@ -1575,22 +1377,17 @@ export class Channel {
    * @param clearHistory Whether to clear message history for the user (optional, defaults to `false`).
    * @returns The server response.
    */
-  async hide(clearHistory = false) {
+  override async hide(request?: Gen_HideChannelRequest) {
     this._checkInitialized();
-
-    return await this.channelApi.hide({
-      clear_history: clearHistory,
-    });
+    return await super.hide(request);
   }
 
   /**
-   * Removes the hidden status for a channel.
-   *
-   * @returns The server response.
+   * Removes the hidden status for a channel; ensures the channel is initialized first.
    */
-  async show() {
+  override async show(request?: Gen_ShowChannelRequest) {
     this._checkInitialized();
-    return await this.channelApi.show();
+    return await super.show(request);
   }
 
   /**
@@ -1647,45 +1444,35 @@ export class Channel {
    * @param vote The vote that will be cast (or canceled in case of an empty payload).
    * @returns The poll vote response.
    */
-  async vote(messageId: string, pollId: string, vote: PollVoteData) {
-    return await this.getClient().castPollVote(messageId, pollId, vote);
+  async vote(request: Parameters<ChatApi['castPollVote']>[0]) {
+    return await this.getClient().castPollVote(request);
   }
 
-  async removeVote(messageId: string, pollId: string, voteId: string) {
-    return await this.getClient().removePollVote(messageId, pollId, voteId);
+  async removeVote(request: Parameters<ChatApi['deletePollVote']>[0]) {
+    return await this.getClient().deletePollVote(request);
   }
 
-  /**
-   * Creates or updates a draft message in a channel.
-   *
-   * @param message The draft message to create or update.
-   * @returns Response containing the created draft.
-   */
-  async _createDraft(message: DraftMessagePayload) {
-    return await this.channelApi.createDraft({ message });
+  async _createDraft(request: Gen_CreateDraftRequest) {
+    return await super.createDraft(request);
   }
 
   /**
-   * Creates or updates a draft message in a channel. If offline support is enabled, it will
-   * make sure that creating the draft is queued up if it fails due to bad internet conditions
-   * and executed later.
-   *
-   * @param message The draft message to create or update.
-   * @returns Response containing the created draft.
+   * Creates or updates a draft message in a channel. If offline support is enabled, the
+   * call is queued so it is replayed on reconnect.
    */
-  async createDraft(message: DraftMessagePayload) {
+  override async createDraft(request: Gen_CreateDraftRequest) {
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
-        return await offlineDb.queueTask<CreateDraftResponse>({
+        return (await offlineDb.queueTask<CreateDraftResponse>({
           task: {
             channelId: this.id as string,
             channelType: this.type,
-            threadId: message.parent_id,
-            payload: [message],
+            threadId: request.message?.parent_id,
+            payload: [request],
             type: 'create-draft',
           },
-        });
+        })) as Awaited<ReturnType<ChannelApi['createDraft']>>;
       }
     } catch (error) {
       this._client.logger('error', `offlineDb:create-draft`, {
@@ -1694,43 +1481,30 @@ export class Channel {
       });
     }
 
-    return this._createDraft(message);
+    return this._createDraft(request);
+  }
+
+  async _deleteDraft(request?: Parameters<ChannelApi['deleteDraft']>[0]) {
+    return await super.deleteDraft(request);
   }
 
   /**
-   * Deletes a draft message from a channel or a thread.
-   *
-   * @param options Delete options (optional, defaults to `{}`).
-   * @param options.parent_id Parent message ID for drafts in threads (optional).
-   * @returns API response.
+   * Deletes a draft message from a channel or a thread. If offline support is enabled, the
+   * call is queued so it is replayed on reconnect.
    */
-  async _deleteDraft({ parent_id }: { parent_id?: string } = {}) {
-    return await this.channelApi.deleteDraft({ parent_id });
-  }
-
-  /**
-   * Deletes a draft message from a channel or a thread. If offline support is enabled, it
-   * will make sure that deleting the draft is queued up if it fails due to bad internet
-   * conditions and executed later.
-   *
-   * @param options Delete options (optional, defaults to `{}`).
-   * @param options.parent_id Parent message ID for drafts in threads (optional).
-   * @returns API response.
-   */
-  async deleteDraft(options: { parent_id?: string } = {}) {
-    const { parent_id } = options;
+  override async deleteDraft(request?: Parameters<ChannelApi['deleteDraft']>[0]) {
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
-        return await offlineDb.queueTask<APIResponse>({
+        return (await offlineDb.queueTask<APIResponse>({
           task: {
             channelId: this.id as string,
             channelType: this.type,
-            threadId: parent_id,
-            payload: [options],
+            threadId: request?.parent_id,
+            payload: [request],
             type: 'delete-draft',
           },
-        });
+        })) as Awaited<ReturnType<ChannelApi['deleteDraft']>>;
       }
     } catch (error) {
       this._client.logger('error', `offlineDb:delete-draft`, {
@@ -1739,18 +1513,7 @@ export class Channel {
       });
     }
 
-    return this._deleteDraft(options);
-  }
-
-  /**
-   * Retrieves a draft message from a channel.
-   *
-   * @param options Get options (optional, defaults to `{}`).
-   * @param options.parent_id Parent message ID for drafts in threads (optional).
-   * @returns Response containing the draft.
-   */
-  async getDraft({ parent_id }: { parent_id?: string } = {}): Promise<GetDraftResponse> {
-    return await this.channelApi.getDraft({ parent_id });
+    return this._deleteDraft(request);
   }
 
   /**
