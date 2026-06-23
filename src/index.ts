@@ -43,6 +43,7 @@ export type {
   CustomChannelData,
   CustomCommandData,
   CustomEventData,
+  CustomEventTypes,
   CustomMemberData,
   CustomMessageComposerData,
   CustomMessageData,
