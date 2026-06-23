@@ -8,6 +8,7 @@ import type {
   CustomChannelData,
   CustomCommandData,
   CustomEventData,
+  CustomEventTypes,
   CustomMemberData,
   CustomMessageData,
   CustomPollData,
@@ -1702,7 +1703,7 @@ export type UserCustomEvent = CustomEventData & {
 
 export type EventHandler = (event: Event) => void;
 
-export type EventTypes = 'all' | keyof typeof EVENT_MAP;
+export type EventTypes = 'all' | keyof typeof EVENT_MAP | keyof CustomEventTypes;
 
 /**
  * Filter Types

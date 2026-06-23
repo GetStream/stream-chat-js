@@ -2,6 +2,7 @@ export interface CustomAttachmentData {}
 export interface CustomChannelData {}
 export interface CustomCommandData {}
 export interface CustomEventData {}
+export interface CustomEventTypes {}
 export interface CustomMemberData {}
 export interface CustomMessageData {}
 export interface CustomPollOptionData {}
