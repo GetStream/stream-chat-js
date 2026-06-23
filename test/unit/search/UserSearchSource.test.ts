@@ -160,61 +160,77 @@ describe('UserSearchSource', () => {
           searchQuery ? { name: { $autocomplete: searchQuery } } : null,
       },
     });
-    searchSource.sort = { created_at: -1 } as UserSort;
+    searchSource.sort = [{ field: 'created_at', direction: -1 }];
     searchSource.searchOptions = { presence: true };
 
     // @ts-expect-error accessing protected method
     await searchSource.query('John');
 
-    expect(queryUsersMock).toHaveBeenCalledWith(
-      {
-        $or: [{ id: { $autocomplete: 'John' } }, { name: { $autocomplete: 'John' } }],
-        name: { $autocomplete: 'John' },
-        role: { $eq: 'admin' },
+    expect(queryUsersMock).toHaveBeenCalledWith({
+      payload: {
+        filter_conditions: {
+          $or: [{ id: { $autocomplete: 'John' } }, { name: { $autocomplete: 'John' } }],
+          name: { $autocomplete: 'John' },
+          role: { $eq: 'admin' },
+        },
+        sort: [
+          { field: 'created_at', direction: -1 },
+          { field: 'id', direction: 1 },
+        ],
+        presence: true,
+        limit: searchSource.pageSize,
+        offset: searchSource.offset,
       },
-      { id: 1, created_at: -1 },
-      { presence: true, limit: searchSource.pageSize, offset: searchSource.offset },
-    );
+    });
   });
 
   it('appends a default id sort when sort is an array without an id key', async () => {
-    searchSource.sort = [{ created_at: -1 }] as UserSort;
+    searchSource.sort = [{ field: 'created_at', direction: -1 }];
 
     // @ts-expect-error accessing protected method
     await searchSource.query('John');
 
-    expect(queryUsersMock).toHaveBeenCalledWith(
-      expect.anything(),
-      [{ created_at: -1 }, { id: 1 }],
-      expect.anything(),
-    );
+    expect(queryUsersMock).toHaveBeenCalledWith({
+      payload: expect.objectContaining({
+        sort: [
+          { field: 'created_at', direction: -1 },
+          { field: 'id', direction: 1 },
+        ],
+      }),
+    });
   });
 
   it('leaves the sort array unchanged when it already contains an id key', async () => {
-    const sort = [{ id: -1 }, { created_at: -1 }] as UserSort;
+    const sort: UserSort = [
+      { field: 'id', direction: -1 },
+      { field: 'created_at', direction: -1 },
+    ];
     searchSource.sort = sort;
 
     // @ts-expect-error accessing protected method
     await searchSource.query('John');
 
-    expect(queryUsersMock).toHaveBeenCalledWith(
-      expect.anything(),
-      [{ id: -1 }, { created_at: -1 }],
-      expect.anything(),
-    );
+    expect(queryUsersMock).toHaveBeenCalledWith({
+      payload: expect.objectContaining({
+        sort: [
+          { field: 'id', direction: -1 },
+          { field: 'created_at', direction: -1 },
+        ],
+      }),
+    });
   });
 
   it('uses only the default id sort when sort is an empty array', async () => {
-    searchSource.sort = [] as UserSort;
+    searchSource.sort = [];
 
     // @ts-expect-error accessing protected method
     await searchSource.query('John');
 
-    expect(queryUsersMock).toHaveBeenCalledWith(
-      expect.anything(),
-      [{ id: 1 }],
-      expect.anything(),
-    );
+    expect(queryUsersMock).toHaveBeenCalledWith({
+      payload: expect.objectContaining({
+        sort: [{ field: 'id', direction: 1 }],
+      }),
+    });
   });
 
   it('returns items from query', async () => {

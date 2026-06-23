@@ -14,12 +14,12 @@ import type { StreamChat } from './client';
 import { runWithRetry } from './utils/retryable';
 
 export class ApiClient {
-  client: StreamChat;
+  client!: StreamChat;
 
   private nextRequestAbortController: AbortController | null = null;
 
-  constructor(client: StreamChat) {
-    this.client = client;
+  constructor(client?: StreamChat) {
+    if (client) this.client = client;
   }
 
   _getToken(): string | undefined {
