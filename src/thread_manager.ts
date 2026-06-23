@@ -298,7 +298,7 @@ export class ThreadManager extends WithSubscriptions {
   };
 
   public queryThreads = (options: QueryThreadsOptions = {}) =>
-    this.client.queryThreads({
+    this.client.queryThreadsAndHydrate({
       limit: 25,
       participant_limit: 10,
       reply_limit: 10,

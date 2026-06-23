@@ -6,7 +6,6 @@ import type {
   MessageFilters,
   MessageResponse,
   SearchMessageSort,
-  SearchOptions,
   SearchPayload,
 } from '../types';
 import type { StreamChat } from '../client';
@@ -156,23 +155,25 @@ export class MessageSearchSource<
       >,
     });
 
-    const sort: SearchMessageSort = {
-      created_at: -1,
-      ...this.messageSearchSort,
-    };
+    const { next, results } = await this.client.search({
+      payload: {
+        filter_conditions: channelFilters,
+        message_filter_conditions: messageFilters,
+        limit: this.pageSize,
+        next: this.next,
+        sort: [
+          {
+            field: 'created_at',
+            direction: -1,
+          },
+          ...(this.messageSearchSort ?? []),
+        ],
+      },
+    });
 
-    const options: SearchOptions = {
-      limit: this.pageSize,
-      next: this.next,
-      sort,
-    };
-
-    const { next, results } = await this.client.search(
-      channelFilters,
-      messageFilters,
-      options,
-    );
-    const items = results.map(({ message }) => message);
+    const items = results
+      .map(({ message }) => message)
+      .filter((m): m is NonNullable<typeof m> => Boolean(m));
 
     const cids = Array.from(
       items.reduce((acc, message) => {
@@ -188,14 +189,11 @@ export class MessageSearchSource<
           MergeContext<BuiltInContexts['channelQuery'], TContexts['channelQueryContext']>
         >,
       });
-      await this.client.queryChannels(
-        channelQueryFilters,
-        {
-          last_message_at: -1,
-          ...this.channelQuerySort,
-        },
-        this.channelQueryOptions,
-      );
+      await this.client.queryChannelsAndHydrate({
+        filter_conditions: channelQueryFilters,
+        sort: [{ direction: -1, field: 'last_message_at' }],
+        ...this.channelQueryOptions,
+      });
     }
 
     return { items, next };

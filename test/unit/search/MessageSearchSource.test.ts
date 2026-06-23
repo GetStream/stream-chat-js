@@ -10,7 +10,7 @@ describe('MessageSearchSource', () => {
   let client: StreamChat;
   let searchSource: MessageSearchSource;
   let searchMock: MockInstance<StreamChat['search']>;
-  let queryChannelsMock: MockInstance<StreamChat['queryChannels']>;
+  let queryChannelsMock: MockInstance<StreamChat['queryChannelsAndHydrate']>;
   let messages: MessageResponse[];
   let searchResponse: SearchAPIResponse;
 
@@ -22,7 +22,7 @@ describe('MessageSearchSource', () => {
       next: 'next-token',
     } as any;
     searchMock = vi.spyOn(client, 'search').mockResolvedValue(searchResponse);
-    queryChannelsMock = vi.spyOn(client, 'queryChannels').mockResolvedValue([]);
+    queryChannelsMock = vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue([]);
     searchSource = new MessageSearchSource(client);
   });
 

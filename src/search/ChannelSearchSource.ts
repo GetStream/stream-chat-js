@@ -61,9 +61,16 @@ export class ChannelSearchSource<
         ChannelSearchSourceFilterBuilderContext<TFilterContext>
       >,
     });
-    const sort = this.sort ?? {};
+    const sort = this.sort;
     const options = { ...this.searchOptions, limit: this.pageSize, offset: this.offset };
-    const items = await this.client.queryChannels(filters, sort, options);
+    const items = await this.client.queryChannelsAndHydrate(
+      {
+        filter_conditions: filters,
+        sort,
+        ...options,
+      },
+      { withResponse: false },
+    );
     return { items };
   }
 

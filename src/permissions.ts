@@ -56,8 +56,7 @@ export const DenyAll = new Permission(
   Deny,
 );
 
-// Fixme: rename to RoleName with next major release
-export type Role =
+export type RoleName =
   | 'admin'
   | 'user'
   | 'guest'

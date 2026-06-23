@@ -137,7 +137,7 @@ describe('ChannelManager', () => {
       });
 
       const clientQueryChannelsSpy = vi
-        .spyOn(client, 'queryChannels')
+        .spyOn(client, 'queryChannelsAndHydrate')
         .mockImplementation(async () => []);
       await (channelManager as any).queryChannelsRequest({});
       expect(clientQueryChannelsSpy).toHaveBeenCalledOnce();
@@ -512,7 +512,7 @@ describe('ChannelManager', () => {
         mockChannelPages.flat().map((obj) => [obj.cid, obj]),
       );
       clientQueryChannelsStub = sinon
-        .stub(client, 'queryChannels')
+        .stub(client, 'queryChannelsAndHydrate')
         .callsFake((filters, _sort, options) => {
           if (
             typeof filters.cid === 'object' &&
@@ -1087,7 +1087,7 @@ describe('ChannelManager', () => {
           const [filters, ...restParams] = params;
           filters.cid = { $in: fetchedChannels.map((c) => c.cid) };
 
-          return await client.queryChannels(filters, ...restParams);
+          return await client.queryChannelsAndHydrate(filters, ...restParams);
         };
         channelManager.setQueryChannelsRequest(queryChannelsOverride);
 
@@ -1422,7 +1422,12 @@ describe('ChannelManager', () => {
             ),
           };
 
-          return await client.queryChannels(filters, sort, options, ...restParams);
+          return await client.queryChannelsAndHydrate(
+            filters,
+            sort,
+            options,
+            ...restParams,
+          );
         };
 
         channelManager.setQueryChannelsRequest(queryChannelsOverride);
@@ -1500,7 +1505,7 @@ describe('ChannelManager', () => {
       filter: Record<string, unknown>;
       sort?: NonNullable<QueryChannelsAPIResponse['predefined_filter']>['sort'];
     }) => {
-      vi.spyOn(client.chatApi, 'queryChannels').mockResolvedValueOnce({
+      vi.spyOn(client, 'queryChannels').mockResolvedValueOnce({
         duration: '0.01s',
         channels: channelsResponse,
         predefined_filter: {
@@ -1678,7 +1683,7 @@ describe('ChannelManager', () => {
       });
 
       it('keeps non-predefined query behavior based on caller filters and sort', async () => {
-        vi.spyOn(client.chatApi, 'queryChannels').mockResolvedValueOnce({
+        vi.spyOn(client, 'queryChannels').mockResolvedValueOnce({
           duration: '0.01s',
           channels: channelsResponse,
           metadata: {} as RequestMetadata,
@@ -1699,7 +1704,7 @@ describe('ChannelManager', () => {
       });
 
       it('preserves resolved predefined response metadata after loading the next page', async () => {
-        vi.spyOn(client.chatApi, 'queryChannels')
+        vi.spyOn(client, 'queryChannels')
           .mockResolvedValueOnce({
             duration: '0.01s',
             channels: channelsResponse,
@@ -1745,7 +1750,7 @@ describe('ChannelManager', () => {
       });
 
       it('clears resolved predefined response metadata when switching to a non-predefined query', async () => {
-        vi.spyOn(client.chatApi, 'queryChannels')
+        vi.spyOn(client, 'queryChannels')
           .mockResolvedValueOnce({
             duration: '0.01s',
             channels: channelsResponse,

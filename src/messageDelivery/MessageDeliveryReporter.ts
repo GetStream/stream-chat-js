@@ -263,7 +263,7 @@ export class MessageDeliveryReporter {
     };
 
     this.markDeliveredRequestPromise = this.client
-      .markChannelsDelivered(payload)
+      .markDelivered(payload)
       .then(handleSuccess, handleError);
   };
 
@@ -285,9 +285,9 @@ export class MessageDeliveryReporter {
 
     let result: StreamResponse<Gen_MarkReadResponse> | null = null;
     if (isChannel(collection)) {
-      result = await collection.markAsReadRequest(options);
+      result = await collection.markRead(options);
     } else if (isThread(collection)) {
-      result = await collection.channel.markAsReadRequest({
+      result = await collection.channel.markRead({
         ...options,
         thread_id: collection.id,
       });

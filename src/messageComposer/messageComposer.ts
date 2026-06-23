@@ -927,7 +927,7 @@ export class MessageComposer extends WithSubscriptions {
       }
     }
     this.logDraftUpdateTimestamp();
-    await this.channel.createDraft(draft);
+    await this.channel.createDraft({ message: draft });
   };
 
   deleteDraft = async () => {

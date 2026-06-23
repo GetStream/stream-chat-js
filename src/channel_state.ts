@@ -907,7 +907,11 @@ export class ChannelState {
       );
     }
     if (!loadedMessageThread && parentMessageId) {
-      await this._channel.getReplies(parentMessageId, { id_around: messageId, limit });
+      await this._channel.getReplies({
+        parent_id: parentMessageId,
+        id_around: messageId,
+        limit,
+      });
     }
     messageSetIndex = this.findMessageSetIndex({ id: messageIdToFind });
     if (messageSetIndex !== -1) {

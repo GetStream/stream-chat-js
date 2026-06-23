@@ -10,7 +10,7 @@ describe('ChannelSearchSource', () => {
   const user = { id: 'user-123' };
   let client: StreamChat;
   let searchSource: ChannelSearchSource;
-  let queryChannelsMock: MockInstance<StreamChat['queryChannels']>;
+  let queryChannelsMock: MockInstance<StreamChat['queryChannelsAndHydrate']>;
   let channels: Channel[];
   const mockChannels: ChannelAPIResponse[] = [generateChannel(), generateChannel()];
 
@@ -19,7 +19,9 @@ describe('ChannelSearchSource', () => {
     channels = mockChannels.map((data) =>
       client.channel(data.channel.type, data.channel.id),
     );
-    queryChannelsMock = vi.spyOn(client, 'queryChannels').mockResolvedValue(channels);
+    queryChannelsMock = vi
+      .spyOn(client, 'queryChannelsAndHydrate')
+      .mockResolvedValue(channels);
     searchSource = new ChannelSearchSource(client);
   });
 
