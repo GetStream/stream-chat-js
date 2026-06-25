@@ -609,7 +609,9 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
         if (cid && client.user && client.user.id !== user?.id) {
           const userId = client.user.id;
           const channel = client.activeChannels[cid];
-          if (channel) {
+          // Skip persisting read state for channels without read events (e.g. livestreams): the
+          // unread count there is client-local and must never be written to the offline DB.
+          if (channel && channel.hasReadEvents()) {
             const ownReads = channel.state.read[userId];
             const unreadCount = channel.countUnread();
             const upsertReadsQueries = await this.upsertReads({
@@ -867,31 +869,34 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
         execute: false,
       });
 
+      let finalQueries = [...truncateQueries];
+
+      // Only persist read state for channels with read events. For read-events-disabled channels
+      // (e.g. livestreams) the unread count is client-local and must not be written to the offline DB.
       const userId = ownUser.id;
       const activeChannel = this.client.activeChannels[cid];
-      const ownReads = activeChannel.state.read[userId];
+      if (activeChannel?.hasReadEvents()) {
+        const ownReads = activeChannel.state.read[userId];
 
-      let unreadCount = 0;
+        let unreadCount = 0;
+        if (truncated_at) {
+          unreadCount = activeChannel.countUnread(new Date(truncated_at));
+        }
 
-      if (truncated_at) {
-        const truncatedAt = new Date(truncated_at);
-        unreadCount = activeChannel.countUnread(truncatedAt);
+        const upsertReadQueries = await this.upsertReads({
+          cid,
+          execute: false,
+          reads: [
+            {
+              last_read: ownReads.last_read.toString() as string,
+              last_read_message_id: ownReads.last_read_message_id,
+              unread_messages: unreadCount,
+              user: ownUser,
+            },
+          ],
+        });
+        finalQueries = [...finalQueries, ...upsertReadQueries];
       }
-
-      const upsertReadQueries = await this.upsertReads({
-        cid,
-        execute: false,
-        reads: [
-          {
-            last_read: ownReads.last_read.toString() as string,
-            last_read_message_id: ownReads.last_read_message_id,
-            unread_messages: unreadCount,
-            user: ownUser,
-          },
-        ],
-      });
-
-      const finalQueries = [...truncateQueries, ...upsertReadQueries];
 
       if (execute) {
         await this.executeSqlBatch(finalQueries);

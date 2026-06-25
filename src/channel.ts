@@ -1446,6 +1446,20 @@ export class Channel {
     }
   }
 
+  /**
+   * hasReadEvents - Whether read events are enabled for the current user on this channel. The channel
+   * is treated as not having read events only when its `own_capabilities` are known and exclude
+   * `read-events` (e.g. livestreams); when capabilities are unknown we assume read events are enabled.
+   *
+   * @return {boolean}
+   */
+  hasReadEvents() {
+    return !(
+      Array.isArray(this.data?.own_capabilities) &&
+      !this.data.own_capabilities.includes('read-events')
+    );
+  }
+
   _countMessageAsUnread(message: LocalMessage | MessageResponse) {
     if (message.shadowed) return false;
     if (message.silent) return false;
@@ -1456,11 +1470,7 @@ export class Channel {
 
     // Return false if channel doesn't allow read events, unless the client opted into a local
     // unread count (e.g. livestreams where read events are disabled). See `enableLocalUnreadCount`.
-    if (
-      !this.getClient().options.enableLocalUnreadCount &&
-      Array.isArray(this.data?.own_capabilities) &&
-      !this.data?.own_capabilities.includes('read-events')
-    ) {
+    if (!this.getClient().options.enableLocalUnreadCount && !this.hasReadEvents()) {
       return false;
     }
 

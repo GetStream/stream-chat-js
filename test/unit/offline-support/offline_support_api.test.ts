@@ -515,6 +515,23 @@ describe('OfflineSupportApi', () => {
           expect(result).toEqual(mockQueries);
         });
 
+        it('should not call upsertReads when the channel has read events disabled', async () => {
+          const noReadEventsResponse = generateChannel({
+            channel: { id: 'no-read-events', own_capabilities: [], type: 'messaging' },
+            read: [generateReadResponse({ user: client.user })],
+          } as ChannelAPIResponse);
+          client.hydrateActiveChannels([noReadEventsResponse]);
+
+          const result = await offlineDb.handleNewMessage({
+            event: { ...baseEvent, cid: noReadEventsResponse.channel.cid },
+            execute: false,
+          });
+
+          expect(offlineDb.upsertMessages).toHaveBeenCalled();
+          expect(offlineDb.upsertReads).not.toHaveBeenCalled();
+          expect(result).toEqual(mockUpsertMessagesQueries);
+        });
+
         it('should not call upsertReads if event.user is the same as client user', async () => {
           const eventWithSameUser = { ...baseEvent, user: client.user };
 
