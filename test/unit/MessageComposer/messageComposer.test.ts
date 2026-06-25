@@ -1535,7 +1535,7 @@ describe('MessageComposer', () => {
       await messageComposer.createDraft();
 
       expect(spyComposeDraft).toHaveBeenCalled();
-      expect(spyCreateDraft).toHaveBeenCalledWith(mockDraft);
+      expect(spyCreateDraft).toHaveBeenCalledWith({ message: mockDraft });
       expect(spyLogDraftUpdateTimestamp).toHaveBeenCalled();
       expect(messageComposer.state.getLatestValue().draftId).toBe('test-draft-id');
     });
@@ -1587,7 +1587,7 @@ describe('MessageComposer', () => {
       await messageComposer.createDraft();
 
       expect(spyComposeDraft).toHaveBeenCalled();
-      expect(spyCreateDraft).toHaveBeenCalledWith(mockDraft);
+      expect(spyCreateDraft).toHaveBeenCalledWith({ message: mockDraft });
       expect(spyLogDraftUpdateTimestamp).toHaveBeenCalled();
       expect(messageComposer.state.getLatestValue().draftId).toBe('test-draft-id');
 
@@ -1635,7 +1635,7 @@ describe('MessageComposer', () => {
       await messageComposer.createDraft();
 
       expect(spyComposeDraft).toHaveBeenCalled();
-      expect(spyCreateDraft).toHaveBeenCalledWith(mockDraft);
+      expect(spyCreateDraft).toHaveBeenCalledWith({ message: mockDraft });
       expect(spyLogDraftUpdateTimestamp).toHaveBeenCalled();
       expect(messageComposer.state.getLatestValue().draftId).toBe('test-draft-id');
 

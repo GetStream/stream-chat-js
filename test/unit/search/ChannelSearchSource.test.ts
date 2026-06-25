@@ -140,7 +140,7 @@ describe('ChannelSearchSource', () => {
           searchQuery ? { 'member.user.name': { $autocomplete: searchQuery } } : null,
       },
     });
-    searchSource.sort = { last_message_at: -1 };
+    searchSource.sort = [{ field: 'last_message_at', direction: -1 }];
     searchSource.searchOptions = { message_limit: 5 };
 
     // @ts-expect-error accessing protected property
@@ -148,14 +148,19 @@ describe('ChannelSearchSource', () => {
 
     expect(queryChannelsMock).toHaveBeenCalledWith(
       {
-        'member.user.name': {
-          $autocomplete: 'channel search',
-        }, // custom
-        members: { $in: [user.id] }, // static default
-        name: { $autocomplete: 'channel search' }, // dynamic default
+        filter_conditions: {
+          'member.user.name': {
+            $autocomplete: 'channel search',
+          },
+          members: { $in: [user.id] },
+          name: { $autocomplete: 'channel search' },
+        },
+        sort: [{ field: 'last_message_at', direction: -1 }],
+        message_limit: 5,
+        limit: searchSource.pageSize,
+        offset: searchSource.offset,
       },
-      { last_message_at: -1 },
-      { message_limit: 5, limit: searchSource.pageSize, offset: searchSource.offset },
+      { withResponse: false },
     );
   });
 

@@ -537,11 +537,9 @@ describe('MentionsSearchSource', () => {
 
     await source.executeQuery();
 
-    expect(client.queryUsers).toHaveBeenCalledWith(
-      expect.any(Object),
-      expect.any(Object),
-      expect.objectContaining({ limit: 10, offset: 3 }),
-    );
+    expect(client.queryUsers).toHaveBeenCalledWith({
+      payload: expect.objectContaining({ limit: 10, offset: 3 }),
+    });
     expect(client.searchUserGroups).toHaveBeenCalledWith({
       id_gt: 'group-0',
       limit: 10,
@@ -582,11 +580,11 @@ describe('MentionsSearchSource', () => {
   it('should prepare correct query parameters for members search', () => {
     const source = new MentionsSearchSource(channel);
     source.memberFilters = { name: { $autocomplete: 'john' } } as MemberFilters;
-    source.memberSort = { created_at: -1 };
+    source.memberSort = [{ field: 'created_at', direction: -1 }];
 
     const params = source.prepareQueryMembersParams('john', 5);
     expect(params.filters).toEqual({ name: { $autocomplete: 'john' } });
-    expect(params.sort).toEqual({ created_at: -1 });
+    expect(params.sort).toEqual([{ field: 'created_at', direction: -1 }]);
     expect(params.options).toEqual(expect.objectContaining({ limit: 10, offset: 5 }));
   });
 
@@ -628,11 +626,9 @@ describe('MentionsSearchSource', () => {
     source.config.mentionAllAppUsers = true;
 
     await source.query('test');
-    expect(client.queryUsers).toHaveBeenCalledWith(
-      expect.any(Object),
-      expect.any(Object),
-      expect.objectContaining({ presence: true }),
-    );
+    expect(client.queryUsers).toHaveBeenCalledWith({
+      payload: expect.objectContaining({ presence: true }),
+    });
   });
 
   it('should correctly calculate Levenshtein distance for fuzzy matching', () => {

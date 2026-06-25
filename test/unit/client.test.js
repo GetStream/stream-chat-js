@@ -422,80 +422,6 @@ describe('Detect node environment', () => {
 	});
 });
 
-describe('updateMessage should maintain data integrity', () => {
-	let client;
-
-	beforeEach(async () => {
-		client = await getClientWithUser();
-	});
-
-	it('should pass mentioned_users (array of userIds) through to the request payload', async () => {
-		const requestSpy = vi
-			.spyOn(client.axiosInstance, 'request')
-			.mockResolvedValue({ data: {} });
-
-		await client.updateMessage(
-			generateMsg({
-				mentioned_users: ['uthred'],
-			}),
-		);
-
-		expect(requestSpy.mock.calls[0][0].data.message.mentioned_users[0]).to.be.equal(
-			'uthred',
-		);
-	});
-
-	it('should allow empty mentioned_users', async () => {
-		const requestSpy = vi
-			.spyOn(client.axiosInstance, 'request')
-			.mockResolvedValue({ data: {} });
-
-		await client.updateMessage(
-			generateMsg({
-				mentioned_users: [],
-			}),
-		);
-		expect(requestSpy.mock.calls[0][0].data.message.mentioned_users[0]).to.be.equal(
-			undefined,
-		);
-
-		await client.updateMessage(
-			generateMsg({
-				text: 'test message',
-				mentioned_users: undefined,
-			}),
-		);
-		expect(requestSpy.mock.calls[1][0].data.message.mentioned_users).to.be.equal(
-			undefined,
-		);
-	});
-
-	it('should remove reserved and volatile fields before running the update', async () => {
-		const requestSpy = vi
-			.spyOn(client.axiosInstance, 'request')
-			.mockResolvedValue({ data: {} });
-		const updatedMessage = generateMsg({
-			text: 'test message',
-			pinned_at: new Date().toISOString(),
-			mentioned_users: undefined,
-		});
-
-		await client.updateMessage(updatedMessage);
-
-		const messageInQuery = {
-			attachments: updatedMessage.attachments,
-			mentioned_users: updatedMessage.mentioned_users,
-			reaction_scores: updatedMessage.reaction_scores,
-			silent: updatedMessage.silent,
-			status: updatedMessage.status,
-			text: updatedMessage.text,
-		};
-
-		expect(requestSpy).toHaveBeenCalledTimes(1);
-		expect(requestSpy.mock.calls[0][0].data.message).toMatchObject(messageInQuery);
-	});
-});
-
 describe('message update', () => {
 	let client;
 	let loggerSpy;
@@ -525,8 +451,9 @@ describe('message update', () => {
 				cid: 'messaging:channel-123',
 				text: 'edited',
 			});
+			const request = { id: message.id, message, skip_enrich_url: true };
 
-			await client.updateMessage(message, { skip_enrich_url: true });
+			await client.updateMessage(request);
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).toHaveBeenCalledWith({
@@ -534,7 +461,7 @@ describe('message update', () => {
 					channelId: 'channel-123',
 					channelType: 'messaging',
 					messageId: 'msg-123',
-					payload: [message, { skip_enrich_url: true }],
+					payload: [request],
 					type: 'update-message',
 				},
 			});
@@ -547,13 +474,14 @@ describe('message update', () => {
 				cid: 'invalid-cid',
 				text: 'edited',
 			});
+			const request = { id: message.id, message };
 
-			await client.updateMessage(message);
+			await client.updateMessage(request);
 
 			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
 					messageId: 'msg-123',
-					payload: [message, undefined],
+					payload: [request],
 					type: 'update-message',
 				},
 			});
@@ -564,15 +492,14 @@ describe('message update', () => {
 				id: 'msg-123',
 				text: 'edited',
 			});
+			const request = { id: message.id, message, skip_enrich_url: true };
 
 			client.offlineDb = undefined;
 
-			await client.updateMessage(message, { skip_enrich_url: true });
+			await client.updateMessage(request);
 
 			expect(_updateMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledWith(message, {
-				skip_enrich_url: true,
-			});
+			expect(_updateMessageSpy).toHaveBeenCalledWith(request);
 		});
 
 		it('routes updates with local attachment metadata through offlineDb queue handling', async () => {
@@ -590,14 +517,15 @@ describe('message update', () => {
 					},
 				],
 			});
+			const request = { id: message.id, message };
 
-			await client.updateMessage(message);
+			await client.updateMessage(request);
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
 					messageId: 'msg-123',
-					payload: [message, undefined],
+					payload: [request],
 					type: 'update-message',
 				},
 			});
@@ -615,14 +543,15 @@ describe('message update', () => {
 					},
 				],
 			});
+			const request = { id: message.id, message };
 
-			await client.updateMessage(message);
+			await client.updateMessage(request);
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
 					messageId: 'msg-123',
-					payload: [message, undefined],
+					payload: [request],
 					type: 'update-message',
 				},
 			});
@@ -634,13 +563,14 @@ describe('message update', () => {
 				id: 'msg-123',
 				text: 'edited',
 			});
+			const request = { id: message.id, message };
 			queueTaskSpy.mockRejectedValue(new Error('Offline failure'));
 
-			await client.updateMessage(message);
+			await client.updateMessage(request);
 
 			expect(loggerSpy).toHaveBeenCalledTimes(1);
 			expect(_updateMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledWith(message, undefined);
+			expect(_updateMessageSpy).toHaveBeenCalledWith(request);
 		});
 
 		it('logs and falls back to _updateMessage when queueTask rethrows for failed offline edits', async () => {
@@ -650,57 +580,21 @@ describe('message update', () => {
 				text: 'edited',
 				message_text_updated_at: '2026-04-01T20:48:43.886269Z',
 			});
+			const request = { id: failedEditedMessage.id, message: failedEditedMessage };
 
 			client.wsConnection = { isHealthy: false };
 			queueTaskSpy.mockRejectedValue(new Error('Offline failure'));
 			_updateMessageSpy.mockResolvedValue({ message: failedEditedMessage });
 
-			const response = await client.updateMessage(failedEditedMessage);
+			const response = await client.updateMessage(request);
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(loggerSpy).toHaveBeenCalledTimes(1);
 			expect(_updateMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledWith(failedEditedMessage, undefined);
+			expect(_updateMessageSpy).toHaveBeenCalledWith(request);
 			expect(response.message.text).toBe('edited');
 			expect(response.message.status).toBe('failed');
 		});
-	});
-});
-
-describe('Client search', async () => {
-	const client = await getClientWithUser();
-
-	it('search with sorting by defined field', async () => {
-		client.api.get = (url, config) => {
-			expect(config.payload.sort).to.be.eql([{ field: 'updated_at', direction: -1 }]);
-		};
-		await client.search({ cid: 'messaging:my-cid' }, 'query', {
-			sort: [{ updated_at: -1 }],
-		});
-	});
-	it('search with sorting by custom field', async () => {
-		client.api.get = (url, config) => {
-			expect(config.payload.sort).to.be.eql([{ field: 'custom_field', direction: -1 }]);
-		};
-		await client.search({ cid: 'messaging:my-cid' }, 'query', {
-			sort: [{ custom_field: -1 }],
-		});
-	});
-	it('sorting and offset works', async () => {
-		await expect(
-			client.search({ cid: 'messaging:my-cid' }, 'query', {
-				offset: 1,
-				sort: [{ custom_field: -1 }],
-			}),
-		).resolves.toEqual();
-	});
-	it('next and offset fails', async () => {
-		await expect(
-			client.search({ cid: 'messaging:my-cid' }, 'query', {
-				offset: 1,
-				next: 'next',
-			}),
-		).rejects.toThrow(Error);
 	});
 });
 
@@ -876,24 +770,6 @@ describe('StreamChat.queryChannels', async () => {
 		queryChannelsResponse.forEach((item) => {
 			expect(item).to.be.instanceOf(Channel);
 		});
-		stub.restore();
-	});
-
-	it('should return the raw channels response from queryChannelsRequest', async () => {
-		const client = await getClientWithUser();
-		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
-			...mockChannelQueryResponse,
-			messages: Array.from(
-				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE },
-				generateMsg,
-			),
-		}));
-		const stub = sinon
-			.stub(client, 'queryChannels')
-			.resolves({ channels: mockedChannelsQueryResponse });
-		const queryChannelsResponse = await client.queryChannelsRequest();
-		expect(queryChannelsResponse.length).to.be.equal(mockedChannelsQueryResponse.length);
-		expect(queryChannelsResponse).to.deep.equal(mockedChannelsQueryResponse);
 		stub.restore();
 	});
 
@@ -1105,7 +981,6 @@ describe('message deletion', () => {
 	let client;
 	let loggerSpy;
 	let queueTaskSpy;
-	let clientDeleteSpy;
 
 	beforeEach(async () => {
 		client = await getClientWithUser();
@@ -1115,9 +990,6 @@ describe('message deletion', () => {
 		await client.offlineDb.init(client.userID);
 
 		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
-		clientDeleteSpy = vi
-			.spyOn(client, 'deleteMessage')
-			.mockResolvedValue({ message: {} });
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
 	});
 
@@ -1136,181 +1008,126 @@ describe('message deletion', () => {
 			vi.resetAllMocks();
 		});
 
-		it.each([
-			['undefined', undefined, {}],
-			['true', true, { hardDelete: true }],
-			['false', false, {}],
-			['{ hardDelete: false }', { hardDelete: false }, {}],
-			['{ hardDelete: true }', { hardDelete: true }, { hardDelete: true }],
-			['{ deleteForMe: true }', { deleteForMe: true }, { deleteForMe: true }],
-			['{ deleteForMe: false }', { deleteForMe: false }, {}],
-			[
-				'{ hardDelete: false, deleteForMe: true }',
-				{ hardDelete: false, deleteForMe: true },
-				{ deleteForMe: true },
-			],
-			[
-				'{ hardDelete: true, deleteForMe: true }',
-				{ hardDelete: true, deleteForMe: true },
-				{ deleteForMe: true },
-			],
-			[
-				'{ hardDelete: false, deleteForMe: false }',
-				{ hardDelete: false, deleteForMe: false },
-				{},
-			],
-			[
-				'{ hardDelete: true, deleteForMe: false }',
-				{ hardDelete: true, deleteForMe: false },
-				{ hardDelete: true },
-			],
-		])('should parse delete message options %s', async (_, options, expectedOptions) => {
-			await client.deleteMessage(messageId, options);
-			if (expectedOptions.hardDelete) {
-				expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledTimes(1);
-				expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledWith({
-					id: messageId,
-				});
-				expect(client.offlineDb.softDeleteMessage).not.toHaveBeenCalled();
-			} else {
-				expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledTimes(1);
-				expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledWith({
-					id: messageId,
-					deleteForMe: expectedOptions.deleteForMe,
-				});
-				expect(client.offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
-			}
+		it('routes soft delete through offlineDb.softDeleteMessage and queues the task', async () => {
+			const request = { id: messageId };
+
+			await client.deleteMessage(request);
+
+			expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledTimes(1);
+			expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledWith({
+				id: messageId,
+			});
+			expect(client.offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
-
-			const taskArg = queueTaskSpy.mock.calls[0][0];
-			expect(taskArg).to.deep.equal({
+			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
 					messageId,
-					payload: [messageId, expectedOptions],
+					payload: [request],
 					type: 'delete-message',
 				},
 			});
 			expect(_deleteMessageSpy).not.toHaveBeenCalled();
 		});
 
-		it.each([
-			['undefined', undefined, {}],
-			['true', true, { hardDelete: true }],
-			['false', false, {}],
-			['{ hardDelete: false }', { hardDelete: false }, {}],
-			['{ hardDelete: true }', { hardDelete: true }, { hardDelete: true }],
-			['{ deleteForMe: true }', { deleteForMe: true }, { deleteForMe: true }],
-			['{ deleteForMe: false }', { deleteForMe: false }, {}],
-			[
-				'{ hardDelete: false, deleteForMe: true }',
-				{ hardDelete: false, deleteForMe: true },
-				{ deleteForMe: true },
-			],
-			[
-				'{ hardDelete: true, deleteForMe: true }',
-				{ hardDelete: true, deleteForMe: true },
-				{ deleteForMe: true },
-			],
-			[
-				'{ hardDelete: false, deleteForMe: false }',
-				{ hardDelete: false, deleteForMe: false },
-				{},
-			],
-			[
-				'{ hardDelete: true, deleteForMe: false }',
-				{ hardDelete: true, deleteForMe: false },
-				{ hardDelete: true },
-			],
-		])(
-			'should fall back to _deleteMessage if offlineDb is not set and delete options is %s',
-			async (_, options, expectedOptions) => {
-				client.offlineDb = undefined;
+		it('routes hard delete through offlineDb.hardDeleteMessage and queues the task', async () => {
+			const request = { id: messageId, hard: true };
 
-				await client.deleteMessage(messageId, options);
+			await client.deleteMessage(request);
 
-				expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
-				expect(_deleteMessageSpy).toHaveBeenCalledWith(messageId, expectedOptions);
-			},
-		);
+			expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledTimes(1);
+			expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledWith({
+				id: messageId,
+			});
+			expect(client.offlineDb.softDeleteMessage).not.toHaveBeenCalled();
 
-		it('should log and fall back to _deleteMessage if offline delete throws', async () => {
+			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
+			expect(queueTaskSpy).toHaveBeenCalledWith({
+				task: {
+					messageId,
+					payload: [request],
+					type: 'delete-message',
+				},
+			});
+			expect(_deleteMessageSpy).not.toHaveBeenCalled();
+		});
+
+		it('forwards delete_for_me to offlineDb.softDeleteMessage', async () => {
+			const request = { id: messageId, delete_for_me: true };
+
+			await client.deleteMessage(request);
+
+			expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledTimes(1);
+			expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledWith({
+				id: messageId,
+				deleteForMe: true,
+			});
+			expect(client.offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
+		});
+
+		it('falls back to _deleteMessage if offlineDb is not set', async () => {
+			client.offlineDb = undefined;
+			const request = { id: messageId };
+
+			await client.deleteMessage(request);
+
+			expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
+			expect(_deleteMessageSpy).toHaveBeenCalledWith(request);
+		});
+
+		it('logs and falls back to _deleteMessage if offline delete throws', async () => {
 			client.offlineDb.softDeleteMessage.mockRejectedValue(new Error('Offline failure'));
+			const request = { id: messageId };
 
-			await client.deleteMessage(messageId, false);
+			await client.deleteMessage(request);
 
 			expect(loggerSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).not.toHaveBeenCalled();
 			expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_deleteMessageSpy).toHaveBeenCalledWith(messageId, {});
+			expect(_deleteMessageSpy).toHaveBeenCalledWith(request);
 		});
 	});
 
 	describe('_deleteMessage', () => {
-		it('should call deleteMessage with correct params when hardDelete is false/undefined', async () => {
-			await client._deleteMessage(messageId);
+		let sendRequestSpy;
 
-			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
-			expect(clientDeleteSpy).toHaveBeenCalledWith({
-				id: messageId,
-				hard: undefined,
-				delete_for_me: undefined,
+		beforeEach(() => {
+			sendRequestSpy = vi.spyOn(client.api, 'sendRequest').mockResolvedValue({
+				body: { message: { id: messageId } },
+				metadata: {},
 			});
 		});
 
-		it('should call deleteMessage with hard=true when hardDelete is true', async () => {
-			await client._deleteMessage(messageId, true);
-
-			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
-			expect(clientDeleteSpy).toHaveBeenCalledWith({
-				id: messageId,
-				hard: true,
-				delete_for_me: undefined,
-			});
+		afterEach(() => {
+			vi.resetAllMocks();
 		});
 
-		it('should call deleteMessage with delete_for_me=true', async () => {
-			await client._deleteMessage(messageId, { deleteForMe: true });
+		it('returns the response from the underlying deleteMessage call', async () => {
+			const result = await client._deleteMessage({ id: messageId });
 
-			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
-			expect(clientDeleteSpy).toHaveBeenCalledWith({
+			expect(sendRequestSpy).toHaveBeenCalledTimes(1);
+			expect(result.message).toMatchObject({ id: messageId });
+		});
+
+		it('enriches the message with type="deleted" and deleted_for_me=true when delete_for_me is set', async () => {
+			const result = await client._deleteMessage({
 				id: messageId,
-				hard: undefined,
 				delete_for_me: true,
 			});
-		});
 
-		it('should call deleteMessage with both hard and delete_for_me when both are true', async () => {
-			await client._deleteMessage(messageId, { deleteForMe: true, hardDelete: true });
-
-			expect(clientDeleteSpy).toHaveBeenCalledTimes(1);
-			expect(clientDeleteSpy).toHaveBeenCalledWith({
+			expect(result.message).toMatchObject({
 				id: messageId,
-				hard: true,
-				delete_for_me: true,
+				deleted_for_me: true,
+				type: 'deleted',
 			});
 		});
 
-		it('should return the response from deleteMessage', async () => {
-			clientDeleteSpy.mockResolvedValue({
-				message: { id: messageId },
-			});
-			const result = await client._deleteMessage(messageId);
+		it('does not enrich the message when delete_for_me is not set', async () => {
+			const result = await client._deleteMessage({ id: messageId, hard: true });
 
-			expect(result).toStrictEqual({
-				message: { id: messageId },
-			});
-		});
-
-		it('enriches the deleted-for-me message with type="deleted" and deleted_for_me=true', async () => {
-			clientDeleteSpy.mockResolvedValue({
-				message: { id: messageId },
-			});
-			const result = await client._deleteMessage(messageId, { deleteForMe: true });
-
-			expect(result).toStrictEqual({
-				message: { deleted_for_me: true, id: messageId, type: 'deleted' },
-			});
+			expect(result.message).toMatchObject({ id: messageId });
+			expect(result.message).not.toHaveProperty('deleted_for_me');
+			expect(result.message).not.toHaveProperty('type');
 		});
 	});
 });

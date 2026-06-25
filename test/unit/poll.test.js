@@ -691,7 +691,7 @@ describe('Poll', () => {
 		const originalState = poll.data;
 		await poll.query(pollResponse.id);
 
-		expect(getPollStub.calledWith(pollResponse.id)).to.be.true;
+		expect(getPollStub.calledWith({ poll_id: pollResponse.id })).to.be.true;
 		const { lastActivityAt: __, ...currentPollState } = poll.data;
 		const { lastActivityAt: _, ...expectedPollState } = {
 			...originalState,
@@ -709,7 +709,7 @@ describe('Poll', () => {
 		const option_id = 'ba933470-c0da-4b6f-a4d2-d2176ac0d4a8';
 		const messageId = 'XXX';
 		const removePollVoteSpy = vi
-			.spyOn(client, 'removePollVote')
+			.spyOn(client, 'deletePollVote')
 			.mockResolvedValue('removed');
 		const castPollVoteSpy = vi
 			.spyOn(client, 'castPollVote')
@@ -731,7 +731,7 @@ describe('Poll', () => {
 		const option_id = 'ba933470-c0da-4b6f-a4d2-d2176ac0d4a8';
 		const messageId = 'XXX';
 		const removePollVoteSpy = vi
-			.spyOn(client, 'removePollVote')
+			.spyOn(client, 'deletePollVote')
 			.mockResolvedValue('removed');
 		const castPollVoteSpy = vi
 			.spyOn(client, 'castPollVote')
@@ -741,8 +741,10 @@ describe('Poll', () => {
 		await poll.castVote(option_id, messageId);
 
 		expect(removePollVoteSpy).not.toHaveBeenCalled();
-		expect(castPollVoteSpy).toHaveBeenCalledWith(messageId, pollResponse.id, {
-			option_id,
+		expect(castPollVoteSpy).toHaveBeenCalledWith({
+			message_id: messageId,
+			poll_id: pollResponse.id,
+			vote: { option_id },
 		});
 		expect(addInfoNotificationSpy).not.toHaveBeenCalled();
 	});
@@ -755,7 +757,7 @@ describe('Poll', () => {
 		const option_id = 'ba933470-c0da-4b6f-a4d2-d2176ac0d4a8';
 		const messageId = 'XXX';
 		const removePollVoteSpy = vi
-			.spyOn(client, 'removePollVote')
+			.spyOn(client, 'deletePollVote')
 			.mockResolvedValue('removed');
 		const castPollVoteSpy = vi
 			.spyOn(client, 'castPollVote')
@@ -765,8 +767,10 @@ describe('Poll', () => {
 		await poll.castVote(option_id, messageId);
 
 		expect(removePollVoteSpy).not.toHaveBeenCalled();
-		expect(castPollVoteSpy).toHaveBeenCalledWith(messageId, pollResponse.id, {
-			option_id,
+		expect(castPollVoteSpy).toHaveBeenCalledWith({
+			message_id: messageId,
+			poll_id: pollResponse.id,
+			vote: { option_id },
 		});
 		expect(addInfoNotificationSpy).not.toHaveBeenCalled();
 	});

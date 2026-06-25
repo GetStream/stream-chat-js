@@ -185,7 +185,6 @@ describe('LiveLocationManager', () => {
         await manager.init();
         expect(updateLocationSpy).toHaveBeenCalledTimes(1);
         expect(updateLocationSpy).toHaveBeenCalledWith({
-          created_by_device_id: liveLocation.created_by_device_id,
           message_id: liveLocation.message_id,
           ...newCoords,
         });

@@ -289,7 +289,7 @@ describe('MessageDeliveryReporter', () => {
     });
   });
 
-  it('removes the pending delivery candidate upon channel.markRead', async () => {
+  it('removes the pending delivery candidate upon channel.markReadViaReporter', async () => {
     const markDeliveredSpy = vi
       .spyOn(client, 'markDelivered')
       .mockResolvedValue({} as any);
@@ -300,7 +300,7 @@ describe('MessageDeliveryReporter', () => {
 
     client.syncDeliveredCandidates([channel]);
 
-    await channel.markRead();
+    await channel.markReadViaReporter();
 
     vi.advanceTimersByTime(1000);
     expect(markDeliveredSpy).not.toHaveBeenCalled();

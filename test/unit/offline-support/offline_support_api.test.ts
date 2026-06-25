@@ -1818,14 +1818,15 @@ describe('OfflineSupportApi', () => {
               },
             },
           ) as PendingTask;
-          const pendingSendOptions = { skip_enrich_url: true };
           vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([
             {
               id: 7,
               messageId: 'msg-123',
               payload: [
-                { id: 'msg-123', status: 'sending', text: 'original' },
-                pendingSendOptions,
+                {
+                  message: { id: 'msg-123', status: 'sending', text: 'original' },
+                  skip_enrich_url: true,
+                },
               ],
               type: 'send-message',
             } as PendingTask,
@@ -1843,17 +1844,16 @@ describe('OfflineSupportApi', () => {
               type: 'send-message',
             }),
           });
-          expect(updatePendingTaskSpy.mock.calls[0][0].task.payload[0]).toMatchObject({
+          expect(
+            updatePendingTaskSpy.mock.calls[0][0].task.payload[0].message,
+          ).toMatchObject({
             id: 'msg-123',
             status: 'sending',
             text: 'edited',
           });
           expect(
-            updatePendingTaskSpy.mock.calls[0][0].task.payload[0],
+            updatePendingTaskSpy.mock.calls[0][0].task.payload[0].message,
           ).not.toHaveProperty('message_text_updated_at');
-          expect(updatePendingTaskSpy.mock.calls[0][0].task.payload[1]).toBe(
-            pendingSendOptions,
-          );
           expect(addPendingTaskSpy).not.toHaveBeenCalled();
         });
 
@@ -1876,8 +1876,7 @@ describe('OfflineSupportApi', () => {
             {
               messageId: 'msg-123',
               payload: [
-                { id: 'msg-123', status: 'sending', text: 'original' },
-                undefined,
+                { message: { id: 'msg-123', status: 'sending', text: 'original' } },
               ],
               type: 'send-message',
             } as PendingTask,
@@ -1888,12 +1887,16 @@ describe('OfflineSupportApi', () => {
           await offlineDb.handleAddPendingTask({ task });
 
           expect(updatePendingTaskSpy).not.toHaveBeenCalled();
-          expect(addPendingTaskSpy).toHaveBeenCalledWith({
-            messageId: 'msg-123',
-            payload: [{ id: 'msg-123', status: 'sending', text: 'edited' }, undefined],
-            type: 'send-message',
-            id: undefined,
-          });
+          expect(addPendingTaskSpy).toHaveBeenCalledWith(
+            expect.objectContaining({
+              messageId: 'msg-123',
+              payload: [
+                { message: { id: 'msg-123', status: 'sending', text: 'edited' } },
+              ],
+              type: 'send-message',
+              id: undefined,
+            }),
+          );
         });
 
         it('does nothing for failed offline update-message tasks without a matching pending send task', async () => {
@@ -2496,12 +2499,10 @@ describe('OfflineDBSyncManager', () => {
 
         await (syncManager as any).sync();
 
-        expect(syncApiSpy).toHaveBeenCalledWith(
-          ['channel-1'],
-          expect.stringMatching(
-            /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/, // ISO8601 regex, YYYY-MM-DDTHH:mm:ss.sssZ
-          ),
-        );
+        expect(syncApiSpy).toHaveBeenCalledWith({
+          channel_cids: ['channel-1'],
+          last_sync_at: expect.any(Date),
+        });
         expect(handleEventSpy).toHaveBeenCalledTimes(mockEvents.length);
         expect(executeSqlBatchSpy).toHaveBeenCalledWith(['query1', 'query2']);
         expect(upsertUserSyncStatusSpy).toHaveBeenCalled();

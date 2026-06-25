@@ -15,26 +15,27 @@ export const generatePendingTask = (type, id = 1, options = {}, payloadOptions =
 export const generatePendingTaskPayload = (type, options = {}) => {
 	if (type === 'send-reaction') {
 		const messageId = options.messageId ?? '123';
-		const reaction = options.reaction ?? { type: 'wow', message_id: messageId };
-		return { type, payload: [messageId, reaction] };
+		const reaction = options.reaction ?? { type: 'wow' };
+		return { type, payload: [{ id: messageId, reaction }] };
 	}
 
 	if (type === 'delete-reaction') {
 		const messageId = options.messageId ?? '123';
 		const reactionType = options.reactionType ?? 'wow';
-		return { type, payload: [messageId, reactionType] };
+		return { type, payload: [{ id: messageId, type: reactionType }] };
 	}
 
 	if (type === 'delete-message') {
 		const messageId = options.messageId ?? '123';
-		return { type, payload: [messageId] };
+		return { type, payload: [{ id: messageId }] };
 	}
 
 	if (type === 'update-message') {
 		const message = options.message ?? generateMsg({ id: options.messageId ?? '123' });
-		return { type, payload: [message, options.user, options.updateOptions] };
+		const request = { id: message.id, message, ...(options.updateOptions ?? {}) };
+		return { type, payload: [request] };
 	}
 
 	const message = options.message ?? generateMsg();
-	return { type, payload: [message] };
+	return { type, payload: [{ message }] };
 };
