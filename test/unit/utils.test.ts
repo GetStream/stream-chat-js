@@ -707,7 +707,7 @@ describe('promoteChannel', () => {
     const result = promoteChannel({
       channels,
       channelToMove: channels[0],
-      sort: {},
+      sort: [],
     });
 
     expect(result).to.deep.equal(channels);
@@ -728,7 +728,7 @@ describe('promoteChannel', () => {
     const result = promoteChannel({
       channels,
       channelToMove,
-      sort: [{ pinned_at: 1 }],
+      sort: [{ field: 'pinned_at', direction: 1 }],
     });
 
     expect(result).to.deep.equal(channels);
@@ -750,7 +750,7 @@ describe('promoteChannel', () => {
     const result = promoteChannel({
       channels,
       channelToMove,
-      sort: {},
+      sort: [],
     });
 
     expect(result.map((c) => c.id)).to.deep.equal(['channel3', 'channel1', 'channel2']);
@@ -772,7 +772,7 @@ describe('promoteChannel', () => {
     const result = promoteChannel({
       channels,
       channelToMove,
-      sort: {},
+      sort: [],
       channelToMoveIndexWithinChannels: 2,
     });
 
@@ -796,7 +796,7 @@ describe('promoteChannel', () => {
     const result = promoteChannel({
       channels,
       channelToMove,
-      sort: {},
+      sort: [],
     });
 
     expect(result.map((c) => c.id)).to.deep.equal([
@@ -824,7 +824,7 @@ describe('promoteChannel', () => {
     const result = promoteChannel({
       channels,
       channelToMove,
-      sort: {},
+      sort: [],
       channelToMoveIndexWithinChannels: -1,
     });
 
@@ -859,7 +859,7 @@ describe('promoteChannel', () => {
     const result = promoteChannel({
       channels,
       channelToMove,
-      sort: [{ pinned_at: -1 }],
+      sort: [{ field: 'pinned_at', direction: -1 }],
     });
 
     expect(result.map((c) => c.id)).to.deep.equal([
@@ -893,7 +893,7 @@ describe('promoteChannel', () => {
     const result = promoteChannel({
       channels,
       channelToMove,
-      sort: {},
+      sort: [],
     });
 
     expect(result.map((c) => c.id)).to.deep.equal([

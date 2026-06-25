@@ -88,7 +88,7 @@ const setup = ({
 
   // Setup mocks
   const mockClient = new StreamChat('apiKey', 'apiSecret');
-  mockClient.enrichURL = vi.fn().mockResolvedValue(enrichURLReturnValue);
+  mockClient.getOG = vi.fn().mockResolvedValue(enrichURLReturnValue);
 
   const mockChannel = mockClient.channel('channelType', 'channelId');
   mockChannel.getConfig = vi.fn().mockImplementation(() => ({ url_enrichment: true }));
@@ -192,7 +192,7 @@ describe('LinkPreviewsManager', () => {
       } = setup();
 
       // Mock the enrichURL to never resolve
-      mockClient.enrichURL = vi.fn().mockImplementation(() => new Promise(() => {}));
+      mockClient.getOG = vi.fn().mockImplementation(() => new Promise(() => {}));
 
       // Add a loading preview
       linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
@@ -397,7 +397,7 @@ describe('LinkPreviewsManager', () => {
         mockClient,
       } = setup();
       let resolveEnrichment: (value: typeof enrichURLReturnValue) => void = () => {};
-      mockClient.enrichURL = vi.fn(
+      mockClient.getOG = vi.fn(
         () =>
           new Promise((resolve) => {
             resolveEnrichment = resolve;
@@ -426,7 +426,7 @@ describe('LinkPreviewsManager', () => {
       mockChannel.getConfig.mockReturnValueOnce({ url_enrichment: false });
       linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
       let enrichPromiseResolve;
-      mockClient.enrichURL = vi.fn().mockImplementation(() => {
+      mockClient.getOG = vi.fn().mockImplementation(() => {
         return new Promise((resolve) => {
           enrichPromiseResolve = resolve;
         });
@@ -434,7 +434,7 @@ describe('LinkPreviewsManager', () => {
       linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
       // Wait for the debounced function to be called
       await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(mockClient.enrichURL).not.toHaveBeenCalled();
+      expect(mockClient.getOG).not.toHaveBeenCalled();
       expect(linkPreviewsManager.previews.size).toBe(0);
     });
 
@@ -445,7 +445,7 @@ describe('LinkPreviewsManager', () => {
       } = setup({ config: { enabled: false } });
       linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
       let enrichPromiseResolve;
-      mockClient.enrichURL = vi.fn().mockImplementation(() => {
+      mockClient.getOG = vi.fn().mockImplementation(() => {
         return new Promise((resolve) => {
           enrichPromiseResolve = resolve;
         });
@@ -453,7 +453,7 @@ describe('LinkPreviewsManager', () => {
       linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
       // Wait for the debounced function to be called
       await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(mockClient.enrichURL).not.toHaveBeenCalled();
+      expect(mockClient.getOG).not.toHaveBeenCalled();
       expect(linkPreviewsManager.previews.size).toBe(0);
     });
 
@@ -463,7 +463,7 @@ describe('LinkPreviewsManager', () => {
         mockClient,
       } = setup();
       let enrichPromiseResolve;
-      mockClient.enrichURL = vi.fn().mockImplementation(() => {
+      mockClient.getOG = vi.fn().mockImplementation(() => {
         return new Promise((resolve) => {
           enrichPromiseResolve = resolve;
         });
@@ -472,7 +472,7 @@ describe('LinkPreviewsManager', () => {
       // Wait for the debounced function to be called
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(mockClient.enrichURL).toHaveBeenCalledWith(linkUrl);
+      expect(mockClient.getOG).toHaveBeenCalledWith({ url: linkUrl });
       expect(linkPreviewsManager.previews.size).toBe(1);
 
       const preview = linkPreviewsManager.previews.get(linkUrl);
@@ -499,7 +499,7 @@ describe('LinkPreviewsManager', () => {
         messageComposer: { linkPreviewsManager },
         mockClient,
       } = setup();
-      mockClient.enrichURL.mockRejectedValueOnce(new Error('Enrichment failed'));
+      mockClient.getOG.mockRejectedValueOnce(new Error('Enrichment failed'));
 
       linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
 
@@ -525,7 +525,7 @@ describe('LinkPreviewsManager', () => {
       // Wait for the debounced function to be called
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(mockClient.enrichURL).toHaveBeenCalledTimes(1);
+      expect(mockClient.getOG).toHaveBeenCalledTimes(1);
       expect(linkPreviewsManager.previews.size).toBe(1);
     });
 

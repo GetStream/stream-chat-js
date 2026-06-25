@@ -932,14 +932,16 @@ describe('BaseSearchSource and implementations', () => {
 			userSource.activate();
 			await userSource.executeQuery('test');
 
-			sinon.assert.calledWith(
-				mockClient.queryUsers,
-				{
-					$or: [{ id: { $autocomplete: 'test' } }, { name: { $autocomplete: 'test' } }],
+			sinon.assert.calledWith(mockClient.queryUsers, {
+				payload: {
+					filter_conditions: {
+						$or: [{ id: { $autocomplete: 'test' } }, { name: { $autocomplete: 'test' } }],
+					},
+					sort: [{ field: 'id', direction: 1 }],
+					limit: 10,
+					offset: 0,
 				},
-				{ id: 1 },
-				{ limit: 10, offset: 0 },
-			);
+			});
 		});
 	});
 
@@ -956,12 +958,14 @@ describe('BaseSearchSource and implementations', () => {
 
 			sinon.assert.calledWith(
 				mockClient.queryChannels,
-				{
-					members: { $in: ['current-user'] },
-					name: { $autocomplete: 'test' },
-				},
-				{},
-				{ limit: 10, offset: 0 },
+				sinon.match({
+					filter_conditions: {
+						members: { $in: ['current-user'] },
+						name: { $autocomplete: 'test' },
+					},
+					limit: 10,
+					offset: 0,
+				}),
 			);
 		});
 	});
@@ -986,9 +990,13 @@ describe('BaseSearchSource and implementations', () => {
 
 			sinon.assert.calledWith(
 				mockClient.search,
-				{ members: { $in: ['current-user'] } },
-				{ text: 'test', type: 'regular' },
-				{ limit: 10, next: undefined, sort: { created_at: -1 } },
+				sinon.match({
+					payload: {
+						filter_conditions: { members: { $in: ['current-user'] } },
+						message_filter_conditions: { type: 'regular', text: 'test' },
+						limit: 10,
+					},
+				}),
 			);
 		});
 
@@ -1003,8 +1011,9 @@ describe('BaseSearchSource and implementations', () => {
 
 			sinon.assert.calledWith(
 				mockClient.queryChannels,
-				{ cid: { $in: ['missing-channel'] } },
-				{ last_message_at: -1 },
+				sinon.match({
+					filter_conditions: { cid: { $in: ['missing-channel'] } },
+				}),
 			);
 		});
 

@@ -51,7 +51,7 @@ describe('Threads 2.0', () => {
     client = new StreamChat('apiKey');
     client._setUser({ id: TEST_USER_ID });
     channelResponse = generateChannel({
-      channel: { id: uuidv4(), name: 'Test channel', members: [] },
+      channel: { id: uuidv4(), members: [], custom: { name: 'Test channel' } },
     }).channel as ChannelResponse;
     channel = client.channel(channelResponse.type, channelResponse.id);
     channel.initialized = true;
@@ -77,7 +77,7 @@ describe('Threads 2.0', () => {
       expect(thread.channel.state.members).to.have.keys([TEST_USER_ID]);
       expect(thread.id).to.equal(parentMessageResponse.id);
       // @ts-expect-error `name` is a custom property
-      expect(thread.channel._data?.name).to.equal(channelResponse.name);
+      expect(thread.channel.data?.name).to.equal(channelResponse.name);
     });
 
     describe('Methods', () => {

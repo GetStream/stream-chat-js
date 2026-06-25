@@ -294,16 +294,16 @@ describe('MessageDeliveryReporter', () => {
   it('does not send a read when the user disabled read receipts', async () => {
     (client as any).user.privacy_settings = { read_receipts: { enabled: false } };
     const markAsReadRequestSpy = vi
-      .spyOn(channel, 'markAsReadRequest')
+      .spyOn(channel, 'markRead')
       .mockResolvedValue({} as any);
 
-    const result = await channel.markRead();
+    const result = await channel.markReadViaReporter();
 
     expect(markAsReadRequestSpy).not.toHaveBeenCalled();
     expect(result).toBeNull();
   });
 
-  it('removes the pending delivery candidate upon channel.markRead', async () => {
+  it('removes the pending delivery candidate upon channel.markReadViaReporter', async () => {
     const markDeliveredSpy = vi
       .spyOn(client, 'markDelivered')
       .mockResolvedValue({} as any);
@@ -314,7 +314,7 @@ describe('MessageDeliveryReporter', () => {
 
     client.syncDeliveredCandidates([channel]);
 
-    await channel.markRead();
+    await channel.markReadViaReporter();
 
     vi.advanceTimersByTime(1000);
     expect(markDeliveredSpy).not.toHaveBeenCalled();
