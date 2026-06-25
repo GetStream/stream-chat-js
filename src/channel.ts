@@ -1248,6 +1248,31 @@ export class Channel {
   }
 
   /**
+   * markReadLocally - Resets this user's unread count locally, without any backend call or offline-DB
+   * write. Intended for channels that have read events disabled (e.g. livestreams) when the client is
+   * created with the `enableLocalUnreadCount` option. Dispatches a dedicated, client-only
+   * `message.local_read` event that runs through the same `_handleChannelEvent` read logic as a real
+   * `message.read` (minus the delivery-report network sync), so the read-state update lives in one
+   * place. The offline DB has no handler for the type, so nothing is persisted.
+   */
+  markReadLocally() {
+    const client = this.getClient();
+    if (!client.userID) return;
+
+    const event: Event = {
+      channel_id: this.id,
+      channel_type: this.type,
+      cid: this.cid,
+      created_at: new Date().toISOString(),
+      last_read_message_id: this.lastMessage()?.id,
+      team: this.data?.team,
+      type: 'message.local_read',
+      user: client.user,
+    };
+    client.dispatchEvent(event);
+  }
+
+  /**
    * clean - Cleans the channel state and fires stop typing if needed
    */
   clean() {
@@ -1429,8 +1454,10 @@ export class Channel {
     if (message.user?.id && this.getClient().userMuteStatus(message.user.id))
       return false;
 
-    // Return false if channel doesn't allow read events.
+    // Return false if channel doesn't allow read events, unless the client opted into a local
+    // unread count (e.g. livestreams where read events are disabled). See `enableLocalUnreadCount`.
     if (
+      !this.getClient().options.enableLocalUnreadCount &&
       Array.isArray(this.data?.own_capabilities) &&
       !this.data?.own_capabilities.includes('read-events')
     ) {
@@ -1965,6 +1992,11 @@ export class Channel {
           delete channelState.typing[event.user.id];
         }
         break;
+      // `message.local_read` is the client-only event dispatched by `markReadLocally()` when read
+      // events are disabled (e.g. livestreams with `enableLocalUnreadCount`). It reuses the exact
+      // `message.read` state logic so the read-state update lives in one place — only the
+      // delivery-report network sync below is skipped for it.
+      case 'message.local_read':
       case 'message.read':
         if (event.user?.id && event.created_at) {
           const previousReadState = channelState.read[event.user.id];
@@ -1987,7 +2019,11 @@ export class Channel {
 
           if (isOwnEvent) {
             channelState.unreadCount = 0;
-            client.syncDeliveredCandidates([this]);
+            // Delivery reporting buffers a `markChannelsDelivered` network request; the local read
+            // must not hit the backend, so only sync for the real server `message.read`.
+            if (event.type === 'message.read') {
+              client.syncDeliveredCandidates([this]);
+            }
           }
         }
         break;

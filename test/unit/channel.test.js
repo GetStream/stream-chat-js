@@ -211,6 +211,97 @@ describe('Channel count unread', function () {
 	});
 });
 
+describe('Channel localized unread count (enableLocalUnreadCount)', function () {
+	const user = { id: 'user' };
+	const otherUser = { id: 'other-user' };
+
+	// own_capabilities without 'read-events' models a channel with read events disabled (livestream).
+	const setupChannel = ({ enableLocalUnreadCount }) => {
+		const client = new StreamChat('apiKey', { enableLocalUnreadCount });
+		client.user = user;
+		client.userID = user.id;
+		client.userMuteStatus = () => false;
+		const channel = client.channel('messaging', 'live-id');
+		channel.initialized = true;
+		channel.data = { ...channel.data, own_capabilities: [] };
+		return { client, channel };
+	};
+
+	it('_countMessageAsUnread returns true with read events off when the flag is set', function () {
+		const { channel } = setupChannel({ enableLocalUnreadCount: true });
+		expect(channel._countMessageAsUnread({ user: otherUser })).to.be.ok;
+	});
+
+	it('_countMessageAsUnread returns false with read events off when the flag is not set', function () {
+		const { channel } = setupChannel({ enableLocalUnreadCount: false });
+		expect(channel._countMessageAsUnread({ user: otherUser })).not.to.be.ok;
+	});
+
+	it('message.new increments the unread count with read events off when the flag is set', function () {
+		const { channel } = setupChannel({ enableLocalUnreadCount: true });
+		channel.state.unreadCount = 0;
+
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user: otherUser,
+			message: generateMsg({ user: otherUser }),
+		});
+		expect(channel.countUnread()).to.be.equal(1);
+
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user: otherUser,
+			message: generateMsg({ user: otherUser }),
+		});
+		expect(channel.countUnread()).to.be.equal(2);
+	});
+
+	it('message.new does not increment the unread count with read events off when the flag is not set', function () {
+		const { channel } = setupChannel({ enableLocalUnreadCount: false });
+		channel.state.unreadCount = 0;
+
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user: otherUser,
+			message: generateMsg({ user: otherUser }),
+		});
+		expect(channel.countUnread()).to.be.equal(0);
+	});
+
+	it('markReadLocally resets the count and emits a message.read-shaped message.local_read event', function () {
+		const { client, channel } = setupChannel({ enableLocalUnreadCount: true });
+		const post = vi.spyOn(client, 'post').mockResolvedValue({});
+		const lastMsg = generateMsg({ user: otherUser });
+		channel.state.addMessagesSorted([lastMsg]);
+		channel.state.unreadCount = 5;
+		channel.state.read[user.id] = {
+			last_read: new Date('2020-01-01T00:00:00'),
+			unread_messages: 5,
+			user,
+		};
+
+		const onLocalRead = vi.fn();
+		channel.on('message.local_read', onLocalRead);
+
+		channel.markReadLocally();
+
+		expect(channel.countUnread()).to.be.equal(0);
+		expect(channel.state.read[user.id].unread_messages).to.be.equal(0);
+		expect(channel.state.read[user.id].last_read_message_id).to.be.equal(lastMsg.id);
+		expect(post.mock.calls.length).to.be.equal(0);
+
+		expect(onLocalRead.mock.calls.length).to.be.equal(1);
+		const event = onLocalRead.mock.calls[0][0];
+		expect(event.type).to.be.equal('message.local_read');
+		expect(event.cid).to.be.equal(channel.cid);
+		expect(event.channel_id).to.be.equal(channel.id);
+		expect(event.channel_type).to.be.equal(channel.type);
+		expect(event.user.id).to.be.equal(user.id);
+		expect(event.last_read_message_id).to.be.equal(lastMsg.id);
+		expect(event.created_at).to.be.a('string');
+	});
+});
+
 describe('Channel _handleChannelEvent', function () {
 	const user = { id: 'user' };
 	const otherUser = { id: 'other-user' };

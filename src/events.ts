@@ -63,6 +63,7 @@ export const EVENT_MAP = {
   'ai_indicator.clear': true,
 
   // local events
+  'message.local_read': true,
   'channels.queried': true,
   'offline_reactions.queried': true,
   'connection.changed': true,

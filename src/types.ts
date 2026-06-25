@@ -1549,6 +1549,12 @@ export type StreamChatOptions = AxiosRequestConfig & {
    */
   disableCache?: boolean;
   enableInsights?: boolean;
+  /**
+   * When true, maintains a client-local unread count on channels that have read events disabled
+   * (e.g. livestreams). The count increments on incoming messages and is reset via
+   * `channel.markReadLocally()`. It is never sent to the backend or persisted to the offline DB.
+   */
+  enableLocalUnreadCount?: boolean;
   /** experimental feature, please contact support if you want this feature enabled for you */
   enableWSFallback?: boolean;
   logger?: Logger;
