@@ -2,9 +2,9 @@ import { generateUUIDv4 as uuidv4 } from '../../../src/utils';
 import type { MessageResponse, UserResponse } from '../../../src';
 
 export const generateMsg = (
-  msg: Partial<MessageResponse> & { date?: string } = {},
+  msg: Partial<MessageResponse> & { date?: Date } = {},
 ): MessageResponse => {
-  const date = msg?.date ? new Date(msg.date) : new Date();
+  const date = msg?.date ?? new Date();
   return {
     id: uuidv4(),
     text: uuidv4(),

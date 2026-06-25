@@ -161,7 +161,7 @@ describe('ChannelMemberSearchSource', () => {
 
     it('passes filters, sort, and options to channel.queryMembers', async () => {
       const filters: MemberFilters = { user_id: 'user-2' };
-      const sort: MemberSort = [{ name: 1 }];
+      const sort: MemberSort = [{ field: 'name', direction: 1 }];
       searchSource.filters = filters;
       searchSource.sort = sort;
       searchSource.searchOptions = { user_id_gt: 'user-0' };
@@ -169,18 +169,18 @@ describe('ChannelMemberSearchSource', () => {
       // @ts-expect-error accessing protected method
       await searchSource.query('John');
 
-      expect(channel.queryMembers).toHaveBeenCalledWith(
-        {
-          ...getAutocompleteFilters('John'),
-          user_id: 'user-2',
-        },
-        sort,
-        {
+      expect(channel.queryMembers).toHaveBeenCalledWith({
+        payload: {
+          filter_conditions: {
+            ...getAutocompleteFilters('John'),
+            user_id: 'user-2',
+          },
+          sort,
           user_id_gt: 'user-0',
           limit: searchSource.pageSize,
           offset: searchSource.offset,
         },
-      );
+      });
     });
 
     it('returns items from query', async () => {
@@ -198,9 +198,8 @@ describe('ChannelMemberSearchSource', () => {
 
       expect(searchSource.items).toEqual(mockMembers);
       expect(searchSource.searchQuery).toBe('');
-      expect(channel.queryMembers).toHaveBeenCalledWith({}, [], {
-        limit: 10,
-        offset: 0,
+      expect(channel.queryMembers).toHaveBeenCalledWith({
+        payload: { filter_conditions: {}, sort: [], limit: 10, offset: 0 },
       });
     });
 
@@ -209,11 +208,14 @@ describe('ChannelMemberSearchSource', () => {
       await vi.advanceTimersByTimeAsync(300);
 
       expect(searchSource.searchQuery).toBe('john');
-      expect(channel.queryMembers).toHaveBeenCalledWith(
-        getAutocompleteFilters('john'),
-        [],
-        { limit: 10, offset: 0 },
-      );
+      expect(channel.queryMembers).toHaveBeenCalledWith({
+        payload: {
+          filter_conditions: getAutocompleteFilters('john'),
+          sort: [],
+          limit: 10,
+          offset: 0,
+        },
+      });
     });
 
     it('debounces rapid search calls and only executes the last query', async () => {
@@ -224,11 +226,14 @@ describe('ChannelMemberSearchSource', () => {
       await vi.advanceTimersByTimeAsync(300);
 
       expect(channel.queryMembers).toHaveBeenCalledTimes(1);
-      expect(channel.queryMembers).toHaveBeenCalledWith(
-        getAutocompleteFilters('john'),
-        [],
-        { limit: 10, offset: 0 },
-      );
+      expect(channel.queryMembers).toHaveBeenCalledWith({
+        payload: {
+          filter_conditions: getAutocompleteFilters('john'),
+          sort: [],
+          limit: 10,
+          offset: 0,
+        },
+      });
     });
 
     it('resets state for a new search query', async () => {
@@ -239,11 +244,14 @@ describe('ChannelMemberSearchSource', () => {
       await vi.advanceTimersByTimeAsync(300);
 
       expect(searchSource.searchQuery).toBe('second');
-      expect(channel.queryMembers).toHaveBeenLastCalledWith(
-        getAutocompleteFilters('second'),
-        [],
-        { limit: 10, offset: 0 },
-      );
+      expect(channel.queryMembers).toHaveBeenLastCalledWith({
+        payload: {
+          filter_conditions: getAutocompleteFilters('second'),
+          sort: [],
+          limit: 10,
+          offset: 0,
+        },
+      });
     });
 
     it('paginates without starting a new search query', async () => {
@@ -270,9 +278,8 @@ describe('ChannelMemberSearchSource', () => {
       paginatedSource.search();
       await vi.advanceTimersByTimeAsync(300);
 
-      expect(queryMembersMock).toHaveBeenNthCalledWith(2, {}, [], {
-        limit: 2,
-        offset: 2,
+      expect(queryMembersMock).toHaveBeenNthCalledWith(2, {
+        payload: { filter_conditions: {}, sort: [], limit: 2, offset: 2 },
       });
       expect(paginatedSource.items).toEqual([...firstPage, ...secondPage]);
       expect(paginatedSource.hasNext).toBe(false);
