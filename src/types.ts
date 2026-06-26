@@ -1695,6 +1695,7 @@ export type Event = CustomEventData & {
   watcher_count?: number;
   channel_last_message_at?: string;
   app?: Record<string, unknown>; // TODO: further specify type
+  thread_id?: string;
 };
 
 export type UserCustomEvent = CustomEventData & {
