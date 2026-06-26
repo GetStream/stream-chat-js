@@ -112,9 +112,11 @@ export class PollComposer {
   };
 
   /**
-   * Updates specified fields and generates relevant errors
-   * @param data
-   * @param injectedFieldErrors - errors produced externally that will take precedence over the errors generated in the middleware chaing
+   * Updates specified fields and generates relevant errors.
+   *
+   * @param data - Partial poll data with the fields to update.
+   * @param injectedFieldErrors - Errors produced externally that will take precedence over the
+   *   errors generated in the middleware chain.
    */
   // FIXME: change method params to a single object with the next major release
   updateFields = async (

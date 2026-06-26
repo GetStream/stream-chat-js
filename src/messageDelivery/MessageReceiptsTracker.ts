@@ -31,10 +31,13 @@ const findIndex = <T>(arr: T[], target: MsgRef, keyOf: (x: T) => MsgRef): number
 };
 
 /**
- * For insertion after the last equal item. E.g. array [a] exists and b is being inserted -> we want [a,b], not [b,a].
- * @param arr
- * @param target
- * @param keyOf
+ * Finds the insertion index after the last equal item. E.g. when array `[a]` exists and `b` is
+ * being inserted we want `[a, b]`, not `[b, a]`.
+ *
+ * @param arr - The sorted array to search.
+ * @param target - The reference value to compare against.
+ * @param keyOf - Accessor that maps an item to its comparable reference.
+ * @returns The insertion index in `arr`.
  */
 const findUpperIndex = <T>(arr: T[], target: MsgRef, keyOf: (x: T) => MsgRef): number => {
   let lo = 0,

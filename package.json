@@ -76,6 +76,7 @@
     "esbuild": "^0.28.0",
     "eslint": "^9.39.4",
     "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-jsdoc": "^63.0.7",
     "eslint-plugin-unused-imports": "^4.4.1",
     "globals": "^17.6.0",
     "husky": "^9.1.7",

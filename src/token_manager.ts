@@ -18,9 +18,10 @@ export class TokenManager {
   tokenProvider?: TokenOrProvider;
   user?: TokenManagerMinimalUser;
   /**
-   * Constructor
+   * Initializes the token manager, optionally with a server-side API secret used to mint tokens
+   * locally.
    *
-   * @param {Secret} secret
+   * @param secret - Optional API secret. When provided, the manager will sign server tokens locally.
    */
   constructor(secret?: jwt.Secret) {
     this.loadTokenPromise = null;
@@ -36,11 +37,11 @@ export class TokenManager {
   }
 
   /**
-   * Set the static string token or token provider.
-   * Token provider should return a token string or a promise which resolves to string token.
+   * Sets the static string token or token provider. A token provider should return a token string
+   * or a promise that resolves to a token string.
    *
-   * @param {TokenOrProvider} tokenOrProvider
-   * @param {UserResponse} user
+   * @param tokenOrProvider - A token string or an async provider that returns one.
+   * @param user - The user the token belongs to.
    */
   setTokenOrProvider = async (
     tokenOrProvider: TokenOrProvider,

@@ -17,12 +17,12 @@ export class Moderation extends ModerationApi {
   }
 
   /**
-   * Flag a user.
+   * Flags a user.
    *
-   * @param flaggedUserId User ID to be flagged.
-   * @param reason Reason for flagging the user.
-   * @param options Additional options for flagging the user (optional, defaults to `{}`).
-   * @param options.custom Additional data to be stored with the flag (optional).
+   * @param flaggedUserId - User ID to be flagged.
+   * @param reason - Reason for flagging the user.
+   * @param options - Additional options for flagging the user (optional, defaults to `{}`).
+   * @param options.custom - Additional data to be stored with the flag (optional).
    * @returns The flag response.
    */
   flagUser(flaggedUserId: string, reason: string, options: ModerationFlagOptions = {}) {
@@ -36,12 +36,12 @@ export class Moderation extends ModerationApi {
   }
 
   /**
-   * Flag a message.
+   * Flags a message.
    *
-   * @param messageId Message ID to be flagged.
-   * @param reason Reason for flagging the message.
-   * @param options Additional options for flagging the message (optional, defaults to `{}`).
-   * @param options.custom Additional data to be stored with the flag (optional).
+   * @param messageId - Message ID to be flagged.
+   * @param reason - Reason for flagging the message.
+   * @param options - Additional options for flagging the message (optional, defaults to `{}`).
+   * @param options.custom - Additional data to be stored with the flag (optional).
    * @returns The flag response.
    */
   flagMessage(messageId: string, reason: string, options: ModerationFlagOptions = {}) {
@@ -55,9 +55,9 @@ export class Moderation extends ModerationApi {
   }
 
   /**
-   * Unmute a user.
+   * Unmutes a user.
    *
-   * @param targetId User ID to be unmuted.
+   * @param targetId - User ID to be unmuted.
    * @returns The unmute response.
    */
   async unmuteUser(targetId: string) {

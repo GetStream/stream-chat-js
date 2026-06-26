@@ -129,14 +129,14 @@ export class AttachmentManager {
     this.composer.updateConfig({ attachments: { acceptedFiles } });
   }
 
-  /*
+  /**
   @deprecated attachments can be filtered using injecting pre-upload middleware
    */
   get fileUploadFilter() {
     return this.config.fileUploadFilter;
   }
 
-  /*
+  /**
   @deprecated attachments can be filtered using injecting pre-upload middleware
    */
   set fileUploadFilter(fileUploadFilter: AttachmentManagerConfig['fileUploadFilter']) {
