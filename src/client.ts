@@ -231,7 +231,7 @@ export class StreamChat extends ChatApi {
   });
 
   /**
-   * Initialize a client.
+   * Initializes a client.
    *
    * **Only use constructor for advanced usages. It is strongly advised to use `StreamChat.getInstance()` instead of `new StreamChat()` to reduce integration issues due to multiple WebSocket connections.**
    *
@@ -242,14 +242,14 @@ export class StreamChat extends ChatApi {
    * @example <caption>secret is optional and only used in server side mode</caption>
    * new StreamChat('api_key', 'secret', { httpsAgent: customAgent })
    *
-   * @param key The API key.
-   * @param secret The API secret (optional).
-   * @param options Additional options; here you can pass custom options to the axios instance (optional).
-   * @param options.browser Enforce the client to be in browser mode (optional).
-   * @param options.warmUp If `true`, the client will open a connection as soon as possible to speed up following requests (optional, defaults to `false`).
-   * @param options.Logger Custom logger (optional).
-   * @param options.timeout Request timeout (optional, defaults to `3000`).
-   * @param options.httpsAgent Custom `httpsAgent`; in Node it defaults to `https.agent()` (optional).
+   * @param key - The API key.
+   * @param secret - The API secret (optional).
+   * @param options - Additional options; here you can pass custom options to the axios instance (optional).
+   * @param options.browser - Enforce the client to be in browser mode (optional).
+   * @param options.warmUp - If `true`, the client will open a connection as soon as possible to speed up following requests (optional, defaults to `false`).
+   * @param options.Logger - Custom logger (optional).
+   * @param options.timeout - Request timeout (optional, defaults to `3000`).
+   * @param options.httpsAgent - Custom `httpsAgent` (optional, in Node defaults to `https.agent()`).
    */
   constructor(key: string, options?: StreamChatOptions);
   constructor(key: string, secret?: string, options?: StreamChatOptions);
@@ -343,54 +343,25 @@ export class StreamChat extends ChatApi {
     this.defaultWSTimeoutWithFallback = 6 * 1000;
     this.defaultWSTimeout = 15 * 1000;
 
-    /**
-     * logger function should accept 3 parameters:
-     * @param logLevel string
-     * @param message   string
-     * @param extraData object
-     *
-     * e.g.,
-     * const client = new StreamChat('api_key', {}, {
-     *    logger = (logLevel, message, extraData) => {
-     *      console.log(message);
-     *    }
-     * })
-     *
-     * extraData contains tags array attached to log message. Tags can have one/many of following values:
-     * 1. api
-     * 2. api_request
-     * 3. api_response
-     * 4. client
-     * 5. channel
-     * 6. connection
-     * 7. event
-     *
-     * It may also contains some extra data, some examples have been mentioned below:
-     * 1. {
-     *    tags: ['api', 'api_request', 'client'],
-     *    url: string,
-     *    payload: object,
-     *    config: object
-     * }
-     * 2. {
-     *    tags: ['api', 'api_response', 'client'],
-     *    url: string,
-     *    response: object
-     * }
-     * 3. {
-     *    tags: ['api', 'api_response', 'client'],
-     *    url: string,
-     *    error: object
-     * }
-     * 4. {
-     *    tags: ['event', 'client'],
-     *    event: object
-     * }
-     * 5. {
-     *    tags: ['channel'],
-     *    channel: object
-     * }
-     */
+    // The `logger` option should be a function with the signature
+    // `(logLevel: string, message: string, extraData: object) => void`.
+    //
+    // Example:
+    // const client = new StreamChat('api_key', {}, {
+    //    logger = (logLevel, message, extraData) => {
+    //      console.log(message);
+    //    }
+    // })
+    //
+    // `extraData` contains a `tags` array attached to the log message. Tags can have one or more
+    // of the following values: api, api_request, api_response, client, channel, connection, event.
+    //
+    // It may also contain extra data. Examples:
+    // 1. { tags: ['api', 'api_request', 'client'], url: string, payload: object, config: object }
+    // 2. { tags: ['api', 'api_response', 'client'], url: string, response: object }
+    // 3. { tags: ['api', 'api_response', 'client'], url: string, error: object }
+    // 4. { tags: ['event', 'client'], event: object }
+    // 5. { tags: ['channel'], channel: object }
     this.logger = isFunction(inputOptions.logger) ? inputOptions.logger : () => null;
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
     this.threads = new ThreadManager({ client: this });
@@ -401,7 +372,7 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Get a client instance.
+   * Returns a client instance.
    *
    * This function always returns the same client instance to avoid issues raised by multiple client and WS connections.
    *
@@ -414,14 +385,14 @@ export class StreamChat extends ChatApi {
    * @example <caption>secret is optional and only used in server side mode</caption>
    * StreamChat.getInstance('api_key', 'secret', { httpsAgent: customAgent })
    *
-   * @param key The API key.
-   * @param secret The API secret (optional).
-   * @param options Additional options; here you can pass custom options to the axios instance (optional).
-   * @param options.browser Enforce the client to be in browser mode (optional).
-   * @param options.warmUp If `true`, the client will open a connection as soon as possible to speed up following requests (optional, defaults to `false`).
-   * @param options.Logger Custom logger (optional).
-   * @param options.timeout Request timeout (optional, defaults to `3000`).
-   * @param options.httpsAgent Custom `httpsAgent`; in Node it defaults to `https.agent()` (optional).
+   * @param key - The API key.
+   * @param secret - The API secret (optional).
+   * @param options - Additional options; here you can pass custom options to the axios instance (optional).
+   * @param options.browser - Enforce the client to be in browser mode (optional).
+   * @param options.warmUp - If `true`, the client will open a connection as soon as possible to speed up following requests (optional, defaults to `false`).
+   * @param options.Logger - Custom logger (optional).
+   * @param options.timeout - Request timeout (optional, defaults to `3000`).
+   * @param options.httpsAgent - Custom `httpsAgent` (optional, in Node defaults to `https.agent()`).
    * @returns The shared client instance.
    */
   public static getInstance(key: string, options?: StreamChatOptions): StreamChat;
@@ -475,10 +446,10 @@ export class StreamChat extends ChatApi {
   };
 
   /**
-   * Set the current user and open a WebSocket connection.
+   * Sets the current user and opens a WebSocket connection.
    *
-   * @param user Data about this user, e.g. `{ name: 'john' }`.
-   * @param userTokenOrProvider Token or provider.
+   * @param user - Data about this user, e.g. `{ name: 'john' }`.
+   * @param userTokenOrProvider - A token string or an async provider that returns one.
    * @returns A promise that resolves when the connection is set up.
    */
   connectUser = async (
@@ -538,12 +509,12 @@ export class StreamChat extends ChatApi {
   };
 
   /**
-   * Set the current user and open a WebSocket connection.
+   * Sets the current user and opens a WebSocket connection.
    *
-   * @deprecated Please use `connectUser()` instead. Its naming is more consistent with its functionality.
+   * @deprecated Use {@link StreamChat.connectUser} instead. Its naming is more consistent with its functionality.
    *
-   * @param user Data about this user, e.g. `{ name: 'john' }`.
-   * @param userTokenOrProvider Token or provider.
+   * @param user - Data about this user, e.g. `{ name: 'john' }`.
+   * @param userTokenOrProvider - A token string or an async provider that returns one.
    * @returns A promise that resolves when the connection is set up.
    */
   setUser = this.connectUser;
@@ -571,7 +542,7 @@ export class StreamChat extends ChatApi {
    * So when your app goes to background, you can call `client.closeConnection`.
    * And when app comes back to foreground, call `client.openConnection`.
    *
-   * @param timeout Max number of milliseconds to wait for the WebSocket close event before forcefully assuming
+   * @param timeout - Max number of milliseconds to wait for the WebSocket close event before forcefully assuming
    *   successful disconnection. See https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent (optional).
    */
   closeConnection = async (timeout?: number) => {
@@ -605,9 +576,11 @@ export class StreamChat extends ChatApi {
    *
    * @internal
    *
-   * @param eventHandlerOverrides The overrides for event handlers to be used (optional, defaults to `{}`).
-   * @param options The options used for the channel manager (optional, defaults to `{}`).
-   * @param queryChannelsOverride Optional override for the underlying `queryChannels` request.
+   * @param config - The channel manager configuration.
+   * @param config.eventHandlerOverrides - The overrides for event handlers to be used (optional,
+   *   defaults to `{}`).
+   * @param config.options - The options used for the channel manager (optional, defaults to `{}`).
+   * @param config.queryChannelsOverride - Override for the underlying `queryChannels` request (optional).
    * @returns A new `ChannelManager` instance.
    */
   createChannelManager = ({
@@ -668,7 +641,7 @@ export class StreamChat extends ChatApi {
   /**
    * Revokes tokens for a connected user issued before the given time.
    *
-   * @param before Cutoff date; tokens issued before this are revoked. Defaults to the current time when omitted.
+   * @param before - Cutoff date; tokens issued before this are revoked (optional, defaults to the current time).
    * @returns The updated users response.
    */
   async revokeTokens(before?: Date | null) {
@@ -701,7 +674,7 @@ export class StreamChat extends ChatApi {
   /**
    * Disconnects the WebSocket and removes the user from client.
    *
-   * @param timeout Max number of milliseconds to wait for the WebSocket close event before forcefully assuming
+   * @param timeout - Max number of milliseconds to wait for the WebSocket close event before forcefully assuming
    *   successful disconnection. See https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent (optional).
    * @returns The close-connection promise.
    */
@@ -748,7 +721,7 @@ export class StreamChat extends ChatApi {
   disconnect = this.disconnectUser;
 
   /**
-   * Set an anonymous user and open a WebSocket connection.
+   * Sets an anonymous user and opens a WebSocket connection.
    *
    * @returns A promise that resolves when the connection is set up.
    */
@@ -774,9 +747,9 @@ export class StreamChat extends ChatApi {
   };
 
   /**
-   * Setup a temporary guest user.
+   * Sets up a temporary guest user.
    *
-   * @param user Data about this user, e.g. `{ name: 'john' }`.
+   * @param user - Data about this user, e.g. `{ name: 'john' }`.
    * @returns A promise that resolves when the connection is set up.
    */
   async setGuestUser(user: UserResponse) {
@@ -794,7 +767,7 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Listen to events on all channels and users you're watching.
+   * Listens to events on all channels and users you're watching.
    *
    * @example
    * client.on('message.new', (event) => {
@@ -806,8 +779,8 @@ export class StreamChat extends ChatApi {
    *   console.log(event.type);
    * });
    *
-   * @param callbackOrString The event type to listen for, or the callback when listening to all events.
-   * @param callbackOrNothing The callback to call when an event type was provided (optional).
+   * @param callbackOrString - The event type to listen for, or the callback when listening to all events.
+   * @param callbackOrNothing - The callback to call when an event type was provided (optional).
    * @returns An object with an `unsubscribe()` method.
    */
   on(callback: EventHandler): { unsubscribe: () => void };
@@ -849,10 +822,10 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Remove the event handler.
+   * Removes the event handler.
    *
-   * @param callbackOrString The event type, or the callback when removing an all-events listener.
-   * @param callbackOrNothing The callback to remove when an event type was provided (optional).
+   * @param callbackOrString - The event type, or the callback when removing an all-events listener.
+   * @param callbackOrNothing - The callback to remove when an event type was provided (optional).
    */
   off(callback: EventHandler): void;
   off(eventType: string, callback: EventHandler): void;
@@ -904,7 +877,7 @@ export class StreamChat extends ChatApi {
   /**
    * Updates the members, watchers and read references of the currently active channels that contain this user.
    *
-   * @param user The updated user.
+   * @param user - The updated user.
    */
   _updateMemberWatcherReferences = (user: UserResponse) => {
     const refMap = this.state.userChannelReferences[user.id] || {};
@@ -935,7 +908,7 @@ export class StreamChat extends ChatApi {
    *
    * @private
    *
-   * @param user The updated user.
+   * @param user - The updated user.
    */
   _updateUserMessageReferences = (user: UserResponse) => {
     const refMap = this.state.userChannelReferences[user.id] || {};
@@ -960,9 +933,9 @@ export class StreamChat extends ChatApi {
    *
    * @private
    *
-   * @param user The user whose messages should be deleted.
-   * @param hardDelete Whether to fully strip the message content (optional, defaults to `false`).
-   * @param deletedAt Timestamp to mark messages as deleted at (optional).
+   * @param user - The user whose messages should be deleted.
+   * @param hardDelete - Whether to fully strip the message content (optional, defaults to `false`).
+   * @param deletedAt - Timestamp to mark messages as deleted at (optional).
    */
   _deleteUserMessageReference = (
     user: UserResponse,
@@ -990,7 +963,7 @@ export class StreamChat extends ChatApi {
    *
    * @private
    *
-   * @param event The user event.
+   * @param event - The user event.
    */
   _handleUserEvent = (
     event: Extract<
@@ -1271,7 +1244,7 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Check the connectivity with server for warmup purpose.
+   * Checks connectivity with the server for warmup purposes.
    *
    * @private
    */
@@ -1290,15 +1263,12 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Query users and watch user presence.
+   * Queries users and watches user presence.
    *
-   * @param filterConditions MongoDB style filter conditions.
-   * @param sort Sort options, for instance `[{ field: 'last_active', direction: -1 }]`.
-   *   To sort by multiple fields, append more entries to the array, e.g.
-   *   `[{ field: 'last_active', direction: -1 }, { field: 'created_at', direction: 1 }]`
-   *   (optional, defaults to `[]`).
-   * @param options Option object, e.g. `{ presence: true }` (optional, defaults to `{}`).
-   * @returns User query response.
+   * @param request - The query users request payload (optional). The inner `payload` accepts
+   *   MongoDB-style filter conditions, sort directions (e.g. `[{ field: 'last_active', direction: -1 }]`),
+   *   and options such as `presence`.
+   * @returns The user query response.
    */
   override async queryUsers(request?: { payload?: Gen_QueryUsersPayload }) {
     // Make sure we wait for the connect promise if there is a pending one
@@ -1313,7 +1283,7 @@ export class StreamChat extends ChatApi {
   /**
    * List user groups with cursor-based pagination.
    *
-   * @param options The query options (optional, defaults to `{}`).
+   * @param options - The query options (optional, defaults to `{}`).
    * @returns User group query response.
    */
   async queryUserGroups(options: QueryUserGroupsOptions = {}) {
@@ -1323,14 +1293,13 @@ export class StreamChat extends ChatApi {
     );
   }
   /**
-   * Query user bans.
+   * Queries user bans.
    *
-   * @param filterConditions MongoDB style filter conditions (optional, defaults to `{}`).
-   * @param sort Sort options, e.g. `[{ field: 'created_at', direction: 1 }]` (optional,
-   *   defaults to `[]`).
-   * @param options Option object, e.g. `{ limit: 10, offset: 0, exclude_expired_bans: true }`
-   *   (optional, defaults to `{}`).
-   * @returns Ban query response.
+   * @param request - The query banned users request payload (optional). The inner `payload`
+   *   accepts MongoDB-style filter conditions, sort directions
+   *   (e.g. `[{ field: 'created_at', direction: 1 }]`), and options such as `limit`, `offset`,
+   *   and `exclude_expired_bans`.
+   * @returns The ban query response.
    */
   async queryBannedUsers(request?: { payload?: QueryBannedUsersPayload }) {
     // Return a list of user bans
@@ -1346,15 +1315,10 @@ export class StreamChat extends ChatApi {
    * only the channel list. In the next major release, the request/response APIs should
    * be consolidated so callers can access the full response through the primary API.
    *
-   * @param filterConditions Object MongoDB style filters. Can be an empty object when using
-   *   `predefined_filter` in options.
-   * @param sort Sort options, for instance `[{ field: 'created_at', direction: -1 }]`.
-   *   To sort by multiple fields, append more entries to the array, e.g.
-   *   `[{ field: 'last_updated', direction: -1 }, { field: 'created_at', direction: 1 }]`
-   *   (optional, defaults to `[]`).
-   * @param request Options object. Can include `predefined_filter`, `filter_values`, and
-   *   `sort_values` for using predefined filters (optional, defaults to `{}`).
-   * @returns Full search channels response.
+   * @param request - The query channels request payload (optional). Accepts MongoDB-style filter
+   *   conditions, sort directions (e.g. `[{ field: 'created_at', direction: -1 }]`), and options
+   *   such as `predefined_filter`, `filter_values`, and `sort_values`.
+   * @returns The full query channels response.
    */
   override async queryChannels(request?: QueryChannelsRequest) {
     const defaultOptions: ChannelOptions = {
@@ -1398,28 +1362,25 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Query channels and hydrate them into `Channel` instances on this client.
+   * Queries channels and hydrates them into `Channel` instances on this client.
    *
    * Use the inherited `queryChannels()` from `ChatApi` when only the raw API response
    * is needed; this method wraps it with state hydration, `channels.queried` dispatch,
    * and offline-db sync.
    *
-   * @param filterConditions Object MongoDB style filters.
-   * @param sort Sort options, for instance `[{ field: 'created_at', direction: -1 }]`.
-   *   To sort by multiple fields, append more entries to the array, e.g.
-   *   `[{ field: 'last_updated', direction: -1 }, { field: 'created_at', direction: 1 }]`
-   *   (optional, defaults to `[]`).
-   * @param options Options object (optional, defaults to `{}`).
-   * @param stateOptions State options object. These options will only be used for state
-   *   management and won't be sent in the request (optional, defaults to `{}`).
-   * @param stateOptions.skipInitialization Skips the initialization of the state for the
-   *   channels matching the ids in the list.
-   * @param stateOptions.skipHydration Skips returning the channels as instances of the
-   *   `Channel` class and rather returns the raw query response.
-   * @param stateOptions.withResponse Returns the full query response with hydrated channels.
-   *   This is a compatibility bridge for internal callers that need response-level metadata
-   *   while the default return value remains `Channel[]`.
-   * @returns Search channels response.
+   * @param options - The query channels request payload (optional). Accepts MongoDB-style filter
+   *   conditions, sort directions (e.g. `[{ field: 'created_at', direction: -1 }]`), and options
+   *   such as `predefined_filter`, `filter_values`, and `sort_values`.
+   * @param stateOptions - Options that only affect state management and aren't sent in the request
+   *   (optional, defaults to `{}`).
+   * @param stateOptions.skipInitialization - Skips the initialization of the state for the
+   *   channels matching the IDs in the list (optional).
+   * @param stateOptions.skipHydration - Skips returning the channels as instances of the `Channel`
+   *   class and instead returns the raw query response (optional).
+   * @param stateOptions.withResponse - Returns the full query response with hydrated channels.
+   *   This is a compatibility bridge for internal callers that need response-level metadata while
+   *   the default return value remains `Channel[]` (optional).
+   * @returns The hydrated channel list, or the full response when `withResponse` is `true`.
    */
   async queryChannelsAndHydrate(
     options?: QueryChannelsRequest,
@@ -1463,15 +1424,13 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Query reactions for a message and hydrate any cached offline reactions before
-   * the network request.
+   * Queries reactions for a message and hydrates any cached offline reactions before the network
+   * request.
    *
-   * @param messageId The message ID.
-   * @param filter Object MongoDB style filters.
-   * @param sort Sort options, for instance `[{ field: 'created_at', direction: -1 }]`
-   *   (optional, defaults to `[]`).
-   * @param options Pagination object (optional, defaults to `{}`).
-   * @returns Query reactions response.
+   * @param request - The query reactions request payload, including the target message ID,
+   *   MongoDB-style filters, sort directions (e.g. `[{ field: 'created_at', direction: -1 }]`),
+   *   and pagination options.
+   * @returns The query reactions response.
    */
   async queryReactionsAndHydrate(request: QueryReactionsRequest) {
     const { filter, next, id: messageId, sort, limit } = request;
@@ -1565,12 +1524,11 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Query messages.
+   * Queries messages.
    *
-   * @param filterConditions MongoDB style filter conditions.
-   * @param query Search query or object MongoDB style filters.
-   * @param payload Option object, e.g. `{ user_id: 'tommaso' }` (optional, defaults to `{}`).
-   * @returns Search messages response.
+   * @param request - The search request payload (optional). The inner `payload` accepts
+   *   MongoDB-style filter conditions, a search query, and options such as `user_id`.
+   * @returns The search messages response.
    */
   override async search(request?: { payload?: SearchPayload }) {
     if (request?.payload?.offset && request?.payload?.next) {
@@ -1584,11 +1542,11 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Set the device info for the current client (device); it will be sent via the WS connection automatically.
+   * Sets the device info for the current client. It will be sent via the WS connection automatically.
    *
-   * @param device The device object.
-   * @param device.id Device ID.
-   * @param device.push_provider The push provider.
+   * @param device - The device object.
+   * @param device.id - Device ID.
+   * @param device.push_provider - The push provider.
    */
   setLocalDevice(device: BaseDeviceFields) {
     if (
@@ -1617,10 +1575,10 @@ export class StreamChat extends ChatApi {
    * i.e. `channel = client.channel('messaging', { members: ['tommaso', 'thierry'] })` then
    * `await channel.create()` to assign an ID to the channel.
    *
-   * @param channelType The channel type.
-   * @param channelIdOrCustom The channel ID; you can leave this out if you want to create a
+   * @param channelType - The channel type.
+   * @param channelIdOrCustom - The channel ID; you can leave this out if you want to create a
    *   conversation channel (optional).
-   * @param custom Custom data to attach to the channel (optional, defaults to `{}`).
+   * @param custom - Custom data to attach to the channel (optional, defaults to `{}`).
    * @returns The channel object; initialize it using `channel.watch()`.
    */
   channel(channelType: string, channelId?: string | null, custom?: ChannelData): Channel;
@@ -1671,8 +1629,8 @@ export class StreamChat extends ChatApi {
    *
    * @private
    *
-   * @param channelType The channel type.
-   * @param custom Custom data to attach to the channel.
+   * @param channelType - The channel type.
+   * @param custom - Custom data to attach to the channel.
    * @returns The channel object; initialize it using `channel.watch()`.
    */
   getChannelByMembers = (channelType: string, custom: ChannelData) => {
@@ -1734,9 +1692,9 @@ export class StreamChat extends ChatApi {
    *
    * @private
    *
-   * @param channelType The channel type.
-   * @param channelId The channel ID.
-   * @param custom Custom data to attach to the channel.
+   * @param channelType - The channel type.
+   * @param channelId - The channel ID.
+   * @param custom - Custom data to attach to the channel.
    * @returns The channel object; initialize it using `channel.watch()`.
    */
   getChannelById = (channelType: string, channelId: string, custom: ChannelData) => {
@@ -1769,8 +1727,8 @@ export class StreamChat extends ChatApi {
   /**
    * Bans a user from all channels.
    *
-   * @param targetUserId The user to ban.
-   * @param options Ban options (optional).
+   * @param targetUserId - The user to ban.
+   * @param options - Ban options (optional).
    * @returns The server response.
    */
   async banUser(targetUserId: string, options?: BanUserOptions) {
@@ -1783,8 +1741,8 @@ export class StreamChat extends ChatApi {
   /**
    * Revoke a global ban for a user.
    *
-   * @param targetUserId The user to unban.
-   * @param options Unban options (optional).
+   * @param targetUserId - The user to unban.
+   * @param options - Unban options (optional).
    * @returns The server response.
    */
   async unbanUser(targetUserId: string, options?: UnBanUserOptions) {
@@ -1797,8 +1755,8 @@ export class StreamChat extends ChatApi {
   /**
    * Shadow bans a user from all channels.
    *
-   * @param targetUserId The user to shadow ban.
-   * @param options Ban options (optional).
+   * @param targetUserId - The user to shadow ban.
+   * @param options - Ban options (optional).
    * @returns The server response.
    */
   async shadowBan(targetUserId: string, options?: BanUserOptions) {
@@ -1811,8 +1769,8 @@ export class StreamChat extends ChatApi {
   /**
    * Revoke a global shadow ban for a user.
    *
-   * @param targetUserId The user to remove the shadow ban for.
-   * @param options Unban options (optional).
+   * @param targetUserId - The user to remove the shadow ban for.
+   * @param options - Unban options (optional).
    * @returns The server response.
    */
   async removeShadowBan(targetUserId: string, options?: UnBanUserOptions) {
@@ -1858,8 +1816,8 @@ export class StreamChat extends ChatApi {
   /**
    * Mutes a user.
    *
-   * @param targetId The user to mute.
-   * @param options Mute options (optional, defaults to `{}`).
+   * @param targetId - The user to mute.
+   * @param options - Mute options (optional, defaults to `{}`).
    * @returns The server response.
    */
   async muteUser(targetId: string, options: MuteUserOptions = {}) {
@@ -1872,7 +1830,7 @@ export class StreamChat extends ChatApi {
   /**
    * Unmutes a user.
    *
-   * @param targetId The user to unmute.
+   * @param targetId - The user to unmute.
    * @returns The server response.
    */
   async unmuteUser(targetId: string) {
@@ -1882,9 +1840,9 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Check if a user is muted or not; can be used after `connectUser()` is called.
+   * Checks whether a user is muted. Can be used after `connectUser()` is called.
    *
-   * @param targetId The user ID to check.
+   * @param targetId - The user ID to check.
    * @returns `true` if the user is muted, otherwise `false`.
    */
   userMuteStatus(targetId: string) {
@@ -1901,9 +1859,9 @@ export class StreamChat extends ChatApi {
   /**
    * Flag a message.
    *
-   * @param targetMessageId The message to flag.
-   * @param options Flag options (optional, defaults to `{}`).
-   * @param options.reason Reason for flagging (optional).
+   * @param targetMessageId - The message to flag.
+   * @param options - Flag options (optional, defaults to `{}`).
+   * @param options.reason - Reason for flagging (optional).
    * @returns The server response.
    */
   async flagMessage(targetMessageId: string, options: { reason?: string } = {}) {
@@ -1916,9 +1874,9 @@ export class StreamChat extends ChatApi {
   /**
    * Flag a user.
    *
-   * @param targetId The user to flag.
-   * @param options Flag options (optional, defaults to `{}`).
-   * @param options.reason Reason for flagging (optional).
+   * @param targetId - The user to flag.
+   * @param options - Flag options (optional, defaults to `{}`).
+   * @param options.reason - Reason for flagging (optional).
    * @returns The server response.
    */
   async flagUser(targetId: string, options: { reason?: string } = {}) {
@@ -1931,7 +1889,7 @@ export class StreamChat extends ChatApi {
   /**
    * Unflag a message.
    *
-   * @param targetMessageId The message to unflag.
+   * @param targetMessageId - The message to unflag.
    * @returns The server response.
    */
   async unflagMessage(targetMessageId: string) {
@@ -1943,7 +1901,7 @@ export class StreamChat extends ChatApi {
   /**
    * Unflag a user.
    *
-   * @param targetId The user to unflag.
+   * @param targetId - The user to unflag.
    * @returns The server response.
    */
   async unflagUser(targetId: string) {
@@ -1955,7 +1913,7 @@ export class StreamChat extends ChatApi {
   /**
    * Unblocks a message blocked by automod.
    *
-   * @param targetMessageId The message to unblock.
+   * @param targetMessageId - The message to unblock.
    * @returns The server response.
    */
   async unblockMessage(targetMessageId: string) {
@@ -1970,7 +1928,7 @@ export class StreamChat extends ChatApi {
   /**
    * Transforms an expiration value into an ISO string.
    *
-   * @param timeoutOrExpirationDate Expiration date or timeout. Use `number` to set the timeout
+   * @param timeoutOrExpirationDate - Expiration date or timeout. Use `number` to set the timeout
    *   in seconds, `string` or `Date` to set the exact expiration date (optional).
    * @returns The expiration as an ISO string, or `null`.
    */
@@ -1991,8 +1949,8 @@ export class StreamChat extends ChatApi {
   /**
    * Extracts a string message ID from either a message object or a message ID.
    *
-   * @param messageOrMessageId Message object or message ID.
-   * @param errorText Error message to report in case of message ID absence.
+   * @param messageOrMessageId - Message object or message ID.
+   * @param errorText - Error message to report in case of message ID absence.
    * @returns The extracted message ID.
    */
   _validateAndGetMessageId(
@@ -2014,10 +1972,10 @@ export class StreamChat extends ChatApi {
   /**
    * Pins the message.
    *
-   * @param messageOrMessageId Message object or message ID.
-   * @param timeoutOrExpirationDate Expiration date or timeout. Use `number` to set the timeout
+   * @param messageOrMessageId - Message object or message ID.
+   * @param timeoutOrExpirationDate - Expiration date or timeout. Use `number` to set the timeout
    *   in seconds, `string` or `Date` to set the exact expiration date (optional).
-   * @param pinnedAt Date when the message should be pinned. It affects the order of pinned
+   * @param pinnedAt - Date when the message should be pinned. It affects the order of pinned
    *   messages. Use a negative number to set relative time in the past, `string` or `Date` to
    *   set the exact date of pin (optional).
    * @returns The updated message response.
@@ -2044,7 +2002,7 @@ export class StreamChat extends ChatApi {
   /**
    * Unpins the message that was previously pinned.
    *
-   * @param messageOrMessageId Message object or message ID.
+   * @param messageOrMessageId - Message object or message ID.
    * @returns The updated message response.
    */
   unpinMessage(messageOrMessageId: string | { id: string }) {
@@ -2059,7 +2017,7 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Update the given message. When an `offlineDb` is registered the call is queued
+   * Updates the given message. When an `offlineDb` is registered the call is queued
    * so it is replayed on reconnect.
    */
   override async updateMessage(
@@ -2093,7 +2051,7 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Delete a message. When an `offlineDb` is registered the call is queued so it
+   * Deletes a message. When an `offlineDb` is registered the call is queued so it
    * is replayed on reconnect.
    */
   override async deleteMessage(request: Parameters<ChatApi['deleteMessage']>[0]) {
@@ -2142,14 +2100,14 @@ export class StreamChat extends ChatApi {
   /**
    * Returns the list of threads of the current user.
    *
-   * @param options Options object for pagination and limiting the participants and replies
+   * @param options - Options object for pagination and limiting the participants and replies
    *   (optional, defaults to `{}`).
-   * @param options.limit Limits the number of threads to be returned (optional).
-   * @param options.watch Subscribes the user to the channels of the threads (optional).
-   * @param options.participant_limit Limits the number of participants returned per thread (optional).
-   * @param options.reply_limit Limits the number of replies returned per thread (optional).
-   * @param options.filter MongoDB style filters for threads (optional).
-   * @param options.sort MongoDB style sort for threads (optional).
+   * @param options.limit - Limits the number of threads to be returned (optional).
+   * @param options.watch - Subscribes the user to the channels of the threads (optional).
+   * @param options.participant_limit - Limits the number of participants returned per thread (optional).
+   * @param options.reply_limit - Limits the number of replies returned per thread (optional).
+   * @param options.filter - MongoDB style filters for threads (optional).
+   * @param options.sort - MongoDB style sort for threads (optional).
    * @returns The list of threads and the next cursor.
    */
   async queryThreadsAndHydrate(options: QueryThreadsOptions = {}) {
@@ -2194,12 +2152,12 @@ export class StreamChat extends ChatApi {
   /**
    * Returns the thread of a message by its ID, wrapped in a hydrated `Thread` instance.
    *
-   * @param messageId The message ID.
-   * @param options Options object for pagination and limiting the participants and replies
+   * @param messageId - The message ID.
+   * @param options - Options object for pagination and limiting the participants and replies
    *   (optional, defaults to `{}`).
-   * @param options.watch Subscribes the user to the channel of the thread (optional).
-   * @param options.participant_limit Limits the number of participants returned per thread (optional).
-   * @param options.reply_limit Limits the number of replies returned per thread (optional).
+   * @param options.watch - Subscribes the user to the channel of the thread (optional).
+   * @param options.participant_limit - Limits the number of participants returned per thread (optional).
+   * @param options.reply_limit - Limits the number of replies returned per thread (optional).
    * @returns The thread.
    */
   async getThreadAndHydrate(messageId: string, options: GetThreadOptions = {}) {
@@ -2225,8 +2183,8 @@ export class StreamChat extends ChatApi {
   /**
    * Updates the given thread.
    *
-   * @param messageId The ID of the thread message which needs to be updated.
-   * @param partialThreadObject Should contain `set` or `unset` params for any of the thread's non-reserved fields.
+   * @param messageId - The ID of the thread message which needs to be updated.
+   * @param partialThreadObject - Should contain `set` or `unset` params for any of the thread's non-reserved fields.
    * @returns The updated thread.
    */
   async partialUpdateThread(messageId: string, partialThreadObject: PartialThreadUpdate) {
@@ -2299,11 +2257,11 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Set the user agent string.
+   * Sets the user agent string.
    *
    * @deprecated Use `sdkIdentifier` instead.
    *
-   * @param userAgent The user agent string.
+   * @param userAgent - The user agent string.
    */
   setUserAgent(userAgent: string) {
     this.userAgent = userAgent;
@@ -2333,11 +2291,11 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Encode the WS URL payload.
+   * Encodes the WS URL payload.
    *
    * @private
    *
-   * @param client_request_id The client request ID (optional).
+   * @param client_request_id - The client request ID (optional).
    * @returns The JSON-encoded payload string.
    */
   _buildWSPayload = (client_request_id?: string) =>
@@ -2351,10 +2309,10 @@ export class StreamChat extends ChatApi {
   /**
    * Queries poll answers.
    *
-   * @param pollId The poll ID.
-   * @param filter Vote filter conditions (optional, defaults to `{}`).
-   * @param sort Sort options (optional, defaults to `[]`).
-   * @param options Option object, e.g. `{ limit: 10, offset: 0 }` (optional, defaults to `{}`).
+   * @param request - The query poll answers request payload, including the poll ID, optional vote
+   *   filter conditions, sort directions, and pagination options (`limit`, `offset`).
+   * @param request.poll_id - The poll ID.
+   * @param request.filter - Vote filter conditions.
    * @returns The poll answers.
    */
   async queryPollAnswers({
@@ -2375,11 +2333,11 @@ export class StreamChat extends ChatApi {
   /**
    * Uploads a file to the configured storage (defaults to Stream CDN).
    *
-   * @param uri The file to upload.
-   * @param name The name of the file (optional).
-   * @param contentType The content type of the file (optional).
-   * @param user User information (optional).
-   * @param axiosRequestConfig Axios config, e.g. `onUploadProgress` for progress tracking (optional).
+   * @param uri - The file to upload.
+   * @param name - The name of the file (optional).
+   * @param contentType - The content type of the file (optional).
+   * @param user - User information (optional).
+   * @param axiosRequestConfig - Axios config, e.g. `onUploadProgress` for progress tracking (optional).
    * @returns Response containing the file URL.
    */
   uploadFile_(
@@ -2402,11 +2360,11 @@ export class StreamChat extends ChatApi {
   /**
    * Uploads an image to the configured storage (defaults to Stream CDN).
    *
-   * @param uri The image to upload.
-   * @param name The name of the image (optional).
-   * @param contentType The content type of the image (optional).
-   * @param user User information (optional).
-   * @param axiosRequestConfig Axios config, e.g. `onUploadProgress` for progress tracking (optional).
+   * @param uri - The image to upload.
+   * @param name - The name of the image (optional).
+   * @param contentType - The content type of the image (optional).
+   * @param user - User information (optional).
+   * @param axiosRequestConfig - Axios config, e.g. `onUploadProgress` for progress tracking (optional).
    * @returns Response containing the image URL.
    */
   uploadImage_(
@@ -2426,9 +2384,9 @@ export class StreamChat extends ChatApi {
     );
   }
   /**
-   * Mark the channels delivered for the given messages and the user.
+   * Marks the channels as delivered for the given messages and the user.
    *
-   * @param request Mark delivered options.
+   * @param request - Mark delivered options.
    * @returns The server response, or `undefined` if there are no messages to mark.
    */
   async markChannelsDelivered(request?: Gen_MarkDeliveredRequest) {

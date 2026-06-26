@@ -40,8 +40,8 @@ export class OfflineDBSyncManager {
    */
   public init = async () => {
     try {
-      // If the websocket connection is already active, then call
-      // the sync api straight away and also execute pending api calls.
+      // If the WebSocket connection is already active, then call
+      // the sync API straight away and also execute pending API calls.
       // Otherwise wait for the `connection.changed` event.
       if (this.client.user?.id && this.client.wsConnection?.isHealthy) {
         await this.syncAndExecutePendingTasks();

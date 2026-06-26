@@ -6,15 +6,13 @@ import type { UR } from './types';
 import type { WSEvent } from './gen/models';
 
 /**
- * Creates the JWT token that can be used for a UserSession
- * @method JWTUserToken
- * @memberof signing
- * @private
- * @param {Secret} apiSecret - API Secret key
- * @param {string} userId - The user_id key in the JWT payload
- * @param {UR} [extraData] - Extra that should be part of the JWT token
- * @param {SignOptions} [jwtOptions] - Options that can be past to jwt.sign
- * @return {string} JWT Token
+ * Creates the JWT token that can be used for a user session.
+ *
+ * @param apiSecret - API secret key.
+ * @param userId - The `user_id` key in the JWT payload.
+ * @param extraData - Extra data that should be part of the JWT token (optional, defaults to `{}`).
+ * @param jwtOptions - Options that can be passed to `jwt.sign` (optional, defaults to `{}`).
+ * @returns The signed JWT token.
  */
 export function JWTUserToken(
   apiSecret: jwt.Secret,
@@ -31,7 +29,7 @@ export function JWTUserToken(
     ...extraData,
   };
 
-  // make sure we return a clear error when jwt is shimmed (ie. browser build)
+  // make sure we return a clear error when the JWT module is shimmed (i.e. browser build)
   if (jwt == null || jwt.sign == null) {
     throw Error(
       `Unable to find jwt crypto, if you are getting this error is probably because you are trying to generate tokens on browser or React Native (or other environment where crypto functions are not available). Please Note: token should only be generated server-side.`,
@@ -49,6 +47,13 @@ export function JWTUserToken(
   return jwt.sign(payload, apiSecret, opts);
 }
 
+/**
+ * Creates the JWT token that can be used for a server-side session.
+ *
+ * @param apiSecret - API secret key.
+ * @param jwtOptions - Options that can be passed to `jwt.sign` (optional, defaults to `{}`).
+ * @returns The signed JWT token.
+ */
 export function JWTServerToken(apiSecret: jwt.Secret, jwtOptions: jwt.SignOptions = {}) {
   const payload = {
     server: true,
@@ -61,6 +66,12 @@ export function JWTServerToken(apiSecret: jwt.Secret, jwtOptions: jwt.SignOption
   return jwt.sign(payload, apiSecret, opts);
 }
 
+/**
+ * Decodes a JWT token and returns the embedded `user_id`.
+ *
+ * @param token - The JWT token to decode.
+ * @returns The `user_id` extracted from the token's payload, or an empty string when the token is malformed.
+ */
 export function UserFromToken(token: string) {
   const fragments = token.split('.');
   if (fragments.length !== 3) {
@@ -73,9 +84,12 @@ export function UserFromToken(token: string) {
 }
 
 /**
+ * Generates a development token for the given user.
  *
- * @param {string} userId the id of the user
- * @return {string}
+ * Development tokens are unsigned and must only be used in environments where token validation is disabled.
+ *
+ * @param userId - The ID of the user.
+ * @returns The development token.
  */
 export function DevToken(userId: string) {
   return [
@@ -86,16 +100,18 @@ export function DevToken(userId: string) {
 }
 
 /**
- * Constant-time HMAC-SHA256 verification of `signature` against the
- * digest of `body` using `secret` as the key. The signature is always
- * computed over the **uncompressed** JSON bytes, so callers that
- * decoded a gzipped or base64-wrapped payload must pass the inflated
- * bytes here.
+ * Constant-time HMAC-SHA256 verification of `signature` against the digest of `body` using `secret`
+ * as the key. The signature is always computed over the **uncompressed** JSON bytes, so callers that
+ * decoded a gzipped or base64-wrapped payload must pass the inflated bytes here.
  *
- * The legacy `client.verifyWebhook` helper wraps this function, so
- * callers that have already migrated to `verifyAndParseWebhook`,
- * `parseSqs`, or `parseSns` rarely need to invoke this
- * directly.
+ * The legacy `client.verifyWebhook` helper wraps this function, so callers that have already
+ * migrated to {@link verifyAndParseWebhook}, {@link parseSqs}, or {@link parseSns} rarely need to
+ * invoke this directly.
+ *
+ * @param body - The uncompressed payload bytes that Stream signed.
+ * @param signature - The HMAC-SHA256 signature delivered alongside the payload.
+ * @param secret - Your app's API secret used as the HMAC key.
+ * @returns `true` when the signature matches the digest of `body`, otherwise `false`.
  */
 export function verifySignature(
   body: string | Buffer,
@@ -112,9 +128,14 @@ export function verifySignature(
 }
 
 /**
- * @deprecated Use {@link verifySignature} - same logic, parameters
- * reordered to match the cross-SDK contract
- * (`verifySignature(body, signature, secret)`).
+ * Verifies an HMAC-SHA256 signature with the legacy parameter order.
+ *
+ * @param body - The uncompressed payload bytes that Stream signed.
+ * @param secret - Your app's API secret used as the HMAC key.
+ * @param signature - The HMAC-SHA256 signature delivered alongside the payload.
+ * @returns `true` when the signature matches the digest of `body`, otherwise `false`.
+ * @deprecated Use {@link verifySignature} instead — same logic, parameters reordered to match the
+ *   cross-SDK contract (`verifySignature(body, signature, secret)`).
  */
 export function CheckSignature(body: string | Buffer, secret: string, signature: string) {
   return verifySignature(body, signature, secret);
@@ -151,14 +172,16 @@ export class InvalidWebhookError extends Error {
 }
 
 /**
- * Returns `body` as a `Buffer`, gzip-decompressed when its first two
- * bytes match the gzip magic (`1f 8b`, per RFC 1952). When the body is
- * plain JSON (no compression, or middleware already decompressed), the
- * bytes are returned unchanged.
+ * Returns `body` as a `Buffer`, gzip-decompressed when its first two bytes match the gzip magic
+ * (`1f 8b`, per RFC 1952). When the body is plain JSON (no compression, or middleware already
+ * decompressed), the bytes are returned unchanged.
  *
- * Magic-byte detection (rather than relying on a header) keeps the
- * same handler correct when middleware - Express, Next.js, AWS Lambda
- * - auto-decompresses the request before your code sees it.
+ * Magic-byte detection (rather than relying on a header) keeps the same handler correct when
+ * middleware — Express, Next.js, AWS Lambda — auto-decompresses the request before your code sees it.
+ *
+ * @param rawBody - The raw HTTP request body, either as a string or a `Buffer`.
+ * @returns The uncompressed payload bytes.
+ * @throws {@link InvalidWebhookError} when the gzip envelope is malformed.
  */
 export function gunzipPayload(rawBody: string | Buffer): Buffer {
   const GZIP_MAGIC = Buffer.from([0x1f, 0x8b]);
@@ -175,13 +198,15 @@ export function gunzipPayload(rawBody: string | Buffer): Buffer {
 }
 
 /**
- * Reverses the SQS firehose envelope: the message `Body` is
- * base64-decoded, then the result is gzip-decompressed when it begins
- * with the gzip magic. Returns the raw JSON `Buffer` Stream signed.
+ * Reverses the SQS firehose envelope: the message `Body` is base64-decoded, then the result is
+ * gzip-decompressed when it begins with the gzip magic. Returns the raw JSON `Buffer` Stream signed.
  *
- * SQS bodies are always base64-encoded so they remain valid UTF-8 over
- * the queue. The same call works whether or not Stream is currently
- * compressing payloads for this app.
+ * SQS bodies are always base64-encoded so they remain valid UTF-8 over the queue. The same call
+ * works whether or not Stream is currently compressing payloads for this app.
+ *
+ * @param body - The base64-encoded SQS message body.
+ * @returns The decoded (and decompressed, when gzipped) payload bytes.
+ * @throws {@link InvalidWebhookError} when the body is not canonical base64 or the gzip envelope is malformed.
  */
 export function decodeSqsPayload(body: string): Buffer {
   // Reject anything that isn't canonical base64 up front. Node's base64
@@ -200,12 +225,15 @@ export function decodeSqsPayload(body: string): Buffer {
 }
 
 /**
- * Reverses an SNS HTTP notification envelope. When `notificationBody`
- * is a JSON envelope (`{"Type":"Notification","Message":"..."}`), the
- * inner `Message` field is extracted and run through the SQS pipeline
- * (base64-decode, then gzip-if-magic). When the input is not a JSON
- * envelope it is treated as the already-extracted `Message` string,
- * so call sites that pre-unwrap continue to work.
+ * Reverses an SNS HTTP notification envelope. When `notificationBody` is a JSON envelope
+ * (`{"Type":"Notification","Message":"..."}`), the inner `Message` field is extracted and run
+ * through the SQS pipeline (base64-decode, then gzip-if-magic). When the input is not a JSON
+ * envelope it is treated as the already-extracted `Message` string, so call sites that pre-unwrap
+ * continue to work.
+ *
+ * @param notificationBody - The raw SNS notification body, or a pre-extracted `Message` string.
+ * @returns The decoded (and decompressed, when gzipped) payload bytes.
+ * @throws {@link InvalidWebhookError} when the body is not canonical base64 or the gzip envelope is malformed.
  */
 export function decodeSnsPayload(notificationBody: string): Buffer {
   const inner = extractSnsMessage(notificationBody);
@@ -235,9 +263,13 @@ function extractSnsMessage(notificationBody: string): string | null {
 }
 
 /**
- * Parse a JSON-encoded webhook event into a typed {@link Event}. New
- * event types Stream introduces still parse successfully - the runtime
- * shape is the JSON Stream sent and the `type` field stays preserved.
+ * Parses a JSON-encoded webhook event into a typed {@link WSEvent}. New event types Stream
+ * introduces still parse successfully — the runtime shape is the JSON Stream sent and the `type`
+ * field stays preserved.
+ *
+ * @param payload - The raw event payload bytes or string.
+ * @returns The parsed WebSocket event.
+ * @throws {@link InvalidWebhookError} when the payload is not valid JSON.
  */
 export function parseEvent(payload: Buffer | string): WSEvent {
   const text = Buffer.isBuffer(payload) ? payload.toString('utf8') : payload;
@@ -256,14 +288,13 @@ function verifyAndParse(payload: Buffer, signature: string, secret: string): WSE
 }
 
 /**
- * Decompress (when gzipped), verify the HMAC `signature`, and return
- * the parsed {@link Event}.
+ * Decompress (when gzipped), verify the HMAC `signature`, and return the parsed {@link WSEvent}.
  *
- * @param rawBody Raw HTTP request body bytes Stream signed
- * @param signature Value of the `X-Signature` header
- * @param secret Your app's API secret
- * @throws {InvalidWebhookError} When the signature does not match or
- *   the gzip envelope is malformed.
+ * @param rawBody - Raw HTTP request body bytes Stream signed.
+ * @param signature - Value of the `X-Signature` header.
+ * @param secret - Your app's API secret.
+ * @returns The parsed WebSocket event.
+ * @throws {@link InvalidWebhookError} when the signature does not match or the gzip envelope is malformed.
  */
 export function verifyAndParseWebhook(
   rawBody: string | Buffer,
@@ -274,17 +305,25 @@ export function verifyAndParseWebhook(
 }
 
 /**
- * Decode the SQS message `Body` (base64, then gzip-if-magic) and return
- * the parsed {@link Event}. Stream does not attach an application-level HMAC
- * to SQS deliveries — use {@link verifyAndParseWebhook} for HTTP webhooks.
+ * Decodes the SQS message `Body` (base64, then gzip-if-magic) and returns the parsed {@link WSEvent}.
+ * Stream does not attach an application-level HMAC to SQS deliveries — use
+ * {@link verifyAndParseWebhook} for HTTP webhooks.
+ *
+ * @param messageBody - The base64-encoded SQS message body.
+ * @returns The parsed WebSocket event.
+ * @throws {@link InvalidWebhookError} when the body is malformed.
  */
 export function parseSqs(messageBody: string): WSEvent {
   return parseEvent(decodeSqsPayload(messageBody));
 }
 
 /**
- * Decode an SNS notification (unwrap the JSON envelope when needed; same
- * inner format as SQS). No application-level HMAC verification.
+ * Decodes an SNS notification (unwraps the JSON envelope when needed; same inner format as SQS).
+ * No application-level HMAC verification.
+ *
+ * @param notificationBody - The raw SNS notification body, or a pre-extracted `Message` string.
+ * @returns The parsed WebSocket event.
+ * @throws {@link InvalidWebhookError} when the body is malformed.
  */
 export function parseSns(notificationBody: string): WSEvent {
   return parseEvent(decodeSnsPayload(notificationBody));

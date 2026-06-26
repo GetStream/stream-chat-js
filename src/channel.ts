@@ -64,7 +64,7 @@ import type { ChatApi } from './gen/chat/ChatApi';
 import { ChannelApi } from './gen/chat/ChannelApi';
 
 /**
- * Channel - The Channel class manages its own state.
+ * The Channel class manages its own state.
  */
 export class Channel extends ChannelApi {
   _client: StreamChat;
@@ -99,12 +99,12 @@ export class Channel extends ChannelApi {
   public readonly cooldownTimer: CooldownTimer;
 
   /**
-   * Create a channel.
+   * Creates a `Channel` instance bound to the given chat client.
    *
-   * @param client The chat client.
-   * @param type The type of channel.
-   * @param id The ID of the chat (optional).
-   * @param data Any additional custom params.
+   * @param client - The chat client.
+   * @param type - The type of channel.
+   * @param id - The ID of the chat (optional).
+   * @param data - Any additional custom params.
    * @returns A new uninitialized channel.
    */
   constructor(
@@ -156,7 +156,7 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Get the chat client for this channel. If `client.disconnect()` was called, this function will error.
+   * Returns the chat client for this channel. Throws if `client.disconnect()` was called.
    *
    * @returns The chat client.
    */
@@ -168,7 +168,7 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Get the config for this channel ID (cid).
+   * Returns the config for this channel ID (CID).
    *
    * @returns The channel config.
    */
@@ -182,16 +182,10 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Send a message to this channel.
+   * Sends a message to this channel.
    *
-   * @param message The message object.
-   * @param options Options (optional).
-   * @param options.skip_enrich_url Do not try to enrich the URLs within message (optional).
-   * @param options.skip_push Skip sending push notifications (optional).
-   * @param options.is_pending_message DEPRECATED, please use `pending` instead (optional).
-   * @param options.pending Make this message pending (optional).
-   * @param options.pending_message_metadata Metadata for the pending message (optional).
-   * @param options.force_moderation Apply force moderation for server-side requests (optional).
+   * @param request - The send message request payload, including the message body and optional flags
+   *   such as `skip_enrich_url`, `skip_push`, and `keep_channel_hidden`.
    * @returns The server response.
    */
   override async sendMessage(request: Gen_SendMessageRequest) {
@@ -221,11 +215,11 @@ export class Channel extends ChannelApi {
   /**
    * Upload a file to this channel's file endpoint (multipart). Forwards to the client's `sendFile` implementation.
    *
-   * @param uri File source: URL string, `File`, `Buffer`, or readable stream (Node).
-   * @param name File name sent in the multipart body (optional).
-   * @param contentType MIME type; defaults are applied when omitted (optional).
-   * @param user User payload appended to the form as JSON (optional).
-   * @param axiosRequestConfig Axios per-request config, merged after upload defaults, e.g. `onUploadProgress`, `signal` from `AbortController` (optional).
+   * @param uri - File source: URL string, `File`, `Buffer`, or readable stream (Node).
+   * @param name - File name sent in the multipart body (optional).
+   * @param contentType - MIME type; defaults are applied when omitted (optional).
+   * @param user - User payload appended to the form as JSON (optional).
+   * @param axiosRequestConfig - Axios per-request config, merged after upload defaults, e.g. `onUploadProgress`, `signal` from `AbortController` (optional).
    * @returns A promise resolving to `{ file: string, ... }` with the CDN URL.
    */
   sendFile(
@@ -248,11 +242,11 @@ export class Channel extends ChannelApi {
   /**
    * Upload an image to this channel's image endpoint (multipart). Uses the same transport as `sendFile`.
    *
-   * @param uri Image source: URL string, `File`, or readable stream (Node). For `Buffer` uploads, use `sendFile` toward the channel file endpoint instead.
-   * @param name File name sent in the multipart body (optional).
-   * @param contentType MIME type (optional).
-   * @param user User payload appended to the form as JSON (optional).
-   * @param axiosRequestConfig Axios per-request config, merged after upload defaults, e.g. `onUploadProgress`, `signal` (optional).
+   * @param uri - Image source: URL string, `File`, or readable stream (Node). For `Buffer` uploads, use `sendFile` toward the channel file endpoint instead.
+   * @param name - File name sent in the multipart body (optional).
+   * @param contentType - MIME type (optional).
+   * @param user - User payload appended to the form as JSON (optional).
+   * @param axiosRequestConfig - Axios per-request config, merged after upload defaults, e.g. `onUploadProgress`, `signal` (optional).
    * @returns A promise resolving to `{ file: string, ... }` with the CDN URL.
    */
   sendImage(
@@ -281,9 +275,9 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Send an event on this channel.
+   * Sends an event on this channel.
    *
-   * @param event For example `{ type: 'message.read' }`.
+   * @param event - For example `{ type: 'message.read' }`.
    * @returns The server response.
    */
   override async sendEvent(request: { event: CombinedEvents }) {
@@ -292,26 +286,23 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Query messages.
+   * Queries messages.
    *
-   * @param query Search query or object MongoDB style filters.
-   * @param options Option object, e.g. `{ user_id: 'tommaso' }` (optional, defaults to `{}`).
-   * @returns Search messages response.
+   * @param request - The search request payload (optional). The inner `payload` accepts
+   *   MongoDB-style filters and additional options such as `user_id`.
+   * @returns The search messages response.
    */
   async search(request?: { payload?: SearchPayload }) {
     return await this.getClient().search(request);
   }
 
   /**
-   * Query members.
+   * Queries members.
    *
-   * @param filter Object MongoDB style filters.
-   * @param sort Sort options, for instance `[{ field: 'created_at', direction: -1 }]`.
-   *   To sort by multiple fields, append more entries to the array, e.g.
-   *   `[{ field: 'name', direction: -1 }, { field: 'created_at', direction: 1 }]`
-   *   (optional, defaults to `[]`).
-   * @param options Option object, e.g. `{ limit: 10, offset: 10 }` (optional, defaults to `{}`).
-   * @returns Query members response.
+   * @param request - The query members request payload (optional). The inner `payload` accepts
+   *   MongoDB-style filters, sort directions (e.g. `[{ field: 'created_at', direction: -1 }]`),
+   *   and pagination options (`limit`, `offset`).
+   * @returns The query members response.
    */
   async queryMembers(request?: { payload?: Partial<QueryMembersPayload> }) {
     const payload = {
@@ -343,10 +334,9 @@ export class Channel extends ChannelApi {
    * that sending the reaction is queued up if it fails due to bad internet conditions and executed
    * later.
    *
-   * @param messageId The message ID.
-   * @param reaction The reaction object, for instance `{ type: 'love' }`.
-   * @param options Option object, e.g. `{ enforce_unique: true, skip_push: true }` to override
-   *   any existing reaction or skip sending push notifications (optional).
+   * @param request - The send-reaction request payload, including the target message ID, the
+   *   reaction object (e.g. `{ type: 'love' }`), and optional flags such as `enforce_unique` and
+   *   `skip_push`.
    * @returns The server response.
    */
   async sendReaction(request: Parameters<ChatApi['sendReaction']>[0]) {
@@ -419,10 +409,9 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Delete a reaction by user and type.
+   * Deletes a reaction by user and type.
    *
-   * @param messageId The ID of the message from which to remove the reaction.
-   * @param reactionType The type of reaction that should be removed.
+   * @param request - The delete reaction request payload identifying the target message and reaction type.
    * @returns The server response.
    */
   async _deleteReaction(request: Parameters<ChatApi['deleteReaction']>[0]) {
@@ -433,7 +422,7 @@ export class Channel extends ChannelApi {
    * Edit the channel using the inherited `update()` from `ChannelApi`. Caches the
    * server-returned channel onto `this.data`.
    *
-   * @param request Channel update payload, e.g. `{ data: { name: 'foo' }, message }`.
+   * @param request - Channel update payload, e.g. `{ data: { name: 'foo' }, message }` (optional).
    * @returns The server response.
    */
   override async update(request?: Gen_UpdateChannelRequest) {
@@ -445,7 +434,7 @@ export class Channel extends ChannelApi {
   /**
    * Partial update of channel properties.
    *
-   * @param update The partial update request.
+   * @param update - The partial update request.
    * @returns The server response.
    */
   async updatePartial(update: PartialUpdateChannel) {
@@ -475,9 +464,9 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Enable slow mode.
+   * Enables slow mode.
    *
-   * @param coolDownInterval The cooldown interval in seconds.
+   * @param coolDownInterval - The cooldown interval in seconds.
    * @returns The server response.
    */
   async enableSlowMode(coolDownInterval: number) {
@@ -485,7 +474,7 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Disable slow mode.
+   * Disables slow mode.
    *
    * @returns The server response.
    */
@@ -525,9 +514,9 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Accept invitation to the channel.
+   * Accepts an invitation to the channel.
    *
-   * @param options The object to update the custom properties of this channel with (optional, defaults to `{}`).
+   * @param options - The object to update the custom properties of this channel with (optional, defaults to `{}`).
    * @returns The server response.
    */
   async acceptInvite(options: ChannelUpdateOptions = {}) {
@@ -535,9 +524,9 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Reject invitation to the channel.
+   * Rejects an invitation to the channel.
    *
-   * @param options The object to update the custom properties of this channel with (optional, defaults to `{}`).
+   * @param options - The object to update the custom properties of this channel with (optional, defaults to `{}`).
    * @returns The server response.
    */
   async rejectInvite(options: ChannelUpdateOptions = {}) {
@@ -545,11 +534,11 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Add members to the channel.
+   * Adds members to the channel.
    *
-   * @param members An array of members to add to the channel.
-   * @param message Message object for channel members notification (optional).
-   * @param options Configuration to control the behavior while updating (optional, defaults to `{}`).
+   * @param members - An array of members to add to the channel.
+   * @param message - Message object for channel members notification (optional).
+   * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
    * @returns The server response.
    */
   async addMembers(
@@ -567,11 +556,11 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Add filter tags to the channel.
+   * Adds filter tags to the channel.
    *
-   * @param tags An array of tags to add to the channel.
-   * @param message Message object for channel members notification (optional).
-   * @param options Configuration to control the behavior while updating (optional, defaults to `{}`).
+   * @param tags - An array of tags to add to the channel.
+   * @param message - Message object for channel members notification (optional).
+   * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
    * @returns The server response.
    */
   async addFilterTags(
@@ -583,11 +572,11 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Remove filter tags from the channel.
+   * Removes filter tags from the channel.
    *
-   * @param tags An array of tags to remove from the channel.
-   * @param message Message object for channel members notification (optional).
-   * @param options Configuration to control the behavior while updating (optional, defaults to `{}`).
+   * @param tags - An array of tags to remove from the channel.
+   * @param message - Message object for channel members notification (optional).
+   * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
    * @returns The server response.
    */
   async removeFilterTags(
@@ -599,11 +588,11 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Add moderators to the channel.
+   * Adds moderators to the channel.
    *
-   * @param members An array of member identifiers.
-   * @param message Message object for channel members notification (optional).
-   * @param options Configuration to control the behavior while updating (optional, defaults to `{}`).
+   * @param members - An array of member identifiers.
+   * @param message - Message object for channel members notification (optional).
+   * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
    * @returns The server response.
    */
   async addModerators(
@@ -617,9 +606,9 @@ export class Channel extends ChannelApi {
   /**
    * Sets member roles in a channel.
    *
-   * @param roles List of role assignments.
-   * @param message Message object for channel members notification (optional).
-   * @param options Configuration to control the behavior while updating (optional, defaults to `{}`).
+   * @param roles - List of role assignments.
+   * @param message - Message object for channel members notification (optional).
+   * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
    * @returns The server response.
    */
   async assignRoles(
@@ -633,9 +622,9 @@ export class Channel extends ChannelApi {
   /**
    * Invite members to the channel.
    *
-   * @param members An array of members to invite to the channel.
-   * @param message Message object for channel members notification (optional).
-   * @param options Configuration to control the behavior while updating (optional, defaults to `{}`).
+   * @param members - An array of members to invite to the channel.
+   * @param message - Message object for channel members notification (optional).
+   * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
    * @returns The server response.
    */
   async inviteMembers(
@@ -654,11 +643,11 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Remove members from channel.
+   * Removes members from the channel.
    *
-   * @param members An array of member identifiers.
-   * @param message Message object for channel members notification (optional).
-   * @param options Configuration to control the behavior while updating (optional, defaults to `{}`).
+   * @param members - An array of member identifiers.
+   * @param message - Message object for channel members notification (optional).
+   * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
    * @returns The server response.
    */
   async removeMembers(
@@ -670,11 +659,11 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Remove moderator role from channel members.
+   * Removes the moderator role from channel members.
    *
-   * @param members An array of member identifiers.
-   * @param message Message object for channel members notification (optional).
-   * @param options Configuration to control the behavior while updating (optional, defaults to `{}`).
+   * @param members - An array of member identifiers.
+   * @param message - Message object for channel members notification (optional).
+   * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
    * @returns The server response.
    */
   async demoteModerators(
@@ -696,8 +685,8 @@ export class Channel extends ChannelApi {
    * // server side
    * await channel.mute({ user_id: userId });
    *
-   * @param options Mute options (optional, defaults to `{}`).
-   * @param options.expiration Expiration in minutes (optional).
+   * @param options - Mute options (optional, defaults to `{}`).
+   * @param options.expiration - Expiration in minutes (optional).
    * @returns The server response.
    */
   async mute(options?: Gen_MuteChannelRequest) {
@@ -714,8 +703,8 @@ export class Channel extends ChannelApi {
    * // server side
    * await channel.unmute({ user_id: userId });
    *
-   * @param options Unmute options (optional, defaults to `{}`).
-   * @param opts.user_id User ID (optional).
+   * @param options - Unmute options (optional, defaults to `{}`).
+   * @param opts.user_id - User ID (optional).
    * @returns The server response.
    */
   async unmute(options?: Gen_UnmuteChannelRequest) {
@@ -800,8 +789,8 @@ export class Channel extends ChannelApi {
    *
    * @see {@link https://getstream.io/chat/docs/typing_indicators/?language=js|Docs}
    *
-   * @param parentId Set this field to `message.id` to indicate that the typing event is happening in a thread (optional).
-   * @param options Optional override carrying a `user_id` (optional).
+   * @param parentId - Set this field to `message.id` to indicate that the typing event is happening in a thread (optional).
+   * @param options - Optional override carrying a `user_id` (optional).
    */
   async keystroke(parentId?: string, options?: { user_id: string }) {
     if (!this._isTypingIndicatorsEnabled()) {
@@ -830,10 +819,10 @@ export class Channel extends ChannelApi {
    * Sends an event to update the AI state for a specific message.
    * Typically used by the server connected to the AI service to notify clients of state changes.
    *
-   * @param messageId The ID of the message associated with the AI state.
-   * @param state The new state of the AI process, e.g. thinking, generating.
-   * @param options Parameters such as `ai_message` to include additional details in the event (optional, defaults to `{}`).
-   * @param options.ai_message Additional message detail to include in the event (optional).
+   * @param messageId - The ID of the message associated with the AI state.
+   * @param state - The new state of the AI process, e.g. thinking, generating.
+   * @param options - Parameters such as `ai_message` to include additional details in the event (optional, defaults to `{}`).
+   * @param options.ai_message - Additional message detail to include in the event (optional).
    */
   async updateAIState(
     messageId: string,
@@ -885,8 +874,8 @@ export class Channel extends ChannelApi {
    *
    * @see {@link https://getstream.io/chat/docs/typing_indicators/?language=js|Docs}
    *
-   * @param parentId Set this field to `message.id` to indicate that the typing event is happening in a thread (optional).
-   * @param options Optional override carrying a `user_id` (optional).
+   * @param parentId - Set this field to `message.id` to indicate that the typing event is happening in a thread (optional).
+   * @param options - Optional override carrying a `user_id` (optional).
    */
   async stopTyping(parentId?: string, options?: { user_id: string }) {
     if (!this._isTypingIndicatorsEnabled()) {
@@ -913,7 +902,7 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Return the last message; takes into account that the last few messages might not be perfectly sorted.
+   * Returns the last message, accounting for the fact that the last few messages might not be perfectly sorted.
    *
    * @returns The latest local message, or `undefined` if there are no messages.
    */
@@ -940,7 +929,7 @@ export class Channel extends ChannelApi {
    *
    * Use the inherited `markRead()` from `ChannelApi` for a direct, unbatched call.
    *
-   * @param data Mark read options (optional, defaults to `{}`).
+   * @param data - Mark read options (optional, defaults to `{}`).
    */
   async markReadViaReporter(data: MarkReadOptions = {}) {
     return await this.getClient().messageDeliveryReporter.markRead(this, data);
@@ -950,7 +939,7 @@ export class Channel extends ChannelApi {
    * Override of the inherited `markRead()` from `ChannelApi` that requires the
    * channel to be initialized and respects the `read_events` channel config.
    *
-   * @param data Mark read options (optional, defaults to `{}`).
+   * @param data - Mark read options (optional, defaults to `{}`).
    * @returns The server response, or `null` if the request was skipped.
    */
   override async markRead(data?: MarkReadOptions) {
@@ -964,9 +953,9 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Mark the channel as unread from `messageId`; only works if the `read_events` setting is enabled.
+   * Marks the channel as unread from `messageId`. Only works when the `read_events` setting is enabled.
    *
-   * @param data Mark unread options.
+   * @param data - Mark unread options.
    * @returns An API response, or `null` if the request was skipped.
    */
   override async markUnread(data?: MarkUnreadOptions) {
@@ -997,7 +986,7 @@ export class Channel extends ChannelApi {
   /**
    * Loads the initial channel state and watches for changes.
    *
-   * @param options Additional options for the query endpoint (optional).
+   * @param options - Additional options for the query endpoint (optional).
    * @returns The server response.
    */
   async watch(options?: ChannelQueryOptions) {
@@ -1033,6 +1022,7 @@ export class Channel extends ChannelApi {
   /**
    * Stops watching the channel.
    *
+   * @param request - The stop-watching request payload (optional).
    * @returns The server response.
    */
   override async stopWatching(request?: Gen_ChannelStopWatchingRequest) {
@@ -1055,9 +1045,8 @@ export class Channel extends ChannelApi {
    *
    * The recommended way of working with threads is to use the `Thread` class.
    *
-   * @param parentId The message parent ID, i.e. the top of the thread.
-   * @param options Pagination params, e.g. `{ limit: 10, id_lte: 10 }`.
-   * @param sort Sort directions for `created_at` (optional).
+   * @param request - The get-replies request payload, including the parent message ID, pagination
+   *   params, and optional sort directions for `created_at`.
    * @returns A response with a list of messages.
    */
   async getReplies(request: GetRepliesRequest) {
@@ -1075,8 +1064,8 @@ export class Channel extends ChannelApi {
   /**
    * List pinned messages of the channel.
    *
-   * @param options Pagination params, e.g. `{ limit: 10, id_lte: 10 }`.
-   * @param sort Defines sorting direction of pinned messages (optional, defaults to `[]`).
+   * @param options - Pagination params, e.g. `{ limit: 10, id_lte: 10 }`.
+   * @param sort - Defines sorting direction of pinned messages (optional, defaults to `[]`).
    * @returns A response with a list of messages.
    */
   async getPinnedMessages(
@@ -1097,11 +1086,9 @@ export class Channel extends ChannelApi {
   /**
    * List the reactions; supports pagination.
    *
-   * @param messageId The message ID.
-   * @param options The pagination options.
-   * @param options.limit Maximum number of reactions to return (optional).
-   * @param options.offset Offset to start the page at (optional).
-   * @returns Server response.
+   * @param request - The request payload, including the target message ID and
+   *   pagination options (`limit`, `offset`).
+   * @returns The server response.
    */
   getReactions(request: Parameters<ChatApi['getReactions']>[0]) {
     return this.getClient().getReactions(request);
@@ -1110,7 +1097,7 @@ export class Channel extends ChannelApi {
   /**
    * Retrieves a list of messages by ID.
    *
-   * @param messageIds The ids of the messages to retrieve from this channel.
+   * @param messageIds - The IDs of the messages to retrieve from this channel.
    * @returns Server response.
    */
   getMessagesById(messageIds: string[]) {
@@ -1156,7 +1143,7 @@ export class Channel extends ChannelApi {
   /**
    * Count of unread messages.
    *
-   * @param lastRead The time that the user read a message; defaults to the current user's read state (optional).
+   * @param lastRead - The time that the user read a message (optional, defaults to the current user's read state).
    * @returns Unread count.
    */
   countUnread(lastRead?: Date | null) {
@@ -1198,7 +1185,7 @@ export class Channel extends ChannelApi {
   /**
    * Creates a new channel.
    *
-   * @param options Channel query options (optional).
+   * @param options - Channel query options (optional).
    * @returns The server response.
    */
   create = async (options?: ChannelQueryOptions) => {
@@ -1212,10 +1199,10 @@ export class Channel extends ChannelApi {
   };
 
   /**
-   * Query the API; get messages, members or other channel fields.
+   * Queries the API to load messages, members, or other channel fields.
    *
-   * @param options The query options (optional, defaults to `{}`).
-   * @param messageSetToAddToIfDoesNotExist It's possible to load disjunct sets of a channel's
+   * @param options - The query options (optional, defaults to `{}`).
+   * @param messageSetToAddToIfDoesNotExist - It's possible to load disjunct sets of a channel's
    *   messages into state. Use `current` to load the initial channel state or to extend the
    *   currently displayed messages; use `latest` to load/extend the latest messages; `new` is
    *   used for loading a specific message and its surroundings (optional, defaults to `'current'`).
@@ -1357,8 +1344,8 @@ export class Channel extends ChannelApi {
   /**
    * Bans a user from a channel.
    *
-   * @param targetUserId The user to ban.
-   * @param options Ban options.
+   * @param targetUserId - The user to ban.
+   * @param options - Ban options.
    * @returns The server response.
    */
   async banUser(targetUserId: string, options: BanUserOptions) {
@@ -1372,9 +1359,10 @@ export class Channel extends ChannelApi {
 
   /**
    * Hides the channel from `queryChannels` for the user until a message is added.
-   * If `clearHistory` is set to `true`, all messages will be removed for the user.
+   * If `clear_history` is set to `true`, all messages will be removed for the user.
    *
-   * @param clearHistory Whether to clear message history for the user (optional, defaults to `false`).
+   * @param request - The hide channel request payload (optional). Pass `{ clear_history: true }`
+   *   to clear message history for the user.
    * @returns The server response.
    */
   override async hide(request?: Gen_HideChannelRequest) {
@@ -1383,7 +1371,10 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Removes the hidden status for a channel; ensures the channel is initialized first.
+   * Removes the hidden status for a channel. Ensures the channel is initialized first.
+   *
+   * @param request - The show channel request payload (optional).
+   * @returns The server response.
    */
   override async show(request?: Gen_ShowChannelRequest) {
     this._checkInitialized();
@@ -1393,8 +1384,8 @@ export class Channel extends ChannelApi {
   /**
    * Removes the bans for a user on a channel.
    *
-   * @param targetUserId The user to unban.
-   * @param options Unban options (optional).
+   * @param targetUserId - The user to unban.
+   * @param options - Unban options (optional).
    * @returns The server response.
    */
   async unbanUser(targetUserId: string, options?: UnBanUserOptions) {
@@ -1409,8 +1400,8 @@ export class Channel extends ChannelApi {
   /**
    * Shadow bans a user from a channel.
    *
-   * @param targetUserId The user to shadow ban.
-   * @param options Ban options.
+   * @param targetUserId - The user to shadow ban.
+   * @param options - Ban options.
    * @returns The server response.
    */
   async shadowBan(targetUserId: string, options: BanUserOptions) {
@@ -1425,7 +1416,7 @@ export class Channel extends ChannelApi {
   /**
    * Removes the shadow ban for a user on a channel.
    *
-   * @param targetUserId The user to remove the shadow ban for.
+   * @param targetUserId - The user to remove the shadow ban for.
    * @returns The server response.
    */
   async removeShadowBan(targetUserId: string) {
@@ -1437,11 +1428,10 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Cast or cancel one or more votes on a poll.
+   * Casts or cancels one or more votes on a poll.
    *
-   * @param messageId The message ID carrying the poll.
-   * @param pollId The poll ID.
-   * @param vote The vote that will be cast (or canceled in case of an empty payload).
+   * @param request - The cast-poll-vote request payload, including the target message ID, poll ID,
+   *   and the vote to cast (or an empty payload to cancel).
    * @returns The poll vote response.
    */
   async vote(request: Parameters<ChatApi['castPollVote']>[0]) {
@@ -1517,7 +1507,7 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Listen to events on this channel.
+   * Listens to events on this channel.
    *
    * @example
    * channel.on('message.new', (event) => {
@@ -1529,8 +1519,8 @@ export class Channel extends ChannelApi {
    *   console.log(event.type);
    * });
    *
-   * @param callbackOrString The event type to listen for, or the callback when listening to all events.
-   * @param callbackOrNothing The callback to call when an event type was provided (optional).
+   * @param callbackOrString - The event type to listen for, or the callback when listening to all events.
+   * @param callbackOrNothing - The callback to call when an event type was provided (optional).
    * @returns An object with an `unsubscribe()` method.
    */
   on<T extends ListenerKeys | string>(
@@ -1580,10 +1570,10 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Remove the event handler.
+   * Removes the event handler.
    *
-   * @param callbackOrString The event type, or the callback when removing an all-events listener.
-   * @param callbackOrNothing The callback to remove when an event type was provided (optional).
+   * @param callbackOrString - The event type, or the callback when removing an all-events listener.
+   * @param callbackOrNothing - The callback to remove when an event type was provided (optional).
    */
   off<T extends ListenerKeys | string>(eventType: T, callback: EventHandler): void;
   off(callback: EventHandler): void;

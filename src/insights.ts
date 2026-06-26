@@ -18,11 +18,12 @@ export class InsightMetrics {
 }
 
 /**
- * postInsights is not supposed to be used by end users directly within chat application, and thus is kept isolated
- * from all the client/connection code/logic.
+ * Posts internal insights telemetry to the Stream insights endpoint. Not intended for end-user use;
+ * kept isolated from the client/connection code/logic.
  *
- * @param insightType
- * @param insights
+ * @internal
+ * @param insightType - The category of insight being reported (e.g. `'ws_fatal'`).
+ * @param insights - The insight payload to send.
  */
 export const postInsights = async (
   insightType: InsightTypes,

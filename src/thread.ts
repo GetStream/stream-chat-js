@@ -39,7 +39,7 @@ export type ThreadState = {
   pagination: ThreadRepliesPagination;
   /**
    * Thread is identified by and has a one-to-one relation with its parent message.
-   * We use parent message id as a thread id.
+   * We use the parent message ID as the thread ID.
    */
   parentMessage: LocalMessage;
   participants: ThreadResponse['thread_participants'];

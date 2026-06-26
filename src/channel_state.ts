@@ -62,7 +62,7 @@ const messageSetsOverlapByTimestamp = (a: LocalMessage[], b: LocalMessage[]) =>
   aOverlapsB(b, a);
 
 /**
- * ChannelState - A container class for the channel state.
+ * Container class for the channel state.
  */
 export class ChannelState {
   _channel: Channel;
@@ -81,7 +81,7 @@ export class ChannelState {
   /**
    * Flag which indicates if channel state contain latest/recent messages or no.
    * This flag should be managed by UI sdks using a setter - setIsUpToDate.
-   * When false, any new message (received by websocket event - message.new) will not
+   * When false, any new message (received by WebSocket event - message.new) will not
    * be pushed on to message list.
    */
   isUpToDate: boolean;
@@ -111,7 +111,7 @@ export class ChannelState {
     /**
      * Flag which indicates if channel state contain latest/recent messages or no.
      * This flag should be managed by UI sdks using a setter - setIsUpToDate.
-     * When false, any new message (received by websocket event - message.new) will not
+     * When false, any new message (received by WebSocket event - message.new) will not
      * be pushed on to message list.
      */
     this.isUpToDate = true;
@@ -160,12 +160,15 @@ export class ChannelState {
   }
 
   /**
-   * addMessageSorted - Add a message to the state
+   * Adds the provided message to the state.
    *
-   * @param {MessageResponse} newMessage A new message
-   * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
-   * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
-   * @param {MessageSetType} messageSetToAddToIfDoesNotExist Which message set to add to if message is not in the list (only used if addIfDoesNotExist is true)
+   * @param newMessage - The new message to add.
+   * @param timestampChanged - Whether updating a message with a changed `created_at` value
+   *   (optional, defaults to `false`).
+   * @param addIfDoesNotExist - Add the message if it is not in the list. Used to prevent
+   *   out-of-order updated messages from being added (optional, defaults to `true`).
+   * @param messageSetToAddToIfDoesNotExist - Which message set to add to if the message is not in
+   *   the list. Only used when `addIfDoesNotExist` is `true` (optional, defaults to `'latest'`).
    */
   addMessageSorted(
     newMessage: MessageResponse | LocalMessage,
@@ -186,19 +189,21 @@ export class ChannelState {
    * Takes the message object, parses the dates, sets `__html`
    * and sets the status to `received` if missing; returns a new message object.
    *
-   * @param {MessageResponse} message `MessageResponse` object
+   * @param message - `MessageResponse` object
    */
   formatMessage = (message: MessageResponse | LocalMessage) => formatMessage(message);
 
   /**
-   * addMessagesSorted - Add the list of messages to state and resorts the messages
+   * Adds the provided messages to state and resorts the list.
    *
-   * @param {Array<MessageResponse>} newMessages A list of messages
-   * @param {boolean} timestampChanged Whether updating messages with changed created_at value.
-   * @param {boolean} initializing Whether channel is being initialized.
-   * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
-   * @param {MessageSetType} messageSetToAddToIfDoesNotExist Which message set to add to if messages are not in the list (only used if addIfDoesNotExist is true)
-   *
+   * @param newMessages - The list of messages to add.
+   * @param timestampChanged - Whether updating messages with a changed `created_at` value
+   *   (optional, defaults to `false`).
+   * @param initializing - Whether the channel is being initialized (optional, defaults to `false`).
+   * @param addIfDoesNotExist - Add the message if it is not in the list. Used to prevent
+   *   out-of-order updated messages from being added (optional, defaults to `true`).
+   * @param messageSetToAddToIfDoesNotExist - Which message set to add to if messages are not in
+   *   the list. Only used when `addIfDoesNotExist` is `true` (optional, defaults to `'current'`).
    */
   addMessagesSorted(
     newMessages: (MessageResponse | LocalMessage)[],
@@ -311,10 +316,9 @@ export class ChannelState {
   }
 
   /**
-   * addPinnedMessages - adds messages in pinnedMessages property
+   * Adds the provided messages to the `pinnedMessages` property.
    *
-   * @param {Array<MessageResponse>} pinnedMessages A list of pinned messages
-   *
+   * @param pinnedMessages - A list of pinned messages.
    */
   addPinnedMessages(pinnedMessages: MessageResponse[]) {
     for (let i = 0; i < pinnedMessages.length; i += 1) {
@@ -323,10 +327,9 @@ export class ChannelState {
   }
 
   /**
-   * addPinnedMessage - adds message in pinnedMessages
+   * Adds a single message to the `pinnedMessages` list.
    *
-   * @param {MessageResponse} pinnedMessage message to update
-   *
+   * @param pinnedMessage - The pinned message to add or update.
    */
   addPinnedMessage(pinnedMessage: MessageResponse) {
     this.pinnedMessages = this._addToMessageList(
@@ -338,10 +341,9 @@ export class ChannelState {
   }
 
   /**
-   * removePinnedMessage - removes pinned message from pinnedMessages
+   * Removes the provided pinned message from `pinnedMessages`.
    *
-   * @param {MessageResponse} message message to remove
-   *
+   * @param message - The pinned message to remove.
    */
   removePinnedMessage(message: MessageResponse) {
     const { result } = this.removeMessageFromArray(this.pinnedMessages, message);
@@ -617,9 +619,10 @@ export class ChannelState {
   }
 
   /**
-   * Updates all instances of given message in channel state
-   * @param message
-   * @param updateFunc
+   * Updates all instances of given message in channel state.
+   *
+   * @param message - The message identity (`id`, optional `parent_id`, `pinned`, `show_in_channel`).
+   * @param updateFunc - Transform applied to the existing formatted message.
    */
   _updateMessage(
     message: {
@@ -667,9 +670,9 @@ export class ChannelState {
   /**
    * Setter for isUpToDate.
    *
-   * @param isUpToDate  Flag which indicates if channel state contain latest/recent messages or no.
+   * @param isUpToDate  - Flag which indicates if channel state contain latest/recent messages or no.
    *                    This flag should be managed by UI sdks using a setter - setIsUpToDate.
-   *                    When false, any new message (received by websocket event - message.new) will not
+   *                    When false, any new message (received by WebSocket event - message.new) will not
    *                    be pushed on to message list.
    */
   setIsUpToDate = (isUpToDate: boolean) => {
@@ -677,13 +680,16 @@ export class ChannelState {
   };
 
   /**
-   * _addToMessageList - Adds a message to a list of messages, tries to update first, appends if message isn't found
+   * Adds a message to a list of messages. Tries to update first; appends if the message isn't found.
    *
-   * @param {Array<ReturnType<ChannelState['formatMessage']>>} messages A list of messages
-   * @param message
-   * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
-   * @param {string} sortBy field name to use to sort the messages by
-   * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
+   * @param messages - A list of messages.
+   * @param message - The formatted message to add or update.
+   * @param timestampChanged - Whether updating a message with a changed `created_at` value
+   *   (optional, defaults to `false`).
+   * @param sortBy - Field name to use to sort the messages by (optional, defaults to `'created_at'`).
+   * @param addIfDoesNotExist - Add the message if it is not in the list. Used to prevent
+   *   out-of-order updated messages from being added (optional, defaults to `true`).
+   * @returns The updated list of messages.
    */
   _addToMessageList(
     messages: Array<ReturnType<ChannelState['formatMessage']>>,
@@ -702,11 +708,10 @@ export class ChannelState {
   }
 
   /**
-   * removeMessage - Description
+   * Removes a message from channel state.
    *
-   * @param {{ id: string; parent_id?: string }} messageToRemove Object of the message to remove. Needs to have at id specified.
-   *
-   * @return {boolean} Returns if the message was removed
+   * @param messageToRemove - The message to remove. Must have at least its `id` specified.
+   * @returns `true` when a matching message was found and removed.
    */
   removeMessage(messageToRemove: {
     id: string;
@@ -750,9 +755,9 @@ export class ChannelState {
   };
 
   /**
-   * Updates the message.user property with updated user object, for messages.
+   * Updates the `message.user` property with the supplied user object across all messages.
    *
-   * @param {UserResponse} user
+   * @param user - The user whose embedded copy should be refreshed on each authored message.
    */
   updateUserMessages = (user: UserResponse) => {
     const _updateUserMessages = (
@@ -777,10 +782,12 @@ export class ChannelState {
   };
 
   /**
-   * Marks the messages as deleted, from deleted user.
+   * Marks all messages authored by the given user as deleted.
    *
-   * @param {UserResponse} user
-   * @param {boolean} hardDelete
+   * @param user - The user whose messages should be marked deleted.
+   * @param hardDelete - When `true`, drop the messages instead of marking them deleted
+   *   (optional, defaults to `false`).
+   * @param deletedAt - Override timestamp for the `deleted_at` field (optional).
    */
   deleteUserMessages = (
     user: UserResponse,
@@ -809,8 +816,7 @@ export class ChannelState {
   };
 
   /**
-   * filterErrorMessages - Removes error messages from the channel state.
-   *
+   * Removes error messages from the channel state.
    */
   filterErrorMessages() {
     const filteredMessages = this.latestMessages.filter(
@@ -827,7 +833,7 @@ export class ChannelState {
   }
 
   /**
-   * clean - Remove stale data such as users that stayed in typing state for more than 5 seconds
+   * Removes stale data such as users that stayed in typing state for more than 5 seconds.
    */
   clean() {
     const now = new Date();
@@ -867,11 +873,13 @@ export class ChannelState {
   }
 
   /**
-   * loadMessageIntoState - Loads a given message (and messages around it) into the state
+   * Loads a given message (and messages around it) into the state.
    *
-   * @param {string} messageId The id of the message, or 'latest' to indicate switching to the latest messages
-   * @param {string} parentMessageId The id of the parent message, if we want load a thread reply
-   * @param {number} limit The page size if the message has to be queried from the server
+   * @param messageId - The ID of the message, or `'latest'` to indicate switching to the latest messages.
+   * @param parentMessageId - The ID of the parent message, when we want to load a thread reply
+   *   (optional).
+   * @param limit - The page size if the message has to be queried from the server (optional,
+   *   defaults to `25`).
    */
   async loadMessageIntoState(
     messageId: string | 'latest',
@@ -920,12 +928,12 @@ export class ChannelState {
   }
 
   /**
-   * findMessage - Finds a message inside the state
+   * Finds a message inside the state.
    *
-   * @param {string} messageId The id of the message
-   * @param {string} parentMessageId The id of the parent message, if we want load a thread reply
-   *
-   * @return {ReturnType<ChannelState['formatMessage']>} Returns the message, or undefined if the message wasn't found
+   * @param messageId - The ID of the message.
+   * @param parentMessageId - The ID of the parent message, when we want to load a thread reply
+   *   (optional).
+   * @returns The matching message, or `undefined` if no message was found.
    */
   findMessage(messageId: string, parentMessageId?: string) {
     if (parentMessageId) {
@@ -1001,8 +1009,11 @@ export class ChannelState {
   }
 
   /**
-   * Identifies the set index into which a message set would pertain if its first item's creation date corresponded to oldestTimestampMs.
-   * @param oldestTimestampMs
+   * Identifies the set index into which a message set would belong if its first item's creation
+   * date corresponded to `oldestTimestampMs`.
+   *
+   * @param oldestTimestampMs - The oldest timestamp (in milliseconds) of the candidate message set.
+   * @returns The matching message set index, or `-1` when none is found.
    */
   private findMessageSetByOldestTimestamp = (oldestTimestampMs: number): number => {
     let lo = 0,

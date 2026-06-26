@@ -879,8 +879,8 @@ export type StreamChatOptions = {
   recoverStateOnReconnect?: boolean;
   warmUp?: boolean;
   /**
-   * Set the instance of StableWSConnection on chat client. Its purely for testing purpose and should
-   * not be used in production apps.
+   * Sets the instance of `StableWSConnection` on the chat client. Intended purely for testing and
+   * should not be used in production apps.
    */
   wsConnection?: StableWSConnection;
   /**
@@ -896,9 +896,9 @@ export type SyncOptions = {
    */
   watch?: boolean;
   /**
-   * Return channels from request that user does not have access to in a separate
-   * field in the response called 'inaccessible_cids' instead of
-   * adding them as 'notification.removed_from_channel' events.
+   * Returns channels from the request that the user does not have access to in a separate field
+   * in the response called `inaccessible_cids` instead of adding them as
+   * `notification.removed_from_channel` events.
    */
   with_inaccessible_cids?: boolean;
 };

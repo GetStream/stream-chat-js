@@ -148,7 +148,8 @@ export class WSConnectionFallback {
 
   /**
    * connect try to open a longpoll request
-   * @param reconnect should be false for first call and true for subsequent calls to keep the connection alive and call recoverState
+   *
+   * @param reconnect - should be false for first call and true for subsequent calls to keep the connection alive and call recoverState
    */
   connect = async (reconnect = false) => {
     if (this.state === ConnectionState.Connecting) {

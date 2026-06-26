@@ -2,12 +2,21 @@ import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import unusedImports from 'eslint-plugin-unused-imports';
+import jsdoc from 'eslint-plugin-jsdoc';
 
 import importPlugin from 'eslint-plugin-import';
 
 export default tseslint.config(
   {
-    ignores: ['dist', 'coverage', '.yarn', '.claude', 'src/@types', '*.{js,ts}'],
+    ignores: [
+      'dist',
+      'coverage',
+      '.yarn',
+      '.claude',
+      'src/@types',
+      'src/gen/**',
+      '*.{js,ts}',
+    ],
   },
   {
     name: 'default',
@@ -20,6 +29,7 @@ export default tseslint.config(
     plugins: {
       import: importPlugin,
       'unused-imports': unusedImports,
+      jsdoc,
     },
     settings: {
       react: {
@@ -95,6 +105,19 @@ export default tseslint.config(
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/no-empty-object-type': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
+      'jsdoc/no-types': 'error',
+      'jsdoc/check-param-names': ['error', { checkDestructured: false }],
+      'jsdoc/check-tag-names': [
+        'error',
+        { definedTags: ['internal', 'experimental', 'remarks'] },
+      ],
+      'jsdoc/require-param-description': 'warn',
+      'jsdoc/require-returns-description': 'warn',
+      'jsdoc/require-hyphen-before-param-description': ['warn', 'always'],
+      'jsdoc/tag-lines': ['error', 'any', { startLines: 1 }],
+      'jsdoc/no-multi-asterisks': 'error',
+      'jsdoc/empty-tags': 'error',
+      'jsdoc/no-bad-blocks': 'error',
     },
   },
 );

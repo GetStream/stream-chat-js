@@ -184,7 +184,7 @@ export type DBGetChannelsForQueryType = {
 };
 
 /**
- * Get the last sync timestamp for a user.
+ * Payload for retrieving the last sync timestamp for a user.
  */
 export type DBGetLastSyncedAtType = {
   /** ID of the user. */
@@ -200,7 +200,7 @@ export type DBGetPendingTasksType = {
 };
 
 /**
- * Get application settings for a user.
+ * Payload for retrieving application settings for a user.
  */
 export type DBGetAppSettingsType = {
   /** ID of the user. */
@@ -222,7 +222,7 @@ export type DBGetReactionsType = {
 };
 
 /**
- * Delete a pending task by ID.
+ * Payload for deleting a pending task by ID.
  */
 export type DBDeletePendingTaskType = {
   /** ID of the pending task. */
@@ -230,7 +230,7 @@ export type DBDeletePendingTaskType = {
 };
 
 /**
- * Update a pending task by ID.
+ * Payload for updating a pending task by ID.
  */
 export type DBUpdatePendingTaskType = {
   /** ID of the pending task. */
@@ -308,7 +308,7 @@ export type DBDeleteMessagesForChannelType = {
 };
 
 /**
- * Check if a channel exists by ID.
+ * Payload for checking whether a channel exists by ID.
  */
 export type DBChannelExistsType = {
   /** Channel ID. */

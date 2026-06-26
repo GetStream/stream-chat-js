@@ -80,17 +80,17 @@ export type AttachmentManagerConfig = {
   /** Function that allows to customize the upload request. */
   doUploadRequest?: UploadRequestFn;
   /**
-   * When true, the attachment manager sets `localMetadata.uploadProgress` and passes `options.onProgress`
-   * to `doUploadRequest` (built-in and custom). Set to false to disable progress tracking.
-   * @default true
+   * When `true`, the attachment manager sets `localMetadata.uploadProgress` and passes
+   * `options.onProgress` to `doUploadRequest` (built-in and custom). Set to `false` to disable
+   * progress tracking (defaults to `true`).
    */
   trackUploadProgress: boolean;
 };
 
 export type LinkPreviewsManagerConfig = {
-  /** Number of milliseconds to debounce firing the URL enrichment queries when typing. The default value is 1500(ms). */
+  /** Number of milliseconds to debounce firing the URL enrichment queries when typing (defaults to `1500`). */
   debounceURLEnrichmentMs: number;
-  /** Allows for toggling the URL enrichment and link previews in `MessageInput`. By default, the feature is disabled. */
+  /** Allows for toggling the URL enrichment and link previews in `MessageInput` (defaults to `false`). */
   enabled: boolean;
   /** Custom function to identify URLs in a string and request OG data */
   findURLFn: (text: string) => string[];
@@ -100,11 +100,11 @@ export type LinkPreviewsManagerConfig = {
 
 export type LocationComposerConfig = {
   /**
-   * Allows for toggling the location addition.
-   * By default, the feature is enabled but has to be enabled also on channel level config via shared_locations.
+   * Allows for toggling the location addition (defaults to `true`). The feature also has to be
+   * enabled at the channel-level config via `shared_locations`.
    */
   enabled: boolean;
-  /** Function that provides a stable id for a device from which the location is shared */
+  /** Function that provides a stable ID for the device from which the location is shared. */
   getDeviceId: () => string;
 };
 

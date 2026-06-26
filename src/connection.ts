@@ -35,15 +35,16 @@ const isErrorEvent = (
 ): res is WebSocket.ErrorEvent => (res as WebSocket.ErrorEvent).error !== undefined;
 
 /**
- * StableWSConnection - A WS connection that reconnects upon failure.
+ * A WS connection that reconnects upon failure.
+ *
  * - the browser will sometimes report that you're online or offline
  * - the WS connection can break and fail (there is a 30s health check)
  * - sometimes your WS connection will seem to work while the user is in fact offline
- * - to speed up online/offline detection you can use the window.addEventListener('offline');
+ * - to speed up online/offline detection you can use the `window.addEventListener('offline')`
  *
  * There are 4 ways in which a connection can become unhealthy:
- * - websocket.onerror is called
- * - websocket.onclose is called
+ * - WebSocket.onerror is called
+ * - WebSocket.onclose is called
  * - the health check fails and no event is received for ~40 seconds
  * - the browser indicates the connection is now offline
  *
@@ -116,9 +117,10 @@ export class StableWSConnection {
   }
 
   /**
-   * connect - Connect to the WS URL
-   * the default 15s timeout allows between 2~3 tries
-   * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Promise that completes once the first health check message is received
+   * Connects to the WS URL. The default 15s timeout allows between 2 and 3 tries.
+   *
+   * @param timeout - Connect timeout in milliseconds (optional, defaults to `15000`).
+   * @returns A promise that resolves once the first health check message is received.
    */
   async connect(timeout = 15000) {
     if (this.isConnecting) {
@@ -164,7 +166,8 @@ export class StableWSConnection {
   /**
    * _waitForHealthy polls the promise connection to see if its resolved until it times out
    * the default 15s timeout allows between 2~3 tries
-   * @param timeout duration(ms)
+   *
+   * @param timeout - duration (ms)
    */
   _waitForHealthy(timeout = 15000) {
     return Promise.race([
@@ -204,7 +207,8 @@ export class StableWSConnection {
   }
 
   /**
-   * Builds and returns the url for websocket.
+   * Builds and returns the URL for the WebSocket connection.
+   *
    * @private
    * @returns url string
    */
@@ -226,11 +230,12 @@ export class StableWSConnection {
   };
 
   /**
-   * disconnect - Disconnect the connection and doesn't recover...
+   * Disconnects the connection without attempting to recover.
    *
+   * @param timeout - Optional timeout in milliseconds to wait for the close frame from the server.
    */
   disconnect(timeout?: number) {
-    this._log(`disconnect() - Closing the websocket connection for wsID ${this.wsID}`);
+    this._log(`disconnect() - Closing the WebSocket connection for wsID ${this.wsID}`);
 
     this.wsID += 1;
     this.isConnecting = false;
@@ -269,7 +274,7 @@ export class StableWSConnection {
         };
 
         ws.onclose = onclose;
-        // In case we don't receive close frame websocket server in time,
+        // In case we don't receive a close frame from the WebSocket server in time,
         // lets not wait for more than 1 seconds.
         setTimeout(onclose, timeout != null ? timeout : 1000);
       });
@@ -293,9 +298,9 @@ export class StableWSConnection {
   }
 
   /**
-   * _connect - Connect to the WS endpoint
+   * Connects to the WS endpoint.
    *
-   * @return {ConnectAPIResponse<ChannelType, CommandType, UserType>} Promise that completes once the first health check message is received
+   * @returns A promise that resolves once the first health check message is received.
    */
   async _connect() {
     if (
@@ -367,12 +372,11 @@ export class StableWSConnection {
   }
 
   /**
-   * _reconnect - Retry the connection to WS endpoint
+   * Retries the connection to the WS endpoint.
    *
-   * @param {{ interval?: number; refreshToken?: boolean }} options Following options are available
-   *
-   * - `interval`	{int}			number of ms that function should wait before reconnecting
-   * - `refreshToken` {boolean}	reload/refresh user token be refreshed before attempting reconnection.
+   * @param options - Reconnect options.
+   * @param options.interval - Number of milliseconds to wait before reconnecting.
+   * @param options.refreshToken - Reload/refresh the user token before attempting to reconnect.
    */
   async _reconnect(
     options: { interval?: number; refreshToken?: boolean } = {},
@@ -447,10 +451,9 @@ export class StableWSConnection {
   }
 
   /**
-   * onlineStatusChanged - this function is called when the browser connects or disconnects from the internet.
+   * Called when the browser connects or disconnects from the internet.
    *
-   * @param {Event} event Event with type online or offline
-   *
+   * @param event - The DOM event whose `type` is `'online'` or `'offline'`.
    */
   onlineStatusChanged = (event: Event) => {
     if (event.type === 'offline') {
@@ -559,11 +562,9 @@ export class StableWSConnection {
   };
 
   /**
-   * _setHealth - Sets the connection to healthy or unhealthy.
-   * Broadcasts an event in case the connection status changed.
+   * Sets the connection to healthy or unhealthy. Broadcasts an event if the connection status changed.
    *
-   * @param {boolean} healthy boolean indicating if the connection is healthy or not
-   *
+   * @param healthy - Whether the connection is healthy.
    */
   _setHealth = (healthy: boolean) => {
     if (healthy === this.isHealthy) return;
@@ -583,8 +584,11 @@ export class StableWSConnection {
   };
 
   /**
-   * _errorFromWSEvent - Creates an error object for the WS event
+   * Creates an error object for the WS event.
    *
+   * @param event - The raw WebSocket close / data / error event.
+   * @param isWSFailure - Whether the underlying cause is a WebSocket failure (optional, defaults to `true`).
+   * @returns A normalized error describing the WS failure.
    */
   _errorFromWSEvent = (
     event: WebSocket.CloseEvent | WebSocket.Data | WebSocket.ErrorEvent,
@@ -626,8 +630,7 @@ export class StableWSConnection {
   };
 
   /**
-   * _destroyCurrentWSConnection - Removes the current WS connection
-   *
+   * Removes the current WS connection.
    */
   _destroyCurrentWSConnection() {
     // increment the ID, meaning we will ignore all messages from the old
@@ -643,7 +646,7 @@ export class StableWSConnection {
   }
 
   /**
-   * _setupPromise - sets up the this.connectOpen promise
+   * Sets up the `this.connectionOpen` promise.
    */
   _setupConnectionPromise = () => {
     this.isResolved = false;
@@ -655,7 +658,7 @@ export class StableWSConnection {
   };
 
   /**
-   * Schedules a next health check ping for websocket.
+   * Schedules the next health check ping for the WebSocket connection.
    */
   scheduleNextPing = () => {
     if (this.healthCheckTimeoutRef) {
@@ -676,9 +679,9 @@ export class StableWSConnection {
   };
 
   /**
-   * scheduleConnectionCheck - schedules a check for time difference between last received event and now.
-   * If the difference is more than 35 seconds, it means our health check logic has failed and websocket needs
-   * to be reconnected.
+   * Schedules a check for the time difference between the last received event and now. If the
+   * difference is more than 35 seconds, it means our health check logic has failed and the
+   * WebSocket needs to be reconnected.
    */
   scheduleConnectionCheck = () => {
     if (this.connectionCheckTimeoutRef) {
