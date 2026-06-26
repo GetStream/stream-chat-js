@@ -467,7 +467,7 @@ export class StreamChat {
       warmUp: false,
       recoverStateOnReconnect: true,
       disableCache: false,
-      enableLocalUnreadCount: false,
+      isLocalUnreadCountEnabled: false,
       wsUrlParams: new URLSearchParams({}),
       ...inputOptions,
     };

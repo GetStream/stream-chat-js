@@ -1250,7 +1250,7 @@ export class Channel {
   /**
    * markReadLocally - Resets this user's unread count locally, without any backend call. Intended for
    * channels that have read events disabled (e.g. livestreams) when the client is created with the
-   * `enableLocalUnreadCount` option. Dispatches a dedicated, client-only `message.local_read` event
+   * `isLocalUnreadCountEnabled` option. Dispatches a dedicated, client-only `message.local_read` event
    * that runs through the same `_handleChannelEvent` read logic as a real `message.read` (minus the
    * delivery-report network sync), so the read-state update lives in one place. When offline support
    * is enabled, the offline DB persists the reset for read-events-disabled channels, so the local
@@ -1470,8 +1470,8 @@ export class Channel {
       return false;
 
     // Return false if channel doesn't allow read events, unless the client opted into a local
-    // unread count (e.g. livestreams where read events are disabled). See `enableLocalUnreadCount`.
-    if (!this.getClient().options.enableLocalUnreadCount && !this.hasReadEvents()) {
+    // unread count (e.g. livestreams where read events are disabled). See `isLocalUnreadCountEnabled`.
+    if (!this.getClient().options.isLocalUnreadCountEnabled && !this.hasReadEvents()) {
       return false;
     }
 
@@ -2004,7 +2004,7 @@ export class Channel {
         }
         break;
       // `message.local_read` is the client-only event dispatched by `markReadLocally()` when read
-      // events are disabled (e.g. livestreams with `enableLocalUnreadCount`). It reuses the exact
+      // events are disabled (e.g. livestreams with `isLocalUnreadCountEnabled`). It reuses the exact
       // `message.read` state logic so the read-state update lives in one place — only the
       // delivery-report network sync below is skipped for it.
       case 'message.local_read':

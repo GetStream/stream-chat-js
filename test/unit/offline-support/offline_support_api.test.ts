@@ -532,8 +532,8 @@ describe('OfflineSupportApi', () => {
           expect(result).toEqual(mockUpsertMessagesQueries);
         });
 
-        it('should call upsertReads for a read-events-disabled channel when enableLocalUnreadCount is on', async () => {
-          client.options.enableLocalUnreadCount = true;
+        it('should call upsertReads for a read-events-disabled channel when isLocalUnreadCountEnabled is on', async () => {
+          client.options.isLocalUnreadCountEnabled = true;
           // No `read` for the channel on purpose: the server omits it for read-events-disabled
           // channels, so the own-read row is absent and the persist must fall back gracefully.
           const localUnreadResponse = generateChannel({
@@ -1700,8 +1700,8 @@ describe('OfflineSupportApi', () => {
         });
 
         describe('message.local_read', () => {
-          it('routes to handleRead for a read-events-disabled channel when enableLocalUnreadCount is on', async () => {
-            client.options.enableLocalUnreadCount = true;
+          it('routes to handleRead for a read-events-disabled channel when isLocalUnreadCountEnabled is on', async () => {
+            client.options.isLocalUnreadCountEnabled = true;
             const localChannelResponse = generateChannel({
               channel: { id: 'local-read', own_capabilities: [], type: 'messaging' },
             } as unknown as ChannelAPIResponse);
@@ -1723,7 +1723,7 @@ describe('OfflineSupportApi', () => {
           });
 
           it('is a no-op when the channel has read events enabled', async () => {
-            client.options.enableLocalUnreadCount = true;
+            client.options.isLocalUnreadCountEnabled = true;
             const readEventsResponse = generateChannel({
               channel: {
                 id: 'read-events-on',
@@ -1744,7 +1744,7 @@ describe('OfflineSupportApi', () => {
             expect(result).toEqual([]);
           });
 
-          it('is a no-op when enableLocalUnreadCount is off', async () => {
+          it('is a no-op when isLocalUnreadCountEnabled is off', async () => {
             const localChannelResponse = generateChannel({
               channel: { id: 'local-read-off', own_capabilities: [], type: 'messaging' },
             } as ChannelAPIResponse);

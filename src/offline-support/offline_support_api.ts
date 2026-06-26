@@ -615,7 +615,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
           // a read for those, so state.read[userId] may be absent here; fall back accordingly and rely
           // on countUnread() (the aggregate the local count maintains) for the value.
           const tracksReadLocally =
-            !channel?.hasReadEvents() && !!client.options.enableLocalUnreadCount;
+            !channel?.hasReadEvents() && !!client.options.isLocalUnreadCountEnabled;
           if (channel && (channel.hasReadEvents() || tracksReadLocally)) {
             const ownReads = channel.state.read[userId];
             const unreadCount = channel.countUnread();
@@ -883,7 +883,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       const userId = ownUser.id;
       const activeChannel = this.client.activeChannels[cid];
       const tracksReadLocally =
-        !activeChannel?.hasReadEvents() && !!this.client.options.enableLocalUnreadCount;
+        !activeChannel?.hasReadEvents() &&
+        !!this.client.options.isLocalUnreadCountEnabled;
       if (activeChannel && (activeChannel.hasReadEvents() || tracksReadLocally)) {
         const ownReads = activeChannel.state.read[userId];
 
@@ -1043,7 +1044,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       if (
         localChannel &&
         !localChannel.hasReadEvents() &&
-        this.client.options.enableLocalUnreadCount
+        this.client.options.isLocalUnreadCountEnabled
       ) {
         return this.handleRead({ event, unreadMessages: 0, execute });
       }
