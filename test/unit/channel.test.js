@@ -300,6 +300,46 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 		expect(event.last_read_message_id).to.be.equal(lastMsg.id);
 		expect(event.created_at).to.be.a('string');
 	});
+
+	it('markReadLocally resets the count and creates the own read row when none exists yet (fresh livestream)', function () {
+		const { client, channel } = setupChannel({ isLocalUnreadCountEnabled: true });
+		const post = vi.spyOn(client, 'post').mockResolvedValue({});
+		const lastMsg = generateMsg({ user: otherUser });
+		channel.state.addMessagesSorted([lastMsg]);
+		channel.state.unreadCount = 3;
+		delete channel.state.read[user.id];
+
+		channel.markReadLocally();
+
+		expect(channel.countUnread()).to.be.equal(0);
+		expect(channel.state.read[user.id]).to.be.ok;
+		expect(channel.state.read[user.id].unread_messages).to.be.equal(0);
+		expect(channel.state.read[user.id].last_read_message_id).to.be.equal(lastMsg.id);
+		expect(post.mock.calls.length).to.be.equal(0);
+	});
+});
+
+describe('Channel.hasReadEvents', function () {
+	const makeChannel = (own_capabilities) => {
+		const client = new StreamChat('apiKey');
+		client.user = { id: 'user' };
+		client.userID = 'user';
+		const channel = client.channel('messaging', 'cap-id');
+		channel.data = { ...channel.data, own_capabilities };
+		return channel;
+	};
+
+	it('returns true when own_capabilities includes read-events', function () {
+		expect(makeChannel(['read-events']).hasReadEvents()).to.equal(true);
+	});
+
+	it('returns false when own_capabilities is known and excludes read-events (e.g. livestream)', function () {
+		expect(makeChannel([]).hasReadEvents()).to.equal(false);
+	});
+
+	it('returns true (assumes read events on) when own_capabilities is unknown', function () {
+		expect(makeChannel(undefined).hasReadEvents()).to.equal(true);
+	});
 });
 
 describe('Channel _handleChannelEvent', function () {

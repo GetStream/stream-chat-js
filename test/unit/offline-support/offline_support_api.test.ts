@@ -1397,6 +1397,60 @@ describe('OfflineSupportApi', () => {
           ]);
           expect(result).toEqual(['DELETE * FROM messages', 'UPDATE * IN reads']);
         });
+
+        it('persists the local unread count on truncate for a read-events-disabled channel when isLocalUnreadCountEnabled is on', async () => {
+          client.options.isLocalUnreadCountEnabled = true;
+          // read-events-disabled channel with no own-read row (the server omits it for these channels),
+          // so this also exercises the defensive last_read fallback.
+          const localChannelResponse = generateChannel({
+            channel: { id: 'local-truncate', own_capabilities: [], type: 'messaging' },
+          } as unknown as ChannelAPIResponse);
+          client.hydrateActiveChannels([localChannelResponse]);
+          const event = {
+            ...truncatedEvent,
+            channel: {
+              cid: localChannelResponse.channel.cid,
+              truncated_at: '2025-05-20T10:00:00Z',
+            } as ChannelResponse,
+          };
+          vi.spyOn(
+            client.activeChannels[localChannelResponse.channel.cid],
+            'countUnread',
+          ).mockReturnValue(3);
+
+          await offlineDb.handleChannelTruncatedEvent({ event, execute: false });
+
+          expect(offlineDb.deleteMessagesForChannel).toHaveBeenCalled();
+          expect(offlineDb.upsertReads).toHaveBeenCalledWith(
+            expect.objectContaining({
+              cid: localChannelResponse.channel.cid,
+              reads: [expect.objectContaining({ unread_messages: 3, user: client.user })],
+            }),
+          );
+        });
+
+        it('does not persist read state on truncate for a read-events-disabled channel when isLocalUnreadCountEnabled is off', async () => {
+          const localChannelResponse = generateChannel({
+            channel: {
+              id: 'local-truncate-off',
+              own_capabilities: [],
+              type: 'messaging',
+            },
+          } as ChannelAPIResponse);
+          client.hydrateActiveChannels([localChannelResponse]);
+          const event = {
+            ...truncatedEvent,
+            channel: {
+              cid: localChannelResponse.channel.cid,
+              truncated_at: '2025-05-20T10:00:00Z',
+            } as ChannelResponse,
+          };
+
+          await offlineDb.handleChannelTruncatedEvent({ event, execute: false });
+
+          expect(offlineDb.deleteMessagesForChannel).toHaveBeenCalled();
+          expect(offlineDb.upsertReads).not.toHaveBeenCalled();
+        });
       });
 
       describe('handleDraftEvent', () => {
