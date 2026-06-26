@@ -20,9 +20,12 @@ import { OfflineError } from './types';
 import type { ListenerKeys, StreamChat } from '../client';
 import type { AxiosError } from 'axios';
 import { OfflineDBSyncManager } from './offline_sync_manager';
+import { chatLoggerSystem } from '../logger';
 import { StateStore } from '../store';
 import { localMessageToNewMessagePayload, runDetached } from '../utils';
 import { isMessageUpdateReplayable } from './util';
+
+const logger = chatLoggerSystem.getLogger('offline-db');
 import type { WSEvent } from '../gen/models';
 
 /**
@@ -469,7 +472,9 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       }
     } catch (error) {
       this.state.partialNext({ initialized: false, userId: undefined });
-      console.log('Error Initializing DB:', error);
+      logger
+        .withExtraTags('init')
+        .error('Failed to initialize the offline database.', { error });
     }
   };
 
@@ -577,17 +582,21 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
           }
           return newQueries;
         } else {
-          console.warn(
-            `Couldn't create channel queries on ${type} event for an initialized channel that is not in DB, skipping event`,
-            { event },
-          );
+          logger
+            .withExtraTags('queriesWithChannelGuard')
+            .warn(
+              `Could not create channel queries on a "${type}" event for an initialized channel that is not in the database. Skipping the event.`,
+              { event },
+            );
           return [];
         }
       } else {
-        console.warn(
-          `Received ${type} event for a non initialized channel that is not in DB, skipping event`,
-          { event },
-        );
+        logger
+          .withExtraTags('queriesWithChannelGuard')
+          .warn(
+            `Received a "${type}" event for a non-initialized channel that is not in the database. Skipping the event.`,
+            { event },
+          );
         return [];
       }
     }

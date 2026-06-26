@@ -1,3 +1,4 @@
+import { chatLoggerSystem } from './logger';
 import { StateStore } from './store';
 import {
   addToMessageList,
@@ -19,6 +20,8 @@ import type { ListenerKeys, StreamChat } from './client';
 import type { CustomThreadData } from './custom_types';
 import { MessageComposer } from './messageComposer';
 import { WithSubscriptions } from './utils/WithSubscriptions';
+
+const logger = chatLoggerSystem.getLogger('thread');
 
 type QueryRepliesOptions = {
   sort?: Gen_SortParamRequest[];
@@ -564,7 +567,9 @@ export class Thread extends WithSubscriptions {
         };
       });
     } catch (error) {
-      this.client.logger('error', (error as Error).message);
+      logger
+        .withExtraTags('loadPage', this.id)
+        .error('Failed to load thread replies.', { error });
       this.state.next((current) => ({
         ...current,
         pagination: {

@@ -34,6 +34,7 @@ import type {
   MessageResponse,
 } from '../../src';
 import { StreamChat, Channel } from '../../src';
+import { chatLoggerSystem } from '../../src/logger';
 
 describe('addToMessageList', () => {
   const timestamp = new Date('2024-09-18T15:30:00.000Z').getTime();
@@ -1089,15 +1090,22 @@ describe('runDetached', () => {
   it('calls default onError when no onErrorCallback is provided', async () => {
     const error = new Error('oops');
     const callback = Promise.reject(error);
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const sinkSpy = vi.fn();
+    chatLoggerSystem.configureLoggers({
+      default: { sink: sinkSpy, level: 'trace' },
+    });
 
     runDetached(callback, { context: 'MyContext' });
 
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining('An error has occurred in context MyContext'),
+    expect(sinkSpy).toHaveBeenCalledWith(
+      'error',
+      expect.stringContaining('An error occurred in context "MyContext"'),
+      expect.objectContaining({ error }),
     );
+
+    chatLoggerSystem.restoreDefaults();
   });
 
   it('does not fail if onSuccessCallback is missing', async () => {

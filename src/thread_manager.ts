@@ -1,3 +1,4 @@
+import { chatLoggerSystem } from './logger';
 import { StateStore } from './store';
 import { throttle } from './utils';
 
@@ -52,6 +53,8 @@ export type ThreadManagerPagination = {
   isLoadingNext: boolean;
   nextCursor: string | null;
 };
+
+const logger = chatLoggerSystem.getLogger('thread-manager');
 
 export class ThreadManager extends WithSubscriptions {
   public readonly state: StateStore<ThreadManagerState>;
@@ -285,7 +288,9 @@ export class ThreadManager extends WithSubscriptions {
         ready: true,
       }));
     } catch (error) {
-      this.client.logger('error', (error as Error).message);
+      logger
+        .withExtraTags('reload')
+        .error('Failed to reload the thread list.', { error });
       this.state.next((current) => ({
         ...current,
         pagination: {
@@ -330,7 +335,9 @@ export class ThreadManager extends WithSubscriptions {
         },
       }));
     } catch (error) {
-      this.client.logger('error', (error as Error).message);
+      logger
+        .withExtraTags('loadNextPage')
+        .error('Failed to load the next page of threads.', { error });
       this.state.next((current) => ({
         ...current,
         pagination: {

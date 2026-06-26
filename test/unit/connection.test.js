@@ -19,7 +19,6 @@ describe('connection', function () {
 		client.wsBaseURL = wsBaseURL;
 		client.tokenManager = tokenManager;
 		client._user = user;
-		client.logger = () => null;
 		client.options.enableInsights = true;
 		client.userAgent = 'agent';
 		client.clientID = 'clientID';

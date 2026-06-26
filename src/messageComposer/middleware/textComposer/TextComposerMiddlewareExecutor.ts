@@ -2,6 +2,7 @@ import { createCommandsMiddleware } from './commands';
 import { createCommandEffectsMiddleware } from './commandEffects';
 import { createMentionsMiddleware } from './mentions';
 import { createTextComposerPreValidationMiddleware } from './validation';
+import { chatLoggerSystem } from '../../../logger';
 import { MiddlewareExecutor } from '../../../middleware';
 import type {
   ExecuteParams,
@@ -15,6 +16,8 @@ import type {
   TextComposerMiddlewareExecutorOptions,
   TextComposerState,
 } from './types';
+
+const logger = chatLoggerSystem.getLogger('text-composer');
 
 export type TextComposerMiddlewareExecutorState<T extends Suggestion = Suggestion> =
   TextComposerState<T> & {
@@ -71,7 +74,13 @@ export class TextComposerMiddlewareExecutor<
      * That means the result of the previous search call as the debounced call result is unknown at the moment.
      * Custom search source implementation should handle errors meaningfully internally.
      */
-    searchSource?.search(query)?.catch(console.error);
+    searchSource
+      ?.search(query)
+      ?.catch((error) =>
+        logger
+          .withExtraTags('execute')
+          .error('Searching for suggestions failed.', { error }),
+      );
 
     return result;
   }

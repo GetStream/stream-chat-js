@@ -16,6 +16,7 @@ import {
   StableWSConnection,
   OfflineError,
 } from '../../../src';
+import { chatLoggerSystem } from '../../../src/logger';
 
 import { generateChannel } from '../test-utils/generateChannel';
 import { generateReadResponse } from '../test-utils/generateReadResponse';
@@ -316,18 +317,23 @@ describe('OfflineSupportApi', () => {
 
         offlineDb.channelExists.mockResolvedValue(false);
 
-        const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const sinkSpy = vi.fn();
+        chatLoggerSystem.configureLoggers({
+          default: { sink: sinkSpy, level: 'trace' },
+        });
 
         const result = await offlineDb.queriesWithChannelGuard({ event }, createQueries);
 
-        // TODO: testing against warning logs seems silly, please rethink this
-        expect(consoleWarnSpy).toHaveBeenCalledWith(
-          'Received message.new event for a non initialized channel that is not in DB, skipping event',
+        expect(sinkSpy).toHaveBeenCalledWith(
+          'warn',
+          expect.stringContaining(
+            'Received a "message.new" event for a non-initialized channel that is not in the database. Skipping the event.',
+          ),
           { event },
         );
         expect(result).toEqual([]);
 
-        consoleWarnSpy.mockRestore();
+        chatLoggerSystem.restoreDefaults();
       });
 
       it('returns createQueries result directly when channel exists and forceUpdate is false', async () => {
@@ -2229,11 +2235,20 @@ describe('OfflineDBSyncManager', () => {
 
       const error = new Error('Sync failed');
       syncAndExecutePendingTasksSpy.mockRejectedValueOnce(error);
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const sinkSpy = vi.fn();
+      chatLoggerSystem.configureLoggers({
+        default: { sink: sinkSpy, level: 'trace' },
+      });
 
       await syncManager.init();
 
-      expect(consoleSpy).toHaveBeenCalledWith('Error in DBSyncManager.init: ', error);
+      expect(sinkSpy).toHaveBeenCalledWith(
+        'error',
+        expect.stringContaining('Failed to initialize the offline DB sync manager.'),
+        { error },
+      );
+
+      chatLoggerSystem.restoreDefaults();
     });
   });
 

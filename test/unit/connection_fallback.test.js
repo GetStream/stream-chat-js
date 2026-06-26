@@ -11,7 +11,6 @@ describe('connection_fallback', () => {
 		const doAxiosRequest = overrides?.doAxiosRequest ?? sinon.spy();
 		return {
 			baseURL: '',
-			logger: () => null,
 			api: { doAxiosRequest },
 			_buildWSPayload: sinon.stub().returns('payload'),
 			dispatchEvent: sinon.spy(),

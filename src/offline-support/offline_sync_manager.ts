@@ -3,7 +3,10 @@ import type { StreamChat } from '../client';
 import type { AbstractOfflineDB } from './offline_support_api';
 import type { AxiosError } from 'axios';
 import { isAxiosError } from 'axios';
+import { chatLoggerSystem } from '../logger';
 import type { APIErrorResponse } from '../types';
+
+const logger = chatLoggerSystem.getLogger('offline-db');
 
 /**
  * Manages synchronization between the local offline database and the Stream backend.
@@ -69,7 +72,9 @@ export class OfflineDBSyncManager {
         },
       );
     } catch (error) {
-      console.log('Error in DBSyncManager.init: ', error);
+      logger
+        .withExtraTags('init')
+        .error('Failed to initialize the offline DB sync manager.', { error });
     }
   };
 
@@ -179,7 +184,9 @@ export class OfflineDBSyncManager {
         lastSyncedAt: new Date().toString(),
       });
     } catch (e) {
-      console.log('An error has occurred while syncing the DB.', e);
+      logger
+        .withExtraTags('syncAndExecutePendingTasks')
+        .error('An error occurred while syncing the database.', { error: e });
 
       if (isAxiosError(e) && e.code === 'ECONNABORTED') {
         // If the sync was aborted due to timeout, we can simply return

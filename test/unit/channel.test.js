@@ -8,6 +8,7 @@ import sinon from 'sinon';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 
 import { ChannelState, StreamChat } from '../../src';
+import { chatLoggerSystem } from '../../src/logger';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
 import { generateUUIDv4 as uuidv4 } from '../../src/utils';
@@ -2163,11 +2164,15 @@ describe('send reaction flow', () => {
 
 		channel = client.channel('messaging', 'test');
 
-		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
+		loggerSpy = vi.fn();
+		chatLoggerSystem.configureLoggers({
+			default: { sink: loggerSpy, level: 'trace' },
+		});
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
 	});
 
 	afterEach(() => {
+		chatLoggerSystem.restoreDefaults();
 		vi.resetAllMocks();
 	});
 
@@ -2246,12 +2251,16 @@ describe('delete reaction flow', () => {
 		// Add a fake message to state for reaction deletion optimistic update in the db
 		channel.state.messages.push({ id: messageId });
 
-		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
+		loggerSpy = vi.fn();
+		chatLoggerSystem.configureLoggers({
+			default: { sink: loggerSpy, level: 'trace' },
+		});
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
 		deleteReactionSpy = vi.spyOn(client.offlineDb, 'deleteReaction').mockResolvedValue();
 	});
 
 	afterEach(() => {
+		chatLoggerSystem.restoreDefaults();
 		vi.resetAllMocks();
 	});
 
@@ -2359,11 +2368,15 @@ describe('message sending flow', () => {
 
 		channel = client.channel('messaging', 'test');
 
-		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
+		loggerSpy = vi.fn();
+		chatLoggerSystem.configureLoggers({
+			default: { sink: loggerSpy, level: 'trace' },
+		});
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
 	});
 
 	afterEach(() => {
+		chatLoggerSystem.restoreDefaults();
 		vi.resetAllMocks();
 	});
 

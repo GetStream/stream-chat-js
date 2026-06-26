@@ -1,8 +1,11 @@
 import type jwt from 'jsonwebtoken';
 
+import { chatLoggerSystem } from './logger';
 import { JWTServerToken, JWTUserToken, UserFromToken } from './signing';
 import { isFunction } from './utils';
 import type { TokenOrProvider } from './types';
+
+const logger = chatLoggerSystem.getLogger('token-manager');
 
 export type TokenManagerMinimalUser = { id: string; anon?: boolean };
 /**
@@ -131,6 +134,9 @@ export class TokenManager {
         try {
           this.token = await this.tokenProvider();
         } catch (e) {
+          logger
+            .withExtraTags('loadToken')
+            .error('The token provider threw an error.', { error: e });
           return reject(
             new Error(`Call to tokenProvider failed with message: ${e}`, { cause: e }),
           );

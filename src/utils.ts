@@ -4,7 +4,6 @@ import type {
   ChannelQueryOptions,
   ChannelSort,
   LocalMessage,
-  Logger,
   Message,
   MessagePaginationOptions,
   MessageResponse,
@@ -20,7 +19,10 @@ import type {
 import type { StreamChat } from './client';
 import type { Channel } from './channel';
 import type { AxiosRequestConfig } from 'axios';
+import { chatLoggerSystem } from './logger';
 import { LOCAL_MESSAGE_FIELDS, RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
+
+const logger = chatLoggerSystem.getLogger('utils');
 
 /**
  * Logs the execution of a promise. Use this when you want to run the promise and handle errors by
@@ -31,7 +33,9 @@ import { LOCAL_MESSAGE_FIELDS, RESERVED_UPDATED_MESSAGE_FIELDS } from './constan
  */
 export function logChatPromiseExecution<T>(promise: Promise<T>, name: string) {
   promise.then().catch((error) => {
-    console.warn(`failed to do ${name}, ran into error: `, error);
+    logger
+      .withExtraTags('logChatPromiseExecution')
+      .error(`Failed to execute "${name}".`, { error });
   });
 }
 
@@ -226,9 +230,9 @@ export function isOnline() {
         : undefined;
 
   if (!nav) {
-    console.warn(
-      'isOnline failed to access window.navigator and assume browser is online',
-    );
+    logger
+      .withExtraTags('isOnline')
+      .warn('Could not access window.navigator; assuming the browser is online.');
     return true;
   }
 
@@ -756,7 +760,6 @@ type MessagePaginationUpdatedParams = {
   requestedPageSize: number;
   returnedPage: MessageResponse[];
   filteredReturnedPage: MessageResponse[];
-  logger?: Logger;
   messagePaginationOptions?: MessagePaginationOptions;
 };
 
@@ -993,10 +996,11 @@ export const messageSetPagination = (params: MessagePaginationUpdatedParams) => 
       (params.returnedPage.length - params.filteredReturnedPage.length) <
     params.returnedPage.length
   ) {
-    params.logger?.(
-      'error',
-      'Corrupted message set state: parent set size < returned page size',
-    );
+    logger
+      .withExtraTags('messageSetPagination')
+      .error(
+        'Corrupted message set state: the parent set size is smaller than the returned page size.',
+      );
     return params.parentSet.pagination;
   }
 
@@ -1298,7 +1302,9 @@ export const runDetached = <T>(
 ) => {
   const { context, onSuccessCallback = () => undefined, onErrorCallback } = options ?? {};
   const defaultOnError = (error: Error) => {
-    console.log(`An error has occurred in context ${context}: ${error}`);
+    logger
+      .withExtraTags('runDetached')
+      .error(`An error occurred in context "${context}".`, { error });
   };
   const onError = onErrorCallback ?? defaultOnError;
 
