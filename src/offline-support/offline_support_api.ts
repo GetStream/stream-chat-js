@@ -609,9 +609,14 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
         if (cid && client.user && client.user.id !== user?.id) {
           const userId = client.user.id;
           const channel = client.activeChannels[cid];
-          // Skip persisting read state for channels without read events (e.g. livestreams): the
-          // unread count there is client-local and must never be written to the offline DB.
-          if (channel && channel.hasReadEvents()) {
+          // Persist the current user's read state for channels that track reads server-side. When the
+          // client opted into a local unread count, also persist it for read-events-disabled channels
+          // (e.g. livestreams) so the client-local count survives a cold start. The server never sends
+          // a read for those, so state.read[userId] may be absent here; fall back accordingly and rely
+          // on countUnread() (the aggregate the local count maintains) for the value.
+          const tracksReadLocally =
+            !channel?.hasReadEvents() && !!client.options.enableLocalUnreadCount;
+          if (channel && (channel.hasReadEvents() || tracksReadLocally)) {
             const ownReads = channel.state.read[userId];
             const unreadCount = channel.countUnread();
             const upsertReadsQueries = await this.upsertReads({
@@ -619,8 +624,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
               execute: false,
               reads: [
                 {
-                  last_read: ownReads.last_read.toISOString() as string,
-                  last_read_message_id: ownReads.last_read_message_id,
+                  last_read: (ownReads?.last_read ?? new Date(0)).toISOString() as string,
+                  last_read_message_id: ownReads?.last_read_message_id,
                   unread_messages: unreadCount,
                   user: client.user,
                 },
@@ -871,11 +876,15 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
       let finalQueries = [...truncateQueries];
 
-      // Only persist read state for channels with read events. For read-events-disabled channels
-      // (e.g. livestreams) the unread count is client-local and must not be written to the offline DB.
+      // Persist read state for channels that track reads server-side. When the client opted into a
+      // local unread count, also persist it for read-events-disabled channels (e.g. livestreams) so
+      // the client-local count survives a cold start. state.read[userId] may be absent for those, so
+      // fall back accordingly.
       const userId = ownUser.id;
       const activeChannel = this.client.activeChannels[cid];
-      if (activeChannel?.hasReadEvents()) {
+      const tracksReadLocally =
+        !activeChannel?.hasReadEvents() && !!this.client.options.enableLocalUnreadCount;
+      if (activeChannel && (activeChannel.hasReadEvents() || tracksReadLocally)) {
         const ownReads = activeChannel.state.read[userId];
 
         let unreadCount = 0;
@@ -888,8 +897,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
           execute: false,
           reads: [
             {
-              last_read: ownReads.last_read.toString() as string,
-              last_read_message_id: ownReads.last_read_message_id,
+              last_read: (ownReads?.last_read ?? new Date(0)).toString() as string,
+              last_read_message_id: ownReads?.last_read_message_id,
               unread_messages: unreadCount,
               user: ownUser,
             },
@@ -1024,6 +1033,21 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
     if (type === 'message.read' || type === 'notification.mark_read') {
       return this.handleRead({ event, unreadMessages: 0, execute });
+    }
+
+    // `message.local_read` is the client-only reset dispatched by `Channel.markReadLocally()`. Only
+    // persist it for read-events-disabled channels with the local unread count opted in (the only
+    // situation it is ever dispatched), so it can never touch channels that track reads server-side.
+    if (type === 'message.local_read') {
+      const localChannel = event.cid ? this.client.activeChannels[event.cid] : undefined;
+      if (
+        localChannel &&
+        !localChannel.hasReadEvents() &&
+        this.client.options.enableLocalUnreadCount
+      ) {
+        return this.handleRead({ event, unreadMessages: 0, execute });
+      }
+      return [];
     }
 
     if (type === 'notification.mark_unread') {

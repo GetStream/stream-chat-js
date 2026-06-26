@@ -532,6 +532,35 @@ describe('OfflineSupportApi', () => {
           expect(result).toEqual(mockUpsertMessagesQueries);
         });
 
+        it('should call upsertReads for a read-events-disabled channel when enableLocalUnreadCount is on', async () => {
+          client.options.enableLocalUnreadCount = true;
+          // No `read` for the channel on purpose: the server omits it for read-events-disabled
+          // channels, so the own-read row is absent and the persist must fall back gracefully.
+          const localUnreadResponse = generateChannel({
+            channel: { id: 'local-unread', own_capabilities: [], type: 'messaging' },
+          } as unknown as ChannelAPIResponse);
+          client.hydrateActiveChannels([localUnreadResponse]);
+
+          const result = await offlineDb.handleNewMessage({
+            event: { ...baseEvent, cid: localUnreadResponse.channel.cid },
+            execute: false,
+          });
+
+          expect(offlineDb.upsertMessages).toHaveBeenCalled();
+          expect(offlineDb.upsertReads).toHaveBeenCalledWith(
+            expect.objectContaining({
+              cid: localUnreadResponse.channel.cid,
+              reads: expect.arrayContaining([
+                expect.objectContaining({
+                  unread_messages: expect.any(Number),
+                  user: client.user,
+                }),
+              ]),
+            }),
+          );
+          expect(result).toEqual(mockQueries);
+        });
+
         it('should not call upsertReads if event.user is the same as client user', async () => {
           const eventWithSameUser = { ...baseEvent, user: client.user };
 
@@ -1668,6 +1697,69 @@ describe('OfflineSupportApi', () => {
           const result = await offlineDb.handleEvent({ event });
           expect(result).toEqual([]);
           expect(offlineDb.deleteChannel).not.toHaveBeenCalled();
+        });
+
+        describe('message.local_read', () => {
+          it('routes to handleRead for a read-events-disabled channel when enableLocalUnreadCount is on', async () => {
+            client.options.enableLocalUnreadCount = true;
+            const localChannelResponse = generateChannel({
+              channel: { id: 'local-read', own_capabilities: [], type: 'messaging' },
+            } as unknown as ChannelAPIResponse);
+            client.hydrateActiveChannels([localChannelResponse]);
+            const event = {
+              ...dummyEvent,
+              type: 'message.local_read',
+              cid: localChannelResponse.channel.cid,
+            } as Event;
+
+            const result = await offlineDb.handleEvent({ event });
+
+            expect(offlineDb.handleRead).toHaveBeenCalledWith({
+              event,
+              unreadMessages: 0,
+              execute: true,
+            });
+            expect(result).toEqual(['read']);
+          });
+
+          it('is a no-op when the channel has read events enabled', async () => {
+            client.options.enableLocalUnreadCount = true;
+            const readEventsResponse = generateChannel({
+              channel: {
+                id: 'read-events-on',
+                own_capabilities: ['read-events'],
+                type: 'messaging',
+              },
+            } as ChannelAPIResponse);
+            client.hydrateActiveChannels([readEventsResponse]);
+            const event = {
+              ...dummyEvent,
+              type: 'message.local_read',
+              cid: readEventsResponse.channel.cid,
+            } as Event;
+
+            const result = await offlineDb.handleEvent({ event });
+
+            expect(offlineDb.handleRead).not.toHaveBeenCalled();
+            expect(result).toEqual([]);
+          });
+
+          it('is a no-op when enableLocalUnreadCount is off', async () => {
+            const localChannelResponse = generateChannel({
+              channel: { id: 'local-read-off', own_capabilities: [], type: 'messaging' },
+            } as ChannelAPIResponse);
+            client.hydrateActiveChannels([localChannelResponse]);
+            const event = {
+              ...dummyEvent,
+              type: 'message.local_read',
+              cid: localChannelResponse.channel.cid,
+            } as Event;
+
+            const result = await offlineDb.handleEvent({ event });
+
+            expect(offlineDb.handleRead).not.toHaveBeenCalled();
+            expect(result).toEqual([]);
+          });
         });
       });
     });

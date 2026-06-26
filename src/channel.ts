@@ -1248,12 +1248,13 @@ export class Channel {
   }
 
   /**
-   * markReadLocally - Resets this user's unread count locally, without any backend call or offline-DB
-   * write. Intended for channels that have read events disabled (e.g. livestreams) when the client is
-   * created with the `enableLocalUnreadCount` option. Dispatches a dedicated, client-only
-   * `message.local_read` event that runs through the same `_handleChannelEvent` read logic as a real
-   * `message.read` (minus the delivery-report network sync), so the read-state update lives in one
-   * place. The offline DB has no handler for the type, so nothing is persisted.
+   * markReadLocally - Resets this user's unread count locally, without any backend call. Intended for
+   * channels that have read events disabled (e.g. livestreams) when the client is created with the
+   * `enableLocalUnreadCount` option. Dispatches a dedicated, client-only `message.local_read` event
+   * that runs through the same `_handleChannelEvent` read logic as a real `message.read` (minus the
+   * delivery-report network sync), so the read-state update lives in one place. When offline support
+   * is enabled, the offline DB persists the reset for read-events-disabled channels, so the local
+   * count stays consistent across app restarts.
    */
   markReadLocally() {
     const client = this.getClient();
