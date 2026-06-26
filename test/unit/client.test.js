@@ -4,6 +4,7 @@ import { getClientWithUser } from './test-utils/getClient';
 
 import * as utils from '../../src/utils';
 import { StreamChat } from '../../src/client';
+import { chatLoggerSystem } from '../../src/logger';
 import { ConnectionState } from '../../src/connection_fallback';
 import { StableWSConnection } from '../../src/connection';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
@@ -384,41 +385,43 @@ describe('Detect node environment', () => {
 	});
 
 	it('should warn when using connectUser on a node environment', async () => {
-		const _warn = console.warn;
-		let warning = '';
-		console.warn = (msg) => {
-			warning = msg;
-		};
+		const sinkSpy = vi.fn();
+		chatLoggerSystem.configureLoggers({
+			default: { sink: sinkSpy, level: 'trace' },
+		});
 
 		try {
 			await client.connectUser({ id: 'user' }, 'fake token');
 		} catch (e) {}
 
 		await client.disconnectUser();
-		expect(warning).to.equal(
-			'Please do not use connectUser server side. connectUser impacts MAU and concurrent connection usage and thus your bill. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
+		expect(sinkSpy).toHaveBeenCalledWith(
+			'warn',
+			expect.stringContaining('Do not use connectUser server-side.'),
 		);
 
-		console.warn = _warn;
+		chatLoggerSystem.restoreDefaults();
 	});
 
 	it('should not warn when adding the allowServerSideConnect flag', async () => {
 		const client2 = new StreamChat('', '', { allowServerSideConnect: true });
 
-		const _warn = console.warn;
-		let warning = '';
-		console.warn = (msg) => {
-			warning = msg;
-		};
+		const sinkSpy = vi.fn();
+		chatLoggerSystem.configureLoggers({
+			default: { sink: sinkSpy, level: 'trace' },
+		});
 
 		try {
 			await client2.connectUser({ id: 'user' }, 'fake token');
 		} catch (e) {}
 
 		await client2.disconnect();
-		expect(warning).to.equal('');
+		expect(sinkSpy).not.toHaveBeenCalledWith(
+			'warn',
+			expect.stringContaining('Do not use connectUser server-side.'),
+		);
 
-		console.warn = _warn;
+		chatLoggerSystem.restoreDefaults();
 	});
 });
 
@@ -435,12 +438,16 @@ describe('message update', () => {
 		client.setOfflineDBApi(offlineDb);
 		await client.offlineDb.init(client.userID);
 
-		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
+		loggerSpy = vi.fn();
+		chatLoggerSystem.configureLoggers({
+			default: { sink: loggerSpy, level: 'trace' },
+		});
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
 		_updateMessageSpy = vi.spyOn(client, '_updateMessage').mockResolvedValue({});
 	});
 
 	afterEach(() => {
+		chatLoggerSystem.restoreDefaults();
 		vi.resetAllMocks();
 	});
 
@@ -949,7 +956,9 @@ describe('StreamChat.queryReactions', () => {
 	it('should log a warning if offlineDb.getReactions throws', async () => {
 		client.offlineDb.getReactions.mockRejectedValue(new Error('DB error'));
 		const loggerSpy = vi.fn();
-		client.logger = loggerSpy;
+		chatLoggerSystem.configureLoggers({
+			default: { sink: loggerSpy, level: 'trace' },
+		});
 
 		await client.queryReactionsAndHydrate({
 			id: messageId,
@@ -960,7 +969,7 @@ describe('StreamChat.queryReactions', () => {
 
 		expect(loggerSpy).toHaveBeenCalledWith(
 			'warn',
-			'An error has occurred while querying offline reactions',
+			expect.stringContaining('An error occurred while querying offline reactions'),
 			expect.objectContaining({
 				error: expect.any(Error),
 			}),
@@ -972,6 +981,8 @@ describe('StreamChat.queryReactions', () => {
 			sort,
 			limit: 50,
 		});
+
+		chatLoggerSystem.restoreDefaults();
 	});
 });
 
@@ -989,11 +1000,15 @@ describe('message deletion', () => {
 		client.setOfflineDBApi(offlineDb);
 		await client.offlineDb.init(client.userID);
 
-		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
+		loggerSpy = vi.fn();
+		chatLoggerSystem.configureLoggers({
+			default: { sink: loggerSpy, level: 'trace' },
+		});
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
 	});
 
 	afterEach(() => {
+		chatLoggerSystem.restoreDefaults();
 		vi.resetAllMocks();
 	});
 

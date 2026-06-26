@@ -10,6 +10,7 @@ import {
   messageSetPagination,
 } from './utils';
 import type { ListenerKeys, StreamChat } from './client';
+import { chatLoggerSystem } from './logger';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import type {
   AIState,
@@ -63,6 +64,9 @@ import type {
 } from './gen/models';
 import type { ChatApi } from './gen/chat/ChatApi';
 import { ChannelApi } from './gen/chat/ChannelApi';
+
+const logger = chatLoggerSystem.getLogger('channel');
+const offlineDbLogger = chatLoggerSystem.getLogger('offline-db');
 
 /**
  * The Channel class manages its own state.
@@ -205,10 +209,9 @@ export class Channel extends ChannelApi {
         });
       }
     } catch (error) {
-      this._client.logger('error', `offlineDb:send-message`, {
-        tags: ['channel', 'offlineDb'],
-        error,
-      });
+      offlineDbLogger
+        .withExtraTags('sendMessage', this.cid)
+        .error('Sending the message failed.', { error });
     }
     return await this._sendMessage(request);
   }
@@ -357,10 +360,9 @@ export class Channel extends ChannelApi {
         });
       }
     } catch (error) {
-      this._client.logger('error', `offlineDb:send-reaction`, {
-        tags: ['channel', 'offlineDb'],
-        error,
-      });
+      offlineDbLogger
+        .withExtraTags('sendReaction', this.cid)
+        .error('Sending the reaction failed.', { error });
     }
 
     return this._sendReaction(request);
@@ -400,10 +402,9 @@ export class Channel extends ChannelApi {
         });
       }
     } catch (error) {
-      this._client.logger('error', `offlineDb:delete-reaction`, {
-        tags: ['channel', 'offlineDb'],
-        error,
-      });
+      offlineDbLogger
+        .withExtraTags('deleteReaction', this.cid)
+        .error('Deleting the reaction failed.', { error });
     }
 
     return await this._deleteReaction(request);
@@ -1039,14 +1040,7 @@ export class Channel extends ChannelApi {
     this.initialized = true;
     this.data = state.channel;
 
-    this._client.logger(
-      'info',
-      `channel:watch() - started watching channel ${this.cid}`,
-      {
-        tags: ['channel'],
-        channel: this,
-      },
-    );
+    logger.withExtraTags('watch', this.cid).info('Started watching the channel.');
     return state;
   }
 
@@ -1059,14 +1053,7 @@ export class Channel extends ChannelApi {
   override async stopWatching(request?: Gen_ChannelStopWatchingRequest) {
     const response = await super.stopWatching(request);
 
-    this._client.logger(
-      'info',
-      `channel:watch() - stopped watching channel ${this.cid}`,
-      {
-        tags: ['channel'],
-        channel: this,
-      },
-    );
+    logger.withExtraTags('stopWatching', this.cid).info('Stopped watching the channel.');
 
     return response;
   }
@@ -1251,10 +1238,11 @@ export class Channel extends ChannelApi {
     // this._data?.created_by_id;
 
     if (this.getClient()._isUsingServerAuth() && typeof createdById !== 'string') {
-      this.getClient().logger(
-        'warn',
-        'Either `created_by` (with `id` property) or `created_by_id` are missing from both `Channel._data` and `options` parameter',
-      );
+      logger
+        .withExtraTags('query', this.cid)
+        .warn(
+          'Neither `created_by` (with an `id` property) nor `created_by_id` is set on `Channel._data` or the `options` parameter.',
+        );
     }
 
     const queryPayload: Gen_ChannelGetOrCreateRequest = {
@@ -1323,7 +1311,6 @@ export class Channel extends ChannelApi {
         filteredReturnedPage: state.messages.filter(
           (m) => !filteredMessageIds.includes(m.id),
         ),
-        logger: this.getClient().logger,
       }),
     };
 
@@ -1497,10 +1484,9 @@ export class Channel extends ChannelApi {
         })) as Awaited<ReturnType<ChannelApi['createDraft']>>;
       }
     } catch (error) {
-      this._client.logger('error', `offlineDb:create-draft`, {
-        tags: ['channel', 'offlineDb'],
-        error,
-      });
+      offlineDbLogger
+        .withExtraTags('createDraft', this.cid)
+        .error('Creating the draft in the offline database failed.', { error });
     }
 
     return this._createDraft(request);
@@ -1529,10 +1515,9 @@ export class Channel extends ChannelApi {
         })) as Awaited<ReturnType<ChannelApi['deleteDraft']>>;
       }
     } catch (error) {
-      this._client.logger('error', `offlineDb:delete-draft`, {
-        tags: ['channel', 'offlineDb'],
-        error,
-      });
+      offlineDbLogger
+        .withExtraTags('deleteDraft', this.cid)
+        .error('Deleting the draft from the offline database failed.', { error });
     }
 
     return this._deleteDraft(request);
@@ -1571,13 +1556,9 @@ export class Channel extends ChannelApi {
 
     const set = this.listeners.get(key) ?? new Set();
 
-    this._client.logger(
-      'info',
-      `Attaching listener for ${key} event on channel ${this.cid}`,
-      {
-        tags: ['event', 'channel'],
-      },
-    );
+    logger
+      .withExtraTags('on', this.cid)
+      .debug(`Attaching a listener for the "${key}" event.`);
     set.add(callback);
 
     if (!this.listeners.has(key)) {
@@ -1586,13 +1567,9 @@ export class Channel extends ChannelApi {
 
     return {
       unsubscribe: () => {
-        this._client.logger(
-          'info',
-          `Removing listener for ${key} event from channel ${this.cid}`,
-          {
-            tags: ['event', 'channel'],
-          },
-        );
+        logger
+          .withExtraTags('on', this.cid)
+          .debug(`Removing the listener for the "${key}" event.`);
         set.delete(callback);
         if (!set.size) {
           this.listeners.delete(key);
@@ -1615,14 +1592,9 @@ export class Channel extends ChannelApi {
       ? callbackOrNothing
       : (callbackOrString as EventHandler);
 
-    this._client.logger(
-      'info',
-      `Removing listener for ${key} event from channel ${this.cid}`,
-      {
-        tags: ['event', 'channel'],
-        channel: this,
-      },
-    );
+    logger
+      .withExtraTags('off', this.cid)
+      .debug(`Removing the listener for the "${key}" event.`);
 
     const set = this.listeners.get(key);
 
@@ -1636,14 +1608,9 @@ export class Channel extends ChannelApi {
   _handleChannelEvent(event: CombinedEvents) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const channel = this;
-    this._client.logger(
-      'info',
-      `channel:_handleChannelEvent - Received event of type { ${event.type} } on ${this.cid}`,
-      {
-        tags: ['event', 'channel'],
-        channel: this,
-      },
-    );
+    logger
+      .withExtraTags('_handleChannelEvent', this.cid)
+      .debug(`Received an event of type "${event.type}".`, { event });
 
     const channelState = channel.state;
     switch (event.type) {
@@ -2177,14 +2144,7 @@ export class Channel extends ChannelApi {
   }
 
   _disconnect() {
-    this._client.logger(
-      'info',
-      `channel:disconnect() - Disconnecting the channel ${this.cid}`,
-      {
-        tags: ['connection', 'channel'],
-        channel: this,
-      },
-    );
+    logger.withExtraTags('_disconnect', this.cid).info('Disconnecting the channel.');
 
     this.disconnected = true;
     this.cooldownTimer.clearTimeout();

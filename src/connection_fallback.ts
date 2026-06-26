@@ -8,8 +8,11 @@ import {
   sleep,
 } from './utils';
 import { isAPIError, isConnectionIDError, isErrorRetryable } from './errors';
-import type { ConnectionOpen, LogLevel, UR } from './types';
+import { chatLoggerSystem } from './logger';
+import type { ConnectionOpen, UR } from './types';
 import type { WSEvent } from './gen/models';
+
+const logger = chatLoggerSystem.getLogger('connection-fallback');
 
 export enum ConnectionState {
   Closed = 'CLOSED',
@@ -34,15 +37,8 @@ export class WSConnectionFallback {
     addConnectionEventListeners(this._onlineStatusChanged);
   }
 
-  _log(msg: string, extra: UR = {}, level: LogLevel = 'info') {
-    this.client.logger(level, 'WSConnectionFallback:' + msg, {
-      tags: ['connection_fallback', 'connection'],
-      ...extra,
-    });
-  }
-
   _setState(state: ConnectionState) {
-    this._log(`_setState() - ${state}`);
+    logger.withExtraTags('_setState').debug(`Transitioning to state: ${state}.`);
 
     // transition from connecting => connected
     if (
@@ -61,7 +57,9 @@ export class WSConnectionFallback {
 
   /** @private */
   _onlineStatusChanged = (event: { type: string }) => {
-    this._log(`_onlineStatusChanged() - ${event.type}`);
+    logger
+      .withExtraTags('_onlineStatusChanged')
+      .info(`Network status changed to ${event.type}.`);
 
     if (event.type === 'offline') {
       this._setState(ConnectionState.Closed);
@@ -99,7 +97,9 @@ export class WSConnectionFallback {
       this.consecutiveFailures += 1;
 
       if (retry && isErrorRetryable(error)) {
-        this._log(`_req() - Retryable error, retrying request`);
+        logger
+          .withExtraTags('_req')
+          .debug('Encountered a retryable error. Retrying the request.');
         await sleep(retryInterval(this.consecutiveFailures));
         return this._req<T>(params, config, retry);
       }
@@ -123,14 +123,16 @@ export class WSConnectionFallback {
         }
       } catch (error: any) {
         if (axios.isCancel(error)) {
-          this._log(`_poll() - axios canceled request`);
+          logger.withExtraTags('_poll').debug('Axios canceled the request.');
           return;
         }
 
         /** client.doAxiosRequest will take care of TOKEN_EXPIRED error */
 
         if (isConnectionIDError(error)) {
-          this._log(`_poll() - ConnectionID error, connecting without ID...`);
+          logger
+            .withExtraTags('_poll')
+            .warn('Received a connection ID error. Reconnecting without an ID.');
           this._setState(ConnectionState.Disconnected);
           this.connect(true);
           return;
@@ -153,11 +155,15 @@ export class WSConnectionFallback {
    */
   connect = async (reconnect = false) => {
     if (this.state === ConnectionState.Connecting) {
-      this._log('connect() - connecting already in progress', { reconnect }, 'warn');
+      logger
+        .withExtraTags('connect')
+        .warn('A connection attempt is already in progress.', { reconnect });
       return;
     }
     if (this.state === ConnectionState.Connected) {
-      this._log('connect() - already connected and polling', { reconnect }, 'warn');
+      logger
+        .withExtraTags('connect')
+        .warn('Already connected and polling.', { reconnect });
       return;
     }
 
@@ -201,9 +207,9 @@ export class WSConnectionFallback {
 
     try {
       await this._req({ close: true, connection_id }, { timeout }, false);
-      this._log(`disconnect() - Closed connectionID`);
+      logger.withExtraTags('disconnect').info('Closed the connection ID.');
     } catch (err) {
-      this._log(`disconnect() - Failed`, { err }, 'error');
+      logger.withExtraTags('disconnect').error('Disconnect failed.', { error: err });
     }
   };
 }

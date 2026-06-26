@@ -27,6 +27,7 @@ import type {
   MessageResponse,
   UserResponse,
 } from '../types';
+import { chatLoggerSystem } from '../logger';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { ListenerKeys, StreamChat } from '../client';
 import type { CommandSendability, MessageComposerConfig } from './configuration/types';
@@ -165,6 +166,9 @@ const initState = (
     editedMessage,
   };
 };
+
+const logger = chatLoggerSystem.getLogger('message-composer');
+const offlineDbLogger = chatLoggerSystem.getLogger('offline-db');
 
 export class MessageComposer extends WithSubscriptions {
   readonly channel: Channel;
@@ -920,10 +924,9 @@ export class MessageComposer extends WithSubscriptions {
         };
         await this.client.offlineDb.upsertDraft({ draft: optimisticDraftResponse });
       } catch (error) {
-        this.client.logger('error', `offlineDb:upsertDraft`, {
-          tags: ['channel', 'offlineDb'],
-          error,
-        });
+        offlineDbLogger
+          .withExtraTags('createDraft', this.channel.cid)
+          .error('Upserting the draft to the offline database failed.', { error });
       }
     }
     this.logDraftUpdateTimestamp();
@@ -941,10 +944,9 @@ export class MessageComposer extends WithSubscriptions {
           parent_id: parentId,
         });
       } catch (error) {
-        this.client.logger('error', `offlineDb:deleteDraft`, {
-          tags: ['channel', 'offlineDb'],
-          error,
-        });
+        offlineDbLogger
+          .withExtraTags('deleteDraft', this.channel.cid)
+          .error('Deleting the draft from the offline database failed.', { error });
       }
     }
     this.logDraftUpdateTimestamp();
@@ -983,10 +985,9 @@ export class MessageComposer extends WithSubscriptions {
 
       this.initState({ composition: draft });
     } catch (error) {
-      this.client.logger('error', `messageComposer:getDraft`, {
-        tags: ['channel', 'messageComposer'],
-        error,
-      });
+      logger
+        .withExtraTags('getDraft', this.channel.cid)
+        .error('Retrieving the draft from the server failed.', { error });
     }
   };
 

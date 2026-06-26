@@ -8,6 +8,7 @@ import type {
   QueryChannelsAPIResponse,
   QueryChannelsRequest,
 } from './types';
+import { chatLoggerSystem } from './logger';
 import type { ValueOrPatch } from './store';
 import { isPatch, StateStore } from './store';
 import type { Channel } from './channel';
@@ -29,6 +30,8 @@ import {
   DEFAULT_QUERY_CHANNELS_RETRY_COUNT,
 } from './constants';
 import { WithSubscriptions } from './utils/WithSubscriptions';
+
+const logger = chatLoggerSystem.getLogger('channel-manager');
 
 export type ChannelManagerPagination = {
   hasNext: boolean;
@@ -359,12 +362,16 @@ export class ChannelManager extends WithSubscriptions {
           }),
         { method: 'upsertCidsForQuery' },
       );
-    } catch (err) {
+    } catch (error) {
       if (retryCount >= DEFAULT_QUERY_CHANNELS_RETRY_COUNT) {
-        console.warn(err);
+        logger
+          .withExtraTags('executeChannelsQuery')
+          .error('Failed to query channels after the maximum number of retries.', {
+            error,
+          });
 
         const wrappedError = new Error(
-          `Maximum number of retries reached in queryChannels. Last error message is: ${err}`,
+          `Maximum number of retries reached in queryChannels. Last error message is: ${error}`,
         );
 
         const state = this.state.getLatestValue();
@@ -458,7 +465,7 @@ export class ChannelManager extends WithSubscriptions {
       }
       await this.executeChannelsQuery(executeChannelsQueryPayload);
     } catch (error) {
-      this.client.logger('error', (error as Error).message);
+      logger.withExtraTags('queryChannels').error('Failed to query channels.', { error });
       this.state.next((currentState) => ({
         ...currentState,
         pagination: { ...currentState.pagination, isLoading: false },
@@ -505,7 +512,9 @@ export class ChannelManager extends WithSubscriptions {
         },
       });
     } catch (error) {
-      this.client.logger('error', (error as Error).message);
+      logger
+        .withExtraTags('loadNext')
+        .error('Failed to load the next page of channels.', { error });
       this.state.next((currentState) => ({
         ...currentState,
         pagination: {

@@ -1,5 +1,6 @@
 import { getClientWithUser } from './test-utils/getClient';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
+import { chatLoggerSystem } from '../../src/logger';
 import { describe, afterEach, beforeEach, it, expect, vi } from 'vitest';
 
 describe('create draft flow', () => {
@@ -23,13 +24,17 @@ describe('create draft flow', () => {
 
 		channel = client.channel('messaging', 'test');
 
-		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
+		loggerSpy = vi.fn();
+		chatLoggerSystem.configureLoggers({
+			default: { sink: loggerSpy, level: 'trace' },
+		});
 		queueTaskSpy = vi
 			.spyOn(client.offlineDb, 'queueTask')
 			.mockResolvedValue({ draft: draftMessage });
 	});
 
 	afterEach(() => {
+		chatLoggerSystem.restoreDefaults();
 		vi.resetAllMocks();
 	});
 
@@ -95,11 +100,15 @@ describe('delete draft flow', () => {
 
 		channel = client.channel('messaging', 'test');
 
-		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
+		loggerSpy = vi.fn();
+		chatLoggerSystem.configureLoggers({
+			default: { sink: loggerSpy, level: 'trace' },
+		});
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
 	});
 
 	afterEach(() => {
+		chatLoggerSystem.restoreDefaults();
 		vi.resetAllMocks();
 	});
 
