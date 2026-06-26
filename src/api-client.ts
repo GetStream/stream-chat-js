@@ -11,7 +11,10 @@ import type {
 import { StreamAPIError } from './types';
 import { addFileToFormData, chatCodes, randomId, retryInterval } from './utils';
 import type { StreamChat } from './client';
+import { chatLoggerSystem } from './logger';
 import { runWithRetry } from './utils/retryable';
+
+const logger = chatLoggerSystem.getLogger('api-client');
 
 export class ApiClient {
   client!: StreamChat;
@@ -215,6 +218,12 @@ export class ApiClient {
             requestResponse = await this.client.axiosInstance.request<T>(config);
           } catch (error) {
             if (isTokenExpiredError(error)) {
+              logger
+                .withExtraTags('_doRequest')
+                .debug(
+                  `The token expired on a ${type.toUpperCase()} request. Reloading the token before retrying.`,
+                  { url, config },
+                );
               this.client.tokenManager.loadToken();
             }
 

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { chatLoggerSystem } from '../../../src/logger';
 import {
   AbstractOfflineDB,
   Channel,
@@ -153,6 +154,7 @@ const offlineModeMessageComposerSetup = ({
 
 describe('MessageComposer', () => {
   afterEach(() => {
+    chatLoggerSystem.restoreDefaults();
     vi.clearAllMocks();
   });
 
@@ -1623,9 +1625,10 @@ describe('MessageComposer', () => {
       const spyUpsertDraft = vi
         .spyOn(messageComposer.client.offlineDb!, 'upsertDraft')
         .mockRejectedValueOnce(new Error('offline insert failed'));
-      const spyLogger = vi
-        .spyOn(messageComposer.client, 'logger')
-        .mockImplementation(vi.fn());
+      const spyLogger = vi.fn();
+      chatLoggerSystem.configureLoggers({
+        default: { sink: spyLogger, level: 'trace' },
+      });
 
       const spyLogDraftUpdateTimestamp = vi.spyOn(
         messageComposer,
@@ -1642,7 +1645,7 @@ describe('MessageComposer', () => {
       expect(spyUpsertDraft).toHaveBeenCalledTimes(1);
       expect(spyLogger).toHaveBeenCalledWith(
         'error',
-        'offlineDb:upsertDraft',
+        expect.stringContaining('Upserting the draft to the offline database failed.'),
         expect.objectContaining({
           error: expect.any(Error),
         }),
@@ -1792,16 +1795,17 @@ describe('MessageComposer', () => {
       const spyChannelDeleteDraft = vi
         .spyOn(mockChannel, 'deleteDraft')
         .mockResolvedValue({});
-      const spyLogger = vi
-        .spyOn(messageComposer.client, 'logger')
-        .mockImplementation(vi.fn());
+      const spyLogger = vi.fn();
+      chatLoggerSystem.configureLoggers({
+        default: { sink: spyLogger, level: 'trace' },
+      });
 
       await messageComposer.deleteDraft();
 
       expect(spyChannelDeleteDraft).toHaveBeenCalled();
       expect(spyLogger).toHaveBeenCalledWith(
         'error',
-        'offlineDb:deleteDraft',
+        expect.stringContaining('Deleting the draft from the offline database failed.'),
         expect.objectContaining({
           error: expect.any(Error),
         }),
@@ -2085,7 +2089,10 @@ describe('MessageComposer', () => {
       const spyChannelGetDraft = vi.spyOn(mockChannel, 'getDraft');
       spyChannelGetDraft.mockRejectedValue(new Error('Failed to get draft'));
 
-      const spyLogger = vi.spyOn(mockClient, 'logger');
+      const spyLogger = vi.fn();
+      chatLoggerSystem.configureLoggers({
+        default: { sink: spyLogger, level: 'trace' },
+      });
 
       await messageComposer.getDraft();
 

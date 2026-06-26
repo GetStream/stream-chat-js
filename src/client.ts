@@ -17,7 +17,6 @@ import {
   axiosParamsSerializer,
   generateChannelTempCid,
   getEnv,
-  isFunction,
   isOnline,
   isOwnUserBaseProperty,
   messageSetPagination,
@@ -44,7 +43,6 @@ import type {
   FlagUserResponse,
   GetThreadOptions,
   LocalMessage,
-  Logger,
   Mute,
   MuteUserOptions,
   MuteUserResponse,
@@ -68,6 +66,7 @@ import type {
   UserResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
+import { chatLoggerSystem } from './logger';
 import { Thread } from './thread';
 import { Moderation } from './moderation';
 import { ThreadManager } from './thread_manager';
@@ -99,6 +98,9 @@ import type { StreamResponse } from './types';
 function isString(value: unknown): value is string {
   return typeof value === 'string' || value instanceof String;
 }
+
+const logger = chatLoggerSystem.getLogger('client');
+const offlineDbLogger = chatLoggerSystem.getLogger('offline-db');
 
 type MessageComposerTearDownFunction = () => void;
 
@@ -162,7 +164,6 @@ export class StreamChat extends ChatApi {
   configs: Configs;
   key: string;
   listeners: Map<ListenerKeys, Set<EventHandler>>;
-  logger: Logger;
   /**
    * When network is recovered, we re-query the active channels on client. But in single query, you can recover
    * only 30 channels. So its not guaranteed that all the channels in activeChannels object have updated state.
@@ -250,7 +251,8 @@ export class StreamChat extends ChatApi {
    * @param options - Additional options; here you can pass custom options to the axios instance (optional).
    * @param options.browser - Enforce the client to be in browser mode (optional).
    * @param options.warmUp - If `true`, the client will open a connection as soon as possible to speed up following requests (optional, defaults to `false`).
-   * @param options.Logger - Custom logger (optional).
+   * @param options.logLevel - Minimum log level for the default sink (optional, defaults to `'info'`).
+   * @param options.logOptions - Per-scope sink/level overrides for `chatLoggerSystem` (optional).
    * @param options.timeout - Request timeout (optional, defaults to `3000`).
    * @param options.httpsAgent - Custom `httpsAgent` (optional, in Node defaults to `https.agent()`).
    */
@@ -307,6 +309,14 @@ export class StreamChat extends ChatApi {
       ...inputOptions,
     };
 
+    chatLoggerSystem.configureLoggers({
+      ...inputOptions.logOptions,
+      default: {
+        level: inputOptions.logLevel ?? 'info',
+        ...inputOptions.logOptions?.default,
+      },
+    });
+
     this.axiosInstance = axios.create({
       timeout: 3000,
       withCredentials: false,
@@ -347,26 +357,6 @@ export class StreamChat extends ChatApi {
     this.defaultWSTimeoutWithFallback = 6 * 1000;
     this.defaultWSTimeout = 15 * 1000;
 
-    // The `logger` option should be a function with the signature
-    // `(logLevel: string, message: string, extraData: object) => void`.
-    //
-    // Example:
-    // const client = new StreamChat('api_key', {}, {
-    //    logger = (logLevel, message, extraData) => {
-    //      console.log(message);
-    //    }
-    // })
-    //
-    // `extraData` contains a `tags` array attached to the log message. Tags can have one or more
-    // of the following values: api, api_request, api_response, client, channel, connection, event.
-    //
-    // It may also contain extra data. Examples:
-    // 1. { tags: ['api', 'api_request', 'client'], url: string, payload: object, config: object }
-    // 2. { tags: ['api', 'api_response', 'client'], url: string, response: object }
-    // 3. { tags: ['api', 'api_response', 'client'], url: string, error: object }
-    // 4. { tags: ['event', 'client'], event: object }
-    // 5. { tags: ['channel'], channel: object }
-    this.logger = isFunction(inputOptions.logger) ? inputOptions.logger : () => null;
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
@@ -394,7 +384,8 @@ export class StreamChat extends ChatApi {
    * @param options - Additional options; here you can pass custom options to the axios instance (optional).
    * @param options.browser - Enforce the client to be in browser mode (optional).
    * @param options.warmUp - If `true`, the client will open a connection as soon as possible to speed up following requests (optional, defaults to `false`).
-   * @param options.Logger - Custom logger (optional).
+   * @param options.logLevel - Minimum log level for the default sink (optional, defaults to `'info'`).
+   * @param options.logOptions - Per-scope sink/level overrides for `chatLoggerSystem` (optional).
    * @param options.timeout - Request timeout (optional, defaults to `3000`).
    * @param options.httpsAgent - Custom `httpsAgent` (optional, in Node defaults to `https.agent()`).
    * @returns The shared client instance.
@@ -469,9 +460,11 @@ export class StreamChat extends ChatApi {
      * if the user ID remains the same we don't throw an error.
      */
     if (this.userId === user.id && this.setUserPromise) {
-      console.warn(
-        'Consecutive calls to connectUser is detected, ideally you should only call this function once in your app.',
-      );
+      logger
+        .withExtraTags('connectUser')
+        .warn(
+          'Detected consecutive calls to connectUser. Ideally, this function should only be called once.',
+        );
       return this.setUserPromise;
     }
 
@@ -485,9 +478,11 @@ export class StreamChat extends ChatApi {
       (this._isUsingServerAuth() || this.node) &&
       !this.options.allowServerSideConnect
     ) {
-      console.warn(
-        'Please do not use connectUser server side. connectUser impacts MAU and concurrent connection usage and thus your bill. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
-      );
+      logger
+        .withExtraTags('connectUser')
+        .warn(
+          'Do not use connectUser server-side. connectUser impacts MAU and concurrent connection usage, and therefore your bill. If you have a valid use case, set "allowServerSideConnect: true" in the client options to disable this warning.',
+        );
     }
 
     const setTokenPromise = this._setToken(user, userTokenOrProvider);
@@ -616,9 +611,9 @@ export class StreamChat extends ChatApi {
     }
 
     if (this.wsConnection?.isConnecting && this.wsPromise) {
-      this.logger('info', 'client:openConnection() - connection already in progress', {
-        tags: ['connection', 'client'],
-      });
+      logger
+        .withExtraTags('openConnection')
+        .debug('A connection attempt is already in progress.');
       return this.wsPromise;
     }
 
@@ -626,13 +621,9 @@ export class StreamChat extends ChatApi {
       (this.wsConnection?.isHealthy || this.wsFallback?.isHealthy()) &&
       this._hasConnectionID()
     ) {
-      this.logger(
-        'info',
-        'client:openConnection() - openConnection called twice, healthy connection already exists',
-        {
-          tags: ['connection', 'client'],
-        },
-      );
+      logger
+        .withExtraTags('openConnection')
+        .debug('openConnection was called twice; a healthy connection already exists.');
 
       return;
     }
@@ -683,9 +674,7 @@ export class StreamChat extends ChatApi {
    * @returns The close-connection promise.
    */
   disconnectUser = (timeout?: number) => {
-    this.logger('info', 'client:disconnect() - Disconnecting the client', {
-      tags: ['connection', 'client'],
-    });
+    logger.withExtraTags('disconnectUser').info('Disconnecting the client.');
 
     // remove the user specific fields
     delete this.user;
@@ -710,7 +699,11 @@ export class StreamChat extends ChatApi {
       .finally(() => {
         this.tokenManager.reset();
       })
-      .catch((err) => console.error(err));
+      .catch((err) =>
+        logger
+          .withExtraTags('disconnectUser')
+          .error('The close promise rejected during disconnect.', { error: err }),
+      );
 
     // close the WS connection
     return closePromise;
@@ -734,9 +727,11 @@ export class StreamChat extends ChatApi {
       (this._isUsingServerAuth() || this.node) &&
       !this.options.allowServerSideConnect
     ) {
-      console.warn(
-        'Please do not use connectUser server side. connectUser impacts MAU and concurrent connection usage and thus your bill. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
-      );
+      logger
+        .withExtraTags('connectAnonymousUser')
+        .warn(
+          'Do not use connectUser server-side. connectUser impacts MAU and concurrent connection usage, and therefore your bill. If you have a valid use case, set "allowServerSideConnect: true" in the client options to disable this warning.',
+        );
     }
 
     const anonymousUser = {
@@ -803,9 +798,7 @@ export class StreamChat extends ChatApi {
 
     const set = this.listeners.get(key) ?? new Set();
 
-    this.logger('info', `Attaching listener for ${key} event`, {
-      tags: ['event', 'client'],
-    });
+    logger.withExtraTags('on').debug(`Attaching a listener for the "${key}" event.`);
     set.add(callback);
 
     if (!this.listeners.has(key)) {
@@ -814,9 +807,7 @@ export class StreamChat extends ChatApi {
 
     return {
       unsubscribe: () => {
-        this.logger('info', `Removing listener for ${key} event`, {
-          tags: ['event', 'client'],
-        });
+        logger.withExtraTags('on').debug(`Removing the listener for the "${key}" event.`);
         set.delete(callback);
         if (!set.size) {
           this.listeners.delete(key);
@@ -839,9 +830,7 @@ export class StreamChat extends ChatApi {
       ? callbackOrNothing
       : (callbackOrString as EventHandler);
 
-    this.logger('info', `Removing listener for ${key} event`, {
-      tags: ['event', 'client'],
-    });
+    logger.withExtraTags('off').debug(`Removing the listener for the "${key}" event.`);
 
     const set = this.listeners.get(key);
 
@@ -1036,14 +1025,9 @@ export class StreamChat extends ChatApi {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const client = this;
     const postListenerCallbacks = [];
-    this.logger(
-      'info',
-      `client:_handleClientEvent - Received event of type { ${event.type} }`,
-      {
-        tags: ['event', 'client'],
-        event,
-      },
-    );
+    logger
+      .withExtraTags('_handleClientEvent')
+      .debug(`Received an event of type "${event.type}".`, { event });
 
     if (
       event.type === 'user.presence.changed' ||
@@ -1155,23 +1139,15 @@ export class StreamChat extends ChatApi {
   };
 
   recoverState = async () => {
-    this.logger(
-      'info',
-      `client:recoverState() - Start of recoverState with connectionID ${this._getConnectionID()}`,
-      {
-        tags: ['connection'],
-      },
-    );
+    logger
+      .withExtraTags('recoverState')
+      .info(`Starting state recovery with connection ID ${this._getConnectionID()}.`);
 
     const cids = Object.keys(this.activeChannels);
     if (cids.length && this.recoverStateOnReconnect) {
-      this.logger(
-        'info',
-        `client:recoverState() - Start the querying of ${cids.length} channels`,
-        {
-          tags: ['connection', 'client'],
-        },
-      );
+      logger
+        .withExtraTags('recoverState')
+        .info(`Starting the query for ${cids.length} channel(s).`);
 
       await this.queryChannelsAndHydrate({
         filter_conditions: {
@@ -1181,9 +1157,7 @@ export class StreamChat extends ChatApi {
         sort: [{ field: 'last_message_at', direction: -1 }],
       });
 
-      this.logger('info', 'client:recoverState() - Querying channels finished', {
-        tags: ['connection', 'client'],
-      });
+      logger.withExtraTags('recoverState').info('Finished querying channels.');
       this.dispatchEvent({
         type: 'connection.recovered',
       });
@@ -1243,9 +1217,9 @@ export class StreamChat extends ChatApi {
       // run fallback only if it's WS/Network error and not a normal API error
       // make sure browser is online before even trying the longpoll
       if (this.options.enableWSFallback && isWSFailure(error) && isOnline()) {
-        this.logger('info', 'client:connect() - WS failed, fallback to longpoll', {
-          tags: ['connection', 'client'],
-        });
+        logger
+          .withExtraTags('connect')
+          .warn('The WebSocket connection failed; falling back to long-polling.');
         this.dispatchEvent({ type: 'transport.changed', mode: 'longpoll' });
 
         this.wsConnection._destroyCurrentWSConnection();
@@ -1468,9 +1442,9 @@ export class StreamChat extends ChatApi {
           });
         }
       } catch (e) {
-        this.logger('warn', 'An error has occurred while querying offline reactions', {
-          error: e,
-        });
+        offlineDbLogger
+          .withExtraTags('queryReactionsAndHydrate')
+          .warn('An error occurred while querying offline reactions.', { error: e });
       }
     }
 
@@ -1525,7 +1499,6 @@ export class StreamChat extends ChatApi {
             filteredReturnedPage: channelState.messages.filter(
               (m) => !filteredMessageIds.includes(m.id),
             ),
-            logger: this.logger,
           }),
         };
         this.polls.hydratePollCache(channelState.messages, true);
@@ -2054,10 +2027,9 @@ export class StreamChat extends ChatApi {
         });
       }
     } catch (error) {
-      this.logger('error', `offlineDb:updateMessage`, {
-        tags: ['channel', 'offlineDb'],
-        error,
-      });
+      offlineDbLogger
+        .withExtraTags('updateMessage')
+        .error('Updating the message failed.', { error });
     }
 
     return await this._updateMessage(request);
@@ -2093,10 +2065,9 @@ export class StreamChat extends ChatApi {
         });
       }
     } catch (error) {
-      this.logger('error', `offlineDb:deleteMessage`, {
-        tags: ['channel', 'offlineDb'],
-        error,
-      });
+      offlineDbLogger
+        .withExtraTags('deleteMessage')
+        .error('Deleting the message failed.', { error });
     }
 
     return this._deleteMessage(request);

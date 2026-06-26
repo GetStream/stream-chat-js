@@ -1,6 +1,8 @@
 import type { Channel } from './channel';
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { StableWSConnection } from './connection';
+import type { LogLevel } from '@stream-io/logger';
+import type { ChatLoggerScope, ConfigureLoggersOptions } from './logger';
 import type { RoleName } from './permissions';
 import type {
   CustomAttachmentData,
@@ -862,7 +864,17 @@ export type StreamChatOptions = {
   isLocalUnreadCountEnabled?: boolean;
   /** experimental feature, please contact support if you want this feature enabled for you */
   enableWSFallback?: boolean;
-  logger?: Logger;
+  /**
+   * Minimum log level forwarded to the default sink. Accepts `'trace' | 'debug' | 'info' | 'warn' | 'error'`.
+   * Defaults to `'info'`.
+   */
+  logLevel?: LogLevel;
+  /**
+   * Per-scope sink and level overrides applied to `chatLoggerSystem` at construction time.
+   * Use this to redirect output (e.g. to Sentry) or to crank a single subsystem to `'debug'`
+   * without touching the others.
+   */
+  logOptions?: ConfigureLoggersOptions<ChatLoggerScope>;
   /**
    * Custom notification manager service to use for the client.
    * If not provided, a default notification manager will be created.
@@ -1457,14 +1469,6 @@ export type XiaomiConfig = {
   package_name?: string;
   secret?: string;
 };
-
-export type LogLevel = 'info' | 'error' | 'warn';
-
-export type Logger = (
-  logLevel: LogLevel,
-  message: string,
-  extraData?: Record<string, unknown>,
-) => void;
 
 export type Message = ReplacePropertyTypes<
   Gen_MessageRequest,

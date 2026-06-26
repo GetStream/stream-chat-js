@@ -6,6 +6,7 @@ export * from './channel_state';
 export * from './connection';
 export { type CooldownTimerState } from './CooldownTimer';
 export * from './insights';
+export * from './logger';
 export * from './messageComposer';
 export * from './messageDelivery';
 export * from './middleware';
