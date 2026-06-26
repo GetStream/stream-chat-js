@@ -20,6 +20,7 @@ export class StateStore<T extends Record<string, unknown>> {
 
   /**
    * Allows merging two stores only if their keys differ otherwise there's no way to ensure the data type stability.
+   *
    * @experimental
    * This method is experimental and may change in future versions.
    */

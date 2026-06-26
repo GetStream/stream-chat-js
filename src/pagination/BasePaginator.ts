@@ -26,7 +26,7 @@ export type PaginatorState<T = any> = {
 };
 
 export type PaginatorOptions = {
-  /** The number of milliseconds to debounce the search query. The default interval is 300ms. */
+  /** The number of milliseconds to debounce the search query (defaults to `300`). */
   debounceMs?: number;
   pageSize?: number;
 };

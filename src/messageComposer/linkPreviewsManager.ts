@@ -18,13 +18,13 @@ export interface ILinkPreviewsManager {
 }
 
 export enum LinkPreviewStatus {
-  /** Link preview has been dismissed using **/
+  /** Link preview has been dismissed using */
   DISMISSED = 'dismissed',
-  /** Link preview could not be loaded, the enrichment request has failed. **/
+  /** Link preview could not be loaded, the enrichment request has failed. */
   FAILED = 'failed',
-  /** Link preview has been successfully loaded. **/
+  /** Link preview has been successfully loaded. */
   LOADED = 'loaded',
-  /** The enrichment query is in progress for a given link. **/
+  /** The enrichment query is in progress for a given link. */
   LOADING = 'loading',
   /** The preview reference enrichment has not begun. Default status if not set. */
   PENDING = 'pending',

@@ -23,6 +23,10 @@ $ yarn run test-unit
 
 We use [ESLint](https://eslint.org/) for linting and [Prettier](https://prettier.io/) for code formatting. We enforce it during the build process. If your IDE has integration with these tools, it's recommended to set them up.
 
+## JSDoc
+
+See [`JSDOC.md`](./JSDOC.md) for the canonical JSDoc format used in this repository. The format is enforced by `eslint-plugin-jsdoc`.
+
 ## Commit message convention
 
 Since we're autogenerating our [CHANGELOG](./CHANGELOG.md), we need to follow a specific commit message convention.
