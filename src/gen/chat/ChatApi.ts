@@ -186,6 +186,7 @@ export class ChatApi {
       is_confusable_folding_enabled: request?.is_confusable_folding_enabled,
       is_leet_check_enabled: request?.is_leet_check_enabled,
       is_plural_check_enabled: request?.is_plural_check_enabled,
+      is_substring_matching_enabled: request?.is_substring_matching_enabled,
       team: request?.team,
       type: request?.type,
     };
@@ -232,6 +233,7 @@ export class ChatApi {
       is_confusable_folding_enabled: request?.is_confusable_folding_enabled,
       is_leet_check_enabled: request?.is_leet_check_enabled,
       is_plural_check_enabled: request?.is_plural_check_enabled,
+      is_substring_matching_enabled: request?.is_substring_matching_enabled,
       team: request?.team,
       words: request?.words,
     };

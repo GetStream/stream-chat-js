@@ -998,6 +998,13 @@ decoders['ListDevicesResponse'] = (input?: { [key: string]: any }) => {
   return decode(typeMappings, input);
 };
 
+decoders['ListQueuesResponse'] = (input?: { [key: string]: any }) => {
+  const typeMappings: TypeMapping = {
+    queues: { type: 'ModerationQueueResponse', isSingle: false },
+  };
+  return decode(typeMappings, input);
+};
+
 decoders['ListUserGroupsResponse'] = (input?: { [key: string]: any }) => {
   const typeMappings: TypeMapping = {
     user_groups: { type: 'UserGroupResponse', isSingle: false },
@@ -1349,6 +1356,15 @@ decoders['ModerationMarkReviewedEvent'] = (input?: { [key: string]: any }) => {
     received_at: { type: 'DatetimeType', isSingle: true },
 
     message: { type: 'MessageResponse', isSingle: true },
+  };
+  return decode(typeMappings, input);
+};
+
+decoders['ModerationQueueResponse'] = (input?: { [key: string]: any }) => {
+  const typeMappings: TypeMapping = {
+    created_at: { type: 'DatetimeType', isSingle: true },
+
+    updated_at: { type: 'DatetimeType', isSingle: true },
   };
   return decode(typeMappings, input);
 };
@@ -1818,6 +1834,13 @@ decoders['QueryThreadsResponse'] = (input?: { [key: string]: any }) => {
 decoders['QueryUsersResponse'] = (input?: { [key: string]: any }) => {
   const typeMappings: TypeMapping = {
     users: { type: 'FullUserResponse', isSingle: false },
+  };
+  return decode(typeMappings, input);
+};
+
+decoders['QueueResponse'] = (input?: { [key: string]: any }) => {
+  const typeMappings: TypeMapping = {
+    queue: { type: 'ModerationQueueResponse', isSingle: true },
   };
   return decode(typeMappings, input);
 };
@@ -2453,6 +2476,13 @@ decoders['UserGroupDeletedEvent'] = (input?: { [key: string]: any }) => {
   return decode(typeMappings, input);
 };
 
+decoders['UserGroupMember'] = (input?: { [key: string]: any }) => {
+  const typeMappings: TypeMapping = {
+    created_at: { type: 'DatetimeType', isSingle: true },
+  };
+  return decode(typeMappings, input);
+};
+
 decoders['UserGroupMemberAddedEvent'] = (input?: { [key: string]: any }) => {
   const typeMappings: TypeMapping = {
     created_at: { type: 'DatetimeType', isSingle: true },
@@ -2480,6 +2510,8 @@ decoders['UserGroupResponse'] = (input?: { [key: string]: any }) => {
     created_at: { type: 'DatetimeType', isSingle: true },
 
     updated_at: { type: 'DatetimeType', isSingle: true },
+
+    members: { type: 'UserGroupMember', isSingle: false },
   };
   return decode(typeMappings, input);
 };
