@@ -8,15 +8,7 @@ import importPlugin from 'eslint-plugin-import';
 
 export default tseslint.config(
   {
-    ignores: [
-      'dist',
-      'coverage',
-      '.yarn',
-      '.claude',
-      'src/@types',
-      'src/gen/**',
-      '*.{js,ts}',
-    ],
+    ignores: ['dist', 'coverage', '.yarn', '.claude', 'src/@types', '*.{js,ts}'],
   },
   {
     name: 'default',
@@ -29,7 +21,6 @@ export default tseslint.config(
     plugins: {
       import: importPlugin,
       'unused-imports': unusedImports,
-      jsdoc,
     },
     settings: {
       react: {
@@ -105,6 +96,15 @@ export default tseslint.config(
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/no-empty-object-type': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
+  {
+    ignores: ['src/gen/**'],
+    files: ['src/**/*.{js,ts}'],
+    plugins: {
+      jsdoc,
+    },
+    rules: {
       'jsdoc/no-types': 'error',
       'jsdoc/check-param-names': ['error', { checkDestructured: false }],
       'jsdoc/check-tag-names': [
