@@ -694,6 +694,8 @@ export type ChatLevelPushPreference =
   | 'default'
   | (string & {});
 
+export type CallLevelPushPreference = 'all' | 'none' | 'default' | (string & {});
+
 /** Granular all/none toggle used by the chat sub-preferences. */
 export type PushPreferenceLevel = 'all' | 'none' | (string & {});
 
@@ -716,6 +718,7 @@ export type ChatPreferences = {
  * defaults to the connected user for client-side auth.
  */
 export type PushPreference = {
+  call_level?: CallLevelPushPreference;
   channel_cid?: string;
   chat_level?: ChatLevelPushPreference;
   chat_preferences?: ChatPreferences;
@@ -726,6 +729,7 @@ export type PushPreference = {
 
 /** Per-user push preferences returned by the API (matches OpenAPI `PushPreferencesResponse`). */
 export type PushPreferencesResponse = {
+  call_level?: CallLevelPushPreference;
   chat_level?: ChatLevelPushPreference;
   chat_preferences?: ChatPreferences;
   disabled_until?: string;
