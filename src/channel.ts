@@ -21,6 +21,7 @@ import type {
   ChannelFilters,
   ChannelMemberAPIResponse,
   ChannelMemberResponse,
+  ChannelPushPreference,
   ChannelQueryOptions,
   ChannelResponse,
   ChannelUpdateOptions,
@@ -56,7 +57,6 @@ import type {
   PinnedMessagePaginationOptions,
   PinnedMessagesSort,
   PollVoteData,
-  PushPreference,
   QueryChannelAPIResponse,
   QueryMembersOptions,
   Reaction,
@@ -112,7 +112,7 @@ export class Channel {
   lastTypingEvent: Date | null;
   isTyping: boolean;
   disconnected: boolean;
-  push_preferences?: PushPreference;
+  push_preferences?: ChannelPushPreference;
   public readonly messageComposer: MessageComposer;
   public readonly messageReceiptsTracker: MessageReceiptsTracker;
   public readonly cooldownTimer: CooldownTimer;
