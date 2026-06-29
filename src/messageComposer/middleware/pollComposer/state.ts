@@ -137,6 +137,27 @@ export const pollCompositionStateProcessors: Partial<
     // For single option updates
     const { index, text } = value;
     const prevOptions = data.options || [];
+    const targetOption = prevOptions[index];
+
+    if (!targetOption) {
+      return { options: prevOptions };
+    }
+
+    const nextOptionsAfterTarget = prevOptions.slice(index + 1);
+    const shouldPreserveClearedOption =
+      !text &&
+      nextOptionsAfterTarget.length > 0 &&
+      nextOptionsAfterTarget.every((option) => !option.text);
+
+    if (shouldPreserveClearedOption) {
+      return {
+        options: [
+          ...prevOptions.slice(0, index),
+          { ...targetOption, text },
+          ...nextOptionsAfterTarget,
+        ],
+      };
+    }
 
     const shouldRemoveOption =
       prevOptions && prevOptions.slice(index + 1).length > 0 && !text;
@@ -146,7 +167,7 @@ export const pollCompositionStateProcessors: Partial<
 
     const newOptions = [
       ...optionListHead,
-      ...(shouldRemoveOption ? [] : [{ ...prevOptions[index], text }]),
+      ...(shouldRemoveOption ? [] : [{ ...targetOption, text }]),
       ...optionListTail,
     ];
 
