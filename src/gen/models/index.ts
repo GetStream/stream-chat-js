@@ -767,6 +767,8 @@ export interface BlockListResponse {
 
   is_plural_check_enabled: boolean;
 
+  is_substring_matching_enabled: boolean;
+
   /**
    * Block list name
    */
@@ -1070,7 +1072,7 @@ export interface CastPollVoteRequest {
   vote?: VoteData;
 }
 
-export interface ChannelConfig {
+export interface ChannelConfigOverrides {
   blocklist?: string;
 
   blocklist_behavior?: 'flag' | 'block';
@@ -1465,7 +1467,7 @@ export interface ChannelInput {
 
   members?: Array<ChannelMemberRequest>;
 
-  config_overrides?: ChannelConfig;
+  config_overrides?: ChannelConfigOverrides;
 
   created_by?: UserRequest;
 
@@ -1659,6 +1661,7 @@ export const ChannelOwnCapability = {
   CAST_POLL_VOTE: 'cast-poll-vote',
   CONNECT_EVENTS: 'connect-events',
   CREATE_ATTACHMENT: 'create-attachment',
+  CREATE_MENTION: 'create-mention',
   DELETE_ANY_MESSAGE: 'delete-any-message',
   DELETE_CHANNEL: 'delete-channel',
   DELETE_OWN_MESSAGE: 'delete-own-message',
@@ -2651,6 +2654,8 @@ export interface CreateBlockListRequest {
 
   is_plural_check_enabled?: boolean;
 
+  is_substring_matching_enabled?: boolean;
+
   team?: string;
 
   /**
@@ -2777,6 +2782,18 @@ export interface CreatePollRequest {
   options?: Array<PollOptionInput>;
 
   custom?: Record<string, any>;
+}
+
+export interface CreateQueueRequest {
+  name: string;
+
+  type: 'personal_view' | 'operational_queue';
+
+  description?: string;
+
+  sort?: Array<Record<string, any>>;
+
+  filters?: Record<string, any>;
 }
 
 export interface CreateReminderRequest {
@@ -2970,6 +2987,8 @@ export interface DeleteMessageResponse {
 export interface DeleteModerationConfigResponse {
   duration: string;
 }
+
+export interface DeleteQueueRequest {}
 
 export interface DeleteReactionRequestPayload {
   /**
@@ -3852,6 +3871,15 @@ export interface FlagFeedbackResponse {
   labels: Array<LabelResponse>;
 }
 
+export interface FlagItemResponse {
+  duration: string;
+
+  /**
+   * Unique identifier of the created moderation item
+   */
+  item_id: string;
+}
+
 export interface FlagMessageDetailsResponse {
   pin_changed?: boolean;
 
@@ -3889,15 +3917,6 @@ export interface FlagRequest {
   custom?: Record<string, any>;
 
   moderation_payload?: ModerationPayload;
-}
-
-export interface FlagResponse {
-  duration: string;
-
-  /**
-   * Unique identifier of the created moderation item
-   */
-  item_id: string;
 }
 
 export interface FlagUserOptions {
@@ -4475,6 +4494,15 @@ export interface ListDevicesResponse {
    * List of devices
    */
   devices: Array<DeviceResponse>;
+}
+
+export interface ListQueuesResponse {
+  /**
+   * Duration of the request in milliseconds
+   */
+  duration: string;
+
+  queues: Array<ModerationQueueResponse>;
 }
 
 export interface ListUserGroupsResponse {
@@ -5861,6 +5889,10 @@ export interface ModerationActionConfigResponse {
   custom?: Record<string, any>;
 }
 
+export interface ModerationBanResponse {
+  duration: string;
+}
+
 export interface ModerationCustomActionEvent {
   /**
    * The ID of the custom action that was executed
@@ -5952,20 +5984,38 @@ export interface ModerationMarkReviewedEvent {
 }
 
 export interface ModerationPayload {
+  image_ordered_keys?: Array<string>;
+
   images?: Array<string>;
+
+  text_ordered_keys?: Array<string>;
 
   texts?: Array<string>;
 
   videos?: Array<string>;
 
   custom?: Record<string, any>;
+
+  image_ids?: Record<string, string>;
+
+  text_ids?: Record<string, string>;
 }
 
 export interface ModerationPayloadResponse {
   /**
+   * Caller-supplied keys for images, index-aligned with images[]
+   */
+  image_ordered_keys?: Array<string>;
+
+  /**
    * Image URLs to moderate
    */
   images?: Array<string>;
+
+  /**
+   * Caller-supplied keys for texts (e.g. "title", "description"), index-aligned with texts[]
+   */
+  text_ordered_keys?: Array<string>;
 
   /**
    * Text content to moderate
@@ -5981,6 +6031,38 @@ export interface ModerationPayloadResponse {
    * Custom data for moderation
    */
   custom?: Record<string, any>;
+
+  /**
+   * Caller-supplied content IDs per image key (from content_ids on /analyze)
+   */
+  image_ids?: Record<string, string>;
+
+  /**
+   * Caller-supplied content IDs per text key (from content_ids on /analyze)
+   */
+  text_ids?: Record<string, string>;
+}
+
+export interface ModerationQueueResponse {
+  created_at: Date;
+
+  created_by: string;
+
+  description: string;
+
+  id: string;
+
+  item_count: number;
+
+  name: string;
+
+  type: string;
+
+  updated_at: Date;
+
+  sort: Array<Record<string, any>>;
+
+  filters: Record<string, any>;
 }
 
 export interface ModerationResponse {
@@ -7898,6 +7980,15 @@ export interface QueryUsersResponse {
   users: Array<FullUserResponse>;
 }
 
+export interface QueueResponse {
+  /**
+   * Duration of the request in milliseconds
+   */
+  duration: string;
+
+  queue?: ModerationQueueResponse;
+}
+
 export interface Reaction {
   activity_id: string;
 
@@ -9238,6 +9329,10 @@ export interface TextContentParameters {
 
   severity?: string;
 
+  text_length?: number;
+
+  text_length_operator?: string;
+
   blocklist_match?: Array<string>;
 
   harm_labels?: Array<string>;
@@ -9748,6 +9843,8 @@ export interface UpdateBlockListRequest {
 
   is_plural_check_enabled?: boolean;
 
+  is_substring_matching_enabled?: boolean;
+
   team?: string;
 
   /**
@@ -10048,6 +10145,16 @@ export interface UpdatePollRequest {
   options?: Array<PollOptionRequest>;
 
   custom?: Record<string, any>;
+}
+
+export interface UpdateQueueRequest {
+  description?: string;
+
+  name?: string;
+
+  sort?: Array<Record<string, any>>;
+
+  filters?: Record<string, any>;
 }
 
 export interface UpdateReminderRequest {
@@ -10631,6 +10738,8 @@ export interface UserGroupResponse {
   description?: string;
 
   team_id?: string;
+
+  members?: Array<UserGroupMember>;
 }
 
 export interface UserGroupUpdatedEvent {
