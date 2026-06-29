@@ -184,7 +184,6 @@ export class StreamChat extends ChatApi {
   blockedUsers: StateStore<BlockedUsersState>;
   node: boolean;
   options: StreamChatOptions;
-  secret?: string;
   setUserPromise: ConnectAPIResponse | null;
   state: ClientState;
   tokenManager: TokenManager;
@@ -244,7 +243,6 @@ export class StreamChat extends ChatApi {
    * new StreamChat('api_key', 'secret', { httpsAgent: customAgent })
    *
    * @param key - The API key.
-   * @param secret - The API secret (optional).
    * @param options - Additional options; here you can pass custom options to the axios instance (optional).
    * @param options.browser - Enforce the client to be in browser mode (optional).
    * @param options.warmUp - If `true`, the client will open a connection as soon as possible to speed up following requests (optional, defaults to `false`).
@@ -253,13 +251,7 @@ export class StreamChat extends ChatApi {
    * @param options.timeout - Request timeout (optional, defaults to `3000`).
    * @param options.httpsAgent - Custom `httpsAgent` (optional, in Node defaults to `https.agent()`).
    */
-  constructor(key: string, options?: StreamChatOptions);
-  constructor(key: string, secret?: string, options?: StreamChatOptions);
-  constructor(
-    key: string,
-    secretOrOptions?: StreamChatOptions | string,
-    options?: StreamChatOptions,
-  ) {
+  constructor(key: string, options: StreamChatOptions = {}) {
     // generated client requires ApiClient right away
     super(new ApiClient());
     // but ApiClient relies on properties defined here so we set it after (can't pass `this` in super call)
@@ -279,22 +271,7 @@ export class StreamChat extends ChatApi {
     this.notifications = options?.notifications ?? new NotificationManager();
     this.uploadManager = new UploadManager(this);
 
-    // set the secret
-    if (secretOrOptions && isString(secretOrOptions)) {
-      this.secret = secretOrOptions;
-    }
-
-    // set the options... and figure out defaults...
-    const inputOptions = options
-      ? options
-      : secretOrOptions && !isString(secretOrOptions)
-        ? secretOrOptions
-        : {};
-
-    this.browser =
-      typeof inputOptions.browser !== 'undefined'
-        ? inputOptions.browser
-        : typeof window !== 'undefined';
+    this.browser = options.browser ?? typeof window !== 'undefined';
     this.node = !this.browser;
 
     this.options = {
@@ -302,14 +279,14 @@ export class StreamChat extends ChatApi {
       recoverStateOnReconnect: true,
       disableCache: false,
       wsUrlParams: new URLSearchParams({}),
-      ...inputOptions,
+      ...options,
     };
 
     chatLoggerSystem.configureLoggers({
-      ...inputOptions.logOptions,
+      ...options.logOptions,
       default: {
-        level: inputOptions.logLevel ?? 'info',
-        ...inputOptions.logOptions?.default,
+        level: options.logLevel ?? 'info',
+        ...options.logOptions?.default,
       },
     });
 
@@ -347,7 +324,7 @@ export class StreamChat extends ChatApi {
 
     // If its a server-side client, then lets initialize the tokenManager, since token will be
     // generated from secret.
-    this.tokenManager = new TokenManager(this.secret);
+    this.tokenManager = new TokenManager();
     this.insightMetrics = new InsightMetrics();
 
     this.defaultWSTimeoutWithFallback = 6 * 1000;
@@ -376,7 +353,6 @@ export class StreamChat extends ChatApi {
    * StreamChat.getInstance('api_key', 'secret', { httpsAgent: customAgent })
    *
    * @param key - The API key.
-   * @param secret - The API secret (optional).
    * @param options - Additional options; here you can pass custom options to the axios instance (optional).
    * @param options.browser - Enforce the client to be in browser mode (optional).
    * @param options.warmUp - If `true`, the client will open a connection as soon as possible to speed up following requests (optional, defaults to `false`).
@@ -386,23 +362,9 @@ export class StreamChat extends ChatApi {
    * @param options.httpsAgent - Custom `httpsAgent` (optional, in Node defaults to `https.agent()`).
    * @returns The shared client instance.
    */
-  public static getInstance(key: string, options?: StreamChatOptions): StreamChat;
-  public static getInstance(
-    key: string,
-    secret?: string,
-    options?: StreamChatOptions,
-  ): StreamChat;
-  public static getInstance(
-    key: string,
-    secretOrOptions?: StreamChatOptions | string,
-    options?: StreamChatOptions,
-  ): StreamChat {
+  public static getInstance(key: string, options?: StreamChatOptions): StreamChat {
     if (!StreamChat._instance) {
-      if (typeof secretOrOptions === 'string') {
-        StreamChat._instance = new StreamChat(key, secretOrOptions, options);
-      } else {
-        StreamChat._instance = new StreamChat(key, secretOrOptions);
-      }
+      StreamChat._instance = new StreamChat(key, options);
     }
 
     return StreamChat._instance as StreamChat;
@@ -470,10 +432,7 @@ export class StreamChat extends ChatApi {
       );
     }
 
-    if (
-      (this._isUsingServerAuth() || this.node) &&
-      !this.options.allowServerSideConnect
-    ) {
+    if (this.node && !this.options.allowServerSideConnect) {
       logger
         .withExtraTags('connectUser')
         .warn(
@@ -719,10 +678,7 @@ export class StreamChat extends ChatApi {
    * @returns A promise that resolves when the connection is set up.
    */
   connectAnonymousUser = () => {
-    if (
-      (this._isUsingServerAuth() || this.node) &&
-      !this.options.allowServerSideConnect
-    ) {
+    if (this.node && !this.options.allowServerSideConnect) {
       logger
         .withExtraTags('connectAnonymousUser')
         .warn(
@@ -1561,7 +1517,7 @@ export class StreamChat extends ChatApi {
     channelIdOrCustom?: string | ChannelData | null,
     custom: ChannelData = {},
   ) {
-    if (!this.userId && !this._isUsingServerAuth()) {
+    if (!this.userId) {
       throw Error('Call connectUser or connectAnonymousUser before creating a channel');
     }
 
@@ -2238,14 +2194,7 @@ export class StreamChat extends ChatApi {
     this.userAgent = userAgent;
   }
 
-  /**
-   * Returns true if we're using server-side auth.
-   *
-   * @returns `true` if a secret was provided.
-   */
-  _isUsingServerAuth = () => !!this.secret;
-
-  _cacheEnabled = () => !this._isUsingServerAuth() || !this.options.disableCache;
+  _cacheEnabled = () => !this.options.disableCache;
 
   _startCleaning() {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
