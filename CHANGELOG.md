@@ -1,3 +1,14 @@
+## [9.48.0](https://github.com/GetStream/stream-chat-js/compare/v9.47.1...v9.48.0) (2026-06-29)
+
+### Bug Fixes
+
+* **push-preferences:** align chat push preference types with the API ([#1786](https://github.com/GetStream/stream-chat-js/issues/1786)) ([26c2e49](https://github.com/GetStream/stream-chat-js/commit/26c2e498a01d8fc6e2cbdc050c3e65196d88824f))
+* **threads:** add notification.mark_unread handler ([#1785](https://github.com/GetStream/stream-chat-js/issues/1785)) ([c60134d](https://github.com/GetStream/stream-chat-js/commit/c60134d30390dfc3702d15b4abd78734ad9d79e4)), closes [#1778](https://github.com/GetStream/stream-chat-js/issues/1778)
+
+### Features
+
+* allow augmenting event types ([#1784](https://github.com/GetStream/stream-chat-js/issues/1784)) ([c32f7e9](https://github.com/GetStream/stream-chat-js/commit/c32f7e9776f52b38622537251ba84e500e50e4b5))
+
 ## [9.47.1](https://github.com/GetStream/stream-chat-js/compare/v9.47.0...v9.47.1) (2026-06-22)
 
 ### Bug Fixes
