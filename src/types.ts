@@ -4537,6 +4537,14 @@ export type SdkIdentifier = {
  */
 export type DeviceIdentifier = { os: string; model?: string };
 
+/**
+ * An identifier containing information about the downstream application integrating
+ * stream-chat, if available. `name` is reported as `app` and `version` as `app_version`
+ * in the user agent. Distinct from the SDK ({@link SdkIdentifier}) and device
+ * ({@link DeviceIdentifier}) identifiers.
+ */
+export type AppIdentifier = { name: string; version?: string };
+
 export type DraftResponse = {
   channel_cid: string;
   created_at: string;

@@ -1802,11 +1802,46 @@ describe('X-Stream-Client header', () => {
 		);
 	});
 
+	it('SDK integration with appIdentifier', () => {
+		client.sdkIdentifier = { name: 'react-native', version: '2.3.4' };
+		client.appIdentifier = { name: 'Acme', version: '2.1.0' };
+		client.deviceIdentifier = { os: 'iOS 15.0', model: 'iPhone17,4' };
+		const userAgent = client.getUserAgent();
+
+		// app / app_version are emitted right after the head, before os / device_model.
+		expect(userAgent).toMatchInlineSnapshot(
+			`"stream-chat-react-native-v2.3.4-llc-v1.2.3|app=Acme|app_version=2.1.0|os=iOS 15.0|device_model=iPhone17,4|client_bundle=browser-esm"`,
+		);
+	});
+
+	it('appIdentifier with name only omits the app_version segment', () => {
+		client.appIdentifier = { name: 'Acme' };
+		const userAgent = client.getUserAgent();
+
+		expect(userAgent).toMatchInlineSnapshot(
+			`"stream-chat-js-v1.2.3-node|app=Acme|client_bundle=browser-esm"`,
+		);
+	});
+
 	it('setUserAgent is now deprecated', () => {
 		client.setUserAgent('deprecated');
 		const userAgent = client.getUserAgent();
 
 		expect(userAgent).toMatchInlineSnapshot(`"deprecated"`);
+	});
+
+	it('memoizes the result permanently and ignores inputs set after the first call', () => {
+		const first = client.getUserAgent();
+		expect(first).toMatchInlineSnapshot(
+			`"stream-chat-js-v1.2.3-node|client_bundle=browser-esm"`,
+		);
+
+		// Inputs mutated after the first call must be ignored - the user agent is
+		// computed once and the cached value is returned for the client's lifetime.
+		client.sdkIdentifier = { name: 'react', version: '2.3.4' };
+		client.deviceIdentifier = { os: 'iOS 15.0', model: 'iPhone17,4' };
+
+		expect(client.getUserAgent()).toBe(first);
 	});
 
 	describe('getHookEvents', () => {
