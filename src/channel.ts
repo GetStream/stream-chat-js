@@ -1255,6 +1255,8 @@ export class Channel {
    * delivery-report network sync), so the read-state update lives in one place. When offline support
    * is enabled, the offline DB persists the reset for read-events-disabled channels, so the local
    * count stays consistent across app restarts.
+   *
+   * @return {Event | undefined} The dispatched `message.local_read` event, or `undefined` if there is no connected user.
    */
   markReadLocally() {
     const client = this.getClient();
@@ -1271,6 +1273,8 @@ export class Channel {
       user: client.user,
     };
     client.dispatchEvent(event);
+
+    return event;
   }
 
   /**
