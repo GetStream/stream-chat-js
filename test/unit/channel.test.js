@@ -283,7 +283,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 		const onLocalRead = vi.fn();
 		channel.on('message.local_read', onLocalRead);
 
-		channel.markReadLocally();
+		const returned = channel.markReadLocally();
 
 		expect(channel.countUnread()).to.be.equal(0);
 		expect(channel.state.read[user.id].unread_messages).to.be.equal(0);
@@ -299,6 +299,25 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 		expect(event.user.id).to.be.equal(user.id);
 		expect(event.last_read_message_id).to.be.equal(lastMsg.id);
 		expect(event.created_at).to.be.a('string');
+
+		// markReadLocally returns the same dispatched event so callers (e.g. the RN SDK) can sync
+		// their own unread UI from that read info instead of re-deriving it.
+		expect(returned).to.equal(event);
+		expect(returned.last_read_message_id).to.be.equal(lastMsg.id);
+		expect(returned.created_at).to.be.a('string');
+	});
+
+	it('markReadLocally returns undefined and dispatches nothing when there is no connected user', function () {
+		const { client, channel } = setupChannel({ isLocalUnreadCountEnabled: true });
+		client.user = undefined;
+		client.userID = undefined;
+		const onLocalRead = vi.fn();
+		channel.on('message.local_read', onLocalRead);
+
+		const returned = channel.markReadLocally();
+
+		expect(returned).to.be.undefined;
+		expect(onLocalRead.mock.calls.length).to.be.equal(0);
 	});
 
 	it('markReadLocally resets the count and creates the own read row when none exists yet (fresh livestream)', function () {
