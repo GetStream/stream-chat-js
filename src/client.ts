@@ -1641,6 +1641,19 @@ export class StreamChat {
       });
     }
 
+    // Current user removed from a channel: evict it like channel.deleted so
+    // recoverState won't re-watch it and no further events reach it (#2599).
+    // Type-agnostic. We skip deleteAllChannelReference (unlike deletion) since
+    // the channel still exists for its remaining members.
+    if (event.type === 'notification.removed_from_channel' && event.cid) {
+      const { cid } = event;
+      this.activeChannels[cid]?._disconnect();
+
+      postListenerCallbacks.push(() => {
+        delete this.activeChannels[cid];
+      });
+    }
+
     return postListenerCallbacks;
   }
 
