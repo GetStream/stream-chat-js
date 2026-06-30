@@ -282,14 +282,6 @@ export class StreamChat extends ChatApi {
       ...options,
     };
 
-    chatLoggerSystem.configureLoggers({
-      ...options.logOptions,
-      default: {
-        level: options.logLevel ?? 'info',
-        ...options.logOptions?.default,
-      },
-    });
-
     this.axiosInstance = axios.create({
       timeout: 3000,
       withCredentials: false,

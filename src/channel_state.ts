@@ -352,16 +352,6 @@ export class ChannelState {
 
   addReaction(
     reaction: ReactionResponse,
-    message: MessageResponse,
-    enforce_unique?: boolean,
-  ): MessageResponse;
-  addReaction(
-    reaction: ReactionResponse,
-    message?: undefined,
-    enforce_unique?: boolean,
-  ): LocalMessage | undefined;
-  addReaction(
-    reaction: ReactionResponse,
     message?: MessageResponse,
     enforce_unique?: boolean,
   ): MessageResponse | LocalMessage | undefined {
@@ -516,11 +506,6 @@ export class ChannelState {
     return [];
   }
 
-  removeReaction(reaction: ReactionResponse, message: MessageResponse): MessageResponse;
-  removeReaction(
-    reaction: ReactionResponse,
-    message?: undefined,
-  ): LocalMessage | undefined;
   removeReaction(
     reaction: ReactionResponse,
     message?: MessageResponse,

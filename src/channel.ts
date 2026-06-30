@@ -1196,22 +1196,11 @@ export class Channel extends ChannelApi {
    * @returns A query response.
    */
   async query(
-    options: ChannelQueryOptions & { created_by_id?: string } = {},
+    options: ChannelQueryOptions = {},
     messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
   ) {
     // Make sure we wait for the connect promise if there is a pending one
     await this.getClient().wsPromise;
-
-    const createdById = options.created_by_id ?? this._data?.created_by?.id;
-    // this._data?.created_by_id;
-
-    if (this.getClient()._isUsingServerAuth() && typeof createdById !== 'string') {
-      logger
-        .withExtraTags('query', this.cid)
-        .warn(
-          'Neither `created_by` (with an `id` property) nor `created_by_id` is set on `Channel._data` or the `options` parameter.',
-        );
-    }
 
     const queryPayload: Gen_ChannelGetOrCreateRequest = {
       data: this._data,
@@ -1876,7 +1865,11 @@ export class Channel extends ChannelApi {
         if (event.message && event.reaction) {
           const { message, reaction } = event;
           // assuming reaction.updated is only called if enforce_unique is true
-          event.message = channelState.addReaction(reaction, message, true);
+          event.message = channelState.addReaction(
+            reaction,
+            message,
+            true,
+          ) as MessageResponse;
         }
         break;
       case 'channel.hidden':
@@ -1951,11 +1944,7 @@ export class Channel extends ChannelApi {
   };
 
   _checkInitialized() {
-    if (
-      !this.initialized &&
-      !this.offlineMode &&
-      !this.getClient()._isUsingServerAuth()
-    ) {
+    if (!this.initialized && !this.offlineMode) {
       throw Error(
         `Channel ${this.cid} hasn't been initialized yet. Make sure to call .watch() and wait for it to resolve`,
       );

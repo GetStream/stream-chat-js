@@ -856,17 +856,6 @@ export type StreamChatOptions = {
   /** experimental feature, please contact support if you want this feature enabled for you */
   enableWSFallback?: boolean;
   /**
-   * Minimum log level forwarded to the default sink. Accepts `'trace' | 'debug' | 'info' | 'warn' | 'error'`.
-   * Defaults to `'info'`.
-   */
-  logLevel?: LogLevel;
-  /**
-   * Per-scope sink and level overrides applied to `chatLoggerSystem` at construction time.
-   * Use this to redirect output (e.g. to Sentry) or to crank a single subsystem to `'debug'`
-   * without touching the others.
-   */
-  logOptions?: ConfigureLoggersOptions<ChatLoggerScope>;
-  /**
    * Custom notification manager service to use for the client.
    * If not provided, a default notification manager will be created.
    * Notifications are used to communicate events like errors, warnings, info, etc. Other services can publish notifications or subscribe to the NotificationManager state changes.
