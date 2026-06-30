@@ -1753,7 +1753,7 @@ describe('OfflineSupportApi', () => {
           expect(offlineDb.deleteChannel).not.toHaveBeenCalled();
         });
 
-        describe('message.local_read', () => {
+        describe('message.read_locally', () => {
           it('routes to handleRead for a read-events-disabled channel when isLocalUnreadCountEnabled is on', async () => {
             client.options.isLocalUnreadCountEnabled = true;
             const localChannelResponse = generateChannel({
@@ -1762,7 +1762,7 @@ describe('OfflineSupportApi', () => {
             client.hydrateActiveChannels([localChannelResponse]);
             const event = {
               ...dummyEvent,
-              type: 'message.local_read',
+              type: 'message.read_locally',
               cid: localChannelResponse.channel.cid,
             } as Event;
 
@@ -1788,7 +1788,7 @@ describe('OfflineSupportApi', () => {
             client.hydrateActiveChannels([readEventsResponse]);
             const event = {
               ...dummyEvent,
-              type: 'message.local_read',
+              type: 'message.read_locally',
               cid: readEventsResponse.channel.cid,
             } as Event;
 
@@ -1805,7 +1805,7 @@ describe('OfflineSupportApi', () => {
             client.hydrateActiveChannels([localChannelResponse]);
             const event = {
               ...dummyEvent,
-              type: 'message.local_read',
+              type: 'message.read_locally',
               cid: localChannelResponse.channel.cid,
             } as Event;
 

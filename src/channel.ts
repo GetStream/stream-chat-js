@@ -1250,13 +1250,13 @@ export class Channel {
   /**
    * markReadLocally - Resets this user's unread count locally, without any backend call. Intended for
    * channels that have read events disabled (e.g. livestreams) when the client is created with the
-   * `isLocalUnreadCountEnabled` option. Dispatches a dedicated, client-only `message.local_read` event
+   * `isLocalUnreadCountEnabled` option. Dispatches a dedicated, client-only `message.read_locally` event
    * that runs through the same `_handleChannelEvent` read logic as a real `message.read` (minus the
    * delivery-report network sync), so the read-state update lives in one place. When offline support
    * is enabled, the offline DB persists the reset for read-events-disabled channels, so the local
    * count stays consistent across app restarts.
    *
-   * @return {Event | undefined} The dispatched `message.local_read` event, or `undefined` if there is no connected user.
+   * @return {Event | undefined} The dispatched `message.read_locally` event, or `undefined` if there is no connected user.
    */
   markReadLocally() {
     const client = this.getClient();
@@ -1269,7 +1269,7 @@ export class Channel {
       created_at: new Date().toISOString(),
       last_read_message_id: this.lastMessage()?.id,
       team: this.data?.team,
-      type: 'message.local_read',
+      type: 'message.read_locally',
       user: client.user,
     };
     client.dispatchEvent(event);
@@ -2007,11 +2007,11 @@ export class Channel {
           delete channelState.typing[event.user.id];
         }
         break;
-      // `message.local_read` is the client-only event dispatched by `markReadLocally()` when read
+      // `message.read_locally` is the client-only event dispatched by `markReadLocally()` when read
       // events are disabled (e.g. livestreams with `isLocalUnreadCountEnabled`). It reuses the exact
       // `message.read` state logic so the read-state update lives in one place — only the
       // delivery-report network sync below is skipped for it.
-      case 'message.local_read':
+      case 'message.read_locally':
       case 'message.read':
         if (event.user?.id && event.created_at) {
           const previousReadState = channelState.read[event.user.id];

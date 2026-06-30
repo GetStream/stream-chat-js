@@ -268,7 +268,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 		expect(channel.countUnread()).to.be.equal(0);
 	});
 
-	it('markReadLocally resets the count and emits a message.read-shaped message.local_read event', function () {
+	it('markReadLocally resets the count and emits a message.read-shaped message.read_locally event', function () {
 		const { client, channel } = setupChannel({ isLocalUnreadCountEnabled: true });
 		const post = vi.spyOn(client, 'post').mockResolvedValue({});
 		const lastMsg = generateMsg({ user: otherUser });
@@ -281,7 +281,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 		};
 
 		const onLocalRead = vi.fn();
-		channel.on('message.local_read', onLocalRead);
+		channel.on('message.read_locally', onLocalRead);
 
 		const returned = channel.markReadLocally();
 
@@ -292,7 +292,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 
 		expect(onLocalRead.mock.calls.length).to.be.equal(1);
 		const event = onLocalRead.mock.calls[0][0];
-		expect(event.type).to.be.equal('message.local_read');
+		expect(event.type).to.be.equal('message.read_locally');
 		expect(event.cid).to.be.equal(channel.cid);
 		expect(event.channel_id).to.be.equal(channel.id);
 		expect(event.channel_type).to.be.equal(channel.type);
@@ -312,7 +312,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 		client.user = undefined;
 		client.userID = undefined;
 		const onLocalRead = vi.fn();
-		channel.on('message.local_read', onLocalRead);
+		channel.on('message.read_locally', onLocalRead);
 
 		const returned = channel.markReadLocally();
 

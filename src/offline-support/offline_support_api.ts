@@ -1036,10 +1036,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       return this.handleRead({ event, unreadMessages: 0, execute });
     }
 
-    // `message.local_read` is the client-only reset dispatched by `Channel.markReadLocally()`. Only
+    // `message.read_locally` is the client-only reset dispatched by `Channel.markReadLocally()`. Only
     // persist it for read-events-disabled channels with the local unread count opted in (the only
     // situation it is ever dispatched), so it can never touch channels that track reads server-side.
-    if (type === 'message.local_read') {
+    if (type === 'message.read_locally') {
       const localChannel = event.cid ? this.client.activeChannels[event.cid] : undefined;
       if (
         localChannel &&
