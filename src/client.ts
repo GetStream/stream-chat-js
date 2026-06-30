@@ -1641,6 +1641,27 @@ export class StreamChat {
       });
     }
 
+    // When the current user is removed from a channel the server delivers a
+    // `notification.removed_from_channel` event (only to the removed user — it is
+    // the authoritative signal that this client lost access). Mirror the
+    // channel.deleted eviction so we stop tracking the channel: drop it from
+    // `activeChannels` and disconnect it. Without this, `recoverState()` would
+    // re-watch it on reconnect (it re-watches every cid still in `activeChannels`)
+    // and later channel events would keep being delivered. See
+    // GetStream/stream-chat-react#2599. Channel type is intentionally not checked —
+    // the event itself, not the channel, drives the decision.
+    // Unlike the deletion path above, we intentionally do NOT call
+    // `deleteAllChannelReference(cid)`: the channel still exists for its remaining
+    // members, only this client lost access, so we just stop tracking it locally.
+    if (event.type === 'notification.removed_from_channel' && event.cid) {
+      const { cid } = event;
+      this.activeChannels[cid]?._disconnect();
+
+      postListenerCallbacks.push(() => {
+        delete this.activeChannels[cid];
+      });
+    }
+
     return postListenerCallbacks;
   }
 
