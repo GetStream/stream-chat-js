@@ -37,7 +37,7 @@ export const createMessageComposerStateCompositionMiddleware = (
         localMessage: {
           ...state.localMessage,
           ...payload,
-          quoted_message: (composer.quotedMessage as LocalMessage) ?? undefined,
+          quoted_message: composer.quotedMessage ?? undefined,
         },
         message: {
           ...state.message,
