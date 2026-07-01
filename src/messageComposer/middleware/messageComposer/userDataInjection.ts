@@ -33,12 +33,12 @@ export const createUserDataInjectionMiddleware = (
         devices: _devices,
         mutes: _mutes,
         ...messageUser
-      } = composer.client.user as RequireLiteral<OwnUserResponse, 'blocked_user_ids'>; // TODO: drop RequireLiteral once the oapi spec is adjusted
+      } = composer.client.user;
       return next({
         ...state,
         localMessage: {
           ...state.localMessage,
-          user: messageUser,
+          user: messageUser as RequireLiteral<OwnUserResponse, 'blocked_user_ids'>, // TODO: drop RequireLiteral once the oapi spec is adjusted,
           user_id: messageUser.id,
         },
       });
