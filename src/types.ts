@@ -1,8 +1,6 @@
 import type { Channel } from './channel';
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { StableWSConnection } from './connection';
-import type { LogLevel } from '@stream-io/logger';
-import type { ChatLoggerScope, ConfigureLoggersOptions } from './logger';
 import type { RoleName } from './permissions';
 import type {
   CustomAttachmentData,
@@ -39,11 +37,9 @@ import type {
   DraftResponse as Gen_DraftResponse,
   Field as Gen_Field,
   FileUploadConfig as Gen_FileUploadConfig,
-  MarkChannelsReadRequest as Gen_MarkChannelsReadRequest,
   MarkDeliveredRequest as Gen_MarkDeliveredRequest,
   MarkReadRequest as Gen_MarkReadRequest,
   MarkUnreadRequest as Gen_MarkUnreadRequest,
-  MessageModerationResult as Gen_MessageModerationResult,
   MessageOptions as Gen_MessageOptions,
   MessageRequest as Gen_MessageRequest,
   MessageResponse as Gen_MessageResponse,
@@ -57,10 +53,8 @@ import type {
   QueryBannedUsersPayload as Gen_QueryBannedUsersPayload,
   QueryChannelsRequest as Gen_QueryChannelsRequest,
   QueryChannelsResponse as Gen_QueryChannelsResponse,
-  QueryFutureChannelBansPayload as Gen_QueryFutureChannelBansPayload,
   QueryMembersPayload as Gen_QueryMembersPayload,
   QueryPollsResponse as Gen_QueryPollsResponse,
-  QueryReactionsResponse as Gen_QueryReactionsResponse,
   QueryRemindersResponse as Gen_QueryRemindersResponse,
   QueryThreadsRequest as Gen_QueryThreadsRequest,
   QueryUsersPayload as Gen_QueryUsersPayload,
@@ -73,24 +67,20 @@ import type {
   SearchWarning as Gen_SearchWarning,
   SendMessageRequest as Gen_SendMessageRequest,
   SendMessageResponse as Gen_SendMessageResponse,
-  SendReactionRequest as Gen_SendReactionRequest,
   SharedLocation as Gen_SharedLocation,
   SharedLocationResponseData as Gen_SharedLocationResponseData,
   SortParamRequest as Gen_SortParamRequest,
   ThreadStateResponse as Gen_ThreadStateResponse,
-  TruncateChannelRequest as Gen_TruncateChannelRequest,
   UpdateChannelPartialRequest as Gen_UpdateChannelPartialRequest,
   UpdateChannelRequest as Gen_UpdateChannelRequest,
   UpdateLiveLocationRequest as Gen_UpdateLiveLocationRequest,
-  UpdateMessageRequest as Gen_UpdateMessageRequest,
   UpdatePollOptionRequest as Gen_UpdatePollOptionRequest,
   UpdatePollRequest as Gen_UpdatePollRequest,
   UpdateUserPartialRequest as Gen_UpdateUserPartialRequest,
   UpsertPushPreferencesResponse as Gen_UpsertPushPreferencesResponse,
+  UserGroupResponse as Gen_UserGroupResponse,
   UserMuteResponse as Gen_UserMuteResponse,
-  UserRequest as Gen_UserRequest,
   UserResponse as Gen_UserResponse,
-  VoteData as Gen_VoteData,
   WSEvent,
 } from './gen/models';
 import type {
@@ -275,8 +265,6 @@ export type AppSettingsAPIResponse = APIResponse & {
   };
 };
 
-export type ModerationResult = Gen_MessageModerationResult;
-
 export type AutomodDetails = Gen_AutomodDetailsResponse;
 
 export type FlagDetails = {
@@ -293,47 +281,6 @@ export type Flag = {
   user?: UserResponse;
 };
 
-export type MessageFlagsResponse = APIResponse & {
-  flags?: Array<{
-    message: MessageResponse;
-    user: UserResponse;
-    approved_at?: string;
-    created_at?: string;
-    created_by_automod?: boolean;
-    moderation_result?: ModerationResult;
-    rejected_at?: string;
-    reviewed_at?: string;
-    reviewed_by?: UserResponse;
-    updated_at?: string;
-  }>;
-};
-
-export type BannedUsersResponse = APIResponse & {
-  bans?: Array<{
-    user: UserResponse;
-    banned_by?: UserResponse;
-    channel?: ChannelResponse;
-    expires?: string;
-    ip_ban?: boolean;
-    reason?: string;
-    timeout?: number;
-  }>;
-};
-
-export type FutureChannelBan = {
-  user: UserResponse;
-  expires?: string;
-  reason?: string;
-  shadow?: boolean;
-  created_at: string;
-};
-
-export type FutureChannelBansResponse = APIResponse & {
-  bans: FutureChannelBan[];
-};
-
-export type QueryFutureChannelBansOptions = Gen_QueryFutureChannelBansPayload;
-
 export type BlockListResponse = BlockList & {
   created_at?: string;
   type?: string;
@@ -344,10 +291,6 @@ export type ChannelResponse = ReplacePropertyTypes<
   Gen_ChannelResponse,
   { custom: CustomChannelData }
 >;
-
-export type QueryReactionsOptions = Pager;
-
-export type QueryReactionsAPIResponse = Gen_QueryReactionsResponse;
 
 /**
  *  `ChatApi.queryChannels` response
@@ -364,16 +307,6 @@ export type ChannelAPIResponse = Gen_ChannelStateResponseFields;
 
 export type ChannelUpdateOptions = Omit<Gen_UpdateChannelRequest, 'message' | 'members'>;
 
-export type ChannelMemberAPIResponse = APIResponse & {
-  members: ChannelMemberResponse[];
-};
-
-export type ChannelMemberUpdates = CustomMemberData & {
-  archived?: boolean;
-  channel_role?: RoleName;
-  pinned?: boolean;
-};
-
 export type ChannelMemberResponse = ReplacePropertyTypes<
   Gen_ChannelMemberResponse,
   { custom: CustomMemberData }
@@ -382,10 +315,6 @@ export type ChannelMemberResponse = ReplacePropertyTypes<
 export type CommandResponse = Gen_Command;
 
 export type ConnectAPIResponse = Promise<void | ConnectionOpen>;
-
-export type DeleteChannelAPIResponse = APIResponse & {
-  channel: ChannelResponse;
-};
 
 export type FlagMessageResponse = APIResponse & {
   flag: {
@@ -446,14 +375,6 @@ export type QueryThreadsOptions = WithTypedFilters<
 
 export type GetThreadOptions = Omit<Parameters<ChatApi['getThread']>[0], 'message_id'>;
 
-export type GetThreadAPIResponse = APIResponse & {
-  thread: ThreadResponse;
-};
-
-export type GetMultipleMessagesAPIResponse = APIResponse & {
-  messages: MessageResponse[];
-};
-
 export enum Product {
   Chat = 'chat',
   Video = 'video',
@@ -461,46 +382,13 @@ export enum Product {
   Feeds = 'feeds',
 }
 
-export type GetReactionsAPIResponse = APIResponse & {
-  reactions: ReactionResponse[];
-};
-
 export type GetRepliesAPIResponse = APIResponse & {
   messages: MessageResponse[];
-};
-
-export type GetUnreadCountAPIResponse = APIResponse & {
-  channel_type: {
-    channel_count: number;
-    channel_type: string;
-    unread_count: number;
-  }[];
-  channels: {
-    channel_id: string;
-    last_read: string;
-    unread_count: number;
-  }[];
-  threads: {
-    last_read: string;
-    last_read_message_id: string;
-    parent_message_id: string;
-    unread_count: number;
-  }[];
-  total_unread_count: number;
-  total_unread_threads_count: number;
-  total_unread_count_by_team?: Record<string, number>;
 };
 
 export type PushPreference = Gen_PushPreferenceInput;
 
 export type UpsertPushPreferencesResponse = Gen_UpsertPushPreferencesResponse;
-
-export type MuteChannelAPIResponse = APIResponse & {
-  channel_mute: ChannelMute;
-  own_user: OwnUserResponse;
-  channel_mutes?: ChannelMute[];
-  mute?: MuteResponse;
-};
 
 export type MessageResponse = ReplacePropertyTypes<
   Gen_MessageResponse,
@@ -553,11 +441,6 @@ export type OwnUserResponse = ReplacePropertyTypes<
   { custom: CustomUserData }
 >;
 
-export type PartialUpdateChannelAPIResponse = APIResponse & {
-  channel: ChannelResponse;
-  members: ChannelMemberResponse[];
-};
-
 export type ReactionAPIResponse = APIResponse & {
   message: MessageResponse;
   reaction: ReactionResponse;
@@ -579,52 +462,20 @@ export type SearchAPIResponse = APIResponse & {
   results_warning?: SearchWarning | null;
 };
 
-export type RoleResponse = {
-  name: RoleName;
-  custom: boolean;
-  scopes: string[];
-  created_at: string;
-  updated_at: string;
-};
-
-export type SearchRolesAPIResponse = APIResponse & {
-  roles: RoleResponse[];
-};
-
-export type SearchRolesOptions = {
-  query: string;
-  include_global_roles?: boolean;
-  limit?: number;
-  name_gt?: string;
-  // If not provided, the default is search performed both in user-assignable + channel-assignable roles
-  role_type?: 'user' | 'channel';
-};
-
 export type SearchWarning = Gen_SearchWarning;
 
 // Thumb URL(thumb_url) is added considering video attachments as the backend will return the thumbnail in the response.
 export type SendFileAPIResponse = APIResponse & { file: string; thumb_url?: string };
-
-export type SendMessageAPIResponse = Gen_SendMessageResponse;
 
 export type SyncResponse = APIResponse & {
   events: WSEvent[];
   inaccessible_cids?: string[];
 };
 
-export type TruncateChannelAPIResponse = APIResponse & {
-  channel: ChannelResponse;
-  message?: MessageResponse;
-};
-
 export type UpdateChannelAPIResponse = APIResponse & {
   channel: ChannelResponse;
   members: ChannelMemberResponse[];
   message?: MessageResponse;
-};
-
-export type UpdateMessageAPIResponse = APIResponse & {
-  message: MessageResponse;
 };
 
 export type UsersAPIResponse = APIResponse & {
@@ -638,18 +489,6 @@ export type UserResponse = ReplacePropertyTypes<
 >;
 
 export type PrivacySettings = Gen_PrivacySettingsResponse;
-
-export type MessageFlagsPaginationOptions = {
-  limit?: number;
-  offset?: number;
-};
-
-export type BannedUsersPaginationOptions = Omit<
-  PaginationOptions,
-  'id_gt' | 'id_gte' | 'id_lt' | 'id_lte'
-> & {
-  exclude_expired_bans?: boolean;
-};
 
 export type BanUserOptions = UnBanUserOptions & {
   ban_from_future_channels?: boolean;
@@ -724,9 +563,6 @@ export type ChannelStateOptions = {
   withResponse?: boolean;
 };
 
-export type NewMemberPayload = CustomMemberData &
-  Pick<ChannelMemberResponse, 'user_id' | 'channel_role'>;
-
 export type Thresholds = Partial<
   Record<'explicit' | 'spam' | 'toxic', Partial<{ block: number; flag: number }>>
 >;
@@ -755,8 +591,6 @@ export type PolicyRequest = {
 export type Automod = 'disabled' | 'simple' | 'AI' | (string & {});
 export type AutomodBehavior = 'flag' | 'block' | 'shadow_block' | (string & {});
 export type Command = Gen_Command;
-
-export type MarkChannelsReadOptions = Gen_MarkChannelsReadRequest;
 
 export type MarkReadOptions = Gen_MarkReadRequest;
 
@@ -810,8 +644,6 @@ export type PinnedMessagePaginationOptions = {
 };
 
 export type GetRepliesRequest = Parameters<ChatApi['getReplies']>[0];
-export type GetRepliesOptions = Omit<GetRepliesRequest, 'parent_id' | 'sort'>;
-
 export type QueryMembersOptions = Partial<
   Omit<Gen_QueryMembersPayload, 'filter_conditions'>
 >;
@@ -822,13 +654,6 @@ export type QueryMembersPayload = WithTypedFilters<
     filter_conditions: QueryMembersPayloadFilterConditions;
   }
 >;
-
-export type SearchOptions = {
-  limit?: number;
-  next?: string;
-  offset?: number;
-  sort?: SearchMessageSort;
-};
 
 export type StreamChatOptions = {
   /**
@@ -891,19 +716,6 @@ export type StreamChatOptions = {
   wsUrlParams?: URLSearchParams;
 };
 
-export type SyncOptions = {
-  /**
-   * This will behave as queryChannels option.
-   */
-  watch?: boolean;
-  /**
-   * Returns channels from the request that the user does not have access to in a separate field
-   * in the response called `inaccessible_cids` instead of adding them as
-   * `notification.removed_from_channel` events.
-   */
-  with_inaccessible_cids?: boolean;
-};
-
 export type UnBanUserOptions = {
   client_id?: string;
   connection_id?: string;
@@ -953,48 +765,10 @@ export type EventHandler<T = string> = (
  * Filter Types
  */
 
-export type MessageFlagsFiltersOptions = {
-  channel_cid?: string;
-  is_reviewed?: boolean;
-  team?: string;
-  user_id?: string;
-};
-
-export type MessageFlagsFilters = QueryFilters<
-  {
-    channel_cid?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<MessageFlagsFiltersOptions['channel_cid']>, '$eq' | '$in'>
-        >
-      | PrimitiveFilter<MessageFlagsFiltersOptions['channel_cid']>;
-  } & {
-    team?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<MessageFlagsFiltersOptions['team']>, '$eq' | '$in'>
-        >
-      | PrimitiveFilter<MessageFlagsFiltersOptions['team']>;
-  } & {
-    user_id?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<MessageFlagsFiltersOptions['user_id']>, '$eq' | '$in'>
-        >
-      | PrimitiveFilter<MessageFlagsFiltersOptions['user_id']>;
-  } & {
-    [Key in keyof Omit<
-      MessageFlagsFiltersOptions,
-      'channel_cid' | 'user_id' | 'is_reviewed'
-    >]:
-      | RequireOnlyOne<QueryFilter<MessageFlagsFiltersOptions[Key]>>
-      | PrimitiveFilter<MessageFlagsFiltersOptions[Key]>;
-  }
->;
-
 export type QueryBannedUsersPayload = WithTypedFilters<
   Gen_QueryBannedUsersPayload,
   { filter_conditions: Gen_QueryBannedUsersPayloadFilterConditions }
 >;
-
-export type BannedUsersFilters = QueryBannedUsersPayload['filter_conditions'];
 
 export type ReactionFilters = NonNullable<QueryReactionsRequest['filter']>;
 
@@ -1016,25 +790,6 @@ export type QueryChannelsRequest = WithTypedFilters<
 >;
 
 export type ChannelFilters = NonNullable<QueryChannelsRequest['filter_conditions']>;
-
-export type DraftFilters = {
-  channel_cid?:
-    | RequireOnlyOne<Pick<QueryFilter<DraftResponse['channel_cid']>, '$in' | '$eq'>>
-    | PrimitiveFilter<DraftResponse['channel_cid']>;
-  created_at?:
-    | RequireOnlyOne<
-        Pick<
-          QueryFilter<DraftResponse['created_at']>,
-          '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
-        >
-      >
-    | PrimitiveFilter<DraftResponse['created_at']>;
-  parent_id?:
-    | RequireOnlyOne<
-        Pick<QueryFilter<DraftResponse['created_at']>, '$in' | '$eq' | '$exists'>
-      >
-    | PrimitiveFilter<DraftResponse['parent_id']>;
-};
 
 export type QueryPollsOptions = Pager;
 
@@ -1464,41 +1219,11 @@ export type MessageLabel =
 
 export type SendMessageOptions = Omit<Gen_SendMessageRequest, 'message'>;
 
-export type UpdateMessageOptions = Omit<Gen_UpdateMessageRequest, 'message'>;
-
-export type SendReactionOptions = Omit<Gen_SendReactionRequest, 'reaction'>;
-
-export type GetMessageOptions = {
-  show_deleted_message?: boolean;
-};
-
 export type Mute = Gen_UserMuteResponse;
 
 export type PartialUpdateChannel = Gen_UpdateChannelPartialRequest;
 
-export type PartialUpdateMember = {
-  set?: ChannelMemberUpdates;
-  unset?: Array<keyof ChannelMemberUpdates>;
-};
-
-// TODO: properly type set/unset types based on keys in Gen_UserRequest
 export type PartialUserUpdate = Gen_UpdateUserPartialRequest;
-
-// TODO: new type, naming sucks - rename to something that makes sense
-export type UserUpdate = ReplacePropertyTypes<
-  Gen_UserRequest,
-  { custom: CustomUserData }
->;
-
-export type MessageUpdatableFields = Omit<
-  MessageResponse,
-  'cid' | 'created_at' | 'updated_at' | 'deleted_at' | 'user' | 'user_id'
->;
-
-export type PartialMessageUpdate = {
-  set?: Partial<MessageUpdatableFields>;
-  unset?: Array<keyof MessageUpdatableFields>;
-};
 
 export type PendingMessageResponse = Gen_PendingMessageResponse; //Gen_SendMessageResponse;
 
@@ -1571,8 +1296,6 @@ export type Pager = {
   next?: string;
   prev?: string;
 };
-
-export type TruncateOptions = Gen_TruncateChannelRequest;
 
 export type MessageSetType = 'latest' | 'current' | 'new';
 export type MessageSet = {
@@ -1657,18 +1380,6 @@ export const ErrorFromResponse = StreamAPIError;
 
 export type QueryPollsResponse = Gen_QueryPollsResponse;
 
-export type CreatePollAPIResponse = {
-  poll: PollResponse;
-};
-
-export type GetPollAPIResponse = {
-  poll: PollResponse;
-};
-
-export type UpdatePollAPIResponse = {
-  poll: PollResponse;
-};
-
 export type PollResponse = ReplacePropertyTypes<
   Gen_PollResponseData,
   { custom: CustomPollData }
@@ -1711,10 +1422,6 @@ export type PollOptionData = ReplacePropertyTypes<
   position?: number;
 };
 
-export type PollVoteData = Gen_VoteData & {
-  is_answer?: boolean;
-};
-
 export type PollOptionResponse = CustomPollData & {
   created_at: string;
   id: string;
@@ -1728,38 +1435,14 @@ export type PollOptionResponse = CustomPollData & {
 
 export type PollVote = Gen_PollVoteResponseData;
 
-export type PollVotesAPIResponse = {
-  votes: PollVote[];
-  next?: string;
-};
-
-export type PollAnswersAPIResponse = {
-  votes: PollVote[]; // todo: should be changes to answers?
-  next?: string;
-};
-
-export type CastVoteAPIResponse = {
-  vote: PollVote;
-};
-
 export type ModerationPayload = Gen_ModerationPayload;
 
 export type MessageDeletionStrategy = 'soft' | 'hard' | 'pruning';
 // @deprecated use type MessageDeletionStrategy instead
 
-export type DeleteMessageOptions = {
-  deleteForMe?: boolean;
-  hardDelete?: boolean;
-};
-
 export type ModerationFlagOptions = {
   custom?: Record<string, unknown>;
   moderation_payload?: ModerationPayload;
-  user_id?: string;
-};
-
-export type ModerationMuteOptions = {
-  timeout?: number;
   user_id?: string;
 };
 
@@ -1830,10 +1513,6 @@ export type DraftMessage = ReplacePropertyTypes<
     >
   >;
 
-export type ActiveLiveLocationsAPIResponse = APIResponse & {
-  active_live_locations: SharedLiveLocationResponse[];
-};
-
 export type SharedLocationResponse = Gen_SharedLocationResponseData;
 
 export type SharedLiveLocationResponse = RequireLiteral<SharedLocationResponse, 'end_at'>;
@@ -1850,13 +1529,7 @@ export type ThreadFilters = NonNullable<QueryThreadsOptions['filter']>;
 
 export type ReminderResponse = Gen_ReminderResponseData;
 
-export type ReminderAPIResponse = APIResponse & {
-  reminder: ReminderResponse;
-};
-
 export type CreateReminderOptions = Parameters<ChatApi['createReminder']>[0];
-
-export type UpdateReminderOptions = Parameters<ChatApi['updateReminder']>[0];
 
 export type ReminderFilters = QueryFilters<{
   channel_cid?:
@@ -1888,37 +1561,13 @@ export type ReminderFilters = QueryFilters<{
 
 export type ReminderSort = Gen_SortParamRequest[];
 
-export type QueryRemindersOptions = Pager & {
-  filter?: ReminderFilters;
-  sort?: ReminderSort;
-};
-
 export type QueryRemindersResponse = Gen_QueryRemindersResponse;
 
-export type UserGroupMemberResponse = {
-  group_id: string;
-  user_id: string;
-  is_admin: boolean;
-  created_at: string;
-};
+export type UserGroupResponse = Gen_UserGroupResponse;
 
-export type UserGroupResponse = {
-  id: string;
-  name: string;
-  created_at: string;
-  updated_at: string;
-  description?: string;
-  team_id?: string;
-  members?: UserGroupMemberResponse[];
-  created_by?: string;
-};
-
-export type QueryUserGroupsOptions = {
-  limit?: number;
-  id_gt?: string;
-  created_at_gt?: string;
-  team_id?: string;
-};
+export type QueryUserGroupsOptions = NonNullable<
+  Parameters<ChatApi['listUserGroups']>[0]
+>;
 
 export type QueryUserGroupsResponse = APIResponse & {
   user_groups: UserGroupResponse[];
@@ -2039,3 +1688,7 @@ export type ReplacePropertyTypes<
       [K in keyof Replacement as undefined extends Base[K] ? K : never]?: Replacement[K];
     }
   : never;
+
+export type PartializeAllBut<T, K extends keyof T> = {
+  [P in K]-?: T[P];
+} & { [P in Exclude<keyof T, K>]?: T[P] };

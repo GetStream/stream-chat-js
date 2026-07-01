@@ -8,10 +8,9 @@ import type {
 import type { QueryUserGroupsOptions, UserGroupResponse } from '../types';
 import type { StreamChat } from '../client';
 
-type UserGroupListCursor = {
-  created_at_gt: string;
-  id_gt: string;
-};
+type UserGroupListCursor = Required<
+  Pick<QueryUserGroupsOptions, 'created_at_gt' | 'id_gt'>
+>;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
@@ -65,7 +64,7 @@ export class UserGroupPaginator extends BasePaginator<UserGroupResponse> {
     if (!lastItem) return undefined;
 
     return JSON.stringify({
-      created_at_gt: lastItem.created_at,
+      created_at_gt: lastItem.created_at.toISOString(), // TODO: this should not be the case
       id_gt: lastItem.id,
     } satisfies UserGroupListCursor);
   };

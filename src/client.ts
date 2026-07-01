@@ -46,6 +46,7 @@ import type {
   MuteUserOptions,
   MuteUserResponse,
   OwnUserResponse,
+  PartializeAllBut,
   PartialThreadUpdate,
   PartialUserUpdate,
   QueryBannedUsersPayload,
@@ -56,7 +57,6 @@ import type {
   QueryUserGroupsOptions,
   QueryUserGroupsResponse,
   ReactionResponse,
-  RequireLiteral,
   SdkIdentifier,
   SearchPayload,
   StreamChatOptions,
@@ -132,7 +132,7 @@ export type MessageComposerSetupState = {
 
 export type ListenerKeys = CombinedEvents['type'] | 'all';
 
-type ClientUser = RequireLiteral<Partial<OwnUserResponse>, 'id'> & { anon?: boolean };
+type ClientUser = PartializeAllBut<OwnUserResponse, 'id'> & { anon?: boolean };
 
 export class StreamChat extends ChatApi {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics

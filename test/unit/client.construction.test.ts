@@ -17,7 +17,6 @@ import { ThreadManager } from '../../src/thread_manager';
 import { TokenManager } from '../../src/token_manager';
 import { UploadManager } from '../../src/uploadManager';
 import { axiosParamsSerializer } from '../../src/utils';
-// import { chatLoggerSystem } from '../../src/logger';
 
 const API_KEY = 'apiKey';
 
@@ -372,57 +371,6 @@ describe('StreamChat construction', () => {
       expect(a.state).to.not.equal(b.state);
     });
   });
-
-  // describe('logger configuration', () => {
-  //   let configureLoggersSpy: sinon.SinonSpy<
-  //     Parameters<typeof chatLoggerSystem.configureLoggers>,
-  //     ReturnType<typeof chatLoggerSystem.configureLoggers>
-  //   >;
-
-  //   beforeEach(() => {
-  //     configureLoggersSpy = sinon.spy(chatLoggerSystem, 'configureLoggers');
-  //   });
-
-  //   it("defaults the chat logger system's default sink to 'info'", () => {
-  //     new StreamChat(API_KEY);
-  //     expect(configureLoggersSpy.calledOnce).to.be.true;
-  //     expect(configureLoggersSpy.firstCall.args[0]).to.deep.equal({
-  //       default: { level: 'info' },
-  //     });
-  //   });
-
-  //   it('forwards logLevel into the default sink', () => {
-  //     new StreamChat(API_KEY, { logLevel: 'debug' });
-  //     expect(configureLoggersSpy.firstCall.args[0]).to.deep.equal({
-  //       default: { level: 'debug' },
-  //     });
-  //   });
-
-  //   it('merges logOptions on top of the default sink', () => {
-  //     const sink = { write: () => undefined };
-  //     new StreamChat(API_KEY, {
-  //       logLevel: 'warn',
-  //       logOptions: {
-  //         default: { sink },
-  //         channel: { level: 'trace' },
-  //       },
-  //     });
-  //     expect(configureLoggersSpy.firstCall.args[0]).to.deep.equal({
-  //       default: { level: 'warn', sink },
-  //       channel: { level: 'trace' },
-  //     });
-  //   });
-
-  //   it('lets logOptions.default.level win over the top-level logLevel', () => {
-  //     new StreamChat(API_KEY, {
-  //       logLevel: 'info',
-  //       logOptions: { default: { level: 'error' } },
-  //     });
-  //     expect(configureLoggersSpy.firstCall.args[0]).to.deep.equal({
-  //       default: { level: 'error' },
-  //     });
-  //   });
-  // });
 
   describe('getInstance', () => {
     it('returns the same instance for repeated calls', () => {

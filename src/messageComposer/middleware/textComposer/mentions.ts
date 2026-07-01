@@ -664,14 +664,9 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
 
     return {
       items: user_groups.map((userGroup) =>
-        this.toUserGroupMentionSuggestion(
-          userGroup as unknown as UserGroupResponse,
-          searchQuery,
-        ),
+        this.toUserGroupMentionSuggestion(userGroup, searchQuery),
       ),
-      next: this.buildUserGroupSearchCursor(
-        user_groups as unknown as UserGroupResponse[],
-      ),
+      next: this.buildUserGroupSearchCursor(user_groups),
     };
   };
 
