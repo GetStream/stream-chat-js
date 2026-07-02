@@ -129,10 +129,7 @@
     "lint": "yarn run prettier && yarn run eslint",
     "lint-fix": "yarn run prettier-fix && yarn run eslint-fix",
     "fix-staged": "lint-staged --config .lintstagedrc.fix.json --concurrent 1",
-    "prepare": "yarn run build",
-    "preversion": "yarn && yarn lint && yarn test-unit",
-    "version": "git add yarn.lock",
-    "postversion": "git push && git push --tags && npm publish"
+    "prepare": "yarn run build"
   },
   "engines": {
     "node": ">=16"
