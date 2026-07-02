@@ -3861,6 +3861,13 @@ export type SdkIdentifier = { name: 'react' | 'react-native' | 'expo' | 'angular
  */
 export type DeviceIdentifier = { os: string; model?: string };
 
+/**
+ * An identifier containing information about the downstream application integrating
+ * stream-chat, if available. `name` is reported as `app` and `version` as `app_version`
+ * in the user agent. Distinct from the SDK and device identifiers.
+ */
+export type AppIdentifier = { name: string; version?: string };
+
 export type DraftResponse<StreamChatGenerics extends ExtendableGenerics = DefaultGenerics> = {
   channel_cid: string;
   created_at: string;

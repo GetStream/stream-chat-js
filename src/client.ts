@@ -32,6 +32,7 @@ import {
 import {
   APIErrorResponse,
   APIResponse,
+  AppIdentifier,
   AppSettings,
   AppSettingsAPIResponse,
   BannedUsersFilters,
@@ -283,6 +284,8 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
   defaultWSTimeout: number;
   sdkIdentifier?: SdkIdentifier;
   deviceIdentifier?: DeviceIdentifier;
+  appIdentifier?: AppIdentifier;
+  private cachedUserAgent?: string;
   private nextRequestAbortController: AbortController | null = null;
 
   /**
@@ -2945,36 +2948,42 @@ export class StreamChat<StreamChatGenerics extends ExtendableGenerics = DefaultG
     );
   }
 
-  getUserAgent() {
+  getUserAgent = (): string => {
+    // An explicit override (deprecated `setUserAgent`) always wins and is never cached.
     if (this.userAgent) {
       return this.userAgent;
     }
 
-    const version = process.env.PKG_VERSION;
-    const clientBundle = process.env.CLIENT_BUNDLE;
+    // Computed once, then memoized for the client's lifetime - inputs read on
+    // the first call (sdk/app/device identifiers, build-time env) are not re-read.
+    if (!this.cachedUserAgent) {
+      const version = process.env.PKG_VERSION;
+      const { name: sdkName, version: sdkVersion } = this.sdkIdentifier ?? {};
+      const { name: appName, version: appVersion } = this.appIdentifier ?? {};
+      const { os, model: deviceModel } = this.deviceIdentifier ?? {};
 
-    let userAgentString = '';
-    if (this.sdkIdentifier) {
-      userAgentString = `stream-chat-${this.sdkIdentifier.name}-v${this.sdkIdentifier.version}-llc-v${version}`;
-    } else {
-      userAgentString = `stream-chat-js-v${version}-${this.node ? 'node' : 'browser'}`;
+      const head = sdkName
+        ? `stream-chat-${sdkName}-v${sdkVersion}-llc-v${version}`
+        : `stream-chat-js-v${version}-${this.node ? 'node' : 'browser'}`;
+
+      this.cachedUserAgent = [
+        head,
+        // reports the host app, the device OS, the device model, and the picked
+        // exports bundle, each only when a value is present
+        ...Object.entries({
+          app: appName,
+          app_version: appVersion,
+          os,
+          device_model: deviceModel,
+          client_bundle: process.env.CLIENT_BUNDLE,
+        })
+          .filter(([, value]) => value && value.length > 0)
+          .map(([key, value]) => `${key}=${value}`),
+      ].join('|');
     }
 
-    const { os, model } = this.deviceIdentifier ?? {};
-
-    return ([
-      // reports the device OS, if provided
-      ['os', os],
-      // reports the device model, if provided
-      ['device_model', model],
-      // reports which bundle is being picked from the exports
-      ['client_bundle', clientBundle],
-    ] as const).reduce(
-      (withArguments, [key, value]) =>
-        value && value.length > 0 ? withArguments.concat(`|${key}=${value}`) : withArguments,
-      userAgentString,
-    );
-  }
+    return this.cachedUserAgent;
+  };
 
   /**
    * @deprecated use sdkIdentifier instead

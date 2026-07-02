@@ -705,6 +705,40 @@ describe('X-Stream-Client header', () => {
 		expect(userAgent).to.be.equal('stream-chat-react-native-v2.3.4-llc-v1.2.3|os=iOS 15.0|device_model=iPhone17,4');
 	});
 
+	it('SDK integration with appIdentifier', () => {
+		delete process.env.CLIENT_BUNDLE;
+		client.sdkIdentifier = { name: 'react-native', version: '2.3.4' };
+		client.appIdentifier = { name: 'Acme', version: '2.1.0' };
+		client.deviceIdentifier = { os: 'iOS 15.0', model: 'iPhone17,4' };
+		const userAgent = client.getUserAgent();
+
+		// app / app_version are emitted right after the head, before os / device_model.
+		expect(userAgent).to.be.equal(
+			'stream-chat-react-native-v2.3.4-llc-v1.2.3|app=Acme|app_version=2.1.0|os=iOS 15.0|device_model=iPhone17,4',
+		);
+	});
+
+	it('appIdentifier with name only omits the app_version segment', () => {
+		delete process.env.CLIENT_BUNDLE;
+		client.appIdentifier = { name: 'Acme' };
+		const userAgent = client.getUserAgent();
+
+		expect(userAgent).to.be.equal('stream-chat-js-v1.2.3-node|app=Acme');
+	});
+
+	it('memoizes the result permanently and ignores inputs set after the first call', () => {
+		delete process.env.CLIENT_BUNDLE;
+		const first = client.getUserAgent();
+		expect(first).to.be.equal('stream-chat-js-v1.2.3-node');
+
+		// Inputs mutated after the first call must be ignored - the user agent is
+		// computed once and cached for the client's lifetime.
+		client.sdkIdentifier = { name: 'react', version: '2.3.4' };
+		client.deviceIdentifier = { os: 'iOS 15.0', model: 'iPhone17,4' };
+
+		expect(client.getUserAgent()).to.be.equal(first);
+	});
+
 	it('SDK integration with process.env.CLIENT_BUNDLE', () => {
 		process.env.CLIENT_BUNDLE = 'browser';
 		client.sdkIdentifier = { name: 'react', version: '2.3.4' };
