@@ -18,7 +18,11 @@ import type { StreamChat } from '../client';
 import type { AxiosError } from 'axios';
 import { OfflineDBSyncManager } from './offline_sync_manager';
 import { StateStore } from '../store';
-import { localMessageToNewMessagePayload, runDetached } from '../utils';
+import {
+  channelHasReadEvents,
+  localMessageToNewMessagePayload,
+  runDetached,
+} from '../utils';
 import { isMessageUpdateReplayable } from './util';
 
 /**
@@ -609,7 +613,15 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
         if (cid && client.user && client.user.id !== user?.id) {
           const userId = client.user.id;
           const channel = client.activeChannels[cid];
-          if (channel) {
+          // Persist the current user's read state for channels that track reads server-side. When the
+          // client opted into a local unread count, also persist it for read-events-disabled channels
+          // (e.g. livestreams) so the client-local count survives a cold start. The server never sends
+          // a read for those, so state.read[userId] may be absent here; fall back accordingly and rely
+          // on countUnread() (the aggregate the local count maintains) for the value.
+          const readEventsEnabled = channel ? channelHasReadEvents(channel) : true;
+          const tracksReadLocally =
+            !readEventsEnabled && !!client.options.isLocalUnreadCountEnabled;
+          if (channel && (readEventsEnabled || tracksReadLocally)) {
             const ownReads = channel.state.read[userId];
             const unreadCount = channel.countUnread();
             const upsertReadsQueries = await this.upsertReads({
@@ -617,8 +629,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
               execute: false,
               reads: [
                 {
-                  last_read: ownReads.last_read.toISOString() as string,
-                  last_read_message_id: ownReads.last_read_message_id,
+                  last_read: (ownReads?.last_read ?? new Date(0)).toISOString() as string,
+                  last_read_message_id: ownReads?.last_read_message_id,
                   unread_messages: unreadCount,
                   user: client.user,
                 },
@@ -867,31 +879,41 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
         execute: false,
       });
 
+      let finalQueries = [...truncateQueries];
+
+      // Persist read state for channels that track reads server-side. When the client opted into a
+      // local unread count, also persist it for read-events-disabled channels (e.g. livestreams) so
+      // the client-local count survives a cold start. state.read[userId] may be absent for those, so
+      // fall back accordingly.
       const userId = ownUser.id;
       const activeChannel = this.client.activeChannels[cid];
-      const ownReads = activeChannel.state.read[userId];
+      const readEventsEnabled = activeChannel
+        ? channelHasReadEvents(activeChannel)
+        : true;
+      const tracksReadLocally =
+        !readEventsEnabled && !!this.client.options.isLocalUnreadCountEnabled;
+      if (activeChannel && (readEventsEnabled || tracksReadLocally)) {
+        const ownReads = activeChannel.state.read[userId];
 
-      let unreadCount = 0;
+        let unreadCount = 0;
+        if (truncated_at) {
+          unreadCount = activeChannel.countUnread(new Date(truncated_at));
+        }
 
-      if (truncated_at) {
-        const truncatedAt = new Date(truncated_at);
-        unreadCount = activeChannel.countUnread(truncatedAt);
+        const upsertReadQueries = await this.upsertReads({
+          cid,
+          execute: false,
+          reads: [
+            {
+              last_read: (ownReads?.last_read ?? new Date(0)).toString() as string,
+              last_read_message_id: ownReads?.last_read_message_id,
+              unread_messages: unreadCount,
+              user: ownUser,
+            },
+          ],
+        });
+        finalQueries = [...finalQueries, ...upsertReadQueries];
       }
-
-      const upsertReadQueries = await this.upsertReads({
-        cid,
-        execute: false,
-        reads: [
-          {
-            last_read: ownReads.last_read.toString() as string,
-            last_read_message_id: ownReads.last_read_message_id,
-            unread_messages: unreadCount,
-            user: ownUser,
-          },
-        ],
-      });
-
-      const finalQueries = [...truncateQueries, ...upsertReadQueries];
 
       if (execute) {
         await this.executeSqlBatch(finalQueries);
@@ -1019,6 +1041,21 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
     if (type === 'message.read' || type === 'notification.mark_read') {
       return this.handleRead({ event, unreadMessages: 0, execute });
+    }
+
+    // `message.read_locally` is the client-only reset dispatched by `Channel.markReadLocally()`. Only
+    // persist it for read-events-disabled channels with the local unread count opted in (the only
+    // situation it is ever dispatched), so it can never touch channels that track reads server-side.
+    if (type === 'message.read_locally') {
+      const localChannel = event.cid ? this.client.activeChannels[event.cid] : undefined;
+      if (
+        localChannel &&
+        !channelHasReadEvents(localChannel) &&
+        this.client.options.isLocalUnreadCountEnabled
+      ) {
+        return this.handleRead({ event, unreadMessages: 0, execute });
+      }
+      return [];
     }
 
     if (type === 'notification.mark_unread') {

@@ -12,6 +12,8 @@ import {
   getAndWatchChannel,
   addToMessageList,
   findIndexInSortedArray,
+  channelHasReadEvents,
+  userHasReadReceipts,
   formatMessage,
   generateChannelTempCid,
   shouldConsiderArchivedChannels,
@@ -1169,5 +1171,54 @@ describe('sleep', () => {
     vi.advanceTimersByTime(1000);
     await waitPromise;
     expect(resolved).toBe(true);
+  });
+});
+
+describe('channelHasReadEvents', () => {
+  const makeChannel = (own_capabilities?: string[]) => {
+    const client = new StreamChat('apiKey');
+    client.user = { id: 'user' };
+    client.userID = 'user';
+    const channel = client.channel('messaging', 'cap-id');
+    channel.data = { own_capabilities };
+    return channel;
+  };
+
+  it('returns true when own_capabilities includes read-events', () => {
+    expect(channelHasReadEvents(makeChannel(['read-events']))).toBe(true);
+  });
+
+  it('returns false when own_capabilities is known and excludes read-events (e.g. livestream)', () => {
+    expect(channelHasReadEvents(makeChannel([]))).toBe(false);
+  });
+
+  it('returns true (assumes read events on) when own_capabilities is unknown', () => {
+    expect(channelHasReadEvents(makeChannel(undefined))).toBe(true);
+  });
+});
+
+describe('userHasReadReceipts', () => {
+  const makeClient = (readReceiptsEnabled?: boolean) => {
+    const client = new StreamChat('apiKey');
+    client.user = {
+      id: 'user',
+      privacy_settings:
+        readReceiptsEnabled === undefined
+          ? undefined
+          : { read_receipts: { enabled: readReceiptsEnabled } },
+    };
+    return client;
+  };
+
+  it('returns true when read receipts are enabled', () => {
+    expect(userHasReadReceipts(makeClient(true))).toBe(true);
+  });
+
+  it('returns false when read receipts are explicitly disabled', () => {
+    expect(userHasReadReceipts(makeClient(false))).toBe(false);
+  });
+
+  it('returns true (assumes enabled) when privacy settings are unset', () => {
+    expect(userHasReadReceipts(makeClient(undefined))).toBe(true);
   });
 });
