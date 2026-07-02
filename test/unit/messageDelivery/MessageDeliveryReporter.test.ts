@@ -30,7 +30,9 @@ describe('MessageDeliveryReporter', () => {
   beforeEach(async () => {
     vi.useFakeTimers();
     client = getClientWithUser(ownUser);
-    (client as any).user.privacy_settings.delivery_receipts.enabled = undefined;
+    // Rebuild privacy_settings on each run — `client.user` is the shared `ownUser` reference, so a
+    // fresh object keeps tests isolated (e.g. read_receipts set in one test can't leak into others).
+    (client as any).user.privacy_settings = { delivery_receipts: { enabled: undefined } };
 
     channel = client.channel(channelType, channelId);
     channel.initialized = true;
@@ -291,6 +293,18 @@ describe('MessageDeliveryReporter', () => {
         },
       ],
     });
+  });
+
+  it('does not send a read when the user disabled read receipts', async () => {
+    (client as any).user.privacy_settings = { read_receipts: { enabled: false } };
+    const markAsReadRequestSpy = vi
+      .spyOn(channel, 'markAsReadRequest')
+      .mockResolvedValue({} as any);
+
+    const result = await channel.markRead();
+
+    expect(markAsReadRequestSpy).not.toHaveBeenCalled();
+    expect(result).toBeNull();
   });
 
   it('removes the pending delivery candidate upon channel.markRead', async () => {

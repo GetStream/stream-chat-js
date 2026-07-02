@@ -338,29 +338,6 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 	});
 });
 
-describe('Channel.hasReadEvents', function () {
-	const makeChannel = (own_capabilities) => {
-		const client = new StreamChat('apiKey');
-		client.user = { id: 'user' };
-		client.userID = 'user';
-		const channel = client.channel('messaging', 'cap-id');
-		channel.data = { ...channel.data, own_capabilities };
-		return channel;
-	};
-
-	it('returns true when own_capabilities includes read-events', function () {
-		expect(makeChannel(['read-events']).hasReadEvents()).to.equal(true);
-	});
-
-	it('returns false when own_capabilities is known and excludes read-events (e.g. livestream)', function () {
-		expect(makeChannel([]).hasReadEvents()).to.equal(false);
-	});
-
-	it('returns true (assumes read events on) when own_capabilities is unknown', function () {
-		expect(makeChannel(undefined).hasReadEvents()).to.equal(true);
-	});
-});
-
 describe('Channel _handleChannelEvent', function () {
 	const user = { id: 'user' };
 	const otherUser = { id: 'other-user' };
