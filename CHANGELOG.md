@@ -1,3 +1,13 @@
+## [8.61.0](https://github.com/GetStream/stream-chat-js/compare/v8.60.0...v8.61.0) (2026-07-02)
+
+### Features
+
+* **client:** add AppIdentifier for app/app_version in the user agent ([#1791](https://github.com/GetStream/stream-chat-js/issues/1791)) ([8bad3be](https://github.com/GetStream/stream-chat-js/commit/8bad3bed7d04da95ec2578dd8a9b968ab187600c)), closes [#1789](https://github.com/GetStream/stream-chat-js/issues/1789) [#1789](https://github.com/GetStream/stream-chat-js/issues/1789)
+
+### Chores
+
+* **deps:** upgrade form-data to version 4.0.4 ([#1591](https://github.com/GetStream/stream-chat-js/issues/1591)) ([4c1d042](https://github.com/GetStream/stream-chat-js/commit/4c1d04200430ff184f46b24e87b27a6f3e61b570))
+
 # Changelog
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
