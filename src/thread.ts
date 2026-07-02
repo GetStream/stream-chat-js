@@ -63,6 +63,7 @@ export type ThreadUserReadState = {
   unreadMessageCount: number;
   user: UserResponse;
   lastReadMessageId?: string;
+  firstUnreadMessageId?: string;
 };
 
 export type ThreadReadState = Record<string, ThreadUserReadState | undefined>;
@@ -272,6 +273,7 @@ export class Thread extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeMarkThreadStale());
     this.addUnsubscribeFunction(this.subscribeNewReplies());
     this.addUnsubscribeFunction(this.subscribeRepliesRead());
+    this.addUnsubscribeFunction(this.subscribeRepliesUnread());
     this.addUnsubscribeFunction(this.subscribeMessageDeleted());
     this.addUnsubscribeFunction(this.subscribeMessageUpdated());
   };
@@ -328,6 +330,33 @@ export class Thread extends WithSubscriptions {
       }
 
       this.state.partialNext({ isStateStale: true });
+    }).unsubscribe;
+
+  private subscribeRepliesUnread = () =>
+    this.client.on('notification.mark_unread', (event) => {
+      if (!event.user || !event.created_at || !event.thread_id) return;
+      if (event.thread_id !== this.id) return;
+
+      const userId = event.user.id;
+      const createdAt = event.created_at;
+      const user = event.user;
+
+      this.state.next((current) => ({
+        ...current,
+        read: {
+          ...current.read,
+          [userId]: {
+            ...current.read[userId],
+            lastReadAt:
+              typeof event.last_read_at !== 'undefined'
+                ? new Date(event.last_read_at)
+                : new Date(createdAt),
+            user,
+            firstUnreadMessageId: event.first_unread_message_id,
+            unreadMessageCount: event.unread_messages ?? 0,
+          },
+        },
+      }));
     }).unsubscribe;
 
   private subscribeNewReplies = () =>

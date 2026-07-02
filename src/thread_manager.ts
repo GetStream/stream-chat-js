@@ -117,6 +117,7 @@ export class ThreadManager extends WithSubscriptions {
     const unsubscribeFunctions = [
       'health.check',
       'notification.mark_read',
+      'notification.mark_unread',
       'notification.thread_message_new',
       'notification.channel_deleted',
     ].map(

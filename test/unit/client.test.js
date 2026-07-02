@@ -1802,11 +1802,46 @@ describe('X-Stream-Client header', () => {
 		);
 	});
 
+	it('SDK integration with appIdentifier', () => {
+		client.sdkIdentifier = { name: 'react-native', version: '2.3.4' };
+		client.appIdentifier = { name: 'Acme', version: '2.1.0' };
+		client.deviceIdentifier = { os: 'iOS 15.0', model: 'iPhone17,4' };
+		const userAgent = client.getUserAgent();
+
+		// app / app_version are emitted right after the head, before os / device_model.
+		expect(userAgent).toMatchInlineSnapshot(
+			`"stream-chat-react-native-v2.3.4-llc-v1.2.3|app=Acme|app_version=2.1.0|os=iOS 15.0|device_model=iPhone17,4|client_bundle=browser-esm"`,
+		);
+	});
+
+	it('appIdentifier with name only omits the app_version segment', () => {
+		client.appIdentifier = { name: 'Acme' };
+		const userAgent = client.getUserAgent();
+
+		expect(userAgent).toMatchInlineSnapshot(
+			`"stream-chat-js-v1.2.3-node|app=Acme|client_bundle=browser-esm"`,
+		);
+	});
+
 	it('setUserAgent is now deprecated', () => {
 		client.setUserAgent('deprecated');
 		const userAgent = client.getUserAgent();
 
 		expect(userAgent).toMatchInlineSnapshot(`"deprecated"`);
+	});
+
+	it('memoizes the result permanently and ignores inputs set after the first call', () => {
+		const first = client.getUserAgent();
+		expect(first).toMatchInlineSnapshot(
+			`"stream-chat-js-v1.2.3-node|client_bundle=browser-esm"`,
+		);
+
+		// Inputs mutated after the first call must be ignored - the user agent is
+		// computed once and the cached value is returned for the client's lifetime.
+		client.sdkIdentifier = { name: 'react', version: '2.3.4' };
+		client.deviceIdentifier = { os: 'iOS 15.0', model: 'iPhone17,4' };
+
+		expect(client.getUserAgent()).toBe(first);
 	});
 
 	describe('getHookEvents', () => {
@@ -1909,5 +1944,141 @@ describe('markChannelsDelivered', () => {
 			'https://chat.stream-io-api.com/channels/delivered',
 			{ latest_delivered_messages: delivered },
 		);
+	});
+});
+
+// Regression coverage for GetStream/stream-chat-react#2599.
+// When the current user is removed from a channel the server sends a
+// `notification.removed_from_channel` event. Previously the client only evicted
+// channels from `activeChannels` on deletion, so a removed-from channel lingered:
+// later `message.new` / `notification.message_new` events were still delivered to
+// it, and on reconnect `recoverState()` re-watched it (because it re-watches every
+// cid still in `activeChannels`), re-promoting it in downstream lists.
+describe('activeChannels eviction when the current user is removed (#2599)', () => {
+	let client;
+	const currentUserId = 'current-user';
+
+	beforeEach(async () => {
+		client = await getClientWithUser({ id: currentUserId });
+	});
+
+	const removedFromChannelEvent = (channel) => ({
+		type: 'notification.removed_from_channel',
+		cid: channel.cid,
+		channel_type: channel.type,
+		channel_id: channel.id,
+	});
+
+	it('evicts the channel from activeChannels and disconnects it on notification.removed_from_channel', () => {
+		const channel = client.channel('messaging', 'ch-removed');
+		const disconnectSpy = vi.spyOn(channel, '_disconnect');
+		expect(client.activeChannels[channel.cid]).to.equal(channel);
+
+		client.dispatchEvent(removedFromChannelEvent(channel));
+
+		expect(disconnectSpy).toHaveBeenCalledTimes(1);
+		expect(client.activeChannels[channel.cid]).to.be.undefined;
+	});
+
+	it('evicts regardless of channel type (does not special-case the channel type)', () => {
+		const channels = [
+			client.channel('livestream', 'stream-1'),
+			client.channel('team', 'team-1'),
+			client.channel('gaming', 'game-1'),
+		];
+		channels.forEach((channel) => {
+			expect(client.activeChannels[channel.cid]).to.equal(channel);
+		});
+
+		channels.forEach((channel) => {
+			client.dispatchEvent(removedFromChannelEvent(channel));
+		});
+
+		channels.forEach((channel) => {
+			expect(client.activeChannels[channel.cid]).to.be.undefined;
+		});
+	});
+
+	it('stops routing channel events (message.new) to the channel once it is evicted', () => {
+		const channel = client.channel('messaging', 'ch-events');
+		const handleChannelEventSpy = vi.spyOn(channel, '_handleChannelEvent');
+		const messageNewEvent = {
+			type: 'message.new',
+			cid: channel.cid,
+			channel_type: channel.type,
+			channel_id: channel.id,
+			message: generateMsg(),
+		};
+
+		// Before removal the event is routed to the channel.
+		client.dispatchEvent(messageNewEvent);
+		expect(handleChannelEventSpy).toHaveBeenCalledTimes(1);
+
+		client.dispatchEvent(removedFromChannelEvent(channel));
+		handleChannelEventSpy.mockClear();
+
+		// After removal the same event is no longer routed to the (evicted) channel —
+		// this is the downstream symptom from #2599 (a removed channel kept receiving
+		// new messages and got re-promoted in the ChannelList).
+		client.dispatchEvent(messageNewEvent);
+		expect(handleChannelEventSpy).not.toHaveBeenCalled();
+		expect(client.activeChannels[channel.cid]).to.be.undefined;
+	});
+
+	it('does not re-watch the evicted channel on recoverState', async () => {
+		const removed = client.channel('messaging', 'removed');
+		const kept = client.channel('messaging', 'kept');
+		const queryChannelsStub = vi.spyOn(client, 'queryChannels').mockResolvedValue([]);
+
+		client.dispatchEvent(removedFromChannelEvent(removed));
+
+		await client.recoverState();
+
+		expect(queryChannelsStub).toHaveBeenCalledTimes(1);
+		const [filters] = queryChannelsStub.mock.calls[0];
+		expect(filters.cid.$in).to.contain(kept.cid);
+		expect(filters.cid.$in).not.to.contain(removed.cid);
+	});
+
+	it('does not evict when another user is removed (member.removed for a different user)', () => {
+		const channel = client.channel('messaging', 'ch-other-member');
+		const disconnectSpy = vi.spyOn(channel, '_disconnect');
+
+		client.dispatchEvent({
+			type: 'member.removed',
+			cid: channel.cid,
+			channel_type: channel.type,
+			channel_id: channel.id,
+			user: { id: 'some-other-user' },
+			member: { user_id: 'some-other-user', user: { id: 'some-other-user' } },
+		});
+
+		expect(disconnectSpy).not.toHaveBeenCalled();
+		expect(client.activeChannels[channel.cid]).to.equal(channel);
+	});
+
+	it('still evicts on channel.deleted and notification.channel_deleted (no regression)', () => {
+		const deleted = client.channel('messaging', 'deleted-1');
+		const notifDeleted = client.channel('messaging', 'deleted-2');
+		const deletedDisconnect = vi.spyOn(deleted, '_disconnect');
+		const notifDeletedDisconnect = vi.spyOn(notifDeleted, '_disconnect');
+
+		client.dispatchEvent({
+			type: 'channel.deleted',
+			cid: deleted.cid,
+			channel_type: deleted.type,
+			channel_id: deleted.id,
+		});
+		client.dispatchEvent({
+			type: 'notification.channel_deleted',
+			cid: notifDeleted.cid,
+			channel_type: notifDeleted.type,
+			channel_id: notifDeleted.id,
+		});
+
+		expect(deletedDisconnect).toHaveBeenCalledTimes(1);
+		expect(notifDeletedDisconnect).toHaveBeenCalledTimes(1);
+		expect(client.activeChannels[deleted.cid]).to.be.undefined;
+		expect(client.activeChannels[notifDeleted.cid]).to.be.undefined;
 	});
 });

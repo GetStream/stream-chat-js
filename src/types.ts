@@ -380,7 +380,7 @@ export type ChannelAPIResponse = {
   hidden?: boolean;
   membership?: ChannelMemberResponse | null;
   pending_messages?: PendingMessageResponse[];
-  push_preferences?: PushPreference;
+  push_preferences?: ChannelPushPreference;
   read?: ReadResponse[];
   threads?: ThreadResponse[];
   watcher_count?: number;
@@ -685,25 +685,67 @@ export type GetUnreadCountAPIResponse = APIResponse & {
   total_unread_count_by_team?: Record<string, number>;
 };
 
-export type ChatLevelPushPreference = 'all' | 'none' | 'mentions' | (string & {});
+export type ChatLevelPushPreference =
+  | 'all'
+  | 'mentions' // deprecated by the API in favor of 'direct_mentions'
+  | 'direct_mentions'
+  | 'all_mentions'
+  | 'none'
+  | 'default'
+  | (string & {});
 
-export type PushPreference = {
-  callLevel?: 'all' | 'none' | (string & {});
-  chatLevel?: ChatLevelPushPreference;
-  disabledUntil?: string; // snooze till this time
-  removeDisable?: boolean; // Temporary flag for resetting disabledUntil
+export type CallLevelPushPreference = 'all' | 'none' | 'default' | (string & {});
+
+/** Granular all/none toggle used by the chat sub-preferences. */
+export type PushPreferenceLevel = 'all' | 'none' | (string & {});
+
+/** Per-mention-type chat push preferences (matches OpenAPI `ChatPreferencesInput`). */
+export type ChatPreferences = {
+  channel_mentions?: PushPreferenceLevel;
+  default_preference?: PushPreferenceLevel;
+  direct_mentions?: PushPreferenceLevel;
+  group_mentions?: PushPreferenceLevel;
+  here_mentions?: PushPreferenceLevel;
+  role_mentions?: PushPreferenceLevel;
+  thread_replies?: PushPreferenceLevel;
 };
 
+/**
+ * Input accepted by {@link StreamChat.setPushPreferences} (matches OpenAPI `PushPreferenceInput`).
+ *
+ * Set `channel_cid` to scope the preference to a single channel; leave it empty to
+ * set the user-level default. `user_id` is required for server-side auth and
+ * defaults to the connected user for client-side auth.
+ */
+export type PushPreference = {
+  call_level?: CallLevelPushPreference;
+  channel_cid?: string;
+  chat_level?: ChatLevelPushPreference;
+  chat_preferences?: ChatPreferences;
+  disabled_until?: string; // snooze until this time
+  remove_disable?: boolean; // stop snoozing (clears disabled_until)
+  user_id?: string;
+};
+
+/** Per-user push preferences returned by the API (matches OpenAPI `PushPreferencesResponse`). */
+export type PushPreferencesResponse = {
+  call_level?: CallLevelPushPreference;
+  chat_level?: ChatLevelPushPreference;
+  chat_preferences?: ChatPreferences;
+  disabled_until?: string;
+};
+
+/** Per-channel push preferences returned by the API (matches OpenAPI `ChannelPushPreferencesResponse`). */
 export type ChannelPushPreference = {
-  chatLevel?: ChatLevelPushPreference; // "all", "none", "mentions", or other custom strings
-  disabledUntil?: string;
-  removeDisable?: boolean; // Temporary flag for resetting disabledUntil
+  chat_level?: ChatLevelPushPreference; // "all", "mentions", "direct_mentions", "all_mentions", "none", "default" or other custom strings
+  disabled_until?: string;
 };
 
 export type UpsertPushPreferencesResponse = APIResponse & {
-  // Mapping of user IDs to their push preferences
-  userChannelPreferences: Record<string, Record<string, ChannelPushPreference>>;
-  userPreferences: Record<string, PushPreference>; // Mapping of user -> channel id -> push preferences
+  // Mapping of user id -> channel cid -> channel push preferences
+  user_channel_preferences: Record<string, Record<string, ChannelPushPreference>>;
+  // Mapping of user id -> user push preferences
+  user_preferences: Record<string, PushPreferencesResponse>;
 };
 
 export type GetUnreadCountBatchAPIResponse = APIResponse & {
@@ -862,7 +904,7 @@ export type OwnUserBase = {
   unread_threads: number;
   invisible?: boolean;
   privacy_settings?: PrivacySettings;
-  push_preferences?: PushPreference;
+  push_preferences?: PushPreferencesResponse;
   roles?: string[];
   total_unread_count_by_team?: Record<string, number> | null;
 };
@@ -1701,6 +1743,7 @@ export type Event = CustomEventData & {
   watcher_count?: number;
   channel_last_message_at?: string;
   app?: Record<string, unknown>; // TODO: further specify type
+  thread_id?: string;
 };
 
 export type UserCustomEvent = CustomEventData & {
@@ -4499,6 +4542,14 @@ export type SdkIdentifier = {
  * available. Is used by the react-native SDKs to enrich the user agent further.
  */
 export type DeviceIdentifier = { os: string; model?: string };
+
+/**
+ * An identifier containing information about the downstream application integrating
+ * stream-chat, if available. `name` is reported as `app` and `version` as `app_version`
+ * in the user agent. Distinct from the SDK ({@link SdkIdentifier}) and device
+ * ({@link DeviceIdentifier}) identifiers.
+ */
+export type AppIdentifier = { name: string; version?: string };
 
 export type DraftResponse = {
   channel_cid: string;

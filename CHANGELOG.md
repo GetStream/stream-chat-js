@@ -1,3 +1,24 @@
+## [9.49.0](https://github.com/GetStream/stream-chat-js/compare/v9.48.0...v9.49.0) (2026-07-01)
+
+### Bug Fixes
+
+* evict channel from activeChannels when the current user is removed ([#1788](https://github.com/GetStream/stream-chat-js/issues/1788)) ([5510aa6](https://github.com/GetStream/stream-chat-js/commit/5510aa6c9dc69ec7a6454b8c2186033319a5ff42)), closes [GetStream/stream-chat-react#2599](https://github.com/GetStream/stream-chat-react/issues/2599) [#2599](https://github.com/GetStream/stream-chat-js/issues/2599) [#3227](https://github.com/GetStream/stream-chat-js/issues/3227) [#2599](https://github.com/GetStream/stream-chat-js/issues/2599)
+
+### Features
+
+* **client:** add AppIdentifier for app/app_version in the user agent ([#1789](https://github.com/GetStream/stream-chat-js/issues/1789)) ([d361695](https://github.com/GetStream/stream-chat-js/commit/d361695b6f65b879a3bd107a3e46a41f2d9bd773))
+
+## [9.48.0](https://github.com/GetStream/stream-chat-js/compare/v9.47.1...v9.48.0) (2026-06-29)
+
+### Bug Fixes
+
+* **push-preferences:** align chat push preference types with the API ([#1786](https://github.com/GetStream/stream-chat-js/issues/1786)) ([26c2e49](https://github.com/GetStream/stream-chat-js/commit/26c2e498a01d8fc6e2cbdc050c3e65196d88824f))
+* **threads:** add notification.mark_unread handler ([#1785](https://github.com/GetStream/stream-chat-js/issues/1785)) ([c60134d](https://github.com/GetStream/stream-chat-js/commit/c60134d30390dfc3702d15b4abd78734ad9d79e4)), closes [#1778](https://github.com/GetStream/stream-chat-js/issues/1778)
+
+### Features
+
+* allow augmenting event types ([#1784](https://github.com/GetStream/stream-chat-js/issues/1784)) ([c32f7e9](https://github.com/GetStream/stream-chat-js/commit/c32f7e9776f52b38622537251ba84e500e50e4b5))
+
 ## [9.47.1](https://github.com/GetStream/stream-chat-js/compare/v9.47.0...v9.47.1) (2026-06-22)
 
 ### Bug Fixes
