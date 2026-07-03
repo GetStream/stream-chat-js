@@ -655,9 +655,11 @@ describe('ChannelPaginatorsOrchestrator', () => {
         client.dispatchEvent({ type: eventType, cid } as const);
 
         await vi.waitFor(() => {
-          // client.activeChannels contains the hidden channel, therefore the search is performed with item
-          expect(r1).toHaveBeenCalledWith({ id: ch.cid, item: ch });
-          expect(r2).toHaveBeenCalledWith({ id: ch.cid, item: ch });
+          // The client evicts the channel from activeChannels on
+          // notification.removed_from_channel (stream-chat-js #1788), so the
+          // orchestrator no longer has the instance and removes purely by id.
+          expect(r1).toHaveBeenCalledWith({ id: ch.cid, item: undefined });
+          expect(r2).toHaveBeenCalledWith({ id: ch.cid, item: undefined });
         });
       });
 

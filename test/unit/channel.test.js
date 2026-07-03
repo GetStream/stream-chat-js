@@ -2022,7 +2022,9 @@ describe('Channels - Constructor', function () {
 	it('undefined ID no options', function () {
 		const channel = client.channel('messaging', undefined);
 		expect(channel.id).to.eql(undefined);
-		expect(channel.data.own_capabilities).to.eql([]);
+		// own_capabilities stays undefined ("not yet loaded") until the channel is
+		// hydrated; the reactive getter is still defined (hence enumerable).
+		expect(channel.data.own_capabilities).to.be.undefined;
 		expect(Object.keys(channel.data)).to.eql(['own_capabilities']);
 	});
 

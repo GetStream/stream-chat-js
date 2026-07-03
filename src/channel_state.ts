@@ -266,14 +266,18 @@ export class ChannelState {
       return;
     }
 
-    let ownCapabilities = Array.isArray(data.own_capabilities)
+    let ownCapabilities: string[] | undefined = Array.isArray(data.own_capabilities)
       ? [...data.own_capabilities]
       : Array.isArray(fallbackData?.own_capabilities)
         ? [...fallbackData.own_capabilities]
-        : [];
+        : undefined;
 
-    this.ownCapabilitiesStore.next({ ownCapabilities });
+    this.ownCapabilitiesStore.next({ ownCapabilities: ownCapabilities ?? [] });
 
+    // Keep the reactive getter/setter so backward-compatible assignments still sync to
+    // the store, but return `undefined` until capabilities are actually known. Forcing
+    // `[]` on an unloaded channel would make read-events–gated logic (e.g. unread
+    // counting, regression #1732) treat "not yet loaded" as "explicitly no capabilities".
     Object.defineProperty(data, 'own_capabilities', {
       configurable: true,
       enumerable: true,
@@ -281,8 +285,8 @@ export class ChannelState {
       set: (nextOwnCapabilities: string[] | undefined) => {
         ownCapabilities = Array.isArray(nextOwnCapabilities)
           ? [...nextOwnCapabilities]
-          : [];
-        this.ownCapabilitiesStore.next({ ownCapabilities });
+          : undefined;
+        this.ownCapabilitiesStore.next({ ownCapabilities: ownCapabilities ?? [] });
       },
     });
   }

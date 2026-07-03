@@ -78,17 +78,13 @@ export class UserGroupPaginator extends BasePaginator<
     } satisfies UserGroupListCursor);
   };
 
-  protected getNextQueryShape({
-    direction,
-  }: Required<
-    Pick<PaginationQueryParams<QueryUserGroupsOptions>, 'direction'>
-  >): QueryUserGroupsOptions {
-    const cursor = decodeCursor<UserGroupListCursor>(this.cursor?.[direction]);
+  // The query shape must stay stable across pages: the paginator resets its
+  // accumulated list when the query shape changes ('auto' reset policy), so the
+  // forward cursor is NOT part of the shape — it is applied per request in `query`.
+  protected getNextQueryShape(): QueryUserGroupsOptions {
     return {
       limit: this.pageSize,
       ...(this.teamId ? { team_id: this.teamId } : {}),
-      ...(cursor?.id_gt ? { id_gt: cursor.id_gt } : {}),
-      ...(cursor?.created_at_gt ? { created_at_gt: cursor.created_at_gt } : {}),
     };
   }
 
@@ -102,7 +98,12 @@ export class UserGroupPaginator extends BasePaginator<
       return { items: [] };
     }
 
-    const options = queryShape ?? this.getNextQueryShape({ direction: 'tailward' });
+    const cursor = decodeCursor<UserGroupListCursor>(this.cursor?.tailward);
+    const options: QueryUserGroupsOptions = {
+      ...(queryShape ?? this.getNextQueryShape()),
+      ...(cursor?.id_gt ? { id_gt: cursor.id_gt } : {}),
+      ...(cursor?.created_at_gt ? { created_at_gt: cursor.created_at_gt } : {}),
+    };
 
     const { user_groups: items } = await this.client.queryUserGroups(options);
     return { items, tailward: this.buildNextCursor(items) };

@@ -18,12 +18,12 @@ Default is **merge PR #1674 into a branch cut from `origin/master`** (`git merge
 
 **Runtime (`src/`, 4):**
 
-| File | Nature |
-| ---- | ------ |
-| `src/channel.ts` | Both sides changed heavily. PR: paginator wiring, minimal-init thread, message operations, custom mark-read. Master: 92 commits of fixes. **Highest-risk file.** |
-| `src/client.ts` | PR adds `InstanceConfigurationService`, store wiring, `messageDeliveryReporter`. Master added client-level features (e.g. AppIdentifier user-agent #1789). Note prior attempt hit a **missing `StateStore` import** regression here — watch for it. |
-| `src/messageComposer/middleware/textComposer/types.ts` | Small type-shape conflict. |
-| `src/pagination/index.ts` | PR restructured `pagination/` (moved `BasePaginator`/`ReminderPaginator` into `pagination/paginators/`); master edited the old barrel. |
+| File                                                   | Nature                                                                                                                                                                                                                                              |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/channel.ts`                                       | Both sides changed heavily. PR: paginator wiring, minimal-init thread, message operations, custom mark-read. Master: 92 commits of fixes. **Highest-risk file.**                                                                                    |
+| `src/client.ts`                                        | PR adds `InstanceConfigurationService`, store wiring, `messageDeliveryReporter`. Master added client-level features (e.g. AppIdentifier user-agent #1789). Note prior attempt hit a **missing `StateStore` import** regression here — watch for it. |
+| `src/messageComposer/middleware/textComposer/types.ts` | Small type-shape conflict.                                                                                                                                                                                                                          |
+| `src/pagination/index.ts`                              | PR restructured `pagination/` (moved `BasePaginator`/`ReminderPaginator` into `pagination/paginators/`); master edited the old barrel.                                                                                                              |
 
 **Tests (3):** `test/unit/MessageComposer/messageComposer.test.ts`, `test/unit/MessageComposer/textComposer.test.ts`, `test/unit/channel.test.js`.
 
@@ -44,10 +44,12 @@ Serialized by file ownership; conflicting files are resolved in dependency order
 **Owner:** unassigned
 
 **Scope:**
+
 - From the worktree: `git merge --no-ff --no-commit pr-1674` (per D1; if D1 → rebase, `git rebase origin/master` on a branch cut from `pr-1674` instead).
 - Do **not** commit yet. Record the conflicted file list and any `add/add` surprises in `decisions.md`.
 
 **Acceptance Criteria:**
+
 - [ ] Merge started; 7 conflicts present as measured.
 - [ ] Conflict inventory recorded in `decisions.md`.
 
@@ -62,10 +64,12 @@ Serialized by file ownership; conflicting files are resolved in dependency order
 **Owner:** unassigned
 
 **Scope:**
+
 - `pagination/index.ts`: keep the PR's re-export structure (`paginators/*`) as the source of truth; re-apply any master-added exports on top. Verify no dangling exports to the removed `pagination/BasePaginator.ts`/`ReminderPaginator.ts`.
 - `textComposer/types.ts`: union both type additions.
 
 **Acceptance Criteria:**
+
 - [ ] Both files compile in isolation (`yarn types` after Task 4).
 - [ ] No exports reference deleted modules.
 
@@ -80,10 +84,12 @@ Serialized by file ownership; conflicting files are resolved in dependency order
 **Owner:** unassigned
 
 **Scope:**
+
 - `channel.ts`: base = PR version (it owns the paginator/thread/message-operations rewrite); then **re-apply each master fix** from the 92-commit range that landed in `channel.ts` (enumerate with `git log ef2169f..origin/master --oneline -- src/channel.ts`). See D2.
 - `client.ts`: union PR's service/store/reporter wiring with master's client additions. Explicitly verify the `StateStore` import exists (prior regression).
 
 **Acceptance Criteria:**
+
 - [ ] `yarn types` passes.
 - [ ] Every master `channel.ts` fix in range is present or consciously superseded (logged in `decisions.md`).
 
@@ -98,11 +104,13 @@ Serialized by file ownership; conflicting files are resolved in dependency order
 **Owner:** unassigned
 
 **Scope:**
+
 - Merge test additions from both sides; where master changed an assertion the PR also changed, prefer the assertion matching the merged runtime behavior.
 - Commit the merge.
 - Run `yarn types` then `yarn test`. Fix fallout (paginator, orchestrator, event-pipeline, thread, message-operations, delivery, composer suites are the ones the PR expands).
 
 **Acceptance Criteria:**
+
 - [ ] `yarn types` passes.
 - [ ] `yarn test` passes (or every residual failure is triaged in `decisions.md`).
 - [ ] Merge committed on `feat/message-paginator-master-merge`.
@@ -118,10 +126,12 @@ Serialized by file ownership; conflicting files are resolved in dependency order
 **Owner:** unassigned
 
 **Scope:**
+
 - `yarn build` → produce `dist/`.
 - Document the link method chosen in D3 (yarn link / portal / file: dependency) so the React worktree can consume this exact build.
 
 **Acceptance Criteria:**
+
 - [ ] `dist/` built.
 - [ ] Link command reproducible and recorded.
 
@@ -137,13 +147,13 @@ Phase 5: Task 5  (build + link)  ──▶ unblocks React plan Task 8
 
 ## File ownership summary
 
-| Task | Creates/Modifies |
-| ---- | ---------------- |
-| 1 | git index; `state.json`, `decisions.md` |
-| 2 | `src/pagination/index.ts`, `src/messageComposer/middleware/textComposer/types.ts` |
-| 3 | `src/channel.ts`, `src/client.ts` |
-| 4 | `test/unit/MessageComposer/messageComposer.test.ts`, `test/unit/MessageComposer/textComposer.test.ts`, `test/unit/channel.test.js` |
-| 5 | build artifacts only |
+| Task | Creates/Modifies                                                                                                                   |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | git index; `state.json`, `decisions.md`                                                                                            |
+| 2    | `src/pagination/index.ts`, `src/messageComposer/middleware/textComposer/types.ts`                                                  |
+| 3    | `src/channel.ts`, `src/client.ts`                                                                                                  |
+| 4    | `test/unit/MessageComposer/messageComposer.test.ts`, `test/unit/MessageComposer/textComposer.test.ts`, `test/unit/channel.test.js` |
+| 5    | build artifacts only                                                                                                               |
 
 ## Decisions — ALL RESOLVED 2026-07-03 (see decisions.md)
 

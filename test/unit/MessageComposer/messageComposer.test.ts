@@ -203,7 +203,9 @@ describe('MessageComposer', () => {
           fileUploadFilter: DEFAULT_COMPOSER_CONFIG.attachments.fileUploadFilter,
           maxNumberOfFilesPerMessage:
             customConfig.attachments!.maxNumberOfFilesPerMessage,
+          trackUploadProgress: DEFAULT_COMPOSER_CONFIG.attachments.trackUploadProgress,
         },
+        commands: DEFAULT_COMPOSER_CONFIG.commands,
         drafts: customConfig.drafts,
         linkPreviews: {
           debounceURLEnrichmentMs: customConfig.linkPreviews!.debounceURLEnrichmentMs,
