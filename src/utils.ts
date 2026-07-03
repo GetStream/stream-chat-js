@@ -110,6 +110,28 @@ export function isOwnUserBaseProperty(property: string) {
   return ownUserBaseProperties[property as keyof OwnUserBase];
 }
 
+/**
+ * channelHasReadEvents - Whether read events are enabled for the current user on a channel.
+ */
+export const channelHasReadEvents = (channel?: Channel) => {
+  const ownCapabilities = channel?.data?.own_capabilities;
+  return !(Array.isArray(ownCapabilities) && !ownCapabilities.includes('read-events'));
+};
+
+/**
+ * channelTracksReadLocally - Whether a channel maintains a client local unread count.
+ */
+export const channelTracksReadLocally = (channel?: Channel) =>
+  !channelHasReadEvents(channel) &&
+  !!channel?.getClient().options.isLocalUnreadCountEnabled;
+
+/**
+ * userHasReadReceipts - Whether the current user allows read receipts, per their privacy settings.
+ * Read receipts are treated as enabled unless the user has explicitly disabled them.
+ */
+export const userHasReadReceipts = (client: StreamChat) =>
+  client.user?.privacy_settings?.read_receipts?.enabled ?? true;
+
 export function addFileToFormData(
   uri: string | NodeJS.ReadableStream | Buffer | File,
   name?: string,
