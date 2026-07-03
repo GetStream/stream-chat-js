@@ -9,8 +9,8 @@ const createUserGroup = (
 ): UserGroupResponse => ({
   id: 'group-1',
   name: 'Backend Support',
-  created_at: '2026-01-01T00:00:00.000000000Z',
-  updated_at: '2026-01-01T00:00:00.000000000Z',
+  created_at: new Date('2026-01-01T00:00:00.000Z'),
+  updated_at: new Date('2026-01-01T00:00:00.000Z'),
   ...overrides,
 });
 
@@ -32,20 +32,20 @@ describe('UserGroupPaginator', () => {
 
   it('paginates listed user groups using synthesized cursors', async () => {
     const firstPage = [
-      createUserGroup({ id: 'group-1', created_at: '2026-01-01T00:00:00.000000000Z' }),
+      createUserGroup({ id: 'group-1', created_at: new Date('2026-01-01T00:00:00.000Z') }),
       createUserGroup({
         id: 'group-2',
         name: 'Frontend Support',
-        created_at: '2026-01-02T00:00:00.000000000Z',
-        updated_at: '2026-01-02T00:00:00.000000000Z',
+        created_at: new Date('2026-01-02T00:00:00.000Z'),
+        updated_at: new Date('2026-01-02T00:00:00.000Z'),
       }),
     ];
     const secondPage = [
       createUserGroup({
         id: 'group-3',
         name: 'QA Support',
-        created_at: '2026-01-03T00:00:00.000000000Z',
-        updated_at: '2026-01-03T00:00:00.000000000Z',
+        created_at: new Date('2026-01-03T00:00:00.000Z'),
+        updated_at: new Date('2026-01-03T00:00:00.000Z'),
       }),
     ];
 
@@ -63,7 +63,7 @@ describe('UserGroupPaginator', () => {
     expect(paginator.hasNext).toBe(true);
     expect(paginator.hasPrev).toBe(false);
     expect(JSON.parse(paginator.cursor?.next ?? '{}')).toEqual({
-      created_at_gt: firstPage[1].created_at,
+      created_at_gt: firstPage[1].created_at.toISOString(),
       id_gt: firstPage[1].id,
     });
 
@@ -71,7 +71,7 @@ describe('UserGroupPaginator', () => {
 
     expect(querySpy).toHaveBeenNthCalledWith(2, {
       limit: 2,
-      created_at_gt: firstPage[1].created_at,
+      created_at_gt: firstPage[1].created_at.toISOString(),
       id_gt: firstPage[1].id,
     });
     expect(paginator.items).toEqual([...firstPage, ...secondPage]);

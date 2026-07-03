@@ -18,6 +18,7 @@ import {
   MessageDraftComposerMiddlewareValueState,
   MiddlewareStatus,
 } from '../../../../../src';
+import { getClientWithUser } from '../../../test-utils/getClient';
 
 const enrichURLReturnValue = {
   asset_url: 'https://example.com/image.jpg',
@@ -71,8 +72,9 @@ const setup = ({
 } = {}) => {
   vi.clearAllMocks();
 
-  const mockClient = new StreamChat('apiKey', 'apiSecret');
-  mockClient.enrichURL = vi.fn().mockResolvedValue(enrichURLReturnValue);
+  const mockClient = getClientWithUser({ id: 'user' });
+
+  mockClient.getOG = vi.fn().mockResolvedValue(enrichURLReturnValue);
 
   const mockChannel = mockClient.channel('messaging', 'test-channel', {
     members: [],
@@ -584,8 +586,8 @@ const setupForDraft = ({
 } = {}) => {
   vi.clearAllMocks();
 
-  const mockClient = new StreamChat('apiKey', 'apiSecret');
-  mockClient.enrichURL = vi.fn().mockResolvedValue(enrichURLReturnValue);
+  const mockClient = getClientWithUser({ id: 'user' });
+  mockClient.getOG = vi.fn().mockResolvedValue(enrichURLReturnValue);
 
   const mockChannel = mockClient.channel('messaging', 'test-channel', {
     members: [],

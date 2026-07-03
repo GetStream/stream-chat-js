@@ -202,13 +202,6 @@ describe('Channel count unread', function () {
 			channel.state.addMessagesSorted(messages);
 			expect(channel.lastRead()).to.eq(last_read);
 		});
-
-		it('should return undefined if client user is not set (server-side client)', () => {
-			client = new StreamChat('apiKey', 'secret');
-			channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
-			channel.initialized = true;
-			expect(channel.lastRead()).to.be.undefined;
-		});
 	});
 });
 
@@ -1646,7 +1639,8 @@ describe('Uninitialized Channel', () => {
 });
 
 describe('Channels - Constructor', function () {
-	const client = new StreamChat('key', 'secret');
+	const client = new StreamChat('key');
+	client.user = { id: 'user' };
 
 	it('canonical form', function () {
 		const channel = client.channel('messaging', '123', { cool: true });

@@ -87,7 +87,7 @@ describe('StreamChat getInstance', () => {
 	});
 
 	it('should set axios request config correctly', async () => {
-		const client = StreamChat.getInstance('key', 'secret', {
+		const client = StreamChat.getInstance('key', {
 			axiosRequestConfig: {
 				headers: {
 					'Cache-Control': 'no-cache',
@@ -95,6 +95,7 @@ describe('StreamChat getInstance', () => {
 				},
 			},
 		});
+		client.tokenManager.getToken = () => 'mock-token';
 
 		const requestSpy = vi
 			.spyOn(client.axiosInstance, 'request')
@@ -111,17 +112,11 @@ describe('StreamChat getInstance', () => {
 	});
 
 	it('should correctly resolve _cacheEnabled', async () => {
-		const client1 = new StreamChat('key', 'secret', {
-			disableCache: true,
-		});
+		const client1 = new StreamChat('key', { disableCache: true });
 		expect(client1._cacheEnabled()).to.be.equal(false);
-		const client2 = new StreamChat('key', 'secret', {
-			disableCache: false,
-		});
+		const client2 = new StreamChat('key', { disableCache: false });
 		expect(client2._cacheEnabled()).to.be.equal(true);
-		const client3 = new StreamChat('key', {
-			disableCache: true,
-		});
+		const client3 = new StreamChat('key');
 		expect(client3._cacheEnabled()).to.be.equal(true);
 	});
 });
@@ -402,27 +397,6 @@ describe('Detect node environment', () => {
 
 		chatLoggerSystem.restoreDefaults();
 	});
-
-	it('should not warn when adding the allowServerSideConnect flag', async () => {
-		const client2 = new StreamChat('', '', { allowServerSideConnect: true });
-
-		const sinkSpy = vi.fn();
-		chatLoggerSystem.configureLoggers({
-			default: { sink: sinkSpy, level: 'trace' },
-		});
-
-		try {
-			await client2.connectUser({ id: 'user' }, 'fake token');
-		} catch (e) {}
-
-		await client2.disconnect();
-		expect(sinkSpy).not.toHaveBeenCalledWith(
-			'warn',
-			expect.stringContaining('Do not use connectUser server-side.'),
-		);
-
-		chatLoggerSystem.restoreDefaults();
-	});
 });
 
 describe('message update', () => {
@@ -607,7 +581,7 @@ describe('message update', () => {
 
 describe('Client setLocalDevice', async () => {
 	const device = { id: 'id1', push_provider: 'apn' };
-	const client = new StreamChat('', '', { device });
+	const client = new StreamChat('', { device });
 
 	it('should update device info before ws open', async () => {
 		expect(client.options.device).to.deep.equal(device);
@@ -1694,16 +1668,18 @@ describe('activeChannels eviction when the current user is removed (#2599)', () 
 	it('does not re-watch the evicted channel on recoverState', async () => {
 		const removed = client.channel('messaging', 'removed');
 		const kept = client.channel('messaging', 'kept');
-		const queryChannelsStub = vi.spyOn(client, 'queryChannels').mockResolvedValue([]);
+		const queryChannelsStub = vi
+			.spyOn(client, 'queryChannels')
+			.mockResolvedValue({ channels: [] });
 
 		client.dispatchEvent(removedFromChannelEvent(removed));
 
 		await client.recoverState();
 
 		expect(queryChannelsStub).toHaveBeenCalledTimes(1);
-		const [filters] = queryChannelsStub.mock.calls[0];
-		expect(filters.cid.$in).to.contain(kept.cid);
-		expect(filters.cid.$in).not.to.contain(removed.cid);
+		const [options] = queryChannelsStub.mock.calls[0];
+		expect(options.filter_conditions.cid.$in).to.contain(kept.cid);
+		expect(options.filter_conditions.cid.$in).not.to.contain(removed.cid);
 	});
 
 	it('does not evict when another user is removed (member.removed for a different user)', () => {
