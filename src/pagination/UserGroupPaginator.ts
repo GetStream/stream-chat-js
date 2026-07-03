@@ -1,10 +1,10 @@
-import { BasePaginator } from './BasePaginator';
+import { BasePaginator, ZERO_PAGE_CURSOR } from './paginators/BasePaginator';
 import type {
   PaginationQueryParams,
   PaginationQueryReturnValue,
   PaginatorOptions,
   PaginatorState,
-} from './BasePaginator';
+} from './paginators/BasePaginator';
 import type { QueryUserGroupsOptions, UserGroupResponse } from '../types';
 import type { StreamChat } from '../client';
 
@@ -30,22 +30,30 @@ const decodeCursor = <TCursor extends object>(cursor: string | null | undefined)
 /**
  * Paginates user-group listing through `/usergroups`.
  *
- * This entity only supports forward cursor pagination via `created_at_gt` and `id_gt`.
- * Previous-page pagination is not available because the API does not expose a backward cursor.
+ * This entity only supports forward (tailward) cursor pagination via
+ * `created_at_gt` and `id_gt`. Backward (headward) pagination is not available
+ * because the API does not expose a backward cursor, so the headward cursor is
+ * initialized as exhausted (`null`).
  */
-export class UserGroupPaginator extends BasePaginator<UserGroupResponse> {
+export class UserGroupPaginator extends BasePaginator<
+  UserGroupResponse,
+  QueryUserGroupsOptions
+> {
   private client: StreamChat;
   protected _teamId: string | undefined;
 
-  constructor(client: StreamChat, options?: PaginatorOptions) {
-    super(options);
+  constructor(
+    client: StreamChat,
+    options?: PaginatorOptions<UserGroupResponse, QueryUserGroupsOptions>,
+  ) {
+    super({ initialCursor: { ...ZERO_PAGE_CURSOR, headward: null }, ...options });
     this.client = client;
   }
 
   get initialState(): PaginatorState<UserGroupResponse> {
     return {
       ...super.initialState,
-      hasPrev: false,
+      hasMoreHead: false,
     };
   }
 
@@ -70,23 +78,34 @@ export class UserGroupPaginator extends BasePaginator<UserGroupResponse> {
     } satisfies UserGroupListCursor);
   };
 
-  query = async ({
+  protected getNextQueryShape({
     direction,
-  }: PaginationQueryParams): Promise<PaginationQueryReturnValue<UserGroupResponse>> => {
-    if (direction === 'prev') {
-      return { items: [] };
-    }
-
-    const cursor = decodeCursor<UserGroupListCursor>(this.cursor?.next);
-    const options: QueryUserGroupsOptions = {
+  }: Required<
+    Pick<PaginationQueryParams<QueryUserGroupsOptions>, 'direction'>
+  >): QueryUserGroupsOptions {
+    const cursor = decodeCursor<UserGroupListCursor>(this.cursor?.[direction]);
+    return {
       limit: this.pageSize,
       ...(this.teamId ? { team_id: this.teamId } : {}),
       ...(cursor?.id_gt ? { id_gt: cursor.id_gt } : {}),
       ...(cursor?.created_at_gt ? { created_at_gt: cursor.created_at_gt } : {}),
     };
+  }
+
+  query = async ({
+    direction,
+    queryShape,
+  }: PaginationQueryParams<QueryUserGroupsOptions>): Promise<
+    PaginationQueryReturnValue<UserGroupResponse>
+  > => {
+    if (direction === 'headward') {
+      return { items: [] };
+    }
+
+    const options = queryShape ?? this.getNextQueryShape({ direction: 'tailward' });
 
     const { user_groups: items } = await this.client.queryUserGroups(options);
-    return { items, next: this.buildNextCursor(items) };
+    return { items, tailward: this.buildNextCursor(items) };
   };
 
   filterQueryResults = (items: UserGroupResponse[]) => items;

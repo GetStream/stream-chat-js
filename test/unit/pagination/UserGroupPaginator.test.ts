@@ -27,7 +27,7 @@ describe('UserGroupPaginator', () => {
     expect(paginator.hasNext).toBe(true);
     expect(paginator.hasPrev).toBe(false);
     expect(paginator.items).toBeUndefined();
-    expect(paginator.cursor).toBeUndefined();
+    expect(paginator.cursor).toEqual({ tailward: undefined, headward: null });
   });
 
   it('paginates listed user groups using synthesized cursors', async () => {
@@ -62,7 +62,7 @@ describe('UserGroupPaginator', () => {
     expect(paginator.items).toEqual(firstPage);
     expect(paginator.hasNext).toBe(true);
     expect(paginator.hasPrev).toBe(false);
-    expect(JSON.parse(paginator.cursor?.next ?? '{}')).toEqual({
+    expect(JSON.parse(paginator.cursor?.tailward ?? '{}')).toEqual({
       created_at_gt: firstPage[1].created_at,
       id_gt: firstPage[1].id,
     });
@@ -77,7 +77,9 @@ describe('UserGroupPaginator', () => {
     expect(paginator.items).toEqual([...firstPage, ...secondPage]);
     expect(paginator.hasNext).toBe(false);
     expect(paginator.hasPrev).toBe(false);
-    expect(paginator.cursor).toEqual({ next: null, prev: null });
+    // forward-only: headward stays exhausted, tailward exhausted after the short page
+    expect(paginator.cursor?.headward).toBeNull();
+    expect(paginator.cursor?.tailward == null).toBe(true);
   });
 
   it('resets paginator state when team id changes', async () => {
@@ -93,7 +95,7 @@ describe('UserGroupPaginator', () => {
     paginator.teamId = 'engineering';
 
     expect(paginator.items).toBeUndefined();
-    expect(paginator.cursor).toBeUndefined();
+    expect(paginator.cursor).toEqual({ tailward: undefined, headward: null });
     expect(paginator.hasNext).toBe(true);
     expect(paginator.hasPrev).toBe(false);
   });
@@ -106,7 +108,7 @@ describe('UserGroupPaginator', () => {
 
     const paginator = new UserGroupPaginator(client, { pageSize: 1 });
     paginator.state.partialNext({
-      cursor: { next: '{not-json', prev: null },
+      cursor: { tailward: '{not-json', headward: null },
     });
 
     await paginator.next();

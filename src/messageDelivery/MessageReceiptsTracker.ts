@@ -1,4 +1,7 @@
 import type { ReadResponse, UserResponse } from '../types';
+import { StateStore } from '../store';
+import type { Channel } from '../channel';
+import { WithSubscriptions } from '../utils/WithSubscriptions';
 
 type UserId = string;
 type MessageId = string;
@@ -11,10 +14,38 @@ export type UserProgress = {
   lastReadRef: MsgRef; // MIN_REF if none
   lastDeliveredRef: MsgRef; // MIN_REF if none; always >= readRef
 };
+export type MessageReceiptsSnapshot = {
+  revision: number;
+  readersByMessageId: Record<MessageId, UserResponse[]>;
+  deliveredByMessageId: Record<MessageId, UserResponse[]>;
+};
+export type ReadStoreReconcileMeta = {
+  changedUserIds?: string[];
+  removedUserIds?: string[];
+};
+type ReadStoreUserState = {
+  last_read?: Date | string;
+  unread_messages?: number;
+  user?: UserResponse;
+  first_unread_message_id?: string;
+  last_read_message_id?: string;
+  last_delivered_at?: Date | string;
+  last_delivered_message_id?: string;
+};
 
 // ---------- ordering utilities ----------
 
 const MIN_REF: MsgRef = { timestampMs: Number.NEGATIVE_INFINITY, msgId: '' } as const;
+
+const toTimestampMs = (value: Date | string) =>
+  value instanceof Date ? value.getTime() : new Date(value).getTime();
+
+const isValidReadState = (
+  readState: ReadStoreUserState | undefined,
+): readState is ReadStoreUserState & {
+  last_read: Date | string;
+  user: UserResponse;
+} => !!readState?.user && !!readState.last_read;
 
 const compareRefsAsc = (a: MsgRef, b: MsgRef) =>
   a.timestampMs !== b.timestampMs ? a.timestampMs - b.timestampMs : 0;
@@ -71,7 +102,8 @@ const removeByOldKey = (
 };
 
 export type OwnMessageReceiptsTrackerOptions = {
-  locateMessage: OwnMessageReceiptsTrackerMessageLocator;
+  channel: Channel;
+  locateMessage?: OwnMessageReceiptsTrackerMessageLocator;
 };
 
 /**
@@ -92,9 +124,10 @@ export type OwnMessageReceiptsTrackerOptions = {
  *
  * Construction
  * ------------
- * `new MessageReceiptsTracker({locateMessage})`
- * - `locateMessage(timestamp) => MsgRef | null` must resolve a message ref representation - `{ timestamp, msgId }`.
- *   - If `locateMessage` returns `null`, the event is ignored (message unknown locally).
+ * `new MessageReceiptsTracker({ channel, locateMessage? })`
+ * - By default, message references are read through `channel.state.findMessageByTimestamp`.
+ * - `locateMessage` can override this lookup strategy.
+ *   If a message cannot be resolved locally, the event is ignored.
  *
  * Event ingestion
  * ---------------
@@ -131,14 +164,100 @@ export type OwnMessageReceiptsTrackerOptions = {
  *   equal-timestamp plateau (upper-bound insertion), preserving intuitive arrival order.
  * - This tracker models **others’ progress toward own messages**;
  */
-export class MessageReceiptsTracker {
+export class MessageReceiptsTracker extends WithSubscriptions {
   private byUser = new Map<UserId, UserProgress>();
   private readSorted: UserProgress[] = []; // asc by lastReadRef
   private deliveredSorted: UserProgress[] = []; // asc by lastDeliveredRef
+  private channel: Channel;
   private locateMessage: OwnMessageReceiptsTrackerMessageLocator;
+  private pendingReadStoreReconcileMeta?: ReadStoreReconcileMeta;
+  readonly snapshotStore = new StateStore<MessageReceiptsSnapshot>({
+    revision: 0,
+    readersByMessageId: {},
+    deliveredByMessageId: {},
+  });
 
-  constructor({ locateMessage }: OwnMessageReceiptsTrackerOptions) {
-    this.locateMessage = locateMessage;
+  constructor({ channel, locateMessage }: OwnMessageReceiptsTrackerOptions) {
+    super();
+    this.channel = channel;
+    this.locateMessage =
+      locateMessage ??
+      ((timestampMs: number) => {
+        const message = this.channel.state.findMessageByTimestamp(timestampMs);
+        return message ? { timestampMs, msgId: message.id } : null;
+      });
+  }
+
+  public registerSubscriptions = () => {
+    this.incrementRefCount();
+    if (this.hasSubscriptions) return;
+
+    this.addUnsubscribeFunction(
+      this.channel.state.readStore.subscribe((next, prev) => {
+        this.reconcileFromReadStore({
+          previousReadState: prev?.read,
+          nextReadState: next.read,
+          meta: this.pendingReadStoreReconcileMeta,
+        });
+        this.pendingReadStoreReconcileMeta = undefined;
+      }),
+    );
+  };
+
+  public unregisterSubscriptions = () => {
+    this.pendingReadStoreReconcileMeta = undefined;
+    return super.unregisterSubscriptions();
+  };
+
+  public setPendingReadStoreReconcileMeta(meta?: ReadStoreReconcileMeta) {
+    this.pendingReadStoreReconcileMeta = meta;
+  }
+
+  reconcileFromReadStore({
+    previousReadState,
+    nextReadState,
+    meta,
+  }: {
+    previousReadState?: Record<string, { user: UserResponse }>;
+    nextReadState: Record<string, ReadStoreUserState>;
+    meta?: ReadStoreReconcileMeta;
+  }) {
+    if (!previousReadState) {
+      this.ingestInitial(this.readStoreStateToResponses(nextReadState));
+      return;
+    }
+
+    // For non-bootstrap updates, we require patch metadata from channel read-store mutations.
+    if (!meta) return;
+
+    const removedUserIds = new Set(meta?.removedUserIds ?? []);
+    const changedUserIds = new Set(meta?.changedUserIds ?? []);
+
+    const changedOrRemovedUserIds = new Set<string>([
+      ...changedUserIds,
+      ...removedUserIds,
+    ]);
+
+    if (!changedOrRemovedUserIds.size) return;
+
+    let hasEffectiveChange = false;
+
+    for (const userId of changedOrRemovedUserIds) {
+      if (removedUserIds.has(userId) || !nextReadState[userId]) {
+        hasEffectiveChange = this.removeUserProgress(userId) || hasEffectiveChange;
+        continue;
+      }
+
+      const nextUserReadState = nextReadState[userId];
+      if (!isValidReadState(nextUserReadState)) continue;
+      const resolvedProgress = this.readStateToUserProgress(nextUserReadState);
+      hasEffectiveChange =
+        this.upsertUserProgress(resolvedProgress) || hasEffectiveChange;
+    }
+
+    if (hasEffectiveChange) {
+      this.emitSnapshot();
+    }
   }
 
   /** Build initial state from server snapshots (single pass + sort). */
@@ -173,6 +292,8 @@ export class MessageReceiptsTracker {
         userProgress,
       );
     }
+
+    this.emitSnapshot();
   }
 
   /** message.delivered — user device confirmed delivery up to and including messageId. */
@@ -207,6 +328,7 @@ export class MessageReceiptsTracker {
     );
     userProgress.lastDeliveredRef = newDelivered;
     insertByKey(this.deliveredSorted, userProgress, (x) => x.lastDeliveredRef);
+    this.emitSnapshot();
   }
 
   /** message.read — user read up to and including messageId. */
@@ -249,6 +371,8 @@ export class MessageReceiptsTracker {
       userProgress.lastDeliveredRef = userProgress.lastReadRef;
       insertByKey(this.deliveredSorted, userProgress, (x) => x.lastDeliveredRef);
     }
+
+    this.emitSnapshot();
   }
 
   /** notification.mark_unread — user marked messages unread starting at `first_unread_message_id`.
@@ -300,6 +424,8 @@ export class MessageReceiptsTracker {
       userProgress.lastDeliveredRef = userProgress.lastReadRef;
       insertByKey(this.deliveredSorted, userProgress, (x) => x.lastDeliveredRef);
     }
+
+    this.emitSnapshot();
   }
 
   /** All users who READ this message. */
@@ -413,5 +539,147 @@ export class MessageReceiptsTracker {
       insertByKey(this.deliveredSorted, up, (x) => x.lastDeliveredRef);
     }
     return up;
+  }
+
+  private removeUserProgress(userId: string) {
+    const userProgress = this.byUser.get(userId);
+    if (!userProgress) return false;
+
+    removeByOldKey(
+      this.readSorted,
+      userProgress,
+      userProgress.lastReadRef,
+      (x) => x.lastReadRef,
+    );
+    removeByOldKey(
+      this.deliveredSorted,
+      userProgress,
+      userProgress.lastDeliveredRef,
+      (x) => x.lastDeliveredRef,
+    );
+    this.byUser.delete(userId);
+
+    return true;
+  }
+
+  private upsertUserProgress(nextUserProgress: UserProgress) {
+    const existingUserProgress = this.byUser.get(nextUserProgress.user.id);
+    if (!existingUserProgress) {
+      this.byUser.set(nextUserProgress.user.id, nextUserProgress);
+      insertByKey(this.readSorted, nextUserProgress, (x) => x.lastReadRef);
+      insertByKey(this.deliveredSorted, nextUserProgress, (x) => x.lastDeliveredRef);
+      return true;
+    }
+
+    const hasSameReadRef =
+      compareRefsAsc(existingUserProgress.lastReadRef, nextUserProgress.lastReadRef) ===
+        0 &&
+      existingUserProgress.lastReadRef.msgId === nextUserProgress.lastReadRef.msgId;
+    const hasSameDeliveredRef =
+      compareRefsAsc(
+        existingUserProgress.lastDeliveredRef,
+        nextUserProgress.lastDeliveredRef,
+      ) === 0 &&
+      existingUserProgress.lastDeliveredRef.msgId ===
+        nextUserProgress.lastDeliveredRef.msgId;
+    const hasSameUser = existingUserProgress.user.id === nextUserProgress.user.id;
+
+    if (hasSameReadRef && hasSameDeliveredRef && hasSameUser) {
+      return false;
+    }
+
+    removeByOldKey(
+      this.readSorted,
+      existingUserProgress,
+      existingUserProgress.lastReadRef,
+      (x) => x.lastReadRef,
+    );
+    removeByOldKey(
+      this.deliveredSorted,
+      existingUserProgress,
+      existingUserProgress.lastDeliveredRef,
+      (x) => x.lastDeliveredRef,
+    );
+
+    existingUserProgress.user = nextUserProgress.user;
+    existingUserProgress.lastReadRef = nextUserProgress.lastReadRef;
+    existingUserProgress.lastDeliveredRef = nextUserProgress.lastDeliveredRef;
+
+    insertByKey(this.readSorted, existingUserProgress, (x) => x.lastReadRef);
+    insertByKey(this.deliveredSorted, existingUserProgress, (x) => x.lastDeliveredRef);
+
+    return true;
+  }
+
+  private readStateToUserProgress(readState: {
+    last_read: Date | string;
+    unread_messages?: number;
+    user: UserResponse;
+    first_unread_message_id?: string;
+    last_read_message_id?: string;
+    last_delivered_at?: Date | string;
+    last_delivered_message_id?: string;
+  }): UserProgress {
+    const lastReadTimestamp = toTimestampMs(readState.last_read);
+    const lastDeliveredTimestamp = readState.last_delivered_at
+      ? toTimestampMs(readState.last_delivered_at)
+      : null;
+    const lastReadRef = readState.last_read_message_id
+      ? { timestampMs: lastReadTimestamp, msgId: readState.last_read_message_id }
+      : (this.locateMessage(lastReadTimestamp) ?? MIN_REF);
+    let lastDeliveredRef = readState.last_delivered_message_id
+      ? {
+          timestampMs: lastDeliveredTimestamp ?? lastReadTimestamp,
+          msgId: readState.last_delivered_message_id,
+        }
+      : lastDeliveredTimestamp
+        ? (this.locateMessage(lastDeliveredTimestamp) ?? MIN_REF)
+        : MIN_REF;
+
+    if (compareRefsAsc(lastDeliveredRef, lastReadRef) < 0) {
+      lastDeliveredRef = lastReadRef;
+    }
+
+    return {
+      user: readState.user,
+      lastReadRef,
+      lastDeliveredRef,
+    };
+  }
+
+  private readStoreStateToResponses(
+    readState: Record<string, ReadStoreUserState>,
+  ): ReadResponse[] {
+    return Object.values(readState).reduce<ReadResponse[]>((responses, userReadState) => {
+      if (!isValidReadState(userReadState)) return responses;
+      const lastReadDate = new Date(userReadState.last_read);
+      if (Number.isNaN(lastReadDate.getTime())) return responses;
+      const lastReadIso = lastReadDate.toISOString();
+
+      responses.push({
+        last_read: lastReadIso,
+        user: userReadState.user,
+        last_read_message_id: userReadState.last_read_message_id,
+        unread_messages: userReadState.unread_messages ?? 0,
+        last_delivered_at: userReadState.last_delivered_at
+          ? new Date(userReadState.last_delivered_at).toISOString()
+          : undefined,
+        last_delivered_message_id: userReadState.last_delivered_message_id,
+      });
+
+      return responses;
+    }, []);
+  }
+
+  private emitSnapshot() {
+    const readersByMessageId = this.groupUsersByLastReadMessage();
+    const deliveredByMessageId = this.groupUsersByLastDeliveredMessage();
+    const currentSnapshot = this.snapshotStore.getLatestValue();
+
+    this.snapshotStore.next({
+      revision: currentSnapshot.revision + 1,
+      readersByMessageId,
+      deliveredByMessageId,
+    });
   }
 }

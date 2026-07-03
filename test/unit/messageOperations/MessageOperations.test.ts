@@ -1,0 +1,436 @@
+import { describe, expect, it, vi } from 'vitest';
+import { MessageOperations } from '../../../src/messageOperations/MessageOperations';
+import type { LocalMessage, Message, MessageResponse } from '../../../src/types';
+
+type Store = Map<string, LocalMessage>;
+
+const makeLocalMessage = (overrides?: Partial<LocalMessage>): LocalMessage =>
+  ({
+    attachments: [],
+    created_at: new Date(),
+    deleted_at: null,
+    id: 'm1',
+    mentioned_users: [],
+    pinned_at: null,
+    reaction_groups: null,
+    status: 'failed',
+    text: 'hi',
+    type: 'regular',
+    updated_at: new Date(),
+    ...overrides,
+  }) as LocalMessage;
+
+const makeMessageResponse = (overrides?: Partial<MessageResponse>): MessageResponse =>
+  ({
+    id: 'm1',
+    text: 'hi',
+    type: 'regular',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    ...overrides,
+  }) as MessageResponse;
+
+const defaultDelete = async () => ({ message: makeMessageResponse({ id: 'm1' }) });
+
+describe('MessageOperations', () => {
+  it('marks optimistic message as sending, then ingests received response', async () => {
+    const store: Store = new Map();
+
+    const ops = new MessageOperations({
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        delete: defaultDelete,
+        send: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+    });
+
+    const localMessage = makeLocalMessage({ id: 'm1', status: 'failed' });
+    await ops.send({ localMessage });
+
+    expect(store.get('m1')?.status).toBe('received');
+  });
+
+  it('uses per-call requestFn override for send', async () => {
+    const store: Store = new Map();
+
+    const ops = new MessageOperations({
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        delete: defaultDelete,
+        send: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+    });
+
+    const localMessage = makeLocalMessage({ id: 'm1' });
+
+    await ops.send({ localMessage }, async () => ({
+      message: makeMessageResponse({ id: 'm1', text: 'override' }),
+    }));
+
+    expect(store.get('m1')?.text).toBe('override');
+  });
+
+  it('marks as received on duplicate send error (already exists)', async () => {
+    const store: Store = new Map();
+
+    const ops = new MessageOperations({
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        delete: defaultDelete,
+        send: async () => {
+          throw Object.assign(new Error('message already exists'), { code: 4 });
+        },
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+    });
+
+    const localMessage = makeLocalMessage({ id: 'm1', status: 'failed' });
+
+    await expect(ops.send({ localMessage })).rejects.toThrow();
+    expect(store.get('m1')?.status).toBe('received');
+  });
+
+  it('marks as failed on non-duplicate error', async () => {
+    const store: Store = new Map();
+
+    const ops = new MessageOperations({
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        delete: defaultDelete,
+        send: async () => {
+          throw new Error('nope');
+        },
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+    });
+
+    const localMessage = makeLocalMessage({ id: 'm1', status: 'failed' });
+
+    await expect(ops.send({ localMessage })).rejects.toThrow('nope');
+    expect(store.get('m1')?.status).toBe('failed');
+  });
+
+  it('reuses cached payload and options when retry is called without explicit params', async () => {
+    const store: Store = new Map();
+    const sendCalls: Array<{ message: Message; options: unknown }> = [];
+
+    const ops = new MessageOperations({
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        delete: defaultDelete,
+        send: async (message, options) => {
+          sendCalls.push({ message, options });
+          if (sendCalls.length === 1) {
+            throw new Error('send failed');
+          }
+          return { message: makeMessageResponse({ id: 'm1', text: 'retried' }) };
+        },
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+    });
+
+    const localMessage = makeLocalMessage({ id: 'm1', text: 'local text' });
+    const cachedMessage = {
+      id: 'm1',
+      text: 'cached text',
+      type: 'regular',
+    } as Message;
+    const cachedOptions = { skip_push: true };
+
+    await expect(
+      ops.send({
+        localMessage,
+        message: cachedMessage,
+        options: cachedOptions,
+      }),
+    ).rejects.toThrow('send failed');
+
+    await ops.retry({ localMessage });
+
+    expect(sendCalls[1].message).toEqual(cachedMessage);
+    expect(sendCalls[1].options).toEqual(cachedOptions);
+  });
+
+  it('does not reuse expired cached payload and options', async () => {
+    vi.useFakeTimers();
+    try {
+      const store: Store = new Map();
+      const sendCalls: Array<{ message: Message; options: unknown }> = [];
+
+      const ops = new MessageOperations({
+        ingest: (m) => store.set(m.id, m),
+        get: (id) => store.get(id),
+        handlers: () => ({}),
+        defaults: {
+          delete: defaultDelete,
+          send: async (message, options) => {
+            sendCalls.push({ message, options });
+            if (sendCalls.length === 1) {
+              throw new Error('send failed');
+            }
+            return { message: makeMessageResponse({ id: 'm1', text: 'retried' }) };
+          },
+          update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+        },
+      });
+
+      const localMessage = makeLocalMessage({ id: 'm1', text: 'local text' });
+      const cachedMessage = {
+        id: 'm1',
+        text: 'cached text',
+        type: 'regular',
+      } as Message;
+      const cachedOptions = { skip_push: true };
+
+      await expect(
+        ops.send({
+          localMessage,
+          message: cachedMessage,
+          options: cachedOptions,
+        }),
+      ).rejects.toThrow('send failed');
+
+      vi.advanceTimersByTime(5 * 60 * 1000 + 1);
+
+      await ops.retry({ localMessage });
+
+      expect(sendCalls[1].message.text).toBe('local text');
+      expect(sendCalls[1].options).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears cached payload after successful retry', async () => {
+    const store: Store = new Map();
+    const sendCalls: Array<{ message: Message; options: unknown }> = [];
+
+    const ops = new MessageOperations({
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        delete: defaultDelete,
+        send: async (message, options) => {
+          sendCalls.push({ message, options });
+          if (sendCalls.length === 1) {
+            throw new Error('send failed');
+          }
+          return {
+            message: makeMessageResponse({ id: 'm1', text: `ok-${sendCalls.length}` }),
+          };
+        },
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+    });
+
+    const localMessage = makeLocalMessage({ id: 'm1', text: 'local text' });
+    const cachedMessage = {
+      id: 'm1',
+      text: 'cached text',
+      type: 'regular',
+    } as Message;
+    const cachedOptions = { skip_push: true };
+
+    await expect(
+      ops.send({
+        localMessage,
+        message: cachedMessage,
+        options: cachedOptions,
+      }),
+    ).rejects.toThrow('send failed');
+
+    await ops.retry({ localMessage });
+    await ops.retry({ localMessage });
+
+    expect(sendCalls[1].message).toEqual(cachedMessage);
+    expect(sendCalls[1].options).toEqual(cachedOptions);
+    expect(sendCalls[2].message.text).toBe('local text');
+    expect(sendCalls[2].options).toBeUndefined();
+  });
+
+  it('normalizes outgoing message for send', async () => {
+    const store: Store = new Map();
+
+    const ops = new MessageOperations({
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      normalizeOutgoingMessage: (m) => ({ ...m, parent_id: 't1' }),
+      handlers: () => ({
+        send: async (p) => {
+          expect(p.message?.parent_id).toBe('t1');
+          return { message: makeMessageResponse({ id: p.localMessage.id }) };
+        },
+      }),
+      defaults: {
+        delete: defaultDelete,
+        send: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+    });
+
+    const localMessage = makeLocalMessage({ id: 'm1' });
+    const message = { id: 'm1', text: 'hi' } as unknown as Message;
+
+    await ops.send({ localMessage, message });
+    expect(store.get('m1')?.status).toBe('received');
+  });
+
+  it('update passes only supported options (skip_enrich_url / skip_push) to defaults.update', async () => {
+    const store: Store = new Map();
+
+    let seenOptions: unknown = 'unset';
+
+    const ops = new MessageOperations({
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        delete: defaultDelete,
+        send: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+        update: async (_m, options) => {
+          seenOptions = options;
+          return { message: makeMessageResponse({ id: 'm1' }) };
+        },
+      },
+    });
+
+    const localMessage = makeLocalMessage({ id: 'm1', status: 'received' });
+
+    await ops.update({
+      localMessage,
+      options: {
+        // known fields
+        skip_enrich_url: true,
+        skip_push: false,
+        // @ts-expect-error extra fields should be dropped by MessageOperations.update
+        force_moderation: true,
+      },
+    });
+
+    expect(seenOptions).toEqual({
+      skip_enrich_url: true,
+      skip_push: false,
+    });
+  });
+
+  it('update passes undefined options to defaults.update when params.options is undefined', async () => {
+    const store: Store = new Map();
+
+    let seenOptions: unknown = 'unset';
+
+    const ops = new MessageOperations({
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        delete: defaultDelete,
+        send: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+        update: async (_m, options) => {
+          seenOptions = options;
+          return { message: makeMessageResponse({ id: 'm1' }) };
+        },
+      },
+    });
+
+    const localMessage = makeLocalMessage({ id: 'm1', status: 'received' });
+
+    await ops.update({ localMessage });
+    expect(seenOptions).toBeUndefined();
+  });
+
+  it('delete uses defaults.delete and ingests deleted message', async () => {
+    const store: Store = new Map();
+    const defaultsDelete = vi.fn(async () => ({
+      message: makeMessageResponse({ id: 'm1', deleted_at: new Date().toISOString() }),
+    }));
+
+    const ops = new MessageOperations({
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        delete: defaultsDelete,
+        send: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+    });
+
+    const localMessage = makeLocalMessage({ id: 'm1', status: 'received' });
+    await ops.delete({ localMessage });
+
+    expect(defaultsDelete).toHaveBeenCalledWith('m1', undefined);
+    expect(store.get('m1')?.deleted_at).toBeInstanceOf(Date);
+  });
+
+  it('delete uses per-call requestFn override', async () => {
+    const store: Store = new Map();
+
+    const ops = new MessageOperations({
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        delete: defaultDelete,
+        send: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+    });
+
+    const localMessage = makeLocalMessage({ id: 'm1', status: 'received' });
+
+    await ops.delete({ localMessage }, async () => ({
+      message: makeMessageResponse({
+        id: 'm1',
+        deleted_at: new Date().toISOString(),
+        text: 'deleted via override',
+      }),
+    }));
+
+    expect(store.get('m1')?.text).toBe('deleted via override');
+    expect(store.get('m1')?.deleted_at).toBeInstanceOf(Date);
+  });
+
+  it('delete uses configured handlers.delete when provided', async () => {
+    const store: Store = new Map();
+    const configuredDelete = vi.fn(async () => ({
+      message: makeMessageResponse({
+        id: 'm1',
+        deleted_at: new Date().toISOString(),
+        text: 'deleted via configured handler',
+      }),
+    }));
+
+    const ops = new MessageOperations({
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({ delete: configuredDelete }),
+      defaults: {
+        delete: defaultDelete,
+        send: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+    });
+
+    const localMessage = makeLocalMessage({ id: 'm1', status: 'received' });
+    await ops.delete({ localMessage, options: { hard: true } });
+
+    expect(configuredDelete).toHaveBeenCalledWith({
+      localMessage,
+      options: { hard: true },
+    });
+    expect(store.get('m1')?.text).toBe('deleted via configured handler');
+  });
+});

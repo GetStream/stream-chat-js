@@ -279,14 +279,39 @@ export class MessageDeliveryReporter {
    * @param options
    */
   public markRead = async (collection: Channel | Thread, options?: MarkReadOptions) => {
+    const isThreadCollection = isThread(collection);
+    const channel = isThreadCollection ? collection.channel : collection;
+    const requestOptions = isThreadCollection
+      ? { ...options, thread_id: collection.id }
+      : options;
+
     let result: EventAPIResponse | null = null;
-    if (isChannel(collection)) {
-      result = await collection.markAsReadRequest(options);
-    } else if (isThread(collection)) {
-      result = await collection.channel.markAsReadRequest({
-        ...options,
-        thread_id: collection.id,
-      });
+
+    if (isThreadCollection) {
+      const markReadRequestHandler = collection.configState.getLatestValue()
+        .requestHandlers?.markReadRequest as
+        | ((params: {
+            thread: Thread;
+            options?: MarkReadOptions;
+          }) => Promise<EventAPIResponse | null> | void)
+        | undefined;
+      result = markReadRequestHandler
+        ? ((await markReadRequestHandler({
+            options: requestOptions,
+            thread: collection,
+          })) ?? null)
+        : await channel.markAsReadRequest(requestOptions);
+    } else {
+      const markReadRequestHandler = channel.configState.getLatestValue().requestHandlers
+        ?.markReadRequest as
+        | ((params: {
+            channel: Channel;
+            options?: MarkReadOptions;
+          }) => Promise<EventAPIResponse | null> | void)
+        | undefined;
+      result = markReadRequestHandler
+        ? ((await markReadRequestHandler({ channel, options: requestOptions })) ?? null)
+        : await channel.markAsReadRequest(requestOptions);
     }
 
     this.removeCandidateFor(collection);

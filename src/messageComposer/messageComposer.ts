@@ -83,6 +83,7 @@ export type MessageComposerSnapshot = {
 };
 
 export type LocalMessageWithLegacyThreadId = LocalMessage & { legacyThreadId?: string };
+// todo: remove LocalMessageWithLegacyThreadId
 export type CompositionContext = Channel | Thread | LocalMessageWithLegacyThreadId;
 
 export type MessageComposerState = {
@@ -640,15 +641,16 @@ export class MessageComposer extends WithSubscriptions {
 
   private subscribeMessageComposerSetupStateChange = () => {
     let tearDown: (() => void) | null = null;
-    const unsubscribe = this.client._messageComposerSetupState.subscribeWithSelector(
-      ({ setupFunction: setup }) => ({
-        setup,
-      }),
-      ({ setup }) => {
-        tearDown?.();
-        tearDown = setup?.({ composer: this }) ?? null;
-      },
-    );
+    const unsubscribe =
+      this.client.instanceConfigurationService.MessageComposer.subscribeWithSelector(
+        ({ setupFunction: setup }) => ({
+          setup,
+        }),
+        ({ setup }) => {
+          tearDown?.();
+          tearDown = setup?.({ composer: this }) ?? null;
+        },
+      );
 
     return () => {
       tearDown?.();
@@ -865,6 +867,7 @@ export class MessageComposer extends WithSubscriptions {
         },
         localMessage: {
           attachments: [],
+          cid: this.channel.cid, // it is needed to match local paginator filters to be ingested into its state
           created_at, // only assigned to localMessage as this is used for optimistic update
           deleted_at: null,
           error: undefined,
