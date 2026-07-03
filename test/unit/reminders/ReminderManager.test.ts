@@ -158,8 +158,7 @@ describe('ReminderManager', () => {
     });
 
     it('does not add new reminders if client cache is disabled', () => {
-      const secret = 'secret';
-      const client = new StreamChat('api-key', secret, { disableCache: true });
+      const client = new StreamChat('api-key', { disableCache: true });
       const manager = new ReminderManager({ client });
 
       const reminderResponse = generateReminderResponse();

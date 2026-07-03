@@ -53,6 +53,7 @@ import type {
   PollVoteResponseData as Gen_PollVoteResponseData,
   PrivacySettingsResponse as Gen_PrivacySettingsResponse,
   PushPreferenceInput as Gen_PushPreferenceInput,
+  PushPreferencesResponse as Gen_PushPreferencesResponse,
   QueryBannedUsersPayload as Gen_QueryBannedUsersPayload,
   QueryChannelsRequest as Gen_QueryChannelsRequest,
   QueryChannelsResponse as Gen_QueryChannelsResponse,
@@ -363,7 +364,10 @@ export type LocalMessage = MessageResponse & {
   user_id?: string;
 };
 
-export type ThreadResponse = CustomThreadData & Gen_ThreadStateResponse;
+export type ThreadResponse = ReplacePropertyTypes<
+  Gen_ThreadStateResponse,
+  { custom: CustomThreadData }
+>;
 
 // TODO: Figure out a way to strongly type set and unset.
 export type PartialThreadUpdate = {
@@ -438,7 +442,7 @@ export type OwnUserBase = {
   unread_threads: number;
   invisible?: boolean;
   privacy_settings?: PrivacySettings;
-  push_preferences?: PushPreferencesResponse;
+  push_preferences?: Gen_PushPreferencesResponse;
   roles?: string[];
   total_unread_count_by_team?: Record<string, number> | null;
 };

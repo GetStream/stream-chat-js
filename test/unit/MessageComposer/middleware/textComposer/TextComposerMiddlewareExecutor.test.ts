@@ -14,6 +14,7 @@ import type {
 } from '../../../../../src/types';
 import { TextComposerMiddleware } from '../../../../../src';
 import type { UserSuggestion } from '../../../../../src/messageComposer/middleware/textComposer/types';
+import { getClientWithUser } from '../../../test-utils/getClient';
 
 // Mock dependencies
 vi.mock('../../../src/utils', () => ({
@@ -46,7 +47,7 @@ const setup = ({
   vi.clearAllMocks();
 
   // Setup mocks
-  const client = new StreamChat('apiKey', 'apiSecret');
+  const client = getClientWithUser({ id: 'user' });
   client.queryUsers = vi.fn().mockResolvedValue({ users: [] });
 
   const channel = client.channel('channelType', 'channelId');
