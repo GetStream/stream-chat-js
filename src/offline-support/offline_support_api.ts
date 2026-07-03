@@ -1,8 +1,9 @@
 import type {
   APIErrorResponse,
   ChannelResponse,
-  CombinedEvents,
+  Event,
   EventPayload,
+  EventType,
   LocalMessage,
   Message,
   MessageResponse,
@@ -17,7 +18,7 @@ import type {
   PrepareBatchDBQueries,
 } from './types';
 import { OfflineError } from './types';
-import type { ListenerKeys, StreamChat } from '../client';
+import type { StreamChat } from '../client';
 import type { AxiosError } from 'axios';
 import { OfflineDBSyncManager } from './offline_sync_manager';
 import { chatLoggerSystem } from '../logger';
@@ -983,7 +984,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       return [];
     }
 
-    const getReactionMethod = (type: ListenerKeys) => {
+    const getReactionMethod = (type: EventType) => {
       switch (type) {
         case 'reaction.new':
           return this.insertReaction;
@@ -1056,7 +1057,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     event,
     execute = true,
   }: {
-    event: CombinedEvents;
+    event: Event;
     execute?: boolean;
   }) => {
     const { type } = event;

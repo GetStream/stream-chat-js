@@ -23,13 +23,14 @@ import type {
   CommandResponse,
   DraftMessage,
   DraftResponse,
+  EventType,
   LocalMessage,
   MessageResponse,
   UserResponse,
 } from '../types';
 import { chatLoggerSystem } from '../logger';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
-import type { ListenerKeys, StreamChat } from '../client';
+import type { StreamChat } from '../client';
 import type { CommandSendability, MessageComposerConfig } from './configuration/types';
 import type {
   CommandSuggestionDisabledReason,
@@ -621,7 +622,7 @@ export class MessageComposer extends WithSubscriptions {
       'reaction.new',
       'reaction.deleted', // todo: do we need to subscribe to this especially when the whole state is overriden?
       'reaction.updated', // todo: do we need to subscribe to this especially when the whole state is overriden?
-    ] satisfies ListenerKeys[];
+    ] satisfies EventType[];
 
     const unsubscribeFunctions = eventTypes.map(
       (eventType) =>

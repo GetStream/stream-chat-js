@@ -2,19 +2,19 @@ import { chatLoggerSystem } from './logger';
 import { StateStore } from './store';
 import { throttle } from './utils';
 
-import type { ListenerKeys, StreamChat } from './client';
+import type { StreamChat } from './client';
 import type { Thread } from './thread';
 import type {
-  CombinedEvents,
+  Event,
   EventPayload,
+  EventType,
   OwnUserResponse,
   QueryThreadsOptions,
 } from './types';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 
-const eventIsHealthCheck = (
-  event: CombinedEvents,
-): event is EventPayload<'health.check'> => Object.hasOwn(event, 'me');
+const eventIsHealthCheck = (event: Event): event is EventPayload<'health.check'> =>
+  Object.hasOwn(event, 'me');
 
 const DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION = 1000;
 const MAX_QUERY_THREADS_LIMIT = 25;
@@ -140,7 +140,7 @@ export class ThreadManager extends WithSubscriptions {
         'notification.mark_unread',
         'notification.thread_message_new',
         'notification.channel_deleted',
-      ] as const satisfies ListenerKeys[]
+      ] as const satisfies EventType[]
     ).map(
       (eventType) =>
         this.client.on(eventType, (event) => {
