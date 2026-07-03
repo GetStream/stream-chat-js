@@ -13,6 +13,7 @@ import {
   addToMessageList,
   findIndexInSortedArray,
   channelHasReadEvents,
+  channelTracksReadLocally,
   userHasReadReceipts,
   formatMessage,
   generateChannelTempCid,
@@ -1194,6 +1195,55 @@ describe('channelHasReadEvents', () => {
 
   it('returns true (assumes read events on) when own_capabilities is unknown', () => {
     expect(channelHasReadEvents(makeChannel(undefined))).toBe(true);
+  });
+
+  it('returns true when the channel is undefined', () => {
+    expect(channelHasReadEvents(undefined)).toBe(true);
+  });
+});
+
+describe('channelTracksReadLocally', () => {
+  const setup = ({
+    isLocalUnreadCountEnabled,
+    own_capabilities,
+  }: {
+    isLocalUnreadCountEnabled?: boolean;
+    own_capabilities?: string[];
+  }) => {
+    const client = new StreamChat('apiKey', { isLocalUnreadCountEnabled });
+    client.user = { id: 'user' };
+    client.userID = 'user';
+    const channel = client.channel('messaging', 'cap-id');
+    channel.data = { own_capabilities };
+    return { client, channel };
+  };
+
+  it('returns true when read events are disabled and local unread count is enabled', () => {
+    const { channel } = setup({
+      isLocalUnreadCountEnabled: true,
+      own_capabilities: [],
+    });
+    expect(channelTracksReadLocally(channel)).toBe(true);
+  });
+
+  it('returns false when the channel has read events', () => {
+    const { channel } = setup({
+      isLocalUnreadCountEnabled: true,
+      own_capabilities: ['read-events'],
+    });
+    expect(channelTracksReadLocally(channel)).toBe(false);
+  });
+
+  it('returns false when local unread count is disabled', () => {
+    const { channel } = setup({
+      isLocalUnreadCountEnabled: false,
+      own_capabilities: [],
+    });
+    expect(channelTracksReadLocally(channel)).toBe(false);
+  });
+
+  it('returns false when the channel is undefined', () => {
+    expect(channelTracksReadLocally(undefined)).toBe(false);
   });
 });
 

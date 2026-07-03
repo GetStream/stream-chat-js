@@ -113,11 +113,17 @@ export function isOwnUserBaseProperty(property: string) {
 /**
  * channelHasReadEvents - Whether read events are enabled for the current user on a channel.
  */
-export const channelHasReadEvents = (channel: Channel) =>
-  !(
-    Array.isArray(channel.data?.own_capabilities) &&
-    !channel.data.own_capabilities.includes('read-events')
-  );
+export const channelHasReadEvents = (channel?: Channel) => {
+  const ownCapabilities = channel?.data?.own_capabilities;
+  return !(Array.isArray(ownCapabilities) && !ownCapabilities.includes('read-events'));
+};
+
+/**
+ * channelTracksReadLocally - Whether a channel maintains a client local unread count.
+ */
+export const channelTracksReadLocally = (channel?: Channel) =>
+  !channelHasReadEvents(channel) &&
+  !!channel?.getClient().options.isLocalUnreadCountEnabled;
 
 /**
  * userHasReadReceipts - Whether the current user allows read receipts, per their privacy settings.
