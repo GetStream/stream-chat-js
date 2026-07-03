@@ -10,8 +10,8 @@
       "range": "8.x"
     },
     {
-      "name": "rc",
-      "prerelease": true
+      "name": "release-v10",
+      "prerelease": "rc"
     }
   ],
   "plugins": [
