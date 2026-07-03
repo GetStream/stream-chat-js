@@ -11,9 +11,10 @@
 import { withCancellation } from './utils/concurrency';
 import { StateStore } from './store';
 import { WithSubscriptions } from './utils/WithSubscriptions';
-import type { ListenerKeys, StreamChat } from './client';
+import type { StreamChat } from './client';
 import type { Unsubscribe } from './store';
 import type {
+  EventType,
   MessageResponse,
   SharedLiveLocationResponse,
   SharedLocationResponse,
@@ -221,7 +222,7 @@ export class LiveLocationManager extends WithSubscriptions {
           'live_location_sharing.started',
           'message.updated',
           'message.deleted',
-        ] satisfies ListenerKeys[]
+        ] satisfies EventType[]
       ).map((eventType) =>
         this.client.on(eventType, (event) => {
           if (!event.message) return;

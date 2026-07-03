@@ -1,7 +1,6 @@
 import type { Channel } from './channel';
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { StableWSConnection } from './connection';
-import type { RoleName } from './permissions';
 import type {
   CustomAttachmentData,
   CustomChannelData,
@@ -38,6 +37,8 @@ import type {
   DraftResponse as Gen_DraftResponse,
   Field as Gen_Field,
   FileUploadConfig as Gen_FileUploadConfig,
+  GetApplicationResponse as Gen_GetApplicationResponse,
+  Images as Gen_Images,
   MarkDeliveredRequest as Gen_MarkDeliveredRequest,
   MarkReadRequest as Gen_MarkReadRequest,
   MarkUnreadRequest as Gen_MarkUnreadRequest,
@@ -47,6 +48,7 @@ import type {
   ModerationPayload as Gen_ModerationPayload,
   OwnUserResponse as Gen_OwnUserResponse,
   PendingMessageResponse as Gen_PendingMessageResponse,
+  PollOptionResponseData as Gen_PollOptionResponseData,
   PollResponseData as Gen_PollResponseData,
   PollVoteResponseData as Gen_PollVoteResponseData,
   PrivacySettingsResponse as Gen_PrivacySettingsResponse,
@@ -75,6 +77,8 @@ import type {
   UpdateChannelPartialRequest as Gen_UpdateChannelPartialRequest,
   UpdateChannelRequest as Gen_UpdateChannelRequest,
   UpdateLiveLocationRequest as Gen_UpdateLiveLocationRequest,
+  UpdateMessageRequest as Gen_UpdateMessageRequest,
+  UpdateMessageResponse as Gen_UpdateMessageResponse,
   UpdatePollOptionRequest as Gen_UpdatePollOptionRequest,
   UpdatePollRequest as Gen_UpdatePollRequest,
   UpdateUserPartialRequest as Gen_UpdateUserPartialRequest,
@@ -765,10 +769,10 @@ type LocalEvent = (
     })
 ) & { received_at?: Date };
 
-export type CombinedEvents = WSEvent | LocalEvent  | keyof CustomEventTypes;;
-export type EventHandler<T = string> = (
-  event: Extract<CombinedEvents, { type: T }>,
-) => void;
+export type Event = WSEvent | LocalEvent | keyof CustomEventTypes;
+export type EventType = Event['type'] | 'all';
+
+export type EventHandler<T = string> = (event: Extract<Event, { type: T }>) => void;
 
 /**
  * Filter Types
@@ -1689,8 +1693,8 @@ type Filters<FilterConditions extends Record<string, { type: any; operators: str
       : undefined;
   }>;
 
-export type EventPayload<T extends CombinedEvents['type'] | (string & {})> = Extract<
-  CombinedEvents,
+export type EventPayload<T extends Event['type'] | (string & {})> = Extract<
+  Event,
   { type: T }
 >;
 
@@ -1710,3 +1714,42 @@ export type ReplacePropertyTypes<
 export type PartializeAllBut<T, K extends keyof T> = {
   [P in K]-?: T[P];
 } & { [P in Exclude<keyof T, K>]?: T[P] };
+
+export type DeleteMessageOptions = Omit<Parameters<ChatApi['deleteMessage']>[0], 'id'>;
+export type SendMessageAPIResponse = StreamResponse<Gen_SendMessageResponse>;
+export type UpdateMessageOptions = Omit<Gen_UpdateMessageRequest, 'message'>;
+export type UpdateMessageAPIResponse = StreamResponse<Gen_UpdateMessageResponse>;
+export type GiphyVersions = keyof Gen_Images;
+export type PollVoteResponseData = Gen_PollVoteResponseData;
+export type PollOption = ReplacePropertyTypes<
+  Gen_PollOptionResponseData,
+  { custom: CustomPollOptionData }
+>;
+export type PollOptionResponseData = PollOption;
+export type PollResponseData = ReplacePropertyTypes<
+  Gen_PollResponseData,
+  { custom: CustomPollData }
+>;
+export type MessageRequest = ReplacePropertyTypes<
+  Gen_MessageRequest,
+  { custom: CustomMessageData }
+>;
+export type SendMessageResponse = Gen_SendMessageResponse;
+export type UpdateMessageResponse = Gen_UpdateMessageResponse;
+export type GetApplicationResponse = Gen_GetApplicationResponse;
+
+/**
+ * v9 → v10 compatibility aliases. Kept to ease migration; prefer the v10 name.
+ */
+
+/** @deprecated Use `ListenerKeys` (from the client module) instead. */
+export type EventTypes = EventType;
+
+/** @deprecated Use `PollVote` instead. */
+export type PollAnswer = PollVote;
+
+/** @deprecated The v9 `TranslationLanguages` literal union no longer exists; use `string`. */
+export type TranslationLanguages = string;
+
+/** @deprecated The event-returning endpoint is gone; use `APIResponse` and consume events via WS (`CombinedEvents`). */
+export type EventAPIResponse = APIResponse & { event: Event };

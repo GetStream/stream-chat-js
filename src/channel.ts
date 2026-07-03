@@ -9,7 +9,7 @@ import {
   logChatPromiseExecution,
   messageSetPagination,
 } from './utils';
-import type { ListenerKeys, StreamChat } from './client';
+import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import type {
@@ -22,10 +22,11 @@ import type {
   ChannelQueryOptions,
   ChannelResponse,
   ChannelUpdateOptions,
-  CombinedEvents,
   CreateDraftResponse,
+  Event,
   EventHandler,
   EventPayload,
+  EventType,
   GetRepliesAPIResponse,
   GetRepliesRequest,
   LiveLocationPayload,
@@ -77,7 +78,7 @@ export class Channel extends ChannelApi {
   _data: ChannelData;
   cid: string;
   /**  */
-  listeners: Map<ListenerKeys, Set<EventHandler>>;
+  listeners: Map<EventType, Set<EventHandler>>;
   state: ChannelState;
   /**
    * This boolean is a vague indication of whether the channel exists on chat backend.
@@ -284,7 +285,7 @@ export class Channel extends ChannelApi {
    * @param event - For example `{ type: 'message.read' }`.
    * @returns The server response.
    */
-  override async sendEvent(request: { event: CombinedEvents }) {
+  override async sendEvent(request: { event: Event }) {
     this._checkInitialized();
     return await super.sendEvent(request);
   }
@@ -1529,7 +1530,7 @@ export class Channel extends ChannelApi {
    * @param callbackOrNothing - The callback to call when an event type was provided (optional).
    * @returns An object with an `unsubscribe()` method.
    */
-  on<T extends ListenerKeys | string>(
+  on<T extends EventType | string>(
     eventType: T,
     callback: EventHandler<T>,
   ): { unsubscribe: () => void };
@@ -1538,7 +1539,7 @@ export class Channel extends ChannelApi {
     callbackOrString: EventHandler | string,
     callbackOrNothing?: EventHandler,
   ): { unsubscribe: () => void } {
-    const key = callbackOrNothing ? (callbackOrString as ListenerKeys) : 'all';
+    const key = callbackOrNothing ? (callbackOrString as EventType) : 'all';
     const callback = callbackOrNothing
       ? callbackOrNothing
       : (callbackOrString as EventHandler);
@@ -1573,10 +1574,10 @@ export class Channel extends ChannelApi {
    * @param callbackOrString - The event type, or the callback when removing an all-events listener.
    * @param callbackOrNothing - The callback to remove when an event type was provided (optional).
    */
-  off<T extends ListenerKeys | string>(eventType: T, callback: EventHandler): void;
+  off<T extends EventType | string>(eventType: T, callback: EventHandler): void;
   off(callback: EventHandler): void;
   off(callbackOrString: EventHandler | string, callbackOrNothing?: EventHandler): void {
-    const key = callbackOrNothing ? (callbackOrString as ListenerKeys) : 'all';
+    const key = callbackOrNothing ? (callbackOrString as EventType) : 'all';
     const callback = callbackOrNothing
       ? callbackOrNothing
       : (callbackOrString as EventHandler);
@@ -1594,7 +1595,7 @@ export class Channel extends ChannelApi {
     }
   }
 
-  _handleChannelEvent(event: CombinedEvents) {
+  _handleChannelEvent(event: Event) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const channel = this;
     logger

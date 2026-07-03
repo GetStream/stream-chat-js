@@ -34,11 +34,12 @@ import type {
   ChannelOptions,
   ChannelResponse,
   ChannelStateOptions,
-  CombinedEvents,
   Configs,
   ConnectAPIResponse,
   DeviceIdentifier,
+  Event,
   EventHandler,
+  EventType,
   FlagMessageResponse,
   FlagUserResponse,
   GetThreadOptions,
@@ -131,8 +132,6 @@ export type MessageComposerSetupState = {
   setupFunction: MessageComposerSetupFunction | null;
 };
 
-export type ListenerKeys = CombinedEvents['type'] | 'all';
-
 type ClientUser = PartializeAllBut<OwnUserResponse, 'id'> & { anon?: boolean };
 
 export class StreamChat extends ChatApi {
@@ -163,7 +162,7 @@ export class StreamChat extends ChatApi {
   clientId?: string;
   configs: Configs;
   key: string;
-  listeners: Map<ListenerKeys, Set<EventHandler>>;
+  listeners: Map<EventType, Set<EventHandler>>;
   /**
    * When network is recovered, we re-query the active channels on client. But in single query, you can recover
    * only 30 channels. So its not guaranteed that all the channels in activeChannels object have updated state.
@@ -731,7 +730,7 @@ export class StreamChat extends ChatApi {
    * @returns An object with an `unsubscribe()` method.
    */
   on(callback: EventHandler): { unsubscribe: () => void };
-  on<T extends ListenerKeys | string>(
+  on<T extends EventType | string>(
     eventType: T,
     callback: EventHandler<T>,
   ): { unsubscribe: () => void };
@@ -739,7 +738,7 @@ export class StreamChat extends ChatApi {
     callbackOrString: EventHandler | string,
     callbackOrNothing?: EventHandler,
   ): { unsubscribe: () => void } {
-    const key = callbackOrNothing ? (callbackOrString as ListenerKeys) : 'all';
+    const key = callbackOrNothing ? (callbackOrString as EventType) : 'all';
     const callback = callbackOrNothing
       ? callbackOrNothing
       : (callbackOrString as EventHandler);
@@ -773,7 +772,7 @@ export class StreamChat extends ChatApi {
   off(callback: EventHandler): void;
   off(eventType: string, callback: EventHandler): void;
   off(callbackOrString: EventHandler | string, callbackOrNothing?: EventHandler) {
-    const key = callbackOrNothing ? (callbackOrString as ListenerKeys) : 'all';
+    const key = callbackOrNothing ? (callbackOrString as EventType) : 'all';
     const callback = callbackOrNothing
       ? callbackOrNothing
       : (callbackOrString as EventHandler);
@@ -789,14 +788,14 @@ export class StreamChat extends ChatApi {
     }
   }
 
-  dispatchEvent = (event: CombinedEvents) => {
+  dispatchEvent = (event: Event) => {
     if (!event.received_at) event.received_at = new Date();
 
     // client event handlers
     const postListenerCallbacks = this._handleClientEvent(event as WSEvent);
 
     // channel event handlers
-    const cid = (event as Extract<CombinedEvents, { cid?: any }>).cid;
+    const cid = (event as Extract<Event, { cid?: any }>).cid;
     const channel = cid ? this.activeChannels[cid] : undefined;
     if (channel) {
       channel._handleChannelEvent(event as WSEvent);
@@ -1077,7 +1076,7 @@ export class StreamChat extends ChatApi {
     };
   }
 
-  _callClientListeners = (event: CombinedEvents) => {
+  _callClientListeners = (event: Event) => {
     const allSet = this.listeners.get('all');
     const targetSet = this.listeners.get(event.type);
 

@@ -6,8 +6,8 @@ import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { ReminderResponseBaseOrResponse } from './Reminder';
 import type { StreamChat } from '../client';
 import type {
-  CombinedEvents,
   CreateReminderOptions,
+  Event,
   EventPayload,
   LocalMessage,
   MessageResponse,
@@ -160,7 +160,7 @@ export class ReminderManager extends WithSubscriptions {
   // Timers API END //
 
   // WS event handling START //
-  static isReminderWsEventPayload = (event: CombinedEvents): event is ReminderEvent =>
+  static isReminderWsEventPayload = (event: Event): event is ReminderEvent =>
     'reminder' in event &&
     !!event.reminder &&
     (event.type.startsWith('reminder.') || event.type === 'notification.reminder_due');

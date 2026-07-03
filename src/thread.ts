@@ -7,6 +7,7 @@ import {
   throttle,
 } from './utils';
 import type {
+  EventType,
   LocalMessage,
   MessagePaginationOptions,
   MessageResponse,
@@ -16,7 +17,7 @@ import type {
 } from './types';
 import type { SortParamRequest as Gen_SortParamRequest } from './gen/models';
 import type { Channel } from './channel';
-import type { ListenerKeys, StreamChat } from './client';
+import type { StreamChat } from './client';
 import type { CustomThreadData } from './custom_types';
 import { MessageComposer } from './messageComposer';
 import { WithSubscriptions } from './utils/WithSubscriptions';
@@ -429,7 +430,7 @@ export class Thread extends WithSubscriptions {
       'reaction.new',
       'reaction.deleted',
       'reaction.updated',
-    ] satisfies ListenerKeys[];
+    ] satisfies EventType[];
 
     const unsubscribeFunctions = eventTypes.map(
       (eventType) =>
