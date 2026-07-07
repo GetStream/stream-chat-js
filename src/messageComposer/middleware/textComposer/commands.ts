@@ -2,7 +2,7 @@ import type { Channel } from '../../../channel';
 import type { Middleware } from '../../../middleware';
 import type { SearchSourceOptions } from '../../../search';
 import { BaseSearchSourceSync } from '../../../search';
-import type { CommandResponse } from '../../../types';
+import type { Command } from '../../../types';
 import { mergeWith } from '../../../utils/mergeWith';
 import type { MessageComposer } from '../../messageComposer';
 import type { CommandSuggestion, TextComposerMiddlewareOptions } from './types';
@@ -40,8 +40,8 @@ export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion>
   query(searchQuery: string) {
     const channelConfig = this.channel.getConfig();
     const commands = channelConfig?.commands || [];
-    const selectedCommands: CommandResponse[] = commands.filter(
-      (command): command is CommandResponse =>
+    const selectedCommands: Command[] = commands.filter(
+      (command): command is Command =>
         !!(
           command.name &&
           command.name.toLowerCase().indexOf(searchQuery.toLowerCase()) !== -1

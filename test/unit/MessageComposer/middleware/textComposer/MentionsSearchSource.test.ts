@@ -9,13 +9,13 @@ import { StreamChat } from '../../../../../src/client';
 import { MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY } from '../../../../../src/constants';
 import type {
   ChannelMemberResponse,
+  MemberFilters,
   SearchUserGroupsOptions,
   SearchUserGroupsResponse,
-  Mute,
-  UserGroupResponse,
-  UserResponse,
   UserFilters,
-  MemberFilters,
+  UserGroupResponse,
+  UserMuteResponse,
+  UserResponse,
 } from '../../../../../src/types';
 import type { MentionSuggestion } from '../../../../../src/messageComposer/middleware/textComposer/types';
 
@@ -499,7 +499,7 @@ describe('MentionsSearchSource', () => {
 
   it('should preserve special mentions while filtering muted users', () => {
     const source = new MentionsSearchSource(channel);
-    const mute: Mute = {
+    const mute: UserMuteResponse = {
       target: { id: 'user1' },
       user: { id: 'currentUser' },
       created_at: new Date().toISOString(),
@@ -522,7 +522,7 @@ describe('MentionsSearchSource', () => {
 
   it('should return only muted users for /unmute and hide special mentions', () => {
     const source = new MentionsSearchSource(channel);
-    const mute: Mute = {
+    const mute: UserMuteResponse = {
       target: { id: 'user1' },
       user: { id: 'currentUser' },
       created_at: new Date().toISOString(),

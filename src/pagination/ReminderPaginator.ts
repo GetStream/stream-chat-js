@@ -4,10 +4,10 @@ import type {
   PaginationQueryReturnValue,
   PaginatorOptions,
 } from './BasePaginator';
-import type { ReminderFilters, ReminderResponse, ReminderSort } from '../types';
+import type { ReminderFilters, ReminderResponseData, ReminderSort } from '../types';
 import type { StreamChat } from '../client';
 
-export class ReminderPaginator extends BasePaginator<ReminderResponse> {
+export class ReminderPaginator extends BasePaginator<ReminderResponseData> {
   private client: StreamChat;
   protected _filters: ReminderFilters | undefined;
   protected _sort: ReminderSort | undefined;
@@ -37,7 +37,9 @@ export class ReminderPaginator extends BasePaginator<ReminderResponse> {
 
   query = async ({
     direction,
-  }: PaginationQueryParams): Promise<PaginationQueryReturnValue<ReminderResponse>> => {
+  }: PaginationQueryParams): Promise<
+    PaginationQueryReturnValue<ReminderResponseData>
+  > => {
     const cursor = this.cursor?.[direction];
     const {
       reminders: items,
@@ -52,5 +54,5 @@ export class ReminderPaginator extends BasePaginator<ReminderResponse> {
     return { items, next, prev };
   };
 
-  filterQueryResults = (items: ReminderResponse[]) => items;
+  filterQueryResults = (items: ReminderResponseData[]) => items;
 }

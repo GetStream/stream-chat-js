@@ -1,20 +1,20 @@
 import { describe, expect, it, beforeEach, afterEach, vi, MockInstance } from 'vitest';
 import {
   AbstractOfflineDB,
-  ChannelAPIResponse,
+  APIError,
   ChannelManager,
   StreamChat,
   Event,
   Channel,
-  MessageResponse,
-  ReadResponse,
   ChannelMemberResponse,
   ChannelResponse,
-  PendingTask,
-  APIErrorResponse,
+  ChannelStateResponseFields,
+  MessageResponse,
   OfflineDBSyncManager,
-  StableWSConnection,
   OfflineError,
+  PendingTask,
+  ReadStateResponse,
+  StableWSConnection,
 } from '../../../src';
 import { chatLoggerSystem } from '../../../src/logger';
 
@@ -442,8 +442,8 @@ describe('OfflineSupportApi', () => {
       let queriesWithChannelGuardSpy: MockInstance<
         typeof offlineDb.queriesWithChannelGuard
       >;
-      let channelResponse: ChannelAPIResponse;
-      let readResponse: ReadResponse;
+      let channelResponse: ChannelStateResponseFields;
+      let readResponse: ReadStateResponse;
 
       beforeEach(() => {
         queriesWithChannelGuardSpy = vi.spyOn(offlineDb, 'queriesWithChannelGuard');
@@ -452,7 +452,7 @@ describe('OfflineSupportApi', () => {
         channelResponse = generateChannel({
           channel: { id: 'channel123', type: 'messaging' },
           read: [readResponse],
-        } as ChannelAPIResponse);
+        } as ChannelStateResponseFields);
         client.hydrateActiveChannels([channelResponse]);
 
         // to make sure queriesWithChannelGuard always passes
@@ -1260,7 +1260,7 @@ describe('OfflineSupportApi', () => {
           channelResponse = generateChannel({
             channel: { id: 'to-truncate', type: 'messaging' },
             read: [readResponse],
-          } as ChannelAPIResponse);
+          } as ChannelStateResponseFields);
           client.hydrateActiveChannels([channelResponse]);
         });
 
@@ -1901,7 +1901,7 @@ describe('OfflineSupportApi', () => {
           const error = {
             isAxiosError: true,
             response: { data: { code: 999 } },
-          } as AxiosError<APIErrorResponse>;
+          } as AxiosError<APIError>;
 
           shouldSkipSpy.mockReturnValue(false);
           executeTaskSpy.mockRejectedValue(error);
@@ -1916,7 +1916,7 @@ describe('OfflineSupportApi', () => {
           const error = {
             isAxiosError: true,
             response: { data: { code: 4 } },
-          } as AxiosError<APIErrorResponse>;
+          } as AxiosError<APIError>;
 
           shouldSkipSpy.mockReturnValue(true);
           executeTaskSpy.mockRejectedValue(error);
@@ -2221,7 +2221,7 @@ describe('OfflineSupportApi', () => {
         const skippableError = {
           isAxiosError: true,
           response: { data: { code: 4 } },
-        } as AxiosError<APIErrorResponse>;
+        } as AxiosError<APIError>;
 
         beforeEach(() => {
           getPendingTasksSpy = vi
@@ -2695,7 +2695,7 @@ describe('OfflineDBSyncManager', () => {
           isAxiosError: true,
           code: 'ECONNABORTED',
           response: { data: { code: 4 } },
-        } as AxiosError<APIErrorResponse>;
+        } as AxiosError<APIError>;
 
         syncApiSpy.mockRejectedValueOnce(axiosError);
 
@@ -2712,7 +2712,7 @@ describe('OfflineDBSyncManager', () => {
 
         const axiosError = {
           response: { data: { code: 23 } },
-        } as AxiosError<APIErrorResponse>;
+        } as AxiosError<APIError>;
 
         syncApiSpy.mockRejectedValueOnce(axiosError);
 

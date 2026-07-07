@@ -4,8 +4,8 @@ import type { ThreadUserReadState } from '../thread';
 import { Thread } from '../thread';
 import type {
   LocalMessage,
-  MarkDeliveredOptions,
-  MarkReadOptions,
+  MarkDeliveredRequest,
+  MarkReadRequest,
   StreamAPIError,
   StreamResponse,
 } from '../types';
@@ -25,7 +25,7 @@ type MessageId = string;
 type ChannelThreadCompositeId = string;
 
 export type AnnounceDeliveryOptions = Omit<
-  MarkDeliveredOptions,
+  MarkDeliveredRequest,
   'latest_delivered_messages'
 >;
 
@@ -293,7 +293,7 @@ export class MessageDeliveryReporter {
    * @param options - Flags forwarded to the underlying `markRead` call (optional).
    * @returns The server response, or `null` when the collection is unsupported.
    */
-  public markRead = async (collection: Channel | Thread, options?: MarkReadOptions) => {
+  public markRead = async (collection: Channel | Thread, options?: MarkReadRequest) => {
     if (!userHasReadReceipts(this.client)) return null;
 
     let result: StreamResponse<Gen_MarkReadResponse> | null = null;

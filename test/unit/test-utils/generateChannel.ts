@@ -1,14 +1,18 @@
 import { generateUUIDv4 as uuidv4 } from '../../../src/utils';
-import { ChannelAPIResponse, ChannelConfigWithInfo, ChannelResponse } from '../../../src';
+import {
+  ChannelStateResponseFields,
+  ChannelConfigWithInfo,
+  ChannelResponse,
+} from '../../../src';
 
 export const generateChannel = (
   options: Partial<
-    Omit<ChannelAPIResponse, 'channel'> & {
+    Omit<ChannelStateResponseFields, 'channel'> & {
       channel?: Partial<ChannelResponse>;
       config?: ChannelConfigWithInfo;
     }
   > = { channel: {} },
-): ChannelAPIResponse => {
+): ChannelStateResponseFields => {
   const { channel: optionsChannel, config, ...optionsBesidesChannel } = options;
   const idFromOptions = optionsChannel && optionsChannel.id;
   const type = (optionsChannel && optionsChannel.type) || 'messaging';

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getClientWithUser } from '../test-utils/getClient';
 import {
-  type APIErrorResponse,
+  type APIError,
   Channel,
   ErrorFromResponse,
   Event,
@@ -342,13 +342,13 @@ describe('MessageDeliveryReporter', () => {
     return channels;
   };
 
-  const retryableError = new ErrorFromResponse<APIErrorResponse>('X', {
+  const retryableError = new ErrorFromResponse<APIError>('X', {
     code: -1,
     response: {} as AxiosResponse,
     status: 400,
   });
 
-  const notRetryableError = new ErrorFromResponse<APIErrorResponse>('X', {
+  const notRetryableError = new ErrorFromResponse<APIError>('X', {
     code: 2,
     response: {} as AxiosResponse,
     status: 400,

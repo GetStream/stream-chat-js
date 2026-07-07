@@ -3,14 +3,14 @@ import type { StreamChat } from './client';
 import type {
   EventPayload,
   PartialPollUpdate,
-  PollData,
   PollEnrichData,
   PollOptionData,
-  PollResponse,
-  PollVote,
+  PollResponse_old,
+  PollVoteResponseData,
   QueryVotesFilters,
   QueryVotesOptions,
   RequireLiteral,
+  UpdatePollRequest,
   VoteSort,
   VotingVisibility,
 } from './types';
@@ -29,7 +29,8 @@ const isPollVoteRemovedEvent = (e: WSEvent): e is EventPayload<'poll.vote_remove
 
 export const isVoteAnswer = (
   vote: any | undefined,
-): vote is RequireLiteral<PollVote, 'answer_text' | 'is_answer'> => !!vote?.answer_text;
+): vote is RequireLiteral<PollVoteResponseData, 'answer_text' | 'is_answer'> =>
+  !!vote?.answer_text;
 
 export type PollAnswersQueryParams = {
   filter?: QueryVotesFilters;
@@ -45,11 +46,11 @@ export type PollOptionVotesQueryParams = {
 
 type OptionId = string;
 
-export type PollState = Omit<PollResponse, 'own_votes' | 'id'> & {
+export type PollState = Omit<PollResponse_old, 'own_votes' | 'id'> & {
   lastActivityAt: Date; // todo: would be ideal to get this from the BE
   maxVotedOptionIds: OptionId[];
-  ownVotesByOptionId: Record<OptionId, PollVote>;
-  ownAnswer?: PollVote; // each user can have only one answer
+  ownVotesByOptionId: Record<OptionId, PollVoteResponseData>;
+  ownAnswer?: PollVoteResponseData; // each user can have only one answer
 };
 
 type PollInitOptions = {
@@ -72,8 +73,8 @@ export class Poll {
   private getInitialStateFromPollResponse = (poll: PollInitOptions['poll']) => {
     const { own_votes, id: _id, ...pollResponseForState } = poll;
     const { ownAnswer, ownVotes } = own_votes?.reduce<{
-      ownVotes: PollVote[];
-      ownAnswer?: PollVote;
+      ownVotes: PollVoteResponseData[];
+      ownAnswer?: PollVoteResponseData;
     }>(
       (acc, voteOrAnswer) => {
         if (isVoteAnswer(voteOrAnswer)) {
@@ -135,7 +136,7 @@ export class Poll {
     if (!isPollVoteCastedEvent(event)) return;
     const currentState = this.data;
     const isOwnVote = event.poll_vote.user_id === this.client.userId;
-    let latestAnswers = [...(currentState.latest_answers as PollVote[])];
+    let latestAnswers = [...(currentState.latest_answers as PollVoteResponseData[])];
     let ownAnswer = currentState.ownAnswer;
     const ownVotesByOptionId = currentState.ownVotesByOptionId;
     let maxVotedOptionIds = currentState.maxVotedOptionIds;
@@ -172,7 +173,7 @@ export class Poll {
     if (!isPollVoteChangedEvent(event)) return;
     const currentState = this.data;
     const isOwnVote = event.poll_vote.user_id === this.client.userId;
-    let latestAnswers = [...(currentState.latest_answers as PollVote[])];
+    let latestAnswers = [...(currentState.latest_answers as PollVoteResponseData[])];
     let ownAnswer = currentState.ownAnswer;
     let ownVotesByOptionId = currentState.ownVotesByOptionId;
     let maxVotedOptionIds = currentState.maxVotedOptionIds;
@@ -189,7 +190,7 @@ export class Poll {
           ownVotesByOptionId = { [event.poll_vote.option_id]: event.poll_vote };
         } else {
           ownVotesByOptionId = Object.entries(ownVotesByOptionId).reduce<
-            Record<OptionId, PollVote>
+            Record<OptionId, PollVoteResponseData>
           >((acc, [optionId, vote]) => {
             if (
               optionId !== event.poll_vote.option_id &&
@@ -231,7 +232,7 @@ export class Poll {
     if (!isPollVoteRemovedEvent(event)) return;
     const currentState = this.data;
     const isOwnVote = event.poll_vote.user_id === this.client.userId;
-    let latestAnswers = [...(currentState.latest_answers as PollVote[])];
+    let latestAnswers = [...(currentState.latest_answers as PollVoteResponseData[])];
     let ownAnswer = currentState.ownAnswer;
     const ownVotesByOptionId = { ...currentState.ownVotesByOptionId };
     let maxVotedOptionIds = currentState.maxVotedOptionIds;
@@ -266,7 +267,7 @@ export class Poll {
     return poll;
   };
 
-  update = async (data: Exclude<PollData, 'id'>) =>
+  update = async (data: Exclude<UpdatePollRequest, 'id'>) =>
     await this.client.updatePoll({ ...data, id: this.id as string });
 
   partialUpdate = async (partialPollObject: PartialPollUpdate) =>
@@ -356,7 +357,9 @@ export class Poll {
     });
 }
 
-function getMaxVotedOptionIds(voteCountsByOption: PollResponse['vote_counts_by_option']) {
+function getMaxVotedOptionIds(
+  voteCountsByOption: PollResponse_old['vote_counts_by_option'],
+) {
   let maxVotes = 0;
   let winningOptions: string[] = [];
   for (const [id, count] of Object.entries(voteCountsByOption ?? {})) {
@@ -370,17 +373,17 @@ function getMaxVotedOptionIds(voteCountsByOption: PollResponse['vote_counts_by_o
   return winningOptions;
 }
 
-function getOwnVotesByOptionId(ownVotes: PollVote[]) {
+function getOwnVotesByOptionId(ownVotes: PollVoteResponseData[]) {
   return !ownVotes
-    ? ({} as Record<OptionId, PollVote>)
-    : ownVotes.reduce<Record<OptionId, PollVote>>((acc, vote) => {
+    ? ({} as Record<OptionId, PollVoteResponseData>)
+    : ownVotes.reduce<Record<OptionId, PollVoteResponseData>>((acc, vote) => {
         if (isVoteAnswer(vote) || !vote.option_id) return acc;
         acc[vote.option_id] = vote;
         return acc;
       }, {});
 }
 
-export function extractPollData(pollResponse: Gen_PollResponseData): PollData {
+export function extractPollData(pollResponse: Gen_PollResponseData): UpdatePollRequest {
   return {
     allow_answers: pollResponse.allow_answers,
     allow_user_suggested_options: pollResponse.allow_user_suggested_options,
@@ -395,7 +398,7 @@ export function extractPollData(pollResponse: Gen_PollResponseData): PollData {
   };
 }
 
-export function mapPollStateToResponse(poll: Poll): PollResponse {
+export function mapPollStateToResponse(poll: Poll): PollResponse_old {
   const {
     lastActivityAt: _lastActivityAt,
 

@@ -28,12 +28,12 @@ import type {
   AppIdentifier,
   BanUserOptions,
   BaseDeviceFields,
-  ChannelAPIResponse,
   ChannelData,
   ChannelMute,
   ChannelOptions,
   ChannelResponse,
   ChannelStateOptions,
+  ChannelStateResponseFields,
   Configs,
   ConnectAPIResponse,
   DeviceIdentifier,
@@ -44,18 +44,16 @@ import type {
   FlagUserResponse,
   GetThreadOptions,
   LocalMessage,
-  Mute,
   MuteUserOptions,
   MuteUserResponse,
   OwnUserResponse,
   PartializeAllBut,
   PartialThreadUpdate,
-  PartialUserUpdate,
   QueryBannedUsersPayload,
-  QueryChannelsAPIResponse,
   QueryChannelsRequest,
-  QueryReactionsRequest,
-  QueryThreadsOptions,
+  QueryChannelsResponse,
+  QueryReactionsRequestWithId,
+  QueryThreadsRequest,
   QueryUserGroupsOptions,
   QueryUserGroupsResponse,
   ReactionResponse,
@@ -64,6 +62,8 @@ import type {
   StreamChatOptions,
   TokenOrProvider,
   UnBanUserOptions,
+  UpdateUserPartialRequest,
+  UserMuteResponse,
   UserResponse,
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
@@ -106,7 +106,7 @@ const offlineDbLogger = chatLoggerSystem.getLogger('offline-db');
 type MessageComposerTearDownFunction = () => void;
 
 export type QueryChannelsResponseWithChannels = Omit<
-  QueryChannelsAPIResponse,
+  QueryChannelsResponse,
   'channels'
 > & {
   channels: Channel[];
@@ -132,7 +132,7 @@ export type MessageComposerSetupState = {
   setupFunction: MessageComposerSetupFunction | null;
 };
 
-type ClientUser = PartializeAllBut<OwnUserResponse, 'id'> & { anon?: boolean };
+export type ClientUser = PartializeAllBut<OwnUserResponse, 'id'> & { anon?: boolean };
 
 export class StreamChat extends ChatApi {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
@@ -180,7 +180,7 @@ export class StreamChat extends ChatApi {
   preventThreadCleanup = false;
   moderation: Moderation;
   mutedChannels: ChannelMute[];
-  mutedUsers: Mute[];
+  mutedUsers: UserMuteResponse[];
   blockedUsers: StateStore<BlockedUsersState>;
   node: boolean;
   options: StreamChatOptions;
@@ -400,10 +400,7 @@ export class StreamChat extends ChatApi {
    * @param userTokenOrProvider - A token string or an async provider that returns one.
    * @returns A promise that resolves when the connection is set up.
    */
-  connectUser = async (
-    user: OwnUserResponse | UserResponse,
-    userTokenOrProvider: TokenOrProvider,
-  ) => {
+  connectUser = async (user: ClientUser, userTokenOrProvider: TokenOrProvider) => {
     if (!user.id) {
       throw new Error('The "id" field on the user is missing');
     }
@@ -594,7 +591,7 @@ export class StreamChat extends ChatApi {
       before = new Date();
     }
 
-    const users: PartialUserUpdate[] = [
+    const users: UpdateUserPartialRequest[] = [
       {
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         id: this.userId!,
@@ -1249,7 +1246,7 @@ export class StreamChat extends ChatApi {
    * `predefined_filter`.
    *
    * This exists as a compatibility bridge, as changing `queryChannelsRequest()` to return
-   * `QueryChannelsAPIResponse` would be a breaking change because it currently returns
+   * `QueryChannelsResponse` would be a breaking change because it currently returns
    * only the channel list. In the next major release, the request/response APIs should
    * be consolidated so callers can access the full response through the primary API.
    *
@@ -1370,7 +1367,7 @@ export class StreamChat extends ChatApi {
    *   and pagination options.
    * @returns The query reactions response.
    */
-  async queryReactionsAndHydrate(request: QueryReactionsRequest) {
+  async queryReactionsAndHydrate(request: QueryReactionsRequestWithId) {
     const { filter, next, id: messageId, sort, limit } = request;
 
     if (this.offlineDb?.getReactions && !next) {
@@ -1402,7 +1399,7 @@ export class StreamChat extends ChatApi {
   }
 
   hydrateActiveChannels(
-    channelsFromApi: ChannelAPIResponse[] = [],
+    channelsFromApi: ChannelStateResponseFields[] = [],
     stateOptions: ChannelStateOptions = {},
     queryChannelsOptions?: ChannelOptions,
   ) {
@@ -2045,7 +2042,7 @@ export class StreamChat extends ChatApi {
    * @param options.sort - MongoDB style sort for threads (optional).
    * @returns The list of threads and the next cursor.
    */
-  async queryThreadsAndHydrate(options: QueryThreadsOptions = {}) {
+  async queryThreadsAndHydrate(options: QueryThreadsRequest = {}) {
     const optionsWithDefaults = {
       limit: 10,
       participant_limit: 10,

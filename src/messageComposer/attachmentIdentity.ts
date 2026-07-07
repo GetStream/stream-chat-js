@@ -1,4 +1,4 @@
-import type { Attachment, SharedLocationResponse } from '../types';
+import type { Attachment, SharedLocationResponseData } from '../types';
 import type {
   AudioAttachment,
   FileAttachment,
@@ -99,12 +99,12 @@ export const isUploadedAttachment = (
   isVideoAttachment(attachment) ||
   isVoiceRecordingAttachment(attachment);
 
-export const isSharedLocationResponse = (
+export const isSharedLocationResponseData = (
   location: unknown,
-): location is SharedLocationResponse =>
-  !!(location as SharedLocationResponse).latitude &&
-  !!(location as SharedLocationResponse).longitude &&
-  !!(location as SharedLocationResponse).channel_cid;
+): location is SharedLocationResponseData =>
+  !!(location as SharedLocationResponseData).latitude &&
+  !!(location as SharedLocationResponseData).longitude &&
+  !!(location as SharedLocationResponseData).channel_cid;
 
 export const isGiphyAttachment = (
   attachment: Attachment,

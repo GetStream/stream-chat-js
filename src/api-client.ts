@@ -2,7 +2,7 @@ import type { AxiosRequestConfig, AxiosResponse, Method } from 'axios';
 import { AxiosError } from 'axios';
 
 import type {
-  APIErrorResponse,
+  APIError,
   RateLimit,
   RequestMetadata,
   SendFileAPIResponse,
@@ -263,12 +263,11 @@ export class ApiClient {
   }
 }
 
-const errorIsApiError = (error: unknown): error is AxiosError<APIErrorResponse> => {
+const errorIsApiError = (error: unknown): error is AxiosError<APIError> => {
   if (!(error instanceof AxiosError)) return false;
 
   return (
-    typeof (error as AxiosError<APIErrorResponse | undefined>).response?.data?.code ===
-    'number'
+    typeof (error as AxiosError<APIError | undefined>).response?.data?.code === 'number'
   );
 };
 

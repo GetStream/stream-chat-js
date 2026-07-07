@@ -1,17 +1,17 @@
 import FormData from 'form-data';
 import type {
   ChannelFilters,
-  ChannelQueryOptions,
+  ChannelGetOrCreateRequest,
   ChannelSort,
+  ChannelStateResponse,
   LocalMessage,
-  Message,
   MessagePaginationOptions,
+  MessageRequest,
   MessageResponse,
   MessageSet,
   OwnUserBase,
   OwnUserResponse,
   PromoteChannelParams,
-  QueryChannelAPIResponse,
   ReactionGroupResponse,
   UpdatedMessage,
   UserResponse,
@@ -327,7 +327,9 @@ export function formatMessage(message: MessageResponse | LocalMessage): LocalMes
   } satisfies LocalMessage;
 }
 
-export const localMessageToNewMessagePayload = (localMessage: LocalMessage): Message => {
+export const localMessageToNewMessagePayload = (
+  localMessage: LocalMessage,
+): MessageRequest => {
   const {
     // Remove all timestamp fields and client-specific fields.
     // Field pinned_at can therefore be earlier than created_at as new message payload can hold it.
@@ -358,7 +360,7 @@ export const localMessageToNewMessagePayload = (localMessage: LocalMessage): Mes
     ...messageFields,
     pinned_at: messageFields.pinned_at,
     mentioned_users: mentioned_users?.map((user) => user.id),
-  } as Message;
+  } as MessageRequest;
 };
 
 export const toUpdatedMessagePayload = (
@@ -1041,7 +1043,7 @@ export const messageSetPagination = (params: MessagePaginationUpdatedParams) => 
  */
 const WATCH_QUERY_IN_PROGRESS_FOR_CHANNEL: Record<
   string,
-  Promise<QueryChannelAPIResponse> | undefined
+  Promise<ChannelStateResponse> | undefined
 > = {};
 
 type GetChannelParams = {
@@ -1049,7 +1051,7 @@ type GetChannelParams = {
   channel?: Channel;
   id?: string;
   members?: string[];
-  options?: ChannelQueryOptions;
+  options?: ChannelGetOrCreateRequest;
   type?: string;
 };
 /**

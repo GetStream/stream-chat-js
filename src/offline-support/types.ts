@@ -1,20 +1,20 @@
 import type {
-  AppSettingsAPIResponse,
-  ChannelAPIResponse,
   ChannelFilters,
   ChannelMemberResponse,
   ChannelOptions,
   ChannelResponse,
   ChannelSort,
+  ChannelStateResponseFields,
   DraftResponse,
+  GetApplicationResponse,
   LocalMessage,
   MessageResponse,
-  PollResponse,
+  PollResponse_old,
   QueryChannelsRequest,
   ReactionFilters,
   ReactionResponse,
   ReactionSort,
-  ReadResponse,
+  ReadStateResponse,
 } from '../types';
 import type { Channel } from '../channel';
 import type { StreamChat } from '../client';
@@ -56,7 +56,7 @@ export type DBUpsertCidsForQueryType = {
  */
 export type DBUpsertChannelsType = {
   /** Array of channel API responses. */
-  channels: ChannelAPIResponse[];
+  channels: ChannelStateResponseFields[];
   /** Whether to immediately execute the operation. */
   execute?: boolean;
   /** If true, marks that the latest messages are already set. */
@@ -68,7 +68,7 @@ export type DBUpsertChannelsType = {
  */
 export type DBUpsertAppSettingsType = {
   /** App settings data. */
-  appSettings: AppSettingsAPIResponse;
+  appSettings: GetApplicationResponse;
   /** ID of the user the settings belong to. */
   userId: string;
   /** Whether to immediately execute the operation. */
@@ -92,7 +92,7 @@ export type DBUpsertUserSyncStatusType = {
  */
 export type DBUpsertPollType = {
   /** Poll data to be stored. */
-  poll: PollResponse;
+  poll: PollResponse_old;
   /** Whether to immediately execute the operation. */
   execute?: boolean;
 };
@@ -114,7 +114,7 @@ export type DBUpsertReadsType = {
   /** Channel ID. */
   cid: string;
   /** Array of read statuses. */
-  reads: ReadResponse[];
+  reads: ReadStateResponse[];
   /** Whether to immediately execute the operation. */
   execute?: boolean;
 };
@@ -370,15 +370,15 @@ export interface OfflineDBApi {
   getDraft: (options: DBGetDraftType) => Promise<DraftResponse | null>;
   getChannels: (
     options: DBGetChannelsType,
-  ) => Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>;
+  ) => Promise<Omit<ChannelStateResponseFields, 'duration'>[] | null>;
   getChannelsForQuery: (
     options: DBGetChannelsForQueryType,
-  ) => Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>;
+  ) => Promise<Omit<ChannelStateResponseFields, 'duration'>[] | null>;
   getAllChannelCids: () => Promise<string[]>;
   getLastSyncedAt: (options: DBGetLastSyncedAtType) => Promise<string | undefined>;
   getAppSettings: (
     options: DBGetAppSettingsType,
-  ) => Promise<AppSettingsAPIResponse | null>;
+  ) => Promise<GetApplicationResponse | null>;
   getReactions: (options: DBGetReactionsType) => Promise<ReactionResponse[] | null>;
   executeSqlBatch: (queries: ExecuteBatchDBQueriesType) => Promise<unknown>;
   addPendingTask: (task: PendingTask) => Promise<() => Promise<void>>;

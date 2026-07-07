@@ -16,11 +16,11 @@ import type {
   AIState,
   APIResponse,
   BanUserOptions,
-  ChannelAPIResponse,
   ChannelData,
+  ChannelGetOrCreateRequest,
   ChannelMemberResponse,
-  ChannelQueryOptions,
   ChannelResponse,
+  ChannelStateResponseFields,
   ChannelUpdateOptions,
   CreateDraftResponse,
   Event,
@@ -29,28 +29,26 @@ import type {
   EventType,
   GetRepliesAPIResponse,
   GetRepliesRequest,
-  LiveLocationPayload,
   LocalMessage,
-  MarkReadOptions,
-  MarkUnreadOptions,
-  Message,
+  MarkReadRequest,
+  MarkUnreadRequest,
+  MessageRequest,
   MessageResponse,
   MessageSetType,
-  PartialUpdateChannel,
   PinnedMessagePaginationOptions,
   PinnedMessagesSort,
   QueryMembersPayload,
   ReactionAPIResponse,
   ReactionResponse,
   SearchPayload,
-  StaticLocationPayload,
+  SharedLocation,
   UnBanUserOptions,
-  UpdateLocationPayload,
+  UpdateChannelPartialRequest,
+  UpdateLiveLocationRequest,
   UserResponse,
 } from './types';
 import type { RoleName } from './permissions';
 import type {
-  ChannelGetOrCreateRequest as Gen_ChannelGetOrCreateRequest,
   ChannelMemberRequest as Gen_ChannelMemberRequest,
   ChannelPushPreferencesResponse as Gen_ChannelPushPreferencesResponse,
   ChannelStopWatchingRequest as Gen_ChannelStopWatchingRequest,
@@ -440,7 +438,7 @@ export class Channel extends ChannelApi {
    * @param update - The partial update request.
    * @returns The server response.
    */
-  async updatePartial(update: PartialUpdateChannel) {
+  async updatePartial(update: UpdateChannelPartialRequest) {
     const data = await this.updateChannelPartial(update);
 
     if (!this.getClient()._cacheEnabled) return data;
@@ -485,9 +483,7 @@ export class Channel extends ChannelApi {
     return await this.update({ cooldown: 0 });
   }
 
-  public async sendSharedLocation(
-    location: (StaticLocationPayload | LiveLocationPayload) & { message_id?: string },
-  ) {
+  public async sendSharedLocation(location: SharedLocation & { message_id?: string }) {
     const result = await this.sendMessage({
       message: {
         id: location.message_id,
@@ -505,7 +501,7 @@ export class Channel extends ChannelApi {
     return result;
   }
 
-  public async stopLiveLocationSharing(payload: UpdateLocationPayload) {
+  public async stopLiveLocationSharing(payload: UpdateLiveLocationRequest) {
     const location = await this.getClient().updateLiveLocation({
       ...payload,
       end_at: new Date(),
@@ -546,7 +542,7 @@ export class Channel extends ChannelApi {
    */
   async addMembers(
     members: string[] | Gen_ChannelMemberRequest[],
-    message?: Message,
+    message?: MessageRequest,
     options: ChannelUpdateOptions = {},
   ) {
     const adjustedMembers = members.map(
@@ -568,7 +564,7 @@ export class Channel extends ChannelApi {
    */
   async addFilterTags(
     tags: string[],
-    message?: Message,
+    message?: MessageRequest,
     options: ChannelUpdateOptions = {},
   ) {
     return await this.update({ add_filter_tags: tags, message, ...options });
@@ -584,7 +580,7 @@ export class Channel extends ChannelApi {
    */
   async removeFilterTags(
     tags: string[],
-    message?: Message,
+    message?: MessageRequest,
     options: ChannelUpdateOptions = {},
   ) {
     return await this.update({ remove_filter_tags: tags, message, ...options });
@@ -600,7 +596,7 @@ export class Channel extends ChannelApi {
    */
   async addModerators(
     members: string[],
-    message?: Message,
+    message?: MessageRequest,
     options: ChannelUpdateOptions = {},
   ) {
     return await this.update({ add_moderators: members, message, ...options });
@@ -616,7 +612,7 @@ export class Channel extends ChannelApi {
    */
   async assignRoles(
     roles: { channel_role: RoleName; user_id: string }[],
-    message?: Message,
+    message?: MessageRequest,
     options: ChannelUpdateOptions = {},
   ) {
     return await this.update({ assign_roles: roles, message, ...options });
@@ -632,7 +628,7 @@ export class Channel extends ChannelApi {
    */
   async inviteMembers(
     members: string[] | Gen_ChannelMemberRequest[],
-    message?: Message,
+    message?: MessageRequest,
     options: ChannelUpdateOptions = {},
   ) {
     const adjustedMembers = members.map(
@@ -655,7 +651,7 @@ export class Channel extends ChannelApi {
    */
   async removeMembers(
     members: string[],
-    message?: Message,
+    message?: MessageRequest,
     options: ChannelUpdateOptions = {},
   ) {
     return await this.update({ remove_members: members, message, ...options });
@@ -671,7 +667,7 @@ export class Channel extends ChannelApi {
    */
   async demoteModerators(
     members: string[],
-    message?: Message,
+    message?: MessageRequest,
     options: ChannelUpdateOptions = {},
   ) {
     return await this.update({ demote_moderators: members, message, ...options });
@@ -934,7 +930,7 @@ export class Channel extends ChannelApi {
    *
    * @param data - Mark read options (optional, defaults to `{}`).
    */
-  async markReadViaReporter(data: MarkReadOptions = {}) {
+  async markReadViaReporter(data: MarkReadRequest = {}) {
     return await this.getClient().messageDeliveryReporter.markRead(this, data);
   }
 
@@ -945,7 +941,7 @@ export class Channel extends ChannelApi {
    * @param data - Mark read options (optional, defaults to `{}`).
    * @returns The server response, or `null` if the request was skipped.
    */
-  override async markRead(data?: MarkReadOptions) {
+  override async markRead(data?: MarkReadRequest) {
     this._checkInitialized();
 
     if (!this.getConfig()?.read_events) {
@@ -961,7 +957,7 @@ export class Channel extends ChannelApi {
    * @param data - Mark unread options.
    * @returns An API response, or `null` if the request was skipped.
    */
-  override async markUnread(data?: MarkUnreadOptions) {
+  override async markUnread(data?: MarkUnreadRequest) {
     this._checkInitialized();
 
     if (!this.getConfig()?.read_events) {
@@ -1022,7 +1018,7 @@ export class Channel extends ChannelApi {
    * @param options - Additional options for the query endpoint (optional).
    * @returns The server response.
    */
-  async watch(options?: ChannelQueryOptions) {
+  async watch(options?: ChannelGetOrCreateRequest) {
     const defaultOptions = {
       state: true,
       watch: true,
@@ -1208,7 +1204,7 @@ export class Channel extends ChannelApi {
    * @param options - Channel query options (optional).
    * @returns The server response.
    */
-  create = async (options?: ChannelQueryOptions) => {
+  create = async (options?: ChannelGetOrCreateRequest) => {
     const defaultOptions = {
       ...options,
       watch: false,
@@ -1229,13 +1225,13 @@ export class Channel extends ChannelApi {
    * @returns A query response.
    */
   async query(
-    options: ChannelQueryOptions = {},
+    options: ChannelGetOrCreateRequest = {},
     messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
   ) {
     // Make sure we wait for the connect promise if there is a pending one
     await this.getClient().wsPromise;
 
-    const queryPayload: Gen_ChannelGetOrCreateRequest = {
+    const queryPayload: ChannelGetOrCreateRequest = {
       data: this._data,
       state: true,
       ...options,
@@ -1994,7 +1990,7 @@ export class Channel extends ChannelApi {
   }
 
   _initializeState(
-    state: ChannelAPIResponse,
+    state: ChannelStateResponseFields,
     messageSetToAddToIfDoesNotExist: MessageSetType = 'latest',
   ) {
     const { state: clientState, user, userId } = this.getClient();

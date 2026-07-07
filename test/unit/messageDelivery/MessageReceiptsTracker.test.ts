@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   MessageReceiptsTracker,
   type MsgRef,
-  ReadResponse,
+  ReadStateResponse,
   UserResponse,
 } from '../../../src';
 
@@ -46,7 +46,7 @@ describe('MessageDeliveryReadTracker', () => {
 
       // Alice read m2, delivered m1 -> delivered must be bumped to m2
       // Bob delivered m3, haven't read any message -> read stays MIN, delivered m3
-      const snapshot: ReadResponse[] = [
+      const snapshot: ReadStateResponse[] = [
         {
           user: alice,
           last_read: new Date(2000),
@@ -81,7 +81,7 @@ describe('MessageDeliveryReadTracker', () => {
     it('includes own read state', () => {
       const ownUser = U(ownUserId);
 
-      const snapshot: ReadResponse[] = [
+      const snapshot: ReadStateResponse[] = [
         {
           user: ownUser,
           last_read: new Date(2000),

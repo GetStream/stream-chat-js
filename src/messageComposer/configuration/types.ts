@@ -2,7 +2,7 @@ import type { LinkPreview } from '../linkPreviewsManager';
 import type { FileUploadFilter } from '../attachmentManager';
 import type { MessageComposer } from '../messageComposer';
 import type { FileLike, FileReference } from '../types';
-import type { CommandResponse, UserResponse } from '../../types';
+import type { Command, UserResponse } from '../../types';
 
 export type MinimumUploadRequestResult = { file: string; thumb_url?: string } & Partial<
   Record<string, unknown>
@@ -41,14 +41,14 @@ export type TextComposerConfig = {
 };
 
 export type CommandSendability = {
-  command: CommandResponse;
+  command: Command;
   ready: boolean;
   reason?: string & {};
   metadata?: Record<string, unknown>;
 };
 
 export type CommandSendValidationContext = {
-  command: CommandResponse;
+  command: Command;
   composer: MessageComposer;
   commandArgsText: string;
   mentionedUsersInText: UserResponse[];

@@ -19,8 +19,8 @@ import { Channel } from '../channel';
 import { Thread } from '../thread';
 import type {
   Attachment,
-  ChannelAPIResponse,
-  CommandResponse,
+  ChannelStateResponseFields,
+  Command,
   DraftMessage,
   DraftResponse,
   EventType,
@@ -387,7 +387,7 @@ export class MessageComposer extends WithSubscriptions {
   }
 
   getCommandDisabledReason = (
-    command: CommandResponse,
+    command: Command,
   ): CommandSuggestionDisabledReason | undefined => {
     if (this.editedMessage) return 'editing';
 
@@ -401,11 +401,10 @@ export class MessageComposer extends WithSubscriptions {
     return undefined;
   };
 
-  isCommandDisabled = (command: CommandResponse) =>
-    !!this.getCommandDisabledReason(command);
+  isCommandDisabled = (command: Command) => !!this.getCommandDisabledReason(command);
 
   validateCommandSendability = (
-    command: CommandResponse,
+    command: Command,
     text = this.textComposer.text,
   ): CommandSendability => {
     const currentMentionedUsers = this.textComposer.mentionedUsers;
@@ -507,7 +506,7 @@ export class MessageComposer extends WithSubscriptions {
     this.state.next(initState(composition));
   };
 
-  initStateFromChannelResponse = (channelApiResponse: ChannelAPIResponse) => {
+  initStateFromChannelResponse = (channelApiResponse: ChannelStateResponseFields) => {
     if (this.channel.cid !== channelApiResponse.channel?.cid) {
       return;
     }
