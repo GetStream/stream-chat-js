@@ -62,7 +62,7 @@ const setup = ({
   vi.clearAllMocks();
 
   // Setup mocks
-  const mockClient = getClientWithUser({ id: 'user' })
+  const mockClient = getClientWithUser({ id: 'user' });
 
   mockClient.queryUsers = vi.fn().mockResolvedValue({ users: [] });
 

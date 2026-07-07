@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, MockInstance } from 'v
 import { ChannelSearchSource } from '../../../src/search/ChannelSearchSource';
 import type { Channel } from '../../../src/channel';
 import type { StreamChat } from '../../../src/client';
-import type { ChannelAPIResponse, ChannelFilters } from '../../../src/types';
+import type { ChannelStateResponseFields, ChannelFilters } from '../../../src/types';
 import { generateChannel } from '../test-utils/generateChannel';
 import { getClientWithUser } from '../test-utils/getClient';
 
@@ -12,7 +12,10 @@ describe('ChannelSearchSource', () => {
   let searchSource: ChannelSearchSource;
   let queryChannelsMock: MockInstance<StreamChat['queryChannelsAndHydrate']>;
   let channels: Channel[];
-  const mockChannels: ChannelAPIResponse[] = [generateChannel(), generateChannel()];
+  const mockChannels: ChannelStateResponseFields[] = [
+    generateChannel(),
+    generateChannel(),
+  ];
 
   beforeEach(() => {
     client = getClientWithUser(user);

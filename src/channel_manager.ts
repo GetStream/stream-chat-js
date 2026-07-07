@@ -5,8 +5,8 @@ import type {
   ChannelStateOptions,
   Event,
   EventPayload,
-  QueryChannelsAPIResponse,
   QueryChannelsRequest,
+  QueryChannelsResponse,
 } from './types';
 import { chatLoggerSystem } from './logger';
 import type { ValueOrPatch } from './store';
@@ -161,7 +161,7 @@ const getResponsePaginationParams = ({
   queryChannelsResponse,
   sort,
 }: {
-  queryChannelsResponse?: Pick<QueryChannelsAPIResponse, 'predefined_filter'>;
+  queryChannelsResponse?: Pick<QueryChannelsResponse, 'predefined_filter'>;
   sort: ChannelSort;
 }): Pick<ChannelManagerPagination, 'responseFilters' | 'responseSort'> => {
   const predefinedFilter = queryChannelsResponse?.predefined_filter;

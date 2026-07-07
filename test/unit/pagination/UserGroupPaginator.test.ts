@@ -32,7 +32,10 @@ describe('UserGroupPaginator', () => {
 
   it('paginates listed user groups using synthesized cursors', async () => {
     const firstPage = [
-      createUserGroup({ id: 'group-1', created_at: new Date('2026-01-01T00:00:00.000Z') }),
+      createUserGroup({
+        id: 'group-1',
+        created_at: new Date('2026-01-01T00:00:00.000Z'),
+      }),
       createUserGroup({
         id: 'group-2',
         name: 'Frontend Support',

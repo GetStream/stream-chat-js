@@ -11,7 +11,7 @@ import {
   LocalMessage,
   StreamChat,
 } from '../../../src';
-import { AppSettings } from '../../../src';
+import { AppResponseFields } from '../../../src';
 import * as Utils from '../../../src/utils';
 import { beforeEach } from 'node:test';
 
@@ -88,7 +88,7 @@ const setup = ({
   composition,
   config,
 }: {
-  appSettings?: Partial<AppSettings>;
+  appSettings?: Partial<AppResponseFields>;
   composition?: DraftResponse | LocalMessage;
   config?: Partial<AttachmentManagerConfig>;
 } = {}) => {

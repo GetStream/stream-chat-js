@@ -7,11 +7,7 @@ import {
 } from '../../../../../src/messageComposer/messageComposer';
 import { createMentionsMiddleware } from '../../../../../src/messageComposer/middleware/textComposer/mentions';
 import type { TextComposerSuggestion } from '../../../../../src/messageComposer/';
-import type {
-  CommandResponse,
-  DraftResponse,
-  LocalMessage,
-} from '../../../../../src/types';
+import type { Command, DraftResponse, LocalMessage } from '../../../../../src/types';
 import { TextComposerMiddleware } from '../../../../../src';
 import type { UserSuggestion } from '../../../../../src/messageComposer/middleware/textComposer/types';
 import { getClientWithUser } from '../../../test-utils/getClient';
@@ -243,7 +239,7 @@ describe('TextComposerMiddlewareExecutor', () => {
       id: 'ban',
       name: 'ban',
       description: 'Ban a user',
-    } as TextComposerSuggestion<CommandResponse>;
+    } as TextComposerSuggestion<Command>;
 
     await textComposer.handleSelect(selectedSuggestion);
 
@@ -274,7 +270,7 @@ describe('TextComposerMiddlewareExecutor', () => {
       id: 'ban',
       name: 'ban',
       description: 'Ban a user',
-    } as TextComposerSuggestion<CommandResponse>);
+    } as TextComposerSuggestion<Command>);
 
     expect(textComposer.text).toBe('/ba');
     expect(textComposer.command).toBeNull();
@@ -314,7 +310,7 @@ describe('TextComposerMiddlewareExecutor', () => {
       name: 'ban',
       description: 'Ban a user',
       set: 'moderation_set',
-    } as TextComposerSuggestion<CommandResponse>);
+    } as TextComposerSuggestion<Command>);
 
     expect(textComposer.text).toBe('/ba');
     expect(textComposer.command).toBeNull();

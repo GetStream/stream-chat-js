@@ -6,7 +6,7 @@ import {
   MessageResponse,
   Reminder,
   ReminderManager,
-  ReminderResponse,
+  ReminderResponseData,
   ReminderState,
   RequestMetadata,
   StreamChat,
@@ -24,9 +24,9 @@ export const generateReminderResponse = ({
   data,
   scheduleOffsetMs,
 }: {
-  data?: Partial<ReminderResponse>;
+  data?: Partial<ReminderResponseData>;
   scheduleOffsetMs?: number;
-} = {}): ReminderResponse => {
+} = {}): ReminderResponseData => {
   const created_at = new Date();
   const basePayload = {
     ...baseData,
@@ -34,7 +34,7 @@ export const generateReminderResponse = ({
     message: { id: baseData.message_id, type: 'regular' },
     updated_at: created_at,
     user: { id: baseData.user_id },
-  } as ReminderResponse;
+  } as ReminderResponseData;
   if (typeof scheduleOffsetMs === 'number') {
     basePayload.remind_at = new Date(created_at.getTime() + scheduleOffsetMs);
   }
@@ -44,7 +44,7 @@ export const generateReminderResponse = ({
   };
 };
 
-const generateReminderEvent = (type: ListenerKeys, reminder: ReminderResponse) =>
+const generateReminderEvent = (type: ListenerKeys, reminder: ReminderResponseData) =>
   ({
     ...baseData,
     cid: baseData.channel_cid,
@@ -487,7 +487,7 @@ describe('ReminderManager', () => {
       const reminders = Array.from({ length: 4 }, (_, i) =>
         generateReminderResponse({ data: { message_id: `message_id_${i}` } }),
       );
-      const queryReturnValue: PaginationQueryReturnValue<ReminderResponse> = {
+      const queryReturnValue: PaginationQueryReturnValue<ReminderResponseData> = {
         items: reminders,
       };
       vi.spyOn(manager.paginator, 'query').mockResolvedValue(queryReturnValue);
@@ -504,7 +504,7 @@ describe('ReminderManager', () => {
       const reminders = Array.from({ length: 4 }, (_, i) =>
         generateReminderResponse({ data: { message_id: `messag_id_${i}` } }),
       );
-      const queryReturnValue: PaginationQueryReturnValue<ReminderResponse> = {
+      const queryReturnValue: PaginationQueryReturnValue<ReminderResponseData> = {
         items: reminders,
       };
       vi.spyOn(manager.paginator, 'query').mockResolvedValue(queryReturnValue);

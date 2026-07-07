@@ -17,7 +17,7 @@ import type {
   EventType,
   MessageResponse,
   SharedLiveLocationResponse,
-  SharedLocationResponse,
+  SharedLocationResponseData,
 } from './types';
 import type { Coords } from './messageComposer';
 
@@ -178,7 +178,7 @@ export class LiveLocationManager extends WithSubscriptions {
         Date.now() + UPDATE_LIVE_LOCATION_REQUEST_MIN_THROTTLE_TIMEOUT;
 
       withCancellation(LiveLocationManager.symbol, async () => {
-        const promises: Promise<SharedLocationResponse>[] = [];
+        const promises: Promise<SharedLocationResponseData>[] = [];
         await this.assureStateInit();
         const expiredLocations: string[] = [];
 

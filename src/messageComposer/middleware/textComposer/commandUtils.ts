@@ -1,5 +1,5 @@
 import type { MessageComposer } from '../../messageComposer';
-import type { CommandResponse, UserResponse } from '../../../types';
+import type { Command, UserResponse } from '../../../types';
 import type { CommandSendability } from '../../configuration';
 import type { CommandSearchSource } from './commands';
 
@@ -49,7 +49,7 @@ export const getMentionedUsersInText = (text: string, mentionedUsers: UserRespon
 export const getCommandByName = (
   searchSource: CommandSearchSource,
   commandName?: string,
-): CommandResponse | undefined => {
+): Command | undefined => {
   if (!commandName) return;
 
   const normalizedCommandName = commandName.toLowerCase();
@@ -58,10 +58,7 @@ export const getCommandByName = (
     .items.find((command) => command.name?.toLowerCase() === normalizedCommandName);
 };
 
-export const notifyCommandDisabled = (
-  composer: MessageComposer,
-  command: CommandResponse,
-) => {
+export const notifyCommandDisabled = (composer: MessageComposer, command: Command) => {
   const disabledReason = composer.getCommandDisabledReason(command);
   if (!disabledReason) return;
 

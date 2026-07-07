@@ -12,7 +12,7 @@ import {
   StreamChat,
   Thread,
   ThreadManager,
-  ThreadResponse,
+  ThreadStateResponse,
   THREAD_MANAGER_INITIAL_STATE,
   ThreadFilters,
   ThreadSort,
@@ -33,7 +33,7 @@ describe('Threads 2.0', () => {
     channelOverrides = {},
     parentMessageOverrides = {},
     ...overrides
-  }: Partial<ThreadResponse> & {
+  }: Partial<ThreadStateResponse> & {
     channelOverrides?: Partial<ChannelResponse>;
     parentMessageOverrides?: Partial<MessageResponse>;
   } = {}) {
@@ -767,7 +767,7 @@ describe('Threads 2.0', () => {
             thread: generateThreadResponse(
               channelResponse,
               generateMsg(),
-            ) as ThreadResponse,
+            ) as ThreadStateResponse,
           });
 
           const stateAfter = thread.state.getLatestValue();
@@ -798,7 +798,7 @@ describe('Threads 2.0', () => {
             thread: generateThreadResponse(
               channelResponse,
               generateMsg({ id: parentMessageResponse.id }),
-            ) as ThreadResponse,
+            ) as ThreadStateResponse,
             created_at: createdAt.toISOString(),
           });
 
@@ -1598,7 +1598,7 @@ describe('Threads 2.0', () => {
           const newThread = createTestThread({
             thread_participants: [
               { user_id: 'u1' },
-            ] as ThreadResponse['thread_participants'],
+            ] as ThreadStateResponse['thread_participants'],
           });
           threadManager.state.partialNext({
             threads: [existingThread],

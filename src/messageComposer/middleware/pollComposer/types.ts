@@ -1,5 +1,5 @@
 import type { MiddlewareExecutionResult } from '../../../middleware';
-import type { CreatePollData, VotingVisibility } from '../../../types';
+import type { CreatePollRequest, VotingVisibility } from '../../../types';
 
 export type PollComposerOption = {
   id: string;
@@ -20,7 +20,7 @@ export type UpdateFieldsData = Partial<Omit<PollComposerState['data'], 'options'
 };
 
 export type PollComposerFieldErrors = Partial<
-  Omit<Record<keyof CreatePollData, string>, 'options'> & {
+  Omit<Record<keyof CreatePollRequest, string>, 'options'> & {
     options?: Record<string, string>;
   }
 >;
@@ -42,7 +42,7 @@ export type PollComposerState = {
 };
 
 export type PollComposerCompositionMiddlewareValueState = {
-  data: CreatePollData;
+  data: CreatePollRequest;
   errors: PollComposerFieldErrors;
 };
 

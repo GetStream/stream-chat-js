@@ -4,7 +4,7 @@ import type { AbstractOfflineDB } from './offline_support_api';
 import type { AxiosError } from 'axios';
 import { isAxiosError } from 'axios';
 import { chatLoggerSystem } from '../logger';
-import type { APIErrorResponse } from '../types';
+import type { APIError } from '../types';
 
 const logger = chatLoggerSystem.getLogger('offline-db');
 
@@ -193,7 +193,7 @@ export class OfflineDBSyncManager {
         return;
       }
 
-      const error = e as AxiosError<APIErrorResponse>;
+      const error = e as AxiosError<APIError>;
 
       if (error.response?.data?.code === 23) {
         return;

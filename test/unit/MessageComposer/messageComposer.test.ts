@@ -3,12 +3,12 @@ import { chatLoggerSystem } from '../../../src/logger';
 import {
   AbstractOfflineDB,
   Channel,
-  ChannelAPIResponse,
+  ChannelStateResponseFields,
   ChannelConfigWithInfo,
   ChannelResponse,
   LocalMessage,
   MessageComposerConfig,
-  StaticLocationPayload,
+  SharedLocation,
   StreamChat,
   Thread,
 } from '../../../src';
@@ -290,7 +290,7 @@ describe('MessageComposer', () => {
     it('does nothing if cids do not match', () => {
       const response = {
         channel: { cid: 'messaging:other' },
-      } as unknown as ChannelAPIResponse;
+      } as unknown as ChannelStateResponseFields;
 
       composer.initStateFromChannelResponse(response);
 
@@ -305,7 +305,7 @@ describe('MessageComposer', () => {
       const response = {
         channel: { cid: composer.channel.cid },
         draft,
-      } as unknown as ChannelAPIResponse;
+      } as unknown as ChannelStateResponseFields;
 
       composer.initStateFromChannelResponse(response);
 
@@ -317,7 +317,7 @@ describe('MessageComposer', () => {
     it('clears and deletes draft if no draft in response but draftId exists in state', () => {
       const response = {
         channel: { cid: composer.channel.cid },
-      } as unknown as ChannelAPIResponse;
+      } as unknown as ChannelStateResponseFields;
       const executeQuerySafelySpy = vi
         .spyOn(composer.client.offlineDb!, 'executeQuerySafely')
         .mockImplementation(vi.fn());
@@ -343,7 +343,7 @@ describe('MessageComposer', () => {
 
       const response = {
         channel: { cid: composer.channel.cid },
-      } as unknown as ChannelAPIResponse;
+      } as unknown as ChannelStateResponseFields;
 
       composer.initStateFromChannelResponse(response);
 
@@ -1904,7 +1904,7 @@ describe('MessageComposer', () => {
         created_by_device_id: messageComposer.locationComposer.deviceId,
         latitude: 1,
         longitude: 1,
-      } as StaticLocationPayload);
+      } as SharedLocation);
       expect(messageComposer.locationComposer.state.getLatestValue()).toEqual({
         location: null,
       });

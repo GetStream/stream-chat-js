@@ -9,7 +9,7 @@ import type {
   EventPayload,
   EventType,
   OwnUserResponse,
-  QueryThreadsOptions,
+  QueryThreadsRequest,
 } from './types';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 
@@ -310,7 +310,7 @@ export class ThreadManager extends WithSubscriptions {
     }
   };
 
-  public queryThreads = (options: QueryThreadsOptions = {}) =>
+  public queryThreads = (options: QueryThreadsRequest = {}) =>
     this.client.queryThreadsAndHydrate({
       limit: 25,
       participant_limit: 10,
@@ -319,7 +319,7 @@ export class ThreadManager extends WithSubscriptions {
       ...options,
     });
 
-  public loadNextPage = async (options: Omit<QueryThreadsOptions, 'next'> = {}) => {
+  public loadNextPage = async (options: Omit<QueryThreadsRequest, 'next'> = {}) => {
     const { pagination } = this.state.getLatestValue();
 
     if (pagination.isLoadingNext || !pagination.nextCursor) return;

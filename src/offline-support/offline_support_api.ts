@@ -1,11 +1,11 @@
 import type {
-  APIErrorResponse,
+  APIError,
   ChannelResponse,
   Event,
   EventPayload,
   EventType,
   LocalMessage,
-  Message,
+  MessageRequest,
   MessageResponse,
   OwnUserResponse,
   RequireLiteral,
@@ -246,23 +246,23 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
   /**
    * Fetches the provided channels from the DB and aggregates all data associated
-   * with them in a single ChannelAPIResponse. The implementation itself is responsible
+   * with them in a single ChannelStateResponseFields. The implementation itself is responsible
    * for aggregating and serialization of all of the data. Should return as close to
-   * the server side ChannelAPIResponse as possible.
+   * the server side ChannelStateResponseFields as possible.
    *
    * @param {DBGetChannelsType} options
-   * @returns {Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>}
+   * @returns {Promise<Omit<ChannelStateResponseFields, 'duration'>[] | null>}
    */
   abstract getChannels: OfflineDBApi['getChannels'];
 
   /**
    * Fetches the channels from the DB that were the last known response to a filters & sort
-   * hash as a query and aggregates all data associated with them in a single ChannelAPIResponse.
+   * hash as a query and aggregates all data associated with them in a single ChannelStateResponseFields.
    * The implementation itself is responsible for aggregating and serialization of all of the data.
-   * Should return as close to the server side ChannelAPIResponse as possible.
+   * Should return as close to the server side ChannelStateResponseFields as possible.
    *
    * @param {DBGetChannelsForQueryType} options
-   * @returns {Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>}
+   * @returns {Promise<Omit<ChannelStateResponseFields, 'duration'>[] | null>}
    */
   abstract getChannelsForQuery: OfflineDBApi['getChannelsForQuery'];
 
@@ -298,7 +298,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * be stale.
    *
    * @param {DBGetAppSettingsType} options
-   * @returns {Promise<AppSettingsAPIResponse | null>}
+   * @returns {Promise<GetApplicationResponse | null>}
    */
   abstract getAppSettings: OfflineDBApi['getAppSettings'];
 
@@ -1173,7 +1173,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     try {
       return await attemptTaskExecution();
     } catch (e) {
-      if (!this.shouldSkipQueueingTask(e as AxiosError<APIErrorResponse>)) {
+      if (!this.shouldSkipQueueingTask(e as AxiosError<APIError>)) {
         await this.handleAddPendingTask({ task });
       }
       throw e;
@@ -1188,7 +1188,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * @param error - The failed task's Axios error.
    * @returns `true` when the task should not be re-queued.
    */
-  private shouldSkipQueueingTask = (error: AxiosError<APIErrorResponse>) =>
+  private shouldSkipQueueingTask = (error: AxiosError<APIError>) =>
     error?.response?.data?.code === 4 || error?.response?.data?.code === 17;
 
   private mergeFailedMessageUpdateIntoPendingSendMessage = ({
@@ -1196,7 +1196,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     pendingMessage,
   }: {
     editedMessage: LocalMessage | Partial<MessageResponse>;
-    pendingMessage: Message;
+    pendingMessage: MessageRequest;
   }) => {
     const normalizedEditedMessageSource = {
       ...editedMessage,
@@ -1217,7 +1217,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       ...(typeof pendingMessageStatus !== 'undefined'
         ? { status: pendingMessageStatus }
         : {}),
-    } as Message;
+    } as MessageRequest;
   };
 
   private isPendingSendMessageTask = (
@@ -1244,7 +1244,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       {
         // TODO: this is not good, we have too many message types, should probably only have two (request, response)
         editedMessage: message as unknown as LocalMessage,
-        pendingMessage: pendingSendMessageTask.payload[0].message as Message,
+        pendingMessage: pendingSendMessageTask.payload[0].message as MessageRequest,
       },
     );
 
@@ -1387,7 +1387,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
           true,
         );
       } catch (e) {
-        const error = e as AxiosError<APIErrorResponse>;
+        const error = e as AxiosError<APIError>;
         if (!this.shouldSkipQueueingTask(error)) {
           // executing the pending task has failed, so keep it in the queue
           continue;

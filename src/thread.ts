@@ -11,8 +11,8 @@ import type {
   LocalMessage,
   MessagePaginationOptions,
   MessageResponse,
-  ReadResponse,
-  ThreadResponse,
+  ReadStateResponse,
+  ThreadStateResponse,
   UserResponse,
 } from './types';
 import type { SortParamRequest as Gen_SortParamRequest } from './gen/models';
@@ -46,7 +46,7 @@ export type ThreadState = {
    * We use the parent message ID as the thread ID.
    */
   parentMessage: LocalMessage;
-  participants: ThreadResponse['thread_participants'];
+  participants: ThreadStateResponse['thread_participants'];
   read: ThreadReadState;
   replies: Array<LocalMessage>;
   replyCount: number;
@@ -88,7 +88,7 @@ export class Thread extends WithSubscriptions {
     threadData,
   }: {
     client: StreamChat;
-    threadData: ThreadResponse;
+    threadData: ThreadStateResponse;
   }) {
     super();
 
@@ -106,7 +106,7 @@ export class Thread extends WithSubscriptions {
 
     // For when read object is undefined and due to that unreadMessageCount for
     // the current user isn't being incremented on message.new
-    const placeholderReadResponse: ReadResponse[] = client.userId
+    const placeholderReadStateResponse: ReadStateResponse[] = client.userId
       ? [
           {
             user: { id: client.userId } as UserResponse,
@@ -132,7 +132,7 @@ export class Thread extends WithSubscriptions {
       participants: threadData.thread_participants,
       read: formatReadState(
         !threadData.read || threadData.read.length === 0
-          ? placeholderReadResponse
+          ? placeholderReadStateResponse
           : threadData.read,
       ),
       replies: threadData.latest_replies.map(formatMessage),
@@ -611,7 +611,7 @@ export class Thread extends WithSubscriptions {
   };
 }
 
-const formatReadState = (read: ReadResponse[]): ThreadReadState =>
+const formatReadState = (read: ReadStateResponse[]): ThreadReadState =>
   read.reduce<ThreadReadState>((state, userRead) => {
     state[userRead.user.id] = {
       user: userRead.user,
@@ -623,7 +623,7 @@ const formatReadState = (read: ReadResponse[]): ThreadReadState =>
   }, {});
 
 const repliesPaginationFromInitialThread = (
-  thread: ThreadResponse,
+  thread: ThreadStateResponse,
 ): ThreadRepliesPagination => {
   const latestRepliesContainsAllReplies =
     thread.latest_replies.length === thread.reply_count;

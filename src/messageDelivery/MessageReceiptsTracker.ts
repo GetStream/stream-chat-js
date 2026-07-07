@@ -1,4 +1,4 @@
-import type { ReadResponse, UserResponse } from '../types';
+import type { ReadStateResponse, UserResponse } from '../types';
 
 type UserId = string;
 type MessageId = string;
@@ -101,7 +101,7 @@ export type OwnMessageReceiptsTrackerOptions = {
  *
  * Event ingestion
  * ---------------
- * - `ingestInitial(rows: ReadResponse[])`: Builds initial state from server snapshot.
+ * - `ingestInitial(rows: ReadStateResponse[])`: Builds initial state from server snapshot.
  *   If a user’s `last_read` is ahead of `last_delivered_at`, the tracker enforces
  *   the invariant `lastDeliveredRef >= lastReadRef`.
  * - `onMessageRead(user, readAtISO)`:
@@ -145,7 +145,7 @@ export class MessageReceiptsTracker {
   }
 
   /** Build initial state from server snapshots (single pass + sort). */
-  ingestInitial(responses: ReadResponse[]) {
+  ingestInitial(responses: ReadStateResponse[]) {
     this.byUser.clear();
     this.readSorted = [];
     this.deliveredSorted = [];

@@ -1,7 +1,7 @@
 import sinon from 'sinon';
 import {
   Channel,
-  ChannelAPIResponse,
+  ChannelStateResponseFields,
   ChannelManager,
   ChannelResponse,
   StreamChat,
@@ -10,7 +10,7 @@ import {
   channelManagerEventToHandlerMapping,
   DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS,
   QueryChannelsRequestType,
-  QueryChannelsAPIResponse,
+  QueryChannelsResponse,
   RequestMetadata,
   EventPayload,
 } from '../../src';
@@ -26,7 +26,7 @@ import { DEFAULT_QUERY_CHANNELS_RETRY_COUNT } from '../../src/constants';
 describe('ChannelManager', () => {
   let client: StreamChat;
   let channelManager: ChannelManager;
-  let channelsResponse: ChannelAPIResponse[];
+  let channelsResponse: ChannelStateResponseFields[];
 
   beforeEach(async () => {
     client = await getClientWithUser();
@@ -1545,7 +1545,7 @@ describe('ChannelManager', () => {
       sort,
     }: {
       filter: Record<string, unknown>;
-      sort?: NonNullable<QueryChannelsAPIResponse['predefined_filter']>['sort'];
+      sort?: NonNullable<QueryChannelsResponse['predefined_filter']>['sort'];
     }) => {
       vi.spyOn(client, 'queryChannels').mockResolvedValueOnce({
         duration: '0.01s',
