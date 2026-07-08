@@ -10,7 +10,7 @@ import type {
   MarkReadOptions,
 } from '../types';
 import { type APIErrorResponse } from '../types';
-import { throttle } from '../utils';
+import { throttle, userHasReadReceipts } from '../utils';
 import { isAPIError, isErrorRetryable } from '../errors';
 
 const MAX_DELIVERED_MESSAGE_COUNT_IN_PAYLOAD = 100 as const;
@@ -279,6 +279,7 @@ export class MessageDeliveryReporter {
    * @param options
    */
   public markRead = async (collection: Channel | Thread, options?: MarkReadOptions) => {
+    if (!userHasReadReceipts(this.client)) return null;
     const isThreadCollection = isThread(collection);
     const channel = isThreadCollection ? collection.channel : collection;
     const requestOptions = isThreadCollection

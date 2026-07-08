@@ -12,6 +12,9 @@ import {
   getAndWatchChannel,
   addToMessageList,
   findIndexInSortedArray,
+  channelHasReadEvents,
+  channelTracksReadLocally,
+  userHasReadReceipts,
   formatMessage,
   generateChannelTempCid,
   shouldConsiderArchivedChannels,
@@ -1169,5 +1172,103 @@ describe('sleep', () => {
     vi.advanceTimersByTime(1000);
     await waitPromise;
     expect(resolved).toBe(true);
+  });
+});
+
+describe('channelHasReadEvents', () => {
+  const makeChannel = (own_capabilities?: string[]) => {
+    const client = new StreamChat('apiKey');
+    client.user = { id: 'user' };
+    client.userID = 'user';
+    const channel = client.channel('messaging', 'cap-id');
+    channel.data = { own_capabilities };
+    return channel;
+  };
+
+  it('returns true when own_capabilities includes read-events', () => {
+    expect(channelHasReadEvents(makeChannel(['read-events']))).toBe(true);
+  });
+
+  it('returns false when own_capabilities is known and excludes read-events (e.g. livestream)', () => {
+    expect(channelHasReadEvents(makeChannel([]))).toBe(false);
+  });
+
+  it('returns true (assumes read events on) when own_capabilities is unknown', () => {
+    expect(channelHasReadEvents(makeChannel(undefined))).toBe(true);
+  });
+
+  it('returns true when the channel is undefined', () => {
+    expect(channelHasReadEvents(undefined)).toBe(true);
+  });
+});
+
+describe('channelTracksReadLocally', () => {
+  const setup = ({
+    isLocalUnreadCountEnabled,
+    own_capabilities,
+  }: {
+    isLocalUnreadCountEnabled?: boolean;
+    own_capabilities?: string[];
+  }) => {
+    const client = new StreamChat('apiKey', { isLocalUnreadCountEnabled });
+    client.user = { id: 'user' };
+    client.userID = 'user';
+    const channel = client.channel('messaging', 'cap-id');
+    channel.data = { own_capabilities };
+    return { client, channel };
+  };
+
+  it('returns true when read events are disabled and local unread count is enabled', () => {
+    const { channel } = setup({
+      isLocalUnreadCountEnabled: true,
+      own_capabilities: [],
+    });
+    expect(channelTracksReadLocally(channel)).toBe(true);
+  });
+
+  it('returns false when the channel has read events', () => {
+    const { channel } = setup({
+      isLocalUnreadCountEnabled: true,
+      own_capabilities: ['read-events'],
+    });
+    expect(channelTracksReadLocally(channel)).toBe(false);
+  });
+
+  it('returns false when local unread count is disabled', () => {
+    const { channel } = setup({
+      isLocalUnreadCountEnabled: false,
+      own_capabilities: [],
+    });
+    expect(channelTracksReadLocally(channel)).toBe(false);
+  });
+
+  it('returns false when the channel is undefined', () => {
+    expect(channelTracksReadLocally(undefined)).toBe(false);
+  });
+});
+
+describe('userHasReadReceipts', () => {
+  const makeClient = (readReceiptsEnabled?: boolean) => {
+    const client = new StreamChat('apiKey');
+    client.user = {
+      id: 'user',
+      privacy_settings:
+        readReceiptsEnabled === undefined
+          ? undefined
+          : { read_receipts: { enabled: readReceiptsEnabled } },
+    };
+    return client;
+  };
+
+  it('returns true when read receipts are enabled', () => {
+    expect(userHasReadReceipts(makeClient(true))).toBe(true);
+  });
+
+  it('returns false when read receipts are explicitly disabled', () => {
+    expect(userHasReadReceipts(makeClient(false))).toBe(false);
+  });
+
+  it('returns true (assumes enabled) when privacy settings are unset', () => {
+    expect(userHasReadReceipts(makeClient(undefined))).toBe(true);
   });
 });
