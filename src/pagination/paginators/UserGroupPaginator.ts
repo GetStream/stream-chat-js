@@ -1,12 +1,12 @@
-import { BasePaginator, ZERO_PAGE_CURSOR } from './paginators/BasePaginator';
+import { BasePaginator, ZERO_PAGE_CURSOR } from './BasePaginator';
 import type {
   PaginationQueryParams,
   PaginationQueryReturnValue,
   PaginatorOptions,
   PaginatorState,
-} from './paginators/BasePaginator';
-import type { QueryUserGroupsOptions, UserGroupResponse } from '../types';
-import type { StreamChat } from '../client';
+} from './BasePaginator';
+import type { QueryUserGroupsOptions, UserGroupResponse } from '../../types';
+import type { StreamChat } from '../../client';
 
 type UserGroupListCursor = {
   created_at_gt: string;
