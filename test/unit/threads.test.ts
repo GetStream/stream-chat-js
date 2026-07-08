@@ -1356,9 +1356,12 @@ describe('Threads 2.0', () => {
         });
       });
 
-      it('reloads after connection drop', () => {
+      it('reloads after connection drop if the thread list was activated at least once', () => {
         const thread = createTestThread();
-        threadManager.state.partialNext({ threads: [thread] });
+        threadManager.state.partialNext({
+          threads: [thread],
+          wasActivatedAtLeastOnce: true,
+        });
         threadManager.registerSubscriptions();
         const stub = sinon.stub(client, 'queryThreads').resolves({
           threads: [],
@@ -1378,6 +1381,35 @@ describe('Threads 2.0', () => {
         clock.runAll();
 
         expect(stub.calledOnce).to.be.true;
+
+        threadManager.unregisterSubscriptions();
+        clock.restore();
+      });
+
+      it('does not reload after connection drop if the thread list was never activated', () => {
+        const thread = createTestThread();
+        threadManager.state.partialNext({ threads: [thread] });
+        threadManager.registerSubscriptions();
+        const stub = sinon.stub(client, 'queryThreads').resolves({
+          threads: [],
+          next: undefined,
+        });
+        const clock = sinon.useFakeTimers();
+
+        client.dispatchEvent({
+          type: 'connection.changed',
+          online: false,
+        });
+
+        // the drop is still recorded...
+        const { lastConnectionDropAt } = threadManager.state.getLatestValue();
+        expect(lastConnectionDropAt).to.be.a('date');
+
+        // ...but recovery must not trigger a thread query for a list nobody uses.
+        client.dispatchEvent({ type: 'connection.recovered' });
+        clock.runAll();
+
+        expect(stub.called).to.be.false;
 
         threadManager.unregisterSubscriptions();
         clock.restore();
