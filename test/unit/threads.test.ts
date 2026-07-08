@@ -1401,11 +1401,9 @@ describe('Threads 2.0', () => {
           online: false,
         });
 
-        // the drop is still recorded...
         const { lastConnectionDropAt } = threadManager.state.getLatestValue();
         expect(lastConnectionDropAt).to.be.a('date');
 
-        // ...but recovery must not trigger a thread query for a list nobody uses.
         client.dispatchEvent({ type: 'connection.recovered' });
         clock.runAll();
 
