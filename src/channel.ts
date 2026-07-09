@@ -986,11 +986,11 @@ export class Channel extends ChannelApi {
       channel_id: this.id,
       channel_type: this.type,
       cid: this.cid,
-      created_at: new Date().toISOString(),
+      created_at: new Date(),
       last_read_message_id: this.lastMessage()?.id,
       team: this.data?.team,
       type: 'message.read_locally',
-      user: client.user,
+      user: client.user as UserResponse,
     };
     client.dispatchEvent(event);
 

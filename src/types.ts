@@ -476,6 +476,15 @@ type LocalEvent = (
       cid: string;
       own_capabilities: ChannelOwnCapability[];
     })
+  | ({ type: 'message.read_locally' } & {
+      channel_type: string;
+      cid: string;
+      created_at: Date;
+      channel_id?: string;
+      last_read_message_id?: string;
+      team?: string;
+      user?: UserResponse;
+    })
 ) & { received_at?: Date };
 
 export type Event = WSEvent | LocalEvent | keyof CustomEventTypes;

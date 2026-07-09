@@ -541,7 +541,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       forceUpdate = false,
     }: {
       event: Extract<
-        WSEvent,
+        Event,
         { channel?: any; cid?: any; channel_type?: any; channel_id?: any }
       >;
       execute?: boolean;
@@ -761,7 +761,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     execute = true,
   }: {
     event: EventPayload<
-      'message.read' | 'notification.mark_read' | 'notification.mark_unread'
+      | 'message.read'
+      | 'message.read_locally'
+      | 'notification.mark_read'
+      | 'notification.mark_unread'
     >;
     unreadMessages?: number;
     execute?: boolean;
