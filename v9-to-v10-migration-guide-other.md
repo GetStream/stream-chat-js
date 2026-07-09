@@ -35,8 +35,8 @@
 | `export * from './channel_batch_updater'`  | `ChannelBatchUpdater` was a server-side admin surface.                                                                                        |
 | `CustomEventTypes` (re-exported interface) | Interface deleted from `custom_types.ts` — see event section below.                                                                           |
 
-| Added export barrel        | What it exposes                                                                                                                     |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Added export barrel        | What it exposes                                                                                                                          |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `export * from './logger'` | `chatLoggerSystem`, `LogLevel`, `LogLevelEnum`, `Sink`, `ScopedLogger`, `ChatLoggerScope`, `ConfigureLoggersOptions`. See logging guide. |
 
 Any consumer doing `import { Campaign, Segment, ChannelBatchUpdater, EVENT_MAP } from 'stream-chat'` will fail to resolve. Delete those imports; there is no drop-in replacement in this SDK.
@@ -47,26 +47,26 @@ Any consumer doing `import { Campaign, Segment, ChannelBatchUpdater, EVENT_MAP }
 
 Beyond the individual server-side methods listed in the methods guide, entire subsystems are gone. If your app used one of these, the client-side wrapper is not coming back — move to `@stream-io/node-sdk`:
 
-| Subsystem                          | v9 shape                                                                             | v10 status                                                                                                                                     |
-| ---------------------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Campaigns**                      | `client.campaign`, `queryCampaigns`, `createCampaign`, `startCampaign`, `stopCampaign`, `updateCampaign`, `deleteCampaign`, `getCampaign` | removed                                                                                                                                        |
-| **Segments**                       | `client.segment`, `createSegment`, `createUserSegment`, `createChannelSegment`, `updateSegment`, `getSegment`, `deleteSegment`, `querySegments`, `segmentTargetExists`, `addSegmentTargets`, `removeSegmentTargets`, `querySegmentTargets` | removed                                                                                                                                        |
-| **`ChannelBatchUpdater`**          | `client.channelBatchUpdater`, `client.updateChannelsBatch(...)`                      | removed                                                                                                                                        |
-| **Retention policies**             | `setRetentionPolicy`, `deleteRetentionPolicy`, `getRetentionPolicy`, `getRetentionPolicyRuns` | removed                                                                                                                                        |
-| **Team usage stats**               | `queryTeamUsageStats`                                                                | removed                                                                                                                                        |
-| **User groups**                    | `createUserGroup`, `getUserGroup`, `searchUserGroups`, `updateUserGroup`, `deleteUserGroup`, `addUserGroupMembers`, `removeUserGroupMembers` | mutations removed. Read paths (`queryUserGroups` + `UserGroupPaginator`) remain; see paginator note below.                                     |
-| **Predefined filters (client)**    | `deletePredefinedFilter`, `PredefinedFilterSort(Param)` types, `mapPredefinedFilterSortToChannelSort` helper | removed. Read paths remain via the generated API.                                                                                              |
-| **Reminder client batch API**      | `client.createReminder`, `client.updateReminder`, `client.deleteReminder`, `client.queryReminders` | removed from `StreamChat`. `ReminderManager` remains — use it. See "Reminders" below for shape change.                                          |
-| **Push provider admin**            | `upsertPushProvider`, `deletePushProvider`, `listPushProviders`, `setPushPreferences` | removed                                                                                                                                        |
-| **Roles / Permissions admin**      | `createRole`, `listRoles`, `deleteRole`, `getPermission`, `createPermission`, `updatePermission`, `deletePermission`, `listPermissions` | removed. `searchRoles` remains, inherited from the generated API.                                                                              |
-| **Channel-types admin**            | `createChannelType`, `getChannelType`, `updateChannelType`, `deleteChannelType`, `listChannelTypes` | removed                                                                                                                                        |
-| **Commands admin**                 | `createCommand`, `getCommand`, `updateCommand`, `deleteCommand`, `listCommands`      | removed                                                                                                                                        |
-| **Imports / Exports**              | `_createImport`, `_createImportURL`, `_getImport`, `_listImports`, `exportChannel`, `exportChannels`, `exportUsers`, `getExportChannelStatus`, `getTask` | removed                                                                                                                                        |
-| **App-settings mutations**         | `updateAppSettings`, `testPushSettings`, `testSQSSettings`, `testSNSSettings`, `translate`, `translateMessage`, `getHookEvents` | removed. `getAppSettings` remains.                                                                                                             |
-| **User admin**                     | `partialUpdateUser`, `deleteUser`, `restoreUsers`, `reactivateUser(s)`, `deactivateUser(s)`, `exportUser`, `revokeUserToken`, `revokeUsersToken`, `sendUserCustomEvent`, `deleteUsers` | removed                                                                                                                                        |
-| **Flag admin**                     | `_queryFlags`, `_queryFlagReports`, `_reviewFlagReport`, `queryMessageFlags`, `updateFlags` | removed. User/message flagging by the connected user remains via `client.flagMessage` / `client.flagUser`.                                     |
-| **Webhook / SQS / SNS helpers**    | `client.verifyWebhook`, `client.verifyAndParseWebhook`, `client.parseSqs`, `client.parseSns` (used `client.secret` implicitly) | Moved to module exports on `./signing`, `secret` now required explicitly. See methods guide for signatures.                                    |
-| **Misc.**                          | `commitMessage`, `undeleteMessage`, `getSharedLocations`, `updateLocation`, `getUnreadCountBatch`, `getBlockList`, `enrichURL`, `_normalizeDate`, `validateServerSideAuth`, `_setupConnection`, `_enrichAxiosOptions`, `_logApiRequest`, `_logApiError` | removed                                                                                                                                        |
+| Subsystem                       | v9 shape                                                                                                                                                                                                                                                | v10 status                                                                                                  |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Campaigns**                   | `client.campaign`, `queryCampaigns`, `createCampaign`, `startCampaign`, `stopCampaign`, `updateCampaign`, `deleteCampaign`, `getCampaign`                                                                                                               | removed                                                                                                     |
+| **Segments**                    | `client.segment`, `createSegment`, `createUserSegment`, `createChannelSegment`, `updateSegment`, `getSegment`, `deleteSegment`, `querySegments`, `segmentTargetExists`, `addSegmentTargets`, `removeSegmentTargets`, `querySegmentTargets`              | removed                                                                                                     |
+| **`ChannelBatchUpdater`**       | `client.channelBatchUpdater`, `client.updateChannelsBatch(...)`                                                                                                                                                                                         | removed                                                                                                     |
+| **Retention policies**          | `setRetentionPolicy`, `deleteRetentionPolicy`, `getRetentionPolicy`, `getRetentionPolicyRuns`                                                                                                                                                           | removed                                                                                                     |
+| **Team usage stats**            | `queryTeamUsageStats`                                                                                                                                                                                                                                   | removed                                                                                                     |
+| **User groups**                 | `createUserGroup`, `getUserGroup`, `searchUserGroups`, `updateUserGroup`, `deleteUserGroup`, `addUserGroupMembers`, `removeUserGroupMembers`                                                                                                            | mutations removed. Read paths (`queryUserGroups` + `UserGroupPaginator`) remain; see paginator note below.  |
+| **Predefined filters (client)** | `deletePredefinedFilter`, `PredefinedFilterSort(Param)` types, `mapPredefinedFilterSortToChannelSort` helper                                                                                                                                            | removed. Read paths remain via the generated API.                                                           |
+| **Reminder client batch API**   | `client.createReminder`, `client.updateReminder`, `client.deleteReminder`, `client.queryReminders`                                                                                                                                                      | removed from `StreamChat`. `ReminderManager` remains — use it. See "Reminders" below for shape change.      |
+| **Push provider admin**         | `upsertPushProvider`, `deletePushProvider`, `listPushProviders`, `setPushPreferences`                                                                                                                                                                   | removed                                                                                                     |
+| **Roles / Permissions admin**   | `createRole`, `listRoles`, `deleteRole`, `getPermission`, `createPermission`, `updatePermission`, `deletePermission`, `listPermissions`                                                                                                                 | removed. `searchRoles` remains, inherited from the generated API.                                           |
+| **Channel-types admin**         | `createChannelType`, `getChannelType`, `updateChannelType`, `deleteChannelType`, `listChannelTypes`                                                                                                                                                     | removed                                                                                                     |
+| **Commands admin**              | `createCommand`, `getCommand`, `updateCommand`, `deleteCommand`, `listCommands`                                                                                                                                                                         | removed                                                                                                     |
+| **Imports / Exports**           | `_createImport`, `_createImportURL`, `_getImport`, `_listImports`, `exportChannel`, `exportChannels`, `exportUsers`, `getExportChannelStatus`, `getTask`                                                                                                | removed                                                                                                     |
+| **App-settings mutations**      | `updateAppSettings`, `testPushSettings`, `testSQSSettings`, `testSNSSettings`, `translate`, `translateMessage`, `getHookEvents`                                                                                                                         | removed. `getAppSettings` remains.                                                                          |
+| **User admin**                  | `partialUpdateUser`, `deleteUser`, `restoreUsers`, `reactivateUser(s)`, `deactivateUser(s)`, `exportUser`, `revokeUserToken`, `revokeUsersToken`, `sendUserCustomEvent`, `deleteUsers`                                                                  | removed                                                                                                     |
+| **Flag admin**                  | `_queryFlags`, `_queryFlagReports`, `_reviewFlagReport`, `queryMessageFlags`, `updateFlags`                                                                                                                                                             | removed. User/message flagging by the connected user remains via `client.flagMessage` / `client.flagUser`.  |
+| **Webhook / SQS / SNS helpers** | `client.verifyWebhook`, `client.verifyAndParseWebhook`, `client.parseSqs`, `client.parseSns` (used `client.secret` implicitly)                                                                                                                          | Moved to module exports on `./signing`, `secret` now required explicitly. See methods guide for signatures. |
+| **Misc.**                       | `commitMessage`, `undeleteMessage`, `getSharedLocations`, `updateLocation`, `getUnreadCountBatch`, `getBlockList`, `enrichURL`, `_normalizeDate`, `validateServerSideAuth`, `_setupConnection`, `_enrichAxiosOptions`, `_logApiRequest`, `_logApiError` | removed                                                                                                     |
 
 If your call site was gated on `client._isUsingServerAuth()` (which is also removed), delete the branch — it was only ever true on the server-side path.
 
@@ -111,13 +111,13 @@ export type ListenerKeys = CombinedEvents['type'] | 'all';
 
 ### v9 → v10 replacement table
 
-| v9                                                                | v10                                                                                                            |
-| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `import { Event } from 'stream-chat'`                             | `import { CombinedEvents, WSEvent, LocalEvent } from 'stream-chat'`                                            |
-| `Event` as a callback argument type                               | `CombinedEvents` (or the specific `EventPayload<'message.new'>`)                                               |
-| `import { EventTypes } from 'stream-chat'`                        | `import { ListenerKeys } from 'stream-chat'` (values are the same strings)                                     |
-| `import { EVENT_MAP } from 'stream-chat'`                         | removed — no runtime table. Match on `event.type` directly.                                                    |
-| `interface CustomEventTypes { my_custom: 'my_custom'; ... }` (module augmentation) | augment `ListenerKeys` from `stream-chat` — see below                                                          |
+| v9                                                                                                                                                                                                                                   | v10                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `import { Event } from 'stream-chat'`                                                                                                                                                                                                | `import { CombinedEvents, WSEvent, LocalEvent } from 'stream-chat'`                                                                                                                                  |
+| `Event` as a callback argument type                                                                                                                                                                                                  | `CombinedEvents` (or the specific `EventPayload<'message.new'>`)                                                                                                                                     |
+| `import { EventTypes } from 'stream-chat'`                                                                                                                                                                                           | `import { ListenerKeys } from 'stream-chat'` (values are the same strings)                                                                                                                           |
+| `import { EVENT_MAP } from 'stream-chat'`                                                                                                                                                                                            | removed — no runtime table. Match on `event.type` directly.                                                                                                                                          |
+| `interface CustomEventTypes { my_custom: 'my_custom'; ... }` (module augmentation)                                                                                                                                                   | augment `ListenerKeys` from `stream-chat` — see below                                                                                                                                                |
 | Hand-rolled `ReminderEvent`, `PollEvent`, `PollUpdatedEvent`, `PollVoteCastedEvent`, `PollClosedEvent`, `PollAnswerCastedEvent`, `VoteChangedEvent`, `VoteCastedEvent`, `VoteRemovedEvent`, `AnswerCastedEvent`, and similar aliases | replaced by `EventPayload<'reminder.created' \| 'reminder.updated' \| ...>` etc. `ReminderManager.ReminderEvent` now aliases to `EventPayload<`reminder.${string}` \| 'notification.reminder_due'>`. |
 
 ### Narrowing a listener
@@ -159,7 +159,9 @@ declare module 'stream-chat' {
   type ListenerKeys = import('stream-chat').ListenerKeys | 'my_app_custom';
 }
 // Alternative: fall through to `string` where you use the listener key generic:
-client.on<'my_app_custom'>('my_app_custom', (event) => { /* event is CombinedEvents */ });
+client.on<'my_app_custom'>('my_app_custom', (event) => {
+  /* event is CombinedEvents */
+});
 ```
 
 Because the v10 generic on `on<T extends ListenerKeys | string>` accepts any `string`, unknown listener keys still type-check without augmentation, but the event payload will not be narrowed.
@@ -235,7 +237,10 @@ Any code that inspected the typing entry's fields is now narrowed to typing-even
 The per-user record now composes the generated `ReadStateResponse` plus an SDK-only `first_unread_message_id`:
 
 ```ts
-type ChannelReadStatus = Record<string, ReadStateResponse & { first_unread_message_id?: string }>;
+type ChannelReadStatus = Record<
+  string,
+  ReadStateResponse & { first_unread_message_id?: string }
+>;
 ```
 
 Field names are unchanged (`last_read`, `unread_messages`, `user`, `last_read_message_id`, `last_delivered_at`, `last_delivered_message_id`), but `user` is now `UserResponseCommonFields`-shaped (from the generator) rather than the v9 `UserResponse`. Downstream code that reads fields off `read[uid].user` should be fine; code that assigned back onto it may not.
@@ -270,7 +275,9 @@ Consequences:
 
 ```ts
 // v9
-export type LiveLocationPreview = Omit<LiveLocationPayload, 'end_at'> & { durationMs?: number };
+export type LiveLocationPreview = Omit<LiveLocationPayload, 'end_at'> & {
+  durationMs?: number;
+};
 // end_at was set to `new Date(...).toISOString()`
 
 // v10
@@ -368,10 +375,10 @@ Also, `client.userID = ...` no longer compiles (getter is deprecated; setter is 
 
 ```ts
 // v9
-Promise<GetAppSettingsAPIResponse>
+Promise<GetAppSettingsAPIResponse>;
 
 // v10
-Promise<StreamResponse<Gen_GetApplicationResponse>>
+Promise<StreamResponse<Gen_GetApplicationResponse>>;
 ```
 
 `StreamResponse<T> = T & { metadata: RequestMetadata }` — pre-existing fields are all still there; the wrapper only adds `metadata`.

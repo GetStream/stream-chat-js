@@ -92,7 +92,7 @@ In v10, `axiosRequestConfig` is spread into the `axios.create` call during const
 const client = new StreamChat(API_KEY, {
   axiosRequestConfig: { timeout: 9999, withCredentials: true },
 });
-client.axiosInstance.defaults.timeout;         // 9999
+client.axiosInstance.defaults.timeout; // 9999
 client.axiosInstance.defaults.withCredentials; // true
 ```
 
@@ -105,7 +105,10 @@ The defaults (`timeout: 3000`, `withCredentials: false`, keep-alive `https.Agent
 new StreamChat(API_KEY, { browser: false, httpsAgent: customAgent });
 
 // v10 — under axiosRequestConfig
-new StreamChat(API_KEY, { browser: false, axiosRequestConfig: { httpsAgent: customAgent } });
+new StreamChat(API_KEY, {
+  browser: false,
+  axiosRequestConfig: { httpsAgent: customAgent },
+});
 ```
 
 In both versions, node mode (`browser: false` or auto-detected) auto-creates a keep-alive `https.Agent` when none is supplied. Browser mode does not.

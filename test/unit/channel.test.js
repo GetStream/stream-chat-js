@@ -291,13 +291,13 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 		expect(event.channel_type).to.be.equal(channel.type);
 		expect(event.user.id).to.be.equal(user.id);
 		expect(event.last_read_message_id).to.be.equal(lastMsg.id);
-		expect(event.created_at).to.be.a('string');
+		expect(event.created_at).to.be.instanceOf(Date);
 
 		// markReadLocally returns the same dispatched event so callers (e.g. the RN SDK) can sync
 		// their own unread UI from that read info instead of re-deriving it.
 		expect(returned).to.equal(event);
 		expect(returned.last_read_message_id).to.be.equal(lastMsg.id);
-		expect(returned.created_at).to.be.a('string');
+		expect(returned.created_at).to.be.instanceOf(Date);
 	});
 
 	it('markReadLocally returns undefined and dispatches nothing when there is no connected user', function () {
