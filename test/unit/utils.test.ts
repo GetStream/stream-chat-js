@@ -32,6 +32,7 @@ import {
 
 import type {
   ChannelFilters,
+  ChannelOwnCapability,
   ChannelSort,
   FormatMessageResponse,
   MessageResponse,
@@ -1180,10 +1181,9 @@ describe('sleep', () => {
 });
 
 describe('channelHasReadEvents', () => {
-  const makeChannel = (own_capabilities?: string[]) => {
+  const makeChannel = (own_capabilities?: ChannelOwnCapability[]) => {
     const client = new StreamChat('apiKey');
     client.user = { id: 'user' };
-    client.userID = 'user';
     const channel = client.channel('messaging', 'cap-id');
     channel.data = { own_capabilities };
     return channel;
@@ -1212,11 +1212,10 @@ describe('channelTracksReadLocally', () => {
     own_capabilities,
   }: {
     isLocalUnreadCountEnabled?: boolean;
-    own_capabilities?: string[];
+    own_capabilities?: ChannelOwnCapability[];
   }) => {
     const client = new StreamChat('apiKey', { isLocalUnreadCountEnabled });
     client.user = { id: 'user' };
-    client.userID = 'user';
     const channel = client.channel('messaging', 'cap-id');
     channel.data = { own_capabilities };
     return { client, channel };

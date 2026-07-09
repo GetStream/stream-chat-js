@@ -1,5 +1,16 @@
+import type {
+  CustomAttachmentData,
+  CustomChannelData,
+  CustomEventData,
+  CustomMemberData,
+  CustomMessageData,
+  CustomPollData,
+  CustomPollOptionData,
+  CustomReactionData,
+  CustomThreadData,
+  CustomUserData,
+} from '../../custom_types';
 
-import type { CustomAttachmentData, CustomChannelData, CustomEventData, CustomMemberData, CustomMessageData, CustomPollData, CustomPollOptionData, CustomReactionData, CustomThreadData, CustomUserData } from '../../custom_types';
 type Filters<FilterConditions extends Record<string, { type: any; operators: string }>> =
   QueryFilters<{
     [Property in keyof FilterConditions]: FilterConditions[Property]['operators'] extends string

@@ -976,7 +976,7 @@ export class Channel extends ChannelApi {
    * is enabled, the offline DB persists the reset for read-events-disabled channels, so the local
    * count stays consistent across app restarts.
    *
-   * @return The dispatched `message.read_locally` event, or `undefined` if there is no connected user.
+   * @returns The dispatched `message.read_locally` event, or `undefined` if there is no connected user.
    */
   markReadLocally() {
     const client = this.getClient();
@@ -1628,7 +1628,7 @@ export class Channel extends ChannelApi {
           };
           this.messageReceiptsTracker.onMessageRead({
             user: event.user,
-            readAt: event.created_at,
+            readAt: new Date(event.created_at),
             lastReadMessageId: event.last_read_message_id,
           });
           const client = this.getClient();

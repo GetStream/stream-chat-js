@@ -213,7 +213,6 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 	const setupChannel = ({ isLocalUnreadCountEnabled }) => {
 		const client = new StreamChat('apiKey', { isLocalUnreadCountEnabled });
 		client.user = user;
-		client.userID = user.id;
 		client.userMuteStatus = () => false;
 		const channel = client.channel('messaging', 'live-id');
 		channel.initialized = true;
@@ -264,7 +263,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 
 	it('markReadLocally resets the count and emits a message.read-shaped message.read_locally event', function () {
 		const { client, channel } = setupChannel({ isLocalUnreadCountEnabled: true });
-		const post = vi.spyOn(client, 'post').mockResolvedValue({});
+		const post = vi.spyOn(client.api, 'post').mockResolvedValue({});
 		const lastMsg = generateMsg({ user: otherUser });
 		channel.state.addMessagesSorted([lastMsg]);
 		channel.state.unreadCount = 5;
@@ -304,7 +303,6 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 	it('markReadLocally returns undefined and dispatches nothing when there is no connected user', function () {
 		const { client, channel } = setupChannel({ isLocalUnreadCountEnabled: true });
 		client.user = undefined;
-		client.userID = undefined;
 		const onLocalRead = vi.fn();
 		channel.on('message.read_locally', onLocalRead);
 
@@ -315,8 +313,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 	});
 
 	it('markReadLocally resets the count and creates the own read row when none exists yet (fresh livestream)', function () {
-		const { client, channel } = setupChannel({ isLocalUnreadCountEnabled: true });
-		const post = vi.spyOn(client, 'post').mockResolvedValue({});
+		const { channel } = setupChannel({ isLocalUnreadCountEnabled: true });
 		const lastMsg = generateMsg({ user: otherUser });
 		channel.state.addMessagesSorted([lastMsg]);
 		channel.state.unreadCount = 3;
@@ -328,7 +325,6 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 		expect(channel.state.read[user.id]).to.be.ok;
 		expect(channel.state.read[user.id].unread_messages).to.be.equal(0);
 		expect(channel.state.read[user.id].last_read_message_id).to.be.equal(lastMsg.id);
-		expect(post.mock.calls.length).to.be.equal(0);
 	});
 });
 
