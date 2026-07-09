@@ -1,3 +1,9 @@
+## [9.50.1](https://github.com/GetStream/stream-chat-js/compare/v9.50.0...v9.50.1) (2026-07-09)
+
+### Bug Fixes
+
+* prevent reload if ThreadManager has never been activated ([#1798](https://github.com/GetStream/stream-chat-js/issues/1798)) ([affbb9c](https://github.com/GetStream/stream-chat-js/commit/affbb9cac73eea798084879523b9bad709ad4dc1))
+
 ## [9.50.0](https://github.com/GetStream/stream-chat-js/compare/v9.49.0...v9.50.0) (2026-07-03)
 
 ### Features
