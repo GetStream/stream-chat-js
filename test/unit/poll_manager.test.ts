@@ -5,7 +5,7 @@ import { generateUUIDv4 as uuidv4 } from '../../src/utils';
 
 import sinon from 'sinon';
 import {
-  EventTypes,
+  EventType,
   FormatMessageResponse,
   MessageResponse,
   Poll,
@@ -538,7 +538,7 @@ describe('PollManager', () => {
         const updatedPoll = pollMessage1.poll as PollResponse;
 
         client.dispatchEvent({
-          type: eventType as EventTypes,
+          type: eventType as EventType,
           poll: updatedPoll,
         });
 

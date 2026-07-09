@@ -11,7 +11,7 @@ import { generateUser } from '../test-utils/generateUser';
 import { generateChannel } from '../test-utils/generateChannel';
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ErrorFromResponse, StreamChat } from '../../../src';
+import { StreamAPIError, StreamChat } from '../../../src';
 import { APIErrorCodes } from '../../../src/errors';
 
 describe('SearchController', () => {
@@ -431,7 +431,7 @@ describe('BaseSearchSource and implementations', () => {
 				});
 
 				vi.spyOn(searchSource, 'query').mockRejectedValue(
-					new ErrorFromResponse('anything', {
+					new StreamAPIError('anything', {
 						code: APIErrorCodes[4],
 						response: {},
 						status: 400,

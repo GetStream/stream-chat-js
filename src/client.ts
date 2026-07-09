@@ -54,8 +54,6 @@ import type {
   QueryChannelsResponse,
   QueryReactionsRequestWithId,
   QueryThreadsRequest,
-  QueryUserGroupsOptions,
-  QueryUserGroupsResponse,
   ReactionResponse,
   SdkIdentifier,
   SearchPayload,
@@ -1215,18 +1213,6 @@ export class StreamChat extends ChatApi {
     return data;
   }
 
-  /**
-   * List user groups with cursor-based pagination.
-   *
-   * @param options - The query options (optional, defaults to `{}`).
-   * @returns User group query response.
-   */
-  async queryUserGroups(options: QueryUserGroupsOptions = {}) {
-    return await this.api.get<QueryUserGroupsResponse>(
-      this.baseURL + '/usergroups',
-      options,
-    );
-  }
   /**
    * Queries user bans.
    *

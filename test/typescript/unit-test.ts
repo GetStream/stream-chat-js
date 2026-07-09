@@ -14,7 +14,7 @@ import {
   SendFileAPIResponse,
   UR,
   Channel,
-  EventTypes,
+  EventType,
   ChannelState,
   ChannelMemberResponse,
   UpdateChannelAPIResponse,
@@ -148,7 +148,7 @@ const file: Promise<SendFileAPIResponse> = client.sendFile(
   { id: 'james' },
 );
 
-const type: EventTypes = 'user.updated';
+const type: EventType = 'user.updated';
 const event: Event = {
   type,
   cid: 'channelid',

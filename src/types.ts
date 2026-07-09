@@ -22,7 +22,6 @@ import type {
   CreateDeviceRequest,
   DraftPayloadResponse,
   Images,
-  MessageRequest,
   MessageResponse,
   ModerationPayload,
   OwnUserResponse,
@@ -50,7 +49,6 @@ import type {
   UpdateMessageResponse,
   UpdatePollOptionRequest,
   UpdatePollRequest,
-  UserGroupResponse,
   UserMuteResponse,
   UserResponse,
   WSEvent,
@@ -82,7 +80,6 @@ export type Unpacked<T> = T extends (infer U)[]
 
 export type APIResponse = {
   duration: string;
-  blocklist?: BlockListResponse_old;
 };
 
 export type FlagDetails = {
@@ -97,12 +94,6 @@ export type Flag = {
   target_message?: MessageResponse;
   target_user?: UserResponse;
   user?: UserResponse;
-};
-
-export type BlockListResponse_old = BlockList & {
-  created_at?: string;
-  type?: string;
-  updated_at?: string;
 };
 
 export type ChannelUpdateOptions = Omit<UpdateChannelRequest, 'message' | 'members'>;
@@ -211,11 +202,6 @@ export type SearchAPIResponse = APIResponse & {
 // Thumb URL(thumb_url) is added considering video attachments as the backend will return the thumbnail in the response.
 export type SendFileAPIResponse = APIResponse & { file: string; thumb_url?: string };
 
-export type SyncResponse_old = APIResponse & {
-  events: WSEvent[];
-  inaccessible_cids?: string[];
-};
-
 export type UpdateChannelAPIResponse = APIResponse & {
   channel: ChannelResponse;
   members: ChannelMemberResponse[];
@@ -294,10 +280,6 @@ export type ChannelStateOptions = {
    */
   withResponse?: boolean;
 };
-
-export type Thresholds_old = Partial<
-  Record<'explicit' | 'spam' | 'toxic', Partial<{ block: number; flag: number }>>
->;
 
 export type PolicyRequest = {
   action: 'Deny' | 'Allow' | (string & {});
@@ -715,12 +697,6 @@ export type BlockList = {
   is_plural_check_enabled?: boolean;
 };
 
-export type ChannelConfigAutomod = Automod;
-
-export type ChannelConfigAutomodBehavior = AutomodBehavior;
-
-export type ChannelConfigAutomodThresholds = null | Thresholds_old;
-
 export type ChannelData = ReplacePropertyTypes<
   ChannelInput,
   { custom: CustomChannelData }
@@ -880,11 +856,6 @@ export type UpdatedMessage = Omit<
   type?: MessageLabel;
 };
 
-/**
- * @description type alias for UserResponse
- */
-export type User_old = UserResponse;
-
 export type TaskResponse = {
   task_id: string;
 };
@@ -969,11 +940,6 @@ export class StreamAPIError<T = APIError> extends Error {
   }
 }
 
-/**
- * @deprecated Use `StreamAPIError` instead.
- */
-export const ErrorFromResponse = StreamAPIError;
-
 export type PollResponse_old = PollResponseData & PollEnrichData;
 
 export enum VotingVisibility {
@@ -1049,8 +1015,6 @@ export type DeviceIdentifier = { os: string; model?: string };
  */
 export type AppIdentifier = { name: string; version?: string };
 
-export type DraftMessagePayload = MessageRequest;
-
 export type DraftMessage = DraftPayloadResponse &
   Partial<
     Pick<
@@ -1109,59 +1073,9 @@ export type ReminderFilters = QueryFilters<{
 
 export type ReminderSort = SortParamRequest[];
 
-export type QueryUserGroupsOptions = NonNullable<
-  Parameters<ChatApi['listUserGroups']>[0]
->;
+export type ListUserGroupsOptions = NonNullable<Parameters<ChatApi['listUserGroups']>[0]>;
 
-export type QueryUserGroupsResponse = APIResponse & {
-  user_groups: UserGroupResponse[];
-};
-
-export type SearchUserGroupsOptions = {
-  query: string;
-  limit?: number;
-  id_gt?: string;
-  name_gt?: string;
-  team_id?: string;
-};
-
-export type SearchUserGroupsResponse_old = APIResponse & {
-  user_groups: UserGroupResponse[];
-};
-
-export type HookType = 'webhook' | 'sqs' | 'sns' | 'pending_message';
-
-export type EventHook = {
-  id?: string;
-  hook_type?: HookType;
-  enabled?: boolean;
-  product?: Product | 'all'; // optional, default is 'all'
-  event_types?: Array<string>;
-  webhook_url?: string;
-  sqs_queue_url?: string;
-  sqs_region?: string;
-  sqs_auth_type?: string;
-  sqs_key?: string;
-  sqs_secret?: string;
-  sqs_role_arn?: string;
-  sns_topic_arn?: string;
-  sns_region?: string;
-  sns_auth_type?: string;
-  sns_key?: string;
-  sns_secret?: string;
-  sns_role_arn?: string;
-  should_send_custom_events?: boolean;
-
-  // pending message config
-  timeout_ms?: number;
-  callback?: {
-    mode: 'CALLBACK_MODE_NONE' | 'CALLBACK_MODE_REST' | 'CALLBACK_MODE_TWIRP';
-  };
-
-  delete?: boolean;
-  created_at?: string;
-  updated_at?: string;
-};
+export type SearchUserGroupsOptions = Parameters<ChatApi['searchUserGroups']>[0];
 
 export type RateLimit = {
   rate_limit?: number;
@@ -1207,21 +1121,5 @@ export type SendMessageAPIResponse = StreamResponse<SendMessageResponse>;
 export type UpdateMessageOptions = Omit<UpdateMessageRequest, 'message'>;
 export type UpdateMessageAPIResponse = StreamResponse<UpdateMessageResponse>;
 export type GiphyVersions = keyof Images;
-
-/**
- * v9 → v10 compatibility aliases. Kept to ease migration; prefer the v10 name.
- */
-
-/** @deprecated Use `EventType` instead. */
-export type EventTypes = EventType;
-
-/** @deprecated Use `PollVoteResponseData` instead. */
-export type PollAnswer = PollVoteResponseData;
-
-/** @deprecated The v9 `TranslationLanguages` literal union no longer exists; use `string`. */
-export type TranslationLanguages = string;
-
-/** @deprecated The event-returning endpoint is gone; use `APIResponse` and consume events via WS (`Event`). */
-export type EventAPIResponse = APIResponse & { event: Event };
 
 export * from './gen/models';

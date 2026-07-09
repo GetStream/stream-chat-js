@@ -5,11 +5,11 @@ import type {
   PaginatorOptions,
   PaginatorState,
 } from './BasePaginator';
-import type { QueryUserGroupsOptions, UserGroupResponse } from '../types';
+import type { ListUserGroupsOptions, UserGroupResponse } from '../types';
 import type { StreamChat } from '../client';
 
 type UserGroupListCursor = Required<
-  Pick<QueryUserGroupsOptions, 'created_at_gt' | 'id_gt'>
+  Pick<ListUserGroupsOptions, 'created_at_gt' | 'id_gt'>
 >;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -77,14 +77,14 @@ export class UserGroupPaginator extends BasePaginator<UserGroupResponse> {
     }
 
     const cursor = decodeCursor<UserGroupListCursor>(this.cursor?.next);
-    const options: QueryUserGroupsOptions = {
+    const options: ListUserGroupsOptions = {
       limit: this.pageSize,
       ...(this.teamId ? { team_id: this.teamId } : {}),
       ...(cursor?.id_gt ? { id_gt: cursor.id_gt } : {}),
       ...(cursor?.created_at_gt ? { created_at_gt: cursor.created_at_gt } : {}),
     };
 
-    const { user_groups: items } = await this.client.queryUserGroups(options);
+    const { user_groups: items } = await this.client.listUserGroups(options);
     return { items, next: this.buildNextCursor(items) };
   };
 

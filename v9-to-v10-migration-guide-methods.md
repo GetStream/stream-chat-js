@@ -30,7 +30,7 @@ The `secret` parameter, `client.secret`, `client._isUsingServerAuth()`, and all 
 
 The following `StreamChat` methods no longer exist. All were server-side or admin-only. Rewrites should either delete the call site or move it to the server SDK:
 
-`updateAppSettings`, `revokeUserToken`, `revokeUsersToken`, `testPushSettings`, `testSQSSettings`, `testSNSSettings`, `createToken`, `devToken`, `queryUserGroups`-mutations (`createUserGroup` / `getUserGroup` / `searchUserGroups` / `updateUserGroup` / `deleteUserGroup` / `addUserGroupMembers` / `removeUserGroupMembers`), `upsertPushProvider`, `deletePushProvider`, `listPushProviders`, `setPushPreferences`, `_queryFlags`, `_queryFlagReports`, `_reviewFlagReport`, `queryFutureChannelBans`-write paths, `queryMessageFlags`, `getHookEvents`, `partialUpdateUser`, `deleteUser`, `restoreUsers`, `reactivateUser`, `reactivateUsers`, `deactivateUser`, `deactivateUsers`, `exportUser`, `getSharedLocations`, `translate`, `translateMessage`, `updateFlags`, `queryCampaigns`, `_createImportURL`, `_createImport`, `_getImport`, `_listImports`, `commitMessage`, `queryTeamUsageStats`, `updateLocation`, `updateChannelsBatch`, `deletePredefinedFilter`, `setRetentionPolicy`, `deleteRetentionPolicy`, `getRetentionPolicy`, `getRetentionPolicyRuns`, `queryReminders` (server-side batch — the manager still uses `ReminderPaginator`), `createReminder`/`updateReminder`/`deleteReminder` (see note under `Reminder` handling), `queryPolls`/`queryPollVotes` client-methods (see poll section), all `queryDrafts`/`createCommand`/`getCommand`/`updateCommand`/`deleteCommand`/`listCommands`/`createChannelType`/`getChannelType`/`updateChannelType`/`deleteChannelType`/`listChannelTypes`/`exportChannel`/`exportChannels`/`exportUsers`/`getExportChannelStatus`/`getTask`/`enrichURL`/`sendUserCustomEvent`/`markChannelsDelivered` (was wrapped; still present but see below), `deleteChannels`, `deleteUsers`, `createRole`/`listRoles`/`deleteRole` (only `searchRoles` remains, inherited), `getPermission`/`createPermission`/`updatePermission`/`deletePermission`/`listPermissions`, `getBlockList` (only `listBlockLists`/`createBlockList`/`updateBlockList`/`deleteBlockList` remain, inherited), `verifyWebhook`, `verifyAndParseWebhook`, `parseSqs`, `parseSns` (moved — see below), `campaign`, `segment`, `channelBatchUpdater`, `validateServerSideAuth`, `createSegment`, `createUserSegment`, `createChannelSegment`, `getSegment`, `updateSegment`, `addSegmentTargets`, `querySegmentTargets`, `removeSegmentTargets`, `querySegments`, `deleteSegment`, `segmentTargetExists`, `createCampaign`, `getCampaign`, `startCampaign`, `updateCampaign`, `deleteCampaign`, `stopCampaign`, `_normalizeDate`.
+`updateAppSettings`, `revokeUserToken`, `revokeUsersToken`, `testPushSettings`, `testSQSSettings`, `testSNSSettings`, `createToken`, `devToken`, user-groups mutations (`createUserGroup` / `getUserGroup` / `searchUserGroups` / `updateUserGroup` / `deleteUserGroup` / `addUserGroupMembers` / `removeUserGroupMembers`) — the read path is renamed, see below, `upsertPushProvider`, `deletePushProvider`, `listPushProviders`, `setPushPreferences`, `_queryFlags`, `_queryFlagReports`, `_reviewFlagReport`, `queryFutureChannelBans`-write paths, `queryMessageFlags`, `getHookEvents`, `partialUpdateUser`, `deleteUser`, `restoreUsers`, `reactivateUser`, `reactivateUsers`, `deactivateUser`, `deactivateUsers`, `exportUser`, `getSharedLocations`, `translate`, `translateMessage`, `updateFlags`, `queryCampaigns`, `_createImportURL`, `_createImport`, `_getImport`, `_listImports`, `commitMessage`, `queryTeamUsageStats`, `updateLocation`, `updateChannelsBatch`, `deletePredefinedFilter`, `setRetentionPolicy`, `deleteRetentionPolicy`, `getRetentionPolicy`, `getRetentionPolicyRuns`, `queryReminders` (server-side batch — the manager still uses `ReminderPaginator`), `createReminder`/`updateReminder`/`deleteReminder` (see note under `Reminder` handling), `queryPolls`/`queryPollVotes` client-methods (see poll section), all `queryDrafts`/`createCommand`/`getCommand`/`updateCommand`/`deleteCommand`/`listCommands`/`createChannelType`/`getChannelType`/`updateChannelType`/`deleteChannelType`/`listChannelTypes`/`exportChannel`/`exportChannels`/`exportUsers`/`getExportChannelStatus`/`getTask`/`enrichURL`/`sendUserCustomEvent`/`markChannelsDelivered` (was wrapped; still present but see below), `deleteChannels`, `deleteUsers`, `createRole`/`listRoles`/`deleteRole` (only `searchRoles` remains, inherited), `getPermission`/`createPermission`/`updatePermission`/`deletePermission`/`listPermissions`, `getBlockList` (only `listBlockLists`/`createBlockList`/`updateBlockList`/`deleteBlockList` remain, inherited), `verifyWebhook`, `verifyAndParseWebhook`, `parseSqs`, `parseSns` (moved — see below), `campaign`, `segment`, `channelBatchUpdater`, `validateServerSideAuth`, `createSegment`, `createUserSegment`, `createChannelSegment`, `getSegment`, `updateSegment`, `addSegmentTargets`, `querySegmentTargets`, `removeSegmentTargets`, `querySegments`, `deleteSegment`, `segmentTargetExists`, `createCampaign`, `getCampaign`, `startCampaign`, `updateCampaign`, `deleteCampaign`, `stopCampaign`, `_normalizeDate`.
 
 ### Renamed / signature-changed
 
@@ -445,6 +445,29 @@ Removed. Callers should not rely on these internals; `_setupConnection` was an a
 #### `client.recoverState` / `client.connect` / `client._sayHi` / `client._buildWSPayload`
 
 Signatures unchanged.
+
+#### `client.queryUserGroups`
+
+```ts
+// v9 — hand-rolled GET on `/usergroups`
+client.queryUserGroups(options?: QueryUserGroupsOptions): Promise<QueryUserGroupsResponse>;
+// QueryUserGroupsResponse = APIResponse & { user_groups: UserGroupResponse[] }
+
+// v10 — inherited from ChatApi (same underlying endpoint)
+client.listUserGroups(request?: ListUserGroupsOptions): Promise<StreamResponse<ListUserGroupsResponse>>;
+```
+
+Mechanical rewrite:
+
+```ts
+// v9
+const { user_groups } = await client.queryUserGroups({ team_id: 'engineering' });
+
+// v10
+const { user_groups } = await client.listUserGroups({ team_id: 'engineering' });
+```
+
+`UserGroupPaginator` still exists and now calls `listUserGroups` internally — consumers using the paginator do not need to change anything. Direct callers of `queryUserGroups` must rename to `listUserGroups`. The request shape is identical (`{ limit?, id_gt?, created_at_gt?, team_id? }`); the response gains a `metadata: RequestMetadata` field via the `StreamResponse<...>` wrapper. See the type-renames guide for the `QueryUserGroupsOptions` / `QueryUserGroupsResponse` type entries.
 
 #### `client.sync`
 

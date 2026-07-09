@@ -53,7 +53,7 @@ describe('UserGroupPaginator', () => {
     ];
 
     const querySpy = vi
-      .spyOn(client, 'queryUserGroups')
+      .spyOn(client, 'listUserGroups')
       .mockResolvedValueOnce({ duration: '0.01s', user_groups: firstPage })
       .mockResolvedValueOnce({ duration: '0.01s', user_groups: secondPage });
 
@@ -84,7 +84,7 @@ describe('UserGroupPaginator', () => {
   });
 
   it('resets paginator state when team id changes', async () => {
-    vi.spyOn(client, 'queryUserGroups').mockResolvedValue({
+    vi.spyOn(client, 'listUserGroups').mockResolvedValue({
       duration: '0.01s',
       user_groups: [createUserGroup()],
     });
@@ -102,7 +102,7 @@ describe('UserGroupPaginator', () => {
   });
 
   it('ignores malformed stored cursors and retries from the first page options', async () => {
-    const querySpy = vi.spyOn(client, 'queryUserGroups').mockResolvedValue({
+    const querySpy = vi.spyOn(client, 'listUserGroups').mockResolvedValue({
       duration: '0.01s',
       user_groups: [createUserGroup()],
     });
@@ -118,7 +118,7 @@ describe('UserGroupPaginator', () => {
   });
 
   it('does not execute prev pagination requests', async () => {
-    const querySpy = vi.spyOn(client, 'queryUserGroups');
+    const querySpy = vi.spyOn(client, 'listUserGroups');
     const paginator = new UserGroupPaginator(client);
 
     await paginator.prev();

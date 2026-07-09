@@ -3,10 +3,11 @@ import { getClientWithUser } from '../test-utils/getClient';
 import {
   type APIError,
   Channel,
-  ErrorFromResponse,
   Event,
-  EventAPIResponse,
+  MarkDeliveredResponse,
+  StreamAPIError,
   StreamChat,
+  StreamResponse,
 } from '../../../src';
 import type { AxiosResponse } from 'axios';
 
@@ -220,7 +221,10 @@ describe('MessageDeliveryReporter', () => {
   it('does not start a second request while one is in-flight; queues new candidate for after', async () => {
     // first call stays in-flight until we resolve it
     let resolveFirstMarkDelivered!: (
-      value: EventAPIResponse | PromiseLike<EventAPIResponse | undefined> | undefined,
+      value:
+        | StreamResponse<MarkDeliveredResponse>
+        | PromiseLike<StreamResponse<MarkDeliveredResponse> | undefined>
+        | undefined,
     ) => void;
     const markDeliveredSpy = vi
       .spyOn(client, 'markDelivered')
@@ -342,13 +346,13 @@ describe('MessageDeliveryReporter', () => {
     return channels;
   };
 
-  const retryableError = new ErrorFromResponse<APIError>('X', {
+  const retryableError = new StreamAPIError<APIError>('X', {
     code: -1,
     response: {} as AxiosResponse,
     status: 400,
   });
 
-  const notRetryableError = new ErrorFromResponse<APIError>('X', {
+  const notRetryableError = new StreamAPIError<APIError>('X', {
     code: 2,
     response: {} as AxiosResponse,
     status: 400,
