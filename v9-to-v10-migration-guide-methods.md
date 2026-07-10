@@ -16,8 +16,8 @@ Before applying any per-method entry below, apply these repo-wide renames — th
 | `clientID` (param and field)                                                                                                               | `clientId`                                                                                                          | Field: `client.clientID` kept as a deprecated getter+setter.                                                                                                                      |
 | `messageID`, `targetID`, `targetMessageID`, `targetUserID`, `flaggedUserID`, `entityCreatorID`, `wsID`, `channelID`, `channelId` parameter | `messageId`, `targetId`, `targetMessageId`, `targetUserId`, `flaggedUserId`, `entityCreatorId`, `wsId`, `channelId` | Named-parameter rename only; call sites using positional args are unaffected.                                                                                                     |
 | `parent_id` parameter on `keystroke` / `stopTyping`                                                                                        | `parentId`                                                                                                          | Positional; call sites unaffected.                                                                                                                                                |
-| `Event` (type)                                                                                                                             | `WSEvent` \| `LocalEvent` \| `CombinedEvents`                                                                       | Where a v9 handler took `Event`, the v10 equivalent takes `CombinedEvents` (or the narrower `WSEvent` on internal handlers).                                                      |
-| `EventTypes` (type import)                                                                                                                 | `ListenerKeys \| string` (via generic)                                                                              | Callers annotating handlers as `EventHandler` are safe; callers importing `EventTypes` need to switch to the new generic form. `CustomEventTypes` module augmentation is removed. |
+| `Event` (type)                                                                                                                             | `Event` (still exported; shape changed)                                                                             | `Event` is now `WSEvent \| LocalEvent \| keyof CustomEventTypes`. The name is unchanged; the wire shape is what's different. Internal handlers that took an untyped `Event` are the same. `EventPayload<'…'>` narrows to a specific event type. |
+| `EventTypes` (type import)                                                                                                                 | `EventType \| string` (via generic)                                                                                 | The public alias renamed to singular `EventType = Event['type'] \| 'all'`. Callers annotating handlers as `EventHandler` are safe; callers importing `EventTypes` need to switch to `EventType`. `CustomEventTypes` module augmentation is unchanged — augment it to add custom event-type keys.        |
 | `Logger` option / `client.logger()`                                                                                                        | `chatLoggerSystem` from `./logger`                                                                                  | See "Logging" note at the end of the guide.                                                                                                                                       |
 
 The `secret` parameter, `client.secret`, `client._isUsingServerAuth()`, and all server-only methods are gone. Where a v9 method took a `user_id?` / `userID?` / `currentUserID?` override, that argument has been dropped in v10 (the connected user is always used).
@@ -30,7 +30,7 @@ The `secret` parameter, `client.secret`, `client._isUsingServerAuth()`, and all 
 
 The following `StreamChat` methods no longer exist. All were server-side or admin-only. Rewrites should either delete the call site or move it to the server SDK:
 
-`updateAppSettings`, `revokeUserToken`, `revokeUsersToken`, `testPushSettings`, `testSQSSettings`, `testSNSSettings`, `createToken`, `devToken`, user-groups mutations (`createUserGroup` / `getUserGroup` / `searchUserGroups` / `updateUserGroup` / `deleteUserGroup` / `addUserGroupMembers` / `removeUserGroupMembers`) — the read path is renamed, see below, `upsertPushProvider`, `deletePushProvider`, `listPushProviders`, `setPushPreferences`, `_queryFlags`, `_queryFlagReports`, `_reviewFlagReport`, `queryFutureChannelBans`-write paths, `queryMessageFlags`, `getHookEvents`, `partialUpdateUser`, `deleteUser`, `restoreUsers`, `reactivateUser`, `reactivateUsers`, `deactivateUser`, `deactivateUsers`, `exportUser`, `getSharedLocations`, `translate`, `translateMessage`, `updateFlags`, `queryCampaigns`, `_createImportURL`, `_createImport`, `_getImport`, `_listImports`, `commitMessage`, `queryTeamUsageStats`, `updateLocation`, `updateChannelsBatch`, `deletePredefinedFilter`, `setRetentionPolicy`, `deleteRetentionPolicy`, `getRetentionPolicy`, `getRetentionPolicyRuns`, `queryReminders` (server-side batch — the manager still uses `ReminderPaginator`), `createReminder`/`updateReminder`/`deleteReminder` (see note under `Reminder` handling), `queryPolls`/`queryPollVotes` client-methods (see poll section), all `queryDrafts`/`createCommand`/`getCommand`/`updateCommand`/`deleteCommand`/`listCommands`/`createChannelType`/`getChannelType`/`updateChannelType`/`deleteChannelType`/`listChannelTypes`/`exportChannel`/`exportChannels`/`exportUsers`/`getExportChannelStatus`/`getTask`/`enrichURL`/`sendUserCustomEvent`/`markChannelsDelivered` (was wrapped; still present but see below), `deleteChannels`, `deleteUsers`, `createRole`/`listRoles`/`deleteRole` (only `searchRoles` remains, inherited), `getPermission`/`createPermission`/`updatePermission`/`deletePermission`/`listPermissions`, `getBlockList` (only `listBlockLists`/`createBlockList`/`updateBlockList`/`deleteBlockList` remain, inherited), `verifyWebhook`, `verifyAndParseWebhook`, `parseSqs`, `parseSns` (moved — see below), `campaign`, `segment`, `channelBatchUpdater`, `validateServerSideAuth`, `createSegment`, `createUserSegment`, `createChannelSegment`, `getSegment`, `updateSegment`, `addSegmentTargets`, `querySegmentTargets`, `removeSegmentTargets`, `querySegments`, `deleteSegment`, `segmentTargetExists`, `createCampaign`, `getCampaign`, `startCampaign`, `updateCampaign`, `deleteCampaign`, `stopCampaign`, `_normalizeDate`.
+`updateAppSettings`, `revokeUserToken`, `revokeUsersToken`, `testPushSettings`, `testSQSSettings`, `testSNSSettings`, `createToken`, `devToken`, user-groups mutations (`createUserGroup` / `getUserGroup` / `searchUserGroups` / `updateUserGroup` / `deleteUserGroup` / `addUserGroupMembers` / `removeUserGroupMembers`) — the read path is renamed, see below, `upsertPushProvider`, `deletePushProvider`, `listPushProviders`, `setPushPreferences`, `_queryFlags`, `_queryFlagReports`, `_reviewFlagReport`, `queryFutureChannelBans`-write paths, `getHookEvents`, `partialUpdateUser`, `deleteUser`, `restoreUsers`, `reactivateUser`, `reactivateUsers`, `deactivateUser`, `deactivateUsers`, `exportUser`, `getSharedLocations`, `translate`, `translateMessage`, `updateFlags`, `queryCampaigns`, `_createImportURL`, `_createImport`, `_getImport`, `_listImports`, `commitMessage`, `queryTeamUsageStats`, `updateLocation`, `updateChannelsBatch`, `deletePredefinedFilter`, `setRetentionPolicy`, `deleteRetentionPolicy`, `getRetentionPolicy`, `getRetentionPolicyRuns`, hand-rolled reminder client methods (`createReminder`/`updateReminder`/`deleteReminder` — see note under `Reminder` handling; the inherited `queryReminders` from `ChatApi` remains but with the generated request shape, not the v9 `QueryRemindersOptions`), `createCommand`/`getCommand`/`updateCommand`/`deleteCommand`/`listCommands`/`createChannelType`/`getChannelType`/`updateChannelType`/`deleteChannelType`/`listChannelTypes`/`exportChannel`/`exportChannels`/`exportUsers`/`getExportChannelStatus`/`getTask`/`enrichURL`/`sendUserCustomEvent`, `deleteChannels`, `deleteUsers`, `createRole`/`listRoles`/`deleteRole` (only `searchRoles` remains, inherited), `getPermission`/`createPermission`/`updatePermission`/`deletePermission`/`listPermissions`, `getBlockList` (only `listBlockLists`/`createBlockList`/`updateBlockList`/`deleteBlockList` remain, inherited), `verifyWebhook`, `verifyAndParseWebhook`, `parseSqs`, `parseSns` (moved — see below), `campaign`, `segment`, `channelBatchUpdater`, `validateServerSideAuth`, `createSegment`, `createUserSegment`, `createChannelSegment`, `getSegment`, `updateSegment`, `addSegmentTargets`, `querySegmentTargets`, `removeSegmentTargets`, `querySegments`, `deleteSegment`, `segmentTargetExists`, `createCampaign`, `getCampaign`, `startCampaign`, `updateCampaign`, `deleteCampaign`, `stopCampaign`, `_normalizeDate`. Note: `queryDrafts`, `queryPolls`, `queryPollVotes`, `queryMessageFlags`, and `markChannelsDelivered` — all of which were hand-rolled in v9 — now come from `ChatApi` inheritance with generated request shapes; they still exist on `client`.
 
 ### Renamed / signature-changed
 
@@ -372,7 +372,7 @@ client.sendFile(url, uri, name?, contentType?, user?, axiosRequestConfig?);
 
 // v10
 client.api.doAxiosRequest(type, url, data?, options?);
-client.dispatchEvent(event: CombinedEvents);            // typed with new event union
+client.dispatchEvent(event: Event);                     // Event union expanded to WSEvent | LocalEvent | keyof CustomEventTypes
 client.api.errorFromResponse(response);                 // moved to ApiClient
 client.api.sendFile(url, uri, name?, contentType?, user?, axiosRequestConfig?);
 ```
@@ -508,16 +508,16 @@ client.verifyAndParseWebhook(rawBody, signature);
 client.parseSqs(messageBody);
 client.parseSns(notificationBody);
 
-// v10 — module exports; return WSEvent (not Event)
+// v10 — module exports; return WSEvent
 import { verifySignature, verifyAndParseWebhook, parseSqs, parseSns } from 'stream-chat';
 
 verifySignature(body, signature, secret);
 verifyAndParseWebhook(rawBody, signature, secret);
-parseSqs(messageBody, secret);
-parseSns(notificationBody, secret);
+parseSqs(messageBody);         // SQS deliveries carry no application-level HMAC — decode-only
+parseSns(notificationBody);    // SNS deliveries carry no application-level HMAC — decode-only
 ```
 
-The v9 method reused `client.secret` implicitly; v10 requires the secret to be passed in.
+The v9 `verifyWebhook` / `verifyAndParseWebhook` reused `client.secret` implicitly; the v10 module-level replacements require the secret to be passed in. `parseSqs` / `parseSns` do not take a `secret` — Stream never attaches an application-level HMAC to SQS/SNS deliveries; use `verifyAndParseWebhook` for HTTP webhooks when you need signature verification.
 
 ---
 
@@ -564,7 +564,8 @@ await channel.sendMessage({ message: { text: 'hi' }, skip_push: true });
 channel.sendEvent(event: Event);
 
 // v10
-channel.sendEvent(request: { event: CombinedEvents });
+channel.sendEvent(request: { event: Event });
+// Event now unions the generated WSEvent, the SDK-only LocalEvent, and keyof CustomEventTypes.
 ```
 
 #### `channel.search`
@@ -738,9 +739,11 @@ channel.markRead(data?: MarkReadOptions);              // batched through Messag
 channel.markAsReadRequest(data?: MarkReadOptions);     // direct API call
 
 // v10
-channel.markRead(data?: MarkReadOptions);              // direct API call (override, requires _checkInitialized + read_events)
-channel.markReadViaReporter(data?: MarkReadOptions);   // batched through MessageDeliveryReporter — v9 markRead behavior
+channel.markRead(data?: MarkReadRequest);              // direct API call (override, requires _checkInitialized + read_events)
+channel.markReadViaReporter(data?: MarkReadRequest);   // batched through MessageDeliveryReporter — v9 markRead behavior
 ```
+
+`MarkReadOptions` (v9) → `MarkReadRequest` (v10 generated type). See the type-renames guide.
 
 Migration rule: if you want to preserve the v9 batching behavior, rename `markRead` → `markReadViaReporter`. If your v9 code was calling `markAsReadRequest`, rename it to `markRead`.
 
@@ -751,7 +754,7 @@ Migration rule: if you want to preserve the v9 batching behavior, rename `markRe
 channel.markUnread(data: MarkUnreadOptions);
 
 // v10 — inherited/override; data is optional
-channel.markUnread(data?: MarkUnreadOptions);
+channel.markUnread(data?: MarkUnreadRequest);
 ```
 
 #### `channel.stopWatching`
@@ -846,13 +849,13 @@ channel.off(eventType: EventTypes, callback: EventHandler): void;
 channel.off(callback: EventHandler): void;
 
 // v10
-channel.on<T extends ListenerKeys | string>(eventType: T, callback: EventHandler<T>): { unsubscribe: () => void };
+channel.on<T extends EventType | string>(eventType: T, callback: EventHandler<T>): { unsubscribe: () => void };
 channel.on(callback: EventHandler): { unsubscribe: () => void };
-channel.off<T extends ListenerKeys | string>(eventType: T, callback: EventHandler): void;
+channel.off<T extends EventType | string>(eventType: T, callback: EventHandler): void;
 channel.off(callback: EventHandler): void;
 ```
 
-Callers that imported `EventTypes` need to switch to `ListenerKeys | string`. `CustomEventTypes` module augmentation is gone; augment `ListenerKeys` instead if needed.
+Callers that imported `EventTypes` need to switch to `EventType` (`EventType = Event['type'] | 'all'`). The `CustomEventTypes` interface is still exported — augment it to add custom event-type keys, same as v9.
 
 #### `channel.sendFile` / `channel.sendImage` / `channel.deleteFile` / `channel.deleteImage` / `channel.getPinnedMessages` / `channel.getMessagesById` / `channel.lastRead` / `channel.countUnread` / `channel.countUnreadMentions` / `channel.lastMessage` / `channel.watch` / `channel.query`
 
@@ -860,7 +863,7 @@ Signatures unchanged.
 
 #### `channel._handleChannelEvent` / `channel._callChannelListeners`
 
-Parameter type changed from `Event` to `CombinedEvents` (`_handleChannelEvent`) and `WSEvent` (`_callChannelListeners`).
+Both still take `Event` — the union shape of `Event` itself changed (now `WSEvent | LocalEvent | keyof CustomEventTypes`), but the parameter type name did not.
 
 ---
 
@@ -961,21 +964,18 @@ logger.info(msg, extra);
 
 ## Logging (applies to every class)
 
-`options.logger` (function) and `client.logger(level, msg, extra?)` are gone. To capture logs in v10:
+`options.logger` (function) and `client.logger(level, msg, extra?)` are gone. To capture logs in v10, configure the shared `chatLoggerSystem` before constructing the client:
 
 ```ts
-import { chatLoggerSystem, LogLevelEnum } from 'stream-chat';
+import { chatLoggerSystem, type Sink } from 'stream-chat';
 
-chatLoggerSystem.configure({
-  level: LogLevelEnum.INFO,
-  sinks: [
-    {
-      write: (record) => {
-        /* forward record to your logger */
-      },
-    },
-  ],
+const sink: Sink = (level, message, ...rest) => {
+  /* forward to your logger; message is prefixed with `[<scope>](<tags>): ` */
+};
+
+chatLoggerSystem.configureLoggers({
+  default: { level: 'info', sink },
 });
 ```
 
-Class-internal call sites use scoped loggers such as `chatLoggerSystem.getLogger('client')`, `'channel'`, `'connection'`, `'api-client'`, `'thread'`, `'thread-manager'`, `'upload-manager'`, `'offline-db'`, `'state-store'`, `'token-manager'`, `'message-composer'`, `'text-composer'`, `'utils'`, `'channel-manager'`, `'connection-fallback'`.
+Class-internal call sites use scoped loggers such as `chatLoggerSystem.getLogger('client')`, `'channel'`, `'connection'`, `'api-client'`, `'thread'`, `'thread-manager'`, `'upload-manager'`, `'offline-db'`, `'state-store'`, `'token-manager'`, `'message-composer'`, `'text-composer'`, `'utils'`, `'channel-manager'`, `'connection-fallback'`. See `v9-to-v10-migration-guide-logging.md` for the full logging system reference.

@@ -12,9 +12,9 @@
 ## TL;DR
 
 - **Server-side is gone.** If you construct with a `secret` or call server-only admin endpoints, switch to `@stream-io/node-sdk`. The construction guide has the full list — every feature module below that was server-only is dropped for the same reason.
-- Four barrels removed from the package root, one added: **`./events`, `./campaign`, `./channel_batch_updater`, `./segment` are gone; `./logger` is new.**
-- `CustomEventTypes` module augmentation is **removed**; augment `ListenerKeys` (union of known WS + local event types) instead.
-- `Event` (union) is removed; use `WSEvent | LocalEvent = CombinedEvents` and `EventPayload<'<type>'>` for narrowing.
+- One barrel removed from the package root, one added: **`./events` is gone; `./logger` is new.** The `./campaign`, `./channel_batch_updater`, and `./segment` barrels are still exported but the modules are emptied (they contain only a comment pointing at the server SDK) — importing anything by name from them will fail.
+- `Event` (type name) is kept, but its shape widened: `Event = WSEvent | LocalEvent | keyof CustomEventTypes`. `EventPayload<'<type>'>` narrows to a specific event.
+- `EventTypes` (plural) renamed to `EventType` (singular). `CustomEventTypes` interface is unchanged — augment it to add custom event-type keys, same as v9.
 - Filter payloads now carry **per-endpoint operator constraints** (`Query*FilterConditions` types) — previously-permissive filter objects may stop type-checking.
 - `ChannelState.membership` initializes to `undefined` (was `{}`); `ChannelState.typing` values are now `EventPayload<'typing.start' | 'typing.stop'>` (were `Event`); read receipts merged with the generated `ReadStateResponse`.
 - Composer attachments now nest `mime_type` / `file_size` / `duration` under `.custom`; `LocationComposer` preview `end_at` is a `Date` (was ISO string).
@@ -27,19 +27,21 @@
 
 `src/index.ts` barrel changes:
 
-| Removed export barrel                      | Reason                                                                                                                                        |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `export * from './events'`                 | `src/events.ts` deleted along with `EVENT_MAP`. Event-type set is now derived from the generated event decoders, no longer a hand-rolled map. |
-| `export * from './campaign'`               | `Campaign` was a server-side admin surface; the module is emptied.                                                                            |
-| `export * from './segment'`                | Same as `campaign`.                                                                                                                           |
-| `export * from './channel_batch_updater'`  | `ChannelBatchUpdater` was a server-side admin surface.                                                                                        |
-| `CustomEventTypes` (re-exported interface) | Interface deleted from `custom_types.ts` — see event section below.                                                                           |
+| Removed export barrel      | Reason                                                                                                                                        |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `export * from './events'` | `src/events.ts` deleted along with `EVENT_MAP`. Event-type set is now derived from the generated event decoders, no longer a hand-rolled map. |
+
+| Emptied module (barrel still present, no named exports) | Reason                                                        |
+| ------------------------------------------------------- | ------------------------------------------------------------- |
+| `./campaign`                                            | `Campaign` was a server-side admin surface; module is a stub. |
+| `./segment`                                             | Same as `campaign`.                                           |
+| `./channel_batch_updater`                               | `ChannelBatchUpdater` was a server-side admin surface.        |
 
 | Added export barrel        | What it exposes                                                                                                                          |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `export * from './logger'` | `chatLoggerSystem`, `LogLevel`, `LogLevelEnum`, `Sink`, `ScopedLogger`, `ChatLoggerScope`, `ConfigureLoggersOptions`. See logging guide. |
 
-Any consumer doing `import { Campaign, Segment, ChannelBatchUpdater, EVENT_MAP } from 'stream-chat'` will fail to resolve. Delete those imports; there is no drop-in replacement in this SDK.
+Any consumer doing `import { Campaign, Segment, ChannelBatchUpdater, EVENT_MAP } from 'stream-chat'` will fail to resolve. Delete those imports; there is no drop-in replacement in this SDK. `CustomEventTypes` is still exported from `stream-chat` and its interface is unchanged — augment it to declare custom event-type keys the same way as in v9.
 
 ---
 
@@ -56,7 +58,7 @@ Beyond the individual server-side methods listed in the methods guide, entire su
 | **Team usage stats**            | `queryTeamUsageStats`                                                                                                                                                                                                                                   | removed                                                                                                                                                                             |
 | **User groups**                 | `createUserGroup`, `getUserGroup`, `searchUserGroups`, `updateUserGroup`, `deleteUserGroup`, `addUserGroupMembers`, `removeUserGroupMembers`                                                                                                            | mutations removed. Read path is now `listUserGroups` (v9 `queryUserGroups` renamed — see methods guide); `UserGroupPaginator` remains and delegates to `listUserGroups` internally. |
 | **Predefined filters (client)** | `deletePredefinedFilter`, `PredefinedFilterSort(Param)` types, `mapPredefinedFilterSortToChannelSort` helper                                                                                                                                            | removed. Read paths remain via the generated API.                                                                                                                                   |
-| **Reminder client batch API**   | `client.createReminder`, `client.updateReminder`, `client.deleteReminder`, `client.queryReminders`                                                                                                                                                      | removed from `StreamChat`. `ReminderManager` remains — use it. See "Reminders" below for shape change.                                                                              |
+| **Reminder client batch API**   | `client.createReminder`, `client.updateReminder`, `client.deleteReminder`, `client.queryReminders` (v9 `QueryRemindersOptions` shape)                                                                                                                    | hand-rolled `createReminder`/`updateReminder`/`deleteReminder` removed from `StreamChat`. `queryReminders` is still available via `ChatApi` inheritance but takes the generated `QueryRemindersRequest` shape. `ReminderManager` remains — use it. See "Reminders" below for shape change. |
 | **Push provider admin**         | `upsertPushProvider`, `deletePushProvider`, `listPushProviders`, `setPushPreferences`                                                                                                                                                                   | removed                                                                                                                                                                             |
 | **Roles / Permissions admin**   | `createRole`, `listRoles`, `deleteRole`, `getPermission`, `createPermission`, `updatePermission`, `deletePermission`, `listPermissions`                                                                                                                 | removed. `searchRoles` remains, inherited from the generated API.                                                                                                                   |
 | **Channel-types admin**         | `createChannelType`, `getChannelType`, `updateChannelType`, `deleteChannelType`, `listChannelTypes`                                                                                                                                                     | removed                                                                                                                                                                             |
@@ -64,7 +66,7 @@ Beyond the individual server-side methods listed in the methods guide, entire su
 | **Imports / Exports**           | `_createImport`, `_createImportURL`, `_getImport`, `_listImports`, `exportChannel`, `exportChannels`, `exportUsers`, `getExportChannelStatus`, `getTask`                                                                                                | removed                                                                                                                                                                             |
 | **App-settings mutations**      | `updateAppSettings`, `testPushSettings`, `testSQSSettings`, `testSNSSettings`, `translate`, `translateMessage`, `getHookEvents`                                                                                                                         | removed. `getAppSettings` remains.                                                                                                                                                  |
 | **User admin**                  | `partialUpdateUser`, `deleteUser`, `restoreUsers`, `reactivateUser(s)`, `deactivateUser(s)`, `exportUser`, `revokeUserToken`, `revokeUsersToken`, `sendUserCustomEvent`, `deleteUsers`                                                                  | removed                                                                                                                                                                             |
-| **Flag admin**                  | `_queryFlags`, `_queryFlagReports`, `_reviewFlagReport`, `queryMessageFlags`, `updateFlags`                                                                                                                                                             | removed. User/message flagging by the connected user remains via `client.flagMessage` / `client.flagUser`.                                                                          |
+| **Flag admin**                  | `_queryFlags`, `_queryFlagReports`, `_reviewFlagReport`, `updateFlags`                                                                                                                                                                                  | removed. `queryMessageFlags` remains via `ChatApi` inheritance (generated request shape). User/message flagging by the connected user remains via `client.flagMessage` / `client.flagUser`. |
 | **Webhook / SQS / SNS helpers** | `client.verifyWebhook`, `client.verifyAndParseWebhook`, `client.parseSqs`, `client.parseSns` (used `client.secret` implicitly)                                                                                                                          | Moved to module exports on `./signing`, `secret` now required explicitly. See methods guide for signatures.                                                                         |
 | **Misc.**                       | `commitMessage`, `undeleteMessage`, `getSharedLocations`, `updateLocation`, `getUnreadCountBatch`, `getBlockList`, `enrichURL`, `_normalizeDate`, `validateServerSideAuth`, `_setupConnection`, `_enrichAxiosOptions`, `_logApiRequest`, `_logApiError` | removed                                                                                                                                                                             |
 
@@ -74,7 +76,7 @@ If your call site was gated on `client._isUsingServerAuth()` (which is also remo
 
 ## Event system
 
-`src/events.ts` — the single-source `EVENT_MAP` — is **deleted**. Event types are now driven by the generated event decoders (`src/gen/model-decoders/event-decoder-mapping.ts`) plus a small local overlay. As a result:
+`src/events.ts` — the single-source `EVENT_MAP` — is **deleted**. Event types are now driven by the generated event decoders (`src/gen/model-decoders/event-decoder-mapping.ts`) plus a small local overlay. The public `Event` type is kept but its definition changed:
 
 ### Union types you'll see
 
@@ -83,41 +85,54 @@ If your call site was gated on `client._isUsingServerAuth()` (which is also remo
 type WSEvent = /* union of all generated Gen_*Event shapes */;
 
 // SDK-only events not received over the wire.
-type LocalEvent =
-  | ({ type: 'live_location_sharing.started'; message: MessageResponse })
-  | ({ type: 'live_location_sharing.stopped'; live_location?: SharedLocationResponse })
-  | ({ type: 'channels.queried';
-       queriedChannels: { channels: ChannelAPIResponse[]; isLatestMessageSet: boolean } })
-  | ({ type: 'transport.changed'; mode: string })
-  | ({ type: 'connection.changed'; online: boolean })
+type LocalEvent = (
+  | ({ type: 'live_location_sharing.started' } & { message: MessageResponse })
+  | ({ type: 'live_location_sharing.stopped' } & { live_location?: SharedLocationResponseData })
+  | ({ type: 'channels.queried' } & {
+      queriedChannels: {
+        channels: ChannelStateResponseFields[];
+        isLatestMessageSet: boolean;
+      };
+    })
+  | ({ type: 'transport.changed' } & { mode: string })
+  | ({ type: 'connection.changed' } & { online: boolean })
   | { type: 'connection.recovered' }
-  | ({ type: 'offline_reactions.queried'; offlineReactions: ReactionResponse[] })
-  | ({ type: 'capabilities.changed'; cid: string; own_capabilities: ChannelOwnCapability[] })
-  & { received_at?: Date };
+  | ({ type: 'offline_reactions.queried' } & { offlineReactions: ReactionResponse[] })
+  | ({ type: 'capabilities.changed' } & {
+      cid: string;
+      own_capabilities: ChannelOwnCapability[];
+    })
+  | ({ type: 'message.read_locally' } & {
+      channel_type: string;
+      cid: string;
+      created_at: Date;
+      channel_id?: string;
+      last_read_message_id?: string;
+      team?: string;
+      user?: UserResponse;
+    })
+) & { received_at?: Date };
 
-export type CombinedEvents = WSEvent | LocalEvent;
-export type EventHandler<T = string> = (
-  event: Extract<CombinedEvents, { type: T }>,
-) => void;
+// Public alias — same name as in v9, wider shape.
+export type Event = WSEvent | LocalEvent | keyof CustomEventTypes;
+export type EventType = Event['type'] | 'all';
+export type EventHandler<T = string> = (event: Extract<Event, { type: T }>) => void;
 
-export type EventPayload<T extends CombinedEvents['type'] | (string & {})> = Extract<
-  CombinedEvents,
+export type EventPayload<T extends Event['type'] | (string & {})> = Extract<
+  Event,
   { type: T }
 >;
-
-// From client.ts
-export type ListenerKeys = CombinedEvents['type'] | 'all';
 ```
 
 ### v9 → v10 replacement table
 
 | v9                                                                                                                                                                                                                                   | v10                                                                                                                                                                                                  |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `import { Event } from 'stream-chat'`                                                                                                                                                                                                | `import { CombinedEvents, WSEvent, LocalEvent } from 'stream-chat'`                                                                                                                                  |
-| `Event` as a callback argument type                                                                                                                                                                                                  | `CombinedEvents` (or the specific `EventPayload<'message.new'>`)                                                                                                                                     |
-| `import { EventTypes } from 'stream-chat'`                                                                                                                                                                                           | `import { ListenerKeys } from 'stream-chat'` (values are the same strings)                                                                                                                           |
+| `import { Event } from 'stream-chat'`                                                                                                                                                                                                | still `import { Event } from 'stream-chat'` — the alias is retained; the union it resolves to widened to `WSEvent \| LocalEvent \| keyof CustomEventTypes`.                                          |
+| `Event` as a callback argument type                                                                                                                                                                                                  | `Event` still works; prefer `EventPayload<'message.new'>` for narrowed events.                                                                                                                       |
+| `import { EventTypes } from 'stream-chat'`                                                                                                                                                                                           | `import { EventType } from 'stream-chat'` — singular; same shape (`Event['type'] \| 'all'`)                                                                                                          |
 | `import { EVENT_MAP } from 'stream-chat'`                                                                                                                                                                                            | removed — no runtime table. Match on `event.type` directly.                                                                                                                                          |
-| `interface CustomEventTypes { my_custom: 'my_custom'; ... }` (module augmentation)                                                                                                                                                   | augment `ListenerKeys` from `stream-chat` — see below                                                                                                                                                |
+| `interface CustomEventTypes { my_custom: 'my_custom'; ... }` (module augmentation)                                                                                                                                                   | unchanged — augment `CustomEventTypes` exactly the same way. The interface is still exported from `stream-chat`.                                                                                     |
 | Hand-rolled `ReminderEvent`, `PollEvent`, `PollUpdatedEvent`, `PollVoteCastedEvent`, `PollClosedEvent`, `PollAnswerCastedEvent`, `VoteChangedEvent`, `VoteCastedEvent`, `VoteRemovedEvent`, `AnswerCastedEvent`, and similar aliases | replaced by `EventPayload<'reminder.created' \| 'reminder.updated' \| ...>` etc. `ReminderManager.ReminderEvent` now aliases to `EventPayload<`reminder.${string}` \| 'notification.reminder_due'>`. |
 
 ### Narrowing a listener
@@ -140,10 +155,9 @@ const handler = (event: EventPayload<'message.new'>) => event.message;
 
 ### Custom event types (module augmentation)
 
-v9:
+The `CustomEventTypes` module-augmentation contract is unchanged from v9:
 
 ```ts
-// v9
 declare module 'stream-chat' {
   interface CustomEventTypes {
     my_app_custom: 'my_app_custom';
@@ -151,22 +165,9 @@ declare module 'stream-chat' {
 }
 ```
 
-v10:
+Because the v10 generic on `channel.on<T extends EventType | string>` accepts any `string`, unknown listener keys still type-check without augmentation, but the event payload will not be narrowed. Augmenting `CustomEventTypes` adds the custom key to `Event['type']`, which flows through `EventType` and `EventHandler` narrowing.
 
-```ts
-// v10 — augment ListenerKeys via a local module declaration
-declare module 'stream-chat' {
-  type ListenerKeys = import('stream-chat').ListenerKeys | 'my_app_custom';
-}
-// Alternative: fall through to `string` where you use the listener key generic:
-client.on<'my_app_custom'>('my_app_custom', (event) => {
-  /* event is CombinedEvents */
-});
-```
-
-Because the v10 generic on `on<T extends ListenerKeys | string>` accepts any `string`, unknown listener keys still type-check without augmentation, but the event payload will not be narrowed.
-
-> **Larger topic** — the event system rewrite (removed hand-rolled event types across `poll`, `poll_manager`, `thread`, `reminders`, live-location, and the client itself; the shift from a hand-maintained `EVENT_MAP` to generated decoders; module-augmentation shape) touches enough call sites that it may warrant a dedicated guide. Flag me if you want one written.
+> **Larger topic** — the event system rewrite (removed hand-rolled event types across `poll`, `poll_manager`, `thread`, `reminders`, live-location, and the client itself; the shift from a hand-maintained `EVENT_MAP` to generated decoders) touches enough call sites that it may warrant a dedicated guide. Flag me if you want one written.
 
 ---
 
@@ -391,9 +392,10 @@ _user?: OwnUserResponse | UserResponse
 
 // v10
 _user?: ClientUser
+// ClientUser = PartializeAllBut<OwnUserResponse, 'id'> & { anon?: boolean }
 ```
 
-`ClientUser` collapses the two into a single alias. Fields present on both are unchanged; anything specific to `OwnUserResponse` (e.g. `total_unread_count`) reads the same way.
+`ClientUser` is an `OwnUserResponse` with every field except `id` made optional, plus an optional `anon` flag for anonymous connections. Fields specific to `OwnUserResponse` (e.g. `total_unread_count`) still read the same way; anywhere that previously narrowed to `UserResponse` should assume all fields except `id` may be missing until the connect-user response arrives.
 
 ---
 
@@ -413,9 +415,9 @@ For any of these that survive as a generated shape, the replacement is the gener
 
 For each source file that touches the SDK:
 
-1. **Delete removed imports.** `Event`, `EventTypes`, `EVENT_MAP`, `CustomEventTypes`, `Campaign*`, `Segment*`, `ChannelBatchUpdater`, `Role` (rename), `MessageResponseBase`, `FormatMessageResponse`, `PredefinedFilterSort(Param)`, and any of the removed type utilities.
+1. **Delete removed imports.** `EVENT_MAP`, `Campaign*`, `Segment*`, `ChannelBatchUpdater`, `Role` (rename), `MessageResponseBase`, `FormatMessageResponse`, `PredefinedFilterSort(Param)`, and any of the removed type utilities. `Event` and `CustomEventTypes` are kept — do not delete them.
 2. **Rename `Role` → `RoleName`** at every import + annotation site.
-3. **Rewrite event-handler callbacks** to take `CombinedEvents` (or `EventPayload<'…'>`) instead of `Event`. Where you had a custom event-type augmentation via `CustomEventTypes`, rewrite it as a `ListenerKeys` augmentation.
+3. **Rewrite event-handler callback types where needed.** `Event` is still valid (its union widened) — prefer `EventPayload<'…'>` for narrowed access. Custom event-type augmentation still goes on `CustomEventTypes`, unchanged from v9. Rename any imports of the plural `EventTypes` to the singular `EventType`.
 4. **Guard `channel.state.membership` reads** with `?.` — it's `undefined` on freshly constructed channels.
 5. **Fix filter objects that used undeclared operators** for constrained endpoints (`queryChannels`, `queryUsers`, `queryReactions`, `queryThreads`, `queryMembers`, `queryBannedUsers`, `queryMessageFlags`, `search`). If the filter must stay as-is, cast; otherwise use a declared operator.
 6. **Move composer attachment metadata reads** from `attachment.mime_type` / `attachment.file_size` / `attachment.duration` to `attachment.custom?.<same>`.

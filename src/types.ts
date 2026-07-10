@@ -44,6 +44,7 @@ import type {
   SharedLocation,
   SharedLocationResponseData,
   SortParamRequest,
+  TranslateMessageRequest,
   UpdateChannelRequest,
   UpdateMessageRequest,
   UpdateMessageResponse,
@@ -1121,5 +1122,6 @@ export type SendMessageAPIResponse = StreamResponse<SendMessageResponse>;
 export type UpdateMessageOptions = Omit<UpdateMessageRequest, 'message'>;
 export type UpdateMessageAPIResponse = StreamResponse<UpdateMessageResponse>;
 export type GiphyVersions = keyof Images;
+export type TranslationLanguage = TranslateMessageRequest['language'];
 
 export * from './gen/models';
