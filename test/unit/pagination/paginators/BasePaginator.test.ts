@@ -1869,6 +1869,33 @@ describe('BasePaginator', () => {
       });
     });
 
+    describe('re-ingesting the sole item of the active interval', () => {
+      it('keeps the item visible in state.items after an update', () => {
+        const paginator = new Paginator({
+          itemIndex: new ItemIndex<TestItem>({ getId: ({ id }) => id }),
+        });
+        paginator.sortComparator = makeComparator<
+          TestItem,
+          Partial<Record<keyof TestItem, AscDesc>>
+        >({ sort: { age: -1 } });
+
+        const optimistic: TestItem = { id: 'r1', age: 10, name: 'sending' };
+        const confirmed: TestItem = { id: 'r1', age: 10, name: 'received' };
+
+        // Optimistic ingest into the empty paginator -> sole item of the (active) logical head.
+        paginator.ingestItem(optimistic);
+        expect(paginator.items).toStrictEqual([optimistic]);
+        // @ts-expect-error accessing protected property _activeIntervalId
+        expect(paginator._activeIntervalId).toBe(LOGICAL_HEAD_INTERVAL_ID);
+
+        // Confirmed re-ingest of the same id must keep it visible (not vanish).
+        paginator.ingestItem(confirmed);
+        expect(paginator.items).toStrictEqual([confirmed]);
+        // @ts-expect-error accessing protected property _activeIntervalId
+        expect(paginator._activeIntervalId).toBe(LOGICAL_HEAD_INTERVAL_ID);
+      });
+    });
+
     describe('ingestItem to state only', () => {
       it.each([
         ['on lockItemOrder: false', false],

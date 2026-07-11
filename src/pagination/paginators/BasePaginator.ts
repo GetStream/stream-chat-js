@@ -1549,6 +1549,7 @@ export abstract class BasePaginator<T, Q> {
     const keepOrderInState = this.config.lockItemOrder && originalIndexInState >= 0;
 
     // 1. Remove the old snapshot from state & intervals.
+    const activeIntervalIdBeforeRemoval = this._activeIntervalId;
     let removedItemCoordinates: ItemCoordinates | undefined;
     if (previousCoords) {
       removedItemCoordinates = this.removeItemAtCoordinates(previousCoords);
@@ -1651,6 +1652,21 @@ export abstract class BasePaginator<T, Q> {
     } else {
       // Found an anchored interval whose bounds contain the new snapshot.
       targetInterval = this.insertItemIdIntoInterval(targetInterval, ingestedItem);
+    }
+
+    // If removing the previous snapshot emptied and dropped what was the active interval
+    // (e.g. the sole reply in a freshly-opened thread), and we are re-adding the item into
+    // that same interval, restore it as the active interval. Otherwise the re-added item is
+    // never emitted to state.items below — the emit is gated on _activeIntervalId — so it
+    // silently disappears from the visible list until the interval is reloaded.
+    const removedIntervalId = removedItemCoordinates?.interval?.interval.id;
+    if (
+      !this._activeIntervalId &&
+      !!activeIntervalIdBeforeRemoval &&
+      activeIntervalIdBeforeRemoval === removedIntervalId &&
+      targetInterval.id === removedIntervalId
+    ) {
+      this.setActiveInterval(targetInterval);
     }
 
     const addedNewInterval = !this._itemIntervals.has(targetInterval.id);
