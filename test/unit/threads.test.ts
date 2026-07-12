@@ -105,6 +105,55 @@ describe('Threads 2.0', () => {
       expect(thread.messagePaginator.pageSize).to.equal(50);
     });
 
+    it('seeds the reply paginator from latest_replies (complete window -> no older to load)', () => {
+      const reply1 = generateMsg({
+        parent_id: parentMessageResponse.id,
+      }) as MessageResponse;
+      const reply2 = generateMsg({
+        parent_id: parentMessageResponse.id,
+      }) as MessageResponse;
+      const thread = createTestThread({
+        latest_replies: [reply1, reply2],
+        reply_count: 2,
+      });
+
+      const paginatorState = thread.messagePaginator.state.getLatestValue();
+      expect(paginatorState.items).to.have.lengthOf(2);
+      expect(paginatorState.items?.map((reply) => reply.id)).to.have.members([
+        reply1.id,
+        reply2.id,
+      ]);
+      // latest_replies already held every reply, so there is nothing older to fetch
+      expect(paginatorState.hasMoreTail).to.be.false;
+    });
+
+    it('seeds the reply paginator and keeps hasMoreTail for a partial latest_replies window', () => {
+      const reply1 = generateMsg({
+        parent_id: parentMessageResponse.id,
+      }) as MessageResponse;
+      const reply2 = generateMsg({
+        parent_id: parentMessageResponse.id,
+      }) as MessageResponse;
+      const thread = createTestThread({
+        latest_replies: [reply1, reply2],
+        reply_count: 10,
+      });
+
+      const paginatorState = thread.messagePaginator.state.getLatestValue();
+      expect(paginatorState.items).to.have.lengthOf(2);
+      // older replies exist beyond the most-recent window -> still paginable
+      expect(paginatorState.hasMoreTail).to.be.true;
+      // seeding records a query shape (isInitialized) so the first paginate continues from this
+      // page instead of first-page-resetting (wiping items + re-fetching page 1).
+      expect(thread.messagePaginator.isInitialized).to.be.true;
+    });
+
+    it('leaves the reply paginator unseeded (items undefined, not initialized) with no latest_replies', () => {
+      const thread = createTestThread({ latest_replies: [], reply_count: 0 });
+      expect(thread.messagePaginator.state.getLatestValue().items).to.be.undefined;
+      expect(thread.messagePaginator.isInitialized).to.be.false;
+    });
+
     it('initializes properly without threadData', () => {
       const thread = createMinimalThread();
       const state = thread.state.getLatestValue();

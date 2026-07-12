@@ -244,6 +244,21 @@ export class Thread extends WithSubscriptions {
         pageSize: DEFAULT_PAGE_LIMIT,
       },
     });
+
+    // Seed the reply paginator from the thread's `latest_replies` so a thread we already hold
+    // data for (queried via the ThreadManager or hydrated from a ThreadResponse) renders its
+    // first reply page instantly, without a network fetch on open. `latest_replies` is the most
+    // recent window of replies, so it reaches the head (nothing newer to load); it reaches the
+    // tail only when it already contains every reply. Threads built from a bare parent message
+    // carry no replies to seed and fall back to a paginator fetch on first open.
+    if (threadData?.latest_replies?.length) {
+      this.messagePaginator.setItems({
+        valueOrFactory: threadData.latest_replies.map(formatMessage),
+        isFirstPage: true,
+        isLastPage: threadData.latest_replies.length === (threadData.reply_count ?? 0),
+      });
+    }
+
     this.messageComposer = new MessageComposer({
       client,
       composition: threadData?.draft ?? draft,

@@ -1836,6 +1836,17 @@ export abstract class BasePaginator<T, Q> {
 
       return newState;
     });
+
+    // A populated page means a first page is effectively "loaded". Record a query shape so the
+    // paginator counts as initialized and the next pagination continues from this page - otherwise
+    // an undefined `_lastQueryShape` makes the first query look like a shape change, triggering a
+    // first page reset that wipes the seeded items and re-fetches the first page before paginating.
+    if (
+      typeof this._lastQueryShape === 'undefined' &&
+      (this.state.getLatestValue().items?.length ?? 0) > 0
+    ) {
+      this._lastQueryShape = this.getNextQueryShape({});
+    }
   }
 
   // ---------------------------------------------------------------------------
