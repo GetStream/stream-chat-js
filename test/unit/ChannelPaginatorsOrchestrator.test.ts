@@ -1007,4 +1007,40 @@ describe('ChannelPaginatorsOrchestrator', () => {
       expect(partialNextSpy).not.toHaveBeenCalled();
     });
   });
+
+  describe('ingestChannel', () => {
+    it('ingests a channel into every paginator whose filter it matches', () => {
+      const ch = makeChannel('messaging:200');
+      const p1 = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+      const p2 = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+      const orchestrator = new ChannelPaginatorsOrchestrator({
+        client,
+        paginators: [p1, p2],
+      });
+
+      orchestrator.ingestChannel(ch);
+
+      expect(p1.items?.map((c) => c.cid)).toEqual(['messaging:200']);
+      expect(p2.items?.map((c) => c.cid)).toEqual(['messaging:200']);
+    });
+
+    it('routes a non-matching channel to a catch-all fallback (lowest priority) and keeps matches in the primary', () => {
+      const primary = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+      const fallback = new ChannelPaginator({ client, filters: {} });
+      const orchestrator = new ChannelPaginatorsOrchestrator({
+        client,
+        paginators: [primary, fallback],
+        ownershipResolver: createPriorityOwnershipResolver([primary.id, fallback.id]),
+      });
+
+      orchestrator.ingestChannel(makeChannel('messaging:201'));
+      orchestrator.ingestChannel(makeChannel('team:202'));
+
+      // A channel matching the primary filter is owned by the primary only (higher priority),
+      // even though the catch-all fallback also matches it.
+      expect(primary.items?.map((c) => c.cid)).toEqual(['messaging:201']);
+      // A channel that matches only the catch-all lands in the fallback.
+      expect(fallback.items?.map((c) => c.cid)).toEqual(['team:202']);
+    });
+  });
 });
