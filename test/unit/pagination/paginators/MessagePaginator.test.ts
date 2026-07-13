@@ -604,7 +604,7 @@ describe('MessagePaginator', () => {
   });
 
   describe('messageFocusSignal', () => {
-    it('emits focus signal with unique token and clears stale timer safely', async () => {
+    it('emits focus signal with unique token and does not auto-dismiss', async () => {
       vi.useFakeTimers();
       const paginator = new MessagePaginator({ channel, itemIndex });
 
@@ -624,8 +624,61 @@ describe('MessagePaginator', () => {
         second.token,
       );
 
-      vi.advanceTimersByTime(3000);
+      // The dismissal countdown is not started on emit — it must be scheduled explicitly once the
+      // message is viewed, so a signal emitted while its list is hidden survives until then.
+      vi.advanceTimersByTime(10000);
+      expect(paginator.messageFocusSignal.getLatestValue().signal?.token).toBe(
+        second.token,
+      );
+      vi.useRealTimers();
+    });
+
+    it('starts the dismissal countdown from scheduleMessageFocusSignalClear (viewed moment)', async () => {
+      vi.useFakeTimers();
+      const paginator = new MessagePaginator({ channel, itemIndex });
+
+      const signal = paginator.emitMessageFocusSignal({
+        messageId: 'm1',
+        reason: 'jump-to-message',
+        ttlMs: 3000,
+      });
+
+      // Time can pass while the message is off-screen without dismissing it.
+      vi.advanceTimersByTime(5000);
+      expect(paginator.messageFocusSignal.getLatestValue().signal).not.toBe(null);
+
+      // Once viewed, the TTL is measured from this moment.
+      paginator.scheduleMessageFocusSignalClear({ token: signal.token });
+      vi.advanceTimersByTime(2999);
+      expect(paginator.messageFocusSignal.getLatestValue().signal?.token).toBe(
+        signal.token,
+      );
+      vi.advanceTimersByTime(1);
       expect(paginator.messageFocusSignal.getLatestValue().signal).toBe(null);
+      vi.useRealTimers();
+    });
+
+    it('scheduleMessageFocusSignalClear is a no-op for a stale token', async () => {
+      vi.useFakeTimers();
+      const paginator = new MessagePaginator({ channel, itemIndex });
+
+      paginator.emitMessageFocusSignal({
+        messageId: 'm1',
+        reason: 'jump-to-message',
+        ttlMs: 3000,
+      });
+      const current = paginator.emitMessageFocusSignal({
+        messageId: 'm2',
+        reason: 'jump-to-message',
+        ttlMs: 3000,
+      });
+
+      // A schedule request carrying a superseded token must not dismiss the current signal.
+      paginator.scheduleMessageFocusSignalClear({ token: current.token - 1 });
+      vi.advanceTimersByTime(3000);
+      expect(paginator.messageFocusSignal.getLatestValue().signal?.token).toBe(
+        current.token,
+      );
       vi.useRealTimers();
     });
   });
