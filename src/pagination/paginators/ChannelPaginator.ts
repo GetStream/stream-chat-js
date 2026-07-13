@@ -152,6 +152,15 @@ const pinnedFilterResolver: FieldToDataResolver<Channel> = {
   resolve: (channel) => !!channel.state.membership.pinned_at,
 };
 
+const mutedFilterResolver: FieldToDataResolver<Channel> = {
+  matchesField: (field) => field === 'muted',
+  // Mute state lives on the client (client.mutedChannels), not on channel.data — resolve it via
+  // the client so `{ muted: true/false }` matches client-side, rather than letting the generic
+  // data resolver read a non-existent `channel.data.muted` (which would resolve to undefined and
+  // never equal a boolean filter value).
+  resolve: (channel) => channel.getClient()._muteStatus(channel.cid).muted,
+};
+
 const dataFieldFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: () => true,
   resolve: (channel, path) => resolveDotPathValue(channel.data, path),
@@ -226,6 +235,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       hasUnreadFilterResolver,
       lastUpdatedFilterResolver,
       pinnedFilterResolver,
+      mutedFilterResolver,
       membersFilterResolver,
       memberUserNameFilterResolver,
       dataFieldFilterResolver,
