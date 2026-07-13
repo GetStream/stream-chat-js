@@ -179,19 +179,31 @@ export type PaginationQueryShapeChangeIdentifier<S> = (
 
 export type PaginationQueryParams<Q> = {
   direction?: PaginationDirection;
+  /**
+   * Keep the currently loaded items (and cursor/flags) visible while a first-page query runs
+   * instead of blanking to the empty initial state. The freshly fetched page is merged into the
+   * active interval by `postQueryReconcile` (upserting changed items, appending new ones), so the
+   * list is refreshed in place with no loading-screen flash. Used by the non-destructive refresh.
+   */
+  keepPreviousItems?: boolean;
   /** Data that define the query (filters, sort, ...) */
   queryShape?: Q;
   /** Per-call override of the reset behavior. */
   reset?: StateResetPolicy;
   /** Should retry the failed request given number of times. Default is 0. */
   retryCount?: number;
+  /**
+   * Suppress `isLoading` transitions for this query (a silent, background refresh). When falsy
+   * (default) the usual loading state is surfaced so the UI can show a spinner.
+   */
+  silent?: boolean;
   /** Determines, whether the page loaded with the query will be committed to the paginator state. Default: true. */
   updateState?: boolean;
 };
 
 export type PostQueryReconcileParams<T, Q> = Pick<
   PaginationQueryParams<Q>,
-  'direction' | 'queryShape' | 'updateState'
+  'direction' | 'queryShape' | 'updateState' | 'keepPreviousItems'
 > & {
   isFirstPage: boolean;
   requestedPageSize: number;
@@ -1965,16 +1977,18 @@ export abstract class BasePaginator<T, Q> {
    */
   async executeQuery({
     direction,
+    keepPreviousItems,
     queryShape: forcedQueryShape,
     reset,
     retryCount = 0,
+    silent,
     updateState = true,
   }: PaginationQueryParams<Q> = {}): Promise<ExecuteQueryReturnValue<T> | void> {
     const queryShape = forcedQueryShape ?? this.getNextQueryShape({ direction });
     if (!this.canExecuteQuery({ direction, reset })) return;
 
     const isFirstPage = this.isFirstPageQuery({ queryShape, reset });
-    if (isFirstPage) {
+    if (isFirstPage && !keepPreviousItems) {
       const state = this.getStateBeforeFirstQuery();
       let items: T[] | undefined = undefined;
       if (!this.isInitialized) {
@@ -1987,7 +2001,9 @@ export abstract class BasePaginator<T, Q> {
           })) ?? state.items;
       }
       this.state.next({ ...state, items });
-    } else {
+    } else if (!silent) {
+      // Non-first-page, or a keepPreviousItems refresh: surface loading without blanking the list.
+      // The freshly fetched page is merged into the active interval in postQueryReconcile.
       this.state.partialNext({ isLoading: true });
     }
 
@@ -2002,6 +2018,7 @@ export abstract class BasePaginator<T, Q> {
     return await this.postQueryReconcile({
       direction,
       isFirstPage,
+      keepPreviousItems,
       queryShape,
       requestedPageSize: this.pageSize,
       results,
@@ -2012,6 +2029,7 @@ export abstract class BasePaginator<T, Q> {
   async postQueryReconcile({
     direction,
     isFirstPage,
+    keepPreviousItems,
     queryShape,
     requestedPageSize,
     results,
@@ -2075,6 +2093,20 @@ export abstract class BasePaginator<T, Q> {
     if (interval && updateState) {
       this.setActiveInterval(interval, { updateState: false });
       stateUpdate.items = this.intervalToItems(interval);
+    } else if (
+      updateState &&
+      this.usesItemIntervalStorage &&
+      !items.length &&
+      (keepPreviousItems || !isFirstPage)
+    ) {
+      // An empty page must NOT wipe the loaded items on a non-destructive refresh
+      // (keepPreviousItems) or an incremental query. `ingestPage` returns null for an empty page
+      // (leaving the active interval untouched), so `stateUpdate.items` still holds the empty
+      // `filteredItems` here and committing that would blank the list. This happens when a refresh
+      // finds nothing, or when a paginate hits the dataset edge. Preserve the current view instead
+      // (mirrors state only mode, whose concat of an empty page is a noop). A genuine reset
+      // (isFirstPage without keepPreviousItems) still blanks, so an emptied dataset shows empty.
+      stateUpdate.items = this.items;
     }
 
     /**

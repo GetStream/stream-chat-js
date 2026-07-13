@@ -493,6 +493,37 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
   };
 
   /**
+   * Non-destructively refresh the newest (first) page and merge it into the loaded set, WITHOUT
+   * resetting the paginator. The freshly fetched page is upserted into the active head interval:
+   * changed messages are reconciled (edits/deletes), new messages are appended, and every already
+   * loaded message (including scrolled in older pages) is preserved. Unlike `reload()`, the list is
+   * never blanked to a loading screen.
+   *
+   * Intended for reconnect recovery, where any WS event related list item mutations might have been
+   * missed while the connection was dropped. Requerying the first page reconciles both
+   * new messages AND in place changes to already loaded messages within that page.
+   *
+   * @param force When true the loading state is surfaced (for an explicit, user triggered refresh
+   *              such as pull to refresh); when false (default) the refresh is silent.
+   *
+   * Noop unless the newest slice is currently loaded (the head interval is anchored at the head);
+   * when scrolled into an older window the newest page is picked up on scroll / next open. For a
+   * full destructive reset callers can still use `reload()`.
+   */
+  refresh = async ({ force = false }: { force?: boolean } = {}): Promise<void> => {
+    const headInterval = this.itemIntervals[0] as Interval | undefined;
+    if (!headInterval?.isHead) return;
+
+    await this.executeQuery({
+      direction: 'tailward',
+      queryShape: { limit: this.pageSize },
+      reset: 'yes',
+      keepPreviousItems: true,
+      silent: !force,
+    });
+  };
+
+  /**
    * Jumps to the unread reference message.
    *
    * IMPORTANT: This intentionally does *not* rely on `channel.state.read[ownUserId]` only,

@@ -910,6 +910,177 @@ describe('MessagePaginator', () => {
     });
   });
 
+  describe('refresh()', () => {
+    const setupLoadedHead = () => {
+      const paginator = new MessagePaginator({
+        channel,
+        itemIndex,
+        parentMessageId: 'parent-1',
+      });
+      const m1 = createMessage({
+        cid: 'channel-id',
+        id: 'm1',
+        created_at: '2020-01-01T00:00:00.000Z',
+      });
+      const m2 = createMessage({
+        cid: 'channel-id',
+        id: 'm2',
+        created_at: '2020-01-02T00:00:00.000Z',
+      });
+      const m3 = createMessage({
+        cid: 'channel-id',
+        id: 'm3',
+        text: 'original',
+        created_at: '2020-01-03T00:00:00.000Z',
+      });
+      // Loaded and anchored at the newest (head), nothing more on either side.
+      paginator.ingestPage({
+        page: [m1, m2, m3],
+        isHead: true,
+        isTail: true,
+        setActive: true,
+      });
+      paginator.state.partialNext({ items: [m1, m2, m3] });
+      // postQueryReconcile reads the client to take an unread snapshot; no user => snapshot skipped.
+      (channel as unknown as { getClient: () => unknown }).getClient = () => ({
+        user: undefined,
+      });
+      return paginator;
+    };
+
+    it('requeries the first page and merges: reconciles in-place edits AND appends new messages', async () => {
+      const paginator = setupLoadedHead();
+
+      // While offline: m3 was edited ("original" -> "edited") and m4/m5 arrived. The first page now
+      // returns the reconciled newest window.
+      (channel.getReplies as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        messages: [
+          { id: 'm1', created_at: '2020-01-01T00:00:00.000Z' },
+          { id: 'm2', created_at: '2020-01-02T00:00:00.000Z' },
+          { id: 'm3', text: 'edited', created_at: '2020-01-03T00:00:00.000Z' },
+          { id: 'm4', created_at: '2020-01-04T00:00:00.000Z' },
+          { id: 'm5', created_at: '2020-01-05T00:00:00.000Z' },
+        ],
+      });
+
+      await paginator.refresh();
+
+      // First page requery — no id_gt/id_lt cursor (not an incremental newer-only fetch).
+      const [, options] = (channel.getReplies as unknown as ReturnType<typeof vi.fn>).mock
+        .calls[0];
+      expect(options.id_gt).toBeUndefined();
+      expect(options.id_lt).toBeUndefined();
+      // m4/m5 appended, m3 reconciled in place, m1/m2 preserved.
+      expect(paginator.items?.map((message) => message.id)).toEqual([
+        'm1',
+        'm2',
+        'm3',
+        'm4',
+        'm5',
+      ]);
+      expect(paginator.getItem('m3')?.text).toBe('edited');
+    });
+
+    it('does not blank the list while refreshing (keepPreviousItems)', async () => {
+      const paginator = setupLoadedHead();
+      let sawUndefinedItems = false;
+      const unsubscribe = paginator.state.subscribe((state) => {
+        if (typeof state.items === 'undefined') sawUndefinedItems = true;
+      });
+      (channel.getReplies as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        messages: [{ id: 'm1' }, { id: 'm2' }, { id: 'm3' }],
+      });
+
+      await paginator.refresh();
+      unsubscribe();
+
+      expect(sawUndefinedItems).toBe(false);
+    });
+
+    it('does not toggle the loading state when silent (force: false, the default)', async () => {
+      const paginator = setupLoadedHead();
+      let sawLoading = false;
+      const unsubscribe = paginator.state.subscribe((state) => {
+        if (state.isLoading) sawLoading = true;
+      });
+      (channel.getReplies as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        messages: [{ id: 'm1' }, { id: 'm2' }, { id: 'm3' }],
+      });
+
+      await paginator.refresh();
+      unsubscribe();
+
+      expect(sawLoading).toBe(false);
+    });
+
+    it('surfaces the loading state when force is true', async () => {
+      const paginator = setupLoadedHead();
+      let sawLoading = false;
+      const unsubscribe = paginator.state.subscribe((state) => {
+        if (state.isLoading) sawLoading = true;
+      });
+      (channel.getReplies as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        messages: [{ id: 'm1' }, { id: 'm2' }, { id: 'm3' }],
+      });
+
+      await paginator.refresh({ force: true });
+      unsubscribe();
+
+      expect(sawLoading).toBe(true);
+    });
+
+    it('does not wipe the loaded messages when the refresh returns nothing', async () => {
+      const paginator = setupLoadedHead();
+      (channel.getReplies as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        messages: [],
+      });
+
+      await paginator.refresh();
+
+      expect(paginator.items?.map((message) => message.id)).toEqual(['m1', 'm2', 'm3']);
+    });
+
+    it('is a no-op when the newest slice is not loaded (not anchored at head)', async () => {
+      const paginator = new MessagePaginator({
+        channel,
+        itemIndex,
+        parentMessageId: 'parent-1',
+      });
+      const m4 = createMessage({
+        cid: 'channel-id',
+        id: 'm4',
+        created_at: '2020-01-04T00:00:00.000Z',
+      });
+      const m5 = createMessage({
+        cid: 'channel-id',
+        id: 'm5',
+        created_at: '2020-01-05T00:00:00.000Z',
+      });
+      paginator.ingestPage({
+        page: [m4, m5],
+        isHead: false,
+        isTail: false,
+        setActive: true,
+      });
+
+      await paginator.refresh();
+
+      expect(channel.getReplies).not.toHaveBeenCalled();
+    });
+
+    it('is a no-op when nothing is loaded', async () => {
+      const paginator = new MessagePaginator({
+        channel,
+        itemIndex,
+        parentMessageId: 'parent-1',
+      });
+
+      await paginator.refresh();
+
+      expect(channel.getReplies).not.toHaveBeenCalled();
+    });
+  });
+
   it('cannot be customized', () => {
     const paginator = new MessagePaginator({ channel, itemIndex });
   });
