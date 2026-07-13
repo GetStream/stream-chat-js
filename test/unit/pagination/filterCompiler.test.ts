@@ -277,6 +277,33 @@ describe('itemMatchesFilter', () => {
     ).toBeFalsy();
   });
 
+  it('ANDs a logical operator with sibling field conditions on the same node', () => {
+    // `{ $or: [...], custom4: <value> }` means `($or ...) AND custom4 == <value>` — the sibling
+    // field must not be ignored just because a `$or` is present on the same node.
+    const orMatchingItem: TestChannel = {
+      custom1: ['x', 'b', 'y'],
+      custom2: '15',
+      custom3: 9,
+      custom4: false,
+    };
+    // $or matches (2nd branch), and custom4 === false → whole filter matches.
+    expect(
+      itemMatchesFilter<TestChannel>(
+        orMatchingItem,
+        { ...filter, custom4: false },
+        options,
+      ),
+    ).toBeTruthy();
+    // $or still matches, but the sibling custom4 === true fails → whole filter must NOT match.
+    expect(
+      itemMatchesFilter<TestChannel>(
+        orMatchingItem,
+        { ...filter, custom4: true },
+        options,
+      ),
+    ).toBeFalsy();
+  });
+
   it('determines that data match filter by property dot path', () => {
     const item: TestChannel = {
       data: {
