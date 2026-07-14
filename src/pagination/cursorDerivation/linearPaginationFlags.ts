@@ -67,7 +67,10 @@ export const deriveLinearPaginationFlags = <
     typeof queriedMessagesTowardsTail !== 'undefined' ||
     containsUnrecognizedOptionsOnly
   ) {
-    hasMoreTail = !hasMoreTail ? false : hasMore;
+    // Without the isFirstPage branch, a partial first page (e.g. an
+    // offline prehydrate returning fewer than `requestedPageSize`) latches `hasMoreTail`
+    // to `false` and a subsequent full network first page can never restore it.
+    hasMoreTail = isFirstPage ? hasMore : !hasMoreTail ? false : hasMore;
   }
   if (typeof queriedMessagesTowardsHead !== 'undefined') {
     hasMoreHead = !hasMoreHead || isFirstPage ? false : hasMore;
