@@ -493,33 +493,73 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
   };
 
   /**
-   * Non-destructively refresh the newest (first) page and merge it into the loaded set, WITHOUT
-   * resetting the paginator. The freshly fetched page is upserted into the active head interval:
-   * changed messages are reconciled (edits/deletes), new messages are appended, and every already
-   * loaded message (including scrolled in older pages) is preserved. Unlike `reload()`, the list is
-   * never blanked to a loading screen.
+   * Fold an already fetched newest (head) page into the currently loaded items without issuing a
+   * query. The caller supplies a page it obtained on its own and this reconciles it against what is
+   * loaded, instead of rerunning the first page query, so the loaded set is updated in place rather
+   * than blanked and reloaded. Two cases, decided by whether the incoming page overlaps the loaded
+   * head:
    *
-   * Intended for reconnect recovery, where any WS event related list item mutations might have been
-   * missed while the connection was dropped. Requerying the first page reconciles both
-   * new messages AND in place changes to already loaded messages within that page.
+   * 1. OVERLAP - the incoming page shares at least one id with the loaded head (fewer than a full
+   *    page is new). Merge in place: existing items are reconciled by id (edits, soft deletes), new
+   *    items are appended and every already loaded item (including older pages already paged in) is
+   *    kept. `hasMoreTail`/`cursor.tailward` are left as-is so the page can be any size, so deriving
+   *    "has older items" from its length would wrongly clear it while older items remain.
    *
-   * @param force When true the loading state is surfaced (for an explicit, user triggered refresh
-   *              such as pull to refresh); when false (default) the refresh is silent.
+   * 2. DISJOINT - the incoming page shares no id with the loaded head (at least a full page is new).
+   *    Merging would weld the two across the gap (the interval merge treats two head intervals as
+   *    overlapping when one reaches further headward), hiding the items in between with no way to
+   *    reach them. Instead the loaded set is discarded and rebuilt from the incoming page as a fresh
+   *    contiguous head (`hasMoreTail: true`, cursor reanchored to the page's oldest item) so the
+   *    gap and older history load again when paginating older.
    *
-   * Noop unless the newest slice is currently loaded (the head interval is anchored at the head);
-   * when scrolled into an older window the newest page is picked up on scroll / next open. For a
-   * full destructive reset callers can still use `reload()`.
+   * Both paths emit exactly once and never blank the loaded set. Noop unless the page is non empty
+   * and the newest slice is currently loaded (the head interval is anchored at the head); otherwise
+   * the incoming page is picked up on a later load.
    */
-  refresh = async ({ force = false }: { force?: boolean } = {}): Promise<void> => {
+  mergeNewestPage = (page: LocalMessage[]) => {
+    if (!page?.length) return;
     const headInterval = this.itemIntervals[0] as Interval | undefined;
     if (!headInterval?.isHead) return;
 
-    await this.executeQuery({
-      direction: 'tailward',
-      queryShape: { limit: this.pageSize },
-      reset: 'yes',
-      keepPreviousItems: true,
-      silent: !force,
+    const loadedIds = new Set(headInterval.itemIds);
+    const overlapsLoadedHead = page.some((item) => loadedIds.has(this.getItemId(item)));
+
+    if (!overlapsLoadedHead) {
+      // Disjoint window: rebuild from the fetched page as a fresh newest slice. Clearing
+      // the stale intervals first ensures `ingestPage` builds a single head interval instead of
+      // merging across the gap so reanchoring the cursor to this page's oldest item keeps the next
+      // "load older" contiguous.
+      this.setIntervals([]);
+      this.setActiveInterval(undefined);
+      const resetInterval = this.ingestPage({
+        page,
+        isHead: true,
+        // Disjoint means the previously loaded head was entirely OLDER than this newest window, so
+        // there is always older data to load (the gap + the prior history) - keep hasMoreTail true.
+        isTail: false,
+        setActive: false,
+      });
+      if (!resetInterval) return;
+      this.setActiveInterval(resetInterval, { updateState: false });
+      this.state.partialNext({
+        items: this.intervalToItems(resetInterval),
+        cursor: this.getCursorFromInterval(resetInterval),
+        hasMoreHead: resetInterval.hasMoreHead,
+        hasMoreTail: resetInterval.hasMoreTail,
+      });
+      return;
+    }
+
+    // Overlapping window: merge in place, preserving the older boundary.
+    const interval = this.ingestPage({ page, isHead: true, setActive: false });
+    if (!interval) return;
+
+    this.setActiveInterval(interval, { updateState: false });
+    this.state.partialNext({
+      items: this.intervalToItems(interval),
+      // The newest slice is loaded (head anchored), so after merging the head window there is
+      // nothing newer to load. hasMoreTail / cursor are deliberately preserved (see above).
+      hasMoreHead: false,
     });
   };
 

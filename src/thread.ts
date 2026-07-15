@@ -356,7 +356,12 @@ export class Thread extends WithSubscriptions {
     this.state.partialNext({ isLoading: true });
 
     try {
-      const thread = await this.client.getThread(this.id, { watch: true });
+      const loadedReplyCount =
+        this.messagePaginator.state.getLatestValue().items?.length ?? 0;
+      const thread = await this.client.getThread(this.id, {
+        watch: true,
+        reply_limit: loadedReplyCount || this.messagePaginator.pageSize,
+      });
       this.hydrateState(thread);
     } finally {
       this.state.partialNext({ isLoading: false });
@@ -406,6 +411,8 @@ export class Thread extends WithSubscriptions {
       updatedAt,
       isStateStale: false,
     });
+
+    this.messagePaginator.mergeNewestPage(replies);
   };
 
   public registerSubscriptions = () => {

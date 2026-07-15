@@ -433,6 +433,50 @@ describe('Threads 2.0', () => {
           expect(stateAfter.replies).to.have.lengthOf(2);
           expect(stateAfter.replies[1].id).to.equal(failedMessage.id);
         });
+
+        it('merges the incoming newest reply window into the reply paginator', () => {
+          const existingReply = generateMsg({
+            parent_id: parentMessageResponse.id,
+            created_at: '2020-01-01T00:00:00.000Z',
+            text: 'original',
+          }) as MessageResponse;
+          // Head-anchored, with older replies still to load (reply_count > loaded).
+          const thread = createTestThread({
+            latest_replies: [existingReply],
+            reply_count: 10,
+          });
+          expect(thread.messagePaginator.state.getLatestValue().hasMoreTail).to.be.true;
+
+          // A fresh hydrate (as produced by reload/ThreadManager on reconnect): the existing reply
+          // edited + a brand-new reply that arrived while the connection was dropped.
+          const editedReply = generateMsg({
+            id: existingReply.id,
+            parent_id: parentMessageResponse.id,
+            created_at: '2020-01-01T00:00:00.000Z',
+            text: 'edited',
+          }) as MessageResponse;
+          const newReply = generateMsg({
+            parent_id: parentMessageResponse.id,
+            created_at: '2020-01-02T00:00:00.000Z',
+          }) as MessageResponse;
+          const hydrationThread = createTestThread({
+            latest_replies: [editedReply, newReply],
+            reply_count: 11,
+          });
+
+          thread.hydrateState(hydrationThread);
+
+          const paginatorState = thread.messagePaginator.state.getLatestValue();
+          expect(paginatorState.items?.map((reply) => reply.id)).to.deep.equal([
+            existingReply.id,
+            newReply.id,
+          ]);
+          expect(thread.messagePaginator.getItem(existingReply.id)?.text).to.equal(
+            'edited',
+          );
+          // Merging a partial newest window must not clear "load older".
+          expect(paginatorState.hasMoreTail).to.be.true;
+        });
       });
 
       describe('reload', () => {
@@ -463,6 +507,33 @@ describe('Threads 2.0', () => {
           const stateAfter = minimalThread.state.getLatestValue();
           expect(stateAfter.pagination.prevCursor).to.not.be.null;
           expect(stateAfter.pagination.nextCursor).to.equal('next-cursor');
+        });
+
+        it('sizes getThread reply_limit to the loaded reply count, falling back to pageSize when unloaded', async () => {
+          const stub = sinon.stub(client, 'getThread').resolves(createTestThread());
+
+          // Unloaded (minimal) thread → falls back to pageSize.
+          const minimalThread = createMinimalThread();
+          expect(minimalThread.messagePaginator.state.getLatestValue().items).to.be
+            .undefined;
+          await minimalThread.reload();
+          expect(stub.firstCall.args[1]?.reply_limit).to.equal(
+            minimalThread.messagePaginator.pageSize,
+          );
+
+          // Loaded thread → sized to the loaded reply count (so the whole loaded window reconciles),
+          // NOT the paginator pageSize.
+          const loadedThread = createTestThread({
+            latest_replies: Array.from(
+              { length: 7 },
+              () =>
+                generateMsg({ parent_id: parentMessageResponse.id }) as MessageResponse,
+            ),
+            reply_count: 20,
+          });
+          await loadedThread.reload();
+          expect(stub.secondCall.args[1]?.reply_limit).to.equal(7);
+          expect(loadedThread.messagePaginator.pageSize).to.not.equal(7);
         });
       });
 
