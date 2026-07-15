@@ -411,6 +411,21 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
     let state: Partial<PaginatorState<LocalMessage>> | undefined;
     if (localMessage) {
       interval = this.locateIntervalForItem(localMessage);
+      if (
+        interval &&
+        !isLogicalInterval(interval) &&
+        !interval.itemIds.includes(messageId)
+      ) {
+        // locateIntervalForItem can match by created_at RANGE and return an interval whose range
+        // spans the target while its loaded itemIds do NOT contain it (e.g. a neighbouring interval
+        // grew across the target's position without merging). Prefer the interval that actually
+        // holds the id so the jump activates the window the message really lives in - otherwise, if
+        // the range-matched interval happens to be active, the jump becomes a no-op.
+        interval = this.itemIntervals.find(
+          (candidate) =>
+            !isLogicalInterval(candidate) && candidate.itemIds.includes(messageId),
+        );
+      }
     }
 
     if (localMessage && interval && !isLogicalInterval(interval)) {
@@ -465,14 +480,16 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
 
   jumpToTheLatestMessage = async (options?: JumpToMessageOptions): Promise<boolean> => {
     let latestMessageId: string | undefined;
-    const intervals = this.itemIntervals;
-    if (!(intervals[0] as Interval)?.isHead) {
-      // get the first page (in case the pagination has not started at the head)
+    if (!(this.itemIntervals[0] as Interval)?.isHead) {
+      // load the newest page in case pagination is currently on an older window (an empty/partial
+      // headward response marks the interval as the head)
       await this.executeQuery({ direction: 'headward', updateState: false });
     }
 
-    const headInterval = intervals[0];
-    if ((intervals[0] as Interval)?.isHead) {
+    // Re-read itemIntervals AFTER the query: the getter returns a fresh array each call, so a
+    // reference captured before executeQuery would be stale and miss the head we just loaded.
+    const headInterval = this.itemIntervals[0] as Interval | undefined;
+    if (headInterval?.isHead) {
       latestMessageId = headInterval.itemIds.slice(-1)[0];
     }
 
@@ -513,13 +530,20 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
    *    gap and older history load again when paginating older.
    *
    * Both paths emit exactly once and never blank the loaded set. Noop unless the page is non empty
-   * and the newest slice is currently loaded (the head interval is anchored at the head); otherwise
-   * the incoming page is picked up on a later load.
+   * and the newest slice is both loaded AND the interval currently in view (the head interval is
+   * anchored at the head and active); when the caller has jumped to a separate older window the
+   * merge is skipped so their position is preserved, and the incoming page is picked up on a later
+   * load.
    */
   mergeNewestPage = (page: LocalMessage[]) => {
     if (!page?.length) return;
     const headInterval = this.itemIntervals[0] as Interval | undefined;
     if (!headInterval?.isHead) return;
+    // Only reconcile when the head is the interval currently in view. If the caller jumped to a
+    // separate (older) window, that window is active and the head is merely still-loaded underneath;
+    // reconciling would switch the view to the head and yank them to the newest. Skip to preserve
+    // their position (the newest page is picked up on scroll / a later load).
+    if (!this.isActiveInterval(headInterval)) return;
 
     const loadedIds = new Set(headInterval.itemIds);
     const overlapsLoadedHead = page.some((item) => loadedIds.has(this.getItemId(item)));

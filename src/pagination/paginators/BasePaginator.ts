@@ -785,6 +785,23 @@ export abstract class BasePaginator<T, Q> {
     return this._activeIntervalId === interval.id;
   }
 
+  /**
+   * Whether the currently active (viewed) interval is the anchored head. Used to decide if it is
+   * safe to re-seed an already-loaded paginator with a fresh newest page: only when at the head
+   * (the newest page overlaps it, so the re-seed reconciles + re-derives cursors in place). When the
+   * caller has jumped to an older window (active interval is NOT the head), a first-page re-seed
+   * would force-merge the newest page into that window across the gap - so the re-seed is skipped.
+   */
+  get isActiveIntervalAtHead(): boolean {
+    const head = this.getHeadIntervalFromSortedIntervals(this.itemIntervals);
+    return (
+      !!head &&
+      !isLogicalInterval(head) &&
+      !!(head as Interval).isHead &&
+      this.isActiveInterval(head)
+    );
+  }
+
   setActiveInterval(interval: AnyInterval | undefined, opts?: { updateState?: boolean }) {
     this._activeIntervalId = interval?.id;
 
@@ -2166,6 +2183,24 @@ export abstract class BasePaginator<T, Q> {
       interval.hasMoreTail = resolvedHasMoreTail;
       interval.isHead = resolvedHasMoreHead === false;
       interval.isTail = resolvedHasMoreTail === false;
+    } else if (!items.length && direction) {
+      // An empty directional response means the dataset edge was reached in `direction`, but
+      // `ingestPage` returns no interval for an empty page so the block above never runs. Flag the
+      // currently active interval as reaching that edge; otherwise its `isHead`/`isTail` stay stale
+      // (e.g. `jumpToTheLatestMessage` would never see the head as loaded, and a "scroll to latest"
+      // affordance would never clear).
+      const activeInterval = this._activeIntervalId
+        ? this._itemIntervals.get(this._activeIntervalId)
+        : undefined;
+      if (activeInterval && !isLogicalInterval(activeInterval)) {
+        if (direction === 'headward') {
+          activeInterval.isHead = true;
+          activeInterval.hasMoreHead = false;
+        } else if (direction === 'tailward') {
+          activeInterval.isTail = true;
+          activeInterval.hasMoreTail = false;
+        }
+      }
     }
 
     const state = this.getStateAfterQuery(stateUpdate, isFirstPage);

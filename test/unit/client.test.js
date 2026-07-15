@@ -1017,6 +1017,58 @@ describe('StreamChat.queryChannels', async () => {
 		postStub.restore();
 	});
 
+	it('does not weld a jumped/older window into the newest page when re-hydrating a shared channel on re-query', async () => {
+		const client = await getClientWithUser();
+		const newest = [
+			generateMsg({ id: 'm5', created_at: '2023-11-14T12:00:05.000Z' }),
+			generateMsg({ id: 'm6', created_at: '2023-11-14T12:00:06.000Z' }),
+			generateMsg({ id: 'm7', created_at: '2023-11-14T12:00:07.000Z' }),
+		];
+		const postStub = sinon.stub(client, 'post').returns(
+			Promise.resolve({
+				channels: [{ ...mockChannelQueryResponse, messages: newest }],
+			}),
+		);
+
+		// Initial query seeds the (cold) paginator with the newest window. message_limit === page
+		// length so the seed is NOT flagged as the complete set (hasMoreTail stays true: older exist,
+		// so an older jumped window stays a separate interval instead of merging at the tail edge).
+		const [channel] = await client.queryChannels({}, {}, { message_limit: 3 });
+
+		// Simulate the user jumping to an OLDER window, disjoint from the newest, which becomes the
+		// active (visible) interval while the newest window stays loaded as a separate interval.
+		const older = [
+			channel.state.formatMessage(
+				generateMsg({ id: 'm1', created_at: '2023-11-14T12:00:01.000Z' }),
+			),
+			channel.state.formatMessage(
+				generateMsg({ id: 'm2', created_at: '2023-11-14T12:00:02.000Z' }),
+			),
+		];
+		channel.messagePaginator.ingestPage({
+			page: older,
+			isHead: false,
+			isTail: false,
+			setActive: true,
+		});
+		const activeBefore = channel.messagePaginator.state
+			.getLatestValue()
+			.items?.map((m) => m.id);
+		expect(activeBefore).to.eql(['m1', 'm2']);
+
+		// A channel-list re-query on reconnect re-hydrates the SAME channel instance with the newest
+		// window (disjoint from the jumped one). It must NOT weld them (which would drop m3/m4 in the
+		// middle) nor yank the user off the jumped window.
+		await client.queryChannels({}, {}, { message_limit: 3 });
+
+		const activeAfter = channel.messagePaginator.state
+			.getLatestValue()
+			.items?.map((m) => m.id);
+		expect(activeAfter).to.eql(['m1', 'm2']);
+
+		postStub.restore();
+	});
+
 	it('should return the raw channels response from queryChannelsRequest', async () => {
 		const client = await getClientWithUser();
 		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
