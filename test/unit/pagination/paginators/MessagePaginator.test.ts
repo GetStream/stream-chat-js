@@ -668,15 +668,17 @@ describe('MessagePaginator', () => {
         'm-unread',
         expect.objectContaining({ focusReason: 'jump-to-first-unread' }),
       );
+      // The inferred boundary is NOT persisted into the snapshot (persisting firstUnreadMessageId
+      // would look like an explicit mark-unread and suppress auto-mark-read).
       expect(paginator.unreadStateSnapshot.getLatestValue()).toEqual({
-        firstUnreadMessageId: 'm-unread',
-        lastReadAt,
-        lastReadMessageId: 'm-read',
+        firstUnreadMessageId: null,
+        lastReadAt: null,
+        lastReadMessageId: null,
         unreadCount: 0,
       });
     });
 
-    it('hydrates firstUnreadMessageId when the queried page starts after lastReadAt', async () => {
+    it('jumps to the first unread message when the queried page starts after lastReadAt', async () => {
       const lastReadAt = new Date('2021-01-01T00:00:00.000Z');
       const channelWithReadState = {
         cid: 'channel-id',
@@ -723,12 +725,143 @@ describe('MessagePaginator', () => {
         'm-first-unread',
         expect.objectContaining({ focusReason: 'jump-to-first-unread' }),
       );
+      // Not persisted — see note above.
       expect(paginator.unreadStateSnapshot.getLatestValue()).toEqual({
-        firstUnreadMessageId: 'm-first-unread',
-        lastReadAt,
+        firstUnreadMessageId: null,
+        lastReadAt: null,
         lastReadMessageId: null,
         unreadCount: 0,
       });
+    });
+
+    it('infers the first unread from the already-loaded window (no query) and jumps to it, not the last read message', async () => {
+      const lastReadAt = new Date('2021-01-02T00:00:00.000Z');
+      const channelWithReadState = {
+        cid: 'channel-id',
+        query: vi.fn(),
+        state: {
+          read: {
+            user1: {
+              first_unread_message_id: null,
+              last_read: lastReadAt,
+              last_read_message_id: 'm-read',
+            },
+          },
+        },
+        getClient: () => ({
+          user: { id: 'user1' },
+        }),
+      } as unknown as Channel;
+
+      const paginator = new MessagePaginator({
+        channel: channelWithReadState,
+        itemIndex,
+      });
+      // Loaded newest window straddles the last-read boundary (some read, some unread) — the common
+      // "a few unreads at the bottom" case where no extra request is needed.
+      paginator.state.partialNext({
+        items: [
+          createMessage({ created_at: '2021-01-01T00:00:00.000Z', id: 'm-read' }),
+          createMessage({ created_at: '2021-01-03T00:00:00.000Z', id: 'm-unread' }),
+        ],
+      });
+      const executeQuerySpy = vi.spyOn(paginator, 'executeQuery');
+      const jumpSpy = vi.spyOn(paginator, 'jumpToMessage').mockResolvedValue(true);
+
+      const ok = await paginator.jumpToTheFirstUnreadMessage();
+
+      expect(ok).toBe(true);
+      // No extra network round trip — the loaded window already straddles the boundary.
+      expect(executeQuerySpy).not.toHaveBeenCalled();
+      // Lands ON (and highlights) the first unread message, not the last read one.
+      expect(jumpSpy).toHaveBeenCalledWith(
+        'm-unread',
+        expect.objectContaining({ focusReason: 'jump-to-first-unread' }),
+      );
+      // The inferred boundary is NOT written back to the snapshot.
+      expect(paginator.unreadStateSnapshot.getLatestValue()).toEqual({
+        firstUnreadMessageId: null,
+        lastReadAt: null,
+        lastReadMessageId: null,
+        unreadCount: 0,
+      });
+    });
+
+    it('re-seeds the unread snapshot from the current read state on demand (reopen from cache)', () => {
+      const lastReadAt = new Date('2021-05-01T00:00:00.000Z');
+      const channelWithReadState = {
+        cid: 'channel-id',
+        query: vi.fn(),
+        state: {
+          read: {
+            user1: {
+              first_unread_message_id: null,
+              last_read: lastReadAt,
+              last_read_message_id: 'm-42',
+              unread_messages: 3,
+            },
+          },
+        },
+        getClient: () => ({
+          user: { id: 'user1' },
+        }),
+      } as unknown as Channel;
+
+      const paginator = new MessagePaginator({
+        channel: channelWithReadState,
+        itemIndex,
+      });
+      // Simulate a stale snapshot frozen from a previous open (e.g. an explicit mark-unread).
+      paginator.setUnreadSnapshot({
+        firstUnreadMessageId: 'stale-old-id',
+        lastReadAt: new Date('2020-01-01T00:00:00.000Z'),
+        lastReadMessageId: 'stale-old-id',
+        unreadCount: 99,
+      });
+
+      paginator.seedUnreadSnapshot();
+
+      expect(paginator.unreadStateSnapshot.getLatestValue()).toEqual({
+        firstUnreadMessageId: null,
+        lastReadAt,
+        lastReadMessageId: 'm-42',
+        unreadCount: 3,
+      });
+    });
+
+    it('falls back to jumping to the last read message when no last-read timestamp is available', async () => {
+      const channelWithReadState = {
+        cid: 'channel-id',
+        query: vi.fn(),
+        state: {
+          read: {
+            user1: {
+              first_unread_message_id: null,
+              last_read: undefined,
+              last_read_message_id: 'm-read',
+            },
+          },
+        },
+        getClient: () => ({
+          user: { id: 'user1' },
+        }),
+      } as unknown as Channel;
+
+      const paginator = new MessagePaginator({
+        channel: channelWithReadState,
+        itemIndex,
+      });
+      const executeQuerySpy = vi.spyOn(paginator, 'executeQuery');
+      const jumpSpy = vi.spyOn(paginator, 'jumpToMessage').mockResolvedValue(true);
+
+      const ok = await paginator.jumpToTheFirstUnreadMessage();
+
+      expect(ok).toBe(true);
+      expect(executeQuerySpy).not.toHaveBeenCalled();
+      expect(jumpSpy).toHaveBeenCalledWith(
+        'm-read',
+        expect.objectContaining({ focusReason: 'jump-to-first-unread' }),
+      );
     });
   });
 
