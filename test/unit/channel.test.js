@@ -212,6 +212,67 @@ describe('Channel count unread', function () {
 	});
 });
 
+describe('Channel isViewingLive (unread bump gating)', function () {
+	const user = { id: 'user' };
+	const otherUser = { id: 'other-user' };
+
+	const setupChannel = () => {
+		const client = new StreamChat('apiKey');
+		client.user = user;
+		client.userID = user.id;
+		client.userMuteStatus = () => false;
+		const channel = client.channel('messaging', 'live-mode-id');
+		channel.initialized = true;
+		channel.data = { ...channel.data, own_capabilities: ['read-events'] };
+		channel.state.unreadCount = 0;
+		return { channel };
+	};
+
+	const dispatchNewMessageFromOther = (channel) =>
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user: otherUser,
+			message: generateMsg({ user: otherUser }),
+		});
+
+	it('does not bump the unread count or snapshot on a new message while viewing live', () => {
+		const { channel } = setupChannel();
+		channel.messagePaginator.setViewingLive(true);
+
+		dispatchNewMessageFromOther(channel);
+
+		expect(channel.countUnread()).to.be.equal(0);
+		expect(
+			channel.messagePaginator.unreadStateSnapshot.getLatestValue().unreadCount,
+		).to.be.equal(0);
+	});
+
+	it('bumps the unread count and snapshot on a new message when not viewing live', () => {
+		const { channel } = setupChannel();
+		// isViewingLive defaults to false
+
+		dispatchNewMessageFromOther(channel);
+
+		expect(channel.countUnread()).to.be.equal(1);
+		expect(
+			channel.messagePaginator.unreadStateSnapshot.getLatestValue().unreadCount,
+		).to.be.equal(1);
+	});
+
+	it('setViewingLive no-ops when the value is unchanged', () => {
+		const { channel } = setupChannel();
+		let emissions = 0;
+		channel.messagePaginator.isViewingLive.subscribe(() => (emissions += 1));
+		emissions = 0; // ignore the immediate subscribe callback
+
+		channel.messagePaginator.setViewingLive(false); // already false
+		expect(emissions).to.be.equal(0);
+
+		channel.messagePaginator.setViewingLive(true);
+		expect(emissions).to.be.equal(1);
+	});
+});
+
 describe('Channel localized unread count (isLocalUnreadCountEnabled)', function () {
 	const user = { id: 'user' };
 	const otherUser = { id: 'other-user' };
