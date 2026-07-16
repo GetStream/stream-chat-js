@@ -3737,3 +3737,101 @@ describe('BasePaginator', () => {
     });
   });
 });
+
+describe('BasePaginator sideloaded items (flat mode)', () => {
+  const sideloadedIds = (paginator: Paginator) =>
+    paginator.sideloadedState.getLatestValue().itemIds;
+
+  const loadFirstPage = async (paginator: Paginator, items: TestItem[]) => {
+    const promise = paginator.toTail();
+    await sleep(0);
+    paginator.queryResolve({ items });
+    await promise;
+  };
+
+  it('records a sideloaded item in the separate sideloadedState store, not in the paginated list', () => {
+    const paginator = new Paginator();
+    paginator.sideloadItem({ id: 'b' });
+
+    expect(sideloadedIds(paginator)).toEqual(['b']);
+    expect(paginator.isSideloaded('b')).toBe(true);
+    // Entity lives once in the shared index; the paginated list is untouched.
+    expect(paginator.getItem('b')).toEqual({ id: 'b' });
+    expect(paginator.items ?? []).not.toContainEqual({ id: 'b' });
+  });
+
+  it('leaves the paginated list and offset untouched by sideloading', async () => {
+    const paginator = new Paginator();
+    paginator.sideloadItem({ id: 'z' });
+
+    await loadFirstPage(paginator, [{ id: 'a' }, { id: 'b' }]);
+
+    // Paginated list is the pure server page; sideloaded item is only in its own store.
+    expect(paginator.items?.map((i) => i.id)).toEqual(['a', 'b']);
+    expect(sideloadedIds(paginator)).toEqual(['z']);
+    expect(paginator.offset).toBe(2);
+  });
+
+  it('removeSideloadedItem removes from the sideloaded store without touching the paginated list', async () => {
+    const paginator = new Paginator();
+    paginator.sideloadItem({ id: 'z' }); // never delivered by the page
+    paginator.sideloadItem({ id: 'a' }); // also delivered by the page
+
+    await loadFirstPage(paginator, [{ id: 'a' }, { id: 'b' }]);
+    expect(paginator.items?.map((i) => i.id)).toEqual(['a', 'b']);
+    expect(sideloadedIds(paginator).sort()).toEqual(['a', 'z']);
+
+    paginator.removeSideloadedItem('z');
+    expect(sideloadedIds(paginator)).toEqual(['a']);
+    expect(paginator.isSideloaded('z')).toBe(false);
+
+    paginator.removeSideloadedItem('a'); // 'a' still lives in the paginated list on its own
+    expect(sideloadedIds(paginator)).toEqual([]);
+    expect(paginator.items?.map((i) => i.id)).toEqual(['a', 'b']);
+    expect(paginator.offset).toBe(2);
+  });
+
+  it('keepSideloaded (default) keeps the sideload record after pagination delivers the item', async () => {
+    const paginator = new Paginator();
+    paginator.sideloadItem({ id: 'a' });
+
+    await loadFirstPage(paginator, [{ id: 'a' }, { id: 'b' }]);
+
+    expect(paginator.isSideloaded('a')).toBe(true);
+    expect(sideloadedIds(paginator)).toEqual(['a']);
+  });
+
+  it('dropSideloaded clears the sideload record once pagination delivers the item', async () => {
+    const paginator = new Paginator();
+    paginator.sideloadItem({ id: 'a' }, { oncePaginated: 'dropSideloaded' });
+
+    await loadFirstPage(paginator, [{ id: 'a' }, { id: 'b' }]);
+
+    expect(paginator.isSideloaded('a')).toBe(false);
+    expect(sideloadedIds(paginator)).toEqual([]);
+    // Still present in the paginated list — it's an ordinary paginated member now.
+    expect(paginator.items?.map((i) => i.id)).toEqual(['a', 'b']);
+  });
+
+  it('drops a sideloaded item that stops matching the filter (lifecycle removal)', () => {
+    const paginator = new Paginator();
+    // @ts-expect-error override protected method for the test
+    paginator.buildFilters = () => ({ blocked: false });
+    paginator.sideloadItem({ id: 'z', blocked: false }); // matches
+    expect(paginator.isSideloaded('z')).toBe(true);
+
+    // A later WS update makes it stop matching -> ingestItem drops it from the sideload record + index.
+    paginator.ingestItem({ id: 'z', blocked: true });
+    expect(paginator.isSideloaded('z')).toBe(false);
+    expect(sideloadedIds(paginator)).toEqual([]);
+  });
+
+  it('is a no-op in interval-storage mode', () => {
+    const paginator = new Paginator({
+      itemIndex: new ItemIndex<TestItem>({ getId: ({ id }) => id }),
+    });
+    paginator.sideloadItem({ id: 'x' });
+    expect(paginator.isSideloaded('x')).toBe(false);
+    expect(sideloadedIds(paginator)).toEqual([]);
+  });
+});

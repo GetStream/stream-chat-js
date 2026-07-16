@@ -1,7 +1,7 @@
 import { EventHandlerPipeline } from './EventHandlerPipeline';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import type { Event, EventTypes } from './types';
-import type { ChannelPaginator } from './pagination';
+import type { ChannelPaginator, OncePaginated } from './pagination';
 import type { StreamChat } from './client';
 import type { Unsubscribe } from './store';
 import { StateStore } from './store';
@@ -402,6 +402,27 @@ export class ChannelPaginatorsOrchestrator extends WithSubscriptions {
         paginator.removeItem({ item: channel });
       }
     });
+  }
+
+  /**
+   * Sideload a channel surfaced outside pagination (deep-link restore, search result, new DM) in its
+   * owning list. Unlike `ingestChannel` — whose insert a fresh first-page query would overwrite —
+   * a sideloaded channel is re-applied on every query reconcile, so it survives the initial load.
+   * Data-semantic: how the channel came to be opened is the app's concern. See `BasePaginator.sideloadItem`.
+   */
+  sideloadChannel(channel: Channel, opts?: { oncePaginated?: OncePaginated }) {
+    const matchingPaginators = this.paginators.filter((p) => p.matchesFilter(channel));
+    const ownerIds = this.resolveOwnership(channel, matchingPaginators);
+    matchingPaginators.forEach((paginator) => {
+      if (ownerIds.size === 0 || ownerIds.has(paginator.id)) {
+        paginator.sideloadItem(channel, opts);
+      }
+    });
+  }
+
+  /** Stop sideloading a channel (removes it from lists unless pagination also delivered it). */
+  removeSideloadedChannel(cid: string) {
+    this.paginators.forEach((paginator) => paginator.removeSideloadedItem(cid));
   }
 
   /**

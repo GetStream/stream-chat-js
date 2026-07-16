@@ -237,6 +237,16 @@ export type PaginatorState<T> = {
   offset?: number;
 };
 
+/**
+ * What to do with a sideloaded item's sideload record when the *same* item is later delivered by
+ * pagination (a duplicate). Both keep the displayed list identical right now (it is always deduped);
+ * they differ only for a future re-query that no longer returns the item.
+ * - `keepSideloaded` (default): the sideload record stands, so the item survives future re-queries.
+ * - `dropSideloaded`: the sideload was only a bridge until pagination caught up — drop it once a page
+ *   delivers the item, after which it behaves like any ordinary paginated member.
+ */
+export type OncePaginated = 'keepSideloaded' | 'dropSideloaded';
+
 // todo: think whether plugins are necessary. Maybe we could just document how to add
 
 export type PaginatorItemsChangeProcessor<T> = (params: {
@@ -313,6 +323,10 @@ export type PaginatorOptions<T, Q> = {
    * It does not guarantee global stability across interval changes or page jumps.
    */
   lockItemOrder?: boolean;
+  /**
+   * Default policy for sideloaded items (see `sideloadItem`) when a sideloaded item is later delivered by    * pagination. Defaults to `keepSideloaded`. Overridable per `sideloadItem` call.
+   */
+  oncePaginated?: OncePaginated;
   /** The item page size to be requested from the server. */
   pageSize?: number;
   /** Prevent silencing the errors thrown during the pagination execution. Default is false. */
@@ -326,6 +340,7 @@ type OptionalPaginatorConfigFields =
   | 'initialOffset'
   | 'itemIndex'
   | 'itemOrderComparator'
+  | 'oncePaginated'
   | 'throwErrors';
 
 export type BasePaginatorConfig<T, Q> = Pick<
@@ -395,6 +410,21 @@ export abstract class BasePaginator<T, Q> {
 
   protected boosts = new Map<string, { until: number; seq: number }>();
   protected _maxBoostSeq = 0;
+
+  /**
+   * Sideloaded items (flat mode) — ids of items kept in the list even though pagination did not
+   * deliver them (a deep-link restore, a search result, a new DM). Value is the per-item
+   * `OncePaginated` policy. Entities themselves live in `_itemIndex` (single source of
+   * truth); this holds only ids + policy. Presence only — ordering stays with the comparator/boost.
+   */
+  protected sideloadedItems = new Map<string, OncePaginated>();
+  /**
+   * Reactive membership of sideloaded item ids, kept **separate** from `state` so the paginated list
+   * stays the pure server truth (no merge, no offset impact). Consumers observe this store and
+   * render sideloaded items wherever they like, resolving ids -> entities via `getItem` and ordering
+   * them with the paginator sort (`effectiveComparator`). Order here is not significant.
+   */
+  readonly sideloadedState = new StateStore<{ itemIds: string[] }>({ itemIds: [] });
 
   /**
    * Describes how `interval.itemIds` are oriented relative to pagination semantics.
@@ -703,6 +733,51 @@ export abstract class BasePaginator<T, Q> {
   isBoosted(id: string) {
     const boost = this.getBoost(id);
     return !!(boost && Date.now() <= boost.until);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Sideloaded items (flat mode) — presence for items not delivered by pagination
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Merge sideloaded items (resolved from `_itemIndex`, still matching the filter, and not already
+   * present) into a server-ordered list, each at its `effectiveComparator` position (boost then
+   * sort) — without reordering the server items. Returns the input unchanged when nothing is
+   * sideloaded, so lists that never sideload behave exactly as before.
+   */
+  /** Publish the current sideloaded membership to the reactive `sideloadedState` store. */
+  protected syncSideloadedState() {
+    this.sideloadedState.partialNext({ itemIds: [...this.sideloadedItems.keys()] });
+  }
+
+  /**
+   * Keep an item present regardless of pagination — a deep-link restore, a search result, a new
+   * DM. Sideloaded items are tracked in the separate `sideloadedState` store (they are NOT merged into
+   * the paginated `state.items`, so pagination/offset are untouched); consumers observe that store
+   * and render them wherever they like. The entity is stored once in `_itemIndex`; this holds only
+   * the id + `oncePaginated` policy. Flat-list mode only.
+   */
+  sideloadItem(item: T, opts?: { oncePaginated?: OncePaginated }) {
+    if (this.usesItemIntervalStorage) return;
+    const id = this.getItemId(item);
+    this._itemIndex.setOne(item);
+    this.sideloadedItems.set(
+      id,
+      opts?.oncePaginated ?? this.config.oncePaginated ?? 'keepSideloaded',
+    );
+    this.syncSideloadedState();
+  }
+
+  /** Stop sideloading an item. Does not touch the paginated list — an item that pagination also
+   *  delivered stays there on its own. */
+  removeSideloadedItem(id: string) {
+    if (this.usesItemIntervalStorage) return;
+    if (!this.sideloadedItems.delete(id)) return;
+    this.syncSideloadedState();
+  }
+
+  isSideloaded(id: string) {
+    return this.sideloadedItems.has(id);
   }
 
   // ---------------------------------------------------------------------------
@@ -1231,7 +1306,7 @@ export abstract class BasePaginator<T, Q> {
   /**
    * Splits a logical interval by checking each item individually.
    * Items overlapping anchoredInterval are merged into it.
-   * Others stay in a retained logical interval.
+   * Others stay in a sideloaded logical interval.
    */
   protected mergeItemsFromLogicalInterval(
     logical: LogicalInterval,
@@ -1512,11 +1587,18 @@ export abstract class BasePaginator<T, Q> {
       const nextItems = items.slice();
       if (hadItem) nextItems.splice(existingIndex, 1);
 
-      // If it no longer matches the filter, we only commit the removal (if any).
+      // If it no longer matches the filter, we only commit the removal (if any). A sideloaded item
+      // that stops matching (archived/muted out, deleted) also drops from the sideloaded store.
       if (!this.matchesFilter(ingestedItem)) {
+        this._itemIndex.remove(id);
+        if (this.sideloadedItems.delete(id)) this.syncSideloadedState();
         if (hadItem) this.state.partialNext({ items: nextItems });
         return hadItem;
       }
+
+      // Keep the id-addressable entity store current in flat mode too (the sideload record resolves
+      // ids -> entities via it). This does not enable interval storage.
+      this._itemIndex.setOne(ingestedItem);
 
       // Determine insertion index against the list without the old snapshot.
       const insertionIndex =
@@ -1759,24 +1841,30 @@ export abstract class BasePaginator<T, Q> {
     if (!id && !inputItem) return noAction;
 
     const item = inputItem ?? this.getItem(id);
+    const removedId = id ?? (item ? this.getItemId(item) : undefined);
 
+    let result: ItemCoordinates = noAction;
     if (item) {
       const coords = this.locateByItem(item);
-      if (!coords.state && !coords.interval) return noAction;
-      return this.removeItemAtCoordinates(coords);
-    }
-
-    // Fallback for state-only mode (sequential scan in state.items)
-    if (!this.usesItemIntervalStorage) {
+      if (coords.state || coords.interval) result = this.removeItemAtCoordinates(coords);
+    } else if (!this.usesItemIntervalStorage) {
+      // Fallback for state-only mode (sequential scan in state.items).
       const index = this.items?.findIndex((i) => this.getItemId(i) === id) ?? -1;
-      if (index === -1) return noAction;
-      const newItems = [...(this.items ?? [])];
-      newItems.splice(index, 1);
-      this.state.partialNext({ items: newItems });
-      return { state: { currentIndex: index, insertionIndex: -1 } };
+      if (index !== -1) {
+        const newItems = [...(this.items ?? [])];
+        newItems.splice(index, 1);
+        this.state.partialNext({ items: newItems });
+        result = { state: { currentIndex: index, insertionIndex: -1 } };
+      }
     }
 
-    return noAction;
+    // Flat-mode bookkeeping: a removed item is no longer paginated, sideloaded, or in the entity
+    // store. (Interval mode keeps `_itemIndex` authoritative via `removeItemAtCoordinates`.)
+    if (!this.usesItemIntervalStorage && removedId) {
+      if (this.sideloadedItems.delete(removedId)) this.syncSideloadedState();
+      this._itemIndex.remove(removedId);
+    }
+    return result;
   }
 
   /** Sets the items in the state. If intervals are kept, the active interval will be updated */
@@ -2016,14 +2104,30 @@ export abstract class BasePaginator<T, Q> {
     const filteredItems = await this.filterQueryResults(items);
     stateUpdate.items = filteredItems;
 
-    // State-only mode: merge pages into a single list.
+    // State-only mode: merge pages into a single list (the pure server list — sideloaded items live
+    // in their own store, not here).
     if (!this.usesItemIntervalStorage) {
+      // Keep the id-addressable entity store current so sideloaded ids can resolve to entities.
+      filteredItems.forEach((item) => this._itemIndex.setOne(item));
+
       const currentItems = this.items ?? [];
       if (!isFirstPage) {
-        // In state-only mode we treat pagination as a growing list.
-        // Both directions extend the same list (cursor semantics are expressed by the cursor, not by list "side").
         stateUpdate.items = [...currentItems, ...filteredItems];
       }
+
+      // oncePaginated: a sideloaded item now delivered by pagination drops its sideload
+      // record when its policy is `dropSideloaded` (default `keepSideloaded` leaves it in place).
+      let sideloadedChanged = false;
+      filteredItems.forEach((item) => {
+        const id = this.getItemId(item);
+        if (
+          this.sideloadedItems.get(id) === 'dropSideloaded' &&
+          this.sideloadedItems.delete(id)
+        ) {
+          sideloadedChanged = true;
+        }
+      });
+      if (sideloadedChanged) this.syncSideloadedState();
     }
 
     const isJumpQuery = !!queryShape && this.isJumpQueryShape(queryShape);
