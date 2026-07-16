@@ -1,3 +1,9 @@
+## [9.50.2](https://github.com/GetStream/stream-chat-js/compare/v9.50.1...v9.50.2) (2026-07-16)
+
+### Bug Fixes
+
+* **AttachmentManager:** add permission bypass for custom upload functions ([#1800](https://github.com/GetStream/stream-chat-js/issues/1800)) ([30e6bc4](https://github.com/GetStream/stream-chat-js/commit/30e6bc41f9d779da50078cf844883dc2713c346c))
+
 ## [9.50.1](https://github.com/GetStream/stream-chat-js/compare/v9.50.0...v9.50.1) (2026-07-09)
 
 ### Bug Fixes
