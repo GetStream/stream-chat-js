@@ -179,19 +179,31 @@ export type PaginationQueryShapeChangeIdentifier<S> = (
 
 export type PaginationQueryParams<Q> = {
   direction?: PaginationDirection;
+  /**
+   * Keep the currently loaded items (and cursor/flags) visible while a first-page query runs
+   * instead of blanking to the empty initial state. The freshly fetched page is merged into the
+   * active interval by `postQueryReconcile` (upserting changed items, appending new ones), so the
+   * list is refreshed in place with no loading-screen flash. Used by the non-destructive refresh.
+   */
+  keepPreviousItems?: boolean;
   /** Data that define the query (filters, sort, ...) */
   queryShape?: Q;
   /** Per-call override of the reset behavior. */
   reset?: StateResetPolicy;
   /** Should retry the failed request given number of times. Default is 0. */
   retryCount?: number;
+  /**
+   * Suppress `isLoading` transitions for this query (a silent, background refresh). When falsy
+   * (default) the usual loading state is surfaced so the UI can show a spinner.
+   */
+  silent?: boolean;
   /** Determines, whether the page loaded with the query will be committed to the paginator state. Default: true. */
   updateState?: boolean;
 };
 
 export type PostQueryReconcileParams<T, Q> = Pick<
   PaginationQueryParams<Q>,
-  'direction' | 'queryShape' | 'updateState'
+  'direction' | 'queryShape' | 'updateState' | 'keepPreviousItems'
 > & {
   isFirstPage: boolean;
   requestedPageSize: number;
@@ -771,6 +783,23 @@ export abstract class BasePaginator<T, Q> {
 
   isActiveInterval(interval: AnyInterval): boolean {
     return this._activeIntervalId === interval.id;
+  }
+
+  /**
+   * Whether the currently active (viewed) interval is the anchored head. Used to decide if it is
+   * safe to re-seed an already-loaded paginator with a fresh newest page: only when at the head
+   * (the newest page overlaps it, so the re-seed reconciles + re-derives cursors in place). When the
+   * caller has jumped to an older window (active interval is NOT the head), a first-page re-seed
+   * would force-merge the newest page into that window across the gap - so the re-seed is skipped.
+   */
+  get isActiveIntervalAtHead(): boolean {
+    const head = this.getHeadIntervalFromSortedIntervals(this.itemIntervals);
+    return (
+      !!head &&
+      !isLogicalInterval(head) &&
+      !!(head as Interval).isHead &&
+      this.isActiveInterval(head)
+    );
   }
 
   setActiveInterval(interval: AnyInterval | undefined, opts?: { updateState?: boolean }) {
@@ -1549,6 +1578,7 @@ export abstract class BasePaginator<T, Q> {
     const keepOrderInState = this.config.lockItemOrder && originalIndexInState >= 0;
 
     // 1. Remove the old snapshot from state & intervals.
+    const activeIntervalIdBeforeRemoval = this._activeIntervalId;
     let removedItemCoordinates: ItemCoordinates | undefined;
     if (previousCoords) {
       removedItemCoordinates = this.removeItemAtCoordinates(previousCoords);
@@ -1651,6 +1681,21 @@ export abstract class BasePaginator<T, Q> {
     } else {
       // Found an anchored interval whose bounds contain the new snapshot.
       targetInterval = this.insertItemIdIntoInterval(targetInterval, ingestedItem);
+    }
+
+    // If removing the previous snapshot emptied and dropped what was the active interval
+    // (e.g. the sole reply in a freshly-opened thread), and we are re-adding the item into
+    // that same interval, restore it as the active interval. Otherwise the re-added item is
+    // never emitted to state.items below — the emit is gated on _activeIntervalId — so it
+    // silently disappears from the visible list until the interval is reloaded.
+    const removedIntervalId = removedItemCoordinates?.interval?.interval.id;
+    if (
+      !this._activeIntervalId &&
+      !!activeIntervalIdBeforeRemoval &&
+      activeIntervalIdBeforeRemoval === removedIntervalId &&
+      targetInterval.id === removedIntervalId
+    ) {
+      this.setActiveInterval(targetInterval);
     }
 
     const addedNewInterval = !this._itemIntervals.has(targetInterval.id);
@@ -1820,6 +1865,17 @@ export abstract class BasePaginator<T, Q> {
 
       return newState;
     });
+
+    // A populated page means a first page is effectively "loaded". Record a query shape so the
+    // paginator counts as initialized and the next pagination continues from this page - otherwise
+    // an undefined `_lastQueryShape` makes the first query look like a shape change, triggering a
+    // first page reset that wipes the seeded items and re-fetches the first page before paginating.
+    if (
+      typeof this._lastQueryShape === 'undefined' &&
+      (this.state.getLatestValue().items?.length ?? 0) > 0
+    ) {
+      this._lastQueryShape = this.getNextQueryShape({});
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -1938,16 +1994,18 @@ export abstract class BasePaginator<T, Q> {
    */
   async executeQuery({
     direction,
+    keepPreviousItems,
     queryShape: forcedQueryShape,
     reset,
     retryCount = 0,
+    silent,
     updateState = true,
   }: PaginationQueryParams<Q> = {}): Promise<ExecuteQueryReturnValue<T> | void> {
     const queryShape = forcedQueryShape ?? this.getNextQueryShape({ direction });
     if (!this.canExecuteQuery({ direction, reset })) return;
 
     const isFirstPage = this.isFirstPageQuery({ queryShape, reset });
-    if (isFirstPage) {
+    if (isFirstPage && !keepPreviousItems) {
       const state = this.getStateBeforeFirstQuery();
       let items: T[] | undefined = undefined;
       if (!this.isInitialized) {
@@ -1960,7 +2018,9 @@ export abstract class BasePaginator<T, Q> {
           })) ?? state.items;
       }
       this.state.next({ ...state, items });
-    } else {
+    } else if (!silent) {
+      // Non-first-page, or a keepPreviousItems refresh: surface loading without blanking the list.
+      // The freshly fetched page is merged into the active interval in postQueryReconcile.
       this.state.partialNext({ isLoading: true });
     }
 
@@ -1975,6 +2035,7 @@ export abstract class BasePaginator<T, Q> {
     return await this.postQueryReconcile({
       direction,
       isFirstPage,
+      keepPreviousItems,
       queryShape,
       requestedPageSize: this.pageSize,
       results,
@@ -1985,6 +2046,7 @@ export abstract class BasePaginator<T, Q> {
   async postQueryReconcile({
     direction,
     isFirstPage,
+    keepPreviousItems,
     queryShape,
     requestedPageSize,
     results,
@@ -2048,6 +2110,20 @@ export abstract class BasePaginator<T, Q> {
     if (interval && updateState) {
       this.setActiveInterval(interval, { updateState: false });
       stateUpdate.items = this.intervalToItems(interval);
+    } else if (
+      updateState &&
+      this.usesItemIntervalStorage &&
+      !items.length &&
+      (keepPreviousItems || !isFirstPage)
+    ) {
+      // An empty page must NOT wipe the loaded items on a non-destructive refresh
+      // (keepPreviousItems) or an incremental query. `ingestPage` returns null for an empty page
+      // (leaving the active interval untouched), so `stateUpdate.items` still holds the empty
+      // `filteredItems` here and committing that would blank the list. This happens when a refresh
+      // finds nothing, or when a paginate hits the dataset edge. Preserve the current view instead
+      // (mirrors state only mode, whose concat of an empty page is a noop). A genuine reset
+      // (isFirstPage without keepPreviousItems) still blanks, so an emptied dataset shows empty.
+      stateUpdate.items = this.items;
     }
 
     /**
@@ -2107,6 +2183,24 @@ export abstract class BasePaginator<T, Q> {
       interval.hasMoreTail = resolvedHasMoreTail;
       interval.isHead = resolvedHasMoreHead === false;
       interval.isTail = resolvedHasMoreTail === false;
+    } else if (!items.length && direction) {
+      // An empty directional response means the dataset edge was reached in `direction`, but
+      // `ingestPage` returns no interval for an empty page so the block above never runs. Flag the
+      // currently active interval as reaching that edge; otherwise its `isHead`/`isTail` stay stale
+      // (e.g. `jumpToTheLatestMessage` would never see the head as loaded, and a "scroll to latest"
+      // affordance would never clear).
+      const activeInterval = this._activeIntervalId
+        ? this._itemIntervals.get(this._activeIntervalId)
+        : undefined;
+      if (activeInterval && !isLogicalInterval(activeInterval)) {
+        if (direction === 'headward') {
+          activeInterval.isHead = true;
+          activeInterval.hasMoreHead = false;
+        } else if (direction === 'tailward') {
+          activeInterval.isTail = true;
+          activeInterval.hasMoreTail = false;
+        }
+      }
     }
 
     const state = this.getStateAfterQuery(stateUpdate, isFirstPage);

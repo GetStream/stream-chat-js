@@ -367,25 +367,42 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
   };
 
   /**
-   * Invokes the super.postQueryReconcile() and takes unread state snapshot on the first page query.
-   * The snapshot has to be taken immediately after the query as the viewed channel is marked read immediately after opening it.
-   * The snapshot can be used to display unread UI indicators.
+   * (Re)seed the unread state snapshot from the current own read state.
+   *
+   * Called after the first-page query, and can be called again by the SDK whenever a channel is
+   * (re)opened from a cached paginator — where no fresh first-page query runs — so the snapshot
+   * reflects the CURRENT read boundary rather than one frozen at the very first open. Without a
+   * re-seed the separator position, unread count and "jump to first unread" target all go stale
+   * across reopens.
+   *
+   * `firstUnreadMessageId` is intentionally reset to `null`: it represents an EXPLICIT mark-unread
+   * (set by `notification.mark_unread`), not a live/computed boundary. Persisting a computed value
+   * here would make the channel look explicitly marked-unread and suppress auto-mark-read.
+   */
+  seedUnreadSnapshot = () => {
+    const ownUserId = this.channel.getClient().user?.id;
+    const ownReadState = ownUserId ? this.channel.state.read[ownUserId] : undefined;
+    if (!ownReadState) return;
+    this.setUnreadSnapshot({
+      firstUnreadMessageId: null,
+      lastReadAt: ownReadState.last_read ?? null,
+      lastReadMessageId: ownReadState.last_read_message_id ?? null,
+      unreadCount: ownReadState.unread_messages ?? 0,
+    });
+  };
+
+  /**
+   * Invokes the super.postQueryReconcile() and takes an unread state snapshot on the first page
+   * query. The snapshot has to be taken immediately after the query as the viewed channel is marked
+   * read immediately after opening it. The snapshot can be used to display unread UI indicators.
    */
   async postQueryReconcile(
     params: PostQueryReconcileParams<LocalMessage, MessageQueryShape>,
   ): Promise<ExecuteQueryReturnValue<LocalMessage>> {
     const result = await super.postQueryReconcile(params);
 
-    // Take unread state snapshot
-    const ownUserId = this.channel.getClient().user?.id;
-    const ownReadState = ownUserId ? this.channel.state.read[ownUserId] : undefined;
-    if (ownReadState && params.isFirstPage) {
-      this.setUnreadSnapshot({
-        firstUnreadMessageId: null,
-        lastReadAt: ownReadState.last_read,
-        lastReadMessageId: ownReadState.last_read_message_id,
-        unreadCount: ownReadState.unread_messages,
-      });
+    if (params.isFirstPage) {
+      this.seedUnreadSnapshot();
     }
     return result;
   }
@@ -411,6 +428,21 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
     let state: Partial<PaginatorState<LocalMessage>> | undefined;
     if (localMessage) {
       interval = this.locateIntervalForItem(localMessage);
+      if (
+        interval &&
+        !isLogicalInterval(interval) &&
+        !interval.itemIds.includes(messageId)
+      ) {
+        // locateIntervalForItem can match by created_at RANGE and return an interval whose range
+        // spans the target while its loaded itemIds do NOT contain it (e.g. a neighbouring interval
+        // grew across the target's position without merging). Prefer the interval that actually
+        // holds the id so the jump activates the window the message really lives in - otherwise, if
+        // the range-matched interval happens to be active, the jump becomes a no-op.
+        interval = this.itemIntervals.find(
+          (candidate) =>
+            !isLogicalInterval(candidate) && candidate.itemIds.includes(messageId),
+        );
+      }
     }
 
     if (localMessage && interval && !isLogicalInterval(interval)) {
@@ -465,14 +497,16 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
 
   jumpToTheLatestMessage = async (options?: JumpToMessageOptions): Promise<boolean> => {
     let latestMessageId: string | undefined;
-    const intervals = this.itemIntervals;
-    if (!(intervals[0] as Interval)?.isHead) {
-      // get the first page (in case the pagination has not started at the head)
+    if (!(this.itemIntervals[0] as Interval)?.isHead) {
+      // load the newest page in case pagination is currently on an older window (an empty/partial
+      // headward response marks the interval as the head)
       await this.executeQuery({ direction: 'headward', updateState: false });
     }
 
-    const headInterval = intervals[0];
-    if ((intervals[0] as Interval)?.isHead) {
+    // Re-read itemIntervals AFTER the query: the getter returns a fresh array each call, so a
+    // reference captured before executeQuery would be stale and miss the head we just loaded.
+    const headInterval = this.itemIntervals[0] as Interval | undefined;
+    if (headInterval?.isHead) {
       latestMessageId = headInterval.itemIds.slice(-1)[0];
     }
 
@@ -493,6 +527,84 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
   };
 
   /**
+   * Fold an already fetched newest (head) page into the currently loaded items without issuing a
+   * query. The caller supplies a page it obtained on its own and this reconciles it against what is
+   * loaded, instead of rerunning the first page query, so the loaded set is updated in place rather
+   * than blanked and reloaded. Two cases, decided by whether the incoming page overlaps the loaded
+   * head:
+   *
+   * 1. OVERLAP - the incoming page shares at least one id with the loaded head (fewer than a full
+   *    page is new). Merge in place: existing items are reconciled by id (edits, soft deletes), new
+   *    items are appended and every already loaded item (including older pages already paged in) is
+   *    kept. `hasMoreTail`/`cursor.tailward` are left as-is so the page can be any size, so deriving
+   *    "has older items" from its length would wrongly clear it while older items remain.
+   *
+   * 2. DISJOINT - the incoming page shares no id with the loaded head (at least a full page is new).
+   *    Merging would weld the two across the gap (the interval merge treats two head intervals as
+   *    overlapping when one reaches further headward), hiding the items in between with no way to
+   *    reach them. Instead the loaded set is discarded and rebuilt from the incoming page as a fresh
+   *    contiguous head (`hasMoreTail: true`, cursor reanchored to the page's oldest item) so the
+   *    gap and older history load again when paginating older.
+   *
+   * Both paths emit exactly once and never blank the loaded set. Noop unless the page is non empty
+   * and the newest slice is both loaded AND the interval currently in view (the head interval is
+   * anchored at the head and active); when the caller has jumped to a separate older window the
+   * merge is skipped so their position is preserved, and the incoming page is picked up on a later
+   * load.
+   */
+  mergeNewestPage = (page: LocalMessage[]) => {
+    if (!page?.length) return;
+    const headInterval = this.itemIntervals[0] as Interval | undefined;
+    if (!headInterval?.isHead) return;
+    // Only reconcile when the head is the interval currently in view. If the caller jumped to a
+    // separate (older) window, that window is active and the head is merely still-loaded underneath;
+    // reconciling would switch the view to the head and yank them to the newest. Skip to preserve
+    // their position (the newest page is picked up on scroll / a later load).
+    if (!this.isActiveInterval(headInterval)) return;
+
+    const loadedIds = new Set(headInterval.itemIds);
+    const overlapsLoadedHead = page.some((item) => loadedIds.has(this.getItemId(item)));
+
+    if (!overlapsLoadedHead) {
+      // Disjoint window: rebuild from the fetched page as a fresh newest slice. Clearing
+      // the stale intervals first ensures `ingestPage` builds a single head interval instead of
+      // merging across the gap so reanchoring the cursor to this page's oldest item keeps the next
+      // "load older" contiguous.
+      this.setIntervals([]);
+      this.setActiveInterval(undefined);
+      const resetInterval = this.ingestPage({
+        page,
+        isHead: true,
+        // Disjoint means the previously loaded head was entirely OLDER than this newest window, so
+        // there is always older data to load (the gap + the prior history) - keep hasMoreTail true.
+        isTail: false,
+        setActive: false,
+      });
+      if (!resetInterval) return;
+      this.setActiveInterval(resetInterval, { updateState: false });
+      this.state.partialNext({
+        items: this.intervalToItems(resetInterval),
+        cursor: this.getCursorFromInterval(resetInterval),
+        hasMoreHead: resetInterval.hasMoreHead,
+        hasMoreTail: resetInterval.hasMoreTail,
+      });
+      return;
+    }
+
+    // Overlapping window: merge in place, preserving the older boundary.
+    const interval = this.ingestPage({ page, isHead: true, setActive: false });
+    if (!interval) return;
+
+    this.setActiveInterval(interval, { updateState: false });
+    this.state.partialNext({
+      items: this.intervalToItems(interval),
+      // The newest slice is loaded (head anchored), so after merging the head window there is
+      // nothing newer to load. hasMoreTail / cursor are deliberately preserved (see above).
+      hasMoreHead: false,
+    });
+  };
+
+  /**
    * Jumps to the unread reference message.
    *
    * IMPORTANT: This intentionally does *not* rely on `channel.state.read[ownUserId]` only,
@@ -500,12 +612,15 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
    * wanting to keep "jump to unread" UI indicators alive (based on a snapshot).
    *
    * Resolution order:
-   * 1) first unread id from snapshot/read-state
-   * 2) last read id from snapshot/read-state
-   * 3) timestamp fallback (`created_at_around`) when ids are missing but last-read timestamp is known
+   * 1) explicit first-unread id from snapshot/read-state (mark-unread) — jump straight to it
+   * 2) last-read timestamp: infer the FIRST UNREAD message from it — using the already-loaded
+   *    window when it straddles the boundary, otherwise a `created_at_around` query — and jump there
+   * 3) last read id from snapshot/read-state (last-resort fallback when no timestamp is available)
    *
-   * The timestamp fallback mirrors legacy behavior where unread boundaries were inferred from
-   * a page around `last_read_at` and then reused by subsequent jumps.
+   * The timestamp inference (2) is preferred over jumping to the last-read id so that the jump lands
+   * ON (and highlights) the first unread message rather than the last read one. The last-read id is
+   * only used as a fallback when we cannot infer an unread boundary. The inference is NOT persisted
+   * back into the snapshot (that is reserved for explicit mark-unread).
    */
   jumpToTheFirstUnreadMessage = async (options?: JumpToMessageOptions) => {
     const ownUserId = this.channel.getClient().user?.id;
@@ -524,6 +639,8 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
     const lastReadAtFromReadState = ownReadState?.last_read ?? null;
     const lastReadIdFromReadState = ownReadState?.last_read_message_id ?? null;
 
+    // 1) A stable first-unread id is known (mark-unread, or a previously persisted inference):
+    // jump straight to it.
     const firstUnreadMessageId = firstUnreadFromSnapshot ?? firstUnreadFromReadState;
     if (firstUnreadMessageId) {
       return await this.jumpToMessage(firstUnreadMessageId, {
@@ -533,6 +650,59 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
     }
 
     const lastReadMessageId = lastReadIdFromSnapshot ?? lastReadIdFromReadState;
+    // Prefer the FRESH read-state timestamp over the snapshot's: the snapshot is seeded at open and
+    // isn't advanced by subsequent reads, so a re-jump mid-session (e.g. tapping the banner) must not
+    // infer against a stale boundary.
+    const lastReadAt = lastReadAtFromReadState ?? lastReadAtFromSnapshot;
+
+    // 2) No explicit first-unread id, but we know when the channel was last read. Infer the first
+    // unread message from that timestamp so we land ON (and highlight) the first unread message
+    // instead of the last read one. Prefer the already-loaded window (the common "a few unreads at
+    // the bottom" case — no extra request); only query a page around last-read when the loaded
+    // window does not straddle the boundary (i.e. every loaded message is newer than last-read).
+    //
+    // We deliberately do NOT persist the inferred boundary back into the snapshot: writing
+    // `firstUnreadMessageId` would make the channel look explicitly marked-unread and suppress
+    // auto-mark-read at the bottom. The separator reads the (re-seeded) snapshot directly.
+    if (lastReadAt) {
+      let {
+        firstUnreadMessageId: inferredFirstUnreadMessageId,
+        lastReadMessageId: inferredLastReadMessageId,
+      } = this.resolveUnreadBoundaryIdsByTimestamp({
+        lastReadAt,
+        messages: this.state.getLatestValue().items ?? [],
+      });
+
+      if (!inferredLastReadMessageId) {
+        const result = await this.executeQuery({
+          queryShape: {
+            created_at_around: lastReadAt.toISOString(),
+            limit: options?.pageSize,
+          },
+          updateState: false,
+        });
+        if (result) {
+          ({
+            firstUnreadMessageId: inferredFirstUnreadMessageId,
+            lastReadMessageId: inferredLastReadMessageId,
+          } = this.resolveUnreadBoundaryIdsByTimestamp({
+            lastReadAt,
+            messages: result.stateCandidate.items ?? [],
+          }));
+        }
+      }
+
+      const targetMessageId =
+        inferredFirstUnreadMessageId ?? inferredLastReadMessageId ?? lastReadMessageId;
+      if (targetMessageId) {
+        return await this.jumpToMessage(targetMessageId, {
+          ...options,
+          focusReason: 'jump-to-first-unread',
+        });
+      }
+    }
+
+    // 3) Last resort: jump to the known last-read message when that is all we have.
     if (lastReadMessageId) {
       return await this.jumpToMessage(lastReadMessageId, {
         ...options,
@@ -540,46 +710,7 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
       });
     }
 
-    const lastReadAt = lastReadAtFromSnapshot ?? lastReadAtFromReadState;
-    if (!lastReadAt) return false;
-
-    // No stable unread/read ids are available. Query a page around last-read timestamp
-    // and infer boundaries from temporal position.
-    const result = await this.executeQuery({
-      queryShape: {
-        created_at_around: lastReadAt.toISOString(),
-        limit: options?.pageSize,
-      },
-      updateState: false,
-    });
-    if (!result) return false;
-
-    const {
-      firstUnreadMessageId: inferredFirstUnreadMessageId,
-      lastReadMessageId: inferredLastReadMessageId,
-    } = this.resolveUnreadBoundaryIdsByTimestamp({
-      lastReadAt,
-      messages: result.stateCandidate.items ?? [],
-    });
-
-    const targetMessageId = inferredFirstUnreadMessageId ?? inferredLastReadMessageId;
-    if (!targetMessageId) return false;
-
-    const jumpResult = await this.jumpToMessage(targetMessageId, {
-      ...options,
-      focusReason: 'jump-to-first-unread',
-    });
-    if (!jumpResult) return false;
-
-    // Persist inferred boundaries so future "jump to first unread" calls can use ids directly
-    // instead of repeating timestamp-based inference.
-    this.setUnreadSnapshot({
-      firstUnreadMessageId: inferredFirstUnreadMessageId,
-      lastReadAt,
-      lastReadMessageId: inferredLastReadMessageId,
-    });
-
-    return true;
+    return false;
   };
 
   private resolveUnreadBoundaryIdsByTimestamp = ({
