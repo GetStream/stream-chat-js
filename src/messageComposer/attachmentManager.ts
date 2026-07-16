@@ -168,8 +168,16 @@ export class AttachmentManager {
     )?.includes('upload-file');
   }
 
+  get hasCustomDoUploadRequest() {
+    return typeof this.config.doUploadRequest === 'function';
+  }
+
+  get hasAvailableUploadSlots() {
+    return this.availableUploadSlots > 0;
+  }
+
   get isUploadEnabled() {
-    return this.hasUploadPermission && this.availableUploadSlots > 0;
+    return this.hasUploadPermission && this.hasAvailableUploadSlots;
   }
 
   get successfulUploads() {
@@ -726,7 +734,12 @@ export class AttachmentManager {
   };
 
   uploadFiles = async (files: FileReference[] | FileList | FileLike[]) => {
-    if (!this.isUploadEnabled) return;
+    if (
+      (this.hasCustomDoUploadRequest && !this.hasAvailableUploadSlots) ||
+      (!this.hasCustomDoUploadRequest && !this.isUploadEnabled)
+    )
+      return;
+
     const iterableFiles: FileReference[] | FileLike[] = isFileList(files)
       ? Array.from(files)
       : files;
