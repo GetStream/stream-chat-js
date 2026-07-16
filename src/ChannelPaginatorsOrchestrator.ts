@@ -374,6 +374,37 @@ export class ChannelPaginatorsOrchestrator extends WithSubscriptions {
   }
 
   /**
+   * Route a channel into the paginator(s) that should own it, and remove it from any list it
+   * no longer belongs to. Ownership is resolved exactly as for live WS updates — the channel is
+   * ingested into every paginator whose filter it matches (or, when an ownership resolver picks
+   * winners among several matches, only into the owner(s)).
+   *
+   * Use this to surface a channel the app just opened — a search result, a freshly created DM —
+   * in the list(s) without a full re-query. `ingestItem` dedupes by cid and inserts in sort
+   * order, so calling this repeatedly is safe.
+   *
+   * A channel that matches no paginator is not added anywhere. To have such channels still
+   * appear, register a catch-all paginator (empty filter) with the lowest ownership priority as
+   * a local fallback list.
+   */
+  ingestChannel(channel: Channel) {
+    const matchingPaginators = this.paginators.filter((p) => p.matchesFilter(channel));
+    const matchingIds = new Set(matchingPaginators.map((p) => p.id));
+    const ownerIds = this.resolveOwnership(channel, matchingPaginators);
+
+    this.paginators.forEach((paginator) => {
+      const isMatch = matchingIds.has(paginator.id);
+      const isOwner = ownerIds.size === 0 || ownerIds.has(paginator.id);
+      if (isMatch && isOwner) {
+        paginator.ingestItem(channel);
+      } else {
+        // Not a match, or matched but not the selected owner — enforce exclusivity.
+        paginator.removeItem({ item: channel });
+      }
+    });
+  }
+
+  /**
    * Filter a page of query results for a specific paginator according to ownership rules.
    * If no owners are specified by the resolver, all matching paginators keep the item.
    */

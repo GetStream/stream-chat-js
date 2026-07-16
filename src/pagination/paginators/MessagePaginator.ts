@@ -790,11 +790,37 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
 
     this.messageFocusSignal.next({ signal });
 
-    this.clearMessageFocusSignalTimeoutId = setTimeout(() => {
-      this.clearMessageFocusSignal({ token: signal.token });
-    }, ttlMs);
-
+    // NOTE: the auto-dismissal countdown is intentionally NOT started here. A focused message may
+    // be emitted while its message list is not yet visible (e.g. the channel is covered by a thread
+    // panel when a "view in channel" jump resolves), so measuring the highlight lifetime from the
+    // moment the jump resolved would burn it while the message is still off-screen. The consumer
+    // starts the countdown via `scheduleMessageFocusSignalClear` once the message is actually
+    // viewed.
     return signal;
+  };
+
+  /**
+   * Starts the auto-dismissal countdown for the currently active focus signal. Call this once the
+   * focused message has been viewed (rendered and visible), so the highlight's lifetime is measured
+   * from when the user could actually see it rather than from when the jump resolved. No-op if the
+   * signal has already been cleared or superseded (guarded by `token`).
+   */
+  scheduleMessageFocusSignalClear = ({
+    token,
+    ttlMs,
+  }: { token?: number; ttlMs?: number } = {}) => {
+    const current = this.messageFocusSignal.getLatestValue().signal;
+    if (!current) return;
+    if (typeof token !== 'undefined' && current.token !== token) return;
+
+    if (this.clearMessageFocusSignalTimeoutId) {
+      clearTimeout(this.clearMessageFocusSignalTimeoutId);
+      this.clearMessageFocusSignalTimeoutId = null;
+    }
+
+    this.clearMessageFocusSignalTimeoutId = setTimeout(() => {
+      this.clearMessageFocusSignal({ token: current.token });
+    }, ttlMs ?? current.ttlMs);
   };
 
   clearMessageFocusSignal = ({ token }: { token?: number } = {}) => {

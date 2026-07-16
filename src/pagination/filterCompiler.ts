@@ -38,11 +38,15 @@ export function itemMatchesFilter<T>(
   const matches = (filterNode: QueryFilters<any>): boolean => {
     if (!filterNode || typeof filterNode !== 'object') return true;
 
-    if (filterNode.$and) return filterNode.$and.every((n) => matches(n));
-    if (filterNode.$or) return filterNode.$or.some((n) => matches(n));
-    if (filterNode.$nor) return !filterNode.$nor.some((n) => matches(n));
+    // Logical operators are ANDed with each other AND with any sibling field conditions on the
+    // same node (MongoDB / Stream server semantics: `{ $or: [...], field: value }` means
+    // `(field == value) AND ($or ...)`). They must not short-circuit past the field loop below.
+    if (filterNode.$and && !filterNode.$and.every((n) => matches(n))) return false;
+    if (filterNode.$or && !filterNode.$or.some((n) => matches(n))) return false;
+    if (filterNode.$nor && filterNode.$nor.some((n) => matches(n))) return false;
 
     for (const [field, condition] of Object.entries(filterNode)) {
+      if (field === '$and' || field === '$or' || field === '$nor') continue;
       const itemPropertyValue = resolveOnce(field);
 
       if (

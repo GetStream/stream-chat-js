@@ -61,7 +61,7 @@ describe('ChannelPaginator', () => {
         paginator.filterBuilder.buildFilters({ baseFilters: paginator.staticFilters }),
       ).toStrictEqual({});
       // @ts-expect-error accessing protected property
-      expect(paginator._filterFieldToDataResolvers).toHaveLength(8);
+      expect(paginator._filterFieldToDataResolvers).toHaveLength(9);
       expect(paginator.config.doRequest).toBeUndefined();
     });
 
@@ -125,7 +125,7 @@ describe('ChannelPaginator', () => {
         ...initialFilterBuilderContext,
       });
       // @ts-expect-error accessing protected property
-      expect(paginator._filterFieldToDataResolvers).toHaveLength(8);
+      expect(paginator._filterFieldToDataResolvers).toHaveLength(9);
       expect(paginator.config.debounceMs).toStrictEqual(paginatorOptions.debounceMs);
       expect(paginator.config.doRequest).toStrictEqual(doRequest);
       expect(paginator.config.hasPaginationQueryShapeChanged).toStrictEqual(
@@ -466,6 +466,40 @@ describe('ChannelPaginator', () => {
         user,
         pinned_at: undefined,
       };
+      expect(paginator.matchesFilter(channel1)).toBeFalsy();
+    });
+
+    it('resolves "muted" field from client mute state', () => {
+      const paginator = new ChannelPaginator({
+        client,
+        filters: { members: { $in: [user.id] }, muted: true },
+      });
+
+      channel1.state.members = {
+        [user.id]: { user },
+        ['other-member']: { user: { id: 'other-member' } },
+      };
+
+      // Mute state lives on the client, not on the channel data.
+      client.mutedChannels = [{ channel: { cid: channel1.cid } } as never];
+      expect(paginator.matchesFilter(channel1)).toBeTruthy();
+
+      client.mutedChannels = [];
+      expect(paginator.matchesFilter(channel1)).toBeFalsy();
+    });
+
+    it('excludes muted channels when filtering "muted: false"', () => {
+      const paginator = new ChannelPaginator({
+        client,
+        filters: { members: { $in: [user.id] }, muted: false },
+      });
+
+      channel1.state.members = { [user.id]: { user } };
+
+      client.mutedChannels = [];
+      expect(paginator.matchesFilter(channel1)).toBeTruthy();
+
+      client.mutedChannels = [{ channel: { cid: channel1.cid } } as never];
       expect(paginator.matchesFilter(channel1)).toBeFalsy();
     });
 
