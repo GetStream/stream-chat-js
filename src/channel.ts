@@ -2470,7 +2470,7 @@ export class Channel {
           // viewing state via `messagePaginator.setViewingLive` and marks the message read itself.
           // Only the OWN unread accounting is gated; the per-user read/receipt tracking above is
           // intentionally left intact.
-          const { isViewingLive } = this.messagePaginator.isViewingLive.getLatestValue();
+          const isViewingLive = this.messagePaginator.isViewingLive;
           if (!isViewingLive && this._countMessageAsUnread(event.message)) {
             channelState.unreadCount = channelState.unreadCount + 1;
             this.messagePaginator.setUnreadSnapshot({

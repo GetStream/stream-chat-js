@@ -262,7 +262,7 @@ describe('Channel isViewingLive (unread bump gating)', function () {
 	it('setViewingLive no-ops when the value is unchanged', () => {
 		const { channel } = setupChannel();
 		let emissions = 0;
-		channel.messagePaginator.isViewingLive.subscribe(() => (emissions += 1));
+		channel.messagePaginator.liveViewState.subscribe(() => (emissions += 1));
 		emissions = 0; // ignore the immediate subscribe callback
 
 		channel.messagePaginator.setViewingLive(false); // already false

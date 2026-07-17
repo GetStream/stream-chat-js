@@ -181,9 +181,10 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
   readonly unreadStateSnapshot: StateStore<UnreadSnapshotState>;
   /**
    * UI-driven "viewing the latest messages" signal (see {@link LiveViewState}). Set by the SDK via
-   * {@link setViewingLive}; read by the channel to gate the unread bump on `message.new`.
+   * {@link setViewingLive}; read by the channel to gate the unread bump on `message.new`. Subscribe to
+   * this store for reactivity, or read the current boolean directly via the {@link isViewingLive} getter.
    */
-  readonly isViewingLive: StateStore<LiveViewState>;
+  readonly liveViewState: StateStore<LiveViewState>;
   readonly messageFocusSignal: StateStore<MessageFocusSignalState>;
   private clearMessageFocusSignalTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private messageFocusSignalToken = 0;
@@ -244,7 +245,7 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
       lastReadMessageId: null,
       unreadCount: 0,
     });
-    this.isViewingLive = new StateStore<LiveViewState>({
+    this.liveViewState = new StateStore<LiveViewState>({
       isViewingLive: false,
     });
     this.messageFocusSignal = new StateStore<MessageFocusSignalState>({
@@ -871,9 +872,14 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
    * Intentionally NOT reset by `clearStateAndCache` — it is an external input owned by the SDK, not
    * derived pagination state.
    */
+  /** Current "viewing the latest messages" boolean (convenience read of {@link liveViewState}). */
+  get isViewingLive(): boolean {
+    return this.liveViewState.getLatestValue().isViewingLive;
+  }
+
   setViewingLive = (isViewingLive: boolean) => {
-    if (this.isViewingLive.getLatestValue().isViewingLive === isViewingLive) return;
-    this.isViewingLive.next({ isViewingLive });
+    if (this.isViewingLive === isViewingLive) return;
+    this.liveViewState.next({ isViewingLive });
   };
 
   clearUnreadSnapshot = () => {
