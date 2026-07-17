@@ -656,4 +656,17 @@ describe('MessageDeliveryReporter', () => {
     vi.advanceTimersByTime(1000);
     expect(spy).toHaveBeenCalledTimes(1);
   });
+
+  it('marks read on a single (non-burst) throttledMarkRead call', async () => {
+    const spy = vi.spyOn(channel, 'markAsReadRequest').mockResolvedValue({} as any);
+
+    // A single call is the common case (e.g. scrolling to the bottom once). Regression guard: the
+    // custom `leading: false` throttle used to drop lone calls entirely — only a burst of 2+ within
+    // the window ever fired, so a solitary mark-read was silently lost.
+    client.messageDeliveryReporter.throttledMarkRead(channel);
+
+    expect(spy).not.toHaveBeenCalled(); // leading:false → nothing on the leading edge
+    vi.advanceTimersByTime(1000);
+    expect(spy).toHaveBeenCalledTimes(1); // trailing edge must fire the lone call
+  });
 });
