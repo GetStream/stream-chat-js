@@ -644,7 +644,7 @@ describe('MessageDeliveryReporter', () => {
     });
   });
 
-  it('throttles markRead (burst collapses to one underlying request)', async () => {
+  it('throttles markRead (leading + trailing: fires immediately, then once more on the trailing edge)', async () => {
     const spy = vi.spyOn(channel, 'markAsReadRequest').mockResolvedValue({} as any);
 
     // burst
@@ -652,8 +652,22 @@ describe('MessageDeliveryReporter', () => {
     client.messageDeliveryReporter.throttledMarkRead(channel);
     client.messageDeliveryReporter.throttledMarkRead(channel);
 
-    expect(spy).not.toHaveBeenCalled();
+    expect(spy).toHaveBeenCalledTimes(1); // leading edge fires immediately
     vi.advanceTimersByTime(1000);
-    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledTimes(2); // trailing edge coalesces the remaining calls into one more
+  });
+
+  it('marks read immediately on a single throttledMarkRead call (leading edge)', async () => {
+    const spy = vi.spyOn(channel, 'markAsReadRequest').mockResolvedValue({} as any);
+
+    // A single call is the common case (e.g. scrolling to the bottom once). With `leading: true` it
+    // fires immediately on the leading edge — no delay — and a lone call schedules no extra trailing
+    // invocation. (The lone-call-drop regression for `leading: false` is covered by the `throttle`
+    // unit tests in utils.test.ts.)
+    client.messageDeliveryReporter.throttledMarkRead(channel);
+
+    expect(spy).toHaveBeenCalledTimes(1); // leading edge fires immediately
+    vi.advanceTimersByTime(1000);
+    expect(spy).toHaveBeenCalledTimes(1); // no extra trailing for a solitary call
   });
 });

@@ -2463,7 +2463,15 @@ export class Channel {
             );
           }
 
-          if (this._countMessageAsUnread(event.message)) {
+          // Skip the own-unread bump when the user is actively viewing the latest messages (app
+          // foregrounded + newest message on screen). Without this, a message read in real time
+          // momentarily bumps `unreadCount`/the snapshot — the "N new" separator/banner + the
+          // channel-list badge would flash until the SDK's mark-read resets it. The SDK reports the
+          // viewing state via `messagePaginator.setViewingLive` and marks the message read itself.
+          // Only the OWN unread accounting is gated; the per-user read/receipt tracking above is
+          // intentionally left intact.
+          const isViewingLive = this.messagePaginator.isViewingLive;
+          if (!isViewingLive && this._countMessageAsUnread(event.message)) {
             channelState.unreadCount = channelState.unreadCount + 1;
             this.messagePaginator.setUnreadSnapshot({
               unreadCount: channelState.unreadCount,

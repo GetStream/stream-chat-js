@@ -155,6 +155,17 @@ export type UnreadSnapshotState = {
 };
 
 /**
+ * External, UI-driven signal: `true` while the user is actively viewing the latest messages of
+ * this collection (app foregrounded AND the newest message on screen). The owning SDK sets it — the
+ * state layer has no viewport. When live, an incoming message is NOT counted as unread (the count /
+ * snapshot bump is skipped), so the "N new" separator/banner never flash for a message the user is
+ * already looking at. Defaults to `false` (assume not viewing until the SDK proves otherwise).
+ */
+export type LiveViewState = {
+  isViewingLive: boolean;
+};
+
+/**
  * MessagePaginator allows configuring backend request sort, while keeping internal item ordering stable.
  * Filtering of ingested items is still limited to local predicates (`filterQueryResults`).
  */
@@ -168,6 +179,12 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
    * Consumers may set this right before calling markRead / when opening a channel.
    */
   readonly unreadStateSnapshot: StateStore<UnreadSnapshotState>;
+  /**
+   * UI-driven "viewing the latest messages" signal (see {@link LiveViewState}). Set by the SDK via
+   * {@link setViewingLive}; read by the channel to gate the unread bump on `message.new`. Subscribe to
+   * this store for reactivity, or read the current boolean directly via the {@link isViewingLive} getter.
+   */
+  readonly liveViewState: StateStore<LiveViewState>;
   readonly messageFocusSignal: StateStore<MessageFocusSignalState>;
   private clearMessageFocusSignalTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private messageFocusSignalToken = 0;
@@ -227,6 +244,9 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
       firstUnreadMessageId: null,
       lastReadMessageId: null,
       unreadCount: 0,
+    });
+    this.liveViewState = new StateStore<LiveViewState>({
+      isViewingLive: false,
     });
     this.messageFocusSignal = new StateStore<MessageFocusSignalState>({
       signal: null,
@@ -650,10 +670,14 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
     }
 
     const lastReadMessageId = lastReadIdFromSnapshot ?? lastReadIdFromReadState;
-    // Prefer the FRESH read-state timestamp over the snapshot's: the snapshot is seeded at open and
-    // isn't advanced by subsequent reads, so a re-jump mid-session (e.g. tapping the banner) must not
-    // infer against a stale boundary.
-    const lastReadAt = lastReadAtFromReadState ?? lastReadAtFromSnapshot;
+    // Prefer the SNAPSHOT timestamp over the fresh read-state one. The snapshot is the frozen UI
+    // boundary the "N new" separator/banner render from, so a banner tap must jump to where that
+    // indicator points. On (re)open the SDK marks the channel read (`markReadOnMount`) which advances
+    // the read-state `last_read` to ~now and clears the server unread — so preferring read-state
+    // would make a later banner tap infer "nothing unread" and jump to the latest message. The
+    // snapshot is kept fresh on genuine catch-up (the SDK's mark-read resets it), so it is only
+    // "frozen" precisely while there are unreads to jump to.
+    const lastReadAt = lastReadAtFromSnapshot ?? lastReadAtFromReadState;
 
     // 2) No explicit first-unread id, but we know when the channel was last read. Infer the first
     // unread message from that timestamp so we land ON (and highlight) the first unread message
@@ -839,6 +863,23 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
   setUnreadSnapshot = (next: Partial<UnreadSnapshotState>): UnreadSnapshotState => {
     this.unreadStateSnapshot.partialNext(next);
     return this.unreadStateSnapshot.getLatestValue();
+  };
+
+  /**
+   * Set the UI-driven "viewing the latest messages" signal (see {@link LiveViewState}). Called by
+   * the SDK from its message-list viewability + app-state tracking. No-ops when unchanged.
+   *
+   * Intentionally NOT reset by `clearStateAndCache` — it is an external input owned by the SDK, not
+   * derived pagination state.
+   */
+  /** Current "viewing the latest messages" boolean (convenience read of {@link liveViewState}). */
+  get isViewingLive(): boolean {
+    return this.liveViewState.getLatestValue().isViewingLive;
+  }
+
+  setViewingLive = (isViewingLive: boolean) => {
+    if (this.isViewingLive === isViewingLive) return;
+    this.liveViewState.next({ isViewingLive });
   };
 
   clearUnreadSnapshot = () => {

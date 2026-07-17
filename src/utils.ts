@@ -787,7 +787,11 @@ export const throttle = <T extends (...args: any[]) => any>(
       return;
     }
 
-    if (leading) fn(...args);
+    if (leading) {
+      fn(...args);
+    } else if (trailing) {
+      storedArgs = args;
+    }
 
     const timeoutHandler = () => {
       if (storedArgs) {
