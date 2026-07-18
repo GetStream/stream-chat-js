@@ -1224,7 +1224,7 @@ describe('Threads 2.0', () => {
           thread.unregisterSubscriptions();
         });
 
-        it('increments local reply_count on new reply', () => {
+        it('tracks reply_count from the authoritative parent update, not a local increment on new reply', () => {
           const thread = createTestThread({
             reply_count: 0,
             read: [
@@ -1242,9 +1242,20 @@ describe('Threads 2.0', () => {
             user: { id: 'bob' },
           }) as MessageResponse;
 
+          // A received reply must NOT locally bump replyCount. The count is kept authoritative by
+          // the parent's server-driven reply_count (below); a local increment double-counted
+          // received replies on top of that re-sync (see subscribeNewReplies).
           client.dispatchEvent({
             type: 'message.new',
             message: newMessage,
+            user: { id: 'bob' },
+          });
+          expect(thread.state.getLatestValue().replyCount).to.equal(0);
+
+          // The server delivers the authoritative reply_count via the parent's message.updated.
+          client.dispatchEvent({
+            type: 'message.updated',
+            message: { ...parentMessageResponse, reply_count: 1 } as MessageResponse,
             user: { id: 'bob' },
           });
 
@@ -1255,7 +1266,7 @@ describe('Threads 2.0', () => {
           thread.unregisterSubscriptions();
         });
 
-        it('does not increment local reply_count for duplicate message.new events', () => {
+        it('does not change local reply_count on message.new (parent-message-driven, so duplicates are harmless)', () => {
           const existingReply = generateMsg({
             parent_id: parentMessageResponse.id,
             user: { id: 'bob' },
@@ -1263,6 +1274,7 @@ describe('Threads 2.0', () => {
           const thread = createTestThread({
             latest_replies: [existingReply],
             reply_count: 1,
+            parentMessageOverrides: { reply_count: 1 },
             read: [
               {
                 user: { id: TEST_USER_ID },
@@ -1273,14 +1285,11 @@ describe('Threads 2.0', () => {
           });
           thread.registerSubscriptions();
 
-          thread.state.next((current) => ({
-            ...current,
-            parentMessage: {
-              ...current.parentMessage,
-              reply_count: 1,
-            },
-          }));
+          // reply_count is sourced from the parent message, so it starts at 1.
+          expect(thread.state.getLatestValue().replyCount).to.equal(1);
 
+          // A message.new (here a duplicate of an already-loaded reply) must not locally change the
+          // count — the authoritative reply_count comes from the parent message, so this is a no-op.
           client.dispatchEvent({
             type: 'message.new',
             message: existingReply,

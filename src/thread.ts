@@ -184,7 +184,12 @@ export class Thread extends WithSubscriptions {
             : threadData.read,
         ),
         replies: threadData.latest_replies.map(formatMessage),
-        replyCount: threadData.reply_count ?? 0,
+        // Use the parent message's reply_count, not the top-level threadData.reply_count. The
+        // thread endpoints (getThread/queryThreads) return a top level reply_count that EXCLUDES
+        // soft-deleted replies, while parent_message.reply_count (and the channel's own copy)
+        // INCLUDE them so the top level value renders fewer replies than the channel badge shows.
+        // parent_message.reply_count is the authoritative, channel consistent count.
+        replyCount: threadData.parent_message.reply_count ?? 0,
         updatedAt: threadData.updated_at ? new Date(threadData.updated_at) : null,
         title: threadData.title,
         custom: constructCustomDataObject(threadData),
@@ -520,10 +525,7 @@ export class Thread extends WithSubscriptions {
       }
 
       const isOwnMessage = event.message.user?.id === this.client.userID;
-      const { active, read, replies } = this.state.getLatestValue();
-      const hasReplyAlready =
-        replies.some((reply) => reply.id === event.message?.id) ||
-        !!this.messagePaginator.getItem(event.message.id);
+      const { active, read } = this.state.getLatestValue();
 
       this.messagePaginator.ingestItem(formatMessage(event.message));
       this.upsertReplyLocally({
@@ -532,10 +534,6 @@ export class Thread extends WithSubscriptions {
         // so the actual timestamp might differ in the event
         timestampChanged: isOwnMessage,
       });
-
-      if (!hasReplyAlready) {
-        this.incrementReplyCountLocally();
-      }
 
       if (active) {
         this.throttledMarkRead();
@@ -622,9 +620,11 @@ export class Thread extends WithSubscriptions {
       if (event.message.parent_id === this.id) {
         if (event.hard_delete) {
           this.deleteReplyLocally({ message: event.message });
+          this.messagePaginator.removeItem({ id: event.message.id });
         } else {
           // Handle soft delete (updates deleted_at timestamp)
           this.upsertReplyLocally({ message: event.message });
+          this.messagePaginator.ingestItem(formattedMessage);
         }
       }
 
@@ -650,12 +650,11 @@ export class Thread extends WithSubscriptions {
         this.client.on(eventType, (event) => {
           if (event.message) {
             this.updateParentMessageOrReplyLocally(event.message);
-            if (
-              ['reaction.new', 'reaction.deleted', 'reaction.updated'].includes(
-                eventType,
-              ) &&
-              event.message.parent_id === this.id
-            ) {
+            // A reply edited / undeleted / reacted-to by anyone (including other users, via the WS
+            // event rather than a local optimistic op) must reflect in the reply messagePaginator,
+            // which backs the reply list. ingestItem updates an already-loaded reply in place and
+            // safely no-ops / queues to a logical interval for an unloaded one.
+            if (event.message.parent_id === this.id) {
               this.messagePaginator.ingestItem(formatMessage(event.message));
             }
             this.messagePaginator.reflectQuotedMessageUpdate(
