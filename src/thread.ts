@@ -527,7 +527,6 @@ export class Thread extends WithSubscriptions {
       const isOwnMessage = event.message.user?.id === this.client.userID;
       const { active, read } = this.state.getLatestValue();
 
-      this.messagePaginator.ingestItem(formatMessage(event.message));
       this.upsertReplyLocally({
         message: event.message,
         // Message from current user could have been added optimistically,
@@ -620,11 +619,9 @@ export class Thread extends WithSubscriptions {
       if (event.message.parent_id === this.id) {
         if (event.hard_delete) {
           this.deleteReplyLocally({ message: event.message });
-          this.messagePaginator.removeItem({ id: event.message.id });
         } else {
           // Handle soft delete (updates deleted_at timestamp)
           this.upsertReplyLocally({ message: event.message });
-          this.messagePaginator.ingestItem(formattedMessage);
         }
       }
 
@@ -650,13 +647,6 @@ export class Thread extends WithSubscriptions {
         this.client.on(eventType, (event) => {
           if (event.message) {
             this.updateParentMessageOrReplyLocally(event.message);
-            // A reply edited / undeleted / reacted-to by anyone (including other users, via the WS
-            // event rather than a local optimistic op) must reflect in the reply messagePaginator,
-            // which backs the reply list. ingestItem updates an already-loaded reply in place and
-            // safely no-ops / queues to a logical interval for an unloaded one.
-            if (event.message.parent_id === this.id) {
-              this.messagePaginator.ingestItem(formatMessage(event.message));
-            }
             this.messagePaginator.reflectQuotedMessageUpdate(
               formatMessage(event.message),
             );
@@ -675,6 +665,11 @@ export class Thread extends WithSubscriptions {
 
   // todo: can be removed with the next breaking change and use MessagePaginator only
   public deleteReplyLocally = ({ message }: { message: MessageResponse }) => {
+    // Keep the reply messagePaginator (the reply list source) in sync. removeItem is a no-op when
+    // the reply isn't loaded, so it's safe to run unconditionally — even when the legacy
+    // state.replies removal below bails because the reply isn't in that list.
+    this.messagePaginator.removeItem({ id: message.id });
+
     const { replies } = this.state.getLatestValue();
 
     const index = findIndexInSortedArray({
@@ -723,6 +718,9 @@ export class Thread extends WithSubscriptions {
       ...current,
       replies: addToMessageList(current.replies, formattedMessage, timestampChanged),
     }));
+
+    // Keep the reply messagePaginator (the reply list source) in sync with the same upsert.
+    this.messagePaginator.ingestItem(formattedMessage);
   };
 
   // todo: can be removed with the next breaking change and use MessagePaginator only
