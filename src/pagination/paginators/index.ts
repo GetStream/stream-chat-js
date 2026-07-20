@@ -1,5 +1,6 @@
 export * from './BasePaginator';
 export * from './ChannelPaginator';
+export { MessageIntervalPaginator } from './MessageIntervalPaginator';
 export * from './MessagePaginator';
 export * from './MessageReplyPaginator';
 export * from './ReminderPaginator';
