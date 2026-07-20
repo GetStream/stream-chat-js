@@ -67,7 +67,7 @@ export class ChannelState {
   readonly ownCapabilitiesStore: StateStore<OwnCapabilitiesState>;
   // todo: is this actually used somewhere?
   readonly mutedUsersStore: StateStore<MutedUsersState>;
-  pinnedMessages: Array<ReturnType<ChannelState['formatMessage']>>;
+  pinnedMessages: Array<LocalMessage>;
   pending_messages: Array<PendingMessageResponse>;
   unreadCount: number;
   membership: ChannelMemberResponse;
@@ -505,9 +505,7 @@ export class ChannelState {
       id?: string;
       pinned?: boolean;
     },
-    updateFunc: (
-      msg: ReturnType<ChannelState['formatMessage']>,
-    ) => ReturnType<ChannelState['formatMessage']>,
+    updateFunc: (msg: LocalMessage) => LocalMessage,
   ) {
     const { pinned } = message;
 
@@ -534,15 +532,15 @@ export class ChannelState {
   /**
    * _addToMessageList - Adds a message to a list of messages, tries to update first, appends if message isn't found
    *
-   * @param {Array<ReturnType<ChannelState['formatMessage']>>} messages A list of messages
+   * @param {Array<LocalMessage>} messages A list of messages
    * @param message
    * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
    * @param {string} sortBy field name to use to sort the messages by
    * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
    */
   _addToMessageList(
-    messages: Array<ReturnType<ChannelState['formatMessage']>>,
-    message: ReturnType<ChannelState['formatMessage']>,
+    messages: Array<LocalMessage>,
+    message: LocalMessage,
     timestampChanged = false,
     sortBy: 'pinned_at' | 'created_at' = 'created_at',
     addIfDoesNotExist = true,
@@ -557,7 +555,7 @@ export class ChannelState {
   }
 
   removeMessageFromArray = (
-    msgArray: Array<ReturnType<ChannelState['formatMessage']>>,
+    msgArray: Array<LocalMessage>,
     msg: { id: string; parent_id?: string },
   ) => {
     const result = msgArray.filter(

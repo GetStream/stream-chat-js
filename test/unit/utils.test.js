@@ -1,6 +1,5 @@
 import {
 	axiosParamsSerializer,
-	binarySearchByDateEqualOrNearestGreater,
 	formatMessage,
 	normalizeQuerySort,
 } from '../../src/utils';
@@ -141,35 +140,5 @@ describe('reaction groups fallback', () => {
 				sum_scores: 2,
 			},
 		});
-	});
-});
-
-describe('binarySearchByDateEqualOrNearestGreater', () => {
-	const messages = [
-		{ created_at: '2024-08-05T08:55:00.199808Z', id: '0' },
-		{ created_at: '2024-08-05T08:55:01.199808Z', id: '1' },
-		{ created_at: '2024-08-05T08:55:02.199808Z', id: '2' },
-		{ created_at: '2024-08-05T08:55:03.199808Z', id: '3' },
-		{ created_at: '2024-08-05T08:55:04.199808Z', id: '4' },
-		{ created_at: '2024-08-05T08:55:05.199808Z', id: '5' },
-		{ created_at: '2024-08-05T08:55:06.199808Z', id: '6' },
-		{ created_at: '2024-08-05T08:55:07.199808Z', id: '7' },
-		{ created_at: '2024-08-05T08:55:08.199808Z', id: '8' },
-	];
-	it('finds the nearest newer item', () => {
-		expect(
-			binarySearchByDateEqualOrNearestGreater(
-				messages,
-				new Date('2024-08-05T08:55:02.299808Z'),
-			),
-		).to.eql(3);
-	});
-	it('finds the nearest matching item', () => {
-		expect(
-			binarySearchByDateEqualOrNearestGreater(
-				messages,
-				new Date('2024-08-05T08:55:07.199808Z'),
-			),
-		).to.eql(7);
 	});
 });

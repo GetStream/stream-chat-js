@@ -831,36 +831,6 @@ export const uniqBy = <T>(
   });
 };
 
-export function binarySearchByDateEqualOrNearestGreater(
-  array: {
-    created_at?: string;
-  }[],
-  targetDate: Date,
-): number {
-  let left = 0;
-  let right = array.length - 1;
-
-  while (left <= right) {
-    const mid = Math.floor((left + right) / 2);
-    const midCreatedAt = array[mid].created_at;
-    if (!midCreatedAt) {
-      left += 1;
-      continue;
-    }
-    const midDate = new Date(midCreatedAt);
-
-    if (midDate.getTime() === targetDate.getTime()) {
-      return mid;
-    } else if (midDate.getTime() < targetDate.getTime()) {
-      left = mid + 1;
-    } else {
-      right = mid - 1;
-    }
-  }
-
-  return left;
-}
-
 /**
  * A utility object used to prevent duplicate invocation of channel.watch() to be triggered when
  * 'notification.message_new' and 'notification.added_to_channel' events arrive at the same time.
