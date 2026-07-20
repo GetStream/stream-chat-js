@@ -281,8 +281,10 @@ dual-writing → delete the store → types/exports → tests.
 **Dependencies:** Task 9, Task 10 (and Task 15 if offline in scope)
 
 **Status:** in progress — reaction sub-steps 1-2 done; **step 3a DONE** (main message-list
-storage removed, threads retained, both suites green); **step 3b NEXT** (remove
-`channel.state.threads` + fully delete the shared methods + re-home thread reply `own_reactions`)
+storage removed); **step 3b DONE** (`channel.state.threads` removed, thread-only methods deleted,
+thread reply `own_reactions` + user-deletion re-homed onto the `Thread` object; both suites green).
+`addMessagesSorted`/`addMessageSorted` remain as a slim channel-meta path (`last_message_at` +
+user-reference map) for full deletion after Task 13.
 
 **Owner:** claude
 
@@ -336,16 +338,25 @@ paginators (owner-approved).
      deleteUser/updateUser + #1736 self-quote coverage to threads + pinned, migrated event/query tests
      to the paginator. JS 2605 pass, React 2517 pass; `yarn types` + `yarn lint` clean in both.
    - Commits: JS `caba066b` (src) + `c238323f` (tests); React `a61e634d4` (readers) + `79e26c037` (test).
-4. **[NEXT] Step 3b — remove `channel.state.threads` + fully delete the shared methods.**
-   - Delete `addMessagesSorted`/`addMessageSorted`, `removeMessage`, `deleteUserMessages`, `findMessage`,
-     `addReaction`/`removeReaction`, `updateUserMessages`; shrink `_updateMessage` /
-     `_updateQuotedMessageReferences` to pinned-only or delete.
-   - Re-home thread reply `own_reactions` preservation onto `Thread.state.replies` (channel stops
-     enriching reply events) — the reaction sub-step-2 caveat above.
-   - Remove `getReplies` (channel.ts) thread population and any remaining `channel.state.threads` readers;
-     `offline_support_api`. Then the full-delete of `addMessagesSorted` (its last caller was the user→channel
-     reference registration — relocate that).
-   - Test surgery: remove the thread `ChannelState` tests; verify both suites green + types/lint clean.
+4. **[DONE] Step 3b — remove `channel.state.threads` + delete the thread-only methods.**
+   - Removed the `threads` property and every thread code path. Deleted `removeMessage`, `findMessage`,
+     `_updateQuotedMessageReferences`/`removeQuotedMessageReferences`, and the reaction-state helpers
+     `_addReactionToState`/`_removeReactionFromState`. `_updateMessage`, `updateUserMessages`,
+     `deleteUserMessages`, `addReaction`/`removeReaction` are now **pinned-only**.
+   - `addMessagesSorted`/`addMessageSorted` kept as a slim channel-meta path (records the user
+     reference + advances `last_message_at`, no thread population); `timestampChanged`/`initializing`
+     retained only for positional-call compatibility. Full deletion deferred to after Task 13.
+   - Re-homed onto the `Thread` object (owner-approved): reply reaction `own_reactions` via
+     `Thread.messagePaginator.reflectReaction`; reply `message.updated` own_reactions preserved from the
+     existing reply; and a new `user.messages.deleted`/`user.deleted` subscription that calls
+     `Thread.messagePaginator.applyMessageDeletionForUser`. The channel no longer enriches reply events
+     (`_extendEventWithOwnReactions` + reaction handlers are main-only via the paginator).
+   - `getReplies` no longer writes `channel.state.threads` (Thread owns replies). `offline_support_api`
+     reply upsert already targets the Thread; its `addMessageSorted` call is now channel-meta only.
+   - Test surgery: deleted the thread/`_addReactionToState`/`_removeReactionFromState`/`findMessage`
+     `ChannelState` specs and thread-scoped event tests; added Thread coverage for reply own_reactions
+     preservation and banned-user reply deletion. JS 2583 pass, React 2517 pass; `yarn types` + `yarn lint`
+     clean in both. (Uncommitted — pending review.)
 
 **Acceptance Criteria:**
 
