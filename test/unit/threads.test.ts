@@ -178,8 +178,6 @@ describe('Threads 2.0', () => {
       expect(repliesOf(thread)).to.deep.equal([]);
       expect(state.participants).to.deep.equal([]);
       expect(state.custom).to.deep.equal({});
-      expect(state.pagination.prevCursor).to.be.null;
-      expect(state.pagination.nextCursor).to.be.null;
       expect(state.read).to.have.keys([TEST_USER_ID]);
       expect(thread.messagePaginator.sort).to.deep.equal([{ created_at: -1 }]);
       expect(thread.messagePaginator.requestSort).to.deep.equal([{ created_at: -1 }]);
@@ -398,30 +396,6 @@ describe('Threads 2.0', () => {
           expect(stateAfter.participants).to.equal(hydrationState.participants);
         });
 
-        it('copies pagination state during hydration', () => {
-          const thread = createMinimalThread();
-          const hydrationThread = createTestThread({
-            latest_replies: [
-              generateMsg({ parent_id: parentMessageResponse.id }) as MessageResponse,
-            ],
-            reply_count: 3,
-          });
-
-          hydrationThread.state.next((current) => ({
-            ...current,
-            pagination: {
-              ...current.pagination,
-              nextCursor: 'next-cursor',
-            },
-          }));
-
-          thread.hydrateState(hydrationThread);
-
-          const stateAfter = thread.state.getLatestValue();
-          expect(stateAfter.pagination.prevCursor).to.not.be.null;
-          expect(stateAfter.pagination.nextCursor).to.equal('next-cursor');
-        });
-
         it('retains failed replies after hydration', () => {
           const thread = createTestThread();
           const hydrationThread = createTestThread({
@@ -484,35 +458,6 @@ describe('Threads 2.0', () => {
       });
 
       describe('reload', () => {
-        it('bootstraps pagination for minimally initialized threads', async () => {
-          const minimalThread = createMinimalThread();
-          const hydratedThread = createTestThread({
-            latest_replies: [
-              generateMsg({ parent_id: parentMessageResponse.id }) as MessageResponse,
-            ],
-            reply_count: 3,
-          });
-          hydratedThread.state.next((current) => ({
-            ...current,
-            pagination: {
-              ...current.pagination,
-              nextCursor: 'next-cursor',
-            },
-          }));
-
-          sinon.stub(client, 'getThread').resolves(hydratedThread);
-
-          const stateBefore = minimalThread.state.getLatestValue();
-          expect(stateBefore.pagination.prevCursor).to.be.null;
-          expect(stateBefore.pagination.nextCursor).to.be.null;
-
-          await minimalThread.reload();
-
-          const stateAfter = minimalThread.state.getLatestValue();
-          expect(stateAfter.pagination.prevCursor).to.not.be.null;
-          expect(stateAfter.pagination.nextCursor).to.equal('next-cursor');
-        });
-
         it('sizes getThread reply_limit to the loaded reply count, falling back to pageSize when unloaded', async () => {
           const stub = sinon.stub(client, 'getThread').resolves(createTestThread());
 
@@ -611,202 +556,48 @@ describe('Threads 2.0', () => {
         });
       });
 
-      describe('loadPage', () => {
-        it('sets up pagination on initialization (all replies included in response)', () => {
-          const thread = createTestThread({
-            latest_replies: [generateMsg() as MessageResponse],
-            reply_count: 1,
-          });
-          const state = thread.state.getLatestValue();
-          expect(state.pagination.prevCursor).to.be.null;
-          expect(state.pagination.nextCursor).to.be.null;
+      // Reply pagination now flows through the instance's messagePaginator (toTail = older,
+      // toHead = newer) — the replacement for the removed Thread.loadNextPage/loadPrevPage. The
+      // paginator's own suite covers the query-shape/cursor mechanics; these assert the end-to-end
+      // wiring through a real Thread (seeded from latest_replies) which the paginator suite doesn't.
+      describe('reply pagination (messagePaginator)', () => {
+        it('loads older replies via toTail() and scopes the request to the thread parent', async () => {
+          // Seeded newest window with older replies still to load (reply_count > loaded).
+          const newest = makeReply({ created_at: '2020-01-03T00:00:00.000Z' });
+          const thread = createTestThread({ latest_replies: [newest], reply_count: 3 });
+          expect(thread.messagePaginator.state.getLatestValue().hasMoreTail).to.be.true;
+
+          const older = makeReply({ created_at: '2020-01-02T00:00:00.000Z' });
+          const getRepliesStub = sinon
+            .stub(thread.channel, 'getReplies')
+            .resolves({ messages: [older], duration: '' } as unknown as ReturnType<
+              Channel['getReplies']
+            >);
+
+          await thread.messagePaginator.toTail();
+
+          // The fetched older reply is now in the rendered reply list...
+          expect(repliesOf(thread).map((reply) => reply.id)).to.include(older.id);
+          // ...and the request was made against this thread's parent (the replies endpoint).
+          expect(getRepliesStub.calledOnce).to.be.true;
+          expect(getRepliesStub.firstCall.args[0]).to.equal(thread.id);
         });
 
-        it('sets up pagination on initialization (not all replies included in response)', () => {
-          const firstMessage = generateMsg() as MessageResponse;
-          const lastMessage = generateMsg() as MessageResponse;
-          const thread = createTestThread({
-            latest_replies: [firstMessage, lastMessage],
-            reply_count: 3,
-          });
-          const state = thread.state.getLatestValue();
-          expect(state.pagination.prevCursor).not.to.be.null;
-          expect(state.pagination.nextCursor).to.be.null;
-        });
+        it('clears hasMoreTail once toTail() reaches the start of the reply list', async () => {
+          const newest = makeReply({ created_at: '2020-01-03T00:00:00.000Z' });
+          const thread = createTestThread({ latest_replies: [newest], reply_count: 2 });
+          expect(thread.messagePaginator.state.getLatestValue().hasMoreTail).to.be.true;
 
-        it('updates pagination after loading next page (end reached)', async () => {
-          const thread = createTestThread({
-            latest_replies: [generateMsg(), generateMsg()] as MessageResponse[],
-            reply_count: 3,
-          });
-          thread.state.next((current) => ({
-            ...current,
-            pagination: {
-              ...current.pagination,
-              nextCursor: 'cursor',
-            },
-          }));
-          sinon.stub(thread, 'queryReplies').resolves({
-            messages: [generateMsg()] as MessageResponse[],
-            duration: '',
-          });
-
-          await thread.loadNextPage({ limit: 2 });
-
-          const state = thread.state.getLatestValue();
-          expect(state.pagination.nextCursor).to.be.null;
-        });
-
-        it('updates pagination after loading next page (end not reached)', async () => {
-          const thread = createTestThread({
-            latest_replies: [generateMsg(), generateMsg()] as MessageResponse[],
-            reply_count: 4,
-          });
-          thread.state.next((current) => ({
-            ...current,
-            pagination: {
-              ...current.pagination,
-              nextCursor: 'cursor',
-            },
-          }));
-          const lastMessage = generateMsg() as MessageResponse;
-          sinon.stub(thread, 'queryReplies').resolves({
-            messages: [generateMsg(), lastMessage] as MessageResponse[],
-            duration: '',
-          });
-
-          await thread.loadNextPage({ limit: 2 });
-
-          const state = thread.state.getLatestValue();
-          expect(state.pagination.nextCursor).to.equal(lastMessage.id);
-        });
-
-        it('forms correct request when loading next page', async () => {
-          const firstMessage = generateMsg() as MessageResponse;
-          const lastMessage = generateMsg() as MessageResponse;
-          const thread = createTestThread({
-            latest_replies: [firstMessage, lastMessage],
-            reply_count: 3,
-          });
-          thread.state.next((current) => ({
-            ...current,
-            pagination: {
-              ...current.pagination,
-              nextCursor: lastMessage.id,
-            },
-          }));
-          const queryRepliesStub = sinon
-            .stub(thread, 'queryReplies')
-            .resolves({ messages: [], duration: '' });
-
-          await thread.loadNextPage({ limit: 42 });
-
-          expect(
-            queryRepliesStub.calledOnceWith({
-              id_gt: lastMessage.id,
-              limit: 42,
-            }),
-          ).to.be.true;
-        });
-
-        it('updates pagination after loading previous page (end reached)', async () => {
-          const thread = createTestThread({
-            latest_replies: [generateMsg(), generateMsg()] as MessageResponse[],
-            reply_count: 3,
-          });
-          sinon.stub(thread, 'queryReplies').resolves({
-            messages: [generateMsg()] as MessageResponse[],
-            duration: '',
-          });
-
-          await thread.loadPrevPage({ limit: 2 });
-
-          const state = thread.state.getLatestValue();
-          expect(state.pagination.prevCursor).to.be.null;
-        });
-
-        it('updates pagination after loading previous page (end not reached)', async () => {
-          const thread = createTestThread({
-            latest_replies: [generateMsg(), generateMsg()] as MessageResponse[],
-            reply_count: 4,
-          });
-          const firstMessage = generateMsg() as MessageResponse;
-          sinon.stub(thread, 'queryReplies').resolves({
-            messages: [firstMessage, generateMsg()] as MessageResponse[],
-            duration: '',
-          });
-
-          await thread.loadPrevPage({ limit: 2 });
-
-          const state = thread.state.getLatestValue();
-          expect(state.pagination.prevCursor).to.equal(firstMessage.id);
-        });
-
-        it('forms correct request when loading previous page', async () => {
-          const firstMessage = generateMsg() as MessageResponse;
-          const lastMessage = generateMsg() as MessageResponse;
-          const thread = createTestThread({
-            latest_replies: [firstMessage, lastMessage],
-            reply_count: 3,
-          });
-          const queryRepliesStub = sinon
-            .stub(thread, 'queryReplies')
-            .resolves({ messages: [], duration: '' });
-
-          await thread.loadPrevPage({ limit: 42 });
-
-          expect(
-            queryRepliesStub.calledOnceWith({
-              id_lt: firstMessage.id,
-              limit: 42,
-            }),
-          ).to.be.true;
-        });
-
-        // loadNextPage/loadPrevPage are a legacy, deprecated cursor-only path — loading replies into
-        // the rendered list is the messagePaginator's job now (toTail/toHead). These assert only the
-        // remaining behavior: advancing the legacy pagination cursor.
-        it('advances the next-page cursor when loading the next page', async () => {
-          const initialMessages = [makeReply(), makeReply()];
-          const nextMessages = [makeReply(), makeReply()];
-          const thread = createTestThread({
-            latest_replies: initialMessages,
-            reply_count: 4,
-          });
-          thread.state.next((current) => ({
-            ...current,
-            pagination: {
-              ...current.pagination,
-              nextCursor: initialMessages[1].id,
-            },
-          }));
+          const older = makeReply({ created_at: '2020-01-02T00:00:00.000Z' });
           sinon
-            .stub(thread, 'queryReplies')
-            .resolves({ messages: nextMessages, duration: '' });
+            .stub(thread.channel, 'getReplies')
+            .resolves({ messages: [older], duration: '' } as unknown as ReturnType<
+              Channel['getReplies']
+            >);
 
-          await thread.loadNextPage({ limit: 2 });
+          await thread.messagePaginator.toTail();
 
-          expect(thread.state.getLatestValue().pagination.nextCursor).to.equal(
-            nextMessages[1].id,
-          );
-        });
-
-        it('advances the previous-page cursor when loading the previous page', async () => {
-          const prevMessages = [makeReply(), makeReply()];
-          const initialMessages = [makeReply(), makeReply()];
-          const thread = createTestThread({
-            latest_replies: initialMessages,
-            reply_count: 4,
-          });
-          sinon
-            .stub(thread, 'queryReplies')
-            .resolves({ messages: prevMessages, duration: '' });
-
-          await thread.loadPrevPage({ limit: 2 });
-
-          expect(thread.state.getLatestValue().pagination.prevCursor).to.equal(
-            prevMessages[0].id,
-          );
+          expect(thread.messagePaginator.state.getLatestValue().hasMoreTail).to.be.false;
         });
       });
     });

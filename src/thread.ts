@@ -7,7 +7,6 @@ import type {
   EventTypes,
   LocalMessage,
   MarkReadOptions,
-  MessagePaginationOptions,
   MessageResponse,
   ReadResponse,
   ThreadResponse,
@@ -26,10 +25,6 @@ import { MessageOperations } from './messageOperations';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import { MessagePaginator } from './pagination';
 
-type QueryRepliesOptions = {
-  sort?: { created_at: AscDesc }[];
-} & MessagePaginationOptions & { user?: UserResponse; user_id?: string };
-
 export type ThreadState = {
   /**
    * Determines if the thread is currently opened and on-screen. When the thread is active,
@@ -42,7 +37,6 @@ export type ThreadState = {
   deletedAt: Date | null;
   isLoading: boolean;
   isStateStale: boolean;
-  pagination: ThreadRepliesPagination;
   /**
    * Thread is identified by and has a one-to-one relation with its parent message.
    * We use parent message id as a thread id.
@@ -53,13 +47,6 @@ export type ThreadState = {
   replyCount: number;
   title: string;
   updatedAt: Date | null;
-};
-
-export type ThreadRepliesPagination = {
-  isLoadingNext: boolean;
-  isLoadingPrev: boolean;
-  nextCursor: string | null;
-  prevCursor: string | null;
 };
 
 export type ThreadUserReadState = {
@@ -174,7 +161,6 @@ export class Thread extends WithSubscriptions {
         createdAt: new Date(threadData.created_at),
         // rest
         deletedAt: threadData.deleted_at ? new Date(threadData.deleted_at) : null,
-        pagination: repliesPaginationFromInitialThread(threadData),
         parentMessage: formatMessage(threadData.parent_message),
         participants: threadData.thread_participants,
         read: formatReadState(
@@ -218,12 +204,6 @@ export class Thread extends WithSubscriptions {
         deletedAt: formattedParentMessage.deleted_at,
         isLoading: false,
         isStateStale: false,
-        pagination: {
-          isLoadingNext: false,
-          isLoadingPrev: false,
-          nextCursor: null,
-          prevCursor: null,
-        },
         parentMessage: formattedParentMessage,
         participants: [],
         read: formatReadState(getPlaceholderReadResponse(client.userID)),
@@ -387,7 +367,6 @@ export class Thread extends WithSubscriptions {
       custom,
       title,
       deletedAt,
-      pagination,
       parentMessage,
       participants,
       read,
@@ -409,7 +388,6 @@ export class Thread extends WithSubscriptions {
       participants,
       read,
       replyCount,
-      pagination,
       updatedAt,
       isStateStale: false,
     });
@@ -808,63 +786,6 @@ export class Thread extends WithSubscriptions {
    */
   public markAsRead = ({ force = false }: { force?: boolean } = {}) =>
     this.markRead({ force });
-
-  // todo: can be removed with the next breaking change and use MessagePaginator only
-  public queryReplies = ({
-    limit = DEFAULT_PAGE_LIMIT,
-    sort = DEFAULT_SORT,
-    ...otherOptions
-  }: QueryRepliesOptions = {}) =>
-    this.channel.getReplies(this.id, { limit, ...otherOptions }, sort);
-
-  // todo: can be removed with the next breaking change and use MessagePaginator only
-  public loadNextPage = ({ limit = DEFAULT_PAGE_LIMIT }: { limit?: number } = {}) =>
-    this.loadPage(limit);
-
-  // todo: can be removed with the next breaking change and use MessagePaginator only
-  public loadPrevPage = ({ limit = DEFAULT_PAGE_LIMIT }: { limit?: number } = {}) =>
-    this.loadPage(-limit);
-  // todo: can be removed with the next breaking change and use MessagePaginator only
-  private loadPage = async (count: number) => {
-    const { pagination } = this.state.getLatestValue();
-    const [loadingKey, cursorKey] =
-      count > 0
-        ? (['isLoadingNext', 'nextCursor'] as const)
-        : (['isLoadingPrev', 'prevCursor'] as const);
-
-    if (pagination[loadingKey] || pagination[cursorKey] === null) return;
-
-    const queryOptions = { [count > 0 ? 'id_gt' : 'id_lt']: pagination[cursorKey] };
-    const limit = Math.abs(count);
-
-    this.state.partialNext({ pagination: { ...pagination, [loadingKey]: true } });
-
-    try {
-      const data = await this.queryReplies({ ...queryOptions, limit });
-      const replies = data.messages.map(formatMessage);
-      const maybeNextCursor = replies.at(count > 0 ? -1 : 0)?.id ?? null;
-
-      // Legacy pagination cursor bookkeeping only. Loading replies into the reply list is the
-      // messagePaginator's job (toTail/toHead); this deprecated path just advances its own cursor.
-      this.state.next((current) => ({
-        ...current,
-        pagination: {
-          ...current.pagination,
-          [cursorKey]: data.messages.length < limit ? null : maybeNextCursor,
-          [loadingKey]: false,
-        },
-      }));
-    } catch (error) {
-      this.client.logger('error', (error as Error).message);
-      this.state.next((current) => ({
-        ...current,
-        pagination: {
-          ...current.pagination,
-          [loadingKey]: false,
-        },
-      }));
-    }
-  };
 }
 
 type MessageThreadParticipant = NonNullable<
@@ -912,22 +833,6 @@ const getPlaceholderReadResponse = (currentUserId?: string): ReadResponse[] =>
         },
       ]
     : [];
-
-const repliesPaginationFromInitialThread = (
-  thread: ThreadResponse,
-): ThreadRepliesPagination => {
-  const latestRepliesContainsAllReplies =
-    thread.latest_replies.length === thread.reply_count;
-
-  return {
-    nextCursor: null,
-    prevCursor: latestRepliesContainsAllReplies
-      ? null
-      : (thread.latest_replies.at(0)?.id ?? null),
-    isLoadingNext: false,
-    isLoadingPrev: false,
-  };
-};
 
 const ownUnreadCountSelector =
   (currentUserId: string | undefined) => (state: ThreadState) =>
