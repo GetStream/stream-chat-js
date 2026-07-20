@@ -413,6 +413,7 @@ export class Thread extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeRepliesUnread());
     this.addUnsubscribeFunction(this.subscribeMessageDeleted());
     this.addUnsubscribeFunction(this.subscribeMessageUpdated());
+    this.addUnsubscribeFunction(this.subscribeUserMessagesDeleted());
   };
 
   private subscribeThreadUpdated = () =>
@@ -612,23 +613,79 @@ export class Thread extends WithSubscriptions {
     }).unsubscribe;
 
   private subscribeMessageUpdated = () => {
-    const eventTypes: EventTypes[] = [
-      'message.updated',
-      'message.undeleted',
+    const messageUpdateTypes: EventTypes[] = ['message.updated', 'message.undeleted'];
+    const reactionTypes: EventTypes[] = [
       'reaction.new',
       'reaction.deleted',
       'reaction.updated',
     ];
 
+    const unsubscribeMessageUpdated = messageUpdateTypes.map(
+      (eventType) =>
+        this.client.on(eventType, (event) => {
+          if (!event.message) return;
+          // A `message.updated` WS event carries `own_reactions: []`; upserting it verbatim would
+          // wipe the current user's reactions on a reply edit. The reply paginator is this thread's
+          // own source of truth (the channel no longer enriches reply events), so preserve the
+          // existing reply's `own_reactions`.
+          const message =
+            event.message.parent_id === this.id
+              ? {
+                  ...event.message,
+                  own_reactions:
+                    this.messagePaginator.getItem(event.message.id)?.own_reactions ??
+                    event.message.own_reactions,
+                }
+              : event.message;
+          this.updateParentMessageOrReplyLocally(message);
+          this.messagePaginator.reflectQuotedMessageUpdate(formatMessage(event.message));
+        }).unsubscribe,
+    );
+
+    const unsubscribeReactions = reactionTypes.map(
+      (eventType) =>
+        this.client.on(eventType, (event) => {
+          if (!event.message || !event.reaction) return;
+          const { message, reaction } = event;
+          if (message.parent_id === this.id) {
+            // Preserve/apply the current user's `own_reactions` off the reply paginator itself,
+            // independently of the channel (mirrors the channel's main-list reflectReaction).
+            this.messagePaginator.reflectReaction({
+              enforceUnique: eventType === 'reaction.updated',
+              message,
+              reaction,
+              removed: eventType === 'reaction.deleted',
+            });
+          } else if (!message.parent_id && message.id === this.id) {
+            this.updateParentMessageLocally({ message });
+          }
+          this.messagePaginator.reflectQuotedMessageUpdate(formatMessage(message));
+        }).unsubscribe,
+    );
+
+    const unsubscribeFunctions = [...unsubscribeMessageUpdated, ...unsubscribeReactions];
+
+    return () => unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
+  };
+
+  private subscribeUserMessagesDeleted = () => {
+    // Apply a user ban / deletion to this thread's own reply list. Previously
+    // channel.state.deleteUserMessages marked banned-user replies deleted in the (now removed)
+    // channel.state.threads shadow; the reply paginator is the thread's source of truth now.
+    const eventTypes: EventTypes[] = ['user.messages.deleted', 'user.deleted'];
+
     const unsubscribeFunctions = eventTypes.map(
       (eventType) =>
         this.client.on(eventType, (event) => {
-          if (event.message) {
-            this.updateParentMessageOrReplyLocally(event.message);
-            this.messagePaginator.reflectQuotedMessageUpdate(
-              formatMessage(event.message),
-            );
-          }
+          if (!event.user) return;
+          // user.deleted carries the deletion time on the user; user.messages.deleted on the event.
+          const deletedAtSource =
+            eventType === 'user.deleted' ? event.user.deleted_at : event.created_at;
+          this.messagePaginator.applyMessageDeletionForUser({
+            userId: event.user.id,
+            hardDelete: !!event.hard_delete,
+            deletedAt: deletedAtSource ? new Date(deletedAtSource) : new Date(),
+          });
         }).unsubscribe,
     );
 

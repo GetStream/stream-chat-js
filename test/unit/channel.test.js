@@ -1118,21 +1118,15 @@ describe('Channel _handleChannelEvent', function () {
 
 		const pinnedMessages = [messageSet1[0], messageSet1[1], messageSet2[0]];
 
+		// Thread-reply deletion is owned by the Thread object (covered in threads.test.ts); this
+		// suite exercises the pinned-message cache that ChannelState still keeps.
 		const setupChannel = (channel) => {
-			channel.state.addMessagesSorted(messageSet1);
-			channel.state.addMessagesSorted(messageSet2, false, false, true, 'new');
-
-			// pinned messages
 			channel.state.addPinnedMessages(pinnedMessages);
-
-			// thread replies
-			channel.state.addMessagesSorted(thread1);
 		};
 
-		it('removes the pinned and thread messages on hard delete', () => {
+		it('removes the pinned messages on hard delete', () => {
 			setupChannel(channel);
 			expect(channel.state.pinnedMessages).toHaveLength(pinnedMessages.length);
-			expect(channel.state.threads[parent_id]).toHaveLength(thread1.length);
 
 			const event = {
 				type: 'user.messages.deleted',
@@ -1182,12 +1176,10 @@ describe('Channel _handleChannelEvent', function () {
 			};
 
 			channel.state.pinnedMessages.forEach(check);
-			Object.values(channel.state.threads).forEach((replies) => replies.forEach(check));
 		});
-		it('removes the pinned and thread messages on soft delete', () => {
+		it('removes the pinned messages on soft delete', () => {
 			setupChannel(channel);
 			expect(channel.state.pinnedMessages).toHaveLength(pinnedMessages.length);
-			expect(channel.state.threads[parent_id]).toHaveLength(thread1.length);
 
 			const event = {
 				type: 'user.messages.deleted',
@@ -1224,7 +1216,6 @@ describe('Channel _handleChannelEvent', function () {
 			};
 
 			channel.state.pinnedMessages.forEach(check);
-			Object.values(channel.state.threads).forEach((replies) => replies.forEach(check));
 		});
 
 		it('updates messagePaginator items on soft delete', () => {
@@ -1817,52 +1808,34 @@ describe('Channel _handleChannelEvent', function () {
 				type: 'wow',
 			},
 		];
-		const testCases = [
-			[generateMsg({ own_reactions })], // channel message
-			[generateMsg({ id: '0' }), generateMsg({ parent_id: '0', own_reactions })], // thread message
-		];
+		// Thread-reply own_reactions preservation is owned by the Thread object (covered in
+		// threads.test.ts); at the channel level only the paginator-backed message list is enriched.
+		const message = generateMsg({ own_reactions });
+		seedLatestWindow(channel, [message]);
 
-		testCases.forEach((messages) => {
-			channel.state.addMessagesSorted(messages);
-			// Main (non-reply) messages are resolved from the paginator by
-			// _extendEventWithOwnReactions; thread replies stay resolved via channel.state.
-			seedLatestWindow(
-				channel,
-				messages.filter((m) => !m.parent_id),
-			);
-			const message = messages[messages.length - 1];
+		['message.updated', 'message.deleted'].forEach((eventType) => {
+			let receivedEvent;
+			channel.on(eventType, (e) => (receivedEvent = e));
 
-			const eventTypes = ['message.updated', 'message.deleted'];
+			const event = {
+				type: eventType,
+				// own_reactions is always [] in WS events
+				message: { ...message, own_reactions: [] },
+			};
+			channel._handleChannelEvent(event);
+			channel._callChannelListeners(event);
 
-			eventTypes.forEach((eventType) => {
-				let receivedEvent;
-				channel.on(eventType, (e) => (receivedEvent = e));
-
-				const event = {
-					type: eventType,
-					// own_reactions is always [] in WS events
-					message: { ...message, own_reactions: [] },
-				};
-				channel._handleChannelEvent(event);
-				channel._callChannelListeners(event);
-
-				const stored = message.parent_id
-					? channel.state.findMessage(message.id, message.parent_id)
-					: channel.messagePaginator.getItem(message.id);
-				expect(stored.own_reactions.length).to.equal(own_reactions.length);
-				expect(receivedEvent.message.own_reactions.length).to.equal(own_reactions.length);
-			});
+			const stored = channel.messagePaginator.getItem(message.id);
+			expect(stored.own_reactions.length).to.equal(own_reactions.length);
+			expect(receivedEvent.message.own_reactions.length).to.equal(own_reactions.length);
 		});
 	});
 
 	it('should update quoted_message references on "message.updated" and "message.deleted" event', () => {
+		// Thread-reply quoted-message updates are owned by the Thread object (Thread.messagePaginator
+		// .reflectQuotedMessageUpdate); this exercises the channel's paginator-backed message list.
 		const originalText = 'XX';
 		const updatedText = 'YY';
-		const parent_id = '0';
-		const parentMesssage = generateMsg({
-			date: new Date(0).toISOString(),
-			id: parent_id,
-		});
 		const quoted_message = generateMsg({
 			date: new Date(2).toISOString(),
 			id: 'quoted-message',
@@ -1875,32 +1848,13 @@ describe('Channel _handleChannelEvent', function () {
 			quoted_message_id: quoted_message.id,
 		});
 		const updatedQuotedMessage = { ...quoted_message, text: updatedText };
-		const updatedQuotedThreadReply = { ...quoted_message, parent_id, text: updatedText };
-		[
-			[quoted_message, quotingMessage], // channel message
-			[
-				parentMesssage,
-				{ ...quoted_message, parent_id },
-				{ ...quotingMessage, parent_id },
-			], // thread message
-		].forEach((messages) => {
-			['message.updated', 'message.deleted'].forEach((eventType) => {
-				channel.state.addMessagesSorted(messages);
-				const isThread = messages.length === 3;
-				if (!isThread) seedLatestWindow(channel, messages);
-				const quotingMessage = messages[messages.length - 1];
-				const event = {
-					type: eventType,
-					message: isThread ? updatedQuotedThreadReply : updatedQuotedMessage,
-				};
-				channel._handleChannelEvent(event);
-				const stored = isThread
-					? channel.state.findMessage(quotingMessage.id, quotingMessage.parent_id)
-					: channel.messagePaginator.getItem(quotingMessage.id);
-				expect(stored.quoted_message.text).to.equal(updatedQuotedMessage.text);
-				channel.state.clearMessages();
-				channel.messagePaginator.clearStateAndCache();
-			});
+		['message.updated', 'message.deleted'].forEach((eventType) => {
+			seedLatestWindow(channel, [quoted_message, quotingMessage]);
+			const event = { type: eventType, message: updatedQuotedMessage };
+			channel._handleChannelEvent(event);
+			const stored = channel.messagePaginator.getItem(quotingMessage.id);
+			expect(stored.quoted_message.text).to.equal(updatedQuotedMessage.text);
+			channel.messagePaginator.clearStateAndCache();
 		});
 	});
 

@@ -1597,6 +1597,9 @@ describe('user.messages.deleted', () => {
 
 	const pinnedMessages = [messageSet1[0], messageSet1[1], messageSet2[0]];
 
+	// Thread-reply deletion is owned by the Thread object (covered in threads.test.ts); this suite
+	// exercises the pinned-message cache. addMessagesSorted still registers the user->channel
+	// reference (client.state.userChannelReferences) that the client-level deletion loop walks.
 	const setupChannel = (type, id) => {
 		const channel = client.channel(type, id);
 		channel.state.addMessagesSorted(messageSet1);
@@ -1605,10 +1608,7 @@ describe('user.messages.deleted', () => {
 		// pinned messages
 		channel.state.addPinnedMessages(pinnedMessages);
 
-		// thread replies
-		channel.state.addMessagesSorted(thread1);
 		expect(channel.state.pinnedMessages).toHaveLength(pinnedMessages.length);
-		expect(channel.state.threads[parent_id]).toHaveLength(thread1.length);
 
 		return channel;
 	};
@@ -1631,7 +1631,6 @@ describe('user.messages.deleted', () => {
 				expect(message).toEqual(message);
 			};
 			channel.state.pinnedMessages.forEach(check);
-			Object.values(channel.state.threads).forEach((replies) => replies.forEach(check));
 		});
 	});
 
@@ -1682,7 +1681,6 @@ describe('user.messages.deleted', () => {
 				}
 			};
 			channel.state.pinnedMessages.forEach(check);
-			Object.values(channel.state.threads).forEach((replies) => replies.forEach(check));
 		});
 	});
 
@@ -1720,7 +1718,6 @@ describe('user.messages.deleted', () => {
 				}
 			};
 			channel.state.pinnedMessages.forEach(check);
-			Object.values(channel.state.threads).forEach((replies) => replies.forEach(check));
 		});
 	});
 });

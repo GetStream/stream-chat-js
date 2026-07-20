@@ -1572,11 +1572,8 @@ export class Channel {
       },
     );
 
-    // add any messages to our thread state
-    if (data.messages) {
-      this.state.addMessagesSorted(data.messages);
-    }
-
+    // Thread reply state is owned by the Thread object (Thread.messagePaginator); the returned
+    // replies are consumed there. The channel message list is owned by channel.messagePaginator.
     return data;
   }
 
@@ -2375,20 +2372,15 @@ export class Channel {
           const formattedMessage = formatMessage(event.message);
           const isThreadReply =
             !!event.message.parent_id && !event.message.show_in_channel;
-          if (event.hard_delete) {
-            channelState.removeMessage(event.message);
-            if (!isThreadReply) {
+          // Thread-only replies are handled by the Thread object; the channel owns the main list.
+          if (!isThreadReply) {
+            if (event.hard_delete) {
               this.messagePaginator.removeItem({ id: event.message.id });
-            }
-          } else {
-            channelState.addMessageSorted(event.message, false, false);
-            if (!isThreadReply) {
+            } else {
               this.messagePaginator.ingestItem(formattedMessage);
             }
           }
           this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
-
-          channelState.removeQuotedMessageReferences(event.message);
 
           if (event.message.pinned) {
             channelState.removePinnedMessage(event.message);
@@ -2501,7 +2493,6 @@ export class Channel {
             this.messagePaginator.ingestItem(formattedMessage);
             this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
           }
-          channelState._updateQuotedMessageReferences({ message: event.message });
           if (event.message.pinned) {
             channelState.addPinnedMessage(event.message);
           } else {
@@ -2886,12 +2877,10 @@ export class Channel {
     if (!event.message) {
       return;
     }
-    // Main (non-reply) messages are owned by the message paginator; thread replies still live in
-    // ChannelState (threads are OUT OF SCOPE and stay there). Resolve each from its own source so
-    // this no longer reads the legacy main message list.
-    const message = event.message.parent_id
-      ? this.state.findMessage(event.message.id, event.message.parent_id)
-      : this.messagePaginator.getItem(event.message.id);
+    // The channel message list is owned by the paginator; enrich from it. Thread-only replies are
+    // not in the paginator (getItem returns undefined) — the Thread object preserves their
+    // own_reactions on its own reply store.
+    const message = this.messagePaginator.getItem(event.message.id);
     if (message) {
       event.message.own_reactions = message.own_reactions;
     }
