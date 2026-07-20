@@ -280,7 +280,9 @@ dual-writing → delete the store → types/exports → tests.
 
 **Dependencies:** Task 9, Task 10 (and Task 15 if offline in scope)
 
-**Status:** in progress (sub-steps 1-2 done; step sequence below in progress)
+**Status:** in progress — reaction sub-steps 1-2 done; **step 3a DONE** (main message-list
+storage removed, threads retained, both suites green); **step 3b NEXT** (remove
+`channel.state.threads` + fully delete the shared methods + re-home thread reply `own_reactions`)
 
 **Owner:** claude
 
@@ -316,17 +318,34 @@ paginators (owner-approved).
    preservation must move onto `Thread.state.replies` — done in step 4/5 together with removing
    `channel.state.threads` (when the channel stops enriching reply events). A paginator-level
    `reflectReaction` on the Thread would not fix the `state.replies`-based UI.
-3. Delete the message-list/thread methods: `addMessagesSorted`/`addMessageSorted`, `removeMessage`,
-   `deleteUserMessages`, `findMessage`, `addReaction`/`removeReaction`; shrink `_updateMessage` /
-   `_updateQuotedMessageReferences` to pinned-only.
-4. Remove writes/callers: `message.new/updated/deleted/channel.truncated/channel.hidden` handlers,
-   `getReplies` (channel.ts) thread population, `_initializeState` split (keep read/members/watchers/pinned),
-   `client._deleteUserMessageReference`, `offline_support_api`. Re-home `last_message_at`.
-5. Delete storage: `messageSets` / `messages` / `latestMessages` / `threads` + geometry helpers +
-   `utils.messageSetPagination`.
-6. Test surgery: remove/rewrite the message-set machinery + thread `ChannelState` tests (both repos);
-   keep pinned/reaction-merge coverage; add `reflectReaction` tests.
-7. Verify JS + React suites green; `yarn types` + `yarn lint` clean in both repos.
+   The remaining removal is split into **3a** (main message list, threads retained) and **3b**
+   (threads) so each lands with a green suite.
+
+3. **[DONE] Step 3a — remove the main message-list storage; retain `channel.state.threads`.**
+   - Removed `messageSets` / `messages` / `latestMessages` accessors + all pure message-set methods and
+     geometry helpers; `addMessagesSorted`/`addMessageSorted` shrunk to shadow-skip + format +
+     `updateUserReference` + stale-thread-cleanup + `last_message_at` + thread population.
+     `removeMessage`/`findMessage`/`_updateQuotedMessageReferences` are thread-only; `_updateMessage`,
+     `deleteUserMessages`, `updateUserMessages` are thread+pinned; `clearMessages` clears pinned only.
+   - Removed `utils.messageSetPagination` (+ helpers/type/unused imports).
+   - Rewired writers/callers: `message.new/updated/deleted`, `channel.truncated`, `channel.hidden`,
+     `_initializeState` (no set param/return), `query`/`queryChannels` seeding via `seedFirstPageSync`,
+     `client._deleteUserMessageReference`. Channel + client reaction/deletion handlers act on
+     `channel.messagePaginator` (`reflectReaction` / `applyMessageDeletionForUser`).
+   - Full test surgery in both repos: deleted message-set machinery specs, re-scoped surviving
+     deleteUser/updateUser + #1736 self-quote coverage to threads + pinned, migrated event/query tests
+     to the paginator. JS 2605 pass, React 2517 pass; `yarn types` + `yarn lint` clean in both.
+   - Commits: JS `caba066b` (src) + `c238323f` (tests); React `a61e634d4` (readers) + `79e26c037` (test).
+4. **[NEXT] Step 3b — remove `channel.state.threads` + fully delete the shared methods.**
+   - Delete `addMessagesSorted`/`addMessageSorted`, `removeMessage`, `deleteUserMessages`, `findMessage`,
+     `addReaction`/`removeReaction`, `updateUserMessages`; shrink `_updateMessage` /
+     `_updateQuotedMessageReferences` to pinned-only or delete.
+   - Re-home thread reply `own_reactions` preservation onto `Thread.state.replies` (channel stops
+     enriching reply events) — the reaction sub-step-2 caveat above.
+   - Remove `getReplies` (channel.ts) thread population and any remaining `channel.state.threads` readers;
+     `offline_support_api`. Then the full-delete of `addMessagesSorted` (its last caller was the user→channel
+     reference registration — relocate that).
+   - Test surgery: remove the thread `ChannelState` tests; verify both suites green + types/lint clean.
 
 **Acceptance Criteria:**
 
