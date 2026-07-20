@@ -22,7 +22,10 @@ import type {
   AscDesc,
   LocalMessage,
   MessagePaginationOptions,
+  MessageResponse,
   PinnedMessagePaginationOptions,
+  ReactionResponse,
+  UserResponse,
 } from '../../types';
 import type { Channel } from '../../channel';
 import { StateStore } from '../../store';
@@ -30,6 +33,7 @@ import { formatMessage, generateUUIDv4, toDeletedMessage } from '../../utils';
 import { makeComparator } from '../sortCompiler';
 import type { FieldToDataResolver } from '../types.normalization';
 import { resolveDotPathValue } from '../utility.normalization';
+import { lowerBound } from '../utility.search';
 import { ItemIndex } from '../ItemIndex';
 import { deriveCreatedAtAroundPaginationFlags } from '../cursorDerivation';
 import { deriveIdAroundPaginationFlags } from '../cursorDerivation/idAroundPaginationFlags';
@@ -400,6 +404,11 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
    * here would make the channel look explicitly marked-unread and suppress auto-mark-read.
    */
   seedUnreadSnapshot = () => {
+    // A paginator query (BasePaginator.executeQuery) awaits the network before running its
+    // synchronous postQueryReconcile, which calls this on the first page. If the channel was
+    // disconnected while that request was in flight, reading the client below throws ("You can't
+    // use a channel after client.disconnect()"), so guard against that.
+    if (this.channel.disconnected) return;
     const ownUserId = this.channel.getClient().user?.id;
     const ownReadState = ownUserId ? this.channel.state.read[ownUserId] : undefined;
     if (!ownReadState) return;
@@ -412,19 +421,60 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
   };
 
   /**
-   * Invokes the super.postQueryReconcile() and takes an unread state snapshot on the first page
-   * query. The snapshot has to be taken immediately after the query as the viewed channel is marked
-   * read immediately after opening it. The snapshot can be used to display unread UI indicators.
+   * Invokes super.postQueryReconcile() and takes an unread state snapshot on the first-page query.
+   * The snapshot has to be taken immediately after the query as the viewed channel is marked read
+   * immediately after opening it. The snapshot can be used to display unread UI indicators.
    */
-  async postQueryReconcile(
+  postQueryReconcile(
     params: PostQueryReconcileParams<LocalMessage, MessageQueryShape>,
-  ): Promise<ExecuteQueryReturnValue<LocalMessage>> {
-    const result = await super.postQueryReconcile(params);
+  ): ExecuteQueryReturnValue<LocalMessage> {
+    const result = super.postQueryReconcile(params);
 
     if (params.isFirstPage) {
       this.seedUnreadSnapshot();
     }
     return result;
+  }
+
+  /**
+   * Seed the paginator with the page a channel-open query just fetched (`Channel.query` for
+   * `watch`/`create`, and `client.hydrateActiveChannels`).
+   *
+   * These paths hydrate the channel read state in the SAME synchronous tick they add messages
+   * (`Channel._initializeState`), and the read patch drives `MessageReceiptsTracker`, which resolves
+   * read/delivered cursors against this paginator (`findItemByTimestamp`) whenever the server omits
+   * the `last_read_message_id` / `last_delivered_message_id`. `postQueryReconcile` is fully
+   * synchronous (filtering is a local predicate), so seeding here guarantees the paginator is
+   * populated before the reconcile runs. First-page reconciliation also takes the unread snapshot.
+   *
+   * The fetched page is NOT always the latest window: a channel can be opened AROUND a message
+   * (`messages: { id_around }` / `{ created_at_around }`), so the original pagination options are
+   * threaded through as the query shape. For an around/jump open this lets `postQueryReconcile`
+   * apply jump semantics (no forced head/tail; cursor flags derived from the around position)
+   * instead of wrongly flagging the window as the head (newest) page.
+   */
+  seedFirstPageSync(
+    messages: LocalMessage[],
+    requestedPageSize: number,
+    messagePaginationOptions?: MessagePaginationOptions,
+  ) {
+    const queryShape: MessageQueryShape = {
+      ...messagePaginationOptions,
+      limit: requestedPageSize,
+    };
+    const isJump = this.isJumpQueryShape(queryShape);
+    this.postQueryReconcile({
+      // A jump/around page spans both directions; a plain latest page paginates tailward (older).
+      direction: isJump ? undefined : 'tailward',
+      isFirstPage: true,
+      queryShape,
+      requestedPageSize,
+      results: {
+        items: messages,
+        headward: isJump ? messages[messages.length - 1]?.id : undefined,
+        tailward: messages[0]?.id,
+      },
+    });
   }
 
   isJumpQueryShape(queryShape: MessageQueryShape): boolean {
@@ -898,6 +948,89 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
     this.clearMessageFocusSignal();
   };
 
+  /**
+   * Partial truncation for `channel.truncated` carrying a `truncated_at`: drop every loaded
+   * message strictly older than the cutoff (keeping newer ones) across all loaded windows,
+   * mirroring the legacy per-message-set pruning. For a full truncation (no `truncated_at`) use
+   * {@link MessagePaginator.clearStateAndCache} instead.
+   *
+   * Batched and edge-classified: because messages are chronological, each interval is classified by
+   * its `tail` (oldest) and `head` (newest) edges, so only the single interval that *straddles* the
+   * cutoff is scanned member-by-member — the rest are kept or dropped wholesale. The straddling
+   * interval becomes the new global tail (nothing older than the cutoff exists anymore), so its
+   * `isTail`/`hasMoreTail` are set; intervals entirely newer keep their flags (unloaded older
+   * messages may still sit between them and the cutoff). The active window is re-emitted once.
+   */
+  truncate = ({ truncatedAt }: { truncatedAt: Date }) => {
+    const cutoff = truncatedAt.getTime();
+    if (Number.isNaN(cutoff)) return;
+
+    const isOld = (item: LocalMessage | undefined) => {
+      const time = item?.created_at ? new Date(item.created_at).getTime() : undefined;
+      return typeof time === 'number' && time < cutoff;
+    };
+
+    const removedIds: string[] = [];
+    const survivingIntervals: AnyInterval[] = [];
+    // iterate from head to tail
+    for (const interval of this.itemIntervals) {
+      const edges = this.getIntervalPaginationEdges(interval);
+      if (!edges || !isOld(edges.tail)) {
+        survivingIntervals.push(interval); // oldest edge >= cutoff → nothing to drop
+      } else if (isOld(edges.head)) {
+        removedIds.push(...interval.itemIds); // newest edge < cutoff → whole interval is older
+      } else {
+        // determines the cutoff. Items are chronological, so the old ones are at the beginning of the array,
+        // binary-search rather than scanning every member.
+        const ids = interval.itemIds;
+        const splitIndex = lowerBound(
+          ids.length,
+          (index) => !isOld(this._itemIndex.get(ids[index])),
+        );
+        removedIds.push(...ids.slice(0, splitIndex));
+        const kept = ids.slice(splitIndex);
+        survivingIntervals.push(
+          isLogicalInterval(interval)
+            ? { ...interval, itemIds: kept }
+            : { ...interval, itemIds: kept, isTail: true, hasMoreTail: false },
+        );
+      }
+    }
+
+    if (!removedIds.length) return;
+    for (const id of removedIds) this._itemIndex.remove(id);
+
+    // No re-sort needed: `survivingIntervals` preserves the order of the already-sorted
+    // `itemIntervals` (we only keep/prune/drop, never reorder), and truncation removes only
+    // tailward items — an interval's head edge (the intervalComparator sort key) never changes.
+    this.setIntervals(survivingIntervals);
+
+    // Single re-emit of the active window (setIntervals does not emit).
+    const active = this._activeIntervalId
+      ? this._itemIntervals.get(this._activeIntervalId)
+      : undefined;
+    if (active && !isLogicalInterval(active)) {
+      this.setActiveInterval(active);
+      return;
+    }
+
+    // The active window was truncated away entirely. It sat below the cutoff, so it was older
+    // than every survivor — activate the nearest surviving window (the tail-most, i.e. oldest,
+    // anchored interval) rather than emitting an empty page, which would blank the message list.
+    const anchoredSurvivors = this.itemIntervals.filter(
+      (itv): itv is Interval => !isLogicalInterval(itv),
+    );
+
+    // If the active interval was truncated, we move to the neareast interval - which is the tail now
+    const fallback = this.getTailIntervalFromSortedIntervals(anchoredSurvivors);
+    if (fallback) {
+      this.setActiveInterval(fallback);
+    } else {
+      // Nothing loaded survived the truncation.
+      this.state.partialNext({ items: [] });
+    }
+  };
+
   applyMessageDeletionForUser = ({
     userId,
     hardDelete = false,
@@ -959,6 +1092,132 @@ export class MessagePaginator extends BasePaginator<LocalMessage, MessageQuerySh
         quoted_message: message,
       });
     }
+  };
+
+  /**
+   * Reflect an updated `user` object onto every cached message authored by that user, mirroring
+   * the legacy `ChannelState.updateUserMessages` for the main message list (does not touch
+   * `quoted_message.user` — that is not part of the legacy behavior).
+   *
+   * Batched: a user rename can affect many messages, so this patches the shared item index and
+   * re-emits the active window a single time (if it held an affected message) rather than one
+   * `ingestItem` re-emit per message.
+   */
+  reflectUserUpdate = (user: UserResponse) => {
+    const activeIds = new Set((this.items ?? []).map((m) => this.getItemId(m)));
+    let activeAffected = false;
+    for (const message of this._itemIndex.values()) {
+      if (message.user?.id !== user.id) continue;
+      this._itemIndex.setOne({ ...message, user });
+      if (activeIds.has(this.getItemId(message))) activeAffected = true;
+    }
+    if (activeAffected) {
+      this.state.partialNext({
+        items: (this.items ?? []).map((m) => this.getItem(this.getItemId(m)) ?? m),
+      });
+    }
+  };
+
+  /**
+   * Apply a reaction WS event (`reaction.new` / `reaction.updated` / `reaction.deleted`) to the
+   * cached message. The event's `message` already carries the server-updated
+   * `reaction_groups` / `latest_reactions`; only `own_reactions` needs local preservation so a
+   * cross-user reaction does not wipe the current user's reactions. This re-homes what
+   * `ChannelState.addReaction` / `removeReaction` used to do off the now-removed
+   * `channel.state.messages` / `channel.state.threads` caches (the same logic backs the thread
+   * paginator via `Thread.messagePaginator`).
+   *
+   * `own_reactions` is seeded from the currently cached item (so another user's reaction keeps ours),
+   * falling back to the event's own_reactions when the message is not loaded — matching the legacy
+   * behavior where `_updateMessage` only mutated a message that existed locally.
+   *
+   * @param params
+   * @param {MessageResponse | LocalMessage} params.message The reaction event's message, carrying the
+   *   server-computed `reaction_groups` / `latest_reactions`. Ingested as-is except for `own_reactions`.
+   * @param {ReactionResponse} params.reaction The reaction from the event. Only added to/removed from
+   *   `own_reactions` when its `user_id` is the current user; otherwise the current user's
+   *   `own_reactions` are left untouched.
+   * @param {boolean} [params.removed=false] `true` for `reaction.deleted` (remove the reaction from
+   *   `own_reactions`); `false` for `reaction.new` / `reaction.updated` (add it).
+   * @param {boolean} [params.enforceUnique=false] When adding, first clear the current user's existing
+   *   `own_reactions` so only the incoming one remains (used by `reaction.updated`, where a user's
+   *   reaction replaces their previous one).
+   */
+  reflectReaction = ({
+    enforceUnique = false,
+    message,
+    reaction,
+    removed = false,
+  }: {
+    message: MessageResponse | LocalMessage;
+    reaction: ReactionResponse;
+    enforceUnique?: boolean;
+    removed?: boolean;
+  }) => {
+    const formatted = formatMessage(message);
+    const existing = this.getItem(formatted.id);
+    const baseOwnReactions = existing?.own_reactions ?? formatted.own_reactions ?? [];
+    const own_reactions = removed
+      ? this.removeOwnReactionOfType(baseOwnReactions, reaction)
+      : this.addOwnReaction(baseOwnReactions, reaction, enforceUnique);
+    this.ingestItem({ ...formatted, own_reactions });
+  };
+
+  private removeOwnReactionOfType(
+    ownReactions: ReactionResponse[],
+    reaction: ReactionResponse,
+  ): ReactionResponse[] {
+    return ownReactions.filter(
+      (r) => r.user_id !== reaction.user_id || r.type !== reaction.type,
+    );
+  }
+
+  private addOwnReaction(
+    ownReactions: ReactionResponse[],
+    reaction: ReactionResponse,
+    enforceUnique: boolean,
+  ): ReactionResponse[] {
+    const base = enforceUnique
+      ? []
+      : this.removeOwnReactionOfType(ownReactions, reaction);
+    if (this.channel.getClient().userID === reaction.user_id) {
+      return [...base, reaction];
+    }
+    return base;
+  }
+
+  /**
+   * Map a timestamp to a loaded message — the first message in the latest (head) window whose
+   * `created_at` is >= `timestampMs` (mirrors the legacy `ChannelState.findMessageByTimestamp`
+   * lower-bound search), or the newest loaded message when the timestamp is beyond it. Used by the
+   * receipts tracker to resolve read/delivered cursors. Searches the newest loaded window — where
+   * read cursors live — which is already sorted, so this is O(log n) with no re-sort.
+   */
+  findItemByTimestamp = (
+    timestampMs: number,
+    exactTsMatch = false,
+  ): LocalMessage | null => {
+    const items = this.latestItems; // ascending by created_at
+    if (!items.length) return null;
+    // Resolve the last message created AT OR BEFORE `timestampMs` (floor). The sole caller is
+    // read/delivered cursor resolution (MessageReceiptsTracker): the cursor carries the timestamp of
+    // the last message a participant reached, so a message created strictly after the cursor has NOT
+    // been reached. A ceil match (first message >= target) would over-count it — e.g. a participant
+    // whose read cursor predates every loaded message would be reported as having read the oldest one.
+    // `lowerBound` returns the first index whose created_at is strictly greater than the target, so
+    // the floor is the item immediately before it.
+    const firstAfter = lowerBound(items.length, (i) => {
+      const t = getMessageCreatedAtTimestamp(items[i]);
+      return t === null || t > timestampMs;
+    });
+    if (firstAfter === 0) return null; // target precedes every loaded message
+    const found = items[firstAfter - 1];
+    const foundTimestamp = getMessageCreatedAtTimestamp(found);
+    // A message without a resolvable created_at (e.g. an optimistic message still missing its
+    // server timestamp) cannot be located by timestamp.
+    if (foundTimestamp === null) return null;
+    if (!exactTsMatch) return found;
+    return foundTimestamp === timestampMs ? found : null;
   };
 
   filterQueryResults = (items: LocalMessage[]) =>

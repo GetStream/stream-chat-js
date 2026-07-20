@@ -526,6 +526,35 @@ export abstract class BasePaginator<T, Q> {
     return this.state.getLatestValue().items;
   }
 
+  /**
+   * The newest loaded window of items, independent of which window is currently *active*
+   * (`items` follows the active interval, which may point at a jumped-to / searched window). In
+   * interval-storage mode this is the head-most loaded interval under the paginator's ordering
+   * (anchored or the live-head logical interval); in flat mode it is the full `items` list.
+   *
+   * NOTE: this deliberately uses the head-*most loaded* interval rather than requiring the
+   * `isHead` flag — the query/hydration seed does not reliably mark a freshly loaded latest page
+   * as `isHead`, so an isHead-only check would miss channel-list channels entirely. The trade-off
+   * is that after jumping to an older window with the latest window not loaded, this reports that
+   * older window as "latest" (best effort). Use for "latest"-derived reads: last message, unread
+   * counting, delivery candidates, channel-list previews.
+   */
+  get latestItems(): T[] {
+    if (!this.usesItemIntervalStorage) return this.items ?? [];
+    const head = this.getHeadIntervalFromSortedIntervals(this.itemIntervals);
+    return head ? this.intervalToItems(head) : [];
+  }
+
+  /**
+   * The single newest loaded item — the head pagination edge of {@link BasePaginator.latestItems}.
+   * `undefined` when nothing is loaded.
+   */
+  get latestItem(): T | undefined {
+    if (!this.usesItemIntervalStorage) return this.items?.[0];
+    const head = this.getHeadIntervalFromSortedIntervals(this.itemIntervals);
+    return head ? (this.getIntervalPaginationEdges(head)?.head ?? undefined) : undefined;
+  }
+
   get cursor() {
     return this.state.getLatestValue().cursor;
   }
@@ -600,7 +629,7 @@ export abstract class BasePaginator<T, Q> {
     params: PaginationQueryParams<Q>,
   ): Promise<PaginationQueryReturnValue<T>>;
 
-  abstract filterQueryResults(items: T[]): T[] | Promise<T[]>;
+  abstract filterQueryResults(items: T[]): T[];
 
   /**
    * Subclasses must return the query shape.
@@ -1987,9 +2016,11 @@ export abstract class BasePaginator<T, Q> {
   /**
    * Falsy return value means query was not successful.
    * @param direction
+   * @param keepPreviousItems
    * @param forcedQueryShape
    * @param reset
    * @param retryCount
+   * @param silent
    * @param updateState
    */
   async executeQuery({
@@ -2032,7 +2063,7 @@ export abstract class BasePaginator<T, Q> {
       retryCount,
     });
 
-    return await this.postQueryReconcile({
+    return this.postQueryReconcile({
       direction,
       isFirstPage,
       keepPreviousItems,
@@ -2043,7 +2074,7 @@ export abstract class BasePaginator<T, Q> {
     });
   }
 
-  async postQueryReconcile({
+  postQueryReconcile({
     direction,
     isFirstPage,
     keepPreviousItems,
@@ -2051,7 +2082,7 @@ export abstract class BasePaginator<T, Q> {
     requestedPageSize,
     results,
     updateState = true,
-  }: PostQueryReconcileParams<T, Q>): Promise<ExecuteQueryReturnValue<T>> {
+  }: PostQueryReconcileParams<T, Q>): ExecuteQueryReturnValue<T> {
     this._lastQueryShape = queryShape;
     this._nextQueryShape = undefined;
 
@@ -2075,7 +2106,10 @@ export abstract class BasePaginator<T, Q> {
     const resolvedTailward = tailward ?? next;
 
     stateUpdate.lastQueryError = undefined;
-    const filteredItems = await this.filterQueryResults(items);
+    // Filtering is a synchronous local predicate (see filterQueryResults), so the whole
+    // reconciliation runs in a single tick. The channel-open seed relies on this to populate the
+    // paginator synchronously (MessagePaginator.seedFirstPageSync) before read-state hydration.
+    const filteredItems = this.filterQueryResults(items);
     stateUpdate.items = filteredItems;
 
     // State-only mode: merge pages into a single list.

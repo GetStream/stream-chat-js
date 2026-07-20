@@ -241,12 +241,15 @@ export class Channel {
       compositionContext: this,
     });
 
+    // Created before MessageReceiptsTracker and CooldownTimer: both read the message paginator
+    // (receipts resolve read cursors via findItemByTimestamp; CooldownTimer.refresh reads the
+    // latest window at construction).
+    this.messagePaginator = new MessagePaginator({ channel: this });
+
     this.messageReceiptsTracker = new MessageReceiptsTracker({ channel: this });
     this.messageReceiptsTracker.registerSubscriptions();
 
     this.cooldownTimer = new CooldownTimer({ channel: this });
-
-    this.messagePaginator = new MessagePaginator({ channel: this });
 
     this.messageOperations = new MessageOperations({
       ingest: (m) => this.messagePaginator.ingestItem(m),
@@ -726,7 +729,7 @@ export class Channel {
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
-        const message = this.state.messages.find(({ id }) => id === messageID);
+        const message = this.messagePaginator.getItem(messageID);
         const reaction = {
           created_at: '',
           updated_at: '',
@@ -1384,19 +1387,9 @@ export class Channel {
    * @return {ReturnType<ChannelState['formatMessage']> | undefined} Description
    */
   lastMessage(): LocalMessage | undefined {
-    // get last 5 messages, sort, return the latest
-    // get a slice of the last 5
-    let min = this.state.latestMessages.length - 5;
-    if (min < 0) {
-      min = 0;
-    }
-    const max = this.state.latestMessages.length + 1;
-    const messageSlice = this.state.latestMessages.slice(min, max);
-
-    // sort by pk desc
-    messageSlice.sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
-
-    return messageSlice[0];
+    // The paginator keeps its latest (head) window sorted, so its head edge is the newest message.
+    // (Replaces the legacy "slice last 5 of state.latestMessages + re-sort" heuristic.)
+    return this.messagePaginator.latestItem;
   }
 
   /**
@@ -1517,6 +1510,10 @@ export class Channel {
     const previousData = this.data;
     this.data = state.channel;
     this._syncStateFromChannelData(this.data, previousData);
+
+    // The message paginator is seeded synchronously inside query() (before read-state hydration),
+    // so a channel opened via watch() alone — a deep-link restore, a search result, a freshly
+    // created DM — already has its latest page loaded here.
 
     this._client.logger(
       'info',
@@ -1685,10 +1682,10 @@ export class Channel {
    */
   countUnread(lastRead?: Date | null) {
     if (!lastRead) return this.state.unreadCount;
-    // todo: prevent finding the latest message set on each iteration
     let count = 0;
-    for (let i = 0; i < this.state.latestMessages.length; i += 1) {
-      const message = this.state.latestMessages[i];
+    const latestMessages = this.messagePaginator.latestItems;
+    for (let i = 0; i < latestMessages.length; i += 1) {
+      const message = latestMessages[i];
       if (message.created_at > lastRead && this._countMessageAsUnread(message)) {
         count++;
       }
@@ -1706,8 +1703,9 @@ export class Channel {
     const userID = this.getClient().userID;
 
     let count = 0;
-    for (let i = 0; i < this.state.latestMessages.length; i += 1) {
-      const message = this.state.latestMessages[i];
+    const latestMessages = this.messagePaginator.latestItems;
+    for (let i = 0; i < latestMessages.length; i += 1) {
+      const message = latestMessages[i];
       if (
         this._countMessageAsUnread(message) &&
         (!lastRead || message.created_at > lastRead) &&
@@ -1811,6 +1809,25 @@ export class Channel {
       this.messageComposer.updateConfig({
         location: { enabled: state.channel.config.shared_locations },
       });
+    }
+
+    // Seed the message paginator with the first (latest) page BEFORE _initializeState, which
+    // hydrates the read state and (via MessageReceiptsTracker) resolves read/delivered cursors
+    // against this paginator. Seeding first guarantees the tracker sees a populated timeline; a
+    // later async seed would run after the reconcile and mislabel delivery status. Only the
+    // latest-page open paths (watch/create) pass 'latest' — the paginator's own pagination queries
+    // use 'current' and must not be reseeded as a first page here.
+    if (messageSetToAddToIfDoesNotExist === 'latest' && Array.isArray(state.messages)) {
+      const requestedPageSize =
+        options?.messages?.limit ?? DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE;
+      // Pass the query's message pagination options through: a channel can be opened AROUND a
+      // message (id_around / created_at_around), in which case the fetched page is a jump window,
+      // not the latest page — the paginator must reconcile it with jump semantics.
+      this.messagePaginator.seedFirstPageSync(
+        state.messages.map(formatMessage),
+        requestedPageSize,
+        options?.messages,
+      );
     }
 
     // add any messages to our channel state
@@ -2501,7 +2518,8 @@ export class Channel {
         break;
       case 'channel.truncated':
         if (event.channel?.truncated_at) {
-          const truncatedAt = +new Date(event.channel.truncated_at);
+          const truncatedAtDate = new Date(event.channel.truncated_at);
+          const truncatedAt = +truncatedAtDate;
 
           channelState.messageSets.forEach((messageSet, messageSetIndex) => {
             messageSet.messages.forEach(({ created_at: createdAt, id }) => {
@@ -2514,23 +2532,27 @@ export class Channel {
             if (truncatedAt > +createdAt)
               channelState.removePinnedMessage({ id } as MessageResponse);
           });
-          channelState.unreadCount = this.countUnread(
-            new Date(event.channel.truncated_at),
-          );
+          channelState.unreadCount = this.countUnread(truncatedAtDate);
+          // Partial truncation: keep messages newer than the cutoff. clearStateAndCache would wipe
+          // the whole paginator (readers now source from it), so use the partial truncate. The
+          // channel-wide read/unread context is reset by the truncation, so drop the unread snapshot
+          // too (clearStateAndCache did this for the full-truncate branch).
+          this.messagePaginator.truncate({ truncatedAt: truncatedAtDate });
+          this.messagePaginator.clearUnreadSnapshot();
         } else {
           channelState.clearMessages();
           channelState.unreadCount = 0;
+          this.messagePaginator.clearStateAndCache();
         }
 
         // system messages don't increment unread counts
         if (event.message) {
           channelState.addMessageSorted(event.message);
+          this.messagePaginator.ingestItem(formatMessage(event.message));
           if (event.message.pinned) {
             channelState.addPinnedMessage(event.message);
           }
         }
-
-        this.messagePaginator.clearStateAndCache();
 
         break;
       case 'member.added':
@@ -2632,9 +2654,12 @@ export class Channel {
       case 'reaction.new':
         if (event.message && event.reaction) {
           const { message, reaction } = event;
+          // channelState.addReaction still runs for its pinnedMessages side-effect (dropped in the
+          // storage-removal step); the paginator's own_reactions preservation is now re-homed onto
+          // messagePaginator.reflectReaction (thread replies are handled by the Thread object).
           event.message = channelState.addReaction(reaction, message) as MessageResponse;
           if (!event.message?.parent_id) {
-            this.messagePaginator.ingestItem(formatMessage(event.message));
+            this.messagePaginator.reflectReaction({ message: event.message, reaction });
           }
         }
         break;
@@ -2643,7 +2668,11 @@ export class Channel {
           const { message, reaction } = event;
           event.message = channelState.removeReaction(reaction, message);
           if (event.message && !event.message.parent_id) {
-            this.messagePaginator.ingestItem(formatMessage(event.message));
+            this.messagePaginator.reflectReaction({
+              message: event.message,
+              reaction,
+              removed: true,
+            });
           }
         }
         break;
@@ -2657,7 +2686,11 @@ export class Channel {
             true,
           ) as MessageResponse;
           if (!event.message?.parent_id) {
-            this.messagePaginator.ingestItem(formatMessage(event.message));
+            this.messagePaginator.reflectReaction({
+              enforceUnique: true,
+              message: event.message,
+              reaction,
+            });
           }
         }
         break;
@@ -2881,7 +2914,12 @@ export class Channel {
     if (!event.message) {
       return;
     }
-    const message = this.state.findMessage(event.message.id, event.message.parent_id);
+    // Main (non-reply) messages are owned by the message paginator; thread replies still live in
+    // ChannelState (threads are OUT OF SCOPE and stay there). Resolve each from its own source so
+    // this no longer reads the legacy main message list.
+    const message = event.message.parent_id
+      ? this.state.findMessage(event.message.id, event.message.parent_id)
+      : this.messagePaginator.getItem(event.message.id);
     if (message) {
       event.message.own_reactions = message.own_reactions;
     }

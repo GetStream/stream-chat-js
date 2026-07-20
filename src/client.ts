@@ -1484,7 +1484,11 @@ export class StreamChat {
       const state = channel.state;
 
       /** update the messages from this user. */
+      // Legacy dual-write retained until the ChannelState message-set removal (Task 10). The
+      // paginator update keeps messagePaginator-backed readers (e.g. lastMessage) in sync; thread
+      // replies live in thread paginators and are handled by the thread migration.
       state?.updateUserMessages(user);
+      channel.messagePaginator.reflectUserUpdate(user);
     }
   };
 
@@ -1512,6 +1516,11 @@ export class StreamChat {
         const state = channel.state;
 
         /** deleted the messages from this user. */
+        channel.messagePaginator.applyMessageDeletionForUser({
+          userId: user.id,
+          hardDelete,
+          deletedAt: deletedAt ?? new Date(),
+        });
         state?.deleteUserMessages(user, hardDelete, deletedAt);
       }
     }
@@ -2285,6 +2294,33 @@ export class StreamChat {
       c.initialized = !offlineMode;
       c.push_preferences = channelState.push_preferences;
 
+      const willInitialize =
+        skipInitialization === undefined ||
+        !skipInitialization.includes(channelState.channel.id);
+      const requestedPageSize =
+        queryChannelsOptions?.message_limit ??
+        DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE;
+
+      // Seed the paginator BEFORE _initializeState, which hydrates read state and (via
+      // MessageReceiptsTracker) resolves read/delivered cursors against this paginator. Seeding
+      // first guarantees the tracker sees a populated timeline; a later async seed would run after
+      // the reconcile and mislabel delivery status.
+      //
+      // Skip the re-seed when this (shared) channel's paginator is already loaded AND the user has
+      // jumped to an older window (active interval is not the head): a first-page re-seed forces the
+      // newest page to merge into that jumped interval across the gap (missing messages in the
+      // middle). A cold paginator, or one still at the head (offline/at-latest), re-seeds normally so
+      // cursors/hasMoreTail get (re)derived and pagination keeps working.
+      if (
+        willInitialize &&
+        (!c.messagePaginator.isInitialized || c.messagePaginator.isActiveIntervalAtHead)
+      ) {
+        c.messagePaginator.seedFirstPageSync(
+          channelState.messages.map(formatMessage),
+          requestedPageSize,
+        );
+      }
+
       let updatedMessagesSet;
       let filteredMessageIds: string[] = [];
       if (skipInitialization === undefined) {
@@ -2317,29 +2353,6 @@ export class StreamChat {
         };
         this.polls.hydratePollCache(channelState.messages, true);
         this.reminders.hydrateState(channelState.messages);
-      }
-      const requestedPageSize =
-        queryChannelsOptions?.message_limit ??
-        DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE;
-      // Skip the re-seed when this (shared) channel's paginator is already loaded AND the user has
-      // jumped to an older window (active interval is not the head): a first-page re-seed forces the
-      // newest page to merge into that jumped interval across the gap (missing messages in the
-      // middle). A cold paginator, or one still at the head (offline/at-latest), re-seeds normally so
-      // cursors/hasMoreTail get (re)derived and pagination keeps working.
-      if (
-        !c.messagePaginator.isInitialized ||
-        c.messagePaginator.isActiveIntervalAtHead
-      ) {
-        c.messagePaginator.postQueryReconcile({
-          direction: 'tailward',
-          isFirstPage: true,
-          queryShape: { limit: requestedPageSize },
-          requestedPageSize,
-          results: {
-            items: channelState.messages.map(formatMessage),
-            tailward: channelState.messages[0]?.id,
-          },
-        });
       }
       c.messageComposer.initStateFromChannelResponse(channelState);
       c.cooldownTimer.refresh();

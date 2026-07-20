@@ -10,12 +10,24 @@ import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse'
 import { ChannelState, StreamChat } from '../../src';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
-import { generateUUIDv4 as uuidv4 } from '../../src/utils';
+import { formatMessage, generateUUIDv4 as uuidv4 } from '../../src/utils';
 
 import { describe, beforeEach, afterEach, it, expect, vi } from 'vitest';
 
+// Seed the channel's messagePaginator "latest" (head) window from raw generated messages.
+// The unread/last-message readers now source from `messagePaginator.latestItems`/`latestItem`,
+// so tests populate the paginator (formatted) rather than the legacy `state.addMessagesSorted`.
+const seedLatestWindow = (channel, messages) =>
+	channel.messagePaginator.ingestPage({
+		page: messages.map((m) => formatMessage(m)),
+		isHead: true,
+		isTail: true,
+		setActive: true,
+	});
+
 describe('Channel count unread', function () {
 	let lastRead;
+	let ignoredMessages;
 	let user;
 	let channel;
 	let client;
@@ -34,7 +46,7 @@ describe('Channel count unread', function () {
 		channel.lastRead = () => lastRead;
 		channel.data.own_capabilities = ['read-events'];
 
-		const ignoredMessages = [
+		ignoredMessages = [
 			generateMsg({ date: '2018-01-01T00:00:00', mentioned_users: [user] }),
 			generateMsg({ date: '2019-01-01T00:00:00' }),
 			generateMsg({ date: '2020-01-01T00:00:00' }),
@@ -115,35 +127,40 @@ describe('Channel count unread', function () {
 
 	it('countUnread should return correct count', function () {
 		expect(channel.countUnread(lastRead)).to.be.equal(0);
-		channel.state.addMessagesSorted([
+		// ignoredMessages (shadowed/silent/muted/at-or-before lastRead) must not be counted
+		seedLatestWindow(channel, [
+			...ignoredMessages,
 			generateMsg({ date: '2021-01-01T00:00:00' }),
 			generateMsg({ date: '2022-01-01T00:00:00' }),
 		]);
 		expect(channel.countUnread(lastRead)).to.be.equal(2);
 	});
 
-	it('countUnread should return correct count when multiple message sets are loaded into state', () => {
+	it('countUnread should read the latest window, not the active one', () => {
 		expect(channel.countUnread(lastRead)).to.be.equal(0);
-		channel.state.addMessagesSorted([
-			generateMsg({ date: '2026-01-01T00:00:00' }),
-			generateMsg({ date: '2026-02-01T00:00:00' }),
-		]);
-		channel.state.addMessagesSorted(
-			[generateMsg({ date: '2006-01-01T00:00:00' })],
-			false,
-			true,
-			true,
-			'new',
-		);
-		channel.state.messageSets[0].isCurrent = false;
-		channel.state.messageSets[1].isCurrent = true;
+		// latest (head) window
+		channel.messagePaginator.ingestPage({
+			page: [
+				...ignoredMessages,
+				generateMsg({ date: '2026-01-01T00:00:00' }),
+				generateMsg({ date: '2026-02-01T00:00:00' }),
+			].map((m) => formatMessage(m)),
+			isHead: true,
+			setActive: false,
+		});
+		// a separate, older window becomes the active (current) one
+		channel.messagePaginator.ingestPage({
+			page: [formatMessage(generateMsg({ date: '2006-01-01T00:00:00' }))],
+			setActive: true,
+		});
 
 		expect(channel.countUnread(lastRead)).to.be.equal(2);
 	});
 
 	it('countUnreadMentions should return correct count', function () {
 		expect(channel.countUnreadMentions()).to.be.equal(0);
-		channel.state.addMessageSorted(
+		seedLatestWindow(channel, [
+			...ignoredMessages,
 			generateMsg({
 				date: '2021-01-01T00:00:00',
 				mentioned_users: [user, { id: 'random' }],
@@ -152,28 +169,30 @@ describe('Channel count unread', function () {
 				date: '2022-01-01T00:00:00',
 				mentioned_users: [{ id: 'random' }],
 			}),
-		);
+		]);
 		expect(channel.countUnreadMentions()).to.be.equal(1);
 	});
 
-	it('countUnreadMentions should return correct count when multiple message sets are loaded into state', () => {
+	it('countUnreadMentions should read the latest window, not the active one', () => {
 		expect(channel.countUnreadMentions()).to.be.equal(0);
-		channel.state.addMessagesSorted([
-			generateMsg({
-				date: '2021-01-01T00:00:00',
-				mentioned_users: [user, { id: 'random' }],
-			}),
-			generateMsg({ date: '2022-01-01T00:00:00' }),
-		]);
-		channel.state.addMessagesSorted(
-			[generateMsg({ date: '2010-01-01T00:00:00' })],
-			false,
-			true,
-			true,
-			'new',
-		);
-		channel.state.messageSets[0].isCurrent = false;
-		channel.state.messageSets[1].isCurrent = true;
+		// latest (head) window contains the mention
+		channel.messagePaginator.ingestPage({
+			page: [
+				...ignoredMessages,
+				generateMsg({
+					date: '2021-01-01T00:00:00',
+					mentioned_users: [user, { id: 'random' }],
+				}),
+				generateMsg({ date: '2022-01-01T00:00:00' }),
+			].map((m) => formatMessage(m)),
+			isHead: true,
+			setActive: false,
+		});
+		// a separate, older window becomes the active (current) one
+		channel.messagePaginator.ingestPage({
+			page: [formatMessage(generateMsg({ date: '2010-01-01T00:00:00' }))],
+			setActive: true,
+		});
 
 		expect(channel.countUnreadMentions()).to.be.equal(1);
 	});
@@ -334,7 +353,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 		const { client, channel } = setupChannel({ isLocalUnreadCountEnabled: true });
 		const post = vi.spyOn(client, 'post').mockResolvedValue({});
 		const lastMsg = generateMsg({ user: otherUser });
-		channel.state.addMessagesSorted([lastMsg]);
+		seedLatestWindow(channel, [lastMsg]);
 		channel.state.unreadCount = 5;
 		channel.state.read[user.id] = {
 			last_read: new Date('2020-01-01T00:00:00'),
@@ -386,7 +405,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 		const { client, channel } = setupChannel({ isLocalUnreadCountEnabled: true });
 		const post = vi.spyOn(client, 'post').mockResolvedValue({});
 		const lastMsg = generateMsg({ user: otherUser });
-		channel.state.addMessagesSorted([lastMsg]);
+		seedLatestWindow(channel, [lastMsg]);
 		channel.state.unreadCount = 3;
 		delete channel.state.read[user.id];
 
@@ -727,8 +746,8 @@ describe('Channel _handleChannelEvent', function () {
 			{ created_at: '2021-01-01T00:03:00' },
 		].map(generateMsg);
 
-		channel.state.addMessagesSorted(messages);
-		expect(channel.state.messages.length).to.be.equal(3);
+		seedLatestWindow(channel, messages);
+		expect(channel.messagePaginator.latestItems.length).to.be.equal(3);
 
 		channel._handleChannelEvent({
 			type: 'channel.truncated',
@@ -738,11 +757,14 @@ describe('Channel _handleChannelEvent', function () {
 			},
 		});
 
-		expect(channel.state.messages.length).to.be.equal(0);
+		expect(channel.messagePaginator.latestItems.length).to.be.equal(0);
 	});
 
 	it('message.truncate clears messagePaginator unread snapshot', function () {
-		const cachedMessage = generateMsg({ id: 'truncate-cached-message-id' });
+		const cachedMessage = generateMsg({
+			date: '2020-01-01T00:00:00.000Z',
+			id: 'truncate-cached-message-id',
+		});
 		channel.messagePaginator.setItems({
 			valueOrFactory: [cachedMessage],
 			isFirstPage: true,
@@ -769,7 +791,9 @@ describe('Channel _handleChannelEvent', function () {
 			lastReadMessageId: null,
 			unreadCount: 0,
 		});
-		expect(channel.messagePaginator.items).toBeUndefined();
+		// Partial truncate (truncated_at in the past) prunes the older-than-cutoff message; the
+		// emptied active window resolves to an empty item list.
+		expect(channel.messagePaginator.items ?? []).toEqual([]);
 		expect(channel.messagePaginator.getItem(cachedMessage.id)).toBeUndefined();
 	});
 
@@ -780,8 +804,8 @@ describe('Channel _handleChannelEvent', function () {
 			{ created_at: '2021-01-01T00:03:00' },
 		].map(generateMsg);
 
-		channel.state.addMessagesSorted(messages);
-		expect(channel.state.messages.length).to.be.equal(3);
+		seedLatestWindow(channel, messages);
+		expect(channel.messagePaginator.latestItems.length).to.be.equal(3);
 
 		channel._handleChannelEvent({
 			type: 'channel.truncated',
@@ -791,7 +815,7 @@ describe('Channel _handleChannelEvent', function () {
 			},
 		});
 
-		expect(channel.state.messages.length).to.be.equal(2);
+		expect(channel.messagePaginator.latestItems.length).to.be.equal(2);
 	});
 
 	it('message.truncate removes pinned messages up to specified date', function () {
@@ -809,9 +833,9 @@ describe('Channel _handleChannelEvent', function () {
 			},
 		].map(generateMsg);
 
-		channel.state.addMessagesSorted(messages);
+		seedLatestWindow(channel, messages);
 		channel.state.addPinnedMessages(messages.filter((m) => m.pinned));
-		expect(channel.state.messages.length).to.be.equal(3);
+		expect(channel.messagePaginator.latestItems.length).to.be.equal(3);
 		expect(channel.state.pinnedMessages.length).to.be.equal(2);
 
 		channel._handleChannelEvent({
@@ -822,7 +846,7 @@ describe('Channel _handleChannelEvent', function () {
 			},
 		});
 
-		expect(channel.state.messages.length).to.be.equal(2);
+		expect(channel.messagePaginator.latestItems.length).to.be.equal(2);
 		expect(channel.state.pinnedMessages.length).to.be.equal(1);
 	});
 
@@ -852,10 +876,8 @@ describe('Channel _handleChannelEvent', function () {
 			message: { ...originalMessage, deleted_at: new Date().toISOString() },
 		});
 
-		expect(
-			channel.state.messages.find((msg) => msg.id === quotingMessage.id).quoted_message
-				.deleted_at,
-		).to.be.ok;
+		expect(channel.messagePaginator.getItem(quotingMessage.id).quoted_message.deleted_at)
+			.to.be.ok;
 	});
 
 	it('message.deleted hard delete removes message from messagePaginator', function () {
@@ -1616,6 +1638,7 @@ describe('Channel _handleChannelEvent', function () {
 				type: 'message.new',
 				user: otherUser,
 				message: generateMsg({
+					cid: channel.cid,
 					id: messageDeliveredEvent.last_delivered_message_id,
 					date: messageDeliveredEvent.last_delivered_at,
 				}),
@@ -1637,6 +1660,7 @@ describe('Channel _handleChannelEvent', function () {
 			});
 			channel.state.read[user.id] = initialReadState;
 			const newerMessage = generateMsg({
+				cid: channel.cid,
 				id: 'some-other-id',
 				date: new Date(3000).toISOString(),
 			});
@@ -1671,6 +1695,7 @@ describe('Channel _handleChannelEvent', function () {
 				type: 'message.new',
 				user: otherUser,
 				message: generateMsg({
+					cid: channel.cid,
 					id: messageDeliveredEvent.last_delivered_message_id,
 					date: messageDeliveredEvent.last_delivered_at,
 				}),
@@ -1767,6 +1792,12 @@ describe('Channel _handleChannelEvent', function () {
 
 		testCases.forEach((messages) => {
 			channel.state.addMessagesSorted(messages);
+			// Main (non-reply) messages are resolved from the paginator by
+			// _extendEventWithOwnReactions; thread replies stay resolved via channel.state.
+			seedLatestWindow(
+				channel,
+				messages.filter((m) => !m.parent_id),
+			);
 			const message = messages[messages.length - 1];
 
 			const eventTypes = ['message.updated', 'message.deleted'];
@@ -1978,7 +2009,7 @@ describe('Channel _handleChannelEvent', function () {
 		channel.state.read = {
 			user: { id: 'user' },
 		};
-		channel.state.addMessageSorted(generateMsg());
+		seedLatestWindow(channel, [generateMsg()]);
 		channel.state.addPinnedMessages([generateMsg()]);
 		channel.state.watcher_count = 5;
 
@@ -1987,7 +2018,7 @@ describe('Channel _handleChannelEvent', function () {
 		expect(Object.keys(channel.state.members).length).to.be.eq(1);
 		expect(Object.keys(channel.state.watchers).length).to.be.eq(1);
 		expect(Object.keys(channel.state.read).length).to.be.eq(1);
-		expect(channel.state.messages.length).to.be.eq(1);
+		expect(channel.messagePaginator.latestItems.length).to.be.eq(1);
 		expect(channel.state.pinnedMessages.length).to.be.eq(1);
 		expect(channel.state.watcher_count).to.be.eq(5);
 	});
@@ -2589,7 +2620,7 @@ describe('Channel lastMessage', async () => {
 	it('should return last message - messages are in order', () => {
 		channel.state = new ChannelState(channel);
 		const latestMessageDate = '2018-01-01T00:13:24';
-		channel.state.addMessagesSorted([
+		seedLatestWindow(channel, [
 			generateMsg({ date: '2018-01-01T00:00:00' }),
 			generateMsg({ date: '2018-01-01T00:02:00' }),
 			generateMsg({ date: latestMessageDate }),
@@ -2603,7 +2634,7 @@ describe('Channel lastMessage', async () => {
 	it('should return last message - messages are out of order', () => {
 		channel.state = new ChannelState(channel);
 		const latestMessageDate = '2018-01-01T00:13:24';
-		channel.state.addMessagesSorted([
+		seedLatestWindow(channel, [
 			generateMsg({ date: latestMessageDate }),
 			generateMsg({ date: '2018-01-01T00:02:00' }),
 			generateMsg({ date: '2018-01-01T00:00:00' }),
@@ -2626,8 +2657,12 @@ describe('Channel lastMessage', async () => {
 			generateMsg({ date: '2017-11-21T00:05:33' }),
 			generateMsg({ date: '2017-11-21T00:05:35' }),
 		];
-		channel.state.addMessagesSorted(latestMessages);
-		channel.state.addMessagesSorted(otherMessages, 'new');
+		// latest (head) window + a separate, older window
+		seedLatestWindow(channel, latestMessages);
+		channel.messagePaginator.ingestPage({
+			page: otherMessages.map((m) => formatMessage(m)),
+			setActive: false,
+		});
 
 		expect(channel.lastMessage().created_at.getTime()).to.be.equal(
 			new Date(latestMessageDate).getTime(),
@@ -2974,8 +3009,9 @@ describe('delete reaction flow', () => {
 		// trick the channel into being initialized
 		channel.initialized = true;
 
-		// Add a fake message to state for reaction deletion optimistic update in the db
-		channel.state.messages.push({ id: messageId });
+		// Add a fake message to the paginator for reaction-deletion optimistic update in the db
+		// (channel.deleteReaction now resolves the message via messagePaginator.getItem).
+		channel.messagePaginator.ingestItem({ id: messageId });
 
 		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});

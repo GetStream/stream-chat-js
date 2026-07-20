@@ -1,3 +1,27 @@
+/**
+ * Partition-point ("lower bound") binary search over the index range `[0, length)`.
+ *
+ * `predicate` must be **monotonic** over the range — `false` for a (possibly empty) prefix, then
+ * `true` for the remaining suffix. Returns the first index at which `predicate(index)` holds, or
+ * `length` if it never does. O(log length).
+ *
+ * Unlike `binarySearch`, this locates a *boundary* defined by a predicate rather than a specific
+ * item by identity — e.g. "first message at/after a timestamp" over a chronologically sorted array.
+ */
+export function lowerBound(
+  length: number,
+  predicate: (index: number) => boolean,
+): number {
+  let lo = 0;
+  let hi = length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (predicate(mid)) hi = mid;
+    else lo = mid + 1;
+  }
+  return lo;
+}
+
 export function locateOnPlateauAlternating<T>(
   items: readonly T[],
   needle: T,

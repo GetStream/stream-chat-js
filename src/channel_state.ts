@@ -15,7 +15,6 @@ import {
   deleteUserMessages as _deleteUserMessages,
   addToMessageList,
   formatMessage,
-  isBlockedMessage,
 } from './utils';
 import { DEFAULT_MESSAGE_SET_PAGINATION } from './constants';
 import { StateStore } from './store';
@@ -981,24 +980,6 @@ export class ChannelState {
   };
 
   /**
-   * filterErrorMessages - Removes error messages from the channel state.
-   *
-   */
-  filterErrorMessages() {
-    const filteredMessages = this.latestMessages.filter(
-      (message) => message.type !== 'error',
-    );
-
-    const blockedMessages = this.latestMessages.filter(isBlockedMessage);
-    // We need to hard delete the blocked messages from the offline database.
-    for (const message of blockedMessages) {
-      this._channel.getClient().offlineDb?.hardDeleteMessage({ id: message.id });
-    }
-
-    this.latestMessages = filteredMessages;
-  }
-
-  /**
    * clean - Remove stale data such as users that stayed in typing state for more than 5 seconds
    */
   clean() {
@@ -1037,55 +1018,6 @@ export class ChannelState {
   }
 
   /**
-   * loadMessageIntoState - Loads a given message (and messages around it) into the state
-   *
-   * @param {string} messageId The id of the message, or 'latest' to indicate switching to the latest messages
-   * @param {string} parentMessageId The id of the parent message, if we want load a thread reply
-   * @param {number} limit The page size if the message has to be queried from the server
-   */
-  async loadMessageIntoState(
-    messageId: string | 'latest',
-    parentMessageId?: string,
-    limit = 25,
-  ) {
-    let messageSetIndex: number;
-    let switchedToMessageSet = false;
-    let loadedMessageThread = false;
-    const messageIdToFind = parentMessageId || messageId;
-    if (messageId === 'latest') {
-      if (this.messages === this.latestMessages) {
-        return;
-      }
-      messageSetIndex = this.messageSets.findIndex((s) => s.isLatest);
-    } else {
-      messageSetIndex = this.findMessageSetIndex({ id: messageIdToFind });
-    }
-    if (messageSetIndex !== -1) {
-      this.switchToMessageSet(messageSetIndex);
-      switchedToMessageSet = true;
-    }
-    loadedMessageThread =
-      !parentMessageId ||
-      !!this.threads[parentMessageId]?.find((m) => m.id === messageId);
-    if (switchedToMessageSet && loadedMessageThread) {
-      return;
-    }
-    if (!switchedToMessageSet) {
-      await this._channel.query(
-        { messages: { id_around: messageIdToFind, limit } },
-        'new',
-      );
-    }
-    if (!loadedMessageThread && parentMessageId) {
-      await this._channel.getReplies(parentMessageId, { id_around: messageId, limit });
-    }
-    messageSetIndex = this.findMessageSetIndex({ id: messageIdToFind });
-    if (messageSetIndex !== -1) {
-      this.switchToMessageSet(messageSetIndex);
-    }
-  }
-
-  /**
    * findMessage - Finds a message inside the state
    *
    * @param {string} messageId The id of the message
@@ -1107,50 +1039,6 @@ export class ChannelState {
       return undefined;
     }
     return this.messageSets[messageSetIndex].messages.find((m) => m.id === messageId);
-  }
-
-  findMessageByTimestamp(
-    timestampMs: number,
-    parentMessageId?: string,
-    exactTsMatch: boolean = false,
-  ): LocalMessage | null {
-    if (
-      (parentMessageId && !this.threads[parentMessageId]) ||
-      this.messageSets.length === 0
-    )
-      return null;
-    const setIndex = this.findMessageSetByOldestTimestamp(timestampMs);
-    const targetMsgSet = this.messageSets[setIndex]?.messages;
-    if (!targetMsgSet?.length) return null;
-    const firstMsgTimestamp = targetMsgSet[0].created_at.getTime();
-    const lastMsgTimestamp = targetMsgSet.slice(-1)[0].created_at.getTime();
-    const isOutOfBound =
-      timestampMs < firstMsgTimestamp || lastMsgTimestamp < timestampMs;
-    if (isOutOfBound && exactTsMatch) return null;
-
-    let msgIndex = 0,
-      hi = targetMsgSet.length - 1;
-    while (msgIndex < hi) {
-      const mid = (msgIndex + hi) >>> 1;
-      if (timestampMs <= targetMsgSet[mid].created_at.getTime()) hi = mid;
-      else msgIndex = mid + 1;
-    }
-
-    const foundMessage = targetMsgSet[msgIndex];
-    return !exactTsMatch
-      ? foundMessage
-      : foundMessage.created_at.getTime() === timestampMs
-        ? foundMessage
-        : null;
-  }
-
-  private switchToMessageSet(index: number) {
-    const currentMessages = this.messageSets.find((s) => s.isCurrent);
-    if (!currentMessages) {
-      return;
-    }
-    currentMessages.isCurrent = false;
-    this.messageSets[index].isCurrent = true;
   }
 
   private areMessageSetsOverlap(

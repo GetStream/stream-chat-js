@@ -295,36 +295,6 @@ describe('ChannelState addMessagesSorted', function () {
 		expect(state.latestMessages[2].id).to.be.equal('14');
 	});
 
-	it('should remove blocked messages from the latest messages from the offline database', () => {
-		state.addMessagesSorted(
-			[
-				generateMsg({
-					id: '12',
-					date: toISOString(1200),
-					type: 'error',
-					moderation_details: { action: 'MESSAGE_RESPONSE_ACTION_REMOVE' },
-				}),
-				generateMsg({
-					id: '13',
-					date: toISOString(1300),
-					type: 'error',
-					moderation: { action: 'remove' },
-				}),
-				generateMsg({ id: '14', date: toISOString(1400) }),
-			],
-			false,
-			false,
-			true,
-			'latest',
-		);
-		expect(state.latestMessages.length).to.be.equal(3);
-		state.filterErrorMessages();
-		expect(state.latestMessages.length).to.be.equal(1);
-		expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledTimes(2);
-		expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledWith({ id: '12' });
-		expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledWith({ id: '13' });
-	});
-
 	it('adds message page sorted', () => {
 		// load first page
 		state.addMessagesSorted(
@@ -2133,141 +2103,6 @@ describe('ChannelState own capabilities store', () => {
 	});
 });
 
-describe('loadMessageIntoState', () => {
-	let state;
-
-	beforeEach(() => {
-		const client = new StreamChat();
-		client.userID = 'userId';
-		const channel = new Channel(client, 'type', 'id', {});
-		client._addChannelConfig({ cid: channel.cid, config: {} });
-		state = new ChannelState(channel);
-	});
-
-	it('should do nothing if message is available locally in the current set', async () => {
-		state.addMessagesSorted([generateMsg({ id: '8' })], false, true, true, 'latest');
-		state.addMessagesSorted([generateMsg({ id: '5' })], false, true, true, 'new');
-		await state.loadMessageIntoState('8');
-
-		expect(state.messageSets[0].isCurrent).to.be.equal(true);
-	});
-
-	it('should switch message sets if message is available locally, but in a different set', async () => {
-		state.addMessagesSorted(
-			[generateMsg({ id: '8', date: toISOString(800) })],
-			false,
-			true,
-			true,
-			'latest',
-		);
-		state.addMessagesSorted(
-			[generateMsg({ id: '5', date: toISOString(500) })],
-			false,
-			true,
-			true,
-			'new',
-		);
-		await state.loadMessageIntoState('5');
-
-		expect(state.messageSets[0].isCurrent).to.be.equal(false);
-		expect(state.messageSets[1].isCurrent).to.be.equal(true);
-	});
-
-	it('should switch to latest message set', async () => {
-		state.addMessagesSorted(
-			[generateMsg({ id: '8', date: toISOString(800) })],
-			false,
-			true,
-			true,
-			'latest',
-		);
-		state.addMessagesSorted(
-			[generateMsg({ id: '5', date: toISOString(500) })],
-			false,
-			true,
-			true,
-			'new',
-		);
-		state.messageSets[0].isCurrent = false;
-		state.messageSets[1].isCurrent = true;
-		await state.loadMessageIntoState('latest');
-
-		expect(state.messageSets[0].isCurrent).to.be.equal(true);
-	});
-
-	it('should load message from backend and switch to the new message set', async () => {
-		state.addMessagesSorted([
-			generateMsg({ id: '5', date: toISOString(500) }),
-			generateMsg({ id: '6', date: toISOString(600) }),
-		]);
-		const newMessages = [generateMsg({ id: '8', date: toISOString(800) })];
-		state._channel.query = () => {
-			state.addMessagesSorted(newMessages, false, true, true, 'new');
-		};
-		await state.loadMessageIntoState('8');
-
-		expect(state.messages.length).to.be.equal(1);
-		expect(state.messages[0].id).to.be.equal('8');
-	});
-
-	describe('if message is a thread reply', () => {
-		it('should do nothing if parent message and reply are available locally in the current set', async () => {
-			const parentMessage = generateMsg({ id: '5', date: toISOString(500) });
-			const reply = generateMsg({ id: '8', date: toISOString(800), parent_id: '5' });
-			state.addMessagesSorted([parentMessage]);
-			state.addMessagesSorted([reply]);
-
-			await state.loadMessageIntoState('8', '5');
-
-			expect(state.messages[0].id).to.be.equal(parentMessage.id);
-			expect(state.threads[parentMessage.id][0].id).to.be.equal(reply.id);
-		});
-
-		it('should change message set if parent message and reply are available locally', async () => {
-			const parentMessage = generateMsg({ id: '5', date: toISOString(500) });
-			const reply = generateMsg({ id: '8', date: toISOString(800), parent_id: '5' });
-			state.addMessagesSorted([parentMessage]);
-			state.addMessagesSorted([reply]);
-			const otherMessages = [generateMsg(), generateMsg()];
-			state.addMessagesSorted(otherMessages, false, true, true, 'new');
-			state.messageSets[0].isCurrent = false;
-			state.messageSets[1].isCurrent = true;
-
-			await state.loadMessageIntoState('8', '5');
-
-			expect(state.messages[0].id).to.be.equal(parentMessage.id);
-			expect(state.threads[parentMessage.id][0].id).to.be.equal(reply.id);
-		});
-
-		it(`should load replies if parent message is available locally, but reply isn't`, async () => {
-			const parentMessage = generateMsg({ id: '5' });
-			const reply = generateMsg({ id: '8', parent_id: '5' });
-			state._channel.getReplies = () =>
-				state.addMessagesSorted([reply], false, false, true, 'current');
-			state.addMessagesSorted([parentMessage]);
-
-			await state.loadMessageIntoState('8', '5');
-
-			expect(state.messages[0].id).to.be.equal(parentMessage.id);
-			expect(state.threads[parentMessage.id][0].id).to.be.equal(reply.id);
-		});
-
-		it('should load parent message and reply from backend, and switch to new message set', async () => {
-			const parentMessage = generateMsg({ id: '5', date: toISOString(500) });
-			const reply = generateMsg({ id: '8', date: toISOString(800), parent_id: '5' });
-			state._channel.getReplies = () =>
-				state.addMessagesSorted([reply], false, false, true, 'current');
-			state._channel.query = () =>
-				state.addMessagesSorted([parentMessage], false, true, true, 'new');
-
-			await state.loadMessageIntoState('8', '5');
-
-			expect(state.messages[0].id).to.be.equal(parentMessage.id);
-			expect(state.threads[parentMessage.id][0].id).to.be.equal(reply.id);
-		});
-	});
-});
-
 describe('findMessage', () => {
 	let state;
 
@@ -2293,11 +2128,10 @@ describe('findMessage', () => {
 		expect(state.findMessage(messageId).id).to.eql(messageId);
 	});
 
-	it('message is in a different set', async () => {
+	it('message is in a different set', () => {
 		const messageId = '5';
 		state.addMessagesSorted([generateMsg({ id: '8' })], false, true, true, 'latest');
 		state.addMessagesSorted([generateMsg({ id: messageId })], false, true, true, 'new');
-		await state.loadMessageIntoState('5');
 
 		expect(state.findMessage(messageId).id).to.eql(messageId);
 	});
@@ -2330,107 +2164,5 @@ describe('findMessage', () => {
 
 			expect(state.findMessage(messageId, `not${parentMessageId}`)).to.eql(undefined);
 		});
-	});
-});
-
-describe('find message by timestamp', () => {
-	let state;
-
-	beforeEach(() => {
-		const client = new StreamChat();
-		client.userID = 'userId';
-		const channel = new Channel(client, 'type', 'id', {});
-		client._addChannelConfig({ cid: channel.cid, config: {} });
-		state = new ChannelState(channel);
-	});
-
-	it('finds the message with matching timestamp', () => {
-		const expectedFoundMsg = generateMsg({
-			id: '2',
-			created_at: toISOString(200),
-		});
-		state.addMessagesSorted([
-			generateMsg({ id: '12', created_at: toISOString(1200) }),
-			generateMsg({ id: '13', created_at: toISOString(1300) }),
-			generateMsg({ id: '14', created_at: toISOString(1400) }),
-		]);
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '1', created_at: toISOString(100) }),
-				expectedFoundMsg,
-				generateMsg({ id: '3', created_at: toISOString(300) }),
-				generateMsg({ id: '4', created_at: toISOString(400) }),
-			],
-			false,
-			false,
-			true,
-			'new',
-		);
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '6', created_at: toISOString(600) }),
-				generateMsg({ id: '7', created_at: toISOString(700) }),
-			],
-			false,
-			false,
-			true,
-			'new',
-		);
-
-		const foundMessage = state.findMessageByTimestamp(
-			new Date(expectedFoundMsg.created_at).getTime(),
-		);
-		expect(foundMessage.id).toBe(expectedFoundMsg.id);
-	});
-
-	it('finds the first message if multiple messages with the same timestamp', () => {
-		const expectedFoundMessage = generateMsg({
-			id: '2',
-			created_at: toISOString(200),
-		});
-		const msgWithSameTimestamp = { ...expectedFoundMessage, id: '3' };
-		state.addMessagesSorted([
-			generateMsg({ id: '12', created_at: toISOString(1200) }),
-			generateMsg({ id: '13', created_at: toISOString(1300) }),
-			generateMsg({ id: '14', created_at: toISOString(1400) }),
-		]);
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '1', created_at: toISOString(100) }),
-				expectedFoundMessage,
-				msgWithSameTimestamp,
-				generateMsg({ id: '3.5', created_at: toISOString(300) }),
-				generateMsg({ id: '4', created_at: toISOString(400) }),
-			],
-			false,
-			false,
-			true,
-			'new',
-		);
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '6', created_at: toISOString(600) }),
-				generateMsg({ id: '7', created_at: toISOString(700) }),
-			],
-			false,
-			false,
-			true,
-			'new',
-		);
-
-		const foundMessage = state.findMessageByTimestamp(
-			new Date(msgWithSameTimestamp.created_at).getTime(),
-		);
-		expect(foundMessage.id).toBe(expectedFoundMessage.id);
-	});
-
-	it('returns null if the message is not found', () => {
-		state.addMessagesSorted([
-			generateMsg({ id: '12', created_at: toISOString(1200) }),
-			generateMsg({ id: '13', created_at: toISOString(1300) }),
-			generateMsg({ id: '14', created_at: toISOString(1400) }),
-		]);
-		const foundMessage = state.findMessageByTimestamp(200);
-		expect(foundMessage).toBeNull();
 	});
 });

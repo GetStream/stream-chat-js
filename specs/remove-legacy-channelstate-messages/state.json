@@ -1,0 +1,156 @@
+{
+  "feature": "remove-legacy-channelstate-messages",
+  "status": "planned",
+  "worktree": {
+    "path": "../stream-chat-js-worktrees/remove-legacy-channelstate-messages",
+    "branch": "feat/remove-legacy-channelstate-messages",
+    "base": "feat/message-paginator-master-merge"
+  },
+  "openDecisions": ["D1", "D2", "D3", "D4"],
+  "tasks": [
+    {
+      "id": 1,
+      "name": "Paginator capability parity",
+      "status": "done",
+      "owner": "claude",
+      "dependencies": [],
+      "note": "Added BasePaginator.latestItems/latestItem + protected headInterval, MessagePaginator.truncate({truncatedAt}); isUpToDate<->isHead parity confirmed via tests. Full unit suite 3514 pass (+7 new), 0 fail."
+    },
+    {
+      "id": 2,
+      "name": "channel.ts seeding + derived readers",
+      "status": "done",
+      "owner": "claude",
+      "dependencies": [1],
+      "note": "Migrated lastMessage/countUnread/countUnreadMentions to messagePaginator.latestItem(s) and deleteReaction offline read to messagePaginator.getItem; legacy dual-writes left in place. _extendEventWithOwnReactions deferred to Task 6 (thread-reply lookup needs the thread paginator). Seeding finding: gap 4 already covered by watch()+hydrateActiveChannels — search() never populated ChannelState messages, loadMessageIntoState has no callers (to be deleted), and direct channel.query() must NOT be blanket-seeded (it is the MessagePaginator's own pagination transport → re-entrancy). channel.test.js updated to seed the paginator. Full suite 3542 pass."
+    },
+    {
+      "id": 3,
+      "name": "CooldownTimer reader",
+      "status": "done",
+      "owner": "claude",
+      "dependencies": [1],
+      "note": "CooldownTimer.refresh() reads messagePaginator.latestItems; moved messagePaginator creation before cooldownTimer in the Channel ctor (refresh() runs at construction). Fixed a Task 1 gap found here: latestItems/latestItem now fall back to the live head (logical) interval so WS message.new on a fresh (unqueried) channel is seen. CooldownTimer.test.ts seeds the paginator. Full suite 3542 pass."
+    },
+    {
+      "id": 4,
+      "name": "messageDelivery readers (channel branch only)",
+      "status": "done",
+      "owner": "claude",
+      "dependencies": [1],
+      "note": "MessageDeliveryReporter channel branch -> messagePaginator.latestItems; added MessagePaginator.findItemByTimestamp (lowerBound over latest window) and re-pointed MessageReceiptsTracker's default locator to it. Thread branch left as-is (threads out of scope; it early-returns anyway). Moved messagePaginator creation above messageReceiptsTracker in the Channel ctor. Tests seed the paginator; message.new test messages need cid to ingest. Full suite 3543 pass (lone 301 WS error is environmental)."
+    },
+    {
+      "id": 5,
+      "name": "client.ts _updateUserReferences reader",
+      "status": "done",
+      "owner": "claude",
+      "dependencies": [1],
+      "note": "Added MessagePaginator.reflectUserUpdate(user) (batched: patches item index + single active-window re-emit) and called it alongside legacy state.updateUserMessages in client._updateUserMessageReferences (dual-write; legacy removed in Task 10). Thread replies (thread paginators) + pinnedMessages user-ref updates deferred to Task 6 / pinned handling. Full suite 3543 pass; the lone 301 WS error is environmental."
+    },
+    {
+      "id": 6,
+      "name": "thread.ts reply source of truth",
+      "status": "in-scope (folded into Task 11)",
+      "owner": "claude",
+      "dependencies": [1],
+      "note": "SCOPE REVERSED (user directive): channel.state.threads is to be REMOVED, not kept. Verified the Thread object already owns reply state: Thread.state.replies + its own Thread.messagePaginator, with independent subscriptions to message.new/updated/deleted + reaction.* (thread.ts:517/617/639). So channel.state.threads is a redundant legacy shadow for RENDERING. The only thing riding on it is own_reactions preservation on cross-user reactions (channelState.addReaction reads the local reply copy so another user's reaction event doesn't wipe our own_reactions). That preservation must be re-homed onto the paginators (see Task 11 note). Removal folded into Task 11."
+    },
+    {
+      "id": 7,
+      "name": "channel.ts getReplies decouple",
+      "status": "in-scope (folded into Task 11)",
+      "owner": "claude",
+      "dependencies": [2],
+      "note": "SCOPE REVERSED (user directive): channel.getReplies (channel.ts:1578) currently calls this.state.addMessagesSorted(data.messages) to populate channel.state.threads. With channel.state.threads removed, that call is dropped — the Thread object populates its own reply store from the getReplies response. Folded into Task 11."
+    },
+    {
+      "id": 8,
+      "name": "React readers migration",
+      "status": "done",
+      "owner": "claude",
+      "dependencies": [],
+      "note": "React readers (ChannelListItem lastMessage/preview, useMessageDeliveryStatus, useMarkRead, MessageBounceContext, useActionHandler) now read channel.messagePaginator. Fixed the receipts-ordering bug (option B): the paginator is now seeded SYNCHRONOUSLY before read-state hydration. Split BasePaginator.postQueryReconcile into an async wrapper + sync applyQueryReconcile core; added MessagePaginator.seedFirstPageSync used by channel.query() ('latest' path, before _initializeState) and client.hydrateActiveChannels() (before _initializeState, keeping the isInitialized/isActiveIntervalAtHead guard); removed the late async seeds from watch()/hydrate. Changed findItemByTimestamp from ceil to floor (last message <= target) — correct for read/delivered cursors; its only prod caller is the receipts tracker. Wired client._deleteUserMessageReference to messagePaginator.applyMessageDeletionForUser (global-ban user.messages.deleted). Fixed initClientWithChannels concurrent-setup race (Promise.all -> sequential) that cross-seeded paginators via the shared axios mock. Full suites green: JS 3544 pass/0 fail; React 2517 pass/0 fail; both types+lint clean."
+    },
+    {
+      "id": 9,
+      "name": "channel.ts stop dual-write",
+      "status": "done",
+      "owner": "claude",
+      "dependencies": [3, 4, 5, 8],
+      "note": "SCOPE RE-SEQUENCED by the threads-stay decision (Task 6/7 out-of-scope): the shared ChannelState methods (addMessageSorted/removeMessage/deleteUserMessages/addReaction/removeReaction/_updateQuotedMessageReferences) still feed state.threads, so their legacy main-list WRITE can only be removed when messageSets is deleted and the methods are split — that is Task 11. Removing them here would break threads and be redone in Task 11. What Task 9 delivered (making the paginator authoritative for all remaining channel.ts read/behavior logic so Task 11 can delete the storage cleanly): (1) channel.truncated now uses messagePaginator.truncate({truncatedAt}) for the partial case (previously clearStateAndCache wrongly wiped the whole paginator on a partial truncate, blanking migrated readers) + clearUnreadSnapshot, keeps clearStateAndCache for the full case, and ingests the truncate system message into the paginator (Part A gap: it previously had no paginator twin). (2) _extendEventWithOwnReactions now resolves main (non-reply) messages via messagePaginator.getItem, keeping state.findMessage only for thread replies — removing the last channel.ts main-list reader. Remaining legacy main-list readers are only last_message_at (fed by addMessagesSorted, which stays until Task 11) and channel.truncated's own messageSet scan (thread/pinned pruning). Tests updated (channel.test.js truncate + own_reactions). Full suites green: JS 3544 pass/0 fail (types+lint clean); React 2517 pass/0 fail."
+    },
+    {
+      "id": 10,
+      "name": "client.ts stop dual-write (hydrate)",
+      "status": "done",
+      "owner": "claude",
+      "dependencies": [5, 9],
+      "note": "No standalone code change — same threads-stay coupling as Task 9, plus a green-cadence constraint. (a) The paginator is already seeded in hydrateActiveChannels via seedFirstPageSync BEFORE _initializeState (added in Task 8). (b) Poll/reminder hydration already sources from the RAW ChannelAPIResponse (client.ts ~2354-2355 use the loop var channelState.messages = the API response, not channel.state.messages) — the plan's independently-feasible criterion, already satisfied. The plan's other directive ('drop _initializeState/clearMessages/messageSetPagination seeding') is NOT independently doable: _initializeState also hydrates read/members/watchers/membership/pinned + stale-thread cleanup (all needed); clearMessages + the messageSetPagination block feed the still-PUBLIC getters channel.state.messages and channel.state.messagePagination (channel_state.ts:330), which tests still read. Stopping the legacy write now (before Task 11 deletes the storage/getters and Task 13 updates those tests) would blank those getters and turn the suite red between Task 10 and Task 13, breaking the green-vs-baseline cadence. So the hydrate legacy message-list seeding removal is folded into Task 11 (with its _initializeState split) + Task 13 (test updates). Suites remain green from Task 9 (JS 3544/0, React 2517/0)."
+    },
+    {
+      "id": 11,
+      "name": "Delete ChannelState message-list storage + utils",
+      "status": "in progress",
+      "owner": "claude",
+      "dependencies": [9, 10],
+      "subSteps": "Running in verified sub-steps. [DONE] Sub-step 1 — dead code + last React straggler: migrated stream-chat-react SearchResultItem off channel.state.loadMessageIntoState to the paginator path (it just sets searchController.focusedMessage; <Channel> already performs messagePaginator.jumpToMessage — a Task 8 React-reader gap the Explore map missed because it only scanned JS src); then deleted ChannelState.loadMessageIntoState, filterErrorMessages, findMessageByTimestamp, and the now-dead private switchToMessageSet + unused isBlockedMessage import, plus their channel_state.test.js blocks. Verified green: JS 3532 pass/0 fail (types+lint clean), React 2517 pass/0 fail. [DONE] Sub-step 2 — migrated the CONSUMER assertions (message-list-as-proxy) to the paginator while storage still dual-writes. JS: channel.test.js 8 sites (truncate tests now seed via seedLatestWindow + assert latestItems; message.delete quoted-refs + 'reload doesn't wipe state' read messagePaginator.getItem/latestItems). React: mock-builders/api/markRead.ts (latestItem?.id), ChannelListItem/ScrollToLatestMessageButton/MessageList/Channel test readers -> messagePaginator.latestItem(s)/getItem. Deliberately LEFT the messageSets/messagePagination MACHINERY tests (channel.test.js ~1036-1250 & 2746-2768; ALL 21 client.test.js message-set-merge assertions) untouched — they test code being deleted, so they get removed WITH the code in sub-step 3/4 (they stay green now via dual-write). Verified green: JS 3532/0 (lint clean), React 2517/0 (types+lint clean). SCOPE EXPANDED (user directive): channel.state.threads is ALSO removed now (not kept) — so the shared methods lose BOTH their main-list and thread branches and are DELETED outright (addMessagesSorted/addMessageSorted, removeMessage, deleteUserMessages, findMessage), or stripped to pinned-only where a pinned branch exists (_updateMessage, _updateQuotedMessageReferences). Threads' reply state is fully owned by the Thread object (Thread.state.replies + Thread.messagePaginator, verified). KEY COUPLING: own_reactions preservation on cross-user reactions currently rides on channelState.addReaction reading the local copy (channel.state.messages for main, channel.state.threads for replies); with both caches gone it must be re-homed onto the paginators — the channel reaction handler preserves via channel.messagePaginator.getItem before ingest (main); the Thread reaction handler preserves via Thread.messagePaginator.getItem (reply). [PENDING] Sub-step 3 — re-home reaction own_reactions preservation onto the paginators (add a paginator reaction-merge path); delete/strip the shared ChannelState methods; remove legacy writes in channel.ts handlers (incl. getReplies thread population) + hydrate + split _initializeState; re-home last_message_at; drop channel.state.threads. [PENDING] Sub-step 4 — delete messageSets/messages/latestMessages/threads storage + getters + geometry helpers + utils.messageSetPagination; delete the machinery + thread ChannelState tests. --- ORIGINAL SCOPE: Scope narrowed to the MAIN message list: remove messageSets / messages / latestMessages / message-set pagination + geometry helpers. KEEP ChannelState.threads (per-parent replies), pinnedMessages, and pending_messages. Shared methods that serve both sets and threads (addMessagesSorted, findMessage, updateUserMessages, deleteUserMessages, addReaction, removeReaction, _updateMessage, _updateQuotedMessageReferences, removeMessage) are REFACTORED to keep their thread/pinned handling, not fully deleted. PULLED IN FROM TASK 9 (threads-stay re-sequencing): the removal of the legacy main-list WRITES in channel.ts event handlers (message.new/updated/deleted, reactions, user.messages.deleted) happens HERE, as the shared methods are split — Task 9 could not remove them without breaking threads. PULLED IN FROM TASK 10: the hydrateActiveChannels legacy message seeding removal (clearMessages + _initializeState's addMessagesSorted message branch + the messageSetPagination block) happens HERE — it feeds the still-public getters channel.state.messages / channel.state.messagePagination (channel_state.ts:330) that tests read, so removing it before the storage/getters are deleted and tests updated (Task 13) would turn the suite red. Split _initializeState so its read/members/watchers/pinned/thread-cleanup stays while the main-list write drops. Also re-home last_message_at (currently maintained by addMessagesSorted) and delete confirmed-dead code found in Part B: ChannelState.loadMessageIntoState, filterErrorMessages, findMessageByTimestamp (no src callers). NOTE: because removing the writes blanks channel.state.messages/messagePagination, Task 11 must land TOGETHER with Task 13's test updates to keep the suite green vs baseline."
+    },
+    {
+      "id": 12,
+      "name": "Types & exports",
+      "status": "pending",
+      "owner": null,
+      "dependencies": [11]
+    },
+    {
+      "id": 13,
+      "name": "Tests",
+      "status": "pending",
+      "owner": null,
+      "dependencies": [11, 12]
+    },
+    {
+      "id": 14,
+      "name": "Docs",
+      "status": "pending",
+      "owner": null,
+      "dependencies": [12]
+    },
+    {
+      "id": 15,
+      "name": "Offline-support migration (gated by D1)",
+      "status": "planned",
+      "owner": null,
+      "dependencies": [1],
+      "blockedBy": "D1",
+      "subPlan": "migrate-offline-to-messagepaginator",
+      "note": "Expanded into its own spec. Parity tranche (O1,O3,O5) is a required predecessor of Task 11; enhancement tranche gated on D-OFF-1."
+    },
+    {
+      "id": 16,
+      "name": "Author (userId -> message ids) secondary index for O(1) per-user updates",
+      "status": "pending",
+      "owner": null,
+      "dependencies": [5],
+      "blocking": false,
+      "note": "Optimization follow-up, NOT gating Task 11. reflectUserUpdate (and later per-user ops like applyMessageDeletionForUser / deleteUserMessages migration) currently scan _itemIndex.values() (all cached messages). Maintain an author index (userId -> Set<messageId>) updated on ingest/remove so these become O(user's messages) not O(all)."
+    },
+    {
+      "id": 17,
+      "name": "Complete removal of addMessagesSorted (migrate channel.state.threads off ChannelState)",
+      "status": "superseded — folded into Task 11 (user directive to remove channel.state.threads now, not after Task 13)",
+      "owner": null,
+      "dependencies": [11, 13],
+      "note": "SUPERSEDED: the user directed removing channel.state.threads as part of Task 11 rather than deferring. See Task 6/7 (now in-scope) and Task 11. Original deferred plan retained below for reference. Sequenced AFTER Task 13. Task 11 only STRIPS addMessagesSorted/addMessageSorted (and removeMessage/deleteUserMessages/_updateMessage/_updateQuotedMessageReferences/findMessage) to their thread(+pinned) branch — it cannot delete them because they are the sole writers/consumers of channel.state.threads, the per-parent reply cache that threads-out-of-scope keeps. channel.state.threads is never read for RENDERING (thread UI reads threadManager.state / Thread.state.replies), only INTERNALLY to enrich thread-reply WS events (findMessage(id,parentId) in _extendEventWithOwnReactions; addReaction/removeReaction reply merge; deleteUserMessages/_updateMessage/_updateQuotedMessageReferences reply branches). To DELETE addMessagesSorted (and channel.state.threads) entirely: (1) move thread-reply own_reactions/reaction/quoted/delete enrichment onto the Thread object's own reply store (Thread.state.replies) — this is the deferred Task 6/7 threads migration; (2) drop the thread branches from the shared ChannelState methods and delete channel.state.threads + addMessagesSorted/addMessageSorted; (3) re-point the remaining callers (channel.getReplies at channel.ts:1578, offline_support_api) at the Thread store; (4) update/remove the ChannelState thread tests. Breaking public-API change (ChannelState is export *-ed) — fold into the Task 12 semver/exports pass or a follow-up major. Gated on reviving the Task 6/7 threads decision."
+    },
+    {
+      "id": 18,
+      "name": "Migrate channel.state.pinnedMessages -> channel.pinnedMessagesPaginator (PinnedMessagePaginator)",
+      "status": "planned",
+      "owner": null,
+      "dependencies": [11],
+      "note": "GOAL: replace the channel.state.pinnedMessages array (+ addPinnedMessages/addPinnedMessage/removePinnedMessage + the pinned branches of _updateMessage/updateUserMessages/deleteUserMessages that Task 11 KEEPS) with a channel.pinnedMessagesPaginator. Unlike channel.state.threads, pinnedMessages is a LIVE store with real React consumers (PinnedMessagesView, usePinnedMessagesSearch, usePinnedMessagesCount, slotBinding), so this is a genuine migration, not a shadow removal.\n\nDESIGN — a dedicated PinnedMessagePaginator, NOT a bare MessagePaginator instance. Passing filters to a vanilla MessagePaginator is insufficient: buildFilters(), the sort (DEFAULT_BACKEND_SORT=created_at), and query() (channel.query({messages}) / getReplies) are methods baked with main-list/created_at assumptions, and pinned uses a DIFFERENT endpoint (channel.getPinnedMessages -> /pinned_messages) with PinnedMessagePaginationOptions (id-based cursors: id_around/id_gt(e)/id_lt(e)) and PinnedMessagesSort. Recommended: `class PinnedMessagePaginator extends MessagePaginator` overriding: buildFilters() -> { cid, pinned: true }; shouldIncludeMessageInInterval() -> !shadowed && !!pinned; item sort/comparator -> pinned_at (desc, matching legacy addPinnedMessage sortBy 'pinned_at'); query()/config.doRequest -> channel.getPinnedMessages(options, sort); getNextQueryShape + cursor derivation -> id-based (PinnedMessagePaginationOptions). NAVIGATION IS KEPT: PinnedMessagePaginationOptions supports id_around, so jumpToMessage (and jumpToTheLatestMessage = most-recently-pinned) are meaningful for pinned and stay exposed. MUST NOT expose/touch READ/UNREAD state — read/unread + delivery receipts belong to the channel + thread message timelines, never to a subset like pinned. So PinnedMessagePaginator: (a) overrides postQueryReconcile so the first-page reconcile does NOT call seedUnreadSnapshot (the base seeds from channel.state.read on first page — wrong for pinned); (b) does NOT surface unreadStateSnapshot / seedUnreadSnapshot / setUnreadSnapshot / jumpToTheFirstUnreadMessage / the unreadReferencePolicy option (unread-coupled — the plain id_around jumpToMessage stays); (c) is NOT wired into MessageReceiptsTracker (the tracker resolves cursors via the CHANNEL's messagePaginator.findItemByTimestamp; pinned must never be a receipts source/target). This read/unread carve-out is the strongest argument for the ALTERNATIVE factoring: instead of subclassing MessagePaginator and suppressing its unread surface, EXTRACT the unread/read-snapshot concern out of MessagePaginator into a composable mixin/companion, leaving a clean message-interval base (interval + ingestItem + reflect* + jumpToMessage/jumpToTheLatestMessage navigation). The channel/thread MAIN paginators compose the unread concern; PinnedMessagePaginator extends the clean base and never gets it (no suppression, no accidental channel.state.read coupling). Recommended: the extraction. Lower-effort fallback: extends MessagePaginator + override/no-op the unread surface (works, but the unread API still exists on the pinned instance and must be kept inert). The reflect* helpers must be reachable by both paginators either way (they live on the shared base if extracted, or are inherited if subclassing).\n\nPIN/UNPIN — the elegant part the user intuited: matchesFilter({ pinned: true }) means ingestItem AUTO-ADDS a message when it becomes pinned and AUTO-REMOVES it when unpinned (ingestItem commits the removal when matchesFilter fails). So the channel message.new/updated/deleted handlers simply also call pinnedMessagesPaginator.ingestItem(...) (and channel.truncated prunes via truncate); reactions on pinned messages go through pinnedMessagesPaginator.reflectReaction. No bespoke pin/unpin branching.\n\nSEEDING: seed from ChannelAPIResponse.pinned_messages on channel open (mirrors the main paginator seedFirstPageSync), replacing state.addPinnedMessages(state.pinned_messages).\n\nFOLLOW-THROUGH: migrate the React consumers to read the paginator state; delete channel.state.pinnedMessages + its methods; this then lets Task 11's 'shrink to pinned-only' methods (_updateMessage/updateUserMessages/deleteUserMessages) be DELETED outright rather than kept. Breaking public-API change (ChannelState.pinnedMessages + methods are export *-ed) -> Task 12 semver/exports + Task 14 docs. Sequenced after Task 11 (independent of the message-list removal, but shares the reflect* infrastructure)."
+    }
+  ]
+}

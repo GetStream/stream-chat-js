@@ -1071,6 +1071,137 @@ describe('MessagePaginator', () => {
     });
   });
 
+  describe('reflectUserUpdate()', () => {
+    it('patches the user on cached messages authored by the user and re-emits the active window', () => {
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      const byA1 = createMessage({
+        id: 'a1',
+        user: { id: 'A' },
+        created_at: '2021-01-01T00:00:00.000Z',
+      });
+      const byB = createMessage({
+        id: 'b1',
+        user: { id: 'B' },
+        created_at: '2021-01-02T00:00:00.000Z',
+      });
+      const byA2 = createMessage({
+        id: 'a2',
+        user: { id: 'A' },
+        created_at: '2021-01-03T00:00:00.000Z',
+      });
+
+      paginator.setItems({
+        valueOrFactory: [byA1, byB, byA2],
+        isFirstPage: true,
+        isLastPage: true,
+      });
+
+      paginator.reflectUserUpdate({ id: 'A', name: 'Renamed A' });
+
+      expect(paginator.getItem('a1')?.user?.name).toBe('Renamed A');
+      expect(paginator.getItem('a2')?.user?.name).toBe('Renamed A');
+      expect(paginator.getItem('b1')?.user?.name).not.toBe('Renamed A');
+      // the active window is re-emitted with the updated user object
+      expect(paginator.items?.find((m) => m.id === 'a1')?.user?.name).toBe('Renamed A');
+    });
+  });
+
+  describe('reflectReaction()', () => {
+    const currentUserId = 'me';
+    const reaction = (type: string, userId: string) => ({
+      created_at: '2021-01-01T00:00:00.000Z',
+      message_id: 'r1',
+      type,
+      user_id: userId,
+    });
+
+    beforeEach(() => {
+      (channel as unknown as { getClient: () => unknown }).getClient = () => ({
+        userID: currentUserId,
+      });
+    });
+
+    const seed = (
+      paginator: MessagePaginator,
+      ownReactions: ReturnType<typeof reaction>[],
+    ) => {
+      paginator.setItems({
+        valueOrFactory: [
+          createMessage({
+            created_at: '2021-01-01T00:00:00.000Z',
+            id: 'r1',
+            latest_reactions: ownReactions,
+            own_reactions: ownReactions,
+          }),
+        ],
+        isFirstPage: true,
+        isLastPage: true,
+      });
+    };
+
+    it("preserves the current user's own_reactions when another user reacts", () => {
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      seed(paginator, [reaction('love', currentUserId)]);
+
+      paginator.reflectReaction({
+        message: createMessage({
+          id: 'r1',
+          // server event omits our own_reactions and carries the merged groups
+          own_reactions: [],
+          reaction_groups: {
+            like: { count: 1, sum_scores: 1 } as never,
+            love: { count: 1, sum_scores: 1 } as never,
+          },
+        }),
+        reaction: reaction('like', 'other'),
+      });
+
+      const updated = paginator.getItem('r1');
+      expect(updated?.own_reactions?.map((r) => r.type)).toEqual(['love']);
+      // the event's server-computed reaction_groups are applied as-is
+      expect(updated?.reaction_groups?.like).toBeDefined();
+    });
+
+    it("adds the current user's reaction to own_reactions", () => {
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      seed(paginator, []);
+
+      paginator.reflectReaction({
+        message: createMessage({ id: 'r1' }),
+        reaction: reaction('love', currentUserId),
+      });
+
+      expect(paginator.getItem('r1')?.own_reactions?.map((r) => r.type)).toEqual([
+        'love',
+      ]);
+    });
+
+    it('removes the reaction from own_reactions on reaction.deleted', () => {
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      seed(paginator, [reaction('love', currentUserId)]);
+
+      paginator.reflectReaction({
+        message: createMessage({ id: 'r1', own_reactions: [] }),
+        reaction: reaction('love', currentUserId),
+        removed: true,
+      });
+
+      expect(paginator.getItem('r1')?.own_reactions ?? []).toEqual([]);
+    });
+
+    it('does not add another user reaction to own_reactions', () => {
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      seed(paginator, []);
+
+      paginator.reflectReaction({
+        message: createMessage({ id: 'r1' }),
+        reaction: reaction('love', 'other'),
+      });
+
+      expect(paginator.getItem('r1')?.own_reactions ?? []).toEqual([]);
+    });
+  });
+
   describe.todo('postQueryReconcile and deriveCursor for', () => {});
   describe('linear pagination', () => {
     describe('updates the hasMoreTail flag only if the first message on page is the first message in interval', () => {
@@ -1233,6 +1364,307 @@ describe('MessagePaginator', () => {
       expect(targetInterval).toBeTruthy();
       expect((targetInterval as unknown as { isHead: boolean }).isHead).toBe(true);
       expect((targetInterval as unknown as { isTail: boolean }).isTail).toBe(false);
+    });
+  });
+
+  describe('seedFirstPageSync()', () => {
+    const msg = (id: string, day: string) =>
+      createMessage({
+        cid: 'channel-id',
+        id,
+        created_at: `2020-01-${day}T00:00:00.000Z`,
+      });
+
+    it('seeds a latest page as the head window (nothing newer to load)', () => {
+      // First-page reconcile reads the client for the unread snapshot; no user => snapshot skipped.
+      (channel as unknown as { getClient: () => unknown }).getClient = () => ({
+        user: undefined,
+      });
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      // Fewer messages than the requested page size => dataset edges reached both ways.
+      paginator.seedFirstPageSync([msg('m8', '08'), msg('m9', '09')], 100);
+
+      expect(paginator.latestItem?.id).toBe('m9');
+      expect(paginator.hasMoreHead).toBe(false);
+      expect(paginator.hasMoreTail).toBe(false);
+    });
+
+    it('seeds an around/jump open as a middle window, not the head', () => {
+      (channel as unknown as { getClient: () => unknown }).getClient = () => ({
+        user: undefined,
+      });
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      // A full page centered on m6: messages exist on both sides beyond this window, so the
+      // paginator must NOT flag it as the latest (head) page — regression for a channel opened
+      // via `messages: { id_around }` rather than the latest page.
+      paginator.seedFirstPageSync(
+        [
+          msg('m4', '04'),
+          msg('m5', '05'),
+          msg('m6', '06'),
+          msg('m7', '07'),
+          msg('m8', '08'),
+        ],
+        5,
+        { id_around: 'm6' },
+      );
+
+      expect(paginator.hasMoreHead).toBe(true);
+      expect(paginator.hasMoreTail).toBe(true);
+    });
+  });
+
+  describe('latest window, truncation & isUpToDate parity', () => {
+    const msg = (id: string, day: string) =>
+      createMessage({
+        cid: 'channel-id',
+        id,
+        created_at: `2020-01-${day}T00:00:00.000Z`,
+      });
+
+    describe('latestItems / latestItem', () => {
+      it('reflect the active head window', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        paginator.ingestPage({
+          page: [msg('m8', '08'), msg('m9', '09')],
+          isHead: true,
+          isTail: true,
+          setActive: true,
+        });
+
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m8', 'm9']);
+        expect(paginator.latestItems.map((m) => m.id)).toEqual(['m8', 'm9']);
+        expect(paginator.latestItem?.id).toBe('m9');
+      });
+
+      it('reflect the head window even while an older window is active (after a jump)', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        paginator.ingestPage({
+          page: [msg('m8', '08'), msg('m9', '09')],
+          isHead: true,
+          setActive: false,
+        });
+        // an older, disjoint window is now the active one
+        paginator.ingestPage({
+          page: [msg('m4', '04'), msg('m5', '05')],
+          setActive: true,
+        });
+
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m4', 'm5']); // active window
+        expect(paginator.latestItems.map((m) => m.id)).toEqual(['m8', 'm9']); // newest window
+        expect(paginator.latestItem?.id).toBe('m9');
+      });
+
+      it('return the newest loaded window even when it is not flagged isHead (query/hydration seed)', () => {
+        // The query/hydration seed does not reliably mark a latest page as isHead, so latestItems
+        // uses the head-most *loaded* window rather than requiring the flag.
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        paginator.ingestPage({
+          page: [msg('m4', '04'), msg('m5', '05')],
+          setActive: true,
+        });
+
+        expect(paginator.latestItems.map((m) => m.id)).toEqual(['m4', 'm5']);
+        expect(paginator.latestItem?.id).toBe('m5');
+      });
+
+      it('are empty when nothing is loaded', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        expect(paginator.latestItems).toEqual([]);
+        expect(paginator.latestItem).toBeUndefined();
+      });
+    });
+
+    describe('truncate()', () => {
+      it('drops messages strictly older than truncated_at and keeps the rest', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        paginator.ingestPage({
+          page: [msg('m1', '01'), msg('m5', '05'), msg('m9', '09')],
+          isHead: true,
+          isTail: true,
+          setActive: true,
+        });
+
+        paginator.truncate({ truncatedAt: new Date('2020-01-05T00:00:00.000Z') });
+
+        // m1 dropped; m5 kept (equal, not strictly older); m9 kept
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m5', 'm9']);
+        expect(paginator.getItem('m1')).toBeUndefined();
+        expect(paginator.getItem('m5')).toBeTruthy();
+      });
+
+      it('marks the interval that spanned the cutoff as the new tail', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        // isHead but NOT isTail → hasMoreTail starts true
+        paginator.ingestPage({
+          page: [msg('m1', '01'), msg('m5', '05'), msg('m9', '09')],
+          isHead: true,
+          setActive: true,
+        });
+        expect(paginator.hasMoreTail).toBe(true);
+
+        paginator.truncate({ truncatedAt: new Date('2020-01-05T00:00:00.000Z') });
+
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m5', 'm9']);
+        // it lost its oldest member → nothing older remains → it is now the tail
+        expect(paginator.hasMoreTail).toBe(false);
+      });
+
+      it('leaves an interval that did not span the cutoff untouched (keeps hasMoreTail)', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        // active newer window, not a tail (older messages may still be unloaded)
+        paginator.ingestPage({
+          page: [msg('m8', '08'), msg('m9', '09')],
+          isHead: true,
+          setActive: true,
+        });
+        // a separate, older, disjoint window
+        paginator.ingestPage({ page: [msg('m2', '02'), msg('m3', '03')] });
+
+        paginator.truncate({ truncatedAt: new Date('2020-01-05T00:00:00.000Z') });
+
+        // the older window was entirely older than the cutoff → dropped
+        expect(paginator.getItem('m2')).toBeUndefined();
+        expect(paginator.getItem('m3')).toBeUndefined();
+        // the active (newer) window did not span the cutoff → unchanged, still expects older pages
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m8', 'm9']);
+        expect(paginator.hasMoreTail).toBe(true);
+      });
+
+      it('re-emits the active window only once (batched)', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        paginator.ingestPage({
+          page: [msg('m1', '01'), msg('m2', '02'), msg('m3', '03'), msg('m9', '09')],
+          isHead: true,
+          isTail: true,
+          setActive: true,
+        });
+
+        const partialNextSpy = vi.spyOn(paginator.state, 'partialNext');
+        paginator.truncate({ truncatedAt: new Date('2020-01-05T00:00:00.000Z') });
+
+        // three messages removed, but a single state emission
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m9']);
+        expect(partialNextSpy).toHaveBeenCalledTimes(1);
+      });
+
+      it('activates the surviving window instead of blanking when the active window is truncated away', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        // a surviving newer window
+        paginator.ingestPage({
+          page: [msg('m8', '08'), msg('m9', '09')],
+          isHead: true,
+          setActive: false,
+        });
+        // the active window is an older, disjoint one
+        paginator.ingestPage({
+          page: [msg('m1', '01'), msg('m2', '02')],
+          setActive: true,
+        });
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m1', 'm2']);
+
+        paginator.truncate({ truncatedAt: new Date('2020-01-05T00:00:00.000Z') });
+
+        // active window removed entirely, but we show the surviving window — NOT an empty list
+        expect(paginator.getItem('m1')).toBeUndefined();
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m8', 'm9']);
+      });
+
+      it('falls back to the nearest (tail-most) surviving window when several survive', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        paginator.ingestPage({
+          page: [msg('m8', '08'), msg('m9', '09')],
+          isHead: true,
+          setActive: false,
+        });
+        paginator.ingestPage({
+          page: [msg('m5', '05'), msg('m6', '06')],
+          setActive: false,
+        });
+        // active is the oldest window
+        paginator.ingestPage({
+          page: [msg('m1', '01'), msg('m2', '02')],
+          setActive: true,
+        });
+
+        paginator.truncate({ truncatedAt: new Date('2020-01-04T00:00:00.000Z') });
+
+        // active [m1,m2] removed; nearest survivor to where it was = the oldest survivor [m5,m6]
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m5', 'm6']);
+      });
+
+      it('splits at the correct point with duplicate timestamps at the boundary', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        paginator.ingestPage({
+          page: [
+            msg('m1', '01'),
+            msg('m3a', '03'),
+            msg('m3b', '03'),
+            msg('m5', '05'),
+            msg('m7', '07'),
+          ],
+          isHead: true,
+          isTail: true,
+          setActive: true,
+        });
+
+        // cutoff 04: everything strictly older (m1, both m3*) dropped; m5, m7 kept
+        paginator.truncate({ truncatedAt: new Date('2020-01-04T00:00:00.000Z') });
+
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m5', 'm7']);
+        expect(paginator.getItem('m3b')).toBeUndefined();
+      });
+
+      it('is a no-op for an invalid cutoff date', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        paginator.ingestPage({
+          page: [msg('m1', '01')],
+          isHead: true,
+          isTail: true,
+          setActive: true,
+        });
+        const partialNextSpy = vi.spyOn(paginator.state, 'partialNext');
+
+        paginator.truncate({ truncatedAt: new Date('not-a-date') });
+
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m1']);
+        expect(partialNextSpy).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('isUpToDate parity — message.new routing', () => {
+      it('appends a newer message when the head window is active', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        paginator.ingestPage({
+          page: [msg('m1', '01'), msg('m2', '02')],
+          isHead: true,
+          isTail: true,
+          setActive: true,
+        });
+
+        paginator.ingestItem(msg('m3', '03'));
+
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
+        expect(paginator.latestItem?.id).toBe('m3');
+      });
+
+      it('does not inject a newer message into an older active window (isUpToDate=false analog)', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        paginator.ingestPage({
+          page: [msg('m8', '08'), msg('m9', '09')],
+          isHead: true,
+          setActive: false,
+        });
+        paginator.ingestPage({
+          page: [msg('m4', '04'), msg('m5', '05')],
+          setActive: true,
+        });
+
+        paginator.ingestItem(msg('m10', '10'));
+
+        // the viewed (older) window is unchanged — the new message is not pushed onto it
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m4', 'm5']);
+      });
     });
   });
 
