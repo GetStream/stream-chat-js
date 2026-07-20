@@ -11,7 +11,6 @@ import {
   formatMessage,
   generateChannelTempCid,
   logChatPromiseExecution,
-  messageSetPagination,
   normalizeQuerySort,
 } from './utils';
 import type { StreamChat } from './client';
@@ -1830,25 +1829,13 @@ export class Channel {
       );
     }
 
-    // add any messages to our channel state
-    const { messageSet, filteredMessageIds } = this._initializeState(
-      state,
-      messageSetToAddToIfDoesNotExist,
-    );
-    messageSet.pagination = {
-      ...messageSet.pagination,
-      ...messageSetPagination({
-        parentSet: messageSet,
-        messagePaginationOptions: options?.messages,
-        requestedPageSize:
-          options?.messages?.limit ?? DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
-        returnedPage: state.messages,
-        filteredReturnedPage: state.messages.filter(
-          (m) => !filteredMessageIds.includes(m.id),
-        ),
-        logger: this.getClient().logger,
-      }),
-    };
+    // Seed read/members/pinned/thread-cleanup state; the message list is in the paginator.
+    this._initializeState(state);
+    // The queried page is the latest set unless this was a jump/around query.
+    const isLatestMessageSet =
+      messageSetToAddToIfDoesNotExist === 'latest' &&
+      !options?.messages?.id_around &&
+      !(options?.messages as MessagePaginationOptions | undefined)?.created_at_around;
 
     this.getClient().polls.hydratePollCache(state.messages, true);
     this.getClient().reminders.hydrateState(state.messages);
@@ -1882,14 +1869,14 @@ export class Channel {
       type: 'channels.queried',
       queriedChannels: {
         channels: [state],
-        isLatestMessageSet: messageSet.isLatest,
+        isLatestMessageSet,
       },
     });
     this.getClient().offlineDb?.executeQuerySafely(
       (db) =>
         db.upsertChannels?.({
           channels: [state],
-          isLatestMessagesSet: messageSet.isLatest,
+          isLatestMessagesSet: isLatestMessageSet,
         }),
       { method: 'upsertChannels' },
     );
@@ -2527,13 +2514,6 @@ export class Channel {
           const truncatedAtDate = new Date(event.channel.truncated_at);
           const truncatedAt = +truncatedAtDate;
 
-          channelState.messageSets.forEach((messageSet, messageSetIndex) => {
-            messageSet.messages.forEach(({ created_at: createdAt, id }) => {
-              if (truncatedAt > +createdAt)
-                channelState.removeMessage({ id, messageSetIndex });
-            });
-          });
-
           channelState.pinnedMessages.forEach(({ id, created_at: createdAt }) => {
             if (truncatedAt > +createdAt)
               channelState.removePinnedMessage({ id } as MessageResponse);
@@ -2710,6 +2690,7 @@ export class Channel {
         channel._syncStateFromChannelData(channel.data, previousChannelData);
         if (event.clear_history) {
           channelState.clearMessages();
+          this.messagePaginator.clearStateAndCache();
         }
         break;
       }
@@ -2805,10 +2786,7 @@ export class Channel {
     this.state.syncMemberCountFromChannelData(data, fallbackData);
   }
 
-  _initializeState(
-    state: ChannelAPIResponse,
-    messageSetToAddToIfDoesNotExist: MessageSetType = 'latest',
-  ) {
+  _initializeState(state: ChannelAPIResponse) {
     const { state: clientState, user, userID } = this.getClient();
 
     // add the members and users
@@ -2824,17 +2802,10 @@ export class Channel {
 
     this.state.membership = state.membership || {};
 
-    const messages = state.messages || [];
-    if (!this.state.messages) {
-      this.state.initMessages();
-    }
-    const { messageSet, filteredMessageIds } = this.state.addMessagesSorted(
-      messages,
-      false,
-      true,
-      true,
-      messageSetToAddToIfDoesNotExist,
-    );
+    // The main message list is seeded into channel.messagePaginator (see Channel.query /
+    // client.hydrateActiveChannels). This maintains thread-reply state, performs stale-thread
+    // cleanup, and advances last_message_at for the initializing page.
+    this.state.addMessagesSorted(state.messages || [], false, true, true);
 
     if (!this.state.pinnedMessages) {
       this.state.pinnedMessages = [];
@@ -2909,11 +2880,6 @@ export class Channel {
         { changedUserIds: entries.map(([userId]) => userId) },
       );
     }
-
-    return {
-      messageSet,
-      filteredMessageIds,
-    };
   }
 
   _extendEventWithOwnReactions(event: Event) {

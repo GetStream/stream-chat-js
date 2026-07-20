@@ -33,7 +33,6 @@ import {
   isFunction,
   isOnline,
   isOwnUserBaseProperty,
-  messageSetPagination,
   normalizeQuerySort,
   randomId,
   retryInterval,
@@ -2321,36 +2320,15 @@ export class StreamChat {
         );
       }
 
-      let updatedMessagesSet;
-      let filteredMessageIds: string[] = [];
       if (skipInitialization === undefined) {
-        const { messageSet, filteredMessageIds: _filteredMessageIds } =
-          c._initializeState(channelState, 'latest');
-        filteredMessageIds = _filteredMessageIds;
-        updatedMessagesSet = messageSet;
+        c._initializeState(channelState);
       } else if (!skipInitialization.includes(channelState.channel.id)) {
+        // clearMessages() resets the pinned cache; the paginator is (re)seeded above.
         c.state.clearMessages();
-        const { messageSet, filteredMessageIds: _filteredMessageIds } =
-          c._initializeState(channelState, 'latest');
-        filteredMessageIds = _filteredMessageIds;
-        updatedMessagesSet = messageSet;
+        c._initializeState(channelState);
       }
 
-      if (updatedMessagesSet) {
-        updatedMessagesSet.pagination = {
-          ...updatedMessagesSet.pagination,
-          ...messageSetPagination({
-            parentSet: updatedMessagesSet,
-            requestedPageSize:
-              queryChannelsOptions?.message_limit ||
-              DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE,
-            returnedPage: channelState.messages,
-            filteredReturnedPage: channelState.messages.filter(
-              (m) => !filteredMessageIds.includes(m.id),
-            ),
-            logger: this.logger,
-          }),
-        };
+      if (willInitialize) {
         this.polls.hydratePollCache(channelState.messages, true);
         this.reminders.hydrateState(channelState.messages);
       }

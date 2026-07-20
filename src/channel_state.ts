@@ -5,8 +5,6 @@ import type {
   LocalMessage,
   MessageResponse,
   MessageResponseBase,
-  MessageSet,
-  MessageSetType,
   PendingMessageResponse,
   ReactionResponse,
   UserResponse,
@@ -16,7 +14,6 @@ import {
   addToMessageList,
   formatMessage,
 } from './utils';
-import { DEFAULT_MESSAGE_SET_PAGINATION } from './constants';
 import { StateStore } from './store';
 
 type ChannelReadStatus = Record<
@@ -58,38 +55,6 @@ export type OwnCapabilitiesState = {
   ownCapabilities: string[];
 };
 
-const messageSetBounds = (
-  a: LocalMessage[] | MessageResponse[],
-  b: LocalMessage[] | MessageResponse[],
-) => ({
-  newestMessageA: new Date(a[0]?.created_at ?? 0),
-  oldestMessageA: new Date(a.slice(-1)[0]?.created_at ?? 0),
-  newestMessageB: new Date(b[0]?.created_at ?? 0),
-  oldestMessageB: new Date(b.slice(-1)[0]?.created_at ?? 0),
-});
-
-const aContainsOrEqualsB = (a: LocalMessage[], b: LocalMessage[]) => {
-  const { newestMessageA, newestMessageB, oldestMessageA, oldestMessageB } =
-    messageSetBounds(a, b);
-  return newestMessageA >= newestMessageB && oldestMessageB >= oldestMessageA;
-};
-
-const aOverlapsB = (a: LocalMessage[], b: LocalMessage[]) => {
-  const { newestMessageA, newestMessageB, oldestMessageA, oldestMessageB } =
-    messageSetBounds(a, b);
-  return (
-    oldestMessageA < oldestMessageB &&
-    oldestMessageB < newestMessageA &&
-    newestMessageA < newestMessageB
-  );
-};
-
-const messageSetsOverlapByTimestamp = (a: LocalMessage[], b: LocalMessage[]) =>
-  aContainsOrEqualsB(a, b) ||
-  aContainsOrEqualsB(b, a) ||
-  aOverlapsB(a, b) ||
-  aOverlapsB(b, a);
-
 /**
  * ChannelState - A container class for the channel state.
  */
@@ -115,13 +80,6 @@ export class ChannelState {
    * be pushed on to message list.
    */
   isUpToDate: boolean;
-  /**
-   * Disjoint lists of messages
-   * Users can jump in the message list (with searching) and this can result in disjoint lists of messages
-   * The state manages these lists and merges them when lists overlap
-   * The messages array contains the currently active set
-   */
-  messageSets: MessageSet[] = [];
 
   constructor(channel: Channel) {
     this._channel = channel;
@@ -141,7 +99,6 @@ export class ChannelState {
     });
     this.syncMemberCountFromChannelData(channel?.data);
     this.syncOwnCapabilitiesFromChannelData(channel?.data);
-    this.initMessages();
     this.pinnedMessages = [];
     this.pending_messages = [];
     this.threads = {};
@@ -158,28 +115,6 @@ export class ChannelState {
       channel?.state?.last_message_at != null
         ? new Date(channel.state.last_message_at)
         : null;
-  }
-
-  get messages() {
-    return this.messageSets.find((s) => s.isCurrent)?.messages || [];
-  }
-
-  set messages(messages: Array<ReturnType<ChannelState['formatMessage']>>) {
-    const index = this.messageSets.findIndex((s) => s.isCurrent);
-    this.messageSets[index].messages = messages;
-  }
-
-  /**
-   * The list of latest messages
-   * The messages array not always contains the latest messages (for example if a user searched for an earlier message, that is in a different message set)
-   */
-  get latestMessages() {
-    return this.messageSets.find((s) => s.isLatest)?.messages || [];
-  }
-
-  set latestMessages(messages: Array<ReturnType<ChannelState['formatMessage']>>) {
-    const index = this.messageSets.findIndex((s) => s.isLatest);
-    this.messageSets[index].messages = messages;
   }
 
   get members() {
@@ -326,42 +261,26 @@ export class ChannelState {
     this.watcherStore.partialNext({ watcherCount });
   }
 
-  get messagePagination() {
-    return (
-      this.messageSets.find((s) => s.isCurrent)?.pagination ||
-      DEFAULT_MESSAGE_SET_PAGINATION
-    );
-  }
-
-  pruneOldest(maxMessages: number) {
-    const currentIndex = this.messageSets.findIndex((s) => s.isCurrent);
-    if (this.messageSets[currentIndex].isLatest) {
-      const newMessages = this.messageSets[currentIndex].messages;
-      this.messageSets[currentIndex].messages = newMessages.slice(-maxMessages);
-      this.messageSets[currentIndex].pagination.hasPrev = true;
-    }
-  }
-
   /**
-   * addMessageSorted - Add a message to the state
+   * addMessageSorted - Maintain thread-reply state for a single message.
+   *
+   * The main channel message list lives in `channel.messagePaginator` now; this only appends thread
+   * replies to `state.threads` and advances `last_message_at`.
    *
    * @param {MessageResponse} newMessage A new message
    * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
    * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
-   * @param {MessageSetType} messageSetToAddToIfDoesNotExist Which message set to add to if message is not in the list (only used if addIfDoesNotExist is true)
    */
   addMessageSorted(
     newMessage: MessageResponse | LocalMessage,
     timestampChanged = false,
     addIfDoesNotExist = true,
-    messageSetToAddToIfDoesNotExist: MessageSetType = 'latest',
   ) {
     return this.addMessagesSorted(
       [newMessage],
       timestampChanged,
       false,
       addIfDoesNotExist,
-      messageSetToAddToIfDoesNotExist,
     );
   }
 
@@ -381,39 +300,24 @@ export class ChannelState {
    * @param {boolean} timestampChanged Whether updating messages with changed created_at value.
    * @param {boolean} initializing Whether channel is being initialized.
    * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
-   * @param {MessageSetType} messageSetToAddToIfDoesNotExist Which message set to add to if messages are not in the list (only used if addIfDoesNotExist is true)
-   *
    */
   addMessagesSorted(
     newMessages: (MessageResponse | LocalMessage)[],
     timestampChanged = false,
     initializing = false,
     addIfDoesNotExist = true,
-    messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
   ) {
-    const { messagesToAdd, targetMessageSetIndex } = this.findTargetMessageSet(
-      newMessages,
-      addIfDoesNotExist,
-      messageSetToAddToIfDoesNotExist,
-    );
-
-    const filteredMessageIds: string[] = [];
-
-    for (let i = 0; i < messagesToAdd.length; i += 1) {
-      const isFromShadowBannedUser = messagesToAdd[i].shadowed;
-      if (isFromShadowBannedUser && addIfDoesNotExist) {
-        filteredMessageIds.push(messagesToAdd[i].id);
+    for (let i = 0; i < newMessages.length; i += 1) {
+      if (newMessages[i].shadowed && addIfDoesNotExist) {
         continue;
       }
-      // If message is already formatted we can skip the tasks below
-      // This will be true for messages that are already present at the state -> this happens when we perform merging of message sets
-      // This will be also true for message previews used by some SDKs
-      const isMessageFormatted = messagesToAdd[i].created_at instanceof Date;
+      // If message is already formatted we can skip the tasks below.
+      const isMessageFormatted = newMessages[i].created_at instanceof Date;
       let message: ReturnType<ChannelState['formatMessage']>;
       if (isMessageFormatted) {
-        message = messagesToAdd[i] as ReturnType<ChannelState['formatMessage']>;
+        message = newMessages[i] as ReturnType<ChannelState['formatMessage']>;
       } else {
-        message = this.formatMessage(messagesToAdd[i]);
+        message = this.formatMessage(newMessages[i]);
 
         if (message.user && this._channel?.cid) {
           /**
@@ -452,29 +356,11 @@ export class ChannelState {
         }
       }
 
-      // update or append the messages...
-      const parentID = message.parent_id;
-
-      // add to the given message set
-      if ((!parentID || message.show_in_channel) && targetMessageSetIndex !== -1) {
-        this.messageSets[targetMessageSetIndex].messages = this._addToMessageList(
-          this.messageSets[targetMessageSetIndex].messages,
-          message,
-          timestampChanged,
-          'created_at',
-          addIfDoesNotExist,
-        );
-      }
-
       /**
-       * Add message to thread if applicable and the message
-       * was added when querying for replies, or the thread already exits.
-       * This is to prevent the thread state from getting out of sync if
-       * a thread message is shown in channel but older than the newest thread
-       * message. This situation can result in a thread state where a random
-       * message is "oldest" message, and newer messages are therefore not loaded.
-       * This can also occur if an old thread message is updated.
+       * Add message to thread if applicable and the message was added when querying for replies,
+       * or the thread already exists. The main channel message list is owned by the paginator.
        */
+      const parentID = message.parent_id;
       if (parentID && !initializing) {
         const thread = this.threads[parentID] || [];
         this.threads[parentID] = this._addToMessageList(
@@ -486,11 +372,6 @@ export class ChannelState {
         );
       }
     }
-
-    return {
-      messageSet: this.messageSets[targetMessageSetIndex],
-      filteredMessageIds,
-    };
   }
 
   /**
@@ -775,10 +656,9 @@ export class ChannelState {
       this.addMessagesSorted(updatedMessages, true);
     };
 
-    if (!message.parent_id) {
-      this.messageSets.forEach((set) => update(set.messages));
-    } else if (message.parent_id && this.threads[message.parent_id]) {
-      // prevent going through all the threads even though it is possible to quote a message from another thread
+    // Main-list quoted-reference updates are handled by messagePaginator.reflectQuotedMessageUpdate;
+    // here we only keep thread replies in sync.
+    if (message.parent_id && this.threads[message.parent_id]) {
       update(this.threads[message.parent_id]);
     }
   }
@@ -803,7 +683,7 @@ export class ChannelState {
       msg: ReturnType<ChannelState['formatMessage']>,
     ) => ReturnType<ChannelState['formatMessage']>,
   ) {
-    const { parent_id, show_in_channel, pinned } = message;
+    const { parent_id, pinned } = message;
 
     if (parent_id && this.threads[parent_id]) {
       const thread = this.threads[parent_id];
@@ -811,19 +691,6 @@ export class ChannelState {
       if (msgIndex !== -1) {
         thread[msgIndex] = updateFunc(thread[msgIndex]);
         this.threads[parent_id] = thread;
-      }
-    }
-
-    if ((!show_in_channel && !parent_id) || show_in_channel) {
-      const messageSetIndex = this.findMessageSetIndex(message);
-      if (messageSetIndex !== -1) {
-        const msgIndex = this.messageSets[messageSetIndex].messages.findIndex(
-          (msg) => msg.id === message.id,
-        );
-        if (msgIndex !== -1) {
-          const upMsg = updateFunc(this.messageSets[messageSetIndex].messages[msgIndex]);
-          this.messageSets[messageSetIndex].messages[msgIndex] = upMsg;
-        }
       }
     }
 
@@ -879,12 +746,9 @@ export class ChannelState {
    *
    * @return {boolean} Returns if the message was removed
    */
-  removeMessage(messageToRemove: {
-    id: string;
-    messageSetIndex?: number;
-    parent_id?: string;
-  }) {
-    let isRemoved = false;
+  removeMessage(messageToRemove: { id: string; parent_id?: string }) {
+    // The main channel message list is owned by the paginator (use messagePaginator.removeItem);
+    // this only removes thread replies from state.threads.
     if (messageToRemove.parent_id && this.threads[messageToRemove.parent_id]) {
       const { removed, result: threadMessages } = this.removeMessageFromArray(
         this.threads[messageToRemove.parent_id],
@@ -892,21 +756,10 @@ export class ChannelState {
       );
 
       this.threads[messageToRemove.parent_id] = threadMessages;
-      isRemoved = removed;
-    } else {
-      const messageSetIndex =
-        messageToRemove.messageSetIndex ?? this.findMessageSetIndex(messageToRemove);
-      if (messageSetIndex !== -1) {
-        const { removed, result: messages } = this.removeMessageFromArray(
-          this.messageSets[messageSetIndex].messages,
-          messageToRemove,
-        );
-        this.messageSets[messageSetIndex].messages = messages;
-        isRemoved = removed;
-      }
+      return removed;
     }
 
-    return isRemoved;
+    return false;
   }
 
   removeMessageFromArray = (
@@ -938,8 +791,7 @@ export class ChannelState {
       }
     };
 
-    this.messageSets.forEach((set) => _updateUserMessages(set.messages, user));
-
+    // Main-list user references are updated on the paginator (messagePaginator.reflectUserUpdate).
     for (const parentId in this.threads) {
       _updateUserMessages(this.threads[parentId], user);
     }
@@ -958,10 +810,7 @@ export class ChannelState {
     hardDelete = false,
     deletedAt?: LocalMessage['deleted_at'],
   ) => {
-    this.messageSets.forEach(({ messages }) =>
-      _deleteUserMessages({ messages, user, hardDelete, deletedAt: deletedAt ?? null }),
-    );
-
+    // Main-list deletions are applied on the paginator (messagePaginator.applyMessageDeletionForUser).
     for (const parentId in this.threads) {
       _deleteUserMessages({
         messages: this.threads[parentId],
@@ -1001,20 +850,12 @@ export class ChannelState {
     }
   }
 
+  /**
+   * Clears the pinned-message cache. The main channel message list is owned by the paginator
+   * (clear it via `channel.messagePaginator.clearStateAndCache()`).
+   */
   clearMessages() {
-    this.initMessages();
     this.pinnedMessages = [];
-  }
-
-  initMessages() {
-    this.messageSets = [
-      {
-        messages: [],
-        isLatest: true,
-        isCurrent: true,
-        pagination: { ...DEFAULT_MESSAGE_SET_PAGINATION },
-      },
-    ];
   }
 
   /**
@@ -1034,169 +875,7 @@ export class ChannelState {
       return messages.find((m) => m.id === messageId);
     }
 
-    const messageSetIndex = this.findMessageSetIndex({ id: messageId });
-    if (messageSetIndex === -1) {
-      return undefined;
-    }
-    return this.messageSets[messageSetIndex].messages.find((m) => m.id === messageId);
-  }
-
-  private areMessageSetsOverlap(
-    messages1: Array<{ id: string }>,
-    messages2: Array<{ id: string }>,
-  ) {
-    return messages1.some((m1) => messages2.find((m2) => m1.id === m2.id));
-  }
-
-  private findMessageSetIndex(message: { id?: string }) {
-    return this.messageSets.findIndex(
-      (set) => !!set.messages.find((m) => m.id === message.id),
-    );
-  }
-
-  /**
-   * Identifies the set index into which a message set would pertain if its first item's creation date corresponded to oldestTimestampMs.
-   * @param oldestTimestampMs
-   */
-  private findMessageSetByOldestTimestamp = (oldestTimestampMs: number): number => {
-    let lo = 0,
-      hi = this.messageSets.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >>> 1;
-      const msgSet = this.messageSets[mid];
-      // should not happen
-      if (msgSet.messages.length === 0) return -1;
-
-      const oldestMessageTimestampInSet = msgSet.messages[0].created_at.getTime();
-      if (oldestMessageTimestampInSet <= oldestTimestampMs) hi = mid;
-      else lo = mid + 1;
-    }
-    return lo;
-  };
-
-  private findTargetMessageSet(
-    newMessages: (MessageResponse | LocalMessage)[],
-    addIfDoesNotExist = true,
-    messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
-  ) {
-    let messagesToAdd: (MessageResponse | LocalMessage)[] = newMessages;
-    let targetMessageSetIndex!: number;
-    if (newMessages.length === 0)
-      return { targetMessageSetIndex: 0, messagesToAdd: newMessages };
-    if (addIfDoesNotExist) {
-      const overlappingMessageSetIndicesByMsgIds = this.messageSets
-        .map((_, i) => i)
-        .filter((i) =>
-          this.areMessageSetsOverlap(this.messageSets[i].messages, newMessages),
-        );
-      const overlappingMessageSetIndicesByTimestamp = this.messageSets
-        .map((_, i) => i)
-        .filter((i) =>
-          messageSetsOverlapByTimestamp(
-            this.messageSets[i].messages,
-            newMessages.map(formatMessage),
-          ),
-        );
-      switch (messageSetToAddToIfDoesNotExist) {
-        case 'new':
-          if (overlappingMessageSetIndicesByMsgIds.length > 0) {
-            targetMessageSetIndex = overlappingMessageSetIndicesByMsgIds[0];
-          } else if (overlappingMessageSetIndicesByTimestamp.length > 0) {
-            targetMessageSetIndex = overlappingMessageSetIndicesByTimestamp[0];
-            // No new message set is created if newMessages only contains thread replies
-          } else if (newMessages.some((m) => !m.parent_id)) {
-            // find the index to insert the set
-            const setIngestIndex = this.findMessageSetByOldestTimestamp(
-              // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-              new Date(newMessages[0].created_at!).getTime(),
-            );
-            if (setIngestIndex === -1) {
-              this.messageSets.push({
-                messages: [],
-                isCurrent: false,
-                isLatest: false,
-                pagination: { ...DEFAULT_MESSAGE_SET_PAGINATION },
-              });
-              targetMessageSetIndex = this.messageSets.length - 1;
-            } else {
-              const isLatest = setIngestIndex === 0;
-              this.messageSets.splice(setIngestIndex, 0, {
-                messages: [],
-                isCurrent: false,
-                isLatest,
-                pagination: { ...DEFAULT_MESSAGE_SET_PAGINATION }, // fixme: it is problematic decide about pagination without having data
-              });
-              if (isLatest) {
-                this.messageSets.slice(1).forEach((set) => {
-                  set.isLatest = false;
-                });
-              }
-              targetMessageSetIndex = setIngestIndex;
-            }
-          }
-          break;
-        case 'current':
-          // determine if there is another set to which it would match taken into consideration the timestamp
-          if (overlappingMessageSetIndicesByTimestamp.length > 0) {
-            targetMessageSetIndex = overlappingMessageSetIndicesByTimestamp[0];
-          } else {
-            targetMessageSetIndex = this.messageSets.findIndex((s) => s.isCurrent);
-          }
-          break;
-        case 'latest':
-          // determine if there is another set to which it would match taken into consideration the timestamp
-          if (overlappingMessageSetIndicesByTimestamp.length > 0) {
-            targetMessageSetIndex = overlappingMessageSetIndicesByTimestamp[0];
-          } else {
-            targetMessageSetIndex = this.messageSets.findIndex((s) => s.isLatest);
-          }
-          break;
-        default:
-          targetMessageSetIndex = -1;
-      }
-      // when merging the target set will be the first one from the overlapping message sets
-      const mergeTargetMessageSetIndex = overlappingMessageSetIndicesByMsgIds.splice(
-        0,
-        1,
-      )[0];
-      const mergeSourceMessageSetIndices = [...overlappingMessageSetIndicesByMsgIds];
-      if (
-        mergeTargetMessageSetIndex !== undefined &&
-        mergeTargetMessageSetIndex !== targetMessageSetIndex
-      ) {
-        mergeSourceMessageSetIndices.push(targetMessageSetIndex);
-      }
-      // merge message sets
-      if (mergeSourceMessageSetIndices.length > 0) {
-        const target = this.messageSets[mergeTargetMessageSetIndex];
-        const sources = this.messageSets.filter(
-          (_, i) => mergeSourceMessageSetIndices.indexOf(i) !== -1,
-        );
-        sources.forEach((messageSet) => {
-          target.isLatest = target.isLatest || messageSet.isLatest;
-          target.isCurrent = target.isCurrent || messageSet.isCurrent;
-          target.pagination.hasPrev =
-            messageSet.messages[0].created_at < target.messages[0].created_at
-              ? messageSet.pagination.hasPrev
-              : target.pagination.hasPrev;
-          target.pagination.hasNext =
-            target.messages.slice(-1)[0].created_at <
-            messageSet.messages.slice(-1)[0].created_at
-              ? messageSet.pagination.hasNext
-              : target.pagination.hasNext;
-          messagesToAdd = [...messagesToAdd, ...messageSet.messages];
-        });
-        sources.forEach((s) => this.messageSets.splice(this.messageSets.indexOf(s), 1));
-        const overlappingMessageSetIndex = this.messageSets.findIndex((s) =>
-          this.areMessageSetsOverlap(s.messages, newMessages),
-        );
-        targetMessageSetIndex = overlappingMessageSetIndex;
-      }
-    } else {
-      // assumes that all new messages belong to the same set
-      targetMessageSetIndex = this.findMessageSetIndex(newMessages[0]);
-    }
-
-    return { targetMessageSetIndex, messagesToAdd };
+    // Main channel messages live in the paginator — use channel.messagePaginator.getItem.
+    return undefined;
   }
 }
