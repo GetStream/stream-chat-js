@@ -1,5 +1,5 @@
 import { StateStore } from './store';
-import { addToMessageList, findIndexInSortedArray, formatMessage } from './utils';
+import { formatMessage } from './utils';
 import type {
   AscDesc,
   DraftResponse,
@@ -50,7 +50,6 @@ export type ThreadState = {
   parentMessage: LocalMessage;
   participants: ThreadResponse['thread_participants'];
   read: ThreadReadState;
-  replies: Array<LocalMessage>;
   replyCount: number;
   title: string;
   updatedAt: Date | null;
@@ -183,7 +182,6 @@ export class Thread extends WithSubscriptions {
             ? getPlaceholderReadResponse(client.userID)
             : threadData.read,
         ),
-        replies: threadData.latest_replies.map(formatMessage),
         // Use the parent message's reply_count, not the top-level threadData.reply_count. The
         // thread endpoints (getThread/queryThreads) return a top level reply_count that EXCLUDES
         // soft-deleted replies, while parent_message.reply_count (and the channel's own copy)
@@ -229,7 +227,6 @@ export class Thread extends WithSubscriptions {
         parentMessage: formattedParentMessage,
         participants: [],
         read: formatReadState(getPlaceholderReadResponse(client.userID)),
-        replies: [],
         replyCount: parentMessage.reply_count ?? 0,
         title: '',
         updatedAt: parentMessage.updated_at ? new Date(parentMessage.updated_at) : null,
@@ -395,11 +392,12 @@ export class Thread extends WithSubscriptions {
       participants,
       read,
       replyCount,
-      replies,
       updatedAt,
     } = thread.state.getLatestValue();
 
-    // Preserve pending replies and append them to the updated list of replies
+    // Preserve pending (failed) replies so they survive the hydrate. The messagePaginator is now
+    // the sole reply source, so we merge the incoming newest page into it and re-ingest the
+    // pending replies (mirrors the previous state.replies concat behavior).
     const pendingReplies = Array.from(this.failedRepliesMap.values());
 
     this.state.partialNext({
@@ -412,12 +410,14 @@ export class Thread extends WithSubscriptions {
       read,
       replyCount,
       pagination,
-      replies: pendingReplies.length ? replies.concat(pendingReplies) : replies,
       updatedAt,
       isStateStale: false,
     });
 
-    this.messagePaginator.mergeNewestPage(replies);
+    this.messagePaginator.mergeNewestPage(
+      thread.messagePaginator.state.getLatestValue().items ?? [],
+    );
+    pendingReplies.forEach((reply) => this.messagePaginator.ingestItem(reply));
   };
 
   public registerSubscriptions = () => {
@@ -665,39 +665,18 @@ export class Thread extends WithSubscriptions {
 
   // todo: can be removed with the next breaking change and use MessagePaginator only
   public deleteReplyLocally = ({ message }: { message: MessageResponse }) => {
-    // Keep the reply messagePaginator (the reply list source) in sync. removeItem is a no-op when
-    // the reply isn't loaded, so it's safe to run unconditionally — even when the legacy
-    // state.replies removal below bails because the reply isn't in that list.
+    // The reply messagePaginator is the reply list source. removeItem is a no-op when the reply
+    // isn't loaded, so it's safe to run unconditionally.
     this.messagePaginator.removeItem({ id: message.id });
-
-    const { replies } = this.state.getLatestValue();
-
-    const index = findIndexInSortedArray({
-      needle: formatMessage(message),
-      sortedArray: replies,
-      sortDirection: 'ascending',
-      selectValueToCompare: (reply) => reply.created_at.getTime(),
-      selectKey: (reply) => reply.id,
-    });
-
-    if (replies[index]?.id !== message.id) {
-      return;
-    }
-
-    const updatedReplies = [...replies];
-    updatedReplies.splice(index, 1);
-
-    this.state.partialNext({
-      replies: updatedReplies,
-    });
   };
 
   // todo: can be removed with the next breaking change and use MessagePaginator only
   public upsertReplyLocally = ({
     message,
-    timestampChanged = false,
   }: {
     message: MessageResponse | LocalMessage;
+    // Accepted for backward compatibility but no longer used — the messagePaginator repositions
+    // by created_at on ingest, so a changed timestamp is handled without an explicit flag.
     timestampChanged?: boolean;
   }) => {
     if (message.parent_id !== this.id) {
@@ -714,12 +693,7 @@ export class Thread extends WithSubscriptions {
       this.failedRepliesMap.delete(message.id);
     }
 
-    this.state.next((current) => ({
-      ...current,
-      replies: addToMessageList(current.replies, formattedMessage, timestampChanged),
-    }));
-
-    // Keep the reply messagePaginator (the reply list source) in sync with the same upsert.
+    // The reply messagePaginator is the reply list source.
     this.messagePaginator.ingestItem(formattedMessage);
   };
 
@@ -792,9 +766,7 @@ export class Thread extends WithSubscriptions {
   /**
    * Updates a message with optimistic local state update.
    *
-   * NOTE: This updates message state via `messagePaginator` only. If you still rely on
-   * `Thread.state.replies` as UI source of truth, make sure it is wired to paginator updates
-   * (or keep upserting separately until migration is complete).
+   * The update flows through `messagePaginator`, which is the sole reply source.
    */
   async updateMessageWithLocalUpdate(params: UpdateMessageWithStateUpdateParams) {
     await this.messageOperations.update(
@@ -855,10 +827,10 @@ export class Thread extends WithSubscriptions {
   // todo: can be removed with the next breaking change and use MessagePaginator only
   private loadPage = async (count: number) => {
     const { pagination } = this.state.getLatestValue();
-    const [loadingKey, cursorKey, insertionMethodKey] =
+    const [loadingKey, cursorKey] =
       count > 0
-        ? (['isLoadingNext', 'nextCursor', 'push'] as const)
-        : (['isLoadingPrev', 'prevCursor', 'unshift'] as const);
+        ? (['isLoadingNext', 'nextCursor'] as const)
+        : (['isLoadingPrev', 'prevCursor'] as const);
 
     if (pagination[loadingKey] || pagination[cursorKey] === null) return;
 
@@ -872,25 +844,16 @@ export class Thread extends WithSubscriptions {
       const replies = data.messages.map(formatMessage);
       const maybeNextCursor = replies.at(count > 0 ? -1 : 0)?.id ?? null;
 
-      this.state.next((current) => {
-        let nextReplies = current.replies;
-
-        // prevent re-creating array if there's nothing to add to the current one
-        if (replies.length > 0) {
-          nextReplies = [...current.replies];
-          nextReplies[insertionMethodKey](...replies);
-        }
-
-        return {
-          ...current,
-          replies: nextReplies,
-          pagination: {
-            ...current.pagination,
-            [cursorKey]: data.messages.length < limit ? null : maybeNextCursor,
-            [loadingKey]: false,
-          },
-        };
-      });
+      // Legacy pagination cursor bookkeeping only. Loading replies into the reply list is the
+      // messagePaginator's job (toTail/toHead); this deprecated path just advances its own cursor.
+      this.state.next((current) => ({
+        ...current,
+        pagination: {
+          ...current.pagination,
+          [cursorKey]: data.messages.length < limit ? null : maybeNextCursor,
+          [loadingKey]: false,
+        },
+      }));
     } catch (error) {
       this.client.logger('error', (error as Error).message);
       this.state.next((current) => ({

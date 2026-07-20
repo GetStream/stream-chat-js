@@ -140,7 +140,7 @@ export class MessageDeliveryReporter {
       lastDeliveredAt = ownReadState?.last_delivered_at;
       key = collection.cid;
     } else if (isThread(collection)) {
-      latestMessages = collection.state.getLatestValue().replies;
+      latestMessages = collection.messagePaginator.state.getLatestValue().items ?? [];
       const ownReadState =
         collection.state.getLatestValue().read[ownUserId] ?? ({} as ThreadUserReadState);
       lastReadAt = ownReadState?.lastReadAt;
