@@ -25,12 +25,7 @@ export * from './segment';
 export * from './signing';
 export * from './store';
 export { Thread } from './thread';
-export type {
-  ThreadState,
-  ThreadReadState,
-  ThreadRepliesPagination,
-  ThreadUserReadState,
-} from './thread';
+export type { ThreadState, ThreadReadState, ThreadUserReadState } from './thread';
 export * from './thread_manager';
 export * from './token_manager';
 export * from './types';

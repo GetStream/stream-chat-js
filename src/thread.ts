@@ -1,5 +1,5 @@
 import { StateStore } from './store';
-import { addToMessageList, findIndexInSortedArray, formatMessage } from './utils';
+import { formatMessage } from './utils';
 import type {
   AscDesc,
   DraftResponse,
@@ -7,7 +7,6 @@ import type {
   EventTypes,
   LocalMessage,
   MarkReadOptions,
-  MessagePaginationOptions,
   MessageResponse,
   ReadResponse,
   ThreadResponse,
@@ -26,10 +25,6 @@ import { MessageOperations } from './messageOperations';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import { MessagePaginator } from './pagination';
 
-type QueryRepliesOptions = {
-  sort?: { created_at: AscDesc }[];
-} & MessagePaginationOptions & { user?: UserResponse; user_id?: string };
-
 export type ThreadState = {
   /**
    * Determines if the thread is currently opened and on-screen. When the thread is active,
@@ -42,7 +37,6 @@ export type ThreadState = {
   deletedAt: Date | null;
   isLoading: boolean;
   isStateStale: boolean;
-  pagination: ThreadRepliesPagination;
   /**
    * Thread is identified by and has a one-to-one relation with its parent message.
    * We use parent message id as a thread id.
@@ -50,17 +44,9 @@ export type ThreadState = {
   parentMessage: LocalMessage;
   participants: ThreadResponse['thread_participants'];
   read: ThreadReadState;
-  replies: Array<LocalMessage>;
   replyCount: number;
   title: string;
   updatedAt: Date | null;
-};
-
-export type ThreadRepliesPagination = {
-  isLoadingNext: boolean;
-  isLoadingPrev: boolean;
-  nextCursor: string | null;
-  prevCursor: string | null;
 };
 
 export type ThreadUserReadState = {
@@ -175,7 +161,6 @@ export class Thread extends WithSubscriptions {
         createdAt: new Date(threadData.created_at),
         // rest
         deletedAt: threadData.deleted_at ? new Date(threadData.deleted_at) : null,
-        pagination: repliesPaginationFromInitialThread(threadData),
         parentMessage: formatMessage(threadData.parent_message),
         participants: threadData.thread_participants,
         read: formatReadState(
@@ -183,8 +168,12 @@ export class Thread extends WithSubscriptions {
             ? getPlaceholderReadResponse(client.userID)
             : threadData.read,
         ),
-        replies: threadData.latest_replies.map(formatMessage),
-        replyCount: threadData.reply_count ?? 0,
+        // Use the parent message's reply_count, not the top-level threadData.reply_count. The
+        // thread endpoints (getThread/queryThreads) return a top level reply_count that EXCLUDES
+        // soft-deleted replies, while parent_message.reply_count (and the channel's own copy)
+        // INCLUDE them so the top level value renders fewer replies than the channel badge shows.
+        // parent_message.reply_count is the authoritative, channel consistent count.
+        replyCount: threadData.parent_message.reply_count ?? 0,
         updatedAt: threadData.updated_at ? new Date(threadData.updated_at) : null,
         title: threadData.title,
         custom: constructCustomDataObject(threadData),
@@ -215,16 +204,9 @@ export class Thread extends WithSubscriptions {
         deletedAt: formattedParentMessage.deleted_at,
         isLoading: false,
         isStateStale: false,
-        pagination: {
-          isLoadingNext: false,
-          isLoadingPrev: false,
-          nextCursor: null,
-          prevCursor: null,
-        },
         parentMessage: formattedParentMessage,
         participants: [],
         read: formatReadState(getPlaceholderReadResponse(client.userID)),
-        replies: [],
         replyCount: parentMessage.reply_count ?? 0,
         title: '',
         updatedAt: parentMessage.updated_at ? new Date(parentMessage.updated_at) : null,
@@ -385,16 +367,16 @@ export class Thread extends WithSubscriptions {
       custom,
       title,
       deletedAt,
-      pagination,
       parentMessage,
       participants,
       read,
       replyCount,
-      replies,
       updatedAt,
     } = thread.state.getLatestValue();
 
-    // Preserve pending replies and append them to the updated list of replies
+    // Preserve pending (failed) replies so they survive the hydrate. The messagePaginator is now
+    // the sole reply source, so we merge the incoming newest page into it and re-ingest the
+    // pending replies (mirrors the previous state.replies concat behavior).
     const pendingReplies = Array.from(this.failedRepliesMap.values());
 
     this.state.partialNext({
@@ -406,13 +388,14 @@ export class Thread extends WithSubscriptions {
       participants,
       read,
       replyCount,
-      pagination,
-      replies: pendingReplies.length ? replies.concat(pendingReplies) : replies,
       updatedAt,
       isStateStale: false,
     });
 
-    this.messagePaginator.mergeNewestPage(replies);
+    this.messagePaginator.mergeNewestPage(
+      thread.messagePaginator.state.getLatestValue().items ?? [],
+    );
+    pendingReplies.forEach((reply) => this.messagePaginator.ingestItem(reply));
   };
 
   public registerSubscriptions = () => {
@@ -520,22 +503,14 @@ export class Thread extends WithSubscriptions {
       }
 
       const isOwnMessage = event.message.user?.id === this.client.userID;
-      const { active, read, replies } = this.state.getLatestValue();
-      const hasReplyAlready =
-        replies.some((reply) => reply.id === event.message?.id) ||
-        !!this.messagePaginator.getItem(event.message.id);
+      const { active, read } = this.state.getLatestValue();
 
-      this.messagePaginator.ingestItem(formatMessage(event.message));
       this.upsertReplyLocally({
         message: event.message,
         // Message from current user could have been added optimistically,
         // so the actual timestamp might differ in the event
         timestampChanged: isOwnMessage,
       });
-
-      if (!hasReplyAlready) {
-        this.incrementReplyCountLocally();
-      }
 
       if (active) {
         this.throttledMarkRead();
@@ -650,14 +625,6 @@ export class Thread extends WithSubscriptions {
         this.client.on(eventType, (event) => {
           if (event.message) {
             this.updateParentMessageOrReplyLocally(event.message);
-            if (
-              ['reaction.new', 'reaction.deleted', 'reaction.updated'].includes(
-                eventType,
-              ) &&
-              event.message.parent_id === this.id
-            ) {
-              this.messagePaginator.ingestItem(formatMessage(event.message));
-            }
             this.messagePaginator.reflectQuotedMessageUpdate(
               formatMessage(event.message),
             );
@@ -676,34 +643,18 @@ export class Thread extends WithSubscriptions {
 
   // todo: can be removed with the next breaking change and use MessagePaginator only
   public deleteReplyLocally = ({ message }: { message: MessageResponse }) => {
-    const { replies } = this.state.getLatestValue();
-
-    const index = findIndexInSortedArray({
-      needle: formatMessage(message),
-      sortedArray: replies,
-      sortDirection: 'ascending',
-      selectValueToCompare: (reply) => reply.created_at.getTime(),
-      selectKey: (reply) => reply.id,
-    });
-
-    if (replies[index]?.id !== message.id) {
-      return;
-    }
-
-    const updatedReplies = [...replies];
-    updatedReplies.splice(index, 1);
-
-    this.state.partialNext({
-      replies: updatedReplies,
-    });
+    // The reply messagePaginator is the reply list source. removeItem is a no-op when the reply
+    // isn't loaded, so it's safe to run unconditionally.
+    this.messagePaginator.removeItem({ id: message.id });
   };
 
   // todo: can be removed with the next breaking change and use MessagePaginator only
   public upsertReplyLocally = ({
     message,
-    timestampChanged = false,
   }: {
     message: MessageResponse | LocalMessage;
+    // Accepted for backward compatibility but no longer used — the messagePaginator repositions
+    // by created_at on ingest, so a changed timestamp is handled without an explicit flag.
     timestampChanged?: boolean;
   }) => {
     if (message.parent_id !== this.id) {
@@ -720,10 +671,8 @@ export class Thread extends WithSubscriptions {
       this.failedRepliesMap.delete(message.id);
     }
 
-    this.state.next((current) => ({
-      ...current,
-      replies: addToMessageList(current.replies, formattedMessage, timestampChanged),
-    }));
+    // The reply messagePaginator is the reply list source.
+    this.messagePaginator.ingestItem(formattedMessage);
   };
 
   // todo: can be removed with the next breaking change and use MessagePaginator only
@@ -795,9 +744,7 @@ export class Thread extends WithSubscriptions {
   /**
    * Updates a message with optimistic local state update.
    *
-   * NOTE: This updates message state via `messagePaginator` only. If you still rely on
-   * `Thread.state.replies` as UI source of truth, make sure it is wired to paginator updates
-   * (or keep upserting separately until migration is complete).
+   * The update flows through `messagePaginator`, which is the sole reply source.
    */
   async updateMessageWithLocalUpdate(params: UpdateMessageWithStateUpdateParams) {
     await this.messageOperations.update(
@@ -839,72 +786,6 @@ export class Thread extends WithSubscriptions {
    */
   public markAsRead = ({ force = false }: { force?: boolean } = {}) =>
     this.markRead({ force });
-
-  // todo: can be removed with the next breaking change and use MessagePaginator only
-  public queryReplies = ({
-    limit = DEFAULT_PAGE_LIMIT,
-    sort = DEFAULT_SORT,
-    ...otherOptions
-  }: QueryRepliesOptions = {}) =>
-    this.channel.getReplies(this.id, { limit, ...otherOptions }, sort);
-
-  // todo: can be removed with the next breaking change and use MessagePaginator only
-  public loadNextPage = ({ limit = DEFAULT_PAGE_LIMIT }: { limit?: number } = {}) =>
-    this.loadPage(limit);
-
-  // todo: can be removed with the next breaking change and use MessagePaginator only
-  public loadPrevPage = ({ limit = DEFAULT_PAGE_LIMIT }: { limit?: number } = {}) =>
-    this.loadPage(-limit);
-  // todo: can be removed with the next breaking change and use MessagePaginator only
-  private loadPage = async (count: number) => {
-    const { pagination } = this.state.getLatestValue();
-    const [loadingKey, cursorKey, insertionMethodKey] =
-      count > 0
-        ? (['isLoadingNext', 'nextCursor', 'push'] as const)
-        : (['isLoadingPrev', 'prevCursor', 'unshift'] as const);
-
-    if (pagination[loadingKey] || pagination[cursorKey] === null) return;
-
-    const queryOptions = { [count > 0 ? 'id_gt' : 'id_lt']: pagination[cursorKey] };
-    const limit = Math.abs(count);
-
-    this.state.partialNext({ pagination: { ...pagination, [loadingKey]: true } });
-
-    try {
-      const data = await this.queryReplies({ ...queryOptions, limit });
-      const replies = data.messages.map(formatMessage);
-      const maybeNextCursor = replies.at(count > 0 ? -1 : 0)?.id ?? null;
-
-      this.state.next((current) => {
-        let nextReplies = current.replies;
-
-        // prevent re-creating array if there's nothing to add to the current one
-        if (replies.length > 0) {
-          nextReplies = [...current.replies];
-          nextReplies[insertionMethodKey](...replies);
-        }
-
-        return {
-          ...current,
-          replies: nextReplies,
-          pagination: {
-            ...current.pagination,
-            [cursorKey]: data.messages.length < limit ? null : maybeNextCursor,
-            [loadingKey]: false,
-          },
-        };
-      });
-    } catch (error) {
-      this.client.logger('error', (error as Error).message);
-      this.state.next((current) => ({
-        ...current,
-        pagination: {
-          ...current.pagination,
-          [loadingKey]: false,
-        },
-      }));
-    }
-  };
 }
 
 type MessageThreadParticipant = NonNullable<
@@ -952,22 +833,6 @@ const getPlaceholderReadResponse = (currentUserId?: string): ReadResponse[] =>
         },
       ]
     : [];
-
-const repliesPaginationFromInitialThread = (
-  thread: ThreadResponse,
-): ThreadRepliesPagination => {
-  const latestRepliesContainsAllReplies =
-    thread.latest_replies.length === thread.reply_count;
-
-  return {
-    nextCursor: null,
-    prevCursor: latestRepliesContainsAllReplies
-      ? null
-      : (thread.latest_replies.at(0)?.id ?? null),
-    isLoadingNext: false,
-    isLoadingPrev: false,
-  };
-};
 
 const ownUnreadCountSelector =
   (currentUserId: string | undefined) => (state: ThreadState) =>

@@ -2369,12 +2369,18 @@ export class Channel {
         if (event.message) {
           this._extendEventWithOwnReactions(event);
           const formattedMessage = formatMessage(event.message);
+          const isThreadReply =
+            !!event.message.parent_id && !event.message.show_in_channel;
           if (event.hard_delete) {
             channelState.removeMessage(event.message);
-            this.messagePaginator.removeItem({ id: event.message.id });
+            if (!isThreadReply) {
+              this.messagePaginator.removeItem({ id: event.message.id });
+            }
           } else {
             channelState.addMessageSorted(event.message, false, false);
-            this.messagePaginator.ingestItem(formattedMessage);
+            if (!isThreadReply) {
+              this.messagePaginator.ingestItem(formattedMessage);
+            }
           }
           this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
 

@@ -68,6 +68,20 @@ describe('Threads 2.0', () => {
     });
   }
 
+  // The messagePaginator is the sole reply source (Thread.state.replies was removed).
+  const repliesOf = (thread: Thread) =>
+    thread.messagePaginator.state.getLatestValue().items ?? [];
+
+  // A realistic reply carries a cid + parent_id so it passes the reply paginator's client-side
+  // filter ({ cid, parent_id }) and shows up in messagePaginator.state.items (the rendered list).
+  // Without cid, ingestItem indexes the message but the filter excludes it from state.items.
+  const makeReply = (overrides: Partial<MessageResponse> = {}) =>
+    generateMsg({
+      cid: channel.cid,
+      parent_id: parentMessageResponse.id,
+      ...overrides,
+    }) as MessageResponse;
+
   beforeEach(() => {
     client = new StreamChat('apiKey');
     client._setUser({ id: TEST_USER_ID });
@@ -161,11 +175,9 @@ describe('Threads 2.0', () => {
       expect(thread.id).to.equal(parentMessageResponse.id);
       expect(thread.channel.cid).to.equal(channel.cid);
       expect(state.parentMessage.id).to.equal(parentMessageResponse.id);
-      expect(state.replies).to.deep.equal([]);
+      expect(repliesOf(thread)).to.deep.equal([]);
       expect(state.participants).to.deep.equal([]);
       expect(state.custom).to.deep.equal({});
-      expect(state.pagination.prevCursor).to.be.null;
-      expect(state.pagination.nextCursor).to.be.null;
       expect(state.read).to.have.keys([TEST_USER_ID]);
       expect(thread.messagePaginator.sort).to.deep.equal([{ created_at: -1 }]);
       expect(thread.messagePaginator.requestSort).to.deep.equal([{ created_at: -1 }]);
@@ -209,52 +221,47 @@ describe('Threads 2.0', () => {
 
         it('inserts a new message that belongs to the associated thread', () => {
           const thread = createTestThread();
-          const message = generateMsg({ parent_id: thread.id }) as MessageResponse;
-          const stateBefore = thread.state.getLatestValue();
-          expect(stateBefore.replies).to.have.lengthOf(0);
+          const message = makeReply({ parent_id: thread.id });
+          expect(repliesOf(thread)).to.have.lengthOf(0);
 
           thread.upsertReplyLocally({ message });
 
-          const stateAfter = thread.state.getLatestValue();
-          expect(stateAfter.replies).to.have.lengthOf(1);
-          expect(stateAfter.replies[0].id).to.equal(message.id);
+          const replies = repliesOf(thread);
+          expect(replies).to.have.lengthOf(1);
+          expect(replies[0].id).to.equal(message.id);
         });
 
         it('updates existing message', () => {
-          const message = generateMsg({
-            parent_id: parentMessageResponse.id,
-            text: 'aaa',
-          }) as MessageResponse;
-          const thread = createTestThread({ latest_replies: [message] });
+          const message = makeReply({ text: 'aaa' });
+          const thread = createTestThread({ latest_replies: [message], reply_count: 1 });
           const udpatedMessage = { ...message, text: 'bbb' };
 
-          const stateBefore = thread.state.getLatestValue();
-          expect(stateBefore.replies).to.have.lengthOf(1);
-          expect(stateBefore.replies[0].id).to.equal(message.id);
-          expect(stateBefore.replies[0].text).to.not.equal(udpatedMessage.text);
+          const repliesBefore = repliesOf(thread);
+          expect(repliesBefore).to.have.lengthOf(1);
+          expect(repliesBefore[0].id).to.equal(message.id);
+          expect(repliesBefore[0].text).to.not.equal(udpatedMessage.text);
 
           thread.upsertReplyLocally({ message: udpatedMessage });
 
-          const stateAfter = thread.state.getLatestValue();
-          expect(stateAfter.replies).to.have.lengthOf(1);
-          expect(stateAfter.replies[0].text).to.equal(udpatedMessage.text);
+          const repliesAfter = repliesOf(thread);
+          expect(repliesAfter).to.have.lengthOf(1);
+          expect(repliesAfter[0].text).to.equal(udpatedMessage.text);
         });
 
         it('updates optimistically added message', () => {
-          const optimisticMessage = generateMsg({
-            parent_id: parentMessageResponse.id,
+          const optimisticMessage = makeReply({
             text: 'aaa',
             created_at: '2020-01-01T00:00:00Z',
-          }) as MessageResponse;
+          });
 
-          const message = generateMsg({
-            parent_id: parentMessageResponse.id,
+          const message = makeReply({
             text: 'bbb',
             created_at: '2020-01-01T00:00:10Z',
-          }) as MessageResponse;
+          });
 
           const thread = createTestThread({
             latest_replies: [optimisticMessage, message],
+            reply_count: 2,
           });
           const updatedMessage: MessageResponse = {
             ...optimisticMessage,
@@ -262,19 +269,20 @@ describe('Threads 2.0', () => {
             created_at: '2020-01-01T00:00:20Z',
           };
 
-          const stateBefore = thread.state.getLatestValue();
-          expect(stateBefore.replies).to.have.lengthOf(2);
-          expect(stateBefore.replies[0].id).to.equal(optimisticMessage.id);
-          expect(stateBefore.replies[0].text).to.equal('aaa');
-          expect(stateBefore.replies[1].id).to.equal(message.id);
+          const repliesBefore = repliesOf(thread);
+          expect(repliesBefore).to.have.lengthOf(2);
+          expect(repliesBefore[0].id).to.equal(optimisticMessage.id);
+          expect(repliesBefore[0].text).to.equal('aaa');
+          expect(repliesBefore[1].id).to.equal(message.id);
 
           thread.upsertReplyLocally({ message: updatedMessage, timestampChanged: true });
 
-          const stateAfter = thread.state.getLatestValue();
-          expect(stateAfter.replies).to.have.lengthOf(2);
-          expect(stateAfter.replies[0].id).to.equal(message.id);
-          expect(stateAfter.replies[1].id).to.equal(optimisticMessage.id);
-          expect(stateAfter.replies[1].text).to.equal('ccc');
+          // Updating the optimistic reply with a newer created_at repositions it after `message`.
+          const repliesAfter = repliesOf(thread);
+          expect(repliesAfter).to.have.lengthOf(2);
+          expect(repliesAfter[0].id).to.equal(message.id);
+          expect(repliesAfter[1].id).to.equal(optimisticMessage.id);
+          expect(repliesAfter[1].text).to.equal('ccc');
         });
       });
 
@@ -384,54 +392,24 @@ describe('Threads 2.0', () => {
 
           // compare non-primitive values only
           expect(stateAfter.read).to.equal(hydrationState.read);
-          expect(stateAfter.replies).to.equal(hydrationState.replies);
           expect(stateAfter.parentMessage).to.equal(hydrationState.parentMessage);
           expect(stateAfter.participants).to.equal(hydrationState.participants);
-        });
-
-        it('copies pagination state during hydration', () => {
-          const thread = createMinimalThread();
-          const hydrationThread = createTestThread({
-            latest_replies: [
-              generateMsg({ parent_id: parentMessageResponse.id }) as MessageResponse,
-            ],
-            reply_count: 3,
-          });
-
-          hydrationThread.state.next((current) => ({
-            ...current,
-            pagination: {
-              ...current.pagination,
-              nextCursor: 'next-cursor',
-            },
-          }));
-
-          thread.hydrateState(hydrationThread);
-
-          const stateAfter = thread.state.getLatestValue();
-          expect(stateAfter.pagination.prevCursor).to.not.be.null;
-          expect(stateAfter.pagination.nextCursor).to.equal('next-cursor');
         });
 
         it('retains failed replies after hydration', () => {
           const thread = createTestThread();
           const hydrationThread = createTestThread({
-            latest_replies: [
-              generateMsg({ parent_id: parentMessageResponse.id }) as MessageResponse,
-            ],
+            latest_replies: [makeReply()],
+            reply_count: 1,
           });
 
-          const failedMessage = generateMsg({
-            status: 'failed',
-            parent_id: parentMessageResponse.id,
-          }) as MessageResponse;
+          const failedMessage = makeReply({ status: 'failed' });
           thread.upsertReplyLocally({ message: failedMessage });
 
           thread.hydrateState(hydrationThread);
 
-          const stateAfter = thread.state.getLatestValue();
-          expect(stateAfter.replies).to.have.lengthOf(2);
-          expect(stateAfter.replies[1].id).to.equal(failedMessage.id);
+          // The failed reply survives the hydrate (it is re-ingested into the paginator).
+          expect(repliesOf(thread).map((reply) => reply.id)).to.include(failedMessage.id);
         });
 
         it('merges the incoming newest reply window into the reply paginator', () => {
@@ -480,35 +458,6 @@ describe('Threads 2.0', () => {
       });
 
       describe('reload', () => {
-        it('bootstraps pagination for minimally initialized threads', async () => {
-          const minimalThread = createMinimalThread();
-          const hydratedThread = createTestThread({
-            latest_replies: [
-              generateMsg({ parent_id: parentMessageResponse.id }) as MessageResponse,
-            ],
-            reply_count: 3,
-          });
-          hydratedThread.state.next((current) => ({
-            ...current,
-            pagination: {
-              ...current.pagination,
-              nextCursor: 'next-cursor',
-            },
-          }));
-
-          sinon.stub(client, 'getThread').resolves(hydratedThread);
-
-          const stateBefore = minimalThread.state.getLatestValue();
-          expect(stateBefore.pagination.prevCursor).to.be.null;
-          expect(stateBefore.pagination.nextCursor).to.be.null;
-
-          await minimalThread.reload();
-
-          const stateAfter = minimalThread.state.getLatestValue();
-          expect(stateAfter.pagination.prevCursor).to.not.be.null;
-          expect(stateAfter.pagination.nextCursor).to.equal('next-cursor');
-        });
-
         it('sizes getThread reply_limit to the loaded reply count, falling back to pageSize when unloaded', async () => {
           const stub = sinon.stub(client, 'getThread').resolves(createTestThread());
 
@@ -550,8 +499,8 @@ describe('Threads 2.0', () => {
           );
           const thread = createTestThread({ latest_replies: messages });
 
-          const stateBefore = thread.state.getLatestValue();
-          expect(stateBefore.replies).to.have.lengthOf(5);
+          const repliesBefore = repliesOf(thread);
+          expect(repliesBefore).to.have.lengthOf(5);
 
           const messageToDelete = generateMsg({
             created_at: messages[2].created_at,
@@ -560,11 +509,11 @@ describe('Threads 2.0', () => {
 
           thread.deleteReplyLocally({ message: messageToDelete });
 
-          const stateAfter = thread.state.getLatestValue();
-          expect(stateAfter.replies).to.not.equal(stateBefore.replies);
-          expect(stateAfter.replies).to.have.lengthOf(4);
-          expect(stateAfter.replies.find((reply) => reply.id === messageToDelete.id)).to
-            .be.undefined;
+          const repliesAfter = repliesOf(thread);
+          expect(repliesAfter).to.not.equal(repliesBefore);
+          expect(repliesAfter).to.have.lengthOf(4);
+          expect(repliesAfter.find((reply) => reply.id === messageToDelete.id)).to.be
+            .undefined;
         });
       });
 
@@ -607,205 +556,48 @@ describe('Threads 2.0', () => {
         });
       });
 
-      describe('loadPage', () => {
-        it('sets up pagination on initialization (all replies included in response)', () => {
-          const thread = createTestThread({
-            latest_replies: [generateMsg() as MessageResponse],
-            reply_count: 1,
-          });
-          const state = thread.state.getLatestValue();
-          expect(state.pagination.prevCursor).to.be.null;
-          expect(state.pagination.nextCursor).to.be.null;
+      // Reply pagination now flows through the instance's messagePaginator (toTail = older,
+      // toHead = newer) — the replacement for the removed Thread.loadNextPage/loadPrevPage. The
+      // paginator's own suite covers the query-shape/cursor mechanics; these assert the end-to-end
+      // wiring through a real Thread (seeded from latest_replies) which the paginator suite doesn't.
+      describe('reply pagination (messagePaginator)', () => {
+        it('loads older replies via toTail() and scopes the request to the thread parent', async () => {
+          // Seeded newest window with older replies still to load (reply_count > loaded).
+          const newest = makeReply({ created_at: '2020-01-03T00:00:00.000Z' });
+          const thread = createTestThread({ latest_replies: [newest], reply_count: 3 });
+          expect(thread.messagePaginator.state.getLatestValue().hasMoreTail).to.be.true;
+
+          const older = makeReply({ created_at: '2020-01-02T00:00:00.000Z' });
+          const getRepliesStub = sinon
+            .stub(thread.channel, 'getReplies')
+            .resolves({ messages: [older], duration: '' } as unknown as ReturnType<
+              Channel['getReplies']
+            >);
+
+          await thread.messagePaginator.toTail();
+
+          // The fetched older reply is now in the rendered reply list...
+          expect(repliesOf(thread).map((reply) => reply.id)).to.include(older.id);
+          // ...and the request was made against this thread's parent (the replies endpoint).
+          expect(getRepliesStub.calledOnce).to.be.true;
+          expect(getRepliesStub.firstCall.args[0]).to.equal(thread.id);
         });
 
-        it('sets up pagination on initialization (not all replies included in response)', () => {
-          const firstMessage = generateMsg() as MessageResponse;
-          const lastMessage = generateMsg() as MessageResponse;
-          const thread = createTestThread({
-            latest_replies: [firstMessage, lastMessage],
-            reply_count: 3,
-          });
-          const state = thread.state.getLatestValue();
-          expect(state.pagination.prevCursor).not.to.be.null;
-          expect(state.pagination.nextCursor).to.be.null;
-        });
+        it('clears hasMoreTail once toTail() reaches the start of the reply list', async () => {
+          const newest = makeReply({ created_at: '2020-01-03T00:00:00.000Z' });
+          const thread = createTestThread({ latest_replies: [newest], reply_count: 2 });
+          expect(thread.messagePaginator.state.getLatestValue().hasMoreTail).to.be.true;
 
-        it('updates pagination after loading next page (end reached)', async () => {
-          const thread = createTestThread({
-            latest_replies: [generateMsg(), generateMsg()] as MessageResponse[],
-            reply_count: 3,
-          });
-          thread.state.next((current) => ({
-            ...current,
-            pagination: {
-              ...current.pagination,
-              nextCursor: 'cursor',
-            },
-          }));
-          sinon.stub(thread, 'queryReplies').resolves({
-            messages: [generateMsg()] as MessageResponse[],
-            duration: '',
-          });
-
-          await thread.loadNextPage({ limit: 2 });
-
-          const state = thread.state.getLatestValue();
-          expect(state.pagination.nextCursor).to.be.null;
-        });
-
-        it('updates pagination after loading next page (end not reached)', async () => {
-          const thread = createTestThread({
-            latest_replies: [generateMsg(), generateMsg()] as MessageResponse[],
-            reply_count: 4,
-          });
-          thread.state.next((current) => ({
-            ...current,
-            pagination: {
-              ...current.pagination,
-              nextCursor: 'cursor',
-            },
-          }));
-          const lastMessage = generateMsg() as MessageResponse;
-          sinon.stub(thread, 'queryReplies').resolves({
-            messages: [generateMsg(), lastMessage] as MessageResponse[],
-            duration: '',
-          });
-
-          await thread.loadNextPage({ limit: 2 });
-
-          const state = thread.state.getLatestValue();
-          expect(state.pagination.nextCursor).to.equal(lastMessage.id);
-        });
-
-        it('forms correct request when loading next page', async () => {
-          const firstMessage = generateMsg() as MessageResponse;
-          const lastMessage = generateMsg() as MessageResponse;
-          const thread = createTestThread({
-            latest_replies: [firstMessage, lastMessage],
-            reply_count: 3,
-          });
-          thread.state.next((current) => ({
-            ...current,
-            pagination: {
-              ...current.pagination,
-              nextCursor: lastMessage.id,
-            },
-          }));
-          const queryRepliesStub = sinon
-            .stub(thread, 'queryReplies')
-            .resolves({ messages: [], duration: '' });
-
-          await thread.loadNextPage({ limit: 42 });
-
-          expect(
-            queryRepliesStub.calledOnceWith({
-              id_gt: lastMessage.id,
-              limit: 42,
-            }),
-          ).to.be.true;
-        });
-
-        it('updates pagination after loading previous page (end reached)', async () => {
-          const thread = createTestThread({
-            latest_replies: [generateMsg(), generateMsg()] as MessageResponse[],
-            reply_count: 3,
-          });
-          sinon.stub(thread, 'queryReplies').resolves({
-            messages: [generateMsg()] as MessageResponse[],
-            duration: '',
-          });
-
-          await thread.loadPrevPage({ limit: 2 });
-
-          const state = thread.state.getLatestValue();
-          expect(state.pagination.prevCursor).to.be.null;
-        });
-
-        it('updates pagination after loading previous page (end not reached)', async () => {
-          const thread = createTestThread({
-            latest_replies: [generateMsg(), generateMsg()] as MessageResponse[],
-            reply_count: 4,
-          });
-          const firstMessage = generateMsg() as MessageResponse;
-          sinon.stub(thread, 'queryReplies').resolves({
-            messages: [firstMessage, generateMsg()] as MessageResponse[],
-            duration: '',
-          });
-
-          await thread.loadPrevPage({ limit: 2 });
-
-          const state = thread.state.getLatestValue();
-          expect(state.pagination.prevCursor).to.equal(firstMessage.id);
-        });
-
-        it('forms correct request when loading previous page', async () => {
-          const firstMessage = generateMsg() as MessageResponse;
-          const lastMessage = generateMsg() as MessageResponse;
-          const thread = createTestThread({
-            latest_replies: [firstMessage, lastMessage],
-            reply_count: 3,
-          });
-          const queryRepliesStub = sinon
-            .stub(thread, 'queryReplies')
-            .resolves({ messages: [], duration: '' });
-
-          await thread.loadPrevPage({ limit: 42 });
-
-          expect(
-            queryRepliesStub.calledOnceWith({
-              id_lt: firstMessage.id,
-              limit: 42,
-            }),
-          ).to.be.true;
-        });
-
-        it('appends messages when loading next page', async () => {
-          const initialMessages = [generateMsg(), generateMsg()] as MessageResponse[];
-          const nextMessages = [generateMsg(), generateMsg()] as MessageResponse[];
-          const thread = createTestThread({
-            latest_replies: initialMessages,
-            reply_count: 4,
-          });
-          thread.state.next((current) => ({
-            ...current,
-            pagination: {
-              ...current.pagination,
-              nextCursor: initialMessages[1].id,
-            },
-          }));
+          const older = makeReply({ created_at: '2020-01-02T00:00:00.000Z' });
           sinon
-            .stub(thread, 'queryReplies')
-            .resolves({ messages: nextMessages, duration: '' });
+            .stub(thread.channel, 'getReplies')
+            .resolves({ messages: [older], duration: '' } as unknown as ReturnType<
+              Channel['getReplies']
+            >);
 
-          await thread.loadNextPage({ limit: 2 });
+          await thread.messagePaginator.toTail();
 
-          const stateAfter = thread.state.getLatestValue();
-          const expectedMessageOrder = [...initialMessages, ...nextMessages]
-            .map(({ id }) => id)
-            .join(', ');
-          const actualMessageOrder = stateAfter.replies.map(({ id }) => id).join(', ');
-          expect(actualMessageOrder).to.equal(expectedMessageOrder);
-        });
-
-        it('prepends messages when loading previous page', async () => {
-          const initialMessages = [generateMsg(), generateMsg()] as MessageResponse[];
-          const prevMessages = [generateMsg(), generateMsg()] as MessageResponse[];
-          const thread = createTestThread({
-            latest_replies: initialMessages,
-            reply_count: 4,
-          });
-          sinon
-            .stub(thread, 'queryReplies')
-            .resolves({ messages: prevMessages, duration: '' });
-
-          await thread.loadPrevPage({ limit: 2 });
-
-          const stateAfter = thread.state.getLatestValue();
-          const expectedMessageOrder = [...prevMessages, ...initialMessages]
-            .map(({ id }) => id)
-            .join(', ');
-          const actualMessageOrder = stateAfter.replies.map(({ id }) => id).join(', ');
-          expect(actualMessageOrder).to.equal(expectedMessageOrder);
+          expect(thread.messagePaginator.state.getLatestValue().hasMoreTail).to.be.false;
         });
       });
     });
@@ -857,15 +649,20 @@ describe('Threads 2.0', () => {
       });
 
       it('reloads stale state when thread is active', async () => {
-        const thread = createTestThread();
+        const initialReply = makeReply({ created_at: '2020-03-01T00:00:00.000Z' });
+        const thread = createTestThread({
+          latest_replies: [initialReply],
+          reply_count: 1,
+        });
         thread.registerSubscriptions();
 
-        const stateBefore = thread.state.getLatestValue();
-        const stubbedGetThread = sinon
-          .stub(client, 'getThread')
-          .resolves(
-            createTestThread({ latest_replies: [generateMsg() as MessageResponse] }),
-          );
+        const reloadedReply = makeReply({ created_at: '2020-03-01T00:00:01.000Z' });
+        const stubbedGetThread = sinon.stub(client, 'getThread').resolves(
+          createTestThread({
+            latest_replies: [initialReply, reloadedReply],
+            reply_count: 2,
+          }),
+        );
 
         thread.state.partialNext({ isStateStale: true });
 
@@ -876,8 +673,7 @@ describe('Threads 2.0', () => {
 
         expect(stubbedGetThread.calledOnce).to.be.true;
         await stubbedGetThread.firstCall.returnValue;
-        const stateAfter = thread.state.getLatestValue();
-        expect(stateAfter.replies).not.to.equal(stateBefore.replies);
+        expect(repliesOf(thread).map((reply) => reply.id)).to.include(reloadedReply.id);
 
         thread.unregisterSubscriptions();
       });
@@ -1205,26 +1001,20 @@ describe('Threads 2.0', () => {
           });
           thread.registerSubscriptions();
 
-          const newMessage = generateMsg({
-            parent_id: thread.id,
-            user: { id: 'bob' },
-          }) as MessageResponse;
+          const newMessage = makeReply({ user: { id: 'bob' } });
           client.dispatchEvent({
             type: 'message.new',
             message: newMessage,
             user: { id: 'bob' },
           });
 
-          const stateAfter = thread.state.getLatestValue();
-          expect(stateAfter.replies).to.have.length(1);
-          expect(stateAfter.replies.find((reply) => reply.id === newMessage.id)).not.to.be
-            .undefined;
+          expect(repliesOf(thread).map((reply) => reply.id)).to.include(newMessage.id);
           expect(thread.ownUnreadCount).to.equal(1);
 
           thread.unregisterSubscriptions();
         });
 
-        it('increments local reply_count on new reply', () => {
+        it('tracks reply_count from the authoritative parent update, not a local increment on new reply', () => {
           const thread = createTestThread({
             reply_count: 0,
             read: [
@@ -1242,9 +1032,20 @@ describe('Threads 2.0', () => {
             user: { id: 'bob' },
           }) as MessageResponse;
 
+          // A received reply must NOT locally bump replyCount. The count is kept authoritative by
+          // the parent's server-driven reply_count (below); a local increment double-counted
+          // received replies on top of that re-sync (see subscribeNewReplies).
           client.dispatchEvent({
             type: 'message.new',
             message: newMessage,
+            user: { id: 'bob' },
+          });
+          expect(thread.state.getLatestValue().replyCount).to.equal(0);
+
+          // The server delivers the authoritative reply_count via the parent's message.updated.
+          client.dispatchEvent({
+            type: 'message.updated',
+            message: { ...parentMessageResponse, reply_count: 1 } as MessageResponse,
             user: { id: 'bob' },
           });
 
@@ -1255,7 +1056,7 @@ describe('Threads 2.0', () => {
           thread.unregisterSubscriptions();
         });
 
-        it('does not increment local reply_count for duplicate message.new events', () => {
+        it('does not change local reply_count on message.new (parent-message-driven, so duplicates are harmless)', () => {
           const existingReply = generateMsg({
             parent_id: parentMessageResponse.id,
             user: { id: 'bob' },
@@ -1263,6 +1064,7 @@ describe('Threads 2.0', () => {
           const thread = createTestThread({
             latest_replies: [existingReply],
             reply_count: 1,
+            parentMessageOverrides: { reply_count: 1 },
             read: [
               {
                 user: { id: TEST_USER_ID },
@@ -1273,14 +1075,11 @@ describe('Threads 2.0', () => {
           });
           thread.registerSubscriptions();
 
-          thread.state.next((current) => ({
-            ...current,
-            parentMessage: {
-              ...current.parentMessage,
-              reply_count: 1,
-            },
-          }));
+          // reply_count is sourced from the parent message, so it starts at 1.
+          expect(thread.state.getLatestValue().replyCount).to.equal(1);
 
+          // A message.new (here a duplicate of an already-loaded reply) must not locally change the
+          // count — the authoritative reply_count comes from the parent message, so this is a no-op.
           client.dispatchEvent({
             type: 'message.new',
             message: existingReply,
@@ -1296,7 +1095,8 @@ describe('Threads 2.0', () => {
 
         it('handles receiving a reply that was previously optimistically added', () => {
           const thread = createTestThread({
-            latest_replies: [generateMsg() as MessageResponse],
+            latest_replies: [makeReply()],
+            reply_count: 1,
             read: [
               {
                 user: { id: TEST_USER_ID },
@@ -1305,14 +1105,10 @@ describe('Threads 2.0', () => {
               },
             ],
           });
-          const message = generateMsg({
-            parent_id: thread.id,
-            user: { id: TEST_USER_ID },
-          }) as MessageResponse;
+          const message = makeReply({ user: { id: TEST_USER_ID } });
           thread.upsertReplyLocally({ message });
 
-          const stateBefore = thread.state.getLatestValue();
-          expect(stateBefore.replies).to.have.length(2);
+          expect(repliesOf(thread)).to.have.length(2);
           expect(thread.ownUnreadCount).to.equal(0);
 
           client.dispatchEvent({
@@ -1321,8 +1117,8 @@ describe('Threads 2.0', () => {
             user: { id: TEST_USER_ID },
           });
 
-          const stateAfter = thread.state.getLatestValue();
-          expect(stateAfter.replies).to.have.length(2);
+          // Receiving the same reply over the WS must not duplicate it.
+          expect(repliesOf(thread)).to.have.length(2);
           expect(thread.ownUnreadCount).to.equal(0);
         });
       });
@@ -1405,10 +1201,10 @@ describe('Threads 2.0', () => {
             message: messageToDelete,
           });
 
-          const stateAfter = thread.state.getLatestValue();
-          expect(stateAfter.replies).to.have.lengthOf(4);
-          expect(stateAfter.replies.find((reply) => reply.id === messageToDelete.id)).to
-            .be.undefined;
+          const replies = repliesOf(thread);
+          expect(replies).to.have.lengthOf(4);
+          expect(replies.find((reply) => reply.id === messageToDelete.id)).to.be
+            .undefined;
 
           thread.unregisterSubscriptions();
         });
@@ -1416,15 +1212,10 @@ describe('Threads 2.0', () => {
         it('updates deleted_at property of the reply if it was soft deleted', () => {
           const createdAt = new Date().getTime();
           // five messages "created" second apart
-          const messages = Array.from(
-            { length: 5 },
-            (_, i) =>
-              generateMsg({
-                parent_id: parentMessageResponse.id,
-                created_at: new Date(createdAt + 1000 * i).toISOString(),
-              }) as MessageResponse,
+          const messages = Array.from({ length: 5 }, (_, i) =>
+            makeReply({ created_at: new Date(createdAt + 1000 * i).toISOString() }),
           );
-          const thread = createTestThread({ latest_replies: messages });
+          const thread = createTestThread({ latest_replies: messages, reply_count: 5 });
           thread.registerSubscriptions();
 
           const messageToDelete = messages[2];
@@ -1441,15 +1232,14 @@ describe('Threads 2.0', () => {
             },
           });
 
-          const stateAfter = thread.state.getLatestValue();
-          expect(stateAfter.replies).to.have.lengthOf(5);
-          expect(stateAfter.replies[2].id).to.equal(messageToDelete.id);
-          expect(stateAfter.replies[2]).to.not.equal(messageToDelete);
-          expect(stateAfter.replies[2].deleted_at).to.be.a('date');
-          expect(stateAfter.replies[2].deleted_at!.toISOString()).to.equal(
-            deletedAt.toISOString(),
-          );
-          expect(stateAfter.replies[2].type).to.equal('deleted');
+          // Soft delete routes through upsertReplyLocally, so the reply is retained (marked) in place.
+          const replies = repliesOf(thread);
+          expect(replies).to.have.lengthOf(5);
+          expect(replies[2].id).to.equal(messageToDelete.id);
+          expect(replies[2]).to.not.equal(messageToDelete);
+          expect(replies[2].deleted_at).to.be.a('date');
+          expect(replies[2].deleted_at!.toISOString()).to.equal(deletedAt.toISOString());
+          expect(replies[2].type).to.equal('deleted');
 
           thread.unregisterSubscriptions();
         });
