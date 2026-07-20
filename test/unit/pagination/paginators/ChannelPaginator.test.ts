@@ -590,6 +590,8 @@ describe('ChannelPaginator', () => {
   describe('setters', () => {
     const stateAfterQuery = {
       items: [channel1, channel2],
+      // flat-mode paginator: the head window mirrors the full list
+      headItems: [channel1, channel2],
       hasMoreTail: false,
       hasMoreHead: false,
       offset: 10,

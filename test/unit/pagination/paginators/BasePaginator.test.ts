@@ -3116,6 +3116,79 @@ describe('BasePaginator', () => {
       });
     });
 
+    describe('headItems (reactive latest window)', () => {
+      it('is undefined before the first load and mirrors items in flat mode', () => {
+        const paginator = new Paginator();
+        expect(paginator.headItems).toBeUndefined();
+
+        const loaded = [{ id: 'a' }];
+        paginator.setItems({ valueOrFactory: loaded });
+
+        expect(paginator.headItems).toStrictEqual(loaded);
+        // flat-mode head window is the items array itself (same reference)
+        expect(paginator.state.getLatestValue().headItems).toBe(loaded);
+      });
+
+      it('emits reactively when the head window changes', () => {
+        const paginator = new Paginator();
+        const emissions: Array<{ id: string }[] | undefined> = [];
+        const unsubscribe = paginator.state.subscribeWithSelector(
+          (state) => ({ headItems: state.headItems }),
+          ({ headItems }) => emissions.push(headItems),
+        );
+
+        const items1 = [{ id: 'a' }];
+        const items2 = [{ id: 'b' }];
+        paginator.setItems({ valueOrFactory: items1 });
+        paginator.setItems({ valueOrFactory: items2 });
+
+        unsubscribe();
+        // initial (undefined) + one emission per head-window change
+        expect(emissions).toEqual([undefined, items1, items2]);
+      });
+
+      it('does not re-emit headItems on unrelated state changes (reference-stable)', () => {
+        const paginator = new Paginator();
+        paginator.setItems({ valueOrFactory: [{ id: 'a' }] });
+
+        let calls = 0;
+        const unsubscribe = paginator.state.subscribeWithSelector(
+          (state) => ({ headItems: state.headItems }),
+          () => {
+            calls += 1;
+          },
+        );
+        expect(calls).toBe(1); // initial
+
+        paginator.state.partialNext({ isLoading: true });
+        paginator.state.partialNext({ isLoading: false });
+
+        expect(calls).toBe(1); // head window did not change → no re-emit
+        unsubscribe();
+      });
+
+      it('materializes the head window in interval-storage mode', () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.sortComparator = makeComparator<
+          TestItem,
+          Partial<Record<keyof TestItem, AscDesc>>
+        >({ sort: { age: -1 } });
+
+        paginator.ingestPage({
+          page: [item2, item1],
+          isHead: true,
+          isTail: true,
+          setActive: true,
+        });
+
+        expect(paginator.headItems).toBeDefined();
+        expect(paginator.headItems?.map((item) => item.id)).toEqual(
+          paginator.items?.map((item) => item.id),
+        );
+        itemIndex.clear();
+      });
+    });
+
     describe('setItems', () => {
       it('overrides all the items in the state with provided value', () => {
         const paginator = new Paginator();
@@ -3144,6 +3217,8 @@ describe('BasePaginator', () => {
           hasMoreHead: true,
           isLoading: false,
           items,
+          // flat-mode paginator: the head window is the full list
+          headItems: items,
           lastQueryError: undefined,
           offset: 1,
         },
