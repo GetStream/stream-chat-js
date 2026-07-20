@@ -553,6 +553,10 @@ delete `channel.state.pinnedMessages` + `addPinnedMessage(s)`/`removePinnedMessa
 "shrink to pinned-only" methods (`_updateMessage`/`updateUserMessages`/`deleteUserMessages`) be **deleted
 outright**. Breaking public-API change → Task 12 (exports/semver) + Task 14 (docs).
 
+**Unblocks util cleanup:** `addPinnedMessage`/`ChannelState._addToMessageList` is the last caller of the
+`utils.addToMessageList` helper. Once they are deleted here, remove `addToMessageList` from `src/utils.ts`
+and its `describe('addToMessageList')` in `test/unit/utils.test.ts`.
+
 ---
 
 ## Task 19 (ENHANCEMENT): reactive `headItems` on `PaginatorState` (generic base level)
@@ -562,9 +566,20 @@ outright**. Breaking public-API change → Task 12 (exports/semver) + Task 14 (d
 **Dependencies:** none (independent base-paginator capability; unblocks reactive "latest message"/
 "latest messages" UI reads sourced from the paginator instead of `channel.state`)
 
-**Status:** pending
+**Status:** DONE (uncommitted — pending review). JS suite green (+4 tests), types + lint clean; React
+suite green.
 
-**Owner:** unassigned
+**Owner:** claude
+
+**Implementation notes:** `headItems?: T[]` added to `PaginatorState` (+ `initialState: undefined` +
+a `get headItems()` accessor). Materialized via a `StateStore` preprocessor registered in the
+`BasePaginator` constructor: interval mode derives from `latestItems` (reads intervals, already
+mutated at emit time), flat mode reads `nextValue.items` (not `this.items`, which is the previous
+emitted value inside a preprocessor). Reference-stable via per-index identity comparison against the
+previous `headItems`. `latestItems`/`latestItem` getters were left unchanged (the preprocessor mirrors
+their logic, so state and getters stay consistent without the riskier re-home). New tests in
+`BasePaginator.test.ts`; `MessageSet`-free state fixtures in `BasePaginator`/`ChannelPaginator` tests
+updated for the new field.
 
 **Motivation:** `latestItems`/`latestItem` are non-reactive getters computed on demand from
 `itemIntervals`, so a UI subscribing via `useStateStore(paginator.state, selector)` cannot react to
@@ -600,6 +615,52 @@ paginator (message, thread reply, pinned, channel-list, reminders) benefits.
       (reference-stable when the window is unchanged).
 - [ ] `latestItems`/`latestItem` remain behavior-equivalent; `yarn types` + `yarn lint` + `yarn test-unit`
       green.
+
+---
+
+## Task 20 (ENHANCEMENT): unify all paginators on itemIndex + interval storage
+
+**File(s) to create/modify:** `src/pagination/paginators/ChannelPaginator.ts`,
+`src/pagination/paginators/ReminderPaginator.ts`, `src/pagination/paginators/UserGroupPaginator.ts`
+(+ their unit tests)
+
+**Dependencies:** none (base capability already exists; independent of the ChannelState removal)
+
+**Status:** pending
+
+**Owner:** unassigned
+
+**Motivation:** `MessagePaginator` and `MessageReplyPaginator` already use interval storage (pass an
+`itemIndex` to `super`); `ChannelPaginator`, `ReminderPaginator` and `UserGroupPaginator` are flat.
+A single storage model gives one API/behavior across paginators (dedup-by-id, interval merge,
+`headItems`/`latestItems` head-window semantics, `getItem`/`removeItem` by id), even where jump-to
+(`*_around`) is not applicable (e.g. channels have no `id_around`). Unified code paths are easier to
+reason about and test.
+
+**Scope:**
+
+- Pass an `itemIndex` (`new ItemIndex({ getId })`) to `super` for each flat paginator, with a correct
+  id: `ChannelPaginator` → `channel.cid`; `ReminderPaginator` → reminder id; `UserGroupPaginator` →
+  user id. Confirm each `sortComparator` is a total order suitable for interval placement.
+- Reconcile behavior differences interval storage introduces:
+  - **dedup by id** on ingest (flat mode may currently allow/handle dupes differently);
+  - **item repositioning / reorder** — a channel whose `last_message_at` bumps it to the top is a
+    non-monotonic sort-key change; verify move = remove + re-ingest works (this is the main risk for
+    `ChannelPaginator`, driven by `ChannelManager`), and that `ChannelManager`'s add/move/remove paths
+    map onto `ingestItem`/`removeItem` cleanly;
+  - cursor/`hasMoreHead`/`hasMoreTail` derivation under the linear (non-around) derivator.
+- Update tests: the flat-mode state fixtures (`headItems` mirrors `items`) become interval-derived;
+  add parity coverage that list order, dedup, pagination flags, and `headItems` match today's behavior.
+
+**Acceptance Criteria:**
+
+- [ ] All five paginators construct with an `itemIndex`; `usesItemIntervalStorage === true`.
+- [ ] Channel list ordering (incl. reorder-to-top on new message), reminder list, and user-group list
+      behavior is unchanged vs. baseline (parity unit tests); `headItems`/`latestItems` correct.
+- [ ] `yarn types` + `yarn lint` + `yarn test-unit` green; React suite green.
+
+**Risk:** medium — interval storage changes merge/dedup/reorder semantics for lists that mutate order
+frequently (channels). Land per-paginator with parity tests rather than all at once.
 
 ---
 
