@@ -373,20 +373,31 @@ paginators (owner-approved).
 
 **Dependencies:** Task 11
 
-**Status:** pending
+**Status:** DONE (uncommitted — pending review). Both suites green, `yarn types` + `yarn lint` clean.
 
-**Owner:** unassigned
+**Owner:** claude
 
-**Scope:**
+**Scope (as executed — deviates from the original assumptions below):**
 
-- Remove `MessageSet`, `MessageSetType`, `isLatestMessageSet`. Resolve the
-  `ReturnType<ChannelState['formatMessage']>` type anchor — retype `pinnedMessages` and remaining
-  signatures against `LocalMessage` (keep `formatMessage` as a util).
-- Land the removal commit with a `BREAKING CHANGE:` footer (no manual version bump).
+- Resolved the `ReturnType<ChannelState['formatMessage']>` anchor: retyped `pinnedMessages` and the
+  remaining `_updateMessage`/`_addToMessageList`/`removeMessageFromArray` signatures to `LocalMessage`
+  (equivalent — the `formatMessage` util returns `LocalMessage`). `ChannelState.formatMessage` stays.
+- Removed the dead `MessageSet` object-shape type from `types.ts` (public via `export * from './types'`
+  → **breaking**) and the internal-only `DEFAULT_MESSAGE_SET_PAGINATION` from `constants.ts`
+  (not re-exported → non-breaking).
+- **Kept** `MessageSetType` — still the type of `channel.query`'s `messageSetToAddToIfDoesNotExist`
+  param, which drives paginator seeding (`'latest'` seeds the first page; `'current'`/`'new'` do not).
+- **Kept** `isLatestMessageSet` / `isLatestMessagesSet` — live flags on the `channels.queried` event
+  and the offline `upsertChannels` payload ("is this the latest page"), not the removed storage.
+- **Kept** `binarySearchByDateEqualOrNearestGreater` (public util, now internally unused): removing it
+  is a gratuitous breaking change unrelated to the storage removal — flagged for the owner to decide.
+- `BREAKING CHANGE:` footer to be applied on the commit for this task (documents the ChannelState
+  message-storage + `MessageSet` removal); triggers the major release for the whole 3a/3b/12 series.
 
 **Acceptance Criteria:**
 
-- [ ] `yarn types` clean across `src`; public export surface updated; `BREAKING CHANGE` documented.
+- [x] `yarn types` clean across `src`; dead `MessageSet`/`DEFAULT_MESSAGE_SET_PAGINATION` removed;
+      `BREAKING CHANGE` to be documented on commit.
 
 ---
 
@@ -541,6 +552,54 @@ its `reflectReaction`. No bespoke pin/unpin logic.
 delete `channel.state.pinnedMessages` + `addPinnedMessage(s)`/`removePinnedMessage`. This then lets Task 11's
 "shrink to pinned-only" methods (`_updateMessage`/`updateUserMessages`/`deleteUserMessages`) be **deleted
 outright**. Breaking public-API change → Task 12 (exports/semver) + Task 14 (docs).
+
+---
+
+## Task 19 (ENHANCEMENT): reactive `headItems` on `PaginatorState` (generic base level)
+
+**File(s) to create/modify:** `src/pagination/paginators/BasePaginator.ts` (+ its unit test)
+
+**Dependencies:** none (independent base-paginator capability; unblocks reactive "latest message"/
+"latest messages" UI reads sourced from the paginator instead of `channel.state`)
+
+**Status:** pending
+
+**Owner:** unassigned
+
+**Motivation:** `latestItems`/`latestItem` are non-reactive getters computed on demand from
+`itemIntervals`, so a UI subscribing via `useStateStore(paginator.state, selector)` cannot react to
+changes in the newest-loaded window (new/edited/removed latest message, truncation, etc.). Expose the
+head window as a reactive field so consumers can select it. Generic on `BasePaginator` so every
+paginator (message, thread reply, pinned, channel-list, reminders) benefits.
+
+**Scope:**
+
+- Add `headItems?: T[] | undefined` to `PaginatorState<T>` and default it to `undefined` in
+  `initialState` (mirrors `items`: `undefined` until the first load).
+- Materialize it centrally. There is no single items-emission choke point (many `state.partialNext`
+  sites) and the `onBeforeItemsEmitted` plugin hook is declared but never invoked, so use a
+  `StateStore` **preprocessor** registered in the `BasePaginator` constructor: on each emission compute
+  the current head window (reuse the `latestItems` logic — head-most loaded interval in interval mode,
+  full list in flat mode) and assign it to `nextValue.headItems`.
+  - **Reference stability:** guard with a shallow (length + per-index `getItemId`) comparison against
+    the previous `headItems`; when unchanged, keep the previous array reference so selectors don't
+    re-fire on unrelated state changes (`isLoading`, `lastQueryError`, cursor). This matters because
+    the preprocessor runs on every `next()`, not only on `items` changes.
+  - Recompute from intervals (not gated on the active `items` reference) so the head window updates
+    even when the active window is a jumped-to older interval — the whole point for "latest message".
+- Re-home `latestItems`/`latestItem` onto the field: `get latestItems()` returns
+  `state.headItems ?? []`; `latestItem` returns its head edge. Keeps a single source of truth and makes
+  both consistent with the reactive value. (Verify parity against the existing getter behavior first.)
+
+**Acceptance Criteria:**
+
+- [ ] `state.headItems` is `T[] | undefined`, `undefined` before first load, and updates reactively when
+      the newest-loaded window changes (ingest/remove/truncate/new-page), verified by a unit test that
+      subscribes and asserts emission.
+- [ ] Selecting `headItems` does **not** re-fire on `isLoading`-only or other non-head state changes
+      (reference-stable when the window is unchanged).
+- [ ] `latestItems`/`latestItem` remain behavior-equivalent; `yarn types` + `yarn lint` + `yarn test-unit`
+      green.
 
 ---
 
