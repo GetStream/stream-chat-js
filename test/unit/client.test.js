@@ -1087,7 +1087,7 @@ describe('StreamChat.queryChannels', async () => {
 		postStub.restore();
 	});
 
-	it('should not update pagination for queried message set', async () => {
+	it('seeds each queried channel paginator with its full message page', async () => {
 		const client = await getClientWithUser();
 		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
 			...mockChannelQueryResponse,
@@ -1097,19 +1097,20 @@ describe('StreamChat.queryChannels', async () => {
 			),
 		}));
 		const mock = sinon.mock(client);
-		mock.expects('post').returns(Promise.resolve(mockedChannelsQueryResponse));
+		mock
+			.expects('post')
+			.returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
 		await client.queryChannels();
+		expect(Object.keys(client.activeChannels).length).to.be.greaterThan(0);
 		Object.values(client.activeChannels).forEach((channel) => {
-			expect(channel.state.messageSets.length).to.be.equal(1);
-			expect(channel.state.messageSets[0].pagination).to.eql({
-				hasNext: true,
-				hasPrev: true,
-			});
+			expect(channel.messagePaginator.items).to.have.length(
+				DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
+			);
 		});
 		mock.restore();
 	});
 
-	it('should update pagination for queried message set to prevent more pagination', async () => {
+	it('seeds each queried channel paginator with its partial message page', async () => {
 		const client = await getClientWithUser();
 		const mockedChannelQueryResponse = Array.from({ length: 10 }, () => ({
 			...mockChannelQueryResponse,
@@ -1119,14 +1120,15 @@ describe('StreamChat.queryChannels', async () => {
 			),
 		}));
 		const mock = sinon.mock(client);
-		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
+		mock
+			.expects('post')
+			.returns(Promise.resolve({ channels: mockedChannelQueryResponse }));
 		await client.queryChannels();
+		expect(Object.keys(client.activeChannels).length).to.be.greaterThan(0);
 		Object.values(client.activeChannels).forEach((channel) => {
-			expect(channel.state.messageSets.length).to.be.equal(1);
-			expect(channel.state.messageSets[0].pagination).to.eql({
-				hasNext: true,
-				hasPrev: false,
-			});
+			expect(channel.messagePaginator.items).to.have.length(
+				DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE - 1,
+			);
 		});
 		mock.restore();
 	});
@@ -1605,10 +1607,6 @@ describe('user.messages.deleted', () => {
 
 		// thread replies
 		channel.state.addMessagesSorted(thread1);
-
-		expect(channel.state.messageSets).toHaveLength(2);
-		expect(channel.state.messageSets[0].messages).toHaveLength(messageSet1.length);
-		expect(channel.state.messageSets[1].messages).toHaveLength(messageSet2.length);
 		expect(channel.state.pinnedMessages).toHaveLength(pinnedMessages.length);
 		expect(channel.state.threads[parent_id]).toHaveLength(thread1.length);
 
@@ -1629,15 +1627,9 @@ describe('user.messages.deleted', () => {
 		client._handleClientEvent(event);
 
 		channels.forEach((channel) => {
-			expect(channel.state.messageSets[0].messages).toHaveLength(messageSet1.length);
-			expect(channel.state.messageSets[1].messages).toHaveLength(messageSet2.length);
-
 			const check = (message) => {
 				expect(message).toEqual(message);
 			};
-
-			channel.state.messageSets[0].messages.forEach(check);
-			channel.state.messageSets[1].messages.forEach(check);
 			channel.state.pinnedMessages.forEach(check);
 			Object.values(channel.state.threads).forEach((replies) => replies.forEach(check));
 		});
@@ -1654,9 +1646,6 @@ describe('user.messages.deleted', () => {
 		};
 		client._handleClientEvent(event);
 		channels.forEach((channel) => {
-			expect(channel.state.messageSets[0].messages).toHaveLength(messageSet1.length);
-			expect(channel.state.messageSets[1].messages).toHaveLength(messageSet2.length);
-
 			const check = (message) => {
 				const deletedMessage = {
 					attachments: [],
@@ -1692,9 +1681,6 @@ describe('user.messages.deleted', () => {
 					expect(message).toEqual(message);
 				}
 			};
-
-			channel.state.messageSets[0].messages.forEach(check);
-			channel.state.messageSets[1].messages.forEach(check);
 			channel.state.pinnedMessages.forEach(check);
 			Object.values(channel.state.threads).forEach((replies) => replies.forEach(check));
 		});
@@ -1711,9 +1697,6 @@ describe('user.messages.deleted', () => {
 		};
 		client._handleClientEvent(event);
 		channels.forEach((channel) => {
-			expect(channel.state.messageSets[0].messages).toHaveLength(messageSet1.length);
-			expect(channel.state.messageSets[1].messages).toHaveLength(messageSet2.length);
-
 			const check = (message) => {
 				if (message.user.id === bannedUser.id) {
 					expect(message).toStrictEqual({
@@ -1736,9 +1719,6 @@ describe('user.messages.deleted', () => {
 					expect(message).toEqual(message);
 				}
 			};
-
-			channel.state.messageSets[0].messages.forEach(check);
-			channel.state.messageSets[1].messages.forEach(check);
 			channel.state.pinnedMessages.forEach(check);
 			Object.values(channel.state.threads).forEach((replies) => replies.forEach(check));
 		});
@@ -1771,7 +1751,15 @@ describe('user.messages.deleted — quoted_message regression (#1736)', () => {
 			quoted_message_id: m1.id,
 		});
 		const channel = client.channel(type, id);
+		// addMessagesSorted registers the user->channel reference (client.state.userChannelReferences)
+		// that the client-level deletion loop walks; setItems puts the messages in the paginator
+		// (the message list source of truth) so the deletion has something to act on.
 		channel.state.addMessagesSorted([m1, m2]);
+		channel.messagePaginator.setItems({
+			valueOrFactory: [m1, m2],
+			isFirstPage: true,
+			isLastPage: true,
+		});
 		return { channel, m1, m2 };
 	};
 
@@ -1787,13 +1775,11 @@ describe('user.messages.deleted — quoted_message regression (#1736)', () => {
 
 		expect(() => client._handleClientEvent(event)).not.toThrow();
 
-		const messages = channel.state.messageSets[0].messages;
-		expect(messages).toHaveLength(2);
-		expect(messages.find((m) => m.id === m1.id).type).toBe('deleted');
-		const quoter = messages.find((m) => m.id === m2.id);
-		expect(quoter.type).toBe('deleted');
-		// Hard-delete strips the parent — no quoted_message field remains on it.
-		expect(quoter.quoted_message).toBeUndefined();
+		// Both messages belong to the banned user, so a hard delete drops both from the
+		// active window; the point is that the self-quote (m2 -> m1) does not throw.
+		const items = channel.messagePaginator.items ?? [];
+		expect(items.find((m) => m.id === m1.id)).toBeUndefined();
+		expect(items.find((m) => m.id === m2.id)).toBeUndefined();
 	});
 
 	it('still fires downstream client listeners after the self-quote encounter on hard-delete', () => {
@@ -1825,9 +1811,9 @@ describe('user.messages.deleted — quoted_message regression (#1736)', () => {
 
 		expect(() => client._handleClientEvent(event)).not.toThrow();
 
-		const messages = channel.state.messageSets[0].messages;
-		expect(messages.find((m) => m.id === m1.id).type).toBe('deleted');
-		expect(messages.find((m) => m.id === m2.id).type).toBe('deleted');
+		const items = channel.messagePaginator.items ?? [];
+		expect(items.find((m) => m.id === m1.id)).toBeUndefined();
+		expect(items.find((m) => m.id === m2.id)).toBeUndefined();
 	});
 });
 

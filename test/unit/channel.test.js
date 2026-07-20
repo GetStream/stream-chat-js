@@ -1129,11 +1129,8 @@ describe('Channel _handleChannelEvent', function () {
 			channel.state.addMessagesSorted(thread1);
 		};
 
-		it('removes the messages on hard delete', () => {
+		it('removes the pinned and thread messages on hard delete', () => {
 			setupChannel(channel);
-			expect(channel.state.messageSets).toHaveLength(2);
-			expect(channel.state.messageSets[0].messages).toHaveLength(messageSet1.length);
-			expect(channel.state.messageSets[1].messages).toHaveLength(messageSet2.length);
 			expect(channel.state.pinnedMessages).toHaveLength(pinnedMessages.length);
 			expect(channel.state.threads[parent_id]).toHaveLength(thread1.length);
 
@@ -1147,7 +1144,6 @@ describe('Channel _handleChannelEvent', function () {
 				created_at: '2025-02-01T14:01:30.000Z',
 			};
 			channel._handleChannelEvent(event);
-			expect(channel.state.messageSets[0].messages).toHaveLength(3);
 
 			const check = (message) => {
 				const deletedMessage = {
@@ -1185,16 +1181,11 @@ describe('Channel _handleChannelEvent', function () {
 				}
 			};
 
-			channel.state.messageSets[0].messages.forEach(check);
-			channel.state.messageSets[1].messages.forEach(check);
 			channel.state.pinnedMessages.forEach(check);
 			Object.values(channel.state.threads).forEach((replies) => replies.forEach(check));
 		});
-		it('removes the messages on soft delete', () => {
+		it('removes the pinned and thread messages on soft delete', () => {
 			setupChannel(channel);
-			expect(channel.state.messageSets).toHaveLength(2);
-			expect(channel.state.messageSets[0].messages).toHaveLength(messageSet1.length);
-			expect(channel.state.messageSets[1].messages).toHaveLength(messageSet2.length);
 			expect(channel.state.pinnedMessages).toHaveLength(pinnedMessages.length);
 			expect(channel.state.threads[parent_id]).toHaveLength(thread1.length);
 
@@ -1208,7 +1199,6 @@ describe('Channel _handleChannelEvent', function () {
 				created_at: '2025-02-01T14:01:30.000Z',
 			};
 			channel._handleChannelEvent(event);
-			expect(channel.state.messageSets[0].messages).toHaveLength(3);
 
 			const check = (message) => {
 				if (message.user.id === bannedUser.id) {
@@ -1233,8 +1223,6 @@ describe('Channel _handleChannelEvent', function () {
 				}
 			};
 
-			channel.state.messageSets[0].messages.forEach(check);
-			channel.state.messageSets[1].messages.forEach(check);
 			channel.state.pinnedMessages.forEach(check);
 			Object.values(channel.state.threads).forEach((replies) => replies.forEach(check));
 		});
@@ -1331,7 +1319,11 @@ describe('Channel _handleChannelEvent', function () {
 				quoted_message: m1,
 				quoted_message_id: m1.id,
 			});
-			channel.state.addMessagesSorted([m1, m2]);
+			channel.messagePaginator.setItems({
+				valueOrFactory: [m1, m2],
+				isFirstPage: true,
+				isLastPage: true,
+			});
 
 			const event = {
 				type: 'user.messages.deleted',
@@ -1345,11 +1337,12 @@ describe('Channel _handleChannelEvent', function () {
 
 			expect(() => channel._handleChannelEvent(event)).not.to.throw();
 
-			const messages = channel.state.messageSets[0].messages;
-			expect(messages.find((m) => m.id === m1.id).type).to.equal('deleted');
-			const quoter = messages.find((m) => m.id === m2.id);
-			expect(quoter.type).to.equal('deleted');
-			expect(quoter.quoted_message).to.equal(undefined);
+			// Both messages belong to the banned user, so a hard delete drops both from the
+			// active window. The point of the regression is that the self-quote (m2 → m1) does
+			// not throw while doing so.
+			const items = channel.messagePaginator.items ?? [];
+			expect(items.find((m) => m.id === m1.id)).to.equal(undefined);
+			expect(items.find((m) => m.id === m2.id)).to.equal(undefined);
 		});
 	});
 
@@ -1853,9 +1846,10 @@ describe('Channel _handleChannelEvent', function () {
 				channel._handleChannelEvent(event);
 				channel._callChannelListeners(event);
 
-				expect(
-					channel.state.findMessage(message.id, message.parent_id).own_reactions.length,
-				).to.equal(own_reactions.length);
+				const stored = message.parent_id
+					? channel.state.findMessage(message.id, message.parent_id)
+					: channel.messagePaginator.getItem(message.id);
+				expect(stored.own_reactions.length).to.equal(own_reactions.length);
 				expect(receivedEvent.message.own_reactions.length).to.equal(own_reactions.length);
 			});
 		});
@@ -1893,17 +1887,19 @@ describe('Channel _handleChannelEvent', function () {
 			['message.updated', 'message.deleted'].forEach((eventType) => {
 				channel.state.addMessagesSorted(messages);
 				const isThread = messages.length === 3;
+				if (!isThread) seedLatestWindow(channel, messages);
 				const quotingMessage = messages[messages.length - 1];
 				const event = {
 					type: eventType,
 					message: isThread ? updatedQuotedThreadReply : updatedQuotedMessage,
 				};
 				channel._handleChannelEvent(event);
-				expect(
-					channel.state.findMessage(quotingMessage.id, quotingMessage.parent_id)
-						.quoted_message.text,
-				).to.equal(updatedQuotedMessage.text);
+				const stored = isThread
+					? channel.state.findMessage(quotingMessage.id, quotingMessage.parent_id)
+					: channel.messagePaginator.getItem(quotingMessage.id);
+				expect(stored.quoted_message.text).to.equal(updatedQuotedMessage.text);
 				channel.state.clearMessages();
+				channel.messagePaginator.clearStateAndCache();
 			});
 		});
 	});
@@ -2818,7 +2814,8 @@ describe('Channel.query', async () => {
 			...mockChannelQueryResponse,
 			messages: Array.from(
 				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE },
-				generateMsg,
+				(_, i) =>
+					generateMsg({ created_at: new Date(1700000000000 + i * 1000).toISOString() }),
 			),
 		};
 		const mock = sinon.mock(client);
@@ -2828,7 +2825,7 @@ describe('Channel.query', async () => {
 		mock.restore();
 	});
 
-	it('should update pagination for queried message set to prevent more pagination', async () => {
+	it('seeds the message paginator with the full latest page on query', async () => {
 		const client = await getClientWithUser();
 		const channel = client.channel('messaging', uuidv4());
 		const mockedChannelQueryResponse = {
@@ -2840,16 +2837,16 @@ describe('Channel.query', async () => {
 		};
 		const mock = sinon.mock(client);
 		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
-		await channel.query();
-		expect(channel.state.messageSets.length).to.be.equal(1);
-		expect(channel.state.messageSets[0].pagination).to.eql({
-			hasNext: false,
-			hasPrev: true,
-		});
+		await channel.query({}, 'latest');
+		// A latest-page query seeds the message paginator with the returned page.
+		expect(channel.messagePaginator.items).to.have.length(
+			DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
+		);
+		expect(channel.messagePaginator.latestItem).to.not.equal(undefined);
 		mock.restore();
 	});
 
-	it('should not update pagination for queried message set', async () => {
+	it('seeds the message paginator with a partial latest page on query', async () => {
 		const client = await getClientWithUser();
 		const channel = client.channel('messaging', uuidv4());
 		const mockedChannelQueryResponse = {
@@ -2861,12 +2858,10 @@ describe('Channel.query', async () => {
 		};
 		const mock = sinon.mock(client);
 		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
-		await channel.query();
-		expect(channel.state.messageSets.length).to.be.equal(1);
-		expect(channel.state.messageSets[0].pagination).to.eql({
-			hasNext: false,
-			hasPrev: false,
-		});
+		await channel.query({}, 'latest');
+		expect(channel.messagePaginator.items).to.have.length(
+			DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE - 1,
+		);
 		mock.restore();
 	});
 
