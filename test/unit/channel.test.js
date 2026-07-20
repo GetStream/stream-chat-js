@@ -890,6 +890,45 @@ describe('Channel _handleChannelEvent', function () {
 		expect(itemFromPaginator?.deleted_at?.toISOString()).to.equal(deletedAt);
 	});
 
+	it('message.deleted (soft) ignores thread replies in messagePaginator', function () {
+		const parentMessage = generateMsg({ id: 'thread-parent-id-on-delete' });
+		const threadReply = generateMsg({
+			id: 'thread-reply-id-on-delete',
+			parent_id: parentMessage.id,
+		});
+
+		channel.messagePaginator.ingestItem(parentMessage);
+		channel._handleChannelEvent({
+			type: 'message.deleted',
+			user: { id: 'id' },
+			message: { ...threadReply, deleted_at: new Date().toISOString() },
+		});
+
+		// A pure thread reply must never leak a "deleted" placeholder into the channel list.
+		expect(channel.messagePaginator.getItem(threadReply.id)).to.be.undefined;
+	});
+
+	it('message.deleted (hard) ignores thread replies in messagePaginator', function () {
+		const parentMessage = generateMsg({ id: 'thread-parent-id-on-hard-delete' });
+		const threadReply = generateMsg({
+			id: 'thread-reply-id-on-hard-delete',
+			parent_id: parentMessage.id,
+		});
+
+		channel.messagePaginator.ingestItem(parentMessage);
+		channel._handleChannelEvent({
+			type: 'message.deleted',
+			user: { id: 'id' },
+			hard_delete: true,
+			message: threadReply,
+		});
+
+		expect(channel.messagePaginator.getItem(parentMessage.id)?.id).to.equal(
+			parentMessage.id,
+		);
+		expect(channel.messagePaginator.getItem(threadReply.id)).to.be.undefined;
+	});
+
 	it('message.deleted syncs quoted_message references in messagePaginator', function () {
 		const quotedMessage = generateMsg({
 			id: 'quoted-message-id-on-delete',
