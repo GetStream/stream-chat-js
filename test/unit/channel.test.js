@@ -2667,7 +2667,7 @@ describe('Channel lastMessage', async () => {
 			generateMsg({ date: '2017-11-21T00:05:35' }),
 		];
 		channel.state.addMessagesSorted(latestMessages);
-		channel.state.addMessagesSorted(otherMessages, 'new');
+		channel.state.addMessagesSorted(otherMessages);
 
 		expect(channel.state.last_message_at.getTime()).toBe(
 			new Date(latestMessages[1].created_at).getTime(),

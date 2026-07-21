@@ -73,9 +73,8 @@ async function getReplies() {
 		parent_id: response.message.id,
 	});
 	await channel.query();
-	const parent = channel.state.messages[channel.state.messages.length - 1];
-
-	return await channel.getReplies(parent.id);
+	// The second sendMessage above is a reply to response.message, so that is the thread parent.
+	return await channel.getReplies(response.message.id);
 }
 
 async function sendAction() {
