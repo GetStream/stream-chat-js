@@ -479,39 +479,6 @@ export const toDeletedMessage = ({
   }
 };
 
-export const deleteUserMessages = ({
-  messages,
-  user,
-  hardDelete = false,
-  deletedAt,
-}: {
-  messages: Array<LocalMessage>;
-  user: UserResponse;
-  hardDelete: boolean;
-  deletedAt: LocalMessage['deleted_at'];
-}) => {
-  for (let i = 0; i < messages.length; i++) {
-    const message = messages[i];
-    if (message.user?.id === user.id) {
-      messages[i] =
-        message.type === 'deleted'
-          ? message
-          : (toDeletedMessage({ message, hardDelete, deletedAt }) as LocalMessage);
-    }
-
-    if (messages[i].quoted_message && message.quoted_message?.user?.id === user.id) {
-      messages[i].quoted_message =
-        message.quoted_message.type === 'deleted'
-          ? message.quoted_message
-          : (toDeletedMessage({
-              message: messages[i].quoted_message as LocalMessageBase,
-              hardDelete,
-              deletedAt,
-            }) as LocalMessage);
-    }
-  }
-};
-
 export const findIndexInSortedArray = <T, L>({
   needle,
   sortedArray,
@@ -600,72 +567,6 @@ export const findIndexInSortedArray = <T, L>({
 
   return left;
 };
-
-export function addToMessageList<T extends LocalMessage>(
-  messages: readonly T[],
-  newMessage: T,
-  timestampChanged = false,
-  sortBy: 'pinned_at' | 'created_at' = 'created_at',
-  addIfDoesNotExist = true,
-) {
-  const addMessageToList = addIfDoesNotExist || timestampChanged;
-  let newMessages = [...messages];
-
-  // if created_at has changed, message should be filtered and re-inserted in correct order
-  // slow op but usually this only happens for a message inserted to state before actual response with correct timestamp
-  if (timestampChanged) {
-    newMessages = newMessages.filter(
-      (message) => !(message.id && newMessage.id === message.id),
-    );
-  }
-
-  // for empty list just concat and return unless it's an update or deletion
-  if (newMessages.length === 0 && addMessageToList) {
-    return newMessages.concat(newMessage);
-  } else if (newMessages.length === 0) {
-    return newMessages;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const messageTime = newMessage[sortBy]!.getTime();
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const messageIsNewest = newMessages.at(-1)![sortBy]!.getTime() < messageTime;
-
-  // if message is newer than last item in the list concat and return unless it's an update or deletion
-  if (messageIsNewest && addMessageToList) {
-    return newMessages.concat(newMessage);
-  } else if (messageIsNewest) {
-    return newMessages;
-  }
-
-  // find the closest index to push the new message
-  const insertionIndex = findIndexInSortedArray({
-    needle: newMessage,
-    sortedArray: newMessages,
-    sortDirection: 'ascending',
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    selectValueToCompare: (m) => m[sortBy]!.getTime(),
-    selectKey: (m) => m.id,
-  });
-
-  // message already exists and not filtered with timestampChanged, update and return
-  if (
-    !timestampChanged &&
-    newMessage.id &&
-    newMessages[insertionIndex] &&
-    newMessage.id === newMessages[insertionIndex].id
-  ) {
-    newMessages[insertionIndex] = newMessage;
-    return newMessages;
-  }
-
-  // do not add updated or deleted messages to the list if they already exist or come with a timestamp change
-  if (addMessageToList) {
-    newMessages.splice(insertionIndex, 0, newMessage);
-  }
-
-  return newMessages;
-}
 
 function maybeGetReactionGroupsFallback(
   groups: { [key: string]: ReactionGroupResponse } | null | undefined,

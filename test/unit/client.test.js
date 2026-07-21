@@ -1533,201 +1533,157 @@ describe('message deletion', () => {
 	});
 });
 
-describe('user.messages.deleted', () => {
+// Regression coverage for GetStream/stream-chat-js#1736.
+// Hard-deleting a user whose cached messages include a self-quote (a message that
+// quotes another message from the same user) used to throw inside the message-deletion
+// path, aborting the entire dispatchEvent chain — downstream listeners and offline-DB
+// writes silently dropped. These tests exercise both event entry points that funnel into
+// _deleteUserMessageReference.
+describe('user.updated propagates to message + pinned paginators', () => {
 	let client;
 
 	beforeEach(async () => {
 		client = await getClientWithUser();
 	});
 
+	it('reflects the updated user on both messagePaginator and pinnedMessagesPaginator', () => {
+		const author = { id: 'author', name: 'Old Name' };
+		const channel = client.channel('messaging', 'user-updated-1');
+		const message = generateMsg({ id: 'm1', user: author });
+		const pinned = generateMsg({
+			id: 'p1',
+			cid: channel.cid,
+			user: author,
+			pinned: true,
+			pinned_at: '2020-01-01T00:00:00.000Z',
+		});
+
+		// addMessagesSorted registers the user->channel reference that _updateUserMessageReferences walks.
+		channel.state.addMessagesSorted([message]);
+		channel.messagePaginator.setItems({
+			valueOrFactory: [message],
+			isFirstPage: true,
+			isLastPage: true,
+		});
+		channel.pinnedMessagesPaginator.ingestPage({
+			page: [utils.formatMessage(pinned)],
+			isHead: true,
+			isTail: true,
+			setActive: true,
+		});
+
+		client._handleClientEvent({
+			type: 'user.updated',
+			user: { ...author, name: 'New Name' },
+		});
+
+		expect(channel.messagePaginator.getItem('m1')?.user?.name).toBe('New Name');
+		expect(channel.pinnedMessagesPaginator.getItem('p1')?.user?.name).toBe('New Name');
+	});
+});
+
+describe('user.messages.deleted (client-level, cross-channel)', () => {
+	let client;
 	const bannedUser = { id: 'banned-user' };
 	const otherUser = { id: 'other-user' };
-	const messageSet1 = [
-		{
-			attachments: [
-				{
-					type: 'image',
-					title: 'YouTube',
-					title_link: 'https://www.youtube.com/',
-					text: 'Enjoy the videos and music you love, upload original content, and share it all with friends, family, and the world on YouTube.',
-					image_url: 'https://www.youtube.com/img/desktop/yt_1200.png',
-					thumb_url: 'https://www.youtube.com/img/desktop/yt_1200.png',
-					og_scrape_url: 'https://www.youtube.com/',
-				},
-			],
-			created_at: '2021-01-01T00:01:00',
-			pinned: true,
-			pinned_at: '2022-01-01T00:01:00',
+
+	beforeEach(async () => {
+		client = await getClientWithUser();
+	});
+
+	// Seeds a channel with one main + one pinned message from the banned user (plus a pinned message
+	// from another user), registering the user->channel reference the client-level loop walks.
+	const setupChannel = (id) => {
+		const channel = client.channel('messaging', id);
+		const main = generateMsg({ id: `${id}-m`, cid: channel.cid, user: bannedUser });
+		const pinned = generateMsg({
+			id: `${id}-p`,
+			cid: channel.cid,
 			user: bannedUser,
-		},
-		{
-			created_at: '2021-01-01T00:02:00',
 			pinned: true,
-			pinned_at: '2022-01-01T00:02:00',
+			pinned_at: '2020-01-01T00:00:00.000Z',
+		});
+		const otherPinned = generateMsg({
+			id: `${id}-op`,
+			cid: channel.cid,
 			user: otherUser,
-		},
-		{ created_at: '2021-01-01T00:03:00', user: bannedUser },
-	].map(generateMsg);
-
-	const quoted_message = messageSet1[0];
-	const messageSet2 = [
-		{
-			created_at: '2020-01-01T00:01:00',
 			pinned: true,
-			pinned_at: '2022-01-01T00:03:00',
-			user: bannedUser,
-		},
-		{
-			created_at: '2020-01-01T00:02:00',
-			quoted_message,
-			quoted_message_id: quoted_message.id,
-			user: otherUser,
-		},
-		{ created_at: '2020-01-01T00:03:00', user: bannedUser },
-		{ created_at: '2020-01-01T00:04:00', user: otherUser },
-	].map(generateMsg);
-
-	const parent_id = messageSet2[0].id;
-	const thread1 = [
-		{ created_at: '2020-01-01T00:01:30', parent_id, user: bannedUser, type: 'reply' },
-		{ created_at: '2020-01-01T00:02:35', parent_id, user: otherUser, type: 'reply' },
-		{ created_at: '2020-01-01T00:03:45', parent_id, user: bannedUser, type: 'reply' },
-		{ created_at: '2020-01-01T00:04:00', parent_id, user: otherUser, type: 'reply' },
-	];
-
-	const pinnedMessages = [messageSet1[0], messageSet1[1], messageSet2[0]];
-
-	// Thread-reply deletion is owned by the Thread object (covered in threads.test.ts); this suite
-	// exercises the pinned-message cache. addMessagesSorted still registers the user->channel
-	// reference (client.state.userChannelReferences) that the client-level deletion loop walks.
-	const setupChannel = (type, id) => {
-		const channel = client.channel(type, id);
-		channel.state.addMessagesSorted(messageSet1);
-		channel.state.addMessagesSorted(messageSet2, false, false, true, 'new');
-
-		// pinned messages
-		channel.state.addPinnedMessages(pinnedMessages);
-
-		expect(channel.state.pinnedMessages).toHaveLength(pinnedMessages.length);
-
+			pinned_at: '2020-01-02T00:00:00.000Z',
+		});
+		channel.state.addMessagesSorted([main]);
+		channel.messagePaginator.setItems({
+			valueOrFactory: [main],
+			isFirstPage: true,
+			isLastPage: true,
+		});
+		channel.pinnedMessagesPaginator.ingestPage({
+			page: [pinned, otherPinned].map((m) => utils.formatMessage(m)),
+			isHead: true,
+			isTail: true,
+			setActive: true,
+		});
 		return channel;
 	};
 
-	it('ignores channel specific event', () => {
-		const channels = [setupChannel('type', 'id1'), setupChannel('type', 'id2')];
-		const event = {
+	it('ignores a channel-scoped (cid-carrying) event — the channel owns it', () => {
+		const channel = setupChannel('c1');
+
+		client._handleClientEvent({
 			type: 'user.messages.deleted',
-			cid: channels[0].cid,
-			channel_type: channels[0].type,
-			channel_id: channels[0].id,
+			cid: channel.cid,
 			user: bannedUser,
 			hard_delete: true,
-			created_at: '2025-02-01T14:01:30.000Z',
-		};
-		client._handleClientEvent(event);
-
-		channels.forEach((channel) => {
-			const check = (message) => {
-				expect(message).toEqual(message);
-			};
-			channel.state.pinnedMessages.forEach(check);
+			created_at: '2025-01-01T00:00:00.000Z',
 		});
+
+		// cid present → the client-level cross-channel loop must be a no-op (no double-delete).
+		expect(channel.messagePaginator.items?.map((m) => m.id)).to.include('c1-m');
+		expect(channel.pinnedMessagesPaginator.items?.map((m) => m.id)).to.include('c1-p');
 	});
 
-	it('removes the messages on hard delete', () => {
-		const channels = [setupChannel('type', 'id1'), setupChannel('type', 'id2')];
+	it("soft-deletes the user's main and pinned messages across channels", () => {
+		const channels = [setupChannel('c1'), setupChannel('c2')];
 
-		const event = {
-			type: 'user.messages.deleted',
-			user: bannedUser,
-			hard_delete: true,
-			created_at: '2025-02-01T14:01:30.000Z',
-		};
-		client._handleClientEvent(event);
-		channels.forEach((channel) => {
-			const check = (message) => {
-				const deletedMessage = {
-					attachments: [],
-					cid: message.cid,
-					created_at: message.created_at,
-					deleted_at: new Date(event.created_at),
-					id: message.id,
-					latest_reactions: [],
-					mentioned_users: [],
-					own_reactions: [],
-					parent_id: message.parent_id,
-					reply_count: message.reply_count,
-					status: message.status,
-					thread_participants: message.thread_participants,
-					type: 'deleted',
-					updated_at: message.updated_at,
-					user: message.user,
-				};
-				if (message.user.id === bannedUser.id) {
-					expect(message).toStrictEqual(deletedMessage);
-				} else if (message.quoted_message) {
-					expect(message).toStrictEqual({
-						...message,
-						quoted_message: {
-							...deletedMessage,
-							id: message.quoted_message.id,
-							user: message.quoted_message.user,
-							created_at: message.quoted_message.created_at,
-							updated_at: message.quoted_message.updated_at,
-						},
-					});
-				} else {
-					expect(message).toEqual(message);
-				}
-			};
-			channel.state.pinnedMessages.forEach(check);
-		});
-	});
-
-	it('removes the messages on soft delete', () => {
-		const channels = [setupChannel('type', 'id1'), setupChannel('type', 'id2')];
-
-		const event = {
+		client._handleClientEvent({
 			type: 'user.messages.deleted',
 			user: bannedUser,
 			soft_delete: true,
-			created_at: '2025-02-01T14:01:30.000Z',
-		};
-		client._handleClientEvent(event);
+			created_at: '2025-01-01T00:00:00.000Z',
+		});
+
 		channels.forEach((channel) => {
-			const check = (message) => {
-				if (message.user.id === bannedUser.id) {
-					expect(message).toStrictEqual({
-						...message,
-						attachments: [],
-						deleted_at: new Date(event.created_at),
-						type: 'deleted',
-					});
-				} else if (message.quoted_message) {
-					expect(message).toStrictEqual({
-						...message,
-						quoted_message: {
-							...message.quoted_message,
-							attachments: [],
-							deleted_at: new Date(event.created_at),
-							type: 'deleted',
-						},
-					});
-				} else {
-					expect(message).toEqual(message);
-				}
-			};
-			channel.state.pinnedMessages.forEach(check);
+			const id = channel.id;
+			expect(channel.messagePaginator.getItem(`${id}-m`)?.type).to.equal('deleted');
+			expect(channel.pinnedMessagesPaginator.getItem(`${id}-p`)?.type).to.equal(
+				'deleted',
+			);
+			// the other user's pinned message is untouched
+			expect(channel.pinnedMessagesPaginator.getItem(`${id}-op`)?.type).to.not.equal(
+				'deleted',
+			);
+		});
+	});
+
+	it("hard-deletes the user's main and pinned messages across channels", () => {
+		const channels = [setupChannel('c1'), setupChannel('c2')];
+
+		client._handleClientEvent({
+			type: 'user.messages.deleted',
+			user: bannedUser,
+			hard_delete: true,
+			created_at: '2025-01-01T00:00:00.000Z',
+		});
+
+		channels.forEach((channel) => {
+			const id = channel.id;
+			expect(channel.messagePaginator.items?.map((m) => m.id)).to.not.include(`${id}-m`);
+			expect(channel.pinnedMessagesPaginator.items?.map((m) => m.id)).to.eql([
+				`${id}-op`,
+			]);
 		});
 	});
 });
 
-// Regression coverage for GetStream/stream-chat-js#1736.
-// Hard-deleting a user whose cached messages include a self-quote (a message that
-// quotes another message from the same user) used to throw inside
-// _deleteUserMessages, aborting the entire dispatchEvent chain — downstream
-// listeners and offline-DB writes silently dropped. These tests exercise both
-// event entry points that funnel into _deleteUserMessageReference.
 describe('user.messages.deleted — quoted_message regression (#1736)', () => {
 	let client;
 	const bannedUser = { id: 'banned-user' };

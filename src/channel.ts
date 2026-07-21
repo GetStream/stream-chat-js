@@ -2386,10 +2386,6 @@ export class Channel {
           }
           this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
           this.pinnedMessagesPaginator.reflectQuotedMessageUpdate(formattedMessage);
-
-          if (event.message.pinned) {
-            channelState.removePinnedMessage(event.message);
-          }
         }
         break;
       case 'user.messages.deleted':
@@ -2406,8 +2402,6 @@ export class Channel {
             hardDelete,
             deletedAt,
           });
-
-          this.state.deleteUserMessages(event.user, hardDelete, deletedAt);
         }
         break;
       case 'message.new':
@@ -2420,10 +2414,6 @@ export class Channel {
 
           if (this.state.isUpToDate || isThreadMessage) {
             channelState.addMessageSorted(event.message, ownMessage);
-          }
-
-          if (event.message.pinned) {
-            channelState.addPinnedMessage(event.message);
           }
 
           if (!isThreadMessage) {
@@ -2508,22 +2498,12 @@ export class Channel {
             this.pinnedMessagesPaginator.ingestItem(formattedMessage);
             this.pinnedMessagesPaginator.reflectQuotedMessageUpdate(formattedMessage);
           }
-          if (event.message.pinned) {
-            channelState.addPinnedMessage(event.message);
-          } else {
-            channelState.removePinnedMessage(event.message);
-          }
         }
         break;
       case 'channel.truncated':
         if (event.channel?.truncated_at) {
           const truncatedAtDate = new Date(event.channel.truncated_at);
-          const truncatedAt = +truncatedAtDate;
 
-          channelState.pinnedMessages.forEach(({ id, created_at: createdAt }) => {
-            if (truncatedAt > +createdAt)
-              channelState.removePinnedMessage({ id } as MessageResponse);
-          });
           channelState.unreadCount = this.countUnread(truncatedAtDate);
           // Partial truncation: keep messages newer than the cutoff. clearStateAndCache would wipe
           // the whole paginator (readers now source from it), so use the partial truncate. The
@@ -2533,7 +2513,6 @@ export class Channel {
           this.messagePaginator.clearUnreadSnapshot();
           this.pinnedMessagesPaginator.truncate({ truncatedAt: truncatedAtDate });
         } else {
-          channelState.clearMessages();
           channelState.unreadCount = 0;
           this.messagePaginator.clearStateAndCache();
           this.pinnedMessagesPaginator.clearStateAndCache();
@@ -2544,9 +2523,6 @@ export class Channel {
           channelState.addMessageSorted(event.message);
           this.messagePaginator.ingestItem(formatMessage(event.message));
           this.pinnedMessagesPaginator.ingestItem(formatMessage(event.message));
-          if (event.message.pinned) {
-            channelState.addPinnedMessage(event.message);
-          }
         }
 
         break;
@@ -2648,11 +2624,7 @@ export class Channel {
         break;
       case 'reaction.new':
         if (event.message && event.reaction) {
-          const { message, reaction } = event;
-          // channelState.addReaction still runs for its pinnedMessages side-effect (dropped in the
-          // storage-removal step); the paginator's own_reactions preservation is now re-homed onto
-          // messagePaginator.reflectReaction (thread replies are handled by the Thread object).
-          event.message = channelState.addReaction(reaction, message) as MessageResponse;
+          const { reaction } = event;
           if (!event.message?.parent_id) {
             this.messagePaginator.reflectReaction({ message: event.message, reaction });
             this.pinnedMessagesPaginator.reflectReaction({
@@ -2664,8 +2636,7 @@ export class Channel {
         break;
       case 'reaction.deleted':
         if (event.message && event.reaction) {
-          const { message, reaction } = event;
-          event.message = channelState.removeReaction(reaction, message);
+          const { reaction } = event;
           if (event.message && !event.message.parent_id) {
             this.messagePaginator.reflectReaction({
               message: event.message,
@@ -2682,13 +2653,8 @@ export class Channel {
         break;
       case 'reaction.updated':
         if (event.message && event.reaction) {
-          const { message, reaction } = event;
+          const { reaction } = event;
           // assuming reaction.updated is only called if enforce_unique is true
-          event.message = channelState.addReaction(
-            reaction,
-            message,
-            true,
-          ) as MessageResponse;
           if (!event.message?.parent_id) {
             this.messagePaginator.reflectReaction({
               enforceUnique: true,
@@ -2712,7 +2678,6 @@ export class Channel {
         };
         channel._syncStateFromChannelData(channel.data, previousChannelData);
         if (event.clear_history) {
-          channelState.clearMessages();
           this.messagePaginator.clearStateAndCache();
           this.pinnedMessagesPaginator.clearStateAndCache();
         }
@@ -2831,12 +2796,7 @@ export class Channel {
     // cleanup, and advances last_message_at for the initializing page.
     this.state.addMessagesSorted(state.messages || [], false, true, true);
 
-    if (!this.state.pinnedMessages) {
-      this.state.pinnedMessages = [];
-    }
-    this.state.addPinnedMessages(state.pinned_messages || []);
-    // Seed the pinned-messages paginator from the same response (runs in parallel with the legacy
-    // channel.state.pinnedMessages until that store is removed).
+    // Seed the pinned-messages paginator from the same response.
     this.pinnedMessagesPaginator.seedFirstPageSync(
       (state.pinned_messages || []).map(formatMessage),
       this.pinnedMessagesPaginator.pageSize,

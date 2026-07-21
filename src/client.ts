@@ -1480,13 +1480,8 @@ export class StreamChat {
 
       if (!channel) continue;
 
-      const state = channel.state;
-
       /** update the messages from this user. */
-      // Legacy dual-write retained until the ChannelState message-set removal (Task 10). The
-      // paginator update keeps messagePaginator-backed readers (e.g. lastMessage) in sync; thread
-      // replies live in thread paginators and are handled by the thread migration.
-      state?.updateUserMessages(user);
+      channel.pinnedMessagesPaginator.reflectUserUpdate(user);
       channel.messagePaginator.reflectUserUpdate(user);
     }
   };
@@ -1512,8 +1507,6 @@ export class StreamChat {
     for (const channelID in refMap) {
       const channel = this.activeChannels[channelID];
       if (channel) {
-        const state = channel.state;
-
         /** deleted the messages from this user. */
         channel.messagePaginator.applyMessageDeletionForUser({
           userId: user.id,
@@ -1525,7 +1518,6 @@ export class StreamChat {
           hardDelete,
           deletedAt: deletedAt ?? new Date(),
         });
-        state?.deleteUserMessages(user, hardDelete, deletedAt);
       }
     }
   };
@@ -2328,8 +2320,7 @@ export class StreamChat {
       if (skipInitialization === undefined) {
         c._initializeState(channelState);
       } else if (!skipInitialization.includes(channelState.channel.id)) {
-        // clearMessages() resets the pinned cache; the paginator is (re)seeded above.
-        c.state.clearMessages();
+        // The paginators are (re)seeded above and via _initializeState → seedFirstPageSync.
         c._initializeState(channelState);
       }
 

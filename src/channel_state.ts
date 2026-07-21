@@ -6,14 +6,9 @@ import type {
   MessageResponse,
   MessageResponseBase,
   PendingMessageResponse,
-  ReactionResponse,
   UserResponse,
 } from './types';
-import {
-  deleteUserMessages as _deleteUserMessages,
-  addToMessageList,
-  formatMessage,
-} from './utils';
+import { formatMessage } from './utils';
 import { StateStore } from './store';
 
 type ChannelReadStatus = Record<
@@ -67,7 +62,6 @@ export class ChannelState {
   readonly ownCapabilitiesStore: StateStore<OwnCapabilitiesState>;
   // todo: is this actually used somewhere?
   readonly mutedUsersStore: StateStore<MutedUsersState>;
-  pinnedMessages: Array<LocalMessage>;
   pending_messages: Array<PendingMessageResponse>;
   unreadCount: number;
   membership: ChannelMemberResponse;
@@ -98,7 +92,6 @@ export class ChannelState {
     });
     this.syncMemberCountFromChannelData(channel?.data);
     this.syncOwnCapabilitiesFromChannelData(channel?.data);
-    this.pinnedMessages = [];
     this.pending_messages = [];
     this.membership = {};
     this.unreadCount = 0;
@@ -352,172 +345,6 @@ export class ChannelState {
   }
 
   /**
-   * addPinnedMessages - adds messages in pinnedMessages property
-   *
-   * @param {Array<MessageResponse>} pinnedMessages A list of pinned messages
-   *
-   */
-  addPinnedMessages(pinnedMessages: MessageResponse[]) {
-    for (let i = 0; i < pinnedMessages.length; i += 1) {
-      this.addPinnedMessage(pinnedMessages[i]);
-    }
-  }
-
-  /**
-   * addPinnedMessage - adds message in pinnedMessages
-   *
-   * @param {MessageResponse} pinnedMessage message to update
-   *
-   */
-  addPinnedMessage(pinnedMessage: MessageResponse) {
-    this.pinnedMessages = this._addToMessageList(
-      this.pinnedMessages,
-      this.formatMessage(pinnedMessage),
-      false,
-      'pinned_at',
-    );
-  }
-
-  /**
-   * removePinnedMessage - removes pinned message from pinnedMessages
-   *
-   * @param {MessageResponse} message message to remove
-   *
-   */
-  removePinnedMessage(message: MessageResponse) {
-    const { result } = this.removeMessageFromArray(this.pinnedMessages, message);
-    this.pinnedMessages = result;
-  }
-
-  /**
-   * addReaction - keeps the pinned-message copy's reactions in sync and enriches the passed
-   * `event.message` with the current user's `own_reactions`.
-   *
-   * The channel message list is owned by `channel.messagePaginator` (see `reflectReaction`) and
-   * thread replies by the `Thread` object; this only maintains the pinned-message cache.
-   */
-  addReaction(
-    reaction: ReactionResponse,
-    message?: MessageResponse,
-    enforce_unique?: boolean,
-  ) {
-    if (!message) {
-      return;
-    }
-
-    const messageWithReaction = message;
-    const updateData = {
-      id: messageWithReaction.id,
-      parent_id: messageWithReaction.parent_id,
-      pinned: messageWithReaction.pinned,
-      show_in_channel: messageWithReaction.show_in_channel,
-    };
-
-    this._updateMessage(updateData, (msg) => {
-      const updatedMessage = { ...messageWithReaction };
-      // This part will remove own_reactions from what is essentially
-      // a copy of event.message; we do not want to return that as someone
-      // else reaction would remove our own_reactions needlessly. This
-      // only happens when we are not the sender of the reaction. We need
-      // the variable itself so that the event can be properly enriched
-      // later on.
-      messageWithReaction.own_reactions = this._addOwnReactionToMessage(
-        msg.own_reactions,
-        reaction,
-        enforce_unique,
-      );
-      // Whenever we are the ones sending the reaction, the helper enriches
-      // own_reactions as normal so we can use that, otherwise we fallback
-      // to whatever state we had.
-      updatedMessage.own_reactions =
-        this._channel.getClient().userID === reaction.user_id
-          ? messageWithReaction.own_reactions
-          : msg.own_reactions;
-      return this.formatMessage(updatedMessage);
-    });
-    return messageWithReaction;
-  }
-
-  _addOwnReactionToMessage(
-    ownReactions: ReactionResponse[] | null | undefined,
-    reaction: ReactionResponse,
-    enforce_unique?: boolean,
-  ) {
-    if (enforce_unique) {
-      ownReactions = [];
-    } else {
-      ownReactions = this._removeOwnReactionFromMessage(ownReactions, reaction);
-    }
-
-    ownReactions = ownReactions || [];
-    if (this._channel.getClient().userID === reaction.user_id) {
-      ownReactions.push(reaction);
-    }
-
-    return ownReactions;
-  }
-
-  _removeOwnReactionFromMessage(
-    ownReactions: ReactionResponse[] | null | undefined,
-    reaction: ReactionResponse,
-  ) {
-    if (ownReactions) {
-      return ownReactions.filter(
-        (item) => item.user_id !== reaction.user_id || item.type !== reaction.type,
-      );
-    }
-    return ownReactions;
-  }
-
-  /**
-   * removeReaction - keeps the pinned-message copy's reactions in sync (see `addReaction`).
-   */
-  removeReaction(reaction: ReactionResponse, message?: MessageResponse) {
-    if (!message) {
-      return;
-    }
-
-    const messageWithRemovedReaction = message;
-    const updateData = {
-      id: messageWithRemovedReaction.id,
-      parent_id: messageWithRemovedReaction.parent_id,
-      pinned: messageWithRemovedReaction.pinned,
-      show_in_channel: messageWithRemovedReaction.show_in_channel,
-    };
-    this._updateMessage(updateData, (msg) => {
-      messageWithRemovedReaction.own_reactions = this._removeOwnReactionFromMessage(
-        msg.own_reactions,
-        reaction,
-      );
-      return this.formatMessage(messageWithRemovedReaction);
-    });
-    return messageWithRemovedReaction;
-  }
-
-  /**
-   * Updates the pinned-message copy of the given message. The channel message list is owned by
-   * `channel.messagePaginator` and thread replies by the `Thread` object.
-   * @param message
-   * @param updateFunc
-   */
-  _updateMessage(
-    message: {
-      id?: string;
-      pinned?: boolean;
-    },
-    updateFunc: (msg: LocalMessage) => LocalMessage,
-  ) {
-    const { pinned } = message;
-
-    if (pinned) {
-      const msgIndex = this.pinnedMessages.findIndex((msg) => msg.id === message.id);
-      if (msgIndex !== -1) {
-        this.pinnedMessages[msgIndex] = updateFunc(this.pinnedMessages[msgIndex]);
-      }
-    }
-  }
-
-  /**
    * Setter for isUpToDate.
    *
    * @param isUpToDate  Flag which indicates if channel state contain latest/recent messages or no.
@@ -527,81 +354,6 @@ export class ChannelState {
    */
   setIsUpToDate = (isUpToDate: boolean) => {
     this.isUpToDate = isUpToDate;
-  };
-
-  /**
-   * _addToMessageList - Adds a message to a list of messages, tries to update first, appends if message isn't found
-   *
-   * @param {Array<LocalMessage>} messages A list of messages
-   * @param message
-   * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
-   * @param {string} sortBy field name to use to sort the messages by
-   * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
-   */
-  _addToMessageList(
-    messages: Array<LocalMessage>,
-    message: LocalMessage,
-    timestampChanged = false,
-    sortBy: 'pinned_at' | 'created_at' = 'created_at',
-    addIfDoesNotExist = true,
-  ) {
-    return addToMessageList(
-      messages,
-      message,
-      timestampChanged,
-      sortBy,
-      addIfDoesNotExist,
-    );
-  }
-
-  removeMessageFromArray = (
-    msgArray: Array<LocalMessage>,
-    msg: { id: string; parent_id?: string },
-  ) => {
-    const result = msgArray.filter(
-      (message) => !(!!message.id && !!msg.id && message.id === msg.id),
-    );
-
-    return { removed: result.length < msgArray.length, result };
-  };
-
-  /**
-   * Updates the message.user property with updated user object, for messages.
-   *
-   * @param {UserResponse} user
-   */
-  updateUserMessages = (user: UserResponse) => {
-    // The channel message list updates user references on the paginator
-    // (messagePaginator.reflectUserUpdate) and thread replies via the Thread object; this keeps the
-    // pinned-message cache in sync.
-    for (let i = 0; i < this.pinnedMessages.length; i++) {
-      const m = this.pinnedMessages[i];
-      if (m.user?.id === user.id) {
-        this.pinnedMessages[i] = { ...m, user };
-      }
-    }
-  };
-
-  /**
-   * Marks the messages as deleted, from deleted user.
-   *
-   * @param {UserResponse} user
-   * @param {boolean} hardDelete
-   */
-  deleteUserMessages = (
-    user: UserResponse,
-    hardDelete = false,
-    deletedAt?: LocalMessage['deleted_at'],
-  ) => {
-    // The channel message list applies deletions on the paginator
-    // (messagePaginator.applyMessageDeletionForUser) and thread replies via the Thread object; this
-    // keeps the pinned-message cache in sync.
-    _deleteUserMessages({
-      messages: this.pinnedMessages,
-      user,
-      hardDelete,
-      deletedAt: deletedAt ?? null,
-    });
   };
 
   /**
@@ -624,13 +376,5 @@ export class ChannelState {
         } as Event);
       }
     }
-  }
-
-  /**
-   * Clears the pinned-message cache. The main channel message list is owned by the paginator
-   * (clear it via `channel.messagePaginator.clearStateAndCache()`).
-   */
-  clearMessages() {
-    this.pinnedMessages = [];
   }
 }
