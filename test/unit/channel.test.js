@@ -435,6 +435,45 @@ describe('Channel _handleChannelEvent', function () {
 		channel.initialized = true;
 	});
 
+	it('feeds the pinnedMessagesPaginator on pin and unpin events', () => {
+		const existing = generateMsg({
+			id: 'pinned-existing',
+			cid: channel.cid,
+			pinned: true,
+			pinned_at: new Date('2020-01-01T00:00:00.001Z').toISOString(),
+		});
+		channel.pinnedMessagesPaginator.ingestPage({
+			page: [formatMessage(existing)],
+			isHead: true,
+			isTail: true,
+			setActive: true,
+		});
+		expect(channel.pinnedMessagesPaginator.items?.map((m) => m.id)).to.eql([
+			'pinned-existing',
+		]);
+
+		// A newly pinned message arrives → auto-added.
+		const newlyPinned = generateMsg({
+			id: 'pinned-new',
+			cid: channel.cid,
+			pinned: true,
+			pinned_at: new Date('2020-01-01T00:00:00.002Z').toISOString(),
+		});
+		channel._handleChannelEvent({ type: 'message.new', message: newlyPinned, user });
+		expect(channel.pinnedMessagesPaginator.items?.map((m) => m.id)).to.include(
+			'pinned-new',
+		);
+
+		// The existing message is unpinned via message.updated → auto-removed.
+		channel._handleChannelEvent({
+			type: 'message.updated',
+			message: { ...existing, pinned: false, pinned_at: null },
+		});
+		expect(channel.pinnedMessagesPaginator.items?.map((m) => m.id)).to.not.include(
+			'pinned-existing',
+		);
+	});
+
 	it('member.updated/member.added are being handled properly (ChannelState.membership & ChannelState.members)', () => {
 		expect(channel.state.members).to.be.empty;
 		expect(channel.state.membership).to.be.empty;

@@ -4,7 +4,7 @@ import { CooldownTimer } from './CooldownTimer';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';
-import { MessagePaginator } from './pagination/paginators';
+import { MessagePaginator, PinnedMessagePaginator } from './pagination/paginators';
 import { MessageOperations } from './messageOperations';
 import {
   channelHasReadEvents,
@@ -189,6 +189,7 @@ export class Channel {
   public readonly messageComposer: MessageComposer;
   public readonly messageReceiptsTracker: MessageReceiptsTracker;
   public readonly messagePaginator: MessagePaginator;
+  public readonly pinnedMessagesPaginator: PinnedMessagePaginator;
   public readonly messageOperations: MessageOperations;
   public readonly cooldownTimer: CooldownTimer;
 
@@ -244,6 +245,7 @@ export class Channel {
     // (receipts resolve read cursors via findItemByTimestamp; CooldownTimer.refresh reads the
     // latest window at construction).
     this.messagePaginator = new MessagePaginator({ channel: this });
+    this.pinnedMessagesPaginator = new PinnedMessagePaginator({ channel: this });
 
     this.messageReceiptsTracker = new MessageReceiptsTracker({ channel: this });
     this.messageReceiptsTracker.registerSubscriptions();
@@ -2376,11 +2378,14 @@ export class Channel {
           if (!isThreadReply) {
             if (event.hard_delete) {
               this.messagePaginator.removeItem({ id: event.message.id });
+              this.pinnedMessagesPaginator.removeItem({ id: event.message.id });
             } else {
               this.messagePaginator.ingestItem(formattedMessage);
+              this.pinnedMessagesPaginator.ingestItem(formattedMessage);
             }
           }
           this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
+          this.pinnedMessagesPaginator.reflectQuotedMessageUpdate(formattedMessage);
 
           if (event.message.pinned) {
             channelState.removePinnedMessage(event.message);
@@ -2392,6 +2397,11 @@ export class Channel {
           const deletedAt = new Date(event.created_at ?? Date.now());
           const hardDelete = !!event.hard_delete;
           this.messagePaginator.applyMessageDeletionForUser({
+            userId: event.user.id,
+            hardDelete,
+            deletedAt,
+          });
+          this.pinnedMessagesPaginator.applyMessageDeletionForUser({
             userId: event.user.id,
             hardDelete,
             deletedAt,
@@ -2418,6 +2428,8 @@ export class Channel {
 
           if (!isThreadMessage) {
             this.messagePaginator.ingestItem(formatMessage(event.message));
+            // ingestItem auto-adds when pinned (matchesFilter { pinned: true }).
+            this.pinnedMessagesPaginator.ingestItem(formatMessage(event.message));
           }
 
           // do not increase the unread count - the back-end does not increase the count neither in the following cases:
@@ -2492,6 +2504,9 @@ export class Channel {
           if (!event.message.parent_id) {
             this.messagePaginator.ingestItem(formattedMessage);
             this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
+            // ingestItem auto-adds on pin / auto-removes on unpin (matchesFilter { pinned: true }).
+            this.pinnedMessagesPaginator.ingestItem(formattedMessage);
+            this.pinnedMessagesPaginator.reflectQuotedMessageUpdate(formattedMessage);
           }
           if (event.message.pinned) {
             channelState.addPinnedMessage(event.message);
@@ -2516,16 +2531,19 @@ export class Channel {
           // too (clearStateAndCache did this for the full-truncate branch).
           this.messagePaginator.truncate({ truncatedAt: truncatedAtDate });
           this.messagePaginator.clearUnreadSnapshot();
+          this.pinnedMessagesPaginator.truncate({ truncatedAt: truncatedAtDate });
         } else {
           channelState.clearMessages();
           channelState.unreadCount = 0;
           this.messagePaginator.clearStateAndCache();
+          this.pinnedMessagesPaginator.clearStateAndCache();
         }
 
         // system messages don't increment unread counts
         if (event.message) {
           channelState.addMessageSorted(event.message);
           this.messagePaginator.ingestItem(formatMessage(event.message));
+          this.pinnedMessagesPaginator.ingestItem(formatMessage(event.message));
           if (event.message.pinned) {
             channelState.addPinnedMessage(event.message);
           }
@@ -2637,6 +2655,10 @@ export class Channel {
           event.message = channelState.addReaction(reaction, message) as MessageResponse;
           if (!event.message?.parent_id) {
             this.messagePaginator.reflectReaction({ message: event.message, reaction });
+            this.pinnedMessagesPaginator.reflectReaction({
+              message: event.message,
+              reaction,
+            });
           }
         }
         break;
@@ -2646,6 +2668,11 @@ export class Channel {
           event.message = channelState.removeReaction(reaction, message);
           if (event.message && !event.message.parent_id) {
             this.messagePaginator.reflectReaction({
+              message: event.message,
+              reaction,
+              removed: true,
+            });
+            this.pinnedMessagesPaginator.reflectReaction({
               message: event.message,
               reaction,
               removed: true,
@@ -2668,6 +2695,11 @@ export class Channel {
               message: event.message,
               reaction,
             });
+            this.pinnedMessagesPaginator.reflectReaction({
+              enforceUnique: true,
+              message: event.message,
+              reaction,
+            });
           }
         }
         break;
@@ -2682,6 +2714,7 @@ export class Channel {
         if (event.clear_history) {
           channelState.clearMessages();
           this.messagePaginator.clearStateAndCache();
+          this.pinnedMessagesPaginator.clearStateAndCache();
         }
         break;
       }
@@ -2802,6 +2835,12 @@ export class Channel {
       this.state.pinnedMessages = [];
     }
     this.state.addPinnedMessages(state.pinned_messages || []);
+    // Seed the pinned-messages paginator from the same response (runs in parallel with the legacy
+    // channel.state.pinnedMessages until that store is removed).
+    this.pinnedMessagesPaginator.seedFirstPageSync(
+      (state.pinned_messages || []).map(formatMessage),
+      this.pinnedMessagesPaginator.pageSize,
+    );
     if (state.pending_messages) {
       this.state.pending_messages = state.pending_messages;
     }

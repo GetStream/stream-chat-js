@@ -1520,6 +1520,11 @@ export class StreamChat {
           hardDelete,
           deletedAt: deletedAt ?? new Date(),
         });
+        channel.pinnedMessagesPaginator.applyMessageDeletionForUser({
+          userId: user.id,
+          hardDelete,
+          deletedAt: deletedAt ?? new Date(),
+        });
         state?.deleteUserMessages(user, hardDelete, deletedAt);
       }
     }
