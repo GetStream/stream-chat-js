@@ -503,7 +503,20 @@ pagination is a **gated, breaking** enhancement requiring RN/mobile coordination
 ## Task 18 (FOLLOW-ON): `channel.state.pinnedMessages` → `channel.pinnedMessagesPaginator`
 
 **File(s):** `src/pagination/paginators/PinnedMessagePaginator.ts` (new), `src/channel.ts`, `src/channel_state.ts`,
-`src/client.ts`, stream-chat-react pinned views. **Dependencies:** Task 11. **Status:** planned. **Owner:** unassigned
+`src/client.ts`, stream-chat-react pinned views. **Dependencies:** Task 11. **Owner:** claude
+**Status:** DONE (uncommitted final step — pending review). Landed in sub-steps, each verified green:
+(1) extract unread-free `MessageIntervalPaginator` base [committed `ca61f933`]; (2) `PinnedMessagePaginator`
+extends it [committed `ecd84fa5`]; (3) wire `channel.pinnedMessagesPaginator` from events in parallel with
+the legacy store [committed `031c5cac`]; (4a) React `usePinnedMessagesCount` reads the paginator
+[committed React `2badfbb2d`]; (4b) delete `channel.state.pinnedMessages` + `addPinnedMessage(s)`/
+`removePinnedMessage` + the pinned-only methods (`addReaction`/`removeReaction`/`_updateMessage`/
+`updateUserMessages`/`deleteUserMessages`/`_addToMessageList`/`removeMessageFromArray`/`clearMessages`) +
+the orphaned `utils.addToMessageList`/`utils.deleteUserMessages` helpers. Per-user pinned updates re-homed
+to `pinnedMessagesPaginator.reflectUserUpdate`/`applyMessageDeletionForUser`. JS 2573 + React 2513 green.
+The unread carve-out was achieved by the base-class extraction (unread absent by construction), not
+suppression. **Follow-on still open:** thread replies + pinned both extend the clean base now, but
+`MessageReplyPaginator` (unused) reconciliation and the final `addMessagesSorted` deletion remain
+(post-Task-13, per the addMessagesSorted-removal note).
 
 **Why a dedicated paginator, not a bare `MessagePaginator` + filters:** pinned messages use a _different
 endpoint_ (`channel.getPinnedMessages` → `/pinned_messages`) with `PinnedMessagePaginationOptions` (id-based
