@@ -1,5 +1,4 @@
 import { generateChannel } from './test-utils/generateChannel';
-import { generateMsg } from './test-utils/generateMessage';
 import { getClientWithUser } from './test-utils/getClient';
 import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
 
@@ -7,68 +6,8 @@ import { ChannelState, StreamChat, Channel } from '../../src';
 import { generateUUIDv4 as uuidv4 } from '../../src/utils';
 
 import { vi, describe, beforeEach, afterEach, it, expect } from 'vitest';
-import { MockOfflineDB } from './offline-support/MockOfflineDB';
 
 const toISOString = (timestampMs) => new Date(timestampMs).toISOString();
-
-describe('ChannelState addMessagesSorted', function () {
-	let state;
-	let client;
-
-	beforeEach(async () => {
-		client = new StreamChat();
-		const offlineDb = new MockOfflineDB({ client });
-
-		client.setOfflineDBApi(offlineDb);
-		await client.offlineDb.init(client.userID);
-		const channel = new Channel(client, 'type', 'id', {});
-		client._addChannelConfig({ cid: channel.cid, config: {} });
-		state = new ChannelState(channel);
-	});
-
-	it('updates last_message_at correctly', async function () {
-		expect(state.last_message_at).to.be.null;
-		state.addMessagesSorted([generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' })]);
-		expect(state.last_message_at.getTime()).to.be.equal(
-			new Date('2020-01-01T00:00:00.000Z').getTime(),
-		);
-		state.addMessagesSorted([generateMsg({ id: '1', date: '2019-01-01T00:00:00.000Z' })]);
-		expect(state.last_message_at.getTime()).to.be.equal(
-			new Date('2020-01-01T00:00:00.000Z').getTime(),
-		);
-
-		state.addMessagesSorted([generateMsg({ id: '2', date: '2020-01-01T00:00:00.001Z' })]);
-		expect(state.last_message_at.getTime()).to.be.equal(
-			new Date('2020-01-01T00:00:00.001Z').getTime(),
-		);
-	});
-});
-
-describe('ChannelState isUpToDate', () => {
-	it('isUpToDate flag should be set to false, when watcher is disconnected', async () => {
-		const chatClient = await getClientWithUser();
-		const channelId = uuidv4();
-		const mockedChannelResponse = generateChannel({
-			channel: {
-				id: channelId,
-			},
-		});
-
-		// to mock the channel.watch call
-		chatClient.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
-		const channel = chatClient.channel('messaging', channelId);
-
-		await channel.watch();
-		// This is a responsibility of application layer to set the flag, depending
-		// on what state is queried - most recent or some older.
-		channel.state.setIsUpToDate(true);
-
-		expect(channel.state.isUpToDate).to.be.eq(true);
-
-		await channel._disconnect();
-		expect(channel.state.isUpToDate).to.be.eq(false);
-	});
-});
 
 describe('ChannelState clean', () => {
 	let client;

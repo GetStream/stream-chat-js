@@ -65,14 +65,6 @@ export class ChannelState {
   pending_messages: Array<PendingMessageResponse>;
   unreadCount: number;
   membership: ChannelMemberResponse;
-  last_message_at: Date | null;
-  /**
-   * Flag which indicates if channel state contain latest/recent messages or no.
-   * This flag should be managed by UI sdks using a setter - setIsUpToDate.
-   * When false, any new message (received by websocket event - message.new) will not
-   * be pushed on to message list.
-   */
-  isUpToDate: boolean;
 
   constructor(channel: Channel) {
     this._channel = channel;
@@ -95,17 +87,6 @@ export class ChannelState {
     this.pending_messages = [];
     this.membership = {};
     this.unreadCount = 0;
-    /**
-     * Flag which indicates if channel state contain latest/recent messages or no.
-     * This flag should be managed by UI sdks using a setter - setIsUpToDate.
-     * When false, any new message (received by websocket event - message.new) will not
-     * be pushed on to message list.
-     */
-    this.isUpToDate = true;
-    this.last_message_at =
-      channel?.state?.last_message_at != null
-        ? new Date(channel.state.last_message_at)
-        : null;
   }
 
   get members() {
@@ -122,6 +103,20 @@ export class ChannelState {
 
   set member_count(memberCount: number) {
     this.membersStore.partialNext({ memberCount });
+  }
+
+  /**
+   * Timestamp of the channel's latest message, derived from the message paginator's tracked latest
+   * message (`channel.messagePaginator.latestMessage`), or `null` when nothing is tracked. Read by
+   * `ChannelPaginator` to sort the channel list.
+   *
+   * Read-only: `last_message_at` is a projection of the message paginator (the single source of
+   * truth for messages). Advance it by ingesting/tracking a message on `channel.messagePaginator`,
+   * not by assignment. (Removing the former writable setter is a breaking change — see
+   * `docs/breaking-changes-v14-v15.md`.)
+   */
+  get last_message_at(): Date | null {
+    return this._channel?.messagePaginator?.latestMessage?.created_at ?? null;
   }
 
   get read() {
@@ -253,29 +248,6 @@ export class ChannelState {
   }
 
   /**
-   * addMessageSorted - Register a single message's channel-level side effects.
-   *
-   * The channel message list lives in `channel.messagePaginator` and thread replies in the
-   * `Thread` object now; this only advances `last_message_at` and records the user reference.
-   *
-   * @param {MessageResponse} newMessage A new message
-   * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
-   * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
-   */
-  addMessageSorted(
-    newMessage: MessageResponse | LocalMessage,
-    timestampChanged = false,
-    addIfDoesNotExist = true,
-  ) {
-    return this.addMessagesSorted(
-      [newMessage],
-      timestampChanged,
-      false,
-      addIfDoesNotExist,
-    );
-  }
-
-  /**
    * Takes the message object, parses the dates, sets `__html`
    * and sets the status to `received` if missing; returns a new message object.
    *
@@ -283,78 +255,6 @@ export class ChannelState {
    */
   formatMessage = (message: MessageResponse | MessageResponseBase | LocalMessage) =>
     formatMessage(message);
-
-  /**
-   * addMessagesSorted - Register channel-level side effects for a list of messages.
-   *
-   * The channel message list lives in `channel.messagePaginator` and thread replies in the `Thread`
-   * object now; this only records the user reference (for user-update propagation) and advances
-   * `last_message_at`. It is retained until the paginators fully own those concerns.
-   *
-   * @param {Array<MessageResponse>} newMessages A list of messages
-   * @param {boolean} timestampChanged Whether updating messages with changed created_at value.
-   * @param {boolean} initializing Whether channel is being initialized.
-   * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
-   */
-  addMessagesSorted(
-    newMessages: (MessageResponse | LocalMessage)[],
-    timestampChanged = false,
-    initializing = false,
-    addIfDoesNotExist = true,
-  ) {
-    // `timestampChanged` / `initializing` are retained for positional-call compatibility only —
-    // the message list and thread replies now live in the paginators, so neither affects this
-    // channel-meta path. (This method is slated for removal once the paginators own last_message_at
-    // and the user reference map.)
-    void timestampChanged;
-    void initializing;
-    for (let i = 0; i < newMessages.length; i += 1) {
-      if (newMessages[i].shadowed && addIfDoesNotExist) {
-        continue;
-      }
-      // Already-formatted messages have run through this side-effect path already; skip them.
-      const isMessageFormatted = newMessages[i].created_at instanceof Date;
-      if (isMessageFormatted) {
-        continue;
-      }
-      const message = this.formatMessage(newMessages[i]);
-
-      if (message.user && this._channel?.cid) {
-        /**
-         * Store the reference to user for this channel, so that when we have to
-         * handle updates to user, we can use the reference map, to determine which
-         * channels need to be updated with updated user object.
-         */
-        this._channel
-          .getClient()
-          .state.updateUserReference(message.user, this._channel.cid);
-      }
-
-      const shouldSkipLastMessageAtUpdate =
-        this._channel.getConfig()?.skip_last_msg_update_for_system_msgs &&
-        message.type === 'system';
-
-      if (
-        !shouldSkipLastMessageAtUpdate &&
-        (!this.last_message_at ||
-          message.created_at.getTime() > this.last_message_at.getTime())
-      ) {
-        this.last_message_at = new Date(message.created_at.getTime());
-      }
-    }
-  }
-
-  /**
-   * Setter for isUpToDate.
-   *
-   * @param isUpToDate  Flag which indicates if channel state contain latest/recent messages or no.
-   *                    This flag should be managed by UI sdks using a setter - setIsUpToDate.
-   *                    When false, any new message (received by websocket event - message.new) will not
-   *                    be pushed on to message list.
-   */
-  setIsUpToDate = (isUpToDate: boolean) => {
-    this.isUpToDate = isUpToDate;
-  };
 
   /**
    * clean - Remove stale data such as users that stayed in typing state for more than 5 seconds

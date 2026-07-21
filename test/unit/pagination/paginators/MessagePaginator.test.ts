@@ -48,6 +48,7 @@ describe('MessagePaginator', () => {
         isLoading: false,
         items: undefined,
         lastQueryError: undefined,
+        latestMessageId: null,
         offset: 0,
       });
       // @ts-expect-error accessing protected property
@@ -1414,7 +1415,7 @@ describe('MessagePaginator', () => {
     });
   });
 
-  describe('latest window, truncation & isUpToDate parity', () => {
+  describe('latest window, truncation & live message routing', () => {
     const msg = (id: string, day: string) =>
       createMessage({
         cid: 'channel-id',
@@ -1632,7 +1633,7 @@ describe('MessagePaginator', () => {
       });
     });
 
-    describe('isUpToDate parity — message.new routing', () => {
+    describe('message.new routing (replaces the isUpToDate flag)', () => {
       it('appends a newer message when the head window is active', () => {
         const paginator = new MessagePaginator({ channel, itemIndex });
         paginator.ingestPage({
@@ -1648,7 +1649,7 @@ describe('MessagePaginator', () => {
         expect(paginator.latestItem?.id).toBe('m3');
       });
 
-      it('does not inject a newer message into an older active window (isUpToDate=false analog)', () => {
+      it('does not inject a newer message into an older active window (viewer scrolled away)', () => {
         const paginator = new MessagePaginator({ channel, itemIndex });
         paginator.ingestPage({
           page: [msg('m8', '08'), msg('m9', '09')],
@@ -1905,7 +1906,198 @@ describe('MessagePaginator', () => {
     });
   });
 
-  it('cannot be customized', () => {
-    const paginator = new MessagePaginator({ channel, itemIndex });
+  describe('trackLatestMessage() / latestMessage', () => {
+    let skipSystemMessages: boolean;
+    let trackingChannel: Channel;
+
+    const buildPaginator = (parentMessageId?: string) => {
+      trackingChannel = {
+        cid: 'channel-id',
+        getConfig: () => ({ skip_last_msg_update_for_system_msgs: skipSystemMessages }),
+        getReplies: vi.fn(),
+        query: vi.fn(),
+      } as unknown as Channel;
+      return new MessagePaginator({
+        channel: trackingChannel,
+        parentMessageId,
+        itemIndex: new ItemIndex<LocalMessage>({ getId: (message) => message.id }),
+      });
+    };
+
+    beforeEach(() => {
+      skipSystemMessages = false;
+    });
+
+    it('is undefined until a message is tracked', () => {
+      const paginator = buildPaginator();
+      expect(paginator.state.getLatestValue().latestMessageId).toBeNull();
+      expect(paginator.latestMessage).toBeUndefined();
+    });
+
+    it('tracks a message and resolves it from the index without ingesting a window', () => {
+      const paginator = buildPaginator();
+      const message = createMessage({ id: 'a', created_at: '2020-01-01T00:00:00.000Z' });
+
+      paginator.trackLatestMessage(message);
+
+      // `trackLatestMessage` updates the source-of-truth field (read by `latestMessage`) without
+      // emitting; `state.latestMessageId` is published by the mirror preprocessor on the next
+      // emission (verified in the reply-list auto-track cases below).
+      expect(paginator.latestMessage?.id).toBe('a');
+      // tracked without ingesting into an interval - the visible window stays empty.
+      expect(paginator.items).toBeUndefined();
+    });
+
+    it('does not emit on its own, so the paired ingest is the single state update', () => {
+      const paginator = buildPaginator();
+      let emissions = 0;
+      const unsubscribe = paginator.state.subscribe(() => {
+        emissions += 1;
+      });
+      emissions = 0; // ignore the synchronous initial subscribe call
+
+      paginator.trackLatestMessage(
+        createMessage({ id: 'a', created_at: '2020-01-01T00:00:00.000Z' }),
+      );
+      unsubscribe();
+
+      expect(emissions).toBe(0);
+      // the field is still updated (read by latestMessage / last_message_at)
+      expect(paginator.latestMessage?.id).toBe('a');
+    });
+
+    it('advances monotonically by created_at', () => {
+      const paginator = buildPaginator();
+      const first = createMessage({ id: 'a', created_at: '2020-01-01T00:00:00.000Z' });
+      const older = createMessage({ id: 'b', created_at: '2019-01-01T00:00:00.000Z' });
+      const newer = createMessage({ id: 'c', created_at: '2021-01-01T00:00:00.000Z' });
+
+      paginator.trackLatestMessage(first);
+      paginator.trackLatestMessage(older);
+      expect(paginator.latestMessage?.id).toBe('a');
+
+      paginator.trackLatestMessage(newer);
+      expect(paginator.latestMessage?.id).toBe('c');
+    });
+
+    it('never advances to a shadowed message', () => {
+      const paginator = buildPaginator();
+      const shadowed = createMessage({
+        id: 'a',
+        created_at: '2020-01-01T00:00:00.000Z',
+        shadowed: true,
+      });
+
+      paginator.trackLatestMessage(shadowed);
+
+      expect(paginator.latestMessage).toBeUndefined();
+    });
+
+    it('never advances to a thread-only reply, but does for a reply shown in the channel', () => {
+      const paginator = buildPaginator();
+      const threadOnlyReply = createMessage({
+        id: 'reply',
+        parent_id: 'parent',
+        created_at: '2020-01-01T00:00:00.000Z',
+      });
+      const shownReply = createMessage({
+        id: 'reply-shown',
+        parent_id: 'parent',
+        show_in_channel: true,
+        created_at: '2021-01-01T00:00:00.000Z',
+      });
+
+      paginator.trackLatestMessage(threadOnlyReply);
+      expect(paginator.latestMessage).toBeUndefined();
+
+      paginator.trackLatestMessage(shownReply);
+      expect(paginator.latestMessage?.id).toBe('reply-shown');
+    });
+
+    it('skips system messages only when skip_last_msg_update_for_system_msgs is set', () => {
+      skipSystemMessages = true;
+      const skipping = buildPaginator();
+      const systemMessage = createMessage({
+        id: 'sys',
+        type: 'system',
+        created_at: '2020-01-01T00:00:00.000Z',
+      });
+      skipping.trackLatestMessage(systemMessage);
+      expect(skipping.latestMessage).toBeUndefined();
+
+      skipSystemMessages = false;
+      const tracking = buildPaginator();
+      tracking.trackLatestMessage(systemMessage);
+      expect(tracking.latestMessage?.id).toBe('sys');
+    });
+
+    it('auto-tracks on ingestion for the main channel list too', () => {
+      const paginator = buildPaginator();
+      paginator.ingestItem(
+        createMessage({
+          id: 'a',
+          cid: 'channel-id',
+          created_at: '2020-01-01T00:00:00.000Z',
+        }),
+      );
+      // The main list no longer relies on an explicit channel-level call: ingestion tracks latest,
+      // and last_message_at is derived from it.
+      expect(paginator.latestMessage?.id).toBe('a');
+    });
+
+    describe('reply list (parentMessageId) auto-tracks on ingestion', () => {
+      const reply = (id: string, createdAt: string): LocalMessage =>
+        createMessage({
+          id,
+          cid: 'channel-id',
+          parent_id: 'parent',
+          created_at: createdAt,
+        });
+
+      it('advances to the newest reply on ingestItem, regardless of ingestion order', () => {
+        const paginator = buildPaginator('parent');
+
+        paginator.ingestItem(reply('r2', '2020-01-01T00:00:02.000Z'));
+        expect(paginator.latestMessage?.id).toBe('r2');
+
+        // an older reply arriving later must not move the pointer back
+        paginator.ingestItem(reply('r1', '2020-01-01T00:00:01.000Z'));
+        expect(paginator.latestMessage?.id).toBe('r2');
+
+        paginator.ingestItem(reply('r3', '2020-01-01T00:00:03.000Z'));
+        expect(paginator.latestMessage?.id).toBe('r3');
+      });
+
+      it('advances to the newest reply when a page is seeded via setItems', () => {
+        const paginator = buildPaginator('parent');
+
+        paginator.setItems({
+          valueOrFactory: [
+            reply('r1', '2020-01-01T00:00:01.000Z'),
+            reply('r3', '2020-01-01T00:00:03.000Z'),
+            reply('r2', '2020-01-01T00:00:02.000Z'),
+          ],
+          isFirstPage: true,
+        });
+
+        expect(paginator.latestMessage?.id).toBe('r3');
+        // The mirror preprocessor publishes the tracked id into state on the setItems emission -
+        // no separate emission from the tracking itself.
+        expect(paginator.state.getLatestValue().latestMessageId).toBe('r3');
+      });
+    });
+
+    it('clears the tracked latest message on clearStateAndCache()', () => {
+      const paginator = buildPaginator();
+      paginator.trackLatestMessage(
+        createMessage({ id: 'a', created_at: '2020-01-01T00:00:00.000Z' }),
+      );
+      expect(paginator.latestMessage?.id).toBe('a');
+
+      paginator.clearStateAndCache();
+
+      expect(paginator.state.getLatestValue().latestMessageId).toBeNull();
+      expect(paginator.latestMessage).toBeUndefined();
+    });
   });
 });

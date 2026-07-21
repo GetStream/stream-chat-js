@@ -1558,8 +1558,6 @@ describe('user.updated propagates to message + pinned paginators', () => {
 			pinned_at: '2020-01-01T00:00:00.000Z',
 		});
 
-		// addMessagesSorted registers the user->channel reference that _updateUserMessageReferences walks.
-		channel.state.addMessagesSorted([message]);
 		channel.messagePaginator.setItems({
 			valueOrFactory: [message],
 			isFirstPage: true,
@@ -1591,8 +1589,9 @@ describe('user.messages.deleted (client-level, cross-channel)', () => {
 		client = await getClientWithUser();
 	});
 
-	// Seeds a channel with one main + one pinned message from the banned user (plus a pinned message
-	// from another user), registering the user->channel reference the client-level loop walks.
+	// Seeds a channel (registered as active by `client.channel`) with one main + one pinned message
+	// from the banned user, plus a pinned message from another user. The client-level loop scans all
+	// active channels, so no explicit user->channel reference registration is needed.
 	const setupChannel = (id) => {
 		const channel = client.channel('messaging', id);
 		const main = generateMsg({ id: `${id}-m`, cid: channel.cid, user: bannedUser });
@@ -1610,7 +1609,6 @@ describe('user.messages.deleted (client-level, cross-channel)', () => {
 			pinned: true,
 			pinned_at: '2020-01-02T00:00:00.000Z',
 		});
-		channel.state.addMessagesSorted([main]);
 		channel.messagePaginator.setItems({
 			valueOrFactory: [main],
 			isFirstPage: true,
@@ -1704,10 +1702,9 @@ describe('user.messages.deleted — quoted_message regression (#1736)', () => {
 			quoted_message_id: m1.id,
 		});
 		const channel = client.channel(type, id);
-		// addMessagesSorted registers the user->channel reference (client.state.userChannelReferences)
-		// that the client-level deletion loop walks; setItems puts the messages in the paginator
-		// (the message list source of truth) so the deletion has something to act on.
-		channel.state.addMessagesSorted([m1, m2]);
+		// `client.channel` registers the channel as active; the client-level deletion loop scans all
+		// active channels, and setItems puts the messages in the paginator (the message list source of
+		// truth) so the deletion has something to act on.
 		channel.messagePaginator.setItems({
 			valueOrFactory: [m1, m2],
 			isFirstPage: true,

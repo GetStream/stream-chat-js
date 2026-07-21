@@ -7,14 +7,28 @@ import {
   ChannelSort,
   DEFAULT_PAGINATION_OPTIONS,
   type FilterBuilderGenerators,
+  formatMessage,
   PaginatorCursor,
   type StreamChat,
 } from '../../../../src';
 import { getClientWithUser } from '../../test-utils/getClient';
+import { generateMsg } from '../../test-utils/generateMessage';
 import type { FieldToDataResolver } from '../../../../src/pagination/types.normalization';
 import { MockOfflineDB } from '../../offline-support/MockOfflineDB';
 
 const user = { id: 'custom-id' };
+
+// `channel.state.last_message_at` is derived (read-only) from the message paginator's tracked latest
+// message. To stage a specific value for sort tests, seed the paginator: clear first so any value
+// (including an earlier one) applies, since tracking is monotonic.
+const setLastMessageAt = (channel: Channel, date: Date | null) => {
+  channel.messagePaginator.clearStateAndCache();
+  if (date) {
+    channel.messagePaginator.trackLatestMessage(
+      formatMessage(generateMsg({ date: date.toISOString() })),
+    );
+  }
+};
 
 describe('ChannelPaginator', () => {
   let client: StreamChat;
@@ -25,11 +39,11 @@ describe('ChannelPaginator', () => {
     client = getClientWithUser(user);
 
     channel1 = new Channel(client, 'type', 'id1', {});
-    channel1.state.last_message_at = new Date('1972-01-01T08:39:35.235Z');
+    setLastMessageAt(channel1, new Date('1972-01-01T08:39:35.235Z'));
     channel1.data!.updated_at = '1972-01-01T08:39:35.235Z';
 
     channel2 = new Channel(client, 'type', 'id1', {});
-    channel2.state.last_message_at = new Date('1971-01-01T08:39:35.235Z');
+    setLastMessageAt(channel2, new Date('1971-01-01T08:39:35.235Z'));
     channel2.data!.updated_at = '1971-01-01T08:39:35.235Z';
   });
 
@@ -49,10 +63,10 @@ describe('ChannelPaginator', () => {
       expect(paginator.id.startsWith('channel-paginator')).toBeTruthy();
       expect(paginator.sortComparator).toBeDefined();
 
-      channel1.state.last_message_at = new Date('1970-01-01T08:39:35.235Z');
+      setLastMessageAt(channel1, new Date('1970-01-01T08:39:35.235Z'));
       channel1.data!.updated_at = '1970-01-01T08:39:35.235Z';
 
-      channel2.state.last_message_at = new Date('1971-01-01T08:39:35.235Z');
+      setLastMessageAt(channel2, new Date('1971-01-01T08:39:35.235Z'));
       channel2.data!.updated_at = '1971-01-01T08:39:35.235Z';
 
       expect(paginator.sortComparator(channel1, channel2)).toBe(1); // channel2 comes before channel1
@@ -152,10 +166,10 @@ describe('ChannelPaginator', () => {
       const paginator = new ChannelPaginator({ client });
       expect(paginator.sortComparator(channel1, channel2)).toBe(keepOrder);
 
-      channel1.state.last_message_at = new Date('1970-01-01T08:39:35.235Z');
+      setLastMessageAt(channel1, new Date('1970-01-01T08:39:35.235Z'));
       channel1.data!.updated_at = '1970-01-01T08:39:35.235Z';
 
-      channel2.state.last_message_at = new Date('1971-01-01T08:39:35.235Z');
+      setLastMessageAt(channel2, new Date('1971-01-01T08:39:35.235Z'));
       channel2.data!.updated_at = '1971-01-01T08:39:35.235Z';
 
       expect(paginator.sortComparator(channel1, channel2)).toBe(changeOrder);
@@ -201,16 +215,16 @@ describe('ChannelPaginator', () => {
       const paginator = new ChannelPaginator({ client, sort: { last_updated: 1 } });
 
       // compares channel1.state.last_message_at with channel2.data!.updated_at
-      channel1.state.last_message_at = new Date('1975-01-01T08:39:35.235Z');
+      setLastMessageAt(channel1, new Date('1975-01-01T08:39:35.235Z'));
       channel1.data!.updated_at = '1970-01-01T08:39:35.235Z';
-      channel2.state.last_message_at = new Date('1971-01-01T08:39:35.235Z');
+      setLastMessageAt(channel2, new Date('1971-01-01T08:39:35.235Z'));
       channel2.data!.updated_at = '1973-01-01T08:39:35.235Z';
       expect(paginator.sortComparator(channel1, channel2)).toBe(changeOrder);
 
       // compares channel2.state.last_message_at with channel1.data!.updated_at
-      channel1.state.last_message_at = new Date('1975-01-01T08:39:35.235Z');
+      setLastMessageAt(channel1, new Date('1975-01-01T08:39:35.235Z'));
       channel1.data!.updated_at = '1976-01-01T08:39:35.235Z';
-      channel2.state.last_message_at = new Date('1978-01-01T08:39:35.235Z');
+      setLastMessageAt(channel2, new Date('1978-01-01T08:39:35.235Z'));
       channel2.data!.updated_at = '1973-01-01T08:39:35.235Z';
       expect(paginator.sortComparator(channel1, channel2)).toBe(keepOrder);
     });
@@ -365,17 +379,17 @@ describe('ChannelPaginator', () => {
           filters: { last_updated: new Date(1000).toISOString() },
         });
         channel1.data = { updated_at: undefined };
-        channel1.state.last_message_at = new Date(1000);
+        setLastMessageAt(channel1, new Date(1000));
 
         expect(paginator.matchesFilter(channel1)).toBeTruthy();
 
         channel1.data = { updated_at: new Date(1000).toISOString() };
-        channel1.state.last_message_at = null;
+        setLastMessageAt(channel1, null);
 
         expect(paginator.matchesFilter(channel1)).toBeTruthy();
 
         channel1.data = { updated_at: undefined };
-        channel1.state.last_message_at = null;
+        setLastMessageAt(channel1, null);
         expect(paginator.matchesFilter(channel1)).toBeFalsy();
       });
 
@@ -429,18 +443,18 @@ describe('ChannelPaginator', () => {
 
         channel1.data = { updated_at: undefined };
         scenarios.forEach(({ val, expected }) => {
-          channel1.state.last_message_at = new Date(val);
+          setLastMessageAt(channel1, new Date(val));
           expect(paginator.matchesFilter(channel1)).toBe(expected);
         });
 
-        channel1.state.last_message_at = null;
+        setLastMessageAt(channel1, null);
         scenarios.forEach(({ val, expected }) => {
           channel1.data = { updated_at: new Date(val).toISOString() };
           expect(paginator.matchesFilter(channel1)).toBe(expected);
         });
 
         channel1.data = { updated_at: undefined };
-        channel1.state.last_message_at = null;
+        setLastMessageAt(channel1, null);
         expect(paginator.matchesFilter(channel1)).toBe(false);
       });
     });

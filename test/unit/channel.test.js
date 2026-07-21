@@ -66,7 +66,6 @@ describe('Channel count unread', function () {
 				mentioned_users: [user],
 			}),
 		];
-		channel.state.addMessagesSorted(ignoredMessages);
 	});
 
 	it('_countMessageAsUnread should return false shadowed or silent messages', function () {
@@ -218,7 +217,6 @@ describe('Channel count unread', function () {
 				user: user,
 				unread_messages: 0,
 			};
-			channel.state.addMessagesSorted(messages);
 			expect(channel.lastRead()).to.eq(last_read);
 		});
 
@@ -2656,22 +2654,68 @@ describe('Channel lastMessage', async () => {
 			config: { skip_last_msg_update_for_system_msgs: true },
 		});
 		channel.state = new ChannelState(channel);
-		const latestMessageDate = '2018-01-01T00:13:24';
 		const latestMessages = [
-			generateMsg({ date: latestMessageDate, type: 'system' }),
+			generateMsg({ date: '2018-01-01T00:13:24', type: 'system' }),
 			generateMsg({ date: '2018-01-01T00:02:00' }),
 			generateMsg({ date: '2018-01-01T00:00:00' }),
 		];
-		const otherMessages = [
-			generateMsg({ date: '2017-11-21T00:05:33' }),
-			generateMsg({ date: '2017-11-21T00:05:35' }),
-		];
-		channel.state.addMessagesSorted(latestMessages);
-		channel.state.addMessagesSorted(otherMessages);
+		// ingestion advances the tracked latest, skipping the newest (system) message per config.
+		seedLatestWindow(channel, latestMessages);
 
 		expect(channel.state.last_message_at.getTime()).toBe(
 			new Date(latestMessages[1].created_at).getTime(),
 		);
+	});
+});
+
+describe('Channel last_message_at', () => {
+	let channel;
+	let client;
+	beforeEach(async () => {
+		client = await getClientWithUser();
+		channel = client.channel('messaging', uuidv4());
+		client._addChannelConfig({ cid: channel.cid, config: {} });
+		channel.state = new ChannelState(channel);
+	});
+
+	const track = (msg) => channel.messagePaginator.trackLatestMessage(formatMessage(msg));
+
+	it('advances monotonically as messages are tracked', () => {
+		expect(channel.state.last_message_at).to.be.null;
+		track(generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }));
+		expect(channel.state.last_message_at.getTime()).to.be.equal(
+			new Date('2020-01-01T00:00:00.000Z').getTime(),
+		);
+		track(generateMsg({ id: '1', date: '2019-01-01T00:00:00.000Z' }));
+		expect(channel.state.last_message_at.getTime()).to.be.equal(
+			new Date('2020-01-01T00:00:00.000Z').getTime(),
+		);
+
+		track(generateMsg({ id: '2', date: '2020-01-01T00:00:00.001Z' }));
+		expect(channel.state.last_message_at.getTime()).to.be.equal(
+			new Date('2020-01-01T00:00:00.001Z').getTime(),
+		);
+	});
+
+	it('derives from the message paginator latestMessage', () => {
+		track(generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }));
+		expect(channel.messagePaginator.latestMessage?.id).to.be.equal('0');
+		expect(channel.state.last_message_at.getTime()).to.be.equal(
+			channel.messagePaginator.latestMessage.created_at.getTime(),
+		);
+	});
+
+	it('is not advanced by a thread-only reply', () => {
+		track(
+			generateMsg({ id: 'reply', date: '2020-01-01T00:00:00.000Z', parent_id: 'parent' }),
+		);
+
+		expect(channel.state.last_message_at).to.be.null;
+	});
+
+	it('is null when no message is tracked (derived from the paginator, read-only)', () => {
+		// The writable setter was removed: last_message_at is a projection of the message paginator.
+		expect(channel.state.last_message_at).to.be.null;
 	});
 });
 

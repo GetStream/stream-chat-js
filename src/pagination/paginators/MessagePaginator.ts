@@ -96,6 +96,28 @@ export class MessagePaginator extends MessageIntervalPaginator {
   }
 
   /**
+   * The main channel list's notion of "latest message" for `channel.state.last_message_at`: on top of
+   * the base rule (not shadowed) this excludes thread-only replies (a reply with a `parent_id` that is
+   * not shown in the channel is not part of the channel list) and, when the channel is configured with
+   * `skip_last_msg_update_for_system_msgs`, system messages. Mirrors the legacy
+   * `Channel._trackLatestMessage` skip logic.
+   *
+   * These exclusions are specific to the MAIN channel list. A reply list (thread paginator, which has
+   * a `parentMessageId`) is made ENTIRELY of thread replies — there the newest reply is exactly the
+   * "latest message", so the exclusions are skipped and only the base rule applies.
+   */
+  protected shouldAdvanceLatestMessage(message: LocalMessage): boolean {
+    if (!super.shouldAdvanceLatestMessage(message)) return false;
+    if (this.parentMessageId) return true;
+    const isThreadOnlyReply = !!message.parent_id && !message.show_in_channel;
+    if (isThreadOnlyReply) return false;
+    const skipSystemMessage =
+      !!this.channel.getConfig?.()?.skip_last_msg_update_for_system_msgs &&
+      message.type === 'system';
+    return !skipSystemMessage;
+  }
+
+  /**
    * (Re)seed the unread state snapshot from the current own read state.
    *
    * Called after the first-page query, and can be called again by the SDK whenever a channel is

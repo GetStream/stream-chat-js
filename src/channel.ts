@@ -2412,11 +2412,10 @@ export class Channel {
           const isThreadMessage =
             event.message.parent_id && !event.message.show_in_channel;
 
-          if (this.state.isUpToDate || isThreadMessage) {
-            channelState.addMessageSorted(event.message, ownMessage);
-          }
-
           if (!isThreadMessage) {
+            // ingestItem advances the paginator's tracked latest message (→ last_message_at). A
+            // message that arrives while the viewer has scrolled to an older window lands in the
+            // head interval, not the active one, so the view is preserved without an isUpToDate flag.
             this.messagePaginator.ingestItem(formatMessage(event.message));
             // ingestItem auto-adds when pinned (matchesFilter { pinned: true }).
             this.pinnedMessagesPaginator.ingestItem(formatMessage(event.message));
@@ -2490,7 +2489,6 @@ export class Channel {
         if (event.message) {
           this._extendEventWithOwnReactions(event);
           const formattedMessage = formatMessage(event.message);
-          channelState.addMessageSorted(event.message, false, false);
           if (!event.message.parent_id) {
             this.messagePaginator.ingestItem(formattedMessage);
             this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
@@ -2520,7 +2518,6 @@ export class Channel {
 
         // system messages don't increment unread counts
         if (event.message) {
-          channelState.addMessageSorted(event.message);
           this.messagePaginator.ingestItem(formatMessage(event.message));
           this.pinnedMessagesPaginator.ingestItem(formatMessage(event.message));
         }
@@ -2792,9 +2789,14 @@ export class Channel {
     this.state.membership = state.membership || {};
 
     // The main message list is seeded into channel.messagePaginator (see Channel.query /
-    // client.hydrateActiveChannels). This maintains thread-reply state, performs stale-thread
-    // cleanup, and advances last_message_at for the initializing page.
-    this.state.addMessagesSorted(state.messages || [], false, true, true);
+    // client.hydrateActiveChannels), whose ingestion advances the tracked latest message
+    // (→ last_message_at). Re-assert it here from the response for the one path where the paginator
+    // seed is skipped: an already-loaded channel that the viewer has jumped away from (see
+    // client.hydrateActiveChannels), where re-seeding would clobber their window. Monotonic, so this
+    // is a no-op when the seed already advanced past these messages.
+    (state.messages || []).forEach((message) =>
+      this.messagePaginator.trackLatestMessage(formatMessage(message)),
+    );
 
     // Seed the pinned-messages paginator from the same response.
     this.pinnedMessagesPaginator.seedFirstPageSync(
@@ -2931,6 +2933,5 @@ export class Channel {
     this.disconnected = true;
     this.messageReceiptsTracker.unregisterSubscriptions();
     this.cooldownTimer.clearTimeout();
-    this.state.setIsUpToDate(false);
   }
 }

@@ -1473,11 +1473,12 @@ export class StreamChat {
    * @param {UserResponse} user
    */
   _updateUserMessageReferences = (user: UserResponse) => {
-    const refMap = this.state.userChannelReferences[user.id] || {};
-
-    for (const channelID in refMap) {
-      const channel = this.activeChannels[channelID];
-
+    // Scan all active channels rather than a user->channel reference map. Message authors are no
+    // longer registered as channel references (that registration was removed along with
+    // `Channel._trackLatestMessage`); `reflectUserUpdate` filters by author id internally, so it is
+    // a no-op on channels without this user's messages.
+    // The next step is to have user ItemIndex, where the update would be O(1) complexity
+    for (const channel of Object.values(this.activeChannels)) {
       if (!channel) continue;
 
       /** update the messages from this user. */
@@ -1502,10 +1503,9 @@ export class StreamChat {
     hardDelete = false,
     deletedAt?: LocalMessage['deleted_at'],
   ) => {
-    const refMap = this.state.userChannelReferences[user.id] || {};
-
-    for (const channelID in refMap) {
-      const channel = this.activeChannels[channelID];
+    // Scan all active channels rather than a user->channel reference map (see
+    // `_updateUserMessageReferences`); `applyMessageDeletionForUser` filters by author id internally.
+    for (const channel of Object.values(this.activeChannels)) {
       if (channel) {
         /** deleted the messages from this user. */
         channel.messagePaginator.applyMessageDeletionForUser({
