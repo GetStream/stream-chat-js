@@ -280,11 +280,11 @@ dual-writing → delete the store → types/exports → tests.
 
 **Dependencies:** Task 9, Task 10 (and Task 15 if offline in scope)
 
-**Status:** in progress — reaction sub-steps 1-2 done; **step 3a DONE** (main message-list
-storage removed); **step 3b DONE** (`channel.state.threads` removed, thread-only methods deleted,
-thread reply `own_reactions` + user-deletion re-homed onto the `Thread` object; both suites green).
-`addMessagesSorted`/`addMessageSorted` remain as a slim channel-meta path (`last_message_at` +
-user-reference map) for full deletion after Task 13.
+**Status:** DONE (committed). Reaction sub-steps 1-2 done; **step 3a** (main message-list storage
+removed) committed `caba066b`/`c238323f`; **step 3b** (`channel.state.threads` removed, thread-only
+methods deleted, thread reply `own_reactions` + user-deletion re-homed onto the `Thread` object)
+committed `b9c4ed61`/`be4ac9dc`; both suites green. `addMessagesSorted`/`addMessageSorted` remain as a
+slim channel-meta path (`last_message_at` + user-reference map) for full deletion after Task 13.
 
 **Owner:** claude
 
@@ -373,7 +373,8 @@ paginators (owner-approved).
 
 **Dependencies:** Task 11
 
-**Status:** DONE (uncommitted — pending review). Both suites green, `yarn types` + `yarn lint` clean.
+**Status:** DONE (committed `fea2407b` src + `8114a2cf` spec). Both suites green, `yarn types` +
+`yarn lint` clean. Carries the `BREAKING CHANGE:` footer for the whole ChannelState storage removal.
 
 **Owner:** claude
 
@@ -407,9 +408,18 @@ paginators (owner-approved).
 
 **Dependencies:** Task 11, Task 12
 
-**Status:** pending
+**Status:** DONE (uncommitted — pending review). Most of the surgery landed incrementally during
+Tasks 11/12/18 (message-set/thread/pinned suites removed or re-scoped to the paginators;
+`channel_state`/`channel`/`client`/`utils` suites rewritten; `channel.ts _handleChannelEvent`
+reorganized one-describe-per-WS-event; parity coverage added for paginators + pinned + user-deletion/
+update wiring). Close-out audit swept all of `test/` and found only two stale references, both fixed:
+`test/typescript/response-generators/message.js` read `channel.state.messages` (→ use
+`response.message.id` for the thread parent), and a `channel.test.js` `last_message_at` test passed a
+stale `'new'` positional arg to `addMessagesSorted` (removed). Parity suites confirmed permanent:
+`CooldownTimer.test.ts` (paginator `ingestPage`), `messageDelivery/*` (`latestItems`), plus the
+paginator/channel/client/thread suites. `yarn test-unit` (2583) + `yarn types` + `yarn lint` green.
 
-**Owner:** unassigned
+**Owner:** claude
 
 **Scope:**
 
@@ -419,7 +429,10 @@ paginators (owner-approved).
 
 **Acceptance Criteria:**
 
-- [ ] `yarn test-unit` green; no test references `messageSets`/`addMessageSorted`/`state.messages`.
+- [x] `yarn test-unit` green; no test references removed state (`messageSets`/`state.messages`/
+      `state.threads`/`state.pinnedMessages`/`addToMessageList`). NOTE: `addMessagesSorted`/`addMessageSorted`
+      survive as the channel-meta path and are still legitimately referenced; their full removal (and the
+      remaining vestigial test seeds) is the deferred post-Task-13 cleanup.
 
 ---
 
@@ -674,6 +687,53 @@ reason about and test.
 
 **Risk:** medium — interval storage changes merge/dedup/reorder semantics for lists that mutate order
 frequently (channels). Land per-paginator with parity tests rather than all at once.
+
+---
+
+## Task 21 (INTEGRATION): land stream-chat-react PR #3245 "fix: unread indicators V10"
+
+**Repo:** stream-chat-react. **PR:** https://github.com/GetStream/stream-chat-react/pull/3245
+(base `feat/message-paginator-master-merge`, head `fix/unread-indicators`, by @isekovanic; goes with
+LLC stream-chat-js PR #1803). **Dependencies:** none blocking — verified compatible with this
+initiative. **Status:** planned. **Owner:** unassigned
+
+**What it is:** the React counterpart of the paginator unread model. Wires the "Unread messages"
+separator / "N new" banner / focus-scroll entirely to `channel.messagePaginator`. Files (+93/-34):
+`Channel.tsx` (seed unread snapshot on cached-channel reopen, before markRead), `MessageList.tsx` +
+`VirtualizedMessageList.tsx` (focus-signal token lifecycle: `scheduleMessageFocusSignalClear` after
+scroll, `clearMessageFocusSignal` on unmount), `UnreadMessagesNotification.tsx` (`clearUnreadSnapshot`
+on mark-read), `useMarkRead.ts` (the bulk: `setViewingLive` gating, `resetUnreadSnapshot` on genuine
+catch-up vs. persist-on-open, scrolled-back-to-bottom tracking via refs).
+
+**Compatibility with our LLC changes: verified clean.** Every API it uses survives our work — unread
+surface (`seedUnreadSnapshot`, `unreadStateSnapshot`, `setViewingLive`/`isViewingLive`,
+`clearUnreadSnapshot`) is retained on `MessagePaginator` through the Task-18 base extraction; focus
+signal (`messageFocusSignal`, `scheduleMessageFocusSignalClear`, `clearMessageFocusSignal`) lives on
+the `MessageIntervalPaginator` base and is inherited. It reads NO removed state (no
+`channel.state.messages`/`threads`/`pinnedMessages`), only `channel.state.read` + `channel.messagePaginator.*`.
+It is design-consistent: manually seeds on cached reopen precisely because our auto-seed only fires on
+a first-page query, and drives `setViewingLive` to feed the exact gate our `message.new` handler reads.
+
+**Scope to land:**
+
+- **Add the missing tests (gating condition).** The PR ships 5 `src/` files with ZERO test changes for
+  an intricate `useMarkRead` state machine (viewing-live gate, catch-up-vs-open snapshot handling,
+  scrolled-back-to-bottom refs). Add unit tests: open/reopen keeps the separator where the user left
+  off; genuine scroll-back-to-bottom clears the snapshot; `visibilitychange` + at-bottom + no
+  `hasMoreNewer` toggles `setViewingLive`; focus-signal is cleared after scroll and on unmount.
+- **Reconcile with our React branch.** Both this PR and our `checkpoint/channelstate-removal-wip`
+  React branch touch `Channel.tsx` — DIFFERENT hunks (its reopen `seedUnreadSnapshot` vs. our
+  `user.deleted` `channel.state.messages`→`channel.messagePaginator.items` fix), so a trivial,
+  no-semantic-conflict merge. The PR does not touch our other migrated readers.
+- **Sequencing.** Both are parallel off `feat/message-paginator-master-merge`; whichever lands second
+  takes the trivial `Channel.tsx` merge. Runtime correctness needs the LLC unread APIs shipped — they
+  are in our branch, so no extra LLC work is required beyond what this initiative already lands.
+
+**Acceptance Criteria:**
+
+- [ ] PR #3245 integrated onto our React branch (cherry-pick/merge), `Channel.tsx` reconciled.
+- [ ] `useMarkRead` unread state-machine unit tests added and green.
+- [ ] React `yarn types` + `yarn lint` + `yarn test` green against our stream-chat-js dist.
 
 ---
 
