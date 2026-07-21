@@ -113,9 +113,10 @@
     {
       "id": 14,
       "name": "Docs",
-      "status": "pending",
-      "owner": null,
-      "dependencies": [12]
+      "status": "done",
+      "owner": "claude",
+      "dependencies": [12],
+      "note": "JS side done. Fixed the two stale JSDoc examples (Channel.on / StreamChat.on) that logged channel.state.messages -> channel.messagePaginator.state.items; added a CLAUDE.md architecture note that messages/threads/pinned live in the paginators (channel.messagePaginator / thread.messagePaginator / channel.pinnedMessagesPaginator) as the single source of truth, not channel.state, incl. the read-only derived last_message_at, pointing at docs/breaking-changes-v14-v15.md (ledger added earlier). JS CLAUDE.md had no stale addMessageSorted guidance to remove. The React CLAUDE.md stale guidance ('DO NOT mutate channel.state.messages / use addMessageSorted()' + 'threads must exist in main channel state') remains and is tracked on the React branch, not here."
     },
     {
       "id": 15,

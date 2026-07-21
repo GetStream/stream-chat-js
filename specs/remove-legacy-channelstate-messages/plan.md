@@ -442,18 +442,31 @@ paginator/channel/client/thread suites. `yarn test-unit` (2583) + `yarn types` +
 
 **Dependencies:** Task 12
 
-**Status:** pending
+**Status:** done (JS). React `CLAUDE.md` tracked separately on the React branch.
 
-**Owner:** unassigned
+**Owner:** claude
 
 **Scope:**
 
 - Remove/replace stale "use `channel.state.addMessageSorted()`/`removeMessage()`/`state.messages`"
   guidance; document `messagePaginator` as the source of truth.
 
+**What landed (JS):**
+
+- Fixed the two stale JSDoc examples — `Channel.on` (`src/channel.ts`) and `StreamChat.on`
+  (`src/client.ts`) — that logged `channel.state.messages` → now `channel.messagePaginator.state.items`.
+- Added a `CLAUDE.md` architecture note: messages / thread replies / pinned messages live in
+  `channel.messagePaginator` / `thread.messagePaginator` / `channel.pinnedMessagesPaginator` (single
+  source of truth), not `channel.state`; how to read/mutate; the read-only derived
+  `last_message_at`; pointer to `docs/breaking-changes-v14-v15.md`.
+- `docs/breaking-changes-v14-v15.md` breaking-change ledger added earlier this effort.
+- JS `CLAUDE.md` had no stale `addMessageSorted` guidance to remove.
+
 **Acceptance Criteria:**
 
-- [ ] No stale legacy-storage guidance in either `CLAUDE.md`.
+- [x] No stale legacy-storage guidance in the JS `CLAUDE.md`.
+- [ ] React `CLAUDE.md` (`DO NOT mutate channel.state.messages` / `addMessageSorted()`, "threads must
+      exist in main channel state") — remains; tracked on the React branch, not this one.
 
 ---
 

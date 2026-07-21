@@ -2105,7 +2105,7 @@ export class Channel {
   /**
    * on - Listen to events on this channel.
    *
-   * channel.on('message.new', event => {console.log("my new message", event, channel.state.messages)})
+   * channel.on('message.new', event => {console.log("my new message", event, channel.messagePaginator.state.items)})
    * or
    * channel.on(event => {console.log(event.type)})
    *

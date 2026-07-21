@@ -1188,7 +1188,7 @@ export class StreamChat {
   /**
    * on - Listen to events on all channels and users your watching
    *
-   * client.on('message.new', event => {console.log("my new message", event, channel.state.messages)})
+   * client.on('message.new', event => {console.log("my new message", event, channel.messagePaginator.state.items)})
    * or
    * client.on(event => {console.log(event.type)})
    *
