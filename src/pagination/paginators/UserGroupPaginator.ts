@@ -7,6 +7,7 @@ import type {
 } from './BasePaginator';
 import type { QueryUserGroupsOptions, UserGroupResponse } from '../../types';
 import type { StreamChat } from '../../client';
+import { ItemIndex } from '../ItemIndex';
 
 type UserGroupListCursor = {
   created_at_gt: string;
@@ -46,8 +47,19 @@ export class UserGroupPaginator extends BasePaginator<
     client: StreamChat,
     options?: PaginatorOptions<UserGroupResponse, QueryUserGroupsOptions>,
   ) {
-    super({ initialCursor: { ...ZERO_PAGE_CURSOR, headward: null }, ...options });
+    super({
+      initialCursor: { ...ZERO_PAGE_CURSOR, headward: null },
+      itemIndex: new ItemIndex<UserGroupResponse>({ getId: (group) => group.id }),
+      ...options,
+    });
     this.client = client;
+    // Interval storage needs a total order for its placement/merge math. The listing is ordered by
+    // the forward cursor (`created_at_gt`, `id_gt`), i.e. ascending `created_at` then `id` — mirror
+    // that here so the visible order matches the server's.
+    this.sortComparator = (a, b) => {
+      if (a.created_at !== b.created_at) return a.created_at < b.created_at ? -1 : 1;
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    };
   }
 
   get initialState(): PaginatorState<UserGroupResponse> {

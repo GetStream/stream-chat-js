@@ -33,7 +33,6 @@ import {
   isFunction,
   isOnline,
   isOwnUserBaseProperty,
-  messageSetPagination,
   normalizeQuerySort,
   randomId,
   retryInterval,
@@ -1189,7 +1188,7 @@ export class StreamChat {
   /**
    * on - Listen to events on all channels and users your watching
    *
-   * client.on('message.new', event => {console.log("my new message", event, channel.state.messages)})
+   * client.on('message.new', event => {console.log("my new message", event, channel.messagePaginator.state.items)})
    * or
    * client.on(event => {console.log(event.type)})
    *
@@ -1474,17 +1473,17 @@ export class StreamChat {
    * @param {UserResponse} user
    */
   _updateUserMessageReferences = (user: UserResponse) => {
-    const refMap = this.state.userChannelReferences[user.id] || {};
-
-    for (const channelID in refMap) {
-      const channel = this.activeChannels[channelID];
-
+    // Scan all active channels rather than a user->channel reference map. Message authors are no
+    // longer registered as channel references (that registration was removed along with
+    // `Channel._trackLatestMessage`); `reflectUserUpdate` filters by author id internally, so it is
+    // a no-op on channels without this user's messages.
+    // The next step is to have user ItemIndex, where the update would be O(1) complexity
+    for (const channel of Object.values(this.activeChannels)) {
       if (!channel) continue;
 
-      const state = channel.state;
-
       /** update the messages from this user. */
-      state?.updateUserMessages(user);
+      channel.pinnedMessagesPaginator.reflectUserUpdate(user);
+      channel.messagePaginator.reflectUserUpdate(user);
     }
   };
 
@@ -1504,15 +1503,21 @@ export class StreamChat {
     hardDelete = false,
     deletedAt?: LocalMessage['deleted_at'],
   ) => {
-    const refMap = this.state.userChannelReferences[user.id] || {};
-
-    for (const channelID in refMap) {
-      const channel = this.activeChannels[channelID];
+    // Scan all active channels rather than a user->channel reference map (see
+    // `_updateUserMessageReferences`); `applyMessageDeletionForUser` filters by author id internally.
+    for (const channel of Object.values(this.activeChannels)) {
       if (channel) {
-        const state = channel.state;
-
         /** deleted the messages from this user. */
-        state?.deleteUserMessages(user, hardDelete, deletedAt);
+        channel.messagePaginator.applyMessageDeletionForUser({
+          userId: user.id,
+          hardDelete,
+          deletedAt: deletedAt ?? new Date(),
+        });
+        channel.pinnedMessagesPaginator.applyMessageDeletionForUser({
+          userId: user.id,
+          hardDelete,
+          deletedAt: deletedAt ?? new Date(),
+        });
       }
     }
   };
@@ -2285,61 +2290,43 @@ export class StreamChat {
       c.initialized = !offlineMode;
       c.push_preferences = channelState.push_preferences;
 
-      let updatedMessagesSet;
-      let filteredMessageIds: string[] = [];
-      if (skipInitialization === undefined) {
-        const { messageSet, filteredMessageIds: _filteredMessageIds } =
-          c._initializeState(channelState, 'latest');
-        filteredMessageIds = _filteredMessageIds;
-        updatedMessagesSet = messageSet;
-      } else if (!skipInitialization.includes(channelState.channel.id)) {
-        c.state.clearMessages();
-        const { messageSet, filteredMessageIds: _filteredMessageIds } =
-          c._initializeState(channelState, 'latest');
-        filteredMessageIds = _filteredMessageIds;
-        updatedMessagesSet = messageSet;
-      }
-
-      if (updatedMessagesSet) {
-        updatedMessagesSet.pagination = {
-          ...updatedMessagesSet.pagination,
-          ...messageSetPagination({
-            parentSet: updatedMessagesSet,
-            requestedPageSize:
-              queryChannelsOptions?.message_limit ||
-              DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE,
-            returnedPage: channelState.messages,
-            filteredReturnedPage: channelState.messages.filter(
-              (m) => !filteredMessageIds.includes(m.id),
-            ),
-            logger: this.logger,
-          }),
-        };
-        this.polls.hydratePollCache(channelState.messages, true);
-        this.reminders.hydrateState(channelState.messages);
-      }
+      const willInitialize =
+        skipInitialization === undefined ||
+        !skipInitialization.includes(channelState.channel.id);
       const requestedPageSize =
         queryChannelsOptions?.message_limit ??
         DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE;
+
+      // Seed the paginator BEFORE _initializeState, which hydrates read state and (via
+      // MessageReceiptsTracker) resolves read/delivered cursors against this paginator. Seeding
+      // first guarantees the tracker sees a populated timeline; a later async seed would run after
+      // the reconcile and mislabel delivery status.
+      //
       // Skip the re-seed when this (shared) channel's paginator is already loaded AND the user has
       // jumped to an older window (active interval is not the head): a first-page re-seed forces the
       // newest page to merge into that jumped interval across the gap (missing messages in the
       // middle). A cold paginator, or one still at the head (offline/at-latest), re-seeds normally so
       // cursors/hasMoreTail get (re)derived and pagination keeps working.
       if (
-        !c.messagePaginator.isInitialized ||
-        c.messagePaginator.isActiveIntervalAtHead
+        willInitialize &&
+        (!c.messagePaginator.isInitialized || c.messagePaginator.isActiveIntervalAtHead)
       ) {
-        c.messagePaginator.postQueryReconcile({
-          direction: 'tailward',
-          isFirstPage: true,
-          queryShape: { limit: requestedPageSize },
+        c.messagePaginator.seedFirstPageSync(
+          channelState.messages.map(formatMessage),
           requestedPageSize,
-          results: {
-            items: channelState.messages.map(formatMessage),
-            tailward: channelState.messages[0]?.id,
-          },
-        });
+        );
+      }
+
+      if (skipInitialization === undefined) {
+        c._initializeState(channelState);
+      } else if (!skipInitialization.includes(channelState.channel.id)) {
+        // The paginators are (re)seeded above and via _initializeState → seedFirstPageSync.
+        c._initializeState(channelState);
+      }
+
+      if (willInitialize) {
+        this.polls.hydratePollCache(channelState.messages, true);
+        this.reminders.hydrateState(channelState.messages);
       }
       c.messageComposer.initStateFromChannelResponse(channelState);
       c.cooldownTimer.refresh();

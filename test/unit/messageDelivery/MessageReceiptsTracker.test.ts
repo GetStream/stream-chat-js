@@ -40,8 +40,12 @@ const createChannelMock = ({
   return {
     channel: {
       state: {
-        findMessageByTimestamp,
         readStore,
+      },
+      // The default receipts locator now resolves timestamps via the message paginator; this mock
+      // fn (still named findMessageByTimestamp in tests) backs messagePaginator.findItemByTimestamp.
+      messagePaginator: {
+        findItemByTimestamp: findMessageByTimestamp,
       },
     } as unknown as Channel,
     readStore,

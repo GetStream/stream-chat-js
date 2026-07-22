@@ -168,6 +168,19 @@ describe('Threads 2.0', () => {
       expect(thread.messagePaginator.isInitialized).to.be.false;
     });
 
+    it('seeds the reply paginator lastMessageAt from the thread last_message_at', () => {
+      const thread = createTestThread({
+        latest_replies: [],
+        reply_count: 0,
+        last_message_at: '2030-01-01T00:00:00.000Z',
+      });
+      // The server floor seeds the sort key even with no replies loaded to display.
+      expect(thread.messagePaginator.lastMessageAt?.getTime()).to.equal(
+        new Date('2030-01-01T00:00:00.000Z').getTime(),
+      );
+      expect(thread.messagePaginator.lastMessage).to.be.null;
+    });
+
     it('initializes properly without threadData', () => {
       const thread = createMinimalThread();
       const state = thread.state.getLatestValue();
@@ -1310,14 +1323,9 @@ describe('Threads 2.0', () => {
       });
 
       describe('Events: message.updated, reaction.new, reaction.deleted', () => {
-        (
-          [
-            'message.updated',
-            'reaction.new',
-            'reaction.deleted',
-            'reaction.updated',
-          ] as const
-        ).forEach((eventType) => {
+        // Reaction events are routed through messagePaginator.reflectReaction (see the "ingests"
+        // tests below); only message-update events go through updateParentMessageOrReplyLocally.
+        (['message.updated', 'message.undeleted'] as const).forEach((eventType) => {
           it(`updates reply or parent message on "${eventType}"`, () => {
             const thread = createTestThread();
             const updateParentMessageOrReplyLocallySpy = sinon.spy(
@@ -1332,6 +1340,81 @@ describe('Threads 2.0', () => {
             });
 
             expect(updateParentMessageOrReplyLocallySpy.calledOnce).to.be.true;
+
+            thread.unregisterSubscriptions();
+          });
+        });
+
+        it("preserves the current user's own_reactions on a cross-user reaction to a reply", () => {
+          const thread = createTestThread();
+          thread.registerSubscriptions();
+          const messageId = uuidv4();
+          // Seed a reply that already carries the current user's own reaction.
+          thread.messagePaginator.ingestItem(
+            formatMessage(
+              generateMsg({
+                id: messageId,
+                parent_id: thread.id,
+                own_reactions: [
+                  { type: 'love', user_id: TEST_USER_ID, message_id: messageId },
+                ],
+              }) as MessageResponse,
+            ),
+          );
+
+          // A different user reacts; the WS event message carries own_reactions: [].
+          client.dispatchEvent({
+            type: 'reaction.new',
+            message: generateMsg({
+              id: messageId,
+              parent_id: thread.id,
+              own_reactions: [],
+            }) as MessageResponse,
+            reaction: {
+              type: 'like',
+              user_id: 'other-user',
+              message_id: messageId,
+              created_at: new Date().toISOString(),
+            },
+          });
+
+          const own = thread.messagePaginator.getItem(messageId)?.own_reactions ?? [];
+          expect(own.some((r) => r.type === 'love' && r.user_id === TEST_USER_ID)).to.be
+            .true;
+          // The other user's reaction is not added to the current user's own_reactions.
+          expect(own.some((r) => r.user_id === 'other-user')).to.be.false;
+
+          thread.unregisterSubscriptions();
+        });
+
+        (['user.messages.deleted', 'user.deleted'] as const).forEach((eventType) => {
+          it(`soft-deletes a banned user's replies in the thread paginator on "${eventType}"`, () => {
+            const thread = createTestThread();
+            thread.registerSubscriptions();
+            const bannedUserId = 'banned-user';
+            const replyId = uuidv4();
+            thread.messagePaginator.ingestPage({
+              page: [
+                formatMessage(
+                  generateMsg({
+                    id: replyId,
+                    parent_id: thread.id,
+                    user: { id: bannedUserId },
+                  }) as MessageResponse,
+                ),
+              ],
+              isHead: true,
+              isTail: true,
+              setActive: true,
+            });
+
+            client.dispatchEvent({
+              type: eventType,
+              user: { id: bannedUserId, deleted_at: new Date().toISOString() },
+              created_at: new Date().toISOString(),
+            });
+
+            expect(thread.messagePaginator.getItem(replyId)?.type).to.equal('deleted');
 
             thread.unregisterSubscriptions();
           });

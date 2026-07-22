@@ -4,14 +4,13 @@ import { CooldownTimer } from './CooldownTimer';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';
-import { MessagePaginator } from './pagination/paginators';
+import { MessagePaginator, PinnedMessagePaginator } from './pagination/paginators';
 import { MessageOperations } from './messageOperations';
 import {
   channelHasReadEvents,
   formatMessage,
   generateChannelTempCid,
   logChatPromiseExecution,
-  messageSetPagination,
   normalizeQuerySort,
 } from './utils';
 import type { StreamChat } from './client';
@@ -190,6 +189,7 @@ export class Channel {
   public readonly messageComposer: MessageComposer;
   public readonly messageReceiptsTracker: MessageReceiptsTracker;
   public readonly messagePaginator: MessagePaginator;
+  public readonly pinnedMessagesPaginator: PinnedMessagePaginator;
   public readonly messageOperations: MessageOperations;
   public readonly cooldownTimer: CooldownTimer;
 
@@ -241,12 +241,16 @@ export class Channel {
       compositionContext: this,
     });
 
+    // Created before MessageReceiptsTracker and CooldownTimer: both read the message paginator
+    // (receipts resolve read cursors via findItemByTimestamp; CooldownTimer.refresh reads the
+    // latest window at construction).
+    this.messagePaginator = new MessagePaginator({ channel: this });
+    this.pinnedMessagesPaginator = new PinnedMessagePaginator({ channel: this });
+
     this.messageReceiptsTracker = new MessageReceiptsTracker({ channel: this });
     this.messageReceiptsTracker.registerSubscriptions();
 
     this.cooldownTimer = new CooldownTimer({ channel: this });
-
-    this.messagePaginator = new MessagePaginator({ channel: this });
 
     this.messageOperations = new MessageOperations({
       ingest: (m) => this.messagePaginator.ingestItem(m),
@@ -726,7 +730,7 @@ export class Channel {
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
-        const message = this.state.messages.find(({ id }) => id === messageID);
+        const message = this.messagePaginator.getItem(messageID);
         const reaction = {
           created_at: '',
           updated_at: '',
@@ -1379,27 +1383,6 @@ export class Channel {
   }
 
   /**
-   * lastMessage - return the last message, takes into account that last few messages might not be perfectly sorted
-   *
-   * @return {ReturnType<ChannelState['formatMessage']> | undefined} Description
-   */
-  lastMessage(): LocalMessage | undefined {
-    // get last 5 messages, sort, return the latest
-    // get a slice of the last 5
-    let min = this.state.latestMessages.length - 5;
-    if (min < 0) {
-      min = 0;
-    }
-    const max = this.state.latestMessages.length + 1;
-    const messageSlice = this.state.latestMessages.slice(min, max);
-
-    // sort by pk desc
-    messageSlice.sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
-
-    return messageSlice[0];
-  }
-
-  /**
    * markRead - Send the mark read event for this user, only works if the `read_events` setting is enabled. Syncs the message delivery report candidates local state.
    *
    * @param {MarkReadOptions} data
@@ -1465,7 +1448,7 @@ export class Channel {
       channel_type: this.type,
       cid: this.cid,
       created_at: new Date().toISOString(),
-      last_read_message_id: this.lastMessage()?.id,
+      last_read_message_id: this.messagePaginator.headmostItem?.id,
       team: this.data?.team,
       type: 'message.read_locally',
       user: client.user,
@@ -1517,6 +1500,10 @@ export class Channel {
     const previousData = this.data;
     this.data = state.channel;
     this._syncStateFromChannelData(this.data, previousData);
+
+    // The message paginator is seeded synchronously inside query() (before read-state hydration),
+    // so a channel opened via watch() alone — a deep-link restore, a search result, a freshly
+    // created DM — already has its latest page loaded here.
 
     this._client.logger(
       'info',
@@ -1576,11 +1563,8 @@ export class Channel {
       },
     );
 
-    // add any messages to our thread state
-    if (data.messages) {
-      this.state.addMessagesSorted(data.messages);
-    }
-
+    // Thread reply state is owned by the Thread object (Thread.messagePaginator); the returned
+    // replies are consumed there. The channel message list is owned by channel.messagePaginator.
     return data;
   }
 
@@ -1685,10 +1669,10 @@ export class Channel {
    */
   countUnread(lastRead?: Date | null) {
     if (!lastRead) return this.state.unreadCount;
-    // todo: prevent finding the latest message set on each iteration
     let count = 0;
-    for (let i = 0; i < this.state.latestMessages.length; i += 1) {
-      const message = this.state.latestMessages[i];
+    const latestMessages = this.messagePaginator.headItems;
+    for (let i = 0; i < latestMessages.length; i += 1) {
+      const message = latestMessages[i];
       if (message.created_at > lastRead && this._countMessageAsUnread(message)) {
         count++;
       }
@@ -1706,8 +1690,9 @@ export class Channel {
     const userID = this.getClient().userID;
 
     let count = 0;
-    for (let i = 0; i < this.state.latestMessages.length; i += 1) {
-      const message = this.state.latestMessages[i];
+    const latestMessages = this.messagePaginator.headItems;
+    for (let i = 0; i < latestMessages.length; i += 1) {
+      const message = latestMessages[i];
       if (
         this._countMessageAsUnread(message) &&
         (!lastRead || message.created_at > lastRead) &&
@@ -1813,25 +1798,32 @@ export class Channel {
       });
     }
 
-    // add any messages to our channel state
-    const { messageSet, filteredMessageIds } = this._initializeState(
-      state,
-      messageSetToAddToIfDoesNotExist,
-    );
-    messageSet.pagination = {
-      ...messageSet.pagination,
-      ...messageSetPagination({
-        parentSet: messageSet,
-        messagePaginationOptions: options?.messages,
-        requestedPageSize:
-          options?.messages?.limit ?? DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
-        returnedPage: state.messages,
-        filteredReturnedPage: state.messages.filter(
-          (m) => !filteredMessageIds.includes(m.id),
-        ),
-        logger: this.getClient().logger,
-      }),
-    };
+    // Seed the message paginator with the first (latest) page BEFORE _initializeState, which
+    // hydrates the read state and (via MessageReceiptsTracker) resolves read/delivered cursors
+    // against this paginator. Seeding first guarantees the tracker sees a populated timeline; a
+    // later async seed would run after the reconcile and mislabel delivery status. Only the
+    // latest-page open paths (watch/create) pass 'latest' — the paginator's own pagination queries
+    // use 'current' and must not be reseeded as a first page here.
+    if (messageSetToAddToIfDoesNotExist === 'latest' && Array.isArray(state.messages)) {
+      const requestedPageSize =
+        options?.messages?.limit ?? DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE;
+      // Pass the query's message pagination options through: a channel can be opened AROUND a
+      // message (id_around / created_at_around), in which case the fetched page is a jump window,
+      // not the latest page — the paginator must reconcile it with jump semantics.
+      this.messagePaginator.seedFirstPageSync(
+        state.messages.map(formatMessage),
+        requestedPageSize,
+        options?.messages,
+      );
+    }
+
+    // Seed read/members/pinned/thread-cleanup state; the message list is in the paginator.
+    this._initializeState(state);
+    // The queried page is the latest set unless this was a jump/around query.
+    const isLatestMessageSet =
+      messageSetToAddToIfDoesNotExist === 'latest' &&
+      !options?.messages?.id_around &&
+      !(options?.messages as MessagePaginationOptions | undefined)?.created_at_around;
 
     this.getClient().polls.hydratePollCache(state.messages, true);
     this.getClient().reminders.hydrateState(state.messages);
@@ -1865,14 +1857,14 @@ export class Channel {
       type: 'channels.queried',
       queriedChannels: {
         channels: [state],
-        isLatestMessageSet: messageSet.isLatest,
+        isLatestMessageSet,
       },
     });
     this.getClient().offlineDb?.executeQuerySafely(
       (db) =>
         db.upsertChannels?.({
           channels: [state],
-          isLatestMessagesSet: messageSet.isLatest,
+          isLatestMessagesSet: isLatestMessageSet,
         }),
       { method: 'upsertChannels' },
     );
@@ -2102,7 +2094,7 @@ export class Channel {
   /**
    * on - Listen to events on this channel.
    *
-   * channel.on('message.new', event => {console.log("my new message", event, channel.state.messages)})
+   * channel.on('message.new', event => {console.log("my new message", event, channel.messagePaginator.state.items)})
    * or
    * channel.on(event => {console.log(event.type)})
    *
@@ -2371,24 +2363,18 @@ export class Channel {
           const formattedMessage = formatMessage(event.message);
           const isThreadReply =
             !!event.message.parent_id && !event.message.show_in_channel;
-          if (event.hard_delete) {
-            channelState.removeMessage(event.message);
-            if (!isThreadReply) {
+          // Thread-only replies are handled by the Thread object; the channel owns the main list.
+          if (!isThreadReply) {
+            if (event.hard_delete) {
               this.messagePaginator.removeItem({ id: event.message.id });
-            }
-          } else {
-            channelState.addMessageSorted(event.message, false, false);
-            if (!isThreadReply) {
+              this.pinnedMessagesPaginator.removeItem({ id: event.message.id });
+            } else {
               this.messagePaginator.ingestItem(formattedMessage);
+              this.pinnedMessagesPaginator.ingestItem(formattedMessage);
             }
           }
           this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
-
-          channelState.removeQuotedMessageReferences(event.message);
-
-          if (event.message.pinned) {
-            channelState.removePinnedMessage(event.message);
-          }
+          this.pinnedMessagesPaginator.reflectQuotedMessageUpdate(formattedMessage);
         }
         break;
       case 'user.messages.deleted':
@@ -2400,8 +2386,11 @@ export class Channel {
             hardDelete,
             deletedAt,
           });
-
-          this.state.deleteUserMessages(event.user, hardDelete, deletedAt);
+          this.pinnedMessagesPaginator.applyMessageDeletionForUser({
+            userId: event.user.id,
+            hardDelete,
+            deletedAt,
+          });
         }
         break;
       case 'message.new':
@@ -2412,16 +2401,13 @@ export class Channel {
           const isThreadMessage =
             event.message.parent_id && !event.message.show_in_channel;
 
-          if (this.state.isUpToDate || isThreadMessage) {
-            channelState.addMessageSorted(event.message, ownMessage);
-          }
-
-          if (event.message.pinned) {
-            channelState.addPinnedMessage(event.message);
-          }
-
           if (!isThreadMessage) {
+            // ingestItem advances the paginator's tracked latest message (→ last_message_at). A
+            // message that arrives while the viewer has scrolled to an older window lands in the
+            // head interval, not the active one, so the view is preserved without an isUpToDate flag.
             this.messagePaginator.ingestItem(formatMessage(event.message));
+            // ingestItem auto-adds when pinned (matchesFilter { pinned: true }).
+            this.pinnedMessagesPaginator.ingestItem(formatMessage(event.message));
           }
 
           // do not increase the unread count - the back-end does not increase the count neither in the following cases:
@@ -2492,51 +2478,38 @@ export class Channel {
         if (event.message) {
           this._extendEventWithOwnReactions(event);
           const formattedMessage = formatMessage(event.message);
-          channelState.addMessageSorted(event.message, false, false);
           if (!event.message.parent_id) {
             this.messagePaginator.ingestItem(formattedMessage);
             this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
-          }
-          channelState._updateQuotedMessageReferences({ message: event.message });
-          if (event.message.pinned) {
-            channelState.addPinnedMessage(event.message);
-          } else {
-            channelState.removePinnedMessage(event.message);
+            // ingestItem auto-adds on pin / auto-removes on unpin (matchesFilter { pinned: true }).
+            this.pinnedMessagesPaginator.ingestItem(formattedMessage);
+            this.pinnedMessagesPaginator.reflectQuotedMessageUpdate(formattedMessage);
           }
         }
         break;
       case 'channel.truncated':
         if (event.channel?.truncated_at) {
-          const truncatedAt = +new Date(event.channel.truncated_at);
+          const truncatedAtDate = new Date(event.channel.truncated_at);
 
-          channelState.messageSets.forEach((messageSet, messageSetIndex) => {
-            messageSet.messages.forEach(({ created_at: createdAt, id }) => {
-              if (truncatedAt > +createdAt)
-                channelState.removeMessage({ id, messageSetIndex });
-            });
-          });
-
-          channelState.pinnedMessages.forEach(({ id, created_at: createdAt }) => {
-            if (truncatedAt > +createdAt)
-              channelState.removePinnedMessage({ id } as MessageResponse);
-          });
-          channelState.unreadCount = this.countUnread(
-            new Date(event.channel.truncated_at),
-          );
+          channelState.unreadCount = this.countUnread(truncatedAtDate);
+          // Partial truncation: keep messages newer than the cutoff. clearStateAndCache would wipe
+          // the whole paginator (readers now source from it), so use the partial truncate. The
+          // channel-wide read/unread context is reset by the truncation, so drop the unread snapshot
+          // too (clearStateAndCache did this for the full-truncate branch).
+          this.messagePaginator.truncate({ truncatedAt: truncatedAtDate });
+          this.messagePaginator.clearUnreadSnapshot();
+          this.pinnedMessagesPaginator.truncate({ truncatedAt: truncatedAtDate });
         } else {
-          channelState.clearMessages();
           channelState.unreadCount = 0;
+          this.messagePaginator.clearStateAndCache();
+          this.pinnedMessagesPaginator.clearStateAndCache();
         }
 
         // system messages don't increment unread counts
         if (event.message) {
-          channelState.addMessageSorted(event.message);
-          if (event.message.pinned) {
-            channelState.addPinnedMessage(event.message);
-          }
+          this.messagePaginator.ingestItem(formatMessage(event.message));
+          this.pinnedMessagesPaginator.ingestItem(formatMessage(event.message));
         }
-
-        this.messagePaginator.clearStateAndCache();
 
         break;
       case 'member.added':
@@ -2637,33 +2610,48 @@ export class Channel {
         break;
       case 'reaction.new':
         if (event.message && event.reaction) {
-          const { message, reaction } = event;
-          event.message = channelState.addReaction(reaction, message) as MessageResponse;
+          const { reaction } = event;
           if (!event.message?.parent_id) {
-            this.messagePaginator.ingestItem(formatMessage(event.message));
+            this.messagePaginator.reflectReaction({ message: event.message, reaction });
+            this.pinnedMessagesPaginator.reflectReaction({
+              message: event.message,
+              reaction,
+            });
           }
         }
         break;
       case 'reaction.deleted':
         if (event.message && event.reaction) {
-          const { message, reaction } = event;
-          event.message = channelState.removeReaction(reaction, message);
+          const { reaction } = event;
           if (event.message && !event.message.parent_id) {
-            this.messagePaginator.ingestItem(formatMessage(event.message));
+            this.messagePaginator.reflectReaction({
+              message: event.message,
+              reaction,
+              removed: true,
+            });
+            this.pinnedMessagesPaginator.reflectReaction({
+              message: event.message,
+              reaction,
+              removed: true,
+            });
           }
         }
         break;
       case 'reaction.updated':
         if (event.message && event.reaction) {
-          const { message, reaction } = event;
+          const { reaction } = event;
           // assuming reaction.updated is only called if enforce_unique is true
-          event.message = channelState.addReaction(
-            reaction,
-            message,
-            true,
-          ) as MessageResponse;
           if (!event.message?.parent_id) {
-            this.messagePaginator.ingestItem(formatMessage(event.message));
+            this.messagePaginator.reflectReaction({
+              enforceUnique: true,
+              message: event.message,
+              reaction,
+            });
+            this.pinnedMessagesPaginator.reflectReaction({
+              enforceUnique: true,
+              message: event.message,
+              reaction,
+            });
           }
         }
         break;
@@ -2676,7 +2664,8 @@ export class Channel {
         };
         channel._syncStateFromChannelData(channel.data, previousChannelData);
         if (event.clear_history) {
-          channelState.clearMessages();
+          this.messagePaginator.clearStateAndCache();
+          this.pinnedMessagesPaginator.clearStateAndCache();
         }
         break;
       }
@@ -2772,10 +2761,7 @@ export class Channel {
     this.state.syncMemberCountFromChannelData(data, fallbackData);
   }
 
-  _initializeState(
-    state: ChannelAPIResponse,
-    messageSetToAddToIfDoesNotExist: MessageSetType = 'latest',
-  ) {
+  _initializeState(state: ChannelAPIResponse) {
     const { state: clientState, user, userID } = this.getClient();
 
     // add the members and users
@@ -2791,22 +2777,18 @@ export class Channel {
 
     this.state.membership = state.membership || {};
 
-    const messages = state.messages || [];
-    if (!this.state.messages) {
-      this.state.initMessages();
-    }
-    const { messageSet, filteredMessageIds } = this.state.addMessagesSorted(
-      messages,
-      false,
-      true,
-      true,
-      messageSetToAddToIfDoesNotExist,
-    );
+    // Seed the message paginator's `lastMessageAt` aggregate from the server's authoritative
+    // `last_message_at`. The first-page seed (Channel.query / client.hydrateActiveChannels) also
+    // advances it from ingested messages; both feed the same monotonic max, so this additionally
+    // covers the path where the paginator seed is skipped (an already-loaded channel the viewer has
+    // jumped away from, where re-seeding would clobber their window).
+    this.messagePaginator.seedLastMessageAt(state.channel?.last_message_at);
 
-    if (!this.state.pinnedMessages) {
-      this.state.pinnedMessages = [];
-    }
-    this.state.addPinnedMessages(state.pinned_messages || []);
+    // Seed the pinned-messages paginator from the same response.
+    this.pinnedMessagesPaginator.seedFirstPageSync(
+      (state.pinned_messages || []).map(formatMessage),
+      this.pinnedMessagesPaginator.pageSize,
+    );
     if (state.pending_messages) {
       this.state.pending_messages = state.pending_messages;
     }
@@ -2828,7 +2810,7 @@ export class Channel {
     // that everything up to this point is not marked as unread
     const readUpdates: ChannelState['read'] = {};
     if (userID != null) {
-      const last_read = this.state.last_message_at || new Date();
+      const last_read = this.messagePaginator.lastMessageAt || new Date();
       if (user) {
         readUpdates[user.id] = {
           user,
@@ -2876,18 +2858,16 @@ export class Channel {
         { changedUserIds: entries.map(([userId]) => userId) },
       );
     }
-
-    return {
-      messageSet,
-      filteredMessageIds,
-    };
   }
 
   _extendEventWithOwnReactions(event: Event) {
     if (!event.message) {
       return;
     }
-    const message = this.state.findMessage(event.message.id, event.message.parent_id);
+    // The channel message list is owned by the paginator; enrich from it. Thread-only replies are
+    // not in the paginator (getItem returns undefined) — the Thread object preserves their
+    // own_reactions on its own reply store.
+    const message = this.messagePaginator.getItem(event.message.id);
     if (message) {
       event.message.own_reactions = message.own_reactions;
     }
@@ -2939,6 +2919,5 @@ export class Channel {
     this.disconnected = true;
     this.messageReceiptsTracker.unregisterSubscriptions();
     this.cooldownTimer.clearTimeout();
-    this.state.setIsUpToDate(false);
   }
 }

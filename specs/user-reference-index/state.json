@@ -1,0 +1,25 @@
+{
+  "tasks": {
+    "task-1-resolve-design-decisions": "pending",
+    "task-2-index-and-maintenance": "pending",
+    "task-3-expose-targeted-lookup": "pending",
+    "task-4-rewrite-client-handlers": "pending",
+    "task-5-tests-and-complexity": "pending"
+  },
+  "flags": {
+    "blocked": false,
+    "blocked_reason": "",
+    "needs-review": false,
+    "decisions_resolved": "D1=open, D2=open, D3=open, D4=noted, D5=leave-userChannelReferences-as-is",
+    "ready_to_execute": false,
+    "ready_to_execute_reason": "Design gate: resolve D1/D2/D3 (Task 1) before implementation."
+  },
+  "meta": {
+    "last_updated": "2026-07-21",
+    "active_task": null,
+    "worktree": "/Users/martincupela/Projects/stream/chat/stream-chat-js-worktrees/user-reference-index",
+    "branch": "feat/user-reference-index",
+    "base_branch": "feat/message-paginator-master-merge",
+    "motivation": "Replace the O(active channels x loaded items) all-channel scan in client._updateUserMessageReferences / _deleteUserMessageReference (introduced when Channel._trackLatestMessage / per-author userChannelReferences registration was removed) with a targeted user->message-reference index."
+  }
+}

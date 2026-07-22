@@ -3509,12 +3509,6 @@ export type ImportTask = {
 };
 
 export type MessageSetType = 'latest' | 'current' | 'new';
-export type MessageSet = {
-  isCurrent: boolean;
-  isLatest: boolean;
-  messages: LocalMessage[];
-  pagination: { hasNext: boolean; hasPrev: boolean };
-};
 
 export type PushProviderUpsertResponse = {
   push_provider: PushProvider;

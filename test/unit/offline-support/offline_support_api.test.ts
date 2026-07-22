@@ -2103,7 +2103,7 @@ describe('OfflineSupportApi', () => {
             _deleteReaction: vi.fn(),
             _createDraft: vi.fn(),
             _deleteDraft: vi.fn(),
-            state: { addMessageSorted: vi.fn() },
+            messagePaginator: { trackLastMessage: vi.fn() },
           } as unknown as Channel;
 
           _updateMessageSpy = vi
@@ -2169,7 +2169,7 @@ describe('OfflineSupportApi', () => {
           expect(mockChannel._deleteDraft).toHaveBeenCalledWith(...task.payload);
         });
 
-        it('should call _sendMessage and addMessageSorted if isPendingTask is true', async () => {
+        it('should call _sendMessage and track the latest message if isPendingTask is true', async () => {
           const task = generatePendingTask('send-message') as PendingTask;
 
           const messageResponse = { message: { id: 'msg1', text: 'hello' } };
@@ -2180,9 +2180,8 @@ describe('OfflineSupportApi', () => {
           await offlineDb['executeTask']({ task }, true);
 
           expect(mockChannel._sendMessage).toHaveBeenCalledWith(...task.payload);
-          expect(mockChannel.state.addMessageSorted).toHaveBeenCalledWith(
-            messageResponse.message,
-            true,
+          expect(mockChannel.messagePaginator.trackLastMessage).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 'msg1' }),
           );
         });
 

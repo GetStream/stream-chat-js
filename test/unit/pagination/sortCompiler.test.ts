@@ -140,7 +140,7 @@ describe('makeComparator', () => {
     expect(orderByComparator(items, cmp)).toEqual(['1', '2', '3', '4']);
   });
 
-  it('fallback ordering: null/undefined come last (ascending) and first (descending)', () => {
+  it('fallback ordering: null/undefined come last regardless of direction', () => {
     const items: Item[] = [
       { cid: 'a', v: 10 },
       { cid: 'b', v: undefined },
@@ -148,11 +148,35 @@ describe('makeComparator', () => {
       { cid: 'd', v: 5 },
     ];
 
+    // null/undefined always sort to the tail; the direction only orders the real values.
     const asc = toComparator({ v: 1 });
-    expect(orderByComparator(items, asc)).toEqual(['d', 'a', 'b', 'c']); // null/undefined last
+    expect(orderByComparator(items, asc)).toEqual(['d', 'a', 'b', 'c']);
 
     const desc = toComparator({ v: -1 });
-    expect(orderByComparator(items, desc)).toEqual(['b', 'c', 'a', 'd']); // null/undefined first
+    expect(orderByComparator(items, desc)).toEqual(['a', 'd', 'b', 'c']);
+  });
+
+  it('keeps null date values at the tail for a descending sort (last_message_at regression)', () => {
+    // Reproduces the channel-list bug: channels with no last_message_at must sort to the BOTTOM of a
+    // `{ last_message_at: -1 }` list, not float to the top. Before the fix, the "null last" result
+    // was negated by the descending direction flip and value-less channels were prepended at the head.
+    type Chan = { cid: string; last_message_at: string | null };
+    const chans: Chan[] = [
+      { cid: 'old', last_message_at: '2022-01-01T00:00:00.000Z' },
+      { cid: 'none1', last_message_at: null },
+      { cid: 'new', last_message_at: '2026-07-21T00:00:00.000Z' },
+      { cid: 'none2', last_message_at: null },
+    ];
+    const desc = makeComparator<Chan, Record<string, AscDesc>>({
+      sort: { last_message_at: -1 },
+      resolvePathValue: defaultResolvePathValue,
+    });
+    expect([...chans].sort(desc).map((c) => c.cid)).toEqual([
+      'new',
+      'old',
+      'none1',
+      'none2',
+    ]);
   });
 
   it('applies custom tiebreaker when provided', () => {

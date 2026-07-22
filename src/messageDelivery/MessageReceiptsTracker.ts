@@ -183,7 +183,7 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     this.locateMessage =
       locateMessage ??
       ((timestampMs: number) => {
-        const message = this.channel.state.findMessageByTimestamp(timestampMs);
+        const message = this.channel.messagePaginator.findItemByTimestamp(timestampMs);
         return message ? { timestampMs, msgId: message.id } : null;
       });
   }
