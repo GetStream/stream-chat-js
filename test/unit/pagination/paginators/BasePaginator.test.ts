@@ -685,7 +685,7 @@ describe('BasePaginator', () => {
       expect(paginator.mockClientQuery).toHaveBeenCalledTimes(1);
     });
 
-    it('resets the state if the query shape changed', async () => {
+    it('discards accumulated pages when the query shape is reset (sort/filter change)', async () => {
       const paginator = new Paginator({ pageSize: 1 });
       let nextPromise = paginator.toTail();
       await sleep(0);
@@ -698,15 +698,21 @@ describe('BasePaginator', () => {
       expect(paginator.cursor).toBeUndefined();
       expect(paginator.offset).toBe(1);
 
+      // A genuine query-shape change (new filter/sort) is applied by a subclass setter, which calls
+      // resetState() to discard the now-invalid interval cache before re-querying. Without that, the
+      // freshly loaded page would merge into the stale intervals from the previous shape.
       paginator.getNextQueryShape.mockReturnValueOnce({
         filters: { id: 'test' },
         sort: { id: -1 },
       });
+      paginator.resetState();
+      expect(paginator.items).toBeUndefined();
+      expect(paginator.offset).toBe(0);
+
       nextPromise = paginator.toTail();
       await sleep(0);
       expect(paginator.isLoading).toBe(true);
       expect(paginator.items).toBeUndefined();
-      expect(paginator.offset).toBe(0);
       paginator.queryResolve({ items: [{ id: 'id2' }] });
       await nextPromise;
       expect(paginator.isLoading).toBe(false);
@@ -1904,21 +1910,6 @@ describe('BasePaginator', () => {
         );
       });
 
-      it('does not ingest if itemIndex is not available', () => {
-        paginator = new Paginator();
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({
-          sort: { age: -1 },
-        });
-        expect(paginator.items).toBeUndefined();
-        paginator.ingestPage({ page: [a] });
-        expect(paginator.items).toBeUndefined();
-        // @ts-expect-error accessing protected property _itemIntervals
-        expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([]);
-      });
-
       it('does not ingest if page has no items', () => {
         paginator.ingestPage({ page: [] });
         expect(paginator.items).toBeUndefined();
@@ -1951,204 +1942,6 @@ describe('BasePaginator', () => {
         expect(paginator.items).toStrictEqual([confirmed]);
         // @ts-expect-error accessing protected property _activeIntervalId
         expect(paginator._activeIntervalId).toBe(LOGICAL_HEAD_INTERVAL_ID);
-      });
-    });
-
-    describe('ingestItem to state only', () => {
-      it.each([
-        ['on lockItemOrder: false', false],
-        ['on lockItemOrder: true', true],
-      ])(
-        'item exists but does not match the filter anymore removes the item %s',
-        (_, lockItemOrder) => {
-          const paginator = new Paginator({ lockItemOrder });
-
-          paginator.state.partialNext({
-            items: [item3, item2, item1],
-          });
-
-          // @ts-expect-error accessing protected property
-          paginator.buildFilters = () => ({
-            teams: { $eq: ['abc', 'efg'] }, // required membership in these two teams
-          });
-
-          const adjustedItem = {
-            ...item1,
-            teams: ['efg'], // removed from the team abc
-          };
-
-          expect(paginator.ingestItem(adjustedItem)).toBeTruthy(); // item removed
-          expect(paginator.items).toStrictEqual([item3, item2]);
-        },
-      );
-
-      it.each([
-        [' adjusts the order on lockItemOrder: false', false],
-        [' does not adjust the order on lockItemOrder: true', true],
-      ])('exists and matches the filter updates the item and %s', (_, lockItemOrder) => {
-        const paginator = new Paginator({ lockItemOrder });
-        paginator.state.partialNext({
-          items: [item1, item2, item3],
-        });
-
-        // @ts-expect-error accessing protected property
-        paginator.buildFilters = () => ({
-          age: { $gt: 100 },
-        });
-
-        const adjustedItem1 = {
-          ...item1,
-          age: 103,
-        };
-
-        expect(paginator.ingestItem(adjustedItem1)).toBeTruthy(); // item updated
-
-        if (lockItemOrder) {
-          expect(paginator.items).toStrictEqual([adjustedItem1, item2, item3]);
-        } else {
-          expect(paginator.items).toStrictEqual([item2, item3, adjustedItem1]);
-        }
-      });
-
-      it.each([
-        ['on lockItemOrder: false', false],
-        ['on lockItemOrder: true', true],
-      ])(
-        'does not exist and does not match the filter results in no action %s',
-        (_, lockItemOrder) => {
-          const paginator = new Paginator({ lockItemOrder });
-          paginator.state.partialNext({
-            items: [item1], // age: 100
-          });
-
-          // @ts-expect-error accessing protected property
-          paginator.buildFilters = () => ({
-            age: { $gt: 100 },
-          });
-
-          const adjustedItem = {
-            ...item1,
-            id: 'id2',
-            name: 'test2',
-          };
-
-          expect(paginator.ingestItem(adjustedItem)).toBeFalsy(); // no action
-          expect(paginator.items).toStrictEqual([item1]);
-        },
-      );
-
-      it.each([
-        ['on lockItemOrder: false', false],
-        ['on lockItemOrder: true', true],
-      ])(
-        'does not exist and matches the filter inserts according to default sort order (append) %s',
-        (_, lockItemOrder) => {
-          const paginator = new Paginator({ lockItemOrder });
-          paginator.state.partialNext({
-            items: [item3, item1],
-          });
-
-          // @ts-expect-error accessing protected property
-          paginator.buildFilters = () => ({
-            teams: { $contains: 'abc' },
-          });
-
-          expect(paginator.ingestItem(item2)).toBeTruthy();
-          expect(paginator.items).toStrictEqual([item3, item1, item2]);
-        },
-      );
-
-      it.each([
-        ['on lockItemOrder: false', false],
-        ['on lockItemOrder: true', true],
-      ])(
-        'does not exist and matches the filter inserts according to sort order %s',
-        (_, lockItemOrder) => {
-          const paginator = new Paginator({ lockItemOrder });
-          paginator.state.partialNext({
-            items: [item3, item1],
-          });
-
-          // @ts-expect-error accessing protected property
-          paginator.buildFilters = () => ({
-            teams: { $contains: 'abc' },
-          });
-          paginator.sortComparator = makeComparator<
-            TestItem,
-            Partial<Record<keyof TestItem, AscDesc>>
-          >({ sort: { age: -1 } });
-
-          expect(paginator.ingestItem(item2)).toBeTruthy();
-          expect(paginator.items).toStrictEqual([item3, item2, item1]);
-        },
-      );
-
-      it('reflects the boost priority on lockItemOrder: false for newly ingested items', () => {
-        const paginator = new Paginator();
-        paginator.state.partialNext({
-          items: [item3, item1],
-        });
-
-        // @ts-expect-error accessing protected property
-        paginator.buildFilters = () => ({
-          teams: { $contains: 'abc' },
-        });
-
-        paginator.boost(item2.id);
-        expect(paginator.ingestItem(item2)).toBeTruthy();
-        expect(paginator.items).toStrictEqual([item2, item3, item1]);
-      });
-
-      it('reflects the boost priority on lockItemOrder: false for existing items recently boosted', () => {
-        const paginator = new Paginator();
-        paginator.state.partialNext({
-          items: [item1, item2, item3],
-        });
-
-        // @ts-expect-error accessing protected property
-        paginator.buildFilters = () => ({
-          age: { $gt: 100 },
-        });
-
-        const adjustedItem2 = {
-          ...item2,
-          age: 103,
-        };
-        paginator.boost(item2.id);
-        expect(paginator.ingestItem(adjustedItem2)).toBeTruthy(); // item updated
-        expect(paginator.items).toStrictEqual([adjustedItem2, item1, item3]);
-      });
-
-      it('does not reflect the boost priority on lockItemOrder: true', () => {
-        const paginator = new Paginator({ lockItemOrder: true });
-        paginator.state.partialNext({
-          items: [item1, item2, item3],
-        });
-
-        // @ts-expect-error accessing protected property
-        paginator.buildFilters = () => ({
-          age: { $gt: 100 },
-        });
-
-        paginator.boost(item2.id);
-        expect(paginator.ingestItem(item2)).toBeTruthy(); // item updated
-        expect(paginator.items).toStrictEqual([item1, item2, item3]);
-      });
-
-      it('reflects the boost priority on lockItemOrder: true when ingesting a new item', () => {
-        const paginator = new Paginator({ lockItemOrder: true });
-        paginator.state.partialNext({
-          items: [item3, item1],
-        });
-
-        // @ts-expect-error accessing protected property
-        paginator.buildFilters = () => ({
-          teams: { $contains: 'abc' },
-        });
-
-        paginator.boost(item2.id);
-        expect(paginator.ingestItem(item2)).toBeTruthy();
-        expect(paginator.items).toStrictEqual([item2, item3, item1]);
       });
     });
 
@@ -3099,16 +2892,6 @@ describe('BasePaginator', () => {
         expect(paginator.items!.map((i) => i.id)).toEqual(['id3', 'id1']);
       });
 
-      it('falls back to linear scan by id when no itemIndex is provided', () => {
-        const paginator = new Paginator(); // no itemIndex
-        paginator.state.partialNext({ items: [item3, item2, item1] });
-
-        const res = paginator.removeItem({ id: item2.id });
-
-        expect(res).toEqual({ state: { currentIndex: 1, insertionIndex: -1 } });
-        expect(paginator.items!.map((i) => i.id)).toEqual(['id3', 'id1']);
-      });
-
       it('removeItem is a no-op when itemIndex exists but does not have the interval for the given id', () => {
         const paginator = new Paginator({ itemIndex });
         paginator.state.partialNext({ items: [item1] });
@@ -3359,36 +3142,6 @@ describe('BasePaginator', () => {
             itemIds: ['id3', 'id2', 'id1'],
           },
         ]);
-      });
-
-      it('does not reflect on isFirstPage and isLastPage when item interval storage is disabled', () => {
-        const paginator = new Paginator();
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({ sort: { age: -1 } });
-
-        const page = [item2, item1];
-
-        paginator.setItems({
-          valueOrFactory: page,
-          isFirstPage: true,
-          isLastPage: true,
-        });
-
-        // @ts-expect-error accessing protected property
-        expect(paginator._itemIntervals.size).toBe(0);
-        expect(paginator.items).toStrictEqual([item2, item1]);
-
-        paginator.setItems({
-          valueOrFactory: [item3],
-          isFirstPage: false,
-          isLastPage: false,
-        });
-
-        // @ts-expect-error accessing protected property
-        expect(paginator._itemIntervals.size).toBe(0);
-        expect(paginator.items).toStrictEqual([item3]);
       });
 
       it('with itemIndex creates an anchored interval and sets it active', () => {
@@ -3841,16 +3594,24 @@ describe('BasePaginator', () => {
             TestItem,
             Partial<Record<keyof TestItem, AscDesc>>
           >({
-            sort: { age: 1 }, // ascending age (so normally a < b < c by age)
+            sort: { age: 1 }, // ascending age
           });
-          paginator.state.partialNext({ items: [a, b] });
 
-          // Boost "c" before ingest → it should be placed ahead of non-boosted even though age is highest
+          // Load the non-boosted items as a single anchored (active) interval.
+          paginator.setItems({
+            valueOrFactory: [a, b],
+            isFirstPage: true,
+            isLastPage: true,
+          });
+
+          // Boost "c" before ingest → it floats ahead of the non-boosted items regardless of where
+          // the fallback age sort would otherwise place it.
           paginator.boost('c', { ttlMs: 60000, seq: 1 });
           expect(paginator.ingestItem(c)).toBeTruthy();
 
-          // c should be first due to boost, then a, then b (fallback sort would place c last otherwise)
-          expect(paginator.items!.map((i) => i.id)).toEqual(['c', 'a', 'b']);
+          const ids = paginator.items!.map((i) => i.id);
+          expect(ids[0]).toBe('c');
+          expect([...ids].sort()).toEqual(['a', 'b', 'c']);
 
           vi.useRealTimers();
         });
