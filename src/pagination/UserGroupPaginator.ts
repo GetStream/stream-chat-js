@@ -5,13 +5,12 @@ import type {
   PaginatorOptions,
   PaginatorState,
 } from './BasePaginator';
-import type { QueryUserGroupsOptions, UserGroupResponse } from '../types';
+import type { ListUserGroupsOptions, UserGroupResponse } from '../types';
 import type { StreamChat } from '../client';
 
-type UserGroupListCursor = {
-  created_at_gt: string;
-  id_gt: string;
-};
+type UserGroupListCursor = Required<
+  Pick<ListUserGroupsOptions, 'created_at_gt' | 'id_gt'>
+>;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
@@ -65,7 +64,7 @@ export class UserGroupPaginator extends BasePaginator<UserGroupResponse> {
     if (!lastItem) return undefined;
 
     return JSON.stringify({
-      created_at_gt: lastItem.created_at,
+      created_at_gt: lastItem.created_at.toISOString(), // TODO: this should not be the case
       id_gt: lastItem.id,
     } satisfies UserGroupListCursor);
   };
@@ -78,14 +77,14 @@ export class UserGroupPaginator extends BasePaginator<UserGroupResponse> {
     }
 
     const cursor = decodeCursor<UserGroupListCursor>(this.cursor?.next);
-    const options: QueryUserGroupsOptions = {
+    const options: ListUserGroupsOptions = {
       limit: this.pageSize,
       ...(this.teamId ? { team_id: this.teamId } : {}),
       ...(cursor?.id_gt ? { id_gt: cursor.id_gt } : {}),
       ...(cursor?.created_at_gt ? { created_at_gt: cursor.created_at_gt } : {}),
     };
 
-    const { user_groups: items } = await this.client.queryUserGroups(options);
+    const { user_groups: items } = await this.client.listUserGroups(options);
     return { items, next: this.buildNextCursor(items) };
   };
 

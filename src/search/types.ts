@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type SearchSourceState<T = any> = {
   hasNext: boolean;
   isActive: boolean;
@@ -11,12 +10,12 @@ export type SearchSourceState<T = any> = {
 };
 
 export type SearchSourceOptions = {
-  /** The number of milliseconds to debounce the search query. The default interval is 300ms. */
+  /** The number of milliseconds to debounce the search query (defaults to `300`). */
   debounceMs?: number;
   pageSize?: number;
-  /** When true, the source can execute queries with an empty search string. Defaults to false. */
+  /** When `true`, the source can execute queries with an empty search string (defaults to `false`). */
   allowEmptySearchString?: boolean;
-  /** When true, previously loaded items are cleared at the start of a new search query. Defaults to true. */
+  /** When `true`, previously loaded items are cleared at the start of a new search query (defaults to `true`). */
   resetOnNewSearchQuery?: boolean;
 };
 

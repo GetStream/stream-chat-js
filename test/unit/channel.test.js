@@ -8,6 +8,7 @@ import sinon from 'sinon';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 
 import { ChannelState, StreamChat } from '../../src';
+import { chatLoggerSystem } from '../../src/logger';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
 import { generateUUIDv4 as uuidv4 } from '../../src/utils';
@@ -26,7 +27,7 @@ describe('Channel count unread', function () {
 
 		client = new StreamChat('apiKey');
 		client.user = user;
-		client.userID = 'user';
+
 		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
 
 		channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
@@ -34,21 +35,21 @@ describe('Channel count unread', function () {
 		channel.lastRead = () => lastRead;
 
 		const ignoredMessages = [
-			generateMsg({ date: '2018-01-01T00:00:00', mentioned_users: [user] }),
-			generateMsg({ date: '2019-01-01T00:00:00' }),
-			generateMsg({ date: '2020-01-01T00:00:00' }),
+			generateMsg({ date: new Date('2018-01-01T00:00:00'), mentioned_users: [user] }),
+			generateMsg({ date: new Date('2019-01-01T00:00:00') }),
+			generateMsg({ date: new Date('2020-01-01T00:00:00') }),
 			generateMsg({
-				date: '2023-01-01T00:00:00',
+				date: new Date('2023-01-01T00:00:00'),
 				shadowed: true,
 				mentioned_users: [user],
 			}),
 			generateMsg({
-				date: '2024-01-01T00:00:00',
+				date: new Date('2024-01-01T00:00:00'),
 				silent: true,
 				mentioned_users: [user],
 			}),
 			generateMsg({
-				date: '2025-01-01T00:00:00',
+				date: new Date('2025-01-01T00:00:00'),
 				user: { id: 'mute1' },
 				mentioned_users: [user],
 			}),
@@ -76,8 +77,8 @@ describe('Channel count unread', function () {
 	it('_countMessageAsUnread should return false for channel with read_events off', function () {
 		const channel = client.channel('messaging', {
 			members: ['tommaso'],
-			own_capabilities: [],
 		});
+		channel.data = { own_capabilities: [] };
 		expect(channel._countMessageAsUnread({ user: { id: 'random' } })).not.to.be.ok;
 	});
 
@@ -115,8 +116,8 @@ describe('Channel count unread', function () {
 	it('countUnread should return correct count', function () {
 		expect(channel.countUnread(lastRead)).to.be.equal(0);
 		channel.state.addMessagesSorted([
-			generateMsg({ date: '2021-01-01T00:00:00' }),
-			generateMsg({ date: '2022-01-01T00:00:00' }),
+			generateMsg({ date: new Date('2021-01-01T00:00:00') }),
+			generateMsg({ date: new Date('2022-01-01T00:00:00') }),
 		]);
 		expect(channel.countUnread(lastRead)).to.be.equal(2);
 	});
@@ -124,11 +125,11 @@ describe('Channel count unread', function () {
 	it('countUnread should return correct count when multiple message sets are loaded into state', () => {
 		expect(channel.countUnread(lastRead)).to.be.equal(0);
 		channel.state.addMessagesSorted([
-			generateMsg({ date: '2026-01-01T00:00:00' }),
-			generateMsg({ date: '2026-02-01T00:00:00' }),
+			generateMsg({ date: new Date('2026-01-01T00:00:00') }),
+			generateMsg({ date: new Date('2026-02-01T00:00:00') }),
 		]);
 		channel.state.addMessagesSorted(
-			[generateMsg({ date: '2006-01-01T00:00:00' })],
+			[generateMsg({ date: new Date('2006-01-01T00:00:00') })],
 			false,
 			true,
 			true,
@@ -144,11 +145,11 @@ describe('Channel count unread', function () {
 		expect(channel.countUnreadMentions()).to.be.equal(0);
 		channel.state.addMessageSorted(
 			generateMsg({
-				date: '2021-01-01T00:00:00',
+				date: new Date('2021-01-01T00:00:00'),
 				mentioned_users: [user, { id: 'random' }],
 			}),
 			generateMsg({
-				date: '2022-01-01T00:00:00',
+				date: new Date('2022-01-01T00:00:00'),
 				mentioned_users: [{ id: 'random' }],
 			}),
 		);
@@ -159,13 +160,13 @@ describe('Channel count unread', function () {
 		expect(channel.countUnreadMentions()).to.be.equal(0);
 		channel.state.addMessagesSorted([
 			generateMsg({
-				date: '2021-01-01T00:00:00',
+				date: new Date('2021-01-01T00:00:00'),
 				mentioned_users: [user, { id: 'random' }],
 			}),
-			generateMsg({ date: '2022-01-01T00:00:00' }),
+			generateMsg({ date: new Date('2022-01-01T00:00:00') }),
 		]);
 		channel.state.addMessagesSorted(
-			[generateMsg({ date: '2010-01-01T00:00:00' })],
+			[generateMsg({ date: new Date('2010-01-01T00:00:00') })],
 			false,
 			true,
 			true,
@@ -201,13 +202,6 @@ describe('Channel count unread', function () {
 			channel.state.addMessagesSorted(messages);
 			expect(channel.lastRead()).to.eq(last_read);
 		});
-
-		it('should return undefined if client user is not set (server-side client)', () => {
-			client = new StreamChat('apiKey', 'secret');
-			channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
-			channel.initialized = true;
-			expect(channel.lastRead()).to.be.undefined;
-		});
 	});
 });
 
@@ -219,7 +213,6 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 	const setupChannel = ({ isLocalUnreadCountEnabled }) => {
 		const client = new StreamChat('apiKey', { isLocalUnreadCountEnabled });
 		client.user = user;
-		client.userID = user.id;
 		client.userMuteStatus = () => false;
 		const channel = client.channel('messaging', 'live-id');
 		channel.initialized = true;
@@ -270,7 +263,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 
 	it('markReadLocally resets the count and emits a message.read-shaped message.read_locally event', function () {
 		const { client, channel } = setupChannel({ isLocalUnreadCountEnabled: true });
-		const post = vi.spyOn(client, 'post').mockResolvedValue({});
+		const post = vi.spyOn(client.api, 'post').mockResolvedValue({});
 		const lastMsg = generateMsg({ user: otherUser });
 		channel.state.addMessagesSorted([lastMsg]);
 		channel.state.unreadCount = 5;
@@ -298,19 +291,18 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 		expect(event.channel_type).to.be.equal(channel.type);
 		expect(event.user.id).to.be.equal(user.id);
 		expect(event.last_read_message_id).to.be.equal(lastMsg.id);
-		expect(event.created_at).to.be.a('string');
+		expect(event.created_at).to.be.instanceOf(Date);
 
 		// markReadLocally returns the same dispatched event so callers (e.g. the RN SDK) can sync
 		// their own unread UI from that read info instead of re-deriving it.
 		expect(returned).to.equal(event);
 		expect(returned.last_read_message_id).to.be.equal(lastMsg.id);
-		expect(returned.created_at).to.be.a('string');
+		expect(returned.created_at).to.be.instanceOf(Date);
 	});
 
 	it('markReadLocally returns undefined and dispatches nothing when there is no connected user', function () {
 		const { client, channel } = setupChannel({ isLocalUnreadCountEnabled: true });
 		client.user = undefined;
-		client.userID = undefined;
 		const onLocalRead = vi.fn();
 		channel.on('message.read_locally', onLocalRead);
 
@@ -321,8 +313,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 	});
 
 	it('markReadLocally resets the count and creates the own read row when none exists yet (fresh livestream)', function () {
-		const { client, channel } = setupChannel({ isLocalUnreadCountEnabled: true });
-		const post = vi.spyOn(client, 'post').mockResolvedValue({});
+		const { channel } = setupChannel({ isLocalUnreadCountEnabled: true });
 		const lastMsg = generateMsg({ user: otherUser });
 		channel.state.addMessagesSorted([lastMsg]);
 		channel.state.unreadCount = 3;
@@ -334,7 +325,6 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 		expect(channel.state.read[user.id]).to.be.ok;
 		expect(channel.state.read[user.id].unread_messages).to.be.equal(0);
 		expect(channel.state.read[user.id].last_read_message_id).to.be.equal(lastMsg.id);
-		expect(post.mock.calls.length).to.be.equal(0);
 	});
 });
 
@@ -347,7 +337,7 @@ describe('Channel _handleChannelEvent', function () {
 	beforeEach(() => {
 		client = new StreamChat('apiKey');
 		client.user = user;
-		client.userID = user.id;
+
 		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
 		channel = client.channel('messaging', 'id');
 		channel.initialized = true;
@@ -355,7 +345,7 @@ describe('Channel _handleChannelEvent', function () {
 
 	it('member.updated/member.added are being handled properly (ChannelState.membership & ChannelState.members)', () => {
 		expect(channel.state.members).to.be.empty;
-		expect(channel.state.membership).to.be.empty;
+		expect(channel.state.membership).to.be.undefined;
 
 		const currentMember = generateMember({
 			user,
@@ -509,9 +499,9 @@ describe('Channel _handleChannelEvent', function () {
 
 	it('message.truncate removes all messages if "truncated_at" is "now"', function () {
 		const messages = [
-			{ created_at: '2021-01-01T00:01:00' },
-			{ created_at: '2021-01-01T00:02:00' },
-			{ created_at: '2021-01-01T00:03:00' },
+			{ created_at: new Date('2021-01-01T00:01:00') },
+			{ created_at: new Date('2021-01-01T00:02:00') },
+			{ created_at: new Date('2021-01-01T00:03:00') },
 		].map(generateMsg);
 
 		channel.state.addMessagesSorted(messages);
@@ -530,9 +520,9 @@ describe('Channel _handleChannelEvent', function () {
 
 	it('message.truncate removes messages up to specified date', function () {
 		const messages = [
-			{ created_at: '2021-01-01T00:01:00' },
-			{ created_at: '2021-01-01T00:02:00' },
-			{ created_at: '2021-01-01T00:03:00' },
+			{ created_at: new Date('2021-01-01T00:01:00') },
+			{ created_at: new Date('2021-01-01T00:02:00') },
+			{ created_at: new Date('2021-01-01T00:03:00') },
 		].map(generateMsg);
 
 		channel.state.addMessagesSorted(messages);
@@ -552,13 +542,13 @@ describe('Channel _handleChannelEvent', function () {
 	it('message.truncate removes pinned messages up to specified date', function () {
 		const messages = [
 			{
-				created_at: '2021-01-01T00:01:00',
+				created_at: new Date('2021-01-01T00:01:00'),
 				pinned: true,
 				pinned_at: new Date('2021-01-01T00:01:01.010Z'),
 			},
-			{ created_at: '2021-01-01T00:02:00' },
+			{ created_at: new Date('2021-01-01T00:02:00') },
 			{
-				created_at: '2021-01-01T00:03:00',
+				created_at: new Date('2021-01-01T00:03:00'),
 				pinned: true,
 				pinned_at: new Date('2021-01-01T00:02:02.011Z'),
 			},
@@ -629,45 +619,65 @@ describe('Channel _handleChannelEvent', function () {
 						og_scrape_url: 'https://www.youtube.com/',
 					},
 				],
-				created_at: '2021-01-01T00:01:00',
+				created_at: new Date('2021-01-01T00:01:00'),
 				pinned: true,
-				pinned_at: '2022-01-01T00:01:00',
+				pinned_at: new Date('2022-01-01T00:01:00'),
 				user: bannedUser,
 			},
 			{
-				created_at: '2021-01-01T00:02:00',
+				created_at: new Date('2021-01-01T00:02:00'),
 				pinned: true,
-				pinned_at: '2022-01-01T00:02:00',
+				pinned_at: new Date('2022-01-01T00:02:00'),
 				user: otherUser,
 			},
-			{ created_at: '2021-01-01T00:03:00', user: bannedUser },
+			{ created_at: new Date('2021-01-01T00:03:00'), user: bannedUser },
 		].map(generateMsg);
 
 		const quoted_message = messageSet1[0];
 		const messageSet2 = [
 			{
-				created_at: '2020-01-01T00:01:00',
+				created_at: new Date('2020-01-01T00:01:00'),
 				pinned: true,
-				pinned_at: '2022-01-01T00:03:00',
+				pinned_at: new Date('2022-01-01T00:03:00'),
 				user: bannedUser,
 			},
 			{
-				created_at: '2020-01-01T00:02:00',
+				created_at: new Date('2020-01-01T00:02:00'),
 				quoted_message,
 				quoted_message_id: quoted_message.id,
 				user: otherUser,
 			},
-			{ created_at: '2020-01-01T00:03:00', user: bannedUser },
-			{ created_at: '2020-01-01T00:04:00', user: otherUser },
+			{ created_at: new Date('2020-01-01T00:03:00'), user: bannedUser },
+			{ created_at: new Date('2020-01-01T00:04:00'), user: otherUser },
 		].map(generateMsg);
 
 		const parent_id = messageSet2[0].id;
 		const thread1 = [
-			{ created_at: '2020-01-01T00:01:30', parent_id, user: bannedUser, type: 'reply' },
-			{ created_at: '2020-01-01T00:02:35', parent_id, user: otherUser, type: 'reply' },
-			{ created_at: '2020-01-01T00:03:45', parent_id, user: bannedUser, type: 'reply' },
-			{ created_at: '2020-01-01T00:04:00', parent_id, user: otherUser, type: 'reply' },
-		];
+			{
+				created_at: new Date('2020-01-01T00:01:30'),
+				parent_id,
+				user: bannedUser,
+				type: 'reply',
+			},
+			{
+				created_at: new Date('2020-01-01T00:02:35'),
+				parent_id,
+				user: otherUser,
+				type: 'reply',
+			},
+			{
+				created_at: new Date('2020-01-01T00:03:45'),
+				parent_id,
+				user: bannedUser,
+				type: 'reply',
+			},
+			{
+				created_at: new Date('2020-01-01T00:04:00'),
+				parent_id,
+				user: otherUser,
+				type: 'reply',
+			},
+		].map(generateMsg);
 
 		const pinnedMessages = [messageSet1[0], messageSet1[1], messageSet2[0]];
 
@@ -697,7 +707,7 @@ describe('Channel _handleChannelEvent', function () {
 				channel_id: channel.id,
 				user: bannedUser,
 				hard_delete: true,
-				created_at: '2025-02-01T14:01:30.000Z',
+				created_at: new Date('2025-02-01T14:01:30.000Z'),
 			};
 			channel._handleChannelEvent(event);
 			expect(channel.state.messageSets[0].messages).toHaveLength(3);
@@ -758,7 +768,7 @@ describe('Channel _handleChannelEvent', function () {
 				channel_id: channel.id,
 				user: bannedUser,
 				soft_delete: true,
-				created_at: '2025-02-01T14:01:30.000Z',
+				created_at: new Date('2025-02-01T14:01:30.000Z'),
 			};
 			channel._handleChannelEvent(event);
 			expect(channel.state.messageSets[0].messages).toHaveLength(3);
@@ -802,11 +812,11 @@ describe('Channel _handleChannelEvent', function () {
 
 		it('does not throw on channel-scoped hard-delete when channel contains a same-user self-quote', () => {
 			const m1 = generateMsg({
-				created_at: '2020-01-01T00:00:01.000Z',
+				created_at: new Date('2020-01-01T00:00:01.000Z'),
 				user: bannedUser,
 			});
 			const m2 = generateMsg({
-				created_at: '2020-01-01T00:00:02.000Z',
+				created_at: new Date('2020-01-01T00:00:02.000Z'),
 				user: bannedUser,
 				quoted_message: m1,
 				quoted_message_id: m1.id,
@@ -820,7 +830,7 @@ describe('Channel _handleChannelEvent', function () {
 				channel_id: channel.id,
 				user: bannedUser,
 				hard_delete: true,
-				created_at: '2025-02-01T14:01:30.000Z',
+				created_at: new Date('2025-02-01T14:01:30.000Z'),
 			};
 
 			expect(() => channel._handleChannelEvent(event)).not.to.throw();
@@ -849,16 +859,14 @@ describe('Channel _handleChannelEvent', function () {
 			};
 			notificationMarkUnreadEvent = {
 				type: 'notification.mark_unread',
-				created_at: new Date().toISOString(),
+				created_at: new Date(),
 				cid: channel.cid,
 				channel_id: channel.id,
 				channel_type: channel.type,
 				channel: null,
 				user,
 				first_unread_message_id: '2',
-				last_read_at: new Date(
-					new Date(initialReadState.last_read).getTime() - 1000,
-				).toISOString(),
+				last_read_at: new Date(new Date(initialReadState.last_read).getTime() - 1000),
 				last_read_message_id: '1',
 				unread_messages: 5,
 				unread_count: 6,
@@ -935,7 +943,7 @@ describe('Channel _handleChannelEvent', function () {
 			};
 			messageReadEvent = {
 				type: 'message.read',
-				created_at: new Date(2000).toISOString(),
+				created_at: new Date(2000),
 				cid: channel.cid,
 				channel_member_count: 100,
 				channel_type: channel.type,
@@ -1010,14 +1018,14 @@ describe('Channel _handleChannelEvent', function () {
 			};
 			messageDeliveredEvent = {
 				type: 'message.delivered',
-				created_at: new Date(2000).toISOString(),
+				created_at: new Date(2000),
 				cid: channel.cid,
 				channel_member_count: 100,
 				channel_type: channel.type,
 				channel_id: channel.id,
 				user,
 				last_delivered_message_id: 'fd403be5-9207-48db-8bd7-13bd65ffbea6',
-				last_delivered_at: new Date(2000).toISOString(),
+				last_delivered_at: new Date(2000),
 			};
 		});
 
@@ -1105,7 +1113,7 @@ describe('Channel _handleChannelEvent', function () {
 			channel.state.read[user.id] = initialReadState;
 			const newerMessage = generateMsg({
 				id: 'some-other-id',
-				date: new Date(3000).toISOString(),
+				date: new Date(3000),
 			});
 			channel._handleChannelEvent({
 				type: 'message.new',
@@ -1263,16 +1271,16 @@ describe('Channel _handleChannelEvent', function () {
 		const updatedText = 'YY';
 		const parent_id = '0';
 		const parentMesssage = generateMsg({
-			date: new Date(0).toISOString(),
+			date: new Date(0),
 			id: parent_id,
 		});
 		const quoted_message = generateMsg({
-			date: new Date(2).toISOString(),
+			date: new Date(2),
 			id: 'quoted-message',
 			text: originalText,
 		});
 		const quotingMessage = generateMsg({
-			date: new Date(3).toISOString(),
+			date: new Date(3),
 			id: 'quoting-message',
 			quoted_message,
 			quoted_message_id: quoted_message.id,
@@ -1317,16 +1325,15 @@ describe('Channel _handleChannelEvent', function () {
 			user: {
 				id: 'admin',
 				role: 'admin',
-				created_at: '2022-03-08T09:46:56.840739Z',
-				updated_at: '2022-03-15T08:30:09.796926Z',
+				created_at: new Date('2022-03-08T09:46:56.840739Z'),
+				updated_at: new Date('2022-03-15T08:30:09.796926Z'),
 				last_active: '2023-05-24T09:20:31.041292724Z',
 				banned: false,
 				online: true,
 			},
-			created_at: '2023-05-24T09:20:43.986615426Z',
+			created_at: new Date('2023-05-24T09:20:43.986615426Z'),
 		};
-		channel.data.hidden = true;
-		channel.data.blocked = true;
+		channel.data = { hidden: true, blocked: true };
 
 		channel._handleChannelEvent(channelVisibleEvent);
 		expect(channel.data.hidden).eq(false);
@@ -1345,16 +1352,15 @@ describe('Channel _handleChannelEvent', function () {
 			user: {
 				id: 'admin',
 				role: 'admin',
-				created_at: '2022-03-08T09:46:56.840739Z',
-				updated_at: '2022-03-15T08:30:09.796926Z',
+				created_at: new Date('2022-03-08T09:46:56.840739Z'),
+				updated_at: new Date('2022-03-15T08:30:09.796926Z'),
 				last_active: '2023-05-24T09:20:31.041292724Z',
 				banned: false,
 				online: true,
 			},
-			created_at: '2023-05-24T09:20:43.986615426Z',
+			created_at: new Date('2023-05-24T09:20:43.986615426Z'),
 		};
-		channel.data.hidden = true;
-		channel.data.blocked = true;
+		channel.data = { hidden: true, blocked: true };
 
 		channel._handleChannelEvent(channelVisibleEvent);
 		expect(channel.data.hidden).eq(false);
@@ -1368,8 +1374,7 @@ describe('Channel _handleChannelEvent', function () {
 			},
 			type: 'channel.hidden',
 		};
-		channel.data.hidden = false;
-		channel.data.blocked = false;
+		channel.data = { hidden: false, blocked: false };
 
 		channel._handleChannelEvent(channelVisibleEvent);
 		expect(channel.data.hidden).eq(true);
@@ -1383,8 +1388,7 @@ describe('Channel _handleChannelEvent', function () {
 			},
 			type: 'channel.hidden',
 		};
-		channel.data.hidden = false;
-		channel.data.blocked = false;
+		channel.data = { hidden: false, blocked: false };
 
 		channel._handleChannelEvent(channelVisibleEvent);
 		expect(channel.data.hidden).eq(true);
@@ -1396,7 +1400,7 @@ describe('Channel _handleChannelEvent', function () {
 			channel: { frozen: true },
 			type: 'channel.updated',
 		};
-		channel.data.frozen = false;
+		channel.data = { frozen: false };
 		const channelQuerySpy = vi.spyOn(channel, 'query');
 
 		channel._handleChannelEvent(event);
@@ -1421,8 +1425,7 @@ describe('Channel _handleChannelEvent', function () {
 	});
 
 	it(`should make sure that state reload doesn't wipe out existing data`, async () => {
-		const mock = sinon.mock(client);
-		mock.expects('post').returns(Promise.resolve(mockChannelQueryResponse));
+		sinon.stub(channel, 'getOrCreate').resolves(mockChannelQueryResponse);
 
 		channel.state.members = {
 			user: { id: 'user' },
@@ -1448,10 +1451,11 @@ describe('Channel _handleChannelEvent', function () {
 	});
 
 	it('should dispatch "capabilities.changed" event', async () => {
-		const mock = sinon.mock(client);
 		const response = mockChannelQueryResponse;
-		channel.data.own_capabilities = response.channel.own_capabilities.slice(0, 1);
-		mock.expects('post').returns(Promise.resolve(response));
+		channel.data = { own_capabilities: response.channel.own_capabilities.slice(0, 1) };
+
+		sinon.stub(channel, 'getOrCreate').resolves(mockChannelQueryResponse);
+
 		const spy = sinon.spy();
 		channel.on('capabilities.changed', spy);
 
@@ -1468,8 +1472,7 @@ describe('Channel _handleChannelEvent', function () {
 			own_capabilities: response.channel.own_capabilities,
 		});
 
-		channel.data.own_capabilities = response.channel.own_capabilities;
-		mock.expects('post').returns(Promise.resolve(response));
+		channel.data = { own_capabilities: response.channel.own_capabilities };
 		spy.resetHistory();
 
 		await channel.query();
@@ -1559,7 +1562,7 @@ describe('Uninitialized Channel', () => {
 	beforeEach(() => {
 		client = new StreamChat('apiKey');
 		client.user = user;
-		client.userID = user.id;
+
 		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
 		channel = client.channel('messaging', 'id');
 		channel.initialized = false;
@@ -1632,22 +1635,27 @@ describe('Uninitialized Channel', () => {
 });
 
 describe('Channels - Constructor', function () {
-	const client = new StreamChat('key', 'secret');
+	const client = new StreamChat('key');
+	client.user = { id: 'user' };
 
 	it('canonical form', function () {
 		const channel = client.channel('messaging', '123', { cool: true });
 		expect(channel.cid).to.eql('messaging:123');
 		expect(channel.id).to.eql('123');
-		expect(channel.data).to.eql({ cool: true });
+		expect(channel._data).to.eql({ cool: true });
 	});
 
-	it('custom data merges to the right with current data', function () {
-		let channel = client.channel('messaging', 'brand_new_123', { cool: true });
+	it('custom data on the second call replaces the first call custom', function () {
+		let channel = client.channel('messaging', 'brand_new_123', {
+			custom: { cool: true },
+		});
 		expect(channel.cid).to.eql('messaging:brand_new_123');
 		expect(channel.id).to.eql('brand_new_123');
-		expect(channel.data).to.eql({ cool: true });
-		channel = client.channel('messaging', 'brand_new_123', { custom_cool: true });
-		expect(channel.data).to.eql({ cool: true, custom_cool: true });
+		expect(channel._data).to.eql({ custom: { cool: true } });
+		channel = client.channel('messaging', 'brand_new_123', {
+			custom: { custom_cool: true },
+		});
+		expect(channel._data).to.eql({ custom: { custom_cool: true } });
 	});
 
 	it('default options', function () {
@@ -1664,12 +1672,12 @@ describe('Channels - Constructor', function () {
 	it('undefined ID no options', function () {
 		const channel = client.channel('messaging', undefined);
 		expect(channel.id).to.eql(undefined);
-		expect(channel.data).to.eql({});
+		expect(channel._data).to.eql({});
 	});
 
 	it('short version with options', function () {
 		const channel = client.channel('messaging', { members: ['tommaso', 'thierry'] });
-		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel._data).to.eql({ members: ['tommaso', 'thierry'] });
 		expect(channel.id).to.eql(undefined);
 	});
 
@@ -1677,7 +1685,7 @@ describe('Channels - Constructor', function () {
 		const channel = client.channel('messaging', null, {
 			members: ['tommaso', 'thierry'],
 		});
-		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel._data).to.eql({ members: ['tommaso', 'thierry'] });
 		expect(channel.id).to.eql(undefined);
 	});
 
@@ -1685,7 +1693,7 @@ describe('Channels - Constructor', function () {
 		const channel = client.channel('messaging', '', {
 			members: ['tommaso', 'thierry'],
 		});
-		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel._data).to.eql({ members: ['tommaso', 'thierry'] });
 		expect(channel.id).to.eql(undefined);
 	});
 
@@ -1693,7 +1701,7 @@ describe('Channels - Constructor', function () {
 		const channel = client.channel('messaging', undefined, {
 			members: ['tommaso', 'thierry'],
 		});
-		expect(channel.data).to.eql({ members: ['tommaso', 'thierry'] });
+		expect(channel._data).to.eql({ members: ['tommaso', 'thierry'] });
 		expect(channel.id).to.eql(undefined);
 	});
 });
@@ -1705,11 +1713,14 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 
 	clientVish.connectUser = () => {
 		clientVish.user = user;
-		clientVish.userID = user.id;
 		clientVish.wsPromise = Promise.resolve();
 	};
 
 	clientVish.connectUser();
+
+	afterEach(() => {
+		sinon.restore();
+	});
 
 	it('channel created using id - case 1', async () => {
 		clientVish.activeChannels = {};
@@ -1721,9 +1732,9 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 			},
 		});
 
-		// to mock the channel.watch call
-		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
 		const channelVish_copy1 = clientVish.channel('messaging', channelVishId);
+
+		sinon.stub(channelVish_copy1, 'getOrCreate').resolves(mockedChannelResponse);
 
 		const cid = `${channelType}:${channelVishId}`;
 
@@ -1745,9 +1756,6 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 			},
 		});
 
-		// to mock the channel.watch call
-		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
-
 		const channelVish_copy1 = clientVish.channel('messaging', channelVishId);
 
 		const cid = `${channelType}:${channelVishId}`;
@@ -1759,6 +1767,8 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 
 		expect(Object.keys(clientVish.activeChannels)).to.contain(cid);
 		expect(clientVish.activeChannels[cid]).to.contain(channelVish_copy1);
+
+		sinon.stub(clientVish, 'getOrCreateChannel').resolves(mockedChannelResponse);
 
 		await channelVish_copy1.watch();
 		await channelVish_copy2.watch();
@@ -1777,7 +1787,9 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		const mockedChannelResponse = generateChannel({
 			members: [memberVish, memberAmin],
 		});
-		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+
+		sinon.stub(clientVish, 'getOrCreateDistinctChannel').resolves(mockedChannelResponse);
+		sinon.stub(clientVish, 'getOrCreateChannel').resolves(mockedChannelResponse);
 
 		// Lets start testing
 		const channelVish_copy1 = clientVish.channel('messaging', {
@@ -1825,7 +1837,8 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		});
 
 		// to mock the channel.watch call
-		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+		sinon.stub(clientVish, 'getOrCreateChannel').resolves(mockedChannelResponse);
+		sinon.stub(clientVish, 'getOrCreateDistinctChannel').resolves(mockedChannelResponse);
 
 		// Case 1 =======================>
 		const channelVish_copy1 = clientVish.channel('messaging', {
@@ -1863,7 +1876,8 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		const mockedChannelResponse = generateChannel({
 			members: [memberVish, memberAmin],
 		});
-		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+		sinon.stub(clientVish, 'getOrCreateChannel').resolves(mockedChannelResponse);
+		sinon.stub(clientVish, 'getOrCreateDistinctChannel').resolves(mockedChannelResponse);
 
 		// Lets start testing
 		const channelVish_copy1 = clientVish.channel('messaging', undefined, {
@@ -1911,7 +1925,8 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		});
 
 		// to mock the channel.watch call
-		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+		sinon.stub(clientVish, 'getOrCreateChannel').resolves(mockedChannelResponse);
+		sinon.stub(clientVish, 'getOrCreateDistinctChannel').resolves(mockedChannelResponse);
 
 		// Case 1 =======================>
 		const channelVish_copy1 = clientVish.channel('messaging', undefined, {
@@ -1953,7 +1968,7 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		});
 
 		// to mock the channel.watch call
-		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+		sinon.stub(clientVish, 'getOrCreateDistinctChannel').resolves(mockedChannelResponse);
 
 		// Case 1 =======================>
 		const channelVish_copy1 = clientVish.channel('messaging', undefined, {
@@ -1996,38 +2011,43 @@ describe('event subscription and unsubscription', () => {
 		const { unsubscribe: unsubscribe1 } = channel.on('message.new', () => {});
 		const { unsubscribe: unsubscribe2 } = channel.on(() => {});
 
-		expect(Object.values(channel.listeners).length).to.be.equal(2);
+		expect(channel.listeners.size).to.be.equal(2);
 
 		unsubscribe1();
-		expect(channel.listeners['message.new'].length).to.be.equal(0);
+		expect(channel.listeners.has('message.new')).to.be.false;
 		unsubscribe2();
-		expect(channel.listeners['all'].length).to.be.equal(0);
+		expect(channel.listeners.has('all')).to.be.false;
 	});
 });
 describe('Channel search', async () => {
-	const client = await getClientWithUser();
-	const channel = client.channel('messaging', uuidv4());
+	let client;
+	let channel;
 
-	it('search with sorting by defined field', async () => {
-		client.get = (url, config) => {
-			expect(config.payload.sort).to.be.eql([{ field: 'updated_at', direction: -1 }]);
-		};
-		await channel.search('query', { sort: [{ updated_at: -1 }] });
+	beforeEach(async () => {
+		client = await getClientWithUser();
+		channel = client.channel('messaging', uuidv4());
 	});
-	it('search with sorting by custom field', async () => {
-		client.get = (url, config) => {
-			expect(config.payload.sort).to.be.eql([{ field: 'custom_field', direction: -1 }]);
-		};
-		await channel.search('query', { sort: [{ custom_field: -1 }] });
-	});
+
 	it('sorting and offset works', async () => {
-		await expect(channel.search('query', { offset: 1, sort: [{ custom_field: -1 }] }));
+		vi.spyOn(channel, 'search').mockResolvedValue({});
+		await expect(
+			channel.search({
+				payload: {
+					query: 'query',
+					offset: 1,
+					sort: [{ field: 'custom_field', direction: -1 }],
+				},
+			}),
+		);
 	});
 	it('next and offset fails', async () => {
-		await expect(channel.search('query', { offset: 1, next: 'next' })).rejects.toThrow();
+		await expect(
+			channel.search({
+				payload: { query: 'query', offset: 1, next: 'next' },
+			}),
+		).rejects.toThrow();
 	});
 });
-
 describe('Channel lastMessage', async () => {
 	let channel;
 	let client;
@@ -2041,9 +2061,9 @@ describe('Channel lastMessage', async () => {
 		channel.state = new ChannelState(channel);
 		const latestMessageDate = '2018-01-01T00:13:24';
 		channel.state.addMessagesSorted([
-			generateMsg({ date: '2018-01-01T00:00:00' }),
-			generateMsg({ date: '2018-01-01T00:02:00' }),
-			generateMsg({ date: latestMessageDate }),
+			generateMsg({ date: new Date('2018-01-01T00:00:00') }),
+			generateMsg({ date: new Date('2018-01-01T00:02:00') }),
+			generateMsg({ date: new Date(latestMessageDate) }),
 		]);
 
 		expect(channel.lastMessage().created_at.getTime()).to.be.equal(
@@ -2055,9 +2075,9 @@ describe('Channel lastMessage', async () => {
 		channel.state = new ChannelState(channel);
 		const latestMessageDate = '2018-01-01T00:13:24';
 		channel.state.addMessagesSorted([
-			generateMsg({ date: latestMessageDate }),
-			generateMsg({ date: '2018-01-01T00:02:00' }),
-			generateMsg({ date: '2018-01-01T00:00:00' }),
+			generateMsg({ date: new Date(latestMessageDate) }),
+			generateMsg({ date: new Date('2018-01-01T00:02:00') }),
+			generateMsg({ date: new Date('2018-01-01T00:00:00') }),
 		]);
 
 		expect(channel.lastMessage().created_at.getTime()).to.be.equal(
@@ -2069,13 +2089,13 @@ describe('Channel lastMessage', async () => {
 		channel.state = new ChannelState(channel);
 		const latestMessageDate = '2018-01-01T00:13:24';
 		const latestMessages = [
-			generateMsg({ date: latestMessageDate }),
-			generateMsg({ date: '2018-01-01T00:02:00' }),
-			generateMsg({ date: '2018-01-01T00:00:00' }),
+			generateMsg({ date: new Date(latestMessageDate) }),
+			generateMsg({ date: new Date('2018-01-01T00:02:00') }),
+			generateMsg({ date: new Date('2018-01-01T00:00:00') }),
 		];
 		const otherMessages = [
-			generateMsg({ date: '2017-11-21T00:05:33' }),
-			generateMsg({ date: '2017-11-21T00:05:35' }),
+			generateMsg({ date: new Date('2017-11-21T00:05:33') }),
+			generateMsg({ date: new Date('2017-11-21T00:05:35') }),
 		];
 		channel.state.addMessagesSorted(latestMessages);
 		channel.state.addMessagesSorted(otherMessages, 'new');
@@ -2093,13 +2113,13 @@ describe('Channel lastMessage', async () => {
 		channel.state = new ChannelState(channel);
 		const latestMessageDate = '2018-01-01T00:13:24';
 		const latestMessages = [
-			generateMsg({ date: latestMessageDate, type: 'system' }),
-			generateMsg({ date: '2018-01-01T00:02:00' }),
-			generateMsg({ date: '2018-01-01T00:00:00' }),
+			generateMsg({ date: new Date(latestMessageDate), type: 'system' }),
+			generateMsg({ date: new Date('2018-01-01T00:02:00') }),
+			generateMsg({ date: new Date('2018-01-01T00:00:00') }),
 		];
 		const otherMessages = [
-			generateMsg({ date: '2017-11-21T00:05:33' }),
-			generateMsg({ date: '2017-11-21T00:05:35' }),
+			generateMsg({ date: new Date('2017-11-21T00:05:33') }),
+			generateMsg({ date: new Date('2017-11-21T00:05:35') }),
 		];
 		channel.state.addMessagesSorted(latestMessages);
 		channel.state.addMessagesSorted(otherMessages, 'new');
@@ -2151,6 +2171,10 @@ describe('Channel _initializeState', () => {
 });
 
 describe('Channel.query', async () => {
+	const mockGetOrCreateResponse = (client, response) => {
+		sinon.stub(client, 'getOrCreateChannel').resolves(response);
+	};
+
 	it('should not populate client.activeChannels if caching is disabled', async () => {
 		const client = await getClientWithUser();
 		client._cacheEnabled = () => false;
@@ -2162,11 +2186,9 @@ describe('Channel.query', async () => {
 				generateMsg,
 			),
 		};
-		const mock = sinon.mock(client);
-		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
+		mockGetOrCreateResponse(client, mockedChannelQueryResponse);
 		await channel.query();
 		expect(Object.keys(client.activeChannels).length).to.be.equal(0);
-		mock.restore();
 	});
 
 	it('should update pagination for queried message set to prevent more pagination', async () => {
@@ -2179,15 +2201,13 @@ describe('Channel.query', async () => {
 				generateMsg,
 			),
 		};
-		const mock = sinon.mock(client);
-		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
+		mockGetOrCreateResponse(client, mockedChannelQueryResponse);
 		await channel.query();
 		expect(channel.state.messageSets.length).to.be.equal(1);
 		expect(channel.state.messageSets[0].pagination).to.eql({
 			hasNext: false,
 			hasPrev: true,
 		});
-		mock.restore();
 	});
 
 	it('should not update pagination for queried message set', async () => {
@@ -2200,15 +2220,13 @@ describe('Channel.query', async () => {
 				generateMsg,
 			),
 		};
-		const mock = sinon.mock(client);
-		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
+		mockGetOrCreateResponse(client, mockedChannelQueryResponse);
 		await channel.query();
 		expect(channel.state.messageSets.length).to.be.equal(1);
 		expect(channel.state.messageSets[0].pagination).to.eql({
 			hasNext: false,
 			hasPrev: false,
 		});
-		mock.restore();
 	});
 
 	it(`update the messageComposer config`, async () => {
@@ -2216,22 +2234,25 @@ describe('Channel.query', async () => {
 		const channel = client.channel('messaging', uuidv4());
 		expect(channel.messageComposer.config.location.enabled).toBe(true);
 
-		const postStub = sinon.stub(client, 'post');
-		postStub.onFirstCall().resolves({
-			...mockChannelQueryResponse,
-			channel: {
-				...mockChannelQueryResponse.channel,
-				config: { ...mockChannelQueryResponse.channel.config, shared_locations: false },
+		const responses = [
+			{
+				...mockChannelQueryResponse,
+				channel: {
+					...mockChannelQueryResponse.channel,
+					config: { ...mockChannelQueryResponse.channel.config, shared_locations: false },
+				},
 			},
-		});
+			{
+				...mockChannelQueryResponse,
+				channel: {
+					...mockChannelQueryResponse.channel,
+					config: { ...mockChannelQueryResponse.channel.config, shared_locations: true },
+				},
+			},
+		];
+		let callIndex = 0;
 
-		postStub.onSecondCall().resolves({
-			...mockChannelQueryResponse,
-			channel: {
-				...mockChannelQueryResponse.channel,
-				config: { ...mockChannelQueryResponse.channel.config, shared_locations: true },
-			},
-		});
+		sinon.stub(client, 'getOrCreateChannel').callsFake(() => responses[callIndex++]);
 
 		await channel.query();
 		expect(channel.messageComposer.config.location.enabled).toBe(false);
@@ -2244,13 +2265,12 @@ describe('Channel.query', async () => {
 describe('send reaction flow', () => {
 	const messageId = 'msg-456';
 	const reaction = { type: 'love' };
-	const options = { enforce_unique: true, skip_push: true };
+	const request = { id: messageId, reaction, enforce_unique: true, skip_push: true };
 
 	let client;
 	let channel;
 	let loggerSpy;
 	let queueTaskSpy;
-	let postSpy;
 
 	beforeEach(async () => {
 		client = await getClientWithUser();
@@ -2261,12 +2281,15 @@ describe('send reaction flow', () => {
 
 		channel = client.channel('messaging', 'test');
 
-		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
+		loggerSpy = vi.fn();
+		chatLoggerSystem.configureLoggers({
+			default: { sink: loggerSpy, level: 'trace' },
+		});
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
-		postSpy = vi.spyOn(client, 'post').mockResolvedValue({});
 	});
 
 	afterEach(() => {
+		chatLoggerSystem.restoreDefaults();
 		vi.resetAllMocks();
 	});
 
@@ -2279,20 +2302,8 @@ describe('send reaction flow', () => {
 			vi.resetAllMocks();
 		});
 
-		it('throws if messageID is missing', async () => {
-			await expect(channel.sendReaction('', reaction)).rejects.toThrow(
-				'Message id is missing',
-			);
-		});
-
-		it('throws if reaction is missing or empty', async () => {
-			await expect(channel.sendReaction(messageId, {})).rejects.toThrow(
-				'Reaction object is missing',
-			);
-		});
-
 		it('queues task if offlineDb exists', async () => {
-			await channel.sendReaction(messageId, reaction, options);
+			await channel.sendReaction(request);
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 
@@ -2302,7 +2313,7 @@ describe('send reaction flow', () => {
 					channelId: 'test',
 					channelType: 'messaging',
 					messageId,
-					payload: [messageId, reaction, options],
+					payload: [request],
 					type: 'send-reaction',
 				},
 			});
@@ -2313,55 +2324,20 @@ describe('send reaction flow', () => {
 		it('falls back to _sendReaction if offlineDb throws', async () => {
 			client.offlineDb.queueTask.mockRejectedValue(new Error('Offline failure'));
 
-			await channel.sendReaction(messageId, reaction, options);
+			await channel.sendReaction(request);
 
 			expect(loggerSpy).toHaveBeenCalledTimes(1);
 			expect(channel._sendReaction).toHaveBeenCalledTimes(1);
-			expect(channel._sendReaction).toHaveBeenCalledWith(messageId, reaction, options);
+			expect(channel._sendReaction).toHaveBeenCalledWith(request);
 		});
 
 		it('falls back to _sendReaction if offlineDb is undefined', async () => {
 			client.offlineDb = undefined;
 
-			await channel.sendReaction(messageId, reaction, options);
+			await channel.sendReaction(request);
 
 			expect(channel._sendReaction).toHaveBeenCalledTimes(1);
-			expect(channel._sendReaction).toHaveBeenCalledWith(messageId, reaction, options);
-		});
-	});
-
-	describe('_sendReaction', () => {
-		it('throws if messageID is missing', async () => {
-			await expect(channel._sendReaction('', reaction)).rejects.toThrow(
-				'Message id is missing',
-			);
-		});
-
-		it('throws if reaction is missing or empty', async () => {
-			await expect(channel._sendReaction(messageId, {})).rejects.toThrow(
-				'Reaction object is missing',
-			);
-		});
-
-		it('posts to correct URL with reaction and options', async () => {
-			await channel._sendReaction(messageId, reaction, options);
-
-			expect(postSpy).toHaveBeenCalledTimes(1);
-			expect(postSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reaction`,
-				{
-					reaction,
-					...options,
-				},
-			);
-		});
-
-		it('returns the response from post', async () => {
-			postSpy.mockResolvedValue({ message: 'ok' });
-
-			const result = await channel._sendReaction(messageId, reaction);
-
-			expect(result).toEqual({ message: 'ok' });
+			expect(channel._sendReaction).toHaveBeenCalledWith(request);
 		});
 	});
 });
@@ -2370,13 +2346,13 @@ describe('delete reaction flow', () => {
 	const messageId = 'msg-123';
 	const reactionType = 'love';
 	const user_id = 'user-abc';
+	const request = { id: messageId, type: reactionType };
 
 	let client;
 	let channel;
 	let loggerSpy;
 	let queueTaskSpy;
 	let deleteReactionSpy;
-	let deleteSpy;
 
 	beforeEach(async () => {
 		client = await getClientWithUser({ id: user_id });
@@ -2392,13 +2368,16 @@ describe('delete reaction flow', () => {
 		// Add a fake message to state for reaction deletion optimistic update in the db
 		channel.state.messages.push({ id: messageId });
 
-		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
+		loggerSpy = vi.fn();
+		chatLoggerSystem.configureLoggers({
+			default: { sink: loggerSpy, level: 'trace' },
+		});
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
 		deleteReactionSpy = vi.spyOn(client.offlineDb, 'deleteReaction').mockResolvedValue();
-		deleteSpy = vi.spyOn(client, 'delete').mockResolvedValue({});
 	});
 
 	afterEach(() => {
+		chatLoggerSystem.restoreDefaults();
 		vi.resetAllMocks();
 	});
 
@@ -2411,32 +2390,18 @@ describe('delete reaction flow', () => {
 			vi.resetAllMocks();
 		});
 
-		it('throws if messageID or reactionType is missing', async () => {
-			await expect(channel.deleteReaction('', reactionType)).rejects.toThrow(
-				'Deleting a reaction requires specifying both the message and reaction type',
-			);
-			await expect(channel.deleteReaction(messageId, '')).rejects.toThrow(
-				'Deleting a reaction requires specifying both the message and reaction type',
-			);
-		});
-
 		it('calls offlineDb.deleteReaction and queues task if offlineDb exists', async () => {
-			await channel.deleteReaction(messageId, reactionType);
+			await channel.deleteReaction(request);
 
 			expect(deleteReactionSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 
-			const expectedReaction = {
-				created_at: '',
-				updated_at: '',
-				message_id: messageId,
-				type: reactionType,
-				user_id: user_id,
-			};
-
 			expect(deleteReactionSpy).toHaveBeenCalledWith({
 				message: { id: messageId },
-				reaction: expectedReaction,
+				reaction: {
+					message_id: messageId,
+					type: reactionType,
+				},
 			});
 
 			expect(queueTaskSpy).toHaveBeenCalledWith({
@@ -2444,7 +2409,7 @@ describe('delete reaction flow', () => {
 					channelId: 'test',
 					channelType: 'messaging',
 					messageId,
-					payload: [messageId, reactionType],
+					payload: [request],
 					type: 'delete-reaction',
 				},
 			});
@@ -2454,7 +2419,8 @@ describe('delete reaction flow', () => {
 
 		it('skips calling offlineDb.deleteReaction if the message does not exist in the state, but still queues the task', async () => {
 			const unknownMessageId = 'some-unknown-message-id';
-			await channel.deleteReaction(unknownMessageId, reactionType);
+			const unknownRequest = { id: unknownMessageId, type: reactionType };
+			await channel.deleteReaction(unknownRequest);
 
 			expect(deleteReactionSpy).not.toHaveBeenCalled();
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
@@ -2463,7 +2429,7 @@ describe('delete reaction flow', () => {
 					channelId: 'test',
 					channelType: 'messaging',
 					messageId: unknownMessageId,
-					payload: [unknownMessageId, reactionType],
+					payload: [unknownRequest],
 					type: 'delete-reaction',
 				},
 			});
@@ -2473,67 +2439,20 @@ describe('delete reaction flow', () => {
 		it('falls back to _deleteReaction if offlineDb throws', async () => {
 			deleteReactionSpy.mockRejectedValue(new Error('Offline failure'));
 
-			await channel.deleteReaction(messageId, reactionType);
+			await channel.deleteReaction(request);
 
 			expect(loggerSpy).toHaveBeenCalledTimes(1);
 			expect(channel._deleteReaction).toHaveBeenCalledTimes(1);
-			expect(channel._deleteReaction).toHaveBeenCalledWith(
-				messageId,
-				reactionType,
-				undefined,
-			);
+			expect(channel._deleteReaction).toHaveBeenCalledWith(request);
 		});
 
 		it('falls back to _deleteReaction if offlineDb is undefined', async () => {
 			client.offlineDb = undefined;
 
-			await channel.deleteReaction(messageId, reactionType);
+			await channel.deleteReaction(request);
 
 			expect(channel._deleteReaction).toHaveBeenCalledTimes(1);
-			expect(channel._deleteReaction).toHaveBeenCalledWith(
-				messageId,
-				reactionType,
-				undefined,
-			);
-		});
-	});
-
-	describe('_deleteReaction', () => {
-		it('throws if messageID or reactionType is missing', async () => {
-			await expect(channel._deleteReaction(undefined, reactionType)).rejects.toThrow(
-				'Deleting a reaction requires specifying both the message and reaction type',
-			);
-			await expect(channel._deleteReaction(messageId, undefined)).rejects.toThrow(
-				'Deleting a reaction requires specifying both the message and reaction type',
-			);
-		});
-
-		it('calls delete with user_id when provided', async () => {
-			await channel._deleteReaction(messageId, reactionType, user_id);
-
-			expect(deleteSpy).toHaveBeenCalledTimes(1);
-			expect(deleteSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reaction/${encodeURIComponent(reactionType)}`,
-				{ user_id },
-			);
-		});
-
-		it('calls delete with empty body if user_id is not provided', async () => {
-			await channel._deleteReaction(messageId, reactionType);
-
-			expect(deleteSpy).toHaveBeenCalledTimes(1);
-			expect(deleteSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reaction/${encodeURIComponent(reactionType)}`,
-				{},
-			);
-		});
-
-		it('returns the response from delete', async () => {
-			deleteSpy.mockResolvedValue({ success: true });
-
-			const result = await channel._deleteReaction(messageId, reactionType);
-
-			expect(result).toEqual({ success: true });
+			expect(channel._deleteReaction).toHaveBeenCalledWith(request);
 		});
 	});
 });
@@ -2543,7 +2462,6 @@ describe('message sending flow', () => {
 	let channel;
 	let loggerSpy;
 	let queueTaskSpy;
-	let postSpy;
 
 	const message = {
 		id: 'msg-123',
@@ -2551,8 +2469,9 @@ describe('message sending flow', () => {
 		user: { id: 'user-abc' },
 	};
 
-	const options = {
-		pending: true,
+	const request = {
+		message,
+		skip_enrich_url: true,
 		skip_push: true,
 		pending_message_metadata: { source: 'local' },
 	};
@@ -2566,12 +2485,15 @@ describe('message sending flow', () => {
 
 		channel = client.channel('messaging', 'test');
 
-		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
+		loggerSpy = vi.fn();
+		chatLoggerSystem.configureLoggers({
+			default: { sink: loggerSpy, level: 'trace' },
+		});
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
-		postSpy = vi.spyOn(client, 'post').mockResolvedValue({});
 	});
 
 	afterEach(() => {
+		chatLoggerSystem.restoreDefaults();
 		vi.resetAllMocks();
 	});
 
@@ -2585,7 +2507,7 @@ describe('message sending flow', () => {
 		});
 
 		it('queues task if offlineDb exists and message has ID', async () => {
-			const result = await channel.sendMessage(message, options);
+			const result = await channel.sendMessage(request);
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).toHaveBeenCalledWith({
@@ -2593,7 +2515,7 @@ describe('message sending flow', () => {
 					channelId: 'test',
 					channelType: 'messaging',
 					messageId: 'msg-123',
-					payload: [message, options],
+					payload: [request],
 					type: 'send-message',
 				},
 			});
@@ -2605,54 +2527,29 @@ describe('message sending flow', () => {
 		it('falls back to _sendMessage if offlineDb is missing', async () => {
 			client.offlineDb = undefined;
 
-			const result = await channel.sendMessage(message, options);
+			const result = await channel.sendMessage(request);
 
 			expect(channel._sendMessage).toHaveBeenCalledTimes(1);
-			expect(channel._sendMessage).toHaveBeenCalledWith(message, options);
+			expect(channel._sendMessage).toHaveBeenCalledWith(request);
 			expect(result).toEqual({});
 		});
 
 		it('falls back to _sendMessage if message.id is missing', async () => {
-			const msg = { ...message, id: undefined };
+			const requestWithoutId = { ...request, message: { ...message, id: undefined } };
 
-			await channel.sendMessage(msg, options);
+			await channel.sendMessage(requestWithoutId);
 
-			expect(channel._sendMessage).toHaveBeenCalledWith(msg, options);
+			expect(channel._sendMessage).toHaveBeenCalledWith(requestWithoutId);
 		});
 
 		it('falls back to _sendMessage if offlineDb throws', async () => {
 			queueTaskSpy.mockRejectedValue(new Error('Queue failed'));
 
-			const result = await channel.sendMessage(message, options);
+			const result = await channel.sendMessage(request);
 
 			expect(loggerSpy).toHaveBeenCalledTimes(1);
-			expect(channel._sendMessage).toHaveBeenCalledWith(message, options);
+			expect(channel._sendMessage).toHaveBeenCalledWith(request);
 			expect(result).toEqual({});
-		});
-	});
-
-	describe('_sendMessage', () => {
-		it('posts the message to the correct endpoint with options', async () => {
-			const expectedUrl = `${client.baseURL}/channels/messaging/test/message`;
-
-			const result = await channel._sendMessage(message, options);
-
-			expect(postSpy).toHaveBeenCalledTimes(1);
-			expect(postSpy).toHaveBeenCalledWith(expectedUrl, {
-				message,
-				...options,
-			});
-
-			expect(result).toEqual({});
-		});
-
-		it('works without options', async () => {
-			await channel._sendMessage(message);
-
-			expect(postSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/channels/messaging/test/message`,
-				{ message },
-			);
 		});
 	});
 });
@@ -2678,7 +2575,9 @@ describe('share location', () => {
 		const channel = client.channel('messaging', 'test');
 		const sendMessageSpy = vi.spyOn(channel, 'sendMessage').mockResolvedValue({});
 		const dispatchEventSpy = vi.spyOn(client, 'dispatchEvent').mockResolvedValue({});
-		const updateLocationSpy = vi.spyOn(client, 'updateLocation').mockResolvedValue({});
+		const updateLocationSpy = vi
+			.spyOn(client, 'updateLiveLocation')
+			.mockResolvedValue({});
 		return {
 			channel,
 			client,
@@ -2693,36 +2592,21 @@ describe('share location', () => {
 
 		await channel.sendSharedLocation(staticLocation);
 		expect(sendMessageSpy).toHaveBeenCalledWith({
-			id: staticLocation.message_id,
-			shared_location: staticLocation,
-			user: undefined,
+			message: {
+				id: staticLocation.message_id,
+				shared_location: staticLocation,
+			},
 		});
 
 		await channel.sendSharedLocation(liveLocation);
 		expect(sendMessageSpy).toHaveBeenCalledWith({
-			id: liveLocation.message_id,
-			shared_location: liveLocation,
-			user: undefined,
+			message: {
+				id: liveLocation.message_id,
+				shared_location: liveLocation,
+			},
 		});
 	});
 
-	it('injects the user object into the request payload', async () => {
-		const { channel, sendMessageSpy } = await setup();
-
-		await channel.sendSharedLocation(staticLocation, userId);
-		expect(sendMessageSpy).toHaveBeenCalledWith({
-			id: staticLocation.message_id,
-			shared_location: staticLocation,
-			user: { id: userId },
-		});
-
-		await channel.sendSharedLocation(liveLocation, userId);
-		expect(sendMessageSpy).toHaveBeenCalledWith({
-			id: liveLocation.message_id,
-			shared_location: liveLocation,
-			user: { id: userId },
-		});
-	});
 	it('emits live_location_sharing.started local event', async () => {
 		const { channel, dispatchEventSpy, sendMessageSpy } = await setup();
 

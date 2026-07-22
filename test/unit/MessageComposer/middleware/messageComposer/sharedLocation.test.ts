@@ -65,10 +65,10 @@ describe('stream-io/message-composer-middleware/shared-location', () => {
         localMessage: {
           shared_location: {
             channel_cid: messageComposer.channel.cid,
-            created_at: expect.any(String),
+            created_at: expect.any(Date),
             created_by_device_id: messageComposer.locationComposer.deviceId,
             message_id: messageComposer.id,
-            updated_at: expect.any(String),
+            updated_at: expect.any(Date),
             user_id: user.id,
             ...coords,
           },
@@ -101,7 +101,6 @@ describe('stream-io/message-composer-middleware/shared-location', () => {
   it('does not inject shared_location to localMessage and message payloads if the location state is corrupted', async () => {
     const { messageComposer } = setup();
     const middleware = createSharedLocationCompositionMiddleware(messageComposer);
-    // @ts-expect-error invalid location payload
     messageComposer.locationComposer.state.next({
       location: {
         latitude: 1,

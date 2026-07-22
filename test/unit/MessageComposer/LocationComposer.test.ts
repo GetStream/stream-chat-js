@@ -159,10 +159,10 @@ describe('LocationComposer', () => {
       created_by_device_id: deviceId,
       latitude: data.latitude,
       longitude: data.longitude,
-      end_at: expect.any(String),
+      end_at: expect.any(Date),
     });
 
-    const endAt = new Date(locationComposer.validLocation!.end_at);
+    const endAt = locationComposer.validLocation!.end_at as Date;
     const expectedEndAt = new Date(Date.now() + data.durationMs);
     expect(endAt.getTime()).toBeCloseTo(expectedEndAt.getTime(), -2); // Within 100ms
   });

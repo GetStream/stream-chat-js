@@ -1,10 +1,9 @@
 import type { Channel } from './channel';
 import type {
   ChannelMemberResponse,
-  Event,
+  EventPayload,
   LocalMessage,
   MessageResponse,
-  MessageResponseBase,
   MessageSet,
   MessageSetType,
   PendingMessageResponse,
@@ -18,17 +17,15 @@ import {
   isBlockedMessage,
 } from './utils';
 import { DEFAULT_MESSAGE_SET_PAGINATION } from './constants';
+import type {
+  ReadStateResponse as Gen_ReadStateResponse,
+  UserResponseCommonFields as Gen_UserResponseCommonFields,
+} from './gen/models';
 
 type ChannelReadStatus = Record<
   string,
-  {
-    last_read: Date;
-    unread_messages: number;
-    user: UserResponse;
+  Gen_ReadStateResponse & {
     first_unread_message_id?: string;
-    last_read_message_id?: string;
-    last_delivered_at?: Date;
-    last_delivered_message_id?: string;
   }
 >;
 
@@ -65,12 +62,12 @@ const messageSetsOverlapByTimestamp = (a: LocalMessage[], b: LocalMessage[]) =>
   aOverlapsB(b, a);
 
 /**
- * ChannelState - A container class for the channel state.
+ * Container class for the channel state.
  */
 export class ChannelState {
   _channel: Channel;
   watcher_count: number;
-  typing: Record<string, Event>;
+  typing: Record<string, EventPayload<'typing.start' | 'typing.stop'>>;
   read: ChannelReadStatus;
   pinnedMessages: Array<ReturnType<ChannelState['formatMessage']>>;
   pending_messages: Array<PendingMessageResponse>;
@@ -79,12 +76,12 @@ export class ChannelState {
   watchers: Record<string, UserResponse>;
   members: Record<string, ChannelMemberResponse>;
   unreadCount: number;
-  membership: ChannelMemberResponse;
+  membership: ChannelMemberResponse | undefined;
   last_message_at: Date | null;
   /**
    * Flag which indicates if channel state contain latest/recent messages or no.
    * This flag should be managed by UI sdks using a setter - setIsUpToDate.
-   * When false, any new message (received by websocket event - message.new) will not
+   * When false, any new message (received by WebSocket event - message.new) will not
    * be pushed on to message list.
    */
   isUpToDate: boolean;
@@ -109,12 +106,12 @@ export class ChannelState {
     this.mutedUsers = [];
     this.watchers = {};
     this.members = {};
-    this.membership = {};
+    this.membership = undefined;
     this.unreadCount = 0;
     /**
      * Flag which indicates if channel state contain latest/recent messages or no.
      * This flag should be managed by UI sdks using a setter - setIsUpToDate.
-     * When false, any new message (received by websocket event - message.new) will not
+     * When false, any new message (received by WebSocket event - message.new) will not
      * be pushed on to message list.
      */
     this.isUpToDate = true;
@@ -163,12 +160,15 @@ export class ChannelState {
   }
 
   /**
-   * addMessageSorted - Add a message to the state
+   * Adds the provided message to the state.
    *
-   * @param {MessageResponse} newMessage A new message
-   * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
-   * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
-   * @param {MessageSetType} messageSetToAddToIfDoesNotExist Which message set to add to if message is not in the list (only used if addIfDoesNotExist is true)
+   * @param newMessage - The new message to add.
+   * @param timestampChanged - Whether updating a message with a changed `created_at` value
+   *   (optional, defaults to `false`).
+   * @param addIfDoesNotExist - Add the message if it is not in the list. Used to prevent
+   *   out-of-order updated messages from being added (optional, defaults to `true`).
+   * @param messageSetToAddToIfDoesNotExist - Which message set to add to if the message is not in
+   *   the list. Only used when `addIfDoesNotExist` is `true` (optional, defaults to `'latest'`).
    */
   addMessageSorted(
     newMessage: MessageResponse | LocalMessage,
@@ -189,20 +189,21 @@ export class ChannelState {
    * Takes the message object, parses the dates, sets `__html`
    * and sets the status to `received` if missing; returns a new message object.
    *
-   * @param {MessageResponse} message `MessageResponse` object
+   * @param message - `MessageResponse` object
    */
-  formatMessage = (message: MessageResponse | MessageResponseBase | LocalMessage) =>
-    formatMessage(message);
+  formatMessage = (message: MessageResponse | LocalMessage) => formatMessage(message);
 
   /**
-   * addMessagesSorted - Add the list of messages to state and resorts the messages
+   * Adds the provided messages to state and resorts the list.
    *
-   * @param {Array<MessageResponse>} newMessages A list of messages
-   * @param {boolean} timestampChanged Whether updating messages with changed created_at value.
-   * @param {boolean} initializing Whether channel is being initialized.
-   * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
-   * @param {MessageSetType} messageSetToAddToIfDoesNotExist Which message set to add to if messages are not in the list (only used if addIfDoesNotExist is true)
-   *
+   * @param newMessages - The list of messages to add.
+   * @param timestampChanged - Whether updating messages with a changed `created_at` value
+   *   (optional, defaults to `false`).
+   * @param initializing - Whether the channel is being initialized (optional, defaults to `false`).
+   * @param addIfDoesNotExist - Add the message if it is not in the list. Used to prevent
+   *   out-of-order updated messages from being added (optional, defaults to `true`).
+   * @param messageSetToAddToIfDoesNotExist - Which message set to add to if messages are not in
+   *   the list. Only used when `addIfDoesNotExist` is `true` (optional, defaults to `'current'`).
    */
   addMessagesSorted(
     newMessages: (MessageResponse | LocalMessage)[],
@@ -228,48 +229,49 @@ export class ChannelState {
       // If message is already formatted we can skip the tasks below
       // This will be true for messages that are already present at the state -> this happens when we perform merging of message sets
       // This will be also true for message previews used by some SDKs
-      const isMessageFormatted = messagesToAdd[i].created_at instanceof Date;
+      const isMessageFormatted =
+        typeof (messagesToAdd[i] as LocalMessage).status === 'string';
       let message: ReturnType<ChannelState['formatMessage']>;
       if (isMessageFormatted) {
         message = messagesToAdd[i] as ReturnType<ChannelState['formatMessage']>;
       } else {
         message = this.formatMessage(messagesToAdd[i]);
+      }
 
-        if (message.user && this._channel?.cid) {
-          /**
-           * Store the reference to user for this channel, so that when we have to
-           * handle updates to user, we can use the reference map, to determine which
-           * channels need to be updated with updated user object.
-           */
-          this._channel
-            .getClient()
-            .state.updateUserReference(message.user, this._channel.cid);
-        }
+      if (message.user && this._channel?.cid) {
+        /**
+         * Store the reference to user for this channel, so that when we have to
+         * handle updates to user, we can use the reference map, to determine which
+         * channels need to be updated with updated user object.
+         */
+        this._channel
+          .getClient()
+          .state.updateUserReference(message.user, this._channel.cid);
+      }
 
-        if (
-          initializing &&
-          message.id &&
-          this.threads[message.id] &&
-          !this._channel.getClient().preventThreadCleanup
-        ) {
-          // If we are initializing the state of channel (e.g., in case of connection recovery),
-          // then in that case we remove thread related to this message from threads object.
-          // This way we can ensure that we don't have any stale data in thread object
-          // and consumer can refetch the replies.
-          delete this.threads[message.id];
-        }
+      if (
+        initializing &&
+        message.id &&
+        this.threads[message.id] &&
+        !this._channel.getClient().preventThreadCleanup
+      ) {
+        // If we are initializing the state of channel (e.g., in case of connection recovery),
+        // then in that case we remove thread related to this message from threads object.
+        // This way we can ensure that we don't have any stale data in thread object
+        // and consumer can refetch the replies.
+        delete this.threads[message.id];
+      }
 
-        const shouldSkipLastMessageAtUpdate =
-          this._channel.getConfig()?.skip_last_msg_update_for_system_msgs &&
-          message.type === 'system';
+      const shouldSkipLastMessageAtUpdate =
+        this._channel.getConfig()?.skip_last_msg_update_for_system_msgs &&
+        message.type === 'system';
 
-        if (
-          !shouldSkipLastMessageAtUpdate &&
-          (!this.last_message_at ||
-            message.created_at.getTime() > this.last_message_at.getTime())
-        ) {
-          this.last_message_at = new Date(message.created_at.getTime());
-        }
+      if (
+        !shouldSkipLastMessageAtUpdate &&
+        (!this.last_message_at ||
+          message.created_at.getTime() > this.last_message_at.getTime())
+      ) {
+        this.last_message_at = new Date(message.created_at.getTime());
       }
 
       // update or append the messages...
@@ -314,10 +316,9 @@ export class ChannelState {
   }
 
   /**
-   * addPinnedMessages - adds messages in pinnedMessages property
+   * Adds the provided messages to the `pinnedMessages` property.
    *
-   * @param {Array<MessageResponse>} pinnedMessages A list of pinned messages
-   *
+   * @param pinnedMessages - A list of pinned messages.
    */
   addPinnedMessages(pinnedMessages: MessageResponse[]) {
     for (let i = 0; i < pinnedMessages.length; i += 1) {
@@ -326,10 +327,9 @@ export class ChannelState {
   }
 
   /**
-   * addPinnedMessage - adds message in pinnedMessages
+   * Adds a single message to the `pinnedMessages` list.
    *
-   * @param {MessageResponse} pinnedMessage message to update
-   *
+   * @param pinnedMessage - The pinned message to add or update.
    */
   addPinnedMessage(pinnedMessage: MessageResponse) {
     this.pinnedMessages = this._addToMessageList(
@@ -341,10 +341,9 @@ export class ChannelState {
   }
 
   /**
-   * removePinnedMessage - removes pinned message from pinnedMessages
+   * Removes the provided pinned message from `pinnedMessages`.
    *
-   * @param {MessageResponse} message message to remove
-   *
+   * @param message - The pinned message to remove.
    */
   removePinnedMessage(message: MessageResponse) {
     const { result } = this.removeMessageFromArray(this.pinnedMessages, message);
@@ -355,7 +354,7 @@ export class ChannelState {
     reaction: ReactionResponse,
     message?: MessageResponse,
     enforce_unique?: boolean,
-  ) {
+  ): MessageResponse | LocalMessage | undefined {
     const messageWithReaction = message;
     let messageFromState: LocalMessage | undefined;
     if (!messageWithReaction) {
@@ -392,7 +391,7 @@ export class ChannelState {
         // own_reactions as normal so we can use that, otherwise we fallback
         // to whatever state we had.
         updatedMessage.own_reactions =
-          this._channel.getClient().userID === reaction.user_id
+          this._channel.getClient().userId === reaction.user_id
             ? messageWithReaction.own_reactions
             : msg.own_reactions;
         return this.formatMessage(updatedMessage);
@@ -444,12 +443,14 @@ export class ChannelState {
           count: oldReactionTypeData.count + 1,
           sum_scores: oldReactionTypeData.sum_scores + score,
           last_reaction_at: reaction.created_at,
+          latest_reactions_by: [],
         }
       : {
           count: 1,
           first_reaction_at: reaction.created_at,
           last_reaction_at: reaction.created_at,
           sum_scores: score,
+          latest_reactions_by: [],
         };
 
     // 3. Update the own_reactions with the new reaction.
@@ -461,7 +462,7 @@ export class ChannelState {
 
     // 4. Finally, update the latest_reactions with the new reaction,
     //    while respecting enforce_unique.
-    const userId = this._channel.getClient().userID;
+    const userId = this._channel.getClient().userId;
     messageFromState.latest_reactions = enforce_unique
       ? [
           ...(messageFromState.latest_reactions || []).filter(
@@ -486,7 +487,7 @@ export class ChannelState {
     }
 
     ownReactions = ownReactions || [];
-    if (this._channel.getClient().userID === reaction.user_id) {
+    if (this._channel.getClient().userId === reaction.user_id) {
       ownReactions.push(reaction);
     }
 
@@ -496,16 +497,19 @@ export class ChannelState {
   _removeOwnReactionFromMessage(
     ownReactions: ReactionResponse[] | null | undefined,
     reaction: ReactionResponse,
-  ) {
+  ): ReactionResponse[] {
     if (ownReactions) {
       return ownReactions.filter(
         (item) => item.user_id !== reaction.user_id || item.type !== reaction.type,
       );
     }
-    return ownReactions;
+    return [];
   }
 
-  removeReaction(reaction: ReactionResponse, message?: MessageResponse) {
+  removeReaction(
+    reaction: ReactionResponse,
+    message?: MessageResponse,
+  ): MessageResponse | LocalMessage | undefined {
     const messageWithRemovedReaction = message;
     let messageFromState: LocalMessage | undefined;
     if (!messageWithRemovedReaction) {
@@ -560,7 +564,7 @@ export class ChannelState {
     messageFromState.own_reactions = messageFromState.own_reactions?.filter(
       (r) => r.type !== reaction.type,
     );
-    const userId = this._channel.getClient().userID;
+    const userId = this._channel.getClient().userId;
     messageFromState.latest_reactions = messageFromState.latest_reactions?.filter(
       (r) => !(r.user_id === userId && r.type === reaction.type),
     );
@@ -574,19 +578,11 @@ export class ChannelState {
     message: MessageResponse;
     remove?: boolean;
   }) {
-    const parseMessage = (m: ReturnType<ChannelState['formatMessage']>) =>
-      ({
-        ...m,
-        created_at: m.created_at.toISOString(),
-        pinned_at: m.pinned_at?.toISOString(),
-        updated_at: m.updated_at?.toISOString(),
-      }) as unknown as MessageResponse;
-
     const update = (messages: LocalMessage[]) => {
-      const updatedMessages = messages.reduce<MessageResponse[]>((acc, msg) => {
+      const updatedMessages = messages.reduce<LocalMessage[]>((acc, msg) => {
         if (msg.quoted_message_id === message.id) {
           acc.push({
-            ...parseMessage(msg),
+            ...msg,
             quoted_message: remove ? { ...message, attachments: [] } : message,
           });
         }
@@ -608,9 +604,10 @@ export class ChannelState {
   }
 
   /**
-   * Updates all instances of given message in channel state
-   * @param message
-   * @param updateFunc
+   * Updates all instances of given message in channel state.
+   *
+   * @param message - The message identity (`id`, optional `parent_id`, `pinned`, `show_in_channel`).
+   * @param updateFunc - Transform applied to the existing formatted message.
    */
   _updateMessage(
     message: {
@@ -658,9 +655,9 @@ export class ChannelState {
   /**
    * Setter for isUpToDate.
    *
-   * @param isUpToDate  Flag which indicates if channel state contain latest/recent messages or no.
+   * @param isUpToDate  - Flag which indicates if channel state contain latest/recent messages or no.
    *                    This flag should be managed by UI sdks using a setter - setIsUpToDate.
-   *                    When false, any new message (received by websocket event - message.new) will not
+   *                    When false, any new message (received by WebSocket event - message.new) will not
    *                    be pushed on to message list.
    */
   setIsUpToDate = (isUpToDate: boolean) => {
@@ -668,13 +665,16 @@ export class ChannelState {
   };
 
   /**
-   * _addToMessageList - Adds a message to a list of messages, tries to update first, appends if message isn't found
+   * Adds a message to a list of messages. Tries to update first; appends if the message isn't found.
    *
-   * @param {Array<ReturnType<ChannelState['formatMessage']>>} messages A list of messages
-   * @param message
-   * @param {boolean} timestampChanged Whether updating a message with changed created_at value.
-   * @param {string} sortBy field name to use to sort the messages by
-   * @param {boolean} addIfDoesNotExist Add message if it is not in the list, used to prevent out of order updated messages from being added.
+   * @param messages - A list of messages.
+   * @param message - The formatted message to add or update.
+   * @param timestampChanged - Whether updating a message with a changed `created_at` value
+   *   (optional, defaults to `false`).
+   * @param sortBy - Field name to use to sort the messages by (optional, defaults to `'created_at'`).
+   * @param addIfDoesNotExist - Add the message if it is not in the list. Used to prevent
+   *   out-of-order updated messages from being added (optional, defaults to `true`).
+   * @returns The updated list of messages.
    */
   _addToMessageList(
     messages: Array<ReturnType<ChannelState['formatMessage']>>,
@@ -693,11 +693,10 @@ export class ChannelState {
   }
 
   /**
-   * removeMessage - Description
+   * Removes a message from channel state.
    *
-   * @param {{ id: string; parent_id?: string }} messageToRemove Object of the message to remove. Needs to have at id specified.
-   *
-   * @return {boolean} Returns if the message was removed
+   * @param messageToRemove - The message to remove. Must have at least its `id` specified.
+   * @returns `true` when a matching message was found and removed.
    */
   removeMessage(messageToRemove: {
     id: string;
@@ -741,9 +740,9 @@ export class ChannelState {
   };
 
   /**
-   * Updates the message.user property with updated user object, for messages.
+   * Updates the `message.user` property with the supplied user object across all messages.
    *
-   * @param {UserResponse} user
+   * @param user - The user whose embedded copy should be refreshed on each authored message.
    */
   updateUserMessages = (user: UserResponse) => {
     const _updateUserMessages = (
@@ -768,10 +767,12 @@ export class ChannelState {
   };
 
   /**
-   * Marks the messages as deleted, from deleted user.
+   * Marks all messages authored by the given user as deleted.
    *
-   * @param {UserResponse} user
-   * @param {boolean} hardDelete
+   * @param user - The user whose messages should be marked deleted.
+   * @param hardDelete - When `true`, drop the messages instead of marking them deleted
+   *   (optional, defaults to `false`).
+   * @param deletedAt - Override timestamp for the `deleted_at` field (optional).
    */
   deleteUserMessages = (
     user: UserResponse,
@@ -779,7 +780,7 @@ export class ChannelState {
     deletedAt?: LocalMessage['deleted_at'],
   ) => {
     this.messageSets.forEach(({ messages }) =>
-      _deleteUserMessages({ messages, user, hardDelete, deletedAt: deletedAt ?? null }),
+      _deleteUserMessages({ messages, user, hardDelete, deletedAt }),
     );
 
     for (const parentId in this.threads) {
@@ -787,7 +788,7 @@ export class ChannelState {
         messages: this.threads[parentId],
         user,
         hardDelete,
-        deletedAt: deletedAt ?? null,
+        deletedAt,
       });
     }
 
@@ -795,13 +796,12 @@ export class ChannelState {
       messages: this.pinnedMessages,
       user,
       hardDelete,
-      deletedAt: deletedAt ?? null,
+      deletedAt,
     });
   };
 
   /**
-   * filterErrorMessages - Removes error messages from the channel state.
-   *
+   * Removes error messages from the channel state.
    */
   filterErrorMessages() {
     const filteredMessages = this.latestMessages.filter(
@@ -818,23 +818,25 @@ export class ChannelState {
   }
 
   /**
-   * clean - Remove stale data such as users that stayed in typing state for more than 5 seconds
+   * Removes stale data such as users that stayed in typing state for more than 5 seconds.
    */
   clean() {
     const now = new Date();
     // prevent old users from showing up as typing
-    for (const [userID, lastEvent] of Object.entries(this.typing)) {
+    for (const [userId, lastEvent] of Object.entries(this.typing)) {
       const receivedAt =
         typeof lastEvent.received_at === 'string'
           ? new Date(lastEvent.received_at)
           : lastEvent.received_at || new Date();
       if (now.getTime() - receivedAt.getTime() > 7000) {
-        delete this.typing[userID];
+        delete this.typing[userId];
         this._channel.getClient().dispatchEvent({
           cid: this._channel.cid,
           type: 'typing.stop',
-          user: { id: userID },
-        } as Event);
+          user: { id: userId } as Gen_UserResponseCommonFields,
+          custom: {},
+          created_at: new Date(),
+        });
       }
     }
   }
@@ -856,11 +858,13 @@ export class ChannelState {
   }
 
   /**
-   * loadMessageIntoState - Loads a given message (and messages around it) into the state
+   * Loads a given message (and messages around it) into the state.
    *
-   * @param {string} messageId The id of the message, or 'latest' to indicate switching to the latest messages
-   * @param {string} parentMessageId The id of the parent message, if we want load a thread reply
-   * @param {number} limit The page size if the message has to be queried from the server
+   * @param messageId - The ID of the message, or `'latest'` to indicate switching to the latest messages.
+   * @param parentMessageId - The ID of the parent message, when we want to load a thread reply
+   *   (optional).
+   * @param limit - The page size if the message has to be queried from the server (optional,
+   *   defaults to `25`).
    */
   async loadMessageIntoState(
     messageId: string | 'latest',
@@ -896,7 +900,11 @@ export class ChannelState {
       );
     }
     if (!loadedMessageThread && parentMessageId) {
-      await this._channel.getReplies(parentMessageId, { id_around: messageId, limit });
+      await this._channel.getReplies({
+        parent_id: parentMessageId,
+        id_around: messageId,
+        limit,
+      });
     }
     messageSetIndex = this.findMessageSetIndex({ id: messageIdToFind });
     if (messageSetIndex !== -1) {
@@ -905,12 +913,12 @@ export class ChannelState {
   }
 
   /**
-   * findMessage - Finds a message inside the state
+   * Finds a message inside the state.
    *
-   * @param {string} messageId The id of the message
-   * @param {string} parentMessageId The id of the parent message, if we want load a thread reply
-   *
-   * @return {ReturnType<ChannelState['formatMessage']>} Returns the message, or undefined if the message wasn't found
+   * @param messageId - The ID of the message.
+   * @param parentMessageId - The ID of the parent message, when we want to load a thread reply
+   *   (optional).
+   * @returns The matching message, or `undefined` if no message was found.
    */
   findMessage(messageId: string, parentMessageId?: string) {
     if (parentMessageId) {
@@ -986,8 +994,11 @@ export class ChannelState {
   }
 
   /**
-   * Identifies the set index into which a message set would pertain if its first item's creation date corresponded to oldestTimestampMs.
-   * @param oldestTimestampMs
+   * Identifies the set index into which a message set would belong if its first item's creation
+   * date corresponded to `oldestTimestampMs`.
+   *
+   * @param oldestTimestampMs - The oldest timestamp (in milliseconds) of the candidate message set.
+   * @returns The matching message set index, or `-1` when none is found.
    */
   private findMessageSetByOldestTimestamp = (oldestTimestampMs: number): number => {
     let lo = 0,

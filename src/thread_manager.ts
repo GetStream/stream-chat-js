@@ -1,10 +1,20 @@
+import { chatLoggerSystem } from './logger';
 import { StateStore } from './store';
 import { throttle } from './utils';
 
 import type { StreamChat } from './client';
 import type { Thread } from './thread';
-import type { Event, OwnUserResponse, QueryThreadsOptions } from './types';
+import type {
+  Event,
+  EventPayload,
+  EventType,
+  OwnUserResponse,
+  QueryThreadsRequest,
+} from './types';
 import { WithSubscriptions } from './utils/WithSubscriptions';
+
+const eventIsHealthCheck = (event: Event): event is EventPayload<'health.check'> =>
+  Object.hasOwn(event, 'me');
 
 const DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION = 1000;
 const MAX_QUERY_THREADS_LIMIT = 25;
@@ -50,6 +60,8 @@ export type ThreadManagerPagination = {
   isLoadingNext: boolean;
   nextCursor: string | null;
 };
+
+const logger = chatLoggerSystem.getLogger('thread-manager');
 
 export class ThreadManager extends WithSubscriptions {
   public readonly state: StateStore<ThreadManagerState>;
@@ -121,16 +133,21 @@ export class ThreadManager extends WithSubscriptions {
       (this.client.user as OwnUserResponse) ?? {};
     this.state.partialNext({ unreadThreadCount });
 
-    const unsubscribeFunctions = [
-      'health.check',
-      'notification.mark_read',
-      'notification.mark_unread',
-      'notification.thread_message_new',
-      'notification.channel_deleted',
-    ].map(
+    const unsubscribeFunctions = (
+      [
+        'health.check',
+        'notification.mark_read',
+        'notification.mark_unread',
+        'notification.thread_message_new',
+        'notification.channel_deleted',
+      ] as const satisfies EventType[]
+    ).map(
       (eventType) =>
         this.client.on(eventType, (event) => {
-          const { unread_threads: unreadThreadCount } = event.me ?? event;
+          const { unread_threads: unreadThreadCount } =
+            (eventIsHealthCheck(event) && event.me) ||
+            (event as Extract<typeof event, { unread_threads?: any }>);
+
           if (typeof unreadThreadCount === 'number') {
             this.state.partialNext({ unreadThreadCount });
           }
@@ -174,7 +191,7 @@ export class ThreadManager extends WithSubscriptions {
     );
 
   private subscribeNewReplies = () =>
-    this.client.on('notification.thread_message_new', (event: Event) => {
+    this.client.on('notification.thread_message_new', (event) => {
       const parentId = event.message?.parent_id;
       if (!parentId) return;
 
@@ -280,7 +297,9 @@ export class ThreadManager extends WithSubscriptions {
         ready: true,
       }));
     } catch (error) {
-      this.client.logger('error', (error as Error).message);
+      logger
+        .withExtraTags('reload')
+        .error('Failed to reload the thread list.', { error });
       this.state.next((current) => ({
         ...current,
         pagination: {
@@ -291,8 +310,8 @@ export class ThreadManager extends WithSubscriptions {
     }
   };
 
-  public queryThreads = (options: QueryThreadsOptions = {}) =>
-    this.client.queryThreads({
+  public queryThreads = (options: QueryThreadsRequest = {}) =>
+    this.client.queryThreadsAndHydrate({
       limit: 25,
       participant_limit: 10,
       reply_limit: 10,
@@ -300,7 +319,7 @@ export class ThreadManager extends WithSubscriptions {
       ...options,
     });
 
-  public loadNextPage = async (options: Omit<QueryThreadsOptions, 'next'> = {}) => {
+  public loadNextPage = async (options: Omit<QueryThreadsRequest, 'next'> = {}) => {
     const { pagination } = this.state.getLatestValue();
 
     if (pagination.isLoadingNext || !pagination.nextCursor) return;
@@ -325,7 +344,9 @@ export class ThreadManager extends WithSubscriptions {
         },
       }));
     } catch (error) {
-      this.client.logger('error', (error as Error).message);
+      logger
+        .withExtraTags('loadNextPage')
+        .error('Failed to load the next page of threads.', { error });
       this.state.next((current) => ({
         ...current,
         pagination: {

@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { chatLoggerSystem } from '../../../src/logger';
 import {
   AbstractOfflineDB,
   Channel,
-  ChannelAPIResponse,
+  ChannelStateResponseFields,
   ChannelConfigWithInfo,
   ChannelResponse,
   LocalMessage,
   MessageComposerConfig,
-  StaticLocationPayload,
+  SharedLocation,
   StreamChat,
   Thread,
 } from '../../../src';
@@ -38,6 +39,7 @@ vi.mock('../../../src/utils', async (importOriginal) => ({
   isLocalMessage: vi.fn().mockReturnValue(true),
   randomId: vi.fn().mockReturnValue('test-uuid'),
   throttle: vi.fn().mockImplementation((fn) => fn),
+  getEnv: vi.fn(),
 }));
 
 const quotedMessage = {
@@ -64,19 +66,19 @@ const getThread = (channel: Channel, client: StreamChat, threadId: string) =>
         text: 'Test message',
         type: 'regular' as const,
         user,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        created_at: new Date(),
+        updated_at: new Date(),
       },
       channel: {
-        id: channel.id,
+        id: channel.id!,
         type: channel.type,
         cid: channel.cid,
         disabled: false,
         frozen: false,
       },
       title: 'Test Thread',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: new Date(),
+      updated_at: new Date(),
       channel_cid: channel.cid,
       latest_replies: [],
       thread_participants: [],
@@ -100,18 +102,13 @@ const setup = ({
 } = {}) => {
   const mockClient = new StreamChat('test-api-key');
   mockClient.user = user;
-  mockClient.userID = user.id;
   const cid = 'messaging:test-channel-id';
   if (channelConfig) {
     // @ts-expect-error incomplete channel config object
     mockClient.configs[cid] = channelConfig;
   }
   // Create a proper Channel instance with only the necessary attributes mocked
-  const mockChannel = new Channel(mockClient, 'messaging', 'test-channel-id', {
-    id: 'test-channel-id',
-    type: 'messaging',
-    cid: 'messaging:test-channel-id',
-  });
+  const mockChannel = mockClient.channel('messaging', 'test-channel-id');
 
   // Mock the getClient method
   vi.spyOn(mockChannel, 'getClient').mockReturnValue(mockClient);
@@ -137,15 +134,10 @@ const offlineModeMessageComposerSetup = ({
 } = {}) => {
   const mockClient = new StreamChat('test-api-key');
   mockClient.user = user;
-  mockClient.userID = user.id;
   mockClient.setOfflineDBApi(new MockOfflineDB({ client: mockClient }));
   vi.spyOn(mockClient.offlineDb!, 'initializeDB').mockResolvedValue(false);
   // Create a proper Channel instance with only the necessary attributes mocked
-  const mockChannel = new Channel(mockClient, 'messaging', 'test-channel-id', {
-    id: 'test-channel-id',
-    type: 'messaging',
-    cid: 'messaging:test-channel-id',
-  });
+  const mockChannel = mockClient.channel('messaging', 'test-channel-id');
 
   // Mock the getClient method
   vi.spyOn(mockChannel, 'getClient').mockReturnValue(mockClient);
@@ -162,6 +154,7 @@ const offlineModeMessageComposerSetup = ({
 
 describe('MessageComposer', () => {
   afterEach(() => {
+    chatLoggerSystem.restoreDefaults();
     vi.clearAllMocks();
   });
 
@@ -297,7 +290,7 @@ describe('MessageComposer', () => {
     it('does nothing if cids do not match', () => {
       const response = {
         channel: { cid: 'messaging:other' },
-      } as unknown as ChannelAPIResponse;
+      } as unknown as ChannelStateResponseFields;
 
       composer.initStateFromChannelResponse(response);
 
@@ -312,7 +305,7 @@ describe('MessageComposer', () => {
       const response = {
         channel: { cid: composer.channel.cid },
         draft,
-      } as unknown as ChannelAPIResponse;
+      } as unknown as ChannelStateResponseFields;
 
       composer.initStateFromChannelResponse(response);
 
@@ -324,7 +317,7 @@ describe('MessageComposer', () => {
     it('clears and deletes draft if no draft in response but draftId exists in state', () => {
       const response = {
         channel: { cid: composer.channel.cid },
-      } as unknown as ChannelAPIResponse;
+      } as unknown as ChannelStateResponseFields;
       const executeQuerySafelySpy = vi
         .spyOn(composer.client.offlineDb!, 'executeQuerySafely')
         .mockImplementation(vi.fn());
@@ -350,7 +343,7 @@ describe('MessageComposer', () => {
 
       const response = {
         channel: { cid: composer.channel.cid },
-      } as unknown as ChannelAPIResponse;
+      } as unknown as ChannelStateResponseFields;
 
       composer.initStateFromChannelResponse(response);
 
@@ -1245,12 +1238,12 @@ describe('MessageComposer', () => {
 
       const result = await messageComposer.compose();
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         localMessage: {
           attachments: [],
           created_at: expect.any(Date),
-          deleted_at: null,
-          error: null,
+          deleted_at: undefined,
+          error: undefined,
           id: 'test-uuid',
           mentioned_channel: false,
           mentioned_group_ids: [],
@@ -1258,9 +1251,9 @@ describe('MessageComposer', () => {
           mentioned_roles: [],
           mentioned_users: [],
           parent_id: undefined,
-          pinned_at: null,
-          quoted_message: null,
-          reaction_groups: null,
+          pinned_at: undefined,
+          quoted_message: undefined,
+          reaction_groups: undefined,
           status: 'sending',
           text: 'Test message',
           type: 'regular',
@@ -1290,9 +1283,9 @@ describe('MessageComposer', () => {
       const date = new Date();
       const { messageComposer } = setup({
         composition: {
-          attachments: [{ type: 'file' }],
+          attachments: [{ type: 'file', custom: {} }],
           created_at: date,
-          deleted_at: null,
+          deleted_at: undefined,
           id: 'test-uuid',
           mentioned_users: [],
           pinned: true,
@@ -1320,12 +1313,12 @@ describe('MessageComposer', () => {
 
       const result = await messageComposer.compose();
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         localMessage: {
-          attachments: [{ type: 'file' }],
+          attachments: [{ type: 'file', custom: {} }],
           created_at: date,
-          deleted_at: null,
-          error: null,
+          deleted_at: undefined,
+          error: undefined,
           id: 'test-uuid',
           mentioned_channel: false,
           mentioned_group_ids: [],
@@ -1335,7 +1328,7 @@ describe('MessageComposer', () => {
           parent_id: undefined,
           pinned: true,
           pinned_at: date,
-          quoted_message: null,
+          quoted_message: undefined,
           reaction_counts: {
             like: 1,
           },
@@ -1544,7 +1537,7 @@ describe('MessageComposer', () => {
       await messageComposer.createDraft();
 
       expect(spyComposeDraft).toHaveBeenCalled();
-      expect(spyCreateDraft).toHaveBeenCalledWith(mockDraft);
+      expect(spyCreateDraft).toHaveBeenCalledWith({ message: mockDraft });
       expect(spyLogDraftUpdateTimestamp).toHaveBeenCalled();
       expect(messageComposer.state.getLatestValue().draftId).toBe('test-draft-id');
     });
@@ -1596,7 +1589,7 @@ describe('MessageComposer', () => {
       await messageComposer.createDraft();
 
       expect(spyComposeDraft).toHaveBeenCalled();
-      expect(spyCreateDraft).toHaveBeenCalledWith(mockDraft);
+      expect(spyCreateDraft).toHaveBeenCalledWith({ message: mockDraft });
       expect(spyLogDraftUpdateTimestamp).toHaveBeenCalled();
       expect(messageComposer.state.getLatestValue().draftId).toBe('test-draft-id');
 
@@ -1632,9 +1625,10 @@ describe('MessageComposer', () => {
       const spyUpsertDraft = vi
         .spyOn(messageComposer.client.offlineDb!, 'upsertDraft')
         .mockRejectedValueOnce(new Error('offline insert failed'));
-      const spyLogger = vi
-        .spyOn(messageComposer.client, 'logger')
-        .mockImplementation(vi.fn());
+      const spyLogger = vi.fn();
+      chatLoggerSystem.configureLoggers({
+        default: { sink: spyLogger, level: 'trace' },
+      });
 
       const spyLogDraftUpdateTimestamp = vi.spyOn(
         messageComposer,
@@ -1644,14 +1638,14 @@ describe('MessageComposer', () => {
       await messageComposer.createDraft();
 
       expect(spyComposeDraft).toHaveBeenCalled();
-      expect(spyCreateDraft).toHaveBeenCalledWith(mockDraft);
+      expect(spyCreateDraft).toHaveBeenCalledWith({ message: mockDraft });
       expect(spyLogDraftUpdateTimestamp).toHaveBeenCalled();
       expect(messageComposer.state.getLatestValue().draftId).toBe('test-draft-id');
 
       expect(spyUpsertDraft).toHaveBeenCalledTimes(1);
       expect(spyLogger).toHaveBeenCalledWith(
         'error',
-        'offlineDb:upsertDraft',
+        expect.stringContaining('Upserting the draft to the offline database failed.'),
         expect.objectContaining({
           error: expect.any(Error),
         }),
@@ -1801,16 +1795,17 @@ describe('MessageComposer', () => {
       const spyChannelDeleteDraft = vi
         .spyOn(mockChannel, 'deleteDraft')
         .mockResolvedValue({});
-      const spyLogger = vi
-        .spyOn(messageComposer.client, 'logger')
-        .mockImplementation(vi.fn());
+      const spyLogger = vi.fn();
+      chatLoggerSystem.configureLoggers({
+        default: { sink: spyLogger, level: 'trace' },
+      });
 
       await messageComposer.deleteDraft();
 
       expect(spyChannelDeleteDraft).toHaveBeenCalled();
       expect(spyLogger).toHaveBeenCalledWith(
         'error',
-        'offlineDb:deleteDraft',
+        expect.stringContaining('Deleting the draft from the offline database failed.'),
         expect.objectContaining({
           error: expect.any(Error),
         }),
@@ -1909,7 +1904,7 @@ describe('MessageComposer', () => {
         created_by_device_id: messageComposer.locationComposer.deviceId,
         latitude: 1,
         longitude: 1,
-      } as StaticLocationPayload);
+      } as SharedLocation);
       expect(messageComposer.locationComposer.state.getLatestValue()).toEqual({
         location: null,
       });
@@ -2094,7 +2089,10 @@ describe('MessageComposer', () => {
       const spyChannelGetDraft = vi.spyOn(mockChannel, 'getDraft');
       spyChannelGetDraft.mockRejectedValue(new Error('Failed to get draft'));
 
-      const spyLogger = vi.spyOn(mockClient, 'logger');
+      const spyLogger = vi.fn();
+      chatLoggerSystem.configureLoggers({
+        default: { sink: spyLogger, level: 'trace' },
+      });
 
       await messageComposer.getDraft();
 

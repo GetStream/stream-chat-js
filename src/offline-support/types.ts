@@ -1,19 +1,20 @@
 import type {
-  AppSettingsAPIResponse,
-  ChannelAPIResponse,
   ChannelFilters,
   ChannelMemberResponse,
   ChannelOptions,
   ChannelResponse,
   ChannelSort,
+  ChannelStateResponseFields,
   DraftResponse,
+  GetApplicationResponse,
   LocalMessage,
   MessageResponse,
-  PollResponse,
+  PollResponse_old,
+  QueryChannelsRequest,
   ReactionFilters,
   ReactionResponse,
   ReactionSort,
-  ReadResponse,
+  ReadStateResponse,
 } from '../types';
 import type { Channel } from '../channel';
 import type { StreamChat } from '../client';
@@ -55,7 +56,7 @@ export type DBUpsertCidsForQueryType = {
  */
 export type DBUpsertChannelsType = {
   /** Array of channel API responses. */
-  channels: ChannelAPIResponse[];
+  channels: ChannelStateResponseFields[];
   /** Whether to immediately execute the operation. */
   execute?: boolean;
   /** If true, marks that the latest messages are already set. */
@@ -67,7 +68,7 @@ export type DBUpsertChannelsType = {
  */
 export type DBUpsertAppSettingsType = {
   /** App settings data. */
-  appSettings: AppSettingsAPIResponse;
+  appSettings: GetApplicationResponse;
   /** ID of the user the settings belong to. */
   userId: string;
   /** Whether to immediately execute the operation. */
@@ -91,7 +92,7 @@ export type DBUpsertUserSyncStatusType = {
  */
 export type DBUpsertPollType = {
   /** Poll data to be stored. */
-  poll: PollResponse;
+  poll: PollResponse_old;
   /** Whether to immediately execute the operation. */
   execute?: boolean;
 };
@@ -113,7 +114,7 @@ export type DBUpsertReadsType = {
   /** Channel ID. */
   cid: string;
   /** Array of read statuses. */
-  reads: ReadResponse[];
+  reads: ReadStateResponse[];
   /** Whether to immediately execute the operation. */
   execute?: boolean;
 };
@@ -179,15 +180,11 @@ export type DBGetChannelsForQueryType = {
   /** ID of the user. */
   userId: string;
   /** Optional filters for channels. */
-  filters?: ChannelFilters;
-  /** Optional full query options for channels. */
-  options?: ChannelOptions;
-  /** Optional sorting for the channels. */
-  sort?: ChannelSort;
+  options?: QueryChannelsRequest;
 };
 
 /**
- * Get the last sync timestamp for a user.
+ * Payload for retrieving the last sync timestamp for a user.
  */
 export type DBGetLastSyncedAtType = {
   /** ID of the user. */
@@ -203,7 +200,7 @@ export type DBGetPendingTasksType = {
 };
 
 /**
- * Get application settings for a user.
+ * Payload for retrieving application settings for a user.
  */
 export type DBGetAppSettingsType = {
   /** ID of the user. */
@@ -217,7 +214,7 @@ export type DBGetReactionsType = {
   /** ID of the message. */
   messageId: string;
   /** Optional filter to apply to reactions. */
-  filters?: Pick<ReactionFilters, 'type'>;
+  filters?: ReactionFilters;
   /** Optional sorting for reactions. */
   sort?: ReactionSort;
   /** Optional maximum number of reactions to return. */
@@ -225,7 +222,7 @@ export type DBGetReactionsType = {
 };
 
 /**
- * Delete a pending task by ID.
+ * Payload for deleting a pending task by ID.
  */
 export type DBDeletePendingTaskType = {
   /** ID of the pending task. */
@@ -233,7 +230,7 @@ export type DBDeletePendingTaskType = {
 };
 
 /**
- * Update a pending task by ID.
+ * Payload for updating a pending task by ID.
  */
 export type DBUpdatePendingTaskType = {
   /** ID of the pending task. */
@@ -305,13 +302,13 @@ export type DBDeleteMessagesForChannelType = {
   /** Channel ID. */
   cid: string;
   /** Timestamp before which messages are deleted. */
-  truncated_at?: string;
+  truncated_at?: Date;
   /** Whether to immediately execute the operation. */
   execute?: boolean;
 };
 
 /**
- * Check if a channel exists by ID.
+ * Payload for checking whether a channel exists by ID.
  */
 export type DBChannelExistsType = {
   /** Channel ID. */
@@ -373,15 +370,15 @@ export interface OfflineDBApi {
   getDraft: (options: DBGetDraftType) => Promise<DraftResponse | null>;
   getChannels: (
     options: DBGetChannelsType,
-  ) => Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>;
+  ) => Promise<Omit<ChannelStateResponseFields, 'duration'>[] | null>;
   getChannelsForQuery: (
     options: DBGetChannelsForQueryType,
-  ) => Promise<Omit<ChannelAPIResponse, 'duration'>[] | null>;
+  ) => Promise<Omit<ChannelStateResponseFields, 'duration'>[] | null>;
   getAllChannelCids: () => Promise<string[]>;
   getLastSyncedAt: (options: DBGetLastSyncedAtType) => Promise<string | undefined>;
   getAppSettings: (
     options: DBGetAppSettingsType,
-  ) => Promise<AppSettingsAPIResponse | null>;
+  ) => Promise<GetApplicationResponse | null>;
   getReactions: (options: DBGetReactionsType) => Promise<ReactionResponse[] | null>;
   executeSqlBatch: (queries: ExecuteBatchDBQueriesType) => Promise<unknown>;
   addPendingTask: (task: PendingTask) => Promise<() => Promise<void>>;

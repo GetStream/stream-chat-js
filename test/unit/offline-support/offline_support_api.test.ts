@@ -1,21 +1,22 @@
 import { describe, expect, it, beforeEach, afterEach, vi, MockInstance } from 'vitest';
 import {
   AbstractOfflineDB,
-  ChannelAPIResponse,
+  APIError,
   ChannelManager,
   StreamChat,
   Event,
   Channel,
-  MessageResponse,
-  ReadResponse,
   ChannelMemberResponse,
   ChannelResponse,
-  PendingTask,
-  APIErrorResponse,
+  ChannelStateResponseFields,
+  MessageResponse,
   OfflineDBSyncManager,
-  StableWSConnection,
   OfflineError,
+  PendingTask,
+  ReadStateResponse,
+  StableWSConnection,
 } from '../../../src';
+import { chatLoggerSystem } from '../../../src/logger';
 
 import { generateChannel } from '../test-utils/generateChannel';
 import { generateReadResponse } from '../test-utils/generateReadResponse';
@@ -316,18 +317,23 @@ describe('OfflineSupportApi', () => {
 
         offlineDb.channelExists.mockResolvedValue(false);
 
-        const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const sinkSpy = vi.fn();
+        chatLoggerSystem.configureLoggers({
+          default: { sink: sinkSpy, level: 'trace' },
+        });
 
         const result = await offlineDb.queriesWithChannelGuard({ event }, createQueries);
 
-        // TODO: testing against warning logs seems silly, please rethink this
-        expect(consoleWarnSpy).toHaveBeenCalledWith(
-          'Received message.new event for a non initialized channel that is not in DB, skipping event',
+        expect(sinkSpy).toHaveBeenCalledWith(
+          'warn',
+          expect.stringContaining(
+            'Received a "message.new" event for a non-initialized channel that is not in the database. Skipping the event.',
+          ),
           { event },
         );
         expect(result).toEqual([]);
 
-        consoleWarnSpy.mockRestore();
+        chatLoggerSystem.restoreDefaults();
       });
 
       it('returns createQueries result directly when channel exists and forceUpdate is false', async () => {
@@ -436,8 +442,8 @@ describe('OfflineSupportApi', () => {
       let queriesWithChannelGuardSpy: MockInstance<
         typeof offlineDb.queriesWithChannelGuard
       >;
-      let channelResponse: ChannelAPIResponse;
-      let readResponse: ReadResponse;
+      let channelResponse: ChannelStateResponseFields;
+      let readResponse: ReadStateResponse;
 
       beforeEach(() => {
         queriesWithChannelGuardSpy = vi.spyOn(offlineDb, 'queriesWithChannelGuard');
@@ -446,7 +452,7 @@ describe('OfflineSupportApi', () => {
         channelResponse = generateChannel({
           channel: { id: 'channel123', type: 'messaging' },
           read: [readResponse],
-        } as ChannelAPIResponse);
+        } as ChannelStateResponseFields);
         client.hydrateActiveChannels([channelResponse]);
 
         // to make sure queriesWithChannelGuard always passes
@@ -1254,7 +1260,7 @@ describe('OfflineSupportApi', () => {
           channelResponse = generateChannel({
             channel: { id: 'to-truncate', type: 'messaging' },
             read: [readResponse],
-          } as ChannelAPIResponse);
+          } as ChannelStateResponseFields);
           client.hydrateActiveChannels([channelResponse]);
         });
 
@@ -1310,7 +1316,7 @@ describe('OfflineSupportApi', () => {
             execute: false,
             reads: [
               {
-                last_read: lastReadDate.toString(),
+                last_read: lastReadDate,
                 last_read_message_id: lastReadMessageId,
                 unread_messages: 2,
                 user: client.user,
@@ -1341,7 +1347,7 @@ describe('OfflineSupportApi', () => {
             execute: false,
             reads: [
               {
-                last_read: lastReadDate.toString(),
+                last_read: lastReadDate,
                 last_read_message_id: lastReadMessageId,
                 unread_messages: 0,
                 user: client.user,
@@ -1383,7 +1389,7 @@ describe('OfflineSupportApi', () => {
             execute: false,
             reads: [
               {
-                last_read: lastReadDate.toString(),
+                last_read: lastReadDate,
                 last_read_message_id: lastReadMessageId,
                 unread_messages: 0,
                 user: client.user,
@@ -1895,7 +1901,7 @@ describe('OfflineSupportApi', () => {
           const error = {
             isAxiosError: true,
             response: { data: { code: 999 } },
-          } as AxiosError<APIErrorResponse>;
+          } as AxiosError<APIError>;
 
           shouldSkipSpy.mockReturnValue(false);
           executeTaskSpy.mockRejectedValue(error);
@@ -1910,7 +1916,7 @@ describe('OfflineSupportApi', () => {
           const error = {
             isAxiosError: true,
             response: { data: { code: 4 } },
-          } as AxiosError<APIErrorResponse>;
+          } as AxiosError<APIError>;
 
           shouldSkipSpy.mockReturnValue(true);
           executeTaskSpy.mockRejectedValue(error);
@@ -1981,14 +1987,15 @@ describe('OfflineSupportApi', () => {
               },
             },
           ) as PendingTask;
-          const pendingSendOptions = { skip_enrich_url: true };
           vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([
             {
               id: 7,
               messageId: 'msg-123',
               payload: [
-                { id: 'msg-123', status: 'sending', text: 'original' },
-                pendingSendOptions,
+                {
+                  message: { id: 'msg-123', status: 'sending', text: 'original' },
+                  skip_enrich_url: true,
+                },
               ],
               type: 'send-message',
             } as PendingTask,
@@ -2006,17 +2013,16 @@ describe('OfflineSupportApi', () => {
               type: 'send-message',
             }),
           });
-          expect(updatePendingTaskSpy.mock.calls[0][0].task.payload[0]).toMatchObject({
+          expect(
+            updatePendingTaskSpy.mock.calls[0][0].task.payload[0].message,
+          ).toMatchObject({
             id: 'msg-123',
             status: 'sending',
             text: 'edited',
           });
           expect(
-            updatePendingTaskSpy.mock.calls[0][0].task.payload[0],
+            updatePendingTaskSpy.mock.calls[0][0].task.payload[0].message,
           ).not.toHaveProperty('message_text_updated_at');
-          expect(updatePendingTaskSpy.mock.calls[0][0].task.payload[1]).toBe(
-            pendingSendOptions,
-          );
           expect(addPendingTaskSpy).not.toHaveBeenCalled();
         });
 
@@ -2039,8 +2045,7 @@ describe('OfflineSupportApi', () => {
             {
               messageId: 'msg-123',
               payload: [
-                { id: 'msg-123', status: 'sending', text: 'original' },
-                undefined,
+                { message: { id: 'msg-123', status: 'sending', text: 'original' } },
               ],
               type: 'send-message',
             } as PendingTask,
@@ -2051,12 +2056,16 @@ describe('OfflineSupportApi', () => {
           await offlineDb.handleAddPendingTask({ task });
 
           expect(updatePendingTaskSpy).not.toHaveBeenCalled();
-          expect(addPendingTaskSpy).toHaveBeenCalledWith({
-            messageId: 'msg-123',
-            payload: [{ id: 'msg-123', status: 'sending', text: 'edited' }, undefined],
-            type: 'send-message',
-            id: undefined,
-          });
+          expect(addPendingTaskSpy).toHaveBeenCalledWith(
+            expect.objectContaining({
+              messageId: 'msg-123',
+              payload: [
+                { message: { id: 'msg-123', status: 'sending', text: 'edited' } },
+              ],
+              type: 'send-message',
+              id: undefined,
+            }),
+          );
         });
 
         it('does nothing for failed offline update-message tasks without a matching pending send task', async () => {
@@ -2212,7 +2221,7 @@ describe('OfflineSupportApi', () => {
         const skippableError = {
           isAxiosError: true,
           response: { data: { code: 4 } },
-        } as AxiosError<APIErrorResponse>;
+        } as AxiosError<APIError>;
 
         beforeEach(() => {
           getPendingTasksSpy = vi
@@ -2389,11 +2398,20 @@ describe('OfflineDBSyncManager', () => {
 
       const error = new Error('Sync failed');
       syncAndExecutePendingTasksSpy.mockRejectedValueOnce(error);
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const sinkSpy = vi.fn();
+      chatLoggerSystem.configureLoggers({
+        default: { sink: sinkSpy, level: 'trace' },
+      });
 
       await syncManager.init();
 
-      expect(consoleSpy).toHaveBeenCalledWith('Error in DBSyncManager.init: ', error);
+      expect(sinkSpy).toHaveBeenCalledWith(
+        'error',
+        expect.stringContaining('Failed to initialize the offline DB sync manager.'),
+        { error },
+      );
+
+      chatLoggerSystem.restoreDefaults();
     });
   });
 
@@ -2659,12 +2677,10 @@ describe('OfflineDBSyncManager', () => {
 
         await (syncManager as any).sync();
 
-        expect(syncApiSpy).toHaveBeenCalledWith(
-          ['channel-1'],
-          expect.stringMatching(
-            /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/, // ISO8601 regex, YYYY-MM-DDTHH:mm:ss.sssZ
-          ),
-        );
+        expect(syncApiSpy).toHaveBeenCalledWith({
+          channel_cids: ['channel-1'],
+          last_sync_at: expect.any(Date),
+        });
         expect(handleEventSpy).toHaveBeenCalledTimes(mockEvents.length);
         expect(executeSqlBatchSpy).toHaveBeenCalledWith(['query1', 'query2']);
         expect(upsertUserSyncStatusSpy).toHaveBeenCalled();
@@ -2679,7 +2695,7 @@ describe('OfflineDBSyncManager', () => {
           isAxiosError: true,
           code: 'ECONNABORTED',
           response: { data: { code: 4 } },
-        } as AxiosError<APIErrorResponse>;
+        } as AxiosError<APIError>;
 
         syncApiSpy.mockRejectedValueOnce(axiosError);
 
@@ -2696,7 +2712,7 @@ describe('OfflineDBSyncManager', () => {
 
         const axiosError = {
           response: { data: { code: 23 } },
-        } as AxiosError<APIErrorResponse>;
+        } as AxiosError<APIError>;
 
         syncApiSpy.mockRejectedValueOnce(axiosError);
 

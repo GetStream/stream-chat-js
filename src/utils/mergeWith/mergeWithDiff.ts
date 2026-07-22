@@ -3,9 +3,9 @@
  * which keys have been added or updated during the merge operation.
  *
  * @category Object
- * @param object The destination object.
- * @param source A single source object or an array of objects to be merged into the object.
- * @param customizer The function to customize assigned values.
+ * @param object - The destination object.
+ * @param source - A single source object or an array of objects to be merged into the object.
+ * @param customizer - The function to customize assigned values.
  * @returns Returns an object containing the merged result and a hierarchical diff object.
  * @example
  *

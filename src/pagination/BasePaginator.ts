@@ -15,7 +15,6 @@ type DebouncedExecQueryFunction = DebouncedFunc<
   (params: { direction: PaginationDirection }) => Promise<void>
 >;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type PaginatorState<T = any> = {
   hasNext: boolean;
   hasPrev: boolean;
@@ -27,7 +26,7 @@ export type PaginatorState<T = any> = {
 };
 
 export type PaginatorOptions = {
-  /** The number of milliseconds to debounce the search query. The default interval is 300ms. */
+  /** The number of milliseconds to debounce the search query (defaults to `300`). */
   debounceMs?: number;
   pageSize?: number;
 };

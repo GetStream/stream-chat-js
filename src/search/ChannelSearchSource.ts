@@ -54,16 +54,23 @@ export class ChannelSearchSource<
   protected async query(searchQuery: string) {
     const filters = this.filterBuilder.buildFilters({
       baseFilters: {
-        ...(this.client.userID ? { members: { $in: [this.client.userID] } } : {}),
+        ...(this.client.userId ? { members: { $in: [this.client.userId] } } : {}),
         ...this.filters,
       },
       context: { searchQuery } as Partial<
         ChannelSearchSourceFilterBuilderContext<TFilterContext>
       >,
     });
-    const sort = this.sort ?? {};
+    const sort = this.sort;
     const options = { ...this.searchOptions, limit: this.pageSize, offset: this.offset };
-    const items = await this.client.queryChannels(filters, sort, options);
+    const items = await this.client.queryChannelsAndHydrate(
+      {
+        filter_conditions: filters,
+        sort,
+        ...options,
+      },
+      { withResponse: false },
+    );
     return { items };
   }
 

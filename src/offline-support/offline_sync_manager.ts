@@ -3,7 +3,10 @@ import type { StreamChat } from '../client';
 import type { AbstractOfflineDB } from './offline_support_api';
 import type { AxiosError } from 'axios';
 import { isAxiosError } from 'axios';
-import type { APIErrorResponse } from '../types';
+import { chatLoggerSystem } from '../logger';
+import type { APIError } from '../types';
+
+const logger = chatLoggerSystem.getLogger('offline-db');
 
 /**
  * Manages synchronization between the local offline database and the Stream backend.
@@ -40,8 +43,8 @@ export class OfflineDBSyncManager {
    */
   public init = async () => {
     try {
-      // If the websocket connection is already active, then call
-      // the sync api straight away and also execute pending api calls.
+      // If the WebSocket connection is already active, then call
+      // the sync API straight away and also execute pending API calls.
       // Otherwise wait for the `connection.changed` event.
       if (this.client.user?.id && this.client.wsConnection?.isHealthy) {
         await this.syncAndExecutePendingTasks();
@@ -69,7 +72,9 @@ export class OfflineDBSyncManager {
         },
       );
     } catch (error) {
-      console.log('Error in DBSyncManager.init: ', error);
+      logger
+        .withExtraTags('init')
+        .error('Failed to initialize the offline DB sync manager.', { error });
     }
   };
 
@@ -159,7 +164,10 @@ export class OfflineDBSyncManager {
           // In that case reset the entire DB and start fresh.
           await this.offlineDb.resetDB();
         } else {
-          const result = await this.client.sync(cids, lastSyncedAtDate.toISOString());
+          const result = await this.client.sync({
+            channel_cids: cids,
+            last_sync_at: lastSyncedAtDate,
+          });
           const queryPromises = result.events.map((event) =>
             this.offlineDb.handleEvent({ event, execute: false }),
           );
@@ -176,14 +184,16 @@ export class OfflineDBSyncManager {
         lastSyncedAt: new Date().toString(),
       });
     } catch (e) {
-      console.log('An error has occurred while syncing the DB.', e);
+      logger
+        .withExtraTags('syncAndExecutePendingTasks')
+        .error('An error occurred while syncing the database.', { error: e });
 
       if (isAxiosError(e) && e.code === 'ECONNABORTED') {
         // If the sync was aborted due to timeout, we can simply return
         return;
       }
 
-      const error = e as AxiosError<APIErrorResponse>;
+      const error = e as AxiosError<APIError>;
 
       if (error.response?.data?.code === 23) {
         return;

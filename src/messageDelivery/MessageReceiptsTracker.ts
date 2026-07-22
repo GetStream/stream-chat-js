@@ -1,4 +1,4 @@
-import type { ReadResponse, UserResponse } from '../types';
+import type { ReadStateResponse, UserResponse } from '../types';
 
 type UserId = string;
 type MessageId = string;
@@ -31,10 +31,13 @@ const findIndex = <T>(arr: T[], target: MsgRef, keyOf: (x: T) => MsgRef): number
 };
 
 /**
- * For insertion after the last equal item. E.g. array [a] exists and b is being inserted -> we want [a,b], not [b,a].
- * @param arr
- * @param target
- * @param keyOf
+ * Finds the insertion index after the last equal item. E.g. when array `[a]` exists and `b` is
+ * being inserted we want `[a, b]`, not `[b, a]`.
+ *
+ * @param arr - The sorted array to search.
+ * @param target - The reference value to compare against.
+ * @param keyOf - Accessor that maps an item to its comparable reference.
+ * @returns The insertion index in `arr`.
  */
 const findUpperIndex = <T>(arr: T[], target: MsgRef, keyOf: (x: T) => MsgRef): number => {
   let lo = 0,
@@ -98,7 +101,7 @@ export type OwnMessageReceiptsTrackerOptions = {
  *
  * Event ingestion
  * ---------------
- * - `ingestInitial(rows: ReadResponse[])`: Builds initial state from server snapshot.
+ * - `ingestInitial(rows: ReadStateResponse[])`: Builds initial state from server snapshot.
  *   If a user’s `last_read` is ahead of `last_delivered_at`, the tracker enforces
  *   the invariant `lastDeliveredRef >= lastReadRef`.
  * - `onMessageRead(user, readAtISO)`:
@@ -142,7 +145,7 @@ export class MessageReceiptsTracker {
   }
 
   /** Build initial state from server snapshots (single pass + sort). */
-  ingestInitial(responses: ReadResponse[]) {
+  ingestInitial(responses: ReadStateResponse[]) {
     this.byUser.clear();
     this.readSorted = [];
     this.deliveredSorted = [];
@@ -182,13 +185,13 @@ export class MessageReceiptsTracker {
     lastDeliveredMessageId,
   }: {
     user: UserResponse;
-    deliveredAt: string;
+    deliveredAt: Date;
     lastDeliveredMessageId?: string;
   }) {
-    const timestampMs = new Date(deliveredAt).getTime();
+    const timestampMs = deliveredAt.getTime();
     const msgRef = lastDeliveredMessageId
       ? { timestampMs, msgId: lastDeliveredMessageId }
-      : this.locateMessage(new Date(deliveredAt).getTime());
+      : this.locateMessage(deliveredAt.getTime());
     if (!msgRef) return;
     const userProgress = this.ensureUser(user);
 
@@ -216,10 +219,10 @@ export class MessageReceiptsTracker {
     lastReadMessageId,
   }: {
     user: UserResponse;
-    readAt: string;
+    readAt: Date;
     lastReadMessageId?: string;
   }) {
-    const timestampMs = new Date(readAt).getTime();
+    const timestampMs = readAt.getTime();
     const msgRef = lastReadMessageId
       ? { timestampMs, msgId: lastReadMessageId }
       : this.locateMessage(timestampMs);
@@ -263,13 +266,13 @@ export class MessageReceiptsTracker {
     lastReadMessageId,
   }: {
     user: UserResponse;
-    lastReadAt?: string;
+    lastReadAt?: Date;
     lastReadMessageId?: string;
   }) {
     const userProgress = this.ensureUser(user);
 
     const newReadRef: MsgRef = lastReadAt
-      ? { timestampMs: new Date(lastReadAt).getTime(), msgId: lastReadMessageId ?? '' }
+      ? { timestampMs: lastReadAt.getTime(), msgId: lastReadMessageId ?? '' }
       : { ...MIN_REF };
 
     // If no change, exit early.

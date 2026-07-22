@@ -1,64 +1,36 @@
 import { StateStore } from './store';
 import type { StreamChat } from './client';
 import type {
-  Event,
+  EventPayload,
   PartialPollUpdate,
-  PollAnswer,
-  PollData,
   PollEnrichData,
   PollOptionData,
-  PollResponse,
-  PollVote,
+  PollResponse_old,
+  PollVoteResponseData,
   QueryVotesFilters,
   QueryVotesOptions,
+  RequireLiteral,
+  UpdatePollRequest,
   VoteSort,
+  VotingVisibility,
 } from './types';
+import type { PollResponseData as Gen_PollResponseData, WSEvent } from './gen/models';
 
-type PollEvent = {
-  cid: string;
-  created_at: string;
-  poll: PollResponse;
-};
-
-type PollUpdatedEvent = PollEvent & {
-  type: 'poll.updated';
-};
-
-type PollClosedEvent = PollEvent & {
-  type: 'poll.closed';
-};
-
-type PollVoteEvent = {
-  cid: string;
-  created_at: string;
-  poll: PollResponse;
-  poll_vote: PollVote | PollAnswer;
-};
-
-type PollVoteCastedEvent = PollVoteEvent & {
-  type: 'poll.vote_casted';
-};
-
-type PollVoteCastedChanged = PollVoteEvent & {
-  type: 'poll.vote_removed';
-};
-
-type PollVoteCastedRemoved = PollVoteEvent & {
-  type: 'poll.vote_removed';
-};
-
-const isPollUpdatedEvent = (e: Event): e is PollUpdatedEvent => e.type === 'poll.updated';
-const isPollClosedEventEvent = (e: Event): e is PollClosedEvent =>
+const isPollUpdatedEvent = (e: WSEvent): e is EventPayload<'poll.updated'> =>
+  e.type === 'poll.updated';
+const isPollClosedEventEvent = (e: WSEvent): e is EventPayload<'poll.closed'> =>
   e.type === 'poll.closed';
-const isPollVoteCastedEvent = (e: Event): e is PollVoteCastedEvent =>
+const isPollVoteCastedEvent = (e: WSEvent): e is EventPayload<'poll.vote_casted'> =>
   e.type === 'poll.vote_casted';
-const isPollVoteChangedEvent = (e: Event): e is PollVoteCastedChanged =>
+const isPollVoteChangedEvent = (e: WSEvent): e is EventPayload<'poll.vote_changed'> =>
   e.type === 'poll.vote_changed';
-const isPollVoteRemovedEvent = (e: Event): e is PollVoteCastedRemoved =>
+const isPollVoteRemovedEvent = (e: WSEvent): e is EventPayload<'poll.vote_removed'> =>
   e.type === 'poll.vote_removed';
 
-export const isVoteAnswer = (vote: PollVote | PollAnswer): vote is PollAnswer =>
-  !!(vote as PollAnswer)?.answer_text;
+export const isVoteAnswer = (
+  vote: any | undefined,
+): vote is RequireLiteral<PollVoteResponseData, 'answer_text' | 'is_answer'> =>
+  !!vote?.answer_text;
 
 export type PollAnswersQueryParams = {
   filter?: QueryVotesFilters;
@@ -74,16 +46,16 @@ export type PollOptionVotesQueryParams = {
 
 type OptionId = string;
 
-export type PollState = Omit<PollResponse, 'own_votes' | 'id'> & {
+export type PollState = Omit<PollResponse_old, 'own_votes' | 'id'> & {
   lastActivityAt: Date; // todo: would be ideal to get this from the BE
   maxVotedOptionIds: OptionId[];
-  ownVotesByOptionId: Record<OptionId, PollVote>;
-  ownAnswer?: PollAnswer; // each user can have only one answer
+  ownVotesByOptionId: Record<OptionId, PollVoteResponseData>;
+  ownAnswer?: PollVoteResponseData; // each user can have only one answer
 };
 
 type PollInitOptions = {
   client: StreamChat;
-  poll: PollResponse;
+  poll: Gen_PollResponseData;
 };
 
 export class Poll {
@@ -99,11 +71,10 @@ export class Poll {
   }
 
   private getInitialStateFromPollResponse = (poll: PollInitOptions['poll']) => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { own_votes, id, ...pollResponseForState } = poll;
+    const { own_votes, id: _id, ...pollResponseForState } = poll;
     const { ownAnswer, ownVotes } = own_votes?.reduce<{
-      ownVotes: PollVote[];
-      ownAnswer?: PollAnswer;
+      ownVotes: PollVoteResponseData[];
+      ownAnswer?: PollVoteResponseData;
     }>(
       (acc, voteOrAnswer) => {
         if (isVoteAnswer(voteOrAnswer)) {
@@ -119,9 +90,7 @@ export class Poll {
     return {
       ...pollResponseForState,
       lastActivityAt: new Date(),
-      maxVotedOptionIds: getMaxVotedOptionIds(
-        pollResponseForState.vote_counts_by_option as PollResponse['vote_counts_by_option'],
-      ),
+      maxVotedOptionIds: getMaxVotedOptionIds(pollResponseForState.vote_counts_by_option),
       ownAnswer,
       ownVotesByOptionId: getOwnVotesByOptionId(ownVotes),
     };
@@ -142,17 +111,17 @@ export class Poll {
     return this.state.getLatestValue();
   }
 
-  public handlePollUpdated = (event: Event) => {
+  public handlePollUpdated = (event: EventPayload<'poll.updated'>) => {
     if (event.poll?.id && event.poll.id !== this.id) return;
     if (!isPollUpdatedEvent(event)) return;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { id, ...pollData } = extractPollData(event.poll);
+
+    const { id: _id, ...pollData } = extractPollData(event.poll);
     // @ts-expect-error type mismatch
     this.state.partialNext({ ...pollData, lastActivityAt: new Date(event.created_at) });
     this.upsertOfflineDb();
   };
 
-  public handlePollClosed = (event: Event) => {
+  public handlePollClosed = (event: EventPayload<'poll.closed'>) => {
     if (event.poll?.id && event.poll.id !== this.id) return;
     if (!isPollClosedEventEvent(event)) return;
     this.state.partialNext({
@@ -162,12 +131,12 @@ export class Poll {
     this.upsertOfflineDb();
   };
 
-  public handleVoteCasted = (event: Event) => {
+  public handleVoteCasted = (event: EventPayload<'poll.vote_casted'>) => {
     if (event.poll?.id && event.poll.id !== this.id) return;
     if (!isPollVoteCastedEvent(event)) return;
     const currentState = this.data;
-    const isOwnVote = event.poll_vote.user_id === this.client.userID;
-    let latestAnswers = [...(currentState.latest_answers as PollAnswer[])];
+    const isOwnVote = event.poll_vote.user_id === this.client.userId;
+    let latestAnswers = [...(currentState.latest_answers as PollVoteResponseData[])];
     let ownAnswer = currentState.ownAnswer;
     const ownVotesByOptionId = currentState.ownVotesByOptionId;
     let maxVotedOptionIds = currentState.maxVotedOptionIds;
@@ -198,13 +167,13 @@ export class Poll {
     this.upsertOfflineDb();
   };
 
-  public handleVoteChanged = (event: Event) => {
+  public handleVoteChanged = (event: EventPayload<'poll.vote_changed'>) => {
     // this event is triggered only when event.poll.enforce_unique_vote === true
     if (event.poll?.id && event.poll.id !== this.id) return;
     if (!isPollVoteChangedEvent(event)) return;
     const currentState = this.data;
-    const isOwnVote = event.poll_vote.user_id === this.client.userID;
-    let latestAnswers = [...(currentState.latest_answers as PollAnswer[])];
+    const isOwnVote = event.poll_vote.user_id === this.client.userId;
+    let latestAnswers = [...(currentState.latest_answers as PollVoteResponseData[])];
     let ownAnswer = currentState.ownAnswer;
     let ownVotesByOptionId = currentState.ownVotesByOptionId;
     let maxVotedOptionIds = currentState.maxVotedOptionIds;
@@ -221,7 +190,7 @@ export class Poll {
           ownVotesByOptionId = { [event.poll_vote.option_id]: event.poll_vote };
         } else {
           ownVotesByOptionId = Object.entries(ownVotesByOptionId).reduce<
-            Record<OptionId, PollVote>
+            Record<OptionId, PollVoteResponseData>
           >((acc, [optionId, vote]) => {
             if (
               optionId !== event.poll_vote.option_id &&
@@ -258,12 +227,12 @@ export class Poll {
     this.upsertOfflineDb();
   };
 
-  public handleVoteRemoved = (event: Event) => {
+  public handleVoteRemoved = (event: EventPayload<'poll.vote_removed'>) => {
     if (event.poll?.id && event.poll.id !== this.id) return;
     if (!isPollVoteRemovedEvent(event)) return;
     const currentState = this.data;
-    const isOwnVote = event.poll_vote.user_id === this.client.userID;
-    let latestAnswers = [...(currentState.latest_answers as PollAnswer[])];
+    const isOwnVote = event.poll_vote.user_id === this.client.userId;
+    let latestAnswers = [...(currentState.latest_answers as PollVoteResponseData[])];
     let ownAnswer = currentState.ownAnswer;
     const ownVotesByOptionId = { ...currentState.ownVotesByOptionId };
     let maxVotedOptionIds = currentState.maxVotedOptionIds;
@@ -293,29 +262,36 @@ export class Poll {
   };
 
   query = async (id: string) => {
-    const { poll } = await this.client.getPoll(id);
+    const { poll } = await this.client.getPoll({ poll_id: id });
     this.state.partialNext({ ...poll, lastActivityAt: new Date() });
     return poll;
   };
 
-  update = async (data: Exclude<PollData, 'id'>) =>
-    await this.client.updatePoll({ ...data, id: this.id });
+  update = async (data: Exclude<UpdatePollRequest, 'id'>) =>
+    await this.client.updatePoll({ ...data, id: this.id as string });
 
   partialUpdate = async (partialPollObject: PartialPollUpdate) =>
-    await this.client.partialUpdatePoll(this.id as string, partialPollObject);
+    await this.client.updatePollPartial({
+      poll_id: this.id as string,
+      ...partialPollObject,
+    });
 
-  close = async () => await this.client.closePoll(this.id as string);
+  close = async () =>
+    await this.client.updatePollPartial({
+      poll_id: this.id as string,
+      set: { is_closed: true },
+    });
 
-  delete = async () => await this.client.deletePoll(this.id as string);
+  delete = async () => await this.client.deletePoll({ poll_id: this.id as string });
 
   createOption = async (option: PollOptionData) =>
-    await this.client.createPollOption(this.id as string, option);
+    await this.client.createPollOption({ poll_id: this.id as string, ...option });
 
   updateOption = async (option: PollOptionData) =>
-    await this.client.updatePollOption(this.id as string, option);
+    await this.client.updatePollOption({ poll_id: this.id as string, ...option });
 
-  deleteOption = async (optionId: string) =>
-    await this.client.deletePollOption(this.id as string, optionId);
+  deleteOption = async (option_id: string) =>
+    await this.client.deletePollOption({ poll_id: this.id as string, option_id });
 
   castVote = async (optionId: string, messageId: string) => {
     const { max_votes_allowed, ownVotesByOptionId } = this.data;
@@ -336,38 +312,54 @@ export class Poll {
       });
       return;
     }
-    return await this.client.castPollVote(messageId, this.id as string, {
-      option_id: optionId,
+    return await this.client.castPollVote({
+      message_id: messageId,
+      poll_id: this.id as string,
+      vote: { option_id: optionId },
     });
   };
 
   removeVote = async (voteId: string, messageId: string) =>
-    await this.client.removePollVote(messageId, this.id as string, voteId);
+    await this.client.deletePollVote({
+      message_id: messageId,
+      poll_id: this.id as string,
+      vote_id: voteId,
+    });
 
   addAnswer = async (answerText: string, messageId: string) =>
-    await this.client.addPollAnswer(messageId, this.id as string, answerText);
+    await this.client.castPollVote({
+      message_id: messageId,
+      poll_id: this.id as string,
+      vote: { answer_text: answerText },
+    });
 
   removeAnswer = async (answerId: string, messageId: string) =>
-    await this.client.removePollVote(messageId, this.id as string, answerId);
+    await this.client.deletePollVote({
+      message_id: messageId,
+      poll_id: this.id as string,
+      vote_id: answerId,
+    });
 
   queryAnswers = async (params: PollAnswersQueryParams) =>
-    await this.client.queryPollAnswers(
-      this.id as string,
-      params.filter,
-      params.sort,
-      params.options,
-    );
+    await this.client.queryPollVotes({
+      poll_id: this.id as string,
+      sort: params.sort,
+      filter: { ...(params.filter ?? {}), is_answer: true },
+      ...(params.options ?? {}),
+    });
 
   queryOptionVotes = async (params: PollOptionVotesQueryParams) =>
-    await this.client.queryPollVotes(
-      this.id as string,
-      params.filter,
-      params.sort,
-      params.options,
-    );
+    await this.client.queryPollVotes({
+      poll_id: this.id as string,
+      sort: params.sort,
+      filter: params.filter,
+      ...(params.options ?? {}),
+    });
 }
 
-function getMaxVotedOptionIds(voteCountsByOption: PollResponse['vote_counts_by_option']) {
+function getMaxVotedOptionIds(
+  voteCountsByOption: PollResponse_old['vote_counts_by_option'],
+) {
   let maxVotes = 0;
   let winningOptions: string[] = [];
   for (const [id, count] of Object.entries(voteCountsByOption ?? {})) {
@@ -381,17 +373,17 @@ function getMaxVotedOptionIds(voteCountsByOption: PollResponse['vote_counts_by_o
   return winningOptions;
 }
 
-function getOwnVotesByOptionId(ownVotes: PollVote[]) {
+function getOwnVotesByOptionId(ownVotes: PollVoteResponseData[]) {
   return !ownVotes
-    ? ({} as Record<OptionId, PollVote>)
-    : ownVotes.reduce<Record<OptionId, PollVote>>((acc, vote) => {
+    ? ({} as Record<OptionId, PollVoteResponseData>)
+    : ownVotes.reduce<Record<OptionId, PollVoteResponseData>>((acc, vote) => {
         if (isVoteAnswer(vote) || !vote.option_id) return acc;
         acc[vote.option_id] = vote;
         return acc;
       }, {});
 }
 
-export function extractPollData(pollResponse: PollResponse): PollData {
+export function extractPollData(pollResponse: Gen_PollResponseData): UpdatePollRequest {
   return {
     allow_answers: pollResponse.allow_answers,
     allow_user_suggested_options: pollResponse.allow_user_suggested_options,
@@ -402,16 +394,15 @@ export function extractPollData(pollResponse: PollResponse): PollData {
     max_votes_allowed: pollResponse.max_votes_allowed,
     name: pollResponse.name,
     options: pollResponse.options,
-    voting_visibility: pollResponse.voting_visibility,
+    voting_visibility: pollResponse.voting_visibility as VotingVisibility,
   };
 }
 
-export function mapPollStateToResponse(poll: Poll): PollResponse {
+export function mapPollStateToResponse(poll: Poll): PollResponse_old {
   const {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    lastActivityAt,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    maxVotedOptionIds,
+    lastActivityAt: _lastActivityAt,
+
+    maxVotedOptionIds: _maxVotedOptionIds,
     ownVotesByOptionId,
     ownAnswer,
     ...restState
@@ -419,7 +410,7 @@ export function mapPollStateToResponse(poll: Poll): PollResponse {
   const ownVotes = [
     ...Object.values(ownVotesByOptionId),
     ...(ownAnswer ? [ownAnswer] : []),
-  ].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+  ].sort((a, b) => a.created_at.getTime() - b.created_at.getTime());
 
   return {
     ...restState,
@@ -429,7 +420,7 @@ export function mapPollStateToResponse(poll: Poll): PollResponse {
 }
 
 export function extractPollEnrichedData(
-  pollResponse: PollResponse,
+  pollResponse: Gen_PollResponseData,
 ): Omit<PollEnrichData, 'own_votes' | 'latest_answers'> {
   return {
     answers_count: pollResponse.answers_count,

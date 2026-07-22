@@ -11,8 +11,6 @@ import { generateUUIDv4 as uuidv4 } from '../../src/utils';
 import { vi, describe, beforeEach, afterEach, it, expect } from 'vitest';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
 
-const toISOString = (timestampMs) => new Date(timestampMs).toISOString();
-
 describe('ChannelState addMessagesSorted', function () {
 	let state;
 	let client;
@@ -30,9 +28,13 @@ describe('ChannelState addMessagesSorted', function () {
 
 	it('empty state add single messages', async function () {
 		expect(state.messages).to.have.length(0);
-		state.addMessagesSorted([generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' })]);
+		state.addMessagesSorted([
+			generateMsg({ id: '0', date: new Date('2020-01-01T00:00:00.000Z') }),
+		]);
 		expect(state.messages).to.have.length(1);
-		state.addMessagesSorted([generateMsg({ id: '1', date: '2020-01-01T00:00:01.000Z' })]);
+		state.addMessagesSorted([
+			generateMsg({ id: '1', date: new Date('2020-01-01T00:00:01.000Z') }),
+		]);
 
 		expect(state.messages).to.have.length(2);
 		expect(state.messages[0].id).to.be.equal('0');
@@ -60,9 +62,9 @@ describe('ChannelState addMessagesSorted', function () {
 
 	it('empty state add multiple messages', async function () {
 		state.addMessagesSorted([
-			generateMsg({ id: '1', date: '2020-01-01T00:00:00.001Z' }),
-			generateMsg({ id: '2', date: '2020-01-01T00:00:00.002Z' }),
-			generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
+			generateMsg({ id: '1', date: new Date('2020-01-01T00:00:00.001Z') }),
+			generateMsg({ id: '2', date: new Date('2020-01-01T00:00:00.002Z') }),
+			generateMsg({ id: '0', date: new Date('2020-01-01T00:00:00.000Z') }),
 		]);
 
 		expect(state.messages).to.have.length(3);
@@ -81,9 +83,9 @@ describe('ChannelState addMessagesSorted', function () {
 
 	it('update a message in place 2', async function () {
 		state.addMessagesSorted([
-			generateMsg({ id: '1', date: '2020-01-01T00:00:00.001Z' }),
-			generateMsg({ id: '2', date: '2020-01-01T00:00:00.002Z' }),
-			generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
+			generateMsg({ id: '1', date: new Date('2020-01-01T00:00:00.001Z') }),
+			generateMsg({ id: '2', date: new Date('2020-01-01T00:00:00.002Z') }),
+			generateMsg({ id: '0', date: new Date('2020-01-01T00:00:00.000Z') }),
 		]);
 
 		state.addMessagesSorted([{ ...state.messages[1], text: 'update' }]);
@@ -97,10 +99,10 @@ describe('ChannelState addMessagesSorted', function () {
 
 	it('update a message in place 3', async function () {
 		state.addMessagesSorted([
-			generateMsg({ id: '1', date: '2020-01-01T00:00:00.001Z' }),
-			generateMsg({ id: '2', date: '2020-01-01T00:00:00.002Z' }),
-			generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
-			generateMsg({ id: '3', date: '2020-01-01T00:00:00.003Z' }),
+			generateMsg({ id: '1', date: new Date('2020-01-01T00:00:00.001Z') }),
+			generateMsg({ id: '2', date: new Date('2020-01-01T00:00:00.002Z') }),
+			generateMsg({ id: '0', date: new Date('2020-01-01T00:00:00.000Z') }),
+			generateMsg({ id: '3', date: new Date('2020-01-01T00:00:00.003Z') }),
 		]);
 
 		state.addMessagesSorted([{ ...state.messages[0], text: 'update 0' }]);
@@ -119,7 +121,7 @@ describe('ChannelState addMessagesSorted', function () {
 	it('add a message with same created_at', async function () {
 		for (let i = 0; i < 10; i++) {
 			state.addMessagesSorted([
-				generateMsg({ id: `${i}`, date: `2020-01-01T00:00:00.00${i}Z` }),
+				generateMsg({ id: `${i}`, date: new Date(`2020-01-01T00:00:00.00${i}Z`) }),
 			]);
 		}
 
@@ -132,7 +134,7 @@ describe('ChannelState addMessagesSorted', function () {
 
 		expect(state.messages).to.have.length(10);
 		state.addMessagesSorted([
-			generateMsg({ id: 'id', date: `2020-01-01T00:00:00.007Z` }),
+			generateMsg({ id: 'id', date: new Date(`2020-01-01T00:00:00.007Z`) }),
 		]);
 		expect(state.messages).to.have.length(11);
 		expect(state.messages[7].id).to.be.equal('7');
@@ -142,7 +144,7 @@ describe('ChannelState addMessagesSorted', function () {
 	it('add lots of messages in order', async function () {
 		for (let i = 100; i < 300; i++) {
 			state.addMessagesSorted([
-				generateMsg({ id: `${i}`, date: `2020-01-01T00:00:00.${i}Z` }),
+				generateMsg({ id: `${i}`, date: new Date(`2020-01-01T00:00:00.${i}Z`) }),
 			]);
 		}
 
@@ -158,7 +160,9 @@ describe('ChannelState addMessagesSorted', function () {
 	it('add lots of messages out of order', async function () {
 		const messages = [];
 		for (let i = 100; i < 300; i++) {
-			messages.push(generateMsg({ id: `${i}`, date: `2020-01-01T00:00:00.${i}Z` }));
+			messages.push(
+				generateMsg({ id: `${i}`, date: new Date(`2020-01-01T00:00:00.${i}Z`) }),
+			);
 		}
 		// shuffle
 		for (let i = messages.length - 1; i > 0; i--) {
@@ -175,13 +179,15 @@ describe('ChannelState addMessagesSorted', function () {
 	});
 
 	it('should avoid duplicates if message.created_at changes', async function () {
-		state.addMessagesSorted([generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' })]);
+		state.addMessagesSorted([
+			generateMsg({ id: '0', date: new Date('2020-01-01T00:00:00.000Z') }),
+		]);
 		expect(state.messages).to.have.length(1);
 
 		state.addMessageSorted(
 			{
 				...state.messages[0],
-				created_at: '2020-01-01T00:00:00.044Z',
+				created_at: new Date('2020-01-01T00:00:00.044Z'),
 				text: 'update 0',
 			},
 			true,
@@ -195,10 +201,10 @@ describe('ChannelState addMessagesSorted', function () {
 
 	it('should respect order and avoid duplicates if message.created_at changes', async function () {
 		state.addMessagesSorted([
-			generateMsg({ id: '1', date: '2020-01-01T00:00:00.001Z' }),
-			generateMsg({ id: '2', date: '2020-01-01T00:00:00.002Z' }),
-			generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }),
-			generateMsg({ id: '3', date: '2020-01-01T00:00:00.003Z' }),
+			generateMsg({ id: '1', date: new Date('2020-01-01T00:00:00.001Z') }),
+			generateMsg({ id: '2', date: new Date('2020-01-01T00:00:00.002Z') }),
+			generateMsg({ id: '0', date: new Date('2020-01-01T00:00:00.000Z') }),
+			generateMsg({ id: '3', date: new Date('2020-01-01T00:00:00.003Z') }),
 		]);
 		expect(state.messages).to.have.length(4);
 
@@ -206,7 +212,7 @@ describe('ChannelState addMessagesSorted', function () {
 			[
 				{
 					...state.messages[3],
-					created_at: '2020-01-01T00:00:00.033Z',
+					created_at: new Date('2020-01-01T00:00:00.033Z'),
 					text: 'update 3',
 				},
 			],
@@ -218,7 +224,7 @@ describe('ChannelState addMessagesSorted', function () {
 		state.addMessageSorted(
 			{
 				...state.messages[0],
-				created_at: '2020-01-01T00:00:00.044Z',
+				created_at: new Date('2020-01-01T00:00:00.044Z'),
 				text: 'update 0',
 			},
 			true,
@@ -233,14 +239,14 @@ describe('ChannelState addMessagesSorted', function () {
 
 	it('should add messages to new message set', () => {
 		state.addMessagesSorted([
-			generateMsg({ id: '12', date: toISOString(100) }),
-			generateMsg({ id: '13', date: toISOString(200) }),
-			generateMsg({ id: '14', date: toISOString(300) }),
+			generateMsg({ id: '12', date: new Date(100) }),
+			generateMsg({ id: '13', date: new Date(200) }),
+			generateMsg({ id: '14', date: new Date(300) }),
 		]);
 		state.addMessagesSorted(
 			[
-				generateMsg({ id: '0', date: toISOString(1000) }),
-				generateMsg({ id: '1', date: toISOString(1100) }),
+				generateMsg({ id: '0', date: new Date(1000) }),
+				generateMsg({ id: '1', date: new Date(1100) }),
 			],
 			false,
 			false,
@@ -300,17 +306,17 @@ describe('ChannelState addMessagesSorted', function () {
 			[
 				generateMsg({
 					id: '12',
-					date: toISOString(1200),
-					type: 'error',
-					moderation_details: { action: 'MESSAGE_RESPONSE_ACTION_REMOVE' },
-				}),
-				generateMsg({
-					id: '13',
-					date: toISOString(1300),
+					date: new Date(1200),
 					type: 'error',
 					moderation: { action: 'remove' },
 				}),
-				generateMsg({ id: '14', date: toISOString(1400) }),
+				generateMsg({
+					id: '13',
+					date: new Date(1300),
+					type: 'error',
+					moderation: { action: 'remove' },
+				}),
+				generateMsg({ id: '14', date: new Date(1400) }),
 			],
 			false,
 			false,
@@ -329,9 +335,9 @@ describe('ChannelState addMessagesSorted', function () {
 		// load first page
 		state.addMessagesSorted(
 			[
-				generateMsg({ id: '12', date: toISOString(1200) }),
-				generateMsg({ id: '13', date: toISOString(1300) }),
-				generateMsg({ id: '14', date: toISOString(1400) }),
+				generateMsg({ id: '12', date: new Date(1200) }),
+				generateMsg({ id: '13', date: new Date(1300) }),
+				generateMsg({ id: '14', date: new Date(1400) }),
 			],
 			false,
 			false,
@@ -342,8 +348,8 @@ describe('ChannelState addMessagesSorted', function () {
 		// jump to a start
 		state.addMessagesSorted(
 			[
-				generateMsg({ id: '1', date: toISOString(100) }),
-				generateMsg({ id: '2', date: toISOString(200) }),
+				generateMsg({ id: '1', date: new Date(100) }),
+				generateMsg({ id: '2', date: new Date(200) }),
 			],
 			false,
 			false,
@@ -355,7 +361,7 @@ describe('ChannelState addMessagesSorted', function () {
 		// jump to a end
 
 		state.addMessagesSorted(
-			[generateMsg({ id: '10', date: toISOString(1000) })],
+			[generateMsg({ id: '10', date: new Date(1000) })],
 			false,
 			false,
 			true,
@@ -364,8 +370,8 @@ describe('ChannelState addMessagesSorted', function () {
 
 		state.addMessagesSorted(
 			[
-				generateMsg({ id: '8', date: toISOString(800) }),
-				generateMsg({ id: '9', date: toISOString(900) }),
+				generateMsg({ id: '8', date: new Date(800) }),
+				generateMsg({ id: '9', date: new Date(900) }),
 			],
 			false,
 			false,
@@ -375,9 +381,9 @@ describe('ChannelState addMessagesSorted', function () {
 
 		state.addMessagesSorted(
 			[
-				generateMsg({ id: '4', date: toISOString(400) }),
-				generateMsg({ id: '5', date: toISOString(500) }),
-				generateMsg({ id: '6', date: toISOString(600) }),
+				generateMsg({ id: '4', date: new Date(400) }),
+				generateMsg({ id: '5', date: new Date(500) }),
+				generateMsg({ id: '6', date: new Date(600) }),
 			],
 			false,
 			false,
@@ -386,7 +392,7 @@ describe('ChannelState addMessagesSorted', function () {
 		);
 
 		state.addMessagesSorted(
-			[generateMsg({ id: '1500', date: toISOString(1500) })],
+			[generateMsg({ id: '1500', date: new Date(1500) })],
 			false,
 			false,
 			true,
@@ -409,8 +415,8 @@ describe('ChannelState addMessagesSorted', function () {
 		// load first page
 		state.addMessagesSorted(
 			[
-				generateMsg({ id: '12', date: toISOString(1200) }),
-				generateMsg({ id: '14', date: toISOString(1400) }),
+				generateMsg({ id: '12', date: new Date(1200) }),
+				generateMsg({ id: '14', date: new Date(1400) }),
 			],
 			false,
 			false,
@@ -420,8 +426,8 @@ describe('ChannelState addMessagesSorted', function () {
 
 		state.addMessagesSorted(
 			[
-				generateMsg({ id: '6', date: toISOString(600) }),
-				generateMsg({ id: '8', date: toISOString(800) }),
+				generateMsg({ id: '6', date: new Date(600) }),
+				generateMsg({ id: '8', date: new Date(800) }),
 			],
 			false,
 			false,
@@ -431,8 +437,8 @@ describe('ChannelState addMessagesSorted', function () {
 
 		state.addMessagesSorted(
 			[
-				generateMsg({ id: '1', date: toISOString(100) }),
-				generateMsg({ id: '3', date: toISOString(300) }),
+				generateMsg({ id: '1', date: new Date(100) }),
+				generateMsg({ id: '3', date: new Date(300) }),
 			],
 			false,
 			false,
@@ -442,9 +448,9 @@ describe('ChannelState addMessagesSorted', function () {
 
 		state.addMessagesSorted(
 			[
-				generateMsg({ id: '7', date: 700 }),
-				generateMsg({ id: '2', date: 200 }),
-				generateMsg({ id: '13', date: toISOString(1300) }),
+				generateMsg({ id: '7', date: new Date(700) }),
+				generateMsg({ id: '2', date: new Date(200) }),
+				generateMsg({ id: '13', date: new Date(1300) }),
 			],
 			false,
 			false,
@@ -465,9 +471,9 @@ describe('ChannelState addMessagesSorted', function () {
 	it(`should add messages to latest message set when it's not currently active`, () => {
 		state.addMessagesSorted(
 			[
-				generateMsg({ id: '12', date: toISOString(1200) }),
-				generateMsg({ id: '13', date: toISOString(1300) }),
-				generateMsg({ id: '14', date: toISOString(1400) }),
+				generateMsg({ id: '12', date: new Date(1200) }),
+				generateMsg({ id: '13', date: new Date(1300) }),
+				generateMsg({ id: '14', date: new Date(1400) }),
 			],
 			false,
 			false,
@@ -476,8 +482,8 @@ describe('ChannelState addMessagesSorted', function () {
 		);
 		state.addMessagesSorted(
 			[
-				generateMsg({ id: '1', date: toISOString(100) }),
-				generateMsg({ id: '2', date: toISOString(200) }),
+				generateMsg({ id: '1', date: new Date(100) }),
+				generateMsg({ id: '2', date: new Date(200) }),
 			],
 			false,
 			false,
@@ -487,7 +493,7 @@ describe('ChannelState addMessagesSorted', function () {
 		state.messageSets[0].isCurrent = false;
 		state.messageSets[1].isCurrent = true;
 		state.addMessagesSorted(
-			[generateMsg({ id: '15', date: toISOString(1500) })],
+			[generateMsg({ id: '15', date: new Date(1500) })],
 			false,
 			false,
 			true,
@@ -500,8 +506,8 @@ describe('ChannelState addMessagesSorted', function () {
 	it('adjusts the latest set flag according to actual message creation date', () => {
 		state.addMessagesSorted(
 			[
-				generateMsg({ id: '1', date: toISOString(100) }),
-				generateMsg({ id: '2', date: toISOString(200) }),
+				generateMsg({ id: '1', date: new Date(100) }),
+				generateMsg({ id: '2', date: new Date(200) }),
 			],
 			false,
 			false,
@@ -512,9 +518,9 @@ describe('ChannelState addMessagesSorted', function () {
 
 		state.addMessagesSorted(
 			[
-				generateMsg({ id: '12', date: toISOString(1200) }),
-				generateMsg({ id: '13', date: toISOString(1300) }),
-				generateMsg({ id: '14', date: toISOString(1400) }),
+				generateMsg({ id: '12', date: new Date(1200) }),
+				generateMsg({ id: '13', date: new Date(1300) }),
+				generateMsg({ id: '14', date: new Date(1400) }),
 			],
 			false,
 			false,
@@ -528,9 +534,9 @@ describe('ChannelState addMessagesSorted', function () {
 	it("the messageSetToAddToIfDoesNotExist: 'latest' should be ignored if the messages do not belong to the latest set based on their creation timestamp", () => {
 		state.addMessagesSorted(
 			[
-				generateMsg({ id: '12', date: toISOString(1200) }),
-				generateMsg({ id: '13', date: toISOString(1300) }),
-				generateMsg({ id: '14', date: toISOString(1400) }),
+				generateMsg({ id: '12', date: new Date(1200) }),
+				generateMsg({ id: '13', date: new Date(1300) }),
+				generateMsg({ id: '14', date: new Date(1400) }),
 			],
 			false,
 			false,
@@ -539,8 +545,8 @@ describe('ChannelState addMessagesSorted', function () {
 		);
 		state.addMessagesSorted(
 			[
-				generateMsg({ id: '1', date: toISOString(100) }),
-				generateMsg({ id: '2', date: toISOString(200) }),
+				generateMsg({ id: '1', date: new Date(100) }),
+				generateMsg({ id: '2', date: new Date(200) }),
 			],
 			false,
 			false,
@@ -551,7 +557,7 @@ describe('ChannelState addMessagesSorted', function () {
 		expect(state.messageSets[1].isCurrent).toBeFalsy();
 
 		state.addMessagesSorted(
-			[generateMsg({ id: '15', date: toISOString(150) })],
+			[generateMsg({ id: '15', date: new Date(150) })],
 			false,
 			false,
 			true,
@@ -594,7 +600,7 @@ describe('ChannelState addMessagesSorted', function () {
 			generateMsg({ id: '14' }),
 		]);
 		state.addMessagesSorted(
-			[generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' })],
+			[generateMsg({ id: '0', date: new Date('2020-01-01T00:00:00.000Z') })],
 			false,
 			false,
 			true,
@@ -604,7 +610,7 @@ describe('ChannelState addMessagesSorted', function () {
 			[
 				generateMsg({
 					id: '0',
-					date: '2020-01-01T00:00:00.000Z',
+					date: new Date('2020-01-01T00:00:00.000Z'),
 					text: 'Updated text',
 				}),
 			],
@@ -620,15 +626,15 @@ describe('ChannelState addMessagesSorted', function () {
 
 	it(`should update message in active message set`, () => {
 		state.addMessagesSorted([
-			generateMsg({ id: '12', date: '2020-01-01T00:00:00.000Z' }),
-			generateMsg({ id: '13', date: '2020-01-01T00:00:10.000Z' }),
-			generateMsg({ id: '14', date: '2020-01-01T00:00:11.000Z' }),
+			generateMsg({ id: '12', date: new Date('2020-01-01T00:00:00.000Z') }),
+			generateMsg({ id: '13', date: new Date('2020-01-01T00:00:10.000Z') }),
+			generateMsg({ id: '14', date: new Date('2020-01-01T00:00:11.000Z') }),
 		]);
 		state.addMessagesSorted(
 			[
 				generateMsg({
 					id: '13',
-					date: '2020-01-01T00:00:10.000Z',
+					date: new Date('2020-01-01T00:00:10.000Z'),
 					text: 'Updated text',
 				}),
 			],
@@ -645,9 +651,9 @@ describe('ChannelState addMessagesSorted', function () {
 	it(`should update message in latest message set`, () => {
 		state.addMessagesSorted(
 			[
-				generateMsg({ id: '12', date: '2020-01-01T00:00:00.000Z' }),
-				generateMsg({ id: '13', date: '2020-01-01T00:00:10.000Z' }),
-				generateMsg({ id: '14', date: '2020-01-01T00:00:11.000Z' }),
+				generateMsg({ id: '12', date: new Date('2020-01-01T00:00:00.000Z') }),
+				generateMsg({ id: '13', date: new Date('2020-01-01T00:00:10.000Z') }),
+				generateMsg({ id: '14', date: new Date('2020-01-01T00:00:11.000Z') }),
 			],
 			false,
 			false,
@@ -658,7 +664,7 @@ describe('ChannelState addMessagesSorted', function () {
 			[
 				generateMsg({
 					id: '13',
-					date: '2020-01-01T00:00:10.000Z',
+					date: new Date('2020-01-01T00:00:10.000Z'),
 					text: 'Updated text',
 				}),
 			],
@@ -673,12 +679,12 @@ describe('ChannelState addMessagesSorted', function () {
 
 	it(`should do nothing if message is not available locally`, () => {
 		state.addMessagesSorted([
-			generateMsg({ id: '12', date: toISOString(1200) }),
-			generateMsg({ id: '13', date: toISOString(1300) }),
-			generateMsg({ id: '14', date: toISOString(1400) }),
+			generateMsg({ id: '12', date: new Date(1200) }),
+			generateMsg({ id: '13', date: new Date(1300) }),
+			generateMsg({ id: '14', date: new Date(1400) }),
 		]);
 		state.addMessagesSorted(
-			[generateMsg({ id: '5', date: toISOString(500) })],
+			[generateMsg({ id: '5', date: new Date(500) })],
 			false,
 			false,
 			true,
@@ -686,8 +692,8 @@ describe('ChannelState addMessagesSorted', function () {
 		);
 		state.addMessagesSorted(
 			[
-				generateMsg({ id: '1', date: toISOString(100) }),
-				generateMsg({ id: '2', date: toISOString(200) }),
+				generateMsg({ id: '1', date: new Date(100) }),
+				generateMsg({ id: '2', date: new Date(200) }),
 			],
 			false,
 			false,
@@ -695,7 +701,7 @@ describe('ChannelState addMessagesSorted', function () {
 			'new',
 		);
 		state.addMessagesSorted(
-			[generateMsg({ id: '8', date: toISOString(800) })],
+			[generateMsg({ id: '8', date: new Date(800) })],
 			false,
 			false,
 			false,
@@ -709,16 +715,22 @@ describe('ChannelState addMessagesSorted', function () {
 
 	it('updates last_message_at correctly', async function () {
 		expect(state.last_message_at).to.be.null;
-		state.addMessagesSorted([generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' })]);
+		state.addMessagesSorted([
+			generateMsg({ id: '0', date: new Date('2020-01-01T00:00:00.000Z') }),
+		]);
 		expect(state.last_message_at.getTime()).to.be.equal(
 			new Date('2020-01-01T00:00:00.000Z').getTime(),
 		);
-		state.addMessagesSorted([generateMsg({ id: '1', date: '2019-01-01T00:00:00.000Z' })]);
+		state.addMessagesSorted([
+			generateMsg({ id: '1', date: new Date('2019-01-01T00:00:00.000Z') }),
+		]);
 		expect(state.last_message_at.getTime()).to.be.equal(
 			new Date('2020-01-01T00:00:00.000Z').getTime(),
 		);
 
-		state.addMessagesSorted([generateMsg({ id: '2', date: '2020-01-01T00:00:00.001Z' })]);
+		state.addMessagesSorted([
+			generateMsg({ id: '2', date: new Date('2020-01-01T00:00:00.001Z') }),
+		]);
 		expect(state.last_message_at.getTime()).to.be.equal(
 			new Date('2020-01-01T00:00:00.001Z').getTime(),
 		);
@@ -726,9 +738,9 @@ describe('ChannelState addMessagesSorted', function () {
 
 	it('sets pinnedMessages correctly', async function () {
 		const msgs = [
-			generateMsg({ id: '1', date: '2020-01-01T00:00:00.001Z' }),
-			generateMsg({ id: '2', date: '2020-01-01T00:00:00.002Z' }),
-			generateMsg({ id: '3', date: '2020-01-01T00:00:00.003Z' }),
+			generateMsg({ id: '1', date: new Date('2020-01-01T00:00:00.001Z') }),
+			generateMsg({ id: '2', date: new Date('2020-01-01T00:00:00.002Z') }),
+			generateMsg({ id: '3', date: new Date('2020-01-01T00:00:00.003Z') }),
 		];
 		msgs[0].pinned = true;
 		msgs[0].pinned_at = new Date('2020-01-01T00:00:00.010Z');
@@ -758,7 +770,7 @@ describe('ChannelState addMessagesSorted', function () {
 		// these message previews are used by UI SDKs
 		const parentMessage = generateMsg({
 			id: 'parent_id',
-			date: '2020-01-01T00:00:00.001Z',
+			date: new Date('2020-01-01T00:00:00.001Z'),
 		});
 		const threadReplyPreview = generateMsg({
 			id: '2',
@@ -776,20 +788,17 @@ describe('ChannelState addMessagesSorted', function () {
 	describe('merges overlapping message sets', () => {
 		it('when new messages overlap with latest messages', () => {
 			const overlap = [
-				generateMsg({ id: '11', date: toISOString(1100) }),
-				generateMsg({ id: '12', date: toISOString(1200) }),
-				generateMsg({ id: '13', date: toISOString(1300) }),
+				generateMsg({ id: '11', date: new Date(1100) }),
+				generateMsg({ id: '12', date: new Date(1200) }),
+				generateMsg({ id: '13', date: new Date(1300) }),
 			];
 			const messages = [
 				...overlap,
-				generateMsg({ id: '14', date: toISOString(1400) }),
-				generateMsg({ id: '15', date: toISOString(1500) }),
+				generateMsg({ id: '14', date: new Date(1400) }),
+				generateMsg({ id: '15', date: new Date(1500) }),
 			];
 			state.addMessagesSorted(messages);
-			const newMessages = [
-				generateMsg({ id: '10', date: toISOString(1000) }),
-				...overlap,
-			];
+			const newMessages = [generateMsg({ id: '10', date: new Date(1000) }), ...overlap];
 			state.addMessagesSorted(newMessages, false, true, true, 'new');
 
 			expect(state.messages.length).to.be.equal(6);
@@ -804,13 +813,15 @@ describe('ChannelState addMessagesSorted', function () {
 		});
 
 		it('when new messages overlap with current messages, but not with latest messages', () => {
-			const overlap = [generateMsg({ id: '11', date: '2020-01-01T00:00:10.001Z' })];
+			const overlap = [
+				generateMsg({ id: '11', date: new Date('2020-01-01T00:00:10.001Z') }),
+			];
 			const latestMessages = [
-				generateMsg({ id: '20', date: '2020-01-01T00:10:10.001Z' }),
+				generateMsg({ id: '20', date: new Date('2020-01-01T00:10:10.001Z') }),
 			];
 			state.addMessagesSorted(latestMessages);
 			const currentMessages = [
-				generateMsg({ id: '10', date: '2020-01-01T00:00:03.001Z' }),
+				generateMsg({ id: '10', date: new Date('2020-01-01T00:00:03.001Z') }),
 				...overlap,
 			];
 			state.addMessagesSorted(currentMessages, false, true, true, 'new');
@@ -818,7 +829,7 @@ describe('ChannelState addMessagesSorted', function () {
 			state.messageSets[1].isCurrent = true;
 			const newMessages = [
 				...overlap,
-				generateMsg({ id: '12', date: '2020-01-01T00:00:11.001Z' }),
+				generateMsg({ id: '12', date: new Date('2020-01-01T00:00:11.001Z') }),
 			];
 			state.addMessagesSorted(newMessages, false, true, true, 'new');
 
@@ -832,22 +843,16 @@ describe('ChannelState addMessagesSorted', function () {
 		});
 
 		it('when new messages overlap with messages, but not current or latest messages', () => {
-			const overlap = [generateMsg({ id: '11', date: toISOString(1100) })];
-			const latestMessages = [generateMsg({ id: '20', date: toISOString(2000) })];
+			const overlap = [generateMsg({ id: '11', date: new Date(1100) })];
+			const latestMessages = [generateMsg({ id: '20', date: new Date(2000) })];
 			state.addMessagesSorted(latestMessages);
-			const currentMessages = [generateMsg({ id: '8', date: toISOString(800) })];
+			const currentMessages = [generateMsg({ id: '8', date: new Date(800) })];
 			state.addMessagesSorted(currentMessages, false, true, true, 'new');
 			state.messageSets[0].isCurrent = false;
 			state.messageSets[1].isCurrent = true;
-			const otherMessages = [
-				generateMsg({ id: '10', date: toISOString(1000) }),
-				...overlap,
-			];
+			const otherMessages = [generateMsg({ id: '10', date: new Date(1000) }), ...overlap];
 			state.addMessagesSorted(otherMessages, false, true, true, 'new');
-			const newMessages = [
-				...overlap,
-				generateMsg({ id: '12', date: toISOString(1200) }),
-			];
+			const newMessages = [...overlap, generateMsg({ id: '12', date: new Date(1200) })];
 			state.addMessagesSorted(newMessages, false, true, true, 'new');
 
 			expect(state.messageSets.length).to.be.equal(3);
@@ -861,21 +866,23 @@ describe('ChannelState addMessagesSorted', function () {
 		});
 
 		it('when current messages overlap with latest', () => {
-			const overlap = [generateMsg({ id: '11', date: '2020-01-01T00:00:10.001Z' })];
+			const overlap = [
+				generateMsg({ id: '11', date: new Date('2020-01-01T00:00:10.001Z') }),
+			];
 			const latestMessages = [
 				...overlap,
-				generateMsg({ id: '12', date: '2020-01-01T00:01:10.001Z' }),
+				generateMsg({ id: '12', date: new Date('2020-01-01T00:01:10.001Z') }),
 			];
 			state.addMessagesSorted(latestMessages);
 			const currentMessages = [
-				generateMsg({ id: '8', date: '2020-01-01T00:00:03.001Z' }),
+				generateMsg({ id: '8', date: new Date('2020-01-01T00:00:03.001Z') }),
 			];
 			state.addMessagesSorted(currentMessages, false, true, true, 'new');
 			state.messageSets[0].isCurrent = false;
 			state.messageSets[1].isCurrent = true;
 			const newMessages = [
-				generateMsg({ id: '9', date: '2020-01-01T00:00:04.001Z' }),
-				generateMsg({ id: '10', date: '2020-01-01T00:00:07.001Z' }),
+				generateMsg({ id: '9', date: new Date('2020-01-01T00:00:04.001Z') }),
+				generateMsg({ id: '10', date: new Date('2020-01-01T00:00:07.001Z') }),
 				...overlap,
 			];
 			state.addMessagesSorted(newMessages, false, true, true, 'current');
@@ -890,15 +897,19 @@ describe('ChannelState addMessagesSorted', function () {
 		});
 
 		it('when new messages overlap with multiple message sets', () => {
-			const overlap1 = [generateMsg({ id: '11', date: '2020-01-01T00:00:10.001Z' })];
-			const overlap2 = [generateMsg({ id: '13', date: '2020-01-01T00:01:10.001Z' })];
+			const overlap1 = [
+				generateMsg({ id: '11', date: new Date('2020-01-01T00:00:10.001Z') }),
+			];
+			const overlap2 = [
+				generateMsg({ id: '13', date: new Date('2020-01-01T00:01:10.001Z') }),
+			];
 			const latestMessages = [
 				...overlap2,
-				generateMsg({ id: '14', date: '2020-01-01T00:01:15.001Z' }),
+				generateMsg({ id: '14', date: new Date('2020-01-01T00:01:15.001Z') }),
 			];
 			state.addMessagesSorted(latestMessages);
 			const currentMessages = [
-				generateMsg({ id: '10', date: '2020-01-01T00:00:03.001Z' }),
+				generateMsg({ id: '10', date: new Date('2020-01-01T00:00:03.001Z') }),
 				...overlap1,
 			];
 			state.addMessagesSorted(currentMessages, false, true, true, 'new');
@@ -908,7 +919,7 @@ describe('ChannelState addMessagesSorted', function () {
 			state.messageSets[1].pagination = { hasPrev: false, hasNext: true };
 			const newMessages = [
 				...overlap1,
-				generateMsg({ id: '12', date: '2020-01-01T00:00:14.001Z' }),
+				generateMsg({ id: '12', date: new Date('2020-01-01T00:00:14.001Z') }),
 				...overlap2,
 			];
 			state.addMessagesSorted(newMessages, false, true, true, 'new');
@@ -935,12 +946,12 @@ describe('ChannelState message pruning', () => {
 
 	beforeEach(() => {
 		const client = new StreamChat();
-		client.userID = 'userId';
+		client.user = { id: 'userId' };
 		const channel = new Channel(client, 'type', 'id', {});
 		client._addChannelConfig({ cid: channel.cid, config: {} });
 		channelState = new ChannelState(channel);
 		initialMessages = Array.from({ length: 10 }, () =>
-			generateMsg({ date: toISOString(100) }),
+			generateMsg({ date: new Date(100) }),
 		);
 		channelState.addMessagesSorted(initialMessages);
 	});
@@ -978,7 +989,7 @@ describe('ChannelState message pruning', () => {
 
 	it('should prune the correct messageSet', () => {
 		channelState.addMessagesSorted(
-			Array.from({ length: 10 }, () => generateMsg({ date: toISOString(50) })),
+			Array.from({ length: 10 }, () => generateMsg({ date: new Date(50) })),
 			false,
 			true,
 			true,
@@ -1019,7 +1030,7 @@ describe('ChannelState reactions', () => {
 	let state;
 	beforeEach(() => {
 		const client = new StreamChat();
-		client.userID = 'observer';
+		client.user = { id: 'observer' };
 		state = new ChannelState(new Channel(client, 'live', 'stream', {}));
 		state.addMessageSorted(message);
 	});
@@ -1116,6 +1127,7 @@ describe('ChannelState reactions', () => {
 					sum_scores: 2,
 					first_reaction_at: reaction.created_at,
 					last_reaction_at: reaction.created_at,
+					latest_reactions_by: [],
 				},
 			});
 		});
@@ -1212,6 +1224,7 @@ describe('ChannelState reactions', () => {
 				wow: {
 					count: 1,
 					sum_scores: 2,
+					latest_reactions_by: [],
 				},
 			});
 			expect(result.latest_reactions).to.deep.equal([
@@ -1417,7 +1430,9 @@ describe('ChannelState isUpToDate', () => {
 		});
 
 		// to mock the channel.watch call
-		chatClient.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+		vi.spyOn(chatClient.axiosInstance, 'request').mockResolvedValueOnce({
+			data: getOrCreateChannelApi(mockedChannelResponse).response.data,
+		});
 		const channel = chatClient.channel('messaging', channelId);
 
 		await channel.watch();
@@ -1437,7 +1452,7 @@ describe('ChannelState clean', () => {
 	let channel;
 	beforeEach(() => {
 		client = new StreamChat();
-		client.userID = 'observer';
+		client.user = { id: 'observer' };
 		channel = new Channel(client, 'live', 'stream', {});
 		client.activeChannels[channel.cid] = channel;
 	});
@@ -1448,7 +1463,7 @@ describe('ChannelState clean', () => {
 			cid: channel.cid,
 			type: 'typing.start',
 			user: { id: 'other' },
-			received_at: toISOString(Date.now() - 10000),
+			received_at: new Date(Date.now() - 10000),
 		});
 		expect(channel.state.typing['other']).not.to.be.undefined;
 
@@ -1474,7 +1489,7 @@ describe('deleteUserMessages', () => {
 
 	beforeEach(() => {
 		const client = new StreamChat();
-		client.userID = 'userId';
+		client.user = { id: 'userId' };
 		const channel = new Channel(client, 'type', 'id', {});
 		client._addChannelConfig({ cid: channel.cid, config: {} });
 		state = new ChannelState(channel);
@@ -1558,7 +1573,7 @@ describe('deleteUserMessages — quoted_message regression (#1736)', () => {
 
 	beforeEach(() => {
 		const client = new StreamChat();
-		client.userID = 'userId';
+		client.user = { id: 'userId' };
 		const channel = new Channel(client, 'type', 'id', {});
 		client._addChannelConfig({ cid: channel.cid, config: {} });
 		state = new ChannelState(channel);
@@ -1591,12 +1606,12 @@ describe('deleteUserMessages — quoted_message regression (#1736)', () => {
 		const reply1 = generateMsg({
 			user: user1,
 			parent_id: parent.id,
-			date: '2020-01-01T00:00:01.000Z',
+			date: new Date('2020-01-01T00:00:01.000Z'),
 		});
 		const reply2 = generateMsg({
 			user: user1,
 			parent_id: parent.id,
-			date: '2020-01-01T00:00:02.000Z',
+			date: new Date('2020-01-01T00:00:02.000Z'),
 			quoted_message: reply1,
 			quoted_message_id: reply1.id,
 		});
@@ -1668,16 +1683,16 @@ describe('deleteUserMessages — quoted_message regression (#1736)', () => {
 	it('continues processing later messages after encountering a self-quote on hard-delete', () => {
 		const user1 = generateUser();
 		const user2 = generateUser();
-		const mA = generateMsg({ user: user2, date: '2020-01-01T00:00:01.000Z' });
-		const m1 = generateMsg({ user: user1, date: '2020-01-01T00:00:02.000Z' });
+		const mA = generateMsg({ user: user2, date: new Date('2020-01-01T00:00:01.000Z') });
+		const m1 = generateMsg({ user: user1, date: new Date('2020-01-01T00:00:02.000Z') });
 		const m2 = generateMsg({
 			user: user1,
-			date: '2020-01-01T00:00:03.000Z',
+			date: new Date('2020-01-01T00:00:03.000Z'),
 			quoted_message: m1,
 			quoted_message_id: m1.id,
 		});
-		const mB = generateMsg({ user: user1, date: '2020-01-01T00:00:04.000Z' });
-		const mC = generateMsg({ user: user2, date: '2020-01-01T00:00:05.000Z' });
+		const mB = generateMsg({ user: user1, date: new Date('2020-01-01T00:00:04.000Z') });
+		const mC = generateMsg({ user: user2, date: new Date('2020-01-01T00:00:05.000Z') });
 
 		state.addMessagesSorted([mA, m1, m2, mB, mC]);
 
@@ -1698,7 +1713,7 @@ describe('updateUserMessages', () => {
 
 	beforeEach(() => {
 		const client = new StreamChat();
-		client.userID = 'userId';
+		client.user = { id: 'userId' };
 		const channel = new Channel(client, 'type', 'id', {});
 		client._addChannelConfig({ cid: channel.cid, config: {} });
 		state = new ChannelState(channel);
@@ -1740,7 +1755,7 @@ describe('latestMessages', () => {
 
 	beforeEach(() => {
 		const client = new StreamChat();
-		client.userID = 'userId';
+		client.user = { id: 'userId' };
 		const channel = new Channel(client, 'type', 'id', {});
 		client._addChannelConfig({ cid: channel.cid, config: {} });
 		state = new ChannelState(channel);
@@ -1762,12 +1777,12 @@ describe('latestMessages', () => {
 
 	it('should return latest messages - if they are not the current message set', () => {
 		const latestMessages = [
-			generateMsg({ id: '2', date: toISOString(200) }),
-			generateMsg({ id: '3', date: toISOString(300) }),
-			generateMsg({ id: '4', date: toISOString(400) }),
+			generateMsg({ id: '2', date: new Date(200) }),
+			generateMsg({ id: '3', date: new Date(300) }),
+			generateMsg({ id: '4', date: new Date(400) }),
 		];
 		state.addMessagesSorted(latestMessages);
-		const newMessages = [generateMsg({ id: '1', date: toISOString(100) })];
+		const newMessages = [generateMsg({ id: '1', date: new Date(100) })];
 		state.addMessagesSorted(newMessages, false, true, true, 'new');
 		state.messageSets[0].isCurrent = false;
 		state.messageSets[1].isCurrent = true;
@@ -1780,16 +1795,16 @@ describe('latestMessages', () => {
 
 	it('should return latest messages - if they are not the current message set and new messages received', () => {
 		const latestMessages = [
-			generateMsg({ id: '2', date: toISOString(200) }),
-			generateMsg({ id: '3', date: toISOString(300) }),
-			generateMsg({ id: '4', date: toISOString(400) }),
+			generateMsg({ id: '2', date: new Date(200) }),
+			generateMsg({ id: '3', date: new Date(300) }),
+			generateMsg({ id: '4', date: new Date(400) }),
 		];
 		state.addMessagesSorted(latestMessages);
-		const newMessages = [generateMsg({ id: '1', date: toISOString(100) })];
+		const newMessages = [generateMsg({ id: '1', date: new Date(100) })];
 		state.addMessagesSorted(newMessages, false, true, true, 'new');
 		state.messageSets[0].isCurrent = false;
 		state.messageSets[1].isCurrent = true;
-		const latestMessage = generateMsg({ id: '5', date: toISOString(500) });
+		const latestMessage = generateMsg({ id: '5', date: new Date(500) });
 		state.addMessagesSorted([latestMessage], false, true, true, 'latest');
 
 		expect(state.latestMessages.length).to.be.equal(latestMessages.length + 1);
@@ -1818,7 +1833,7 @@ describe('loadMessageIntoState', () => {
 
 	beforeEach(() => {
 		const client = new StreamChat();
-		client.userID = 'userId';
+		client.user = { id: 'userId' };
 		const channel = new Channel(client, 'type', 'id', {});
 		client._addChannelConfig({ cid: channel.cid, config: {} });
 		state = new ChannelState(channel);
@@ -1834,14 +1849,14 @@ describe('loadMessageIntoState', () => {
 
 	it('should switch message sets if message is available locally, but in a different set', async () => {
 		state.addMessagesSorted(
-			[generateMsg({ id: '8', date: toISOString(800) })],
+			[generateMsg({ id: '8', date: new Date(800) })],
 			false,
 			true,
 			true,
 			'latest',
 		);
 		state.addMessagesSorted(
-			[generateMsg({ id: '5', date: toISOString(500) })],
+			[generateMsg({ id: '5', date: new Date(500) })],
 			false,
 			true,
 			true,
@@ -1855,14 +1870,14 @@ describe('loadMessageIntoState', () => {
 
 	it('should switch to latest message set', async () => {
 		state.addMessagesSorted(
-			[generateMsg({ id: '8', date: toISOString(800) })],
+			[generateMsg({ id: '8', date: new Date(800) })],
 			false,
 			true,
 			true,
 			'latest',
 		);
 		state.addMessagesSorted(
-			[generateMsg({ id: '5', date: toISOString(500) })],
+			[generateMsg({ id: '5', date: new Date(500) })],
 			false,
 			true,
 			true,
@@ -1877,10 +1892,10 @@ describe('loadMessageIntoState', () => {
 
 	it('should load message from backend and switch to the new message set', async () => {
 		state.addMessagesSorted([
-			generateMsg({ id: '5', date: toISOString(500) }),
-			generateMsg({ id: '6', date: toISOString(600) }),
+			generateMsg({ id: '5', date: new Date(500) }),
+			generateMsg({ id: '6', date: new Date(600) }),
 		]);
-		const newMessages = [generateMsg({ id: '8', date: toISOString(800) })];
+		const newMessages = [generateMsg({ id: '8', date: new Date(800) })];
 		state._channel.query = () => {
 			state.addMessagesSorted(newMessages, false, true, true, 'new');
 		};
@@ -1892,8 +1907,8 @@ describe('loadMessageIntoState', () => {
 
 	describe('if message is a thread reply', () => {
 		it('should do nothing if parent message and reply are available locally in the current set', async () => {
-			const parentMessage = generateMsg({ id: '5', date: toISOString(500) });
-			const reply = generateMsg({ id: '8', date: toISOString(800), parent_id: '5' });
+			const parentMessage = generateMsg({ id: '5', date: new Date(500) });
+			const reply = generateMsg({ id: '8', date: new Date(800), parent_id: '5' });
 			state.addMessagesSorted([parentMessage]);
 			state.addMessagesSorted([reply]);
 
@@ -1904,8 +1919,8 @@ describe('loadMessageIntoState', () => {
 		});
 
 		it('should change message set if parent message and reply are available locally', async () => {
-			const parentMessage = generateMsg({ id: '5', date: toISOString(500) });
-			const reply = generateMsg({ id: '8', date: toISOString(800), parent_id: '5' });
+			const parentMessage = generateMsg({ id: '5', date: new Date(500) });
+			const reply = generateMsg({ id: '8', date: new Date(800), parent_id: '5' });
 			state.addMessagesSorted([parentMessage]);
 			state.addMessagesSorted([reply]);
 			const otherMessages = [generateMsg(), generateMsg()];
@@ -1933,8 +1948,8 @@ describe('loadMessageIntoState', () => {
 		});
 
 		it('should load parent message and reply from backend, and switch to new message set', async () => {
-			const parentMessage = generateMsg({ id: '5', date: toISOString(500) });
-			const reply = generateMsg({ id: '8', date: toISOString(800), parent_id: '5' });
+			const parentMessage = generateMsg({ id: '5', date: new Date(500) });
+			const reply = generateMsg({ id: '8', date: new Date(800), parent_id: '5' });
 			state._channel.getReplies = () =>
 				state.addMessagesSorted([reply], false, false, true, 'current');
 			state._channel.query = () =>
@@ -1953,7 +1968,7 @@ describe('findMessage', () => {
 
 	beforeEach(() => {
 		const client = new StreamChat();
-		client.userID = 'userId';
+		client.user = { id: 'userId' };
 		const channel = new Channel(client, 'type', 'id', {});
 		client._addChannelConfig({ cid: channel.cid, config: {} });
 		state = new ChannelState(channel);
@@ -2018,7 +2033,7 @@ describe('find message by timestamp', () => {
 
 	beforeEach(() => {
 		const client = new StreamChat();
-		client.userID = 'userId';
+		client.user = { id: 'userId' };
 		const channel = new Channel(client, 'type', 'id', {});
 		client._addChannelConfig({ cid: channel.cid, config: {} });
 		state = new ChannelState(channel);
@@ -2027,19 +2042,19 @@ describe('find message by timestamp', () => {
 	it('finds the message with matching timestamp', () => {
 		const expectedFoundMsg = generateMsg({
 			id: '2',
-			created_at: toISOString(200),
+			created_at: new Date(200),
 		});
 		state.addMessagesSorted([
-			generateMsg({ id: '12', created_at: toISOString(1200) }),
-			generateMsg({ id: '13', created_at: toISOString(1300) }),
-			generateMsg({ id: '14', created_at: toISOString(1400) }),
+			generateMsg({ id: '12', created_at: new Date(1200) }),
+			generateMsg({ id: '13', created_at: new Date(1300) }),
+			generateMsg({ id: '14', created_at: new Date(1400) }),
 		]);
 		state.addMessagesSorted(
 			[
-				generateMsg({ id: '1', created_at: toISOString(100) }),
+				generateMsg({ id: '1', created_at: new Date(100) }),
 				expectedFoundMsg,
-				generateMsg({ id: '3', created_at: toISOString(300) }),
-				generateMsg({ id: '4', created_at: toISOString(400) }),
+				generateMsg({ id: '3', created_at: new Date(300) }),
+				generateMsg({ id: '4', created_at: new Date(400) }),
 			],
 			false,
 			false,
@@ -2048,8 +2063,8 @@ describe('find message by timestamp', () => {
 		);
 		state.addMessagesSorted(
 			[
-				generateMsg({ id: '6', created_at: toISOString(600) }),
-				generateMsg({ id: '7', created_at: toISOString(700) }),
+				generateMsg({ id: '6', created_at: new Date(600) }),
+				generateMsg({ id: '7', created_at: new Date(700) }),
 			],
 			false,
 			false,
@@ -2058,7 +2073,7 @@ describe('find message by timestamp', () => {
 		);
 
 		const foundMessage = state.findMessageByTimestamp(
-			new Date(expectedFoundMsg.created_at).getTime(),
+			expectedFoundMsg.created_at.getTime(),
 		);
 		expect(foundMessage.id).toBe(expectedFoundMsg.id);
 	});
@@ -2066,21 +2081,21 @@ describe('find message by timestamp', () => {
 	it('finds the first message if multiple messages with the same timestamp', () => {
 		const expectedFoundMessage = generateMsg({
 			id: '2',
-			created_at: toISOString(200),
+			created_at: new Date(200),
 		});
 		const msgWithSameTimestamp = { ...expectedFoundMessage, id: '3' };
 		state.addMessagesSorted([
-			generateMsg({ id: '12', created_at: toISOString(1200) }),
-			generateMsg({ id: '13', created_at: toISOString(1300) }),
-			generateMsg({ id: '14', created_at: toISOString(1400) }),
+			generateMsg({ id: '12', created_at: new Date(1200) }),
+			generateMsg({ id: '13', created_at: new Date(1300) }),
+			generateMsg({ id: '14', created_at: new Date(1400) }),
 		]);
 		state.addMessagesSorted(
 			[
-				generateMsg({ id: '1', created_at: toISOString(100) }),
+				generateMsg({ id: '1', created_at: new Date(100) }),
 				expectedFoundMessage,
 				msgWithSameTimestamp,
-				generateMsg({ id: '3.5', created_at: toISOString(300) }),
-				generateMsg({ id: '4', created_at: toISOString(400) }),
+				generateMsg({ id: '3.5', created_at: new Date(300) }),
+				generateMsg({ id: '4', created_at: new Date(400) }),
 			],
 			false,
 			false,
@@ -2089,8 +2104,8 @@ describe('find message by timestamp', () => {
 		);
 		state.addMessagesSorted(
 			[
-				generateMsg({ id: '6', created_at: toISOString(600) }),
-				generateMsg({ id: '7', created_at: toISOString(700) }),
+				generateMsg({ id: '6', created_at: new Date(600) }),
+				generateMsg({ id: '7', created_at: new Date(700) }),
 			],
 			false,
 			false,
@@ -2099,16 +2114,16 @@ describe('find message by timestamp', () => {
 		);
 
 		const foundMessage = state.findMessageByTimestamp(
-			new Date(msgWithSameTimestamp.created_at).getTime(),
+			msgWithSameTimestamp.created_at.getTime(),
 		);
 		expect(foundMessage.id).toBe(expectedFoundMessage.id);
 	});
 
 	it('returns null if the message is not found', () => {
 		state.addMessagesSorted([
-			generateMsg({ id: '12', created_at: toISOString(1200) }),
-			generateMsg({ id: '13', created_at: toISOString(1300) }),
-			generateMsg({ id: '14', created_at: toISOString(1400) }),
+			generateMsg({ id: '12', created_at: new Date(1200) }),
+			generateMsg({ id: '13', created_at: new Date(1300) }),
+			generateMsg({ id: '14', created_at: new Date(1400) }),
 		]);
 		const foundMessage = state.findMessageByTimestamp(200);
 		expect(foundMessage).toBeNull();

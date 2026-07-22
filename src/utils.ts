@@ -1,22 +1,17 @@
 import FormData from 'form-data';
 import type {
-  AscDesc,
   ChannelFilters,
-  ChannelQueryOptions,
+  ChannelGetOrCreateRequest,
   ChannelSort,
-  ChannelSortBase,
+  ChannelStateResponse,
   LocalMessage,
-  LocalMessageBase,
-  Logger,
-  Message,
   MessagePaginationOptions,
+  MessageRequest,
   MessageResponse,
-  MessageResponseBase,
   MessageSet,
   OwnUserBase,
   OwnUserResponse,
   PromoteChannelParams,
-  QueryChannelAPIResponse,
   ReactionGroupResponse,
   UpdatedMessage,
   UserResponse,
@@ -24,19 +19,23 @@ import type {
 import type { StreamChat } from './client';
 import type { Channel } from './channel';
 import type { AxiosRequestConfig } from 'axios';
+import { chatLoggerSystem } from './logger';
 import { LOCAL_MESSAGE_FIELDS, RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
 
+const logger = chatLoggerSystem.getLogger('utils');
+
 /**
- * logChatPromiseExecution - utility function for logging the execution of a promise..
- *  use this when you want to run the promise and handle errors by logging a warning
+ * Logs the execution of a promise. Use this when you want to run the promise and handle errors by
+ * logging a warning.
  *
- * @param {Promise<T>} promise The promise you want to run and log
- * @param {string} name    A descriptive name of what the promise does for log output
- *
+ * @param promise - The promise you want to run and log.
+ * @param name - A descriptive name of what the promise does for log output.
  */
 export function logChatPromiseExecution<T>(promise: Promise<T>, name: string) {
   promise.then().catch((error) => {
-    console.warn(`failed to do ${name}, ran into error: `, error);
+    logger
+      .withExtraTags('logChatPromiseExecution')
+      .error(`Failed to execute "${name}".`, { error });
   });
 }
 
@@ -153,29 +152,12 @@ export function addFileToFormData(
 
   return data;
 }
-export function normalizeQuerySort<T extends Record<string, AscDesc | undefined>>(
-  sort: T | T[],
-) {
-  const sortFields: Array<{ direction: AscDesc; field: keyof T }> = [];
-  const sortArr = Array.isArray(sort) ? sort : [sort];
-  for (const item of sortArr) {
-    const entries = Object.entries(item) as [keyof T, AscDesc][];
-    if (entries.length > 1) {
-      console.warn(
-        "client._buildSort() - multiple fields in a single sort object detected. Object's field order is not guaranteed",
-      );
-    }
-    for (const [field, direction] of entries) {
-      sortFields.push({ field, direction });
-    }
-  }
-  return sortFields;
-}
 
 /**
- * retryInterval - A retry interval which increases acc to number of failures
+ * Returns a retry interval that increases according to the number of failures.
  *
- * @return {number} Duration to wait in milliseconds
+ * @param numberOfFailures - The current consecutive failure count.
+ * @returns The duration to wait before the next retry, in milliseconds.
  */
 export function retryInterval(numberOfFailures: number) {
   // try to reconnect in 0.25-25 seconds (random to spread out the load from failures)
@@ -270,9 +252,9 @@ export function isOnline() {
         : undefined;
 
   if (!nav) {
-    console.warn(
-      'isOnline failed to access window.navigator and assume browser is online',
-    );
+    logger
+      .withExtraTags('isOnline')
+      .warn('Could not access window.navigator; assuming the browser is online.');
     return true;
   }
 
@@ -285,7 +267,9 @@ export function isOnline() {
 }
 
 /**
- * listenForConnectionChanges - Adds an event listener fired on browser going online or offline
+ * Adds event listeners fired when the browser goes online or offline.
+ *
+ * @param cb - The handler to invoke on each `online` / `offline` event.
  */
 export function addConnectionEventListeners(cb: (e: Event) => void) {
   if (typeof window !== 'undefined' && window.addEventListener) {
@@ -319,92 +303,54 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
 };
 
 /**
- * Takes the message object, parses the dates, sets `__html`
- * and sets the status to `received` if missing; returns a new LocalMessage object.
+ * Takes the message object, adds SDK-specific fields (status, error),
+ * and returns a new LocalMessage object.
  *
- * @param {LocalMessage} message `LocalMessage` object
+ * @param message - message object
  */
-export function formatMessage(
-  message: MessageResponse | MessageResponseBase | LocalMessage,
-): LocalMessage {
-  const toLocalMessageBase = (
-    msg: MessageResponse | MessageResponseBase | LocalMessage | null | undefined,
-  ): LocalMessageBase | null => {
-    if (!msg) return null;
-    return {
-      ...msg,
-      created_at: msg.created_at ? new Date(msg.created_at) : new Date(),
-      deleted_at: msg.deleted_at ? new Date(msg.deleted_at) : null,
-      pinned_at: msg.pinned_at ? new Date(msg.pinned_at) : null,
-      reaction_groups: maybeGetReactionGroupsFallback(
-        msg.reaction_groups,
-        msg.reaction_counts,
-        msg.reaction_scores,
-      ),
-      status: msg.status || 'received',
-      updated_at: msg.updated_at ? new Date(msg.updated_at) : new Date(),
-    };
-  };
-
+export function formatMessage(message: MessageResponse | LocalMessage): LocalMessage {
   return {
-    ...toLocalMessageBase(message),
-    error: (message as LocalMessage).error ?? null,
-    quoted_message: toLocalMessageBase((message as MessageResponse).quoted_message),
-  } as LocalMessage;
+    ...message,
+    created_at: message.created_at ?? new Date(),
+    updated_at: message.updated_at ?? new Date(),
+    reaction_groups: maybeGetReactionGroupsFallback(
+      message.reaction_groups,
+      message.reaction_counts,
+      message.reaction_scores,
+    ),
+    status: (message as LocalMessage).status || 'received',
+    error: (message as LocalMessage).error ?? undefined,
+    quoted_message: message.quoted_message
+      ? formatMessage(message.quoted_message)
+      : undefined,
+    user_id: message?.user?.id,
+  } satisfies LocalMessage;
 }
 
-/**
- * @private
- *
- * Takes a LocalMessage, parses the dates back to strings,
- * and converts the message back to a MessageResponse.
- *
- * @param {MessageResponse} message `MessageResponse` object
- */
-export function unformatMessage(message: LocalMessage): MessageResponse {
-  const toMessageResponseBase = (
-    msg: LocalMessage | null | undefined,
-  ): MessageResponseBase | null => {
-    if (!msg) return null;
-    const newDateString = new Date().toISOString();
-    return {
-      ...msg,
-      created_at: message.created_at ? message.created_at.toISOString() : newDateString,
-      deleted_at: message.deleted_at ? message.deleted_at.toISOString() : undefined,
-      pinned_at: message.pinned_at ? message.pinned_at.toISOString() : undefined,
-      updated_at: message.updated_at ? message.updated_at.toISOString() : newDateString,
-    };
-  };
-
-  return {
-    ...toMessageResponseBase(message),
-    quoted_message: toMessageResponseBase((message as LocalMessage).quoted_message),
-  } as MessageResponse;
-}
-
-export const localMessageToNewMessagePayload = (localMessage: LocalMessage): Message => {
-  /* eslint-disable @typescript-eslint/no-unused-vars */
+export const localMessageToNewMessagePayload = (
+  localMessage: LocalMessage,
+): MessageRequest => {
   const {
     // Remove all timestamp fields and client-specific fields.
     // Field pinned_at can therefore be earlier than created_at as new message payload can hold it.
-    created_at,
-    updated_at,
-    deleted_at,
+    created_at: _created_at,
+    updated_at: _updated_at,
+    deleted_at: _deleted_at,
     // Client-specific fields
-    error,
-    status,
+    error: _error,
+    status: _status,
     // Reaction related fields
-    latest_reactions,
-    own_reactions,
-    reaction_counts,
-    reaction_scores,
-    reply_count,
+    latest_reactions: _latest_reactions,
+    own_reactions: _own_reactions,
+    reaction_counts: _reaction_counts,
+    reaction_scores: _reaction_scores,
+    reply_count: _reply_count,
     // Message text related fields that shouldn't be in update
-    command,
-    html,
-    i18n,
-    mentioned_groups,
-    quoted_message,
+    command: _command,
+    html: _html,
+    i18n: _i18n,
+    mentioned_groups: _mentioned_groups,
+    quoted_message: _quoted_message,
     mentioned_users,
     // Message content related fields
     ...messageFields
@@ -412,9 +358,9 @@ export const localMessageToNewMessagePayload = (localMessage: LocalMessage): Mes
 
   return {
     ...messageFields,
-    pinned_at: messageFields.pinned_at?.toISOString(),
+    pinned_at: messageFields.pinned_at,
     mentioned_users: mentioned_users?.map((user) => user.id),
-  };
+  } as MessageRequest;
 };
 
 export const toUpdatedMessagePayload = (
@@ -445,7 +391,7 @@ export const toDeletedMessage = ({
   deletedAt,
   hardDelete = false,
 }: {
-  message: LocalMessage | LocalMessageBase;
+  message: LocalMessage;
   deletedAt: LocalMessage['deleted_at'];
   hardDelete: boolean;
 }) => {
@@ -507,7 +453,7 @@ export const deleteUserMessages = ({
         message.quoted_message.type === 'deleted'
           ? message.quoted_message
           : (toDeletedMessage({
-              message: messages[i].quoted_message as LocalMessageBase,
+              message: messages[i].quoted_message as LocalMessage,
               hardDelete,
               deletedAt,
             }) as LocalMessage);
@@ -546,8 +492,8 @@ export const findIndexInSortedArray = <T, L>({
    */
   selectValueToCompare?: (arrayElement: T) => L | T;
   /**
-   * @default ascending
-   * @description
+   * Sort direction (defaults to `'ascending'`).
+   *
    * ```md
    * ascending  - [1,2,3,4,5...]
    * descending - [...5,4,3,2,1]
@@ -674,7 +620,7 @@ function maybeGetReactionGroupsFallback(
   groups: { [key: string]: ReactionGroupResponse } | null | undefined,
   counts: { [key: string]: number } | null | undefined,
   scores: { [key: string]: number } | null | undefined,
-): { [key: string]: ReactionGroupResponse } | null {
+): { [key: string]: ReactionGroupResponse } | undefined {
   if (groups) {
     return groups;
   }
@@ -686,16 +632,19 @@ function maybeGetReactionGroupsFallback(
       fallback[type] = {
         count: counts[type],
         sum_scores: scores[type],
+        // empty
+        first_reaction_at: new Date(),
+        last_reaction_at: new Date(),
+        latest_reactions_by: [],
       };
     }
 
     return fallback;
   }
 
-  return null;
+  return undefined;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface DebouncedFunc<T extends (...args: any[]) => any> {
   /**
    * Call the original function, but applying the debounce rules.
@@ -724,7 +673,7 @@ export interface DebouncedFunc<T extends (...args: any[]) => any> {
 }
 
 // works exactly the same as lodash.debounce
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 export const debounce = <T extends (...args: any[]) => any>(
   fn: T,
   timeout = 0,
@@ -772,7 +721,7 @@ export const debounce = <T extends (...args: any[]) => any>(
 };
 
 // works exactly the same as lodash.throttle
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 export const throttle = <T extends (...args: any[]) => any>(
   fn: T,
   timeout = 200,
@@ -835,13 +784,12 @@ type MessagePaginationUpdatedParams = {
   requestedPageSize: number;
   returnedPage: MessageResponse[];
   filteredReturnedPage: MessageResponse[];
-  logger?: Logger;
   messagePaginationOptions?: MessagePaginationOptions;
 };
 
 export function binarySearchByDateEqualOrNearestGreater(
   array: {
-    created_at?: string;
+    created_at?: string | Date;
   }[],
   targetDate: Date,
 ): number {
@@ -855,7 +803,7 @@ export function binarySearchByDateEqualOrNearestGreater(
       left += 1;
       continue;
     }
-    const midDate = new Date(midCreatedAt);
+    const midDate = midCreatedAt instanceof Date ? midCreatedAt : new Date(midCreatedAt);
 
     if (midDate.getTime() === targetDate.getTime()) {
       return mid;
@@ -1072,10 +1020,11 @@ export const messageSetPagination = (params: MessagePaginationUpdatedParams) => 
       (params.returnedPage.length - params.filteredReturnedPage.length) <
     params.returnedPage.length
   ) {
-    params.logger?.(
-      'error',
-      'Corrupted message set state: parent set size < returned page size',
-    );
+    logger
+      .withExtraTags('messageSetPagination')
+      .error(
+        'Corrupted message set state: the parent set size is smaller than the returned page size.',
+      );
     return params.parentSet.pagination;
   }
 
@@ -1094,7 +1043,7 @@ export const messageSetPagination = (params: MessagePaginationUpdatedParams) => 
  */
 const WATCH_QUERY_IN_PROGRESS_FOR_CHANNEL: Record<
   string,
-  Promise<QueryChannelAPIResponse> | undefined
+  Promise<ChannelStateResponse> | undefined
 > = {};
 
 type GetChannelParams = {
@@ -1102,18 +1051,21 @@ type GetChannelParams = {
   channel?: Channel;
   id?: string;
   members?: string[];
-  options?: ChannelQueryOptions;
+  options?: ChannelGetOrCreateRequest;
   type?: string;
 };
 /**
- * Calls channel.watch() if it was not already recently called. Waits for watch promise to resolve even if it was invoked previously.
- * If the channel is not passed as a property, it will get it either by its channel.cid or by its members list and do the same.
- * @param client
- * @param members
- * @param options
- * @param type
- * @param id
- * @param channel
+ * Calls `channel.watch()` if it was not already recently called. Waits for the watch promise to
+ * resolve even if it was invoked previously. If the channel is not passed as a property, it will
+ * get it either by its `channel.cid` or by its members list and do the same.
+ *
+ * @param channel - The channel to watch, when known (optional).
+ * @param channel.client - The chat client used to look up the channel when one isn't supplied.
+ * @param channel.members - The member IDs used to identify a members-based channel (optional).
+ * @param channel.options - Options forwarded to `channel.watch()` (optional).
+ * @param channel.type - The channel type to watch when no `channel` is supplied (optional).
+ * @param channel.id - The channel ID to watch when no `channel` is supplied (optional).
+ * @returns The watched channel.
  */
 export const getAndWatchChannel = async ({
   channel,
@@ -1128,10 +1080,14 @@ export const getAndWatchChannel = async ({
   }
 
   // unfortunately typescript is not able to infer that if (!channel && !type) === false, then channel or type has to be truthy
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const channelToWatch = channel || client.channel(type!, id, { members });
+  const channelToWatch =
+    channel ||
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    client.channel(type!, id, {
+      members: members?.map((userId) => ({ user_id: userId })),
+    });
 
-  // need to keep as with call to channel.watch the id can be changed from undefined to an actual ID generated server-side
+  // need to keep as with call to channel.watch the ID can be changed from undefined to an actual ID generated server-side
   const originalCid = channelToWatch.id
     ? channelToWatch.cid
     : members && members.length
@@ -1161,11 +1117,13 @@ export const getAndWatchChannel = async ({
 };
 
 /**
- * Generates a temporary channel.cid for channels created without ID, as they need to be referenced
- * by an identifier until the back-end generates the final ID. The cid is generated by its member IDs
- * which are sorted and can be recreated the same every time given the same arguments.
- * @param channelType
- * @param members
+ * Generates a temporary `channel.cid` for channels created without an ID, as they need to be
+ * referenced by an identifier until the back-end generates the final ID. The CID is generated from
+ * its member IDs, which are sorted so the same arguments always produce the same value.
+ *
+ * @param channelType - The channel type.
+ * @param members - The member IDs that uniquely identify this channel.
+ * @returns The temporary CID, or `undefined` when `members` is empty.
  */
 export const generateChannelTempCid = (channelType: string, members: string[]) => {
   if (!members) return;
@@ -1175,8 +1133,11 @@ export const generateChannelTempCid = (channelType: string, members: string[]) =
 };
 
 /**
- * Checks if a channel is pinned or not. Will return true only if channel.state.membership.pinned_at exists.
- * @param channel
+ * Checks if a channel is pinned. Returns `true` only when `channel.state.membership.pinned_at`
+ * exists.
+ *
+ * @param channel - The channel to inspect.
+ * @returns `true` when the channel is pinned for the current user.
  */
 export const isChannelPinned = (channel: Channel) => {
   if (!channel) return false;
@@ -1187,8 +1148,11 @@ export const isChannelPinned = (channel: Channel) => {
 };
 
 /**
- * Checks if a channel is archived or not. Will return true only if channel.state.membership.archived_at exists.
- * @param channel
+ * Checks if a channel is archived. Returns `true` only when `channel.state.membership.archived_at`
+ * exists.
+ *
+ * @param channel - The channel to inspect.
+ * @returns `true` when the channel is archived for the current user.
  */
 export const isChannelArchived = (channel: Channel) => {
   if (!channel) return false;
@@ -1199,23 +1163,26 @@ export const isChannelArchived = (channel: Channel) => {
 };
 
 /**
- * A utility that tells us whether we should consider archived channels or not based
- * on filters. Will return true only if filters.archived exists and is a boolean value.
- * @param filters
+ * A utility that tells us whether we should consider archived channels based on filters. Returns
+ * `true` only when `filters.archived` exists and is a boolean.
+ *
+ * @param filters - The channel filters used in a `queryChannels` request.
+ * @returns `true` when archived channels should be considered.
  */
-export const shouldConsiderArchivedChannels = (filters: ChannelFilters) => {
+export const shouldConsiderArchivedChannels = (filters?: ChannelFilters) => {
   if (!filters) return false;
 
   return typeof filters.archived === 'boolean';
 };
 
 /**
- * Extracts the value of the sort parameter at a given index, for a targeted key. Can
- * handle both array and object versions of sort. Will return null if the index/key
- * combination does not exist.
- * @param atIndex - the index at which we'll examine the sort value, if it's an array one
- * @param sort - the sort value - both array and object notations are accepted
- * @param targetKey - the target key which needs to exist for the sort at a certain index
+ * Extracts the value of the sort parameter at a given index, for a targeted key. Can handle both
+ * array and object versions of sort. Returns `null` if the index/key combination does not exist.
+ *
+ * @param atIndex - The index at which we'll examine the sort value, when it's an array.
+ * @param atIndex.sort - The sort value — both array and object notations are accepted.
+ * @param atIndex.targetKey - The target key that must exist at the given index.
+ * @returns The sort direction at the requested position, or `null`.
  */
 export const extractSortValue = ({
   atIndex,
@@ -1223,33 +1190,16 @@ export const extractSortValue = ({
   targetKey,
 }: {
   atIndex: number;
-  targetKey: keyof ChannelSortBase;
+  targetKey: string;
   sort?: ChannelSort;
 }) => {
   if (!sort) return null;
-  let option: null | ChannelSortBase = null;
 
-  if (Array.isArray(sort)) {
-    option = sort[atIndex] ?? null;
-  } else {
-    let index = 0;
-    for (const key in sort) {
-      if (index !== atIndex) {
-        index++;
-        continue;
-      }
+  const option = sort[atIndex] ?? null;
 
-      if (key !== targetKey) {
-        return null;
-      }
+  if (option?.field !== targetKey) return null;
 
-      option = sort;
-
-      break;
-    }
-  }
-
-  return option?.[targetKey] ?? null;
+  return option.direction ?? null;
 };
 
 /**
@@ -1264,9 +1214,11 @@ export const shouldConsiderPinnedChannels = (sort: ChannelSort) => {
 };
 
 /**
- * Checks whether the sort value of type object contains a pinned_at value or if
- * an array sort value type has the first value be an object containing pinned_at.
- * @param sort
+ * Checks whether the sort value of type object contains a `pinned_at` value, or if an array sort
+ * value's first entry is an object containing `pinned_at`.
+ *
+ * @param sort - The sort value to inspect.
+ * @returns The sort direction for `pinned_at` (`1` or `-1`), or `null` when not present.
  */
 export const findPinnedAtSortOrder = ({ sort }: { sort: ChannelSort }) =>
   extractSortValue({
@@ -1276,10 +1228,11 @@ export const findPinnedAtSortOrder = ({ sort }: { sort: ChannelSort }) =>
   });
 
 /**
- * Finds the index of the last consecutively pinned channel, starting from the start of the
- * array. Will not consider any pinned channels after the contiguous subsequence at the
- * start of the array.
- * @param channels
+ * Finds the index of the last consecutively pinned channel, starting from the start of the array.
+ * Does not consider any pinned channels after the contiguous subsequence at the start of the array.
+ *
+ * @param channels - The channel list to scan.
+ * @returns The index of the last pinned channel in the leading run, or `null` when none are pinned.
  */
 export const findLastPinnedChannelIndex = ({ channels }: { channels: Channel[] }) => {
   let lastPinnedChannelIndex: number | null = null;
@@ -1298,13 +1251,17 @@ export const findLastPinnedChannelIndex = ({ channels }: { channels: Channel[] }
 };
 
 /**
- * A utility used to move a channel towards the beginning of a list of channels (promote it to a higher position). It
- * considers pinned channels in the process if needed and makes sure to only update the list reference if the list
- * should actually change. It will try to move the channel as high as it can within the list.
- * @param channels - the list of channels we want to modify
- * @param channelToMove - the channel we want to promote
- * @param channelToMoveIndexWithinChannels - optionally, the index of the channel we want to move if we know it (will skip a manual check)
- * @param sort - the sort value used to check for pinned channels
+ * A utility used to move a channel towards the beginning of a list of channels (promote it to a
+ * higher position). It considers pinned channels in the process if needed and makes sure to only
+ * update the list reference if the list should actually change. It will try to move the channel as
+ * high as it can within the list.
+ *
+ * @param channels - The list of channels we want to modify.
+ * @param channels.channelToMove - The channel we want to promote.
+ * @param channels.channelToMoveIndexWithinChannels - The index of the channel we want to move
+ *   when it is known (optional; skips a manual lookup).
+ * @param channels.sort - The sort value used to check for pinned channels.
+ * @returns The (possibly new) channel list with the target channel promoted.
  */
 export const promoteChannel = ({
   channels,
@@ -1357,7 +1314,7 @@ export const promoteChannel = ({
 export const isDate = (value: unknown): value is Date => !!(value as Date).getTime;
 
 export const isLocalMessage = (message: unknown): message is LocalMessage =>
-  isDate((message as LocalMessage).created_at);
+  typeof (message as LocalMessage | undefined)?.status === 'string';
 
 export const runDetached = <T>(
   callback: Promise<void | T>,
@@ -1369,7 +1326,9 @@ export const runDetached = <T>(
 ) => {
   const { context, onSuccessCallback = () => undefined, onErrorCallback } = options ?? {};
   const defaultOnError = (error: Error) => {
-    console.log(`An error has occurred in context ${context}: ${error}`);
+    logger
+      .withExtraTags('runDetached')
+      .error(`An error occurred in context "${context}".`, { error });
   };
   const onError = onErrorCallback ?? defaultOnError;
 
@@ -1383,11 +1342,18 @@ export const runDetached = <T>(
 };
 
 export const isBlockedMessage = (message: LocalMessage) =>
-  message.type === 'error' &&
-  (message.moderation_details?.action === 'MESSAGE_RESPONSE_ACTION_REMOVE' ||
-    message.moderation?.action === 'remove');
+  message.type === 'error' && message.moderation?.action === 'remove';
 
 export const isBouncedMessage = (message: LocalMessage) =>
-  message.type === 'error' &&
-  (message?.moderation_details?.action === 'MESSAGE_RESPONSE_ACTION_BOUNCE' ||
-    message?.moderation?.action === 'bounce');
+  message.type === 'error' && message?.moderation?.action === 'bounce';
+
+export const getEnv = (envKey: keyof NodeJS.ProcessEnv) => {
+  if (
+    typeof process !== 'undefined' &&
+    (Object.hasOwn(process, 'env') || 'env' in process)
+  ) {
+    return process.env[envKey];
+  }
+
+  return undefined;
+};

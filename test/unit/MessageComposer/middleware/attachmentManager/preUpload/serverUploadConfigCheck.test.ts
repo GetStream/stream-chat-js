@@ -26,6 +26,7 @@ const setupHandlerParams = (initialState: AttachmentPreUploadMiddlewareState) =>
 // Mock dependencies
 vi.mock('../../../../../src/utils', () => ({
   generateUUIDv4: vi.fn().mockReturnValue('test-uuid'),
+  getEnv: vi.fn(),
 }));
 
 const setup = () => {

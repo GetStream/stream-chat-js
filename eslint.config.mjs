@@ -1,6 +1,8 @@
 import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+import unusedImports from 'eslint-plugin-unused-imports';
+import jsdoc from 'eslint-plugin-jsdoc';
 
 import importPlugin from 'eslint-plugin-import';
 
@@ -18,6 +20,7 @@ export default tseslint.config(
     },
     plugins: {
       import: importPlugin,
+      'unused-imports': unusedImports,
     },
     settings: {
       react: {
@@ -71,9 +74,18 @@ export default tseslint.config(
         },
       ],
       'no-unused-vars': 'off',
-      '@typescript-eslint/no-unused-vars': [
+      '@typescript-eslint/no-unused-vars': 'off',
+      'unused-imports/no-unused-imports': 'warn',
+      'unused-imports/no-unused-vars': [
         'warn',
-        { ignoreRestSiblings: false, caughtErrors: 'none' },
+        {
+          vars: 'all',
+          varsIgnorePattern: '^_',
+          args: 'after-used',
+          argsIgnorePattern: '^_',
+          ignoreRestSiblings: false,
+          caughtErrors: 'none',
+        },
       ],
       '@typescript-eslint/no-unsafe-function-type': 'error',
       '@typescript-eslint/no-wrapper-object-types': 'error',
@@ -83,6 +95,29 @@ export default tseslint.config(
       '@typescript-eslint/no-require-imports': 'off', // TODO: remove this rule once all files are .mjs (and require is not used)
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/no-empty-object-type': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
+  {
+    ignores: ['src/gen/**'],
+    files: ['src/**/*.{js,ts}'],
+    plugins: {
+      jsdoc,
+    },
+    rules: {
+      'jsdoc/no-types': 'error',
+      'jsdoc/check-param-names': ['error', { checkDestructured: false }],
+      'jsdoc/check-tag-names': [
+        'error',
+        { definedTags: ['internal', 'experimental', 'remarks'] },
+      ],
+      'jsdoc/require-param-description': 'warn',
+      'jsdoc/require-returns-description': 'warn',
+      'jsdoc/require-hyphen-before-param-description': ['warn', 'always'],
+      'jsdoc/tag-lines': ['error', 'any', { startLines: 1 }],
+      'jsdoc/no-multi-asterisks': 'error',
+      'jsdoc/empty-tags': 'error',
+      'jsdoc/no-bad-blocks': 'error',
     },
   },
 );
