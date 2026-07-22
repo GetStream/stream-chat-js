@@ -10,6 +10,7 @@ const DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION = 1000;
 const MAX_QUERY_THREADS_LIMIT = 25;
 export const THREAD_MANAGER_INITIAL_STATE = {
   active: false,
+  wasActivatedAtLeastOnce: false,
   isThreadOrderStale: false,
   threads: [],
   unreadThreadCount: 0,
@@ -25,6 +26,12 @@ export const THREAD_MANAGER_INITIAL_STATE = {
 
 export type ThreadManagerState = {
   active: boolean;
+  /**
+   * Whether the thread manager has been activated at least once in the current
+   * session (i.e. `activate()` was called). Used to avoid requerying threads
+   * on connection recovery for consumers that never actually activate the manager.
+   */
+  wasActivatedAtLeastOnce: boolean;
   isThreadOrderStale: boolean;
   lastConnectionDropAt: Date | null;
   pagination: ThreadManagerPagination;
@@ -90,7 +97,7 @@ export class ThreadManager extends WithSubscriptions {
   };
 
   public activate = () => {
-    this.state.partialNext({ active: true });
+    this.state.partialNext({ active: true, wasActivatedAtLeastOnce: true });
   };
 
   public deactivate = () => {
@@ -197,8 +204,9 @@ export class ThreadManager extends WithSubscriptions {
 
     const throttledHandleConnectionRecovered = throttle(
       () => {
-        const { lastConnectionDropAt } = this.state.getLatestValue();
-        if (!lastConnectionDropAt) return;
+        const { lastConnectionDropAt, wasActivatedAtLeastOnce } =
+          this.state.getLatestValue();
+        if (!lastConnectionDropAt || !wasActivatedAtLeastOnce) return;
         this.reload({ force: true });
       },
       DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION,
