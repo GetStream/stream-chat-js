@@ -102,7 +102,7 @@ export class CooldownTimer extends WithSubscriptions {
     const canSkipCooldown = (own_capabilities ?? []).includes('skip-slow-mode');
 
     const ownLatestMessageDate = this.findOwnLatestMessageDate({
-      messages: this.channel.messagePaginator.latestItems,
+      messages: this.channel.messagePaginator.headItems,
     });
 
     if (

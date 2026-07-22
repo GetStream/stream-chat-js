@@ -35,11 +35,16 @@ export { MessageIntervalPaginator } from './MessageIntervalPaginator';
  */
 export type MessagePaginatorAggregateState = {
   /**
-   * The newest channel-relevant message loaded/received (monotonic by `created_at`), for display —
-   * e.g. a thread-list item's latest-reply avatar. `null` until one is ingested. Lives here, NOT
-   * derived from pagination `state`, so it stays reactive when a WS message lands in the head interval
-   * while an older window is active — the pagination store only emits when the *active* interval is
-   * impacted (see `BasePaginator.ingestItem`), so a `state`-derived latest would go stale in that case.
+   * The newest channel-relevant message, for display (e.g. a channel/thread list item's last-message
+   * preview or latest-reply avatar). A LIVE reference: it advances to a strictly newer message, is
+   * refreshed in place when that message is edited/soft-deleted/reacted-to, and is recomputed to the
+   * next newest when it is hard-removed. Respects `shouldAdvanceLastMessage` (skips system messages
+   * per `skip_last_msg_update_for_system_msgs`, and thread-only replies). `null` until one is ingested.
+   *
+   * Lives here, NOT derived from pagination `state`, so it stays reactive when a WS message lands in
+   * the head interval while an older window is active — the pagination store only emits when the
+   * *active* interval is impacted (see `BasePaginator.ingestItem`), so a `state`-derived latest would
+   * go stale in that case.
    */
   lastMessage: LocalMessage | null;
   /**
@@ -140,7 +145,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
 
   /**
    * Channel-list sort key: the later of the newest loaded message's `created_at` and the server seed.
-   * **Derived** (never stored) so it cannot drift from {@link latestMessage}. `null` until seeded or a
+   * **Derived** (never stored) so it cannot drift from {@link lastMessage}. `null` until seeded or a
    * message is ingested.
    */
   get lastMessageAt(): Date | null {
@@ -158,7 +163,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
    * of {@link aggregateState}; subscribe to `aggregateState` for reactivity. `null` until a message is
    * ingested (a server-only seed advances {@link lastMessageAt} but leaves this `null`).
    */
-  get latestMessage(): LocalMessage | null {
+  get lastMessage(): LocalMessage | null {
     return this.aggregateState.getLatestValue().lastMessage;
   }
 
@@ -167,13 +172,13 @@ export class MessagePaginator extends MessageIntervalPaginator {
    * the base rule (not shadowed) this excludes thread-only replies (a reply with a `parent_id` that is
    * not shown in the channel is not part of the channel list) and, when the channel is configured with
    * `skip_last_msg_update_for_system_msgs`, system messages. Mirrors the legacy
-   * `Channel._trackLatestMessage` skip logic.
+   * `Channel._trackLastMessage` skip logic.
    *
    * These exclusions are specific to the MAIN channel list. A reply list (thread paginator, which has
    * a `parentMessageId`) is made ENTIRELY of thread replies — there the newest reply is exactly the
    * "latest message", so the exclusions are skipped and only the base rule applies.
    */
-  protected shouldAdvanceLatestMessage(message: LocalMessage): boolean {
+  protected shouldAdvanceLastMessage(message: LocalMessage): boolean {
     if (message.shadowed) return false;
     if (this.parentMessageId) return true;
     const isThreadOnlyReply = !!message.parent_id && !message.show_in_channel;
@@ -186,7 +191,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
 
   /**
    * Monotonically advance {@link lastMessageAt} to `message.created_at` when it is newer than the
-   * current value and {@link shouldAdvanceLatestMessage} permits it. Writes the dedicated
+   * current value and {@link shouldAdvanceLastMessage} permits it. Writes the dedicated
    * {@link aggregateState} store (not `state`), so it is safe to call from inside a `state.next`
    * updater (`ingestPage`). Returns `true` when the value moved.
    *
@@ -194,14 +199,22 @@ export class MessagePaginator extends MessageIntervalPaginator {
    * in-window ingest — e.g. offline pending-message replay, where the sent message has not yet been
    * ingested via the `message.new` event.
    */
-  trackLatestMessage(message: LocalMessage): boolean {
-    if (!this.shouldAdvanceLatestMessage(message)) return false;
+  trackLastMessage(message: LocalMessage): boolean {
+    if (!this.shouldAdvanceLastMessage(message)) return false;
     const incoming = getMessageCreatedAtTimestamp(message);
     if (incoming === null) return false;
-    // Guard against the current display message's own timestamp — NOT `lastMessageAt` (which the
-    // server seed can inflate). Otherwise, a seed newer than the loaded window would reject the very
-    // message it was derived from, and `lastMessage` would never populate.
     const current = this.aggregateState.getLatestValue().lastMessage;
+    // Refresh in place when this IS the current latest being updated — an edit, soft-delete,
+    // reaction, or quoted-message update all re-ingest the same id (same `created_at`). This keeps
+    // `lastMessage` a LIVE reference (so a preview shows "deleted"/edited text), and because
+    // `aggregateState` emits regardless of the active interval, it stays reactive off-window.
+    if (current && current.id === message.id) {
+      this.aggregateState.partialNext({ lastMessage: message });
+      return true;
+    }
+    // Otherwise only advance to a strictly newer message. Guard against the current message's own
+    // timestamp — NOT `lastMessageAt` (which the server seed can inflate); otherwise a seed newer than
+    // the loaded window would reject the very message it was derived from.
     const currentTs = current ? getMessageCreatedAtTimestamp(current) : null;
     if (currentTs !== null && incoming <= currentTs) return false;
     this.aggregateState.partialNext({ lastMessage: message });
@@ -228,7 +241,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
     // of items that no longer match). The advance writes the separate `aggregateState` store, so it
     // is independent of `super`'s `state`/index mutations.
     if (this.matchesFilter(item)) {
-      this.trackLatestMessage(item);
+      this.trackLastMessage(item);
     }
     return super.ingestItem(item);
   }
@@ -240,9 +253,48 @@ export class MessagePaginator extends MessageIntervalPaginator {
     // Advance from each page item; the monotonic max over the page yields the newest. Comparison is
     // by `created_at` against `aggregateState` (no index lookup), so order vs `super` is irrelevant.
     if (params.page?.length) {
-      for (const item of params.page) this.trackLatestMessage(item);
+      for (const item of params.page) this.trackLastMessage(item);
     }
     return interval;
+  }
+
+  removeItem(
+    params: Parameters<MessageIntervalPaginator['removeItem']>[0],
+  ): ReturnType<MessageIntervalPaginator['removeItem']> {
+    const removedId =
+      params.id ?? (params.item ? this.getItemId(params.item) : undefined);
+    const wasLatest =
+      !!removedId && this.aggregateState.getLatestValue().lastMessage?.id === removedId;
+    const result = super.removeItem(params);
+    if (wasLatest) {
+      // The tracked latest was hard-removed; fall back to the newest still-loaded message that
+      // passes the filter. `trackLastMessage` cannot do this (it only advances), so recompute here.
+      this.aggregateState.partialNext({ lastMessage: this.recomputeLastMessage() });
+    }
+    return result;
+  }
+
+  /**
+   * The still-loaded message with the greatest `created_at` that passes
+   * {@link shouldAdvanceLastMessage} (skips system / thread-only per config), from the newest-loaded
+   * window. Used to recompute the tracked latest after the current one is removed. `null` when nothing
+   * loaded qualifies.
+   *
+   * "Latest" is defined by `created_at` (matching {@link trackLastMessage}), NOT by the paginator's
+   * display order — so this compares timestamps rather than assuming a position, and stays correct
+   * whatever `itemOrder` / `requestSort` are configured to.
+   */
+  private recomputeLastMessage(): LocalMessage | null {
+    let latest: LocalMessage | null = null;
+    let latestTimestamp = -Infinity;
+    for (const item of this.headItems) {
+      if (!this.shouldAdvanceLastMessage(item)) continue;
+      const timestamp = getMessageCreatedAtTimestamp(item);
+      if (timestamp === null || timestamp <= latestTimestamp) continue;
+      latest = item;
+      latestTimestamp = timestamp;
+    }
+    return latest;
   }
 
   /**

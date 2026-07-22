@@ -949,7 +949,7 @@ export class MessageIntervalPaginator extends BasePaginator<
     timestampMs: number,
     exactTsMatch = false,
   ): LocalMessage | null => {
-    const items = this.latestItems; // ascending by created_at
+    const items = this.headItems; // ascending by created_at
     if (!items.length) return null;
     // Resolve the last message created AT OR BEFORE `timestampMs` (floor). The sole caller is
     // read/delivered cursor resolution (MessageReceiptsTracker): the cursor carries the timestamp of

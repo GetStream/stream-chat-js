@@ -3174,15 +3174,15 @@ describe('BasePaginator', () => {
       });
     });
 
-    describe('latestItems (newest loaded window)', () => {
+    describe('headItems (newest loaded window)', () => {
       it('is empty before the first load and mirrors items in flat mode', () => {
         const paginator = new Paginator();
-        expect(paginator.latestItems).toEqual([]);
+        expect(paginator.headItems).toEqual([]);
 
         const loaded = [{ id: 'a' }];
         paginator.setItems({ valueOrFactory: loaded });
 
-        expect(paginator.latestItems).toStrictEqual(loaded);
+        expect(paginator.headItems).toStrictEqual(loaded);
       });
 
       it('materializes the head window in interval-storage mode', () => {
@@ -3199,8 +3199,8 @@ describe('BasePaginator', () => {
           setActive: true,
         });
 
-        expect(paginator.latestItems.length).toBeGreaterThan(0);
-        expect(paginator.latestItems.map((item) => item.id)).toEqual(
+        expect(paginator.headItems.length).toBeGreaterThan(0);
+        expect(paginator.headItems.map((item) => item.id)).toEqual(
           paginator.items?.map((item) => item.id),
         );
         itemIndex.clear();

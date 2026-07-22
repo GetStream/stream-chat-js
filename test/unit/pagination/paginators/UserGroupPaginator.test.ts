@@ -20,7 +20,7 @@ describe('UserGroupPaginator', () => {
     client = getClientWithUser({ id: 'user' });
   });
 
-  it('stores results in interval storage (index-addressable, latestItems populated)', async () => {
+  it('stores results in interval storage (index-addressable, headItems populated)', async () => {
     const paginator = new UserGroupPaginator(client, { pageSize: 2 });
     vi.spyOn(client, 'queryUserGroups').mockResolvedValue(
       response([
@@ -35,7 +35,7 @@ describe('UserGroupPaginator', () => {
     // interval storage: items are now resolvable by id and mirrored into the head window
     expect(paginator.getItem('a')?.id).toBe('a');
     expect(paginator.getItem('b')?.id).toBe('b');
-    expect(paginator.latestItems.map((g) => g.id)).toEqual(['a', 'b']);
+    expect(paginator.headItems.map((g) => g.id)).toEqual(['a', 'b']);
     // full page -> more forward; backward pagination is disabled for this listing
     expect(paginator.hasMoreTail).toBe(true);
     expect(paginator.hasMoreHead).toBe(false);

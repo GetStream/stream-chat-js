@@ -46,7 +46,7 @@ Methods: `addMessageSorted`, `addMessagesSorted`, `removeMessage`, `findMessage`
 | Before (v14)                                                  | After (v15)                                                                          |
 | ------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | `channel.state.messages`                                      | `channel.messagePaginator.state.items` (reactive) / `channel.messagePaginator.items` |
-| `channel.state.latestMessages`                                | `channel.messagePaginator.latestItems` / `.latestMessage`                            |
+| `channel.state.latestMessages`                                | `channel.messagePaginator.headItems` / `.lastMessage`                                |
 | `channel.state.messagePagination`                             | `channel.messagePaginator.state` (`hasMoreHead` / `hasMoreTail` / `cursor`)          |
 | `channel.state.threads[parentId]`                             | `thread.messagePaginator.state.items` (resolve the `Thread` via `client.threads`)    |
 | `channel.state.pinnedMessages`                                | `channel.pinnedMessagesPaginator.state.items`                                        |
@@ -94,25 +94,47 @@ seededLastMessageAt }`). It returns `max(lastMessage?.created_at, seededLastMess
 - **Tracking relocated:** `MessageIntervalPaginator`'s `state.latestMessageId` and the `latestMessage`
   getter (id resolved from the pagination `state`) were replaced. The tracked latest now lives on
   `MessagePaginator.aggregateState.lastMessage`, advanced on every ingest.
-  `MessagePaginator.latestMessage` remains as a convenience getter but now reads `aggregateState`.
+  `MessagePaginator.lastMessage` remains as a convenience getter but now reads `aggregateState`.
   This matters for reactivity: pagination `state` only emits when the **active** interval is impacted,
   so a WS message landing in the (non-active) head interval would not notify a `state`-derived
   latest; `aggregateState` is written directly on each advance and emits regardless — subscribe to it
-  (e.g. for a channel/thread list item's latest-message display).
+  (e.g. for a channel/thread list item's latest-message display). `aggregateState.lastMessage` is a
+  LIVE reference: refreshed in place on edit/soft-delete/reaction of the current latest and recomputed
+  on hard-remove, and it honors `skip_last_msg_update_for_system_msgs` (system messages neither
+  reorder a channel nor become its displayed latest). A consumer that previously showed the unfiltered
+  newest message (`headmostItem`) as the channel-list preview will now skip system messages under that
+  config — a deliberate behavior change so the preview and the channel's sort position agree.
 
-## `PaginatorState.headItems` and `BasePaginator.headItems` removed — use `latestItems` / `latestItem`
+## Newest-loaded window is exposed as computed getters `headItems` / `headmostItem`
 
 **Area:** `BasePaginator` · **Status:** implemented
 
-The reactive `headItems` field on `PaginatorState` and the `paginator.headItems` getter were removed.
-They materialized a reference-stable copy of the newest-loaded window into pagination state, but had
-no consumer.
+The newest-loaded window is exposed as **computed getters** on the paginator — `paginator.headItems`
+(the window; `[]` before the first load) and `paginator.headmostItem` (its single newest item),
+derived from the intervals on read.
 
-- **Migrate:** use the computed getters `paginator.latestItems` (newest loaded window — returns `[]`
-  instead of `undefined` before the first load) and `paginator.latestItem` (single newest loaded
-  item). These are derived directly from the intervals and are unchanged.
-- **Why:** dead state. `latestItems`/`latestItem` already provide the value, computed from the
-  intervals; the materialized mirror only added a preprocessor and a `PaginatorState` field.
+- **Migrate:** the v14 `channel.state.latestMessages` reactive array becomes
+  `channel.messagePaginator.headItems`. Because these are getters, **not** `PaginatorState` fields,
+  they are not subscribable via `useStateStore(paginator.state, (s) => s.headItems)` — read them
+  directly, or subscribe to `channel.messagePaginator.aggregateState` for the reactive last-message
+  signal.
+- **Why:** the value is derivable from the intervals on demand, so it does not need to be materialized
+  (and re-emitted) into pagination state.
+
+## `Channel.lastMessage()` removed — use `channel.messagePaginator.headmostItem`
+
+**Area:** `Channel` · **Status:** implemented
+
+`channel.lastMessage()` was removed. It returned the newest loaded message (the head edge of the
+message paginator's latest window); read `channel.messagePaginator.headmostItem` directly instead.
+
+- **Migrate:** `channel.lastMessage()` → `channel.messagePaginator.headmostItem`.
+- **Note:** `headmostItem` is the newest _loaded_ message, **unfiltered** (includes system messages) —
+  distinct from `channel.messagePaginator.lastMessage`, the filtered chronological latest (honors
+  `skip_last_msg_update_for_system_msgs`) that backs `lastMessageAt`. Use `headmostItem` for "the newest
+  message on screen"; use `lastMessage` / `lastMessageAt` for channel-list ordering.
+- **Why:** it was a thin wrapper over `headmostItem`, and sharing the name `lastMessage` with the
+  differently-filtered paginator getter was misleading.
 
 ## `ChannelState.isUpToDate` / `setIsUpToDate` removed
 

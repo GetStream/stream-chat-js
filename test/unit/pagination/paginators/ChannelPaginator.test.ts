@@ -24,7 +24,7 @@ const user = { id: 'custom-id' };
 const setLastMessageAt = (channel: Channel, date: Date | null) => {
   channel.messagePaginator.clearStateAndCache();
   if (date) {
-    channel.messagePaginator.trackLatestMessage(
+    channel.messagePaginator.trackLastMessage(
       formatMessage(generateMsg({ date: date.toISOString() })),
     );
   }
@@ -727,7 +727,7 @@ describe('ChannelPaginator', () => {
   });
 
   describe('interval storage', () => {
-    it('is index-addressable by cid, populates latestItems, and dedupes across pages', async () => {
+    it('is index-addressable by cid, populates headItems, and dedupes across pages', async () => {
       const a = new Channel(client, 'type', 'iv-a', {});
       const b = new Channel(client, 'type', 'iv-b', {});
       let page: Channel[] = [a, b];
@@ -744,7 +744,7 @@ describe('ChannelPaginator', () => {
       // resolvable by cid + mirrored into the head window (interval storage)
       expect(paginator.getItem('type:iv-a')).toBe(a);
       expect(paginator.getItem('type:iv-b')).toBe(b);
-      expect(paginator.latestItems.map((c) => c.cid).sort()).toEqual([
+      expect(paginator.headItems.map((c) => c.cid).sort()).toEqual([
         'type:iv-a',
         'type:iv-b',
       ]);
@@ -783,8 +783,8 @@ describe('ChannelPaginator', () => {
         'type:oldest',
       ]);
       // head edge = index 0 = newest; head window starts with it too
-      expect(paginator.latestItem?.cid).toBe('type:newest');
-      expect(paginator.latestItems[0]?.cid).toBe('type:newest');
+      expect(paginator.headmostItem?.cid).toBe('type:newest');
+      expect(paginator.headItems[0]?.cid).toBe('type:newest');
     });
 
     it('promotes a non-headmost channel to the top on re-ingest without dropping it', async () => {

@@ -1383,17 +1383,6 @@ export class Channel {
   }
 
   /**
-   * lastMessage - return the last message, takes into account that last few messages might not be perfectly sorted
-   *
-   * @return {ReturnType<ChannelState['formatMessage']> | undefined} Description
-   */
-  lastMessage(): LocalMessage | undefined {
-    // The paginator keeps its latest (head) window sorted, so its head edge is the newest message.
-    // (Replaces the legacy "slice last 5 of state.latestMessages + re-sort" heuristic.)
-    return this.messagePaginator.latestItem;
-  }
-
-  /**
    * markRead - Send the mark read event for this user, only works if the `read_events` setting is enabled. Syncs the message delivery report candidates local state.
    *
    * @param {MarkReadOptions} data
@@ -1459,7 +1448,7 @@ export class Channel {
       channel_type: this.type,
       cid: this.cid,
       created_at: new Date().toISOString(),
-      last_read_message_id: this.lastMessage()?.id,
+      last_read_message_id: this.messagePaginator.headmostItem?.id,
       team: this.data?.team,
       type: 'message.read_locally',
       user: client.user,
@@ -1681,7 +1670,7 @@ export class Channel {
   countUnread(lastRead?: Date | null) {
     if (!lastRead) return this.state.unreadCount;
     let count = 0;
-    const latestMessages = this.messagePaginator.latestItems;
+    const latestMessages = this.messagePaginator.headItems;
     for (let i = 0; i < latestMessages.length; i += 1) {
       const message = latestMessages[i];
       if (message.created_at > lastRead && this._countMessageAsUnread(message)) {
@@ -1701,7 +1690,7 @@ export class Channel {
     const userID = this.getClient().userID;
 
     let count = 0;
-    const latestMessages = this.messagePaginator.latestItems;
+    const latestMessages = this.messagePaginator.headItems;
     for (let i = 0; i < latestMessages.length; i += 1) {
       const message = latestMessages[i];
       if (

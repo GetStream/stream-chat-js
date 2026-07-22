@@ -134,7 +134,7 @@ export class MessageDeliveryReporter {
     let key: string | undefined = undefined;
 
     if (isChannel(collection)) {
-      latestMessages = collection.messagePaginator.latestItems;
+      latestMessages = collection.messagePaginator.headItems;
       const ownReadState = collection.state.read[ownUserId] ?? {};
       lastReadAt = ownReadState?.last_read;
       lastDeliveredAt = ownReadState?.last_delivered_at;

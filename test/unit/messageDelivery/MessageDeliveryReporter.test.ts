@@ -23,7 +23,7 @@ const otherUser = {
 const mkMsg = (id: string, at: string | number | Date) =>
   ({ id, created_at: new Date(at) }) as any;
 
-// The delivery reporter now derives the latest message from `channel.messagePaginator.latestItems`,
+// The delivery reporter now derives the latest message from `channel.messagePaginator.headItems`,
 // so tests seed the paginator's latest (head) window instead of assigning `channel.state.latestMessages`.
 const setLatest = (channel: Channel, msgs: ReturnType<typeof mkMsg>[]) => {
   channel.messagePaginator.clearStateAndCache();

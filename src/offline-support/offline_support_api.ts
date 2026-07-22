@@ -1294,7 +1294,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
               timestampChanged: true,
             });
           }
-          channel.messagePaginator.trackLatestMessage(formatMessage(newMessage));
+          channel.messagePaginator.trackLastMessage(formatMessage(newMessage));
         }
         return newMessageResponse;
       }

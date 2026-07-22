@@ -42,7 +42,7 @@ describe('ReminderPaginator', () => {
     expect(paginator.items?.map((r) => r.message_id)).toEqual(['m1', 'm2']);
     // interval storage: addressable by message_id + mirrored into the head window
     expect(paginator.getItem('m1')?.message_id).toBe('m1');
-    expect(paginator.latestItems.map((r) => r.message_id)).toEqual(['m1', 'm2']);
+    expect(paginator.headItems.map((r) => r.message_id)).toEqual(['m1', 'm2']);
     expect(paginator.hasMoreTail).toBe(true);
     expect(paginator.cursor?.tailward).toBe('next-cursor');
   });

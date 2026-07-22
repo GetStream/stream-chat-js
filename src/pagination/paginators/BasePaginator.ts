@@ -539,17 +539,17 @@ export abstract class BasePaginator<T, Q> {
    * older window as "latest" (best effort). Use for "latest"-derived reads: last message, unread
    * counting, delivery candidates, channel-list previews.
    */
-  get latestItems(): T[] {
+  get headItems(): T[] {
     if (!this.usesItemIntervalStorage) return this.items ?? [];
     const head = this.getHeadIntervalFromSortedIntervals(this.itemIntervals);
     return head ? this.intervalToItems(head) : [];
   }
 
   /**
-   * The single newest loaded item — the head pagination edge of {@link BasePaginator.latestItems}.
+   * The item on the head edge of the head pagination interval (of {@link BasePaginator.headItems}).
    * `undefined` when nothing is loaded.
    */
-  get latestItem(): T | undefined {
+  get headmostItem(): T | undefined {
     if (!this.usesItemIntervalStorage) return this.items?.[0];
     const head = this.getHeadIntervalFromSortedIntervals(this.itemIntervals);
     return head ? (this.getIntervalPaginationEdges(head)?.head ?? undefined) : undefined;

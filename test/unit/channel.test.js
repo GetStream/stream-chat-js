@@ -15,7 +15,7 @@ import { formatMessage, generateUUIDv4 as uuidv4 } from '../../src/utils';
 import { describe, beforeEach, afterEach, it, expect, vi } from 'vitest';
 
 // Seed the channel's messagePaginator "latest" (head) window from raw generated messages.
-// The unread/last-message readers now source from `messagePaginator.latestItems`/`latestItem`,
+// The unread/last-message readers now source from `messagePaginator.headItems`/`headmostItem`,
 // so tests populate the paginator (formatted) rather than the legacy `state.addMessagesSorted`.
 const seedLatestWindow = (channel, messages) =>
 	channel.messagePaginator.ingestPage({
@@ -938,7 +938,7 @@ describe('Channel _handleChannelEvent', function () {
 			].map(generateMsg);
 
 			seedLatestWindow(channel, messages);
-			expect(channel.messagePaginator.latestItems.length).to.be.equal(3);
+			expect(channel.messagePaginator.headItems.length).to.be.equal(3);
 
 			channel._handleChannelEvent({
 				type: 'channel.truncated',
@@ -948,7 +948,7 @@ describe('Channel _handleChannelEvent', function () {
 				},
 			});
 
-			expect(channel.messagePaginator.latestItems.length).to.be.equal(0);
+			expect(channel.messagePaginator.headItems.length).to.be.equal(0);
 		});
 
 		it('message.truncate clears messagePaginator unread snapshot', function () {
@@ -996,7 +996,7 @@ describe('Channel _handleChannelEvent', function () {
 			].map(generateMsg);
 
 			seedLatestWindow(channel, messages);
-			expect(channel.messagePaginator.latestItems.length).to.be.equal(3);
+			expect(channel.messagePaginator.headItems.length).to.be.equal(3);
 
 			channel._handleChannelEvent({
 				type: 'channel.truncated',
@@ -1006,7 +1006,7 @@ describe('Channel _handleChannelEvent', function () {
 				},
 			});
 
-			expect(channel.messagePaginator.latestItems.length).to.be.equal(2);
+			expect(channel.messagePaginator.headItems.length).to.be.equal(2);
 		});
 
 		it('prunes pinned messages older than the cutoff on a partial channel.truncated', () => {
@@ -1994,7 +1994,7 @@ describe('Channel _handleChannelEvent', function () {
 			expect(Object.keys(channel.state.members).length).to.be.eq(1);
 			expect(Object.keys(channel.state.watchers).length).to.be.eq(1);
 			expect(Object.keys(channel.state.read).length).to.be.eq(1);
-			expect(channel.messagePaginator.latestItems.length).to.be.eq(1);
+			expect(channel.messagePaginator.headItems.length).to.be.eq(1);
 			expect(channel.state.watcher_count).to.be.eq(5);
 		});
 
@@ -2605,7 +2605,7 @@ describe('Channel lastMessage', async () => {
 			generateMsg({ date: latestMessageDate }),
 		]);
 
-		expect(channel.lastMessage().created_at.getTime()).to.be.equal(
+		expect(channel.messagePaginator.headmostItem.created_at.getTime()).to.be.equal(
 			new Date(latestMessageDate).getTime(),
 		);
 	});
@@ -2619,7 +2619,7 @@ describe('Channel lastMessage', async () => {
 			generateMsg({ date: '2018-01-01T00:00:00' }),
 		]);
 
-		expect(channel.lastMessage().created_at.getTime()).to.be.equal(
+		expect(channel.messagePaginator.headmostItem.created_at.getTime()).to.be.equal(
 			new Date(latestMessageDate).getTime(),
 		);
 	});
@@ -2643,7 +2643,7 @@ describe('Channel lastMessage', async () => {
 			setActive: false,
 		});
 
-		expect(channel.lastMessage().created_at.getTime()).to.be.equal(
+		expect(channel.messagePaginator.headmostItem.created_at.getTime()).to.be.equal(
 			new Date(latestMessageDate).getTime(),
 		);
 	});
@@ -2678,7 +2678,7 @@ describe('Channel last_message_at', () => {
 		channel.state = new ChannelState(channel);
 	});
 
-	const track = (msg) => channel.messagePaginator.trackLatestMessage(formatMessage(msg));
+	const track = (msg) => channel.messagePaginator.trackLastMessage(formatMessage(msg));
 
 	it('advances monotonically as messages are tracked', () => {
 		expect(channel.messagePaginator.lastMessageAt).to.be.null;
@@ -2840,7 +2840,7 @@ describe('Channel.query', async () => {
 		expect(channel.messagePaginator.items).to.have.length(
 			DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
 		);
-		expect(channel.messagePaginator.latestItem).to.not.equal(undefined);
+		expect(channel.messagePaginator.headmostItem).to.not.equal(undefined);
 		mock.restore();
 	});
 

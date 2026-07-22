@@ -178,7 +178,7 @@ describe('Threads 2.0', () => {
       expect(thread.messagePaginator.lastMessageAt?.getTime()).to.equal(
         new Date('2030-01-01T00:00:00.000Z').getTime(),
       );
-      expect(thread.messagePaginator.latestMessage).to.be.null;
+      expect(thread.messagePaginator.lastMessage).to.be.null;
     });
 
     it('initializes properly without threadData', () => {
