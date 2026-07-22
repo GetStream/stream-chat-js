@@ -155,21 +155,27 @@ export function makeComparator<
         case 'boolean':
           comparison = compare(normalized.a, normalized.b);
           break;
-        default:
-          // deterministic fallback: null/undefined last; else string compare
-          if (leftValue == null && rightValue == null) comparison = 0;
-          else if (leftValue == null) comparison = 1;
-          else if (rightValue == null) comparison = -1;
-          else {
-            const stringLeftValue = String(leftValue),
-              stringRightValue = String(rightValue);
-            comparison =
-              stringLeftValue === stringRightValue
-                ? 0
-                : stringLeftValue < stringRightValue
-                  ? -1
-                  : 1;
+        default: {
+          // Null/undefined always sort to the tail, INDEPENDENT of `direction`. Return here so the
+          // result bypasses the direction flip below — otherwise a descending sort (e.g.
+          // `{ last_message_at: -1 }`) negates "null last" into "null first" and floats value-less
+          // items (e.g. channels with no last message) to the head of the list.
+          if (leftValue == null && rightValue == null) {
+            comparison = 0; // tie on this term; fall through to the next term / tiebreaker
+            break;
           }
+          if (leftValue == null) return 1; // a (null) sorts after b
+          if (rightValue == null) return -1; // b (null) sorts after a
+          // Both non-null but not normalizable: deterministic string compare (respects direction).
+          const stringLeftValue = String(leftValue),
+            stringRightValue = String(rightValue);
+          comparison =
+            stringLeftValue === stringRightValue
+              ? 0
+              : stringLeftValue < stringRightValue
+                ? -1
+                : 1;
+        }
       }
       if (comparison !== 0) return direction === 1 ? comparison : -comparison;
     }
