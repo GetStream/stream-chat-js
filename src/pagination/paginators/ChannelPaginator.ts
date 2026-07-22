@@ -10,6 +10,7 @@ import { BasePaginator } from './BasePaginator';
 import type { FilterBuilderOptions } from '../FilterBuilder';
 import { FilterBuilder } from '../FilterBuilder';
 import { makeComparator } from '../sortCompiler';
+import { ItemIndex } from '../ItemIndex';
 import { generateUUIDv4 } from '../../utils';
 import type { StreamChat } from '../../client';
 import type { Channel } from '../../channel';
@@ -111,7 +112,7 @@ const lastUpdatedFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: (field) => field === 'last_updated',
   resolve: (channel) => {
     // combination of last_message_at and updated_at
-    const lastMessageAt = channel.state.last_message_at?.getTime() ?? null;
+    const lastMessageAt = channel.messagePaginator.lastMessageAt?.getTime() ?? null;
     const updatedAt = channel.data?.updated_at
       ? new Date(channel.data?.updated_at).getTime()
       : undefined;
@@ -170,7 +171,7 @@ const dataFieldFilterResolver: FieldToDataResolver<Channel> = {
 const channelSortPathResolver: PathResolver<Channel> = (channel, path) => {
   switch (path) {
     case 'last_message_at':
-      return channel.state.last_message_at;
+      return channel.messagePaginator.lastMessageAt;
     case 'has_unread': {
       return hasUnreadFilterResolver.resolve(channel, path);
     }
@@ -211,7 +212,11 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     requestOptions,
     sort,
   }: ChannelPaginatorOptions) {
-    super({ hasPaginationQueryShapeChanged, ...paginatorOptions });
+    super({
+      hasPaginationQueryShapeChanged,
+      itemIndex: new ItemIndex<Channel>({ getId: (channel) => channel.cid }),
+      ...paginatorOptions,
+    });
     const definedSort = sort ?? DEFAULT_BACKEND_SORT;
     this.client = client;
     this._id = id ?? `channel-paginator-${generateUUIDv4()}`;

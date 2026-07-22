@@ -105,20 +105,6 @@ export class ChannelState {
     this.membersStore.partialNext({ memberCount });
   }
 
-  /**
-   * Timestamp of the channel's latest message, derived from the message paginator's tracked latest
-   * message (`channel.messagePaginator.latestMessage`), or `null` when nothing is tracked. Read by
-   * `ChannelPaginator` to sort the channel list.
-   *
-   * Read-only: `last_message_at` is a projection of the message paginator (the single source of
-   * truth for messages). Advance it by ingesting/tracking a message on `channel.messagePaginator`,
-   * not by assignment. (Removing the former writable setter is a breaking change — see
-   * `docs/breaking-changes-v14-v15.md`.)
-   */
-  get last_message_at(): Date | null {
-    return this._channel?.messagePaginator?.latestMessage?.created_at ?? null;
-  }
-
   get read() {
     return this.readStore.getLatestValue().read;
   }

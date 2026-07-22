@@ -86,17 +86,7 @@ const DEFAULT_BACKEND_SORT: MessagePaginatorSort = {
 // server's default size is 100
 const DEFAULT_CHANNEL_MESSAGE_LIST_PAGE_SIZE = 100;
 
-export type MessagePaginatorState = PaginatorState<LocalMessage> & {
-  /**
-   * Id of the newest message tracked for `channel.state.last_message_at` derivation. Advanced by
-   * {@link MessageIntervalPaginator.trackLatestMessage} (monotonic by `created_at`, honoring the
-   * per-paginator {@link MessageIntervalPaginator.shouldAdvanceLatestMessage} predicate — e.g. the main
-   * list skips system messages when configured and thread-only replies always), resolved back to a
-   * message via the {@link MessageIntervalPaginator.latestMessage} getter (index lookup), and reset
-   * to `null` with the rest of the state on {@link MessageIntervalPaginator.clearStateAndCache}.
-   */
-  latestMessageId?: string | null;
-};
+export type MessagePaginatorState = PaginatorState<LocalMessage>;
 export type MessageQueryShape = MessagePaginationOptions | PinnedMessagePaginationOptions;
 
 /**
@@ -114,7 +104,7 @@ const dataFieldFilterResolver: FieldToDataResolver<LocalMessage> = {
   resolve: (message, path) => resolveDotPathValue(message, path),
 };
 
-const getMessageCreatedAtTimestamp = (message: LocalMessage): number | null => {
+export const getMessageCreatedAtTimestamp = (message: LocalMessage): number | null => {
   if (!(message.created_at instanceof Date)) return null;
   const timestamp = message.created_at.getTime();
   return Number.isFinite(timestamp) ? timestamp : null;
@@ -166,105 +156,6 @@ export class MessageIntervalPaginator extends BasePaginator<
    */
   shouldIncludeMessageInInterval(message: LocalMessage): boolean {
     return !message.shadowed;
-  }
-
-  /**
-   * Source of truth for the tracked latest message. Kept as an instance field rather than only in
-   * `state` so it can be advanced from inside `ingestPage`/`setItems` (which run within a
-   * `state.next` updater, where a nested `partialNext` would be clobbered by the outer update). A
-   * state preprocessor mirrors this into {@link MessagePaginatorState.latestMessageId} on every
-   * emission, so subscribers stay reactive.
-   */
-  private _latestMessageId: string | null = null;
-
-  get initialState(): MessagePaginatorState {
-    return { ...super.initialState, latestMessageId: null };
-  }
-
-  /**
-   * The newest message of this list, resolved from the item index by the tracked id. Deliberately
-   * index-resolved rather than derived from the head window, so it is unaffected by which window is
-   * active OR by the interval/item sort orientation, and stays current across edits/reactions. This
-   * is the source of truth for `channel.state.last_message_at`. Returns `undefined` once nothing is
-   * tracked or the tracked message is no longer in the index.
-   */
-  get latestMessage(): LocalMessage | undefined {
-    return this._latestMessageId ? this.getItem(this._latestMessageId) : undefined;
-  }
-
-  /**
-   * Whether `message` may advance the tracked latest message. Base excludes only shadowed messages;
-   * subclasses narrow it to their notion of "the latest message of this list" (e.g.
-   * {@link MessagePaginator} additionally excludes thread-only replies and — when configured —
-   * system messages, but only for the main channel list).
-   */
-  protected shouldAdvanceLatestMessage(message: LocalMessage): boolean {
-    return !message.shadowed;
-  }
-
-  /**
-   * Monotonically advance the tracked latest message id to `message` when it is newer (by
-   * `created_at`) than the currently tracked one and {@link MessageIntervalPaginator.shouldAdvanceLatestMessage}
-   * permits it. Updates only the instance field (no state write) so it is safe to call from inside a
-   * `state.next` updater; the mirror preprocessor reflects it on the next emission. Returns `true`
-   * when the pointer moved.
-   *
-   * The current latest's timestamp is resolved from the item index rather than cached: there is no
-   * interval trimming, so the tracked message stays resolvable while loaded; the only way it leaves
-   * the index is deletion (its author hard-deleted / an explicit remove), and in that case advancing
-   * to the next newest loaded message is the correct outcome, not a regression.
-   */
-  protected advanceLatestTo(message: LocalMessage): boolean {
-    if (!this.shouldAdvanceLatestMessage(message)) return false;
-    const incomingTimestamp = getMessageCreatedAtTimestamp(message);
-    if (incomingTimestamp === null) return false;
-    const current = this.latestMessage;
-    const currentTimestamp = current ? getMessageCreatedAtTimestamp(current) : null;
-    if (currentTimestamp !== null && incomingTimestamp <= currentTimestamp) return false;
-    this._latestMessageId = message.id;
-    return true;
-  }
-
-  /**
-   * Explicitly track `message` as the newest message of this list, for callers that advance it
-   * without a normal in-window ingest — the channel-open seed reconciliation (`_initializeState`,
-   * whose paginator seed is skipped for an already-loaded channel jumped to an older window) and
-   * offline pending-message replay. The message is upserted into the item index so
-   * {@link MessageIntervalPaginator.latestMessage} can resolve it. Advancement is monotonic (see
-   * {@link MessageIntervalPaginator.advanceLatestTo}).
-   *
-   * Intentionally does NOT emit: the field is the source of truth (read synchronously by
-   * `latestMessage` / `channel.state.last_message_at`), and the mirror preprocessor publishes it into
-   * `state.latestMessageId` on the next emission.
-   */
-  trackLatestMessage(message: LocalMessage) {
-    if (!this.advanceLatestTo(message)) return;
-    this._itemIndex.setOne(message);
-  }
-
-  ingestItem(item: LocalMessage): boolean {
-    // Advance BEFORE delegating so `super.ingestItem`'s own emission already reflects the new latest
-    // (the mirror preprocessor reads the field). Only items that survive the filter are tracked -
-    // `ingestItem` also handles removals of items that no longer match. The field-only advance does
-    // not touch the index, so it cannot confuse `super`'s new-vs-existing item diffing, and it reads
-    // the *previous* latest (still indexed) for the monotonic comparison.
-    if (this.matchesFilter(item)) {
-      this.advanceLatestTo(item);
-    }
-    return super.ingestItem(item);
-  }
-
-  ingestPage(
-    params: Parameters<BasePaginator<LocalMessage, MessageQueryShape>['ingestPage']>[0],
-  ): Interval | null {
-    const interval = super.ingestPage(params);
-    // Advance AFTER delegating: page items reference each other by index for the monotonic
-    // comparison, and they are only in the index once `super.ingestPage` has run. The committing
-    // emission (this method's caller - `setItems` / query / `mergeNewestPage`) mirrors the field.
-    if (params.page?.length) {
-      for (const item of params.page) this.advanceLatestTo(item);
-    }
-    return interval;
   }
 
   protected get intervalItemIdsAreHeadFirst(): boolean {
@@ -326,14 +217,6 @@ export class MessageIntervalPaginator extends BasePaginator<
       },
     });
     this.setFilterResolvers([dataFieldFilterResolver]);
-
-    // Mirror the tracked-latest source-of-truth field into reactive state on every emission. Doing
-    // it in a preprocessor (rather than a `partialNext` at each advance) means advances made from
-    // inside a `state.next` updater - `ingestPage` via `setItems`/query - are reflected by the very
-    // update that commits the page, instead of being clobbered by it.
-    this.state.addPreprocessor((nextValue) => {
-      nextValue.latestMessageId = this._latestMessageId;
-    });
   }
 
   get id() {
@@ -812,8 +695,6 @@ export class MessageIntervalPaginator extends BasePaginator<
   };
 
   clearStateAndCache() {
-    // Clear the source-of-truth field first so the `resetState` emission mirrors `null`.
-    this._latestMessageId = null;
     this.resetState();
     this._itemIndex.clear();
     this.clearMessageFocusSignal();

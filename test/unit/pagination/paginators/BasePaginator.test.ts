@@ -305,13 +305,15 @@ describe('BasePaginator', () => {
       await sleep(0);
       expect(paginator.isLoading).toBe(true);
       expect(paginator.hasMoreTail).toBe(true);
-      expect(paginator.hasMoreHead).toBe(true);
+      // Offset pagination establishes its window from the start offset (0 here) as soon as the
+      // first-page load begins, so the head is known to be loaded before the query resolves.
+      expect(paginator.hasMoreHead).toBe(false);
 
       paginator.queryResolve({ items: [{ id: 'id1' }] });
       await nextPromise;
       expect(paginator.isLoading).toBe(false);
       expect(paginator.hasMoreTail).toBe(true);
-      expect(paginator.hasMoreHead).toBe(true);
+      expect(paginator.hasMoreHead).toBe(false);
       expect(paginator.items).toEqual([{ id: 'id1' }]);
       expect(paginator.cursor).toBeUndefined();
       expect(paginator.offset).toBe(1);
@@ -327,7 +329,7 @@ describe('BasePaginator', () => {
       paginator.queryResolve({ items: [{ id: 'id2' }] });
       await nextPromise;
       expect(paginator.hasMoreTail).toBe(true);
-      expect(paginator.hasMoreHead).toBe(true);
+      expect(paginator.hasMoreHead).toBe(false);
       expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]);
       expect(paginator.cursor).toBeUndefined();
       expect(paginator.offset).toBe(2);
@@ -336,7 +338,7 @@ describe('BasePaginator', () => {
       paginator.queryResolve({ items: [] });
       await nextPromise;
       expect(paginator.hasMoreTail).toBe(false);
-      expect(paginator.hasMoreHead).toBe(true);
+      expect(paginator.hasMoreHead).toBe(false);
       expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]);
       expect(paginator.cursor).toBeUndefined();
       expect(paginator.offset).toBe(2);
@@ -344,6 +346,61 @@ describe('BasePaginator', () => {
       paginator.toTail();
       expect(paginator.isLoading).toBe(false);
       expect(paginator.mockClientQuery).toHaveBeenCalledTimes(3);
+    });
+
+    it('keeps hasMoreHead unchanged on a keepPreviousItems first-page refresh (offset)', async () => {
+      // Regression: hasMoreHead is derived from the start offset only when the first page resets
+      // the window (isFirstPage && !keepPreviousItems). A keepPreviousItems refresh is isFirstPage
+      // but does NOT reset the offset, so it must not re-derive hasMoreHead from the grown offset.
+      const paginator = new Paginator({ pageSize: 1 });
+
+      // First page from offset 0 -> head is loaded.
+      let nextPromise = paginator.toTail();
+      await sleep(0);
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await nextPromise;
+      expect(paginator.hasMoreHead).toBe(false);
+      expect(paginator.offset).toBe(1);
+
+      // Grow the tail so the offset is well past 0.
+      nextPromise = paginator.toTail();
+      paginator.queryResolve({ items: [{ id: 'id2' }] });
+      await nextPromise;
+      expect(paginator.offset).toBe(2);
+      expect(paginator.hasMoreHead).toBe(false);
+
+      // A non-destructive first-page refresh (isFirstPage via reset, keepPreviousItems) must NOT
+      // flip hasMoreHead to true off the grown offset (2 > 0) — the window still starts at 0.
+      const refreshPromise = paginator.executeQuery({
+        keepPreviousItems: true,
+        reset: 'yes',
+      });
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await refreshPromise;
+      expect(paginator.hasMoreHead).toBe(false);
+    });
+
+    it('anchors hasMoreHead from a new start offset when the window is re-established via reset (offset)', async () => {
+      // To start a window mid-list, set the start offset and reset. isFirstPage is true,
+      // getStateBeforeFirstQuery runs, and hasMoreHead is anchored from the (new) start offset.
+      const paginator = new Paginator({ pageSize: 10 });
+
+      // First window at the head (offset 0) -> head loaded.
+      let queryPromise = paginator.toTail();
+      await sleep(0);
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await queryPromise;
+      expect(paginator.hasMoreHead).toBe(false);
+
+      // Move the start offset and re-establish the window from it (reload -> reset: 'yes').
+      paginator.initialOffset = 30;
+      queryPromise = paginator.reload();
+      await sleep(0);
+      paginator.queryResolve({ items: [{ id: 'id2' }] });
+      await queryPromise;
+
+      // Anchored correctly: a window starting at offset 30 reports items before it.
+      expect(paginator.hasMoreHead).toBe(true);
     });
 
     it('paginates to next pages debounced (cursor)', async () => {
@@ -400,7 +457,8 @@ describe('BasePaginator', () => {
       await toNextTick();
       expect(paginator.isLoading).toBe(true);
       expect(paginator.hasMoreTail).toBe(true);
-      expect(paginator.hasMoreHead).toBe(true);
+      // Head is known to be loaded once the offset-0 first-page load begins (see non-debounced case).
+      expect(paginator.hasMoreHead).toBe(false);
 
       paginator.queryResolve({
         items: [{ id: 'id1' }],
@@ -409,7 +467,7 @@ describe('BasePaginator', () => {
       await toNextTick();
       expect(paginator.isLoading).toBe(false);
       expect(paginator.hasMoreTail).toBe(true);
-      expect(paginator.hasMoreHead).toBe(true);
+      expect(paginator.hasMoreHead).toBe(false);
       expect(paginator.items).toEqual([{ id: 'id1' }]);
       expect(paginator.cursor).toBeUndefined();
       expect(paginator.offset).toBe(1);
@@ -635,7 +693,7 @@ describe('BasePaginator', () => {
       await nextPromise;
       expect(paginator.isLoading).toBe(false);
       expect(paginator.hasMoreTail).toBe(true);
-      expect(paginator.hasMoreHead).toBe(true);
+      expect(paginator.hasMoreHead).toBe(false);
       expect(paginator.items).toEqual([{ id: 'id1' }]);
       expect(paginator.cursor).toBeUndefined();
       expect(paginator.offset).toBe(1);
@@ -664,7 +722,7 @@ describe('BasePaginator', () => {
       await nextPromise;
       expect(paginator.isLoading).toBe(false);
       expect(paginator.hasMoreTail).toBe(true);
-      expect(paginator.hasMoreHead).toBe(true);
+      expect(paginator.hasMoreHead).toBe(false);
       expect(paginator.items).toEqual([{ id: 'id1' }]);
       expect(paginator.cursor).toBeUndefined();
       expect(paginator.offset).toBe(1);
@@ -689,7 +747,7 @@ describe('BasePaginator', () => {
       await nextPromise;
       expect(paginator.isLoading).toBe(false);
       expect(paginator.hasMoreTail).toBe(true);
-      expect(paginator.hasMoreHead).toBe(true);
+      expect(paginator.hasMoreHead).toBe(false);
       expect(paginator.items).toEqual([{ id: 'id1' }]);
       expect(paginator.cursor).toBeUndefined();
       expect(paginator.offset).toBe(1);
@@ -3116,55 +3174,15 @@ describe('BasePaginator', () => {
       });
     });
 
-    describe('headItems (reactive latest window)', () => {
-      it('is undefined before the first load and mirrors items in flat mode', () => {
+    describe('latestItems (newest loaded window)', () => {
+      it('is empty before the first load and mirrors items in flat mode', () => {
         const paginator = new Paginator();
-        expect(paginator.headItems).toBeUndefined();
+        expect(paginator.latestItems).toEqual([]);
 
         const loaded = [{ id: 'a' }];
         paginator.setItems({ valueOrFactory: loaded });
 
-        expect(paginator.headItems).toStrictEqual(loaded);
-        // flat-mode head window is the items array itself (same reference)
-        expect(paginator.state.getLatestValue().headItems).toBe(loaded);
-      });
-
-      it('emits reactively when the head window changes', () => {
-        const paginator = new Paginator();
-        const emissions: Array<{ id: string }[] | undefined> = [];
-        const unsubscribe = paginator.state.subscribeWithSelector(
-          (state) => ({ headItems: state.headItems }),
-          ({ headItems }) => emissions.push(headItems),
-        );
-
-        const items1 = [{ id: 'a' }];
-        const items2 = [{ id: 'b' }];
-        paginator.setItems({ valueOrFactory: items1 });
-        paginator.setItems({ valueOrFactory: items2 });
-
-        unsubscribe();
-        // initial (undefined) + one emission per head-window change
-        expect(emissions).toEqual([undefined, items1, items2]);
-      });
-
-      it('does not re-emit headItems on unrelated state changes (reference-stable)', () => {
-        const paginator = new Paginator();
-        paginator.setItems({ valueOrFactory: [{ id: 'a' }] });
-
-        let calls = 0;
-        const unsubscribe = paginator.state.subscribeWithSelector(
-          (state) => ({ headItems: state.headItems }),
-          () => {
-            calls += 1;
-          },
-        );
-        expect(calls).toBe(1); // initial
-
-        paginator.state.partialNext({ isLoading: true });
-        paginator.state.partialNext({ isLoading: false });
-
-        expect(calls).toBe(1); // head window did not change → no re-emit
-        unsubscribe();
+        expect(paginator.latestItems).toStrictEqual(loaded);
       });
 
       it('materializes the head window in interval-storage mode', () => {
@@ -3181,8 +3199,8 @@ describe('BasePaginator', () => {
           setActive: true,
         });
 
-        expect(paginator.headItems).toBeDefined();
-        expect(paginator.headItems?.map((item) => item.id)).toEqual(
+        expect(paginator.latestItems.length).toBeGreaterThan(0);
+        expect(paginator.latestItems.map((item) => item.id)).toEqual(
           paginator.items?.map((item) => item.id),
         );
         itemIndex.clear();
@@ -3217,8 +3235,6 @@ describe('BasePaginator', () => {
           hasMoreHead: true,
           isLoading: false,
           items,
-          // flat-mode paginator: the head window is the full list
-          headItems: items,
           lastQueryError: undefined,
           offset: 1,
         },
@@ -3422,13 +3438,15 @@ describe('BasePaginator', () => {
         await sleep(0);
         expect(paginator.isLoading).toBe(true);
         expect(paginator.hasMoreTail).toBe(true);
-        expect(paginator.hasMoreHead).toBe(true);
+        // reload() restarts offset pagination from the beginning (offset 0), so the head is loaded
+        // as soon as the reload query begins — before it resolves.
+        expect(paginator.hasMoreHead).toBe(false);
 
         paginator.queryResolve({ items: [{ id: 'id1' }] });
         await reloadPromise;
         expect(paginator.isLoading).toBe(false);
         expect(paginator.hasMoreTail).toBe(false);
-        expect(paginator.hasMoreHead).toBe(true);
+        expect(paginator.hasMoreHead).toBe(false);
         expect(paginator.items).toEqual([{ id: 'id1' }]);
         expect(paginator.cursor).toBeUndefined();
         expect(paginator.offset).toBe(1);
@@ -3444,13 +3462,14 @@ describe('BasePaginator', () => {
         await sleep(0);
         expect(paginator.isLoading).toBe(true);
         expect(paginator.hasMoreTail).toBe(true);
-        expect(paginator.hasMoreHead).toBe(true);
+        // Offset-0 reload again: head loaded from the start of the reload query.
+        expect(paginator.hasMoreHead).toBe(false);
 
         paginator.queryResolve({ items: [{ id: 'id2' }], tailward: 'next2' });
         await reloadPromise;
         expect(paginator.isLoading).toBe(false);
         expect(paginator.hasMoreTail).toBe(false);
-        expect(paginator.hasMoreHead).toBe(true);
+        expect(paginator.hasMoreHead).toBe(false);
         expect(paginator.items).toEqual([{ id: 'id2' }]);
         expect(paginator.cursor).toBeUndefined();
         expect(paginator.offset).toBe(1);

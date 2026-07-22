@@ -241,6 +241,11 @@ export class Thread extends WithSubscriptions {
       });
     }
 
+    // Seed the reply paginator's lastMessageAt floor from the thread's server-provided
+    // `last_message_at` (analogous to the channel seed in Channel._initializeState), so a thread whose
+    // newest reply is not among `latest_replies` still reports the correct latest-activity timestamp.
+    this.messagePaginator.seedLastMessageAt(threadData?.last_message_at);
+
     this.messageComposer = new MessageComposer({
       client,
       composition: threadData?.draft ?? draft,
@@ -396,6 +401,9 @@ export class Thread extends WithSubscriptions {
       thread.messagePaginator.state.getLatestValue().items ?? [],
     );
     pendingReplies.forEach((reply) => this.messagePaginator.ingestItem(reply));
+    // Carry the re-queried thread's last-activity floor so lastMessageAt stays fresh even when the
+    // merged page does not include the newest reply. Monotonic, so an older value is a no-op.
+    this.messagePaginator.seedLastMessageAt(thread.messagePaginator.lastMessageAt);
   };
 
   public registerSubscriptions = () => {

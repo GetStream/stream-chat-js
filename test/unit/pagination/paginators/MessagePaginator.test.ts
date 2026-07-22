@@ -48,8 +48,11 @@ describe('MessagePaginator', () => {
         isLoading: false,
         items: undefined,
         lastQueryError: undefined,
-        latestMessageId: null,
         offset: 0,
+      });
+      expect(paginator.aggregateState.getLatestValue()).toEqual({
+        lastMessage: null,
+        seededLastMessageAt: null,
       });
       // @ts-expect-error accessing protected property
       expect(paginator._filterFieldToDataResolvers).toHaveLength(1);
@@ -1906,7 +1909,7 @@ describe('MessagePaginator', () => {
     });
   });
 
-  describe('trackLatestMessage() / latestMessage', () => {
+  describe('trackLatestMessage() / lastMessageAt', () => {
     let skipSystemMessages: boolean;
     let trackingChannel: Channel;
 
@@ -1924,94 +1927,136 @@ describe('MessagePaginator', () => {
       });
     };
 
+    const at = (iso: string) => new Date(iso).getTime();
+
     beforeEach(() => {
       skipSystemMessages = false;
     });
 
-    it('is undefined until a message is tracked', () => {
+    it('is null until a message is tracked', () => {
       const paginator = buildPaginator();
-      expect(paginator.state.getLatestValue().latestMessageId).toBeNull();
-      expect(paginator.latestMessage).toBeUndefined();
+      expect(paginator.aggregateState.getLatestValue()).toEqual({
+        lastMessage: null,
+        seededLastMessageAt: null,
+      });
+      expect(paginator.lastMessageAt).toBeNull();
+      expect(paginator.latestMessage).toBeNull();
     });
 
-    it('tracks a message and resolves it from the index without ingesting a window', () => {
+    it('advances lastMessageAt and lastMessage without ingesting a window', () => {
       const paginator = buildPaginator();
-      const message = createMessage({ id: 'a', created_at: '2020-01-01T00:00:00.000Z' });
 
-      paginator.trackLatestMessage(message);
+      paginator.trackLatestMessage(
+        createMessage({ id: 'a', created_at: '2020-01-01T00:00:00.000Z' }),
+      );
 
-      // `trackLatestMessage` updates the source-of-truth field (read by `latestMessage`) without
-      // emitting; `state.latestMessageId` is published by the mirror preprocessor on the next
-      // emission (verified in the reply-list auto-track cases below).
+      expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-01-01T00:00:00.000Z'));
+      // The display message is tracked on aggregateState (reactive off-window), not the visible list.
       expect(paginator.latestMessage?.id).toBe('a');
-      // tracked without ingesting into an interval - the visible window stays empty.
       expect(paginator.items).toBeUndefined();
     });
 
-    it('does not emit on its own, so the paired ingest is the single state update', () => {
+    it('seed advances only the timestamp, leaving lastMessage null', () => {
       const paginator = buildPaginator();
-      let emissions = 0;
+      paginator.seedLastMessageAt('2023-05-03T11:12:53.993Z');
+      expect(paginator.lastMessageAt?.getTime()).toBe(at('2023-05-03T11:12:53.993Z'));
+      // The server seed has a timestamp but not the message itself.
+      expect(paginator.latestMessage).toBeNull();
+    });
+
+    it('lastMessageAt is the max of the loaded message and the seed; a seed never blocks the display message', () => {
+      const paginator = buildPaginator();
+      // Server says the newest message is far in the future (not yet loaded).
+      paginator.seedLastMessageAt('2030-01-01T00:00:00.000Z');
+      expect(paginator.lastMessageAt?.getTime()).toBe(at('2030-01-01T00:00:00.000Z'));
+      expect(paginator.latestMessage).toBeNull();
+
+      // A real (older-than-seed) message must still become the display message — the guard is against
+      // the display message's own timestamp, not the seed-inflated lastMessageAt.
+      paginator.trackLatestMessage(
+        createMessage({ id: 'a', created_at: '2020-01-01T00:00:00.000Z' }),
+      );
+      expect(paginator.latestMessage?.id).toBe('a');
+      // Sort key stays the max (the seed), so it can never drift below the display message.
+      expect(paginator.lastMessageAt?.getTime()).toBe(at('2030-01-01T00:00:00.000Z'));
+
+      // Once a message newer than the seed arrives, lastMessageAt follows it.
+      paginator.trackLatestMessage(
+        createMessage({ id: 'b', created_at: '2031-01-01T00:00:00.000Z' }),
+      );
+      expect(paginator.latestMessage?.id).toBe('b');
+      expect(paginator.lastMessageAt?.getTime()).toBe(at('2031-01-01T00:00:00.000Z'));
+    });
+
+    it('does not emit on the pagination state (writes the separate aggregateState store)', () => {
+      const paginator = buildPaginator();
+      let stateEmissions = 0;
       const unsubscribe = paginator.state.subscribe(() => {
-        emissions += 1;
+        stateEmissions += 1;
       });
-      emissions = 0; // ignore the synchronous initial subscribe call
+      stateEmissions = 0; // ignore the synchronous initial subscribe call
 
       paginator.trackLatestMessage(
         createMessage({ id: 'a', created_at: '2020-01-01T00:00:00.000Z' }),
       );
       unsubscribe();
 
-      expect(emissions).toBe(0);
-      // the field is still updated (read by latestMessage / last_message_at)
-      expect(paginator.latestMessage?.id).toBe('a');
+      expect(stateEmissions).toBe(0);
+      expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-01-01T00:00:00.000Z'));
     });
 
     it('advances monotonically by created_at', () => {
       const paginator = buildPaginator();
-      const first = createMessage({ id: 'a', created_at: '2020-01-01T00:00:00.000Z' });
-      const older = createMessage({ id: 'b', created_at: '2019-01-01T00:00:00.000Z' });
-      const newer = createMessage({ id: 'c', created_at: '2021-01-01T00:00:00.000Z' });
 
-      paginator.trackLatestMessage(first);
-      paginator.trackLatestMessage(older);
-      expect(paginator.latestMessage?.id).toBe('a');
+      paginator.trackLatestMessage(
+        createMessage({ id: 'a', created_at: '2020-01-01T00:00:00.000Z' }),
+      );
+      paginator.trackLatestMessage(
+        createMessage({ id: 'b', created_at: '2019-01-01T00:00:00.000Z' }),
+      );
+      expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-01-01T00:00:00.000Z'));
 
-      paginator.trackLatestMessage(newer);
-      expect(paginator.latestMessage?.id).toBe('c');
+      paginator.trackLatestMessage(
+        createMessage({ id: 'c', created_at: '2021-01-01T00:00:00.000Z' }),
+      );
+      expect(paginator.lastMessageAt?.getTime()).toBe(at('2021-01-01T00:00:00.000Z'));
     });
 
-    it('never advances to a shadowed message', () => {
+    it('never advances for a shadowed message', () => {
       const paginator = buildPaginator();
-      const shadowed = createMessage({
-        id: 'a',
-        created_at: '2020-01-01T00:00:00.000Z',
-        shadowed: true,
-      });
 
-      paginator.trackLatestMessage(shadowed);
+      paginator.trackLatestMessage(
+        createMessage({
+          id: 'a',
+          created_at: '2020-01-01T00:00:00.000Z',
+          shadowed: true,
+        }),
+      );
 
-      expect(paginator.latestMessage).toBeUndefined();
+      expect(paginator.lastMessageAt).toBeNull();
     });
 
-    it('never advances to a thread-only reply, but does for a reply shown in the channel', () => {
+    it('never advances for a thread-only reply, but does for a reply shown in the channel', () => {
       const paginator = buildPaginator();
-      const threadOnlyReply = createMessage({
-        id: 'reply',
-        parent_id: 'parent',
-        created_at: '2020-01-01T00:00:00.000Z',
-      });
-      const shownReply = createMessage({
-        id: 'reply-shown',
-        parent_id: 'parent',
-        show_in_channel: true,
-        created_at: '2021-01-01T00:00:00.000Z',
-      });
 
-      paginator.trackLatestMessage(threadOnlyReply);
-      expect(paginator.latestMessage).toBeUndefined();
+      paginator.trackLatestMessage(
+        createMessage({
+          id: 'reply',
+          parent_id: 'parent',
+          created_at: '2020-01-01T00:00:00.000Z',
+        }),
+      );
+      expect(paginator.lastMessageAt).toBeNull();
 
-      paginator.trackLatestMessage(shownReply);
-      expect(paginator.latestMessage?.id).toBe('reply-shown');
+      paginator.trackLatestMessage(
+        createMessage({
+          id: 'reply-shown',
+          parent_id: 'parent',
+          show_in_channel: true,
+          created_at: '2021-01-01T00:00:00.000Z',
+        }),
+      );
+      expect(paginator.lastMessageAt?.getTime()).toBe(at('2021-01-01T00:00:00.000Z'));
     });
 
     it('skips system messages only when skip_last_msg_update_for_system_msgs is set', () => {
@@ -2023,12 +2068,12 @@ describe('MessagePaginator', () => {
         created_at: '2020-01-01T00:00:00.000Z',
       });
       skipping.trackLatestMessage(systemMessage);
-      expect(skipping.latestMessage).toBeUndefined();
+      expect(skipping.lastMessageAt).toBeNull();
 
       skipSystemMessages = false;
       const tracking = buildPaginator();
       tracking.trackLatestMessage(systemMessage);
-      expect(tracking.latestMessage?.id).toBe('sys');
+      expect(tracking.lastMessageAt?.getTime()).toBe(at('2020-01-01T00:00:00.000Z'));
     });
 
     it('auto-tracks on ingestion for the main channel list too', () => {
@@ -2040,9 +2085,30 @@ describe('MessagePaginator', () => {
           created_at: '2020-01-01T00:00:00.000Z',
         }),
       );
-      // The main list no longer relies on an explicit channel-level call: ingestion tracks latest,
-      // and last_message_at is derived from it.
-      expect(paginator.latestMessage?.id).toBe('a');
+      // The main list no longer relies on an explicit channel-level call: ingestion advances the
+      // lastMessageAt aggregate directly.
+      expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-01-01T00:00:00.000Z'));
+    });
+
+    it('seeds lastMessageAt from the server value (monotonic)', () => {
+      const paginator = buildPaginator();
+
+      paginator.seedLastMessageAt('2020-06-01T00:00:00.000Z');
+      expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-06-01T00:00:00.000Z'));
+
+      // an older server value does not move it back
+      paginator.seedLastMessageAt('2020-01-01T00:00:00.000Z');
+      expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-06-01T00:00:00.000Z'));
+
+      // a newer ingested message advances past the seed
+      paginator.ingestItem(
+        createMessage({
+          id: 'a',
+          cid: 'channel-id',
+          created_at: '2021-01-01T00:00:00.000Z',
+        }),
+      );
+      expect(paginator.lastMessageAt?.getTime()).toBe(at('2021-01-01T00:00:00.000Z'));
     });
 
     describe('reply list (parentMessageId) auto-tracks on ingestion', () => {
@@ -2058,14 +2124,14 @@ describe('MessagePaginator', () => {
         const paginator = buildPaginator('parent');
 
         paginator.ingestItem(reply('r2', '2020-01-01T00:00:02.000Z'));
-        expect(paginator.latestMessage?.id).toBe('r2');
+        expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-01-01T00:00:02.000Z'));
 
-        // an older reply arriving later must not move the pointer back
+        // an older reply arriving later must not move the value back
         paginator.ingestItem(reply('r1', '2020-01-01T00:00:01.000Z'));
-        expect(paginator.latestMessage?.id).toBe('r2');
+        expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-01-01T00:00:02.000Z'));
 
         paginator.ingestItem(reply('r3', '2020-01-01T00:00:03.000Z'));
-        expect(paginator.latestMessage?.id).toBe('r3');
+        expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-01-01T00:00:03.000Z'));
       });
 
       it('advances to the newest reply when a page is seeded via setItems', () => {
@@ -2080,24 +2146,20 @@ describe('MessagePaginator', () => {
           isFirstPage: true,
         });
 
-        expect(paginator.latestMessage?.id).toBe('r3');
-        // The mirror preprocessor publishes the tracked id into state on the setItems emission -
-        // no separate emission from the tracking itself.
-        expect(paginator.state.getLatestValue().latestMessageId).toBe('r3');
+        expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-01-01T00:00:03.000Z'));
       });
     });
 
-    it('clears the tracked latest message on clearStateAndCache()', () => {
+    it('resets lastMessageAt on clearStateAndCache()', () => {
       const paginator = buildPaginator();
       paginator.trackLatestMessage(
         createMessage({ id: 'a', created_at: '2020-01-01T00:00:00.000Z' }),
       );
-      expect(paginator.latestMessage?.id).toBe('a');
+      expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-01-01T00:00:00.000Z'));
 
       paginator.clearStateAndCache();
 
-      expect(paginator.state.getLatestValue().latestMessageId).toBeNull();
-      expect(paginator.latestMessage).toBeUndefined();
+      expect(paginator.lastMessageAt).toBeNull();
     });
   });
 });

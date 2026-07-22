@@ -53,7 +53,7 @@ describe('ChannelPaginator', () => {
       expect(paginator.pageSize).toBe(DEFAULT_PAGINATION_OPTIONS.pageSize);
       expect(paginator.state.getLatestValue()).toEqual({
         hasMoreTail: true,
-        hasMoreHead: true,
+        hasMoreHead: true, // initial state (pre-query); becomes false after the first offset-0 query
         isLoading: false,
         items: undefined,
         lastQueryError: undefined,
@@ -602,53 +602,51 @@ describe('ChannelPaginator', () => {
   });
 
   describe('setters', () => {
-    const stateAfterQuery = {
-      items: [channel1, channel2],
-      // flat-mode paginator: the head window mirrors the full list
-      headItems: [channel1, channel2],
-      hasMoreTail: false,
-      hasMoreHead: false,
-      offset: 10,
-      isLoading: false,
-      lastQueryError: undefined,
-      cursor: undefined,
+    // Seed via the real ingestion path (distinct cids — interval storage dedupes by cid) and capture
+    // the resulting state. These setters must not re-emit / reset it, so the state reference should
+    // be identical afterwards.
+    const seed = (paginator: ChannelPaginator) => {
+      const a = new Channel(client, 'type', 'setter-a', {});
+      const b = new Channel(client, 'type', 'setter-b', {});
+      paginator.setItems({
+        valueOrFactory: [a, b],
+        isFirstPage: true,
+        isLastPage: true,
+      });
+      return paginator.state.getLatestValue();
     };
 
     it('filters reset does not reset the paginator state', () => {
       const paginator = new ChannelPaginator({ client });
-      paginator.state.partialNext(stateAfterQuery);
-      expect(paginator.state.getLatestValue()).toStrictEqual(stateAfterQuery);
+      const before = seed(paginator);
       paginator.staticFilters = {};
-      expect(paginator.state.getLatestValue()).toStrictEqual(stateAfterQuery);
+      expect(paginator.state.getLatestValue()).toBe(before);
       expect(paginator.staticFilters).toStrictEqual({});
     });
 
     it('sort reset does not reset the paginator state updates the comparator', () => {
       const paginator = new ChannelPaginator({ client });
-      paginator.state.partialNext(stateAfterQuery);
-      expect(paginator.state.getLatestValue()).toStrictEqual(stateAfterQuery);
+      const before = seed(paginator);
       const originalComparator = paginator.sortComparator;
       paginator.sort = {};
-      expect(paginator.state.getLatestValue()).toStrictEqual(stateAfterQuery);
+      expect(paginator.state.getLatestValue()).toBe(before);
       expect(paginator.sort).toStrictEqual({});
       expect(paginator.sortComparator).not.toEqual(originalComparator);
     });
 
     it('options reset does not reset the paginator state', () => {
       const paginator = new ChannelPaginator({ client });
-      paginator.state.partialNext(stateAfterQuery);
-      expect(paginator.state.getLatestValue()).toStrictEqual(stateAfterQuery);
+      const before = seed(paginator);
       paginator.options = {};
-      expect(paginator.state.getLatestValue()).toStrictEqual(stateAfterQuery);
+      expect(paginator.state.getLatestValue()).toBe(before);
       expect(paginator.options).toStrictEqual({});
     });
 
     it('channelStateOptions reset does not reset the paginator state', () => {
       const paginator = new ChannelPaginator({ client });
-      paginator.state.partialNext(stateAfterQuery);
-      expect(paginator.state.getLatestValue()).toStrictEqual(stateAfterQuery);
+      const before = seed(paginator);
       paginator.channelStateOptions = {};
-      expect(paginator.state.getLatestValue()).toStrictEqual(stateAfterQuery);
+      expect(paginator.state.getLatestValue()).toBe(before);
       expect(paginator.channelStateOptions).toStrictEqual({});
     });
   });
@@ -725,6 +723,103 @@ describe('ChannelPaginator', () => {
         },
         undefined, // channelStateOptions
       );
+    });
+  });
+
+  describe('interval storage', () => {
+    it('is index-addressable by cid, populates latestItems, and dedupes across pages', async () => {
+      const a = new Channel(client, 'type', 'iv-a', {});
+      const b = new Channel(client, 'type', 'iv-b', {});
+      let page: Channel[] = [a, b];
+      const paginator = new ChannelPaginator({
+        client,
+        paginatorOptions: {
+          doRequest: () => Promise.resolve({ items: page }),
+          pageSize: 2,
+        },
+      });
+
+      await paginator.executeQuery({});
+
+      // resolvable by cid + mirrored into the head window (interval storage)
+      expect(paginator.getItem('type:iv-a')).toBe(a);
+      expect(paginator.getItem('type:iv-b')).toBe(b);
+      expect(paginator.latestItems.map((c) => c.cid).sort()).toEqual([
+        'type:iv-a',
+        'type:iv-b',
+      ]);
+
+      // next offset page returns an already-loaded channel — dedup keeps a single entry
+      page = [a];
+      await paginator.toTail();
+      const cids = (paginator.items ?? []).map((c) => c.cid);
+      expect(cids.filter((cid) => cid === 'type:iv-a')).toHaveLength(1);
+    });
+
+    it('keeps the head (newest) at index 0 and the tail (oldest) at the end', async () => {
+      // Contrary to the message list, the channel list is head-first: the newest (head) item sits at
+      // the top (index 0) and the oldest (tail) at the bottom.
+      const newest = new Channel(client, 'type', 'newest', {});
+      const middle = new Channel(client, 'type', 'middle', {});
+      const oldest = new Channel(client, 'type', 'oldest', {});
+      setLastMessageAt(newest, new Date('2020-03-01T00:00:00.000Z'));
+      setLastMessageAt(middle, new Date('2020-02-01T00:00:00.000Z'));
+      setLastMessageAt(oldest, new Date('2020-01-01T00:00:00.000Z'));
+
+      const paginator = new ChannelPaginator({
+        client,
+        paginatorOptions: {
+          // server returns them out of order; interval storage sorts by the default (desc) comparator
+          doRequest: () => Promise.resolve({ items: [middle, oldest, newest] }),
+          pageSize: 10,
+        },
+      });
+
+      await paginator.executeQuery({});
+
+      expect(paginator.items?.map((c) => c.cid)).toEqual([
+        'type:newest',
+        'type:middle',
+        'type:oldest',
+      ]);
+      // head edge = index 0 = newest; head window starts with it too
+      expect(paginator.latestItem?.cid).toBe('type:newest');
+      expect(paginator.latestItems[0]?.cid).toBe('type:newest');
+    });
+
+    it('promotes a non-headmost channel to the top on re-ingest without dropping it', async () => {
+      // Reproduces the reorder-on-new-message bug: a channel below the head gets a newer
+      // last_message_at and is re-ingested (as the orchestrator does on message.new). It must move to
+      // the top and stay visible — not escape into the logical-head interval and disappear.
+      const a = new Channel(client, 'type', 'a', {});
+      const b = new Channel(client, 'type', 'b', {});
+      const c = new Channel(client, 'type', 'c', {});
+      setLastMessageAt(a, new Date('2020-03-01T00:00:00.000Z'));
+      setLastMessageAt(b, new Date('2020-02-01T00:00:00.000Z'));
+      setLastMessageAt(c, new Date('2020-01-01T00:00:00.000Z')); // oldest / non-headmost
+
+      const paginator = new ChannelPaginator({
+        client,
+        paginatorOptions: {
+          doRequest: () => Promise.resolve({ items: [a, b, c] }),
+          pageSize: 10,
+        },
+      });
+      await paginator.executeQuery({});
+      expect(paginator.items?.map((ch) => ch.cid)).toEqual([
+        'type:a',
+        'type:b',
+        'type:c',
+      ]);
+
+      // c receives a new message → newest; re-ingest to reposition (mirrors updateLists)
+      setLastMessageAt(c, new Date('2020-04-01T00:00:00.000Z'));
+      paginator.ingestItem(c);
+
+      const cids = paginator.items?.map((ch) => ch.cid);
+      expect(cids).toContain('type:c'); // not dropped
+      expect(cids?.[0]).toBe('type:c'); // moved to the head (top)
+      expect(cids).toHaveLength(3); // no duplicates, nothing lost
     });
   });
 });

@@ -66,22 +66,53 @@ paginators removes the dual-write, gives one API/behavior across the main list, 
 messages (dedup-by-id, interval merge, `getItem`/`removeItem`, head-window semantics), and lets
 `last_message_at` be derived rather than separately maintained.
 
-## `ChannelState.last_message_at` is now read-only (derived)
+## `ChannelState.last_message_at` removed — use `channel.messagePaginator.lastMessageAt`
 
 **Area:** `ChannelState` · **Status:** implemented
 
-`channel.state.last_message_at` is now a **read-only getter** derived from the message paginator's
-tracked latest message (`channel.messagePaginator.latestMessage?.created_at ?? null`). The writable
-setter and its backing field were removed.
+`channel.state.last_message_at` was **removed entirely** (it was briefly a read-only getter earlier
+in v15; that getter is gone too). The channel's latest-message timestamp is now owned by the message
+paginator as a whole-collection aggregate.
 
-- **Before:** `channel.state.last_message_at = someDate` (writable). Internally maintained by the
-  now-removed `Channel._trackLatestMessage`.
-- **After:** read-only. It reflects whatever the message paginator holds as its latest message.
-- **Migrate:** don't assign it. To make a channel's `last_message_at` reflect a message, ingest /
-  track that message on `channel.messagePaginator` (the message source of truth). Assigning to it is
-  a no-op (silently ignored / throws in strict mode) and a TypeScript error.
-- **Why:** the message paginator is the single source of truth for messages; `last_message_at` is a
-  projection of it. A separate writable field could drift from the actual latest message.
+- **Before:** `channel.state.last_message_at` (writable, then a derived getter). Internally
+  maintained by the now-removed `Channel._trackLatestMessage`.
+- **After:** `channel.messagePaginator.lastMessageAt` — a `Date | null` **derived** getter over the
+  paginator's `aggregateState` store (`MessagePaginatorAggregateState = { lastMessage,
+seededLastMessageAt }`). It returns `max(lastMessage?.created_at, seededLastMessageAt)`:
+  `lastMessage` is the newest loaded/received message (advanced on ingest), `seededLastMessageAt` is
+  the server floor **seeded from `ChannelResponse.last_message_at`** (for channels whose newest
+  message isn't loaded). Deriving the sort key from the two independent facts means it can never drift
+  from the display message. Subscribe to `channel.messagePaginator.aggregateState` for reactivity.
+- **Migrate:** replace `channel.state.last_message_at` reads with
+  `channel.messagePaginator.lastMessageAt`. It is not writable; the value is derived from ingested
+  messages and the server seed.
+- **Why:** the message paginator is the single source of truth for messages; `last_message_at` is an
+  aggregate over them (the dual of pagination). Deriving it through a `ChannelState` getter that
+  reached into the paginator's message index risked stale/mixed-basis sorting (a seeded-but-stale
+  paginator preferred over a fresher server value); a single seeded-then-advanced value on the
+  paginator removes that hazard.
+- **Tracking relocated:** `MessageIntervalPaginator`'s `state.latestMessageId` and the `latestMessage`
+  getter (id resolved from the pagination `state`) were replaced. The tracked latest now lives on
+  `MessagePaginator.aggregateState.lastMessage`, advanced on every ingest.
+  `MessagePaginator.latestMessage` remains as a convenience getter but now reads `aggregateState`.
+  This matters for reactivity: pagination `state` only emits when the **active** interval is impacted,
+  so a WS message landing in the (non-active) head interval would not notify a `state`-derived
+  latest; `aggregateState` is written directly on each advance and emits regardless — subscribe to it
+  (e.g. for a channel/thread list item's latest-message display).
+
+## `PaginatorState.headItems` and `BasePaginator.headItems` removed — use `latestItems` / `latestItem`
+
+**Area:** `BasePaginator` · **Status:** implemented
+
+The reactive `headItems` field on `PaginatorState` and the `paginator.headItems` getter were removed.
+They materialized a reference-stable copy of the newest-loaded window into pagination state, but had
+no consumer.
+
+- **Migrate:** use the computed getters `paginator.latestItems` (newest loaded window — returns `[]`
+  instead of `undefined` before the first load) and `paginator.latestItem` (single newest loaded
+  item). These are derived directly from the intervals and are unchanged.
+- **Why:** dead state. `latestItems`/`latestItem` already provide the value, computed from the
+  intervals; the materialized mirror only added a preprocessor and a `PaginatorState` field.
 
 ## `ChannelState.isUpToDate` / `setIsUpToDate` removed
 

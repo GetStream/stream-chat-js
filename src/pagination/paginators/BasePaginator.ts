@@ -244,13 +244,6 @@ export type PaginatorState<T> = {
   hasMoreTail: boolean;
   isLoading: boolean;
   items: T[] | undefined;
-  /**
-   * The newest loaded window of items, kept in sync with {@link BasePaginator.latestItems}
-   * regardless of which window is currently *active* (`items` follows the active interval, which may
-   * point at a jumped-to / searched window). Reactive mirror for UI that needs to react to changes in
-   * the latest item / latest messages; `undefined` until the first load (mirrors `items`).
-   */
-  headItems?: T[] | undefined;
   lastQueryError?: Error;
   cursor?: PaginatorCursor;
   offset?: number;
@@ -464,33 +457,6 @@ export abstract class BasePaginator<T, Q> {
     this._filterFieldToDataResolvers = [];
     this._usesItemIntervalStorage = !!itemIndex;
     this._itemIndex = itemIndex ?? new ItemIndex({ getId: this.getItemId.bind(this) });
-
-    // Materialize the reactive `headItems` (newest-loaded window) on every state emission. There is
-    // no single items-emission choke point, so a preprocessor keeps it in sync generically. It runs
-    // before subscribers are notified and mutates the incoming value.
-    this.state.addPreprocessor((nextValue, prevValue) => {
-      // `undefined` until something is loaded (mirrors `items`). In interval mode the head window is
-      // derived from the intervals (already mutated by the time state is emitted), so it reflects the
-      // newest window even when the active window is a jumped-to older interval. In flat mode the head
-      // window IS the full list — read `nextValue.items` (NOT `this.items`, which still holds the
-      // previous emitted value inside a preprocessor).
-      const candidate =
-        typeof nextValue.items === 'undefined'
-          ? undefined
-          : this.usesItemIntervalStorage
-            ? this.latestItems
-            : nextValue.items;
-      const previous = prevValue?.headItems;
-      // Preserve the previous array reference when the window is unchanged (per-index identity) so a
-      // `headItems` selector does not re-fire on unrelated state changes (isLoading, cursor, ...).
-      nextValue.headItems =
-        candidate &&
-        previous &&
-        candidate.length === previous.length &&
-        candidate.every((item, index) => item === previous[index])
-          ? previous
-          : candidate;
-    });
   }
 
   // ---------------------------------------------------------------------------
@@ -550,7 +516,6 @@ export abstract class BasePaginator<T, Q> {
       hasMoreTail: true,
       isLoading: false,
       items: undefined,
-      headItems: undefined,
       lastQueryError: undefined,
       cursor: this.config.initialCursor,
       offset: this.config.initialOffset ?? 0,
@@ -559,15 +524,6 @@ export abstract class BasePaginator<T, Q> {
 
   get items() {
     return this.state.getLatestValue().items;
-  }
-
-  /**
-   * Reactive newest-loaded window, materialized on {@link PaginatorState}. Equivalent to
-   * {@link BasePaginator.latestItems} (`undefined` instead of `[]` before the first load) but
-   * subscribable via `state` for UI that reacts to latest-item / latest-messages changes.
-   */
-  get headItems() {
-    return this.state.getLatestValue().headItems;
   }
 
   /**
@@ -1991,10 +1947,20 @@ export abstract class BasePaginator<T, Q> {
   };
 
   protected getStateBeforeFirstQuery(): PaginatorState<T> {
-    return {
+    const state: PaginatorState<T> = {
       ...this.initialState,
       isLoading: true,
     };
+    // This is the one moment the loaded window is (re)established from its start offset. For offset
+    // pagination the head (beginning) is loaded exactly when that window starts at offset 0, so
+    // hasMoreHead is a constant known before the query runs — anchor it here, once. It must NOT be
+    // re-derived per page in postQueryReconcile, because the offset only grows tailward from here and
+    // would then read as "more headward" even for a list that started at the head. Cursor pagination
+    // learns hasMoreHead from the query response, so leave the optimistic default for it.
+    if (!this.isCursorPagination) {
+      state.hasMoreHead = (this.config.initialOffset ?? 0) > 0;
+    }
+    return state;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -2242,7 +2208,11 @@ export abstract class BasePaginator<T, Q> {
       }
     } else {
       // todo: we could keep the offset in two directions (initial tailward offset would be taken from config.initialOffset)
-      stateUpdate.offset = (this.offset ?? 0) + items.length;
+      const startOffset = this.offset ?? 0;
+      stateUpdate.offset = startOffset + items.length;
+      // Only hasMoreTail depends on the page result. hasMoreHead is fixed by where the loaded window
+      // starts (offset 0 => head loaded) and was anchored once at the reset (getStateBeforeFirstQuery);
+      // the offset only grows tailward from here, so leave hasMoreHead untouched.
       stateUpdate.hasMoreTail = items.length === this.pageSize;
     }
 

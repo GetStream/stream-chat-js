@@ -2788,15 +2788,12 @@ export class Channel {
 
     this.state.membership = state.membership || {};
 
-    // The main message list is seeded into channel.messagePaginator (see Channel.query /
-    // client.hydrateActiveChannels), whose ingestion advances the tracked latest message
-    // (→ last_message_at). Re-assert it here from the response for the one path where the paginator
-    // seed is skipped: an already-loaded channel that the viewer has jumped away from (see
-    // client.hydrateActiveChannels), where re-seeding would clobber their window. Monotonic, so this
-    // is a no-op when the seed already advanced past these messages.
-    (state.messages || []).forEach((message) =>
-      this.messagePaginator.trackLatestMessage(formatMessage(message)),
-    );
+    // Seed the message paginator's `lastMessageAt` aggregate from the server's authoritative
+    // `last_message_at`. The first-page seed (Channel.query / client.hydrateActiveChannels) also
+    // advances it from ingested messages; both feed the same monotonic max, so this additionally
+    // covers the path where the paginator seed is skipped (an already-loaded channel the viewer has
+    // jumped away from, where re-seeding would clobber their window).
+    this.messagePaginator.seedLastMessageAt(state.channel?.last_message_at);
 
     // Seed the pinned-messages paginator from the same response.
     this.pinnedMessagesPaginator.seedFirstPageSync(
@@ -2824,7 +2821,7 @@ export class Channel {
     // that everything up to this point is not marked as unread
     const readUpdates: ChannelState['read'] = {};
     if (userID != null) {
-      const last_read = this.state.last_message_at || new Date();
+      const last_read = this.messagePaginator.lastMessageAt || new Date();
       if (user) {
         readUpdates[user.id] = {
           user,

@@ -2662,7 +2662,7 @@ describe('Channel lastMessage', async () => {
 		// ingestion advances the tracked latest, skipping the newest (system) message per config.
 		seedLatestWindow(channel, latestMessages);
 
-		expect(channel.state.last_message_at.getTime()).toBe(
+		expect(channel.messagePaginator.lastMessageAt.getTime()).toBe(
 			new Date(latestMessages[1].created_at).getTime(),
 		);
 	});
@@ -2681,27 +2681,19 @@ describe('Channel last_message_at', () => {
 	const track = (msg) => channel.messagePaginator.trackLatestMessage(formatMessage(msg));
 
 	it('advances monotonically as messages are tracked', () => {
-		expect(channel.state.last_message_at).to.be.null;
+		expect(channel.messagePaginator.lastMessageAt).to.be.null;
 		track(generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }));
-		expect(channel.state.last_message_at.getTime()).to.be.equal(
+		expect(channel.messagePaginator.lastMessageAt.getTime()).to.be.equal(
 			new Date('2020-01-01T00:00:00.000Z').getTime(),
 		);
 		track(generateMsg({ id: '1', date: '2019-01-01T00:00:00.000Z' }));
-		expect(channel.state.last_message_at.getTime()).to.be.equal(
+		expect(channel.messagePaginator.lastMessageAt.getTime()).to.be.equal(
 			new Date('2020-01-01T00:00:00.000Z').getTime(),
 		);
 
 		track(generateMsg({ id: '2', date: '2020-01-01T00:00:00.001Z' }));
-		expect(channel.state.last_message_at.getTime()).to.be.equal(
+		expect(channel.messagePaginator.lastMessageAt.getTime()).to.be.equal(
 			new Date('2020-01-01T00:00:00.001Z').getTime(),
-		);
-	});
-
-	it('derives from the message paginator latestMessage', () => {
-		track(generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }));
-		expect(channel.messagePaginator.latestMessage?.id).to.be.equal('0');
-		expect(channel.state.last_message_at.getTime()).to.be.equal(
-			channel.messagePaginator.latestMessage.created_at.getTime(),
 		);
 	});
 
@@ -2710,12 +2702,28 @@ describe('Channel last_message_at', () => {
 			generateMsg({ id: 'reply', date: '2020-01-01T00:00:00.000Z', parent_id: 'parent' }),
 		);
 
-		expect(channel.state.last_message_at).to.be.null;
+		expect(channel.messagePaginator.lastMessageAt).to.be.null;
 	});
 
-	it('is null when no message is tracked (derived from the paginator, read-only)', () => {
-		// The writable setter was removed: last_message_at is a projection of the message paginator.
-		expect(channel.state.last_message_at).to.be.null;
+	it('is null when nothing has been tracked or seeded', () => {
+		expect(channel.messagePaginator.lastMessageAt).to.be.null;
+	});
+
+	it('is seeded from the server-provided last_message_at', () => {
+		// A channel surfaced by the channel-list query: lastMessageAt is seeded from the server
+		// aggregate so it sorts correctly even before its message paginator loads a page.
+		channel.messagePaginator.seedLastMessageAt('2023-05-03T11:12:53.993Z');
+		expect(channel.messagePaginator.lastMessageAt.getTime()).to.be.equal(
+			new Date('2023-05-03T11:12:53.993Z').getTime(),
+		);
+	});
+
+	it('advances past the seeded value when a newer message is tracked (monotonic max)', () => {
+		channel.messagePaginator.seedLastMessageAt('2020-01-01T00:00:00.000Z');
+		track(generateMsg({ id: '0', date: '2021-06-01T00:00:00.000Z' }));
+		expect(channel.messagePaginator.lastMessageAt.getTime()).to.be.equal(
+			new Date('2021-06-01T00:00:00.000Z').getTime(),
+		);
 	});
 });
 
