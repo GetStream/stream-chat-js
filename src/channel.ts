@@ -459,7 +459,7 @@ export class Channel {
     const applied = this.messagePaginator.applyReactionLocally({
       enforceUnique: options?.enforce_unique ?? false,
       messageId,
-      type: reaction.type,
+      reaction,
     });
 
     try {
@@ -473,8 +473,8 @@ export class Channel {
       if (applied && (!this.getClient().offlineDb || !isEphemeral(error as Error))) {
         this.messagePaginator.applyReactionLocally({
           messageId,
+          reaction,
           removed: true,
-          type: reaction.type,
         });
       }
       throw error;
@@ -494,8 +494,8 @@ export class Channel {
   }) {
     const applied = this.messagePaginator.applyReactionLocally({
       messageId,
+      reaction: { type },
       removed: true,
-      type,
     });
 
     try {
@@ -508,7 +508,11 @@ export class Channel {
       // CURRENT state (never restoring a stale pre-request snapshot). Only when the optimistic apply
       // happened and the failure is terminal (offline support off, or a definitive rejection).
       if (applied && (!this.getClient().offlineDb || !isEphemeral(error as Error))) {
-        this.messagePaginator.applyReactionLocally({ messageId, removed: false, type });
+        this.messagePaginator.applyReactionLocally({
+          messageId,
+          reaction: { type },
+          removed: false,
+        });
       }
       throw error;
     }

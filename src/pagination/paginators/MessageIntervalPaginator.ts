@@ -22,6 +22,7 @@ import type {
   MessagePaginationOptions,
   MessageResponse,
   PinnedMessagePaginationOptions,
+  Reaction,
   ReactionGroupResponse,
   ReactionResponse,
   UserResponse,
@@ -947,8 +948,10 @@ export class MessageIntervalPaginator extends BasePaginator<
    * `reflectReaction`, so both entry points share one `own_reactions` + ingest core and differ solely
    * in where the counts come from (WS event vs. local computation).
    *
-   * Callers pass only `messageId` + reaction `type` — the reaction object (author, timestamps) is
-   * built here from the connected user.
+   * Callers pass the `reaction` (at minimum its `type`; `score` and any custom data ride along) — its
+   * payload is spread into the optimistic reaction, and the fields the paginator is authoritative for
+   * (author + timestamps + message id) are set here from the connected user, so a caller can't spoof
+   * them.
    *
    * @returns the ingested message, or `undefined` when the user isn't connected or the target isn't
    *   loaded (nothing to update).
@@ -956,11 +959,11 @@ export class MessageIntervalPaginator extends BasePaginator<
   applyReactionLocally = ({
     enforceUnique = false,
     messageId,
+    reaction,
     removed = false,
-    type,
   }: {
     messageId: string;
-    type: string;
+    reaction: Reaction;
     enforceUnique?: boolean;
     removed?: boolean;
   }): LocalMessage | undefined => {
@@ -969,19 +972,24 @@ export class MessageIntervalPaginator extends BasePaginator<
     if (!user || !existing) return;
 
     const now = new Date().toISOString();
-    const reaction: ReactionResponse = {
+    const reactionResponse: ReactionResponse = {
       created_at: now,
       message_id: messageId,
-      type,
       updated_at: now,
       user,
       user_id: user.id,
+      ...reaction,
     };
 
     const withCounts = removed
-      ? this.messageWithReactionRemoved(existing, reaction)
-      : this.messageWithReactionAdded(existing, reaction, enforceUnique);
-    this.reflectReaction({ enforceUnique, message: withCounts, reaction, removed });
+      ? this.messageWithReactionRemoved(existing, reactionResponse)
+      : this.messageWithReactionAdded(existing, reactionResponse, enforceUnique);
+    this.reflectReaction({
+      enforceUnique,
+      message: withCounts,
+      reaction: reactionResponse,
+      removed,
+    });
     return this.getItem(messageId);
   };
 

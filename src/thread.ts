@@ -855,7 +855,7 @@ export class Thread extends WithSubscriptions {
     const applied = this.messagePaginator.applyReactionLocally({
       enforceUnique: options?.enforce_unique ?? false,
       messageId,
-      type: reaction.type,
+      reaction,
     });
 
     try {
@@ -872,8 +872,8 @@ export class Thread extends WithSubscriptions {
       ) {
         this.messagePaginator.applyReactionLocally({
           messageId,
+          reaction,
           removed: true,
-          type: reaction.type,
         });
       }
       throw error;
@@ -893,8 +893,8 @@ export class Thread extends WithSubscriptions {
   }) {
     const applied = this.messagePaginator.applyReactionLocally({
       messageId,
+      reaction: { type },
       removed: true,
-      type,
     });
 
     try {
@@ -910,7 +910,11 @@ export class Thread extends WithSubscriptions {
         applied &&
         (!this.channel.getClient().offlineDb || !isEphemeral(error as Error))
       ) {
-        this.messagePaginator.applyReactionLocally({ messageId, removed: false, type });
+        this.messagePaginator.applyReactionLocally({
+          messageId,
+          reaction: { type },
+          removed: false,
+        });
       }
       throw error;
     }
