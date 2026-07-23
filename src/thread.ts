@@ -852,8 +852,7 @@ export class Thread extends WithSubscriptions {
     reaction: Reaction;
     options?: SendReactionOptions;
   }) {
-    const previous = this.messagePaginator.getItem(messageId);
-    this.messagePaginator.applyReactionLocally({
+    const applied = this.messagePaginator.applyReactionLocally({
       enforceUnique: options?.enforce_unique ?? false,
       messageId,
       type: reaction.type,
@@ -868,10 +867,14 @@ export class Thread extends WithSubscriptions {
       // Revert if offline support is off (no queue to retry) OR the error is a definitive rejection;
       // an ephemeral failure with offline support enabled stays queued and will send.
       if (
-        previous &&
+        applied &&
         (!this.channel.getClient().offlineDb || !isEphemeral(error as Error))
       ) {
-        this.messagePaginator.ingestItem(previous);
+        this.messagePaginator.applyReactionLocally({
+          messageId,
+          removed: true,
+          type: reaction.type,
+        });
       }
       throw error;
     }
@@ -888,8 +891,11 @@ export class Thread extends WithSubscriptions {
     messageId: string;
     type: string;
   }) {
-    const previous = this.messagePaginator.getItem(messageId);
-    this.messagePaginator.applyReactionLocally({ messageId, removed: true, type });
+    const applied = this.messagePaginator.applyReactionLocally({
+      messageId,
+      removed: true,
+      type,
+    });
 
     try {
       const response = await this.channel.deleteReaction(messageId, type);
@@ -897,13 +903,14 @@ export class Thread extends WithSubscriptions {
         this.messagePaginator.ingestItem(formatMessage(response.message));
       }
     } catch (error) {
-      // Revert if offline support is off (no queue to retry) OR the error is a definitive rejection;
-      // an ephemeral failure with offline support enabled stays queued and will send.
+      // Deterministic, concurrency-safe revert: undo the DELETE by RE-ADDING the reaction to the
+      // CURRENT state (never restoring a stale pre-request snapshot). Only when the optimistic apply
+      // happened and the failure is terminal.
       if (
-        previous &&
+        applied &&
         (!this.channel.getClient().offlineDb || !isEphemeral(error as Error))
       ) {
-        this.messagePaginator.ingestItem(previous);
+        this.messagePaginator.applyReactionLocally({ messageId, removed: false, type });
       }
       throw error;
     }
