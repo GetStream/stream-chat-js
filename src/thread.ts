@@ -8,10 +8,13 @@ import type {
   LocalMessage,
   MarkReadOptions,
   MessageResponse,
+  Reaction,
   ReadResponse,
+  SendReactionOptions,
   ThreadResponse,
   UserResponse,
 } from './types';
+import { isEphemeral } from './errors';
 import type {
   Channel,
   DeleteMessageWithStateUpdateParams,
@@ -832,6 +835,78 @@ export class Thread extends WithSubscriptions {
       },
       params.deleteMessageRequestFn,
     );
+  }
+
+  /**
+   * Adds a reaction to a reply with an optimistic local state update, mirroring
+   * {@link Channel.addReactionWithLocalUpdate}. The optimistic message is applied to THIS thread's
+   * paginator (so pure replies get optimism the channel paginator can't give); the request routes
+   * through the parent channel since reactions are channel-level.
+   */
+  async addReactionWithLocalUpdate({
+    messageId,
+    reaction,
+    options,
+  }: {
+    messageId: string;
+    reaction: Reaction;
+    options?: SendReactionOptions;
+  }) {
+    const previous = this.messagePaginator.getItem(messageId);
+    this.messagePaginator.applyReactionLocally({
+      enforceUnique: options?.enforce_unique ?? false,
+      messageId,
+      type: reaction.type,
+    });
+
+    try {
+      const response = await this.channel.sendReaction(messageId, reaction, options);
+      if (response?.message) {
+        this.messagePaginator.ingestItem(formatMessage(response.message));
+      }
+    } catch (error) {
+      // Revert if offline support is off (no queue to retry) OR the error is a definitive rejection;
+      // an ephemeral failure with offline support enabled stays queued and will send.
+      if (
+        previous &&
+        (!this.channel.getClient().offlineDb || !isEphemeral(error as Error))
+      ) {
+        this.messagePaginator.ingestItem(previous);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Removes the current user's reaction from a reply with an optimistic local state update,
+   * mirroring {@link Thread.addReactionWithLocalUpdate}.
+   */
+  async deleteReactionWithLocalUpdate({
+    messageId,
+    type,
+  }: {
+    messageId: string;
+    type: string;
+  }) {
+    const previous = this.messagePaginator.getItem(messageId);
+    this.messagePaginator.applyReactionLocally({ messageId, removed: true, type });
+
+    try {
+      const response = await this.channel.deleteReaction(messageId, type);
+      if (response?.message) {
+        this.messagePaginator.ingestItem(formatMessage(response.message));
+      }
+    } catch (error) {
+      // Revert if offline support is off (no queue to retry) OR the error is a definitive rejection;
+      // an ephemeral failure with offline support enabled stays queued and will send.
+      if (
+        previous &&
+        (!this.channel.getClient().offlineDb || !isEphemeral(error as Error))
+      ) {
+        this.messagePaginator.ingestItem(previous);
+      }
+      throw error;
+    }
   }
 
   public markRead = async ({ force = false }: { force?: boolean } = {}) => {

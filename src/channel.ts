@@ -1,6 +1,7 @@
 import type { AxiosRequestConfig } from 'axios';
 import { ChannelState } from './channel_state';
 import { CooldownTimer } from './CooldownTimer';
+import { isEphemeral } from './errors';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';
@@ -441,6 +442,72 @@ export class Channel {
   }
 
   /**
+   * Adds a reaction with an optimistic local state update: the reaction is applied to the cached
+   * message immediately ({@link MessageIntervalPaginator.applyReactionLocally}), then the request is
+   * fired via {@link Channel.sendReaction} (which owns the offline-DB write + queue). The
+   * server-authoritative counts reconcile on the response; the message is rolled back on failure.
+   */
+  async addReactionWithLocalUpdate({
+    messageId,
+    reaction,
+    options,
+  }: {
+    messageId: string;
+    reaction: Reaction;
+    options?: SendReactionOptions;
+  }) {
+    const previous = this.messagePaginator.getItem(messageId);
+    this.messagePaginator.applyReactionLocally({
+      enforceUnique: options?.enforce_unique ?? false,
+      messageId,
+      type: reaction.type,
+    });
+
+    try {
+      const response = await this.sendReaction(messageId, reaction, options);
+      if (response?.message) {
+        this.messagePaginator.ingestItem(formatMessage(response.message));
+      }
+    } catch (error) {
+      // Revert if offline support is off (no queue to retry) OR the error is a definitive rejection;
+      // an ephemeral failure with offline support enabled stays queued and will send.
+      if (previous && (!this.getClient().offlineDb || !isEphemeral(error as Error))) {
+        this.messagePaginator.ingestItem(previous);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Removes the current user's reaction with an optimistic local state update, mirroring
+   * {@link Channel.addReactionWithLocalUpdate}.
+   */
+  async deleteReactionWithLocalUpdate({
+    messageId,
+    type,
+  }: {
+    messageId: string;
+    type: string;
+  }) {
+    const previous = this.messagePaginator.getItem(messageId);
+    this.messagePaginator.applyReactionLocally({ messageId, removed: true, type });
+
+    try {
+      const response = await this.deleteReaction(messageId, type);
+      if (response?.message) {
+        this.messagePaginator.ingestItem(formatMessage(response.message));
+      }
+    } catch (error) {
+      // Revert if offline support is off (no queue to retry) OR the error is a definitive rejection;
+      // an ephemeral failure with offline support enabled stays queued and will send.
+      if (previous && (!this.getClient().offlineDb || !isEphemeral(error as Error))) {
+        this.messagePaginator.ingestItem(previous);
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Upload a file to this channel’s file endpoint (multipart). Forwards to the client’s `sendFile` implementation.
    *
    * @param uri File source: URL string, `File`, `Buffer`, or readable stream (Node).
@@ -669,6 +736,27 @@ export class Channel {
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
+        // Persist the optimistic reaction (the caller has already applied it to local state),
+        // mirroring deleteReaction below. enforce_unique replaces the user's existing reaction
+        // (updateReaction clears their prior rows first); otherwise it is additive (insertReaction).
+        const message = this.messagePaginator.getItem(messageID);
+        if (message) {
+          const storedReaction = {
+            created_at: new Date().toISOString(),
+            message_id: messageID,
+            type: reaction.type,
+            updated_at: new Date().toISOString(),
+            // `user` (not just `user_id`) is required: mapReactionToStorable persists the row's user
+            // id from `reaction.user.id`, so omitting it stores a null user → ghost reaction on read.
+            user: this.getClient().user,
+            user_id: this.getClient().userID as string,
+          };
+          if (options?.enforce_unique) {
+            await offlineDb.updateReaction({ message, reaction: storedReaction });
+          } else {
+            await offlineDb.insertReaction({ message, reaction: storedReaction });
+          }
+        }
         return await offlineDb.queueTask<ReactionAPIResponse>({
           task: {
             channelId: this.id as string,
@@ -2611,7 +2699,9 @@ export class Channel {
       case 'reaction.new':
         if (event.message && event.reaction) {
           const { reaction } = event;
-          if (!event.message?.parent_id) {
+          // Reflect main messages AND show_in_channel replies (both live in these paginators);
+          // pure replies are handled by the thread's own reaction subscription.
+          if (!event.message?.parent_id || event.message.show_in_channel) {
             this.messagePaginator.reflectReaction({ message: event.message, reaction });
             this.pinnedMessagesPaginator.reflectReaction({
               message: event.message,
@@ -2623,7 +2713,10 @@ export class Channel {
       case 'reaction.deleted':
         if (event.message && event.reaction) {
           const { reaction } = event;
-          if (event.message && !event.message.parent_id) {
+          if (
+            event.message &&
+            (!event.message.parent_id || event.message.show_in_channel)
+          ) {
             this.messagePaginator.reflectReaction({
               message: event.message,
               reaction,
@@ -2641,7 +2734,7 @@ export class Channel {
         if (event.message && event.reaction) {
           const { reaction } = event;
           // assuming reaction.updated is only called if enforce_unique is true
-          if (!event.message?.parent_id) {
+          if (!event.message?.parent_id || event.message.show_in_channel) {
             this.messagePaginator.reflectReaction({
               enforceUnique: true,
               message: event.message,

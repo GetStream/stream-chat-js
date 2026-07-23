@@ -22,6 +22,7 @@ import type {
   MessagePaginationOptions,
   MessageResponse,
   PinnedMessagePaginationOptions,
+  ReactionGroupResponse,
   ReactionResponse,
   UserResponse,
 } from '../../types';
@@ -936,6 +937,145 @@ export class MessageIntervalPaginator extends BasePaginator<
       return [...base, reaction];
     }
     return base;
+  }
+
+  /**
+   * Optimistic counterpart to {@link reflectReaction}. The server has not responded yet, so there is
+   * no authoritative message to copy — this authors the current user's reaction locally, computes the
+   * new `reaction_groups` / `latest_reactions`, and ingests through the *same* path `reflectReaction`
+   * uses. The `messageWith*` helpers deliberately touch only the counts; `own_reactions` is left to
+   * `reflectReaction`, so both entry points share one `own_reactions` + ingest core and differ solely
+   * in where the counts come from (WS event vs. local computation).
+   *
+   * Callers pass only `messageId` + reaction `type` — the reaction object (author, timestamps) is
+   * built here from the connected user.
+   *
+   * @returns the ingested message, or `undefined` when the user isn't connected or the target isn't
+   *   loaded (nothing to update).
+   */
+  applyReactionLocally = ({
+    enforceUnique = false,
+    messageId,
+    removed = false,
+    type,
+  }: {
+    messageId: string;
+    type: string;
+    enforceUnique?: boolean;
+    removed?: boolean;
+  }): LocalMessage | undefined => {
+    const user = this.channel.getClient().user;
+    const existing = this.getItem(messageId);
+    if (!user || !existing) return;
+
+    const now = new Date().toISOString();
+    const reaction: ReactionResponse = {
+      created_at: now,
+      message_id: messageId,
+      type,
+      updated_at: now,
+      user,
+      user_id: user.id,
+    };
+
+    const withCounts = removed
+      ? this.messageWithReactionRemoved(existing, reaction)
+      : this.messageWithReactionAdded(existing, reaction, enforceUnique);
+    this.reflectReaction({ enforceUnique, message: withCounts, reaction, removed });
+    return this.getItem(messageId);
+  };
+
+  /**
+   * Returns a copy of `message` with `reaction` folded into its `reaction_groups` /
+   * `latest_reactions`. Does not touch `own_reactions` — the shared `reflectReaction` core owns that.
+   */
+  private messageWithReactionAdded(
+    message: LocalMessage,
+    reaction: ReactionResponse,
+    enforceUnique: boolean,
+  ): LocalMessage {
+    const score = reaction.score ?? 1;
+    const reactionGroups: Record<string, ReactionGroupResponse> = {
+      ...(message.reaction_groups ?? {}),
+    };
+
+    // When enforcing uniqueness, first back the current user's existing reactions out of the groups
+    if (enforceUnique) {
+      for (const ownReaction of message.own_reactions ?? []) {
+        const group = reactionGroups[ownReaction.type];
+        if (!group) continue;
+        const next = {
+          ...group,
+          count: group.count - 1,
+          sum_scores: group.sum_scores - (ownReaction.score ?? 1),
+        };
+        if (next.count < 1) delete reactionGroups[ownReaction.type];
+        else reactionGroups[ownReaction.type] = next;
+      }
+    }
+
+    const existingGroup = reactionGroups[reaction.type];
+    reactionGroups[reaction.type] = existingGroup
+      ? {
+          ...existingGroup,
+          count: existingGroup.count + 1,
+          last_reaction_at: reaction.created_at,
+          sum_scores: existingGroup.sum_scores + score,
+        }
+      : {
+          count: 1,
+          first_reaction_at: reaction.created_at,
+          last_reaction_at: reaction.created_at,
+          sum_scores: score,
+        };
+
+    const latestReactions = enforceUnique
+      ? [
+          ...(message.latest_reactions ?? []).filter(
+            (r) => r.user_id !== reaction.user_id,
+          ),
+          reaction,
+        ]
+      : [...(message.latest_reactions ?? []), reaction];
+
+    return {
+      ...message,
+      latest_reactions: latestReactions,
+      reaction_groups: reactionGroups,
+    };
+  }
+
+  /**
+   * Returns a copy of `message` with the current user's reaction of `reaction.type` backed out of its
+   * `reaction_groups` / `latest_reactions`. Does not touch `own_reactions`.
+   */
+  private messageWithReactionRemoved(
+    message: LocalMessage,
+    reaction: ReactionResponse,
+  ): LocalMessage {
+    const reactionGroups: Record<string, ReactionGroupResponse> = {
+      ...(message.reaction_groups ?? {}),
+    };
+    const reactionToRemove = message.own_reactions?.find((r) => r.type === reaction.type);
+
+    if (reactionToRemove && reactionGroups[reactionToRemove.type]) {
+      const group = reactionGroups[reactionToRemove.type];
+      const next = {
+        ...group,
+        count: group.count - 1,
+        sum_scores: group.sum_scores - (reactionToRemove.score ?? 1),
+      };
+      if (next.count < 1) delete reactionGroups[reactionToRemove.type];
+      else reactionGroups[reactionToRemove.type] = next;
+    }
+
+    return {
+      ...message,
+      latest_reactions: message.latest_reactions?.filter(
+        (r) => !(r.user_id === reaction.user_id && r.type === reaction.type),
+      ),
+      reaction_groups: reactionGroups,
+    };
   }
 
   /**
