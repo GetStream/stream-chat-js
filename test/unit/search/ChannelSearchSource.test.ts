@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, MockInstance } from 'v
 import { ChannelSearchSource } from '../../../src/search/ChannelSearchSource';
 import type { Channel } from '../../../src/channel';
 import type { StreamChat } from '../../../src/client';
-import type { ChannelAPIResponse, ChannelFilters } from '../../../src/types';
+import type { ChannelStateResponseFields, ChannelFilters } from '../../../src/types';
 import { generateChannel } from '../test-utils/generateChannel';
 import { getClientWithUser } from '../test-utils/getClient';
 
@@ -10,16 +10,21 @@ describe('ChannelSearchSource', () => {
   const user = { id: 'user-123' };
   let client: StreamChat;
   let searchSource: ChannelSearchSource;
-  let queryChannelsMock: MockInstance<StreamChat['queryChannels']>;
+  let queryChannelsMock: MockInstance<StreamChat['queryChannelsAndHydrate']>;
   let channels: Channel[];
-  const mockChannels: ChannelAPIResponse[] = [generateChannel(), generateChannel()];
+  const mockChannels: ChannelStateResponseFields[] = [
+    generateChannel(),
+    generateChannel(),
+  ];
 
   beforeEach(() => {
     client = getClientWithUser(user);
     channels = mockChannels.map((data) =>
       client.channel(data.channel.type, data.channel.id),
     );
-    queryChannelsMock = vi.spyOn(client, 'queryChannels').mockResolvedValue(channels);
+    queryChannelsMock = vi
+      .spyOn(client, 'queryChannelsAndHydrate')
+      .mockResolvedValue(channels);
     searchSource = new ChannelSearchSource(client);
   });
 
@@ -138,7 +143,7 @@ describe('ChannelSearchSource', () => {
           searchQuery ? { 'member.user.name': { $autocomplete: searchQuery } } : null,
       },
     });
-    searchSource.sort = { last_message_at: -1 };
+    searchSource.sort = [{ field: 'last_message_at', direction: -1 }];
     searchSource.searchOptions = { message_limit: 5 };
 
     // @ts-expect-error accessing protected property
@@ -146,14 +151,19 @@ describe('ChannelSearchSource', () => {
 
     expect(queryChannelsMock).toHaveBeenCalledWith(
       {
-        'member.user.name': {
-          $autocomplete: 'channel search',
-        }, // custom
-        members: { $in: [user.id] }, // static default
-        name: { $autocomplete: 'channel search' }, // dynamic default
+        filter_conditions: {
+          'member.user.name': {
+            $autocomplete: 'channel search',
+          },
+          members: { $in: [user.id] },
+          name: { $autocomplete: 'channel search' },
+        },
+        sort: [{ field: 'last_message_at', direction: -1 }],
+        message_limit: 5,
+        limit: searchSource.pageSize,
+        offset: searchSource.offset,
       },
-      { last_message_at: -1 },
-      { message_limit: 5, limit: searchSource.pageSize, offset: searchSource.offset },
+      { withResponse: false },
     );
   });
 
@@ -171,7 +181,7 @@ describe('ChannelSearchSource', () => {
   });
 
   it('works without client.userID', async () => {
-    searchSource.client.userID = undefined;
+    searchSource.client.user = undefined;
     const spyBuildFilters = vi
       .spyOn(searchSource.filterBuilder, 'buildFilters')
       .mockReturnValue({});

@@ -2,19 +2,17 @@ import FormData from 'form-data';
 import type {
   AscDesc,
   ChannelFilters,
-  ChannelQueryOptions,
+  ChannelGetOrCreateRequest,
   ChannelSort,
-  ChannelSortBase,
   LocalMessage,
-  LocalMessageBase,
-  Message,
+  MessageRequest,
   MessageResponse,
-  MessageResponseBase,
   OwnUserBase,
   OwnUserResponse,
   PromoteChannelParams,
-  QueryChannelAPIResponse,
+  ChannelStateResponse,
   ReactionGroupResponse,
+  SortParamRequest,
   UpdatedMessage,
   UserResponse,
 } from './types';
@@ -151,12 +149,21 @@ export function addFileToFormData(
   return data;
 }
 export function normalizeQuerySort<T extends Record<string, AscDesc | undefined>>(
-  sort: T | T[],
+  sort: T | T[] | SortParamRequest[],
 ) {
-  const sortFields: Array<{ direction: AscDesc; field: keyof T }> = [];
+  const sortFields: Array<{ direction: AscDesc; field: string }> = [];
   const sortArr = Array.isArray(sort) ? sort : [sort];
   for (const item of sortArr) {
-    const entries = Object.entries(item) as [keyof T, AscDesc][];
+    // OpenAPI `SortParamRequest` (`{ field, direction }`) is already a normalized term — use it as-is.
+    if (item && typeof (item as SortParamRequest).field === 'string') {
+      const term = item as SortParamRequest;
+      sortFields.push({
+        direction: (term.direction ?? 1) as AscDesc,
+        field: term.field as string,
+      });
+      continue;
+    }
+    const entries = Object.entries(item) as [string, AscDesc][];
     if (entries.length > 1) {
       console.warn(
         "client._buildSort() - multiple fields in a single sort object detected. Object's field order is not guaranteed",
@@ -321,24 +328,22 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
  *
  * @param {LocalMessage} message `LocalMessage` object
  */
-export function formatMessage(
-  message: MessageResponse | MessageResponseBase | LocalMessage,
-): LocalMessage {
+export function formatMessage(message: MessageResponse | LocalMessage): LocalMessage {
   const toLocalMessageBase = (
-    msg: MessageResponse | MessageResponseBase | LocalMessage | null | undefined,
-  ): LocalMessageBase | null => {
+    msg: MessageResponse | LocalMessage | null | undefined,
+  ): LocalMessage | null => {
     if (!msg) return null;
     return {
       ...msg,
       created_at: msg.created_at ? new Date(msg.created_at) : new Date(),
-      deleted_at: msg.deleted_at ? new Date(msg.deleted_at) : null,
-      pinned_at: msg.pinned_at ? new Date(msg.pinned_at) : null,
+      deleted_at: msg.deleted_at ? new Date(msg.deleted_at) : undefined,
+      pinned_at: msg.pinned_at ? new Date(msg.pinned_at) : undefined,
       reaction_groups: maybeGetReactionGroupsFallback(
         msg.reaction_groups,
         msg.reaction_counts,
         msg.reaction_scores,
       ),
-      status: msg.status || 'received',
+      status: (msg as LocalMessage).status || 'received',
       updated_at: msg.updated_at ? new Date(msg.updated_at) : new Date(),
     };
   };
@@ -360,17 +365,12 @@ export function formatMessage(
  */
 export function unformatMessage(message: LocalMessage): MessageResponse {
   const toMessageResponseBase = (
-    msg: LocalMessage | null | undefined,
-  ): MessageResponseBase | null => {
+    msg: MessageResponse | LocalMessage | null | undefined,
+  ): MessageResponse | null => {
     if (!msg) return null;
-    const newDateString = new Date().toISOString();
-    return {
-      ...msg,
-      created_at: message.created_at ? message.created_at.toISOString() : newDateString,
-      deleted_at: message.deleted_at ? message.deleted_at.toISOString() : undefined,
-      pinned_at: message.pinned_at ? message.pinned_at.toISOString() : undefined,
-      updated_at: message.updated_at ? message.updated_at.toISOString() : newDateString,
-    };
+    // `MessageResponse` and `LocalMessage` now share `Date` timestamp types (OpenAPI models), so no
+    // Date<->string conversion is needed — the API client serializes Dates on the wire.
+    return { ...msg } as MessageResponse;
   };
 
   return {
@@ -379,7 +379,9 @@ export function unformatMessage(message: LocalMessage): MessageResponse {
   } as MessageResponse;
 }
 
-export const localMessageToNewMessagePayload = (localMessage: LocalMessage): Message => {
+export const localMessageToNewMessagePayload = (
+  localMessage: LocalMessage,
+): MessageRequest => {
   /* eslint-disable @typescript-eslint/no-unused-vars */
   const {
     // Remove all timestamp fields and client-specific fields.
@@ -396,22 +398,23 @@ export const localMessageToNewMessagePayload = (localMessage: LocalMessage): Mes
     reaction_counts,
     reaction_scores,
     reply_count,
-    // Message text related fields that shouldn't be in update
+    // MessageRequest text related fields that shouldn't be in update
     command,
     html,
     i18n,
     mentioned_groups,
     quoted_message,
     mentioned_users,
-    // Message content related fields
+    // MessageRequest content related fields
     ...messageFields
   } = localMessage;
 
+  // `messageFields` still carries LocalMessage-only fields (cid, deleted_reply_count, mentioned_*,
+  // pinned, shadowed, …) that the stricter OpenAPI `MessageRequest` omits; the server ignores them.
   return {
     ...messageFields,
-    pinned_at: messageFields.pinned_at?.toISOString(),
     mentioned_users: mentioned_users?.map((user) => user.id),
-  };
+  } as MessageRequest;
 };
 
 export const toUpdatedMessagePayload = (
@@ -442,7 +445,7 @@ export const toDeletedMessage = ({
   deletedAt,
   hardDelete = false,
 }: {
-  message: LocalMessage | LocalMessageBase;
+  message: LocalMessage | LocalMessage;
   deletedAt: LocalMessage['deleted_at'];
   hardDelete: boolean;
 }) => {
@@ -450,7 +453,7 @@ export const toDeletedMessage = ({
     /**
      * In case of hard delete, we need to strip down all text, html, attachments and all the custom properties on message
      * The hard-deleted message is kept in the UI until the messages are re-queried
-     * FIXME: we are returning an object that does not match LocalMessage | LocalMessageBase
+     * FIXME: we are returning an object that does not match LocalMessage | LocalMessage
      */
     return {
       attachments: [],
@@ -572,7 +575,7 @@ function maybeGetReactionGroupsFallback(
   groups: { [key: string]: ReactionGroupResponse } | null | undefined,
   counts: { [key: string]: number } | null | undefined,
   scores: { [key: string]: number } | null | undefined,
-): { [key: string]: ReactionGroupResponse } | null {
+): { [key: string]: ReactionGroupResponse } | undefined {
   if (groups) {
     return groups;
   }
@@ -581,16 +584,18 @@ function maybeGetReactionGroupsFallback(
     const fallback: { [key: string]: ReactionGroupResponse } = {};
 
     for (const type of Object.keys(counts)) {
+      // Best-effort fallback derived from counts/scores; the richer OpenAPI `ReactionGroupResponse`
+      // fields (first/last_reaction_at, latest_reactions_by) are not available here.
       fallback[type] = {
         count: counts[type],
         sum_scores: scores[type],
-      };
+      } as ReactionGroupResponse;
     }
 
     return fallback;
   }
 
-  return null;
+  return undefined;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -738,7 +743,7 @@ export const uniqBy = <T>(
  */
 const WATCH_QUERY_IN_PROGRESS_FOR_CHANNEL: Record<
   string,
-  Promise<QueryChannelAPIResponse> | undefined
+  Promise<ChannelStateResponse> | undefined
 > = {};
 
 type GetChannelParams = {
@@ -746,7 +751,7 @@ type GetChannelParams = {
   channel?: Channel;
   id?: string;
   members?: string[];
-  options?: ChannelQueryOptions;
+  options?: ChannelGetOrCreateRequest;
   type?: string;
 };
 /**
@@ -773,7 +778,10 @@ export const getAndWatchChannel = async ({
 
   // unfortunately typescript is not able to infer that if (!channel && !type) === false, then channel or type has to be truthy
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const channelToWatch = channel || client.channel(type!, id, { members });
+  const channelToWatch =
+    channel ||
+    // `members` are member IDs; the OpenAPI `ChannelData.members` expects member objects.
+    client.channel(type!, id, { members: members?.map((user_id) => ({ user_id })) });
 
   // need to keep as with call to channel.watch the id can be changed from undefined to an actual ID generated server-side
   const originalCid = channelToWatch.id
@@ -847,7 +855,7 @@ export const isChannelArchived = (channel: Channel) => {
  * on filters. Will return true only if filters.archived exists and is a boolean value.
  * @param filters
  */
-export const shouldConsiderArchivedChannels = (filters: ChannelFilters) => {
+export const shouldConsiderArchivedChannels = (filters: ChannelFilters | undefined) => {
   if (!filters) return false;
 
   return typeof filters.archived === 'boolean';
@@ -867,33 +875,15 @@ export const extractSortValue = ({
   targetKey,
 }: {
   atIndex: number;
-  targetKey: keyof ChannelSortBase;
+  targetKey: string;
   sort?: ChannelSort;
 }) => {
   if (!sort) return null;
-  let option: null | ChannelSortBase = null;
-
-  if (Array.isArray(sort)) {
-    option = sort[atIndex] ?? null;
-  } else {
-    let index = 0;
-    for (const key in sort) {
-      if (index !== atIndex) {
-        index++;
-        continue;
-      }
-
-      if (key !== targetKey) {
-        return null;
-      }
-
-      option = sort;
-
-      break;
-    }
-  }
-
-  return option?.[targetKey] ?? null;
+  // `ChannelSort` is now `SortParamRequest[]` (`{ field, direction }[]`). Return the `direction` of
+  // the entry at `atIndex` when its `field` matches `targetKey`, otherwise null.
+  const option = sort[atIndex] ?? null;
+  if (!option || option.field !== targetKey) return null;
+  return option.direction ?? null;
 };
 
 /**
@@ -1027,11 +1017,18 @@ export const runDetached = <T>(
 };
 
 export const isBlockedMessage = (message: LocalMessage) =>
-  message.type === 'error' &&
-  (message.moderation_details?.action === 'MESSAGE_RESPONSE_ACTION_REMOVE' ||
-    message.moderation?.action === 'remove');
+  message.type === 'error' && message.moderation?.action === 'remove';
 
 export const isBouncedMessage = (message: LocalMessage) =>
-  message.type === 'error' &&
-  (message?.moderation_details?.action === 'MESSAGE_RESPONSE_ACTION_BOUNCE' ||
-    message?.moderation?.action === 'bounce');
+  message.type === 'error' && message?.moderation?.action === 'bounce';
+
+export const getEnv = (envKey: keyof NodeJS.ProcessEnv) => {
+  if (
+    typeof process !== 'undefined' &&
+    (Object.hasOwn(process, 'env') || 'env' in process)
+  ) {
+    return process.env[envKey];
+  }
+
+  return undefined;
+};

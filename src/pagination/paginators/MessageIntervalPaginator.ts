@@ -20,6 +20,7 @@ import type {
   AscDesc,
   LocalMessage,
   MessagePaginationOptions,
+  MessagePaginationParams,
   MessageResponse,
   PinnedMessagePaginationOptions,
   ReactionResponse,
@@ -27,7 +28,12 @@ import type {
 } from '../../types';
 import type { Channel } from '../../channel';
 import { StateStore } from '../../store';
-import { formatMessage, generateUUIDv4, toDeletedMessage } from '../../utils';
+import {
+  formatMessage,
+  generateUUIDv4,
+  normalizeQuerySort,
+  toDeletedMessage,
+} from '../../utils';
 import { makeComparator } from '../sortCompiler';
 import type { FieldToDataResolver } from '../types.normalization';
 import { resolveDotPathValue } from '../utility.normalization';
@@ -314,13 +320,13 @@ export class MessageIntervalPaginator extends BasePaginator<
           : undefined;
     } else {
       const { messages } = this.parentMessageId
-        ? await this.channel.getReplies(
-            this.parentMessageId,
-            options,
-            Array.isArray(this.requestSort) ? this.requestSort : [this.requestSort],
-          )
+        ? await this.channel.getReplies({
+            parent_id: this.parentMessageId,
+            ...options,
+            sort: normalizeQuerySort(this.requestSort),
+          })
         : await this.channel.query({
-            messages: options,
+            messages: options as MessagePaginationParams,
             // todo: why do we query for watchers?
             // watchers: { limit: this.pageSize },
           });
@@ -817,7 +823,7 @@ export class MessageIntervalPaginator extends BasePaginator<
         this.ingestItem({
           ...message,
           quoted_message: toDeletedMessage({
-            message: message.quoted_message,
+            message: formatMessage(message.quoted_message),
             hardDelete,
             deletedAt,
           }) as LocalMessage,

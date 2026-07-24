@@ -1,6 +1,33 @@
 import { generateUUIDv4 } from './utils';
-import type { Event } from './types';
+import type {
+  ChannelResponse,
+  Event,
+  EventType,
+  MessageResponse,
+  ReactionResponse,
+  UserResponse,
+} from './types';
 import type { Unsubscribe } from './store';
+
+/**
+ * Flat routing view of an event, as seen by pipeline handlers. The public `Event` type is now a
+ * discriminated union (each WS event exposes only its own fields) and also admits bare custom-event
+ * name strings — neither is convenient for the generic routers here, which only read a bounded set of
+ * common optional fields. Dispatched event *values* are always objects, so the pipeline casts to
+ * this view at the boundary (see `processOne`).
+ */
+export type PipelineEvent = {
+  type: EventType | (string & {});
+  channel?: ChannelResponse;
+  channel_id?: string;
+  channel_type?: string;
+  cid?: string;
+  created_at?: string | Date;
+  hard_delete?: boolean;
+  message?: MessageResponse;
+  reaction?: ReactionResponse;
+  user?: UserResponse;
+};
 
 type MatchById = { id: string | RegExp; regexMatch?: boolean };
 export type FindEventHandlerParams<CTX extends Record<string, unknown>> = {
@@ -19,7 +46,7 @@ export type InsertEventHandlerPayload<CTX extends Record<string, unknown>> = {
 };
 
 export type EventHandlerPipelineHandler<CTX extends Record<string, unknown>> = (payload: {
-  event: Event;
+  event: PipelineEvent;
   ctx: CTX;
 }) => EventHandlerResult | void | Promise<EventHandlerResult | void>;
 
@@ -183,7 +210,10 @@ export class EventHandlerPipeline<CTX extends Record<string, unknown> = {}> {
     for (let i = 0; i < snapshot.length; i++) {
       const handler = snapshot[i];
       try {
-        const result = await handler.handle({ event, ctx });
+        const result = await handler.handle({
+          event: event as unknown as PipelineEvent,
+          ctx,
+        });
         if (result?.action === 'stop') return;
       } catch {
         console.error(`[pipeline:${this.id}] handler failed`, {

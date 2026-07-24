@@ -1,4 +1,4 @@
-import type { ReadResponse, UserResponse } from '../types';
+import type { ReadStateResponse, UserResponse } from '../types';
 import { StateStore } from '../store';
 import type { Channel } from '../channel';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
@@ -62,10 +62,13 @@ const findIndex = <T>(arr: T[], target: MsgRef, keyOf: (x: T) => MsgRef): number
 };
 
 /**
- * For insertion after the last equal item. E.g. array [a] exists and b is being inserted -> we want [a,b], not [b,a].
- * @param arr
- * @param target
- * @param keyOf
+ * Finds the insertion index after the last equal item. E.g. when array `[a]` exists and `b` is
+ * being inserted we want `[a, b]`, not `[b, a]`.
+ *
+ * @param arr - The sorted array to search.
+ * @param target - The reference value to compare against.
+ * @param keyOf - Accessor that maps an item to its comparable reference.
+ * @returns The insertion index in `arr`.
  */
 const findUpperIndex = <T>(arr: T[], target: MsgRef, keyOf: (x: T) => MsgRef): number => {
   let lo = 0,
@@ -131,7 +134,7 @@ export type OwnMessageReceiptsTrackerOptions = {
  *
  * Event ingestion
  * ---------------
- * - `ingestInitial(rows: ReadResponse[])`: Builds initial state from server snapshot.
+ * - `ingestInitial(rows: ReadStateResponse[])`: Builds initial state from server snapshot.
  *   If a user’s `last_read` is ahead of `last_delivered_at`, the tracker enforces
  *   the invariant `lastDeliveredRef >= lastReadRef`.
  * - `onMessageRead(user, readAtISO)`:
@@ -261,7 +264,7 @@ export class MessageReceiptsTracker extends WithSubscriptions {
   }
 
   /** Build initial state from server snapshots (single pass + sort). */
-  ingestInitial(responses: ReadResponse[]) {
+  ingestInitial(responses: ReadStateResponse[]) {
     this.byUser.clear();
     this.readSorted = [];
     this.deliveredSorted = [];
@@ -303,13 +306,13 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     lastDeliveredMessageId,
   }: {
     user: UserResponse;
-    deliveredAt: string;
+    deliveredAt: Date;
     lastDeliveredMessageId?: string;
   }) {
-    const timestampMs = new Date(deliveredAt).getTime();
+    const timestampMs = deliveredAt.getTime();
     const msgRef = lastDeliveredMessageId
       ? { timestampMs, msgId: lastDeliveredMessageId }
-      : this.locateMessage(new Date(deliveredAt).getTime());
+      : this.locateMessage(deliveredAt.getTime());
     if (!msgRef) return;
     const userProgress = this.ensureUser(user);
 
@@ -338,10 +341,10 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     lastReadMessageId,
   }: {
     user: UserResponse;
-    readAt: string;
+    readAt: Date;
     lastReadMessageId?: string;
   }) {
-    const timestampMs = new Date(readAt).getTime();
+    const timestampMs = readAt.getTime();
     const msgRef = lastReadMessageId
       ? { timestampMs, msgId: lastReadMessageId }
       : this.locateMessage(timestampMs);
@@ -387,13 +390,13 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     lastReadMessageId,
   }: {
     user: UserResponse;
-    lastReadAt?: string;
+    lastReadAt?: Date;
     lastReadMessageId?: string;
   }) {
     const userProgress = this.ensureUser(user);
 
     const newReadRef: MsgRef = lastReadAt
-      ? { timestampMs: new Date(lastReadAt).getTime(), msgId: lastReadMessageId ?? '' }
+      ? { timestampMs: lastReadAt.getTime(), msgId: lastReadMessageId ?? '' }
       : { ...MIN_REF };
 
     // If no change, exit early.
@@ -649,26 +652,28 @@ export class MessageReceiptsTracker extends WithSubscriptions {
 
   private readStoreStateToResponses(
     readState: Record<string, ReadStoreUserState>,
-  ): ReadResponse[] {
-    return Object.values(readState).reduce<ReadResponse[]>((responses, userReadState) => {
-      if (!isValidReadState(userReadState)) return responses;
-      const lastReadDate = new Date(userReadState.last_read);
-      if (Number.isNaN(lastReadDate.getTime())) return responses;
-      const lastReadIso = lastReadDate.toISOString();
+  ): ReadStateResponse[] {
+    return Object.values(readState).reduce<ReadStateResponse[]>(
+      (responses, userReadState) => {
+        if (!isValidReadState(userReadState)) return responses;
+        const lastReadDate = new Date(userReadState.last_read);
+        if (Number.isNaN(lastReadDate.getTime())) return responses;
 
-      responses.push({
-        last_read: lastReadIso,
-        user: userReadState.user,
-        last_read_message_id: userReadState.last_read_message_id,
-        unread_messages: userReadState.unread_messages ?? 0,
-        last_delivered_at: userReadState.last_delivered_at
-          ? new Date(userReadState.last_delivered_at).toISOString()
-          : undefined,
-        last_delivered_message_id: userReadState.last_delivered_message_id,
-      });
+        responses.push({
+          last_read: lastReadDate,
+          user: userReadState.user,
+          last_read_message_id: userReadState.last_read_message_id,
+          unread_messages: userReadState.unread_messages ?? 0,
+          last_delivered_at: userReadState.last_delivered_at
+            ? new Date(userReadState.last_delivered_at)
+            : undefined,
+          last_delivered_message_id: userReadState.last_delivered_message_id,
+        });
 
-      return responses;
-    }, []);
+        return responses;
+      },
+      [],
+    );
   }
 
   private emitSnapshot() {

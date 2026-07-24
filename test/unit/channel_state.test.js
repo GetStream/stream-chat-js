@@ -14,7 +14,7 @@ describe('ChannelState clean', () => {
 	let channel;
 	beforeEach(() => {
 		client = new StreamChat();
-		client.userID = 'observer';
+		client.user = { id: 'observer' };
 		channel = new Channel(client, 'live', 'stream', {});
 		client.activeChannels[channel.cid] = channel;
 	});

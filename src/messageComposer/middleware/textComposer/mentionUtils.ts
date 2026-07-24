@@ -13,8 +13,8 @@ export const userResponsesToMentionEntities = (users: UserResponse[]) =>
   users.map(userResponseToMentionEntity);
 
 export const mentionEntityToUserResponse = (entity: UserMentionEntity): UserResponse => {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { mentionType, ...user } = entity;
+  void mentionType;
   return user;
 };
 

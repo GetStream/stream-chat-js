@@ -38,7 +38,7 @@ describe('Channel count unread', function () {
 
 		client = new StreamChat('apiKey');
 		client.user = user;
-		client.userID = 'user';
+		client.user = { id: 'user' };
 		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
 
 		channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
@@ -236,7 +236,7 @@ describe('Channel isViewingLive (unread bump gating)', function () {
 	const setupChannel = () => {
 		const client = new StreamChat('apiKey');
 		client.user = user;
-		client.userID = user.id;
+		client.user = { id: user.id };
 		client.userMuteStatus = () => false;
 		const channel = client.channel('messaging', 'live-mode-id');
 		channel.initialized = true;
@@ -298,7 +298,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 	const setupChannel = ({ isLocalUnreadCountEnabled }) => {
 		const client = new StreamChat('apiKey', { isLocalUnreadCountEnabled });
 		client.user = user;
-		client.userID = user.id;
+		client.user = { id: user.id };
 		client.userMuteStatus = () => false;
 		const channel = client.channel('messaging', 'live-id');
 		channel.initialized = true;
@@ -389,7 +389,6 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 	it('markReadLocally returns undefined and dispatches nothing when there is no connected user', function () {
 		const { client, channel } = setupChannel({ isLocalUnreadCountEnabled: true });
 		client.user = undefined;
-		client.userID = undefined;
 		const onLocalRead = vi.fn();
 		channel.on('message.read_locally', onLocalRead);
 
@@ -426,7 +425,7 @@ describe('Channel _handleChannelEvent', function () {
 	beforeEach(() => {
 		client = new StreamChat('apiKey');
 		client.user = user;
-		client.userID = user.id;
+		client.user = { id: user.id };
 		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
 		channel = client.channel('messaging', 'id');
 		channel.data.own_capabilities = ['read-events'];
@@ -2114,7 +2113,7 @@ describe('Uninitialized Channel', () => {
 	beforeEach(() => {
 		client = new StreamChat('apiKey');
 		client.user = user;
-		client.userID = user.id;
+		client.user = { id: user.id };
 		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
 		channel = client.channel('messaging', 'id');
 		channel.initialized = false;
@@ -2264,7 +2263,7 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 
 	clientVish.connectUser = () => {
 		clientVish.user = user;
-		clientVish.userID = user.id;
+		clientVish.user = { id: user.id };
 		clientVish.wsPromise = Promise.resolve();
 	};
 

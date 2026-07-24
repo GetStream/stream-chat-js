@@ -1,7 +1,7 @@
 import type {
   DeleteMessageOptions,
   LocalMessage,
-  Message,
+  MessageRequest,
   MessageResponse,
   SendMessageAPIResponse,
   SendMessageOptions,
@@ -33,7 +33,7 @@ export type MessageOperationSpec = {
 export type OperationParams<K extends OperationKind> = {
   localMessage: LocalMessage;
   options?: MessageOperationSpec[K]['options'];
-} & (K extends 'send' | 'retry' ? { message?: Message } : {});
+} & (K extends 'send' | 'retry' ? { message?: MessageRequest } : {});
 
 export type OperationResponse = { message: MessageResponse };
 
@@ -52,11 +52,11 @@ export type MessageOperationsContext = {
   ingest: (m: LocalMessage) => void;
   get: (id: string) => LocalMessage | undefined;
 
-  normalizeOutgoingMessage?: (m: Message) => Message;
+  normalizeOutgoingMessage?: (m: MessageRequest) => MessageRequest;
 
   defaults: {
     delete: (id: string, o?: DeleteMessageOptions) => Promise<OperationResponse>;
-    send: (m: Message, o?: SendMessageOptions) => Promise<OperationResponse>;
+    send: (m: MessageRequest, o?: SendMessageOptions) => Promise<OperationResponse>;
     update: (m: LocalMessage, o?: UpdateMessageOptions) => Promise<OperationResponse>;
   };
 

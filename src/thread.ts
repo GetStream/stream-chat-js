@@ -1,15 +1,15 @@
 import { StateStore } from './store';
-import { formatMessage } from './utils';
+import { formatMessage, localMessageToNewMessagePayload } from './utils';
 import type {
   AscDesc,
   DraftResponse,
   EventAPIResponse,
-  EventTypes,
+  EventType,
   LocalMessage,
-  MarkReadOptions,
+  MarkReadRequest,
   MessageResponse,
-  ReadResponse,
-  ThreadResponse,
+  ReadStateResponse,
+  ThreadStateResponse,
   UserResponse,
 } from './types';
 import type {
@@ -24,6 +24,7 @@ import { MessageComposer } from './messageComposer';
 import { MessageOperations } from './messageOperations';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import { MessagePaginator } from './pagination';
+import type { PipelineEvent } from './EventHandlerPipeline';
 
 export type ThreadState = {
   /**
@@ -42,7 +43,7 @@ export type ThreadState = {
    * We use parent message id as a thread id.
    */
   parentMessage: LocalMessage;
-  participants: ThreadResponse['thread_participants'];
+  participants: ThreadStateResponse['thread_participants'];
   read: ThreadReadState;
   replyCount: number;
   title: string;
@@ -62,48 +63,10 @@ export type ThreadReadState = Record<string, ThreadUserReadState | undefined>;
 const DEFAULT_PAGE_LIMIT = 50;
 const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
 const DEFAULT_ITEM_ORDER: { created_at: AscDesc } = { created_at: 1 };
-// TODO: remove this once we move to API v2
-export const THREAD_RESPONSE_RESERVED_KEYS: Record<keyof ThreadResponse, true> = {
-  active_participant_count: true,
-  channel: true,
-  channel_cid: true,
-  created_at: true,
-  created_by: true,
-  created_by_user_id: true,
-  deleted_at: true,
-  draft: true,
-  last_message_at: true,
-  latest_replies: true,
-  parent_message: true,
-  parent_message_id: true,
-  participant_count: true,
-  read: true,
-  reply_count: true,
-  thread_participants: true,
-  title: true,
-  updated_at: true,
-};
-
-// TODO: remove this once we move to API v2
-const constructCustomDataObject = <T extends ThreadResponse>(threadData: T) => {
-  const custom: CustomThreadData = {};
-
-  for (const key in threadData) {
-    if (THREAD_RESPONSE_RESERVED_KEYS[key as keyof ThreadResponse]) {
-      continue;
-    }
-
-    const customKey = key as keyof CustomThreadData;
-
-    custom[customKey] = threadData[customKey];
-  }
-
-  return custom;
-};
 
 export type CustomThreadMarkReadRequestFn = (params: {
   thread: Thread;
-  options?: MarkReadOptions;
+  options?: MarkReadRequest;
 }) => Promise<EventAPIResponse | null> | void;
 
 export type ThreadInstanceConfig = {
@@ -131,13 +94,19 @@ export class Thread extends WithSubscriptions {
     draft,
   }: {
     client: StreamChat;
-    threadData?: ThreadResponse;
+    threadData?: ThreadStateResponse;
     channel?: Channel;
     parentMessage?: MessageResponse | LocalMessage;
     draft?: DraftResponse;
   }) {
     super();
     if (threadData) {
+      if (!threadData.channel) {
+        throw new Error('Thread channel is required when threadData is provided');
+      }
+      if (!threadData.parent_message) {
+        throw new Error('Thread parent_message is required when threadData is provided');
+      }
       const threadChannel = client.channel(
         threadData.channel.type,
         threadData.channel.id,
@@ -176,7 +145,7 @@ export class Thread extends WithSubscriptions {
         replyCount: threadData.parent_message.reply_count ?? 0,
         updatedAt: threadData.updated_at ? new Date(threadData.updated_at) : null,
         title: threadData.title,
-        custom: constructCustomDataObject(threadData),
+        custom: threadData.custom ?? {},
       });
 
       this.id = threadData.parent_message_id;
@@ -201,7 +170,7 @@ export class Thread extends WithSubscriptions {
         channel,
         createdAt,
         custom: {},
-        deletedAt: formattedParentMessage.deleted_at,
+        deletedAt: formattedParentMessage.deleted_at ?? null,
         isLoading: false,
         isStateStale: false,
         parentMessage: formattedParentMessage,
@@ -300,15 +269,19 @@ export class Thread extends WithSubscriptions {
       },
       defaults: {
         delete: async (id, o) => {
-          const result = await this.channel.getClient().deleteMessage(id, o);
+          const result = await this.channel.getClient().deleteMessage({ id, ...o });
           return { message: result.message };
         },
         send: async (m, o) => {
-          const result = await this.channel.sendMessage(m, o);
+          const result = await this.channel.sendMessage({ message: m, ...o });
           return { message: result.message };
         },
         update: async (m, o) => {
-          const result = await this.channel.getClient().updateMessage(m, undefined, o);
+          const result = await this.channel.getClient().updateMessage({
+            id: m.id,
+            message: localMessageToNewMessagePayload(m),
+            ...o,
+          });
           return { message: result.message };
         },
       },
@@ -345,7 +318,7 @@ export class Thread extends WithSubscriptions {
     try {
       const loadedReplyCount =
         this.messagePaginator.state.getLatestValue().items?.length ?? 0;
-      const thread = await this.client.getThread(this.id, {
+      const thread = await this.client.getThreadAndHydrate(this.id, {
         watch: true,
         reply_limit: loadedReplyCount || this.messagePaginator.pageSize,
       });
@@ -436,8 +409,7 @@ export class Thread extends WithSubscriptions {
         title: threadData.title,
         updatedAt: new Date(threadData.updated_at),
         deletedAt: threadData.deleted_at ? new Date(threadData.deleted_at) : null,
-        // TODO: use threadData.custom once we move to API v2
-        custom: constructCustomDataObject(threadData),
+        custom: threadData.custom ?? {},
       });
     }).unsubscribe;
 
@@ -464,7 +436,7 @@ export class Thread extends WithSubscriptions {
     );
 
   private subscribeMarkThreadStale = () =>
-    this.client.on('user.watching.stop', (event) => {
+    this.client.on('user.watching.stop', (event: PipelineEvent) => {
       const { channel } = this.state.getLatestValue();
 
       if (
@@ -516,7 +488,7 @@ export class Thread extends WithSubscriptions {
 
       this.upsertReplyLocally({
         message: event.message,
-        // Message from current user could have been added optimistically,
+        // MessageRequest from current user could have been added optimistically,
         // so the actual timestamp might differ in the event
         timestampChanged: isOwnMessage,
       });
@@ -621,8 +593,8 @@ export class Thread extends WithSubscriptions {
     }).unsubscribe;
 
   private subscribeMessageUpdated = () => {
-    const messageUpdateTypes: EventTypes[] = ['message.updated', 'message.undeleted'];
-    const reactionTypes: EventTypes[] = [
+    const messageUpdateTypes: EventType[] = ['message.updated', 'message.undeleted'];
+    const reactionTypes: EventType[] = [
       'reaction.new',
       'reaction.deleted',
       'reaction.updated',
@@ -630,7 +602,7 @@ export class Thread extends WithSubscriptions {
 
     const unsubscribeMessageUpdated = messageUpdateTypes.map(
       (eventType) =>
-        this.client.on(eventType, (event) => {
+        this.client.on(eventType, (event: PipelineEvent) => {
           if (!event.message) return;
           // A `message.updated` WS event carries `own_reactions: []`; upserting it verbatim would
           // wipe the current user's reactions on a reply edit. The reply paginator is this thread's
@@ -652,7 +624,7 @@ export class Thread extends WithSubscriptions {
 
     const unsubscribeReactions = reactionTypes.map(
       (eventType) =>
-        this.client.on(eventType, (event) => {
+        this.client.on(eventType, (event: PipelineEvent) => {
           if (!event.message || !event.reaction) return;
           const { message, reaction } = event;
           if (message.parent_id === this.id) {
@@ -680,11 +652,11 @@ export class Thread extends WithSubscriptions {
     // Apply a user ban / deletion to this thread's own reply list. Previously
     // channel.state.deleteUserMessages marked banned-user replies deleted in the (now removed)
     // channel.state.threads shadow; the reply paginator is the thread's source of truth now.
-    const eventTypes: EventTypes[] = ['user.messages.deleted', 'user.deleted'];
+    const eventTypes: EventType[] = ['user.messages.deleted', 'user.deleted'];
 
     const unsubscribeFunctions = eventTypes.map(
       (eventType) =>
-        this.client.on(eventType, (event) => {
+        this.client.on(eventType, (event: PipelineEvent) => {
           if (!event.user) return;
           // user.deleted carries the deletion time on the user; user.messages.deleted on the event.
           const deletedAtSource =
@@ -729,7 +701,7 @@ export class Thread extends WithSubscriptions {
     const formattedMessage = formatMessage(message);
 
     // todo: do we really need to keep the failedRepliesMap?
-    if (message.status === 'failed') {
+    if (formattedMessage.status === 'failed') {
       // store failed reply so that it's not lost when reloading or hydrating
       this.failedRepliesMap.set(formattedMessage.id, formattedMessage);
     } else if (this.failedRepliesMap.has(message.id)) {
@@ -743,7 +715,7 @@ export class Thread extends WithSubscriptions {
   // todo: can be removed with the next breaking change and use MessagePaginator only
   public updateParentMessageLocally = ({ message }: { message: MessageResponse }) => {
     if (message.id !== this.id) {
-      throw new Error('Message does not belong to this thread');
+      throw new Error('MessageRequest does not belong to this thread');
     }
 
     this.state.next((current) => {
@@ -751,7 +723,7 @@ export class Thread extends WithSubscriptions {
 
       return {
         ...current,
-        deletedAt: formattedMessage.deleted_at,
+        deletedAt: formattedMessage.deleted_at ?? null,
         parentMessage: formattedMessage,
         participants:
           normalizeThreadParticipants(message.thread_participants, current.channel.cid) ??
@@ -856,28 +828,29 @@ export class Thread extends WithSubscriptions {
 type MessageThreadParticipant = NonNullable<
   MessageResponse['thread_participants']
 >[number];
-type ThreadParticipant = NonNullable<ThreadResponse['thread_participants']>[number];
+type ThreadParticipant = NonNullable<ThreadStateResponse['thread_participants']>[number];
 
 const normalizeThreadParticipants = (
   participants: MessageResponse['thread_participants'] | undefined,
   channelCid: string,
-): ThreadResponse['thread_participants'] | undefined => {
+): ThreadStateResponse['thread_participants'] | undefined => {
   if (!participants) return undefined;
 
-  const nowIso = new Date().toISOString();
+  const now = new Date();
 
   return participants.map(
-    (participant: MessageThreadParticipant): ThreadParticipant => ({
-      channel_cid: channelCid,
-      created_at: nowIso,
-      last_read_at: nowIso,
-      user: participant,
-      user_id: participant.id,
-    }),
+    (participant: MessageThreadParticipant) =>
+      ({
+        channel_cid: channelCid,
+        created_at: now,
+        last_read_at: now,
+        user: participant as UserResponse,
+        user_id: participant.id,
+      }) as ThreadParticipant,
   );
 };
 
-const formatReadState = (read: ReadResponse[]): ThreadReadState =>
+const formatReadState = (read: ReadStateResponse[]): ThreadReadState =>
   read.reduce<ThreadReadState>((state, userRead) => {
     state[userRead.user.id] = {
       user: userRead.user,
@@ -888,13 +861,13 @@ const formatReadState = (read: ReadResponse[]): ThreadReadState =>
     return state;
   }, {});
 
-const getPlaceholderReadResponse = (currentUserId?: string): ReadResponse[] =>
+const getPlaceholderReadResponse = (currentUserId?: string): ReadStateResponse[] =>
   currentUserId
     ? [
         {
-          user: { id: currentUserId },
+          user: { id: currentUserId } as UserResponse,
           unread_messages: 0,
-          last_read: new Date().toISOString(),
+          last_read: new Date(),
         },
       ]
     : [];

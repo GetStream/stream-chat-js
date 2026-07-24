@@ -86,7 +86,7 @@ export class PinnedMessagePaginator extends MessageIntervalPaginator {
     ): Promise<{ cursor?: PaginatorCursor; items: LocalMessage[] }> => {
       const { messages } = await this.channel.getPinnedMessages(
         options as PinnedMessagePaginationOptions,
-        [{ pinned_at: 1 }],
+        [{ direction: 1, field: 'pinned_at' }],
       );
       const items = messages.map(formatMessage);
       return { cursor: this.getCursorFromQueryResults({ items }), items };

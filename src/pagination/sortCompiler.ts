@@ -6,7 +6,7 @@ import {
   normalizeComparedValues,
 } from './utility.normalization';
 import { normalizeQuerySort } from '../utils';
-import type { AscDesc } from '../types';
+import type { AscDesc, SortParamRequest } from '../types';
 import type { Comparator, PathResolver } from './types.normalization';
 
 export type ItemLocation = {
@@ -130,7 +130,7 @@ export function binarySearch<T>({
  */
 export function makeComparator<
   T,
-  S extends Record<string, AscDesc> | Record<string, AscDesc>[],
+  S extends Record<string, AscDesc> | Record<string, AscDesc>[] | SortParamRequest[],
 >({
   sort,
   resolvePathValue = defaultResolvePathValue,

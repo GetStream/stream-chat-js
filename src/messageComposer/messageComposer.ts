@@ -13,21 +13,22 @@ import {
 } from './middleware';
 import type { Unsubscribe } from '../store';
 import { StateStore } from '../store';
-import { formatMessage, generateUUIDv4, isLocalMessage, unformatMessage } from '../utils';
+import { formatMessage, generateUUIDv4, isLocalMessage } from '../utils';
 import { mergeWith } from '../utils/mergeWith';
 import { Channel } from '../channel';
 import { Thread } from '../thread';
 import type {
-  ChannelAPIResponse,
-  CommandResponse,
+  Attachment,
+  ChannelStateResponseFields,
+  Command,
   DraftMessage,
   DraftResponse,
-  EventTypes,
+  EventType,
   LocalMessage,
-  LocalMessageBase,
   MessageResponse,
-  MessageResponseBase,
+  UserResponse,
 } from '../types';
+import { chatLoggerSystem } from '../logger';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { StreamChat } from '../client';
 import type { CommandSendability, MessageComposerConfig } from './configuration/types';
@@ -90,7 +91,7 @@ export type MessageComposerState = {
   id: string;
   draftId: string | null;
   pollId: string | null;
-  quotedMessage: LocalMessageBase | null;
+  quotedMessage: LocalMessage | null;
   showReplyInChannel: boolean;
   /**
    * Baseline snapshot of the message being edited (if any).
@@ -162,13 +163,14 @@ const initState = (
     draftId,
     id,
     pollId: message.poll_id ?? null,
-    quotedMessage: quotedMessage
-      ? formatMessage(quotedMessage as MessageResponseBase)
-      : null,
+    quotedMessage: quotedMessage ? formatMessage(quotedMessage) : null,
     showReplyInChannel: false,
     editedMessage,
   };
 };
+
+const logger = chatLoggerSystem.getLogger('message-composer');
+const offlineDbLogger = chatLoggerSystem.getLogger('offline-db');
 
 export class MessageComposer extends WithSubscriptions {
   readonly channel: Channel;
@@ -386,7 +388,7 @@ export class MessageComposer extends WithSubscriptions {
   }
 
   getCommandDisabledReason = (
-    command: CommandResponse,
+    command: Command,
   ): CommandSuggestionDisabledReason | undefined => {
     if (this.editedMessage) return 'editing';
 
@@ -400,11 +402,10 @@ export class MessageComposer extends WithSubscriptions {
     return undefined;
   };
 
-  isCommandDisabled = (command: CommandResponse) =>
-    !!this.getCommandDisabledReason(command);
+  isCommandDisabled = (command: Command) => !!this.getCommandDisabledReason(command);
 
   validateCommandSendability = (
-    command: CommandResponse,
+    command: Command,
     text = this.textComposer.text,
   ): CommandSendability => {
     const currentMentionedUsers = this.textComposer.mentionedUsers;
@@ -506,8 +507,8 @@ export class MessageComposer extends WithSubscriptions {
     this.state.next(initState(composition));
   };
 
-  initStateFromChannelResponse = (channelApiResponse: ChannelAPIResponse) => {
-    if (this.channel.cid !== channelApiResponse.channel.cid) {
+  initStateFromChannelResponse = (channelApiResponse: ChannelStateResponseFields) => {
+    if (this.channel.cid !== channelApiResponse.channel?.cid) {
       return;
     }
     if (channelApiResponse.draft) {
@@ -616,12 +617,12 @@ export class MessageComposer extends WithSubscriptions {
 
   private subscribeMessageUpdated = () => {
     // todo: test the impact of 'reaction.new', 'reaction.deleted', 'reaction.updated'
-    const eventTypes: EventTypes[] = [
+    const eventTypes = [
       'message.updated',
       'reaction.new',
       'reaction.deleted', // todo: do we need to subscribe to this especially when the whole state is overriden?
       'reaction.updated', // todo: do we need to subscribe to this especially when the whole state is overriden?
-    ];
+    ] satisfies EventType[];
 
     const unsubscribeFunctions = eventTypes.map(
       (eventType) =>
@@ -866,21 +867,21 @@ export class MessageComposer extends WithSubscriptions {
           type: 'regular',
         },
         localMessage: {
-          attachments: [],
+          attachments: [] as Attachment[],
           cid: this.channel.cid, // it is needed to match local paginator filters to be ingested into its state
           created_at, // only assigned to localMessage as this is used for optimistic update
-          deleted_at: null,
+          deleted_at: undefined,
           error: undefined,
           id: this.id,
-          mentioned_users: [],
+          mentioned_users: [] as UserResponse[],
           parent_id: this.threadId ?? undefined,
-          pinned_at: this.editedMessage?.pinned_at || null,
-          reaction_groups: null,
+          pinned_at: this.editedMessage?.pinned_at || undefined,
+          reaction_groups: undefined,
           status: this.editedMessage ? this.editedMessage.status : 'sending',
           text,
           type: 'regular',
           updated_at: created_at,
-        },
+        } as LocalMessage,
         sendOptions: {},
       },
     });
@@ -894,7 +895,12 @@ export class MessageComposer extends WithSubscriptions {
     const { state, status } = await this.draftCompositionMiddlewareExecutor.execute({
       eventName: 'compose',
       initialValue: {
-        draft: { id: this.id, parent_id: this.threadId ?? undefined, text: '' },
+        draft: {
+          id: this.id,
+          parent_id: this.threadId ?? undefined,
+          text: '',
+          custom: {},
+        },
       },
     });
     if (status === 'discard') return;
@@ -914,23 +920,20 @@ export class MessageComposer extends WithSubscriptions {
       try {
         const optimisticDraftResponse = {
           channel_cid: this.channel.cid,
-          created_at: new Date().toISOString(),
+          created_at: new Date(),
           message: draft as DraftMessage,
           parent_id: draft.parent_id,
-          quoted_message: this.quotedMessage
-            ? unformatMessage(this.quotedMessage)
-            : undefined,
+          quoted_message: this.quotedMessage ?? undefined,
         };
         await this.client.offlineDb.upsertDraft({ draft: optimisticDraftResponse });
       } catch (error) {
-        this.client.logger('error', `offlineDb:upsertDraft`, {
-          tags: ['channel', 'offlineDb'],
-          error,
-        });
+        offlineDbLogger
+          .withExtraTags('createDraft', this.channel.cid)
+          .error('Upserting the draft to the offline database failed.', { error });
       }
     }
     this.logDraftUpdateTimestamp();
-    await this.channel.createDraft(draft);
+    await this.channel.createDraft({ message: draft });
   };
 
   deleteDraft = async () => {
@@ -944,10 +947,9 @@ export class MessageComposer extends WithSubscriptions {
           parent_id: parentId,
         });
       } catch (error) {
-        this.client.logger('error', `offlineDb:deleteDraft`, {
-          tags: ['channel', 'offlineDb'],
-          error,
-        });
+        offlineDbLogger
+          .withExtraTags('deleteDraft', this.channel.cid)
+          .error('Deleting the draft from the offline database failed.', { error });
       }
     }
     this.logDraftUpdateTimestamp();
@@ -955,11 +957,11 @@ export class MessageComposer extends WithSubscriptions {
   };
 
   getDraft = async () => {
-    if (this.editedMessage || !this.config.drafts.enabled || !this.client.userID) return;
+    if (this.editedMessage || !this.config.drafts.enabled || !this.client.userId) return;
 
     const draftFromOfflineDB = await this.client.offlineDb?.getDraft({
       cid: this.channel.cid,
-      userId: this.client.userID,
+      userId: this.client.userId,
       parent_id: this.threadId ?? undefined,
     });
 
@@ -986,10 +988,9 @@ export class MessageComposer extends WithSubscriptions {
 
       this.initState({ composition: draft });
     } catch (error) {
-      this.client.logger('error', `messageComposer:getDraft`, {
-        tags: ['channel', 'messageComposer'],
-        error,
-      });
+      logger
+        .withExtraTags('getDraft', this.channel.cid)
+        .error('Retrieving the draft from the server failed.', { error });
     }
   };
 

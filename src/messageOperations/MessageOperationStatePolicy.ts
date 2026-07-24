@@ -1,9 +1,4 @@
-import type {
-  APIErrorResponse,
-  ErrorFromResponse,
-  LocalMessage,
-  MessageResponse,
-} from '../types';
+import type { StreamAPIError, LocalMessage, MessageResponse } from '../types';
 import { formatMessage } from '../utils';
 
 export type MessageOperationStatePolicyContext = {
@@ -11,17 +6,12 @@ export type MessageOperationStatePolicyContext = {
   get: (id: string) => LocalMessage | undefined;
 };
 
-const parseError = (error: unknown): ErrorFromResponse<APIErrorResponse> => {
+const parseError = (error: unknown): StreamAPIError => {
   const stringError = JSON.stringify(error);
-  return (
-    stringError ? JSON.parse(stringError) : {}
-  ) as ErrorFromResponse<APIErrorResponse>;
+  return (stringError ? JSON.parse(stringError) : {}) as StreamAPIError;
 };
 
-const isAlreadyExistsError = (
-  error: unknown,
-  parsed: ErrorFromResponse<APIErrorResponse>,
-) =>
+const isAlreadyExistsError = (error: unknown, parsed: StreamAPIError) =>
   parsed.code === 4 && error instanceof Error && error.message.includes('already exists');
 
 export class MessageOperationStatePolicy {

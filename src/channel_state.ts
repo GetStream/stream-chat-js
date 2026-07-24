@@ -4,7 +4,6 @@ import type {
   Event,
   LocalMessage,
   MessageResponse,
-  MessageResponseBase,
   PendingMessageResponse,
   UserResponse,
 } from './types';
@@ -85,7 +84,7 @@ export class ChannelState {
     this.syncMemberCountFromChannelData(channel?.data);
     this.syncOwnCapabilitiesFromChannelData(channel?.data);
     this.pending_messages = [];
-    this.membership = {};
+    this.membership = {} as ChannelMemberResponse;
     this.unreadCount = 0;
   }
 
@@ -239,7 +238,7 @@ export class ChannelState {
    *
    * @param {MessageResponse} message `MessageResponse` object
    */
-  formatMessage = (message: MessageResponse | MessageResponseBase | LocalMessage) =>
+  formatMessage = (message: MessageResponse | MessageResponse | LocalMessage) =>
     formatMessage(message);
 
   /**

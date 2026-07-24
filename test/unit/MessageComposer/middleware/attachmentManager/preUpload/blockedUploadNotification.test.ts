@@ -12,6 +12,7 @@ import { getClientWithUser } from '../../../../test-utils/getClient';
 
 vi.mock('../../../../../src/utils', () => ({
   generateUUIDv4: vi.fn().mockReturnValue('test-uuid'),
+  getEnv: vi.fn(),
 }));
 
 const setupHandlerParams = (initialState: AttachmentPreUploadMiddlewareState) => {

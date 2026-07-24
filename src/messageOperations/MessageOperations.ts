@@ -1,5 +1,5 @@
 // todo: add tests
-import type { Message, UpdateMessageOptions } from '../types';
+import type { MessageRequest, UpdateMessageOptions } from '../types';
 import { formatMessage, localMessageToNewMessagePayload } from '../utils';
 import { MessageOperationStatePolicy } from './MessageOperationStatePolicy';
 import type {
@@ -13,7 +13,7 @@ const FAILED_SEND_CACHE_MAX_SIZE = 100;
 const FAILED_SEND_CACHE_TTL_MS = 5 * 60 * 1000;
 
 type FailedSendCacheEntry = {
-  message: Message;
+  message: MessageRequest;
   options?: OperationParams<'send'>['options'];
   cachedAt: number;
 };
@@ -28,7 +28,7 @@ export class MessageOperations {
     this.policy = new MessageOperationStatePolicy({ ingest: ctx.ingest, get: ctx.get });
   }
 
-  private normalizeMessage(message: Message): Message {
+  private normalizeMessage(message: MessageRequest): MessageRequest {
     return this.ctx.normalizeOutgoingMessage
       ? this.ctx.normalizeOutgoingMessage(message)
       : message;
@@ -46,7 +46,7 @@ export class MessageOperations {
 
   private cacheFailedSend(params: {
     messageId: string;
-    message: Message;
+    message: MessageRequest;
     options?: OperationParams<'send'>['options'];
   }) {
     this.pruneExpiredFailedSendCache();

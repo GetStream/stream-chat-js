@@ -8,10 +8,9 @@ import type { StreamChat } from '../client';
 import type {
   CreateReminderOptions,
   Event,
-  EventTypes,
+  EventPayload,
   LocalMessage,
   MessageResponse,
-  ReminderResponse,
 } from '../types';
 
 const oneMinute = 60 * 1000;
@@ -38,14 +37,9 @@ const isReminderDoesNotExistError = (error: Error) =>
 
 type MessageId = string;
 
-export type ReminderEvent = {
-  cid: string;
-  created_at: string;
-  message_id: MessageId;
-  reminder: ReminderResponse;
-  type: EventTypes;
-  user_id: string;
-};
+export type ReminderEvent = EventPayload<
+  `reminder.${string}` | 'notification.reminder_due'
+>;
 
 export type ReminderManagerState = {
   reminders: Map<MessageId, Reminder>;
@@ -167,6 +161,7 @@ export class ReminderManager extends WithSubscriptions {
 
   // WS event handling START //
   static isReminderWsEventPayload = (event: Event): event is ReminderEvent =>
+    'reminder' in event &&
     !!event.reminder &&
     (event.type.startsWith('reminder.') || event.type === 'notification.reminder_due');
 
@@ -186,14 +181,17 @@ export class ReminderManager extends WithSubscriptions {
     this.client.on('reminder.created', (event) => {
       if (!ReminderManager.isReminderWsEventPayload(event)) return;
       const { reminder } = event;
-      this.upsertToState({ data: reminder });
+      // TODO: OAPI discrepancy?
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      this.upsertToState({ data: reminder! });
     }).unsubscribe;
 
   private subscribeReminderUpdated = () =>
     this.client.on('reminder.updated', (event) => {
       if (!ReminderManager.isReminderWsEventPayload(event)) return;
       const { reminder } = event;
-      this.upsertToState({ data: reminder });
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      this.upsertToState({ data: reminder! });
     }).unsubscribe;
 
   private subscribeReminderDeleted = () =>
@@ -249,8 +247,8 @@ export class ReminderManager extends WithSubscriptions {
 
   // API calls START //
   upsertReminder = async (options: CreateReminderOptions) => {
-    const { messageId } = options;
-    if (this.getFromState(messageId)) {
+    const { message_id } = options;
+    if (this.getFromState(message_id)) {
       try {
         return await this.updateReminder(options);
       } catch (error) {
@@ -272,17 +270,17 @@ export class ReminderManager extends WithSubscriptions {
   };
 
   createReminder = async (options: CreateReminderOptions) => {
-    const { reminder } = await this.client.createReminder(options);
-    return this.upsertToState({ data: reminder, overwrite: false });
+    const response = await this.client.createReminder(options);
+    return this.upsertToState({ data: response, overwrite: false });
   };
 
   updateReminder = async (options: CreateReminderOptions) => {
-    const { reminder } = await this.client.updateReminder(options);
-    return this.upsertToState({ data: reminder });
+    const response = await this.client.updateReminder(options);
+    return this.upsertToState({ data: response.reminder });
   };
 
   deleteReminder = async (messageId: MessageId) => {
-    await this.client.deleteReminder(messageId);
+    await this.client.deleteReminder({ message_id: messageId });
     this.removeFromState(messageId);
   };
 

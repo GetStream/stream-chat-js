@@ -6,6 +6,9 @@ on:
     # Monday at 9:00 UTC
     - cron: '0 9 * * 1'
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest

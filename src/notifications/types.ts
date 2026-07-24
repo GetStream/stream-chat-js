@@ -33,7 +33,7 @@ export type Notification = {
   origin: NotificationOrigin;
   /** Array of action buttons for the notification */
   actions?: NotificationAction[];
-  /** The severity level of the notification. Defaults to undefined unless explicitly provided. */
+  /** The severity level of the notification (defaults to `undefined` unless explicitly provided). */
   severity?: NotificationSeverity;
   /**
    * Optional code that can be used to group the notifications of the same type, e.g. attachment-upload-blocked.
@@ -55,9 +55,9 @@ export type Notification = {
    *   'validation:attachment:size:exceeded'    // File size too large
    *   'validation:attachment:count:exceeded'   // Too many attachments
    *
-   *   Message related errors
-   *   'api:message:send:failed'          // Message send failed
-   *   'validation:message:content:empty' // Message content validation failed
+   *   MessageRequest related errors
+   *   'api:message:send:failed'          // MessageRequest send failed
+   *   'validation:message:content:empty' // MessageRequest content validation failed
    *
    *   Channel related errors
    *   'api:channel:join:failed'          // Channel join failed
@@ -104,11 +104,12 @@ export type NotificationOptions = Partial<
 };
 
 /**
- * State shape for the notification store
- * @deprcated use NotificationManagerState
+ * State shape for the notification store.
+ *
+ * @deprecated Use {@link NotificationManagerState} instead.
  */
 export type NotificationState = {
-  /** Array of current notification objects */
+  /** Array of current notification objects. */
   notifications: Notification[];
 };
 

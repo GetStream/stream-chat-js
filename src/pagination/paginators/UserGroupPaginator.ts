@@ -5,7 +5,7 @@ import type {
   PaginatorOptions,
   PaginatorState,
 } from './BasePaginator';
-import type { QueryUserGroupsOptions, UserGroupResponse } from '../../types';
+import type { ListUserGroupsOptions, UserGroupResponse } from '../../types';
 import type { StreamChat } from '../../client';
 import { ItemIndex } from '../ItemIndex';
 
@@ -38,14 +38,14 @@ const decodeCursor = <TCursor extends object>(cursor: string | null | undefined)
  */
 export class UserGroupPaginator extends BasePaginator<
   UserGroupResponse,
-  QueryUserGroupsOptions
+  ListUserGroupsOptions
 > {
   private client: StreamChat;
   protected _teamId: string | undefined;
 
   constructor(
     client: StreamChat,
-    options?: PaginatorOptions<UserGroupResponse, QueryUserGroupsOptions>,
+    options?: PaginatorOptions<UserGroupResponse, ListUserGroupsOptions>,
   ) {
     super({
       initialCursor: { ...ZERO_PAGE_CURSOR, headward: null },
@@ -85,7 +85,7 @@ export class UserGroupPaginator extends BasePaginator<
     if (!lastItem) return undefined;
 
     return JSON.stringify({
-      created_at_gt: lastItem.created_at,
+      created_at_gt: lastItem.created_at.toISOString(),
       id_gt: lastItem.id,
     } satisfies UserGroupListCursor);
   };
@@ -93,7 +93,7 @@ export class UserGroupPaginator extends BasePaginator<
   // The query shape must stay stable across pages: the paginator resets its
   // accumulated list when the query shape changes ('auto' reset policy), so the
   // forward cursor is NOT part of the shape — it is applied per request in `query`.
-  protected getNextQueryShape(): QueryUserGroupsOptions {
+  protected getNextQueryShape(): ListUserGroupsOptions {
     return {
       limit: this.pageSize,
       ...(this.teamId ? { team_id: this.teamId } : {}),
@@ -103,7 +103,7 @@ export class UserGroupPaginator extends BasePaginator<
   query = async ({
     direction,
     queryShape,
-  }: PaginationQueryParams<QueryUserGroupsOptions>): Promise<
+  }: PaginationQueryParams<ListUserGroupsOptions>): Promise<
     PaginationQueryReturnValue<UserGroupResponse>
   > => {
     if (direction === 'headward') {
@@ -111,13 +111,13 @@ export class UserGroupPaginator extends BasePaginator<
     }
 
     const cursor = decodeCursor<UserGroupListCursor>(this.cursor?.tailward);
-    const options: QueryUserGroupsOptions = {
+    const options: ListUserGroupsOptions = {
       ...(queryShape ?? this.getNextQueryShape()),
       ...(cursor?.id_gt ? { id_gt: cursor.id_gt } : {}),
       ...(cursor?.created_at_gt ? { created_at_gt: cursor.created_at_gt } : {}),
     };
 
-    const { user_groups: items } = await this.client.queryUserGroups(options);
+    const { user_groups: items } = await this.client.listUserGroups(options);
     return { items, tailward: this.buildNextCursor(items) };
   };
 

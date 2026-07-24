@@ -28,8 +28,9 @@ import {
   sleep,
 } from '../../src/utils';
 
-import type { ChannelFilters, ChannelSortBase, MessageResponse } from '../../src';
+import type { ChannelFilters, ChannelOwnCapability, ChannelSort } from '../../src';
 import { StreamChat, Channel } from '../../src';
+import { chatLoggerSystem } from '../../src/logger';
 
 describe('findIndexInSortedArray', () => {
   it('finds index in the middle of haystack (asc)', () => {
@@ -224,10 +225,9 @@ describe('getAndWatchChannel', () => {
       ...Array.from({ length: 2 }, () => generateChannel()),
       generateChannel({ channel: { type: 'messaging' }, members: mockedMembers }),
     ];
-    const mock = sandbox.mock(client);
-    mock
-      .expects('post')
-      .returns(Promise.resolve({ channels: mockedChannelsQueryResponse }));
+    sandbox
+      .stub(client, 'queryChannels')
+      .resolves({ channels: mockedChannelsQueryResponse });
   });
 
   afterEach(() => {
@@ -235,14 +235,14 @@ describe('getAndWatchChannel', () => {
   });
 
   it('should throw an error if neither channel nor type is provided', async () => {
-    await client.queryChannels({});
+    await client.queryChannelsAndHydrate({});
     await expect(
       getAndWatchChannel({ client, id: 'test-id', members: [] }),
     ).rejects.toThrow('Channel or channel type have to be provided to query a channel.');
   });
 
   it('should throw an error if neither channel ID nor members array is provided', async () => {
-    await client.queryChannels({});
+    await client.queryChannelsAndHydrate({});
     await expect(
       getAndWatchChannel({ client, type: 'test-type', id: undefined, members: [] }),
     ).rejects.toThrow(
@@ -251,7 +251,7 @@ describe('getAndWatchChannel', () => {
   });
 
   it('should return an existing channel if provided', async () => {
-    const channels = await client.queryChannels({});
+    const channels = await client.queryChannelsAndHydrate({});
     const channel = channels[0];
     const watchStub = sandbox.stub(channel, 'watch');
     const result = await getAndWatchChannel({
@@ -266,7 +266,7 @@ describe('getAndWatchChannel', () => {
   });
 
   it('should return the channel if only type and id are provided', async () => {
-    const channels = await client.queryChannels({});
+    const channels = await client.queryChannelsAndHydrate({});
     const channel = channels[0];
     const { id, type } = channel;
     const watchStub = sandbox.stub(channel, 'watch');
@@ -286,7 +286,7 @@ describe('getAndWatchChannel', () => {
   });
 
   it('should return the channel if only type and members are provided', async () => {
-    const channels = await client.queryChannels({});
+    const channels = await client.queryChannelsAndHydrate({});
     const channel = channels[2];
     const { type } = channel;
     const members = Object.keys(channel.state.members);
@@ -299,14 +299,17 @@ describe('getAndWatchChannel', () => {
       options: {},
     });
     expect(channelSpy.calledOnce).to.be.true;
-    // @ts-ignore
-    expect(channelSpy.calledWith(type, undefined, { members })).to.be.true;
+    expect(
+      channelSpy.calledWith(type, undefined, {
+        members: members.map((userId) => ({ user_id: userId })),
+      }),
+    ).to.be.true;
     expect(watchStub.calledOnce).to.be.true;
     expect(result).to.equal(channel);
   });
 
   it('should not call watch again if a query is already in progress', async () => {
-    const channels = await client.queryChannels({});
+    const channels = await client.queryChannelsAndHydrate({});
     const channel = channels[0];
     const { id, type, cid } = channel;
     // @ts-ignore
@@ -404,21 +407,17 @@ describe('Channel pinning and archiving utils', () => {
       });
 
       it('should extract correct sort value from an array', () => {
-        const sort = [{ pinned_at: -1 }, { created_at: 1 }] as unknown as ChannelSortBase;
+        const sort: ChannelSort = [
+          { field: 'pinned_at', direction: -1 },
+          { field: 'created_at', direction: 1 },
+        ];
         expect(extractSortValue({ atIndex: 0, targetKey: 'pinned_at', sort })).to.equal(
           -1,
         );
       });
 
-      it('should extract correct sort value from an object', () => {
-        const sort = { pinned_at: 1 } as unknown as ChannelSortBase;
-        expect(extractSortValue({ atIndex: 0, targetKey: 'pinned_at', sort })).to.equal(
-          1,
-        );
-      });
-
       it('should return null if key does not match targetKey', () => {
-        const sort = { created_at: 1 } as unknown as ChannelSortBase;
+        const sort: ChannelSort = [{ field: 'created_at', direction: 1 }];
         expect(extractSortValue({ atIndex: 0, targetKey: 'pinned_at', sort })).to.be.null;
       });
     });
@@ -429,18 +428,21 @@ describe('Channel pinning and archiving utils', () => {
       });
 
       it('should return false if pinned_at is not a number', () => {
-        const sort = [{ pinned_at: 'invalid' }];
+        const sort = [{ field: 'pinned_at', direction: 'invalid' }];
         expect(shouldConsiderPinnedChannels(sort as any)).to.be.false;
       });
 
       it('should return false if pinned_at is not first in sort', () => {
-        const sort = [{ created_at: 1 }, { pinned_at: 1 }] as unknown as ChannelSortBase;
+        const sort: ChannelSort = [
+          { field: 'created_at', direction: 1 },
+          { field: 'pinned_at', direction: 1 },
+        ];
         expect(shouldConsiderPinnedChannels(sort)).to.be.false;
       });
 
       it('should return true if pinned_at is 1 or -1 at index 0', () => {
-        const sort1 = [{ pinned_at: 1 }] as unknown as ChannelSortBase;
-        const sort2 = [{ pinned_at: -1 }] as unknown as ChannelSortBase;
+        const sort1: ChannelSort = [{ field: 'pinned_at', direction: 1 }];
+        const sort2: ChannelSort = [{ field: 'pinned_at', direction: -1 }];
         expect(shouldConsiderPinnedChannels(sort1)).to.be.true;
         expect(shouldConsiderPinnedChannels(sort2)).to.be.true;
       });
@@ -448,22 +450,17 @@ describe('Channel pinning and archiving utils', () => {
 
     describe('findPinnedAtSortOrder', () => {
       it('should return null if sort is undefined', () => {
-        expect(findPinnedAtSortOrder({ sort: null as unknown as ChannelSortBase })).to.be
+        expect(findPinnedAtSortOrder({ sort: null as unknown as ChannelSort })).to.be
           .null;
       });
 
       it('should return null if pinned_at is not present', () => {
-        const sort = [{ created_at: 1 }] as unknown as ChannelSortBase;
+        const sort: ChannelSort = [{ field: 'created_at', direction: 1 }];
         expect(findPinnedAtSortOrder({ sort })).to.be.null;
       });
 
-      it('should return pinned_at if found in an object', () => {
-        const sort = { pinned_at: -1 } as unknown as ChannelSortBase;
-        expect(findPinnedAtSortOrder({ sort })).to.equal(-1);
-      });
-
       it('should return pinned_at if found in an array', () => {
-        const sort = [{ pinned_at: 1 }] as unknown as ChannelSortBase;
+        const sort: ChannelSort = [{ field: 'pinned_at', direction: 1 }];
         expect(findPinnedAtSortOrder({ sort })).to.equal(1);
       });
     });
@@ -571,7 +568,7 @@ describe('promoteChannel', () => {
     const result = promoteChannel({
       channels,
       channelToMove: channels[0],
-      sort: {},
+      sort: [],
     });
 
     expect(result).to.deep.equal(channels);
@@ -592,7 +589,7 @@ describe('promoteChannel', () => {
     const result = promoteChannel({
       channels,
       channelToMove,
-      sort: [{ pinned_at: 1 }],
+      sort: [{ field: 'pinned_at', direction: 1 }],
     });
 
     expect(result).to.deep.equal(channels);
@@ -614,7 +611,7 @@ describe('promoteChannel', () => {
     const result = promoteChannel({
       channels,
       channelToMove,
-      sort: {},
+      sort: [],
     });
 
     expect(result.map((c) => c.id)).to.deep.equal(['channel3', 'channel1', 'channel2']);
@@ -636,7 +633,7 @@ describe('promoteChannel', () => {
     const result = promoteChannel({
       channels,
       channelToMove,
-      sort: {},
+      sort: [],
       channelToMoveIndexWithinChannels: 2,
     });
 
@@ -660,7 +657,7 @@ describe('promoteChannel', () => {
     const result = promoteChannel({
       channels,
       channelToMove,
-      sort: {},
+      sort: [],
     });
 
     expect(result.map((c) => c.id)).to.deep.equal([
@@ -688,7 +685,7 @@ describe('promoteChannel', () => {
     const result = promoteChannel({
       channels,
       channelToMove,
-      sort: {},
+      sort: [],
       channelToMoveIndexWithinChannels: -1,
     });
 
@@ -723,7 +720,7 @@ describe('promoteChannel', () => {
     const result = promoteChannel({
       channels,
       channelToMove,
-      sort: [{ pinned_at: -1 }],
+      sort: [{ field: 'pinned_at', direction: -1 }],
     });
 
     expect(result.map((c) => c.id)).to.deep.equal([
@@ -757,7 +754,7 @@ describe('promoteChannel', () => {
     const result = promoteChannel({
       channels,
       channelToMove,
-      sort: {},
+      sort: [],
     });
 
     expect(result.map((c) => c.id)).to.deep.equal([
@@ -956,15 +953,22 @@ describe('runDetached', () => {
   it('calls default onError when no onErrorCallback is provided', async () => {
     const error = new Error('oops');
     const callback = Promise.reject(error);
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const sinkSpy = vi.fn();
+    chatLoggerSystem.configureLoggers({
+      default: { sink: sinkSpy, level: 'trace' },
+    });
 
     runDetached(callback, { context: 'MyContext' });
 
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining('An error has occurred in context MyContext'),
+    expect(sinkSpy).toHaveBeenCalledWith(
+      'error',
+      expect.stringContaining('An error occurred in context "MyContext"'),
+      expect.objectContaining({ error }),
     );
+
+    chatLoggerSystem.restoreDefaults();
   });
 
   it('does not fail if onSuccessCallback is missing', async () => {
@@ -1036,10 +1040,9 @@ describe('sleep', () => {
 });
 
 describe('channelHasReadEvents', () => {
-  const makeChannel = (own_capabilities?: string[]) => {
+  const makeChannel = (own_capabilities?: ChannelOwnCapability[]) => {
     const client = new StreamChat('apiKey');
     client.user = { id: 'user' };
-    client.userID = 'user';
     const channel = client.channel('messaging', 'cap-id');
     channel.data = { own_capabilities };
     return channel;
@@ -1068,11 +1071,10 @@ describe('channelTracksReadLocally', () => {
     own_capabilities,
   }: {
     isLocalUnreadCountEnabled?: boolean;
-    own_capabilities?: string[];
+    own_capabilities?: ChannelOwnCapability[];
   }) => {
     const client = new StreamChat('apiKey', { isLocalUnreadCountEnabled });
     client.user = { id: 'user' };
-    client.userID = 'user';
     const channel = client.channel('messaging', 'cap-id');
     channel.data = { own_capabilities };
     return { client, channel };

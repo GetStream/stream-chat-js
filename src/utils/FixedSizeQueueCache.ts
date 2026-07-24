@@ -2,6 +2,7 @@ type Dispose<K, T> = (key: K, value: T) => void;
 /**
  * A cache that stores a fixed number of values in a queue.
  * The most recently added or retrieved value is kept at the front of the queue.
+ *
  * @template K - The type of the keys.
  * @template T - The type of the values.
  */
@@ -20,9 +21,10 @@ export class FixedSizeQueueCache<K, T> {
   }
 
   /**
-   * Adds a new or moves the existing reference to the front of the queue
-   * @param key
-   * @param value
+   * Adds a new entry or moves the existing reference to the front of the queue.
+   *
+   * @param key - The cache key.
+   * @param value - The value to associate with `key`.
    */
   add(key: K, value: T) {
     const index = this.keys.indexOf(key);
@@ -48,8 +50,10 @@ export class FixedSizeQueueCache<K, T> {
   }
 
   /**
-   * Retrieves the value by key.
-   * @param key
+   * Retrieves the value by key without changing its position in the queue.
+   *
+   * @param key - The cache key.
+   * @returns The value, or `undefined` when the key is not cached.
    */
   peek(key: K) {
     const value = this.map.get(key);
@@ -59,7 +63,9 @@ export class FixedSizeQueueCache<K, T> {
 
   /**
    * Retrieves the value and moves it to the front of the queue.
-   * @param key
+   *
+   * @param key - The cache key.
+   * @returns The value, or `undefined` when the key is not cached.
    */
   get(key: K) {
     const foundItem = this.peek(key);

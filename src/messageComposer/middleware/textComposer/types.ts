@@ -1,6 +1,6 @@
 import type { MessageComposer } from '../../messageComposer';
 import type { MessageComposerEffect } from '../../messageComposer';
-import type { CommandResponse, Event, UserResponse } from '../../../types';
+import type { Command, Event, UserResponse } from '../../../types';
 import type { TokenizationPayload } from './textMiddlewareUtils';
 import type { SearchSource, SearchSourceSync } from '../../../search';
 import type { CustomTextComposerSuggestion } from '../../types.custom';
@@ -15,7 +15,7 @@ export type BaseSuggestion = {
 
 export type CommandSuggestionDisabledReason = 'editing' | 'quoted_message';
 
-export type CommandSuggestion = BaseSuggestion & CommandResponse;
+export type CommandSuggestion = BaseSuggestion & Command;
 export type UserSuggestion = BaseSuggestion &
   UserResponse &
   TokenizationPayload & {
@@ -90,7 +90,7 @@ export type TextComposerCommandActivationStateToRestore =
   Partial<TextComposerStateSnapshot>;
 
 export type TextComposerCommandActivationEffect = {
-  command: CommandResponse;
+  command: Command;
   stateToRestore?: TextComposerCommandActivationStateToRestore;
   type: 'command.activate';
 };
@@ -131,6 +131,6 @@ export type TextComposerState<T extends Suggestion = Suggestion> = {
    * Maps `user.id` -> latest typing event (`typing.start`/`typing.stop`) for that user.
    */
   typing: Record<string, Event>;
-  command?: CommandResponse | null;
+  command?: Command | null;
   suggestions?: Suggestions<T>;
 };
