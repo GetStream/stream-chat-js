@@ -963,6 +963,7 @@ export class MessageIntervalPaginator extends BasePaginator<
    */
   applyReactionLocally = ({
     enforceUnique = false,
+    fanOut = true,
     messageId,
     reaction,
     removed = false,
@@ -970,6 +971,7 @@ export class MessageIntervalPaginator extends BasePaginator<
     messageId: string;
     reaction: Reaction;
     enforceUnique?: boolean;
+    fanOut?: boolean;
     removed?: boolean;
   }): (() => void) | undefined => {
     const client = this.channel.getClient();
@@ -1020,9 +1022,24 @@ export class MessageIntervalPaginator extends BasePaginator<
       );
     }
 
+    let undoSibling: (() => void) | undefined;
+    if (fanOut && existing.parent_id && existing.show_in_channel) {
+      const sibling = this.parentMessageId
+        ? this.channel.messagePaginator
+        : client.threads.threadsById[existing.parent_id]?.messagePaginator;
+      undoSibling = sibling?.applyReactionLocally({
+        enforceUnique,
+        fanOut: false,
+        messageId,
+        reaction,
+        removed,
+      });
+    }
+
     return () => {
       if (!removed) {
         this.applyReactionLocally({
+          fanOut: false,
           messageId,
           reaction: reactionResponse,
           removed: true,
@@ -1030,11 +1047,13 @@ export class MessageIntervalPaginator extends BasePaginator<
       }
       for (const removedReaction of removedReactions) {
         this.applyReactionLocally({
+          fanOut: false,
           messageId,
           reaction: removedReaction,
           removed: false,
         });
       }
+      undoSibling?.();
     };
   };
 
