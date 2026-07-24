@@ -320,7 +320,7 @@ export type PaginatorOptions<T, Q> = {
    * Function containing custom logic that decides, whether the next pagination query to be executed should be considered the first page query.
    * It makes sense to consider the next query as the first page query if filters, sort, options etc. (query params) excluding the page size have changed.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   hasPaginationQueryShapeChanged?: PaginationQueryShapeChangeIdentifier<any>;
   /**
    * Optional hook to fully control cursor + hasMore logic in 'derived' mode.
@@ -371,7 +371,6 @@ const baseHasPaginationQueryShapeChanged: PaginationQueryShapeChangeIdentifier<
   unknown
 > = (prevQueryShape, nextQueryShape) => !isEqual(prevQueryShape, nextQueryShape);
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const DEFAULT_PAGINATION_OPTIONS: BasePaginatorConfig<any, any> = {
   debounceMs: 300,
   lockItemOrder: false,
@@ -769,7 +768,6 @@ export abstract class BasePaginator<T, Q> {
    * Subclasses must return the query shape.
    */
   protected getNextQueryShape({
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     direction,
   }: Pick<PaginationQueryParams<Q>, 'direction'> = {}): Q {
     throw new Error('Paginator.getNextQueryShape() is not implemented');
@@ -820,6 +818,7 @@ export abstract class BasePaginator<T, Q> {
 
   /**
    * Applied by the effectiveComparator to take into consideration item boosts when sorting items.
+   *
    * @param a
    * @param b
    */
@@ -848,6 +847,7 @@ export abstract class BasePaginator<T, Q> {
   /**
    * Increases the item's importance when sorting.
    * Boost affects position inside an item interval (if used), but should not redefine interval boundaries.
+   *
    * @param itemId
    * @param opts
    */
@@ -884,7 +884,6 @@ export abstract class BasePaginator<T, Q> {
   // Interval manipulation
   // ---------------------------------------------------------------------------
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   generateIntervalId(page: (T | string)[]): string {
     return `interval-${generateUUIDv4()}`;
   }
@@ -1315,6 +1314,7 @@ export abstract class BasePaginator<T, Q> {
   /**
    * Locates the current position of the item and the index at which the item should be inserted
    * according to effectiveComparator.
+   *
    * @param item
    */
   protected locateItemInState(item: T): ItemLocation | null {
@@ -2024,14 +2024,13 @@ export abstract class BasePaginator<T, Q> {
     return state;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   isJumpQueryShape(queryShape: Q): boolean {
     return false;
   }
 
   protected getStateAfterQuery(
     stateUpdate: Partial<PaginatorState<T>>,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
     isFirstPage: boolean,
   ): PaginatorState<T> {
     const current = this.state.getLatestValue();
@@ -2045,11 +2044,9 @@ export abstract class BasePaginator<T, Q> {
   }
 
   preloadFirstPageFromOfflineDb = (
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     params: PaginationQueryParams<Q>,
   ): Promise<T[] | undefined> | T[] | undefined => undefined;
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   populateOfflineDbAfterQuery = (params: {
     items: T[] | undefined;
     queryShape: Q | undefined;
@@ -2086,6 +2083,7 @@ export abstract class BasePaginator<T, Q> {
 
   /**
    * Falsy return value means query was not successful.
+   *
    * @param direction
    * @param keepPreviousItems
    * @param forcedQueryShape

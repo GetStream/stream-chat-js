@@ -4,13 +4,13 @@ import type {
   ChannelFilters,
   ChannelGetOrCreateRequest,
   ChannelSort,
+  ChannelStateResponse,
   LocalMessage,
   MessageRequest,
   MessageResponse,
   OwnUserBase,
   OwnUserResponse,
   PromoteChannelParams,
-  ChannelStateResponse,
   ReactionGroupResponse,
   SortParamRequest,
   UpdatedMessage,
@@ -20,14 +20,16 @@ import type { StreamChat } from './client';
 import type { Channel } from './channel';
 import type { AxiosRequestConfig } from 'axios';
 import { LOCAL_MESSAGE_FIELDS, RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
+import { chatLoggerSystem } from './logger';
+
+const logger = chatLoggerSystem.getLogger('utils');
 
 /**
  * logChatPromiseExecution - utility function for logging the execution of a promise..
  *  use this when you want to run the promise and handle errors by logging a warning
  *
- * @param {Promise<T>} promise The promise you want to run and log
- * @param {string} name    A descriptive name of what the promise does for log output
- *
+ * @param promise - The promise you want to run and log
+ * @param name    - A descriptive name of what the promise does for log output
  */
 export function logChatPromiseExecution<T>(promise: Promise<T>, name: string) {
   promise.then().catch((error) => {
@@ -179,7 +181,7 @@ export function normalizeQuerySort<T extends Record<string, AscDesc | undefined>
 /**
  * retryInterval - A retry interval which increases acc to number of failures
  *
- * @return {number} Duration to wait in milliseconds
+ * @returns Duration to wait in milliseconds
  */
 export function retryInterval(numberOfFailures: number) {
   // try to reconnect in 0.25-25 seconds (random to spread out the load from failures)
@@ -326,7 +328,7 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
  * Takes the message object, parses the dates, sets `__html`
  * and sets the status to `received` if missing; returns a new LocalMessage object.
  *
- * @param {LocalMessage} message `LocalMessage` object
+ * @param message - `LocalMessage` object
  */
 export function formatMessage(message: MessageResponse | LocalMessage): LocalMessage {
   const toLocalMessageBase = (
@@ -350,8 +352,9 @@ export function formatMessage(message: MessageResponse | LocalMessage): LocalMes
 
   return {
     ...toLocalMessageBase(message),
-    error: (message as LocalMessage).error ?? null,
-    quoted_message: toLocalMessageBase((message as MessageResponse).quoted_message),
+    error: (message as LocalMessage).error ?? undefined,
+    quoted_message:
+      toLocalMessageBase((message as MessageResponse).quoted_message) ?? undefined,
   } as LocalMessage;
 }
 
@@ -382,7 +385,6 @@ export function unformatMessage(message: LocalMessage): MessageResponse {
 export const localMessageToNewMessagePayload = (
   localMessage: LocalMessage,
 ): MessageRequest => {
-  /* eslint-disable @typescript-eslint/no-unused-vars */
   const {
     // Remove all timestamp fields and client-specific fields.
     // Field pinned_at can therefore be earlier than created_at as new message payload can hold it.
@@ -598,7 +600,6 @@ function maybeGetReactionGroupsFallback(
   return undefined;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface DebouncedFunc<T extends (...args: any[]) => any> {
   /**
    * Call the original function, but applying the debounce rules.
@@ -627,7 +628,7 @@ export interface DebouncedFunc<T extends (...args: any[]) => any> {
 }
 
 // works exactly the same as lodash.debounce
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 export const debounce = <T extends (...args: any[]) => any>(
   fn: T,
   timeout = 0,
@@ -675,7 +676,7 @@ export const debounce = <T extends (...args: any[]) => any>(
 };
 
 // works exactly the same as lodash.throttle
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 export const throttle = <T extends (...args: any[]) => any>(
   fn: T,
   timeout = 200,
@@ -757,6 +758,7 @@ type GetChannelParams = {
 /**
  * Calls channel.watch() if it was not already recently called. Waits for watch promise to resolve even if it was invoked previously.
  * If the channel is not passed as a property, it will get it either by its channel.cid or by its members list and do the same.
+ *
  * @param client
  * @param members
  * @param options
@@ -777,7 +779,7 @@ export const getAndWatchChannel = async ({
   }
 
   // unfortunately typescript is not able to infer that if (!channel && !type) === false, then channel or type has to be truthy
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+
   const channelToWatch =
     channel ||
     // `members` are member IDs; the OpenAPI `ChannelData.members` expects member objects.
@@ -816,6 +818,7 @@ export const getAndWatchChannel = async ({
  * Generates a temporary channel.cid for channels created without ID, as they need to be referenced
  * by an identifier until the back-end generates the final ID. The cid is generated by its member IDs
  * which are sorted and can be recreated the same every time given the same arguments.
+ *
  * @param channelType
  * @param members
  */
@@ -828,6 +831,7 @@ export const generateChannelTempCid = (channelType: string, members: string[]) =
 
 /**
  * Checks if a channel is pinned or not. Will return true only if channel.state.membership.pinned_at exists.
+ *
  * @param channel
  */
 export const isChannelPinned = (channel: Channel) => {
@@ -840,6 +844,7 @@ export const isChannelPinned = (channel: Channel) => {
 
 /**
  * Checks if a channel is archived or not. Will return true only if channel.state.membership.archived_at exists.
+ *
  * @param channel
  */
 export const isChannelArchived = (channel: Channel) => {
@@ -853,6 +858,7 @@ export const isChannelArchived = (channel: Channel) => {
 /**
  * A utility that tells us whether we should consider archived channels or not based
  * on filters. Will return true only if filters.archived exists and is a boolean value.
+ *
  * @param filters
  */
 export const shouldConsiderArchivedChannels = (filters: ChannelFilters | undefined) => {
@@ -865,6 +871,7 @@ export const shouldConsiderArchivedChannels = (filters: ChannelFilters | undefin
  * Extracts the value of the sort parameter at a given index, for a targeted key. Can
  * handle both array and object versions of sort. Will return null if the index/key
  * combination does not exist.
+ *
  * @param atIndex - the index at which we'll examine the sort value, if it's an array one
  * @param sort - the sort value - both array and object notations are accepted
  * @param targetKey - the target key which needs to exist for the sort at a certain index
@@ -900,6 +907,7 @@ export const shouldConsiderPinnedChannels = (sort: ChannelSort) => {
 /**
  * Checks whether the sort value of type object contains a pinned_at value or if
  * an array sort value type has the first value be an object containing pinned_at.
+ *
  * @param sort
  */
 export const findPinnedAtSortOrder = ({ sort }: { sort: ChannelSort }) =>
@@ -913,6 +921,7 @@ export const findPinnedAtSortOrder = ({ sort }: { sort: ChannelSort }) =>
  * Finds the index of the last consecutively pinned channel, starting from the start of the
  * array. Will not consider any pinned channels after the contiguous subsequence at the
  * start of the array.
+ *
  * @param channels
  */
 export const findLastPinnedChannelIndex = ({ channels }: { channels: Channel[] }) => {
@@ -935,6 +944,7 @@ export const findLastPinnedChannelIndex = ({ channels }: { channels: Channel[] }
  * A utility used to move a channel towards the beginning of a list of channels (promote it to a higher position). It
  * considers pinned channels in the process if needed and makes sure to only update the list reference if the list
  * should actually change. It will try to move the channel as high as it can within the list.
+ *
  * @param channels - the list of channels we want to modify
  * @param channelToMove - the channel we want to promote
  * @param channelToMoveIndexWithinChannels - optionally, the index of the channel we want to move if we know it (will skip a manual check)
@@ -1003,7 +1013,9 @@ export const runDetached = <T>(
 ) => {
   const { context, onSuccessCallback, onErrorCallback } = options ?? {};
   const defaultOnError = (error: Error) => {
-    console.log(`An error has occurred in context ${context}: ${error}`);
+    logger
+      .withExtraTags('runDetached')
+      .error(`An error occurred in context "${context}".`, { error });
   };
   const onError = onErrorCallback ?? defaultOnError;
 

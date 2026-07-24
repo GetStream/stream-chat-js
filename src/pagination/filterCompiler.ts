@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   arraysEqualAsSets,
   asArray,
@@ -120,6 +119,7 @@ export function itemMatchesFilter<T>(
  * $gt/$gte/$lt/$lte remain scalar-only (return false if either side is iterable), as you wanted.
  *
  * $in/$nin left may be scalar or iterable; the right is a list.
+ *
  * @param a
  * @param b
  * @param ok

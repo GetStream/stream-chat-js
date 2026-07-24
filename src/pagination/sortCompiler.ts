@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 import {
   compare,
   resolveDotPathValue as defaultResolvePathValue,
@@ -124,6 +122,7 @@ export function binarySearch<T>({
  * (but they can still move relative to others — sort in JS is not guaranteed stable in older engines, though modern V8/Node/Chrome/Firefox make it stable)
  *
  * Positive number (> 0) → a comes after b
+ *
  * @param sort
  * @param resolvePathValue
  * @param tiebreaker

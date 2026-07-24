@@ -473,14 +473,16 @@ describe('Threads 2.0', () => {
 
       describe('reload', () => {
         it('sizes getThread reply_limit to the loaded reply count, falling back to pageSize when unloaded', async () => {
-          const stub = sinon.stub(client, 'getThread').resolves(createTestThread());
+          const stub = sinon.stub(client, 'getThread').resolves({
+            thread: generateThreadResponse(channelResponse, parentMessageResponse),
+          });
 
           // Unloaded (minimal) thread → falls back to pageSize.
           const minimalThread = createMinimalThread();
           expect(minimalThread.messagePaginator.state.getLatestValue().items).to.be
             .undefined;
           await minimalThread.reload();
-          expect(stub.firstCall.args[1]?.reply_limit).to.equal(
+          expect(stub.firstCall.args[0]?.reply_limit).to.equal(
             minimalThread.messagePaginator.pageSize,
           );
 
@@ -495,7 +497,7 @@ describe('Threads 2.0', () => {
             reply_count: 20,
           });
           await loadedThread.reload();
-          expect(stub.secondCall.args[1]?.reply_limit).to.equal(7);
+          expect(stub.secondCall.args[0]?.reply_limit).to.equal(7);
           expect(loadedThread.messagePaginator.pageSize).to.not.equal(7);
         });
       });
@@ -594,7 +596,7 @@ describe('Threads 2.0', () => {
           expect(repliesOf(thread).map((reply) => reply.id)).to.include(older.id);
           // ...and the request was made against this thread's parent (the replies endpoint).
           expect(getRepliesStub.calledOnce).to.be.true;
-          expect(getRepliesStub.firstCall.args[0]).to.equal(thread.id);
+          expect(getRepliesStub.firstCall.args[0].parent_id).to.equal(thread.id);
         });
 
         it('clears hasMoreTail once toTail() reaches the start of the reply list', async () => {

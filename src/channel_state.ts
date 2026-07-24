@@ -236,7 +236,7 @@ export class ChannelState {
    * Takes the message object, parses the dates, sets `__html`
    * and sets the status to `received` if missing; returns a new message object.
    *
-   * @param {MessageResponse} message `MessageResponse` object
+   * @param message - `MessageResponse` object
    */
   formatMessage = (message: MessageResponse | MessageResponse | LocalMessage) =>
     formatMessage(message);

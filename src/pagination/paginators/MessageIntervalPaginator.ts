@@ -890,14 +890,14 @@ export class MessageIntervalPaginator extends BasePaginator<
    * behavior where `_updateMessage` only mutated a message that existed locally.
    *
    * @param params
-   * @param {MessageResponse | LocalMessage} params.message The reaction event's message, carrying the
+   * @param params.message - The reaction event's message, carrying the
    *   server-computed `reaction_groups` / `latest_reactions`. Ingested as-is except for `own_reactions`.
-   * @param {ReactionResponse} params.reaction The reaction from the event. Only added to/removed from
+   * @param params.reaction - The reaction from the event. Only added to/removed from
    *   `own_reactions` when its `user_id` is the current user; otherwise the current user's
    *   `own_reactions` are left untouched.
-   * @param {boolean} [params.removed=false] `true` for `reaction.deleted` (remove the reaction from
+   * @param [params.removed=false] - `true` for `reaction.deleted` (remove the reaction from
    *   `own_reactions`); `false` for `reaction.new` / `reaction.updated` (add it).
-   * @param {boolean} [params.enforceUnique=false] When adding, first clear the current user's existing
+   * @param [params.enforceUnique=false] - When adding, first clear the current user's existing
    *   `own_reactions` so only the incoming one remains (used by `reaction.updated`, where a user's
    *   reaction replaces their previous one).
    */

@@ -15,13 +15,11 @@ import { isWSFailure } from './errors';
 import { ApiClient } from './api-client';
 import {
   axiosParamsSerializer,
-  chatCodes,
   formatMessage,
   generateChannelTempCid,
   getEnv,
   isOnline,
   isOwnUserBaseProperty,
-  normalizeQuerySort,
   randomId,
 } from './utils';
 

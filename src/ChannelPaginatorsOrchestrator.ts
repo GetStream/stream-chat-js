@@ -453,6 +453,7 @@ export class ChannelPaginatorsOrchestrator extends WithSubscriptions {
    * If paginator already exists → remove old, reinsert at new index.
    * If index not provided → append at the end.
    * If index provided → insert (or move) at that index.
+   *
    * @param paginator
    * @param index
    */

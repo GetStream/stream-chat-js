@@ -24,6 +24,7 @@ type GetChannelParams = {
  * Watches a channel, coalescing concurrent invocations for the same CID.
  * If a watch is already in flight, this call waits for it to settle instead of
  * issuing another network request.
+ *
  * @param client
  * @param members
  * @param options
@@ -44,7 +45,7 @@ export const getChannel = async ({
   }
 
   // unfortunately typescript is not able to infer that if (!channel && !type) === false, then channel or type has to be truthy
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+
   const theChannel =
     channel ||
     // `members` are member IDs; the OpenAPI `ChannelData.members` expects member objects.

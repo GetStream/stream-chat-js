@@ -56,12 +56,11 @@ export type ChannelPaginatorOptions = {
 
 const getQueryShapeRelevantChannelOptions = (options: ChannelOptions) => {
   const {
-    /* eslint-disable @typescript-eslint/no-unused-vars */
     limit: _,
     member_limit: __,
     message_limit: ___,
     offset: ____,
-    /* eslint-enable @typescript-eslint/no-unused-vars */
+
     ...relevantShape
   } = options;
   return relevantShape;

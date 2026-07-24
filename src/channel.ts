@@ -12,7 +12,6 @@ import {
   generateChannelTempCid,
   localMessageToNewMessagePayload,
   logChatPromiseExecution,
-  normalizeQuerySort,
 } from './utils';
 import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
@@ -26,11 +25,11 @@ import type {
   ChannelMemberResponse,
   ChannelResponse,
   ChannelStateResponseFields,
+  ChannelUpdateOptions,
   CreateDraftResponse,
-  DeleteChannelResponse,
   DeleteMessageOptions,
-  DraftMessagePayload,
   Event,
+  EventAPIResponse,
   EventHandler,
   EventPayload,
   EventType,
@@ -39,6 +38,7 @@ import type {
   LocalMessage,
   MarkReadRequest,
   MarkUnreadRequest,
+  MessagePaginationOptions,
   MessageRequest,
   MessageResponse,
   MessageSetType,
@@ -48,21 +48,15 @@ import type {
   ReactionAPIResponse,
   ReactionResponse,
   SearchPayload,
+  SendMessageOptions,
   SharedLocation,
   UnBanUserOptions,
-  UpdateChannelAPIResponse,
-  ChannelUpdateOptions,
   UpdateChannelPartialRequest,
   UpdateLiveLocationRequest,
-  LiveLocationPayload,
   UpdateMessageOptions,
   UserResponse,
-  EventAPIResponse,
-  MessagePaginationOptions,
-  SendMessageOptions,
 } from './types';
 import type { RoleName } from './permissions';
-import type { CustomChannelData } from './custom_types';
 import { StateStore } from './store';
 import type {
   ChannelMemberRequest as Gen_ChannelMemberRequest,
@@ -740,10 +734,10 @@ export class Channel extends ChannelApi {
   /**
    * addMembers - add members to the channel
    *
-   * @param {string[] | Array<Gen_ChannelMemberRequest>} members An array of members to add to the channel
-   * @param {MessageRequest} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
+   * @param members - An array of members to add to the channel
+   * @param [message] - Optional message object for channel members notification
+   * @param [options] - Option object, configuration to control the behavior while updating
+   * @returns The server response
    */
   async addMembers(
     members: string[] | Array<Gen_ChannelMemberRequest>,
@@ -762,10 +756,10 @@ export class Channel extends ChannelApi {
   /**
    * addFilterTags - add filter tags to the channel
    *
-   * @param {string[]} tags An array of tags to add to the channel
-   * @param {MessageRequest} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
+   * @param tags - An array of tags to add to the channel
+   * @param [message] - Optional message object for channel members notification
+   * @param [options] - Option object, configuration to control the behavior while updating
+   * @returns The server response
    */
   async addFilterTags(
     tags: string[],
@@ -778,10 +772,10 @@ export class Channel extends ChannelApi {
   /**
    * removeFilterTags - remove filter tags from the channel
    *
-   * @param {string[]} tags An array of tags to remove from the channel
-   * @param {MessageRequest} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
+   * @param tags - An array of tags to remove from the channel
+   * @param [message] - Optional message object for channel members notification
+   * @param [options] - Option object, configuration to control the behavior while updating
+   * @returns The server response
    */
   async removeFilterTags(
     tags: string[],
@@ -794,10 +788,10 @@ export class Channel extends ChannelApi {
   /**
    * addModerators - add moderators to the channel
    *
-   * @param {string[]} members An array of member identifiers
-   * @param {MessageRequest} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
+   * @param members - An array of member identifiers
+   * @param [message] - Optional message object for channel members notification
+   * @param [options] - Option object, configuration to control the behavior while updating
+   * @returns The server response
    */
   async addModerators(
     members: string[],
@@ -810,10 +804,10 @@ export class Channel extends ChannelApi {
   /**
    * assignRoles - sets member roles in a channel
    *
-   * @param {{channel_role: RoleName, user_id: string}[]} roles List of role assignments
-   * @param {MessageRequest} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
+   * @param roles - List of role assignments
+   * @param [message] - Optional message object for channel members notification
+   * @param [options] - Option object, configuration to control the behavior while updating
+   * @returns The server response
    */
   async assignRoles(
     roles: { channel_role: RoleName; user_id: string }[],
@@ -826,10 +820,10 @@ export class Channel extends ChannelApi {
   /**
    * inviteMembers - invite members to the channel
    *
-   * @param {string[] | Array<Gen_ChannelMemberRequest>} members An array of members to invite to the channel
-   * @param {MessageRequest} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
+   * @param members - An array of members to invite to the channel
+   * @param [message] - Optional message object for channel members notification
+   * @param [options] - Option object, configuration to control the behavior while updating
+   * @returns The server response
    */
   async inviteMembers(
     members: string[] | Required<Omit<Gen_ChannelMemberRequest, 'channel_role'>>[],
@@ -848,10 +842,10 @@ export class Channel extends ChannelApi {
   /**
    * removeMembers - remove members from channel
    *
-   * @param {string[]} members An array of member identifiers
-   * @param {MessageRequest} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
+   * @param members - An array of member identifiers
+   * @param [message] - Optional message object for channel members notification
+   * @param [options] - Option object, configuration to control the behavior while updating
+   * @returns The server response
    */
   async removeMembers(
     members: string[],
@@ -864,10 +858,10 @@ export class Channel extends ChannelApi {
   /**
    * demoteModerators - remove moderator role from channel members
    *
-   * @param {string[]} members An array of member identifiers
-   * @param {MessageRequest} [message] Optional message object for channel members notification
-   * @param {ChannelUpdateOptions} [options] Option object, configuration to control the behavior while updating
-   * @return {Promise<UpdateChannelAPIResponse>} The server response
+   * @param members - An array of member identifiers
+   * @param [message] - Optional message object for channel members notification
+   * @param [options] - Option object, configuration to control the behavior while updating
+   * @returns The server response
    */
   async demoteModerators(
     members: string[],
@@ -879,15 +873,15 @@ export class Channel extends ChannelApi {
 
   /**
    * mute - mutes the current channel
-   * @param {{ user_id?: string, expiration?: string }} opts expiration in minutes or user_id
-   * @return {Promise<MuteChannelResponse>} The server response
+   *
+   * @param opts - expiration in minutes or user_id
+   * @returns The server response
    *
    * example with expiration:
    * await channel.mute({expiration: moment.duration(2, 'weeks')});
    *
    * example server side:
    * await channel.mute({user_id: userId});
-   *
    */
   async mute(options?: Gen_MuteChannelRequest) {
     return await this.getClient().muteChannel({
@@ -898,8 +892,9 @@ export class Channel extends ChannelApi {
 
   /**
    * unmute - mutes the current channel
-   * @param {{ user_id?: string}} opts user_id
-   * @return {Promise<APIResponse>} The server response
+   *
+   * @param opts - user_id
+   * @returns The server response
    *
    * example server side:
    * await channel.unmute({user_id: userId});
@@ -913,15 +908,15 @@ export class Channel extends ChannelApi {
 
   /**
    * archive - archives the current channel
-   * @param {{ user_id?: string }} opts user_id if called server side
-   * @return {Promise<ChannelMemberResponse>} The server response
+   *
+   * @param opts - user_id if called server side
+   * @returns The server response
    *
    * example:
    * await channel.archives();
    *
    * example server side:
    * await channel.archive({user_id: userId});
-   *
    */
   async archive() {
     return await this.updateMemberPartial({ set: { archived: true } });
@@ -929,8 +924,9 @@ export class Channel extends ChannelApi {
 
   /**
    * unarchive - unarchives the current channel
-   * @param {{ user_id?: string }} opts user_id if called server side
-   * @return {Promise<ChannelMemberResponse>} The server response
+   *
+   * @param opts - user_id if called server side
+   * @returns The server response
    *
    * example:
    * await channel.unarchive();
@@ -1728,8 +1724,8 @@ export class Channel extends ChannelApi {
    * or
    * channel.on(event => {console.log(event.type)})
    *
-   * @param {EventHandler | EventType} callbackOrString  The event type to listen for (optional)
-   * @param {EventHandler} [callbackOrNothing] The callback to call
+   * @param {EventHandler | EventType} callbackOrString  - The event type to listen for (optional)
+   * @param {EventHandler} [callbackOrNothing] - The callback to call
    */
   on<T extends EventType | string>(
     eventType: T,

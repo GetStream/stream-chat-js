@@ -1,4 +1,4 @@
-import type { StreamAPIError, LocalMessage, MessageResponse } from '../types';
+import type { LocalMessage, MessageResponse, StreamAPIError } from '../types';
 import { formatMessage } from '../utils';
 
 export type MessageOperationStatePolicyContext = {

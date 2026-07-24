@@ -249,11 +249,12 @@ describe('MessagePaginator', () => {
 
       const result = await paginator.query({});
 
-      expect(channel.getReplies).toHaveBeenCalledWith(
-        'parent-1',
-        { id_gt: 'from-cursor', limit: 30 },
-        [{ created_at: 1 }],
-      );
+      expect(channel.getReplies).toHaveBeenCalledWith({
+        parent_id: 'parent-1',
+        id_gt: 'from-cursor',
+        limit: 30,
+        sort: [{ field: 'created_at', direction: 1 }],
+      });
       expect(channel.query).not.toHaveBeenCalled();
       expect(result.tailward).toBe('first-reply');
       expect(result.headward).toBe('last-reply');
@@ -282,11 +283,12 @@ describe('MessagePaginator', () => {
 
       const result = await paginator.query({});
 
-      expect(channel.getReplies).toHaveBeenCalledWith(
-        'parent-1',
-        { id_gt: 'from-cursor', limit: 30 },
-        [{ created_at: -1 }],
-      );
+      expect(channel.getReplies).toHaveBeenCalledWith({
+        parent_id: 'parent-1',
+        id_gt: 'from-cursor',
+        limit: 30,
+        sort: [{ field: 'created_at', direction: -1 }],
+      });
       expect(result.items.map((message) => message.id)).toEqual([
         'oldest-reply',
         'middle-reply',
@@ -1071,7 +1073,7 @@ describe('MessagePaginator', () => {
       expect(paginator.getItem(quoteCarrier.id)?.quoted_message?.text).toBe(
         'after update',
       );
-      expect(paginator.getItem(nonCarrier.id)?.quoted_message).toBeNull();
+      expect(paginator.getItem(nonCarrier.id)?.quoted_message).toBeUndefined();
     });
   });
 

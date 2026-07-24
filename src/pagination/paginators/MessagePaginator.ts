@@ -43,7 +43,7 @@ export type MessagePaginatorAggregateState = {
    *
    * Lives here, NOT derived from pagination `state`, so it stays reactive when a WS message lands in
    * the head interval while an older window is active — the pagination store only emits when the
-   * *active* interval is impacted (see `BasePaginator.ingestItem`), so a `state`-derived latest would
+   * active* interval is impacted (see `BasePaginator.ingestItem`), so a `state`-derived latest would
    * go stale in that case.
    */
   lastMessage: LocalMessage | null;
