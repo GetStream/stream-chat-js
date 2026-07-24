@@ -249,6 +249,27 @@ export type PaginatorState<T> = {
   offset?: number;
 };
 
+/**
+ * Reactive projections of specific (fixed-identity) intervals, published independently of the
+ * paginated `state` (which tracks only the *active* interval). See {@link BasePaginator.intervalViews}.
+ * A field is rewritten only when its own interval changes, so a `useStateStore`/`subscribeWithSelector`
+ * consumer selecting one field only wakes when *that* interval changes. (The head-most window that can
+ * be either a logical or an anchored interval is a derived *role*, not a fixed interval, so it is not
+ * published here — read it one-shot via {@link BasePaginator.headItems} / {@link BasePaginator.headmostItem}.)
+ */
+export type PaginatorIntervalViews<T> = {
+  /** Live logical-head interval — out-of-order items above the loaded window. */
+  logicalHead: T[];
+  /** Live logical-tail interval — out-of-order items below the loaded window. */
+  logicalTail: T[];
+  /**
+   * Anchored head interval — the loaded page bounded at the dataset head (`isHead`), i.e. the newest
+   * loaded page; empty when the head is not loaded. Its content updates when that page ingests/removes
+   * an item, and its identity updates when a page's `isHead` flag flips during query reconciliation.
+   */
+  anchoredHead: T[];
+};
+
 // todo: think whether plugins are necessary. Maybe we could just document how to add
 
 export type PaginatorItemsChangeProcessor<T> = (params: {
@@ -361,6 +382,15 @@ export const DEFAULT_PAGINATION_OPTIONS: BasePaginatorConfig<any, any> = {
 
 export abstract class BasePaginator<T, Q> {
   state: StateStore<PaginatorState<T>>;
+  /**
+   * Reactive projections of specific intervals — see {@link PaginatorIntervalViews}. Unlike `state`
+   * (which only re-emits when the *active* interval is impacted), a field here is rewritten whenever
+   * its own interval changes, regardless of which interval is active — so consumers can reactively
+   * render off-window "sideloaded" content (`logicalHead`/`logicalTail`) and the newest loaded page
+   * (`anchoredHead`). Kept separate from `state` so the paginated-list contract stays focused on the
+   * active window + pagination status.
+   */
+  intervalViews: StateStore<PaginatorIntervalViews<T>>;
   config: BasePaginatorConfig<T, Q>;
 
   /**
@@ -443,6 +473,11 @@ export abstract class BasePaginator<T, Q> {
       ...this.initialState,
       cursor: initialCursor,
       offset: initialOffset ?? 0,
+    });
+    this.intervalViews = new StateStore<PaginatorIntervalViews<T>>({
+      logicalHead: [],
+      logicalTail: [],
+      anchoredHead: [],
     });
     this.setDebounceOptions({ debounceMs });
     this.sortComparator = noOrderChange;
@@ -604,6 +639,120 @@ export abstract class BasePaginator<T, Q> {
   protected get liveTailLogical(): LogicalInterval | undefined {
     const itv = this._itemIntervals.get(LOGICAL_TAIL_INTERVAL_ID);
     return itv && isLiveTailInterval(itv) ? itv : undefined;
+  }
+
+  /**
+   * The current contents of the live logical-head interval (items ingested out of pagination order).
+   * Reads the same value published to {@link BasePaginator.intervalViews}.`logicalHead`.
+   */
+  get logicalHeadItems(): T[] {
+    return this.intervalViews.getLatestValue().logicalHead;
+  }
+
+  /**
+   * The current contents of the live logical-tail interval (out-of-order items below the loaded
+   * window). Reads the same value published to {@link BasePaginator.intervalViews}.`logicalTail`.
+   */
+  get logicalTailItems(): T[] {
+    return this.intervalViews.getLatestValue().logicalTail;
+  }
+
+  /**
+   * The current contents of the anchored head interval (the loaded page bounded at the dataset head,
+   * `isHead`). Reads the same value published to {@link BasePaginator.intervalViews}.`anchoredHead`.
+   */
+  get anchoredHeadItems(): T[] {
+    return this.intervalViews.getLatestValue().anchoredHead;
+  }
+
+  /**
+   * Commit an interval into storage. Single choke point for adding/updating an interval, so it also
+   * republishes the matching {@link intervalViews} field when the committed interval is a tracked one
+   * (logical head / logical tail / anchored head). Use this instead of writing `_itemIntervals`
+   * directly — bulk re-sorting (which does not change any interval's membership) goes through
+   * {@link setIntervals}.
+   */
+  protected commitInterval(interval: AnyInterval) {
+    this._itemIntervals.set(interval.id, interval);
+    this.publishIntervalViewFor(interval);
+  }
+
+  /** Drop an interval from storage, republishing the matching {@link intervalViews} field if tracked. */
+  protected dropInterval(id: string) {
+    const removed = this._itemIntervals.get(id);
+    this._itemIntervals.delete(id);
+    if (removed) this.publishIntervalViewFor(removed, { removed: true });
+  }
+
+  /**
+   * Republish the {@link intervalViews} field backed by the given interval — called from
+   * {@link commitInterval} / {@link dropInterval} (i.e. when that interval ingests or removes an item).
+   * A write to an untracked interval touches nothing here. (The anchored head is also published
+   * directly via {@link publishAsAnchoredHead} from the reconciliation points that flip `isHead` —
+   * see {@link postQueryReconcile}.)
+   */
+  private publishIntervalViewFor(interval: AnyInterval, { removed = false } = {}) {
+    if (interval.id === LOGICAL_HEAD_INTERVAL_ID) {
+      this.intervalViews.partialNext({
+        logicalHead: this.intervalItemsOrEmpty(this.liveHeadLogical),
+      });
+    } else if (interval.id === LOGICAL_TAIL_INTERVAL_ID) {
+      this.intervalViews.partialNext({
+        logicalTail: this.intervalItemsOrEmpty(this.liveTailLogical),
+      });
+    } else if ((interval as Interval).isHead) {
+      // On removal the head page is gone (no other interval is `isHead`) → clear; otherwise the
+      // committed page IS the head.
+      this.publishAsAnchoredHead(removed ? undefined : interval);
+    }
+  }
+
+  /**
+   * Publish `interval` as the anchored head — the loaded page bounded at the dataset head (`isHead`),
+   * or `undefined` to clear it (the head page was removed or a page stopped being the head). Callers
+   * pass the interval they already have, so this does not re-scan storage for the head. Its content
+   * changes via ingest/remove (routed through {@link commitInterval}/{@link dropInterval}) and its
+   * identity changes when a page's `isHead` flag flips during query reconciliation — both call here.
+   */
+  protected publishAsAnchoredHead(interval: AnyInterval | undefined) {
+    this.intervalViews.partialNext({ anchoredHead: this.intervalItemsOrEmpty(interval) });
+  }
+
+  /**
+   * Keep `anchoredHead` in sync after a page's `isHead` flag was (re)computed during query
+   * reconciliation, given its value `wasHead` beforehand. Acts only on an actual transition:
+   * - became the head page → publish it as the anchored head;
+   * - stopped being the head page → clear the anchored head;
+   * - unchanged → nothing (a content change, if any, was already published when the interval was
+   *   committed — see {@link commitInterval}).
+   */
+  protected syncAnchoredHeadAfterHeadFlip(interval: Interval, wasHead: boolean) {
+    if (interval.isHead === wasHead) return;
+    this.publishAsAnchoredHead(interval.isHead ? interval : undefined);
+  }
+
+  private intervalItemsOrEmpty(interval: AnyInterval | undefined): T[] {
+    return interval ? this.intervalToItems(interval) : [];
+  }
+
+  /**
+   * Empty every {@link intervalViews} field. Used by reset paths that clear intervals in bulk (via
+   * {@link setIntervals}), which bypasses the per-interval {@link commitInterval}/{@link dropInterval}
+   * publishing. No-ops when the views are already empty so a reset does not emit needlessly.
+   */
+  protected clearIntervalViews() {
+    const { logicalHead, logicalTail, anchoredHead } =
+      this.intervalViews.getLatestValue();
+    // Clear whenever any view holds items; skip only when all are already empty, so a reset on an
+    // empty paginator does not emit a redundant empty→empty change (new `[]` refs would wake selectors).
+    const alreadyEmpty =
+      logicalHead.length === 0 && logicalTail.length === 0 && anchoredHead.length === 0;
+    if (alreadyEmpty) return;
+    this.intervalViews.partialNext({
+      logicalHead: [],
+      logicalTail: [],
+      anchoredHead: [],
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -1473,7 +1622,7 @@ export abstract class BasePaginator<T, Q> {
       resultingInterval = merged;
       for (const itv of toMerge) {
         if (merged.id === itv.id) continue;
-        this._itemIntervals.delete(itv.id);
+        this.dropInterval(itv.id);
       }
     }
 
@@ -1489,9 +1638,9 @@ export abstract class BasePaginator<T, Q> {
           isHead: false,
           isTail: false,
         };
-        this._itemIntervals.set(convertedInterval.id, convertedInterval);
+        this.commitInterval(convertedInterval);
       } else {
-        this._itemIntervals.set(LOGICAL_HEAD_INTERVAL_ID, logicalHead);
+        this.commitInterval(logicalHead);
       }
     }
 
@@ -1506,13 +1655,13 @@ export abstract class BasePaginator<T, Q> {
           isHead: false,
           isTail: false,
         };
-        this._itemIntervals.set(convertedInterval.id, convertedInterval);
+        this.commitInterval(convertedInterval);
       } else {
-        this._itemIntervals.set(LOGICAL_TAIL_INTERVAL_ID, logicalTail);
+        this.commitInterval(logicalTail);
       }
     }
 
-    this._itemIntervals.set(resultingInterval.id, resultingInterval);
+    this.commitInterval(resultingInterval);
     // keep the intervals sorted
     this.setIntervals(this.sortIntervals(this.itemIntervals));
 
@@ -1652,7 +1801,7 @@ export abstract class BasePaginator<T, Q> {
     }
 
     const addedNewInterval = !this._itemIntervals.has(targetInterval.id);
-    this._itemIntervals.set(targetInterval.id, targetInterval);
+    this.commitInterval(targetInterval);
 
     if (addedNewInterval) {
       this.setIntervals(this.sortIntervals(this.itemIntervals));
@@ -1714,14 +1863,14 @@ export abstract class BasePaginator<T, Q> {
       const { interval } = updatedInterval;
       if (interval.itemIds.length === 0) {
         // Drop empty interval
-        this._itemIntervals.delete(interval.id);
+        this.dropInterval(interval.id);
 
         // If it was active -> clear active
         if (this.isActiveInterval(interval)) {
           this.setActiveInterval(undefined);
         }
       } else {
-        this._itemIntervals.set(updatedInterval.interval.id, updatedInterval.interval);
+        this.commitInterval(updatedInterval.interval);
       }
       result.interval = updatedInterval;
     }
@@ -1973,6 +2122,7 @@ export abstract class BasePaginator<T, Q> {
         this.setIntervals([]);
         this.setActiveInterval(undefined);
         this._itemIndex.clear();
+        this.clearIntervalViews();
       }
       let items: T[] | undefined = undefined;
       if (!this.isInitialized) {
@@ -1998,7 +2148,6 @@ export abstract class BasePaginator<T, Q> {
       reset,
       retryCount,
     });
-
     return this.postQueryReconcile({
       direction,
       isFirstPage,
@@ -2136,10 +2285,13 @@ export abstract class BasePaginator<T, Q> {
           ? stateUpdate.hasMoreTail
           : current.hasMoreTail;
 
+      const wasHead = interval.isHead;
       interval.hasMoreHead = resolvedHasMoreHead;
       interval.hasMoreTail = resolvedHasMoreTail;
       interval.isHead = resolvedHasMoreHead === false;
       interval.isTail = resolvedHasMoreTail === false;
+      // `isHead` is decided here (not at ingest); reflect any head-status flip in `anchoredHead`.
+      this.syncAnchoredHeadAfterHeadFlip(interval, wasHead);
     } else if (!items.length && direction) {
       // An empty directional response means the dataset edge was reached in `direction`, but
       // `ingestPage` returns no interval for an empty page so the block above never runs. Flag the
@@ -2151,8 +2303,11 @@ export abstract class BasePaginator<T, Q> {
         : undefined;
       if (activeInterval && !isLogicalInterval(activeInterval)) {
         if (direction === 'headward') {
+          const wasHead = activeInterval.isHead;
           activeInterval.isHead = true;
           activeInterval.hasMoreHead = false;
+          // The active page just reached the dataset head; reflect the flip in `anchoredHead`.
+          this.syncAnchoredHeadAfterHeadFlip(activeInterval, wasHead);
         } else if (direction === 'tailward') {
           activeInterval.isTail = true;
           activeInterval.hasMoreTail = false;
@@ -2182,6 +2337,7 @@ export abstract class BasePaginator<T, Q> {
     this.state.next(this.initialState);
     this.setIntervals([]);
     this.setActiveInterval(undefined);
+    this.clearIntervalViews();
   }
 
   toTail = (params: Omit<PaginationQueryParams<Q>, 'direction' | 'queryShape'> = {}) =>
