@@ -142,6 +142,7 @@ export class MessageDeliveryReporter {
     let lastReadAt: Date | undefined;
     let key: string | undefined = undefined;
 
+    // todo: unify the API for read state access btw channel and threads
     if (isChannel(collection)) {
       latestMessages = collection.messagePaginator.headItems;
       const ownReadState = collection.state.read[ownUserId] ?? {};
@@ -149,7 +150,10 @@ export class MessageDeliveryReporter {
       lastDeliveredAt = ownReadState?.last_delivered_at;
       key = collection.cid;
     } else if (isThread(collection)) {
-      latestMessages = collection.messagePaginator.state.getLatestValue().items ?? [];
+      // Use the head (newest-loaded) window, not the active/visible interval: the candidate logic
+      // below inspects the newest message, which the active interval only reflects when scrolled to
+      // the head. Mirrors the channel branch above.
+      latestMessages = collection.messagePaginator.headItems;
       const ownReadState =
         collection.state.getLatestValue().read[ownUserId] ?? ({} as ThreadUserReadState);
       lastReadAt = ownReadState?.lastReadAt;

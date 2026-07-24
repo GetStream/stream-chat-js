@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getClientWithUser } from '../test-utils/getClient';
+import { generateChannel } from '../test-utils/generateChannel';
+import { generateThreadResponse } from '../test-utils/generateThreadResponse';
 import {
   type APIError,
   Channel,
@@ -8,6 +10,7 @@ import {
   StreamAPIError,
   StreamChat,
   StreamResponse,
+  Thread,
 } from '../../../src';
 import type { AxiosResponse } from 'axios';
 
@@ -185,6 +188,47 @@ describe('MessageDeliveryReporter', () => {
     client.syncDeliveredCandidates([channel]);
 
     vi.advanceTimersByTime(1000);
+    expect(markDeliveredSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not report delivery for threads (unsupported; branch early-returns)', () => {
+    const markDeliveredSpy = vi
+      .spyOn(client, 'markDelivered')
+      .mockResolvedValue({ ok: true } as any);
+
+    const parent = mkMsg('parent', '2025-01-01T10:00:00Z');
+    const channelResponse = generateChannel({
+      channel: { id: 'thread-channel', members: [] },
+    }).channel;
+    const thread = new Thread({
+      client,
+      threadData: generateThreadResponse(channelResponse, parent),
+    });
+    thread.channel.initialized = true;
+    // Grant delivery permission so we exercise the thread branch of
+    // `getNextDeliveryReportCandidate`, not the earlier permission gate.
+    client.configs[thread.channel.cid] = {
+      created_at: '',
+      delivery_events: true,
+      read_events: false,
+      reminders: false,
+      updated_at: '',
+    };
+    // Seed the thread's head window with a newest reply that — on a channel — would be reported as a
+    // delivery candidate (see the channel tests above).
+    thread.messagePaginator.ingestPage({
+      page: [mkMsg('t1', '2025-01-01T11:00:00Z')],
+      isHead: true,
+      isTail: true,
+      setActive: true,
+    });
+
+    client.messageDeliveryReporter.syncDeliveredCandidates([thread]);
+    vi.advanceTimersByTime(1000);
+
+    // Thread delivery reporting is not yet supported: the thread branch returns before producing a
+    // candidate, so nothing is announced. (When enabled, it reads `messagePaginator.headItems` — the
+    // newest-loaded window — mirroring the channel branch.)
     expect(markDeliveredSpy).not.toHaveBeenCalled();
   });
 

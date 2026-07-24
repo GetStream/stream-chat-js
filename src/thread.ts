@@ -316,8 +316,7 @@ export class Thread extends WithSubscriptions {
     this.state.partialNext({ isLoading: true });
 
     try {
-      const loadedReplyCount =
-        this.messagePaginator.state.getLatestValue().items?.length ?? 0;
+      const loadedReplyCount = this.messagePaginator.items?.length ?? 0;
       const thread = await this.client.getThreadAndHydrate(this.id, {
         watch: true,
         reply_limit: loadedReplyCount || this.messagePaginator.pageSize,
@@ -370,9 +369,7 @@ export class Thread extends WithSubscriptions {
       isStateStale: false,
     });
 
-    this.messagePaginator.mergeNewestPage(
-      thread.messagePaginator.state.getLatestValue().items ?? [],
-    );
+    this.messagePaginator.mergeNewestPage(thread.messagePaginator.items ?? []);
     pendingReplies.forEach((reply) => this.messagePaginator.ingestItem(reply));
     // Carry the re-queried thread's last-activity floor so lastMessageAt stays fresh even when the
     // merged page does not include the newest reply. Monotonic, so an older value is a no-op.
