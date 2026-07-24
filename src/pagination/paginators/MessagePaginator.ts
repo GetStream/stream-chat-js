@@ -118,7 +118,8 @@ export class MessagePaginator extends MessageIntervalPaginator {
    * Auxiliary (non-pagination) state — see {@link MessagePaginatorAggregateState}. A store separate
    * from `state` so `lastMessageAt` can be advanced from inside a `state.next` updater
    * (`ingestPage`) without being clobbered, and so consumers subscribe to a quiet signal that only
-   * emits when the aggregate actually changes (not on every scroll/pagination emission).
+   * emits when the aggregate actually changes (not on every scroll/pagination emission). This is
+   * distinct from the base's `intervalViews` interval-projection store.
    */
   readonly aggregateState: StateStore<MessagePaginatorAggregateState>;
 

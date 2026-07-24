@@ -2832,6 +2832,171 @@ describe('BasePaginator', () => {
       });
     });
 
+    describe('intervalViews (per-interval reactivity)', () => {
+      const makeItem = (id: string, age: number): TestItem => ({ id, age, name: id });
+      const descByAge = () =>
+        makeComparator<TestItem, Partial<Record<keyof TestItem, AscDesc>>>({
+          sort: { age: -1 }, // newest (highest age) is the head
+        });
+      const withItemIndex = () =>
+        new Paginator({ itemIndex: new ItemIndex<TestItem>({ getId: ({ id }) => id }) });
+
+      // Subscribe to a single `intervalViews` field via a scoped selector (as `useStateStore` does),
+      // ignoring the initial synchronous emit so `fires` counts only post-subscribe changes.
+      const trackKey = (
+        paginator: Paginator,
+        key: 'logicalHead' | 'logicalTail' | 'anchoredHead',
+      ) => {
+        const tracker = { fires: 0, last: [] as string[] };
+        const unsub = paginator.intervalViews.subscribeWithSelector(
+          (s) => ({ items: s[key] }),
+          ({ items }) => {
+            tracker.fires += 1;
+            tracker.last = items.map((i) => i.id);
+          },
+        );
+        tracker.fires = 0;
+        return { tracker, unsub };
+      };
+
+      it('all views start empty', () => {
+        const paginator = withItemIndex();
+        expect(paginator.intervalViews.getLatestValue()).toEqual({
+          logicalHead: [],
+          logicalTail: [],
+          anchoredHead: [],
+        });
+        expect(paginator.logicalHeadItems).toEqual([]);
+        expect(paginator.logicalTailItems).toEqual([]);
+        expect(paginator.anchoredHeadItems).toEqual([]);
+        expect(paginator.headItems).toEqual([]);
+      });
+
+      it('an out-of-order head ingest publishes logicalHead only, leaving the active interval, logicalTail, and anchoredHead untouched', () => {
+        const paginator = withItemIndex();
+        paginator.sortComparator = descByAge();
+
+        // A bounded (non-head) anchored interval, loaded and active. No isHead page → anchoredHead empty.
+        paginator.ingestPage({
+          page: [makeItem('m1', 50), makeItem('m2', 40)],
+          isHead: false,
+          isTail: false,
+          setActive: true,
+        });
+        expect(paginator.items?.map((i) => i.id)).toEqual(['m1', 'm2']);
+        expect(paginator.logicalHeadItems).toEqual([]);
+        expect(paginator.anchoredHeadItems).toEqual([]);
+
+        const activeItemsBefore = paginator.items;
+        const logicalHead = trackKey(paginator, 'logicalHead');
+        const logicalTail = trackKey(paginator, 'logicalTail');
+        const anchoredHead = trackKey(paginator, 'anchoredHead');
+
+        // Ingest an item newer (more headward) than the bounded interval → logical head, which is NOT
+        // the active interval.
+        paginator.ingestItem(makeItem('x', 100));
+
+        // Active interval untouched (state.items reference unchanged)...
+        expect(paginator.items).toBe(activeItemsBefore);
+        // ...only logicalHead's own ingest published it...
+        expect(paginator.logicalHeadItems.map((i) => i.id)).toEqual(['x']);
+        expect(logicalHead.tracker).toEqual({ fires: 1, last: ['x'] });
+        // ...selectors on the untouched logicalTail / anchoredHead never fired...
+        expect(logicalTail.tracker.fires).toBe(0);
+        expect(anchoredHead.tracker.fires).toBe(0);
+        // ...and the computed head-most getter still reflects the flip (non-reactive read).
+        expect(paginator.headItems.map((i) => i.id)).toEqual(['x']);
+
+        logicalHead.unsub();
+        logicalTail.unsub();
+        anchoredHead.unsub();
+      });
+
+      it('publishes anchoredHead when the isHead page loads and when it ingests, without waking logical selectors', () => {
+        const paginator = withItemIndex();
+        paginator.sortComparator = descByAge();
+
+        // An isHead page (the newest loaded page) populates anchoredHead on load.
+        paginator.ingestPage({
+          page: [makeItem('m1', 50), makeItem('m2', 40)],
+          isHead: true,
+          isTail: false,
+          setActive: true,
+        });
+        expect(paginator.anchoredHeadItems.map((i) => i.id)).toEqual(['m1', 'm2']);
+
+        const anchoredHead = trackKey(paginator, 'anchoredHead');
+        const logicalHead = trackKey(paginator, 'logicalHead');
+        const logicalTail = trackKey(paginator, 'logicalTail');
+
+        // A newer message merges into the isHead page → anchoredHead grows.
+        paginator.ingestItem(makeItem('m0', 60));
+
+        expect(paginator.anchoredHeadItems.map((i) => i.id)).toEqual(['m0', 'm1', 'm2']);
+        expect(anchoredHead.tracker).toEqual({ fires: 1, last: ['m0', 'm1', 'm2'] });
+        // No logical interval was touched.
+        expect(logicalHead.tracker.fires).toBe(0);
+        expect(logicalTail.tracker.fires).toBe(0);
+
+        anchoredHead.unsub();
+        logicalHead.unsub();
+        logicalTail.unsub();
+      });
+
+      it('an out-of-order tail ingest publishes logicalTail without waking logicalHead / anchoredHead selectors', () => {
+        const paginator = withItemIndex();
+        paginator.sortComparator = descByAge();
+
+        // A bounded interval (tail open) loaded and active.
+        paginator.ingestPage({
+          page: [makeItem('m1', 50), makeItem('m2', 40)],
+          isHead: false,
+          isTail: false,
+          setActive: true,
+        });
+        expect(paginator.logicalTailItems).toEqual([]);
+
+        const tail = trackKey(paginator, 'logicalTail');
+        const head = trackKey(paginator, 'logicalHead');
+        const anchoredHead = trackKey(paginator, 'anchoredHead');
+
+        // Ingest an item older (more tailward) than the loaded window → logical tail.
+        paginator.ingestItem(makeItem('z', 10));
+
+        expect(paginator.logicalTailItems.map((i) => i.id)).toEqual(['z']);
+        expect(tail.tracker).toEqual({ fires: 1, last: ['z'] });
+        // Neither the logical head nor the anchored head was touched.
+        expect(head.tracker.fires).toBe(0);
+        expect(anchoredHead.tracker.fires).toBe(0);
+        expect(paginator.logicalHeadItems).toEqual([]);
+
+        tail.unsub();
+        head.unsub();
+        anchoredHead.unsub();
+      });
+
+      it('clears all views on reset', () => {
+        const paginator = withItemIndex();
+        paginator.sortComparator = descByAge();
+        paginator.ingestPage({
+          page: [makeItem('m1', 50)],
+          isHead: true,
+          isTail: false,
+          setActive: true,
+        });
+        paginator.ingestItem(makeItem('z', 10)); // logical tail
+        expect(paginator.anchoredHeadItems.map((i) => i.id)).toEqual(['m1']);
+        expect(paginator.logicalTailItems.map((i) => i.id)).toEqual(['z']);
+
+        paginator.resetState();
+        expect(paginator.intervalViews.getLatestValue()).toEqual({
+          logicalHead: [],
+          logicalTail: [],
+          anchoredHead: [],
+        });
+      });
+    });
+
     describe('removeItem', () => {
       it('removes existing item', () => {
         const paginator = new Paginator();
