@@ -456,7 +456,7 @@ export class Channel {
     reaction: Reaction;
     options?: SendReactionOptions;
   }) {
-    const applied = this.messagePaginator.applyReactionLocally({
+    const undo = this.messagePaginator.applyReactionLocally({
       enforceUnique: options?.enforce_unique ?? false,
       messageId,
       reaction,
@@ -468,14 +468,8 @@ export class Channel {
         this.messagePaginator.ingestItem(formatMessage(response.message));
       }
     } catch (error) {
-      // Revert if offline support is off (no queue to retry) OR the error is a definitive rejection;
-      // an ephemeral failure with offline support enabled stays queued and will send.
-      if (applied && (!this.getClient().offlineDb || !isEphemeral(error as Error))) {
-        this.messagePaginator.applyReactionLocally({
-          messageId,
-          reaction,
-          removed: true,
-        });
+      if (undo && (!this.getClient().offlineDb || !isEphemeral(error as Error))) {
+        undo();
       }
       throw error;
     }
@@ -492,7 +486,7 @@ export class Channel {
     messageId: string;
     type: string;
   }) {
-    const applied = this.messagePaginator.applyReactionLocally({
+    const undo = this.messagePaginator.applyReactionLocally({
       messageId,
       reaction: { type },
       removed: true,
@@ -504,15 +498,8 @@ export class Channel {
         this.messagePaginator.ingestItem(formatMessage(response.message));
       }
     } catch (error) {
-      // Deterministic, concurrency-safe revert: undo the DELETE by RE-ADDING the reaction to the
-      // CURRENT state (never restoring a stale pre-request snapshot). Only when the optimistic apply
-      // happened and the failure is terminal (offline support off, or a definitive rejection).
-      if (applied && (!this.getClient().offlineDb || !isEphemeral(error as Error))) {
-        this.messagePaginator.applyReactionLocally({
-          messageId,
-          reaction: { type },
-          removed: false,
-        });
+      if (undo && (!this.getClient().offlineDb || !isEphemeral(error as Error))) {
+        undo();
       }
       throw error;
     }
@@ -747,27 +734,8 @@ export class Channel {
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
-        // Persist the optimistic reaction (the caller has already applied it to local state),
-        // mirroring deleteReaction below. enforce_unique replaces the user's existing reaction
-        // (updateReaction clears their prior rows first); otherwise it is additive (insertReaction).
-        const message = this.messagePaginator.getItem(messageID);
-        if (message) {
-          const storedReaction = {
-            created_at: new Date().toISOString(),
-            message_id: messageID,
-            type: reaction.type,
-            updated_at: new Date().toISOString(),
-            // `user` (not just `user_id`) is required: mapReactionToStorable persists the row's user
-            // id from `reaction.user.id`, so omitting it stores a null user → ghost reaction on read.
-            user: this.getClient().user,
-            user_id: this.getClient().userID as string,
-          };
-          if (options?.enforce_unique) {
-            await offlineDb.updateReaction({ message, reaction: storedReaction });
-          } else {
-            await offlineDb.insertReaction({ message, reaction: storedReaction });
-          }
-        }
+        // The optimistic reaction row is written by the local-update layer
+        // (`MessagePaginator.applyReactionLocally`); here we only queue the request for replay.
         return await offlineDb.queueTask<ReactionAPIResponse>({
           task: {
             channelId: this.id as string,
@@ -829,22 +797,8 @@ export class Channel {
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
-        const message = this.messagePaginator.getItem(messageID);
-        const reaction = {
-          created_at: '',
-          updated_at: '',
-          message_id: messageID,
-          type: reactionType,
-          user_id: (this.getClient().userID as string) ?? user_id,
-        };
-
-        if (message) {
-          await offlineDb.deleteReaction({
-            message,
-            reaction,
-          });
-        }
-
+        // The optimistic reaction-row removal is handled by the local-update layer
+        // (`MessagePaginator.applyReactionLocally`); here we only queue the request for replay.
         return await offlineDb.queueTask<ReactionAPIResponse>({
           task: {
             channelId: this.id as string,

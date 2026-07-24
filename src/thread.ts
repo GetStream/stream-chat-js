@@ -852,7 +852,7 @@ export class Thread extends WithSubscriptions {
     reaction: Reaction;
     options?: SendReactionOptions;
   }) {
-    const applied = this.messagePaginator.applyReactionLocally({
+    const undo = this.messagePaginator.applyReactionLocally({
       enforceUnique: options?.enforce_unique ?? false,
       messageId,
       reaction,
@@ -864,17 +864,8 @@ export class Thread extends WithSubscriptions {
         this.messagePaginator.ingestItem(formatMessage(response.message));
       }
     } catch (error) {
-      // Revert if offline support is off (no queue to retry) OR the error is a definitive rejection;
-      // an ephemeral failure with offline support enabled stays queued and will send.
-      if (
-        applied &&
-        (!this.channel.getClient().offlineDb || !isEphemeral(error as Error))
-      ) {
-        this.messagePaginator.applyReactionLocally({
-          messageId,
-          reaction,
-          removed: true,
-        });
+      if (undo && (!this.channel.getClient().offlineDb || !isEphemeral(error as Error))) {
+        undo();
       }
       throw error;
     }
@@ -891,7 +882,7 @@ export class Thread extends WithSubscriptions {
     messageId: string;
     type: string;
   }) {
-    const applied = this.messagePaginator.applyReactionLocally({
+    const undo = this.messagePaginator.applyReactionLocally({
       messageId,
       reaction: { type },
       removed: true,
@@ -903,18 +894,8 @@ export class Thread extends WithSubscriptions {
         this.messagePaginator.ingestItem(formatMessage(response.message));
       }
     } catch (error) {
-      // Deterministic, concurrency-safe revert: undo the DELETE by RE-ADDING the reaction to the
-      // CURRENT state (never restoring a stale pre-request snapshot). Only when the optimistic apply
-      // happened and the failure is terminal.
-      if (
-        applied &&
-        (!this.channel.getClient().offlineDb || !isEphemeral(error as Error))
-      ) {
-        this.messagePaginator.applyReactionLocally({
-          messageId,
-          reaction: { type },
-          removed: false,
-        });
+      if (undo && (!this.channel.getClient().offlineDb || !isEphemeral(error as Error))) {
+        undo();
       }
       throw error;
     }

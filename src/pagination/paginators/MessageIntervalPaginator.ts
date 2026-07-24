@@ -953,8 +953,13 @@ export class MessageIntervalPaginator extends BasePaginator<
    * (author + timestamps + message id) are set here from the connected user, so a caller can't spoof
    * them.
    *
-   * @returns the ingested message, or `undefined` when the user isn't connected or the target isn't
-   *   loaded (nothing to update).
+   * Updates BOTH stores: the in-memory paginator (synchronously, for instant UI) and the offline DB
+   * (fire-and-forget, mirroring the WS-echo persistence path). Returns an `undo()` that reverses the
+   * change across both stores on the CURRENT state (concurrency-safe deltas, not a snapshot restore),
+   * restoring anything this op removed — the deleted reaction, or the `enforce_unique`-displaced ones.
+   *
+   * @returns an `undo()` reversing the change (memory + offline DB), or `undefined` when the user
+   *   isn't connected or the target isn't loaded (nothing was applied).
    */
   applyReactionLocally = ({
     enforceUnique = false,
@@ -966,8 +971,9 @@ export class MessageIntervalPaginator extends BasePaginator<
     reaction: Reaction;
     enforceUnique?: boolean;
     removed?: boolean;
-  }): LocalMessage | undefined => {
-    const user = this.channel.getClient().user;
+  }): (() => void) | undefined => {
+    const client = this.channel.getClient();
+    const user = client.user;
     const existing = this.getItem(messageId);
     if (!user || !existing) return;
 
@@ -981,6 +987,16 @@ export class MessageIntervalPaginator extends BasePaginator<
       ...reaction,
     };
 
+    // Capture the reaction(s) this op removes, so undo() can restore them with their original
+    // payload (the reaction is spread last, so a captured reaction round-trips faithfully): the
+    // deleted reaction for a removal, or the user's displaced reactions for an enforce_unique add.
+    const removedReactions: ReactionResponse[] = removed
+      ? (existing.own_reactions?.filter((r) => r.type === reactionResponse.type) ?? [])
+      : enforceUnique
+        ? (existing.own_reactions ?? [])
+        : [];
+
+    // Memory - synchronous
     const withCounts = removed
       ? this.messageWithReactionRemoved(existing, reactionResponse)
       : this.messageWithReactionAdded(existing, reactionResponse, enforceUnique);
@@ -990,7 +1006,36 @@ export class MessageIntervalPaginator extends BasePaginator<
       reaction: reactionResponse,
       removed,
     });
-    return this.getItem(messageId);
+
+    const message = this.getItem(messageId);
+    if (message) {
+      client.offlineDb?.executeQuerySafely(
+        (db) =>
+          removed
+            ? db.deleteReaction({ message, reaction: reactionResponse })
+            : enforceUnique
+              ? db.updateReaction({ message, reaction: reactionResponse })
+              : db.insertReaction({ message, reaction: reactionResponse }),
+        { method: 'applyReactionLocally' },
+      );
+    }
+
+    return () => {
+      if (!removed) {
+        this.applyReactionLocally({
+          messageId,
+          reaction: reactionResponse,
+          removed: true,
+        });
+      }
+      for (const removedReaction of removedReactions) {
+        this.applyReactionLocally({
+          messageId,
+          reaction: removedReaction,
+          removed: false,
+        });
+      }
+    };
   };
 
   /**
