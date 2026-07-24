@@ -123,9 +123,10 @@ export function binarySearch<T>({
  *
  * Positive number (> 0) → a comes after b
  *
- * @param sort
- * @param resolvePathValue
- * @param tiebreaker
+ * @param params - Comparator configuration.
+ * @param params.sort - The sort specification defining fields and directions.
+ * @param params.resolvePathValue - Resolver used to read a field value from an item.
+ * @param params.tiebreaker - Comparator applied when all sort terms are equal.
  */
 export function makeComparator<
   T,

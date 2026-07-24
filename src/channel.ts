@@ -874,7 +874,7 @@ export class Channel extends ChannelApi {
   /**
    * mute - mutes the current channel
    *
-   * @param opts - expiration in minutes or user_id
+   * @param options - expiration in minutes or user_id
    * @returns The server response
    *
    * example with expiration:
@@ -893,7 +893,7 @@ export class Channel extends ChannelApi {
   /**
    * unmute - mutes the current channel
    *
-   * @param opts - user_id
+   * @param options - user_id
    * @returns The server response
    *
    * example server side:
@@ -909,7 +909,6 @@ export class Channel extends ChannelApi {
   /**
    * archive - archives the current channel
    *
-   * @param opts - user_id if called server side
    * @returns The server response
    *
    * example:
@@ -925,7 +924,6 @@ export class Channel extends ChannelApi {
   /**
    * unarchive - unarchives the current channel
    *
-   * @param opts - user_id if called server side
    * @returns The server response
    *
    * example:

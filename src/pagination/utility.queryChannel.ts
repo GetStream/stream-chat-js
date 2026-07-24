@@ -25,12 +25,13 @@ type GetChannelParams = {
  * If a watch is already in flight, this call waits for it to settle instead of
  * issuing another network request.
  *
- * @param client
- * @param members
- * @param options
- * @param type
- * @param id
- * @param channel
+ * @param params - The channel query parameters.
+ * @param params.client - The chat client instance.
+ * @param params.members - Member user ids used to construct or identify the channel.
+ * @param params.options - Options forwarded to the underlying channel watch request.
+ * @param params.type - The channel type.
+ * @param params.id - The channel id.
+ * @param params.channel - An existing channel to watch (skips construction from type/id/members).
  */
 export const getChannel = async ({
   channel,
@@ -49,7 +50,9 @@ export const getChannel = async ({
   const theChannel =
     channel ||
     // `members` are member IDs; the OpenAPI `ChannelData.members` expects member objects.
-    client.channel(type!, id, { members: members?.map((user_id) => ({ user_id })) });
+    client.channel(type as string, id, {
+      members: members?.map((user_id) => ({ user_id })),
+    });
 
   // need to keep as with call to channel.watch the id can be changed from undefined to an actual ID generated server-side
   const originalCid = theChannel?.id

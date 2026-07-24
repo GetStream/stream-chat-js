@@ -454,8 +454,9 @@ export class ChannelPaginatorsOrchestrator extends WithSubscriptions {
    * If index not provided → append at the end.
    * If index provided → insert (or move) at that index.
    *
-   * @param paginator
-   * @param index
+   * @param params - The insertion parameters.
+   * @param params.paginator - The paginator to insert or move.
+   * @param params.index - Target index; when omitted the paginator is appended.
    */
   insertPaginator({ paginator, index }: { paginator: ChannelPaginator; index?: number }) {
     const paginators = [...this.paginators];

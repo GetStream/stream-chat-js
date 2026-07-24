@@ -120,9 +120,9 @@ export function itemMatchesFilter<T>(
  *
  * $in/$nin left may be scalar or iterable; the right is a list.
  *
- * @param a
- * @param b
- * @param ok
+ * @param a - Left-hand operand.
+ * @param b - Right-hand operand.
+ * @param ok - Predicate applied to the result of comparing `a` and `b`.
  */
 function orderedCompareOp(a: any, b: any, ok: (c: number) => boolean): boolean {
   if (isIterableButNotString(a) || isIterableButNotString(b)) return false;

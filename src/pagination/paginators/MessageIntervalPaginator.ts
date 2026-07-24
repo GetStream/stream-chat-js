@@ -889,7 +889,7 @@ export class MessageIntervalPaginator extends BasePaginator<
    * falling back to the event's own_reactions when the message is not loaded — matching the legacy
    * behavior where `_updateMessage` only mutated a message that existed locally.
    *
-   * @param params
+   * @param params - The reaction event payload.
    * @param params.message - The reaction event's message, carrying the
    *   server-computed `reaction_groups` / `latest_reactions`. Ingested as-is except for `own_reactions`.
    * @param params.reaction - The reaction from the event. Only added to/removed from

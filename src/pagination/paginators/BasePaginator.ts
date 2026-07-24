@@ -767,9 +767,9 @@ export abstract class BasePaginator<T, Q> {
   /**
    * Subclasses must return the query shape.
    */
-  protected getNextQueryShape({
-    direction,
-  }: Pick<PaginationQueryParams<Q>, 'direction'> = {}): Q {
+  protected getNextQueryShape(
+    _params: Pick<PaginationQueryParams<Q>, 'direction'> = {},
+  ): Q {
     throw new Error('Paginator.getNextQueryShape() is not implemented');
   }
 
@@ -819,8 +819,8 @@ export abstract class BasePaginator<T, Q> {
   /**
    * Applied by the effectiveComparator to take into consideration item boosts when sorting items.
    *
-   * @param a
-   * @param b
+   * @param a - The first item to compare.
+   * @param b - The second item to compare.
    */
   protected boostComparator = (a: T, b: T): number => {
     const now = Date.now();
@@ -848,8 +848,8 @@ export abstract class BasePaginator<T, Q> {
    * Increases the item's importance when sorting.
    * Boost affects position inside an item interval (if used), but should not redefine interval boundaries.
    *
-   * @param itemId
-   * @param opts
+   * @param itemId - Id of the item to boost.
+   * @param opts - Boost options: `ttlMs` / `until` control expiry and `seq` orders concurrent boosts.
    */
   boost(itemId: string, opts?: { ttlMs?: number; until?: number; seq?: number }) {
     const now = Date.now();
@@ -884,7 +884,7 @@ export abstract class BasePaginator<T, Q> {
   // Interval manipulation
   // ---------------------------------------------------------------------------
 
-  generateIntervalId(page: (T | string)[]): string {
+  generateIntervalId(_page: (T | string)[]): string {
     return `interval-${generateUUIDv4()}`;
   }
 
@@ -1315,7 +1315,7 @@ export abstract class BasePaginator<T, Q> {
    * Locates the current position of the item and the index at which the item should be inserted
    * according to effectiveComparator.
    *
-   * @param item
+   * @param item - The item to locate within the current state.
    */
   protected locateItemInState(item: T): ItemLocation | null {
     const items = [...(this.items ?? [])];
@@ -2024,14 +2024,14 @@ export abstract class BasePaginator<T, Q> {
     return state;
   }
 
-  isJumpQueryShape(queryShape: Q): boolean {
+  isJumpQueryShape(_queryShape: Q): boolean {
     return false;
   }
 
   protected getStateAfterQuery(
     stateUpdate: Partial<PaginatorState<T>>,
 
-    isFirstPage: boolean,
+    _isFirstPage: boolean,
   ): PaginatorState<T> {
     const current = this.state.getLatestValue();
     return {
@@ -2044,10 +2044,10 @@ export abstract class BasePaginator<T, Q> {
   }
 
   preloadFirstPageFromOfflineDb = (
-    params: PaginationQueryParams<Q>,
+    _params: PaginationQueryParams<Q>,
   ): Promise<T[] | undefined> | T[] | undefined => undefined;
 
-  populateOfflineDbAfterQuery = (params: {
+  populateOfflineDbAfterQuery = (_params: {
     items: T[] | undefined;
     queryShape: Q | undefined;
   }): Promise<T[] | undefined> | T[] | undefined => undefined;
@@ -2084,13 +2084,14 @@ export abstract class BasePaginator<T, Q> {
   /**
    * Falsy return value means query was not successful.
    *
-   * @param direction
-   * @param keepPreviousItems
-   * @param forcedQueryShape
-   * @param reset
-   * @param retryCount
-   * @param silent
-   * @param updateState
+   * @param params - Query parameters.
+   * @param params.direction - Direction to paginate in (headward or tailward).
+   * @param params.keepPreviousItems - Keep already-loaded items instead of clearing them on a first-page query.
+   * @param params.queryShape - Explicit query shape overriding the one derived from current state.
+   * @param params.reset - Whether to reset the loaded state before querying.
+   * @param params.retryCount - Number of remaining retry attempts on failure.
+   * @param params.silent - Suppress loading/state updates for this query.
+   * @param params.updateState - Whether to write the query results back to state.
    */
   async executeQuery({
     direction,
