@@ -593,6 +593,22 @@ describe('MessageDeliveryReporter', () => {
     });
   });
 
+  it('swallows rejections from the throttled (auto) markRead so they do not leak as unhandled rejections', async () => {
+    // Reproduces the fire-and-forget path: an active thread/channel auto-marks-read via
+    // `throttledMarkRead`, but `channel.markRead` rejects (e.g. read events disabled). The throttled
+    // wrapper must absorb it — otherwise it surfaces as an unhandled rejection and fails the run.
+    const markReadSpy = vi
+      .spyOn(channel, 'markRead')
+      .mockRejectedValue(new Error('Read events are disabled for this application'));
+
+    expect(() => client.messageDeliveryReporter.throttledMarkRead(channel)).not.toThrow();
+
+    // Let the rejected markRead settle; the `.catch` in the throttled wrapper absorbs it.
+    // (1000ms === the reporter's MARK_AS_READ_THROTTLE_TIMEOUT.)
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(markReadSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('handles message.new via channel event: schedules and sends delivered for newest', async () => {
     const markDeliveredSpy = vi
       .spyOn(client, 'markDelivered')

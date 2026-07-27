@@ -345,8 +345,19 @@ export class MessageDeliveryReporter {
    * @param collection
    * @param options
    */
-  public throttledMarkRead = throttle(this.markRead, MARK_AS_READ_THROTTLE_TIMEOUT, {
-    leading: true,
-    trailing: true,
-  });
+  // Auto mark-read is throttled and fire-and-forget: it's triggered by state changes / WS events,
+  // not by an awaiting caller, so a rejection here has nowhere to propagate and would otherwise
+  // surface as an unhandled rejection (e.g. `channel.markRead` throwing when read events are
+  // disabled, or a transient network error). Swallow it — the auto path retries on the next
+  // trigger, and explicit `markRead()` callers still receive the error.
+  public throttledMarkRead = throttle(
+    (collection: Channel | Thread, options?: MarkReadRequest) => {
+      void this.markRead(collection, options).catch(() => undefined);
+    },
+    MARK_AS_READ_THROTTLE_TIMEOUT,
+    {
+      leading: true,
+      trailing: true,
+    },
+  );
 }
