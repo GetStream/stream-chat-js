@@ -12,6 +12,8 @@ import {
 } from './MessageIntervalPaginator';
 import type { LocalMessage } from '../../types';
 import { StateStore } from '../../store';
+import { ItemIndex } from '../ItemIndex';
+import { StoreBackedItemIndex } from '../../messageStore/StoreBackedItemIndex';
 
 export type {
   JumpToMessageOptions,
@@ -127,7 +129,30 @@ export class MessagePaginator extends MessageIntervalPaginator {
     unreadReferencePolicy = 'snapshot',
     ...options
   }: MessagePaginatorOptions) {
-    super(options);
+    const { channel } = options;
+    super({
+      ...options,
+      paginatorOptions: {
+        ...options.paginatorOptions,
+        // Back the channel main list and thread reply list with the client-global
+        // message store so a message held in more than one of them (a channel message
+        // also open in its thread, a `show_in_channel` reply in both) has a single
+        // canonical copy — no copy-to-copy fan-out. Falls back to a private index if
+        // the store is unavailable (e.g. a detached paginator in a test).
+        createItemIndex:
+          options.paginatorOptions?.createItemIndex ??
+          ((owner) => {
+            const store = channel.getClient?.().messageStore;
+            return store
+              ? new StoreBackedItemIndex({
+                  store,
+                  owner,
+                  getId: owner.getItemId.bind(owner),
+                })
+              : new ItemIndex({ getId: owner.getItemId.bind(owner) });
+          }),
+      },
+    });
     this.unreadReferencePolicy = unreadReferencePolicy;
     this.unreadStateSnapshot = new StateStore<UnreadSnapshotState>({
       lastReadAt: null,

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { formatMessage, StreamChat, Thread } from '../../src';
 import type {
   Channel,
+  Event,
   MessageResponse,
   ReactionAPIResponse,
   ReactionGroupResponse,
@@ -391,6 +392,188 @@ describe('optimistic reactions', () => {
 
       expect(ownReactionTypes(channel.messagePaginator, reply.id)).toEqual([]);
       expect(ownReactionTypes(thread.messagePaginator, reply.id)).toEqual([]);
+    });
+  });
+
+  describe('thread parent message (own_reactions preservation)', () => {
+    const parentOwnReactionTypes = (thread: Thread) =>
+      (thread.state.getLatestValue().parentMessage?.own_reactions ?? []).map(
+        (r) => r.type,
+      );
+
+    const setupParentThread = (ownTypes: string[] = []) => {
+      const parentId = uuidv4();
+      const thread = new Thread({
+        client,
+        channel,
+        parentMessage: buildMessage(ownTypes, { cid: channel.cid, id: parentId }),
+      });
+      thread.registerSubscriptions();
+      return { parentId, thread };
+    };
+
+    it('keeps the user other own_reactions when reacting to the parent (the dropped-reactions bug)', () => {
+      const { parentId, thread } = setupParentThread(['like']);
+
+      client.dispatchEvent({
+        type: 'reaction.new',
+        message: generateMsg({ id: parentId, own_reactions: [] }),
+        reaction: ownReaction('love', parentId),
+      } as unknown as Event);
+
+      expect(parentOwnReactionTypes(thread)).toEqual(
+        expect.arrayContaining(['like', 'love']),
+      );
+      thread.unregisterSubscriptions();
+    });
+
+    it('removes only the un-reacted type from the parent own_reactions', () => {
+      const { parentId, thread } = setupParentThread(['like', 'love']);
+
+      client.dispatchEvent({
+        type: 'reaction.deleted',
+        message: generateMsg({ id: parentId, own_reactions: [] }),
+        reaction: ownReaction('love', parentId),
+      } as unknown as Event);
+
+      expect(parentOwnReactionTypes(thread)).toEqual(['like']);
+      thread.unregisterSubscriptions();
+    });
+
+    it('preserves parent own_reactions across an edit (message.updated)', () => {
+      const { parentId, thread } = setupParentThread(['love']);
+
+      client.dispatchEvent({
+        type: 'message.updated',
+        message: generateMsg({ id: parentId, text: 'edited', own_reactions: [] }),
+      } as unknown as Event);
+
+      const parent = thread.state.getLatestValue().parentMessage;
+      expect(parent?.text).toBe('edited');
+      expect(parentOwnReactionTypes(thread)).toEqual(['love']);
+      thread.unregisterSubscriptions();
+    });
+  });
+
+  describe('thread parent message (optimistic reactions)', () => {
+    const parentState = (thread: Thread) => thread.state.getLatestValue().parentMessage;
+    const parentOwnTypes = (thread: Thread) =>
+      (parentState(thread)?.own_reactions ?? []).map((r) => r.type);
+
+    // `registerSubscriptions` seeds the parent into the client-global message store and subscribes
+    // `state.parentMessage` to it, so an update to that id anywhere reflects on the thread.
+    const setupParentThread = (
+      ownTypes: string[] = [],
+      { seedInChannel = false }: { seedInChannel?: boolean } = {},
+    ) => {
+      const parentId = uuidv4();
+      const parentMessage = buildMessage(ownTypes, { cid: channel.cid, id: parentId });
+      if (seedInChannel) seed(channel, parentMessage);
+      const thread = new Thread({ client, channel, parentMessage });
+      thread.registerSubscriptions();
+      return { parentId, thread };
+    };
+
+    it('applies an added reaction to the parent immediately even when the channel has not loaded it', async () => {
+      const { parentId, thread } = setupParentThread();
+      vi.spyOn(channel, 'sendReaction').mockResolvedValue(
+        apiReactionResponse(generateMsg({ id: parentId })),
+      );
+
+      const pending = channel.addReactionWithLocalUpdate({
+        messageId: parentId,
+        reaction: { type: 'love' },
+      });
+
+      expect(parentOwnTypes(thread)).toContain('love');
+      expect(parentState(thread)?.reaction_groups?.love?.count).toBe(1);
+      // the channel never held the parent, so there is no channel-side copy to update
+      expect(channel.messagePaginator.getItem(parentId)).toBeUndefined();
+
+      await pending;
+    });
+
+    it('mirrors the reaction onto both the channel copy and the thread parent when both hold it', async () => {
+      const { parentId, thread } = setupParentThread([], { seedInChannel: true });
+      vi.spyOn(channel, 'sendReaction').mockResolvedValue(
+        apiReactionResponse(generateMsg({ id: parentId })),
+      );
+
+      const pending = channel.addReactionWithLocalUpdate({
+        messageId: parentId,
+        reaction: { type: 'love' },
+      });
+
+      expect(ownReactionTypes(channel.messagePaginator, parentId)).toContain('love');
+      expect(parentOwnTypes(thread)).toContain('love');
+
+      await pending;
+    });
+
+    it('preserves the user other own_reactions when adding to the parent', async () => {
+      const { parentId, thread } = setupParentThread(['like']);
+      vi.spyOn(channel, 'sendReaction').mockResolvedValue(
+        apiReactionResponse(generateMsg({ id: parentId })),
+      );
+
+      const pending = channel.addReactionWithLocalUpdate({
+        messageId: parentId,
+        reaction: { type: 'love' },
+      });
+
+      expect(parentOwnTypes(thread)).toEqual(expect.arrayContaining(['like', 'love']));
+
+      await pending;
+    });
+
+    it('replaces the existing own reaction on the parent when enforce_unique is set', async () => {
+      const { parentId, thread } = setupParentThread(['like']);
+      vi.spyOn(channel, 'sendReaction').mockResolvedValue(
+        apiReactionResponse(generateMsg({ id: parentId })),
+      );
+
+      const pending = channel.addReactionWithLocalUpdate({
+        messageId: parentId,
+        reaction: { type: 'love' },
+        options: { enforce_unique: true },
+      });
+
+      expect(parentOwnTypes(thread)).toEqual(['love']);
+
+      await pending;
+    });
+
+    it('removes the own reaction from the parent immediately', async () => {
+      const { parentId, thread } = setupParentThread(['love']);
+      vi.spyOn(channel, 'deleteReaction').mockResolvedValue(
+        apiReactionResponse(generateMsg({ id: parentId })),
+      );
+
+      const pending = channel.deleteReactionWithLocalUpdate({
+        messageId: parentId,
+        type: 'love',
+      });
+
+      expect(parentOwnTypes(thread)).toEqual([]);
+
+      await pending;
+    });
+
+    it('reverts the parent reaction on a terminal failure', async () => {
+      const { parentId, thread } = setupParentThread();
+      vi.spyOn(channel, 'sendReaction').mockRejectedValue(networkError());
+
+      const pending = channel.addReactionWithLocalUpdate({
+        messageId: parentId,
+        reaction: { type: 'love' },
+      });
+
+      expect(parentOwnTypes(thread)).toContain('love');
+
+      await expect(pending).rejects.toThrow('network down');
+
+      expect(parentOwnTypes(thread)).toEqual([]);
+      expect(parentState(thread)?.reaction_groups?.love).toBeUndefined();
     });
   });
 });

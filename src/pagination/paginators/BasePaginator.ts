@@ -5,7 +5,8 @@ import { isPatch, StateStore, type ValueOrPatch } from '../../store';
 import { debounce, type DebouncedFunc, generateUUIDv4, sleep } from '../../utils';
 import type { FieldToDataResolver } from '../types.normalization';
 import { ComparisonResult } from '../types.normalization';
-import { ItemIndex } from '../ItemIndex';
+import { ItemIndex, type ItemIndexApi } from '../ItemIndex';
+import type { MessageStoreChangeBatch } from '../../messageStore/MessageStore';
 import { isEqual } from '../../utils/mergeWith/mergeWithCore';
 import { DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES } from '../../constants';
 
@@ -334,7 +335,14 @@ export type PaginatorOptions<T, Q> = {
   /** In case of offset pagination, specify the initial offset value. */
   initialOffset?: number;
   /** If item index is provided, this index ensures updates in a single place and all consumers have access to a single source of data. */
-  itemIndex?: ItemIndex<T>;
+  itemIndex?: ItemIndexApi<T>;
+  /**
+   * Factory for the item index, invoked with the fully-constructed paginator as `owner`.
+   * Lets a subclass back the paginator with an adapter that needs a reference to the
+   * owner (e.g. a shared, client-global store) without the `this`-before-`super` problem.
+   * Ignored when an explicit `itemIndex` is supplied.
+   */
+  createItemIndex?: (owner: BasePaginator<T, Q>) => ItemIndexApi<T>;
   /**
    * Comparator defining in-memory item ordering for interval math and visible list rendering.
    * Defaults to `sortComparator` to preserve existing paginator behavior.
@@ -358,6 +366,7 @@ type OptionalPaginatorConfigFields =
   | 'initialCursor'
   | 'initialOffset'
   | 'itemIndex'
+  | 'createItemIndex'
   | 'itemOrderComparator'
   | 'throwErrors';
 
@@ -406,7 +415,7 @@ export abstract class BasePaginator<T, Q> {
    * It serves as a single source of truth for all those that need to access the items
    * outside the paginator.
    */
-  protected _itemIndex: ItemIndex<T>;
+  protected _itemIndex: ItemIndexApi<T>;
 
   protected _executeQueryDebounced!: DebouncedExecQueryFunction<Q>;
   /** Last effective query shape produced by subclass for the most recent request. */
@@ -460,6 +469,7 @@ export abstract class BasePaginator<T, Q> {
     initialCursor,
     initialOffset,
     itemIndex,
+    createItemIndex,
     ...options
   }: PaginatorOptions<T, Q> = {}) {
     this.config = {
@@ -482,7 +492,10 @@ export abstract class BasePaginator<T, Q> {
     this.setDebounceOptions({ debounceMs });
     this.sortComparator = noOrderChange;
     this._filterFieldToDataResolvers = [];
-    this._itemIndex = itemIndex ?? new ItemIndex({ getId: this.getItemId.bind(this) });
+    this._itemIndex =
+      itemIndex ??
+      createItemIndex?.(this) ??
+      new ItemIndex({ getId: this.getItemId.bind(this) });
   }
 
   // ---------------------------------------------------------------------------
@@ -804,6 +817,30 @@ export abstract class BasePaginator<T, Q> {
 
   getItem(id: string | undefined): T | undefined {
     return typeof id === 'string' ? this._itemIndex?.get(id) : undefined;
+  }
+
+  /**
+   * Reacts to a change to a held item made *elsewhere* — a sibling paginator or a WS
+   * echo writing through a shared item store. Re-emits the active window only if a
+   * changed id is part of it, mirroring the active-interval emit gate in {@link ingestItem}.
+   *
+   * The paginator's own writes pass themselves to the store as the change origin, so
+   * they never arrive here (they emit inline instead) — this is what lets a shared
+   * store replace the manual copy-to-copy fan-out without double-emitting.
+   */
+  onMessagesChanged({ changedIds }: MessageStoreChangeBatch): void {
+    if (!this._activeIntervalId) return;
+    const activeInterval = this._itemIntervals.get(this._activeIntervalId);
+    if (!activeInterval) return;
+    let impacted = false;
+    for (const id of activeInterval.itemIds) {
+      if (changedIds.has(id)) {
+        impacted = true;
+        break;
+      }
+    }
+    if (!impacted) return;
+    this.state.partialNext({ items: this.intervalToItems(activeInterval) });
   }
 
   // ---------------------------------------------------------------------------
@@ -1553,9 +1590,13 @@ export abstract class BasePaginator<T, Q> {
       isTail,
     });
 
-    for (const item of page) {
-      this._itemIndex.setOne(item);
-    }
+    // Coalesce per-item change notifications into a single flush, so a page of N
+    // items wakes each subscribing paginator once rather than N times.
+    this._itemIndex.batch(() => {
+      for (const item of page) {
+        this._itemIndex.setOne(item);
+      }
+    });
 
     const targetInterval = targetIntervalId
       ? this._itemIntervals.get(targetIntervalId)

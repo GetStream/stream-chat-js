@@ -308,6 +308,9 @@ describe('Threads 2.0', () => {
 
         it('updates parent message and related top-level properties', () => {
           const thread = createTestThread();
+          // `state.parentMessage` is a projection of the client-global message store; the update
+          // reflects through the store subscription registered here.
+          thread.registerSubscriptions();
 
           const stateBefore = thread.state.getLatestValue();
           expect(stateBefore.deletedAt).to.be.null;

@@ -2,6 +2,7 @@ import type { AxiosRequestConfig } from 'axios';
 import { ChannelState } from './channel_state';
 import { CooldownTimer } from './CooldownTimer';
 import { isEphemeral } from './errors';
+import { applyReactionLocally } from './messageStore';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';
@@ -456,7 +457,8 @@ export class Channel {
     reaction: Reaction;
     options?: SendReactionOptions;
   }) {
-    const undo = this.messagePaginator.applyReactionLocally({
+    const client = this.getClient();
+    const undo = applyReactionLocally(client, {
       enforceUnique: options?.enforce_unique ?? false,
       messageId,
       reaction,
@@ -465,10 +467,10 @@ export class Channel {
     try {
       const response = await this.sendReaction(messageId, reaction, options);
       if (response?.message) {
-        this.messagePaginator.ingestItem(formatMessage(response.message));
+        client.messageStore.upsert(formatMessage(response.message));
       }
     } catch (error) {
-      if (undo && (!this.getClient().offlineDb || !isEphemeral(error as Error))) {
+      if (undo && (!client.offlineDb || !isEphemeral(error as Error))) {
         undo();
       }
       throw error;
@@ -486,7 +488,8 @@ export class Channel {
     messageId: string;
     type: string;
   }) {
-    const undo = this.messagePaginator.applyReactionLocally({
+    const client = this.getClient();
+    const undo = applyReactionLocally(client, {
       messageId,
       reaction: { type },
       removed: true,
@@ -495,10 +498,10 @@ export class Channel {
     try {
       const response = await this.deleteReaction(messageId, type);
       if (response?.message) {
-        this.messagePaginator.ingestItem(formatMessage(response.message));
+        client.messageStore.upsert(formatMessage(response.message));
       }
     } catch (error) {
-      if (undo && (!this.getClient().offlineDb || !isEphemeral(error as Error))) {
+      if (undo && (!client.offlineDb || !isEphemeral(error as Error))) {
         undo();
       }
       throw error;
