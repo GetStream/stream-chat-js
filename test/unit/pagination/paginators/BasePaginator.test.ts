@@ -3120,6 +3120,24 @@ describe('BasePaginator', () => {
         // @ts-expect-error accessing protected property
         expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([]);
       });
+
+      it('drops item-index membership so the id is no longer addressable', () => {
+        // Fresh index so the shared module-level one is not polluted across tests.
+        const index = new ItemIndex<TestItem>({ getId: ({ id }) => id });
+        const paginator = new Paginator({ itemIndex: index });
+        paginator.ingestPage({ page: [item1, item2, item3], setActive: true });
+        expect(paginator.getItem(item2.id)).toStrictEqual(item2);
+
+        paginator.removeItem({ id: item2.id });
+
+        // Regression: removeItem used to remove from intervals/state.items but leave the id in the
+        // item index. With a store-backed index that leaked a refcount (the message was never
+        // GC'd) and left getItem returning a no-longer-listed "ghost". Membership must drop too.
+        expect(paginator.getItem(item2.id)).toBeUndefined();
+        // untouched siblings stay addressable
+        expect(paginator.getItem(item1.id)).toStrictEqual(item1);
+        expect(paginator.getItem(item3.id)).toStrictEqual(item3);
+      });
     });
 
     describe('headItems (newest loaded window)', () => {

@@ -1951,7 +1951,9 @@ export abstract class BasePaginator<T, Q> {
     if (item) {
       const coords = this.locateByItem(item);
       if (!coords.state && !coords.interval) return noAction;
-      return this.removeItemAtCoordinates(coords);
+      const result = this.removeItemAtCoordinates(coords);
+      this._itemIndex.remove(this.getItemId(item));
+      return result;
     }
 
     return noAction;
@@ -2379,6 +2381,19 @@ export abstract class BasePaginator<T, Q> {
     this.setIntervals([]);
     this.setActiveInterval(undefined);
     this.clearIntervalViews();
+  }
+
+  /**
+   * Releases this paginator's hold on shared item content. With a store-backed index this unlinks
+   * every member id from the client-global message store, so the store no longer strong-references
+   * this paginator through its subscriber registry — otherwise a discarded owner (e.g. a
+   * {@link Thread} removed from the manager) stays pinned and keeps receiving store notifications,
+   * and its messages never garbage-collect. Call on teardown of the owner. This is a discard, not a
+   * reset: the owner is not expected to be reused afterwards (a re-appearing id gets a fresh
+   * instance); leftover interval/state caches die with the paginator when it is dropped.
+   */
+  dispose(): void {
+    this._itemIndex.clear();
   }
 
   toTail = (params: Omit<PaginationQueryParams<Q>, 'direction' | 'queryShape'> = {}) =>

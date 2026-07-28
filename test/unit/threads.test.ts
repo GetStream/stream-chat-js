@@ -471,6 +471,50 @@ describe('Threads 2.0', () => {
           // Merging a partial newest window must not clear "load older".
           expect(paginatorState.hasMoreTail).to.be.true;
         });
+
+        it('refreshes the store parent so the projection is not clobbered by a stale copy', () => {
+          const thread = createTestThread();
+          thread.registerSubscriptions();
+          // registering seeds the store with the parent the thread currently holds
+          expect(client.messageStore.get(thread.id)?.text).to.equal(
+            parentMessageResponse.text,
+          );
+
+          // A fresh re-query (reload / reconnect) carries an edited parent.
+          const hydrationThread = createTestThread({
+            parentMessageOverrides: { text: 'edited-on-server' },
+          });
+          thread.hydrateState(hydrationThread);
+
+          // Both the projection AND the store's canonical copy are the hydrated parent (no
+          // divergence). Regression: hydrateState used to update only state.parentMessage, leaving
+          // the store on the pre-hydrate copy, so the next store write for this id would fan the
+          // stale parent back over the edit.
+          expect(thread.state.getLatestValue().parentMessage.text).to.equal(
+            'edited-on-server',
+          );
+          expect(client.messageStore.get(thread.id)?.text).to.equal('edited-on-server');
+        });
+      });
+
+      describe('unregisterSubscriptions', () => {
+        it('releases the reply paginator hold on the shared message store', () => {
+          const reply = makeReply();
+          const thread = createTestThread();
+          thread.registerSubscriptions();
+          thread.upsertReplyLocally({ message: reply });
+
+          // the reply is held in the client-global store by the reply paginator
+          expect(client.messageStore.has(reply.id)).to.be.true;
+
+          thread.unregisterSubscriptions();
+
+          // Regression: a removed thread used to keep its reply paginator linked as a store
+          // subscriber, pinning it (and its replies) forever. With no other holder the store GCs
+          // the reply and the paginator no longer holds it.
+          expect(client.messageStore.has(reply.id)).to.be.false;
+          expect(thread.messagePaginator.getItem(reply.id)).to.be.undefined;
+        });
       });
 
       describe('reload', () => {

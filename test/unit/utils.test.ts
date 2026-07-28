@@ -26,10 +26,63 @@ import {
   uniqBy,
   runDetached,
   sleep,
+  computeOwnReactions,
 } from '../../src/utils';
 
-import type { ChannelFilters, ChannelSortBase, MessageResponse } from '../../src';
+import type {
+  ChannelFilters,
+  ChannelSortBase,
+  MessageResponse,
+  ReactionResponse,
+} from '../../src';
 import { StreamChat, Channel } from '../../src';
+
+describe('computeOwnReactions', () => {
+  const ME = 'me';
+  const other = 'someone-else';
+  const reaction = (type: string, userId: string): ReactionResponse =>
+    ({ type, user_id: userId }) as ReactionResponse;
+
+  it('adds the current user reaction, de-duped by type', () => {
+    expect(
+      computeOwnReactions({ current: [], reaction: reaction('love', ME), userId: ME }),
+    ).toEqual([reaction('love', ME)]);
+  });
+
+  it('enforceUnique replaces the current user existing reaction', () => {
+    const result = computeOwnReactions({
+      current: [reaction('like', ME)],
+      reaction: reaction('love', ME),
+      userId: ME,
+      enforceUnique: true,
+    });
+    expect(result).toEqual([reaction('love', ME)]);
+  });
+
+  it('removed drops the current user reaction of that type', () => {
+    expect(
+      computeOwnReactions({
+        current: [reaction('love', ME)],
+        reaction: reaction('love', ME),
+        userId: ME,
+        removed: true,
+      }),
+    ).toEqual([]);
+  });
+
+  // Regression: a cross-user reaction.updated (enforceUnique is passed for every reaction.updated)
+  // must NOT touch the current user's own_reactions. It previously returned [] in this case, wiping
+  // the current user's reaction highlight until a refresh.
+  it('preserves current-user own_reactions on a cross-user enforceUnique reaction.updated', () => {
+    const result = computeOwnReactions({
+      current: [reaction('love', ME)],
+      reaction: reaction('like', other),
+      userId: ME,
+      enforceUnique: true,
+    });
+    expect(result).toEqual([reaction('love', ME)]);
+  });
+});
 
 describe('findIndexInSortedArray', () => {
   it('finds index in the middle of haystack (asc)', () => {

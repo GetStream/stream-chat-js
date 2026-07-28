@@ -382,7 +382,7 @@ export function computeOwnReactions({
     (r) => r.user_id !== reaction.user_id || r.type !== reaction.type,
   );
   if (removed) return withoutType;
-  if (userId !== reaction.user_id) return enforceUnique ? [] : withoutType;
+  if (userId !== reaction.user_id) return withoutType;
   return enforceUnique ? [reaction] : [...withoutType, reaction];
 }
 

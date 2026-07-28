@@ -401,6 +401,10 @@ export class Thread extends WithSubscriptions {
       isStateStale: false,
     });
 
+    if (parentMessage && this.hasSubscriptions) {
+      this.client.messageStore.upsert(parentMessage);
+    }
+
     this.messagePaginator.mergeNewestPage(
       thread.messagePaginator.state.getLatestValue().items ?? [],
     );
@@ -737,6 +741,12 @@ export class Thread extends WithSubscriptions {
 
   public unregisterSubscriptions = () => {
     const symbol = super.unregisterSubscriptions();
+    // Release the reply paginator's hold on the shared message store. The parent subscription is
+    // torn down by `super.unregisterSubscriptions()` (it was added as an unsubscribe function), but
+    // the reply paginator's per-id links live in its item index, not in the subscription list — so a
+    // removed thread would otherwise stay pinned by `messageStore.subscribers` and keep its replies
+    // alive. `getThread` builds a fresh instance if this thread is re-opened, so this is a discard.
+    this.messagePaginator.dispose();
     this.state.partialNext({ isStateStale: true });
     return symbol;
   };
