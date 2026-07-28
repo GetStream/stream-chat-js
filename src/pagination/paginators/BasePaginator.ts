@@ -832,15 +832,50 @@ export abstract class BasePaginator<T, Q> {
     if (!this._activeIntervalId) return;
     const activeInterval = this._itemIntervals.get(this._activeIntervalId);
     if (!activeInterval) return;
-    let impacted = false;
-    for (const id of activeInterval.itemIds) {
-      if (changedIds.has(id)) {
-        impacted = true;
-        break;
+
+    // Fast path: a content update (a reaction/read/edit written through a sibling holder) changes
+    // messages in place without changing membership or order. When the current window still lines
+    // up with the interval one-to-one, shallow-copy it and swap only the changed slots — this
+    // preserves every unchanged item reference (so memoized rows bail) and avoids re-mapping and
+    // re-sorting the whole active window on every event. Skipped when a boost is active (a boost
+    // can reorder the visible window, which a slot-swap would not reflect) — then we fall through
+    // to the full projection below, which applies the boost order.
+    const currentItems = this.items;
+    this.clearExpiredBoosts();
+    if (
+      currentItems &&
+      currentItems.length === activeInterval.itemIds.length &&
+      (this.config.lockItemOrder || this.boosts.size === 0)
+    ) {
+      let next: T[] | undefined;
+      let needsFullProjection = false;
+      for (let i = 0; i < currentItems.length; i++) {
+        const id = this.getItemId(currentItems[i]);
+        if (!changedIds.has(id)) continue;
+        const updated = this._itemIndex.get(id);
+        if (!updated) {
+          // The id left the store (a removal, not an in-place update) — resync via a full projection.
+          needsFullProjection = true;
+          break;
+        }
+        if (updated === currentItems[i]) continue;
+        if (!next) next = currentItems.slice();
+        next[i] = updated;
+      }
+      if (!needsFullProjection) {
+        if (next) this.state.partialNext({ items: next });
+        return;
       }
     }
-    if (!impacted) return;
-    this.state.partialNext({ items: this.intervalToItems(activeInterval) });
+
+    // Fallback: membership/order drifted (or no window to patch, or a boost is active). Re-project,
+    // but only if a changed id is actually in the active interval.
+    for (const id of activeInterval.itemIds) {
+      if (changedIds.has(id)) {
+        this.state.partialNext({ items: this.intervalToItems(activeInterval) });
+        return;
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -933,6 +968,14 @@ export abstract class BasePaginator<T, Q> {
 
     // When lockItemOrder is true, we must *not* reflect boosts in state.items.
     if (this.config.lockItemOrder) {
+      return items;
+    }
+
+    // itemIds are maintained in itemOrder, so the mapped items are already ordered; only an active
+    // boost can reorder the visible window. Skip the otherwise-redundant full re-sort when none are
+    // active (the common case), so a page ingest / full projection is a map, not a map + sort.
+    this.clearExpiredBoosts();
+    if (this.boosts.size === 0) {
       return items;
     }
 

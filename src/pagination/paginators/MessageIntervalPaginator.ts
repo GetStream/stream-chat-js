@@ -799,36 +799,40 @@ export class MessageIntervalPaginator extends BasePaginator<
   }) => {
     const loadedMessages = this.items ?? [];
 
-    for (const message of loadedMessages) {
-      if (message.user?.id === userId) {
-        if (hardDelete) {
-          this.removeItem({ id: message.id });
-        } else {
-          this.ingestItem(
-            toDeletedMessage({
-              message,
+    // Batch: one logical operation touches many messages; coalesce the shared-store fan-out to a
+    // single flush (sibling holders are notified once) instead of once per affected message.
+    this._itemIndex.batch(() => {
+      for (const message of loadedMessages) {
+        if (message.user?.id === userId) {
+          if (hardDelete) {
+            this.removeItem({ id: message.id });
+          } else {
+            this.ingestItem(
+              toDeletedMessage({
+                message,
+                hardDelete,
+                deletedAt,
+              }) as LocalMessage,
+            );
+          }
+          continue;
+        }
+
+        if (
+          message.quoted_message?.user?.id === userId &&
+          message.quoted_message.type !== 'deleted'
+        ) {
+          this.ingestItem({
+            ...message,
+            quoted_message: toDeletedMessage({
+              message: message.quoted_message,
               hardDelete,
               deletedAt,
             }) as LocalMessage,
-          );
+          });
         }
-        continue;
       }
-
-      if (
-        message.quoted_message?.user?.id === userId &&
-        message.quoted_message.type !== 'deleted'
-      ) {
-        this.ingestItem({
-          ...message,
-          quoted_message: toDeletedMessage({
-            message: message.quoted_message,
-            hardDelete,
-            deletedAt,
-          }) as LocalMessage,
-        });
-      }
-    }
+    });
   };
 
   /**
@@ -841,14 +845,18 @@ export class MessageIntervalPaginator extends BasePaginator<
   reflectQuotedMessageUpdate = (message: LocalMessage) => {
     const cachedMessages = this._itemIndex.values();
 
-    for (const cachedMessage of cachedMessages) {
-      if (cachedMessage.quoted_message_id !== message.id) continue;
+    // Batch: several cached messages may quote the updated one; coalesce the shared-store fan-out
+    // to a single flush instead of one per re-ingested quoting message.
+    this._itemIndex.batch(() => {
+      for (const cachedMessage of cachedMessages) {
+        if (cachedMessage.quoted_message_id !== message.id) continue;
 
-      this.ingestItem({
-        ...cachedMessage,
-        quoted_message: message,
-      });
-    }
+        this.ingestItem({
+          ...cachedMessage,
+          quoted_message: message,
+        });
+      }
+    });
   };
 
   /**
@@ -863,11 +871,15 @@ export class MessageIntervalPaginator extends BasePaginator<
   reflectUserUpdate = (user: UserResponse) => {
     const activeIds = new Set((this.items ?? []).map((m) => this.getItemId(m)));
     let activeAffected = false;
-    for (const message of this._itemIndex.values()) {
-      if (message.user?.id !== user.id) continue;
-      this._itemIndex.setOne({ ...message, user });
-      if (activeIds.has(this.getItemId(message))) activeAffected = true;
-    }
+    // Batch: a user rename can touch many messages; coalesce the shared-store fan-out to sibling
+    // holders into a single flush. This paginator's own active window is re-emitted once below.
+    this._itemIndex.batch(() => {
+      for (const message of this._itemIndex.values()) {
+        if (message.user?.id !== user.id) continue;
+        this._itemIndex.setOne({ ...message, user });
+        if (activeIds.has(this.getItemId(message))) activeAffected = true;
+      }
+    });
     if (activeAffected) {
       this.state.partialNext({
         items: (this.items ?? []).map((m) => this.getItem(this.getItemId(m)) ?? m),
