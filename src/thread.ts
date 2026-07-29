@@ -110,10 +110,7 @@ export class Thread extends WithSubscriptions {
       const threadChannel = client.channel(
         threadData.channel.type,
         threadData.channel.id,
-        {
-          // @ts-expect-error name is a "custom" property
-          name: threadData.channel.name,
-        },
+        { custom: threadData.channel.custom },
       );
       threadChannel._hydrateMembers({
         members: threadData.channel.members ?? [],

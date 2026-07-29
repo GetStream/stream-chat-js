@@ -263,6 +263,41 @@ describe('Client active channels cache', () => {
 	});
 });
 
+describe('client.channel() custom-data preservation', () => {
+	let client;
+	beforeEach(async () => {
+		client = await getClientWithUser();
+	});
+
+	it("does not wipe an existing channel's custom when re-resolved with a non-custom arg", () => {
+		// First resolution seeds the channel's custom data (e.g. its display name).
+		const channel = client.channel('messaging', 'little-italy', {
+			custom: { name: 'Little-Italy' },
+		});
+		expect(channel.data.custom.name).to.equal('Little-Italy');
+
+		// A later `client.channel(type, id, arg)` for the SAME channel that passes other fields but
+		// no `custom` — as thread hydration and getChannel do (`{ members }`, or even
+		// `{ members: undefined }` when no members are given) — must NOT blank the channel's custom.
+		// Regression: getChannelById used to run `channel.data.custom = arg.custom` on any non-empty
+		// arg, wiping custom to `undefined` and dropping the channel's name from the channel list.
+		const viaMembers = client.channel('messaging', 'little-italy', {
+			members: [{ user_id: 'u2' }],
+		});
+		expect(viaMembers).to.equal(channel); // same cached instance
+		expect(channel.data.custom.name).to.equal('Little-Italy');
+
+		client.channel('messaging', 'little-italy', { members: undefined });
+		expect(channel.data.custom.name).to.equal('Little-Italy');
+	});
+
+	it('applies custom when the caller actually provides it', () => {
+		const channel = client.channel('messaging', 'ch-custom', { custom: { name: 'Old' } });
+		client.channel('messaging', 'ch-custom', { custom: { name: 'New' } });
+		expect(channel.data.custom.name).to.equal('New');
+	});
+});
+
 describe('Client openConnection', () => {
 	let client;
 

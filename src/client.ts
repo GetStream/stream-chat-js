@@ -1660,7 +1660,13 @@ export class StreamChat extends ChatApi {
       !this.activeChannels[cid].disconnected
     ) {
       const channel = this.activeChannels[cid];
-      if (Object.keys(custom).length > 0) {
+      // Only overwrite the existing channel's custom data when the caller actually provided some.
+      // A caller passing other fields (e.g. `{ members }`, or even `{ members: undefined }`) yields a
+      // non-empty object with no `.custom`; the previous `Object.keys(custom).length > 0` guard let
+      // that through and then set `custom: custom.custom` (undefined), wiping the channel's existing
+      // custom data (e.g. its name). Guarding on `custom.custom` keeps genuine custom updates while
+      // leaving the existing custom intact when the caller omits it.
+      if (custom.custom !== undefined) {
         const previousData = channel.data;
         channel.data = { ...channel.data, custom: custom.custom };
         channel._syncStateFromChannelData(channel.data, previousData);
