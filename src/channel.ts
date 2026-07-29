@@ -255,7 +255,10 @@ export class Channel {
     this.cooldownTimer = new CooldownTimer({ channel: this });
 
     this.messageOperations = new MessageOperations({
-      ingest: (m) => this.messagePaginator.ingestItem(m),
+      ingest: (m) => {
+        this.messagePaginator.ingestItem(m);
+        this.getClient().messageStore.flushSubscribers();
+      },
       get: (id) => this.messagePaginator.getItem(id),
       handlers: () => {
         const { requestHandlers } = this.configState.getLatestValue();

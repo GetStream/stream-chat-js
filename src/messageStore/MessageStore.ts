@@ -22,6 +22,12 @@ export type MessageStoreChangeBatch = {
  */
 export type MessageStoreSubscriber = {
   onMessagesChanged: (batch: MessageStoreChangeBatch) => void;
+  /**
+   * Optional: emit any throttled/pending state notification immediately. Called by
+   * {@link MessageStore.flushSubscribers} after an optimistic (local-user) write so the change renders
+   * without throttle delay. A paginator implements this by flushing its throttled window publish.
+   */
+  flushState?: () => void;
 };
 
 const EMPTY_ID_SET: ReadonlySet<string> = new Set<string>();
@@ -157,6 +163,23 @@ export class MessageStore {
     } finally {
       this.transactionDepth -= 1;
       if (this.transactionDepth === 0) this.flush();
+    }
+  }
+
+  /**
+   * Immediately flushes any throttled/pending state notification on every current holder (via
+   * {@link MessageStoreSubscriber.flushState}). Used after an optimistic (local-user) write so it
+   * renders without throttle delay. Flushing a holder with nothing pending is a no-op, so
+   * over-flushing unaffected holders is harmless.
+   */
+  flushSubscribers(): void {
+    const flushed = new Set<MessageStoreSubscriber>();
+    for (const holders of this.subscribers.values()) {
+      for (const holder of holders) {
+        if (flushed.has(holder)) continue;
+        flushed.add(holder);
+        holder.flushState?.();
+      }
     }
   }
 

@@ -133,6 +133,11 @@ export class MessagePaginator extends MessageIntervalPaginator {
     super({
       ...options,
       paginatorOptions: {
+        // Throttle message-list `state` publishes to at most once per 500ms (leading + trailing), so a
+        // burst of events coalesces into ~2 renders/sec instead of one per event. Optimistic
+        // (local-user) writes bypass the throttle via MessageStore.flushSubscribers → flushState.
+        // Overridable per-instance via `paginatorOptions.stateThrottleMs`.
+        stateThrottleMs: 500,
         ...options.paginatorOptions,
         // Back the channel main list and thread reply list with the client-global
         // message store so a message held in more than one of them (a channel message

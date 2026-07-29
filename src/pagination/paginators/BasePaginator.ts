@@ -3,6 +3,8 @@ import { binarySearch } from '../sortCompiler';
 import { itemMatchesFilter } from '../filterCompiler';
 import { isPatch, StateStore, type ValueOrPatch } from '../../store';
 import { debounce, type DebouncedFunc, generateUUIDv4, sleep } from '../../utils';
+import { throttle, type Throttled } from '../../utils/throttling/throttle';
+import { isStateThrottlingEnabled } from './stateThrottling';
 import type { FieldToDataResolver } from '../types.normalization';
 import { ComparisonResult } from '../types.normalization';
 import { ItemIndex, type ItemIndexApi } from '../ItemIndex';
@@ -318,6 +320,17 @@ export type PaginatorOptions<T, Q> = {
   /** The number of milliseconds to debounce the search query. The default interval is 300ms. */
   debounceMs?: number;
   /**
+   * When set (and not disabled for tests — see `stateThrottling.ts`), coalesces the paginator's own
+   * live `state.items` publishes to at most once per `stateThrottleMs` (leading + trailing edge): a
+   * burst of live mutations (WS `message.new`, reactions, reads) re-projects the active window and
+   * publishes it ~2×/sec instead of once per event. Only the paginator's OWN writes to `state.items`
+   * are batched — `state.getLatestValue()` is untouched (no `StateStore` change), pagination / jump /
+   * query publishes stay immediate, and optimistic (local-user) writes flush past it via
+   * {@link MessageStore.flushSubscribers} → `flushState`. Unset ⇒ no throttle (default). Enabled at
+   * 500ms for the message list — see {@link MessagePaginator}.
+   */
+  stateThrottleMs?: number;
+  /**
    * Function containing custom logic that decides, whether the next pagination query to be executed should be considered the first page query.
    * It makes sense to consider the next query as the first page query if filters, sort, options etc. (query params) excluding the page size have changed.
    */
@@ -361,6 +374,7 @@ export type PaginatorOptions<T, Q> = {
 };
 
 type OptionalPaginatorConfigFields =
+  | 'stateThrottleMs'
   | 'deriveCursor'
   | 'doRequest'
   | 'initialCursor'
@@ -401,6 +415,13 @@ export abstract class BasePaginator<T, Q> {
    */
   intervalViews: StateStore<PaginatorIntervalViews<T>>;
   config: BasePaginatorConfig<T, Q>;
+
+  /**
+   * Throttle for the active-window `state.items` publish (message list). Created only when
+   * `config.stateThrottleMs` is set; drives {@link scheduleWindowPublish} / {@link flushState}. See
+   * `stateThrottleMs` in {@link PaginatorOptions}.
+   */
+  private _windowPublishThrottle?: Throttled<[]>;
 
   /**
    * Intervals keep items in disconnected ranges.
@@ -484,6 +505,15 @@ export abstract class BasePaginator<T, Q> {
       cursor: initialCursor,
       offset: initialOffset ?? 0,
     });
+    if (this.config.stateThrottleMs) {
+      // Coalesce the paginator's own live `state.items` publishes (see `stateThrottleMs` doc). The
+      // trailing edge re-projects the active window fresh, so a burst emits ~once per interval.
+      this._windowPublishThrottle = throttle(
+        () => this.flushWindowPublish(),
+        this.config.stateThrottleMs,
+        { leading: true, trailing: true },
+      );
+    }
     this.intervalViews = new StateStore<PaginatorIntervalViews<T>>({
       logicalHead: [],
       logicalTail: [],
@@ -828,10 +858,79 @@ export abstract class BasePaginator<T, Q> {
    * they never arrive here (they emit inline instead) — this is what lets a shared
    * store replace the manual copy-to-copy fan-out without double-emitting.
    */
+  /**
+   * Whether this paginator's live `state.items` publishes are currently throttled — `stateThrottleMs`
+   * is set, throttling is not globally disabled (tests), and item order is not locked (a locked-order
+   * list must emit the caller-computed, order-preserved array, not a re-projection). When false, every
+   * live mutation publishes immediately, exactly as before this feature.
+   */
+  protected get isStateThrottled(): boolean {
+    return (
+      isStateThrottlingEnabled() &&
+      !!this._windowPublishThrottle &&
+      !this.config.lockItemOrder
+    );
+  }
+
+  /** Re-project the active window from its (live, source-of-truth) interval. `undefined` when inactive. */
+  private projectActiveWindow(): T[] | undefined {
+    if (!this._activeIntervalId) return undefined;
+    const active = this._itemIntervals.get(this._activeIntervalId);
+    return active ? this.intervalToItems(active) : undefined;
+  }
+
+  /**
+   * Publish the active window to `state`, re-projecting it fresh from the active interval at call time
+   * (the throttle boundary / flush). Because the intervals are mutated synchronously by every live op,
+   * this always reflects the latest settled state, so intermediate values within a window coalesce
+   * away. Clears the visible window when the active interval is gone (e.g. the last item was removed).
+   */
+  private flushWindowPublish(): void {
+    const items = this.projectActiveWindow();
+    if (items) {
+      this.state.partialNext({ items });
+      return;
+    }
+    if ((this.state.getLatestValue().items?.length ?? 0) > 0) {
+      this.state.partialNext({ items: [] });
+    }
+  }
+
+  /**
+   * Schedule a throttled active-window publish (leading + trailing). Called from live mutations
+   * (ingest / content-change / remove) INSTEAD of an inline `state.partialNext({ items })` when
+   * {@link isStateThrottled}. Safe to call many times within one op — they coalesce to a single emit.
+   */
+  protected scheduleWindowPublish(): void {
+    this._windowPublishThrottle?.throttledFn();
+  }
+
+  /**
+   * {@link MessageStoreSubscriber.flushState}: emit any pending throttled window publish immediately.
+   * The message store calls this after an optimistic (local-user) write so it renders without throttle
+   * delay. No-op when throttling is off or nothing is pending.
+   */
+  flushState = (): void => {
+    this._windowPublishThrottle?.flush();
+  };
+
   onMessagesChanged({ changedIds }: MessageStoreChangeBatch): void {
     if (!this._activeIntervalId) return;
     const activeInterval = this._itemIntervals.get(this._activeIntervalId);
     if (!activeInterval) return;
+
+    // Throttled (message list): the slot-swap fast path below reads the last-published `items`, which
+    // lags the live intervals while throttled — so skip it. Gate on membership only and schedule a
+    // single coalesced re-projection; the boundary re-derives the window fresh from the interval.
+    if (this.isStateThrottled) {
+      for (const id of activeInterval.itemIds) {
+        if (changedIds.has(id)) {
+          this.scheduleWindowPublish();
+          return;
+        }
+      }
+      return;
+    }
 
     // Fast path: a content update (a reaction/read/edit written through a sibling holder) changes
     // messages in place without changing membership or order. When the current window still lines
@@ -1796,6 +1895,8 @@ export abstract class BasePaginator<T, Q> {
 
     // 3. If it no longer matches the filter, we’re done (it has been removed above).
     if (!this.matchesFilter(ingestedItem)) {
+      // Throttled: the removal above deferred its emit — publish the (settled) window once.
+      if (this.isStateThrottled && itemHasBeenRemoved) this.scheduleWindowPublish();
       return itemHasBeenRemoved;
     }
 
@@ -1861,6 +1962,7 @@ export abstract class BasePaginator<T, Q> {
           // Falls somewhere *inside* the global bounds, but we don't have that page loaded.
           // We’ve already removed any old occurrence, so from the paginator's perspective
           // this item won't be visible again until the relevant page is fetched.
+          if (this.isStateThrottled && itemHasBeenRemoved) this.scheduleWindowPublish();
           return itemHasBeenRemoved;
         }
       }
@@ -1898,32 +2000,36 @@ export abstract class BasePaginator<T, Q> {
         this._activeIntervalId,
       )
     ) {
-      const items = this.items ?? [];
-      /**
-       * Having config.lockItemOrder enabled when working with intervals will lead to
-       * discrepancies once active intervals are switched:
-       * 1. state.items [a,b,c] intervals [a,b,c], [d]
-       * 2. a changed and is moved to another interval state.items is now [a,b,c], intervals [b,c,], [d, a]
-       * 3. jumping / changing active interval to [d,a] - state.items is now [d,a], intervals  [b,c], [d,a]
-       */
-      if (keepOrderInState) {
-        // Item was visible before → reinsert at its old index
-        const nextView = items.slice();
-        const insertAt = Math.min(originalIndexInState, nextView.length);
-        nextView.splice(insertAt, 0, ingestedItem);
-        this.state.partialNext({ items: nextView });
+      if (this.isStateThrottled) {
+        this.scheduleWindowPublish();
       } else {
+        const items = this.items ?? [];
         /**
-         * Select a correct interval from which the state.items array is derived
+         * Having config.lockItemOrder enabled when working with intervals will lead to
+         * discrepancies once active intervals are switched:
+         * 1. state.items [a,b,c] intervals [a,b,c], [d]
+         * 2. a changed and is moved to another interval state.items is now [a,b,c], intervals [b,c,], [d, a]
+         * 3. jumping / changing active interval to [d,a] - state.items is now [d,a], intervals  [b,c], [d,a]
          */
-        this.state.partialNext({
-          items: this.intervalToItems(
-            this._activeIntervalId === removedItemCoordinates?.interval?.interval.id &&
-              this._activeIntervalId !== targetInterval.id
-              ? removedItemCoordinates.interval.interval
-              : targetInterval,
-          ),
-        });
+        if (keepOrderInState) {
+          // Item was visible before → reinsert at its old index
+          const nextView = items.slice();
+          const insertAt = Math.min(originalIndexInState, nextView.length);
+          nextView.splice(insertAt, 0, ingestedItem);
+          this.state.partialNext({ items: nextView });
+        } else {
+          /**
+           * Select a correct interval from which the state.items array is derived
+           */
+          this.state.partialNext({
+            items: this.intervalToItems(
+              this._activeIntervalId === removedItemCoordinates?.interval?.interval.id &&
+                this._activeIntervalId !== targetInterval.id
+                ? removedItemCoordinates.interval.interval
+                : targetInterval,
+            ),
+          });
+        }
       }
     }
 
@@ -1961,9 +2067,11 @@ export abstract class BasePaginator<T, Q> {
 
     // 2) Remove from visible state.items, if present
     if (stateLocation && stateLocation.currentIndex > -1) {
-      const newItems = [...(this.items ?? [])];
-      newItems.splice(stateLocation.currentIndex, 1);
-      this.state.partialNext({ items: newItems });
+      if (!this.isStateThrottled) {
+        const newItems = [...(this.items ?? [])];
+        newItems.splice(stateLocation.currentIndex, 1);
+        this.state.partialNext({ items: newItems });
+      }
 
       // keep insertionIndex consistent if someone uses it later
       if (stateLocation.insertionIndex > stateLocation.currentIndex) {
@@ -1996,6 +2104,8 @@ export abstract class BasePaginator<T, Q> {
       if (!coords.state && !coords.interval) return noAction;
       const result = this.removeItemAtCoordinates(coords);
       this._itemIndex.remove(this.getItemId(item));
+      // Throttled: removeItemAtCoordinates deferred its emit — publish the (settled) window once.
+      if (this.isStateThrottled) this.scheduleWindowPublish();
       return result;
     }
 
