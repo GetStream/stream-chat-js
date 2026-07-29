@@ -18,13 +18,7 @@ import {
   userResponseToMentionEntity,
 } from './middleware/textComposer/mentionUtils';
 import type { MessageComposer } from './messageComposer';
-import type {
-  CommandResponse,
-  DraftMessage,
-  Event,
-  LocalMessage,
-  UserResponse,
-} from '../types';
+import type { Command, DraftMessage, Event, LocalMessage, UserResponse } from '../types';
 
 export type TextComposerOptions = {
   composer: MessageComposer;
@@ -372,7 +366,7 @@ export class TextComposer {
     this.setMentions(mentions);
   };
 
-  setCommand = (command: CommandResponse | null) => {
+  setCommand = (command: Command | null) => {
     if (!command) {
       this.clearCommand();
       return;

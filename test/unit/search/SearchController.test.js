@@ -11,7 +11,7 @@ import { generateUser } from '../test-utils/generateUser';
 import { generateChannel } from '../test-utils/generateChannel';
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ErrorFromResponse } from '../../../src';
+import { StreamAPIError, StreamChat } from '../../../src';
 import { APIErrorCodes } from '../../../src/errors';
 
 describe('SearchController', () => {
@@ -229,14 +229,11 @@ describe('BaseSearchSource and implementations', () => {
 	const results = [{ id: 'result' }];
 
 	beforeEach(() => {
-		mockClient = {
-			user: { id: 'current-user' },
-			userID: 'current-user',
-			queryUsers: sinon.stub().resolves({ users }),
-			queryChannels: sinon.stub().resolves(channels),
-			search: sinon.stub().resolves({ results, next: null }),
-			activeChannels: {},
-		};
+		mockClient = new StreamChat('');
+		mockClient.user = { id: 'current-user' };
+		sinon.stub(mockClient, 'queryUsers').resolves({ users });
+		sinon.stub(mockClient, 'queryChannels').resolves(channels);
+		sinon.stub(mockClient, 'search').resolves({ results, next: null });
 	});
 
 	describe('BaseSearchSource', () => {
@@ -434,7 +431,7 @@ describe('BaseSearchSource and implementations', () => {
 				});
 
 				vi.spyOn(searchSource, 'query').mockRejectedValue(
-					new ErrorFromResponse('anything', {
+					new StreamAPIError('anything', {
 						code: APIErrorCodes[4],
 						response: {},
 						status: 400,
@@ -935,14 +932,16 @@ describe('BaseSearchSource and implementations', () => {
 			userSource.activate();
 			await userSource.executeQuery('test');
 
-			sinon.assert.calledWith(
-				mockClient.queryUsers,
-				{
-					$or: [{ id: { $autocomplete: 'test' } }, { name: { $autocomplete: 'test' } }],
+			sinon.assert.calledWith(mockClient.queryUsers, {
+				payload: {
+					filter_conditions: {
+						$or: [{ id: { $autocomplete: 'test' } }, { name: { $autocomplete: 'test' } }],
+					},
+					sort: [{ field: 'id', direction: 1 }],
+					limit: 10,
+					offset: 0,
 				},
-				{ id: 1 },
-				{ limit: 10, offset: 0 },
-			);
+			});
 		});
 	});
 
@@ -959,12 +958,14 @@ describe('BaseSearchSource and implementations', () => {
 
 			sinon.assert.calledWith(
 				mockClient.queryChannels,
-				{
-					members: { $in: ['current-user'] },
-					name: { $autocomplete: 'test' },
-				},
-				{},
-				{ limit: 10, offset: 0 },
+				sinon.match({
+					filter_conditions: {
+						members: { $in: ['current-user'] },
+						name: { $autocomplete: 'test' },
+					},
+					limit: 10,
+					offset: 0,
+				}),
 			);
 		});
 	});
@@ -977,7 +978,7 @@ describe('BaseSearchSource and implementations', () => {
 		});
 
 		it('returns empty results if no user ID', async () => {
-			mockClient.userID = null;
+			mockClient.user = undefined;
 			messageSource.activate();
 			await messageSource.executeQuery('test');
 			expect(messageSource.items).to.be.empty;
@@ -989,9 +990,13 @@ describe('BaseSearchSource and implementations', () => {
 
 			sinon.assert.calledWith(
 				mockClient.search,
-				{ members: { $in: ['current-user'] } },
-				{ text: 'test', type: 'regular' },
-				{ limit: 10, next: undefined, sort: { created_at: -1 } },
+				sinon.match({
+					payload: {
+						filter_conditions: { members: { $in: ['current-user'] } },
+						message_filter_conditions: { type: 'regular', text: 'test' },
+						limit: 10,
+					},
+				}),
 			);
 		});
 
@@ -1006,8 +1011,9 @@ describe('BaseSearchSource and implementations', () => {
 
 			sinon.assert.calledWith(
 				mockClient.queryChannels,
-				{ cid: { $in: ['missing-channel'] } },
-				{ last_message_at: -1 },
+				sinon.match({
+					filter_conditions: { cid: { $in: ['missing-channel'] } },
+				}),
 			);
 		});
 

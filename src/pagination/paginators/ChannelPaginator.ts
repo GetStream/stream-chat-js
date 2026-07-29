@@ -7,6 +7,7 @@ import type {
   SetPaginatorItemsParams,
 } from './BasePaginator';
 import { BasePaginator } from './BasePaginator';
+import { chatLoggerSystem } from '../../logger';
 import type { FilterBuilderOptions } from '../FilterBuilder';
 import { FilterBuilder } from '../FilterBuilder';
 import { makeComparator } from '../sortCompiler';
@@ -24,7 +25,10 @@ import type { FieldToDataResolver, PathResolver } from '../types.normalization';
 import { resolveDotPathValue } from '../utility.normalization';
 import { isEqual } from '../../utils/mergeWith/mergeWithCore';
 
-const DEFAULT_BACKEND_SORT: ChannelSort = { last_message_at: -1, updated_at: -1 }; // {last_updated: -1}
+const DEFAULT_BACKEND_SORT: ChannelSort = [
+  { direction: -1, field: 'last_message_at' },
+  { direction: -1, field: 'updated_at' },
+];
 
 export type ChannelQueryShape = {
   filters: ChannelFilters;
@@ -47,17 +51,16 @@ export type ChannelPaginatorOptions = {
   id?: string;
   paginatorOptions?: PaginatorOptions<Channel, ChannelQueryShape>;
   requestOptions?: ChannelPaginatorRequestOptions;
-  sort?: ChannelSort | ChannelSort[];
+  sort?: ChannelSort;
 };
 
 const getQueryShapeRelevantChannelOptions = (options: ChannelOptions) => {
   const {
-    /* eslint-disable @typescript-eslint/no-unused-vars */
     limit: _,
     member_limit: __,
     message_limit: ___,
     offset: ____,
-    /* eslint-enable @typescript-eslint/no-unused-vars */
+
     ...relevantShape
   } = options;
   return relevantShape;
@@ -155,7 +158,7 @@ const pinnedFilterResolver: FieldToDataResolver<Channel> = {
 
 const mutedFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: (field) => field === 'muted',
-  // Mute state lives on the client (client.mutedChannels), not on channel.data — resolve it via
+  // UserMuteResponse state lives on the client (client.mutedChannels), not on channel.data — resolve it via
   // the client so `{ muted: true/false }` matches client-side, rather than letting the generic
   // data resolver read a non-existent `channel.data.muted` (which would resolve to undefined and
   // never equal a boolean filter value).
@@ -195,7 +198,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   private readonly _id: string;
   private client: StreamChat;
   protected _staticFilters: ChannelFilters | undefined;
-  protected _sort: ChannelSort | ChannelSort[] | undefined;
+  protected _sort: ChannelSort | undefined;
   protected _options: ChannelPaginatorRequestOptions | undefined;
   protected _channelStateOptions: ChannelStateOptions | undefined;
   protected _nextQueryShape: ChannelQueryShape | undefined;
@@ -275,7 +278,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     this._staticFilters = filters;
   }
 
-  set sort(sort: ChannelSort | ChannelSort[] | undefined) {
+  set sort(sort: ChannelSort | undefined) {
     this._sort = sort;
     this.sortComparator = makeComparator<Channel, ChannelSort>({
       sort: this.sort ?? DEFAULT_BACKEND_SORT,
@@ -335,8 +338,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     try {
       const channelsFromDB = await this.client.offlineDb.getChannelsForQuery({
         userId: this.client.user.id,
-        filters: queryShape.filters,
-        sort: queryShape.sort,
+        options: { filter_conditions: queryShape.filters, sort: queryShape.sort },
       });
 
       if (channelsFromDB) {
@@ -358,7 +360,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
         return;
       }
     } catch (error) {
-      this.client.logger('error', (error as Error).message);
+      chatLoggerSystem.getLogger('channel').error((error as Error).message);
       if (this.config.throwErrors) throw error;
     }
     return;
@@ -394,7 +396,10 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     if (this.config.doRequest) {
       items = (await this.config.doRequest(this._nextQueryShape)).items;
     } else {
-      items = await this.client.queryChannels(filters, sort, options, stateOptions);
+      items = await this.client.queryChannelsAndHydrate(
+        { filter_conditions: filters, sort, ...options },
+        stateOptions,
+      );
     }
     return { items };
   };

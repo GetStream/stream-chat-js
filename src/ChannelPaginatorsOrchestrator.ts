@@ -1,6 +1,6 @@
 import { EventHandlerPipeline } from './EventHandlerPipeline';
 import { WithSubscriptions } from './utils/WithSubscriptions';
-import type { Event, EventTypes } from './types';
+import type { EventType } from './types';
 import type { ChannelPaginator } from './pagination';
 import type { StreamChat } from './client';
 import type { Unsubscribe } from './store';
@@ -10,6 +10,7 @@ import type {
   FindEventHandlerParams,
   InsertEventHandlerPayload,
   LabeledEventHandler,
+  PipelineEvent,
 } from './EventHandlerPipeline';
 import { getChannel } from './pagination/utility.queryChannel';
 import type { Channel } from './channel';
@@ -20,7 +21,7 @@ export type ChannelPaginatorsOrchestratorEventHandlerContext = {
 
 type EventHandlerContext = ChannelPaginatorsOrchestratorEventHandlerContext;
 
-type SupportedEventType = EventTypes | (string & {});
+type SupportedEventType = EventType | (string & {});
 
 /**
  * Resolves which paginators should be the "owners" of a channel
@@ -69,7 +70,7 @@ export const createPriorityOwnershipResolver = (
 };
 
 const getCachedChannelFromEvent = (
-  event: Event,
+  event: PipelineEvent,
   cache: Record<string, Channel>,
 ): Channel | undefined => {
   let channel: Channel | undefined = undefined;
@@ -452,8 +453,10 @@ export class ChannelPaginatorsOrchestrator extends WithSubscriptions {
    * If paginator already exists → remove old, reinsert at new index.
    * If index not provided → append at the end.
    * If index provided → insert (or move) at that index.
-   * @param paginator
-   * @param index
+   *
+   * @param params - The insertion parameters.
+   * @param params.paginator - The paginator to insert or move.
+   * @param params.index - Target index; when omitted the paginator is appended.
    */
   insertPaginator({ paginator, index }: { paginator: ChannelPaginator; index?: number }) {
     const paginators = [...this.paginators];
@@ -507,7 +510,7 @@ export class ChannelPaginatorsOrchestrator extends WithSubscriptions {
     if (!this.hasSubscriptions) {
       this.addUnsubscribeFunction(
         // todo: maybe we should have a wrapper here to decide, whether the event is a LocalEventBus event or else supported by client
-        this.client.on((event: Event) => {
+        this.client.on((event) => {
           const pipe = this._pipelines.get(event.type);
           if (pipe) {
             pipe.run(event, this.ctx);

@@ -1,9 +1,9 @@
 import type { StreamChat } from './client';
 import type {
-  CreatePollData,
+  CreatePollRequest,
   LocalMessage,
   MessageResponse,
-  PollResponse,
+  PollResponse_old,
   PollSort,
   QueryPollsFilters,
   QueryPollsOptions,
@@ -46,7 +46,7 @@ export class PollManager extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeVoteRemoved());
   };
 
-  public createPoll = async (poll: CreatePollData) => {
+  public createPoll = async (poll: CreatePollRequest) => {
     const { poll: createdPoll } = await this.client.createPoll(poll);
 
     if (!createdPoll.vote_counts_by_option) {
@@ -63,11 +63,13 @@ export class PollManager extends WithSubscriptions {
 
     // optimistically return the cached poll if it exists and update in the background
     if (cachedPoll) {
-      this.client.getPoll(id).then(({ poll }) => this.setOrOverwriteInCache(poll, true));
+      this.client
+        .getPoll({ poll_id: id })
+        .then(({ poll }) => this.setOrOverwriteInCache(poll, true));
       return cachedPoll;
     }
     // fetch it, write to the cache and return otherwise
-    const { poll } = await this.client.getPoll(id);
+    const { poll } = await this.client.getPoll({ poll_id: id });
 
     this.setOrOverwriteInCache(poll);
 
@@ -79,7 +81,11 @@ export class PollManager extends WithSubscriptions {
     sort: PollSort = [],
     options: QueryPollsOptions = {},
   ) => {
-    const { polls, next } = await this.client.queryPolls(filter, sort, options);
+    const { polls, next } = await this.client.queryPolls({
+      filter,
+      sort,
+      ...options,
+    });
 
     const pollInstances = polls.map((poll) => {
       this.setOrOverwriteInCache(poll, true);
@@ -101,13 +107,13 @@ export class PollManager extends WithSubscriptions {
       if (!message.poll) {
         continue;
       }
-      const pollResponse = message.poll as PollResponse;
+      const pollResponse = message.poll as PollResponse_old;
       this.setOrOverwriteInCache(pollResponse, overwriteState);
     }
   };
 
   private setOrOverwriteInCache = (
-    pollResponse: PollResponse,
+    pollResponse: PollResponse_old,
     overwriteState?: boolean,
   ) => {
     if (!this.client._cacheEnabled()) {

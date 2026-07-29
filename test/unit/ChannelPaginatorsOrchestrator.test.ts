@@ -169,7 +169,9 @@ describe('ChannelPaginatorsOrchestrator', () => {
     it('applies ownership rules to paginators when they paginate', async () => {
       const ch1 = makeChannel('messaging:101');
       const ch2 = makeChannel('messaging:102');
-      const queryChannelSpy = vi.spyOn(client, 'queryChannels').mockResolvedValue([ch1]);
+      const queryChannelSpy = vi
+        .spyOn(client, 'queryChannelsAndHydrate')
+        .mockResolvedValue([ch1]);
       const p1 = new ChannelPaginator({
         client,
         filters: { type: 'messaging' },

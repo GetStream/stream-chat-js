@@ -9,6 +9,7 @@ import type { DraftResponse, LocalMessage } from '../../../../../src/types';
 import { TextComposerMiddleware } from '../../../../../src';
 import { createActiveCommandGuardMiddleware } from '../../../../../src/messageComposer/middleware/textComposer/activeCommandGuard';
 import { createCommandStringExtractionMiddleware } from '../../../../../src/messageComposer/middleware/textComposer/commandStringExtraction';
+import { getClientWithUser } from '../../../test-utils/getClient';
 
 // Mock dependencies
 
@@ -25,7 +26,7 @@ const setup = ({
   vi.clearAllMocks();
 
   // Setup mocks
-  const client = new StreamChat('apiKey', 'apiSecret');
+  const client = getClientWithUser({ id: 'user' });
   client.queryUsers = vi.fn().mockResolvedValue({ users: [] });
 
   const channel = client.channel('channelType', 'channelId');

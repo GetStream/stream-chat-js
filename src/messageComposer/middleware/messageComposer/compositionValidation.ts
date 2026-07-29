@@ -1,5 +1,5 @@
 import { textIsEmpty } from '../../textComposer';
-import type { CommandResponse } from '../../../types';
+import type { Command } from '../../../types';
 import { CommandSearchSource } from '../textComposer/commands';
 import {
   getCommandByName,
@@ -20,7 +20,7 @@ const getDisabledRawCommand = (
   composer: MessageComposer,
   searchSource: CommandSearchSource,
   text?: string,
-): CommandResponse | undefined => {
+): Command | undefined => {
   const rawCommand = getCommandByName(searchSource, getRawCommandName(text));
   if (rawCommand && composer.isCommandDisabled(rawCommand)) {
     return rawCommand;

@@ -1,15 +1,14 @@
 import type { Middleware, MiddlewareExecutionResult } from '../../../middleware';
 import type {
-  DraftMessagePayload,
   LocalMessage,
-  Message,
+  MessageRequest,
   SendMessageOptions,
   UpdatedMessage,
 } from '../../../types';
 import type { MessageComposer } from '../../messageComposer';
 
 export type MessageComposerMiddlewareState = {
-  message: Message | UpdatedMessage;
+  message: MessageRequest | UpdatedMessage;
   localMessage: LocalMessage;
   sendOptions: SendMessageOptions;
 };
@@ -22,7 +21,7 @@ export type MessageComposerMiddlewareExecutorOptions = {
 };
 
 export type MessageDraftComposerMiddlewareValueState = {
-  draft: DraftMessagePayload;
+  draft: MessageRequest;
 };
 
 export type MessageDraftComposerMiddlewareExecutorOptions = {

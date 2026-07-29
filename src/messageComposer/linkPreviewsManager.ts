@@ -18,13 +18,13 @@ export interface ILinkPreviewsManager {
 }
 
 export enum LinkPreviewStatus {
-  /** Link preview has been dismissed using **/
+  /** Link preview has been dismissed using */
   DISMISSED = 'dismissed',
-  /** Link preview could not be loaded, the enrichment request has failed. **/
+  /** Link preview could not be loaded, the enrichment request has failed. */
   FAILED = 'failed',
-  /** Link preview has been successfully loaded. **/
+  /** Link preview has been successfully loaded. */
   LOADED = 'loaded',
-  /** The enrichment query is in progress for a given link. **/
+  /** The enrichment query is in progress for a given link. */
   LOADING = 'loading',
   /** The preview reference enrichment has not begun. Default status if not set. */
   PENDING = 'pending',
@@ -238,10 +238,9 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
     await Promise.all(
       newLinkPreviews.map(async (linkPreview) => {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { duration, ...ogAttachment } = await this.client.enrichURL(
-            linkPreview.og_scrape_url,
-          );
+          const { duration: _duration, ...ogAttachment } = await this.client.getOG({
+            url: linkPreview.og_scrape_url,
+          });
           if (this.shouldDiscardEnrichQueries) return;
           // due to typing and text changes, the URL may not be anymore in the store
           if (this.previews.has(linkPreview.og_scrape_url)) {
@@ -302,6 +301,7 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
         ...finalPreview,
         og_scrape_url: url,
         status,
+        custom: {},
       }),
     });
   };
@@ -330,8 +330,7 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
     preview.status === LinkPreviewStatus.PENDING;
 
   static getPreviewData = (preview: LinkPreview) => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { status, ...data } = preview;
+    const { status: _status, ...data } = preview;
     return data;
   };
 }

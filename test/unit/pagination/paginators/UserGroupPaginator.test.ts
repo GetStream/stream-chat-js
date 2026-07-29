@@ -7,8 +7,8 @@ import { getClientWithUser } from '../../test-utils/getClient';
 const makeGroup = (id: string, createdAt: string): UserGroupResponse => ({
   id,
   name: id,
-  created_at: createdAt,
-  updated_at: createdAt,
+  created_at: new Date(createdAt),
+  updated_at: new Date(createdAt),
 });
 
 const response = (groups: UserGroupResponse[]) => ({ duration: '', user_groups: groups });
@@ -22,7 +22,7 @@ describe('UserGroupPaginator', () => {
 
   it('stores results in interval storage (index-addressable, headItems populated)', async () => {
     const paginator = new UserGroupPaginator(client, { pageSize: 2 });
-    vi.spyOn(client, 'queryUserGroups').mockResolvedValue(
+    vi.spyOn(client, 'listUserGroups').mockResolvedValue(
       response([
         makeGroup('a', '2020-01-01T00:00:00.000Z'),
         makeGroup('b', '2020-01-02T00:00:00.000Z'),
@@ -43,7 +43,7 @@ describe('UserGroupPaginator', () => {
 
   it('appends forward pages and stops at a short (final) page', async () => {
     const paginator = new UserGroupPaginator(client, { pageSize: 2 });
-    const spy = vi.spyOn(client, 'queryUserGroups');
+    const spy = vi.spyOn(client, 'listUserGroups');
     spy.mockResolvedValueOnce(
       response([
         makeGroup('a', '2020-01-01T00:00:00.000Z'),
@@ -70,7 +70,7 @@ describe('UserGroupPaginator', () => {
 
   it('dedupes by id when a group is returned again', async () => {
     const paginator = new UserGroupPaginator(client, { pageSize: 2 });
-    const spy = vi.spyOn(client, 'queryUserGroups');
+    const spy = vi.spyOn(client, 'listUserGroups');
     spy.mockResolvedValueOnce(
       response([
         makeGroup('a', '2020-01-01T00:00:00.000Z'),
@@ -92,7 +92,7 @@ describe('UserGroupPaginator', () => {
 
   it('orders by created_at/id via the comparator even if the server returns out of order', async () => {
     const paginator = new UserGroupPaginator(client, { pageSize: 3 });
-    vi.spyOn(client, 'queryUserGroups').mockResolvedValue(
+    vi.spyOn(client, 'listUserGroups').mockResolvedValue(
       response([
         makeGroup('b', '2020-01-02T00:00:00.000Z'),
         makeGroup('a', '2020-01-01T00:00:00.000Z'),
@@ -108,7 +108,7 @@ describe('UserGroupPaginator', () => {
   it('does not paginate backward (headward is exhausted)', async () => {
     const paginator = new UserGroupPaginator(client, { pageSize: 2 });
     const spy = vi
-      .spyOn(client, 'queryUserGroups')
+      .spyOn(client, 'listUserGroups')
       .mockResolvedValue(response([makeGroup('a', '2020-01-01T00:00:00.000Z')]));
     await paginator.executeQuery({});
     spy.mockClear();

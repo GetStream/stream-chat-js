@@ -1,7 +1,10 @@
 import type { StreamChat } from './client';
+import { chatLoggerSystem } from './logger';
 import type { UploadRequestOptions } from './messageComposer/configuration/types';
 import { StateStore } from './store';
 import type { AttachmentManager } from '.';
+
+const logger = chatLoggerSystem.getLogger('upload-manager');
 
 export type UploadRecord = {
   id: string;
@@ -150,6 +153,11 @@ export class UploadManager {
         );
         resolvePromise(response);
       } catch (error) {
+        if (!abortController.signal.aborted) {
+          logger
+            .withExtraTags('upload', channelCid)
+            .error(`Upload "${id}" failed.`, { error });
+        }
         rejectPromise(error);
       } finally {
         this.inFlightUploads.delete(id);

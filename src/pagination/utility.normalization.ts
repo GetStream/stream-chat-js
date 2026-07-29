@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 export function asArray(v: any): any[] {
   return Array.isArray(v) ? v : [v];
 }

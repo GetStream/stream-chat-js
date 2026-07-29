@@ -1,7 +1,7 @@
 /* eslint no-unused-vars: "off" */
 /* global process */
 
-import type { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import type { AxiosInstance, AxiosRequestConfig } from 'axios';
 import axios from 'axios';
 import https from 'https';
 
@@ -9,273 +9,63 @@ import { Channel } from './channel';
 import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
 import { UploadManager } from './uploadManager';
-import {
-  DevToken,
-  InvalidWebhookError,
-  JWTUserToken,
-  parseSns as parseSnsHelper,
-  parseSqs as parseSqsHelper,
-  verifyAndParseWebhook as verifyAndParseWebhookHelper,
-  verifySignature,
-} from './signing';
-import { TokenManager } from './token_manager';
+import { TokenManager, type TokenManagerMinimalUser } from './token_manager';
 import { WSConnectionFallback } from './connection_fallback';
-import { Campaign } from './campaign';
-import { ChannelBatchUpdater } from './channel_batch_updater';
-import { Segment } from './segment';
-import { isErrorResponse, isWSFailure } from './errors';
+import { isWSFailure } from './errors';
+import { ApiClient } from './api-client';
 import {
-  addFileToFormData,
   axiosParamsSerializer,
-  chatCodes,
   formatMessage,
   generateChannelTempCid,
-  isFunction,
+  getEnv,
   isOnline,
   isOwnUserBaseProperty,
-  normalizeQuerySort,
   randomId,
-  retryInterval,
-  sleep,
-  toUpdatedMessagePayload,
 } from './utils';
 
 import type {
-  ActiveLiveLocationsAPIResponse,
-  AddUserGroupMembersOptions,
-  AddUserGroupMembersResponse,
-  APIErrorResponse,
   APIResponse,
   AppIdentifier,
-  AppSettings,
-  AppSettingsAPIResponse,
-  BannedUsersFilters,
-  BannedUsersPaginationOptions,
-  BannedUsersResponse,
-  BannedUsersSort,
   BanUserOptions,
   BaseDeviceFields,
-  BlockList,
-  BlockListResponse,
-  BlockUserAPIResponse,
-  CampaignData,
-  CampaignFilters,
-  CampaignQueryOptions,
-  CampaignResponse,
-  CampaignSort,
-  CastVoteAPIResponse,
-  ChannelAPIResponse,
   ChannelData,
-  ChannelFilters,
   ChannelMute,
   ChannelOptions,
   ChannelResponse,
-  ChannelSort,
   ChannelStateOptions,
-  CheckPushResponse,
-  CheckSNSResponse,
-  CheckSQSResponse,
+  ChannelStateResponseFields,
   Configs,
   ConnectAPIResponse,
-  CreateChannelOptions,
-  CreateChannelResponse,
-  CreateCommandOptions,
-  CreateCommandResponse,
-  CreateImportOptions,
-  CreateImportResponse,
-  CreateImportURLResponse,
-  CreatePollAPIResponse,
-  CreatePollData,
-  CreatePollOptionAPIResponse,
-  CreatePredefinedFilterOptions,
-  CreateReminderOptions,
-  CreateRoleAPIResponse,
-  CreateUserGroupOptions,
-  CreateUserGroupResponse,
-  CustomPermissionOptions,
-  DeactivateUsersOptions,
-  DeleteChannelsResponse,
-  DeleteCommandResponse,
-  DeleteMessageOptions,
-  DeleteRetentionPolicyResponse,
-  DeleteUserGroupOptions,
-  DeleteUserOptions,
-  Device,
   DeviceIdentifier,
-  DraftFilters,
-  DraftSort,
-  EndpointName,
   Event,
-  EventAPIResponse,
   EventHandler,
-  ExportChannelOptions,
-  ExportChannelRequest,
-  ExportChannelResponse,
-  ExportChannelStatusResponse,
-  ExportUsersRequest,
-  ExportUsersResponse,
+  EventType,
   FlagMessageResponse,
-  FlagReportsFilters,
-  FlagReportsPaginationOptions,
-  FlagReportsResponse,
-  FlagsFilters,
-  FlagsPaginationOptions,
-  FlagsResponse,
   FlagUserResponse,
-  FutureChannelBansResponse,
-  GetBlockedUsersAPIResponse,
-  GetCampaignOptions,
-  GetChannelTypeResponse,
-  GetCommandResponse,
-  GetHookEventsResponse,
-  GetImportResponse,
-  GetMessageAPIResponse,
-  GetMessageOptions,
-  GetPollAPIResponse,
-  GetPollOptionAPIResponse,
-  GetRateLimitsResponse,
-  GetRetentionPolicyResponse,
-  GetRetentionPolicyRunsOptions,
-  GetRetentionPolicyRunsResponse,
-  GetThreadAPIResponse,
   GetThreadOptions,
-  GetUnreadCountAPIResponse,
-  GetUnreadCountBatchAPIResponse,
-  GetUserGroupOptions,
-  GetUserGroupResponse,
-  ListChannelResponse,
-  ListCommandsResponse,
-  ListImportsPaginationOptions,
-  ListImportsResponse,
-  ListPredefinedFiltersOptions,
-  ListPredefinedFiltersResponse,
-  ListRolesAPIResponse,
   LocalMessage,
-  Logger,
-  MarkChannelsReadOptions,
-  MarkDeliveredOptions,
-  MessageFilters,
-  MessageFlagsFilters,
-  MessageFlagsPaginationOptions,
-  MessageFlagsResponse,
-  MessageResponse,
-  Mute,
   MuteUserOptions,
   MuteUserResponse,
-  NewMemberPayload,
-  OGAttachment,
   OwnUserResponse,
-  Pager,
-  PartialMessageUpdate,
-  PartialPollUpdate,
+  PartializeAllBut,
   PartialThreadUpdate,
-  PartialUserUpdate,
-  PermissionAPIResponse,
-  PermissionsAPIResponse,
-  PollAnswersAPIResponse,
-  PollData,
-  PollOptionData,
-  PollSort,
-  PollVote,
-  PollVoteData,
-  PollVotesAPIResponse,
-  PredefinedFilterResponse,
-  Product,
-  PushPreference,
-  PushProvider,
-  PushProviderConfig,
-  PushProviderID,
-  PushProviderListResponse,
-  PushProviderUpsertResponse,
-  QueryChannelsAPIResponse,
-  QueryDraftsResponse,
-  QueryFutureChannelBansOptions,
-  QueryMessageHistoryFilters,
-  QueryMessageHistoryOptions,
-  QueryMessageHistoryResponse,
-  QueryMessageHistorySort,
-  QueryPollsFilters,
-  QueryPollsOptions,
-  QueryPollsResponse,
-  QueryReactionsAPIResponse,
-  QueryReactionsOptions,
-  QueryRemindersOptions,
-  QueryRemindersResponse,
-  QuerySegmentsOptions,
-  QuerySegmentTargetsFilter,
-  QueryTeamUsageStatsOptions,
-  QueryTeamUsageStatsResponse,
-  QueryThreadsAPIResponse,
-  QueryThreadsOptions,
-  QueryUserGroupsOptions,
-  QueryUserGroupsResponse,
-  QueryVotesFilters,
-  QueryVotesOptions,
-  ReactionFilters,
+  QueryBannedUsersPayload,
+  QueryChannelsRequest,
+  QueryChannelsResponse,
+  QueryReactionsRequestWithId,
+  QueryThreadsRequest,
   ReactionResponse,
-  ReactionSort,
-  ReactivateUserOptions,
-  ReactivateUsersOptions,
-  ReminderAPIResponse,
-  RemoveUserGroupMembersOptions,
-  RemoveUserGroupMembersResponse,
-  ReviewFlagReportOptions,
-  ReviewFlagReportResponse,
   SdkIdentifier,
-  SearchAPIResponse,
-  SearchMessageSortBase,
-  SearchOptions,
   SearchPayload,
-  SearchRolesAPIResponse,
-  SearchRolesOptions,
-  SearchUserGroupsOptions,
-  SearchUserGroupsResponse,
-  SegmentData,
-  SegmentResponse,
-  SegmentTargetsResponse,
-  SegmentType,
-  SendFileAPIResponse,
-  SetRetentionPolicyResponse,
-  SharedLocationResponse,
-  SortParam,
   StreamChatOptions,
-  SyncOptions,
-  SyncResponse,
-  TaskResponse,
-  TaskStatus,
-  TestPushDataInput,
-  TestSNSDataInput,
-  TestSQSDataInput,
   TokenOrProvider,
-  TranslateResponse,
   UnBanUserOptions,
-  UpdateChannelsBatchOptions,
-  UpdateChannelsBatchResponse,
-  UpdateChannelTypeRequest,
-  UpdateChannelTypeResponse,
-  UpdateCommandOptions,
-  UpdateCommandResponse,
-  UpdateLocationPayload,
-  UpdateMessageAPIResponse,
-  UpdateMessageOptions,
-  UpdatePollAPIResponse,
-  UpdatePollOptionAPIResponse,
-  UpdatePredefinedFilterOptions,
-  UpdateReminderOptions,
-  UpdateSegmentData,
-  UpdateUserGroupOptions,
-  UpdateUserGroupResponse,
-  UpdateUsersAPIResponse,
-  UpsertPushPreferencesResponse,
-  UserCustomEvent,
-  UserFilters,
-  UserOptions,
+  UpdateUserPartialRequest,
+  UserMuteResponse,
   UserResponse,
-  UserSort,
-  VoteSort,
 } from './types';
-import { ErrorFromResponse } from './types';
 import { InsightMetrics, postInsights } from './insights';
+import { chatLoggerSystem } from './logger';
 import { Thread } from './thread';
 import { Moderation } from './moderation';
 import { ThreadManager } from './thread_manager';
@@ -300,13 +90,24 @@ import type {
 } from './configuration';
 import { InstanceConfigurationService } from './configuration/InstanceConfigurationService';
 import { StateStore } from './store';
+import type {
+  GetApplicationResponse as Gen_GetApplicationResponse,
+  MarkDeliveredRequest as Gen_MarkDeliveredRequest,
+  QueryUsersPayload as Gen_QueryUsersPayload,
+  WSEvent,
+} from './gen/models';
+import { ChatApi } from './gen-imports';
+import type { StreamResponse } from './types';
 
-function isString(x: unknown): x is string {
-  return typeof x === 'string' || x instanceof String;
+function isString(value: unknown): value is string {
+  return typeof value === 'string' || value instanceof String;
 }
 
+const logger = chatLoggerSystem.getLogger('client');
+const offlineDbLogger = chatLoggerSystem.getLogger('offline-db');
+
 export type QueryChannelsResponseWithChannels = Omit<
-  QueryChannelsAPIResponse,
+  QueryChannelsResponse,
   'channels'
 > & {
   channels: Channel[];
@@ -318,15 +119,20 @@ export type ChannelConfigsState = {
   configs: Configs;
 };
 
-export class StreamChat {
+export type ClientUser = PartializeAllBut<OwnUserResponse, 'id'> & { anon?: boolean };
+
+export class StreamChat extends ChatApi {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
   messageDeliveryReporter: MessageDeliveryReporter;
   /**
    * @internal
    */
   uploadManager: UploadManager;
-  _user?: OwnUserResponse | UserResponse;
-  appSettingsPromise?: Promise<AppSettingsAPIResponse>;
+  /**
+   * @private
+   */
+  _user?: ClientUser;
+  appSettingsPromise?: Promise<StreamResponse<Gen_GetApplicationResponse>>;
   activeChannels: {
     [key: string]: Channel;
   };
@@ -335,16 +141,14 @@ export class StreamChat {
   offlineDb?: AbstractOfflineDB;
   notifications: NotificationManager;
   reminders: ReminderManager;
-  anonymous: boolean;
   persistUserOnConnectionFailure?: boolean;
   axiosInstance: AxiosInstance;
   baseURL?: string;
   browser: boolean;
   cleaningIntervalRef?: NodeJS.Timeout;
-  clientID?: string;
+  clientId?: string;
   key: string;
-  listeners: Record<string, Array<(event: Event) => void>>;
-  logger: Logger;
+  listeners: Map<EventType, Set<EventHandler>>;
   /**
    * When network is recovered, we re-query the active channels on client. But in single query, you can recover
    * only 30 channels. So its not guaranteed that all the channels in activeChannels object have updated state.
@@ -362,23 +166,44 @@ export class StreamChat {
   preventThreadCleanup = false;
   moderation: Moderation;
   mutedChannels: ChannelMute[];
-  readonly mutedUsersStore: StateStore<{ mutedUsers: Mute[] }>;
+  readonly mutedUsersStore: StateStore<{ mutedUsers: UserMuteResponse[] }>;
   readonly configsStore: StateStore<ChannelConfigsState>;
   blockedUsers: StateStore<BlockedUsersState>;
   node: boolean;
   options: StreamChatOptions;
-  secret?: string;
   setUserPromise: ConnectAPIResponse | null;
   state: ClientState;
   tokenManager: TokenManager;
-  user?: OwnUserResponse | UserResponse;
+  user?: ClientUser;
   userAgent?: string;
-  userID?: string;
   wsBaseURL?: string;
   wsConnection: StableWSConnection | null;
   wsFallback?: WSConnectionFallback;
   wsPromise: ConnectAPIResponse | null;
-  consecutiveFailures: number;
+  get anonymous(): boolean {
+    return this.user?.anon ?? false;
+  }
+  get userId() {
+    return this.user?.id;
+  }
+  /**
+   * @deprecated Use `userId` instead.
+   */
+  get userID() {
+    return this.user?.id;
+  }
+  /**
+   * @deprecated Use `clientId` instead.
+   */
+  get clientID() {
+    return this.clientId;
+  }
+  set clientID(id: string | undefined) {
+    this.clientId = id;
+  }
+  get api() {
+    return this.apiClient;
+  }
   insightMetrics: InsightMetrics;
   defaultWSTimeoutWithFallback: number;
   defaultWSTimeout: number;
@@ -391,38 +216,39 @@ export class StreamChat {
   instanceConfigurationService = new InstanceConfigurationService();
 
   /**
-   * Initialize a client
+   * Initializes a client.
    *
-   * **Only use constructor for advanced usages. It is strongly advised to use `StreamChat.getInstance()` instead of `new StreamChat()` to reduce integration issues due to multiple WebSocket connections**
-   * @param {string} key - the api key
-   * @param {string} [secret] - the api secret
-   * @param {StreamChatOptions} [options] - additional options, here you can pass custom options to axios instance
-   * @param {boolean} [options.browser] - enforce the client to be in browser mode
-   * @param {boolean} [options.warmUp] - default to false, if true, client will open a connection as soon as possible to speed up following requests
-   * @param {Logger} [options.Logger] - custom logger
-   * @param {number} [options.timeout] - default to 3000
-   * @param {httpsAgent} [options.httpsAgent] - custom httpsAgent, in node it's default to https.agent()
+   * **Only use constructor for advanced usages. It is strongly advised to use `StreamChat.getInstance()` instead of `new StreamChat()` to reduce integration issues due to multiple WebSocket connections.**
+   *
    * @example <caption>initialize the client in user mode</caption>
    * new StreamChat('api_key')
    * @example <caption>initialize the client in user mode with options</caption>
-   * new StreamChat('api_key', { warmUp:true, timeout:5000 })
+   * new StreamChat('api_key', { warmUp: true, timeout: 5000 })
    * @example <caption>secret is optional and only used in server side mode</caption>
-   * new StreamChat('api_key', "secret", { httpsAgent: customAgent })
+   * new StreamChat('api_key', 'secret', { httpsAgent: customAgent })
+   *
+   * @param key - The API key.
+   * @param options - Additional options; here you can pass custom options to the axios instance (optional).
+   * @param options.browser - Enforce the client to be in browser mode (optional).
+   * @param options.warmUp - If `true`, the client will open a connection as soon as possible to speed up following requests (optional, defaults to `false`).
+   * @param options.logLevel - Minimum log level for the default sink (optional, defaults to `'info'`).
+   * @param options.logOptions - Per-scope sink/level overrides for `chatLoggerSystem` (optional).
+   * @param options.timeout - Request timeout (optional, defaults to `3000`).
+   * @param options.httpsAgent - Custom `httpsAgent` (optional, in Node defaults to `https.agent()`).
    */
-  constructor(key: string, options?: StreamChatOptions);
-  constructor(key: string, secret?: string, options?: StreamChatOptions);
-  constructor(
-    key: string,
-    secretOrOptions?: StreamChatOptions | string,
-    options?: StreamChatOptions,
-  ) {
+  constructor(key: string, options: StreamChatOptions = {}) {
+    // generated client requires ApiClient right away
+    super(new ApiClient());
+    // but ApiClient relies on properties defined here so we set it after (can't pass `this` in super call)
+    this.apiClient.client = this;
+
     // set the key
     this.key = key;
-    this.listeners = {};
+    this.listeners = new Map();
     this.state = new ClientState({ client: this });
     // a list of channels to hide ws events from
     this.mutedChannels = [];
-    this.mutedUsersStore = new StateStore<{ mutedUsers: Mute[] }>({
+    this.mutedUsersStore = new StateStore<{ mutedUsers: UserMuteResponse[] }>({
       mutedUsers: [],
     });
     this.configsStore = new StateStore<{ configs: Configs }>({
@@ -435,60 +261,37 @@ export class StreamChat {
     this.notifications = options?.notifications ?? new NotificationManager();
     this.uploadManager = new UploadManager(this);
 
-    // set the secret
-    if (secretOrOptions && isString(secretOrOptions)) {
-      this.secret = secretOrOptions;
-    }
-
-    // set the options... and figure out defaults...
-    const inputOptions = options
-      ? options
-      : secretOrOptions && !isString(secretOrOptions)
-        ? secretOrOptions
-        : {};
-
-    this.browser =
-      typeof inputOptions.browser !== 'undefined'
-        ? inputOptions.browser
-        : typeof window !== 'undefined';
+    this.browser = options.browser ?? typeof window !== 'undefined';
     this.node = !this.browser;
 
     this.options = {
-      timeout: 3000,
-      withCredentials: false, // making sure cookies are not sent
       warmUp: false,
       recoverStateOnReconnect: true,
       disableCache: false,
       isLocalUnreadCountEnabled: false,
       wsUrlParams: new URLSearchParams({}),
-      ...inputOptions,
+      ...options,
     };
 
-    if (this.node && !this.options.httpsAgent) {
-      this.options.httpsAgent = new https.Agent({
-        keepAlive: true,
-        keepAliveMsecs: 3000,
-      });
-    }
-
-    this.axiosInstance = axios.create(this.options);
+    this.axiosInstance = axios.create({
+      timeout: 3000,
+      withCredentials: false,
+      httpsAgent: this.node
+        ? new https.Agent({ keepAlive: true, keepAliveMsecs: 3000 })
+        : undefined,
+      ...this.options.axiosRequestConfig,
+      paramsSerializer: axiosParamsSerializer,
+    });
 
     this.setBaseURL(this.options.baseURL || 'https://chat.stream-io-api.com');
 
-    if (
-      typeof process !== 'undefined' &&
-      'env' in process &&
-      process.env.STREAM_LOCAL_TEST_RUN
-    ) {
+    const streamLocalTestRun = getEnv('STREAM_LOCAL_TEST_RUN');
+    const streamLocalTestHost = getEnv('STREAM_LOCAL_TEST_HOST');
+    if (streamLocalTestRun) {
       this.setBaseURL('http://localhost:3030');
     }
-
-    if (
-      typeof process !== 'undefined' &&
-      'env' in process &&
-      process.env.STREAM_LOCAL_TEST_HOST
-    ) {
-      this.setBaseURL('http://' + process.env.STREAM_LOCAL_TEST_HOST);
+    if (streamLocalTestHost) {
+      this.setBaseURL(`http://${streamLocalTestHost}`);
     }
 
     // WS connection is initialized when setUser is called
@@ -500,69 +303,16 @@ export class StreamChat {
 
     // mapping between channel groups and configs
     this.configs = {};
-    this.anonymous = false;
     this.persistUserOnConnectionFailure = this.options?.persistUserOnConnectionFailure;
 
     // If its a server-side client, then lets initialize the tokenManager, since token will be
     // generated from secret.
-    this.tokenManager = new TokenManager(this.secret);
-    this.consecutiveFailures = 0;
+    this.tokenManager = new TokenManager();
     this.insightMetrics = new InsightMetrics();
 
     this.defaultWSTimeoutWithFallback = 6 * 1000;
     this.defaultWSTimeout = 15 * 1000;
 
-    this.axiosInstance.defaults.paramsSerializer = axiosParamsSerializer;
-
-    /**
-     * logger function should accept 3 parameters:
-     * @param logLevel string
-     * @param message   string
-     * @param extraData object
-     *
-     * e.g.,
-     * const client = new StreamChat('api_key', {}, {
-     *    logger = (logLevel, message, extraData) => {
-     *      console.log(message);
-     *    }
-     * })
-     *
-     * extraData contains tags array attached to log message. Tags can have one/many of following values:
-     * 1. api
-     * 2. api_request
-     * 3. api_response
-     * 4. client
-     * 5. channel
-     * 6. connection
-     * 7. event
-     *
-     * It may also contains some extra data, some examples have been mentioned below:
-     * 1. {
-     *    tags: ['api', 'api_request', 'client'],
-     *    url: string,
-     *    payload: object,
-     *    config: object
-     * }
-     * 2. {
-     *    tags: ['api', 'api_response', 'client'],
-     *    url: string,
-     *    response: object
-     * }
-     * 3. {
-     *    tags: ['api', 'api_response', 'client'],
-     *    url: string,
-     *    error: object
-     * }
-     * 4. {
-     *    tags: ['event', 'client'],
-     *    event: object
-     * }
-     * 5. {
-     *    tags: ['channel'],
-     *    channel: object
-     * }
-     */
-    this.logger = isFunction(inputOptions.logger) ? inputOptions.logger : () => null;
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
@@ -575,7 +325,7 @@ export class StreamChat {
     return this.mutedUsersStore.getLatestValue().mutedUsers;
   }
 
-  set mutedUsers(mutedUsers: Mute[]) {
+  set mutedUsers(mutedUsers: UserMuteResponse[]) {
     this.mutedUsersStore.next({ mutedUsers });
   }
 
@@ -588,44 +338,32 @@ export class StreamChat {
   }
 
   /**
-   * Get a client instance
+   * Returns a client instance.
    *
-   * This function always returns the same Client instance to avoid issues raised by multiple Client and WS connections
+   * This function always returns the same client instance to avoid issues raised by multiple client and WS connections.
    *
-   * **After the first call, the client configuration will not change if the key or options parameters change**
+   * **After the first call, the client configuration will not change if the key or options parameters change.**
    *
-   * @param {string} key - the api key
-   * @param {string} [secret] - the api secret
-   * @param {StreamChatOptions} [options] - additional options, here you can pass custom options to axios instance
-   * @param {boolean} [options.browser] - enforce the client to be in browser mode
-   * @param {boolean} [options.warmUp] - default to false, if true, client will open a connection as soon as possible to speed up following requests
-   * @param {Logger} [options.Logger] - custom logger
-   * @param {number} [options.timeout] - default to 3000
-   * @param {httpsAgent} [options.httpsAgent] - custom httpsAgent, in node it's default to https.agent()
    * @example <caption>initialize the client in user mode</caption>
    * StreamChat.getInstance('api_key')
    * @example <caption>initialize the client in user mode with options</caption>
-   * StreamChat.getInstance('api_key', { timeout:5000 })
+   * StreamChat.getInstance('api_key', { timeout: 5000 })
    * @example <caption>secret is optional and only used in server side mode</caption>
-   * StreamChat.getInstance('api_key', "secret", { httpsAgent: customAgent })
+   * StreamChat.getInstance('api_key', 'secret', { httpsAgent: customAgent })
+   *
+   * @param key - The API key.
+   * @param options - Additional options; here you can pass custom options to the axios instance (optional).
+   * @param options.browser - Enforce the client to be in browser mode (optional).
+   * @param options.warmUp - If `true`, the client will open a connection as soon as possible to speed up following requests (optional, defaults to `false`).
+   * @param options.logLevel - Minimum log level for the default sink (optional, defaults to `'info'`).
+   * @param options.logOptions - Per-scope sink/level overrides for `chatLoggerSystem` (optional).
+   * @param options.timeout - Request timeout (optional, defaults to `3000`).
+   * @param options.httpsAgent - Custom `httpsAgent` (optional, in Node defaults to `https.agent()`).
+   * @returns The shared client instance.
    */
-  public static getInstance(key: string, options?: StreamChatOptions): StreamChat;
-  public static getInstance(
-    key: string,
-    secret?: string,
-    options?: StreamChatOptions,
-  ): StreamChat;
-  public static getInstance(
-    key: string,
-    secretOrOptions?: StreamChatOptions | string,
-    options?: StreamChatOptions,
-  ): StreamChat {
+  public static getInstance(key: string, options?: StreamChatOptions): StreamChat {
     if (!StreamChat._instance) {
-      if (typeof secretOrOptions === 'string') {
-        StreamChat._instance = new StreamChat(key, secretOrOptions, options);
-      } else {
-        StreamChat._instance = new StreamChat(key, secretOrOptions);
-      }
+      StreamChat._instance = new StreamChat(key, options);
     }
 
     return StreamChat._instance as StreamChat;
@@ -637,10 +375,6 @@ export class StreamChat {
     }
 
     this.offlineDb = offlineDBInstance;
-  }
-
-  devToken(userID: string) {
-    return DevToken(userID);
   }
 
   getAuthType() {
@@ -672,50 +406,43 @@ export class StreamChat {
   };
 
   /**
-   * connectUser - Set the current user and open a WebSocket connection
+   * Sets the current user and opens a WebSocket connection.
    *
-   * @param {OwnUserResponse | UserResponse} user Data about this user. IE {name: "john"}
-   * @param {TokenOrProvider} userTokenOrProvider Token or provider
-   *
-   * @return {ConnectAPIResponse} Returns a promise that resolves when the connection is setup
+   * @param user - Data about this user, e.g. `{ name: 'john' }`.
+   * @param userTokenOrProvider - A token string or an async provider that returns one.
+   * @returns A promise that resolves when the connection is set up.
    */
-  connectUser = async (
-    user: OwnUserResponse | UserResponse,
-    userTokenOrProvider: TokenOrProvider,
-  ) => {
+  connectUser = async (user: ClientUser, userTokenOrProvider: TokenOrProvider) => {
     if (!user.id) {
       throw new Error('The "id" field on the user is missing');
     }
 
     /**
-     * Calling connectUser multiple times is potentially the result of a  bad integration, however,
-     * If the user id remains the same we don't throw error
+     * Calling connectUser multiple times is potentially the result of a bad integration; however,
+     * if the user ID remains the same we don't throw an error.
      */
-    if (this.userID === user.id && this.setUserPromise) {
-      console.warn(
-        'Consecutive calls to connectUser is detected, ideally you should only call this function once in your app.',
-      );
+    if (this.userId === user.id && this.setUserPromise) {
+      logger
+        .withExtraTags('connectUser')
+        .warn(
+          'Detected consecutive calls to connectUser. Ideally, this function should only be called once.',
+        );
       return this.setUserPromise;
     }
 
-    if (this.userID) {
+    if (this.userId) {
       throw new Error(
         'Use client.disconnect() before trying to connect as a different user. connectUser was called twice.',
       );
     }
 
-    if (
-      (this._isUsingServerAuth() || this.node) &&
-      !this.options.allowServerSideConnect
-    ) {
-      console.warn(
-        'Please do not use connectUser server side. connectUser impacts MAU and concurrent connection usage and thus your bill. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
-      );
+    if (this.node && !this.options.allowServerSideConnect) {
+      logger
+        .withExtraTags('connectUser')
+        .warn(
+          'Do not use connectUser server-side. connectUser impacts MAU and concurrent connection usage, and therefore your bill. If you have a valid use case, set "allowServerSideConnect: true" in the client options to disable this warning.',
+        );
     }
-
-    // we generate the client id client side
-    this.userID = user.id;
-    this.anonymous = false;
 
     const setTokenPromise = this._setToken(user, userTokenOrProvider);
     this._setUser(user);
@@ -740,43 +467,41 @@ export class StreamChat {
   };
 
   /**
-   * @deprecated Please use connectUser() function instead. Its naming is more consistent with its functionality.
+   * Sets the current user and opens a WebSocket connection.
    *
-   * setUser - Set the current user and open a WebSocket connection
+   * @deprecated Use {@link StreamChat.connectUser} instead. Its naming is more consistent with its functionality.
    *
-   * @param {OwnUserResponse | UserResponse} user Data about this user. IE {name: "john"}
-   * @param {TokenOrProvider} userTokenOrProvider Token or provider
-   *
-   * @return {ConnectAPIResponse} Returns a promise that resolves when the connection is setup
+   * @param user - Data about this user, e.g. `{ name: 'john' }`.
+   * @param userTokenOrProvider - A token string or an async provider that returns one.
+   * @returns A promise that resolves when the connection is set up.
    */
   setUser = this.connectUser;
 
-  _setToken = (user: UserResponse, userTokenOrProvider: TokenOrProvider) =>
+  _setToken = (user: TokenManagerMinimalUser, userTokenOrProvider: TokenOrProvider) =>
     this.tokenManager.setTokenOrProvider(userTokenOrProvider, user);
 
-  _setUser(user: OwnUserResponse | UserResponse) {
+  _setUser(user: TokenManagerMinimalUser) {
     /**
      * This one is used by the frontend. This is a copy of the current user object stored on backend.
      * It contains reserved properties and own user properties which are not present in `this._user`.
      */
     this.user = user;
-    this.userID = user.id;
     // this one is actually used for requests. This is a copy of current user provided to `connectUser` function.
     this._user = { ...user };
   }
 
   /**
-   * Disconnects the websocket connection, without removing the user set on client.
+   * Disconnects the WebSocket connection, without removing the user set on client.
    * client.closeConnection will not trigger default auto-retry mechanism for reconnection. You need
-   * to call client.openConnection to reconnect to websocket.
+   * to call `client.openConnection` to reconnect to the WebSocket.
    *
    * This is mainly useful on mobile side. You can only receive push notifications
-   * if you don't have active websocket connection.
+   * if you don't have an active WebSocket connection.
    * So when your app goes to background, you can call `client.closeConnection`.
    * And when app comes back to foreground, call `client.openConnection`.
    *
-   * @param timeout Max number of ms, to wait for close event of websocket, before forcefully assuming succesful disconnection.
-   *                https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
+   * @param timeout - Max number of milliseconds to wait for the WebSocket close event before forcefully assuming
+   *   successful disconnection. See https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent (optional).
    */
   closeConnection = async (timeout?: number) => {
     if (this.cleaningIntervalRef != null) {
@@ -791,9 +516,9 @@ export class StreamChat {
 
     this.offlineDb?.executeQuerySafely(
       async (db) => {
-        if (this.userID) {
+        if (this.userId) {
           await db.upsertUserSyncStatus({
-            userId: this.userID,
+            userId: this.userId,
             lastSyncedAt: new Date().toString(),
           });
         }
@@ -805,12 +530,16 @@ export class StreamChat {
   };
 
   /**
-   * Creates an instance of ChannelManager.
+   * Creates an instance of `ChannelManager`.
    *
    * @internal
    *
-   * @param eventHandlerOverrides - the overrides for event handlers to be used
-   * @param options - the options used for the channel manager
+   * @param config - The channel manager configuration.
+   * @param config.eventHandlerOverrides - The overrides for event handlers to be used (optional,
+   *   defaults to `{}`).
+   * @param config.options - The options used for the channel manager (optional, defaults to `{}`).
+   * @param config.queryChannelsOverride - Override for the underlying `queryChannels` request (optional).
+   * @returns A new `ChannelManager` instance.
    */
   createChannelManager = ({
     eventHandlerOverrides = {},
@@ -829,19 +558,21 @@ export class StreamChat {
     });
 
   /**
-   * Creates a new WebSocket connection with the current user. Returns empty promise, if there is an active connection
+   * Creates a new WebSocket connection with the current user.
+   *
+   * @returns The WebSocket connect promise, or an empty resolved promise if a connection is already active.
    */
   openConnection = () => {
-    if (!this.userID) {
+    if (!this.userId) {
       throw Error(
         'User is not set on client, use client.connectUser or client.connectAnonymousUser instead',
       );
     }
 
     if (this.wsConnection?.isConnecting && this.wsPromise) {
-      this.logger('info', 'client:openConnection() - connection already in progress', {
-        tags: ['connection', 'client'],
-      });
+      logger
+        .withExtraTags('openConnection')
+        .debug('A connection attempt is already in progress.');
       return this.wsPromise;
     }
 
@@ -849,224 +580,64 @@ export class StreamChat {
       (this.wsConnection?.isHealthy || this.wsFallback?.isHealthy()) &&
       this._hasConnectionID()
     ) {
-      this.logger(
-        'info',
-        'client:openConnection() - openConnection called twice, healthy connection already exists',
-        {
-          tags: ['connection', 'client'],
-        },
-      );
+      logger
+        .withExtraTags('openConnection')
+        .debug('openConnection was called twice; a healthy connection already exists.');
 
       return;
     }
 
-    this.clientID = `${this.userID}--${randomId()}`;
+    this.clientId = `${this.userId}--${randomId()}`;
     this.wsPromise = this.connect();
     this._startCleaning();
     return this.wsPromise;
   };
-
   /**
-   * @deprecated Please use client.openConnction instead.
-   * @private
+   * Revokes tokens for a connected user issued before the given time.
    *
-   * Creates a new websocket connection with current user.
+   * @param before - Cutoff date; tokens issued before this are revoked (optional, defaults to the current time).
+   * @returns The updated users response.
    */
-  _setupConnection = this.openConnection;
-
-  /**
-   * updateAppSettings - updates application settings
-   *
-   * @param {AppSettings} options App settings.
-   * IE: {
-      'apn_config': {
-        'auth_type': 'token',
-        'auth_key": fs.readFileSync(
-          './apn-push-auth-key.p8',
-          'utf-8',
-        ),
-        'key_id': 'keyid',
-        'team_id': 'teamid',
-        'notification_template": 'notification handlebars template',
-        'bundle_id': 'com.apple.your.app',
-        'development': true
-      },
-      'firebase_config': {
-        'server_key': 'server key from fcm',
-        'notification_template': 'notification handlebars template',
-        'data_template': 'data handlebars template',
-        'apn_template': 'apn notification handlebars template under v2'
-      },
-      'webhook_url': 'https://acme.com/my/awesome/webhook/',
-      'event_hooks': [
-        {
-          'hook_type': 'webhook',
-          'enabled': true,
-          'event_types': ['message.new'],
-          'webhook_url': 'https://acme.com/my/awesome/webhook/'
-        },
-        {
-          'hook_type': 'sqs',
-          'enabled': true,
-          'event_types': ['message.new'],
-          'sqs_url': 'https://sqs.us-east-1.amazonaws.com/1234567890/my-queue',
-          'sqs_auth_type': 'key',
-          'sqs_key': 'my-access-key',
-          'sqs_secret': 'my-secret-key'
-        }
-      ]
-    }
-   */
-  async updateAppSettings(options: AppSettings) {
-    const apn_config = options.apn_config;
-    if (apn_config?.p12_cert) {
-      options = {
-        ...options,
-        apn_config: {
-          ...apn_config,
-          p12_cert: Buffer.from(apn_config.p12_cert).toString('base64'),
-        },
-      };
-    }
-    return await this.patch<APIResponse>(this.baseURL + '/app', options);
-  }
-
-  _normalizeDate = (before: Date | string | null): string | null => {
-    if (before instanceof Date) {
-      before = before.toISOString();
+  async revokeTokens(before?: Date | null) {
+    if (!before) {
+      before = new Date();
     }
 
-    if (before === '') {
-      throw new Error(
-        "Don't pass blank string for since, use null instead if resetting the token revoke",
-      );
-    }
-
-    return before;
-  };
-
-  /**
-   * Revokes all tokens on application level issued before given time
-   */
-  async revokeTokens(before: Date | string | null) {
-    return await this.updateAppSettings({
-      revoke_tokens_issued_before: this._normalizeDate(before),
-    });
-  }
-
-  /**
-   * Revokes token for a user issued before given time
-   */
-  async revokeUserToken(userID: string, before?: Date | string | null) {
-    return await this.revokeUsersToken([userID], before);
-  }
-
-  /**
-   * Revokes tokens for a list of users issued before given time
-   */
-  async revokeUsersToken(userIDs: string[], before?: Date | string | null) {
-    if (before === undefined) {
-      before = new Date().toISOString();
-    } else {
-      before = this._normalizeDate(before);
-    }
-
-    const users: PartialUserUpdate[] = [];
-    for (const userID of userIDs) {
-      users.push({
-        id: userID,
-        set: <Partial<UserResponse>>{
+    const users: UpdateUserPartialRequest[] = [
+      {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        id: this.userId!,
+        set: {
           revoke_tokens_issued_before: before,
         },
-      });
-    }
+      },
+    ];
 
-    return await this.partialUpdateUsers(users);
+    return await this.updateUsersPartial({ users });
   }
 
   /**
-   * getAppSettings - retrieves application settings
+   * Retrieves application settings.
+   *
+   * @returns The application settings response.
    */
   async getAppSettings() {
-    this.appSettingsPromise = this.get<AppSettingsAPIResponse>(this.baseURL + '/app');
-    return await this.appSettingsPromise;
+    return await (this.appSettingsPromise = this.getApp());
   }
 
   /**
-   * testPushSettings - Tests the push settings for a user with a random chat message and the configured push templates
+   * Disconnects the WebSocket and removes the user from client.
    *
-   * @param {string} userID User ID. If user has no devices, it will error
-   * @param {TestPushDataInput} [data] Overrides for push templates/message used
-   *  IE: {
-   messageID: 'id-of-message', // will error if message does not exist
-   apnTemplate: '{}', // if app doesn't have apn configured it will error
-   firebaseTemplate: '{}', // if app doesn't have firebase configured it will error
-   firebaseDataTemplate: '{}', // if app doesn't have firebase configured it will error
-   skipDevices: true, // skip config/device checks and sending to real devices
-   pushProviderName: 'staging' // one of your configured push providers
-   pushProviderType: 'apn' // one of supported provider types
-   }
-   */
-  async testPushSettings(userID: string, data: TestPushDataInput = {}) {
-    return await this.post<CheckPushResponse>(this.baseURL + '/check_push', {
-      user_id: userID,
-      ...(data.messageID ? { message_id: data.messageID } : {}),
-      ...(data.apnTemplate ? { apn_template: data.apnTemplate } : {}),
-      ...(data.firebaseTemplate ? { firebase_template: data.firebaseTemplate } : {}),
-      ...(data.firebaseDataTemplate
-        ? { firebase_data_template: data.firebaseDataTemplate }
-        : {}),
-      ...(data.skipDevices ? { skip_devices: true } : {}),
-      ...(data.pushProviderName ? { push_provider_name: data.pushProviderName } : {}),
-      ...(data.pushProviderType ? { push_provider_type: data.pushProviderType } : {}),
-    });
-  }
-
-  /**
-   * testSQSSettings - Tests that the given or configured SQS configuration is valid
-   *
-   * @param {TestSQSDataInput} [data] Overrides SQS settings for testing if needed
-   *  IE: {
-   sqs_key: 'auth_key',
-   sqs_secret: 'auth_secret',
-   sqs_url: 'url_to_queue',
-   }
-   */
-  async testSQSSettings(data: TestSQSDataInput = {}) {
-    return await this.post<CheckSQSResponse>(this.baseURL + '/check_sqs', data);
-  }
-
-  /**
-   * testSNSSettings - Tests that the given or configured SNS configuration is valid
-   *
-   * @param {TestSNSDataInput} [data] Overrides SNS settings for testing if needed
-   *  IE: {
-   sns_key: 'auth_key',
-   sns_secret: 'auth_secret',
-   sns_topic_arn: 'topic_to_publish_to',
-   }
-   */
-  async testSNSSettings(data: TestSNSDataInput = {}) {
-    return await this.post<CheckSNSResponse>(this.baseURL + '/check_sns', data);
-  }
-
-  /**
-   * Disconnects the websocket and removes the user from client.
-   *
-   * @param timeout Max number of ms, to wait for close event of websocket, before forcefully assuming successful disconnection.
-   *                https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
+   * @param timeout - Max number of milliseconds to wait for the WebSocket close event before forcefully assuming
+   *   successful disconnection. See https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent (optional).
+   * @returns The close-connection promise.
    */
   disconnectUser = (timeout?: number) => {
-    this.logger('info', 'client:disconnect() - Disconnecting the client', {
-      tags: ['connection', 'client'],
-    });
+    logger.withExtraTags('disconnectUser').info('Disconnecting the client.');
 
     // remove the user specific fields
     delete this.user;
     delete this._user;
-    delete this.userID;
-
-    this.anonymous = false;
 
     const closePromise = this.closeConnection(timeout);
 
@@ -1087,7 +658,11 @@ export class StreamChat {
       .finally(() => {
         this.tokenManager.reset();
       })
-      .catch((err) => console.error(err));
+      .catch((err) =>
+        logger
+          .withExtraTags('disconnectUser')
+          .error('The close promise rejected during disconnect.', { error: err }),
+      );
 
     // close the WS connection
     return closePromise;
@@ -1097,335 +672,148 @@ export class StreamChat {
    *
    * @deprecated Please use client.disconnectUser instead.
    *
-   * Disconnects the websocket and removes the user from client.
+   * Disconnects the WebSocket and removes the user from client.
    */
   disconnect = this.disconnectUser;
 
   /**
-   * connectAnonymousUser - Set an anonymous user and open a WebSocket connection
+   * Sets an anonymous user and opens a WebSocket connection.
+   *
+   * @returns A promise that resolves when the connection is set up.
    */
   connectAnonymousUser = () => {
-    if (
-      (this._isUsingServerAuth() || this.node) &&
-      !this.options.allowServerSideConnect
-    ) {
-      console.warn(
-        'Please do not use connectUser server side. connectUser impacts MAU and concurrent connection usage and thus your bill. If you have a valid use-case, add "allowServerSideConnect: true" to the client options to disable this warning.',
-      );
+    if (this.node && !this.options.allowServerSideConnect) {
+      logger
+        .withExtraTags('connectAnonymousUser')
+        .warn(
+          'Do not use connectUser server-side. connectUser impacts MAU and concurrent connection usage, and therefore your bill. If you have a valid use case, set "allowServerSideConnect: true" in the client options to disable this warning.',
+        );
     }
 
-    this.anonymous = true;
-    this.userID = randomId();
     const anonymousUser = {
-      id: this.userID,
+      id: randomId(),
       anon: true,
-    } as UserResponse;
+    } satisfies TokenManagerMinimalUser;
 
     this._setToken(anonymousUser, '');
     this._setUser(anonymousUser);
 
-    return this._setupConnection();
+    return this.openConnection();
   };
 
   /**
-   * @deprecated Please use connectAnonymousUser. Its naming is more consistent with its functionality.
-   */
-  setAnonymousUser = this.connectAnonymousUser;
-
-  /**
-   * setGuestUser - Setup a temporary guest user
+   * Sets up a temporary guest user.
    *
-   * @param {UserResponse} user Data about this user. IE {name: "john"}
-   *
-   * @return {ConnectAPIResponse} Returns a promise that resolves when the connection is setup
+   * @param user - Data about this user, e.g. `{ name: 'john' }`.
+   * @returns A promise that resolves when the connection is set up.
    */
   async setGuestUser(user: UserResponse) {
-    let response: { access_token: string; user: UserResponse } | undefined;
-    this.anonymous = true;
-    try {
-      response = await this.post<
-        APIResponse & {
-          access_token: string;
-          user: UserResponse;
-        }
-      >(this.baseURL + '/guest', { user });
-    } catch (e) {
-      this.anonymous = false;
-      throw e;
-    }
-    this.anonymous = false;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { created_at, updated_at, last_active, online, ...guestUser } = response.user;
+    const response = await this.createGuest({ user });
+
+    const {
+      created_at: _created_at,
+      updated_at: _updated_at,
+      last_active: _last_active,
+      online: _online,
+      ...guestUser
+    } = response.user;
+
     return await this.connectUser(guestUser as UserResponse, response.access_token);
   }
 
   /**
-   * createToken - Creates a token to authenticate this user. This function is used server side.
-   * The resulting token should be passed to the client side when the users registers or logs in.
+   * Listens to events on all channels and users you're watching.
    *
-   * @param {string} userID The User ID
-   * @param {number} [exp] The expiration time for the token expressed in the number of seconds since the epoch
+   * @example
+   * client.on('message.new', (event) => {
+   *   console.log('my new message', event, channel.state.messages);
+   * });
    *
-   * @return {string} Returns a token
-   */
-  createToken(userID: string, exp?: number, iat?: number) {
-    if (this.secret == null) {
-      throw Error(`tokens can only be created server-side using the API Secret`);
-    }
-    const extra: { exp?: number; iat?: number } = {};
-
-    if (exp) {
-      extra.exp = exp;
-    }
-
-    if (iat) {
-      extra.iat = iat;
-    }
-
-    return JWTUserToken(this.secret, userID, extra, {});
-  }
-
-  /**
-   * on - Listen to events on all channels and users your watching
+   * @example
+   * client.on((event) => {
+   *   console.log(event.type);
+   * });
    *
-   * client.on('message.new', event => {console.log("my new message", event, channel.messagePaginator.state.items)})
-   * or
-   * client.on(event => {console.log(event.type)})
-   *
-   * @param {EventHandler | string} callbackOrString  The event type to listen for (optional)
-   * @param {EventHandler} [callbackOrNothing] The callback to call
-   *
-   * @return {{ unsubscribe: () => void }} Description
+   * @param callbackOrString - The event type to listen for, or the callback when listening to all events.
+   * @param callbackOrNothing - The callback to call when an event type was provided (optional).
+   * @returns An object with an `unsubscribe()` method.
    */
   on(callback: EventHandler): { unsubscribe: () => void };
-  on(eventType: string, callback: EventHandler): { unsubscribe: () => void };
+  on<T extends EventType | string>(
+    eventType: T,
+    callback: EventHandler<T>,
+  ): { unsubscribe: () => void };
   on(
     callbackOrString: EventHandler | string,
     callbackOrNothing?: EventHandler,
   ): { unsubscribe: () => void } {
-    const key = callbackOrNothing ? (callbackOrString as string) : 'all';
+    const key = callbackOrNothing ? (callbackOrString as EventType) : 'all';
     const callback = callbackOrNothing
       ? callbackOrNothing
       : (callbackOrString as EventHandler);
-    if (!(key in this.listeners)) {
-      this.listeners[key] = [];
+
+    const set = this.listeners.get(key) ?? new Set();
+
+    logger.withExtraTags('on').debug(`Attaching a listener for the "${key}" event.`);
+    set.add(callback);
+
+    if (!this.listeners.has(key)) {
+      this.listeners.set(key, set);
     }
-    this.logger('info', `Attaching listener for ${key} event`, {
-      tags: ['event', 'client'],
-    });
-    this.listeners[key].push(callback);
+
     return {
       unsubscribe: () => {
-        this.logger('info', `Removing listener for ${key} event`, {
-          tags: ['event', 'client'],
-        });
-        this.listeners[key] = this.listeners[key].filter((el) => el !== callback);
+        logger.withExtraTags('on').debug(`Removing the listener for the "${key}" event.`);
+        set.delete(callback);
+        if (!set.size) {
+          this.listeners.delete(key);
+        }
       },
     };
   }
 
   /**
-   * off - Remove the event handler
+   * Removes the event handler.
    *
+   * @param callbackOrString - The event type, or the callback when removing an all-events listener.
+   * @param callbackOrNothing - The callback to remove when an event type was provided (optional).
    */
   off(callback: EventHandler): void;
   off(eventType: string, callback: EventHandler): void;
   off(callbackOrString: EventHandler | string, callbackOrNothing?: EventHandler) {
-    const key = callbackOrNothing ? (callbackOrString as string) : 'all';
+    const key = callbackOrNothing ? (callbackOrString as EventType) : 'all';
     const callback = callbackOrNothing
       ? callbackOrNothing
       : (callbackOrString as EventHandler);
-    if (!(key in this.listeners)) {
-      this.listeners[key] = [];
+
+    logger.withExtraTags('off').debug(`Removing the listener for the "${key}" event.`);
+
+    const set = this.listeners.get(key);
+
+    set?.delete(callback);
+
+    if (!set?.size) {
+      this.listeners.delete(key);
     }
-
-    this.logger('info', `Removing listener for ${key} event`, {
-      tags: ['event', 'client'],
-    });
-    this.listeners[key] = this.listeners[key].filter((value) => value !== callback);
-  }
-
-  _logApiRequest(
-    type: string,
-    url: string,
-    data: unknown,
-    config: AxiosRequestConfig & {
-      config?: AxiosRequestConfig & { maxBodyLength?: number };
-    },
-  ) {
-    this.logger('info', `client: ${type} - Request - ${url}`, {
-      tags: ['api', 'api_request', 'client'],
-      url,
-      payload: data,
-      config,
-    });
-  }
-
-  _logApiResponse<T>(type: string, url: string, response: AxiosResponse<T>) {
-    this.logger(
-      'info',
-      `client:${type} - Response - url: ${url} > status ${response.status}`,
-      {
-        tags: ['api', 'api_response', 'client'],
-        url,
-        response,
-      },
-    );
-  }
-
-  _logApiError(type: string, url: string, error: unknown) {
-    this.logger('error', `client:${type} - Error - url: ${url}`, {
-      tags: ['api', 'api_response', 'client'],
-      url,
-      error,
-    });
-  }
-
-  doAxiosRequest = async <T>(
-    type: string,
-    url: string,
-    data?: unknown,
-    options: AxiosRequestConfig & {
-      config?: AxiosRequestConfig & { maxBodyLength?: number };
-    } = {},
-  ): Promise<T> => {
-    await this.tokenManager.tokenReady();
-    const requestConfig = this._enrichAxiosOptions(options);
-    try {
-      let response: AxiosResponse<T>;
-      this._logApiRequest(type, url, data, requestConfig);
-      switch (type) {
-        case 'get':
-          response = await this.axiosInstance.get(url, requestConfig);
-          break;
-        case 'delete':
-          response = await this.axiosInstance.delete(url, requestConfig);
-          break;
-        case 'post':
-          response = await this.axiosInstance.post(url, data, requestConfig);
-          break;
-        case 'postForm':
-          response = await this.axiosInstance.postForm(url, data, requestConfig);
-          break;
-        case 'put':
-          response = await this.axiosInstance.put(url, data, requestConfig);
-          break;
-        case 'patch':
-          response = await this.axiosInstance.patch(url, data, requestConfig);
-          break;
-        case 'options':
-          response = await this.axiosInstance.options(url, requestConfig);
-          break;
-        default:
-          throw new Error('Invalid request type');
-      }
-      this._logApiResponse<T>(type, url, response);
-      this.consecutiveFailures = 0;
-      return this.handleResponse(response);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (e: any /**TODO: generalize error types  */) {
-      e.client_request_id = requestConfig.headers?.['x-client-request-id'];
-      this._logApiError(type, url, e);
-      this.consecutiveFailures += 1;
-      if (e.response) {
-        /** connection_fallback depends on this token expiration logic */
-        if (
-          e.response.data.code === chatCodes.TOKEN_EXPIRED &&
-          !this.tokenManager.isStatic()
-        ) {
-          if (this.consecutiveFailures > 1) {
-            await sleep(retryInterval(this.consecutiveFailures));
-          }
-          this.tokenManager.loadToken();
-          return await this.doAxiosRequest<T>(type, url, data, options);
-        }
-        return this.handleResponse(e.response);
-      } else {
-        throw e as AxiosError<APIErrorResponse>;
-      }
-    }
-  };
-
-  get<T>(url: string, params?: AxiosRequestConfig['params']) {
-    return this.doAxiosRequest<T>('get', url, null, { params });
-  }
-
-  put<T>(url: string, data?: unknown) {
-    return this.doAxiosRequest<T>('put', url, data);
-  }
-
-  post<T>(url: string, data?: unknown) {
-    return this.doAxiosRequest<T>('post', url, data);
-  }
-
-  patch<T>(url: string, data?: unknown) {
-    return this.doAxiosRequest<T>('patch', url, data);
-  }
-
-  delete<T>(url: string, params?: AxiosRequestConfig['params']) {
-    return this.doAxiosRequest<T>('delete', url, null, { params });
-  }
-
-  sendFile(
-    url: string,
-    uri: string | NodeJS.ReadableStream | Buffer | File,
-    name?: string,
-    contentType?: string,
-    user?: UserResponse,
-    axiosRequestConfig?: AxiosRequestConfig,
-  ) {
-    const data = addFileToFormData(uri, name, contentType || 'multipart/form-data');
-    if (user != null) data.append('user', JSON.stringify(user));
-
-    return this.doAxiosRequest<SendFileAPIResponse>('postForm', url, data, {
-      headers: data.getHeaders ? data.getHeaders() : {}, // node vs browser
-      config: {
-        timeout: 0,
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-        ...axiosRequestConfig,
-      },
-    });
-  }
-
-  errorFromResponse(response: AxiosResponse<APIErrorResponse>) {
-    const message =
-      typeof response.data.code !== 'undefined'
-        ? `StreamChat error code ${response.data.code}: ${response.data.message}`
-        : `StreamChat error HTTP code: ${response.status}`;
-
-    return new ErrorFromResponse<APIErrorResponse>(message, {
-      code: response.data.code ?? null,
-      response,
-      status: response.status,
-    });
-  }
-
-  handleResponse<T>(response: AxiosResponse<T>) {
-    const data = response.data;
-    if (isErrorResponse(response)) {
-      throw this.errorFromResponse(response);
-    }
-    return data;
   }
 
   dispatchEvent = (event: Event) => {
     if (!event.received_at) event.received_at = new Date();
 
     // client event handlers
-    const postListenerCallbacks = this._handleClientEvent(event);
+    const postListenerCallbacks = this._handleClientEvent(event as WSEvent);
 
     // channel event handlers
-    const cid = event.cid;
+    const cid = (event as Extract<Event, { cid?: any }>).cid;
     const channel = cid ? this.activeChannels[cid] : undefined;
     if (channel) {
-      channel._handleChannelEvent(event);
+      channel._handleChannelEvent(event as WSEvent);
     }
 
     this._callClientListeners(event);
 
     if (channel) {
-      channel._callChannelListeners(event);
+      channel._callChannelListeners(event as WSEvent);
     }
 
     postListenerCallbacks.forEach((c) => c());
@@ -1436,14 +824,14 @@ export class StreamChat {
   };
 
   /**
-   * Updates the members, watchers and read references of the currently active channels that contain this user
+   * Updates the members, watchers and read references of the currently active channels that contain this user.
    *
-   * @param {UserResponse} user
+   * @param user - The updated user.
    */
   _updateMemberWatcherReferences = (user: UserResponse) => {
     const refMap = this.state.userChannelReferences[user.id] || {};
-    for (const channelID in refMap) {
-      const channel = this.activeChannels[channelID];
+    for (const channelId in refMap) {
+      const channel = this.activeChannels[channelId];
       if (channel?.state) {
         if (channel.state.members[user.id]) {
           channel.state.members[user.id].user = user;
@@ -1459,21 +847,20 @@ export class StreamChat {
   };
 
   /**
-   * @deprecated Please _updateMemberWatcherReferences instead.
+   * @deprecated Please use `_updateMemberWatcherReferences` instead.
    * @private
    */
   _updateUserReferences = this._updateMemberWatcherReferences;
 
   /**
+   * Updates the messages from the currently active channels that contain this user, with the updated user object.
+   *
    * @private
    *
-   * Updates the messages from the currently active channels that contain this user,
-   * with updated user object.
-   *
-   * @param {UserResponse} user
+   * @param user - The updated user.
    */
   _updateUserMessageReferences = (user: UserResponse) => {
-    // Scan all active channels rather than a user->channel reference map. Message authors are no
+    // Scan all active channels rather than a user->channel reference map. MessageRequest authors are no
     // longer registered as channel references (that registration was removed along with
     // `Channel._trackLatestMessage`); `reflectUserUpdate` filters by author id internally, so it is
     // a no-op on channels without this user's messages.
@@ -1488,15 +875,16 @@ export class StreamChat {
   };
 
   /**
+   * Deletes the messages from the currently active channels that contain this user.
+   *
+   * If `hardDelete` is `true`, all the content of the message will be stripped down.
+   * Otherwise, only `message.type` will be set as `'deleted'`.
+   *
    * @private
    *
-   * Deletes the messages from the currently active channels that contain this user
-   *
-   * If hardDelete is true, all the content of message will be stripped down.
-   * Otherwise, only 'message.type' will be set as 'deleted'.
-   *
-   * @param {UserResponse} user
-   * @param {boolean} hardDelete
+   * @param user - The user whose messages should be deleted.
+   * @param hardDelete - Whether to fully strip the message content (optional, defaults to `false`).
+   * @param deletedAt - Timestamp to mark messages as deleted at (optional).
    */
   _deleteUserMessageReference = (
     user: UserResponse,
@@ -1523,23 +911,28 @@ export class StreamChat {
   };
 
   /**
+   * Handle the following user-related events:
+   * - `user.presence.changed`
+   * - `user.updated`
+   * - `user.deleted`
+   *
    * @private
    *
-   * Handle following user related events:
-   * - user.presence.changed
-   * - user.updated
-   * - user.deleted
-   *
-   * @param {Event} event
+   * @param event - The user event.
    */
-  _handleUserEvent = (event: Event) => {
+  _handleUserEvent = (
+    event: Extract<
+      WSEvent,
+      { type: 'user.presence.changed' | 'user.updated' | 'user.deleted' }
+    >,
+  ) => {
     if (!event.user) {
       return;
     }
 
     /** update the client.state with any changes to users */
     if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
-      if (event.user.id === this.userID) {
+      if (event.user.id === this.userId) {
         const user = { ...this.user } as NonNullable<StreamChat['user']>;
         const _user = { ...this._user } as NonNullable<StreamChat['_user']>;
 
@@ -1585,23 +978,18 @@ export class StreamChat {
       this._deleteUserMessageReference(
         event.user,
         event.hard_delete,
-        event.user.deleted_at ? new Date(event.user.deleted_at) : null,
+        event.user.deleted_at,
       );
     }
   };
 
-  _handleClientEvent(event: Event) {
+  _handleClientEvent(event: WSEvent) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const client = this;
     const postListenerCallbacks = [];
-    this.logger(
-      'info',
-      `client:_handleClientEvent - Received event of type { ${event.type} }`,
-      {
-        tags: ['event', 'client'],
-        event,
-      },
-    );
+    logger
+      .withExtraTags('_handleClientEvent')
+      .debug(`Received an event of type "${event.type}".`, { event });
 
     if (
       event.type === 'user.presence.changed' ||
@@ -1612,11 +1000,7 @@ export class StreamChat {
     }
 
     if (event.type === 'user.messages.deleted' && !event.cid && event.user) {
-      this._deleteUserMessageReference(
-        event.user,
-        event.hard_delete,
-        event.created_at ? new Date(event.created_at) : null,
-      );
+      this._deleteUserMessageReference(event.user, event.hard_delete, event.created_at);
     }
 
     if (event.type === 'health.check' && event.me) {
@@ -1627,7 +1011,7 @@ export class StreamChat {
       client.blockedUsers.partialNext({ userIds: event.me.blocked_user_ids ?? [] });
     }
 
-    if (event.channel && event.type === 'notification.message_new') {
+    if (event.type === 'notification.message_new' && event.channel) {
       const { channel } = event;
       this._addChannelConfig(channel);
     }
@@ -1708,58 +1092,41 @@ export class StreamChat {
   }
 
   _callClientListeners = (event: Event) => {
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const client = this;
-    // gather and call the listeners
-    const listeners: Array<(event: Event) => void> = [];
-    if (client.listeners.all) {
-      listeners.push(...client.listeners.all);
-    }
-    if (client.listeners[event.type]) {
-      listeners.push(...client.listeners[event.type]);
-    }
+    const allSet = this.listeners.get('all');
+    const targetSet = this.listeners.get(event.type);
 
-    // call the event and send it to the listeners
-    for (const listener of listeners) {
-      listener(event);
-    }
+    [allSet, targetSet].forEach((set) =>
+      set?.forEach((handleEvent) => handleEvent(event)),
+    );
   };
 
   recoverState = async () => {
-    this.logger(
-      'info',
-      `client:recoverState() - Start of recoverState with connectionID ${this._getConnectionID()}`,
-      {
-        tags: ['connection'],
-      },
-    );
+    logger
+      .withExtraTags('recoverState')
+      .info(`Starting state recovery with connection ID ${this._getConnectionID()}.`);
 
     const cids = Object.keys(this.activeChannels);
     if (cids.length && this.recoverStateOnReconnect) {
-      this.logger(
-        'info',
-        `client:recoverState() - Start the querying of ${cids.length} channels`,
-        {
-          tags: ['connection', 'client'],
+      logger
+        .withExtraTags('recoverState')
+        .info(`Starting the query for ${cids.length} channel(s).`);
+
+      await this.queryChannelsAndHydrate({
+        filter_conditions: {
+          cid: { $in: cids },
         },
-      );
-
-      await this.queryChannels(
-        { cid: { $in: cids } } as ChannelFilters,
-        { last_message_at: -1 },
-        { limit: 30 },
-      );
-
-      this.logger('info', 'client:recoverState() - Querying channels finished', {
-        tags: ['connection', 'client'],
+        limit: 30,
+        sort: [{ field: 'last_message_at', direction: -1 }],
       });
+
+      logger.withExtraTags('recoverState').info('Finished querying channels.');
       this.dispatchEvent({
         type: 'connection.recovered',
-      } as Event);
+      });
     } else {
       this.dispatchEvent({
         type: 'connection.recovered',
-      } as Event);
+      });
     }
 
     this.wsPromise = Promise.resolve();
@@ -1770,16 +1137,16 @@ export class StreamChat {
    * @private
    */
   async connect() {
-    if (!this.userID || !this._user) {
+    if (!this.userId || !this._user) {
       throw Error(
         'Call connectUser or connectAnonymousUser before starting the connection',
       );
     }
     if (!this.wsBaseURL) {
-      throw Error('Websocket base url not set');
+      throw Error('Property wsBaseURL is not set');
     }
-    if (!this.clientID) {
-      throw Error('clientID is not set');
+    if (!this.clientId) {
+      throw Error('Property clientId is not set');
     }
 
     if (!this.wsConnection && (this.options.warmUp || this.options.enableInsights)) {
@@ -1808,14 +1175,13 @@ export class StreamChat {
           ? this.defaultWSTimeoutWithFallback
           : this.defaultWSTimeout,
       );
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       // run fallback only if it's WS/Network error and not a normal API error
       // make sure browser is online before even trying the longpoll
       if (this.options.enableWSFallback && isWSFailure(error) && isOnline()) {
-        this.logger('info', 'client:connect() - WS failed, fallback to longpoll', {
-          tags: ['connection', 'client'],
-        });
+        logger
+          .withExtraTags('connect')
+          .warn('The WebSocket connection failed; falling back to long-polling.');
         this.dispatchEvent({ type: 'transport.changed', mode: 'longpoll' });
 
         this.wsConnection._destroyCurrentWSConnection();
@@ -1831,14 +1197,14 @@ export class StreamChat {
   }
 
   /**
-   * Check the connectivity with server for warmup purpose.
+   * Checks connectivity with the server for warmup purposes.
    *
    * @private
    */
   _sayHi() {
     const client_request_id = randomId();
     const opts = { headers: { 'x-client-request-id': client_request_id } };
-    this.doAxiosRequest('get', this.baseURL + '/hi', null, opts).catch((e) => {
+    this.api.doAxiosRequest('get', this.baseURL + '/hi', null, opts).catch((e) => {
       if (this.options.enableInsights) {
         postInsights('http_hi_failed', {
           api_key: this.key,
@@ -1850,244 +1216,52 @@ export class StreamChat {
   }
 
   /**
-   * queryUsers - Query users and watch user presence
+   * Queries users and watches user presence.
    *
-   * @param {UserFilters} filterConditions MongoDB style filter conditions
-   * @param {UserSort} sort Sort options, for instance [{last_active: -1}].
-   * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_active: -1}, {created_at: 1}]
-   * @param {UserOptions} options Option object, {presence: true}
-   *
-   * @return {Promise<{ users: Array<UserResponse> }>} User Query Response
+   * @param request - The query users request payload (optional). The inner `payload` accepts
+   *   MongoDB-style filter conditions, sort directions (e.g. `[{ field: 'last_active', direction: -1 }]`),
+   *   and options such as `presence`.
+   * @returns The user query response.
    */
-  async queryUsers(
-    filterConditions: UserFilters,
-    sort: UserSort = [],
-    options: UserOptions = {},
-  ) {
-    const defaultOptions = {
-      presence: false,
-    };
-
+  override async queryUsers(request?: { payload?: Gen_QueryUsersPayload }) {
     // Make sure we wait for the connect promise if there is a pending one
     await this.wsPromise;
 
-    if (!this._hasConnectionID()) {
-      defaultOptions.presence = false;
-    }
-
-    // Return a list of users
-    const data = await this.get<APIResponse & { users: Array<UserResponse> }>(
-      this.baseURL + '/users',
-      {
-        payload: {
-          filter_conditions: filterConditions,
-          sort: normalizeQuerySort(sort),
-          ...defaultOptions,
-          ...options,
-        },
-      },
-    );
-
+    const data = await super.queryUsers(request);
     this.state.updateUsers(data.users);
 
     return data;
   }
 
   /**
-   * queryUserGroups - List user groups with cursor-based pagination.
+   * Queries user bans.
    *
-   * @param {QueryUserGroupsOptions} options The query options
-   *
-   * @return {Promise<QueryUserGroupsResponse>} User Group Query Response
+   * @param request - The query banned users request payload (optional). The inner `payload`
+   *   accepts MongoDB-style filter conditions, sort directions
+   *   (e.g. `[{ field: 'created_at', direction: 1 }]`), and options such as `limit`, `offset`,
+   *   and `exclude_expired_bans`.
+   * @returns The ban query response.
    */
-  async queryUserGroups(options: QueryUserGroupsOptions = {}) {
-    return await this.get<QueryUserGroupsResponse>(this.baseURL + '/usergroups', options);
-  }
-
-  /**
-   * createUserGroup - Create a user group
-   *
-   * @param {CreateUserGroupOptions} options The create options
-   *
-   * @return {Promise<CreateUserGroupResponse>} User Group Create Response
-   */
-  async createUserGroup(options: CreateUserGroupOptions) {
-    return await this.post<CreateUserGroupResponse>(
-      this.baseURL + '/usergroups',
-      options,
-    );
-  }
-
-  /**
-   * getUserGroup - Get a user group by ID
-   *
-   * @param {string} id The user group ID
-   * @param {GetUserGroupOptions} options Optional query options
-   *
-   * @return {Promise<GetUserGroupResponse>} User Group Get Response
-   */
-  async getUserGroup(id: string, options: GetUserGroupOptions = {}) {
-    return await this.get<GetUserGroupResponse>(
-      `${this.baseURL}/usergroups/${encodeURIComponent(id)}`,
-      options,
-    );
-  }
-
-  /**
-   * searchUserGroups - Search user groups by prefix for autocomplete
-   *
-   * @param {SearchUserGroupsOptions} options The search options
-   *
-   * @return {Promise<SearchUserGroupsResponse>} User Group Search Response
-   */
-  async searchUserGroups(options: SearchUserGroupsOptions) {
-    return await this.get<SearchUserGroupsResponse>(
-      this.baseURL + '/usergroups/search',
-      options,
-    );
-  }
-
-  /**
-   * updateUserGroup - Update a user group by ID
-   *
-   * @param {string} id The user group ID
-   * @param {UpdateUserGroupOptions} options The update options
-   *
-   * @return {Promise<UpdateUserGroupResponse>} User Group Update Response
-   */
-  async updateUserGroup(id: string, options: UpdateUserGroupOptions) {
-    return await this.put<UpdateUserGroupResponse>(
-      `${this.baseURL}/usergroups/${encodeURIComponent(id)}`,
-      options,
-    );
-  }
-
-  /**
-   * deleteUserGroup - Delete a user group by ID
-   *
-   * @param {string} id The user group ID
-   * @param {DeleteUserGroupOptions} options Optional query options
-   *
-   * @return {Promise<APIResponse>} User Group Delete Response
-   */
-  async deleteUserGroup(id: string, options: DeleteUserGroupOptions = {}) {
-    return await this.delete<APIResponse>(
-      `${this.baseURL}/usergroups/${encodeURIComponent(id)}`,
-      options,
-    );
-  }
-
-  /**
-   * addUserGroupMembers - Add members to a user group
-   *
-   * @param {string} id The user group ID
-   * @param {AddUserGroupMembersOptions} options The add-members options
-   *
-   * @return {Promise<AddUserGroupMembersResponse>} User Group Add Members Response
-   */
-  async addUserGroupMembers(id: string, options: AddUserGroupMembersOptions) {
-    return await this.post<AddUserGroupMembersResponse>(
-      `${this.baseURL}/usergroups/${encodeURIComponent(id)}/members`,
-      options,
-    );
-  }
-
-  /**
-   * removeUserGroupMembers - Remove members from a user group
-   *
-   * @param {string} id The user group ID
-   * @param {RemoveUserGroupMembersOptions} options The remove-members options
-   *
-   * @return {Promise<RemoveUserGroupMembersResponse>} User Group Remove Members Response
-   */
-  async removeUserGroupMembers(id: string, options: RemoveUserGroupMembersOptions) {
-    return await this.post<RemoveUserGroupMembersResponse>(
-      `${this.baseURL}/usergroups/${encodeURIComponent(id)}/members/delete`,
-      options,
-    );
-  }
-
-  /**
-   * queryBannedUsers - Query user bans
-   *
-   * @param {BannedUsersFilters} filterConditions MongoDB style filter conditions
-   * @param {BannedUsersSort} sort Sort options [{created_at: 1}].
-   * @param {BannedUsersPaginationOptions} options Option object, {limit: 10, offset:0, exclude_expired_bans: true}
-   *
-   * @return {Promise<BannedUsersResponse>} Ban Query Response
-   */
-  async queryBannedUsers(
-    filterConditions: BannedUsersFilters = {},
-    sort: BannedUsersSort = [],
-    options: BannedUsersPaginationOptions = {},
-  ) {
+  async queryBannedUsers(request?: { payload?: QueryBannedUsersPayload }) {
     // Return a list of user bans
-    return await this.get<BannedUsersResponse>(this.baseURL + '/query_banned_users', {
-      payload: {
-        filter_conditions: filterConditions,
-        sort: normalizeQuerySort(sort),
-        ...options,
-      },
-    });
+    return await super.queryBannedUsers(request);
   }
 
   /**
-   * queryFutureChannelBans - Query future channel bans created by a user
-   *
-   * @param {QueryFutureChannelBansOptions} options Option object with user_id, exclude_expired_bans, limit, offset
-   * @returns {Promise<FutureChannelBansResponse>} Future Channel Bans Response
-   */
-  async queryFutureChannelBans(options: QueryFutureChannelBansOptions = {}) {
-    return await this.get<FutureChannelBansResponse>(
-      this.baseURL + '/query_future_channel_bans',
-      {
-        payload: options,
-      },
-    );
-  }
-
-  /**
-   * queryMessageFlags - Query message flags
-   *
-   * @param {MessageFlagsFilters} filterConditions MongoDB style filter conditions
-   * @param {MessageFlagsPaginationOptions} options Option object, {limit: 10, offset:0}
-   *
-   * @return {Promise<MessageFlagsResponse>} Message Flags Response
-   */
-  async queryMessageFlags(
-    filterConditions: MessageFlagsFilters = {},
-    options: MessageFlagsPaginationOptions = {},
-  ) {
-    // Return a list of message flags
-    return await this.get<MessageFlagsResponse>(
-      this.baseURL + '/moderation/flags/message',
-      {
-        payload: { filter_conditions: filterConditions, ...options },
-      },
-    );
-  }
-
-  /**
-   * queryChannelsRequestWithResponse - Queries channels and returns the full API response
-   * including top-level metadata such as `predefined_filter`.
+   * Queries channels and returns the full API response including top-level metadata such as
+   * `predefined_filter`.
    *
    * This exists as a compatibility bridge, as changing `queryChannelsRequest()` to return
-   * `QueryChannelsAPIResponse` would be a breaking change because it currently returns
+   * `QueryChannelsResponse` would be a breaking change because it currently returns
    * only the channel list. In the next major release, the request/response APIs should
    * be consolidated so callers can access the full response through the primary API.
    *
-   * @param {ChannelFilters} filterConditions object MongoDB style filters. Can be empty object when using predefined_filter in options.
-   * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
-   * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
-   * @param {ChannelOptions} [options] Options object. Can include predefined_filter, filter_values, and sort_values for using predefined filters.
-   *
-   * @return {Promise<QueryChannelsAPIResponse>} full search channels response
+   * @param request - The query channels request payload (optional). Accepts MongoDB-style filter
+   *   conditions, sort directions (e.g. `[{ field: 'created_at', direction: -1 }]`), and options
+   *   such as `predefined_filter`, `filter_values`, and `sort_values`.
+   * @returns The full query channels response.
    */
-  async queryChannelsRequestWithResponse(
-    filterConditions: ChannelFilters,
-    sort: ChannelSort = [],
-    options: ChannelOptions = {},
-  ): Promise<QueryChannelsAPIResponse> {
+  override async queryChannels(request?: QueryChannelsRequest) {
     const defaultOptions: ChannelOptions = {
       state: true,
       watch: true,
@@ -2096,102 +1270,72 @@ export class StreamChat {
 
     // Make sure we wait for the connect promise if there is a pending one
     await this.wsPromise;
+
+    // TODO: probably serverside only thing, remove at some point
     if (!this._hasConnectionID()) {
       defaultOptions.watch = false;
     }
 
-    const { predefined_filter, filter_values, sort_values, ...restOptions } = options;
-    const normalizedSort = normalizeQuerySort(sort);
+    const {
+      predefined_filter,
+      filter_values,
+      sort_values,
+      filter_conditions,
+      ...restOptions
+    } = request ?? {};
 
     // Build payload based on whether we're using a predefined filter or traditional filters
-    const payload = predefined_filter
+    const payload: QueryChannelsRequest = predefined_filter
       ? {
           predefined_filter,
           filter_values,
           sort_values,
-          sort: normalizedSort,
           ...defaultOptions,
           ...restOptions,
         }
       : {
-          filter_conditions: filterConditions,
-          sort: normalizedSort,
+          filter_conditions,
           ...defaultOptions,
           ...restOptions,
         };
 
-    return await this.post<QueryChannelsAPIResponse>(this.baseURL + '/channels', payload);
+    return await super.queryChannels(payload);
   }
 
   /**
-   * queryChannelsRequest - Queries channels and returns the raw channel response list.
+   * Queries channels and hydrates them into `Channel` instances on this client.
    *
-   * This preserves the historical return shape for backwards compatibility. Use
-   * `queryChannelsRequestWithResponse()` when response level metadata such as
-   * `predefined_filter` is needed. In the next major release these APIs should be
-   * consolidated into a single full-response API.
+   * Use the inherited `queryChannels()` from `ChatApi` when only the raw API response
+   * is needed; this method wraps it with state hydration, `channels.queried` dispatch,
+   * and offline-db sync.
    *
-   * @param {ChannelFilters} filterConditions object MongoDB style filters. Can be empty object when using predefined_filter in options.
-   * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
-   * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
-   * @param {ChannelOptions} [options] Options object. Can include predefined_filter, filter_values, and sort_values for using predefined filters.
-   *
-   * @return {Promise<Array<ChannelAPIResponse>>} search channels response
+   * @param options - The query channels request payload (optional). Accepts MongoDB-style filter
+   *   conditions, sort directions (e.g. `[{ field: 'created_at', direction: -1 }]`), and options
+   *   such as `predefined_filter`, `filter_values`, and `sort_values`.
+   * @param stateOptions - Options that only affect state management and aren't sent in the request
+   *   (optional, defaults to `{}`).
+   * @param stateOptions.skipInitialization - Skips the initialization of the state for the
+   *   channels matching the IDs in the list (optional).
+   * @param stateOptions.skipHydration - Skips returning the channels as instances of the `Channel`
+   *   class and instead returns the raw query response (optional).
+   * @param stateOptions.withResponse - Returns the full query response with hydrated channels.
+   *   This is a compatibility bridge for internal callers that need response-level metadata while
+   *   the default return value remains `Channel[]` (optional).
+   * @returns The hydrated channel list, or the full response when `withResponse` is `true`.
    */
-  async queryChannelsRequest(
-    filterConditions: ChannelFilters,
-    sort: ChannelSort = [],
-    options: ChannelOptions = {},
-  ) {
-    const data = await this.queryChannelsRequestWithResponse(
-      filterConditions,
-      sort,
-      options,
-    );
-
-    // FIXME: In the next major release, return the full QueryChannelsAPIResponse
-    // instead of only `data.channels` so top-level metadata such as
-    // `predefined_filter` is not lost.
-    return data.channels;
-  }
-
-  /**
-   * queryChannels - Query channels
-   *
-   * @param {ChannelFilters} filterConditions object MongoDB style filters
-   * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
-   * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
-   * @param {ChannelOptions} [options] Options object
-   * @param {ChannelStateOptions} [stateOptions] State options object. These options will only be used for state management and won't be sent in the request.
-   * - stateOptions.skipInitialization - Skips the initialization of the state for the channels matching the ids in the list.
-   * - stateOptions.skipHydration - Skips returning the channels as instances of the Channel class and rather returns the raw query response.
-   * - stateOptions.withResponse - Returns the full query response with hydrated channels. This is a compatibility bridge for internal callers that need response-level metadata while the default return value remains `Channel[]`.
-   *
-   * @return {Promise<Array<Channel>>} search channels response
-   */
-  async queryChannels(
-    filterConditions: ChannelFilters,
-    sort: ChannelSort,
-    options: ChannelOptions,
-    stateOptions: ChannelStateOptions & { withResponse: true },
+  async queryChannelsAndHydrate(
+    options?: QueryChannelsRequest,
+    stateOptions?: ChannelStateOptions & { withResponse: true },
   ): Promise<QueryChannelsResponseWithChannels>;
-  async queryChannels(
-    filterConditions?: ChannelFilters,
-    sort?: ChannelSort,
-    options?: ChannelOptions,
+  async queryChannelsAndHydrate(
+    options?: QueryChannelsRequest,
     stateOptions?: ChannelStateOptions,
   ): Promise<Channel[]>;
-  async queryChannels(
-    filterConditions: ChannelFilters,
-    sort: ChannelSort = [],
-    options: ChannelOptions = {},
+  async queryChannelsAndHydrate(
+    options?: QueryChannelsRequest,
     stateOptions: ChannelStateOptions = {},
   ): Promise<Channel[] | QueryChannelsResponseWithChannels> {
-    const queryChannelsResponse = await this.queryChannelsRequestWithResponse(
-      filterConditions,
-      sort,
-      options,
-    );
+    const queryChannelsResponse = await this.queryChannels(options);
     const channels = queryChannelsResponse.channels;
 
     this.dispatchEvent({
@@ -2221,33 +1365,24 @@ export class StreamChat {
   }
 
   /**
-   * queryReactions - Query reactions
+   * Queries reactions for a message and hydrates any cached offline reactions before the network
+   * request.
    *
-   * @param {ReactionFilters} filter object MongoDB style filters
-   * @param {ReactionSort} [sort] Sort options, for instance {created_at: -1}.
-   * @param {QueryReactionsOptions} [options] Pagination object
-   *
-   * @return {Promise<{ QueryReactionsAPIResponse } search channels response
+   * @param request - The query reactions request payload, including the target message ID,
+   *   MongoDB-style filters, sort directions (e.g. `[{ field: 'created_at', direction: -1 }]`),
+   *   and pagination options.
+   * @returns The query reactions response.
    */
-  async queryReactions(
-    messageID: string,
-    filter: ReactionFilters,
-    sort: ReactionSort = [],
-    options: QueryReactionsOptions = {},
-  ) {
-    const payload = {
-      filter,
-      sort: normalizeQuerySort(sort),
-      ...options,
-    };
+  async queryReactionsAndHydrate(request: QueryReactionsRequestWithId) {
+    const { filter, next, id: messageId, sort, limit } = request;
 
-    if (this.offlineDb?.getReactions && !options.next) {
+    if (this.offlineDb?.getReactions && !next) {
       try {
         const reactionsFromDb = await this.offlineDb.getReactions({
-          messageId: messageID,
+          messageId,
           filters: filter,
           sort,
-          limit: options.limit,
+          limit,
         });
 
         if (reactionsFromDb) {
@@ -2257,23 +1392,20 @@ export class StreamChat {
           });
         }
       } catch (e) {
-        this.logger('warn', 'An error has occurred while querying offline reactions', {
-          error: e,
-        });
+        offlineDbLogger
+          .withExtraTags('queryReactionsAndHydrate')
+          .warn('An error occurred while querying offline reactions.', { error: e });
       }
     }
 
     // Make sure we wait for the connect promise if there is a pending one
     await this.wsPromise;
 
-    return await this.post<QueryReactionsAPIResponse>(
-      this.baseURL + '/messages/' + encodeURIComponent(messageID) + '/reactions',
-      payload,
-    );
+    return await this.queryReactions(request);
   }
 
   hydrateActiveChannels(
-    channelsFromApi: ChannelAPIResponse[] = [],
+    channelsFromApi: ChannelStateResponseFields[] = [],
     stateOptions: ChannelStateOptions = {},
     queryChannelsOptions?: ChannelOptions,
   ) {
@@ -2281,6 +1413,8 @@ export class StreamChat {
     const channels: Channel[] = [];
 
     for (const channelState of channelsFromApi) {
+      if (!channelState.channel) continue;
+
       this._addChannelConfig(channelState.channel);
       const c = this.channel(channelState.channel.type, channelState.channel.id);
       const previousData = c.data;
@@ -2337,50 +1471,29 @@ export class StreamChat {
   }
 
   /**
-   * search - Query messages
+   * Queries messages.
    *
-   * @param {ChannelFilters} filterConditions MongoDB style filter conditions
-   * @param {MessageFilters | string} query search query or object MongoDB style filters
-   * @param {SearchOptions} [options] Option object, {user_id: 'tommaso'}
-   *
-   * @return {Promise<SearchAPIResponse>} search messages response
+   * @param request - The search request payload (optional). The inner `payload` accepts
+   *   MongoDB-style filter conditions, a search query, and options such as `user_id`.
+   * @returns The search messages response.
    */
-  async search(
-    filterConditions: ChannelFilters,
-    query: string | MessageFilters,
-    options: SearchOptions = {},
-  ) {
-    if (options.offset && options.next) {
-      throw Error(`Cannot specify offset with next`);
-    }
-    const payload: SearchPayload = {
-      filter_conditions: filterConditions,
-      ...options,
-      sort: options.sort
-        ? normalizeQuerySort<SearchMessageSortBase>(options.sort)
-        : undefined,
-    };
-    if (typeof query === 'string') {
-      payload.query = query;
-    } else if (typeof query === 'object') {
-      payload.message_filter_conditions = query;
-    } else {
-      throw Error(`Invalid type ${typeof query} for query parameter`);
+  override async search(request?: { payload?: SearchPayload }) {
+    if (request?.payload?.offset && request?.payload?.next) {
+      throw Error(`Cannot specify "offset" with "next"`);
     }
 
     // Make sure we wait for the connect promise if there is a pending one
     await this.wsPromise;
 
-    return await this.get<SearchAPIResponse>(this.baseURL + '/search', { payload });
+    return await super.search(request);
   }
 
   /**
-   * setLocalDevice - Set the device info for the current client(device) that will be sent via WS connection automatically
+   * Sets the device info for the current client. It will be sent via the WS connection automatically.
    *
-   * @param {BaseDeviceFields} device the device object
-   * @param {string} device.id device id
-   * @param {string} device.push_provider the push provider
-   *
+   * @param device - The device object.
+   * @param device.id - Device ID.
+   * @param device.push_provider - The push provider.
    */
   setLocalDevice(device: BaseDeviceFields) {
     if (
@@ -2388,138 +1501,10 @@ export class StreamChat {
       ((this.wsConnection?.isHealthy || this.wsFallback?.isHealthy()) &&
         this._hasConnectionID())
     ) {
-      throw new Error('you can only set device before opening a websocket connection');
+      throw new Error('Device cannot be set before opening a WebSocket connection');
     }
 
     this.options.device = device;
-  }
-
-  /**
-   * addDevice - Adds a push device for a user.
-   *
-   * @param {string} id the device id
-   * @param {PushProvider} push_provider the push provider
-   * @param {string} [userID] the user id (defaults to current user)
-   * @param {string} [push_provider_name] user provided push provider name for multi bundle support
-   *
-   */
-  async addDevice(
-    id: string,
-    push_provider: PushProvider,
-    userID?: string,
-    push_provider_name?: string,
-  ) {
-    return await this.post<APIResponse>(this.baseURL + '/devices', {
-      id,
-      push_provider,
-      ...(userID != null ? { user_id: userID } : {}),
-      ...(push_provider_name != null ? { push_provider_name } : {}),
-    });
-  }
-
-  /**
-   * getDevices - Returns the devices associated with a current user
-   *
-   * @param {string} [userID] User ID. Only works on serverside
-   *
-   * @return {Device[]} Array of devices
-   */
-  async getDevices(userID?: string) {
-    return await this.get<APIResponse & { devices?: Device[] }>(
-      this.baseURL + '/devices',
-      userID ? { user_id: userID } : {},
-    );
-  }
-
-  /**
-   * getUnreadCount - Returns unread counts for a single user
-   *
-   * @param {string} [userID] User ID.
-   *
-   * @return {<GetUnreadCountAPIResponse>}
-   */
-  async getUnreadCount(userID?: string) {
-    return await this.get<GetUnreadCountAPIResponse>(
-      this.baseURL + '/unread',
-      userID ? { user_id: userID } : {},
-    );
-  }
-
-  /**
-   * getUnreadCountBatch - Returns unread counts for multiple users at once. Only works server side.
-   *
-   * @param {string[]} [userIDs] List of user IDs to fetch unread counts for.
-   *
-   * @return {<GetUnreadCountBatchAPIResponse>}
-   */
-  async getUnreadCountBatch(userIDs: string[]) {
-    return await this.post<GetUnreadCountBatchAPIResponse>(
-      this.baseURL + '/unread_batch',
-      { user_ids: userIDs },
-    );
-  }
-
-  /**
-   * setPushPreferences - Applies the list of push preferences.
-   *
-   * @param {PushPreference[]} A list of push preferences.
-   *
-   * @return {<UpsertPushPreferencesResponse>}
-   */
-  async setPushPreferences(preferences: PushPreference[]) {
-    return await this.post<UpsertPushPreferencesResponse>(
-      this.baseURL + '/push_preferences',
-      { preferences },
-    );
-  }
-
-  /**
-   * removeDevice - Removes the device with the given id. Clientside users can only delete their own devices
-   *
-   * @param {string} id The device id
-   * @param {string} [userID] The user id. Only specify this for serverside requests
-   *
-   */
-  async removeDevice(id: string, userID?: string) {
-    return await this.delete<APIResponse>(this.baseURL + '/devices', {
-      id,
-      ...(userID ? { user_id: userID } : {}),
-    });
-  }
-
-  /**
-   * getRateLimits - Returns the rate limits quota and usage for the current app, possibly filter for a specific platform and/or endpoints.
-   * Only available server-side.
-   *
-   * @param {object} [params] The params for the call. If none of the params are set, all limits for all platforms are returned.
-   * @returns {Promise<GetRateLimitsResponse>}
-   */
-  getRateLimits(params?: {
-    android?: boolean;
-    endpoints?: EndpointName[];
-    ios?: boolean;
-    serverSide?: boolean;
-    web?: boolean;
-  }) {
-    const { serverSide, web, android, ios, endpoints } = params || {};
-    return this.get<GetRateLimitsResponse>(this.baseURL + '/rate_limits', {
-      server_side: serverSide,
-      web,
-      android,
-      ios,
-      endpoints: endpoints ? endpoints.join(',') : undefined,
-    });
-  }
-
-  /**
-   * getHookEvents - Get available events for hooks (webhook, SQS, and SNS)
-   *
-   * @param {Product[]} [products] Optional array of products to filter events by (e.g., [Product.Chat, Product.Video])
-   * @returns {Promise<GetHookEventsResponse>} Response containing available hook events
-   */
-  async getHookEvents(products?: Product[]) {
-    const params = products && products.length > 0 ? { product: products.join(',') } : {};
-    return await this.get<GetHookEventsResponse>(this.baseURL + '/hook/events', params);
   }
 
   _addChannelConfig({ cid, config }: ChannelResponse) {
@@ -2532,27 +1517,28 @@ export class StreamChat {
   }
 
   /**
-   * channel - Returns a new channel with the given type, id and custom data
+   * Returns a new channel with the given type, ID and custom data.
    *
-   * If you want to create a unique conversation between 2 or more users; you can leave out the ID parameter and provide the list of members.
-   * Make sure to await channel.create() or channel.watch() before accessing channel functions:
-   * ie. channel = client.channel("messaging", {members: ["tommaso", "thierry"]})
-   * await channel.create() to assign an ID to channel
+   * If you want to create a unique conversation between 2 or more users, you can leave out the ID
+   * parameter and provide the list of members.
+   * Make sure to await `channel.create()` or `channel.watch()` before accessing channel functions,
+   * i.e. `channel = client.channel('messaging', { members: ['tommaso', 'thierry'] })` then
+   * `await channel.create()` to assign an ID to the channel.
    *
-   * @param {string} channelType The channel type
-   * @param {string | ChannelData | null} [channelIDOrCustom]   The channel ID, you can leave this out if you want to create a conversation channel
-   * @param {object} [custom]    Custom data to attach to the channel
-   *
-   * @return {channel} The channel object, initialize it using channel.watch()
+   * @param channelType - The channel type.
+   * @param channelIdOrCustom - The channel ID; you can leave this out if you want to create a
+   *   conversation channel (optional).
+   * @param custom - Custom data to attach to the channel (optional, defaults to `{}`).
+   * @returns The channel object; initialize it using `channel.watch()`.
    */
-  channel(channelType: string, channelID?: string | null, custom?: ChannelData): Channel;
+  channel(channelType: string, channelId?: string | null, custom?: ChannelData): Channel;
   channel(channelType: string, custom?: ChannelData): Channel;
   channel(
     channelType: string,
-    channelIDOrCustom?: string | ChannelData | null,
+    channelIdOrCustom?: string | ChannelData | null,
     custom: ChannelData = {},
   ) {
-    if (!this.userID && !this._isUsingServerAuth()) {
+    if (!this.userId) {
       throw Error('Call connectUser or connectAnonymousUser before creating a channel');
     }
 
@@ -2563,28 +1549,28 @@ export class StreamChat {
     }
 
     // support channel("messaging", {options})
-    if (channelIDOrCustom && typeof channelIDOrCustom === 'object') {
-      return this.getChannelByMembers(channelType, channelIDOrCustom);
+    if (channelIdOrCustom && typeof channelIdOrCustom === 'object') {
+      return this.getChannelByMembers(channelType, channelIdOrCustom);
     }
 
     // support channel("messaging", undefined, {options})
-    if (!channelIDOrCustom && typeof custom === 'object' && custom.members?.length) {
+    if (!channelIdOrCustom && typeof custom === 'object' && custom.members?.length) {
       return this.getChannelByMembers(channelType, custom);
     }
 
     // support channel("messaging", null, {options})
     // support channel("messaging", undefined, {options})
     // support channel("messaging", "", {options})
-    if (!channelIDOrCustom) {
+    if (!channelIdOrCustom) {
       return new Channel(this, channelType, undefined, custom);
     }
 
-    return this.getChannelById(channelType, channelIDOrCustom, custom);
+    return this.getChannelById(channelType, channelIdOrCustom, custom);
   }
 
   /**
    * It's a helper method for `client.channel()` method, used to create unique conversation or
-   * channel based on member list instead of id.
+   * channel based on member list instead of ID.
    *
    * If the channel already exists in `activeChannels` list, then we simply return it, since that
    * means the same channel was already requested or created.
@@ -2593,16 +1579,15 @@ export class StreamChat {
    *
    * @private
    *
-   * @param {string} channelType The channel type
-   * @param {object} [custom]    Custom data to attach to the channel
-   *
-   * @return {channel} The channel object, initialize it using channel.watch()
+   * @param channelType - The channel type.
+   * @param custom - Custom data to attach to the channel.
+   * @returns The channel object; initialize it using `channel.watch()`.
    */
   getChannelByMembers = (channelType: string, custom: ChannelData) => {
     // Check if the channel already exists.
     // Only allow 1 channel object per cid
-    const memberIds = (custom.members ?? []).map((member: string | NewMemberPayload) =>
-      typeof member === 'string' ? member : (member.user_id ?? ''),
+    const memberIds = (custom.members ?? []).map((member) =>
+      typeof member === 'string' ? member : member.user_id,
     );
     const membersStr = memberIds.sort().join(',');
     const tempCid = generateChannelTempCid(channelType, memberIds);
@@ -2648,43 +1633,48 @@ export class StreamChat {
   };
 
   /**
-   * Its a helper method for `client.channel()` method, used to channel given the id of channel.
+   * It's a helper method for `client.channel()`, used to retrieve a channel given its ID.
    *
    * If the channel already exists in `activeChannels` list, then we simply return it, since that
    * means the same channel was already requested or created.
    *
-   * Otherwise we create a new instance of Channel class and return it.
+   * Otherwise we create a new instance of `Channel` class and return it.
    *
    * @private
    *
-   * @param {string} channelType The channel type
-   * @param {string} [channelID] The channel ID
-   * @param {object} [custom]    Custom data to attach to the channel
-   *
-   * @return {channel} The channel object, initialize it using channel.watch()
+   * @param channelType - The channel type.
+   * @param channelId - The channel ID.
+   * @param custom - Custom data to attach to the channel.
+   * @returns The channel object; initialize it using `channel.watch()`.
    */
-  getChannelById = (channelType: string, channelID: string, custom: ChannelData) => {
-    if (typeof channelID === 'string' && ~channelID.indexOf(':')) {
-      throw Error(`Invalid channel id ${channelID}, can't contain the : character`);
+  getChannelById = (channelType: string, channelId: string, custom: ChannelData) => {
+    if (typeof channelId === 'string' && ~channelId.indexOf(':')) {
+      throw Error(`Invalid channel id ${channelId}, can't contain the : character`);
     }
 
     // only allow 1 channel object per cid
-    const cid = `${channelType}:${channelID}`;
+    const cid = `${channelType}:${channelId}`;
     if (
       cid in this.activeChannels &&
       this.activeChannels[cid] &&
       !this.activeChannels[cid].disconnected
     ) {
       const channel = this.activeChannels[cid];
-      if (Object.keys(custom).length > 0) {
+      // Only overwrite the existing channel's custom data when the caller actually provided some.
+      // A caller passing other fields (e.g. `{ members }`, or even `{ members: undefined }`) yields a
+      // non-empty object with no `.custom`; the previous `Object.keys(custom).length > 0` guard let
+      // that through and then set `custom: custom.custom` (undefined), wiping the channel's existing
+      // custom data (e.g. its name). Guarding on `custom.custom` keeps genuine custom updates while
+      // leaving the existing custom intact when the caller omits it.
+      if (custom.custom !== undefined) {
         const previousData = channel.data;
-        channel.data = { ...channel.data, ...custom };
+        channel.data = { ...channel.data, custom: custom.custom };
         channel._syncStateFromChannelData(channel.data, previousData);
-        channel._data = { ...channel._data, ...custom };
+        channel._data = { ...channel._data, custom: custom.custom };
       }
       return channel;
     }
-    const channel = new Channel(this, channelType, channelID, custom);
+    const channel = new Channel(this, channelType, channelId, custom);
     if (this._cacheEnabled()) {
       this.activeChannels[channel.cid] = channel;
     }
@@ -2693,255 +1683,74 @@ export class StreamChat {
   };
 
   /**
-   * partialUpdateUser - Update the given user object
+   * Bans a user from all channels.
    *
-   * @param {PartialUserUpdate} partialUserObject which should contain id and any of "set" or "unset" params;
-   * example: {id: "user1", set:{field: value}, unset:["field2"]}
-   *
-   * @return {Promise<{ users: { [key: string]: UserResponse } }>} list of updated users
+   * @param targetUserId - The user to ban.
+   * @param options - Ban options (optional).
+   * @returns The server response.
    */
-  async partialUpdateUser(partialUserObject: PartialUserUpdate) {
-    return await this.partialUpdateUsers([partialUserObject]);
-  }
-
-  /**
-   * upsertUsers - Batch upsert the list of users
-   *
-   * @param {UserResponse[]} users list of users
-   *
-   * @return {Promise<{ users: { [key: string]: UserResponse } }>}
-   */
-  async upsertUsers(users: UserResponse[]) {
-    const userMap: { [key: string]: UserResponse } = {};
-    for (const userObject of users) {
-      if (!userObject.id) {
-        throw Error('User ID is required when updating a user');
-      }
-      userMap[userObject.id] = userObject;
-    }
-
-    return await this.post<UpdateUsersAPIResponse>(this.baseURL + '/users', {
-      users: userMap,
-    });
-  }
-
-  /**
-   * @deprecated Please use upsertUsers() function instead.
-   *
-   * updateUsers - Batch update the list of users
-   *
-   * @param {UserResponse[]} users list of users
-   * @return {Promise<{ users: { [key: string]: UserResponse } }>}
-   */
-  updateUsers = this.upsertUsers;
-
-  /**
-   * upsertUser - Update or Create the given user object
-   *
-   * @param {UserResponse} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
-   *
-   * @return {Promise<{ users: { [key: string]: UserResponse } }>}
-   */
-  upsertUser(userObject: UserResponse) {
-    return this.upsertUsers([userObject]);
-  }
-
-  /**
-   * @deprecated Please use upsertUser() function instead.
-   *
-   * updateUser - Update or Create the given user object
-   *
-   * @param {UserResponse} userObject user object, the only required field is the user id. IE {id: "myuser"} is valid
-   * @return {Promise<{ users: { [key: string]: UserResponse } }>}
-   */
-  updateUser = this.upsertUser;
-
-  /**
-   * partialUpdateUsers - Batch partial update of users
-   *
-   * @param {PartialUserUpdate[]} users list of partial update requests
-   *
-   * @return {Promise<{ users: { [key: string]: UserResponse } }>}
-   */
-  async partialUpdateUsers(users: PartialUserUpdate[]) {
-    for (const userObject of users) {
-      if (!userObject.id) {
-        throw Error('User ID is required when updating a user');
-      }
-    }
-
-    return await this.patch<UpdateUsersAPIResponse>(this.baseURL + '/users', { users });
-  }
-
-  async deleteUser(
-    userID: string,
-    params?: {
-      delete_conversation_channels?: boolean;
-      hard_delete?: boolean;
-      mark_messages_deleted?: boolean;
-    },
-  ) {
-    return await this.delete<
-      APIResponse & { user: UserResponse } & {
-        task_id?: string;
-      }
-    >(this.baseURL + `/users/${encodeURIComponent(userID)}`, params);
-  }
-
-  /**
-   * restoreUsers - Restore soft deleted users
-   *
-   * @param {string[]} user_ids which users to restore
-   *
-   * @return {APIResponse} An API response
-   */
-  async restoreUsers(user_ids: string[]) {
-    return await this.post<APIResponse>(this.baseURL + `/users/restore`, {
-      user_ids,
-    });
-  }
-
-  /**
-   * reactivateUser - Reactivate one user
-   *
-   * @param {string} userID which user to reactivate
-   * @param {ReactivateUserOptions} [options]
-   *
-   * @return {UserResponse} Reactivated user
-   */
-  async reactivateUser(userID: string, options?: ReactivateUserOptions) {
-    return await this.post<APIResponse & { user: UserResponse }>(
-      this.baseURL + `/users/${encodeURIComponent(userID)}/reactivate`,
-      { ...options },
-    );
-  }
-
-  /**
-   * reactivateUsers - Reactivate many users asynchronously
-   *
-   * @param {string[]} user_ids which users to reactivate
-   * @param {ReactivateUsersOptions} [options]
-   *
-   * @return {TaskResponse} A task ID
-   */
-  async reactivateUsers(user_ids: string[], options?: ReactivateUsersOptions) {
-    return await this.post<APIResponse & TaskResponse>(
-      this.baseURL + `/users/reactivate`,
-      { user_ids, ...options },
-    );
-  }
-
-  /**
-   * deactivateUser - Deactivate one user
-   *
-   * @param {string} userID which user to deactivate
-   * @param {DeactivateUsersOptions} [options]
-   *
-   * @return {UserResponse} Deactivated user
-   */
-  async deactivateUser(userID: string, options?: DeactivateUsersOptions) {
-    return await this.post<APIResponse & { user: UserResponse }>(
-      this.baseURL + `/users/${encodeURIComponent(userID)}/deactivate`,
-      { ...options },
-    );
-  }
-
-  /**
-   * deactivateUsers - Deactivate many users asynchronously
-   *
-   * @param {string[]} user_ids which users to deactivate
-   * @param {DeactivateUsersOptions} [options]
-   *
-   * @return {TaskResponse} A task ID
-   */
-  async deactivateUsers(user_ids: string[], options?: DeactivateUsersOptions) {
-    return await this.post<APIResponse & TaskResponse>(
-      this.baseURL + `/users/deactivate`,
-      { user_ids, ...options },
-    );
-  }
-
-  async exportUser(userID: string, options?: Record<string, string>) {
-    return await this.get<
-      APIResponse & {
-        messages: MessageResponse[];
-        reactions: ReactionResponse[];
-        user: UserResponse;
-      }
-    >(this.baseURL + `/users/${encodeURIComponent(userID)}/export`, { ...options });
-  }
-
-  /** banUser - bans a user from all channels
-   *
-   * @param {string} targetUserID
-   * @param {BanUserOptions} [options]
-   * @returns {Promise<APIResponse>}
-   */
-  async banUser(targetUserID: string, options?: BanUserOptions) {
-    return await this.post<APIResponse>(this.baseURL + '/moderation/ban', {
-      target_user_id: targetUserID,
+  async banUser(targetUserId: string, options?: BanUserOptions) {
+    return await this.api.post<APIResponse>(this.baseURL + '/moderation/ban', {
+      target_user_id: targetUserId,
       ...options,
     });
   }
 
-  /** unbanUser - revoke global ban for a user
+  /**
+   * Revoke a global ban for a user.
    *
-   * @param {string} targetUserID
-   * @param {UnBanUserOptions} [options]
-   * @returns {Promise<APIResponse>}
+   * @param targetUserId - The user to unban.
+   * @param options - Unban options (optional).
+   * @returns The server response.
    */
-  async unbanUser(targetUserID: string, options?: UnBanUserOptions) {
-    return await this.delete<APIResponse>(this.baseURL + '/moderation/ban', {
-      target_user_id: targetUserID,
+  async unbanUser(targetUserId: string, options?: UnBanUserOptions) {
+    return await this.api.delete<APIResponse>(this.baseURL + '/moderation/ban', {
+      target_user_id: targetUserId,
       ...options,
     });
   }
 
-  /** shadowBan - shadow bans a user from all channels
+  /**
+   * Shadow bans a user from all channels.
    *
-   * @param {string} targetUserID
-   * @param {BanUserOptions} [options]
-   * @returns {Promise<APIResponse>}
+   * @param targetUserId - The user to shadow ban.
+   * @param options - Ban options (optional).
+   * @returns The server response.
    */
-  async shadowBan(targetUserID: string, options?: BanUserOptions) {
-    return await this.banUser(targetUserID, {
+  async shadowBan(targetUserId: string, options?: BanUserOptions) {
+    return await this.banUser(targetUserId, {
       shadow: true,
       ...options,
     });
   }
 
-  /** removeShadowBan - revoke global shadow ban for a user
+  /**
+   * Revoke a global shadow ban for a user.
    *
-   * @param {string} targetUserID
-   * @param {UnBanUserOptions} [options]
-   * @returns {Promise<APIResponse>}
+   * @param targetUserId - The user to remove the shadow ban for.
+   * @param options - Unban options (optional).
+   * @returns The server response.
    */
-  async removeShadowBan(targetUserID: string, options?: UnBanUserOptions) {
-    return await this.unbanUser(targetUserID, {
+  async removeShadowBan(targetUserId: string, options?: UnBanUserOptions) {
+    return await this.unbanUser(targetUserId, {
       shadow: true,
       ...options,
     });
   }
-  async blockUser(blockedUserID: string, user_id?: string) {
-    const result = await this.post<BlockUserAPIResponse>(this.baseURL + '/users/block', {
-      blocked_user_id: blockedUserID,
-      ...(user_id ? { user_id } : {}),
+  async blockUser(blockedUserId: string) {
+    const result = await this.blockUsers({
+      blocked_user_id: blockedUserId,
     });
     if (this._cacheEnabled()) {
       this.blockedUsers.next(({ userIds }) => ({
-        userIds: userIds.concat(blockedUserID),
+        userIds: userIds.concat(blockedUserId),
       }));
     }
     return result;
   }
 
-  async getBlockedUsers(user_id?: string) {
-    const result = await this.get<GetBlockedUsersAPIResponse>(
-      this.baseURL + '/users/block',
-      {
-        ...(user_id ? { user_id } : {}),
-      },
-    );
+  override async getBlockedUsers() {
+    const result = await super.getBlockedUsers();
     if (this._cacheEnabled()) {
       this.blockedUsers.partialNext({
         userIds: result.blocks.map(({ blocked_user_id }) => blocked_user_id),
@@ -2950,335 +1759,136 @@ export class StreamChat {
     return result;
   }
 
-  async unBlockUser(blockedUserID: string, userID?: string) {
-    const result = await this.post<APIResponse>(this.baseURL + '/users/unblock', {
-      blocked_user_id: blockedUserID,
-      ...(userID ? { user_id: userID } : {}),
+  async unblockUser(blockedUserId: string) {
+    const result = await this.unblockUsers({
+      blocked_user_id: blockedUserId,
     });
     if (this._cacheEnabled()) {
       this.blockedUsers.next(({ userIds }) => ({
-        userIds: userIds.filter((id) => id !== blockedUserID),
+        userIds: userIds.filter((id) => id !== blockedUserId),
       }));
     }
     return result;
   }
 
-  /** getSharedLocations
+  /**
+   * Mutes a user.
    *
-   * @returns {Promise<ActiveLiveLocationsAPIResponse>} The server response
-   *
+   * @param targetId - The user to mute.
+   * @param options - UserMuteResponse options (optional, defaults to `{}`).
+   * @returns The server response.
    */
-  async getSharedLocations() {
-    return await this.get<ActiveLiveLocationsAPIResponse>(
-      this.baseURL + `/users/live_locations`,
-    );
-  }
-
-  /** muteUser - mutes a user
-   *
-   * @param {string} targetID
-   * @param {string} [userID] Only used with serverside auth
-   * @param {MuteUserOptions} [options]
-   * @returns {Promise<MuteUserResponse>}
-   */
-  async muteUser(targetID: string, userID?: string, options: MuteUserOptions = {}) {
-    return await this.post<MuteUserResponse>(this.baseURL + '/moderation/mute', {
-      target_id: targetID,
-      ...(userID ? { user_id: userID } : {}),
+  async muteUser(targetId: string, options: MuteUserOptions = {}) {
+    return await this.api.post<MuteUserResponse>(this.baseURL + '/moderation/mute', {
+      target_id: targetId,
       ...options,
     });
   }
 
-  /** unmuteUser - unmutes a user
+  /**
+   * Unmutes a user.
    *
-   * @param {string} targetID
-   * @param {string} [currentUserID] Only used with serverside auth
-   * @returns {Promise<APIResponse>}
+   * @param targetId - The user to unmute.
+   * @returns The server response.
    */
-  async unmuteUser(targetID: string, currentUserID?: string) {
-    return await this.post<APIResponse>(this.baseURL + '/moderation/unmute', {
-      target_id: targetID,
-      ...(currentUserID ? { user_id: currentUserID } : {}),
+  async unmuteUser(targetId: string) {
+    return await this.api.post<APIResponse>(this.baseURL + '/moderation/unmute', {
+      target_id: targetId,
     });
   }
 
-  /** userMuteStatus - check if a user is muted or not, can be used after connectUser() is called
+  /**
+   * Checks whether a user is muted. Can be used after `connectUser()` is called.
    *
-   * @param {string} targetID
-   * @returns {boolean}
+   * @param targetId - The user ID to check.
+   * @returns `true` if the user is muted, otherwise `false`.
    */
-  userMuteStatus(targetID: string) {
+  userMuteStatus(targetId: string) {
     if (!this.user || !this.wsPromise) {
       throw new Error('Make sure to await connectUser() first.');
     }
 
     for (let i = 0; i < this.mutedUsers.length; i += 1) {
-      if (this.mutedUsers[i].target.id === targetID) return true;
+      if (this.mutedUsers[i].target?.id === targetId) return true;
     }
     return false;
   }
 
   /**
-   * flagMessage - flag a message
-   * @param {string} targetMessageID
-   * @param {string} [options.user_id] currentUserID, only used with serverside auth
-   * @returns {Promise<APIResponse>}
+   * Flag a message.
+   *
+   * @param targetMessageId - The message to flag.
+   * @param options - Flag options (optional, defaults to `{}`).
+   * @param options.reason - Reason for flagging (optional).
+   * @returns The server response.
    */
-  async flagMessage(
-    targetMessageID: string,
-    options: { reason?: string; user_id?: string } = {},
-  ) {
-    return await this.post<FlagMessageResponse>(this.baseURL + '/moderation/flag', {
-      target_message_id: targetMessageID,
+  async flagMessage(targetMessageId: string, options: { reason?: string } = {}) {
+    return await this.api.post<FlagMessageResponse>(this.baseURL + '/moderation/flag', {
+      target_message_id: targetMessageId,
       ...options,
     });
   }
 
   /**
-   * flagUser - flag a user
-   * @param {string} targetID
-   * @param {string} [options.user_id] currentUserID, only used with serverside auth
-   * @returns {Promise<APIResponse>}
+   * Flag a user.
+   *
+   * @param targetId - The user to flag.
+   * @param options - Flag options (optional, defaults to `{}`).
+   * @param options.reason - Reason for flagging (optional).
+   * @returns The server response.
    */
-  async flagUser(targetID: string, options: { reason?: string; user_id?: string } = {}) {
-    return await this.post<FlagUserResponse>(this.baseURL + '/moderation/flag', {
-      target_user_id: targetID,
+  async flagUser(targetId: string, options: { reason?: string } = {}) {
+    return await this.api.post<FlagUserResponse>(this.baseURL + '/moderation/flag', {
+      target_user_id: targetId,
       ...options,
     });
   }
 
   /**
-   * unflagMessage - unflag a message
-   * @param {string} targetMessageID
-   * @param {string} [options.user_id] currentUserID, only used with serverside auth
-   * @returns {Promise<APIResponse>}
+   * Unflag a message.
+   *
+   * @param targetMessageId - The message to unflag.
+   * @returns The server response.
    */
-  async unflagMessage(targetMessageID: string, options: { user_id?: string } = {}) {
-    return await this.post<FlagMessageResponse>(this.baseURL + '/moderation/unflag', {
-      target_message_id: targetMessageID,
-      ...options,
+  async unflagMessage(targetMessageId: string) {
+    return await this.api.post<FlagMessageResponse>(this.baseURL + '/moderation/unflag', {
+      target_message_id: targetMessageId,
     });
   }
 
   /**
-   * unflagUser - unflag a user
-   * @param {string} targetID
-   * @param {string} [options.user_id] currentUserID, only used with serverside auth
-   * @returns {Promise<APIResponse>}
+   * Unflag a user.
+   *
+   * @param targetId - The user to unflag.
+   * @returns The server response.
    */
-  async unflagUser(targetID: string, options: { user_id?: string } = {}) {
-    return await this.post<FlagUserResponse>(this.baseURL + '/moderation/unflag', {
-      target_user_id: targetID,
-      ...options,
+  async unflagUser(targetId: string) {
+    return await this.api.post<FlagUserResponse>(this.baseURL + '/moderation/unflag', {
+      target_user_id: targetId,
     });
   }
 
   /**
-   * _queryFlags - Query flags.
+   * Unblocks a message blocked by automod.
    *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
-   *
-   * @private
-   * @param {FlagsFilters} filterConditions MongoDB style filter conditions
-   * @param {FlagsPaginationOptions} options Option object, {limit: 10, offset:0}
-   *
-   * @return {Promise<FlagsResponse>} Flags Response
+   * @param targetMessageId - The message to unblock.
+   * @returns The server response.
    */
-  async _queryFlags(
-    filterConditions: FlagsFilters = {},
-    options: FlagsPaginationOptions = {},
-  ) {
-    // Return a list of flags
-    return await this.post<FlagsResponse>(this.baseURL + '/moderation/flags', {
-      filter_conditions: filterConditions,
-      ...options,
-    });
-  }
-
-  /**
-   * _queryFlagReports - Query flag reports.
-   *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
-   *
-   * @private
-   * @param {FlagReportsFilters} filterConditions MongoDB style filter conditions
-   * @param {FlagReportsPaginationOptions} options Option object, {limit: 10, offset:0}
-   *
-   * @return {Promise<FlagReportsResponse>} Flag Reports Response
-   */
-  async _queryFlagReports(
-    filterConditions: FlagReportsFilters = {},
-    options: FlagReportsPaginationOptions = {},
-  ) {
-    // Return a list of message flags
-    return await this.post<FlagReportsResponse>(this.baseURL + '/moderation/reports', {
-      filter_conditions: filterConditions,
-      ...options,
-    });
-  }
-
-  /**
-   * _reviewFlagReport - review flag report
-   *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
-   *
-   * @private
-   * @param {string} [id] flag report to review
-   * @param {string} [reviewResult] flag report review result
-   * @param {string} [options.user_id] currentUserID, only used with serverside auth
-   * @param {string} [options.review_details] custom information about review result
-   * @returns {Promise<ReviewFlagReportResponse>>}
-   */
-  async _reviewFlagReport(
-    id: string,
-    reviewResult: string,
-    options: ReviewFlagReportOptions = {},
-  ) {
-    return await this.patch<ReviewFlagReportResponse>(
-      this.baseURL + `/moderation/reports/${encodeURIComponent(id)}`,
+  async unblockMessage(targetMessageId: string) {
+    return await this.api.post<APIResponse>(
+      this.baseURL + '/moderation/unblock_message',
       {
-        review_result: reviewResult,
-        ...options,
+        target_message_id: targetMessageId,
       },
     );
   }
 
   /**
-   * unblockMessage - unblocks message blocked by automod
+   * Transforms an expiration value into an ISO string.
    *
-   *
-   * @param {string} targetMessageID
-   * @param {string} [options.user_id] currentUserID, only used with serverside auth
-   * @returns {Promise<APIResponse>}
-   */
-  async unblockMessage(targetMessageID: string, options: { user_id?: string } = {}) {
-    return await this.post<APIResponse>(this.baseURL + '/moderation/unblock_message', {
-      target_message_id: targetMessageID,
-      ...options,
-    });
-  }
-
-  // alias for backwards compatibility
-  _unblockMessage = this.unblockMessage;
-
-  /**
-   * @deprecated use markChannelsRead instead
-   *
-   * markAllRead - marks all channels for this user as read
-   * @param {MarkAllReadOptions} [data]
-   *
-   * @return {Promise<APIResponse>}
-   */
-  markAllRead = this.markChannelsRead;
-
-  /**
-   * markChannelsRead - marks channels read -
-   * it accepts a map of cid:messageid pairs, if messageid is empty, the whole channel will be marked as read
-   *
-   * @param {MarkChannelsReadOptions } [data]
-   *
-   * @return {Promise<APIResponse>}
-   */
-  async markChannelsRead(data: MarkChannelsReadOptions = {}) {
-    await this.post<APIResponse>(this.baseURL + '/channels/read', { ...data });
-  }
-
-  createCommand(data: CreateCommandOptions) {
-    return this.post<CreateCommandResponse>(this.baseURL + '/commands', data);
-  }
-
-  getCommand(name: string) {
-    return this.get<GetCommandResponse>(
-      this.baseURL + `/commands/${encodeURIComponent(name)}`,
-    );
-  }
-
-  updateCommand(name: string, data: UpdateCommandOptions) {
-    return this.put<UpdateCommandResponse>(
-      this.baseURL + `/commands/${encodeURIComponent(name)}`,
-      data,
-    );
-  }
-
-  deleteCommand(name: string) {
-    return this.delete<DeleteCommandResponse>(
-      this.baseURL + `/commands/${encodeURIComponent(name)}`,
-    );
-  }
-
-  listCommands() {
-    return this.get<ListCommandsResponse>(this.baseURL + `/commands`);
-  }
-
-  createChannelType(data: CreateChannelOptions) {
-    const channelData = Object.assign({}, { commands: ['all'] }, data);
-    return this.post<CreateChannelResponse>(this.baseURL + '/channeltypes', channelData);
-  }
-
-  getChannelType(channelType: string) {
-    return this.get<GetChannelTypeResponse>(
-      this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`,
-    );
-  }
-
-  updateChannelType(channelType: string, data: UpdateChannelTypeRequest) {
-    return this.put<UpdateChannelTypeResponse>(
-      this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`,
-      data,
-    );
-  }
-
-  deleteChannelType(channelType: string) {
-    return this.delete<APIResponse>(
-      this.baseURL + `/channeltypes/${encodeURIComponent(channelType)}`,
-    );
-  }
-
-  listChannelTypes() {
-    return this.get<ListChannelResponse>(this.baseURL + `/channeltypes`);
-  }
-
-  /**
-   * translateMessage - adds the translation to the message
-   *
-   * @param {string} messageId
-   * @param {string} language
-   *
-   * @return {MessageResponse} Response that includes the message
-   */
-  async translateMessage(messageId: string, language: string) {
-    return await this.post<APIResponse & MessageResponse>(
-      this.baseURL + `/messages/${encodeURIComponent(messageId)}/translate`,
-      { language },
-    );
-  }
-
-  /**
-   * translate - translates the given text to provided language
-   *
-   * @param {string} text
-   * @param {string} destination_language
-   * @param {string} source_language
-   *
-   * @return {TranslateResponse} Response that includes the message
-   */
-  async translate(text: string, destination_language: string, source_language: string) {
-    return await this.post<APIResponse & TranslateResponse>(this.baseURL + `/translate`, {
-      text,
-      source_language,
-      destination_language,
-    });
-  }
-
-  /**
-   * _normalizeExpiration - transforms expiration value into ISO string
-   * @param {undefined|null|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
+   * @param timeoutOrExpirationDate - Expiration date or timeout. Use `number` to set the timeout
+   *   in seconds, `string` or `Date` to set the exact expiration date (optional).
+   * @returns The expiration as an ISO string, or `null`.
    */
   _normalizeExpiration(timeoutOrExpirationDate?: null | number | string | Date) {
     let pinExpires: null | string = null;
@@ -3295,9 +1905,11 @@ export class StreamChat {
   }
 
   /**
-   * _messageId - extracts string message id from either message object or message id
-   * @param {string | { id: string }} messageOrMessageId message object or message id
-   * @param {string} errorText error message to report in case of message id absence
+   * Extracts a string message ID from either a message object or a message ID.
+   *
+   * @param messageOrMessageId - MessageRequest object or message ID.
+   * @param errorText - Error message to report in case of message ID absence.
+   * @returns The extracted message ID.
    */
   _validateAndGetMessageId(
     messageOrMessageId: string | { id: string },
@@ -3316,328 +1928,145 @@ export class StreamChat {
   }
 
   /**
-   * pinMessage - pins the message
-   * @param {string | { id: string }} messageOrMessageId message object or message id
-   * @param {undefined|null|number|string|Date} timeoutOrExpirationDate expiration date or timeout. Use number type to set timeout in seconds, string or Date to set exact expiration date
-   * @param {undefined|string | { id: string }} [pinnedBy] who will appear as a user who pinned a message. Only for server-side use. Provide `undefined` when pinning message client-side
-   * @param {undefined|number|string|Date} pinnedAt date when message should be pinned. It affects the order of pinned messages. Use negative number to set relative time in the past, string or Date to set exact date of pin
+   * Pins the message.
+   *
+   * @param messageOrMessageId - MessageRequest object or message ID.
+   * @param timeoutOrExpirationDate - Expiration date or timeout. Use `number` to set the timeout
+   *   in seconds, `string` or `Date` to set the exact expiration date (optional).
+   * @param pinnedAt - Date when the message should be pinned. It affects the order of pinned
+   *   messages. Use a negative number to set relative time in the past, `string` or `Date` to
+   *   set the exact date of pin (optional).
+   * @returns The updated message response.
    */
   pinMessage(
     messageOrMessageId: string | { id: string },
     timeoutOrExpirationDate?: null | number | string | Date,
-    pinnedBy?: string | { id: string },
     pinnedAt?: number | string | Date,
   ) {
-    const messageId = this._validateAndGetMessageId(
+    const id = this._validateAndGetMessageId(
       messageOrMessageId,
-      'Please specify the message id when calling unpinMessage',
+      'Please specify the message id when calling pinMessage',
     );
-    return this.partialUpdateMessage(
-      messageId,
-      {
-        set: {
-          pinned: true,
-          pin_expires: this._normalizeExpiration(timeoutOrExpirationDate),
-          pinned_at: this._normalizeExpiration(pinnedAt),
-        },
-      } as unknown as PartialMessageUpdate,
-      pinnedBy,
-    );
+    return this.updateMessagePartial({
+      id,
+      set: {
+        pinned: true,
+        pin_expires: this._normalizeExpiration(timeoutOrExpirationDate),
+        pinned_at: this._normalizeExpiration(pinnedAt),
+      },
+    });
   }
 
   /**
-   * unpinMessage - unpins the message that was previously pinned
-   * @param {string | { id: string }} messageOrMessageId message object or message id
-   * @param {string | { id: string }} [userId]
+   * Unpins the message that was previously pinned.
+   *
+   * @param messageOrMessageId - MessageRequest object or message ID.
+   * @returns The updated message response.
    */
-  unpinMessage(
-    messageOrMessageId: string | { id: string },
-    userId?: string | { id: string },
-  ) {
-    const messageId = this._validateAndGetMessageId(
+  unpinMessage(messageOrMessageId: string | { id: string }) {
+    const id = this._validateAndGetMessageId(
       messageOrMessageId,
       'Please specify the message id when calling unpinMessage',
     );
-    return this.partialUpdateMessage(
-      messageId,
-      {
-        set: { pinned: false },
-      } as unknown as PartialMessageUpdate,
-      userId,
-    );
+    return this.updateMessagePartial({
+      id,
+      set: { pinned: false },
+    });
   }
 
   /**
-   * updateMessage - Update the given message
-   *
-   * @param {Omit<MessageResponse, 'mentioned_users'> & { mentioned_users?: string[] }} message object, id needs to be specified
-   * @param {string | { id: string }} [partialUserOrUserId]
-   * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
-   *
-   * @return {{ message: LocalMessage | MessageResponse }} Response that includes the message
+   * Updates the given message. When an `offlineDb` is registered the call is queued
+   * so it is replayed on reconnect.
    */
-  async updateMessage(
-    message: LocalMessage | Partial<MessageResponse>,
-    partialUserOrUserId?: string | { id: string },
-    options?: UpdateMessageOptions,
+  override async updateMessage(
+    request: Parameters<ChatApi['updateMessage']>[0] & { message: { cid?: string } },
   ) {
-    if (!message.id) {
-      throw Error('Please specify the message.id when calling updateMessage');
-    }
-
-    const messageId = message.id as string;
-
     try {
       if (this.offlineDb) {
-        return await this.offlineDb.queueTask<UpdateMessageAPIResponse>({
+        return await this.offlineDb.queueTask<
+          Awaited<ReturnType<ChatApi['updateMessage']>>
+        >({
           task: {
-            ...getPendingTaskChannelData(message.cid),
-            messageId,
-            payload: [message, partialUserOrUserId, options],
+            ...getPendingTaskChannelData(request.message?.cid),
+            messageId: request.id,
+            payload: [request],
             type: 'update-message',
           },
         });
       }
     } catch (error) {
-      this.logger('error', `offlineDb:updateMessage`, {
-        tags: ['channel', 'offlineDb'],
-        error,
-      });
+      offlineDbLogger
+        .withExtraTags('updateMessage')
+        .error('Updating the message failed.', { error });
     }
 
-    return await this._updateMessage(message, partialUserOrUserId, options);
+    return await this._updateMessage(request);
   }
 
-  async _updateMessage(
-    message: LocalMessage | Partial<MessageResponse>,
-    partialUserOrUserId?: string | { id: string },
-    options?: UpdateMessageOptions,
-  ) {
-    if (!message.id) {
-      throw Error('Please specify the message.id when calling updateMessage');
-    }
-
-    // should not include user object
-    const payload = toUpdatedMessagePayload(message);
-
-    // add user_id (if exists)
-    if (typeof partialUserOrUserId === 'string') {
-      payload.user_id = partialUserOrUserId;
-    } else if (typeof partialUserOrUserId?.id === 'string') {
-      payload.user_id = partialUserOrUserId.id;
-    }
-
-    return await this.post<UpdateMessageAPIResponse>(
-      this.baseURL + `/messages/${encodeURIComponent(message.id as string)}`,
-      {
-        message: payload,
-        ...options,
-      },
-    );
+  async _updateMessage(request: Parameters<ChatApi['updateMessage']>[0]) {
+    return await super.updateMessage(request);
   }
 
   /**
-   * partialUpdateMessage - Update the given message id while retaining additional properties
-   *
-   * @param {string} id the message id
-   *
-   * @param {PartialUpdateMessage}  partialMessageObject which should contain id and any of "set" or "unset" params;
-   *         example: {id: "user1", set:{text: "hi"}, unset:["color"]}
-   * @param {string | { id: string }} [userId]
-   *
-   * @param {boolean} [options.skip_enrich_url] Do not try to enrich the URLs within message
-   *
-   * @return {{ message: MessageResponse }} Response that includes the updated message
+   * Deletes a message. When an `offlineDb` is registered the call is queued so it
+   * is replayed on reconnect.
    */
-  async partialUpdateMessage(
-    id: string,
-    partialMessageObject: PartialMessageUpdate,
-    partialUserOrUserId?: string | { id: string },
-    options?: UpdateMessageOptions,
-  ) {
-    if (!id) {
-      throw Error('Please specify the message.id when calling partialUpdateMessage');
-    }
-
-    let user: { id: string } | undefined = undefined;
-
-    if (typeof partialUserOrUserId === 'string') {
-      user = { id: partialUserOrUserId };
-    } else if (typeof partialUserOrUserId?.id === 'string') {
-      user = { id: partialUserOrUserId.id };
-    }
-
-    return await this.put<UpdateMessageAPIResponse>(
-      this.baseURL + `/messages/${encodeURIComponent(id)}`,
-      {
-        ...partialMessageObject,
-        ...options,
-        user,
-      },
-    );
-  }
-
-  /**
-   * Updates message fields without storing them in the database, only sends update event.
-   *
-   * Available only on the server-side.
-   *
-   * @param messageId the message id to update.
-   * @param partialMessageObject the message payload.
-   * @param partialUserOrUserId the user id linked to this action.
-   * @param options additional options.
-   */
-  async ephemeralUpdateMessage(
-    messageId: string,
-    partialMessageObject: PartialMessageUpdate,
-    partialUserOrUserId?: string | { id: string },
-    options?: UpdateMessageOptions,
-  ) {
-    if (!messageId) throw Error('messageId is required');
-
-    let user: { id: string } | undefined = undefined;
-    if (typeof partialUserOrUserId === 'string') {
-      user = { id: partialUserOrUserId };
-    } else if (typeof partialUserOrUserId?.id === 'string') {
-      user = { id: partialUserOrUserId.id };
-    }
-
-    return await this.patch<UpdateMessageAPIResponse>(
-      `${this.baseURL}/messages/${encodeURIComponent(messageId)}/ephemeral`,
-      {
-        ...partialMessageObject,
-        ...options,
-        user,
-      },
-    );
-  }
-
-  /**
-   * deleteMessage - Delete a message
-   *
-   * @param {string} messageID The id of the message to delete
-   * @param {boolean | DeleteMessageOptions | undefined} [optionsOrHardDelete]
-   * @return {Promise<APIResponse & { message: MessageResponse }>} The API response
-   */
-  // fixme: remove the signature with optionsOrHardDelete boolean with the next major release
-  async deleteMessage(
-    messageID: string,
-    optionsOrHardDelete?: DeleteMessageOptions | boolean,
-  ): Promise<APIResponse & { message: MessageResponse }> {
-    let options: DeleteMessageOptions = {};
-    if (typeof optionsOrHardDelete === 'boolean') {
-      options = optionsOrHardDelete ? { hardDelete: true } : {};
-    } else if (optionsOrHardDelete?.deleteForMe) {
-      options = { deleteForMe: true };
-    } else if (optionsOrHardDelete?.hardDelete) {
-      options = { hardDelete: true };
-    }
-
+  override async deleteMessage(request: Parameters<ChatApi['deleteMessage']>[0]) {
     try {
       if (this.offlineDb) {
-        if (options.hardDelete) {
-          await this.offlineDb.hardDeleteMessage({ id: messageID });
+        if (request.hard) {
+          await this.offlineDb.hardDeleteMessage({ id: request.id });
         } else {
           await this.offlineDb.softDeleteMessage({
-            id: messageID,
-            deleteForMe: options.deleteForMe,
+            id: request.id,
+            deleteForMe: request.delete_for_me,
           });
         }
-        return await this.offlineDb.queueTask<APIResponse & { message: MessageResponse }>(
-          {
-            task: {
-              messageId: messageID,
-              payload: [messageID, options],
-              type: 'delete-message',
-            },
+        return await this.offlineDb.queueTask<
+          Awaited<ReturnType<ChatApi['deleteMessage']>>
+        >({
+          task: {
+            messageId: request.id,
+            payload: [request],
+            type: 'delete-message',
           },
-        );
+        });
       }
     } catch (error) {
-      this.logger('error', `offlineDb:deleteMessage`, {
-        tags: ['channel', 'offlineDb'],
-        error,
-      });
+      offlineDbLogger
+        .withExtraTags('deleteMessage')
+        .error('Deleting the message failed.', { error });
     }
 
-    return this._deleteMessage(messageID, options);
+    return this._deleteMessage(request);
   }
 
-  // fixme: remove the signature with optionsOrHardDelete boolean with the next major release
-  async _deleteMessage(
-    messageID: string,
-    optionsOrHardDelete?: DeleteMessageOptions | boolean,
-  ): Promise<APIResponse & { message: MessageResponse }> {
-    // this is a API call method, we do not route hardDelete: true and deleteForMe: true to deleteForMe: true
-    // and expect to receive error response from the server
-    const { deleteForMe, hardDelete } = (
-      typeof optionsOrHardDelete === 'boolean'
-        ? { hardDelete: optionsOrHardDelete }
-        : (optionsOrHardDelete ?? {})
-    ) as DeleteMessageOptions;
-
-    let params = {};
-    if (hardDelete) {
-      params = { hard: true };
-    }
-    if (deleteForMe) {
-      params = { ...params, delete_for_me: true };
-    }
-    const result = await this.delete<APIResponse & { message: MessageResponse }>(
-      this.baseURL + `/messages/${encodeURIComponent(messageID)}`,
-      params,
-    );
+  async _deleteMessage(request: Parameters<ChatApi['deleteMessage']>[0]) {
+    const result = await super.deleteMessage(request);
 
     // necessary to populate the below values as the server does not return the message in the response as deleted
-    if (deleteForMe) {
+    if (request.delete_for_me) {
       result.message.deleted_for_me = true;
       result.message.type = 'deleted';
     }
+
     return result;
   }
 
   /**
-   * undeleteMessage - Undelete a message
+   * Returns the list of threads of the current user.
    *
-   * undeletes a message that was previous soft deleted. Hard deleted messages
-   * cannot be undeleted. This is only allowed to be called from server-side
-   * clients.
-   *
-   * @param {string} messageID The id of the message to undelete
-   * @param {string} userID The id of the user who undeleted the message
-   *
-   * @return {{ message: MessageResponse }} Response that includes the message
+   * @param options - Options object for pagination and limiting the participants and replies
+   *   (optional, defaults to `{}`).
+   * @param options.limit - Limits the number of threads to be returned (optional).
+   * @param options.watch - Subscribes the user to the channels of the threads (optional).
+   * @param options.participant_limit - Limits the number of participants returned per thread (optional).
+   * @param options.reply_limit - Limits the number of replies returned per thread (optional).
+   * @param options.filter - MongoDB style filters for threads (optional).
+   * @param options.sort - MongoDB style sort for threads (optional).
+   * @returns The list of threads and the next cursor.
    */
-  async undeleteMessage(messageID: string, userID: string) {
-    return await this.post<APIResponse & { message: MessageResponse }>(
-      this.baseURL + `/messages/${encodeURIComponent(messageID)}/undelete`,
-      { undeleted_by: userID },
-    );
-  }
-
-  async getMessage(messageID: string, options?: GetMessageOptions) {
-    return await this.get<GetMessageAPIResponse>(
-      this.baseURL + `/messages/${encodeURIComponent(messageID)}`,
-      {
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * queryThreads - returns the list of threads of current user.
-   *
-   * @param {QueryThreadsOptions} options Options object for pagination and limiting the participants and replies.
-   * @param {number}  options.limit Limits the number of threads to be returned.
-   * @param {boolean} options.watch Subscribes the user to the channels of the threads.
-   * @param {number}  options.participant_limit Limits the number of participants returned per threads.
-   * @param {number}  options.reply_limit Limits the number of replies returned per threads.
-   * @param {ThreadFilters} options.filter MongoDB style filters for threads
-   * @param {ThreadSort} options.sort MongoDB style sort for threads
-   *
-   * @returns {{ threads: Thread[], next: string }} Returns the list of threads and the next cursor.
-   */
-  async queryThreads(options: QueryThreadsOptions = {}) {
+  async queryThreadsAndHydrate(options: QueryThreadsRequest = {}) {
     const optionsWithDefaults = {
       limit: 10,
       participant_limit: 10,
@@ -3657,22 +2086,15 @@ export class StreamChat {
       requestBody.filter = optionsWithDefaults.filter;
     }
 
-    if (
-      optionsWithDefaults.sort &&
-      (Array.isArray(optionsWithDefaults.sort)
-        ? optionsWithDefaults.sort.length > 0
-        : Object.keys(optionsWithDefaults.sort).length > 0)
-    ) {
-      requestBody.sort = normalizeQuerySort(optionsWithDefaults.sort);
+    if (optionsWithDefaults.sort && optionsWithDefaults.sort.length > 0) {
+      requestBody.sort = optionsWithDefaults.sort;
     }
 
-    const response = await this.post<QueryThreadsAPIResponse>(
-      `${this.baseURL}/threads`,
-      requestBody,
-    );
+    const response = await this.queryThreads(requestBody);
 
     // Hydrate the polls for the parent messages of the threads
-    const parentMessages = response.threads.map((thread) => thread.parent_message);
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const parentMessages = response.threads.map((thread) => thread.parent_message!);
     this.polls.hydratePollCache(parentMessages);
 
     return {
@@ -3684,19 +2106,19 @@ export class StreamChat {
   }
 
   /**
-   * getThread - returns the thread of a message by its id.
+   * Returns the thread of a message by its ID, wrapped in a hydrated `Thread` instance.
    *
-   * @param {string}            messageId The message id
-   * @param {GetThreadOptions}  options Options object for pagination and limiting the participants and replies.
-   * @param {boolean}           options.watch Subscribes the user to the channel of the thread.
-   * @param {number}            options.participant_limit Limits the number of participants returned per threads.
-   * @param {number}            options.reply_limit Limits the number of replies returned per threads.
-   *
-   * @returns {Thread} Returns the thread.
+   * @param messageId - The message ID.
+   * @param options - Options object for pagination and limiting the participants and replies
+   *   (optional, defaults to `{}`).
+   * @param options.watch - Subscribes the user to the channel of the thread (optional).
+   * @param options.participant_limit - Limits the number of participants returned per thread (optional).
+   * @param options.reply_limit - Limits the number of replies returned per thread (optional).
+   * @returns The thread.
    */
-  async getThread(messageId: string, options: GetThreadOptions = {}) {
+  async getThreadAndHydrate(messageId: string, options: GetThreadOptions = {}) {
     if (!messageId) {
-      throw new Error('Please specify the messageId when calling getThread');
+      throw new Error('Please specify the messageId when calling getThreadAndHydrate');
     }
 
     const optionsWithDefaults = {
@@ -3706,21 +2128,20 @@ export class StreamChat {
       ...options,
     };
 
-    const response = await this.get<GetThreadAPIResponse>(
-      `${this.baseURL}/threads/${encodeURIComponent(messageId)}`,
-      optionsWithDefaults,
-    );
+    const response = await this.getThread({
+      message_id: messageId,
+      ...optionsWithDefaults,
+    });
 
     return new Thread({ client: this, threadData: response.thread });
   }
 
   /**
-   * partialUpdateThread - updates the given thread
+   * Updates the given thread.
    *
-   * @param {string}              messageId The id of the thread message which needs to be updated.
-   * @param {PartialThreadUpdate} partialThreadObject should contain "set" or "unset" params for any of the thread's non-reserved fields.
-   *
-   * @returns {GetThreadAPIResponse} Returns the updated thread.
+   * @param messageId - The ID of the thread message which needs to be updated.
+   * @param partialThreadObject - Should contain `set` or `unset` params for any of the thread's non-reserved fields.
+   * @returns The updated thread.
    */
   async partialUpdateThread(messageId: string, partialThreadObject: PartialThreadUpdate) {
     if (!messageId) {
@@ -3750,10 +2171,10 @@ export class StreamChat {
       }
     }
 
-    return await this.patch<GetThreadAPIResponse>(
-      `${this.baseURL}/threads/${encodeURIComponent(messageId)}`,
-      partialThreadObject,
-    );
+    return await this.updateThreadPartial({
+      message_id: messageId,
+      ...partialThreadObject,
+    });
   }
 
   getUserAgent = (): string => {
@@ -3794,74 +2215,17 @@ export class StreamChat {
   };
 
   /**
-   * @deprecated use sdkIdentifier instead
-   * @param userAgent
+   * Sets the user agent string.
+   *
+   * @deprecated Use `sdkIdentifier` instead.
+   *
+   * @param userAgent - The user agent string.
    */
   setUserAgent(userAgent: string) {
     this.userAgent = userAgent;
   }
 
-  /**
-   * _isUsingServerAuth - Returns true if we're using server side auth
-   */
-  _isUsingServerAuth = () => !!this.secret;
-
-  _cacheEnabled = () => !this._isUsingServerAuth() || !this.options.disableCache;
-
-  _enrichAxiosOptions(
-    options: AxiosRequestConfig & { config?: AxiosRequestConfig } = {
-      params: {},
-      headers: {},
-      config: {},
-    },
-  ): AxiosRequestConfig {
-    const token = this._getToken();
-    const authorization = token ? { Authorization: token } : undefined;
-    let signal: AbortSignal | null = null;
-    if (this.nextRequestAbortController !== null) {
-      signal = this.nextRequestAbortController.signal;
-      this.nextRequestAbortController = null;
-    }
-
-    if (!options.headers?.['x-client-request-id']) {
-      options.headers = {
-        ...options.headers,
-        'x-client-request-id': randomId(),
-      };
-    }
-
-    const {
-      params: axiosRequestConfigParams,
-      headers: axiosRequestConfigHeaders,
-      ...axiosRequestConfigRest
-    } = this.options.axiosRequestConfig || {};
-
-    return {
-      params: {
-        user_id: this.userID,
-        connection_id: this._getConnectionID(),
-        api_key: this.key,
-        ...options.params,
-        ...(axiosRequestConfigParams || {}),
-      },
-      headers: {
-        ...authorization,
-        'stream-auth-type': this.getAuthType(),
-        'X-Stream-Client': this.getUserAgent(),
-        ...options.headers,
-        ...(axiosRequestConfigHeaders || {}),
-      },
-      ...(signal ? { signal } : {}),
-      ...options.config,
-      ...(axiosRequestConfigRest || {}),
-    };
-  }
-
-  _getToken() {
-    if (!this.tokenManager || this.anonymous) return null;
-
-    return this.tokenManager.getToken();
-  }
+  _cacheEnabled = () => !this.options.disableCache;
 
   _startCleaning() {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -3878,1332 +2242,63 @@ export class StreamChat {
   }
 
   /**
-   * encode ws url payload
+   * Encodes the WS URL payload.
+   *
    * @private
-   * @returns json string
+   *
+   * @param client_request_id - The client request ID (optional).
+   * @returns The JSON-encoded payload string.
    */
   _buildWSPayload = (client_request_id?: string) =>
     JSON.stringify({
-      user_id: this.userID,
+      user_id: this.userId,
       user_details: this._user,
       device: this.options.device,
       client_request_id,
     });
 
   /**
-   * checks signature of a request
-   * @param {string | Buffer} rawBody
-   * @param {string} signature from HTTP header
-   * @returns {boolean}
-   */
-  verifyWebhook(requestBody: string | Buffer, xSignature: string) {
-    return !!this.secret && verifySignature(requestBody, xSignature, this.secret);
-  }
-
-  /**
-   * Verify and parse an HTTP webhook event.
+   * Queries poll answers.
    *
-   * Decompresses `rawBody` when gzipped (detected from the body bytes),
-   * verifies the `X-Signature` header against the app's API secret, and
-   * returns the parsed `Event`. Works whether or not Stream is currently
-   * compressing payloads for this app, and stays correct behind
-   * middleware that auto-decompresses the request.
-   *
-   * @param rawBody Raw HTTP request body bytes Stream signed
-   * @param signature Value of the `X-Signature` header
-   * @throws {InvalidWebhookError} When the signature does not match or
-   *   the gzip envelope is malformed.
+   * @param request - The query poll answers request payload, including the poll ID, optional vote
+   *   filter conditions, sort directions, and pagination options (`limit`, `offset`).
+   * @param request.poll_id - The poll ID.
+   * @param request.filter - Vote filter conditions.
+   * @returns The poll answers.
    */
-  verifyAndParseWebhook(rawBody: string | Buffer, signature: string) {
-    if (!this.secret) {
-      throw new InvalidWebhookError(
-        'cannot verify webhook signature without an API secret on the client',
-      );
-    }
-    return verifyAndParseWebhookHelper(rawBody, signature, this.secret);
-  }
-
-  /**
-   * Parse an SQS firehose event: decodes the message `Body` (base64 +
-   * optional gzip) and returns the parsed `Event`. No HMAC verification
-   * (Stream does not sign SQS bodies).
-   *
-   * @param messageBody SQS message `Body` string
-   * @throws {InvalidWebhookError} When the base64 / gzip envelope is malformed.
-   */
-  parseSqs(messageBody: string) {
-    return parseSqsHelper(messageBody);
-  }
-
-  /**
-   * Parse an SNS-delivered event (unwraps envelope JSON when needed, then
-   * same decode path as SQS). No HMAC verification.
-   *
-   * @param notificationBody Raw SNS POST body or pre-extracted `Message` string
-   * @throws {InvalidWebhookError} When the envelope cannot be decoded.
-   */
-  parseSns(notificationBody: string) {
-    return parseSnsHelper(notificationBody);
-  }
-
-  /** getPermission - gets the definition for a permission
-   *
-   * @param {string} name
-   * @returns {Promise<PermissionAPIResponse>}
-   */
-  getPermission(name: string) {
-    return this.get<PermissionAPIResponse>(
-      `${this.baseURL}/permissions/${encodeURIComponent(name)}`,
-    );
-  }
-
-  /** createPermission - creates a custom permission
-   *
-   * @param {CustomPermissionOptions} permissionData the permission data
-   * @returns {Promise<APIResponse>}
-   */
-  createPermission(permissionData: CustomPermissionOptions) {
-    return this.post<APIResponse>(`${this.baseURL}/permissions`, {
-      ...permissionData,
-    });
-  }
-
-  /** updatePermission - updates an existing custom permission
-   *
-   * @param {string} id
-   * @param {Omit<CustomPermissionOptions, 'id'>} permissionData the permission data
-   * @returns {Promise<APIResponse>}
-   */
-  updatePermission(id: string, permissionData: Omit<CustomPermissionOptions, 'id'>) {
-    return this.put<APIResponse>(
-      `${this.baseURL}/permissions/${encodeURIComponent(id)}`,
-      {
-        ...permissionData,
+  async queryPollAnswers({
+    poll_id,
+    filter,
+    ...options
+  }: Parameters<ChatApi['queryPollVotes']>[0]) {
+    return await this.queryPollVotes({
+      poll_id,
+      filter: {
+        ...filter,
+        is_answer: true,
       },
-    );
-  }
-
-  /** deletePermission - deletes a custom permission
-   *
-   * @param {string} name
-   * @returns {Promise<APIResponse>}
-   */
-  deletePermission(name: string) {
-    return this.delete<APIResponse>(
-      `${this.baseURL}/permissions/${encodeURIComponent(name)}`,
-    );
-  }
-
-  /** listPermissions - returns the list of all permissions for this application
-   *
-   * @returns {Promise<APIResponse>}
-   */
-  listPermissions() {
-    return this.get<PermissionsAPIResponse>(`${this.baseURL}/permissions`);
-  }
-
-  /** createRole - creates a custom role
-   *
-   * @param {string} name the new role name
-   * @returns {Promise<APIResponse>}
-   */
-  createRole(name: string) {
-    return this.post<CreateRoleAPIResponse>(`${this.baseURL}/roles`, { name });
-  }
-
-  /** listRoles - returns the list of all roles for this application
-   *
-   * @returns {Promise<APIResponse>}
-   */
-  listRoles() {
-    return this.get<ListRolesAPIResponse>(`${this.baseURL}/roles`);
-  }
-
-  /** listRoles - returns the list of all roles for this application
-   *
-   * @returns {Promise<APIResponse>}
-   */
-  searchRoles(options: SearchRolesOptions) {
-    return this.get<SearchRolesAPIResponse>(`${this.baseURL}/roles/search`, options);
-  }
-
-  /** deleteRole - deletes a custom role
-   *
-   * @param {string} name the role name
-   * @returns {Promise<APIResponse>}
-   */
-  deleteRole(name: string) {
-    return this.delete<APIResponse>(`${this.baseURL}/roles/${encodeURIComponent(name)}`);
-  }
-
-  /** sync - returns all events that happened for a list of channels since last sync
-   * @param {string[]} channel_cids list of channel CIDs
-   * @param {string} last_sync_at last time the user was online and in sync. RFC3339 ie. "2020-05-06T15:05:01.207Z"
-   * @param {SyncOptions} options See JSDoc in the type fields for more info
-   *
-   * @returns {Promise<SyncResponse>}
-   */
-  sync(channel_cids: string[], last_sync_at: string, options: SyncOptions = {}) {
-    return this.post<SyncResponse>(`${this.baseURL}/sync`, {
-      channel_cids,
-      last_sync_at,
       ...options,
     });
   }
 
   /**
-   * sendUserCustomEvent - Send a custom event to a user
+   * Uploads a file to the configured storage (defaults to Stream CDN).
    *
-   * @param {string} targetUserID target user id
-   * @param {UserCustomEvent} event for example {type: 'friendship-request'}
-   *
-   * @return {Promise<APIResponse>} The Server Response
+   * @param uri - The file to upload.
+   * @param name - The name of the file (optional).
+   * @param contentType - The content type of the file (optional).
+   * @param user - User information (optional).
+   * @param axiosRequestConfig - Axios config, e.g. `onUploadProgress` for progress tracking (optional).
+   * @returns Response containing the file URL.
    */
-  async sendUserCustomEvent(targetUserID: string, event: UserCustomEvent) {
-    return await this.post<APIResponse>(
-      `${this.baseURL}/users/${encodeURIComponent(targetUserID)}/event`,
-      {
-        event,
-      },
-    );
-  }
-
-  /**
-   * Creates a new block list
-   *
-   * @param {BlockList} blockList - The block list to create
-   * @param {string} blockList.name - The name of the block list
-   * @param {string[]} blockList.words - List of words to block
-   * @param {string} [blockList.team] - Team ID the block list belongs to
-   *
-   * @returns {Promise<APIResponse>} The server response
-   */
-  createBlockList(blockList: BlockList) {
-    return this.post<APIResponse>(`${this.baseURL}/blocklists`, blockList);
-  }
-
-  /**
-   * Lists all block lists
-   *
-   * @param {Object} [data] - Query parameters
-   * @param {string} [data.team] - Team ID to filter block lists by
-   *
-   * @returns {Promise<APIResponse & {blocklists: BlockListResponse[]}>} Response containing array of block lists
-   */
-  listBlockLists(data?: { team?: string }) {
-    return this.get<APIResponse & { blocklists: BlockListResponse[] }>(
-      `${this.baseURL}/blocklists`,
-      data,
-    );
-  }
-
-  /**
-   * Gets a specific block list
-   *
-   * @param {string} name - The name of the block list to retrieve
-   * @param {Object} [data] - Query parameters
-   * @param {string} [data.team] - Team ID that blocklist belongs to
-   *
-   * @returns {Promise<APIResponse & {blocklist: BlockListResponse}>} Response containing the block list
-   */
-  getBlockList(name: string, data?: { team?: string }) {
-    return this.get<APIResponse & { blocklist: BlockListResponse }>(
-      `${this.baseURL}/blocklists/${encodeURIComponent(name)}`,
-      data,
-    );
-  }
-
-  /**
-   * Updates an existing block list
-   *
-   * @param {string} name - The name of the block list to update
-   * @param {Object} data - The update data
-   * @param {string[]} data.words - New list of words to block
-   * @param {string} [data.team] - Team ID that blocklist belongs to
-   *
-   * @returns {Promise<APIResponse>} The server response
-   */
-  updateBlockList(name: string, data: { words: string[]; team?: string }) {
-    return this.put<APIResponse>(
-      `${this.baseURL}/blocklists/${encodeURIComponent(name)}`,
-      data,
-    );
-  }
-
-  /**
-   * Deletes a block list
-   *
-   * @param {string} name - The name of the block list to delete
-   * @param {Object} [data] - Query parameters
-   * @param {string} [data.team] - Team ID that blocklist belongs to
-   *
-   * @returns {Promise<APIResponse>} The server response
-   */
-  deleteBlockList(name: string, data?: { team?: string }) {
-    return this.delete<APIResponse>(
-      `${this.baseURL}/blocklists/${encodeURIComponent(name)}`,
-      data,
-    );
-  }
-
-  exportChannels(
-    request: Array<ExportChannelRequest>,
-    options: ExportChannelOptions = {},
-  ) {
-    const payload = { channels: request, ...options };
-    return this.post<APIResponse & ExportChannelResponse>(
-      `${this.baseURL}/export_channels`,
-      payload,
-    );
-  }
-
-  exportUsers(request: ExportUsersRequest) {
-    return this.post<APIResponse & ExportUsersResponse>(
-      `${this.baseURL}/export/users`,
-      request,
-    );
-  }
-
-  exportChannel(request: ExportChannelRequest, options?: ExportChannelOptions) {
-    return this.exportChannels([request], options);
-  }
-
-  getExportChannelStatus(id: string) {
-    return this.get<APIResponse & ExportChannelStatusResponse>(
-      `${this.baseURL}/export_channels/${encodeURIComponent(id)}`,
-    );
-  }
-
-  campaign(idOrData: string | CampaignData, data?: CampaignData) {
-    if (idOrData && typeof idOrData === 'object') {
-      return new Campaign(this, null, idOrData);
-    }
-
-    return new Campaign(this, idOrData, data);
-  }
-
-  /**
-   * channelBatchUpdater - Returns a ChannelBatchUpdater instance for batch channel operations
-   *
-   * @return {ChannelBatchUpdater} A ChannelBatchUpdater instance
-   */
-  channelBatchUpdater() {
-    return new ChannelBatchUpdater(this);
-  }
-
-  segment(type: SegmentType, idOrData: string | SegmentData, data?: SegmentData) {
-    if (typeof idOrData === 'string') {
-      return new Segment(this, type, idOrData, data);
-    }
-
-    return new Segment(this, type, null, idOrData);
-  }
-
-  validateServerSideAuth() {
-    if (!this.secret) {
-      throw new Error(
-        'This feature can be used server-side only. Please initialize the client with a secret to use this feature.',
-      );
-    }
-  }
-
-  /**
-   * createSegment - Creates a segment
-   *
-   * @private
-   * @param {SegmentType} type Segment type
-   * @param {string} id Segment ID
-   * @param {string} name Segment name
-   * @param {SegmentData} params Segment data
-   *
-   * @return {{segment: SegmentResponse} & APIResponse} The created Segment
-   */
-  createSegment(type: SegmentType, id: string | null, data?: SegmentData) {
-    this.validateServerSideAuth();
-    const body = {
-      id,
-      type,
-      ...data,
-    };
-    return this.post<{ segment: SegmentResponse }>(this.baseURL + `/segments`, body);
-  }
-
-  /**
-   * createUserSegment - Creates a user segment
-   *
-   * @param {string} id Segment ID
-   * @param {string} name Segment name
-   * @param {SegmentData} data Segment data
-   *
-   * @return {Segment} The created Segment
-   */
-  createUserSegment(id: string | null, data?: SegmentData) {
-    this.validateServerSideAuth();
-    return this.createSegment('user', id, data);
-  }
-
-  /**
-   * createChannelSegment - Creates a channel segment
-   *
-   * @param {string} id Segment ID
-   * @param {string} name Segment name
-   * @param {SegmentData} data Segment data
-   *
-   * @return {Segment} The created Segment
-   */
-  createChannelSegment(id: string | null, data?: SegmentData) {
-    this.validateServerSideAuth();
-    return this.createSegment('channel', id, data);
-  }
-
-  getSegment(id: string) {
-    this.validateServerSideAuth();
-    return this.get<{ segment: SegmentResponse } & APIResponse>(
-      this.baseURL + `/segments/${encodeURIComponent(id)}`,
-    );
-  }
-
-  /**
-   * updateSegment - Update a segment
-   *
-   * @param {string} id Segment ID
-   * @param {Partial<UpdateSegmentData>} data Data to update
-   *
-   * @return {Segment} Updated Segment
-   */
-  updateSegment(id: string, data: Partial<UpdateSegmentData>) {
-    this.validateServerSideAuth();
-    return this.put<{ segment: SegmentResponse }>(
-      this.baseURL + `/segments/${encodeURIComponent(id)}`,
-      data,
-    );
-  }
-
-  /**
-   * addSegmentTargets - Add targets to a segment
-   *
-   * @param {string} id Segment ID
-   * @param {string[]} targets Targets to add to the segment
-   *
-   * @return {APIResponse} API response
-   */
-  addSegmentTargets(id: string, targets: string[]) {
-    this.validateServerSideAuth();
-    const body = { target_ids: targets };
-    return this.post<APIResponse>(
-      this.baseURL + `/segments/${encodeURIComponent(id)}/addtargets`,
-      body,
-    );
-  }
-
-  querySegmentTargets(
-    id: string,
-    filter: QuerySegmentTargetsFilter | null = {},
-    sort: SortParam[] | null | [] = [],
-    options = {},
-  ) {
-    this.validateServerSideAuth();
-    return this.post<{ targets: SegmentTargetsResponse[]; next?: string } & APIResponse>(
-      this.baseURL + `/segments/${encodeURIComponent(id)}/targets/query`,
-      {
-        filter: filter || {},
-        sort: sort || [],
-        ...options,
-      },
-    );
-  }
-  /**
-   * removeSegmentTargets - Remove targets from a segment
-   *
-   * @param {string} id Segment ID
-   * @param {string[]} targets Targets to add to the segment
-   *
-   * @return {APIResponse} API response
-   */
-  removeSegmentTargets(id: string, targets: string[]) {
-    this.validateServerSideAuth();
-    const body = { target_ids: targets };
-    return this.post<APIResponse>(
-      this.baseURL + `/segments/${encodeURIComponent(id)}/deletetargets`,
-      body,
-    );
-  }
-
-  /**
-   * querySegments - Query Segments
-   *
-   * @param {filter} filter MongoDB style filter conditions
-   * @param {QuerySegmentsOptions} options Options for sorting/paginating the results
-   *
-   * @return {Segment[]} Segments
-   */
-  querySegments(filter: {}, sort?: SortParam[], options: QuerySegmentsOptions = {}) {
-    this.validateServerSideAuth();
-    return this.post<
-      {
-        segments: SegmentResponse[];
-        next?: string;
-        prev?: string;
-      } & APIResponse
-    >(this.baseURL + `/segments/query`, {
-      filter,
-      sort,
-      ...options,
-    });
-  }
-
-  /**
-   * deleteSegment - Delete a Campaign Segment
-   *
-   * @param {string} id Segment ID
-   *
-   * @return {Promise<APIResponse>} The Server Response
-   */
-  deleteSegment(id: string) {
-    this.validateServerSideAuth();
-    return this.delete<APIResponse>(this.baseURL + `/segments/${encodeURIComponent(id)}`);
-  }
-
-  /**
-   * segmentTargetExists - Check if a target exists in a segment
-   *
-   * @param {string} segmentId Segment ID
-   * @param {string} targetId Target ID
-   *
-   * @return {Promise<APIResponse>} The Server Response
-   */
-  segmentTargetExists(segmentId: string, targetId: string) {
-    this.validateServerSideAuth();
-    return this.get<APIResponse>(
-      this.baseURL +
-        `/segments/${encodeURIComponent(segmentId)}/target/${encodeURIComponent(targetId)}`,
-    );
-  }
-
-  /**
-   * createCampaign - Creates a Campaign
-   *
-   * @param {CampaignData} params Campaign data
-   *
-   * @return {Campaign} The Created Campaign
-   */
-  createCampaign(params: CampaignData) {
-    this.validateServerSideAuth();
-    return this.post<
-      {
-        campaign: CampaignResponse;
-        users: {
-          next?: string;
-          prev?: string;
-        };
-      } & APIResponse
-    >(this.baseURL + `/campaigns`, { ...params });
-  }
-
-  getCampaign(id: string, options?: GetCampaignOptions) {
-    this.validateServerSideAuth();
-    return this.get<
-      {
-        campaign: CampaignResponse;
-        users: {
-          next?: string;
-          prev?: string;
-        };
-      } & APIResponse
-    >(this.baseURL + `/campaigns/${encodeURIComponent(id)}`, { ...options?.users });
-  }
-
-  startCampaign(id: string, options?: { scheduledFor?: string; stopAt?: string }) {
-    this.validateServerSideAuth();
-    return this.post<
-      {
-        campaign: CampaignResponse;
-        users: {
-          next?: string;
-          prev?: string;
-        };
-      } & APIResponse
-    >(this.baseURL + `/campaigns/${encodeURIComponent(id)}/start`, {
-      scheduled_for: options?.scheduledFor,
-      stop_at: options?.stopAt,
-    });
-  }
-
-  /**
-   * queryCampaigns - Query Campaigns
-   *
-   *
-   * @return {Campaign[]} Campaigns
-   */
-  async queryCampaigns(
-    filter: CampaignFilters,
-    sort?: CampaignSort,
-    options?: CampaignQueryOptions,
-  ) {
-    this.validateServerSideAuth();
-    return await this.post<
-      {
-        campaigns: CampaignResponse[];
-        next?: string;
-        prev?: string;
-      } & APIResponse
-    >(this.baseURL + `/campaigns/query`, {
-      filter,
-      sort,
-      ...(options || {}),
-    });
-  }
-
-  /**
-   * updateCampaign - Update a Campaign
-   *
-   * @param {string} id Campaign ID
-   * @param {Partial<CampaignData>} params Campaign data
-   *
-   * @return {Campaign} Updated Campaign
-   */
-  updateCampaign(id: string, params: Partial<CampaignData>) {
-    this.validateServerSideAuth();
-    return this.put<{
-      campaign: CampaignResponse;
-      users: {
-        next?: string;
-        prev?: string;
-      };
-    }>(this.baseURL + `/campaigns/${encodeURIComponent(id)}`, params);
-  }
-
-  /**
-   * deleteCampaign - Delete a Campaign
-   *
-   * @param {string} id Campaign ID
-   *
-   * @return {Promise<APIResponse>} The Server Response
-   */
-  deleteCampaign(id: string) {
-    this.validateServerSideAuth();
-    return this.delete<APIResponse>(
-      this.baseURL + `/campaigns/${encodeURIComponent(id)}`,
-    );
-  }
-
-  /**
-   * stopCampaign - Stop a Campaign
-   *
-   * @param {string} id Campaign ID
-   *
-   * @return {Campaign} Stopped Campaign
-   */
-  stopCampaign(id: string) {
-    this.validateServerSideAuth();
-    return this.post<{ campaign: CampaignResponse }>(
-      this.baseURL + `/campaigns/${encodeURIComponent(id)}/stop`,
-    );
-  }
-
-  /**
-   * enrichURL - Get OpenGraph data of the given link
-   *
-   * @param {string} url link
-   * @return {OGAttachment} OG Attachment
-   */
-  enrichURL(url: string) {
-    return this.get<APIResponse & OGAttachment>(this.baseURL + `/og`, { url });
-  }
-
-  /**
-   * getTask - Gets status of a long running task
-   *
-   * @param {string} id Task ID
-   *
-   * @return {TaskStatus} The task status
-   */
-  getTask(id: string) {
-    return this.get<APIResponse & TaskStatus>(
-      `${this.baseURL}/tasks/${encodeURIComponent(id)}`,
-    );
-  }
-
-  /**
-   * deleteChannels - Deletes a list of channel
-   *
-   * @param {string[]} cids Channel CIDs
-   * @param {boolean} [options.hard_delete] Defines if the channel is hard deleted or not
-   *
-   * @return {DeleteChannelsResponse} Result of the soft deletion, if server-side, it holds the task ID as well
-   */
-  async deleteChannels(cids: string[], options: { hard_delete?: boolean } = {}) {
-    return await this.post<APIResponse & DeleteChannelsResponse>(
-      this.baseURL + `/channels/delete`,
-      {
-        cids,
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * deleteUsers - Batch Delete Users
-   *
-   * @param {string[]} user_ids which users to delete
-   * @param {DeleteUserOptions} options Configuration how to delete users
-   *
-   * @return {TaskResponse} A task ID
-   */
-  async deleteUsers(user_ids: string[], options: DeleteUserOptions = {}) {
-    if (
-      typeof options.user !== 'undefined' &&
-      !['soft', 'hard', 'pruning'].includes(options.user)
-    ) {
-      throw new Error(
-        'Invalid delete user options. user must be one of [soft hard pruning]',
-      );
-    }
-    if (
-      typeof options.conversations !== 'undefined' &&
-      !['soft', 'hard'].includes(options.conversations)
-    ) {
-      throw new Error(
-        'Invalid delete user options. conversations must be one of [soft hard]',
-      );
-    }
-    if (
-      typeof options.messages !== 'undefined' &&
-      !['soft', 'hard', 'pruning'].includes(options.messages)
-    ) {
-      throw new Error(
-        'Invalid delete user options. messages must be one of [soft hard pruning]',
-      );
-    }
-    return await this.post<APIResponse & TaskResponse>(this.baseURL + `/users/delete`, {
-      user_ids,
-      ...options,
-    });
-  }
-
-  /**
-   * _createImportURL - Create an Import upload url.
-   *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
-   *
-   * @private
-   * @param {string} filename filename of uploaded data
-   * @return {APIResponse & CreateImportResponse} An ImportTask
-   */
-  async _createImportURL(filename: string) {
-    return await this.post<APIResponse & CreateImportURLResponse>(
-      this.baseURL + `/import_urls`,
-      {
-        filename,
-      },
-    );
-  }
-
-  /**
-   * _createImport - Create an Import Task.
-   *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
-   *
-   * @private
-   * @param {string} path path of uploaded data
-   * @param {CreateImportOptions} options import options
-   * @return {APIResponse & CreateImportResponse} An ImportTask
-   */
-  async _createImport(path: string, options: CreateImportOptions = { mode: 'upsert' }) {
-    return await this.post<APIResponse & CreateImportResponse>(
-      this.baseURL + `/imports`,
-      {
-        path,
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * _getImport - Get an Import Task.
-   *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
-   *
-   * @private
-   * @param {string} id id of Import Task
-   *
-   * @return {APIResponse & GetImportResponse} An ImportTask
-   */
-  async _getImport(id: string) {
-    return await this.get<APIResponse & GetImportResponse>(
-      this.baseURL + `/imports/${encodeURIComponent(id)}`,
-    );
-  }
-
-  /**
-   * _listImports - Lists Import Tasks.
-   *
-   * Note: Do not use this.
-   * It is present for internal usage only.
-   * This function can, and will, break and/or be removed at any point in time.
-   *
-   * @private
-   * @param {ListImportsPaginationOptions} options pagination options
-   *
-   * @return {APIResponse & ListImportsResponse} An ImportTask
-   */
-  async _listImports(options: ListImportsPaginationOptions) {
-    return await this.get<APIResponse & ListImportsResponse>(
-      this.baseURL + `/imports`,
-      options,
-    );
-  }
-
-  /**
-   * upsertPushProvider - Create or Update a push provider
-   *
-   * Note: Works only for v2 push version is enabled on app settings.
-   *
-   * @param {PushProviderConfig} configuration of the provider you want to create or update
-   *
-   * @return {APIResponse & PushProviderUpsertResponse} A push provider
-   */
-  async upsertPushProvider(pushProvider: PushProviderConfig) {
-    return await this.post<APIResponse & PushProviderUpsertResponse>(
-      this.baseURL + `/push_providers`,
-      {
-        push_provider: pushProvider,
-      },
-    );
-  }
-
-  /**
-   * deletePushProvider - Delete a push provider
-   *
-   * Note: Works only for v2 push version is enabled on app settings.
-   *
-   * @param {PushProviderID} type and foreign id of the push provider to be deleted
-   *
-   * @return {APIResponse} An API response
-   */
-  async deletePushProvider({ type, name }: PushProviderID) {
-    return await this.delete<APIResponse>(
-      this.baseURL +
-        `/push_providers/${encodeURIComponent(type)}/${encodeURIComponent(name)}`,
-    );
-  }
-
-  /**
-   * listPushProviders - Get all push providers in the app
-   *
-   * Note: Works only for v2 push version is enabled on app settings.
-   *
-   * @return {APIResponse & PushProviderListResponse} A push provider
-   */
-  async listPushProviders() {
-    return await this.get<APIResponse & PushProviderListResponse>(
-      this.baseURL + `/push_providers`,
-    );
-  }
-
-  /**
-   * creates an abort controller that will be used by the next HTTP Request.
-   */
-  createAbortControllerForNextRequest() {
-    return (this.nextRequestAbortController = new AbortController());
-  }
-
-  /**
-   * commits a pending message, making it visible in the channel and for other users
-   * @param id the message id
-   *
-   * @return {APIResponse & MessageResponse} The message
-   */
-  async commitMessage(id: string) {
-    return await this.post<APIResponse & MessageResponse>(
-      this.baseURL + `/messages/${encodeURIComponent(id)}/commit`,
-    );
-  }
-
-  /**
-   * Creates a poll
-   * @param poll PollData The poll that will be created
-   * @param userId string The user id (only serverside)
-   * @returns {APIResponse & CreatePollAPIResponse} The poll
-   */
-  async createPoll(poll: CreatePollData, userId?: string) {
-    return await this.post<APIResponse & CreatePollAPIResponse>(this.baseURL + `/polls`, {
-      ...poll,
-      ...(userId ? { user_id: userId } : {}),
-    });
-  }
-
-  /**
-   * Retrieves a poll
-   * @param id string The poll id
-   *  @param userId string The user id (only serverside)
-   * @returns {APIResponse & GetPollAPIResponse} The poll
-   */
-  async getPoll(id: string, userId?: string): Promise<APIResponse & GetPollAPIResponse> {
-    return await this.get<APIResponse & GetPollAPIResponse>(
-      this.baseURL + `/polls/${encodeURIComponent(id)}`,
-      userId ? { user_id: userId } : {},
-    );
-  }
-
-  /**
-   * Updates a poll
-   * @param poll PollData The poll that will be updated
-   * @param userId string The user id (only serverside)
-   * @returns {APIResponse & PollResponse} The poll
-   */
-  async updatePoll(poll: PollData, userId?: string) {
-    return await this.put<APIResponse & UpdatePollAPIResponse>(this.baseURL + `/polls`, {
-      ...poll,
-      ...(userId ? { user_id: userId } : {}),
-    });
-  }
-
-  /**
-   * Partially updates a poll
-   * @param id string The poll id
-   * @param {PartialPollUpdate} partialPollObject which should contain id and any of "set" or "unset" params;
-   * @param userId string The user id (only serverside)
-   * example: {id: "44f26af5-f2be-4fa7-9dac-71cf893781de", set:{field: value}, unset:["field2"]}
-   * @returns {APIResponse & UpdatePollAPIResponse} The poll
-   */
-  async partialUpdatePoll(
-    id: string,
-    partialPollObject: PartialPollUpdate,
-    userId?: string,
-  ): Promise<APIResponse & UpdatePollAPIResponse> {
-    return await this.patch<APIResponse & UpdatePollAPIResponse>(
-      this.baseURL + `/polls/${encodeURIComponent(id)}`,
-      {
-        ...partialPollObject,
-        ...(userId ? { user_id: userId } : {}),
-      },
-    );
-  }
-
-  /**
-   * Delete a poll
-   * @param id string The poll id
-   * @param userId string The user id (only serverside)
-   * @returns
-   */
-  async deletePoll(id: string, userId?: string): Promise<APIResponse> {
-    return await this.delete<APIResponse>(
-      this.baseURL + `/polls/${encodeURIComponent(id)}`,
-      {
-        ...(userId ? { user_id: userId } : {}),
-      },
-    );
-  }
-
-  /**
-   * Close a poll
-   * @param id string The poll id
-   * @param userId string The user id (only serverside)
-   * @returns {APIResponse & UpdatePollAPIResponse} The poll
-   */
-  closePoll(id: string, userId?: string): Promise<APIResponse & UpdatePollAPIResponse> {
-    return this.partialUpdatePoll(
-      id,
-      {
-        set: {
-          is_closed: true,
-        } as PartialPollUpdate['set'],
-      },
-      userId,
-    );
-  }
-
-  /**
-   * Creates a poll option
-   * @param pollId string The poll id
-   * @param option PollOptionData The poll option that will be created
-   * @param userId string The user id (only serverside)
-   * @returns {APIResponse & PollOptionResponse} The poll option
-   */
-  async createPollOption(pollId: string, option: PollOptionData, userId?: string) {
-    return await this.post<APIResponse & CreatePollOptionAPIResponse>(
-      this.baseURL + `/polls/${encodeURIComponent(pollId)}/options`,
-      {
-        ...option,
-        ...(userId ? { user_id: userId } : {}),
-      },
-    );
-  }
-
-  /**
-   * Retrieves a poll option
-   * @param pollId string The poll id
-   * @param optionId string The poll option id
-   * @param userId string The user id (only serverside)
-   * @returns {APIResponse & PollOptionResponse} The poll option
-   */
-  async getPollOption(pollId: string, optionId: string, userId?: string) {
-    return await this.get<APIResponse & GetPollOptionAPIResponse>(
-      this.baseURL +
-        `/polls/${encodeURIComponent(pollId)}/options/${encodeURIComponent(optionId)}`,
-      userId ? { user_id: userId } : {},
-    );
-  }
-
-  /**
-   * Updates a poll option
-   * @param pollId string The poll id
-   * @param option PollOptionData The poll option that will be updated
-   * @param userId string The user id (only serverside)
-   * @returns
-   */
-  async updatePollOption(pollId: string, option: PollOptionData, userId?: string) {
-    return await this.put<APIResponse & UpdatePollOptionAPIResponse>(
-      this.baseURL + `/polls/${encodeURIComponent(pollId)}/options`,
-      {
-        ...option,
-        ...(userId ? { user_id: userId } : {}),
-      },
-    );
-  }
-
-  /**
-   * Delete a poll option
-   * @param pollId string The poll id
-   * @param optionId string The poll option id
-   * @param userId string The user id (only serverside)
-   * @returns {APIResponse} The poll option
-   */
-  async deletePollOption(pollId: string, optionId: string, userId?: string) {
-    return await this.delete<APIResponse>(
-      this.baseURL +
-        `/polls/${encodeURIComponent(pollId)}/options/${encodeURIComponent(optionId)}`,
-      userId ? { user_id: userId } : {},
-    );
-  }
-
-  /**
-   * Cast vote on a poll
-   * @param messageId string The message id
-   * @param pollId string The poll id
-   * @param vote PollVoteData The vote that will be casted
-   * @param userId string The user id (only serverside)
-   * @returns {APIResponse & CastVoteAPIResponse} The poll vote
-   */
-  async castPollVote(
-    messageId: string,
-    pollId: string,
-    vote: PollVoteData,
-    userId?: string,
-  ) {
-    return await this.post<APIResponse & CastVoteAPIResponse>(
-      this.baseURL +
-        `/messages/${encodeURIComponent(messageId)}/polls/${encodeURIComponent(pollId)}/vote`,
-      {
-        vote,
-        ...(userId ? { user_id: userId } : {}),
-      },
-    );
-  }
-
-  /**
-   * Add a poll answer
-   * @param messageId string The message id
-   * @param pollId string The poll id
-   * @param answerText string The answer text
-   * @param userId string The user id (only serverside)
-   */
-  addPollAnswer(messageId: string, pollId: string, answerText: string, userId?: string) {
-    return this.castPollVote(
-      messageId,
-      pollId,
-      {
-        answer_text: answerText,
-      },
-      userId,
-    );
-  }
-
-  async removePollVote(
-    messageId: string,
-    pollId: string,
-    voteId: string,
-    userId?: string,
-  ) {
-    return await this.delete<APIResponse & { vote: PollVote }>(
-      this.baseURL +
-        `/messages/${encodeURIComponent(messageId)}/polls/${encodeURIComponent(pollId)}/vote/${encodeURIComponent(
-          voteId,
-        )}`,
-      {
-        ...(userId ? { user_id: userId } : {}),
-      },
-    );
-  }
-
-  /**
-   * Queries polls
-   * @param filter
-   * @param sort
-   * @param options Option object, {limit: 10, offset:0}
-   * @param userId string The user id (only serverside)
-   * @returns {APIResponse & QueryPollsResponse} The polls
-   */
-  async queryPolls(
-    filter: QueryPollsFilters = {},
-    sort: PollSort = [],
-    options: QueryPollsOptions = {},
-    userId?: string,
-  ): Promise<APIResponse & QueryPollsResponse> {
-    const q = userId ? `?user_id=${userId}` : '';
-    return await this.post<APIResponse & QueryPollsResponse>(
-      this.baseURL + `/polls/query${q}`,
-      {
-        filter,
-        sort: normalizeQuerySort(sort),
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * Queries poll votes
-   * @param pollId
-   * @param filter
-   * @param sort
-   * @param options Option object, {limit: 10, offset:0}
-   * @param userId string The user id (only serverside)
-   * @returns {APIResponse & PollVotesAPIResponse} The poll votes
-   */
-  async queryPollVotes(
-    pollId: string,
-    filter: QueryVotesFilters = {},
-    sort: VoteSort = [],
-    options: QueryVotesOptions = {},
-    userId?: string,
-  ): Promise<APIResponse & PollVotesAPIResponse> {
-    const q = userId ? `?user_id=${userId}` : '';
-    return await this.post<APIResponse & PollVotesAPIResponse>(
-      this.baseURL + `/polls/${encodeURIComponent(pollId)}/votes${q}`,
-      {
-        filter,
-        sort: normalizeQuerySort(sort),
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * Queries poll answers
-   * @param pollId
-   * @param filter
-   * @param sort
-   * @param options Option object, {limit: 10, offset:0}
-   * @param userId string The user id (only serverside)
-   * @returns {APIResponse & PollAnswersAPIResponse} The poll votes
-   */
-  async queryPollAnswers(
-    pollId: string,
-    filter: QueryVotesFilters = {},
-    sort: VoteSort = [],
-    options: QueryVotesOptions = {},
-    userId?: string,
-  ): Promise<APIResponse & PollAnswersAPIResponse> {
-    const q = userId ? `?user_id=${userId}` : '';
-    return await this.post<APIResponse & PollAnswersAPIResponse>(
-      this.baseURL + `/polls/${encodeURIComponent(pollId)}/votes${q}`,
-      {
-        filter: { ...filter, is_answer: true },
-        sort: normalizeQuerySort(sort),
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * Query message history
-   * @param filter
-   * @param sort
-   * @param options Option object, {limit: 10}
-   * @returns {APIResponse & QueryMessageHistoryResponse} The message histories
-   */
-  async queryMessageHistory(
-    filter: QueryMessageHistoryFilters = {},
-    sort: QueryMessageHistorySort = [],
-    options: QueryMessageHistoryOptions = {},
-  ): Promise<APIResponse & QueryMessageHistoryResponse> {
-    return await this.post<APIResponse & QueryMessageHistoryResponse>(
-      this.baseURL + '/messages/history',
-      {
-        filter,
-        sort: normalizeQuerySort(sort),
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * updateFlags - reviews/unflags flagged message
-   *
-   * @param {string[]} message_ids list of message IDs
-   * @param {string} options Option object in case user ID is set to review all the flagged messages by the user
-   * @param {string} reviewed_by user ID who reviewed the flagged message
-   * @returns {APIResponse}
-   */
-  async updateFlags(
-    message_ids: string[],
-    reviewed_by: string,
-    options: { user_id?: string } = {},
-  ) {
-    return await this.post<APIResponse>(
-      this.baseURL + '/automod/v1/moderation/update_flags',
-      {
-        message_ids,
-        reviewed_by,
-        ...options,
-      },
-    );
-  }
-
-  /**
-   * queryDrafts - Queries drafts for the current user
-   *
-   * @param {object} [options] Query options
-   * @param {object} [options.filter] Filters for the query
-   * @param {number} [options.sort] Sort parameters
-   * @param {number} [options.limit] Limit the number of results
-   * @param {string} [options.next] Pagination parameter
-   * @param {string} [options.prev] Pagination parameter
-   * @param {string} [options.user_id] Has to be provided when called server-side
-   *
-   * @return {Promise<APIResponse & { drafts: DraftResponse[]; next?: string }>} Response containing the drafts
-   */
-  async queryDrafts(
-    options: Pager & {
-      filter?: DraftFilters;
-      sort?: DraftSort;
-      user_id?: string;
-    } = {},
-  ) {
-    const payload = {
-      ...options,
-      sort: options.sort ? normalizeQuerySort(options.sort) : undefined,
-    };
-
-    return await this.post<QueryDraftsResponse>(this.baseURL + '/drafts/query', payload);
-  }
-
-  /**
-   * createReminder - Creates a reminder for a message
-   *
-   * @param {CreateReminderOptions} options The options for creating the reminder
-   * @returns {Promise<ReminderAPIResponse>}
-   */
-  async createReminder({ messageId, ...options }: CreateReminderOptions) {
-    return await this.post<ReminderAPIResponse>(
-      `${this.baseURL}/messages/${messageId}/reminders`,
-      options,
-    );
-  }
-
-  /**
-   * updateReminder - Updates an existing reminder for a message
-   *
-   * @param {UpdateReminderOptions} options The options for updating the reminder
-   * @returns {Promise<ReminderAPIResponse>}
-   */
-  async updateReminder({ messageId, ...options }: UpdateReminderOptions) {
-    return await this.patch<ReminderAPIResponse>(
-      `${this.baseURL}/messages/${messageId}/reminders`,
-      options,
-    );
-  }
-
-  /**
-   * deleteReminder - Deletes a reminder for a message
-   *
-   * @param {string} messageId The ID of the message whose reminder to delete
-   * @param {string} [userId] Optional user ID, required for server-side operations
-   * @returns {Promise<APIResponse>}
-   */
-  async deleteReminder(messageId: string, userId?: string): Promise<APIResponse> {
-    return await this.delete<APIResponse>(
-      `${this.baseURL}/messages/${messageId}/reminders`,
-      userId ? { user_id: userId } : {},
-    );
-  }
-
-  /**
-   * queryReminders - Queries reminders based on given filters
-   *
-   * @param {QueryRemindersOptions} options The options for querying reminders
-   * @returns {Promise<QueryRemindersResponse>}
-   */
-  async queryReminders({ filter, sort, ...rest }: QueryRemindersOptions = {}) {
-    return await this.post<QueryRemindersResponse>(`${this.baseURL}/reminders/query`, {
-      filter,
-      sort: sort && normalizeQuerySort(sort),
-      ...rest,
-    });
-  }
-
-  /**
-   * queryTeamUsageStats - Queries team-level usage statistics from the warehouse database
-   *
-   * Returns all 16 metrics grouped by team with cursor-based pagination.
-   *
-   * Date Range Options (mutually exclusive):
-   * - Use 'month' parameter (YYYY-MM format) for monthly aggregated values
-   * - Use 'start_date'/'end_date' parameters (YYYY-MM-DD format) for daily breakdown
-   * - If neither provided, defaults to current month (monthly mode)
-   *
-   * This endpoint is server-side only.
-   *
-   * @param {QueryTeamUsageStatsOptions} options The options for querying team usage stats
-   * @returns {Promise<QueryTeamUsageStatsResponse>}
-   */
-  async queryTeamUsageStats(options: QueryTeamUsageStatsOptions = {}) {
-    return await this.post<QueryTeamUsageStatsResponse>(
-      `${this.baseURL}/stats/team_usage`,
-      options,
-    );
-  }
-
-  /**
-   * updateLocation - Updates a location
-   *
-   * @param location SharedLocationRequest the location data to update
-   *
-   * @returns {Promise<SharedLocationResponse>} The server response
-   */
-  async updateLocation(location: UpdateLocationPayload) {
-    return await this.put<SharedLocationResponse>(
-      this.baseURL + `/users/live_locations`,
-      location,
-    );
-  }
-
-  /**
-   * uploadFile - Uploads a file to the configured storage (defaults to Stream CDN)
-   *
-   * @param {string|NodeJS.ReadableStream|Buffer|File} uri The file to upload
-   * @param {string} [name] The name of the file
-   * @param {string} [contentType] The content type of the file
-   * @param {UserResponse} [user] Optional user information
-   * @param {AxiosRequestConfig} [axiosRequestConfig] Optional axios config (e.g. onUploadProgress for progress tracking)
-   *
-   * @return {Promise<SendFileAPIResponse>} Response containing the file URL
-   */
-  uploadFile(
+  uploadFile_(
     uri: string | NodeJS.ReadableStream | Buffer | File,
     name?: string,
     contentType?: string,
     user?: UserResponse,
     axiosRequestConfig?: AxiosRequestConfig,
   ) {
-    return this.sendFile(
+    return this.api.sendFile(
       `${this.baseURL}/uploads/file`,
       uri,
       name,
@@ -5214,24 +2309,23 @@ export class StreamChat {
   }
 
   /**
-   * uploadImage - Uploads an image to the configured storage (defaults to Stream CDN)
+   * Uploads an image to the configured storage (defaults to Stream CDN).
    *
-   * @param {string|NodeJS.ReadableStream|File} uri The image to upload
-   * @param {string} [name] The name of the image
-   * @param {string} [contentType] The content type of the image
-   * @param {UserResponse} [user] Optional user information
-   * @param {AxiosRequestConfig} [axiosRequestConfig] Optional axios config (e.g. onUploadProgress for progress tracking)
-   *
-   * @return {Promise<SendFileAPIResponse>} Response containing the image URL
+   * @param uri - The image to upload.
+   * @param name - The name of the image (optional).
+   * @param contentType - The content type of the image (optional).
+   * @param user - User information (optional).
+   * @param axiosRequestConfig - Axios config, e.g. `onUploadProgress` for progress tracking (optional).
+   * @returns Response containing the image URL.
    */
-  uploadImage(
+  uploadImage_(
     uri: string | NodeJS.ReadableStream | File,
     name?: string,
     contentType?: string,
     user?: UserResponse,
     axiosRequestConfig?: AxiosRequestConfig,
   ) {
-    return this.sendFile(
+    return this.api.sendFile(
       `${this.baseURL}/uploads/image`,
       uri,
       name,
@@ -5240,198 +2334,18 @@ export class StreamChat {
       axiosRequestConfig,
     );
   }
-
   /**
-   * deleteFile - Deletes a file from the configured storage
+   * Marks the channels as delivered for the given messages and the user.
    *
-   * @param {string} url The URL of the file to delete
-   *
-   * @return {Promise<APIResponse>} The server response
+   * @param request - Mark delivered options.
+   * @returns The server response, or `undefined` if there are no messages to mark.
    */
-  deleteFile(url: string) {
-    return this.delete<APIResponse>(`${this.baseURL}/uploads/file`, { url });
-  }
-
-  /**
-   * deleteImage - Deletes an image from the configured storage
-   *
-   * @param {string} url The URL of the image to delete
-   *
-   * @return {Promise<APIResponse>} The server response
-   */
-  deleteImage(url: string) {
-    return this.delete<APIResponse>(`${this.baseURL}/uploads/image`, { url });
-  }
-
-  /**
-   * Mark the channels delivered for the given messages and the user
-   *
-   * @param {MarkDeliveredOptions} data
-   * @return {Promise<EventAPIResponse | void>} Description
-   */
-  async markChannelsDelivered(data: MarkDeliveredOptions) {
-    if (!data?.latest_delivered_messages?.length) return;
-    return await this.post<EventAPIResponse>(this.baseURL + '/channels/delivered', data);
+  async markChannelsDelivered(request?: Gen_MarkDeliveredRequest) {
+    if (!request?.latest_delivered_messages?.length) return;
+    return await this.markDelivered(request);
   }
 
   syncDeliveredCandidates(collections: Channel[]) {
     this.messageDeliveryReporter.syncDeliveredCandidates(collections);
-  }
-
-  /**
-   *  Update Channels Batch
-   *
-   *  @param {UpdateChannelsBatchOptions} payload for updating channels in batch
-   *  @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
-   */
-  async updateChannelsBatch(payload: UpdateChannelsBatchOptions) {
-    return await this.put<APIResponse & UpdateChannelsBatchResponse>(
-      this.baseURL + `/channels/batch`,
-      payload,
-    );
-  }
-
-  /**
-   * createPredefinedFilter - Creates a new predefined filter (server-side only)
-   *
-   * @param {CreatePredefinedFilterOptions} options Predefined filter options
-   *
-   * @return {Promise<PredefinedFilterResponse>} The created predefined filter
-   */
-  async createPredefinedFilter<
-    F extends Record<string, unknown> = Record<string, unknown>,
-  >(options: CreatePredefinedFilterOptions<F>) {
-    this.validateServerSideAuth();
-    return await this.post<PredefinedFilterResponse<F>>(
-      `${this.baseURL}/predefined_filters`,
-      options,
-    );
-  }
-
-  /**
-   * getPredefinedFilter - Gets a predefined filter by name (server-side only)
-   *
-   * @param {string} name Predefined filter name
-   *
-   * @return {Promise<PredefinedFilterResponse>} The predefined filter
-   */
-  async getPredefinedFilter<F extends Record<string, unknown> = Record<string, unknown>>(
-    name: string,
-  ) {
-    this.validateServerSideAuth();
-    return await this.get<PredefinedFilterResponse<F>>(
-      `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
-    );
-  }
-
-  /**
-   * updatePredefinedFilter - Updates a predefined filter (server-side only)
-   *
-   * @param {string} name Predefined filter name
-   * @param {UpdatePredefinedFilterOptions} options Predefined filter options
-   *
-   * @return {Promise<PredefinedFilterResponse>} The updated predefined filter
-   */
-  async updatePredefinedFilter<
-    F extends Record<string, unknown> = Record<string, unknown>,
-  >(name: string, options: UpdatePredefinedFilterOptions<F>) {
-    this.validateServerSideAuth();
-    return await this.put<PredefinedFilterResponse<F>>(
-      `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
-      options,
-    );
-  }
-
-  /**
-   * deletePredefinedFilter - Deletes a predefined filter (server-side only)
-   *
-   * @param {string} name Predefined filter name
-   *
-   * @return {Promise<APIResponse>} The server response
-   */
-  async deletePredefinedFilter(name: string) {
-    this.validateServerSideAuth();
-    return await this.delete<APIResponse>(
-      `${this.baseURL}/predefined_filters/${encodeURIComponent(name)}`,
-    );
-  }
-
-  /**
-   * listPredefinedFilters - Lists all predefined filters (server-side only)
-   *
-   * @param {ListPredefinedFiltersOptions} options Query options
-   *
-   * @return {Promise<ListPredefinedFiltersResponse>} The list of predefined filters
-   */
-  async listPredefinedFilters<
-    F extends Record<string, unknown> = Record<string, unknown>,
-  >(options: ListPredefinedFiltersOptions = {}) {
-    this.validateServerSideAuth();
-    const { sort, ...paginationOptions } = options;
-    return await this.get<ListPredefinedFiltersResponse<F>>(
-      `${this.baseURL}/predefined_filters`,
-      {
-        ...paginationOptions,
-        ...(sort ? { sort: JSON.stringify(sort) } : {}),
-      },
-    );
-  }
-
-  /**
-   * setRetentionPolicy - Creates or updates a retention policy for the app.
-   * Server-side only.
-   *
-   * @param {string} policy The policy type ('old-messages' or 'inactive-channels')
-   * @param {number} maxAgeHours Max age in hours (24-43800)
-   * @returns {Promise<SetRetentionPolicyResponse>}
-   */
-  async setRetentionPolicy(policy: string, maxAgeHours: number) {
-    this.validateServerSideAuth();
-    return await this.post<SetRetentionPolicyResponse>(
-      this.baseURL + '/retention_policy',
-      { policy, max_age_hours: maxAgeHours },
-    );
-  }
-
-  /**
-   * deleteRetentionPolicy - Deletes a retention policy for the app.
-   * Server-side only.
-   *
-   * @param {string} policy The policy type ('old-messages' or 'inactive-channels')
-   * @returns {Promise<DeleteRetentionPolicyResponse>}
-   */
-  async deleteRetentionPolicy(policy: string) {
-    this.validateServerSideAuth();
-    return await this.post<DeleteRetentionPolicyResponse>(
-      this.baseURL + '/retention_policy/delete',
-      { policy },
-    );
-  }
-
-  /**
-   * getRetentionPolicy - Returns all retention policies configured for the app.
-   * Server-side only.
-   *
-   * @returns {Promise<GetRetentionPolicyResponse>}
-   */
-  async getRetentionPolicy() {
-    this.validateServerSideAuth();
-    return await this.get<GetRetentionPolicyResponse>(this.baseURL + '/retention_policy');
-  }
-
-  /**
-   * getRetentionPolicyRuns - Returns filtered and sorted retention cleanup run history.
-   * Supports filter_conditions on 'policy' and 'date' fields.
-   * Server-side only.
-   *
-   * @param {GetRetentionPolicyRunsOptions} options Filter, sort, and pagination options
-   * @returns {Promise<GetRetentionPolicyRunsResponse>}
-   */
-  async getRetentionPolicyRuns(options: GetRetentionPolicyRunsOptions = {}) {
-    this.validateServerSideAuth();
-    return await this.post<GetRetentionPolicyRunsResponse>(
-      this.baseURL + '/retention_policy/runs',
-      options,
-    );
   }
 }

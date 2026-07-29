@@ -129,14 +129,14 @@ export class AttachmentManager {
     this.composer.updateConfig({ attachments: { acceptedFiles } });
   }
 
-  /*
+  /**
   @deprecated attachments can be filtered using injecting pre-upload middleware
    */
   get fileUploadFilter() {
     return this.config.fileUploadFilter;
   }
 
-  /*
+  /**
   @deprecated attachments can be filtered using injecting pre-upload middleware
    */
   set fileUploadFilter(fileUploadFilter: AttachmentManagerConfig['fileUploadFilter']) {
@@ -168,8 +168,16 @@ export class AttachmentManager {
     )?.includes('upload-file');
   }
 
+  get hasCustomDoUploadRequest() {
+    return typeof this.config.doUploadRequest === 'function';
+  }
+
+  get hasAvailableUploadSlots() {
+    return this.availableUploadSlots > 0;
+  }
+
   get isUploadEnabled() {
-    return this.hasUploadPermission && this.availableUploadSlots > 0;
+    return this.hasUploadPermission && this.hasAvailableUploadSlots;
   }
 
   get successfulUploads() {
@@ -418,8 +426,10 @@ export class AttachmentManager {
           });
 
     const localAttachment: LocalUploadAttachment = {
-      file_size: file.size,
-      mime_type: file.type,
+      custom: {
+        file_size: file.size,
+        mime_type: file.type,
+      },
       localMetadata: {
         file,
         id: generateUUIDv4(),
@@ -448,8 +458,12 @@ export class AttachmentManager {
       localAttachment.thumb_url = fileLike.thumb_url;
     }
 
-    if (isFileReference(fileLike) && fileLike.duration) {
-      localAttachment.duration = fileLike.duration;
+    if (
+      isFileReference(fileLike) &&
+      fileLike.duration &&
+      localAttachment.type === 'voiceRecording'
+    ) {
+      localAttachment.custom.duration = fileLike.duration;
     }
 
     return localAttachment;
@@ -551,8 +565,7 @@ export class AttachmentManager {
           mimeType: fileLike.type,
         });
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { duration, ...result } = await this.channel[
+    const { duration: _duration, ...result } = await this.channel[
       isImageFile(fileLike) ? 'sendImage' : 'sendFile'
     ](file, undefined, undefined, undefined, axiosUploadConfig);
     return result;
@@ -726,7 +739,12 @@ export class AttachmentManager {
   };
 
   uploadFiles = async (files: FileReference[] | FileList | FileLike[]) => {
-    if (!this.isUploadEnabled) return;
+    if (
+      (this.hasCustomDoUploadRequest && !this.hasAvailableUploadSlots) ||
+      (!this.hasCustomDoUploadRequest && !this.isUploadEnabled)
+    )
+      return;
+
     const iterableFiles: FileReference[] | FileLike[] = isFileList(files)
       ? Array.from(files)
       : files;

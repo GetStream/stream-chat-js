@@ -1,12 +1,10 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 import {
   compare,
   resolveDotPathValue as defaultResolvePathValue,
   normalizeComparedValues,
 } from './utility.normalization';
 import { normalizeQuerySort } from '../utils';
-import type { AscDesc } from '../types';
+import type { AscDesc, SortParamRequest } from '../types';
 import type { Comparator, PathResolver } from './types.normalization';
 
 export type ItemLocation = {
@@ -124,13 +122,15 @@ export function binarySearch<T>({
  * (but they can still move relative to others — sort in JS is not guaranteed stable in older engines, though modern V8/Node/Chrome/Firefox make it stable)
  *
  * Positive number (> 0) → a comes after b
- * @param sort
- * @param resolvePathValue
- * @param tiebreaker
+ *
+ * @param params - Comparator configuration.
+ * @param params.sort - The sort specification defining fields and directions.
+ * @param params.resolvePathValue - Resolver used to read a field value from an item.
+ * @param params.tiebreaker - Comparator applied when all sort terms are equal.
  */
 export function makeComparator<
   T,
-  S extends Record<string, AscDesc> | Record<string, AscDesc>[],
+  S extends Record<string, AscDesc> | Record<string, AscDesc>[] | SortParamRequest[],
 >({
   sort,
   resolvePathValue = defaultResolvePathValue,
