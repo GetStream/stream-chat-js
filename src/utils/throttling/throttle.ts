@@ -67,15 +67,16 @@ export const throttle = <T extends unknown[]>(
     throttledFn(this: unknown, ...args: T) {
       const now = Date.now();
 
-      const hasBeenInvoked = lastInvokeTime != null;
+      const lastInvoke = lastInvokeTime;
 
-      if (!hasBeenInvoked && !leading) lastInvokeTime = now;
+      if (lastInvoke == null && !leading) lastInvokeTime = now;
 
-      const timeSinceLast = hasBeenInvoked ? now - lastInvokeTime! : timeout;
+      const timeSinceLast = lastInvoke == null ? timeout : now - lastInvoke;
       const remaining = timeout - timeSinceLast;
 
       if (trailing) {
         storedArgs = args;
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
         storedThis = this;
       }
 

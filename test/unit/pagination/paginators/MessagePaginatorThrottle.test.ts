@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessagePaginator } from '../../../../src/pagination/paginators/MessagePaginator';
 import { setStateThrottlingEnabled } from '../../../../src/pagination/paginators/stateThrottling';
+import { MessageStore } from '../../../../src/messageStore/MessageStore';
+import { applyReactionLocally } from '../../../../src/messageStore/applyReactionLocally';
 import { formatMessage } from '../../../../src';
 import { generateMsg } from '../../test-utils/generateMessage';
 import type { Channel } from '../../../../src/channel';
-import type { LocalMessage, MessageResponse } from '../../../../src/types';
+import type { StreamChat } from '../../../../src/client';
+import type { LocalMessage, MessageResponse, Reaction } from '../../../../src/types';
 
 const msg = (id: string, day: number): LocalMessage =>
   formatMessage(
@@ -136,5 +139,87 @@ describe('MessagePaginator — state publish throttling', () => {
     p.ingestItem(msg('m3', 3));
     p.ingestItem(msg('m4', 4));
     expect(ids(p)).toEqual(['m1', 'm2', 'm3', 'm4']); // no timer advance needed
+  });
+});
+
+// End-to-end optimistic path: a real store-backed paginator (StoreBackedItemIndex), driven through
+// the actual optimistic wiring (applyReactionLocally → store.upsert + store.flushSubscribers() →
+// holder.flushState() → throttle.flush()). This is the path the "your own sends/reactions appear
+// instantly" guarantee rides on — distinct from calling paginator.flushState() directly above.
+describe('MessagePaginator — optimistic (local-user) writes bypass the throttle (end-to-end)', () => {
+  let store: MessageStore;
+  let client: StreamChat;
+  let channel: Channel;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    setStateThrottlingEnabled(true);
+    store = new MessageStore();
+    client = {
+      messageStore: store,
+      user: { id: 'me' },
+    } as unknown as StreamChat;
+    channel = {
+      cid: 'channel-id',
+      getReplies: vi.fn(),
+      query: vi.fn(),
+      // MessagePaginator.createItemIndex reads this to build a StoreBackedItemIndex, so the paginator
+      // is a real subscriber of `store` (gets onMessagesChanged + flushState).
+      getClient: () => client,
+    } as unknown as Channel;
+  });
+
+  afterEach(() => {
+    setStateThrottlingEnabled(false);
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  const makeStoreBacked = () =>
+    new MessagePaginator({ channel, paginatorOptions: { stateThrottleMs: THROTTLE } });
+
+  const seedAndOpenWindow = (p: MessagePaginator) => {
+    p.setItems({
+      valueOrFactory: [msg('m1', 1), msg('m2', 2)],
+      isFirstPage: true,
+      isLastPage: true,
+    });
+    p.ingestItem(msg('m3', 3)); // leading edge — opens the throttle window
+    expect(ids(p)).toEqual(['m1', 'm2', 'm3']);
+  };
+
+  const hasLike = (p: MessagePaginator, id: string) =>
+    !!p.items?.find((m) => m.id === id)?.own_reactions?.some((r) => r.type === 'like');
+
+  it('a local reaction renders immediately — no timer advance (flushSubscribers → flushState → flush)', () => {
+    const p = makeStoreBacked();
+    seedAndOpenWindow(p);
+    expect(hasLike(p, 'm3')).toBe(false);
+
+    // The real optimistic entry point: upserts the reacted message (deferred by the throttle) and
+    // then flushSubscribers() to bypass it.
+    applyReactionLocally(client, {
+      messageId: 'm3',
+      reaction: { type: 'like' } as unknown as Reaction,
+    });
+
+    // Reflected WITHOUT advancing the throttle timer.
+    expect(hasLike(p, 'm3')).toBe(true);
+  });
+
+  it('a non-optimistic store change (no flush) stays throttled until the window closes', () => {
+    const p = makeStoreBacked();
+    seedAndOpenWindow(p);
+
+    const current = store.get('m3');
+    if (!current) throw new Error('expected m3 to be held by the store');
+    // Simulate a WS-driven change that does NOT go through the optimistic flush.
+    store.upsert({ ...current, text: 'from-server' });
+
+    // Deferred — not visible until the trailing edge.
+    expect(p.items?.find((m) => m.id === 'm3')?.text).not.toBe('from-server');
+    vi.advanceTimersByTime(THROTTLE);
+    expect(p.items?.find((m) => m.id === 'm3')?.text).toBe('from-server');
   });
 });
