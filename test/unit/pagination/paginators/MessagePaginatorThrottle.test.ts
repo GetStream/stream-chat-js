@@ -223,3 +223,132 @@ describe('MessagePaginator — optimistic (local-user) writes bypass the throttl
     expect(p.items?.find((m) => m.id === 'm3')?.text).toBe('from-server');
   });
 });
+
+// Interval views (anchoredHead / logicalHead / logicalTail) publish on their OWN throttle, so a
+// sibling content update to an off-active-window view still lands within one interval — it does not
+// depend on `state.items` ever publishing again.
+describe('MessagePaginator — interval-view (anchoredHead) publish throttling', () => {
+  let channel: Channel;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    setStateThrottlingEnabled(true);
+    channel = {
+      cid: 'channel-id',
+      getReplies: vi.fn(),
+      query: vi.fn(),
+    } as unknown as Channel;
+  });
+
+  afterEach(() => {
+    setStateThrottlingEnabled(false);
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  const make = () =>
+    new MessagePaginator({ channel, paginatorOptions: { stateThrottleMs: THROTTLE } });
+
+  // Count anchoredHead publishes, ignoring the initial synchronous emit (as `useStateStore` would).
+  const trackAnchored = (p: MessagePaginator) => {
+    let fires = 0;
+    const unsub = p.intervalViews.subscribeWithSelector(
+      (s) => ({ items: s.anchoredHead }),
+      () => {
+        fires += 1;
+      },
+    );
+    fires = 0;
+    return { count: () => fires, unsub };
+  };
+
+  // Simulate a sibling holder rewriting a held message's content in the shared store.
+  const editInIndex = (p: MessagePaginator, id: string, text: string) => {
+    const current = p.getItem(id);
+    if (!current) throw new Error(`expected ${id} to be held`);
+    (
+      p as unknown as { _itemIndex: { setOne: (m: LocalMessage) => void } }
+    )._itemIndex.setOne({ ...current, text });
+  };
+
+  const notify = (p: MessagePaginator, id: string) =>
+    p.onMessagesChanged({ changedIds: new Set([id]), removedIds: new Set() });
+
+  it('coalesces a burst of sibling content updates into leading + trailing anchoredHead publishes', () => {
+    const p = make();
+    p.ingestPage({
+      page: [msg('m1', 1), msg('m2', 2), msg('m3', 3)],
+      isHead: true,
+      isTail: false,
+      setActive: true,
+    });
+    expect(p.anchoredHeadItems.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
+
+    const anchored = trackAnchored(p);
+
+    editInIndex(p, 'm1', 'e1');
+    notify(p, 'm1'); // leading edge -> immediate publish
+    editInIndex(p, 'm2', 'e2');
+    notify(p, 'm2'); // within window -> deferred
+    editInIndex(p, 'm3', 'e3');
+    notify(p, 'm3'); // within window -> deferred
+    expect(anchored.count()).toBe(1); // only the leading edge so far
+
+    vi.advanceTimersByTime(THROTTLE); // trailing edge
+    expect(anchored.count()).toBe(2); // coalesced 3 -> 2, not one publish per event
+    expect(p.anchoredHeadItems.find((m) => m.id === 'm1')?.text).toBe('e1');
+    expect(p.anchoredHeadItems.find((m) => m.id === 'm2')?.text).toBe('e2');
+    expect(p.anchoredHeadItems.find((m) => m.id === 'm3')?.text).toBe('e3');
+
+    anchored.unsub();
+  });
+
+  it('refreshes anchoredHead on its own throttle even when the active window is a different, quiet interval', () => {
+    const p = make();
+    // Head page becomes the anchored head (and the active window).
+    p.ingestPage({
+      page: [msg('h1', 10), msg('h2', 11)],
+      isHead: true,
+      isTail: false,
+      setActive: true,
+    });
+    // Jump to an older, disjoint window and make it the active one.
+    p.ingestPage({
+      page: [msg('o1', 1), msg('o2', 2)],
+      isHead: false,
+      isTail: true,
+      setActive: true,
+    });
+    expect(ids(p)).toEqual(['o1', 'o2']); // active window = the old page
+    expect(p.anchoredHeadItems.map((m) => m.id)).toEqual(['h1', 'h2']);
+
+    let stateFires = 0;
+    const stateUnsub = p.state.subscribeWithSelector(
+      (s) => ({ items: s.items }),
+      () => {
+        stateFires += 1;
+      },
+    );
+    stateFires = 0;
+    const anchored = trackAnchored(p);
+
+    // A sibling content change to a HEAD message — NOT in the active (old) window.
+    editInIndex(p, 'h1', 'edited-in-head');
+    notify(p, 'h1');
+
+    // anchoredHead refreshes via its own throttle's leading edge, without any timer advance...
+    expect(anchored.count()).toBe(1);
+    expect(p.anchoredHeadItems.find((m) => m.id === 'h1')?.text).toBe('edited-in-head');
+    // ...while `state.items` (the quiet active window) never publishes — h1 isn't in it.
+    expect(stateFires).toBe(0);
+    expect(ids(p)).toEqual(['o1', 'o2']);
+
+    // A single change fires only the leading edge — nothing stray on the trailing edge.
+    vi.advanceTimersByTime(THROTTLE);
+    expect(anchored.count()).toBe(1);
+
+    stateUnsub();
+    anchored.unsub();
+  });
+});

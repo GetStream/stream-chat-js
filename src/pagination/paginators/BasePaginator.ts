@@ -424,6 +424,17 @@ export abstract class BasePaginator<T, Q> {
   private _windowPublishThrottle?: Throttled<[]>;
 
   /**
+   * Throttle for the interval-view publishes (`anchoredHead` / `logicalHead` / `logicalTail`) driven
+   * by sibling store updates. Independent of {@link _windowPublishThrottle} so a view refresh lands on
+   * its own trailing edge even when `state.items` stays quiet. Created alongside it (only when
+   * `config.stateThrottleMs` is set); buffers changed ids in {@link _pendingViewChangedIds}.
+   */
+  private _viewPublishThrottle?: Throttled<[]>;
+
+  /** Changed ids buffered since the last {@link flushIntervalViewPublish} (throttled paginators only). */
+  private _pendingViewChangedIds = new Set<string>();
+
+  /**
    * Intervals keep items in disconnected ranges.
    * That is a scenario of jumping to non-sequential pages.
    * Intervals are populated only if itemIndex is provided.
@@ -510,6 +521,13 @@ export abstract class BasePaginator<T, Q> {
       // trailing edge re-projects the active window fresh, so a burst emits ~once per interval.
       this._windowPublishThrottle = throttle(
         () => this.flushWindowPublish(),
+        this.config.stateThrottleMs,
+        { leading: true, trailing: true },
+      );
+      // Interval view publishes ride their own throttle so they coalesce like `state.items` but land
+      // on an independent trailing edge (see {@link _viewPublishThrottle}).
+      this._viewPublishThrottle = throttle(
+        () => this.flushIntervalViewPublish(),
         this.config.stateThrottleMs,
         { leading: true, trailing: true },
       );
@@ -784,6 +802,7 @@ export abstract class BasePaginator<T, Q> {
    * publishing. No-ops when the views are already empty so a reset does not emit needlessly.
    */
   protected clearIntervalViews() {
+    this._pendingViewChangedIds.clear();
     const { logicalHead, logicalTail, anchoredHead } =
       this.intervalViews.getLatestValue();
     // Clear whenever any view holds items; skip only when all are already empty, so a reset on an
@@ -906,13 +925,26 @@ export abstract class BasePaginator<T, Q> {
   }
 
   /**
-   * {@link MessageStoreSubscriber.flushState}: emit any pending throttled window publish immediately.
-   * The message store calls this after an optimistic (local-user) write so it renders without throttle
-   * delay. No-op when throttling is off or nothing is pending.
+   * {@link MessageStoreSubscriber.flushState}: emit any pending throttled window + interval-view
+   * publishes immediately. The message store calls this after an optimistic (local-user) write so it
+   * renders without throttle delay. No-op when throttling is off or nothing is pending.
    */
   flushState = (): void => {
     this._windowPublishThrottle?.flush();
+    this._viewPublishThrottle?.flush();
   };
+
+  /**
+   * {@link _viewPublishThrottle} boundary: apply every interval-view change buffered since the last
+   * flush, then clear the buffer. Independent of the `state.items` window publish, so a view update
+   * lands within one throttle interval even when the active window stays quiet (e.g. a reaction on a
+   * head message while a non-head window is active). No-op when nothing was buffered.
+   */
+  private flushIntervalViewPublish(): void {
+    if (!this._pendingViewChangedIds.size) return;
+    this.refreshIntervalViewsForChangedIds(this._pendingViewChangedIds);
+    this._pendingViewChangedIds.clear();
+  }
 
   /**
    * Refresh any tracked {@link intervalViews} field (logical head, logical tail, anchored head) that
@@ -922,10 +954,11 @@ export abstract class BasePaginator<T, Q> {
    * would otherwise leave stale references in `anchoredHead`/`logicalHead`/`logicalTail` even though
    * the active window (`state.items`, see {@link onMessagesChanged}) was refreshed.
    *
-   * Handled independently of `state.items` and published immediately — these views are never
-   * throttled, matching their ingest/drop publishing. When the anchored head is also the active
-   * interval its content is projected here as well as into `state.items`; deduping that double
-   * projection is a separate, deferred perf follow-up.
+   * Called immediately for un-throttled paginators, or from {@link flushIntervalViewPublish} at the
+   * view-publish throttle boundary when throttled — see {@link onMessagesChanged}. Handled
+   * independently of `state.items`. When the anchored head is also the active interval its content is
+   * projected here as well as into `state.items`; deduping that double projection is a separate,
+   * deferred perf follow-up.
    */
   private refreshIntervalViewsForChangedIds(changedIds: ReadonlySet<string>): void {
     const head = this.liveHeadLogical;
@@ -957,7 +990,17 @@ export abstract class BasePaginator<T, Q> {
   }
 
   onMessagesChanged({ changedIds }: MessageStoreChangeBatch): void {
-    this.refreshIntervalViewsForChangedIds(changedIds);
+    // A sibling holder changed shared content: refresh any tracked interval view (logical head/tail,
+    // anchored head) holding a changed id — independent of the active window below, since a view can
+    // hold a changed id the active window does not. When throttled, buffer the ids and tick the
+    // view-publish throttle so refreshes coalesce (once per interval) yet still land on their own
+    // trailing edge even if `state.items` never publishes again; otherwise publish immediately.
+    if (this.isStateThrottled) {
+      for (const id of changedIds) this._pendingViewChangedIds.add(id);
+      this._viewPublishThrottle?.throttledFn();
+    } else {
+      this.refreshIntervalViewsForChangedIds(changedIds);
+    }
 
     if (!this._activeIntervalId) return;
     const activeInterval = this._itemIntervals.get(this._activeIntervalId);
