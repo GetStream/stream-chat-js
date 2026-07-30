@@ -515,6 +515,31 @@ describe('Threads 2.0', () => {
           expect(client.messageStore.has(reply.id)).to.be.false;
           expect(thread.messagePaginator.getItem(reply.id)).to.be.undefined;
         });
+
+        // Behavioral characterization of the store's refcount/reclaim contract via the PUBLIC read
+        // API (messageStore.has) — a dual-homed message must survive one holder leaving and only be
+        // reclaimed when the LAST holder releases it. This pins the contract independently of how the
+        // store implements routing/refcount internally (so it survives a store rearchitecture).
+        it('keeps a message a sibling collection still holds after the thread is torn down (dual-home refcount)', () => {
+          const thread = createTestThread();
+          // The channel list also holds the parent message (it is a normal channel message). ingestItem
+          // links it into the shared store under the channel paginator, regardless of rendering/filter.
+          channel.messagePaginator.ingestItem(formatMessage(parentMessageResponse));
+          expect(client.messageStore.has(thread.id)).to.be.true;
+
+          // Opening the thread adds a SECOND holder (its parent-message store subscription).
+          thread.registerSubscriptions();
+          expect(client.messageStore.has(thread.id)).to.be.true;
+
+          // Tearing down the thread releases ITS hold — but the channel still holds the message, so
+          // (unlike the pure-reply case above) it must NOT be reclaimed from the store.
+          thread.unregisterSubscriptions();
+          expect(client.messageStore.has(thread.id)).to.be.true;
+
+          // Only once the last holder (the channel) drops it is the canonical copy reclaimed.
+          channel.messagePaginator.removeItem({ id: thread.id });
+          expect(client.messageStore.has(thread.id)).to.be.false;
+        });
       });
 
       describe('reload', () => {
