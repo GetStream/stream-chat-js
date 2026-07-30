@@ -3,8 +3,7 @@ import {
   resolveDotPathValue as defaultResolvePathValue,
   normalizeComparedValues,
 } from './utility.normalization';
-import { normalizeQuerySort } from '../utils';
-import type { AscDesc, SortParamRequest } from '../types';
+import type { SortParamRequest } from '../types';
 import type { Comparator, PathResolver } from './types.normalization';
 
 export type ItemLocation = {
@@ -128,24 +127,19 @@ export function binarySearch<T>({
  * @param params.resolvePathValue - Resolver used to read a field value from an item.
  * @param params.tiebreaker - Comparator applied when all sort terms are equal.
  */
-export function makeComparator<
-  T,
-  S extends Record<string, AscDesc> | Record<string, AscDesc>[] | SortParamRequest[],
->({
+export function makeComparator<T>({
   sort,
   resolvePathValue = defaultResolvePathValue,
   tiebreaker = (a, b) => compare((a as any).cid, (b as any).cid),
 }: {
-  sort: S;
+  sort: SortParamRequest[];
   resolvePathValue?: PathResolver<T>;
   tiebreaker?: Comparator<T>;
 }): Comparator<T> {
-  const terms = normalizeQuerySort(sort);
-
   return (a: T, b: T) => {
-    for (const { field: path, direction } of terms) {
-      const leftValue = resolvePathValue(a, path);
-      const rightValue = resolvePathValue(b, path);
+    for (const { field: path, direction } of sort) {
+      const leftValue = resolvePathValue(a, path as string);
+      const rightValue = resolvePathValue(b, path as string);
       const normalized = normalizeComparedValues(leftValue, rightValue);
       let comparison: number;
       switch (normalized.kind) {

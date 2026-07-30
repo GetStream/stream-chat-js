@@ -1,8 +1,4 @@
-import {
-	axiosParamsSerializer,
-	formatMessage,
-	normalizeQuerySort,
-} from '../../src/utils';
+import { axiosParamsSerializer, formatMessage } from '../../src/utils';
 import sinon from 'sinon';
 
 import { describe, beforeEach, it, expect } from 'vitest';

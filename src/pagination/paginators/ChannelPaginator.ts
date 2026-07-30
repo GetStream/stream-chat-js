@@ -228,7 +228,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     this._options = requestOptions;
     this._channelStateOptions = channelStateOptions;
     this.filterBuilder = new FilterBuilder<ChannelFilters>(filterBuilderOptions);
-    this.sortComparator = makeComparator<Channel, ChannelSort>({
+    this.sortComparator = makeComparator<Channel>({
       sort: definedSort,
       resolvePathValue: channelSortPathResolver,
       tiebreaker: (l, r) => {
@@ -280,7 +280,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
 
   set sort(sort: ChannelSort | undefined) {
     this._sort = sort;
-    this.sortComparator = makeComparator<Channel, ChannelSort>({
+    this.sortComparator = makeComparator<Channel>({
       sort: this.sort ?? DEFAULT_BACKEND_SORT,
     });
   }

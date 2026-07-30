@@ -1,6 +1,5 @@
 import FormData from 'form-data';
 import type {
-  AscDesc,
   ChannelFilters,
   ChannelGetOrCreateRequest,
   ChannelSort,
@@ -12,7 +11,6 @@ import type {
   OwnUserResponse,
   PromoteChannelParams,
   ReactionGroupResponse,
-  SortParamRequest,
   UpdatedMessage,
   UserResponse,
 } from './types';
@@ -25,15 +23,17 @@ import { chatLoggerSystem } from './logger';
 const logger = chatLoggerSystem.getLogger('utils');
 
 /**
- * logChatPromiseExecution - utility function for logging the execution of a promise..
- *  use this when you want to run the promise and handle errors by logging a warning
+ * Logs the execution of a promise. Use this when you want to run the promise and handle errors by
+ * logging a warning.
  *
- * @param promise - The promise you want to run and log
- * @param name    - A descriptive name of what the promise does for log output
+ * @param promise - The promise you want to run and log.
+ * @param name - A descriptive name of what the promise does for log output.
  */
 export function logChatPromiseExecution<T>(promise: Promise<T>, name: string) {
   promise.then().catch((error) => {
-    console.warn(`failed to do ${name}, ran into error: `, error);
+    logger
+      .withExtraTags('logChatPromiseExecution')
+      .error(`Failed to execute "${name}".`, { error });
   });
 }
 
@@ -150,33 +150,6 @@ export function addFileToFormData(
 
   return data;
 }
-export function normalizeQuerySort<T extends Record<string, AscDesc | undefined>>(
-  sort: T | T[] | SortParamRequest[],
-) {
-  const sortFields: Array<{ direction: AscDesc; field: string }> = [];
-  const sortArr = Array.isArray(sort) ? sort : [sort];
-  for (const item of sortArr) {
-    // OpenAPI `SortParamRequest` (`{ field, direction }`) is already a normalized term — use it as-is.
-    if (item && typeof (item as SortParamRequest).field === 'string') {
-      const term = item as SortParamRequest;
-      sortFields.push({
-        direction: (term.direction ?? 1) as AscDesc,
-        field: term.field as string,
-      });
-      continue;
-    }
-    const entries = Object.entries(item) as [string, AscDesc][];
-    if (entries.length > 1) {
-      console.warn(
-        "client._buildSort() - multiple fields in a single sort object detected. Object's field order is not guaranteed",
-      );
-    }
-    for (const [field, direction] of entries) {
-      sortFields.push({ field, direction });
-    }
-  }
-  return sortFields;
-}
 
 /**
  * retryInterval - A retry interval which increases acc to number of failures
@@ -276,9 +249,9 @@ export function isOnline() {
         : undefined;
 
   if (!nav) {
-    console.warn(
-      'isOnline failed to access window.navigator and assume browser is online',
-    );
+    logger
+      .withExtraTags('isOnline')
+      .warn('Could not access window.navigator; assuming the browser is online.');
     return true;
   }
 
@@ -325,10 +298,10 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
 };
 
 /**
- * Takes the message object, parses the dates, sets `__html`
- * and sets the status to `received` if missing; returns a new LocalMessage object.
+ * Takes the message object, adds SDK-specific fields (status, error),
+ * and returns a new LocalMessage object.
  *
- * @param message - `LocalMessage` object
+ * @param message - message object
  */
 export function formatMessage(message: MessageResponse | LocalMessage): LocalMessage {
   const toLocalMessageBase = (
@@ -361,33 +334,31 @@ export function formatMessage(message: MessageResponse | LocalMessage): LocalMes
 export const localMessageToNewMessagePayload = (
   localMessage: LocalMessage,
 ): MessageRequest => {
-  /* eslint-disable unused-imports/no-unused-vars -- destructure-to-omit: fields intentionally stripped from the payload */
   const {
     // Remove all timestamp fields and client-specific fields.
     // Field pinned_at can therefore be earlier than created_at as new message payload can hold it.
-    created_at,
-    updated_at,
-    deleted_at,
+    created_at: _created_at,
+    updated_at: _updated_at,
+    deleted_at: _deleted_at,
     // Client-specific fields
-    error,
-    status,
+    error: _error,
+    status: _status,
     // Reaction related fields
-    latest_reactions,
-    own_reactions,
-    reaction_counts,
-    reaction_scores,
-    reply_count,
+    latest_reactions: _latest_reactions,
+    own_reactions: _own_reactions,
+    reaction_counts: _reaction_counts,
+    reaction_scores: _reaction_scores,
+    reply_count: _reply_count,
     // MessageRequest text related fields that shouldn't be in update
-    command,
-    html,
-    i18n,
-    mentioned_groups,
-    quoted_message,
+    command: _command,
+    html: _html,
+    i18n: _i18n,
+    mentioned_groups: _mentioned_groups,
+    quoted_message: _quoted_message,
     mentioned_users,
     // MessageRequest content related fields
     ...messageFields
   } = localMessage;
-  /* eslint-enable unused-imports/no-unused-vars */
 
   // `messageFields` still carries LocalMessage-only fields (cid, deleted_reply_count, mentioned_*,
   // pinned, shadowed, …) that the stricter OpenAPI `MessageRequest` omits; the server ignores them.
@@ -425,7 +396,7 @@ export const toDeletedMessage = ({
   deletedAt,
   hardDelete = false,
 }: {
-  message: LocalMessage | LocalMessage;
+  message: LocalMessage;
   deletedAt: LocalMessage['deleted_at'];
   hardDelete: boolean;
 }) => {
@@ -433,7 +404,7 @@ export const toDeletedMessage = ({
     /**
      * In case of hard delete, we need to strip down all text, html, attachments and all the custom properties on message
      * The hard-deleted message is kept in the UI until the messages are re-queried
-     * FIXME: we are returning an object that does not match LocalMessage | LocalMessage
+     * FIXME: we are returning an object that does not match LocalMessage
      */
     return {
       attachments: [],

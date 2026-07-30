@@ -1,7 +1,6 @@
 import { StateStore } from './store';
 import { formatMessage, localMessageToNewMessagePayload } from './utils';
 import type {
-  AscDesc,
   DraftResponse,
   EventAPIResponse,
   EventType,
@@ -9,6 +8,7 @@ import type {
   MarkReadRequest,
   MessageResponse,
   ReadStateResponse,
+  SortParamRequest,
   ThreadStateResponse,
   UserResponse,
 } from './types';
@@ -61,8 +61,8 @@ export type ThreadUserReadState = {
 export type ThreadReadState = Record<string, ThreadUserReadState | undefined>;
 
 const DEFAULT_PAGE_LIMIT = 50;
-const DEFAULT_SORT: { created_at: AscDesc }[] = [{ created_at: -1 }];
-const DEFAULT_ITEM_ORDER: { created_at: AscDesc } = { created_at: 1 };
+const DEFAULT_SORT: SortParamRequest[] = [{ field: 'created_at', direction: -1 }];
+const DEFAULT_ITEM_ORDER: SortParamRequest[] = [{ field: 'created_at', direction: 1 }];
 
 export type CustomThreadMarkReadRequestFn = (params: {
   thread: Thread;
@@ -709,7 +709,7 @@ export class Thread extends WithSubscriptions {
   // todo: can be removed with the next breaking change and use MessagePaginator only
   public updateParentMessageLocally = ({ message }: { message: MessageResponse }) => {
     if (message.id !== this.id) {
-      throw new Error('MessageRequest does not belong to this thread');
+      throw new Error('Message does not belong to this thread');
     }
 
     this.state.next((current) => {

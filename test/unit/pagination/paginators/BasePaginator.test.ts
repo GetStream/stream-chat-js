@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  AscDesc,
   BasePaginator,
   DEFAULT_PAGINATION_OPTIONS,
   ItemCoordinates,
@@ -15,6 +14,7 @@ import {
   QueryFilter,
   QueryFilters,
   RequireOnlyOne,
+  SortParamRequest,
   ZERO_PAGE_CURSOR,
 } from '../../../../src';
 import { sleep } from '../../../../src/utils';
@@ -43,7 +43,7 @@ type QueryShape = {
       | RequireOnlyOne<QueryFilter<TestItem[Key]>>
       | PrimitiveFilter<TestItem[Key]>;
   };
-  sort: { [Key in keyof TestItem]?: AscDesc };
+  sort: SortParamRequest[];
 };
 
 class IncompletePaginator extends BasePaginator<TestItem, QueryShape> {
@@ -73,12 +73,15 @@ class IncompletePaginator extends BasePaginator<TestItem, QueryShape> {
     return promise;
   }
 
-  filterQueryResults(items: TestItem[]): TestItem[] | Promise<TestItem[]> {
+  filterQueryResults(items: TestItem[]) {
     return items;
   }
 }
 
-const defaultNextQueryShape: QueryShape = { filters: { id: 'test-id' }, sort: { id: 1 } };
+const defaultNextQueryShape: QueryShape = {
+  filters: { id: 'test-id' },
+  sort: [{ field: 'id', direction: 1 }],
+};
 
 class Paginator extends IncompletePaginator {
   constructor(options: PaginatorOptions<TestItem, QueryShape> = {}) {
@@ -184,8 +187,14 @@ describe('BasePaginator', () => {
         offset: 10,
       };
 
-      const prevQueryShape: QueryShape = { filters: { id: 'a' }, sort: { id: 1 } };
-      const nextQueryShape: QueryShape = { filters: { id: 'b' }, sort: { id: 1 } };
+      const prevQueryShape: QueryShape = {
+        filters: { id: 'a' },
+        sort: [{ field: 'id', direction: 1 }],
+      };
+      const nextQueryShape: QueryShape = {
+        filters: { id: 'b' },
+        sort: [{ field: 'id', direction: 1 }],
+      };
 
       it('resets the state before a query when querying the first page', () => {
         const paginator = new Paginator();
@@ -197,8 +206,14 @@ describe('BasePaginator', () => {
       });
 
       it('resets the state before a query when query shape changed', () => {
-        const prevQueryShape: QueryShape = { filters: { id: 'a' }, sort: { id: 1 } };
-        const nextQueryShape: QueryShape = { filters: { id: 'b' }, sort: { id: 1 } };
+        const prevQueryShape: QueryShape = {
+          filters: { id: 'a' },
+          sort: [{ field: 'id', direction: 1 }],
+        };
+        const nextQueryShape: QueryShape = {
+          filters: { id: 'b' },
+          sort: [{ field: 'id', direction: 1 }],
+        };
         const paginator = new Paginator();
         expect(
           // @ts-expect-error accessing protected property
@@ -856,7 +871,7 @@ describe('BasePaginator', () => {
       const paginator = new Paginator();
       const forcedShape: QueryShape = {
         filters: { id: 'forced' },
-        sort: { id: -1 },
+        sort: [{ field: 'id', direction: -1 }],
       };
 
       const promise = paginator.executeQuery({
@@ -956,11 +971,8 @@ describe('BasePaginator', () => {
       it('finds an existing item on a tie plateau (no ID tiebreaker)', () => {
         const paginator = new Paginator();
         // comparator: age desc only (ties produce a plateau)
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({
-          sort: { age: -1 },
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
         });
         // items are already sorted by age desc
         paginator.state.partialNext({ items: [a, b, c, d] });
@@ -976,11 +988,8 @@ describe('BasePaginator', () => {
       it('finds an existing item on a tie plateau (no ID tiebreaker) with itemIndex', () => {
         const paginator = new Paginator({ itemIndex });
         // comparator: age desc only (ties produce a plateau)
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({
-          sort: { age: -1 },
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
         });
         // items are already sorted by age desc
         paginator.ingestPage({ page: [a, b, c, d], setActive: true });
@@ -1005,11 +1014,8 @@ describe('BasePaginator', () => {
 
       it('returns insertion index when not found on a tie plateau (no ID tiebreaker)', () => {
         const paginator = new Paginator();
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({
-          sort: { age: -1 },
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
         });
         paginator.state.partialNext({ items: [a, b, c, d] });
 
@@ -1023,11 +1029,8 @@ describe('BasePaginator', () => {
 
       it('returns insertion index when not found on a tie plateau (no ID tiebreaker) with itemIndex', () => {
         const paginator = new Paginator({ itemIndex });
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({
-          sort: { age: -1 },
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
         });
         paginator.ingestPage({ page: [a, b, c, d], setActive: true });
 
@@ -1054,11 +1057,8 @@ describe('BasePaginator', () => {
 
       it('finds exact index with ID tiebreaker in comparator (pure O(log n))', () => {
         const paginator = new Paginator();
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({
-          sort: { age: -1 },
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
           // tie-breaker on id asc guarantees a total order
           tiebreaker: tieBreakerById,
         });
@@ -1074,11 +1074,8 @@ describe('BasePaginator', () => {
 
       it('finds exact index with ID tiebreaker in comparator (pure O(log n)) with itemIndex', () => {
         const paginator = new Paginator({ itemIndex });
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({
-          sort: { age: -1 },
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
           // tie-breaker on id asc guarantees a total order
           tiebreaker: tieBreakerById,
         });
@@ -1105,11 +1102,8 @@ describe('BasePaginator', () => {
 
       it('computes insertion for state at the beginning when needle sorts before all items', () => {
         const paginator = new Paginator();
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({
-          sort: { age: -1 },
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
           tiebreaker: tieBreakerById,
         });
         paginator.state.partialNext({ items: [a, b, c, d] });
@@ -1122,11 +1116,8 @@ describe('BasePaginator', () => {
 
       it('computes insertion for state at the beginning when needle sorts before all items with itemIndex', () => {
         const paginator = new Paginator({ itemIndex });
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({
-          sort: { age: -1 },
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
           tiebreaker: tieBreakerById,
         });
         paginator.ingestPage({ page: [a, b, c, d], setActive: true });
@@ -1141,11 +1132,8 @@ describe('BasePaginator', () => {
 
       it('computes insertion for state at the end when needle sorts after all items', () => {
         const paginator = new Paginator();
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({
-          sort: { age: -1 },
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
           tiebreaker: tieBreakerById,
         });
         paginator.state.partialNext({ items: [a, b, c, d] });
@@ -1158,11 +1146,8 @@ describe('BasePaginator', () => {
 
       it('computes insertion for state at the end when needle sorts after all items with item index', () => {
         const paginator = new Paginator({ itemIndex });
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({
-          sort: { age: -1 },
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
           tiebreaker: tieBreakerById,
         });
         paginator.ingestPage({ page: [a, b, c, d], setActive: true });
@@ -1177,11 +1162,8 @@ describe('BasePaginator', () => {
 
       it('locates the correct interval when multiple intervals exist', () => {
         const paginator = new Paginator({ itemIndex });
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({
-          sort: { age: -1 },
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
           tiebreaker: tieBreakerById,
         });
         paginator.ingestPage({ page: [a, b, c, d], setActive: true });
@@ -1211,11 +1193,8 @@ describe('BasePaginator', () => {
       let paginator: Paginator;
       beforeEach(() => {
         paginator = new Paginator({ itemIndex });
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({
-          sort: { age: -1 },
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
         });
       });
 
@@ -1923,10 +1902,9 @@ describe('BasePaginator', () => {
         const paginator = new Paginator({
           itemIndex: new ItemIndex<TestItem>({ getId: ({ id }) => id }),
         });
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({ sort: { age: -1 } });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
 
         const optimistic: TestItem = { id: 'r1', age: 10, name: 'sending' };
         const confirmed: TestItem = { id: 'r1', age: 10, name: 'received' };
@@ -1954,10 +1932,9 @@ describe('BasePaginator', () => {
         const paginator = new Paginator({ itemIndex });
 
         // Sort by age desc so we can create "head" and "tail" logically
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({ sort: { age: -1 } });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
 
         // First ingestion: item2 (age 101) → logical head
         expect(paginator.ingestItem(item2)).toBe(true);
@@ -2011,10 +1988,9 @@ describe('BasePaginator', () => {
         const paginator = new Paginator({ itemIndex });
 
         // Sort by age desc so we can create "head" and "tail" logically
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({ sort: { age: -1 } });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
 
         // First ingestion: item2 (age 101) → logical head
         expect(paginator.ingestItem(item2)).toBe(true);
@@ -2133,10 +2109,9 @@ describe('BasePaginator', () => {
           age: { $gt: 100 },
         });
 
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({ sort: { age: 1 } });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: 1 }],
+        });
 
         const adjustedItem1 = {
           ...item1,
@@ -2266,10 +2241,9 @@ describe('BasePaginator', () => {
           paginator.buildFilters = () => ({
             teams: { $contains: 'abc' },
           });
-          paginator.sortComparator = makeComparator<
-            TestItem,
-            Partial<Record<keyof TestItem, AscDesc>>
-          >({ sort: { age: -1 } });
+          paginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
 
           expect(paginator.ingestItem(item2)).toBeTruthy();
           expect(paginator.items).toHaveLength(3);
@@ -2304,10 +2278,9 @@ describe('BasePaginator', () => {
           paginator.buildFilters = () => ({
             teams: { $contains: 'abc' },
           });
-          paginator.sortComparator = makeComparator<
-            TestItem,
-            Partial<Record<keyof TestItem, AscDesc>>
-          >({ sort: { age: -1 } });
+          paginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
 
           const item4 = {
             id: 'id4',
@@ -2346,10 +2319,9 @@ describe('BasePaginator', () => {
           paginator.buildFilters = () => ({
             teams: { $contains: 'abc' },
           });
-          paginator.sortComparator = makeComparator<
-            TestItem,
-            Partial<Record<keyof TestItem, AscDesc>>
-          >({ sort: { age: -1 } });
+          paginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
 
           const firstPage = paginator.ingestPage({
             page: [item3, item1],
@@ -2441,10 +2413,9 @@ describe('BasePaginator', () => {
           paginator.buildFilters = () => ({
             teams: { $contains: 'abc' },
           });
-          paginator.sortComparator = makeComparator<
-            TestItem,
-            Partial<Record<keyof TestItem, AscDesc>>
-          >({ sort: { age: -1 } });
+          paginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
 
           const firstPage = paginator.ingestPage({
             page: [item3, item1],
@@ -2536,10 +2507,9 @@ describe('BasePaginator', () => {
           paginator.buildFilters = () => ({
             teams: { $contains: 'abc' },
           });
-          paginator.sortComparator = makeComparator<
-            TestItem,
-            Partial<Record<keyof TestItem, AscDesc>>
-          >({ sort: { age: -1 } });
+          paginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
 
           const firstPage = paginator.ingestPage({
             page: [item3, item1],
@@ -2635,10 +2605,9 @@ describe('BasePaginator', () => {
           teams: { $contains: 'abc' },
         });
 
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({ sort: { age: -1 } });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
 
         paginator.boost(item2.id);
         expect(paginator.ingestItem(item2)).toBeTruthy();
@@ -2667,10 +2636,9 @@ describe('BasePaginator', () => {
           teams: { $contains: 'abc' },
         });
 
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({ sort: { age: -1 } });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
 
         const item4 = {
           id: 'id4',
@@ -2741,11 +2709,8 @@ describe('BasePaginator', () => {
           age: { $gt: 100 },
         });
 
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({
-          sort: { age: 1 },
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: 1 }],
         });
 
         paginator.boost(item2.id);
@@ -2776,11 +2741,8 @@ describe('BasePaginator', () => {
           age: { $gt: 100 },
         });
 
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({
-          sort: { age: 1 },
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: 1 }],
         });
 
         paginator.boost(item2.id);
@@ -2808,11 +2770,8 @@ describe('BasePaginator', () => {
           teams: { $contains: 'abc' },
         });
 
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({
-          sort: { age: -1 },
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
         });
 
         paginator.boost(item2.id);
@@ -2835,8 +2794,8 @@ describe('BasePaginator', () => {
     describe('intervalViews (per-interval reactivity)', () => {
       const makeItem = (id: string, age: number): TestItem => ({ id, age, name: id });
       const descByAge = () =>
-        makeComparator<TestItem, Partial<Record<keyof TestItem, AscDesc>>>({
-          sort: { age: -1 }, // newest (highest age) is the head
+        makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }], // newest (highest age) is the head
         });
       const withItemIndex = () =>
         new Paginator({ itemIndex: new ItemIndex<TestItem>({ getId: ({ id }) => id }) });
@@ -3003,11 +2962,8 @@ describe('BasePaginator', () => {
         paginator.state.partialNext({
           items: [item3, item2, item1],
         });
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({
-          sort: { age: -1 },
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
         });
         expect(paginator.removeItem({ item: item3 })).toStrictEqual({
           state: { currentIndex: 0, insertionIndex: 0 },
@@ -3022,11 +2978,8 @@ describe('BasePaginator', () => {
         paginator.state.partialNext({
           items: [item2, item1],
         });
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({
-          sort: { age: -1 },
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
         });
         expect(paginator.removeItem({ item: item3 })).toStrictEqual({
           state: { currentIndex: -1, insertionIndex: -1 },
@@ -3038,10 +2991,9 @@ describe('BasePaginator', () => {
 
       it('removes item from both state and anchored intervals when itemIndex is present', () => {
         const paginator = new Paginator({ itemIndex });
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({ sort: { age: -1 } });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
 
         paginator.ingestPage({ page: [item3, item2, item1], setActive: true });
 
@@ -3135,10 +3087,9 @@ describe('BasePaginator', () => {
 
       it('materializes the head window in interval-storage mode', () => {
         const paginator = new Paginator({ itemIndex });
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({ sort: { age: -1 } });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
 
         paginator.ingestPage({
           page: [item2, item1],
@@ -3265,10 +3216,9 @@ describe('BasePaginator', () => {
 
       it('prioritizes isFirstPage: true and isLastPage: true', () => {
         const paginator = new Paginator({ itemIndex });
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({ sort: { age: -1 } });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
 
         const page = [item2, item1];
 
@@ -3311,10 +3261,9 @@ describe('BasePaginator', () => {
 
       it('with itemIndex creates an anchored interval and sets it active', () => {
         const paginator = new Paginator({ itemIndex });
-        paginator.sortComparator = makeComparator<
-          TestItem,
-          Partial<Record<keyof TestItem, AscDesc>>
-        >({ sort: { age: -1 } });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
 
         const page = [item3, item1];
 
@@ -3755,11 +3704,8 @@ describe('BasePaginator', () => {
           vi.setSystemTime(new Date('2025-01-01T00:00:00Z'));
 
           const paginator = new Paginator();
-          paginator.sortComparator = makeComparator<
-            TestItem,
-            Partial<Record<keyof TestItem, AscDesc>>
-          >({
-            sort: { age: 1 }, // ascending age
+          paginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: 1 }], // ascending age
           });
 
           // Load the non-boosted items as a single anchored (active) interval.

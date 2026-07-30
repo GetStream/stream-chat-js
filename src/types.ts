@@ -1120,10 +1120,6 @@ export type TranslationLanguage = TranslateMessageRequest['language'];
 
 export * from './gen/models';
 
-// Re-added during the OpenAPI merge: hand-written types dropped by the types.ts auto-merge but still
-// referenced by the paginator/message-delivery code. See TODO(openapi-merge).
-export type AscDesc = 1 | -1;
-
 export type EventAPIResponse = APIResponse & {
   event: Event;
 };

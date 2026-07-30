@@ -114,7 +114,7 @@ describe('ChannelPaginator', () => {
         filters: { type: 'type' },
         paginatorOptions,
         requestOptions: { member_limit: 5 },
-        sort: { created_at: 1 },
+        sort: [{ field: 'created_at', direction: 1 }],
       });
       expect(paginator.pageSize).toBe(2);
       expect(paginator.state.getLatestValue()).toEqual({
@@ -176,25 +176,25 @@ describe('ChannelPaginator', () => {
     });
 
     it('should sort by non-existent attribute', () => {
-      const paginator = new ChannelPaginator({ client, sort: { created_at: 1 } });
+      const paginator = new ChannelPaginator({ client, sort: [{ field: 'created_at', direction: 1 }] });
       expect(paginator.sortComparator(channel1, channel2)).toBe(0);
     });
 
     it('should sort by attribute with the same values', () => {
-      const paginator = new ChannelPaginator({ client, sort: { created_at: 1 } });
+      const paginator = new ChannelPaginator({ client, sort: [{ field: 'created_at', direction: 1 }] });
       channel1.data!.created_at = '1971-01-01T08:39:35.235Z';
       channel2.data!.created_at = '1971-01-01T08:39:35.235Z';
       expect(paginator.sortComparator(channel1, channel2)).toBe(0);
     });
 
     it('should sort by created_at', () => {
-      const paginator = new ChannelPaginator({ client, sort: { created_at: 1 } });
+      const paginator = new ChannelPaginator({ client, sort: [{ field: 'created_at', direction: 1 }] });
       channel1.data!.created_at = '1972-01-01T08:39:35.235Z';
       channel2.data!.created_at = '1971-01-01T08:39:35.235Z';
       expect(paginator.sortComparator(channel1, channel2)).toBe(changeOrder);
     });
     it('should sort by has_unread', () => {
-      const paginator = new ChannelPaginator({ client, sort: { has_unread: 1 } });
+      const paginator = new ChannelPaginator({ client, sort: [{ field: 'has_unread', direction: 1 }] });
       channel1.state.read[user.id] = {
         last_read: new Date('1972-01-01T08:39:35.235Z'),
         unread_messages: 10,
@@ -208,11 +208,11 @@ describe('ChannelPaginator', () => {
       expect(paginator.sortComparator(channel1, channel2)).toBe(changeOrder);
     });
     it('should sort by last_message_at', () => {
-      const paginator = new ChannelPaginator({ client, sort: { last_message_at: 1 } });
+      const paginator = new ChannelPaginator({ client, sort: [{ field: 'last_message_at', direction: 1 }] });
       expect(paginator.sortComparator(channel1, channel2)).toBe(changeOrder);
     });
     it('should sort by last_updated', () => {
-      const paginator = new ChannelPaginator({ client, sort: { last_updated: 1 } });
+      const paginator = new ChannelPaginator({ client, sort: [{ field: 'last_updated', direction: 1 }] });
 
       // compares channel1.state.last_message_at with channel2.data!.updated_at
       setLastMessageAt(channel1, new Date('1975-01-01T08:39:35.235Z'));
@@ -229,13 +229,13 @@ describe('ChannelPaginator', () => {
       expect(paginator.sortComparator(channel1, channel2)).toBe(keepOrder);
     });
     it('should sort by member_count', () => {
-      const paginator = new ChannelPaginator({ client, sort: { member_count: 1 } });
+      const paginator = new ChannelPaginator({ client, sort: [{ field: 'member_count', direction: 1 }] });
       channel1.data!.member_count = 2;
       channel2.data!.member_count = 1;
       expect(paginator.sortComparator(channel1, channel2)).toBe(changeOrder);
     });
     it('should sort by pinned_at', () => {
-      const paginator = new ChannelPaginator({ client, sort: { pinned_at: 1 } });
+      const paginator = new ChannelPaginator({ client, sort: [{ field: 'pinned_at', direction: 1 }] });
       channel1.state.membership = { pinned_at: '1972-01-01T08:39:35.235Z' };
       channel2.state.membership = { pinned_at: '1971-01-01T08:39:35.235Z' };
       expect(paginator.sortComparator(channel1, channel2)).toBe(changeOrder);
@@ -245,7 +245,7 @@ describe('ChannelPaginator', () => {
       expect(paginator.sortComparator(channel1, channel2)).toBe(keepOrder);
     });
     it('should sort by unread_count', () => {
-      const paginator = new ChannelPaginator({ client, sort: { unread_count: 1 } });
+      const paginator = new ChannelPaginator({ client, sort: [{ field: 'unread_count', direction: 1 }] });
       channel1.state.read[user.id] = {
         last_read: new Date(),
         unread_messages: 10,
@@ -271,7 +271,7 @@ describe('ChannelPaginator', () => {
       expect(paginator.sortComparator(channel1, channel2)).toBe(keepOrder);
     });
     it('should sort by updated_at', () => {
-      const paginator = new ChannelPaginator({ client, sort: { updated_at: 1 } });
+      const paginator = new ChannelPaginator({ client, sort: [{ field: 'updated_at', direction: 1 }] });
 
       channel1.data!.updated_at = '1972-01-01T08:39:35.235Z';
       channel2.data!.updated_at = '1971-01-01T08:39:35.235Z';

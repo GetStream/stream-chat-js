@@ -84,19 +84,19 @@ describe('MessagePaginator', () => {
 
       expect(paginator.pageSize).toBe(5);
       expect(paginator.id).toBe('custom-id');
-      expect(paginator.sort).toEqual({ created_at: 1 });
+      expect(paginator.sort).toEqual([{ field: 'created_at', direction: 1 }]);
       expect(paginator.config.doRequest).toBe(doRequest);
     });
 
     it('respects provided sort option', () => {
       const paginator = new MessagePaginator({
         channel,
-        sort: [{ created_at: -1 }],
+        sort: [{ field: 'created_at', direction: -1 }],
       });
 
-      expect(paginator.sort).toEqual([{ created_at: -1 }]);
-      expect(paginator.requestSort).toEqual([{ created_at: -1 }]);
-      expect(paginator.itemOrder).toEqual([{ created_at: -1 }]);
+      expect(paginator.sort).toEqual([{ field: 'created_at', direction: -1 }]);
+      expect(paginator.requestSort).toEqual([{ field: 'created_at', direction: -1 }]);
+      expect(paginator.itemOrder).toEqual([{ field: 'created_at', direction: -1 }]);
 
       const newer = createMessage({ id: 'b', created_at: '2021-01-01T00:00:00.000Z' });
       const older = createMessage({ id: 'a', created_at: '2020-01-01T00:00:00.000Z' });
@@ -106,24 +106,24 @@ describe('MessagePaginator', () => {
     it('prefers requestSort over deprecated sort alias', () => {
       const paginator = new MessagePaginator({
         channel,
-        requestSort: [{ created_at: 1 }],
-        sort: [{ created_at: -1 }],
+        requestSort: [{ field: 'created_at', direction: 1 }],
+        sort: [{ field: 'created_at', direction: -1 }],
       });
 
-      expect(paginator.requestSort).toEqual([{ created_at: 1 }]);
-      expect(paginator.sort).toEqual([{ created_at: 1 }]);
-      expect(paginator.itemOrder).toEqual([{ created_at: 1 }]);
+      expect(paginator.requestSort).toEqual([{ field: 'created_at', direction: 1 }]);
+      expect(paginator.sort).toEqual([{ field: 'created_at', direction: 1 }]);
+      expect(paginator.itemOrder).toEqual([{ field: 'created_at', direction: 1 }]);
     });
 
     it('uses itemOrder when provided to decouple in-memory order from request sort', () => {
       const paginator = new MessagePaginator({
         channel,
-        requestSort: [{ created_at: -1 }],
-        itemOrder: [{ created_at: 1 }],
+        requestSort: [{ field: 'created_at', direction: -1 }],
+        itemOrder: [{ field: 'created_at', direction: 1 }],
       });
 
-      expect(paginator.requestSort).toEqual([{ created_at: -1 }]);
-      expect(paginator.itemOrder).toEqual([{ created_at: 1 }]);
+      expect(paginator.requestSort).toEqual([{ field: 'created_at', direction: -1 }]);
+      expect(paginator.itemOrder).toEqual([{ field: 'created_at', direction: 1 }]);
     });
   });
 
@@ -275,8 +275,8 @@ describe('MessagePaginator', () => {
         channel,
         itemIndex,
         parentMessageId: 'parent-1',
-        requestSort: [{ created_at: -1 }],
-        itemOrder: [{ created_at: 1 }],
+        requestSort: [{ field: 'created_at', direction: -1 }],
+        itemOrder: [{ field: 'created_at', direction: 1 }],
       });
       // @ts-expect-error setting protected field for test coverage
       paginator._nextQueryShape = { id_gt: 'from-cursor', limit: 30 };

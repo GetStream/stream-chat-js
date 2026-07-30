@@ -70,7 +70,7 @@ export class ReminderPaginator extends BasePaginator<
   // Interval storage needs a total order. Derive it from the requested sort (rebuilt when `sort`
   // changes, which also resets the accumulated pages), with a message_id tiebreaker.
   private buildSortComparator() {
-    return makeComparator<ReminderResponseData, ReminderSort>({
+    return makeComparator<ReminderResponseData>({
       sort: this._sort ?? DEFAULT_SORT,
       resolvePathValue: resolveDotPathValue,
       tiebreaker: (l, r) =>

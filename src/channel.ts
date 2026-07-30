@@ -978,7 +978,7 @@ export class Channel extends ChannelApi {
   sendAction(messageId: string, formData: Record<string, string>) {
     this._checkInitialized();
     if (!messageId) {
-      throw Error(`MessageRequest id is missing`);
+      throw Error(`Message ID is missing`);
     }
     return this.getClient().runMessageAction({
       id: messageId,

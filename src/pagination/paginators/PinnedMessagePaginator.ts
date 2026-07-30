@@ -3,7 +3,11 @@ import {
   MessageIntervalPaginator,
   type MessageQueryShape,
 } from './MessageIntervalPaginator';
-import type { AscDesc, LocalMessage, PinnedMessagePaginationOptions } from '../../types';
+import type {
+  LocalMessage,
+  PinnedMessagePaginationOptions,
+  SortParamRequest,
+} from '../../types';
 import type { Channel } from '../../channel';
 import { formatMessage, generateUUIDv4 } from '../../utils';
 import { makeComparator } from '../sortCompiler';
@@ -63,16 +67,13 @@ export class PinnedMessagePaginator extends MessageIntervalPaginator {
       const rightId = this.getItemId(r);
       return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
     };
-    const pinnedAtSort: { pinned_at: AscDesc } = { pinned_at: 1 };
-    this.sortComparator = makeComparator<LocalMessage, { pinned_at: AscDesc }>({
+    const pinnedAtSort: SortParamRequest[] = [{ field: 'pinned_at', direction: 1 }];
+    this.sortComparator = makeComparator<LocalMessage>({
       sort: pinnedAtSort,
       resolvePathValue: resolveDotPathValue,
       tiebreaker,
     });
-    this.config.itemOrderComparator = makeComparator<
-      LocalMessage,
-      { pinned_at: AscDesc }
-    >({
+    this.config.itemOrderComparator = makeComparator<LocalMessage>({
       sort: pinnedAtSort,
       resolvePathValue: resolveDotPathValue,
       tiebreaker,

@@ -88,7 +88,7 @@ describe('ReminderPaginator', () => {
     expect(paginator.items?.map((r) => r.message_id)).toEqual(['m1', 'm2', 'm3']);
 
     // changing sort resets accumulated pages and re-orders the next load
-    paginator.sort = { created_at: -1 };
+    paginator.sort = [{ field: 'created_at', direction: -1 }];
     expect(paginator.items).toBeUndefined();
     spy.mockResolvedValue(response(page));
     await paginator.executeQuery({});

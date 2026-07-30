@@ -2639,7 +2639,11 @@ describe('Channel search', async () => {
 		vi.spyOn(client.api, 'sendRequest').mockResolvedValue({ body: {}, metadata: {} });
 		await expect(
 			channel.search({
-				payload: { query: 'query', offset: 1, sort: [{ custom_field: -1 }] },
+				payload: {
+					query: 'query',
+					offset: 1,
+					sort: [{ field: 'custom_field', direction: -1 }],
+				},
 			}),
 		).resolves.toBeDefined();
 	});
