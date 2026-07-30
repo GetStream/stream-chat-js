@@ -2995,6 +2995,92 @@ describe('BasePaginator', () => {
           anchoredHead: [],
         });
       });
+
+      // A sibling holder (another paginator / WS echo) writes new content for an item held in a
+      // tracked interval view. Only the active window used to be refreshed by onMessagesChanged, so
+      // the off-window views (logicalHead/logicalTail/anchoredHead) kept stale item references. These
+      // two tests drive onMessagesChanged directly (the message-store subscriber hook) after replacing
+      // the stored item, mimicking a sibling write.
+      it('refreshes logicalHead on a sibling update to an item that is off the active window', () => {
+        const index = new ItemIndex<TestItem>({ getId: ({ id }) => id });
+        const paginator = new Paginator({ itemIndex: index });
+        paginator.sortComparator = descByAge();
+
+        // A bounded (non-head) window, loaded and active.
+        paginator.ingestPage({
+          page: [makeItem('m1', 50), makeItem('m2', 40)],
+          isHead: false,
+          isTail: false,
+          setActive: true,
+        });
+        // An out-of-order head item lands in the logical head (NOT the active interval).
+        paginator.ingestItem(makeItem('x', 100));
+        expect(paginator.logicalHeadItems.map((i) => i.id)).toEqual(['x']);
+
+        const activeItemsBefore = paginator.items;
+        const logicalHead = trackKey(paginator, 'logicalHead');
+        const logicalTail = trackKey(paginator, 'logicalTail');
+        const anchoredHead = trackKey(paginator, 'anchoredHead');
+
+        // A sibling holder rewrites x's content (same id/order, e.g. a reaction) and notifies.
+        index.setOne({ id: 'x', age: 100, name: 'x-reacted' });
+        paginator.onMessagesChanged({
+          changedIds: new Set(['x']),
+          removedIds: new Set(),
+        });
+
+        // logicalHead republished with the new content...
+        expect(logicalHead.tracker.fires).toBe(1);
+        expect(paginator.logicalHeadItems.map((i) => i.name)).toEqual(['x-reacted']);
+        // ...the active window (x is not in it) and the other views are untouched.
+        expect(paginator.items).toBe(activeItemsBefore);
+        expect(logicalTail.tracker.fires).toBe(0);
+        expect(anchoredHead.tracker.fires).toBe(0);
+
+        logicalHead.unsub();
+        logicalTail.unsub();
+        anchoredHead.unsub();
+      });
+
+      it('refreshes anchoredHead on a sibling update to a message it holds', () => {
+        const index = new ItemIndex<TestItem>({ getId: ({ id }) => id });
+        const paginator = new Paginator({ itemIndex: index });
+        paginator.sortComparator = descByAge();
+
+        // The isHead page populates anchoredHead (and is the active interval).
+        paginator.ingestPage({
+          page: [makeItem('m1', 50), makeItem('m2', 40)],
+          isHead: true,
+          isTail: false,
+          setActive: true,
+        });
+        expect(paginator.anchoredHeadItems.map((i) => i.id)).toEqual(['m1', 'm2']);
+
+        const anchoredHead = trackKey(paginator, 'anchoredHead');
+        const logicalHead = trackKey(paginator, 'logicalHead');
+        const logicalTail = trackKey(paginator, 'logicalTail');
+
+        // A sibling holder rewrites m2's content (same id/order) and notifies.
+        index.setOne({ id: 'm2', age: 40, name: 'm2-reacted' });
+        paginator.onMessagesChanged({
+          changedIds: new Set(['m2']),
+          removedIds: new Set(),
+        });
+
+        // anchoredHead republished with the new content, unchanged siblings preserved by id order...
+        expect(anchoredHead.tracker.fires).toBe(1);
+        expect(paginator.anchoredHeadItems.map((i) => i.name)).toEqual([
+          'm1',
+          'm2-reacted',
+        ]);
+        // ...no logical view was touched.
+        expect(logicalHead.tracker.fires).toBe(0);
+        expect(logicalTail.tracker.fires).toBe(0);
+
+        anchoredHead.unsub();
+        logicalHead.unsub();
+        logicalTail.unsub();
+      });
     });
 
     describe('removeItem', () => {

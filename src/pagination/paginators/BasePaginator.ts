@@ -914,7 +914,51 @@ export abstract class BasePaginator<T, Q> {
     this._windowPublishThrottle?.flush();
   };
 
+  /**
+   * Refresh any tracked {@link intervalViews} field (logical head, logical tail, anchored head) that
+   * holds one of `changedIds`. A sibling holder writing new content through the shared item store
+   * swaps the item object those views reference, but only this paginator's own ingest/remove
+   * ({@link commitInterval}/{@link dropInterval}) republish them — so a reaction/edit made elsewhere
+   * would otherwise leave stale references in `anchoredHead`/`logicalHead`/`logicalTail` even though
+   * the active window (`state.items`, see {@link onMessagesChanged}) was refreshed.
+   *
+   * Handled independently of `state.items` and published immediately — these views are never
+   * throttled, matching their ingest/drop publishing. When the anchored head is also the active
+   * interval its content is projected here as well as into `state.items`; deduping that double
+   * projection is a separate, deferred perf follow-up.
+   */
+  private refreshIntervalViewsForChangedIds(changedIds: ReadonlySet<string>): void {
+    const head = this.liveHeadLogical;
+    if (head && this.intervalHoldsAnyChangedId(head, changedIds)) {
+      this.intervalViews.partialNext({ logicalHead: this.intervalToItems(head) });
+    }
+    const tail = this.liveTailLogical;
+    if (tail && this.intervalHoldsAnyChangedId(tail, changedIds)) {
+      this.intervalViews.partialNext({ logicalTail: this.intervalToItems(tail) });
+    }
+    let anchored: Interval | undefined;
+    for (const itv of this._itemIntervals.values()) {
+      if (!isLogicalInterval(itv) && itv.isHead) {
+        anchored = itv;
+        break;
+      }
+    }
+    if (anchored && this.intervalHoldsAnyChangedId(anchored, changedIds)) {
+      this.publishAsAnchoredHead(anchored);
+    }
+  }
+
+  private intervalHoldsAnyChangedId(
+    interval: AnyInterval,
+    changedIds: ReadonlySet<string>,
+  ): boolean {
+    for (const id of interval.itemIds) if (changedIds.has(id)) return true;
+    return false;
+  }
+
   onMessagesChanged({ changedIds }: MessageStoreChangeBatch): void {
+    this.refreshIntervalViewsForChangedIds(changedIds);
+
     if (!this._activeIntervalId) return;
     const activeInterval = this._itemIntervals.get(this._activeIntervalId);
     if (!activeInterval) return;
