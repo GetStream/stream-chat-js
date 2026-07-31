@@ -257,7 +257,7 @@ export class Channel {
     this.messageOperations = new MessageOperations({
       ingest: (m) => {
         this.messagePaginator.ingestItem(m);
-        this.getClient().messageStore.flushSubscribers();
+        this.getClient().messageStore.flushSubscribers(m.id);
       },
       get: (id) => this.messagePaginator.getItem(id),
       handlers: () => {

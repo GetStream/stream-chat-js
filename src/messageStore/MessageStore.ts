@@ -167,20 +167,15 @@ export class MessageStore {
   }
 
   /**
-   * Immediately flushes any throttled/pending state notification on every current holder (via
-   * {@link MessageStoreSubscriber.flushState}). Used after an optimistic (local-user) write so it
-   * renders without throttle delay. Flushing a holder with nothing pending is a no-op, so
-   * over-flushing unaffected holders is harmless.
+   * Immediately flushes any throttled/pending state publish on the holders of `id` (via
+   * {@link MessageStoreSubscriber.flushState}). Called after an optimistic (local-user) write to `id`
+   * so it renders without the throttle delay. Only that id's own holders are flushed — the write
+   * touched no other id — and flushing a holder with nothing pending is a no-op.
    */
-  flushSubscribers(): void {
-    const flushed = new Set<MessageStoreSubscriber>();
-    for (const holders of this.subscribers.values()) {
-      for (const holder of holders) {
-        if (flushed.has(holder)) continue;
-        flushed.add(holder);
-        holder.flushState?.();
-      }
-    }
+  flushSubscribers(id: string): void {
+    const holders = this.subscribers.get(id);
+    if (!holders) return;
+    for (const holder of holders) holder.flushState?.();
   }
 
   private markDirty(id: string, removed: boolean, origin?: MessageStoreSubscriber): void {

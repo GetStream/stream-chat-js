@@ -71,7 +71,7 @@ export const applyReactionLocally = (
     userId: user.id,
   });
   store.upsert({ ...withCounts, own_reactions });
-  store.flushSubscribers();
+  store.flushSubscribers(messageId);
 
   const persisted = store.get(messageId);
   if (persisted) {

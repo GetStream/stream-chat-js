@@ -259,7 +259,7 @@ export class Thread extends WithSubscriptions {
     this.messageOperations = new MessageOperations({
       ingest: (m) => {
         this.messagePaginator.ingestItem(m);
-        this.channel.getClient().messageStore.flushSubscribers();
+        this.channel.getClient().messageStore.flushSubscribers(m.id);
       },
       get: (id) => this.messagePaginator.getItem(id),
       normalizeOutgoingMessage: (m) => ({
