@@ -2,6 +2,7 @@ import type { AxiosRequestConfig } from 'axios';
 import { ChannelState } from './channel_state';
 import { CooldownTimer } from './CooldownTimer';
 import { isEphemeral } from './errors';
+import { applyReactionLocally } from './messageStore';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';
@@ -254,7 +255,10 @@ export class Channel {
     this.cooldownTimer = new CooldownTimer({ channel: this });
 
     this.messageOperations = new MessageOperations({
-      ingest: (m) => this.messagePaginator.ingestItem(m),
+      ingest: (m) => {
+        this.messagePaginator.ingestItem(m);
+        this.getClient().messageStore.flushSubscribers(m.id);
+      },
       get: (id) => this.messagePaginator.getItem(id),
       handlers: () => {
         const { requestHandlers } = this.configState.getLatestValue();
@@ -443,7 +447,7 @@ export class Channel {
 
   /**
    * Adds a reaction with an optimistic local state update: the reaction is applied to the cached
-   * message immediately ({@link MessageIntervalPaginator.applyReactionLocally}), then the request is
+   * message immediately ({@link applyReactionLocally}), then the request is
    * fired via {@link Channel.sendReaction} (which owns the offline-DB write + queue). The
    * server-authoritative counts reconcile on the response; the message is rolled back on failure.
    */
@@ -456,7 +460,8 @@ export class Channel {
     reaction: Reaction;
     options?: SendReactionOptions;
   }) {
-    const undo = this.messagePaginator.applyReactionLocally({
+    const client = this.getClient();
+    const undo = applyReactionLocally(client, {
       enforceUnique: options?.enforce_unique ?? false,
       messageId,
       reaction,
@@ -464,11 +469,13 @@ export class Channel {
 
     try {
       const response = await this.sendReaction(messageId, reaction, options);
-      if (response?.message) {
-        this.messagePaginator.ingestItem(formatMessage(response.message));
+      // reconcile the server copy only if we still hold it — a bare upsert of an unheld id would
+      // orphan it (the store's refcount GC only reclaims held ids).
+      if (response?.message && client.messageStore.has(response.message.id)) {
+        client.messageStore.upsert(formatMessage(response.message));
       }
     } catch (error) {
-      if (undo && (!this.getClient().offlineDb || !isEphemeral(error as Error))) {
+      if (undo && (!client.offlineDb || !isEphemeral(error as Error))) {
         undo();
       }
       throw error;
@@ -486,7 +493,8 @@ export class Channel {
     messageId: string;
     type: string;
   }) {
-    const undo = this.messagePaginator.applyReactionLocally({
+    const client = this.getClient();
+    const undo = applyReactionLocally(client, {
       messageId,
       reaction: { type },
       removed: true,
@@ -494,11 +502,13 @@ export class Channel {
 
     try {
       const response = await this.deleteReaction(messageId, type);
-      if (response?.message) {
-        this.messagePaginator.ingestItem(formatMessage(response.message));
+      // reconcile the server copy only if we still hold it — a bare upsert of an unheld id would
+      // orphan it (the store's refcount GC only reclaims held ids).
+      if (response?.message && client.messageStore.has(response.message.id)) {
+        client.messageStore.upsert(formatMessage(response.message));
       }
     } catch (error) {
-      if (undo && (!this.getClient().offlineDb || !isEphemeral(error as Error))) {
+      if (undo && (!client.offlineDb || !isEphemeral(error as Error))) {
         undo();
       }
       throw error;
@@ -735,7 +745,7 @@ export class Channel {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
         // The optimistic reaction row is written by the local-update layer
-        // (`MessagePaginator.applyReactionLocally`); here we only queue the request for replay.
+        // (`applyReactionLocally`); here we only queue the request for replay.
         return await offlineDb.queueTask<ReactionAPIResponse>({
           task: {
             channelId: this.id as string,
@@ -798,7 +808,7 @@ export class Channel {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
         // The optimistic reaction-row removal is handled by the local-update layer
-        // (`MessagePaginator.applyReactionLocally`); here we only queue the request for replay.
+        // (`applyReactionLocally`); here we only queue the request for replay.
         return await offlineDb.queueTask<ReactionAPIResponse>({
           task: {
             channelId: this.id as string,
@@ -2977,5 +2987,10 @@ export class Channel {
     this.disconnected = true;
     this.messageReceiptsTracker.unregisterSubscriptions();
     this.cooldownTimer.clearTimeout();
+    // Release the store-backed paginators so the message store no longer pins this removed channel
+    // (and its whole message graph) through its subscriber registry. The channel is being discarded
+    // here (disconnected + deleted from activeChannels, never reused), mirroring Thread teardown.
+    this.messagePaginator.dispose();
+    this.pinnedMessagesPaginator.dispose();
   }
 }

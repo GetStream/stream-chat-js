@@ -327,5 +327,5 @@ export class MessageDeliveryReporter {
   public throttledMarkRead = throttle(this.markRead, MARK_AS_READ_THROTTLE_TIMEOUT, {
     leading: true,
     trailing: true,
-  });
+  }).throttledFn;
 }

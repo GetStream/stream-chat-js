@@ -308,6 +308,9 @@ describe('Threads 2.0', () => {
 
         it('updates parent message and related top-level properties', () => {
           const thread = createTestThread();
+          // `state.parentMessage` is a projection of the client-global message store; the update
+          // reflects through the store subscription registered here.
+          thread.registerSubscriptions();
 
           const stateBefore = thread.state.getLatestValue();
           expect(stateBefore.deletedAt).to.be.null;
@@ -467,6 +470,75 @@ describe('Threads 2.0', () => {
           );
           // Merging a partial newest window must not clear "load older".
           expect(paginatorState.hasMoreTail).to.be.true;
+        });
+
+        it('refreshes the store parent so the projection is not clobbered by a stale copy', () => {
+          const thread = createTestThread();
+          thread.registerSubscriptions();
+          // registering seeds the store with the parent the thread currently holds
+          expect(client.messageStore.get(thread.id)?.text).to.equal(
+            parentMessageResponse.text,
+          );
+
+          // A fresh re-query (reload / reconnect) carries an edited parent.
+          const hydrationThread = createTestThread({
+            parentMessageOverrides: { text: 'edited-on-server' },
+          });
+          thread.hydrateState(hydrationThread);
+
+          // Both the projection AND the store's canonical copy are the hydrated parent (no
+          // divergence). Regression: hydrateState used to update only state.parentMessage, leaving
+          // the store on the pre-hydrate copy, so the next store write for this id would fan the
+          // stale parent back over the edit.
+          expect(thread.state.getLatestValue().parentMessage.text).to.equal(
+            'edited-on-server',
+          );
+          expect(client.messageStore.get(thread.id)?.text).to.equal('edited-on-server');
+        });
+      });
+
+      describe('unregisterSubscriptions', () => {
+        it('releases the reply paginator hold on the shared message store', () => {
+          const reply = makeReply();
+          const thread = createTestThread();
+          thread.registerSubscriptions();
+          thread.upsertReplyLocally({ message: reply });
+
+          // the reply is held in the client-global store by the reply paginator
+          expect(client.messageStore.has(reply.id)).to.be.true;
+
+          thread.unregisterSubscriptions();
+
+          // Regression: a removed thread used to keep its reply paginator linked as a store
+          // subscriber, pinning it (and its replies) forever. With no other holder the store GCs
+          // the reply and the paginator no longer holds it.
+          expect(client.messageStore.has(reply.id)).to.be.false;
+          expect(thread.messagePaginator.getItem(reply.id)).to.be.undefined;
+        });
+
+        // Behavioral characterization of the store's refcount/reclaim contract via the PUBLIC read
+        // API (messageStore.has) — a dual-homed message must survive one holder leaving and only be
+        // reclaimed when the LAST holder releases it. This pins the contract independently of how the
+        // store implements routing/refcount internally (so it survives a store rearchitecture).
+        it('keeps a message a sibling collection still holds after the thread is torn down (dual-home refcount)', () => {
+          const thread = createTestThread();
+          // The channel list also holds the parent message (it is a normal channel message). ingestItem
+          // links it into the shared store under the channel paginator, regardless of rendering/filter.
+          channel.messagePaginator.ingestItem(formatMessage(parentMessageResponse));
+          expect(client.messageStore.has(thread.id)).to.be.true;
+
+          // Opening the thread adds a SECOND holder (its parent-message store subscription).
+          thread.registerSubscriptions();
+          expect(client.messageStore.has(thread.id)).to.be.true;
+
+          // Tearing down the thread releases ITS hold — but the channel still holds the message, so
+          // (unlike the pure-reply case above) it must NOT be reclaimed from the store.
+          thread.unregisterSubscriptions();
+          expect(client.messageStore.has(thread.id)).to.be.true;
+
+          // Only once the last holder (the channel) drops it is the canonical copy reclaimed.
+          channel.messagePaginator.removeItem({ id: thread.id });
+          expect(client.messageStore.has(thread.id)).to.be.false;
         });
       });
 

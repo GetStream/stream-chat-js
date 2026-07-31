@@ -1,5 +1,6 @@
 import { StateStore } from './store';
-import { formatMessage } from './utils';
+import { computeOwnReactions, formatMessage } from './utils';
+import { applyReactionLocally } from './messageStore';
 import type {
   AscDesc,
   DraftResponse,
@@ -256,7 +257,10 @@ export class Thread extends WithSubscriptions {
     });
 
     this.messageOperations = new MessageOperations({
-      ingest: (m) => this.messagePaginator.ingestItem(m),
+      ingest: (m) => {
+        this.messagePaginator.ingestItem(m);
+        this.channel.getClient().messageStore.flushSubscribers(m.id);
+      },
       get: (id) => this.messagePaginator.getItem(id),
       normalizeOutgoingMessage: (m) => ({
         ...m,
@@ -400,6 +404,10 @@ export class Thread extends WithSubscriptions {
       isStateStale: false,
     });
 
+    if (parentMessage && this.hasSubscriptions) {
+      this.client.messageStore.upsert(parentMessage);
+    }
+
     this.messagePaginator.mergeNewestPage(
       thread.messagePaginator.state.getLatestValue().items ?? [],
     );
@@ -415,6 +423,7 @@ export class Thread extends WithSubscriptions {
       return;
     }
 
+    this.addUnsubscribeFunction(this.subscribeParentMessageFromStore());
     this.addUnsubscribeFunction(this.subscribeThreadUpdated());
     this.addUnsubscribeFunction(this.subscribeMarkActiveThreadRead());
     this.addUnsubscribeFunction(this.subscribeReloadActiveStaleThread());
@@ -562,21 +571,6 @@ export class Thread extends WithSubscriptions {
       this.state.partialNext({ read: nextRead });
     }).unsubscribe;
 
-  private incrementReplyCountLocally = () => {
-    this.state.next((current) => {
-      const nextReplyCount = current.replyCount + 1;
-
-      return {
-        ...current,
-        parentMessage: {
-          ...current.parentMessage,
-          reply_count: nextReplyCount,
-        },
-        replyCount: nextReplyCount,
-      };
-    });
-  };
-
   private subscribeRepliesRead = () =>
     this.client.on('message.read', (event) => {
       if (!event.user || !event.created_at || !event.thread) return;
@@ -636,9 +630,9 @@ export class Thread extends WithSubscriptions {
         this.client.on(eventType, (event) => {
           if (!event.message) return;
           // A `message.updated` WS event carries `own_reactions: []`; upserting it verbatim would
-          // wipe the current user's reactions on a reply edit. The reply paginator is this thread's
-          // own source of truth (the channel no longer enriches reply events), so preserve the
-          // existing reply's `own_reactions`.
+          // wipe the current user's reactions on an edit. Preserve them off the copy we already hold
+          // — the reply paginator for a reply, `state.parentMessage` for the parent (the parent is
+          // not held in any paginator, so it needs the same treatment directly).
           const message =
             event.message.parent_id === this.id
               ? {
@@ -647,7 +641,14 @@ export class Thread extends WithSubscriptions {
                     this.messagePaginator.getItem(event.message.id)?.own_reactions ??
                     event.message.own_reactions,
                 }
-              : event.message;
+              : !event.message.parent_id && event.message.id === this.id
+                ? {
+                    ...event.message,
+                    own_reactions:
+                      this.state.getLatestValue().parentMessage?.own_reactions ??
+                      event.message.own_reactions,
+                  }
+                : event.message;
           this.updateParentMessageOrReplyLocally(message);
           this.messagePaginator.reflectQuotedMessageUpdate(formatMessage(event.message));
         }).unsubscribe,
@@ -668,7 +669,20 @@ export class Thread extends WithSubscriptions {
               removed: eventType === 'reaction.deleted',
             });
           } else if (!message.parent_id && message.id === this.id) {
-            this.updateParentMessageLocally({ message });
+            // Reaction on the PARENT. The parent isn't in a paginator, so apply the current user's
+            // own_reactions delta here (mirroring the reply path's reflectReaction) rather than
+            // copying the WS event verbatim — which would drop own_reactions the event omits.
+            const own_reactions = computeOwnReactions({
+              current:
+                this.state.getLatestValue().parentMessage?.own_reactions ??
+                message.own_reactions ??
+                [],
+              enforceUnique: eventType === 'reaction.updated',
+              reaction,
+              removed: eventType === 'reaction.deleted',
+              userId: this.client.userID,
+            });
+            this.updateParentMessageLocally({ message: { ...message, own_reactions } });
           }
           this.messagePaginator.reflectQuotedMessageUpdate(formatMessage(message));
         }).unsubscribe,
@@ -703,8 +717,39 @@ export class Thread extends WithSubscriptions {
     return () => unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
   };
 
+  // The parent message lives in the client-global message store (one canonical POJO per id);
+  // `state.parentMessage` and the fields derived from it are a projection of that copy. Every update
+  // to the parent — optimistic reaction, WS reaction/edit/delete, reply-count bump — writes the
+  // store, which reflects it here through this single subscription (one per thread, not one per
+  // message). Seeds the store on first subscribe when no other collection holds the parent yet
+  // (e.g. a thread opened from a notification, its parent not in the channel window).
+  private subscribeParentMessageFromStore = () => {
+    const store = this.client.messageStore;
+    const parent = this.state.getLatestValue().parentMessage;
+    if (parent && !store.has(parent.id)) store.upsert(parent);
+
+    return store.subscribe(this.id, (message) => {
+      if (!message) return;
+      this.state.next((current) => ({
+        ...current,
+        deletedAt: message.deleted_at ?? null,
+        parentMessage: message,
+        participants:
+          normalizeThreadParticipants(message.thread_participants, current.channel.cid) ??
+          current.participants,
+        replyCount: message.reply_count ?? current.replyCount,
+      }));
+    });
+  };
+
   public unregisterSubscriptions = () => {
     const symbol = super.unregisterSubscriptions();
+    // Release the reply paginator's hold on the shared message store. The parent subscription is
+    // torn down by `super.unregisterSubscriptions()` (it was added as an unsubscribe function), but
+    // the reply paginator's per-id links live in its item index, not in the subscription list — so a
+    // removed thread would otherwise stay pinned by `messageStore.subscribers` and keep its replies
+    // alive. `getThread` builds a fresh instance if this thread is re-opened, so this is a discard.
+    this.messagePaginator.dispose();
     this.state.partialNext({ isStateStale: true });
     return symbol;
   };
@@ -749,19 +794,12 @@ export class Thread extends WithSubscriptions {
       throw new Error('Message does not belong to this thread');
     }
 
-    this.state.next((current) => {
-      const formattedMessage = formatMessage(message);
-
-      return {
-        ...current,
-        deletedAt: formattedMessage.deleted_at,
-        parentMessage: formattedMessage,
-        participants:
-          normalizeThreadParticipants(message.thread_participants, current.channel.cid) ??
-          current.participants,
-        replyCount: message.reply_count ?? current.replyCount,
-      };
-    });
+    // The parent's content lives in the client-global message store; `state.parentMessage` (and the
+    // fields derived from it) is a projection kept in sync by `subscribeParentMessageFromStore`.
+    // Writing the store fans the change out to every collection holding this id and reflects it here.
+    if (this.client.messageStore.has(message.id)) {
+      this.client.messageStore.upsert(formatMessage(message));
+    }
   };
 
   // todo: can be removed with the next breaking change and use MessagePaginator only
@@ -852,7 +890,8 @@ export class Thread extends WithSubscriptions {
     reaction: Reaction;
     options?: SendReactionOptions;
   }) {
-    const undo = this.messagePaginator.applyReactionLocally({
+    const client = this.channel.getClient();
+    const undo = applyReactionLocally(client, {
       enforceUnique: options?.enforce_unique ?? false,
       messageId,
       reaction,
@@ -860,11 +899,13 @@ export class Thread extends WithSubscriptions {
 
     try {
       const response = await this.channel.sendReaction(messageId, reaction, options);
-      if (response?.message) {
-        this.messagePaginator.ingestItem(formatMessage(response.message));
+      // reconcile the server copy only if we still hold it — a bare upsert of an unheld id would
+      // orphan it (the store's refcount GC only reclaims held ids).
+      if (response?.message && client.messageStore.has(response.message.id)) {
+        client.messageStore.upsert(formatMessage(response.message));
       }
     } catch (error) {
-      if (undo && (!this.channel.getClient().offlineDb || !isEphemeral(error as Error))) {
+      if (undo && (!client.offlineDb || !isEphemeral(error as Error))) {
         undo();
       }
       throw error;
@@ -882,7 +923,8 @@ export class Thread extends WithSubscriptions {
     messageId: string;
     type: string;
   }) {
-    const undo = this.messagePaginator.applyReactionLocally({
+    const client = this.channel.getClient();
+    const undo = applyReactionLocally(client, {
       messageId,
       reaction: { type },
       removed: true,
@@ -890,11 +932,13 @@ export class Thread extends WithSubscriptions {
 
     try {
       const response = await this.channel.deleteReaction(messageId, type);
-      if (response?.message) {
-        this.messagePaginator.ingestItem(formatMessage(response.message));
+      // reconcile the server copy only if we still hold it — a bare upsert of an unheld id would
+      // orphan it (the store's refcount GC only reclaims held ids).
+      if (response?.message && client.messageStore.has(response.message.id)) {
+        client.messageStore.upsert(formatMessage(response.message));
       }
     } catch (error) {
-      if (undo && (!this.channel.getClient().offlineDb || !isEphemeral(error as Error))) {
+      if (undo && (!client.offlineDb || !isEphemeral(error as Error))) {
         undo();
       }
       throw error;

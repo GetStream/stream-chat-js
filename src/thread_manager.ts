@@ -203,7 +203,7 @@ export class ThreadManager extends WithSubscriptions {
       },
       DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION,
       { trailing: true },
-    );
+    ).throttledFn;
 
     const unsubscribeConnectionRecovered = this.client.on(
       'connection.recovered',

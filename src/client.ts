@@ -281,6 +281,7 @@ import { Moderation } from './moderation';
 import { ThreadManager } from './thread_manager';
 import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import { PollManager } from './poll_manager';
+import { MessageStore } from './messageStore/MessageStore';
 import type {
   ChannelManagerEventHandlerOverrides,
   ChannelManagerOptions,
@@ -332,6 +333,12 @@ export class StreamChat {
   };
   threads: ThreadManager;
   polls: PollManager;
+  /**
+   * Client-global, normalized store holding one canonical copy of each message. The channel main
+   * list and thread reply paginators read/write message content through it, so a message held in
+   * more than one of them stays consistent without copy-to-copy fan-out.
+   */
+  messageStore: MessageStore;
   offlineDb?: AbstractOfflineDB;
   notifications: NotificationManager;
   reminders: ReminderManager;
@@ -564,6 +571,7 @@ export class StreamChat {
      */
     this.logger = isFunction(inputOptions.logger) ? inputOptions.logger : () => null;
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
+    this.messageStore = new MessageStore();
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
     this.reminders = new ReminderManager({ client: this });

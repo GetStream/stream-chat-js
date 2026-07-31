@@ -12,6 +12,11 @@ export * from './events';
 export * from './insights';
 export * from './messageComposer';
 export * from './messageDelivery';
+export { MessageStore } from './messageStore/MessageStore';
+export type {
+  MessageStoreChangeBatch,
+  MessageStoreSubscriber,
+} from './messageStore/MessageStore';
 export * from './middleware';
 export * from './moderation';
 export * from './notifications';
