@@ -932,6 +932,15 @@ export class MessageIntervalPaginator extends BasePaginator<
    * @param {boolean} [params.enforceUnique=false] When adding, first clear the current user's existing
    *   `own_reactions` so only the incoming one remains (used by `reaction.updated`, where a user's
    *   reaction replaces their previous one).
+   *
+   * TODO(reactive-store): reflect reactions ONCE at the store level, not per-paginator. Both the
+   * channel handler (channel.ts) and the thread handler (thread.ts) call this on every reaction.*
+   * event, so a message held in more than one collection (a show_in_channel reply, or the thread
+   * parent) is reflected TWICE: two writes to the same canonical slot, each fanning out to the
+   * other holder (double re-projection) and minting a fresh ref that defeats the reconcile
+   * ref-equality bail. Idempotent (counts come wholesale from the event) so the result is correct,
+   * just wasteful. The store already fans out to every holder, so reflect once (by id, if held) and
+   * retire the per-collection reflect calls + parent path + enforce_unique branch.
    */
   reflectReaction = ({
     enforceUnique = false,
