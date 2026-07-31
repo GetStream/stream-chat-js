@@ -797,7 +797,9 @@ export class Thread extends WithSubscriptions {
     // The parent's content lives in the client-global message store; `state.parentMessage` (and the
     // fields derived from it) is a projection kept in sync by `subscribeParentMessageFromStore`.
     // Writing the store fans the change out to every collection holding this id and reflects it here.
-    this.client.messageStore.upsert(formatMessage(message));
+    if (this.client.messageStore.has(message.id)) {
+      this.client.messageStore.upsert(formatMessage(message));
+    }
   };
 
   // todo: can be removed with the next breaking change and use MessagePaginator only
@@ -897,7 +899,9 @@ export class Thread extends WithSubscriptions {
 
     try {
       const response = await this.channel.sendReaction(messageId, reaction, options);
-      if (response?.message) {
+      // reconcile the server copy only if we still hold it — a bare upsert of an unheld id would
+      // orphan it (the store's refcount GC only reclaims held ids).
+      if (response?.message && client.messageStore.has(response.message.id)) {
         client.messageStore.upsert(formatMessage(response.message));
       }
     } catch (error) {
@@ -928,7 +932,9 @@ export class Thread extends WithSubscriptions {
 
     try {
       const response = await this.channel.deleteReaction(messageId, type);
-      if (response?.message) {
+      // reconcile the server copy only if we still hold it — a bare upsert of an unheld id would
+      // orphan it (the store's refcount GC only reclaims held ids).
+      if (response?.message && client.messageStore.has(response.message.id)) {
         client.messageStore.upsert(formatMessage(response.message));
       }
     } catch (error) {

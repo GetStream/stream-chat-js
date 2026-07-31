@@ -469,7 +469,9 @@ export class Channel {
 
     try {
       const response = await this.sendReaction(messageId, reaction, options);
-      if (response?.message) {
+      // reconcile the server copy only if we still hold it — a bare upsert of an unheld id would
+      // orphan it (the store's refcount GC only reclaims held ids).
+      if (response?.message && client.messageStore.has(response.message.id)) {
         client.messageStore.upsert(formatMessage(response.message));
       }
     } catch (error) {
@@ -500,7 +502,9 @@ export class Channel {
 
     try {
       const response = await this.deleteReaction(messageId, type);
-      if (response?.message) {
+      // reconcile the server copy only if we still hold it — a bare upsert of an unheld id would
+      // orphan it (the store's refcount GC only reclaims held ids).
+      if (response?.message && client.messageStore.has(response.message.id)) {
         client.messageStore.upsert(formatMessage(response.message));
       }
     } catch (error) {
