@@ -868,15 +868,6 @@ export abstract class BasePaginator<T, Q> {
   }
 
   /**
-   * Reacts to a change to a held item made *elsewhere* — a sibling paginator or a WS
-   * echo writing through a shared item store. Re-emits the active window only if a
-   * changed id is part of it, mirroring the active-interval emit gate in {@link ingestItem}.
-   *
-   * The paginator's own writes pass themselves to the store as the change origin, so
-   * they never arrive here (they emit inline instead) — this is what lets a shared
-   * store replace the manual copy-to-copy fan-out without double-emitting.
-   */
-  /**
    * Whether this paginator's live `state.items` publishes are currently throttled — `stateThrottleMs`
    * is set, throttling is not globally disabled (tests), and item order is not locked (a locked-order
    * list must emit the caller-computed, order-preserved array, not a re-projection). When false, every

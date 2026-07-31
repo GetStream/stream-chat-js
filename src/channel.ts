@@ -447,7 +447,7 @@ export class Channel {
 
   /**
    * Adds a reaction with an optimistic local state update: the reaction is applied to the cached
-   * message immediately ({@link MessageIntervalPaginator.applyReactionLocally}), then the request is
+   * message immediately ({@link applyReactionLocally}), then the request is
    * fired via {@link Channel.sendReaction} (which owns the offline-DB write + queue). The
    * server-authoritative counts reconcile on the response; the message is rolled back on failure.
    */
@@ -745,7 +745,7 @@ export class Channel {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
         // The optimistic reaction row is written by the local-update layer
-        // (`MessagePaginator.applyReactionLocally`); here we only queue the request for replay.
+        // (`applyReactionLocally`); here we only queue the request for replay.
         return await offlineDb.queueTask<ReactionAPIResponse>({
           task: {
             channelId: this.id as string,
@@ -808,7 +808,7 @@ export class Channel {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
         // The optimistic reaction-row removal is handled by the local-update layer
-        // (`MessagePaginator.applyReactionLocally`); here we only queue the request for replay.
+        // (`applyReactionLocally`); here we only queue the request for replay.
         return await offlineDb.queueTask<ReactionAPIResponse>({
           task: {
             channelId: this.id as string,

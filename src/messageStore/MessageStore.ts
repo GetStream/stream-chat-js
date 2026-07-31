@@ -4,13 +4,11 @@ import type { Unsubscribe } from '../store';
 /**
  * A batch of message-store changes delivered to a subscriber in a single notification.
  *
- * `changedIds` are the ids the subscriber watches whose canonical object changed
- * reference this flush (an upsert or a removal). `removedIds` is the subset that
- * was removed (so `store.get(id)` now returns `undefined`).
+ * `changedIds` are the ids the subscriber watches whose canonical object changed reference this
+ * flush (an upsert, or a removal — a removal makes `store.get(id)` return `undefined`).
  */
 export type MessageStoreChangeBatch = {
   changedIds: ReadonlySet<string>;
-  removedIds: ReadonlySet<string>;
 };
 
 /**
@@ -29,8 +27,6 @@ export type MessageStoreSubscriber = {
    */
   flushState?: () => void;
 };
-
-const EMPTY_ID_SET: ReadonlySet<string> = new Set<string>();
 
 /**
  * A client-global, normalized store for message content.
@@ -68,7 +64,6 @@ export class MessageStore {
 
   private transactionDepth = 0;
   private pendingChanged = new Map<MessageStoreSubscriber, Set<string>>();
-  private pendingRemoved = new Map<MessageStoreSubscriber, Set<string>>();
 
   // ---- reads ----
 
@@ -94,18 +89,7 @@ export class MessageStore {
     // do not notify if the value hasn't changed (mirrors StateStore.next)
     if (previous === message) return;
     this.byId.set(id, message);
-    this.markDirty(id, false, origin);
-    this.autoFlush();
-  }
-
-  /**
-   * Hard-removes the canonical copy of `id` and signals its removal to subscribers.
-   * (Refcount GC in {@link unlink} handles the softer "no holder left" case.)
-   */
-  remove(id: string, origin?: MessageStoreSubscriber): void {
-    if (!this.byId.has(id)) return;
-    this.byId.delete(id);
-    this.markDirty(id, true, origin);
+    this.markDirty(id, origin);
     this.autoFlush();
   }
 
@@ -178,7 +162,7 @@ export class MessageStore {
     for (const holder of holders) holder.flushState?.();
   }
 
-  private markDirty(id: string, removed: boolean, origin?: MessageStoreSubscriber): void {
+  private markDirty(id: string, origin?: MessageStoreSubscriber): void {
     const holders = this.subscribers.get(id);
     if (!holders) return;
     for (const holder of holders) {
@@ -189,14 +173,6 @@ export class MessageStore {
         this.pendingChanged.set(holder, changed);
       }
       changed.add(id);
-      if (removed) {
-        let removedSet = this.pendingRemoved.get(holder);
-        if (!removedSet) {
-          removedSet = new Set();
-          this.pendingRemoved.set(holder, removedSet);
-        }
-        removedSet.add(id);
-      }
     }
   }
 
@@ -206,17 +182,12 @@ export class MessageStore {
 
   private flush(): void {
     if (this.pendingChanged.size === 0) return;
-    // swap out the pending maps before notifying so writes made from within a
+    // swap out the pending map before notifying so writes made from within a
     // subscriber accumulate into the next flush rather than mutating this one.
     const changedBySubscriber = this.pendingChanged;
-    const removedBySubscriber = this.pendingRemoved;
     this.pendingChanged = new Map();
-    this.pendingRemoved = new Map();
     for (const [subscriber, changedIds] of changedBySubscriber) {
-      subscriber.onMessagesChanged({
-        changedIds,
-        removedIds: removedBySubscriber.get(subscriber) ?? EMPTY_ID_SET,
-      });
+      subscriber.onMessagesChanged({ changedIds });
     }
   }
 }

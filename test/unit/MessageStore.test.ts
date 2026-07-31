@@ -83,7 +83,6 @@ describe('MessageStore', () => {
 
       const batch = a.onMessagesChanged.mock.calls[0][0];
       expect([...batch.changedIds]).toEqual(['m1']);
-      expect([...batch.removedIds]).toEqual([]);
     });
 
     it('skips the origin subscriber but notifies other holders', () => {
@@ -129,27 +128,6 @@ describe('MessageStore', () => {
 
       store.unlink('m1', b);
       expect(store.has('m1')).toBe(false);
-    });
-  });
-
-  describe('remove', () => {
-    it('deletes content and signals removal to holders', () => {
-      const a = spySubscriber();
-      store.upsert(msg({ id: 'm1' }));
-      store.link('m1', a);
-
-      store.remove('m1');
-      expect(store.get('m1')).toBeUndefined();
-      const batch = a.onMessagesChanged.mock.calls[0][0];
-      expect([...batch.changedIds]).toEqual(['m1']);
-      expect([...batch.removedIds]).toEqual(['m1']);
-    });
-
-    it('is a no-op for an absent id', () => {
-      const a = spySubscriber();
-      store.link('m1', a);
-      store.remove('m1');
-      expect(a.onMessagesChanged).not.toHaveBeenCalled();
     });
   });
 

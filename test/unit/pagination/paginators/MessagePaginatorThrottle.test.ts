@@ -126,7 +126,7 @@ describe('MessagePaginator — state publish throttling', () => {
     (
       p as unknown as { _itemIndex: { setOne: (m: LocalMessage) => void } }
     )._itemIndex.setOne(changed);
-    p.onMessagesChanged({ changedIds: new Set(['m3']), removedIds: new Set() });
+    p.onMessagesChanged({ changedIds: new Set(['m3']) });
     // deferred: the visible text is refreshed only on the trailing edge / flush
     p.flushState();
     expect(p.items?.find((m) => m.id === 'm3')?.text).toBe('edited');
@@ -273,7 +273,7 @@ describe('MessagePaginator — interval-view (anchoredHead) publish throttling',
   };
 
   const notify = (p: MessagePaginator, id: string) =>
-    p.onMessagesChanged({ changedIds: new Set([id]), removedIds: new Set() });
+    p.onMessagesChanged({ changedIds: new Set([id]) });
 
   it('coalesces a burst of sibling content updates into leading + trailing anchoredHead publishes', () => {
     const p = make();
