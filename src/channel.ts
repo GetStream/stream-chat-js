@@ -2983,5 +2983,10 @@ export class Channel {
     this.disconnected = true;
     this.messageReceiptsTracker.unregisterSubscriptions();
     this.cooldownTimer.clearTimeout();
+    // Release the store-backed paginators so the message store no longer pins this removed channel
+    // (and its whole message graph) through its subscriber registry. The channel is being discarded
+    // here (disconnected + deleted from activeChannels, never reused), mirroring Thread teardown.
+    this.messagePaginator.dispose();
+    this.pinnedMessagesPaginator.dispose();
   }
 }

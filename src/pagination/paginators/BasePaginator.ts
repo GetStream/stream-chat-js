@@ -2633,9 +2633,13 @@ export abstract class BasePaginator<T, Q> {
    * paginator through its subscriber registry — otherwise a discarded owner stays pinned, keeps
    * receiving change notifications, and its items never garbage-collect. Call on teardown of the
    * owner: a discard, not a reset (the owner is not reused; a re-appearing id gets a fresh instance;
-   * leftover interval/state caches die with the paginator when it is dropped).
+   * leftover interval/state caches die with the paginator when it is dropped). Also cancels any
+   * pending throttled window/view publish, so nothing emits after teardown.
    */
   dispose(): void {
+    this._windowPublishThrottle?.cancelTimer();
+    this._viewPublishThrottle?.cancelTimer();
+    this._pendingViewChangedIds.clear();
     this._itemIndex.clear();
   }
 
