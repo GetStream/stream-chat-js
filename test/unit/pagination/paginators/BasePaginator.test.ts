@@ -718,7 +718,7 @@ describe('BasePaginator', () => {
       // freshly loaded page would merge into the stale intervals from the previous shape.
       paginator.getNextQueryShape.mockReturnValueOnce({
         filters: { id: 'test' },
-        sort: { id: -1 },
+        sort: [{ field: 'id', direction: -1 }],
       });
       paginator.resetState();
       expect(paginator.items).toBeUndefined();
@@ -775,7 +775,7 @@ describe('BasePaginator', () => {
 
       paginator.getNextQueryShape.mockReturnValueOnce({
         filters: { id: 'test' },
-        sort: { id: -1 },
+        sort: [{ field: 'id', direction: -1 }],
       });
       nextPromise = paginator.toTail({ reset: 'no' });
       await sleep(0);

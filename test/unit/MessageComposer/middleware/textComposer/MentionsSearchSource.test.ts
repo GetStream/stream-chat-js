@@ -607,14 +607,14 @@ describe('MentionsSearchSource', () => {
   it('should prepare correct query parameters for users search', () => {
     const source = new MentionsSearchSource(channel);
     source.userFilters = { id: { $in: ['admin1', 'admin2'] } } as UserFilters;
-    source.userSort = [{ created_at: -1 }];
+    source.userSort = [{ field: 'created_at', direction: -1 }];
 
     const params = source.prepareQueryUsersParams('john', 7);
     expect(params.filters).toEqual({
       $or: [{ id: { $autocomplete: 'john' } }, { name: { $autocomplete: 'john' } }],
       id: { $in: ['admin1', 'admin2'] },
     });
-    expect(params.sort).toEqual([{ created_at: -1 }]);
+    expect(params.sort).toEqual([{ field: 'created_at', direction: -1 }]);
     expect(params.options).toEqual(expect.objectContaining({ limit: 10, offset: 7 }));
   });
 

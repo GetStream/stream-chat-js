@@ -112,9 +112,15 @@ describe('Threads 2.0', () => {
       expect(thread.id).to.equal(parentMessageResponse.id);
       // @ts-expect-error `name` is a custom property
       expect(thread.channel.data?.name).to.equal(channelResponse.name);
-      expect(thread.messagePaginator.sort).to.deep.equal([{ created_at: -1 }]);
-      expect(thread.messagePaginator.requestSort).to.deep.equal([{ created_at: -1 }]);
-      expect(thread.messagePaginator.itemOrder).to.deep.equal({ created_at: 1 });
+      expect(thread.messagePaginator.sort).to.deep.equal([
+        { field: 'created_at', direction: -1 },
+      ]);
+      expect(thread.messagePaginator.requestSort).to.deep.equal([
+        { field: 'created_at', direction: -1 },
+      ]);
+      expect(thread.messagePaginator.itemOrder).to.deep.equal([
+        { field: 'created_at', direction: 1 },
+      ]);
       expect(thread.messagePaginator.pageSize).to.equal(50);
     });
 
@@ -191,9 +197,15 @@ describe('Threads 2.0', () => {
       expect(state.participants).to.deep.equal([]);
       expect(state.custom).to.deep.equal({});
       expect(state.read).to.have.keys([TEST_USER_ID]);
-      expect(thread.messagePaginator.sort).to.deep.equal([{ created_at: -1 }]);
-      expect(thread.messagePaginator.requestSort).to.deep.equal([{ created_at: -1 }]);
-      expect(thread.messagePaginator.itemOrder).to.deep.equal({ created_at: 1 });
+      expect(thread.messagePaginator.sort).to.deep.equal([
+        { field: 'created_at', direction: -1 },
+      ]);
+      expect(thread.messagePaginator.requestSort).to.deep.equal([
+        { field: 'created_at', direction: -1 },
+      ]);
+      expect(thread.messagePaginator.itemOrder).to.deep.equal([
+        { field: 'created_at', direction: 1 },
+      ]);
       expect(thread.messagePaginator.pageSize).to.equal(50);
     });
 
