@@ -60,15 +60,19 @@ export class UserSearchSource<
       baseFilters: this.filters,
       context: { searchQuery } as UserSearchSourceFilterBuilderContext<TFilterContext>,
     });
-    let sort: UserSort;
-    if (Array.isArray(this.sort)) {
-      const hasIdSort = this.sort.some((entry) => 'id' in entry);
-      sort = hasIdSort ? this.sort : [...this.sort, { id: 1 }];
-    } else {
-      sort = { id: 1, ...this.sort };
-    }
+    const baseSort = this.sort ?? [];
+    const hasIdSort = baseSort.some((entry) => entry.field === 'id');
+    const sort: UserSort = hasIdSort
+      ? baseSort
+      : [...baseSort, { field: 'id', direction: 1 }];
     const options = { ...this.searchOptions, limit: this.pageSize, offset: this.offset };
-    const { users } = await this.client.queryUsers(filters, sort, options);
+    const { users } = await this.client.queryUsers({
+      payload: {
+        filter_conditions: filters,
+        sort,
+        ...options,
+      },
+    });
     return { items: users };
   }
 

@@ -16,9 +16,9 @@ type AsyncWrapper<P extends unknown[], T> = (
  * should never run simultaneously: if marked with the same tag, functions
  * will run one after another.
  *
- * @param tag Async functions with the same tag will run serially. Async functions
+ * @param tag - Async functions with the same tag will run serially. Async functions
  * with different tags can run in parallel.
- * @param cb Async function to run.
+ * @param cb - Async function to run.
  * @returns Promise that resolves when async functions returns.
  */
 export const withoutConcurrency = createRunner(wrapWithContinuationTracking);
@@ -32,9 +32,9 @@ export const withoutConcurrency = createRunner(wrapWithContinuationTracking);
  * If an async function is already running and was canceled, it will be notified
  * via an abort signal passed as an argument.
  *
- * @param tag Async functions with the same tag will run serially and are canceled
+ * @param tag - Async functions with the same tag will run serially and are canceled
  * when a new action with the same tag is scheduled.
- * @param cb Async function to run. Receives AbortSignal as the only argument.
+ * @param cb - Async function to run. Receives AbortSignal as the only argument.
  * @returns Promise that resolves when async functions returns. If the function didn't
  * start and was canceled, will resolve with 'canceled'. If the function started to run,
  * it's up to the function to decide how to react to cancelation.

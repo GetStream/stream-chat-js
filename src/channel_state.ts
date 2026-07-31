@@ -4,7 +4,6 @@ import type {
   Event,
   LocalMessage,
   MessageResponse,
-  MessageResponseBase,
   PendingMessageResponse,
   UserResponse,
 } from './types';
@@ -85,7 +84,7 @@ export class ChannelState {
     this.syncMemberCountFromChannelData(channel?.data);
     this.syncOwnCapabilitiesFromChannelData(channel?.data);
     this.pending_messages = [];
-    this.membership = {};
+    this.membership = {} as ChannelMemberResponse;
     this.unreadCount = 0;
   }
 
@@ -234,13 +233,12 @@ export class ChannelState {
   }
 
   /**
-   * Takes the message object, parses the dates, sets `__html`
-   * and sets the status to `received` if missing; returns a new message object.
+   * Takes the message object, adds SDK-specific fields (status, error),
+   * and returns a new message object.
    *
-   * @param {MessageResponse} message `MessageResponse` object
+   * @param message - `MessageResponse` object
    */
-  formatMessage = (message: MessageResponse | MessageResponseBase | LocalMessage) =>
-    formatMessage(message);
+  formatMessage = (message: MessageResponse | LocalMessage) => formatMessage(message);
 
   /**
    * clean - Remove stale data such as users that stayed in typing state for more than 5 seconds

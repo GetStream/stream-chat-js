@@ -47,7 +47,7 @@ describe('Reminder', () => {
     const data = generateReminderResponse({ scheduleOffsetMs });
     const reminder = new Reminder({ data });
     const timerInitSpy = vi.spyOn(reminder.timer, 'init');
-    reminder.setState({ ...data, remind_at: new Date().toISOString() });
+    reminder.setState({ ...data, remind_at: new Date() });
     expect(reminder.timeLeftMs).toBe(0);
     expect(timerInitSpy).toHaveBeenCalledTimes(1);
   });
@@ -61,9 +61,7 @@ describe('Reminder', () => {
     vi.advanceTimersByTime(scheduleOffsetMs + DEFAULT_STOP_REFRESH_BOUNDARY_MS);
     reminder.setState({
       ...data,
-      remind_at: new Date(
-        new Date(orignalRemindAt as string).getTime() - 1000,
-      ).toISOString(),
+      remind_at: new Date(orignalRemindAt!.getTime() - 1000),
     });
     expect(reminder.timer.timeout).toBeNull();
     expect(reminder.timeLeftMs).toBe(-1 * (DEFAULT_STOP_REFRESH_BOUNDARY_MS + 1000));

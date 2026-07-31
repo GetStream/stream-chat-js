@@ -1,12 +1,9 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 import {
   compare,
   resolveDotPathValue as defaultResolvePathValue,
   normalizeComparedValues,
 } from './utility.normalization';
-import { normalizeQuerySort } from '../utils';
-import type { AscDesc } from '../types';
+import type { SortParamRequest } from '../types';
 import type { Comparator, PathResolver } from './types.normalization';
 
 export type ItemLocation = {
@@ -124,28 +121,25 @@ export function binarySearch<T>({
  * (but they can still move relative to others — sort in JS is not guaranteed stable in older engines, though modern V8/Node/Chrome/Firefox make it stable)
  *
  * Positive number (> 0) → a comes after b
- * @param sort
- * @param resolvePathValue
- * @param tiebreaker
+ *
+ * @param params - Comparator configuration.
+ * @param params.sort - The sort specification defining fields and directions.
+ * @param params.resolvePathValue - Resolver used to read a field value from an item.
+ * @param params.tiebreaker - Comparator applied when all sort terms are equal.
  */
-export function makeComparator<
-  T,
-  S extends Record<string, AscDesc> | Record<string, AscDesc>[],
->({
+export function makeComparator<T>({
   sort,
   resolvePathValue = defaultResolvePathValue,
   tiebreaker = (a, b) => compare((a as any).cid, (b as any).cid),
 }: {
-  sort: S;
+  sort: SortParamRequest[];
   resolvePathValue?: PathResolver<T>;
   tiebreaker?: Comparator<T>;
 }): Comparator<T> {
-  const terms = normalizeQuerySort(sort);
-
   return (a: T, b: T) => {
-    for (const { field: path, direction } of terms) {
-      const leftValue = resolvePathValue(a, path);
-      const rightValue = resolvePathValue(b, path);
+    for (const { field: path, direction } of sort) {
+      const leftValue = resolvePathValue(a, path as string);
+      const rightValue = resolvePathValue(b, path as string);
       const normalized = normalizeComparedValues(leftValue, rightValue);
       let comparison: number;
       switch (normalized.kind) {

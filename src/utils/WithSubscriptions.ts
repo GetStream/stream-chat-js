@@ -1,8 +1,9 @@
 import type { Unsubscribe } from '../store';
 
 /**
- * @private
  * Class to use as a template for subscribable entities.
+ *
+ * @internal
  */
 export abstract class WithSubscriptions {
   private unsubscribeFunctions: Set<Unsubscribe> = new Set();

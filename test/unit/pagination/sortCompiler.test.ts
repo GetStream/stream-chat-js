@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { binarySearch, makeComparator } from '../../../src/pagination/sortCompiler';
 import { resolveDotPathValue as defaultResolvePathValue } from '../../../src/pagination/utility.normalization';
-import type { AscDesc } from '../../../src';
+import type { SortParamRequest } from '../../../src';
 
 // Minimal item type for tests
 type Item = {
@@ -20,10 +20,10 @@ function orderByComparator(items: Item[], cmp: (a: Item, b: Item) => number): st
  * Helper to build a comparator with optional resolvePathValue override.
  */
 function toComparator(
-  sort: Record<string, AscDesc> | Array<Record<string, AscDesc>>,
+  sort: SortParamRequest[],
   resolvePathValue = defaultResolvePathValue,
 ) {
-  return makeComparator<Item, Record<string, AscDesc> | Array<Record<string, AscDesc>>>({
+  return makeComparator<Item>({
     sort,
     resolvePathValue,
   });
@@ -38,10 +38,10 @@ describe('makeComparator', () => {
       { cid: 'd', v: 100 },
     ];
 
-    const asc = toComparator({ v: 1 });
+    const asc = toComparator([{ field: 'v', direction: 1 }]);
     expect(orderByComparator(items, asc)).toEqual(['a', 'b', 'c', 'd']);
 
-    const desc = toComparator({ v: -1 });
+    const desc = toComparator([{ field: 'v', direction: -1 }]);
     expect(orderByComparator(items, desc)).toEqual(['d', 'c', 'a', 'b']);
   });
 
@@ -53,10 +53,10 @@ describe('makeComparator', () => {
       { cid: '3', v: 'gamma' },
     ];
 
-    const asc = toComparator({ v: 1 });
+    const asc = toComparator([{ field: 'v', direction: 1 }]);
     expect(orderByComparator(items, asc)).toEqual(['1', '4', '2', '3']);
 
-    const desc = toComparator({ v: -1 });
+    const desc = toComparator([{ field: 'v', direction: -1 }]);
     expect(orderByComparator(items, desc)).toEqual(['3', '2', '1', '4']);
   });
 
@@ -67,10 +67,10 @@ describe('makeComparator', () => {
       { cid: 'b', v: false },
     ];
 
-    const asc = toComparator({ v: 1 });
+    const asc = toComparator([{ field: 'v', direction: 1 }]);
     expect(orderByComparator(items, asc)).toEqual(['a', 'b', 'c']);
 
-    const desc = toComparator({ v: -1 });
+    const desc = toComparator([{ field: 'v', direction: -1 }]);
     expect(orderByComparator(items, desc)).toEqual(['c', 'a', 'b']);
   });
 
@@ -81,10 +81,10 @@ describe('makeComparator', () => {
       { cid: 'c', v: new Date('2022-06-15T00:00:00Z') },
     ];
 
-    const asc = toComparator({ v: 1 });
+    const asc = toComparator([{ field: 'v', direction: 1 }]);
     expect(orderByComparator(items, asc)).toEqual(['c', 'a', 'b']);
 
-    const desc = toComparator({ v: -1 });
+    const desc = toComparator([{ field: 'v', direction: -1 }]);
     expect(orderByComparator(items, desc)).toEqual(['b', 'a', 'c']);
   });
 
@@ -95,10 +95,10 @@ describe('makeComparator', () => {
       { cid: 'c', v: '2022-06-15T00:00:00Z' },
     ];
 
-    const asc = toComparator({ v: 1 });
+    const asc = toComparator([{ field: 'v', direction: 1 }]);
     expect(orderByComparator(items, asc)).toEqual(['c', 'a', 'b']);
 
-    const desc = toComparator({ v: -1 });
+    const desc = toComparator([{ field: 'v', direction: -1 }]);
     expect(orderByComparator(items, desc)).toEqual(['b', 'a', 'c']);
   });
 
@@ -109,10 +109,10 @@ describe('makeComparator', () => {
       { cid: 'c', v: Date.parse('2022-06-15T00:00:00Z') },
     ];
 
-    const asc = toComparator({ v: 1 });
+    const asc = toComparator([{ field: 'v', direction: 1 }]);
     expect(orderByComparator(items, asc)).toEqual(['c', 'a', 'b']);
 
-    const desc = toComparator({ v: -1 });
+    const desc = toComparator([{ field: 'v', direction: -1 }]);
     expect(orderByComparator(items, desc)).toEqual(['b', 'a', 'c']);
   });
 
@@ -123,7 +123,7 @@ describe('makeComparator', () => {
       { cid: 'c', nested: { x: 75 } },
     ];
 
-    const cmp = toComparator({ 'nested.x': 1 });
+    const cmp = toComparator([{ field: 'nested.x', direction: 1 }]);
     expect(orderByComparator(items, cmp)).toEqual(['b', 'c', 'a']);
   });
 
@@ -136,7 +136,10 @@ describe('makeComparator', () => {
     ];
 
     // First by v asc, then nested.x desc; if both equal, tie-break by cid asc
-    const cmp = toComparator([{ v: 1 }, { 'nested.x': -1 }]);
+    const cmp = toComparator([
+      { field: 'v', direction: 1 },
+      { field: 'nested.x', direction: -1 },
+    ]);
     expect(orderByComparator(items, cmp)).toEqual(['1', '2', '3', '4']);
   });
 
@@ -149,10 +152,10 @@ describe('makeComparator', () => {
     ];
 
     // null/undefined always sort to the tail; the direction only orders the real values.
-    const asc = toComparator({ v: 1 });
+    const asc = toComparator([{ field: 'v', direction: 1 }]);
     expect(orderByComparator(items, asc)).toEqual(['d', 'a', 'b', 'c']);
 
-    const desc = toComparator({ v: -1 });
+    const desc = toComparator([{ field: 'v', direction: -1 }]);
     expect(orderByComparator(items, desc)).toEqual(['a', 'd', 'b', 'c']);
   });
 
@@ -167,8 +170,8 @@ describe('makeComparator', () => {
       { cid: 'new', last_message_at: '2026-07-21T00:00:00.000Z' },
       { cid: 'none2', last_message_at: null },
     ];
-    const desc = makeComparator<Chan, Record<string, AscDesc>>({
-      sort: { last_message_at: -1 },
+    const desc = makeComparator<Chan>({
+      sort: [{ field: 'last_message_at', direction: -1 }],
       resolvePathValue: defaultResolvePathValue,
     });
     expect([...chans].sort(desc).map((c) => c.cid)).toEqual([
@@ -188,27 +191,13 @@ describe('makeComparator', () => {
 
     const customTiebreaker = (l: Item, r: Item) => r.cid.localeCompare(l.cid);
 
-    const cmp = makeComparator<Item, Record<string, AscDesc>>({
-      sort: { v: 1 }, // all v equal
+    const cmp = makeComparator<Item>({
+      sort: [{ field: 'v', direction: 1 }], // all v equal
       resolvePathValue: defaultResolvePathValue,
       tiebreaker: customTiebreaker,
     });
 
     expect(orderByComparator(items, cmp)).toEqual(['c', 'b', 'a']);
-  });
-
-  it('accepts array sort spec and object sort spec equivalently', () => {
-    const items: Item[] = [
-      { cid: '3', v: 2 },
-      { cid: '1', v: 1 },
-      { cid: '2', v: 1 },
-    ];
-
-    const arrayBasedComparator = toComparator([{ v: 1 }]);
-    const objectBasedComparator = toComparator({ v: 1 });
-
-    expect(orderByComparator(items, arrayBasedComparator)).toEqual(['1', '2', '3']);
-    expect(orderByComparator(items, objectBasedComparator)).toEqual(['1', '2', '3']);
   });
 });
 

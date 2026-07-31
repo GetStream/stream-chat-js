@@ -14,10 +14,10 @@ import { WithSubscriptions } from './utils/WithSubscriptions';
 import type { StreamChat } from './client';
 import type { Unsubscribe } from './store';
 import type {
-  EventTypes,
+  EventType,
   MessageResponse,
   SharedLiveLocationResponse,
-  SharedLocationResponse,
+  SharedLocationResponseData,
 } from './types';
 import type { Coords } from './messageComposer';
 
@@ -73,7 +73,7 @@ export class LiveLocationManager extends WithSubscriptions {
     getDeviceId,
     watchLocation,
   }: LiveLocationManagerConstructorParameters) {
-    if (!client.userID) {
+    if (!client.userId) {
       throw new Error('Live-location sharing is reserved for client-side use only');
     }
 
@@ -121,10 +121,10 @@ export class LiveLocationManager extends WithSubscriptions {
 
   private async assureStateInit() {
     if (this.stateIsReady) return;
-    const { active_live_locations } = await this.client.getSharedLocations();
+    const { active_live_locations } = await this.client.getUserLiveLocations();
     this.state.next({
       messages: new Map(
-        active_live_locations
+        (active_live_locations as SharedLiveLocationResponse[])
           .filter((location) => !isExpiredLocation(location))
           .map((location) => [
             location.message_id,
@@ -178,7 +178,7 @@ export class LiveLocationManager extends WithSubscriptions {
         Date.now() + UPDATE_LIVE_LOCATION_REQUEST_MIN_THROTTLE_TIMEOUT;
 
       withCancellation(LiveLocationManager.symbol, async () => {
-        const promises: Promise<SharedLocationResponse>[] = [];
+        const promises: Promise<SharedLocationResponseData>[] = [];
         await this.assureStateInit();
         const expiredLocations: string[] = [];
 
@@ -189,8 +189,9 @@ export class LiveLocationManager extends WithSubscriptions {
           }
           if (location.latitude === latitude && location.longitude === longitude)
             continue;
-          const promise = this.client.updateLocation({
-            created_by_device_id: location.created_by_device_id,
+          const promise = this.client.updateLiveLocation({
+            // TODO: this is missing from the OAPI spec
+            // created_by_device_id: location.created_by_device_id,
             message_id: messageId,
             latitude,
             longitude,
@@ -221,7 +222,7 @@ export class LiveLocationManager extends WithSubscriptions {
           'live_location_sharing.started',
           'message.updated',
           'message.deleted',
-        ] as EventTypes[]
+        ] satisfies EventType[]
       ).map((eventType) =>
         this.client.on(eventType, (event) => {
           if (!event.message) return;
@@ -251,8 +252,8 @@ export class LiveLocationManager extends WithSubscriptions {
 
   private registerMessage(message: MessageResponse) {
     if (
-      !this.client.userID ||
-      message?.user?.id !== this.client.userID ||
+      !this.client.userId ||
+      message?.user?.id !== this.client.userId ||
       !isValidLiveLocationMessage(message)
     )
       return;

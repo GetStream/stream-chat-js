@@ -1,4 +1,4 @@
-import type { ChannelQueryOptions, QueryChannelAPIResponse } from '../types';
+import type { ChannelGetOrCreateRequest, ChannelStateResponse } from '../types';
 import type { StreamChat } from '../client';
 import type { Channel } from '../channel';
 import { generateChannelTempCid } from '../utils';
@@ -9,7 +9,7 @@ import { generateChannelTempCid } from '../utils';
  */
 const WATCH_QUERY_IN_PROGRESS_FOR_CHANNEL: Record<
   string,
-  Promise<QueryChannelAPIResponse> | undefined
+  Promise<ChannelStateResponse> | undefined
 > = {};
 
 type GetChannelParams = {
@@ -17,19 +17,21 @@ type GetChannelParams = {
   channel?: Channel;
   id?: string;
   members?: string[];
-  options?: ChannelQueryOptions;
+  options?: ChannelGetOrCreateRequest;
   type?: string;
 };
 /**
  * Watches a channel, coalescing concurrent invocations for the same CID.
  * If a watch is already in flight, this call waits for it to settle instead of
  * issuing another network request.
- * @param client
- * @param members
- * @param options
- * @param type
- * @param id
- * @param channel
+ *
+ * @param params - The channel query parameters.
+ * @param params.client - The chat client instance.
+ * @param params.members - Member user ids used to construct or identify the channel.
+ * @param params.options - Options forwarded to the underlying channel watch request.
+ * @param params.type - The channel type.
+ * @param params.id - The channel id.
+ * @param params.channel - An existing channel to watch (skips construction from type/id/members).
  */
 export const getChannel = async ({
   channel,
@@ -44,8 +46,13 @@ export const getChannel = async ({
   }
 
   // unfortunately typescript is not able to infer that if (!channel && !type) === false, then channel or type has to be truthy
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const theChannel = channel || client.channel(type!, id, { members });
+
+  const theChannel =
+    channel ||
+    // `members` are member IDs; the OpenAPI `ChannelData.members` expects member objects.
+    client.channel(type as string, id, {
+      members: members?.map((user_id) => ({ user_id })),
+    });
 
   // need to keep as with call to channel.watch the id can be changed from undefined to an actual ID generated server-side
   const originalCid = theChannel?.id

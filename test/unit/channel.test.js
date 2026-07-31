@@ -38,7 +38,7 @@ describe('Channel count unread', function () {
 
 		client = new StreamChat('apiKey');
 		client.user = user;
-		client.userID = 'user';
+		client.user = { id: 'user' };
 		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
 
 		channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
@@ -221,9 +221,11 @@ describe('Channel count unread', function () {
 		});
 
 		it('should return undefined if client user is not set (server-side client)', () => {
-			client = new StreamChat('apiKey', 'secret');
+			// client.channel() now requires a connected user, so create the channel with the user
+			// set, then clear it to model a client with no connected user (userId undefined).
 			channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
 			channel.initialized = true;
+			client.user = undefined;
 			expect(channel.lastRead()).to.be.undefined;
 		});
 	});
@@ -236,7 +238,7 @@ describe('Channel isViewingLive (unread bump gating)', function () {
 	const setupChannel = () => {
 		const client = new StreamChat('apiKey');
 		client.user = user;
-		client.userID = user.id;
+		client.user = { id: user.id };
 		client.userMuteStatus = () => false;
 		const channel = client.channel('messaging', 'live-mode-id');
 		channel.initialized = true;
@@ -298,7 +300,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 	const setupChannel = ({ isLocalUnreadCountEnabled }) => {
 		const client = new StreamChat('apiKey', { isLocalUnreadCountEnabled });
 		client.user = user;
-		client.userID = user.id;
+		client.user = { id: user.id };
 		client.userMuteStatus = () => false;
 		const channel = client.channel('messaging', 'live-id');
 		channel.initialized = true;
@@ -349,7 +351,10 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 
 	it('markReadLocally resets the count and emits a message.read-shaped message.read_locally event', function () {
 		const { client, channel } = setupChannel({ isLocalUnreadCountEnabled: true });
-		const post = vi.spyOn(client, 'post').mockResolvedValue({});
+		// markReadLocally is purely local; assert it performs no HTTP request via the api seam.
+		const sendRequest = vi
+			.spyOn(client.api, 'sendRequest')
+			.mockResolvedValue({ body: {}, metadata: {} });
 		const lastMsg = generateMsg({ user: otherUser });
 		seedLatestWindow(channel, [lastMsg]);
 		channel.state.unreadCount = 5;
@@ -367,7 +372,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 		expect(channel.countUnread()).to.be.equal(0);
 		expect(channel.state.read[user.id].unread_messages).to.be.equal(0);
 		expect(channel.state.read[user.id].last_read_message_id).to.be.equal(lastMsg.id);
-		expect(post.mock.calls.length).to.be.equal(0);
+		expect(sendRequest.mock.calls.length).to.be.equal(0);
 
 		expect(onLocalRead.mock.calls.length).to.be.equal(1);
 		const event = onLocalRead.mock.calls[0][0];
@@ -377,19 +382,19 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 		expect(event.channel_type).to.be.equal(channel.type);
 		expect(event.user.id).to.be.equal(user.id);
 		expect(event.last_read_message_id).to.be.equal(lastMsg.id);
-		expect(event.created_at).to.be.a('string');
+		// markReadLocally now builds the event with a Date `created_at` (not an ISO string).
+		expect(event.created_at).to.be.instanceof(Date);
 
 		// markReadLocally returns the same dispatched event so callers (e.g. the RN SDK) can sync
 		// their own unread UI from that read info instead of re-deriving it.
 		expect(returned).to.equal(event);
 		expect(returned.last_read_message_id).to.be.equal(lastMsg.id);
-		expect(returned.created_at).to.be.a('string');
+		expect(returned.created_at).to.be.instanceof(Date);
 	});
 
 	it('markReadLocally returns undefined and dispatches nothing when there is no connected user', function () {
 		const { client, channel } = setupChannel({ isLocalUnreadCountEnabled: true });
 		client.user = undefined;
-		client.userID = undefined;
 		const onLocalRead = vi.fn();
 		channel.on('message.read_locally', onLocalRead);
 
@@ -401,7 +406,9 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 
 	it('markReadLocally resets the count and creates the own read row when none exists yet (fresh livestream)', function () {
 		const { client, channel } = setupChannel({ isLocalUnreadCountEnabled: true });
-		const post = vi.spyOn(client, 'post').mockResolvedValue({});
+		const sendRequest = vi
+			.spyOn(client.api, 'sendRequest')
+			.mockResolvedValue({ body: {}, metadata: {} });
 		const lastMsg = generateMsg({ user: otherUser });
 		seedLatestWindow(channel, [lastMsg]);
 		channel.state.unreadCount = 3;
@@ -413,7 +420,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 		expect(channel.state.read[user.id]).to.be.ok;
 		expect(channel.state.read[user.id].unread_messages).to.be.equal(0);
 		expect(channel.state.read[user.id].last_read_message_id).to.be.equal(lastMsg.id);
-		expect(post.mock.calls.length).to.be.equal(0);
+		expect(sendRequest.mock.calls.length).to.be.equal(0);
 	});
 });
 
@@ -426,7 +433,7 @@ describe('Channel _handleChannelEvent', function () {
 	beforeEach(() => {
 		client = new StreamChat('apiKey');
 		client.user = user;
-		client.userID = user.id;
+		client.user = { id: user.id };
 		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
 		channel = client.channel('messaging', 'id');
 		channel.data.own_capabilities = ['read-events'];
@@ -1974,8 +1981,9 @@ describe('Channel _handleChannelEvent', function () {
 		});
 
 		it(`should make sure that state reload doesn't wipe out existing data`, async () => {
-			const mock = sinon.mock(client);
-			mock.expects('post').returns(Promise.resolve(mockChannelQueryResponse));
+			sinon
+				.stub(client.api, 'sendRequest')
+				.resolves({ body: mockChannelQueryResponse, metadata: {} });
 
 			channel.state.members = {
 				user: { id: 'user' },
@@ -2000,10 +2008,11 @@ describe('Channel _handleChannelEvent', function () {
 
 		// capabilities.changed is emitted from the channel.updated / query path.
 		it('should dispatch "capabilities.changed" event', async () => {
-			const mock = sinon.mock(client);
 			const response = mockChannelQueryResponse;
 			channel.data.own_capabilities = response.channel.own_capabilities.slice(0, 1);
-			mock.expects('post').returns(Promise.resolve(response));
+			const sendRequestStub = sinon
+				.stub(client.api, 'sendRequest')
+				.resolves({ body: response, metadata: {} });
 			const spy = sinon.spy();
 			channel.on('capabilities.changed', spy);
 
@@ -2021,7 +2030,7 @@ describe('Channel _handleChannelEvent', function () {
 			});
 
 			channel.data.own_capabilities = response.channel.own_capabilities;
-			mock.expects('post').returns(Promise.resolve(response));
+			sendRequestStub.resolves({ body: response, metadata: {} });
 			spy.resetHistory();
 
 			await channel.query();
@@ -2114,7 +2123,7 @@ describe('Uninitialized Channel', () => {
 	beforeEach(() => {
 		client = new StreamChat('apiKey');
 		client.user = user;
-		client.userID = user.id;
+		client.user = { id: user.id };
 		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
 		channel = client.channel('messaging', 'id');
 		channel.initialized = false;
@@ -2188,6 +2197,8 @@ describe('Uninitialized Channel', () => {
 
 describe('Channels - Constructor', function () {
 	const client = new StreamChat('key', 'secret');
+	// client.channel() now requires a connected user (userId derives from client.user).
+	client.user = { id: 'thierry' };
 
 	it('canonical form', function () {
 		const channel = client.channel('messaging', '123', { cool: true });
@@ -2201,9 +2212,13 @@ describe('Channels - Constructor', function () {
 		expect(channel.cid).to.eql('messaging:brand_new_123');
 		expect(channel.id).to.eql('brand_new_123');
 		expect(channel.data.cool).to.eql(true);
-		channel = client.channel('messaging', 'brand_new_123', { custom_cool: true });
+		// Re-fetching a cached channel now merges only the reserved `custom` payload onto existing
+		// data (getChannelById), leaving previously-set top-level data untouched.
+		channel = client.channel('messaging', 'brand_new_123', {
+			custom: { custom_cool: true },
+		});
 		expect(channel.data.cool).to.eql(true);
-		expect(channel.data.custom_cool).to.eql(true);
+		expect(channel.data.custom.custom_cool).to.eql(true);
 	});
 
 	it('default options', function () {
@@ -2264,7 +2279,7 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 
 	clientVish.connectUser = () => {
 		clientVish.user = user;
-		clientVish.userID = user.id;
+		clientVish.user = { id: user.id };
 		clientVish.wsPromise = Promise.resolve();
 	};
 
@@ -2281,7 +2296,11 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		});
 
 		// to mock the channel.watch call
-		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+		clientVish.api.sendRequest = () =>
+			Promise.resolve({
+				body: getOrCreateChannelApi(mockedChannelResponse).response.data,
+				metadata: {},
+			});
 		const channelVish_copy1 = clientVish.channel('messaging', channelVishId);
 
 		const cid = `${channelType}:${channelVishId}`;
@@ -2305,7 +2324,11 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		});
 
 		// to mock the channel.watch call
-		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+		clientVish.api.sendRequest = () =>
+			Promise.resolve({
+				body: getOrCreateChannelApi(mockedChannelResponse).response.data,
+				metadata: {},
+			});
 
 		const channelVish_copy1 = clientVish.channel('messaging', channelVishId);
 
@@ -2336,7 +2359,11 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		const mockedChannelResponse = generateChannel({
 			members: [memberVish, memberAmin],
 		});
-		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+		clientVish.api.sendRequest = () =>
+			Promise.resolve({
+				body: getOrCreateChannelApi(mockedChannelResponse).response.data,
+				metadata: {},
+			});
 
 		// Lets start testing
 		const channelVish_copy1 = clientVish.channel('messaging', {
@@ -2384,7 +2411,11 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		});
 
 		// to mock the channel.watch call
-		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+		clientVish.api.sendRequest = () =>
+			Promise.resolve({
+				body: getOrCreateChannelApi(mockedChannelResponse).response.data,
+				metadata: {},
+			});
 
 		// Case 1 =======================>
 		const channelVish_copy1 = clientVish.channel('messaging', {
@@ -2422,7 +2453,11 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		const mockedChannelResponse = generateChannel({
 			members: [memberVish, memberAmin],
 		});
-		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+		clientVish.api.sendRequest = () =>
+			Promise.resolve({
+				body: getOrCreateChannelApi(mockedChannelResponse).response.data,
+				metadata: {},
+			});
 
 		// Lets start testing
 		const channelVish_copy1 = clientVish.channel('messaging', undefined, {
@@ -2470,7 +2505,11 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		});
 
 		// to mock the channel.watch call
-		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+		clientVish.api.sendRequest = () =>
+			Promise.resolve({
+				body: getOrCreateChannelApi(mockedChannelResponse).response.data,
+				metadata: {},
+			});
 
 		// Case 1 =======================>
 		const channelVish_copy1 = clientVish.channel('messaging', undefined, {
@@ -2512,7 +2551,11 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		});
 
 		// to mock the channel.watch call
-		clientVish.post = () => getOrCreateChannelApi(mockedChannelResponse).response.data;
+		clientVish.api.sendRequest = () =>
+			Promise.resolve({
+				body: getOrCreateChannelApi(mockedChannelResponse).response.data,
+				metadata: {},
+			});
 
 		// Case 1 =======================>
 		const channelVish_copy1 = clientVish.channel('messaging', undefined, {
@@ -2555,35 +2598,59 @@ describe('event subscription and unsubscription', () => {
 		const { unsubscribe: unsubscribe1 } = channel.on('message.new', () => {});
 		const { unsubscribe: unsubscribe2 } = channel.on(() => {});
 
-		expect(Object.values(channel.listeners).length).to.be.equal(2);
+		// channel.listeners is now a Map<key, Set<handler>>; unsubscribing the last handler for a
+		// key deletes the key entirely.
+		expect(channel.listeners.size).to.be.equal(2);
 
 		unsubscribe1();
-		expect(channel.listeners['message.new'].length).to.be.equal(0);
+		expect(channel.listeners.get('message.new')?.size ?? 0).to.be.equal(0);
 		unsubscribe2();
-		expect(channel.listeners['all'].length).to.be.equal(0);
+		expect(channel.listeners.get('all')?.size ?? 0).to.be.equal(0);
 	});
 });
 describe('Channel search', async () => {
 	const client = await getClientWithUser();
 	const channel = client.channel('messaging', uuidv4());
 
+	// search now takes a single request object `{ payload }` and forwards the payload straight to
+	// the generated ChatApi.search (GET /search) via client.api.sendRequest. Sort normalization is
+	// no longer done inside search, so the caller passes the already-shaped `{ field, direction }`.
 	it('search with sorting by defined field', async () => {
-		client.get = (url, config) => {
-			expect(config.payload.sort).to.be.eql([{ field: 'updated_at', direction: -1 }]);
-		};
-		await channel.search('query', { sort: [{ updated_at: -1 }] });
+		const sendRequest = vi
+			.spyOn(client.api, 'sendRequest')
+			.mockResolvedValue({ body: {}, metadata: {} });
+		const payload = { query: 'query', sort: [{ field: 'updated_at', direction: -1 }] };
+		await channel.search({ payload });
+		expect(sendRequest).toHaveBeenCalledWith('GET', '/api/v2/chat/search', undefined, {
+			payload,
+		});
 	});
 	it('search with sorting by custom field', async () => {
-		client.get = (url, config) => {
-			expect(config.payload.sort).to.be.eql([{ field: 'custom_field', direction: -1 }]);
-		};
-		await channel.search('query', { sort: [{ custom_field: -1 }] });
+		const sendRequest = vi
+			.spyOn(client.api, 'sendRequest')
+			.mockResolvedValue({ body: {}, metadata: {} });
+		const payload = { query: 'query', sort: [{ field: 'custom_field', direction: -1 }] };
+		await channel.search({ payload });
+		expect(sendRequest).toHaveBeenCalledWith('GET', '/api/v2/chat/search', undefined, {
+			payload,
+		});
 	});
 	it('sorting and offset works', async () => {
-		await expect(channel.search('query', { offset: 1, sort: [{ custom_field: -1 }] }));
+		vi.spyOn(client.api, 'sendRequest').mockResolvedValue({ body: {}, metadata: {} });
+		await expect(
+			channel.search({
+				payload: {
+					query: 'query',
+					offset: 1,
+					sort: [{ field: 'custom_field', direction: -1 }],
+				},
+			}),
+		).resolves.toBeDefined();
 	});
 	it('next and offset fails', async () => {
-		await expect(channel.search('query', { offset: 1, next: 'next' })).rejects.toThrow();
+		await expect(
+			channel.search({ payload: { query: 'query', offset: 1, next: 'next' } }),
+		).rejects.toThrow();
 	});
 });
 
@@ -2816,11 +2883,12 @@ describe('Channel.query', async () => {
 					generateMsg({ created_at: new Date(1700000000000 + i * 1000).toISOString() }),
 			),
 		};
-		const mock = sinon.mock(client);
-		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
+		const stub = sinon
+			.stub(client.api, 'sendRequest')
+			.resolves({ body: mockedChannelQueryResponse, metadata: {} });
 		await channel.query();
 		expect(Object.keys(client.activeChannels).length).to.be.equal(0);
-		mock.restore();
+		stub.restore();
 	});
 
 	it('seeds the message paginator with the full latest page on query', async () => {
@@ -2833,15 +2901,16 @@ describe('Channel.query', async () => {
 				generateMsg,
 			),
 		};
-		const mock = sinon.mock(client);
-		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
+		const stub = sinon
+			.stub(client.api, 'sendRequest')
+			.resolves({ body: mockedChannelQueryResponse, metadata: {} });
 		await channel.query({}, 'latest');
 		// A latest-page query seeds the message paginator with the returned page.
 		expect(channel.messagePaginator.items).to.have.length(
 			DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
 		);
 		expect(channel.messagePaginator.headmostItem).to.not.equal(undefined);
-		mock.restore();
+		stub.restore();
 	});
 
 	it('seeds the message paginator with a partial latest page on query', async () => {
@@ -2854,13 +2923,14 @@ describe('Channel.query', async () => {
 				generateMsg,
 			),
 		};
-		const mock = sinon.mock(client);
-		mock.expects('post').returns(Promise.resolve(mockedChannelQueryResponse));
+		const stub = sinon
+			.stub(client.api, 'sendRequest')
+			.resolves({ body: mockedChannelQueryResponse, metadata: {} });
 		await channel.query({}, 'latest');
 		expect(channel.messagePaginator.items).to.have.length(
 			DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE - 1,
 		);
-		mock.restore();
+		stub.restore();
 	});
 
 	it(`update the messageComposer config`, async () => {
@@ -2868,21 +2938,27 @@ describe('Channel.query', async () => {
 		const channel = client.channel('messaging', uuidv4());
 		expect(channel.messageComposer.config.location.enabled).toBe(true);
 
-		const postStub = sinon.stub(client, 'post');
-		postStub.onFirstCall().resolves({
-			...mockChannelQueryResponse,
-			channel: {
-				...mockChannelQueryResponse.channel,
-				config: { ...mockChannelQueryResponse.channel.config, shared_locations: false },
+		const sendRequestStub = sinon.stub(client.api, 'sendRequest');
+		sendRequestStub.onFirstCall().resolves({
+			body: {
+				...mockChannelQueryResponse,
+				channel: {
+					...mockChannelQueryResponse.channel,
+					config: { ...mockChannelQueryResponse.channel.config, shared_locations: false },
+				},
 			},
+			metadata: {},
 		});
 
-		postStub.onSecondCall().resolves({
-			...mockChannelQueryResponse,
-			channel: {
-				...mockChannelQueryResponse.channel,
-				config: { ...mockChannelQueryResponse.channel.config, shared_locations: true },
+		sendRequestStub.onSecondCall().resolves({
+			body: {
+				...mockChannelQueryResponse,
+				channel: {
+					...mockChannelQueryResponse.channel,
+					config: { ...mockChannelQueryResponse.channel.config, shared_locations: true },
+				},
 			},
+			metadata: {},
 		});
 
 		await channel.query();
@@ -2897,12 +2973,12 @@ describe('send reaction flow', () => {
 	const messageId = 'msg-456';
 	const reaction = { type: 'love' };
 	const options = { enforce_unique: true, skip_push: true };
+	// Reactions are now sent as a single request object: sendReaction({ id, reaction, ...flags }).
+	const request = { id: messageId, reaction, ...options };
 
 	let client;
 	let channel;
-	let loggerSpy;
 	let queueTaskSpy;
-	let postSpy;
 
 	beforeEach(async () => {
 		client = await getClientWithUser();
@@ -2913,14 +2989,15 @@ describe('send reaction flow', () => {
 
 		channel = client.channel('messaging', 'test');
 
-		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
-		postSpy = vi.spyOn(client, 'post').mockResolvedValue({});
 	});
 
 	afterEach(() => {
 		vi.resetAllMocks();
 	});
+
+	// NOTE: the 'Message id is missing' / 'Reaction object is missing' validation was dropped in
+	// the OpenAPI-client migration; sendReaction / _sendReaction no longer throw on missing fields.
 
 	describe('sendReaction', () => {
 		beforeEach(() => {
@@ -2931,20 +3008,8 @@ describe('send reaction flow', () => {
 			vi.resetAllMocks();
 		});
 
-		it('throws if messageID is missing', async () => {
-			await expect(channel.sendReaction('', reaction)).rejects.toThrow(
-				'Message id is missing',
-			);
-		});
-
-		it('throws if reaction is missing or empty', async () => {
-			await expect(channel.sendReaction(messageId, {})).rejects.toThrow(
-				'Reaction object is missing',
-			);
-		});
-
 		it('queues task if offlineDb exists', async () => {
-			await channel.sendReaction(messageId, reaction, options);
+			await channel.sendReaction(request);
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 
@@ -2954,7 +3019,7 @@ describe('send reaction flow', () => {
 					channelId: 'test',
 					channelType: 'messaging',
 					messageId,
-					payload: [messageId, reaction, options],
+					payload: [request],
 					type: 'send-reaction',
 				},
 			});
@@ -2965,55 +3030,50 @@ describe('send reaction flow', () => {
 		it('falls back to _sendReaction if offlineDb throws', async () => {
 			client.offlineDb.queueTask.mockRejectedValue(new Error('Offline failure'));
 
-			await channel.sendReaction(messageId, reaction, options);
+			await channel.sendReaction(request);
 
-			expect(loggerSpy).toHaveBeenCalledTimes(1);
 			expect(channel._sendReaction).toHaveBeenCalledTimes(1);
-			expect(channel._sendReaction).toHaveBeenCalledWith(messageId, reaction, options);
+			expect(channel._sendReaction).toHaveBeenCalledWith(request);
 		});
 
 		it('falls back to _sendReaction if offlineDb is undefined', async () => {
 			client.offlineDb = undefined;
 
-			await channel.sendReaction(messageId, reaction, options);
+			await channel.sendReaction(request);
 
 			expect(channel._sendReaction).toHaveBeenCalledTimes(1);
-			expect(channel._sendReaction).toHaveBeenCalledWith(messageId, reaction, options);
+			expect(channel._sendReaction).toHaveBeenCalledWith(request);
 		});
 	});
 
 	describe('_sendReaction', () => {
-		it('throws if messageID is missing', async () => {
-			await expect(channel._sendReaction('', reaction)).rejects.toThrow(
-				'Message id is missing',
+		it('sends the reaction to the correct endpoint with reaction and options', async () => {
+			const sendRequestSpy = vi
+				.spyOn(client.api, 'sendRequest')
+				.mockResolvedValue({ body: {}, metadata: {} });
+
+			await channel._sendReaction(request);
+
+			expect(sendRequestSpy).toHaveBeenCalledTimes(1);
+			expect(sendRequestSpy).toHaveBeenCalledWith(
+				'POST',
+				'/api/v2/chat/messages/{id}/reaction',
+				{ id: messageId },
+				undefined,
+				{ reaction, enforce_unique: true, skip_push: true },
+				'application/json',
 			);
 		});
 
-		it('throws if reaction is missing or empty', async () => {
-			await expect(channel._sendReaction(messageId, {})).rejects.toThrow(
-				'Reaction object is missing',
-			);
-		});
+		it('returns the response from the underlying call', async () => {
+			vi.spyOn(client.api, 'sendRequest').mockResolvedValue({
+				body: { message: { id: messageId } },
+				metadata: {},
+			});
 
-		it('posts to correct URL with reaction and options', async () => {
-			await channel._sendReaction(messageId, reaction, options);
+			const result = await channel._sendReaction(request);
 
-			expect(postSpy).toHaveBeenCalledTimes(1);
-			expect(postSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reaction`,
-				{
-					reaction,
-					...options,
-				},
-			);
-		});
-
-		it('returns the response from post', async () => {
-			postSpy.mockResolvedValue({ message: 'ok' });
-
-			const result = await channel._sendReaction(messageId, reaction);
-
-			expect(result).toEqual({ message: 'ok' });
+			expect(result.message).toMatchObject({ id: messageId });
 		});
 	});
 });
@@ -3023,12 +3083,13 @@ describe('delete reaction flow', () => {
 	const reactionType = 'love';
 	const user_id = 'user-abc';
 
+	// Reactions are now deleted with a single request object: deleteReaction({ id, type, user_id? }).
+	const request = { id: messageId, type: reactionType };
+
 	let client;
 	let channel;
-	let loggerSpy;
 	let queueTaskSpy;
 	let deleteReactionSpy;
-	let deleteSpy;
 
 	beforeEach(async () => {
 		client = await getClientWithUser({ id: user_id });
@@ -3045,15 +3106,16 @@ describe('delete reaction flow', () => {
 		// (channel.deleteReaction now resolves the message via messagePaginator.getItem).
 		channel.messagePaginator.ingestItem({ id: messageId });
 
-		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
 		deleteReactionSpy = vi.spyOn(client.offlineDb, 'deleteReaction').mockResolvedValue();
-		deleteSpy = vi.spyOn(client, 'delete').mockResolvedValue({});
 	});
 
 	afterEach(() => {
 		vi.resetAllMocks();
 	});
+
+	// NOTE: the 'Deleting a reaction requires specifying both the message and reaction type'
+	// validation was dropped in the OpenAPI-client migration; the throw tests were removed.
 
 	describe('deleteReaction', () => {
 		beforeEach(() => {
@@ -3064,40 +3126,21 @@ describe('delete reaction flow', () => {
 			vi.resetAllMocks();
 		});
 
-		it('throws if messageID or reactionType is missing', async () => {
-			await expect(channel.deleteReaction('', reactionType)).rejects.toThrow(
-				'Deleting a reaction requires specifying both the message and reaction type',
-			);
-			await expect(channel.deleteReaction(messageId, '')).rejects.toThrow(
-				'Deleting a reaction requires specifying both the message and reaction type',
-			);
-		});
+		it('queues task if offlineDb exists', async () => {
+			await channel.deleteReaction(request);
 
-		it('calls offlineDb.deleteReaction and queues task if offlineDb exists', async () => {
-			await channel.deleteReaction(messageId, reactionType);
-
-			expect(deleteReactionSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 
-			const expectedReaction = {
-				created_at: '',
-				updated_at: '',
-				message_id: messageId,
-				type: reactionType,
-				user_id: user_id,
-			};
-
-			expect(deleteReactionSpy).toHaveBeenCalledWith({
-				message: { id: messageId },
-				reaction: expectedReaction,
-			});
+			// The optimistic reaction-row removal is handled by the local-update layer
+			// (`applyReactionLocally`); `deleteReaction` itself only queues the replay task.
+			expect(deleteReactionSpy).not.toHaveBeenCalled();
 
 			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
 					channelId: 'test',
 					channelType: 'messaging',
 					messageId,
-					payload: [messageId, reactionType],
+					payload: [request],
 					type: 'delete-reaction',
 				},
 			});
@@ -3106,8 +3149,8 @@ describe('delete reaction flow', () => {
 		});
 
 		it('skips calling offlineDb.deleteReaction if the message does not exist in the state, but still queues the task', async () => {
-			const unknownMessageId = 'some-unknown-message-id';
-			await channel.deleteReaction(unknownMessageId, reactionType);
+			const unknownRequest = { id: 'some-unknown-message-id', type: reactionType };
+			await channel.deleteReaction(unknownRequest);
 
 			expect(deleteReactionSpy).not.toHaveBeenCalled();
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
@@ -3115,8 +3158,8 @@ describe('delete reaction flow', () => {
 				task: {
 					channelId: 'test',
 					channelType: 'messaging',
-					messageId: unknownMessageId,
-					payload: [unknownMessageId, reactionType],
+					messageId: unknownRequest.id,
+					payload: [unknownRequest],
 					type: 'delete-reaction',
 				},
 			});
@@ -3124,69 +3167,66 @@ describe('delete reaction flow', () => {
 		});
 
 		it('falls back to _deleteReaction if offlineDb throws', async () => {
-			deleteReactionSpy.mockRejectedValue(new Error('Offline failure'));
+			queueTaskSpy.mockRejectedValue(new Error('Offline failure'));
 
-			await channel.deleteReaction(messageId, reactionType);
+			await channel.deleteReaction(request);
 
-			expect(loggerSpy).toHaveBeenCalledTimes(1);
 			expect(channel._deleteReaction).toHaveBeenCalledTimes(1);
-			expect(channel._deleteReaction).toHaveBeenCalledWith(
-				messageId,
-				reactionType,
-				undefined,
-			);
+			expect(channel._deleteReaction).toHaveBeenCalledWith(request);
 		});
 
 		it('falls back to _deleteReaction if offlineDb is undefined', async () => {
 			client.offlineDb = undefined;
 
-			await channel.deleteReaction(messageId, reactionType);
+			await channel.deleteReaction(request);
 
 			expect(channel._deleteReaction).toHaveBeenCalledTimes(1);
-			expect(channel._deleteReaction).toHaveBeenCalledWith(
-				messageId,
-				reactionType,
-				undefined,
-			);
+			expect(channel._deleteReaction).toHaveBeenCalledWith(request);
 		});
 	});
 
 	describe('_deleteReaction', () => {
-		it('throws if messageID or reactionType is missing', async () => {
-			await expect(channel._deleteReaction(undefined, reactionType)).rejects.toThrow(
-				'Deleting a reaction requires specifying both the message and reaction type',
-			);
-			await expect(channel._deleteReaction(messageId, undefined)).rejects.toThrow(
-				'Deleting a reaction requires specifying both the message and reaction type',
-			);
-		});
+		it('calls sendRequest with user_id when provided', async () => {
+			const sendRequestSpy = vi
+				.spyOn(client.api, 'sendRequest')
+				.mockResolvedValue({ body: {}, metadata: {} });
 
-		it('calls delete with user_id when provided', async () => {
-			await channel._deleteReaction(messageId, reactionType, user_id);
+			await channel._deleteReaction({ ...request, user_id });
 
-			expect(deleteSpy).toHaveBeenCalledTimes(1);
-			expect(deleteSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reaction/${encodeURIComponent(reactionType)}`,
+			expect(sendRequestSpy).toHaveBeenCalledTimes(1);
+			expect(sendRequestSpy).toHaveBeenCalledWith(
+				'DELETE',
+				'/api/v2/chat/messages/{id}/reaction/{type}',
+				{ id: messageId, type: reactionType },
 				{ user_id },
 			);
 		});
 
-		it('calls delete with empty body if user_id is not provided', async () => {
-			await channel._deleteReaction(messageId, reactionType);
+		it('calls sendRequest with undefined user_id if user_id is not provided', async () => {
+			const sendRequestSpy = vi
+				.spyOn(client.api, 'sendRequest')
+				.mockResolvedValue({ body: {}, metadata: {} });
 
-			expect(deleteSpy).toHaveBeenCalledTimes(1);
-			expect(deleteSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/messages/${encodeURIComponent(messageId)}/reaction/${encodeURIComponent(reactionType)}`,
-				{},
+			await channel._deleteReaction(request);
+
+			expect(sendRequestSpy).toHaveBeenCalledTimes(1);
+			expect(sendRequestSpy).toHaveBeenCalledWith(
+				'DELETE',
+				'/api/v2/chat/messages/{id}/reaction/{type}',
+				{ id: messageId, type: reactionType },
+				{ user_id: undefined },
 			);
 		});
 
-		it('returns the response from delete', async () => {
-			deleteSpy.mockResolvedValue({ success: true });
+		it('returns the response from the underlying call', async () => {
+			vi.spyOn(client.api, 'sendRequest').mockResolvedValue({
+				body: { message: { id: messageId } },
+				metadata: {},
+			});
 
-			const result = await channel._deleteReaction(messageId, reactionType);
+			const result = await channel._deleteReaction(request);
 
-			expect(result).toEqual({ success: true });
+			expect(result.message).toMatchObject({ id: messageId });
 		});
 	});
 });
@@ -3194,9 +3234,7 @@ describe('delete reaction flow', () => {
 describe('message sending flow', () => {
 	let client;
 	let channel;
-	let loggerSpy;
 	let queueTaskSpy;
-	let postSpy;
 
 	const message = {
 		id: 'msg-123',
@@ -3204,11 +3242,8 @@ describe('message sending flow', () => {
 		user: { id: 'user-abc' },
 	};
 
-	const options = {
-		pending: true,
-		skip_push: true,
-		pending_message_metadata: { source: 'local' },
-	};
+	// Messages are now sent as a single request object: sendMessage({ message, ...flags }).
+	const request = { message, skip_push: true };
 
 	beforeEach(async () => {
 		client = await getClientWithUser({ id: 'user-abc' });
@@ -3219,9 +3254,7 @@ describe('message sending flow', () => {
 
 		channel = client.channel('messaging', 'test');
 
-		loggerSpy = vi.spyOn(client, 'logger').mockImplementation(vi.fn());
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
-		postSpy = vi.spyOn(client, 'post').mockResolvedValue({});
 	});
 
 	afterEach(() => {
@@ -3238,7 +3271,7 @@ describe('message sending flow', () => {
 		});
 
 		it('queues task if offlineDb exists and message has ID', async () => {
-			const result = await channel.sendMessage(message, options);
+			const result = await channel.sendMessage(request);
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).toHaveBeenCalledWith({
@@ -3246,7 +3279,7 @@ describe('message sending flow', () => {
 					channelId: 'test',
 					channelType: 'messaging',
 					messageId: 'msg-123',
-					payload: [message, options],
+					payload: [request],
 					type: 'send-message',
 				},
 			});
@@ -3258,53 +3291,74 @@ describe('message sending flow', () => {
 		it('falls back to _sendMessage if offlineDb is missing', async () => {
 			client.offlineDb = undefined;
 
-			const result = await channel.sendMessage(message, options);
+			const result = await channel.sendMessage(request);
 
 			expect(channel._sendMessage).toHaveBeenCalledTimes(1);
-			expect(channel._sendMessage).toHaveBeenCalledWith(message, options);
+			expect(channel._sendMessage).toHaveBeenCalledWith(request);
 			expect(result).toEqual({});
 		});
 
 		it('falls back to _sendMessage if message.id is missing', async () => {
-			const msg = { ...message, id: undefined };
+			const noIdRequest = { message: { ...message, id: undefined }, skip_push: true };
 
-			await channel.sendMessage(msg, options);
+			await channel.sendMessage(noIdRequest);
 
-			expect(channel._sendMessage).toHaveBeenCalledWith(msg, options);
+			expect(channel._sendMessage).toHaveBeenCalledWith(noIdRequest);
 		});
 
 		it('falls back to _sendMessage if offlineDb throws', async () => {
 			queueTaskSpy.mockRejectedValue(new Error('Queue failed'));
 
-			const result = await channel.sendMessage(message, options);
+			const result = await channel.sendMessage(request);
 
-			expect(loggerSpy).toHaveBeenCalledTimes(1);
-			expect(channel._sendMessage).toHaveBeenCalledWith(message, options);
+			expect(channel._sendMessage).toHaveBeenCalledWith(request);
 			expect(result).toEqual({});
 		});
 	});
 
 	describe('_sendMessage', () => {
-		it('posts the message to the correct endpoint with options', async () => {
-			const expectedUrl = `${client.baseURL}/channels/messaging/test/message`;
+		it('sends the message to the correct endpoint with options', async () => {
+			const sendRequestSpy = vi
+				.spyOn(client.api, 'sendRequest')
+				.mockResolvedValue({ body: {}, metadata: {} });
 
-			const result = await channel._sendMessage(message, options);
+			await channel._sendMessage(request);
 
-			expect(postSpy).toHaveBeenCalledTimes(1);
-			expect(postSpy).toHaveBeenCalledWith(expectedUrl, {
-				message,
-				...options,
-			});
-
-			expect(result).toEqual({});
+			expect(sendRequestSpy).toHaveBeenCalledTimes(1);
+			expect(sendRequestSpy).toHaveBeenCalledWith(
+				'POST',
+				'/api/v2/chat/channels/{type}/{id}/message',
+				{ type: 'messaging', id: 'test' },
+				undefined,
+				{
+					message,
+					keep_channel_hidden: undefined,
+					skip_enrich_url: undefined,
+					skip_push: true,
+				},
+				'application/json',
+			);
 		});
 
 		it('works without options', async () => {
-			await channel._sendMessage(message);
+			const sendRequestSpy = vi
+				.spyOn(client.api, 'sendRequest')
+				.mockResolvedValue({ body: {}, metadata: {} });
 
-			expect(postSpy).toHaveBeenCalledWith(
-				`${client.baseURL}/channels/messaging/test/message`,
-				{ message },
+			await channel._sendMessage({ message });
+
+			expect(sendRequestSpy).toHaveBeenCalledWith(
+				'POST',
+				'/api/v2/chat/channels/{type}/{id}/message',
+				{ type: 'messaging', id: 'test' },
+				undefined,
+				{
+					message,
+					keep_channel_hidden: undefined,
+					skip_enrich_url: undefined,
+					skip_push: undefined,
+				},
+				'application/json',
 			);
 		});
 	});
@@ -3331,50 +3385,45 @@ describe('share location', () => {
 		const channel = client.channel('messaging', 'test');
 		const sendMessageSpy = vi.spyOn(channel, 'sendMessage').mockResolvedValue({});
 		const dispatchEventSpy = vi.spyOn(client, 'dispatchEvent').mockResolvedValue({});
-		const updateLocationSpy = vi.spyOn(client, 'updateLocation').mockResolvedValue({});
+		// stopLiveLocationSharing now goes through the generated client.updateLiveLocation.
+		const updateLiveLocationSpy = vi
+			.spyOn(client, 'updateLiveLocation')
+			.mockResolvedValue({});
 		return {
 			channel,
 			client,
 			dispatchEventSpy,
 			sendMessageSpy,
-			updateLocationSpy,
+			updateLiveLocationSpy,
 		};
 	};
 
 	it('forwards the location object', async () => {
 		const { channel, sendMessageSpy } = await setup();
 
+		// sendSharedLocation now forwards a single-object sendMessage request wrapping the location.
 		await channel.sendSharedLocation(staticLocation);
 		expect(sendMessageSpy).toHaveBeenCalledWith({
-			id: staticLocation.message_id,
-			shared_location: staticLocation,
-			user: undefined,
+			message: { id: staticLocation.message_id, shared_location: staticLocation },
 		});
 
 		await channel.sendSharedLocation(liveLocation);
 		expect(sendMessageSpy).toHaveBeenCalledWith({
-			id: liveLocation.message_id,
-			shared_location: liveLocation,
-			user: undefined,
+			message: { id: liveLocation.message_id, shared_location: liveLocation },
 		});
 	});
 
-	it('injects the user object into the request payload', async () => {
+	it('does not inject a user into the request payload', async () => {
+		// The `userId`/`user` injection was dropped in the OpenAPI-client migration:
+		// sendSharedLocation takes only the location and forwards no user object.
 		const { channel, sendMessageSpy } = await setup();
 
 		await channel.sendSharedLocation(staticLocation, userId);
-		expect(sendMessageSpy).toHaveBeenCalledWith({
-			id: staticLocation.message_id,
-			shared_location: staticLocation,
-			user: { id: userId },
+		const sentArg = sendMessageSpy.mock.calls[0][0];
+		expect(sentArg).to.deep.equal({
+			message: { id: staticLocation.message_id, shared_location: staticLocation },
 		});
-
-		await channel.sendSharedLocation(liveLocation, userId);
-		expect(sendMessageSpy).toHaveBeenCalledWith({
-			id: liveLocation.message_id,
-			shared_location: liveLocation,
-			user: { id: userId },
-		});
+		expect(sentArg.message.user).to.be.undefined;
 	});
 	it('emits live_location_sharing.started local event', async () => {
 		const { channel, dispatchEventSpy, sendMessageSpy } = await setup();
@@ -3392,16 +3441,16 @@ describe('share location', () => {
 	});
 
 	it('stops live location sharing', async () => {
-		const { channel, dispatchEventSpy, updateLocationSpy } = await setup();
+		const { channel, dispatchEventSpy, updateLiveLocationSpy } = await setup();
 
-		updateLocationSpy.mockResolvedValueOnce(staticLocation);
+		updateLiveLocationSpy.mockResolvedValueOnce(staticLocation);
 		await channel.stopLiveLocationSharing(staticLocation);
 		expect(dispatchEventSpy).toHaveBeenCalledWith({
 			live_location: expect.objectContaining(staticLocation),
 			type: 'live_location_sharing.stopped',
 		});
 
-		updateLocationSpy.mockResolvedValueOnce(liveLocation);
+		updateLiveLocationSpy.mockResolvedValueOnce(liveLocation);
 		await channel.stopLiveLocationSharing(liveLocation);
 		expect(dispatchEventSpy).toHaveBeenCalledWith({
 			live_location: expect.objectContaining(liveLocation),

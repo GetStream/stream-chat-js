@@ -40,8 +40,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: lastOwnMessageAt.toISOString(),
-        updated_at: lastOwnMessageAt.toISOString(),
+        created_at: lastOwnMessageAt,
+        updated_at: lastOwnMessageAt,
         user: { id: client.userID as string },
       }),
     );
@@ -77,8 +77,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: now.toISOString(),
-        updated_at: now.toISOString(),
+        created_at: now,
+        updated_at: now,
         user: { id: client.userID as string },
       }),
     );
@@ -92,8 +92,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: now.toISOString(),
-        updated_at: now.toISOString(),
+        created_at: now,
+        updated_at: now,
         user: { id: client.userID as string },
       }),
     );
@@ -107,8 +107,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: now.toISOString(),
-        updated_at: now.toISOString(),
+        created_at: now,
+        updated_at: now,
         user: { id: client.userID as string },
       }),
     );
@@ -140,8 +140,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: lastOwnMessageAt.toISOString(),
-        updated_at: lastOwnMessageAt.toISOString(),
+        created_at: lastOwnMessageAt,
+        updated_at: lastOwnMessageAt,
         user: { id: client.userID as string },
       }),
     );
@@ -167,8 +167,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: now.toISOString(),
-        updated_at: now.toISOString(),
+        created_at: now,
+        updated_at: now,
         user: { id: client.userID as string },
       }),
     );
@@ -191,8 +191,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: lastOwnMessageAt.toISOString(),
-        updated_at: lastOwnMessageAt.toISOString(),
+        created_at: lastOwnMessageAt,
+        updated_at: lastOwnMessageAt,
         user: { id: client.userID as string },
       }),
     );
@@ -226,8 +226,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: lastOwnMessageAt.toISOString(),
-        updated_at: lastOwnMessageAt.toISOString(),
+        created_at: lastOwnMessageAt,
+        updated_at: lastOwnMessageAt,
         user: { id: client.userID as string },
       }),
     );
@@ -261,8 +261,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: lastOwnMessageAt.toISOString(),
-        updated_at: lastOwnMessageAt.toISOString(),
+        created_at: lastOwnMessageAt,
+        updated_at: lastOwnMessageAt,
         user: { id: client.userID as string },
       }),
     );
@@ -299,8 +299,8 @@ describe('CooldownTimer', () => {
       user: { id: client.userID as string },
       message: generateMsg({
         cid: channel.cid, // must match the paginator filter so message.new ingests into an interval
-        created_at: now.toISOString(),
-        updated_at: now.toISOString(),
+        created_at: now,
+        updated_at: now,
         user: { id: client.userID as string },
       }),
     } as Event);

@@ -9,16 +9,16 @@ import {
   Permission,
   MaxPriority,
   APIResponse,
-  AppSettingsAPIResponse,
+  GetApplicationResponse,
   UserResponse,
   SendFileAPIResponse,
   UR,
   Channel,
-  EventTypes,
+  EventType,
   ChannelState,
   ChannelMemberResponse,
   UpdateChannelAPIResponse,
-  PartialUserUpdate,
+  UpdateUserPartialRequest,
   PermissionObject,
   PolicyRequest,
   ConnectAPIResponse,
@@ -94,10 +94,10 @@ const authType: string = client.getAuthType();
 
 voidReturn = client.setBaseURL('https://chat.stream-io-api.com/');
 const settingsPromise: Promise<APIResponse> = client.updateAppSettings({});
-const appPromise: Promise<AppSettingsAPIResponse> = client.getAppSettings();
+const appPromise: Promise<GetApplicationResponse> = client.getAppSettings();
 voidPromise = client.disconnectUser();
 
-const updateRequest: PartialUserUpdate = {
+const updateRequest: UpdateUserPartialRequest = {
   id: 'vishal',
   set: {
     name: 'Awesome',
@@ -148,7 +148,7 @@ const file: Promise<SendFileAPIResponse> = client.sendFile(
   { id: 'james' },
 );
 
-const type: EventTypes = 'user.updated';
+const type: EventType = 'user.updated';
 const event: Event = {
   type,
   cid: 'channelid',

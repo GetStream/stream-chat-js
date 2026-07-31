@@ -17,12 +17,13 @@ import {
   ZERO_PAGE_CURSOR,
 } from './BasePaginator';
 import type {
-  AscDesc,
   LocalMessage,
   MessagePaginationOptions,
+  MessagePaginationParams,
   MessageResponse,
   PinnedMessagePaginationOptions,
   ReactionResponse,
+  SortParamRequest,
   UserResponse,
 } from '../../types';
 import type { Channel } from '../../channel';
@@ -78,16 +79,19 @@ export type JumpToMessageOptions = {
   suppressFocusSignal?: boolean;
 };
 
-export type MessagePaginatorSort = { created_at: AscDesc } | { created_at: AscDesc }[];
+export type MessagePaginatorSort = SortParamRequest[];
 
 export type MessagePaginatorFilter = {
   cid: string;
   parent_id?: string;
 };
 
-const DEFAULT_BACKEND_SORT: MessagePaginatorSort = {
-  created_at: 1,
-};
+const DEFAULT_BACKEND_SORT: MessagePaginatorSort = [
+  {
+    field: 'created_at',
+    direction: 1,
+  },
+];
 
 // server's default size is 100
 const DEFAULT_CHANNEL_MESSAGE_LIST_PAGE_SIZE = 100;
@@ -224,7 +228,7 @@ export class MessageIntervalPaginator extends BasePaginator<
     this.messageFocusSignal = new StateStore<MessageFocusSignalState>({
       signal: null,
     });
-    this.sortComparator = makeComparator<LocalMessage, MessagePaginatorSort>({
+    this.sortComparator = makeComparator<LocalMessage>({
       sort: this._requestSort,
       resolvePathValue: resolveDotPathValue,
       tiebreaker: (l, r) => {
@@ -233,7 +237,7 @@ export class MessageIntervalPaginator extends BasePaginator<
         return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
       },
     });
-    this.config.itemOrderComparator = makeComparator<LocalMessage, MessagePaginatorSort>({
+    this.config.itemOrderComparator = makeComparator<LocalMessage>({
       sort: this._itemOrder,
       resolvePathValue: resolveDotPathValue,
       tiebreaker: (l, r) => {
@@ -340,13 +344,13 @@ export class MessageIntervalPaginator extends BasePaginator<
           : undefined;
     } else {
       const { messages } = this.parentMessageId
-        ? await this.channel.getReplies(
-            this.parentMessageId,
-            options,
-            Array.isArray(this.requestSort) ? this.requestSort : [this.requestSort],
-          )
+        ? await this.channel.getReplies({
+            parent_id: this.parentMessageId,
+            ...options,
+            sort: this.requestSort,
+          })
         : await this.channel.query({
-            messages: options,
+            messages: options as MessagePaginationParams,
             // todo: why do we query for watchers?
             // watchers: { limit: this.pageSize },
           });
@@ -846,7 +850,7 @@ export class MessageIntervalPaginator extends BasePaginator<
           this.ingestItem({
             ...message,
             quoted_message: toDeletedMessage({
-              message: message.quoted_message,
+              message: formatMessage(message.quoted_message),
               hardDelete,
               deletedAt,
             }) as LocalMessage,
@@ -921,15 +925,15 @@ export class MessageIntervalPaginator extends BasePaginator<
    * falling back to the event's own_reactions when the message is not loaded — matching the legacy
    * behavior where `_updateMessage` only mutated a message that existed locally.
    *
-   * @param params
-   * @param {MessageResponse | LocalMessage} params.message The reaction event's message, carrying the
+   * @param params - The reaction event payload.
+   * @param params.message - The reaction event's message, carrying the
    *   server-computed `reaction_groups` / `latest_reactions`. Ingested as-is except for `own_reactions`.
-   * @param {ReactionResponse} params.reaction The reaction from the event. Only added to/removed from
+   * @param params.reaction - The reaction from the event. Only added to/removed from
    *   `own_reactions` when its `user_id` is the current user; otherwise the current user's
    *   `own_reactions` are left untouched.
-   * @param {boolean} [params.removed=false] `true` for `reaction.deleted` (remove the reaction from
+   * @param [params.removed=false] - `true` for `reaction.deleted` (remove the reaction from
    *   `own_reactions`); `false` for `reaction.new` / `reaction.updated` (add it).
-   * @param {boolean} [params.enforceUnique=false] When adding, first clear the current user's existing
+   * @param [params.enforceUnique=false] - When adding, first clear the current user's existing
    *   `own_reactions` so only the incoming one remains (used by `reaction.updated`, where a user's
    *   reaction replaces their previous one).
    *

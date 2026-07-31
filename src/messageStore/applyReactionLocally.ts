@@ -1,5 +1,5 @@
 import type { StreamChat } from '../client';
-import type { Reaction, ReactionResponse } from '../types';
+import type { ReactionRequest, ReactionResponse, UserResponse } from '../types';
 import {
   computeOwnReactions,
   messageWithReactionAdded,
@@ -32,7 +32,7 @@ export const applyReactionLocally = (
     removed = false,
   }: {
     messageId: string;
-    reaction: Reaction;
+    reaction: ReactionRequest;
     enforceUnique?: boolean;
     removed?: boolean;
   },
@@ -42,14 +42,21 @@ export const applyReactionLocally = (
   const existing = store.get(messageId);
   if (!user || !existing) return;
 
-  const now = new Date().toISOString();
+  const now = new Date();
+  // Spread `reaction` first so the authoritative fields below win, while still preserving any values
+  // the caller already carried (e.g. the original `created_at` when undo re-applies a captured
+  // reaction) via `?? now`. `message_id`/`user`/`user_id` are always derived from this message and
+  // the connected user, so they never need to come off `reaction`.
   const reactionResponse: ReactionResponse = {
-    created_at: now,
-    message_id: messageId,
-    updated_at: now,
-    user,
-    user_id: user.id,
     ...reaction,
+    created_at: reaction.created_at ?? now,
+    custom: reaction.custom ?? {},
+    message_id: messageId,
+    score: reaction.score ?? 1,
+    type: reaction.type,
+    updated_at: reaction.updated_at ?? now,
+    user: user as UserResponse,
+    user_id: user.id,
   };
 
   // Capture what this op removes so undo() can restore it faithfully (reaction spread last): the

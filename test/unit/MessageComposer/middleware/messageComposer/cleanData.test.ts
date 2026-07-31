@@ -51,8 +51,12 @@ describe('stream-io/message-composer-middleware/data-cleanup', () => {
       ...stateSeed,
       localMessage: {
         ...stateSeed.localMessage,
-        error: null,
-        quoted_message: null,
+        deleted_at: undefined,
+        error: undefined,
+        pinned_at: undefined,
+        quoted_message: undefined,
+        reaction_groups: undefined,
+        user_id: undefined,
         type: 'regular',
       },
       message: {
@@ -75,8 +79,12 @@ describe('stream-io/message-composer-middleware/data-cleanup', () => {
       ...stateSeed,
       localMessage: {
         ...stateSeed.localMessage,
-        error: null,
-        quoted_message: null,
+        deleted_at: undefined,
+        error: undefined,
+        pinned_at: undefined,
+        quoted_message: undefined,
+        reaction_groups: undefined,
+        user_id: undefined,
         type: 'regular',
       },
       message: {

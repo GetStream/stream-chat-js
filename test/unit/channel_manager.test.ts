@@ -1,7 +1,7 @@
 import sinon from 'sinon';
 import {
   Channel,
-  ChannelAPIResponse,
+  ChannelStateResponseFields,
   ChannelManager,
   ChannelResponse,
   StreamChat,
@@ -10,7 +10,9 @@ import {
   channelManagerEventToHandlerMapping,
   DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS,
   QueryChannelsRequestType,
-  QueryChannelsAPIResponse,
+  QueryChannelsResponse,
+  RequestMetadata,
+  EventPayload,
 } from '../../src';
 
 import { generateChannel } from './test-utils/generateChannel';
@@ -24,7 +26,7 @@ import { DEFAULT_QUERY_CHANNELS_RETRY_COUNT } from '../../src/constants';
 describe('ChannelManager', () => {
   let client: StreamChat;
   let channelManager: ChannelManager;
-  let channelsResponse: ChannelAPIResponse[];
+  let channelsResponse: ChannelStateResponseFields[];
 
   beforeEach(async () => {
     client = await getClientWithUser();
@@ -37,7 +39,7 @@ describe('ChannelManager', () => {
     ];
     client.hydrateActiveChannels(channelsResponse);
     const channels = channelsResponse.map((c) =>
-      client.channel(c.channel.type, c.channel.id),
+      client.channel(c.channel!.type, c.channel!.id),
     );
     channelManager.state.partialNext({ channels, initialized: true });
   });
@@ -66,8 +68,6 @@ describe('ChannelManager', () => {
         isLoading: false,
         isLoadingNext: false,
         hasNext: false,
-        filters: {},
-        sort: {},
         options: DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS,
       });
       expect(state.initialized).to.be.false;
@@ -135,7 +135,7 @@ describe('ChannelManager', () => {
       });
 
       const clientQueryChannelsSpy = vi
-        .spyOn(client, 'queryChannels')
+        .spyOn(client, 'queryChannelsAndHydrate')
         .mockImplementation(async () => []);
       await (channelManager as any).queryChannelsRequest({});
       expect(clientQueryChannelsSpy).toHaveBeenCalledOnce();
@@ -295,14 +295,14 @@ describe('ChannelManager', () => {
           presence: true,
           state: true,
           watch: true,
+          filter_conditions: { team: 'blue' },
+          sort: [{ field: 'last_message_at', direction: -1 }],
         };
 
         channelManager.state.partialNext({
           pagination: {
             ...pagination,
-            filters: { team: 'blue' },
             options,
-            sort: { last_message_at: -1 },
           },
         });
 
@@ -310,9 +310,7 @@ describe('ChannelManager', () => {
 
         expect(client.offlineDb!.upsertCidsForQuery).toHaveBeenCalledExactlyOnceWith({
           cids: channels.map((channel) => channel.cid),
-          filters: { team: 'blue' },
           options,
-          sort: { last_message_at: -1 },
         });
       });
     });
@@ -510,17 +508,14 @@ describe('ChannelManager', () => {
         mockChannelPages.flat().map((obj) => [obj.cid, obj]),
       );
       clientQueryChannelsStub = sinon
-        .stub(client, 'queryChannels')
-        .callsFake((filters, _sort, options) => {
-          if (
-            typeof filters.cid === 'object' &&
-            filters.cid !== null &&
-            '$in' in filters.cid
-          ) {
-            const toReturn = (filters.cid['$in'] ?? []) as string[];
+        .stub(client, 'queryChannelsAndHydrate')
+        .callsFake((request) => {
+          const cidFilter = request?.filter_conditions?.cid;
+          if (typeof cidFilter === 'object' && cidFilter !== null && '$in' in cidFilter) {
+            const toReturn = (cidFilter['$in'] ?? []) as string[];
             return Promise.resolve(toReturn.map((cid) => mockChannelCidMap[cid]));
           }
-          const offset = options?.offset ?? 0;
+          const offset = request?.offset ?? 0;
           return Promise.resolve(mockChannelPages[Math.floor(offset / 10)]);
         });
     });
@@ -569,15 +564,17 @@ describe('ChannelManager', () => {
           );
           stateChangeSpy.resetHistory();
 
-          await channelManager.queryChannels({ filterA: true }, { asc: 1 });
+          const request = {
+            filter_conditions: { filterA: true },
+            sort: [{ field: 'asc', direction: 1 }],
+          };
+          await channelManager.queryChannels(request);
 
           const { channels } = channelManager.state.getLatestValue();
 
           expect(client.offlineDb!.getChannelsForQuery).toHaveBeenCalledExactlyOnceWith({
             userId: client.userID,
-            filters: { filterA: true },
-            options: {},
-            sort: { asc: 1 },
+            options: request,
           });
 
           expect(
@@ -593,20 +590,20 @@ describe('ChannelManager', () => {
         });
 
         it('passes full predefined-filter query options when hydrating channels from DB', async () => {
-          const options = {
+          const request = {
+            filter_conditions: {},
+            sort: [],
             predefined_filter: 'user_messaging',
             filter_values: { user_id: 'dan' },
             sort_values: { sort_field: 'last_message_at' },
             limit: 20,
           };
 
-          await channelManager.queryChannels({}, [], options);
+          await channelManager.queryChannels(request);
 
           expect(client.offlineDb!.getChannelsForQuery).toHaveBeenCalledExactlyOnceWith({
             userId: client.userID,
-            filters: {},
-            options,
-            sort: [],
+            options: request,
           });
         });
 
@@ -619,7 +616,10 @@ describe('ChannelManager', () => {
           );
           stateChangeSpy.resetHistory();
 
-          await channelManager.queryChannels({ filterA: true }, { asc: 1 });
+          await channelManager.queryChannels({
+            filter_conditions: { filterA: true },
+            sort: [{ field: 'asc', direction: 1 }],
+          });
 
           expect(client.offlineDb!.getChannelsForQuery).not.toHaveBeenCalled();
           expect(hydrateActiveChannelsSpy.called).to.be.false;
@@ -636,7 +636,11 @@ describe('ChannelManager', () => {
           );
           stateChangeSpy.resetHistory();
 
-          await channelManager.queryChannels({ filterA: true }, { asc: 1 });
+          const request = {
+            filter_conditions: { filterA: true },
+            sort: [{ field: 'asc', direction: 1 }],
+          };
+          await channelManager.queryChannels(request);
 
           expect(executeChannelsQuerySpy.called).to.be.false;
           expect(scheduleSyncStatusCallbackSpy.calledOnce).toBe(true);
@@ -650,9 +654,9 @@ describe('ChannelManager', () => {
 
           expect(
             executeChannelsQuerySpy.calledOnceWithExactly({
-              filters: { filterA: true },
-              sort: { asc: 1 },
-              options: {},
+              filters: request.filter_conditions,
+              sort: request.sort,
+              options: request,
               stateOptions: {},
             }),
           ).to.be.true;
@@ -678,7 +682,10 @@ describe('ChannelManager', () => {
           );
           stateChangeSpy.resetHistory();
 
-          await channelManager.queryChannels({ filterA: true }, { asc: 1 });
+          await channelManager.queryChannels({
+            filter_conditions: { filterA: true },
+            sort: [{ field: 'asc', direction: 1 }],
+          });
 
           expect(client.offlineDb!.getChannelsForQuery).toHaveBeenCalled();
           expect(hydrateActiveChannelsSpy.called).to.be.true;
@@ -697,7 +704,10 @@ describe('ChannelManager', () => {
           );
           stateChangeSpy.resetHistory();
 
-          await channelManager.queryChannels({ filterA: true }, { asc: 1 });
+          await channelManager.queryChannels({
+            filter_conditions: { filterA: true },
+            sort: [{ field: 'asc', direction: 1 }],
+          });
 
           expect(client.offlineDb!.getChannelsForQuery).not.toHaveBeenCalled();
           expect(hydrateActiveChannelsSpy.called).to.be.false;
@@ -786,30 +796,29 @@ describe('ChannelManager', () => {
           stateChangeSpy.resetHistory();
 
           await channelManager['executeChannelsQuery']({
-            filters: { filterA: true },
-            sort: { asc: 1 },
-            options: { limit: 10, offset: 0 },
+            options: {
+              filter_conditions: { filterA: true },
+              sort: [{ field: 'asc', direction: 1 }],
+              limit: 10,
+              offset: 0,
+            },
           });
 
           const { channels } = channelManager.state.getLatestValue();
 
           expect(clientQueryChannelsStub.calledOnce).to.be.true;
-          expect(
-            clientQueryChannelsStub.calledWith(
-              { filterA: true },
-              { asc: 1 },
-              { limit: 10, offset: 0 },
-            ),
-          );
           expect(stateChangeSpy.callCount).to.equal(1);
           expect(stateChangeSpy.args[0][0]).to.deep.equal({
             pagination: {
-              filters: {},
               hasNext: true,
               isLoading: false,
               isLoadingNext: false,
-              options: { limit: 10, offset: 10 },
-              sort: {},
+              options: {
+                filter_conditions: { filterA: true },
+                sort: [{ field: 'asc', direction: 1 }],
+                limit: 10,
+                offset: 10,
+              },
             },
           });
           expect(channels.length).to.equal(10);
@@ -827,6 +836,8 @@ describe('ChannelManager', () => {
           ).mockResolvedValue([]);
 
           const queryOptions = {
+            filter_conditions: { filterA: true },
+            sort: [{ field: 'asc', direction: 1 }],
             predefined_filter: 'user_messaging',
             filter_values: { user_id: 'user123' },
             sort_values: { sort_field: 'last_message_at' },
@@ -838,17 +849,10 @@ describe('ChannelManager', () => {
           };
           const { pagination } = channelManager.state.getLatestValue();
           channelManager.state.partialNext({
-            pagination: {
-              ...pagination,
-              filters: { filterA: true },
-              options: queryOptions,
-              sort: { asc: 1 },
-            },
+            pagination: { ...pagination, options: queryOptions },
           });
 
           await channelManager['executeChannelsQuery']({
-            filters: { filterA: true },
-            sort: { asc: 1 },
             options: queryOptions,
             stateOptions: {},
           });
@@ -857,7 +861,7 @@ describe('ChannelManager', () => {
             cids: mockChannelPages[0].map((channel) => channel.cid),
             filters: { filterA: true },
             options: queryOptions,
-            sort: { asc: 1 },
+            sort: [{ field: 'asc', direction: 1 }],
           });
         });
 
@@ -865,7 +869,7 @@ describe('ChannelManager', () => {
           clientQueryChannelsStub.callsFake(() => mockChannelPages[2]);
           await channelManager['executeChannelsQuery']({
             filters: { filterA: true },
-            sort: { asc: 1 },
+            sort: [{ field: 'asc', direction: 1 }],
             options: { limit: 10, offset: 0 },
           });
 
@@ -895,7 +899,7 @@ describe('ChannelManager', () => {
 
           await channelManager['executeChannelsQuery']({
             filters: { filterA: true },
-            sort: { asc: 1 },
+            sort: [{ field: 'asc', direction: 1 }],
             options: { limit: 10, offset: 0 },
           });
 
@@ -937,7 +941,7 @@ describe('ChannelManager', () => {
 
           await channelManager['executeChannelsQuery']({
             filters: { filterA: true },
-            sort: { asc: 1 },
+            sort: [{ field: 'asc', direction: 1 }],
             options: { limit: 10, offset: 0 },
           });
 
@@ -967,7 +971,7 @@ describe('ChannelManager', () => {
           await channelManager['executeChannelsQuery'](
             {
               filters: { filterA: true },
-              sort: { asc: 1 },
+              sort: [{ field: 'asc', direction: 1 }],
               options: { limit: 10, offset: 0 },
             },
             3,
@@ -999,7 +1003,7 @@ describe('ChannelManager', () => {
 
           await channelManager['executeChannelsQuery']({
             filters: { filterA: true },
-            sort: { asc: 1 },
+            sort: [{ field: 'asc', direction: 1 }],
             options: { limit: 10, offset: 0 },
           });
 
@@ -1022,11 +1026,13 @@ describe('ChannelManager', () => {
         );
         stateChangeSpy.resetHistory();
 
-        await channelManager.queryChannels(
-          { filterA: true },
-          { asc: 1 },
-          { limit: 10, offset: 0 },
-        );
+        const request = {
+          filter_conditions: { filterA: true },
+          sort: [{ field: 'asc', direction: 1 }],
+          limit: 10,
+          offset: 0,
+        };
+        await channelManager.queryChannels(request);
 
         const { channels } = channelManager.state.getLatestValue();
 
@@ -1034,22 +1040,18 @@ describe('ChannelManager', () => {
         expect(stateChangeSpy.callCount).to.equal(2);
         expect(stateChangeSpy.args[0][0]).to.deep.equal({
           pagination: {
-            filters: { filterA: true },
             hasNext: false,
             isLoading: true,
             isLoadingNext: false,
-            options: { limit: 10, offset: 0 },
-            sort: { asc: 1 },
+            options: request,
           },
         });
         expect(stateChangeSpy.args[1][0]).to.deep.equal({
           pagination: {
-            filters: { filterA: true },
             hasNext: true,
             isLoading: false,
             isLoadingNext: false,
-            options: { limit: 10, offset: 10 },
-            sort: { asc: 1 },
+            options: { ...request, offset: 10 },
           },
         });
         expect(channels.length).to.equal(10);
@@ -1057,11 +1059,12 @@ describe('ChannelManager', () => {
 
       it('should properly update hasNext and offset if the first returned page is less than the limit', async () => {
         clientQueryChannelsStub.callsFake(() => mockChannelPages[2]);
-        await channelManager.queryChannels(
-          { filterA: true },
-          { asc: 1 },
-          { limit: 10, offset: 0 },
-        );
+        await channelManager.queryChannels({
+          filter_conditions: { filterA: true },
+          sort: [{ field: 'asc', direction: 1 }],
+          limit: 10,
+          offset: 0,
+        });
 
         const {
           channels,
@@ -1082,18 +1085,25 @@ describe('ChannelManager', () => {
         const queryChannelsOverride = async (
           ...params: Parameters<QueryChannelsRequestType>
         ) => {
-          const [filters, ...restParams] = params;
-          filters.cid = { $in: fetchedChannels.map((c) => c.cid) };
+          const [request, ...restParams] = params;
+          const updatedRequest = {
+            ...request,
+            filter_conditions: {
+              ...request?.filter_conditions,
+              cid: { $in: fetchedChannels.map((c) => c.cid) },
+            },
+          };
 
-          return await client.queryChannels(filters, ...restParams);
+          return await client.queryChannelsAndHydrate(updatedRequest, ...restParams);
         };
         channelManager.setQueryChannelsRequest(queryChannelsOverride);
 
-        await channelManager.queryChannels(
-          { filterA: true },
-          { asc: 1 },
-          { limit: 15, offset: 0 },
-        );
+        await channelManager.queryChannels({
+          filter_conditions: { filterA: true },
+          sort: [{ field: 'asc', direction: 1 }],
+          limit: 15,
+          offset: 0,
+        });
 
         const {
           channels,
@@ -1170,11 +1180,12 @@ describe('ChannelManager', () => {
       });
 
       it('should properly set the new pagination parameters and update the offset after loading next', async () => {
-        await channelManager.queryChannels(
-          { filterA: true },
-          { asc: 1 },
-          { limit: 10, offset: 0 },
-        );
+        await channelManager.queryChannels({
+          filter_conditions: { filterA: true },
+          sort: [{ field: 'asc', direction: 1 }],
+          limit: 10,
+          offset: 0,
+        });
 
         const stateChangeSpy = sinon.spy();
         channelManager.state.subscribeWithSelector(
@@ -1192,33 +1203,40 @@ describe('ChannelManager', () => {
         expect(stateChangeSpy.callCount).to.equal(2);
         expect(stateChangeSpy.args[0][0]).to.deep.equal({
           pagination: {
-            filters: { filterA: true },
             hasNext: true,
             isLoading: false,
             isLoadingNext: true,
-            options: { limit: 10, offset: 10 },
-            sort: { asc: 1 },
+            options: {
+              filter_conditions: { filterA: true },
+              sort: [{ field: 'asc', direction: 1 }],
+              limit: 10,
+              offset: 10,
+            },
           },
         });
         expect(stateChangeSpy.args[1][0]).to.deep.equal({
           pagination: {
-            filters: { filterA: true },
             hasNext: true,
             isLoading: false,
             isLoadingNext: false,
-            options: { limit: 10, offset: 20 },
-            sort: { asc: 1 },
+            options: {
+              filter_conditions: { filterA: true },
+              sort: [{ field: 'asc', direction: 1 }],
+              limit: 10,
+              offset: 20,
+            },
           },
         });
         expect(channels.length).to.equal(20);
       });
 
       it('should properly paginate even if state.channels gets modified in the meantime', async () => {
-        await channelManager.queryChannels(
-          { filterA: true },
-          { asc: 1 },
-          { limit: 10, offset: 0 },
-        );
+        await channelManager.queryChannels({
+          filter_conditions: { filterA: true },
+          sort: [{ field: 'asc', direction: 1 }],
+          limit: 10,
+          offset: 0,
+        });
         channelManager.state.next((prevState) => ({
           ...prevState,
           channels: [...mockChannelPages[2].slice(0, 5), ...prevState.channels],
@@ -1240,33 +1258,40 @@ describe('ChannelManager', () => {
         expect(stateChangeSpy.callCount).to.equal(2);
         expect(stateChangeSpy.args[0][0]).to.deep.equal({
           pagination: {
-            filters: { filterA: true },
             hasNext: true,
             isLoading: false,
             isLoadingNext: true,
-            options: { limit: 10, offset: 10 },
-            sort: { asc: 1 },
+            options: {
+              filter_conditions: { filterA: true },
+              sort: [{ field: 'asc', direction: 1 }],
+              limit: 10,
+              offset: 10,
+            },
           },
         });
         expect(stateChangeSpy.args[1][0]).to.deep.equal({
           pagination: {
-            filters: { filterA: true },
             hasNext: true,
             isLoading: false,
             isLoadingNext: false,
-            options: { limit: 10, offset: 20 },
-            sort: { asc: 1 },
+            options: {
+              filter_conditions: { filterA: true },
+              sort: [{ field: 'asc', direction: 1 }],
+              limit: 10,
+              offset: 20,
+            },
           },
         });
         expect(channels.length).to.equal(25);
       });
 
       it('should properly deduplicate when paginating if channels from the next page have been promoted', async () => {
-        await channelManager.queryChannels(
-          { filterA: true },
-          { asc: 1 },
-          { limit: 10, offset: 0 },
-        );
+        await channelManager.queryChannels({
+          filter_conditions: { filterA: true },
+          sort: [{ field: 'asc', direction: 1 }],
+          limit: 10,
+          offset: 0,
+        });
         channelManager.state.next((prevState) => ({
           ...prevState,
           channels: [...mockChannelPages[1].slice(0, 5), ...prevState.channels],
@@ -1288,33 +1313,40 @@ describe('ChannelManager', () => {
         expect(stateChangeSpy.callCount).to.equal(2);
         expect(stateChangeSpy.args[0][0]).to.deep.equal({
           pagination: {
-            filters: { filterA: true },
             hasNext: true,
             isLoading: false,
             isLoadingNext: true,
-            options: { limit: 10, offset: 10 },
-            sort: { asc: 1 },
+            options: {
+              filter_conditions: { filterA: true },
+              sort: [{ field: 'asc', direction: 1 }],
+              limit: 10,
+              offset: 10,
+            },
           },
         });
         expect(stateChangeSpy.args[1][0]).to.deep.equal({
           pagination: {
-            filters: { filterA: true },
             hasNext: true,
             isLoading: false,
             isLoadingNext: false,
-            options: { limit: 10, offset: 20 },
-            sort: { asc: 1 },
+            options: {
+              filter_conditions: { filterA: true },
+              sort: [{ field: 'asc', direction: 1 }],
+              limit: 10,
+              offset: 20,
+            },
           },
         });
         expect(channels.length).to.equal(20);
       });
 
       it('should properly deduplicate when paginating if channels latter pages have been promoted and reached', async () => {
-        await channelManager.queryChannels(
-          { filterA: true },
-          { asc: 1 },
-          { limit: 10, offset: 0 },
-        );
+        await channelManager.queryChannels({
+          filter_conditions: { filterA: true },
+          sort: [{ field: 'asc', direction: 1 }],
+          limit: 10,
+          offset: 0,
+        });
         channelManager.state.next((prevState) => ({
           ...prevState,
           channels: [...mockChannelPages[2].slice(0, 3), ...prevState.channels],
@@ -1342,32 +1374,41 @@ describe('ChannelManager', () => {
         expect(stateChangeSpy.callCount).to.equal(4);
         expect(stateChangeSpy.args[0][0]).to.deep.equal({
           pagination: {
-            filters: { filterA: true },
             hasNext: true,
             isLoading: false,
             isLoadingNext: true,
-            options: { limit: 10, offset: 10 },
-            sort: { asc: 1 },
+            options: {
+              filter_conditions: { filterA: true },
+              sort: [{ field: 'asc', direction: 1 }],
+              limit: 10,
+              offset: 10,
+            },
           },
         });
         expect(stateChangeSpy.args[1][0]).to.deep.equal({
           pagination: {
-            filters: { filterA: true },
             hasNext: true,
             isLoading: false,
             isLoadingNext: false,
-            options: { limit: 10, offset: 20 },
-            sort: { asc: 1 },
+            options: {
+              filter_conditions: { filterA: true },
+              sort: [{ field: 'asc', direction: 1 }],
+              limit: 10,
+              offset: 20,
+            },
           },
         });
         expect(stateChangeSpy.args[3][0]).to.deep.equal({
           pagination: {
-            filters: { filterA: true },
             hasNext: false,
             isLoading: false,
             isLoadingNext: false,
-            options: { limit: 10, offset: 25 },
-            sort: { asc: 1 },
+            options: {
+              filter_conditions: { filterA: true },
+              sort: [{ field: 'asc', direction: 1 }],
+              limit: 10,
+              offset: 25,
+            },
           },
         });
         expect(channels.length).to.equal(25);
@@ -1377,11 +1418,12 @@ describe('ChannelManager', () => {
         const { channels: initialChannels } = channelManager.state.getLatestValue();
         expect(initialChannels.length).to.equal(0);
 
-        await channelManager.queryChannels(
-          { filterA: true },
-          { asc: 1 },
-          { limit: 10, offset: 0 },
-        );
+        await channelManager.queryChannels({
+          filter_conditions: { filterA: true },
+          sort: [{ field: 'asc', direction: 1 }],
+          limit: 10,
+          offset: 0,
+        });
         await channelManager.loadNext();
 
         const {
@@ -1412,24 +1454,31 @@ describe('ChannelManager', () => {
         const queryChannelsOverride = async (
           ...params: Parameters<QueryChannelsRequestType>
         ) => {
-          const [filters, sort, options, ...restParams] = params;
-          const isInitialPage = options?.offset === 0;
-          filters.cid = {
-            $in: (isInitialPage ? fetchedChannels : fetchedNextPageChannels).map(
-              (c) => c.cid,
-            ),
+          const [request, ...restParams] = params;
+          const isInitialPage = request?.offset === 0;
+          const updatedRequest = {
+            ...request,
+            filter_conditions: {
+              ...request?.filter_conditions,
+              cid: {
+                $in: (isInitialPage ? fetchedChannels : fetchedNextPageChannels).map(
+                  (c) => c.cid,
+                ),
+              },
+            },
           };
 
-          return await client.queryChannels(filters, sort, options, ...restParams);
+          return await client.queryChannelsAndHydrate(updatedRequest, ...restParams);
         };
 
         channelManager.setQueryChannelsRequest(queryChannelsOverride);
 
-        await channelManager.queryChannels(
-          { filterA: true },
-          { asc: 1 },
-          { limit: 15, offset: 0 },
-        );
+        await channelManager.queryChannels({
+          filter_conditions: { filterA: true },
+          sort: [{ field: 'asc', direction: 1 }],
+          limit: 15,
+          offset: 0,
+        });
 
         const {
           channels: prevChannels,
@@ -1496,9 +1545,9 @@ describe('ChannelManager', () => {
       sort,
     }: {
       filter: Record<string, unknown>;
-      sort?: NonNullable<QueryChannelsAPIResponse['predefined_filter']>['sort'];
+      sort?: NonNullable<QueryChannelsResponse['predefined_filter']>['sort'];
     }) => {
-      vi.spyOn(client, 'post').mockResolvedValueOnce({
+      vi.spyOn(client, 'queryChannels').mockResolvedValueOnce({
         duration: '0.01s',
         channels: channelsResponse,
         predefined_filter: {
@@ -1506,9 +1555,12 @@ describe('ChannelManager', () => {
           filter,
           sort,
         },
-      } satisfies QueryChannelsAPIResponse);
+        metadata: {} as RequestMetadata,
+      });
 
-      await channelManager.queryChannels({}, [], {
+      await channelManager.queryChannels({
+        filter_conditions: {},
+        sort: [],
         predefined_filter: 'messaging_channels',
       });
       setChannelsStub.mockClear();
@@ -1548,7 +1600,7 @@ describe('ChannelManager', () => {
           type: 'message.new',
           channel_type: 'messaging',
           channel_id: 'channel2',
-        });
+        } as EventPayload<'message.new'>);
 
         expect(setChannelsStub).toHaveBeenCalledTimes(0);
       });
@@ -1562,7 +1614,7 @@ describe('ChannelManager', () => {
           type: 'message.new',
           channel_type: 'messaging',
           channel_id: 'channel2',
-        });
+        } as EventPayload<'message.new'>);
 
         expect(setChannelsStub).toHaveBeenCalledTimes(0);
       });
@@ -1580,7 +1632,7 @@ describe('ChannelManager', () => {
           type: 'message.new',
           channel_type: 'messaging',
           channel_id: 'channel2',
-        });
+        } as EventPayload<'message.new'>);
 
         expect(setChannelsStub).toHaveBeenCalledTimes(0);
       });
@@ -1598,7 +1650,7 @@ describe('ChannelManager', () => {
         client.dispatchEvent({
           type: 'notification.message_new',
           channel: { type: 'messaging', id: 'channel4' } as unknown as ChannelResponse,
-        });
+        } as EventPayload<'notification.message_new'>);
 
         await clock.runAllAsync();
         clock.restore();
@@ -1620,7 +1672,7 @@ describe('ChannelManager', () => {
           type: 'channel.visible',
           channel_id: 'channel4',
           channel_type: 'messaging',
-        });
+        } as EventPayload<'channel.visible'>);
 
         await clock.runAllAsync();
         clock.restore();
@@ -1640,8 +1692,8 @@ describe('ChannelManager', () => {
           type: 'member.updated',
           channel_id: 'channel2',
           channel_type: 'messaging',
-          member: { user: { id: client.userID } },
-        });
+          member: { user: { id: client.userId! } },
+        } as EventPayload<'member.updated'>);
 
         expect(setChannelsStub).toHaveBeenCalledOnce();
         expect(
@@ -1666,7 +1718,7 @@ describe('ChannelManager', () => {
           channel_id: 'channel3',
           channel_type: 'messaging',
           member: { user: { id: client.userID } },
-        });
+        } as EventPayload<'member.updated'>);
 
         expect(setChannelsStub).toHaveBeenCalledOnce();
         expect(
@@ -1675,11 +1727,16 @@ describe('ChannelManager', () => {
       });
 
       it('keeps non-predefined query behavior based on caller filters and sort', async () => {
-        vi.spyOn(client, 'post').mockResolvedValueOnce({
+        vi.spyOn(client, 'queryChannels').mockResolvedValueOnce({
           duration: '0.01s',
           channels: channelsResponse,
-        } satisfies QueryChannelsAPIResponse);
-        await channelManager.queryChannels({ archived: false }, [], { limit: 10 });
+          metadata: {} as RequestMetadata,
+        });
+        await channelManager.queryChannels({
+          filter_conditions: { archived: false },
+          sort: [],
+          limit: 10,
+        });
         setChannelsStub.mockClear();
         setChannelMembership('channel2', {
           archived_at: '2024-01-15T10:30:00Z',
@@ -1689,13 +1746,13 @@ describe('ChannelManager', () => {
           type: 'message.new',
           channel_type: 'messaging',
           channel_id: 'channel2',
-        });
+        } as EventPayload<'message.new'>);
 
         expect(setChannelsStub).toHaveBeenCalledTimes(0);
       });
 
       it('preserves resolved predefined response metadata after loading the next page', async () => {
-        vi.spyOn(client, 'post')
+        vi.spyOn(client, 'queryChannels')
           .mockResolvedValueOnce({
             duration: '0.01s',
             channels: channelsResponse,
@@ -1704,7 +1761,8 @@ describe('ChannelManager', () => {
               filter: { archived: false },
               sort: [{ field: 'pinned_at', direction: -1 }],
             },
-          } satisfies QueryChannelsAPIResponse)
+            metadata: {} as RequestMetadata,
+          })
           .mockResolvedValueOnce({
             duration: '0.01s',
             channels: [
@@ -1716,9 +1774,12 @@ describe('ChannelManager', () => {
               filter: { archived: false },
               sort: [{ field: 'pinned_at', direction: -1 }],
             },
-          } satisfies QueryChannelsAPIResponse);
+            metadata: {} as RequestMetadata,
+          });
 
-        await channelManager.queryChannels({}, [], {
+        await channelManager.queryChannels({
+          filter_conditions: {},
+          sort: [],
           predefined_filter: 'messaging_channels',
           limit: 2,
           offset: 0,
@@ -1733,13 +1794,13 @@ describe('ChannelManager', () => {
           type: 'message.new',
           channel_type: 'messaging',
           channel_id: 'channel2',
-        });
+        } as EventPayload<'message.new'>);
 
         expect(setChannelsStub).toHaveBeenCalledTimes(0);
       });
 
       it('clears resolved predefined response metadata when switching to a non-predefined query', async () => {
-        vi.spyOn(client, 'post')
+        vi.spyOn(client, 'queryChannels')
           .mockResolvedValueOnce({
             duration: '0.01s',
             channels: channelsResponse,
@@ -1748,16 +1809,24 @@ describe('ChannelManager', () => {
               filter: { archived: false },
               sort: [{ field: 'pinned_at', direction: -1 }],
             },
-          } satisfies QueryChannelsAPIResponse)
+            metadata: {} as RequestMetadata,
+          })
           .mockResolvedValueOnce({
             duration: '0.01s',
             channels: channelsResponse,
-          } satisfies QueryChannelsAPIResponse);
+            metadata: {} as RequestMetadata,
+          });
 
-        await channelManager.queryChannels({}, [], {
+        await channelManager.queryChannels({
+          filter_conditions: {},
+          sort: [],
           predefined_filter: 'messaging_channels',
         });
-        await channelManager.queryChannels({}, [], { limit: 10 });
+        await channelManager.queryChannels({
+          filter_conditions: {},
+          sort: [],
+          limit: 10,
+        });
         setChannelsStub.mockClear();
         setChannelMembership('channel2', {
           archived_at: '2024-01-15T10:30:00Z',
@@ -1767,7 +1836,7 @@ describe('ChannelManager', () => {
           type: 'message.new',
           channel_type: 'messaging',
           channel_id: 'channel2',
-        });
+        } as EventPayload<'message.new'>);
 
         expect(setChannelsStub).toHaveBeenCalledOnce();
         expect(
@@ -1780,7 +1849,7 @@ describe('ChannelManager', () => {
       let channelToRemove: ChannelResponse;
 
       beforeEach(() => {
-        channelToRemove = channelsResponse[1].channel;
+        channelToRemove = channelsResponse[1].channel!;
       });
 
       (
@@ -1793,14 +1862,23 @@ describe('ChannelManager', () => {
         it('should return early if channels is undefined', () => {
           channelManager.state.partialNext({ channels: undefined });
 
-          client.dispatchEvent({ type: eventType, cid: channelToRemove.cid });
-          client.dispatchEvent({ type: eventType, channel: channelToRemove });
+          client.dispatchEvent({
+            type: eventType,
+            cid: channelToRemove.cid,
+          } as EventPayload<typeof eventType>);
+          client.dispatchEvent({
+            type: eventType,
+            channel: channelToRemove,
+          } as EventPayload<typeof eventType>);
 
           expect(setChannelsStub).toHaveBeenCalledTimes(0);
         });
 
         it('should remove the channel when event.cid matches', () => {
-          client.dispatchEvent({ type: eventType, cid: channelToRemove.cid });
+          client.dispatchEvent({
+            type: eventType,
+            cid: channelToRemove.cid,
+          } as EventPayload<typeof eventType>);
 
           expect(setChannelsStub).toHaveBeenCalledOnce();
           const channels = setChannelsStub.mock.lastCall?.[0] as Channel[];
@@ -1809,7 +1887,10 @@ describe('ChannelManager', () => {
         });
 
         it('should remove the channel when event.channel?.cid matches', () => {
-          client.dispatchEvent({ type: eventType, channel: channelToRemove });
+          client.dispatchEvent({
+            type: eventType,
+            channel: channelToRemove,
+          } as EventPayload<typeof eventType>);
 
           expect(setChannelsStub).toHaveBeenCalledOnce();
           expect(
@@ -1819,7 +1900,9 @@ describe('ChannelManager', () => {
 
         it('should not modify the list if no channels match', () => {
           const { channels: prevChannels } = channelManager.state.getLatestValue();
-          client.dispatchEvent({ type: eventType, cid: 'channel123' });
+          client.dispatchEvent({ type: eventType, cid: 'channel123' } as EventPayload<
+            typeof eventType
+          >);
           const { channels: newChannels } = channelManager.state.getLatestValue();
 
           expect(setChannelsStub).toHaveBeenCalledTimes(0);
@@ -1837,7 +1920,7 @@ describe('ChannelManager', () => {
           type: 'message.new',
           channel_type: 'messaging',
           channel_id: 'channel2',
-        });
+        } as EventPayload<'message.new'>);
 
         expect(setChannelsStub).toHaveBeenCalledTimes(0);
       });
@@ -1851,7 +1934,7 @@ describe('ChannelManager', () => {
           type: 'message.new',
           channel_type: 'messaging',
           channel_id: 'channel2',
-        });
+        } as EventPayload<'message.new'>);
 
         const { channels: newChannels } = channelManager.state.getLatestValue();
 
@@ -1864,7 +1947,13 @@ describe('ChannelManager', () => {
         const { channels: prevChannels } = channelManager.state.getLatestValue();
         channelManager.state.next((prevState) => ({
           ...prevState,
-          pagination: { ...prevState.pagination, filters: { archived: false } },
+          pagination: {
+            ...prevState.pagination,
+            options: {
+              ...prevState.pagination.options,
+              filter_conditions: { archived: false },
+            },
+          },
         }));
         isChannelArchivedStub.mockReturnValueOnce(true);
         shouldConsiderArchivedChannelsStub.mockReturnValueOnce(true);
@@ -1873,7 +1962,7 @@ describe('ChannelManager', () => {
           type: 'message.new',
           channel_type: 'messaging',
           channel_id: 'channel2',
-        });
+        } as EventPayload<'message.new'>);
 
         const { channels: newChannels } = channelManager.state.getLatestValue();
 
@@ -1886,7 +1975,13 @@ describe('ChannelManager', () => {
         const { channels: prevChannels } = channelManager.state.getLatestValue();
         channelManager.state.next((prevState) => ({
           ...prevState,
-          pagination: { ...prevState.pagination, filters: { archived: true } },
+          pagination: {
+            ...prevState.pagination,
+            options: {
+              ...prevState.pagination.options,
+              filter_conditions: { archived: true },
+            },
+          },
         }));
         isChannelArchivedStub.mockReturnValueOnce(false);
         shouldConsiderArchivedChannelsStub.mockReturnValueOnce(true);
@@ -1895,7 +1990,7 @@ describe('ChannelManager', () => {
           type: 'message.new',
           channel_type: 'messaging',
           channel_id: 'channel2',
-        });
+        } as EventPayload<'message.new'>);
 
         const { channels: newChannels } = channelManager.state.getLatestValue();
 
@@ -1912,7 +2007,7 @@ describe('ChannelManager', () => {
           type: 'message.new',
           channel_type: 'messaging',
           channel_id: 'channel2',
-        });
+        } as EventPayload<'message.new'>);
 
         const { channels: newChannels } = channelManager.state.getLatestValue();
 
@@ -1942,7 +2037,7 @@ describe('ChannelManager', () => {
           type: 'message.new',
           channel_type: 'messaging',
           channel_id: 'channel4',
-        });
+        } as EventPayload<'message.new'>);
 
         const { channels: newChannels } = channelManager.state.getLatestValue();
 
@@ -1965,7 +2060,7 @@ describe('ChannelManager', () => {
           type: 'message.new',
           channel_type: 'messaging',
           channel_id: 'channel4',
-        });
+        } as EventPayload<'message.new'>);
 
         const stateAfter = channelManager.state.getLatestValue();
 
@@ -2001,7 +2096,7 @@ describe('ChannelManager', () => {
           type: 'message.new',
           channel_type: 'messaging',
           channel_id: 'channel2',
-        });
+        } as EventPayload<'message.new'>);
 
         const stateAfter = channelManager.state.getLatestValue();
 
@@ -2040,7 +2135,7 @@ describe('ChannelManager', () => {
         client.dispatchEvent({
           type: 'notification.message_new',
           channel: {} as unknown as ChannelResponse,
-        });
+        } as EventPayload<'notification.message_new'>);
 
         await clock.runAllAsync();
 
@@ -2051,14 +2146,14 @@ describe('ChannelManager', () => {
       it('should execute getAndWatchChannel if id and type are provided', async () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
         const newChannel = client.channel(
-          newChannelResponse.channel.type,
-          newChannelResponse.channel.id,
+          newChannelResponse.channel!.type,
+          newChannelResponse.channel!.id,
         );
         getAndWatchChannelStub.mockResolvedValue(newChannel);
         client.dispatchEvent({
           type: 'notification.message_new',
           channel: { type: 'messaging', id: 'channel4' } as unknown as ChannelResponse,
-        });
+        } as EventPayload<'notification.message_new'>);
 
         await clock.runAllAsync();
 
@@ -2075,18 +2170,27 @@ describe('ChannelManager', () => {
         shouldConsiderArchivedChannelsStub.mockReturnValue(true);
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
         getAndWatchChannelStub.mockImplementation(async () =>
-          client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id),
+          client.channel(
+            newChannelResponse.channel!.type,
+            newChannelResponse.channel!.id,
+          ),
         );
 
         channelManager.state.next((prevState) => ({
           ...prevState,
-          pagination: { ...prevState.pagination, filters: { archived: false } },
+          pagination: {
+            ...prevState.pagination,
+            options: {
+              ...prevState.pagination.options,
+              filter_conditions: { archived: false },
+            },
+          },
         }));
 
         client.dispatchEvent({
           type: 'notification.message_new',
-          channel: newChannelResponse.channel as ChannelResponse,
-        });
+          channel: newChannelResponse.channel,
+        } as EventPayload<'notification.message_new'>);
 
         await clock.runAllAsync();
 
@@ -2099,18 +2203,27 @@ describe('ChannelManager', () => {
         shouldConsiderArchivedChannelsStub.mockReturnValueOnce(true);
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
         getAndWatchChannelStub.mockImplementation(async () =>
-          client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id),
+          client.channel(
+            newChannelResponse.channel!.type,
+            newChannelResponse.channel!.id,
+          ),
         );
 
         channelManager.state.next((prevState) => ({
           ...prevState,
-          pagination: { ...prevState.pagination, filters: { archived: true } },
+          pagination: {
+            ...prevState.pagination,
+            options: {
+              ...prevState.pagination.options,
+              filter_conditions: { archived: true },
+            },
+          },
         }));
 
         client.dispatchEvent({
           type: 'notification.message_new',
           channel: newChannelResponse.channel as ChannelResponse,
-        });
+        } as EventPayload<'notification.message_new'>);
 
         await clock.runAllAsync();
 
@@ -2121,8 +2234,8 @@ describe('ChannelManager', () => {
       it('should not update the state if allowNotLoadedChannelPromotionForEvent["notification.message_new"] is false', async () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
         const newChannel = client.channel(
-          newChannelResponse.channel.type,
-          newChannelResponse.channel.id,
+          newChannelResponse.channel!.type,
+          newChannelResponse.channel!.id,
         );
         getAndWatchChannelStub.mockResolvedValueOnce(newChannel);
         channelManager.setOptions({
@@ -2136,7 +2249,7 @@ describe('ChannelManager', () => {
         client.dispatchEvent({
           type: 'notification.message_new',
           channel: { type: 'messaging', id: 'channel4' } as unknown as ChannelResponse,
-        });
+        } as EventPayload<'notification.message_new'>);
 
         await clock.runAllAsync();
 
@@ -2149,8 +2262,8 @@ describe('ChannelManager', () => {
       it('should move channel when all criteria are met', async () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
         const newChannel = client.channel(
-          newChannelResponse.channel.type,
-          newChannelResponse.channel.id,
+          newChannelResponse.channel!.type,
+          newChannelResponse.channel!.id,
         );
         getAndWatchChannelStub.mockResolvedValueOnce(newChannel);
 
@@ -2158,8 +2271,8 @@ describe('ChannelManager', () => {
 
         client.dispatchEvent({
           type: 'notification.message_new',
-          channel: { type: 'messaging', id: 'channel4' } as unknown as ChannelResponse,
-        });
+          channel: { type: 'messaging', id: 'channel4' },
+        } as EventPayload<'notification.message_new'>);
 
         await clock.runAllAsync();
 
@@ -2188,8 +2301,8 @@ describe('ChannelManager', () => {
       it('should not add duplicate channels for multiple event invocations', async () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
         const newChannel = client.channel(
-          newChannelResponse.channel.type,
-          newChannelResponse.channel.id,
+          newChannelResponse.channel!.type,
+          newChannelResponse.channel!.id,
         );
         getAndWatchChannelStub.mockResolvedValue(newChannel);
 
@@ -2198,7 +2311,7 @@ describe('ChannelManager', () => {
         const event = {
           type: 'notification.message_new',
           channel: newChannelResponse.channel as ChannelResponse,
-        } as const;
+        } as EventPayload<'notification.message_new'>;
         // call the event 3 times
         client.dispatchEvent(event);
         client.dispatchEvent(event);
@@ -2243,8 +2356,8 @@ describe('ChannelManager', () => {
       it('should not update the state if the event has no id and type', async () => {
         client.dispatchEvent({
           type: 'channel.visible',
-          channel: {} as unknown as ChannelResponse,
-        });
+          channel: {},
+        } as EventPayload<'channel.visible'>);
 
         await clock.runAllAsync();
 
@@ -2256,13 +2369,16 @@ describe('ChannelManager', () => {
         channelManager.state.partialNext({ channels: undefined });
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
         getAndWatchChannelStub.mockImplementation(async () =>
-          client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id),
+          client.channel(
+            newChannelResponse.channel!.type,
+            newChannelResponse.channel!.id,
+          ),
         );
         client.dispatchEvent({
           type: 'channel.visible',
-          channel_id: newChannelResponse.channel.id,
-          channel_type: newChannelResponse.channel.type,
-        });
+          channel_id: newChannelResponse.channel!.id,
+          channel_type: newChannelResponse.channel!.type,
+        } as EventPayload<'channel.visible'>);
 
         await clock.runAllAsync();
 
@@ -2276,19 +2392,28 @@ describe('ChannelManager', () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
 
         getAndWatchChannelStub.mockImplementation(async () =>
-          client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id),
+          client.channel(
+            newChannelResponse.channel!.type,
+            newChannelResponse.channel!.id,
+          ),
         );
 
         channelManager.state.next((prevState) => ({
           ...prevState,
-          pagination: { ...prevState.pagination, filters: { archived: false } },
+          pagination: {
+            ...prevState.pagination,
+            options: {
+              ...prevState.pagination.options,
+              filter_conditions: { archived: false },
+            },
+          },
         }));
 
         client.dispatchEvent({
           type: 'channel.visible',
-          channel_id: newChannelResponse.channel.cid,
-          channel_type: newChannelResponse.channel.type,
-        });
+          channel_id: newChannelResponse.channel!.cid,
+          channel_type: newChannelResponse.channel!.type,
+        } as EventPayload<'channel.visible'>);
 
         await clock.runAllAsync();
 
@@ -2303,19 +2428,28 @@ describe('ChannelManager', () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
 
         getAndWatchChannelStub.mockImplementation(async () =>
-          client.channel(newChannelResponse.channel.type, newChannelResponse.channel.id),
+          client.channel(
+            newChannelResponse.channel!.type,
+            newChannelResponse.channel!.id,
+          ),
         );
 
         channelManager.state.next((prevState) => ({
           ...prevState,
-          pagination: { ...prevState.pagination, filters: { archived: true } },
+          pagination: {
+            ...prevState.pagination,
+            options: {
+              ...prevState.pagination.options,
+              filter_conditions: { archived: true },
+            },
+          },
         }));
 
         client.dispatchEvent({
           type: 'channel.visible',
-          channel_id: newChannelResponse.channel.id,
-          channel_type: newChannelResponse.channel.type,
-        });
+          channel_id: newChannelResponse.channel!.id,
+          channel_type: newChannelResponse.channel!.type,
+        } as EventPayload<'channel.visible'>);
 
         await clock.runAllAsync();
 
@@ -2326,8 +2460,8 @@ describe('ChannelManager', () => {
       it('should add the channel to the list if all criteria are met', async () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
         const newChannel = client.channel(
-          newChannelResponse.channel.type,
-          newChannelResponse.channel.id,
+          newChannelResponse.channel!.type,
+          newChannelResponse.channel!.id,
         );
         getAndWatchChannelStub.mockResolvedValue(newChannel);
 
@@ -2337,7 +2471,7 @@ describe('ChannelManager', () => {
           type: 'channel.visible',
           channel_id: 'channel4',
           channel_type: 'messaging',
-        });
+        } as EventPayload<'channel.visible'>);
 
         await clock.runAllAsync();
 
@@ -2375,8 +2509,8 @@ describe('ChannelManager', () => {
             type: 'member.updated',
             channel_id: id ?? 'channel2',
             channel_type: 'messaging',
-            member: { user: { id: client?.userID ?? 'anonymous' } },
-          });
+            member: { user: { id: client?.userId ?? 'anonymous' } },
+          } as EventPayload<'member.updated'>);
       });
 
       afterEach(() => {
@@ -2389,7 +2523,7 @@ describe('ChannelManager', () => {
           channel_id: 'channel2',
           channel_type: 'messaging',
           member: { user: { id: 'wrongUserID' } },
-        });
+        } as EventPayload<'member.updated'>);
         expect(setChannelsStub).toHaveBeenCalledTimes(0);
 
         client.dispatchEvent({
@@ -2397,7 +2531,7 @@ describe('ChannelManager', () => {
           channel_id: 'channel2',
           channel_type: 'messaging',
           member: {},
-        });
+        } as EventPayload<'member.updated'>);
         expect(setChannelsStub).toHaveBeenCalledTimes(0);
       });
 
@@ -2405,19 +2539,19 @@ describe('ChannelManager', () => {
         client.dispatchEvent({
           type: 'member.updated',
           member: { user: { id: 'user123' } },
-        });
+        } as EventPayload<'member.updated'>);
         expect(setChannelsStub).toHaveBeenCalledTimes(0);
         client.dispatchEvent({
           type: 'member.updated',
           member: { user: { id: 'user123' } },
           channel_type: 'messaging',
-        });
+        } as EventPayload<'member.updated'>);
         expect(setChannelsStub).toHaveBeenCalledTimes(0);
         client.dispatchEvent({
           type: 'member.updated',
           member: { user: { id: 'user123' } },
           channel_id: 'channel2',
-        });
+        } as EventPayload<'member.updated'>);
         expect(setChannelsStub).toHaveBeenCalledTimes(0);
       });
 
@@ -2462,7 +2596,13 @@ describe('ChannelManager', () => {
       it('should handle archiving correctly', () => {
         channelManager.state.next((prevState) => ({
           ...prevState,
-          pagination: { ...prevState.pagination, filters: { archived: true } },
+          pagination: {
+            ...prevState.pagination,
+            options: {
+              ...prevState.pagination.options,
+              filter_conditions: { archived: true },
+            },
+          },
         }));
         isChannelArchivedStub.mockReturnValueOnce(true);
         shouldConsiderArchivedChannelsStub.mockReturnValueOnce(true);
@@ -2542,14 +2682,16 @@ describe('ChannelManager', () => {
       });
 
       it('should not update state if event.channel defaults are missing', async () => {
-        client.dispatchEvent({ type: 'notification.added_to_channel' });
+        client.dispatchEvent({
+          type: 'notification.added_to_channel',
+        } as EventPayload<'notification.added_to_channel'>);
         await clock.runAllAsync();
         expect(setChannelsStub).toHaveBeenCalledTimes(0);
 
         client.dispatchEvent({
           type: 'notification.added_to_channel',
           channel: { id: '123' } as unknown as ChannelResponse,
-        });
+        } as EventPayload<'notification.added_to_channel'>);
         await clock.runAllAsync();
         expect(setChannelsStub).toHaveBeenCalledTimes(0);
       });
@@ -2557,8 +2699,8 @@ describe('ChannelManager', () => {
       it('should not update state if allowNotLoadedChannelPromotionForEvent["notification.added_to_channel"] is false', async () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
         const newChannel = client.channel(
-          newChannelResponse.channel.type,
-          newChannelResponse.channel.id,
+          newChannelResponse.channel!.type,
+          newChannelResponse.channel!.id,
         );
         getAndWatchChannelStub.mockResolvedValueOnce(newChannel);
         channelManager.setOptions({
@@ -2575,8 +2717,8 @@ describe('ChannelManager', () => {
             id: 'channel4',
             type: 'messaging',
             members: [{ user_id: 'user1' }],
-          } as unknown as ChannelResponse,
-        });
+          },
+        } as EventPayload<'notification.added_to_channel'>);
 
         await clock.runAllAsync();
 
@@ -2587,8 +2729,8 @@ describe('ChannelManager', () => {
       it('should call getAndWatchChannel with correct parameters', async () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
         const newChannel = client.channel(
-          newChannelResponse.channel.type,
-          newChannelResponse.channel.id,
+          newChannelResponse.channel!.type,
+          newChannelResponse.channel!.id,
         );
         getAndWatchChannelStub.mockResolvedValueOnce(newChannel);
         client.dispatchEvent({
@@ -2597,8 +2739,8 @@ describe('ChannelManager', () => {
             id: 'channel4',
             type: 'messaging',
             members: [{ user_id: 'user1' }],
-          } as unknown as ChannelResponse,
-        });
+          },
+        } as EventPayload<'notification.added_to_channel'>);
 
         await clock.runAllAsync();
 
@@ -2614,8 +2756,8 @@ describe('ChannelManager', () => {
       it('should move the channel upwards when criteria is met', async () => {
         const newChannelResponse = generateChannel({ channel: { id: 'channel4' } });
         const newChannel = client.channel(
-          newChannelResponse.channel.type,
-          newChannelResponse.channel.id,
+          newChannelResponse.channel!.type,
+          newChannelResponse.channel!.id,
         );
         getAndWatchChannelStub.mockResolvedValue(newChannel);
 
@@ -2627,8 +2769,8 @@ describe('ChannelManager', () => {
             id: 'channel4',
             type: 'messaging',
             members: [{ user_id: 'user1' }],
-          } as unknown as ChannelResponse,
-        });
+          },
+        } as EventPayload<'notification.added_to_channel'>);
 
         await clock.runAllAsync();
 

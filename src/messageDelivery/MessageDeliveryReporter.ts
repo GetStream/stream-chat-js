@@ -3,15 +3,16 @@ import { Channel } from '../channel';
 import type { ThreadUserReadState } from '../thread';
 import { Thread } from '../thread';
 import type {
-  ErrorFromResponse,
   EventAPIResponse,
   LocalMessage,
-  MarkDeliveredOptions,
-  MarkReadOptions,
+  MarkDeliveredRequest,
+  MarkReadRequest,
+  StreamAPIError,
+  StreamResponse,
 } from '../types';
-import { type APIErrorResponse } from '../types';
 import { throttle, userHasReadReceipts } from '../utils';
 import { isAPIError, isErrorRetryable } from '../errors';
+import type { MarkReadResponse as Gen_MarkReadResponse } from '../gen/models';
 
 const MAX_DELIVERED_MESSAGE_COUNT_IN_PAYLOAD = 100 as const;
 const MARK_AS_DELIVERED_BUFFER_TIMEOUT = 1000 as const;
@@ -25,7 +26,7 @@ type MessageId = string;
 type ChannelThreadCompositeId = string;
 
 export type AnnounceDeliveryOptions = Omit<
-  MarkDeliveredOptions,
+  MarkDeliveredRequest,
   'latest_delivered_messages'
 >;
 
@@ -41,7 +42,7 @@ export class MessageDeliveryReporter {
   protected nextDeliveryReportCandidates: Map<ChannelThreadCompositeId, MessageId> =
     new Map();
 
-  protected markDeliveredRequestPromise: Promise<EventAPIResponse | void> | null = null;
+  protected markDeliveredRequestPromise: Promise<void> | null = null;
   protected markDeliveredTimeout: ReturnType<typeof setTimeout> | null = null;
 
   protected requestTimeoutMs: number = MARK_AS_DELIVERED_BUFFER_TIMEOUT;
@@ -85,7 +86,11 @@ export class MessageDeliveryReporter {
   }
 
   /**
-   * Build latest_delivered_messages payload from an arbitrary buffer (deliveryReportCandidates / nextDeliveryReportCandidates)
+   * Builds the `latest_delivered_messages` payload from an arbitrary buffer
+   * (`deliveryReportCandidates` or `nextDeliveryReportCandidates`).
+   *
+   * @param map - The buffer mapping channel/thread composite IDs to the latest delivered message ID.
+   * @returns The payload entries ready to be sent to the server.
    */
   private confirmationsFrom(map: Map<ChannelThreadCompositeId, MessageId>) {
     return Array.from(map.entries()).map(([key, messageId]) => {
@@ -107,9 +112,10 @@ export class MessageDeliveryReporter {
   }
 
   /**
-   * Generate candidate key for storing in the candidates buffer
-   * @param collection
-   * @private
+   * Generates a candidate key for storing in the candidates buffer.
+   *
+   * @param collection - The channel or thread to derive a candidate key for.
+   * @returns The composite identifier, or `undefined` when the collection is neither a Channel nor a Thread.
    */
   private candidateKeyFor(
     collection: Channel | Thread,
@@ -119,8 +125,11 @@ export class MessageDeliveryReporter {
   }
 
   /**
-   * Retrieve the reference to the latest message in the state that is nor read neither reported as delivered
-   * @param collection
+   * Retrieves a reference to the latest message in the state that is neither read nor reported as
+   * delivered.
+   *
+   * @param collection - The channel or thread to inspect.
+   * @returns The next candidate to report as delivered, or `undefined` when none applies.
    */
   private getNextDeliveryReportCandidate = (
     collection: Channel | Thread,
@@ -133,6 +142,7 @@ export class MessageDeliveryReporter {
     let lastReadAt: Date | undefined;
     let key: string | undefined = undefined;
 
+    // todo: unify the API for read state access btw channel and threads
     if (isChannel(collection)) {
       latestMessages = collection.messagePaginator.headItems;
       const ownReadState = collection.state.read[ownUserId] ?? {};
@@ -140,7 +150,10 @@ export class MessageDeliveryReporter {
       lastDeliveredAt = ownReadState?.last_delivered_at;
       key = collection.cid;
     } else if (isThread(collection)) {
-      latestMessages = collection.messagePaginator.state.getLatestValue().items ?? [];
+      // Use the head (newest-loaded) window, not the active/visible interval: the candidate logic
+      // below inspects the newest message, which the active interval only reflects when scrolled to
+      // the head. Mirrors the channel branch above.
+      latestMessages = collection.messagePaginator.headItems;
       const ownReadState =
         collection.state.getLatestValue().read[ownUserId] ?? ({} as ThreadUserReadState);
       lastReadAt = ownReadState?.lastReadAt;
@@ -168,8 +181,9 @@ export class MessageDeliveryReporter {
   };
 
   /**
-   * Updates the delivery candidates buffer with the latest delivery candidates
-   * @param collection
+   * Updates the delivery candidates buffer with the latest delivery candidates.
+   *
+   * @param collection - The channel or thread whose latest delivery candidate to track.
    */
   private trackDeliveredCandidate(collection: Channel | Thread) {
     if (!MessageDeliveryReporter.hasPermissionToReportDeliveryFor(collection)) return;
@@ -183,9 +197,9 @@ export class MessageDeliveryReporter {
   }
 
   /**
-   * Removes candidate from the delivery report buffer
-   * @param collection
-   * @private
+   * Removes a candidate from the delivery report buffer.
+   *
+   * @param collection - The channel or thread whose candidate should be removed.
    */
   private removeCandidateFor(collection: Channel | Thread) {
     const candidateKey = this.candidateKeyFor(collection);
@@ -195,10 +209,11 @@ export class MessageDeliveryReporter {
   }
 
   /**
-   * Records the latest message delivered for Channel or Thread instances and schedules the next report
-   * if not already scheduled and candidates exist.
-   * Should be used for WS handling (message.new) as well as for ingesting HTTP channel query results.
-   * @param collections
+   * Records the latest message delivered for Channel or Thread instances and schedules the next
+   * report if not already scheduled and candidates exist. Should be used for WS handling
+   * (`message.new`) as well as for ingesting HTTP channel query results.
+   *
+   * @param collections - The channels or threads whose candidates should be synced.
    */
   public syncDeliveredCandidates(collections: (Channel | Thread)[]) {
     if (this.client.user?.privacy_settings?.delivery_receipts?.enabled === false) return;
@@ -207,8 +222,9 @@ export class MessageDeliveryReporter {
   }
 
   /**
-   * Fires delivery announcement request followed by immediate delivery candidate buffer reset.
-   * @param options
+   * Fires a delivery announcement request followed by an immediate delivery candidate buffer reset.
+   *
+   * @param options - Flags forwarded to `client.markDelivered` (optional).
    */
   public announceDelivery = (options?: AnnounceDeliveryOptions) => {
     if (!this.canExecuteRequest) return;
@@ -240,7 +256,7 @@ export class MessageDeliveryReporter {
       postFlightReconcile();
     };
 
-    const handleError = (error: ErrorFromResponse<APIErrorResponse> | Error) => {
+    const handleError = (error: StreamAPIError | Error) => {
       // re-populate relevant candidates for the next report
       // but make sure to keep the items that failed to be reported the first next time
       const newDeliveryReportCandidates = new Map(sendBuffer);
@@ -251,7 +267,9 @@ export class MessageDeliveryReporter {
 
       if (
         (isAPIError(error) && isErrorRetryable(error)) ||
-        (error as ErrorFromResponse<APIErrorResponse>).status >= 500
+        (typeof (error as StreamAPIError).status === 'number' &&
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          (error as StreamAPIError).status! >= 500)
       ) {
         this.increaseBackOff();
         postFlightReconcile();
@@ -261,7 +279,7 @@ export class MessageDeliveryReporter {
     };
 
     this.markDeliveredRequestPromise = this.client
-      .markChannelsDelivered(payload)
+      .markDelivered(payload)
       .then(handleSuccess, handleError);
   };
 
@@ -274,11 +292,13 @@ export class MessageDeliveryReporter {
   };
 
   /**
-   * Delegates the mark-read call to the Channel or Thread instance
-   * @param collection
-   * @param options
+   * Delegates the mark-read call to the Channel or Thread instance.
+   *
+   * @param collection - The channel or thread to mark as read.
+   * @param options - Flags forwarded to the underlying `markRead` call (optional).
+   * @returns The server response, or `null` when the collection is unsupported.
    */
-  public markRead = async (collection: Channel | Thread, options?: MarkReadOptions) => {
+  public markRead = async (collection: Channel | Thread, options?: MarkReadRequest) => {
     if (!userHasReadReceipts(this.client)) return null;
     const isThreadCollection = isThread(collection);
     const channel = isThreadCollection ? collection.channel : collection;
@@ -286,14 +306,14 @@ export class MessageDeliveryReporter {
       ? { ...options, thread_id: collection.id }
       : options;
 
-    let result: EventAPIResponse | null = null;
+    let result: EventAPIResponse | StreamResponse<Gen_MarkReadResponse> | null = null;
 
     if (isThreadCollection) {
       const markReadRequestHandler = collection.configState.getLatestValue()
         .requestHandlers?.markReadRequest as
         | ((params: {
             thread: Thread;
-            options?: MarkReadOptions;
+            options?: MarkReadRequest;
           }) => Promise<EventAPIResponse | null> | void)
         | undefined;
       result = markReadRequestHandler
@@ -301,18 +321,18 @@ export class MessageDeliveryReporter {
             options: requestOptions,
             thread: collection,
           })) ?? null)
-        : await channel.markAsReadRequest(requestOptions);
+        : await channel.markRead(requestOptions);
     } else {
       const markReadRequestHandler = channel.configState.getLatestValue().requestHandlers
         ?.markReadRequest as
         | ((params: {
             channel: Channel;
-            options?: MarkReadOptions;
+            options?: MarkReadRequest;
           }) => Promise<EventAPIResponse | null> | void)
         | undefined;
       result = markReadRequestHandler
         ? ((await markReadRequestHandler({ channel, options: requestOptions })) ?? null)
-        : await channel.markAsReadRequest(requestOptions);
+        : await channel.markRead(requestOptions);
     }
 
     this.removeCandidateFor(collection);
@@ -321,11 +341,23 @@ export class MessageDeliveryReporter {
 
   /**
    * Throttles the MessageDeliveryReporter.markRead call
+   *
    * @param collection
    * @param options
    */
-  public throttledMarkRead = throttle(this.markRead, MARK_AS_READ_THROTTLE_TIMEOUT, {
-    leading: true,
-    trailing: true,
-  }).throttledFn;
+  // Auto mark-read is throttled and fire-and-forget: it's triggered by state changes / WS events,
+  // not by an awaiting caller, so a rejection here has nowhere to propagate and would otherwise
+  // surface as an unhandled rejection (e.g. `channel.markRead` throwing when read events are
+  // disabled, or a transient network error). Swallow it — the auto path retries on the next
+  // trigger, and explicit `markRead()` callers still receive the error.
+  public throttledMarkRead = throttle(
+    (collection: Channel | Thread, options?: MarkReadRequest) => {
+      void this.markRead(collection, options).catch(() => undefined);
+    },
+    MARK_AS_READ_THROTTLE_TIMEOUT,
+    {
+      leading: true,
+      trailing: true,
+    },
+  ).throttledFn;
 }

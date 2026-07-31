@@ -1,4 +1,4 @@
-import type { Attachment, SharedLocationResponse } from '../types';
+import type { Attachment, SharedLocationResponseData } from '../types';
 import type {
   AudioAttachment,
   FileAttachment,
@@ -33,8 +33,10 @@ export const isFileAttachment = (
 ): attachment is FileAttachment =>
   attachment.type === 'file' ||
   !!(
-    attachment.mime_type &&
-    supportedVideoFormat.indexOf(attachment.mime_type) === -1 &&
+    (attachment as FileAttachment).custom?.mime_type &&
+    supportedVideoFormat.indexOf(
+      (attachment as FileAttachment).custom?.mime_type as string,
+    ) === -1 &&
     attachment.type !== 'video'
   );
 
@@ -76,7 +78,12 @@ export const isVideoAttachment = (
   supportedVideoFormat: string[] = [],
 ): attachment is VideoAttachment =>
   attachment.type === 'video' ||
-  !!(attachment.mime_type && supportedVideoFormat.indexOf(attachment.mime_type) !== -1);
+  !!(
+    (attachment as VideoAttachment).custom?.mime_type &&
+    supportedVideoFormat.indexOf(
+      (attachment as VideoAttachment).custom?.mime_type as string,
+    ) !== -1
+  );
 
 export const isLocalVideoAttachment = (
   attachment: Attachment | LocalAttachment,
@@ -92,12 +99,12 @@ export const isUploadedAttachment = (
   isVideoAttachment(attachment) ||
   isVoiceRecordingAttachment(attachment);
 
-export const isSharedLocationResponse = (
+export const isSharedLocationResponseData = (
   location: unknown,
-): location is SharedLocationResponse =>
-  !!(location as SharedLocationResponse).latitude &&
-  !!(location as SharedLocationResponse).longitude &&
-  !!(location as SharedLocationResponse).channel_cid;
+): location is SharedLocationResponseData =>
+  !!(location as SharedLocationResponseData).latitude &&
+  !!(location as SharedLocationResponseData).longitude &&
+  !!(location as SharedLocationResponseData).channel_cid;
 
 export const isGiphyAttachment = (
   attachment: Attachment,

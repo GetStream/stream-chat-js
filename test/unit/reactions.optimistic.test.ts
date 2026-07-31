@@ -18,7 +18,8 @@ const CURRENT_USER = { id: 'me' };
 const connect = () => {
   const client = new StreamChat('apiKey');
   client.user = CURRENT_USER;
-  client.userID = CURRENT_USER.id;
+  // `userID` is now a read-only getter derived from `client.user`, so setting `client.user` above
+  // is sufficient; assigning `client.userID` directly throws.
   return client;
 };
 
@@ -120,7 +121,10 @@ describe('optimistic reactions', () => {
       });
 
       expect(ownReactionTypes(channel.messagePaginator, message.id)).toContain('love');
-      expect(sendReaction).toHaveBeenCalledWith(message.id, { type: 'love' }, undefined);
+      expect(sendReaction).toHaveBeenCalledWith({
+        id: message.id,
+        reaction: { type: 'love' },
+      });
 
       await pending;
 

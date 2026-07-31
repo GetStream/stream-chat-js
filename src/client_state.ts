@@ -1,13 +1,13 @@
-import type { UserResponse } from './types';
+import type { OwnUserResponse, UserResponse } from './types';
 import type { StreamChat } from './client';
 
 /**
- * ClientState - A container class for the client state.
+ * Container class for the client state.
  */
 export class ClientState {
   private client: StreamChat;
   users: {
-    [key: string]: UserResponse;
+    [key: string]: UserResponse | OwnUserResponse;
   };
   userChannelReferences: { [key: string]: { [key: string]: boolean } };
   constructor({ client }: { client: StreamChat }) {
@@ -25,7 +25,7 @@ export class ClientState {
     }
   }
 
-  updateUser(user?: UserResponse) {
+  updateUser(user?: UserResponse | OwnUserResponse) {
     if (user != null && this.client._cacheEnabled()) {
       this.users[user.id] = user;
     }

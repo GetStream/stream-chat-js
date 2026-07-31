@@ -12,6 +12,7 @@ import { logChatPromiseExecution } from '../../../src/utils';
 import { TextComposerConfig } from '../../../src/messageComposer/configuration';
 import { LinkPreviewStatus } from '../../../src/messageComposer/linkPreviewsManager';
 import type { LocalAttachment } from '../../../src/messageComposer/types';
+import { getClientWithUser } from '../test-utils/getClient';
 
 const textComposerMiddlewareExecuteOutput = {
   state: {
@@ -45,7 +46,7 @@ vi.mock('../../../src/utils', () => ({
   isLocalMessage: vi.fn().mockReturnValue(true),
   formatMessage: vi.fn().mockImplementation((msg) => msg),
   throttle: vi.fn().mockImplementation((fn) => fn),
-  normalizeQuerySort: vi.fn().mockReturnValue([{ field: 'created_at', direction: -1 }]),
+  getEnv: vi.fn(),
 }));
 
 const setup = ({
@@ -61,7 +62,8 @@ const setup = ({
   vi.clearAllMocks();
 
   // Setup mocks
-  const mockClient = new StreamChat('apiKey', 'apiSecret');
+  const mockClient = getClientWithUser({ id: 'user' });
+
   mockClient.queryUsers = vi.fn().mockResolvedValue({ users: [] });
 
   const mockChannel = mockClient.channel('channelType', 'channelId');

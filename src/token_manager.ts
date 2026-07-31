@@ -1,9 +1,13 @@
 import type jwt from 'jsonwebtoken';
 
+import { chatLoggerSystem } from './logger';
 import { JWTServerToken, JWTUserToken, UserFromToken } from './signing';
 import { isFunction } from './utils';
-import type { TokenOrProvider, UserResponse } from './types';
+import type { TokenOrProvider } from './types';
 
+const logger = chatLoggerSystem.getLogger('token-manager');
+
+export type TokenManagerMinimalUser = { id: string; anon?: boolean };
 /**
  * TokenManager
  *
@@ -15,11 +19,12 @@ export class TokenManager {
   secret?: jwt.Secret;
   token?: string;
   tokenProvider?: TokenOrProvider;
-  user?: UserResponse;
+  user?: TokenManagerMinimalUser;
   /**
-   * Constructor
+   * Initializes the token manager, optionally with a server-side API secret used to mint tokens
+   * locally.
    *
-   * @param {Secret} secret
+   * @param secret - Optional API secret. When provided, the manager will sign server tokens locally.
    */
   constructor(secret?: jwt.Secret) {
     this.loadTokenPromise = null;
@@ -35,13 +40,16 @@ export class TokenManager {
   }
 
   /**
-   * Set the static string token or token provider.
-   * Token provider should return a token string or a promise which resolves to string token.
+   * Sets the static string token or token provider. A token provider should return a token string
+   * or a promise that resolves to a token string.
    *
-   * @param {TokenOrProvider} tokenOrProvider
-   * @param {UserResponse} user
+   * @param tokenOrProvider - A token string or an async provider that returns one.
+   * @param user - The user the token belongs to.
    */
-  setTokenOrProvider = async (tokenOrProvider: TokenOrProvider, user: UserResponse) => {
+  setTokenOrProvider = async (
+    tokenOrProvider: TokenOrProvider,
+    user: TokenManagerMinimalUser,
+  ) => {
     this.validateToken(tokenOrProvider, user);
     this.user = user;
 
@@ -76,7 +84,7 @@ export class TokenManager {
   };
 
   // Validates the user token.
-  validateToken = (tokenOrProvider: TokenOrProvider, user: UserResponse) => {
+  validateToken = (tokenOrProvider: TokenOrProvider, user: TokenManagerMinimalUser) => {
     // allow empty token for anon user
     if (user && user.anon && !tokenOrProvider) return;
 
@@ -126,6 +134,9 @@ export class TokenManager {
         try {
           this.token = await this.tokenProvider();
         } catch (e) {
+          logger
+            .withExtraTags('loadToken')
+            .error('The token provider threw an error.', { error: e });
           return reject(
             new Error(`Call to tokenProvider failed with message: ${e}`, { cause: e }),
           );

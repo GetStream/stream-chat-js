@@ -88,8 +88,8 @@ describe('LiveLocationManager', () => {
   describe('live location management', () => {
     it('retrieves the active live locations and registers subscriptions on init', async () => {
       const client = await getClientWithUser({ id: 'user-abc' });
-      const getSharedLocationsSpy = vi
-        .spyOn(client, 'getSharedLocations')
+      const getUserLiveLocationsSpy = vi
+        .spyOn(client, 'getUserLiveLocations')
         .mockResolvedValue({ active_live_locations: [], duration: '' });
       const manager = new LiveLocationManager({
         client,
@@ -97,16 +97,16 @@ describe('LiveLocationManager', () => {
         watchLocation,
       });
 
-      expect(getSharedLocationsSpy).toHaveBeenCalledTimes(0);
+      expect(getUserLiveLocationsSpy).toHaveBeenCalledTimes(0);
       expect(manager.stateIsReady).toBeFalsy();
       await manager.init();
-      expect(getSharedLocationsSpy).toHaveBeenCalledTimes(1);
+      expect(getUserLiveLocationsSpy).toHaveBeenCalledTimes(1);
       expect(manager.hasSubscriptions).toBeTruthy();
       // @ts-expect-error accessing private attribute
       expect(manager.refCount).toBe(1);
 
       await manager.init();
-      expect(getSharedLocationsSpy).toHaveBeenCalledTimes(1);
+      expect(getUserLiveLocationsSpy).toHaveBeenCalledTimes(1);
       expect(manager.hasSubscriptions).toBeTruthy();
       expect(manager.stateIsReady).toBeTruthy();
       // @ts-expect-error accessing private attribute
@@ -115,8 +115,8 @@ describe('LiveLocationManager', () => {
 
     it('unregisters subscriptions', async () => {
       const client = await getClientWithUser({ id: 'user-abc' });
-      const getSharedLocationsSpy = vi
-        .spyOn(client, 'getSharedLocations')
+      const getUserLiveLocationsSpy = vi
+        .spyOn(client, 'getUserLiveLocations')
         .mockResolvedValue({ active_live_locations: [], duration: '' });
       const manager = new LiveLocationManager({
         client,
@@ -132,11 +132,11 @@ describe('LiveLocationManager', () => {
     describe('message addition or removal', () => {
       it('does not update active location if there are no active live locations', async () => {
         const client = await getClientWithUser({ id: 'user-abc' });
-        const getSharedLocationsSpy = vi
-          .spyOn(client, 'getSharedLocations')
+        const getUserLiveLocationsSpy = vi
+          .spyOn(client, 'getUserLiveLocations')
           .mockResolvedValue({ active_live_locations: [], duration: '' });
         const updateLocationSpy = vi
-          .spyOn(client, 'updateLocation')
+          .spyOn(client, 'updateLiveLocation')
           .mockResolvedValue(liveLocation);
         const newCoords = { latitude: 2, longitude: 2 };
         const manager = new LiveLocationManager({
@@ -152,11 +152,11 @@ describe('LiveLocationManager', () => {
       it('does not update active location if there are no coordinate updates', async () => {
         // starting from 0
         const client = await getClientWithUser({ id: 'user-abc' });
-        const getSharedLocationsSpy = vi
-          .spyOn(client, 'getSharedLocations')
+        const getUserLiveLocationsSpy = vi
+          .spyOn(client, 'getUserLiveLocations')
           .mockResolvedValue({ active_live_locations: [liveLocation], duration: '' });
         const updateLocationSpy = vi
-          .spyOn(client, 'updateLocation')
+          .spyOn(client, 'updateLiveLocation')
           .mockResolvedValue(liveLocation);
         const manager = new LiveLocationManager({
           client,
@@ -170,12 +170,12 @@ describe('LiveLocationManager', () => {
 
       it('updates active location on coordinate updates', async () => {
         const client = await getClientWithUser({ id: 'user-abc' });
-        vi.spyOn(client, 'getSharedLocations').mockResolvedValue({
+        vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
           active_live_locations: [liveLocation],
           duration: '',
         });
         const updateLocationSpy = vi
-          .spyOn(client, 'updateLocation')
+          .spyOn(client, 'updateLiveLocation')
           .mockResolvedValue(liveLocation);
         const newCoords = { latitude: 2, longitude: 2 };
         const manager = new LiveLocationManager({
@@ -187,7 +187,6 @@ describe('LiveLocationManager', () => {
         await manager.init();
         expect(updateLocationSpy).toHaveBeenCalledTimes(1);
         expect(updateLocationSpy).toHaveBeenCalledWith({
-          created_by_device_id: liveLocation.created_by_device_id,
           message_id: liveLocation.message_id,
           ...newCoords,
         });
@@ -196,12 +195,12 @@ describe('LiveLocationManager', () => {
 
       it('does not update active location if returning to 0 locations', async () => {
         const client = await getClientWithUser({ id: 'user-abc' });
-        vi.spyOn(client, 'getSharedLocations').mockResolvedValue({
+        vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
           active_live_locations: [liveLocation],
           duration: '',
         });
         const updateLocationSpy = vi
-          .spyOn(client, 'updateLocation')
+          .spyOn(client, 'updateLiveLocation')
           .mockResolvedValue(liveLocation);
         const newCoords = { latitude: 2, longitude: 2 };
         const manager = new LiveLocationManager({
@@ -220,12 +219,12 @@ describe('LiveLocationManager', () => {
 
       it('requests the live location upon adding a first message', async () => {
         const client = await getClientWithUser(user);
-        vi.spyOn(client, 'getSharedLocations').mockResolvedValue({
+        vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
           active_live_locations: [],
           duration: '',
         });
         const updateLocationSpy = vi
-          .spyOn(client, 'updateLocation')
+          .spyOn(client, 'updateLiveLocation')
           .mockResolvedValue(liveLocation);
         const newCoords = { latitude: 2, longitude: 2 };
         const manager = new LiveLocationManager({
@@ -255,12 +254,12 @@ describe('LiveLocationManager', () => {
 
       it('does not perform live location update request upon adding subsequent messages within min throttle timeout', async () => {
         const client = await getClientWithUser(user);
-        vi.spyOn(client, 'getSharedLocations').mockResolvedValue({
+        vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
           active_live_locations: [],
           duration: '',
         });
         const updateLocationSpy = vi
-          .spyOn(client, 'updateLocation')
+          .spyOn(client, 'updateLiveLocation')
           .mockResolvedValue(liveLocation);
         const newCoords = { latitude: 2, longitude: 2 };
         const manager = new LiveLocationManager({
@@ -298,12 +297,12 @@ describe('LiveLocationManager', () => {
       it('does not request live location upon adding subsequent messages beyond min throttle timeout', async () => {
         vi.useFakeTimers();
         const client = await getClientWithUser(user);
-        vi.spyOn(client, 'getSharedLocations').mockResolvedValue({
+        vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
           active_live_locations: [],
           duration: '',
         });
         const updateLocationSpy = vi
-          .spyOn(client, 'updateLocation')
+          .spyOn(client, 'updateLiveLocation')
           .mockResolvedValueOnce(liveLocation)
           .mockResolvedValueOnce(liveLocation2);
         const newCoords = { latitude: 2, longitude: 2 };
@@ -347,12 +346,12 @@ describe('LiveLocationManager', () => {
 
       it('throttles live location update requests upon multiple watcher coords emissions under min throttle timeout', async () => {
         const client = await getClientWithUser(user);
-        vi.spyOn(client, 'getSharedLocations').mockResolvedValue({
+        vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
           active_live_locations: [liveLocation],
           duration: '',
         });
         const updateLocationSpy = vi
-          .spyOn(client, 'updateLocation')
+          .spyOn(client, 'updateLiveLocation')
           .mockResolvedValue(liveLocation);
         let watchHandler: WatchLocationHandler = () => {
           throw new Error('XX');
@@ -382,12 +381,12 @@ describe('LiveLocationManager', () => {
       it('allows live location update requests upon multiple watcher coords emissions beyond min throttle timeout', async () => {
         vi.useFakeTimers();
         const client = await getClientWithUser(user);
-        vi.spyOn(client, 'getSharedLocations').mockResolvedValue({
+        vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
           active_live_locations: [liveLocation],
           duration: '',
         });
         const updateLocationSpy = vi
-          .spyOn(client, 'updateLocation')
+          .spyOn(client, 'updateLiveLocation')
           .mockResolvedValue(liveLocation);
         let watchHandler: WatchLocationHandler = () => {
           throw new Error('XX');
@@ -424,7 +423,7 @@ describe('LiveLocationManager', () => {
       it('prevents live location update requests for expired live locations', async () => {
         vi.useFakeTimers();
         const client = await getClientWithUser(user);
-        vi.spyOn(client, 'getSharedLocations').mockResolvedValue({
+        vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
           active_live_locations: [
             {
               ...liveLocation,
@@ -436,7 +435,7 @@ describe('LiveLocationManager', () => {
           duration: '',
         });
         const updateLocationSpy = vi
-          .spyOn(client, 'updateLocation')
+          .spyOn(client, 'updateLiveLocation')
           .mockResolvedValue(liveLocation);
         let watchHandler: WatchLocationHandler = () => {
           throw new Error('XX');
@@ -474,11 +473,11 @@ describe('LiveLocationManager', () => {
     describe('live_location_sharing.started', () => {
       it('registers a new message', async () => {
         const client = await getClientWithUser(user);
-        vi.spyOn(client, 'getSharedLocations').mockResolvedValue({
+        vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
           active_live_locations: [],
           duration: '',
         });
-        vi.spyOn(client, 'updateLocation').mockResolvedValue(liveLocation);
+        vi.spyOn(client, 'updateLiveLocation').mockResolvedValue(liveLocation);
         const newCoords = { latitude: 2, longitude: 2 };
         const manager = new LiveLocationManager({
           client,
@@ -506,11 +505,11 @@ describe('LiveLocationManager', () => {
     describe('message.updated', () => {
       it('registers a new message if not yet registered', async () => {
         const client = await getClientWithUser(user);
-        vi.spyOn(client, 'getSharedLocations').mockResolvedValue({
+        vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
           active_live_locations: [],
           duration: '',
         });
-        vi.spyOn(client, 'updateLocation').mockResolvedValue(liveLocation);
+        vi.spyOn(client, 'updateLiveLocation').mockResolvedValue(liveLocation);
         const newCoords = { latitude: 2, longitude: 2 };
         const manager = new LiveLocationManager({
           client,
@@ -536,11 +535,11 @@ describe('LiveLocationManager', () => {
 
       it('updates location for registered message', async () => {
         const client = await getClientWithUser(user);
-        vi.spyOn(client, 'getSharedLocations').mockResolvedValue({
+        vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
           active_live_locations: [{ ...liveLocation, end_at: new Date().toISOString() }],
           duration: '',
         });
-        vi.spyOn(client, 'updateLocation').mockResolvedValue(liveLocation);
+        vi.spyOn(client, 'updateLiveLocation').mockResolvedValue(liveLocation);
         const newCoords = { latitude: 2, longitude: 2 };
         const manager = new LiveLocationManager({
           client,
@@ -571,11 +570,11 @@ describe('LiveLocationManager', () => {
 
       it('does not register a new message if it does not contain a live location', async () => {
         const client = await getClientWithUser(user);
-        vi.spyOn(client, 'getSharedLocations').mockResolvedValue({
+        vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
           active_live_locations: [],
           duration: '',
         });
-        vi.spyOn(client, 'updateLocation').mockResolvedValue(liveLocation);
+        vi.spyOn(client, 'updateLiveLocation').mockResolvedValue(liveLocation);
         const newCoords = { latitude: 2, longitude: 2 };
         const manager = new LiveLocationManager({
           client,
@@ -596,11 +595,11 @@ describe('LiveLocationManager', () => {
 
       it('does not register a new message if it does not contain user', async () => {
         const client = await getClientWithUser(user);
-        vi.spyOn(client, 'getSharedLocations').mockResolvedValue({
+        vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
           active_live_locations: [],
           duration: '',
         });
-        vi.spyOn(client, 'updateLocation').mockResolvedValue(liveLocation);
+        vi.spyOn(client, 'updateLiveLocation').mockResolvedValue(liveLocation);
         const newCoords = { latitude: 2, longitude: 2 };
         const manager = new LiveLocationManager({
           client,
@@ -625,11 +624,11 @@ describe('LiveLocationManager', () => {
 
       it('unregisters a message if the updated message does not contain a live location', async () => {
         const client = await getClientWithUser(user);
-        vi.spyOn(client, 'getSharedLocations').mockResolvedValue({
+        vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
           active_live_locations: [liveLocation],
           duration: '',
         });
-        vi.spyOn(client, 'updateLocation').mockResolvedValue(liveLocation);
+        vi.spyOn(client, 'updateLiveLocation').mockResolvedValue(liveLocation);
         const newCoords = { latitude: 2, longitude: 2 };
         const manager = new LiveLocationManager({
           client,
@@ -655,11 +654,11 @@ describe('LiveLocationManager', () => {
 
       it('unregisters a message if its live location has been changed to static location', async () => {
         const client = await getClientWithUser(user);
-        vi.spyOn(client, 'getSharedLocations').mockResolvedValue({
+        vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
           active_live_locations: [liveLocation],
           duration: '',
         });
-        vi.spyOn(client, 'updateLocation').mockResolvedValue(liveLocation);
+        vi.spyOn(client, 'updateLiveLocation').mockResolvedValue(liveLocation);
         const newCoords = { latitude: 2, longitude: 2 };
         const manager = new LiveLocationManager({
           client,
@@ -686,11 +685,11 @@ describe('LiveLocationManager', () => {
 
       it('unregisters a message if the updated message has end_at in the past', async () => {
         const client = await getClientWithUser(user);
-        vi.spyOn(client, 'getSharedLocations').mockResolvedValue({
+        vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
           active_live_locations: [liveLocation],
           duration: '',
         });
-        vi.spyOn(client, 'updateLocation').mockResolvedValue(liveLocation);
+        vi.spyOn(client, 'updateLiveLocation').mockResolvedValue(liveLocation);
         const newCoords = { latitude: 2, longitude: 2 };
         const manager = new LiveLocationManager({
           client,
@@ -719,11 +718,11 @@ describe('LiveLocationManager', () => {
     describe('live_location_sharing.stopped', () => {
       it('unregisters a message', async () => {
         const client = await getClientWithUser(user);
-        vi.spyOn(client, 'getSharedLocations').mockResolvedValue({
+        vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
           active_live_locations: [liveLocation],
           duration: '',
         });
-        vi.spyOn(client, 'updateLocation').mockResolvedValue(liveLocation);
+        vi.spyOn(client, 'updateLiveLocation').mockResolvedValue(liveLocation);
         const newCoords = { latitude: 2, longitude: 2 };
         const manager = new LiveLocationManager({
           client,
@@ -746,11 +745,11 @@ describe('LiveLocationManager', () => {
     describe('message.deleted', () => {
       it('unregisters a message', async () => {
         const client = await getClientWithUser(user);
-        vi.spyOn(client, 'getSharedLocations').mockResolvedValue({
+        vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
           active_live_locations: [liveLocation],
           duration: '',
         });
-        vi.spyOn(client, 'updateLocation').mockResolvedValue(liveLocation);
+        vi.spyOn(client, 'updateLiveLocation').mockResolvedValue(liveLocation);
         const newCoords = { latitude: 2, longitude: 2 };
         const manager = new LiveLocationManager({
           client,
@@ -779,11 +778,11 @@ describe('LiveLocationManager', () => {
   describe('getters', async () => {
     it('deviceId is calculated only once', async () => {
       const client = await getClientWithUser(user);
-      vi.spyOn(client, 'getSharedLocations').mockResolvedValue({
+      vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
         active_live_locations: [liveLocation],
         duration: '',
       });
-      vi.spyOn(client, 'updateLocation').mockResolvedValue(liveLocation);
+      vi.spyOn(client, 'updateLiveLocation').mockResolvedValue(liveLocation);
       const getDeviceId = vi
         .fn()
         .mockReturnValueOnce(deviceId)

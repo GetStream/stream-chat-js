@@ -12,12 +12,11 @@ import {
   StreamChat,
   Thread,
   ThreadManager,
-  ThreadResponse,
+  ThreadStateResponse,
   THREAD_MANAGER_INITIAL_STATE,
   ThreadFilters,
   ThreadSort,
 } from '../../src';
-import { THREAD_RESPONSE_RESERVED_KEYS } from '../../src/thread';
 
 import { describe, it, beforeEach, expect, afterEach } from 'vitest';
 
@@ -34,7 +33,7 @@ describe('Threads 2.0', () => {
     channelOverrides = {},
     parentMessageOverrides = {},
     ...overrides
-  }: Partial<ThreadResponse> & {
+  }: Partial<ThreadStateResponse> & {
     channelOverrides?: Partial<ChannelResponse>;
     parentMessageOverrides?: Partial<MessageResponse>;
   } = {}) {
@@ -86,7 +85,7 @@ describe('Threads 2.0', () => {
     client = new StreamChat('apiKey');
     client._setUser({ id: TEST_USER_ID });
     channelResponse = generateChannel({
-      channel: { id: uuidv4(), name: 'Test channel', members: [] },
+      channel: { id: uuidv4(), members: [], custom: { name: 'Test channel' } },
     }).channel as ChannelResponse;
     channel = client.channel(channelResponse.type, channelResponse.id);
     channel.initialized = true;
@@ -113,9 +112,15 @@ describe('Threads 2.0', () => {
       expect(thread.id).to.equal(parentMessageResponse.id);
       // @ts-expect-error `name` is a custom property
       expect(thread.channel.data?.name).to.equal(channelResponse.name);
-      expect(thread.messagePaginator.sort).to.deep.equal([{ created_at: -1 }]);
-      expect(thread.messagePaginator.requestSort).to.deep.equal([{ created_at: -1 }]);
-      expect(thread.messagePaginator.itemOrder).to.deep.equal({ created_at: 1 });
+      expect(thread.messagePaginator.sort).to.deep.equal([
+        { field: 'created_at', direction: -1 },
+      ]);
+      expect(thread.messagePaginator.requestSort).to.deep.equal([
+        { field: 'created_at', direction: -1 },
+      ]);
+      expect(thread.messagePaginator.itemOrder).to.deep.equal([
+        { field: 'created_at', direction: 1 },
+      ]);
       expect(thread.messagePaginator.pageSize).to.equal(50);
     });
 
@@ -192,9 +197,15 @@ describe('Threads 2.0', () => {
       expect(state.participants).to.deep.equal([]);
       expect(state.custom).to.deep.equal({});
       expect(state.read).to.have.keys([TEST_USER_ID]);
-      expect(thread.messagePaginator.sort).to.deep.equal([{ created_at: -1 }]);
-      expect(thread.messagePaginator.requestSort).to.deep.equal([{ created_at: -1 }]);
-      expect(thread.messagePaginator.itemOrder).to.deep.equal({ created_at: 1 });
+      expect(thread.messagePaginator.sort).to.deep.equal([
+        { field: 'created_at', direction: -1 },
+      ]);
+      expect(thread.messagePaginator.requestSort).to.deep.equal([
+        { field: 'created_at', direction: -1 },
+      ]);
+      expect(thread.messagePaginator.itemOrder).to.deep.equal([
+        { field: 'created_at', direction: 1 },
+      ]);
       expect(thread.messagePaginator.pageSize).to.equal(50);
     });
 
@@ -264,13 +275,13 @@ describe('Threads 2.0', () => {
         it('updates optimistically added message', () => {
           const optimisticMessage = makeReply({
             text: 'aaa',
-            created_at: '2020-01-01T00:00:00Z',
-          });
+            created_at: new Date('2020-01-01T00:00:00Z'),
+          }) as MessageResponse;
 
           const message = makeReply({
             text: 'bbb',
-            created_at: '2020-01-01T00:00:10Z',
-          });
+            created_at: new Date('2020-01-01T00:00:10Z'),
+          }) as MessageResponse;
 
           const thread = createTestThread({
             latest_replies: [optimisticMessage, message],
@@ -279,7 +290,7 @@ describe('Threads 2.0', () => {
           const updatedMessage: MessageResponse = {
             ...optimisticMessage,
             text: 'ccc',
-            created_at: '2020-01-01T00:00:20Z',
+            created_at: new Date('2020-01-01T00:00:20Z'),
           };
 
           const repliesBefore = repliesOf(thread);
@@ -321,7 +332,7 @@ describe('Threads 2.0', () => {
             { id: 'participant-1' },
           ] as unknown as ThreadResponse['thread_participants'];
           const updatedMessage = generateMsg({
-            deleted_at: new Date().toISOString(),
+            deleted_at: new Date(),
             id: parentMessageResponse.id,
             reply_count: 10,
             text: 'aaa',
@@ -332,7 +343,9 @@ describe('Threads 2.0', () => {
 
           const stateAfter = thread.state.getLatestValue();
           expect(stateAfter.deletedAt).to.be.not.null;
-          expect(stateAfter.deletedAt!.toISOString()).to.equal(updatedMessage.deleted_at);
+          expect(stateAfter.deletedAt!.toISOString()).to.equal(
+            updatedMessage.deleted_at!.toISOString(),
+          );
           expect(stateAfter.replyCount).to.equal(updatedMessage.reply_count);
           expect(stateAfter.participants).to.have.lengthOf(1);
           expect(stateAfter.participants?.[0].user_id).to.equal('participant-1');
@@ -544,14 +557,16 @@ describe('Threads 2.0', () => {
 
       describe('reload', () => {
         it('sizes getThread reply_limit to the loaded reply count, falling back to pageSize when unloaded', async () => {
-          const stub = sinon.stub(client, 'getThread').resolves(createTestThread());
+          const stub = sinon.stub(client, 'getThread').resolves({
+            thread: generateThreadResponse(channelResponse, parentMessageResponse),
+          });
 
           // Unloaded (minimal) thread → falls back to pageSize.
           const minimalThread = createMinimalThread();
           expect(minimalThread.messagePaginator.state.getLatestValue().items).to.be
             .undefined;
           await minimalThread.reload();
-          expect(stub.firstCall.args[1]?.reply_limit).to.equal(
+          expect(stub.firstCall.args[0]?.reply_limit).to.equal(
             minimalThread.messagePaginator.pageSize,
           );
 
@@ -566,7 +581,7 @@ describe('Threads 2.0', () => {
             reply_count: 20,
           });
           await loadedThread.reload();
-          expect(stub.secondCall.args[1]?.reply_limit).to.equal(7);
+          expect(stub.secondCall.args[0]?.reply_limit).to.equal(7);
           expect(loadedThread.messagePaginator.pageSize).to.not.equal(7);
         });
       });
@@ -579,7 +594,7 @@ describe('Threads 2.0', () => {
             { length: 5 },
             (_, i) =>
               generateMsg({
-                created_at: new Date(createdAt + 1000 * i).toISOString(),
+                created_at: new Date(createdAt + 1000 * i),
               }) as MessageResponse,
           );
           const thread = createTestThread({ latest_replies: messages });
@@ -604,12 +619,12 @@ describe('Threads 2.0', () => {
 
       describe('markAsRead', () => {
         let stubbedChannelMarkRead: sinon.SinonStub<
-          Parameters<Channel['markAsReadRequest']>,
-          ReturnType<Channel['markAsReadRequest']>
+          Parameters<Channel['markRead']>,
+          ReturnType<Channel['markRead']>
         >;
 
         beforeEach(() => {
-          stubbedChannelMarkRead = sinon.stub(channel, 'markAsReadRequest').resolves();
+          stubbedChannelMarkRead = sinon.stub(channel, 'markRead').resolves();
         });
 
         it('does nothing if unread count of the current user is zero', async () => {
@@ -665,7 +680,7 @@ describe('Threads 2.0', () => {
           expect(repliesOf(thread).map((reply) => reply.id)).to.include(older.id);
           // ...and the request was made against this thread's parent (the replies endpoint).
           expect(getRepliesStub.calledOnce).to.be.true;
-          expect(getRepliesStub.firstCall.args[0]).to.equal(thread.id);
+          expect(getRepliesStub.firstCall.args[0].parent_id).to.equal(thread.id);
         });
 
         it('clears hasMoreTail once toTail() reaches the start of the reply list', async () => {
@@ -742,7 +757,7 @@ describe('Threads 2.0', () => {
         thread.registerSubscriptions();
 
         const reloadedReply = makeReply({ created_at: '2020-03-01T00:00:01.000Z' });
-        const stubbedGetThread = sinon.stub(client, 'getThread').resolves(
+        const stubbedGetThread = sinon.stub(client, 'getThreadAndHydrate').resolves(
           createTestThread({
             latest_replies: [initialReply, reloadedReply],
             reply_count: 2,
@@ -808,14 +823,13 @@ describe('Threads 2.0', () => {
           const customKey1 = uuidv4();
           const customKey2 = uuidv4();
 
-          const thread = createTestThread({ [customKey1]: 1, [customKey2]: { key: 1 } });
+          const thread = createTestThread({
+            custom: { [customKey1]: 1, [customKey2]: { key: 1 } },
+          });
           thread.registerSubscriptions();
 
           const stateBefore = thread.state.getLatestValue();
 
-          expect(stateBefore.custom).to.not.have.keys(
-            Object.keys(THREAD_RESPONSE_RESERVED_KEYS),
-          );
           expect(stateBefore.custom).to.have.keys([customKey1, customKey2]);
           expect(stateBefore.custom[customKey1]).to.equal(1);
 
@@ -825,16 +839,13 @@ describe('Threads 2.0', () => {
               channelResponse,
               generateMsg({ id: parentMessageResponse.id }),
               {
-                [customKey1]: 2,
+                custom: { [customKey1]: 2 },
               },
             ),
           });
 
           const stateAfter = thread.state.getLatestValue();
 
-          expect(stateAfter.custom).to.not.have.keys(
-            Object.keys(THREAD_RESPONSE_RESERVED_KEYS),
-          );
           expect(stateAfter.custom).to.not.have.property(customKey2);
           expect(stateAfter.custom[customKey1]).to.equal(2);
         });
@@ -870,6 +881,7 @@ describe('Threads 2.0', () => {
 
           client.dispatchEvent({
             type: 'user.watching.stop',
+            cid: channelResponse.cid,
             channel: channelResponse,
             user: { id: TEST_USER_ID },
           });
@@ -902,7 +914,7 @@ describe('Threads 2.0', () => {
             thread: generateThreadResponse(
               channelResponse,
               generateMsg(),
-            ) as ThreadResponse,
+            ) as ThreadStateResponse,
           });
 
           const stateAfter = thread.state.getLatestValue();
@@ -933,7 +945,7 @@ describe('Threads 2.0', () => {
             thread: generateThreadResponse(
               channelResponse,
               generateMsg({ id: parentMessageResponse.id }),
-            ) as ThreadResponse,
+            ) as ThreadStateResponse,
             created_at: createdAt.toISOString(),
           });
 
@@ -1272,7 +1284,7 @@ describe('Threads 2.0', () => {
             (_, i) =>
               generateMsg({
                 parent_id: parentMessageResponse.id,
-                created_at: new Date(createdAt + 1000 * i).toISOString(),
+                created_at: new Date(createdAt + 1000 * i),
               }) as MessageResponse,
           );
           const thread = createTestThread({ latest_replies: messages });
@@ -1313,7 +1325,7 @@ describe('Threads 2.0', () => {
             message: {
               ...messageToDelete,
               type: 'deleted',
-              deleted_at: deletedAt.toISOString(),
+              deleted_at: deletedAt,
             },
           });
 
@@ -1337,7 +1349,7 @@ describe('Threads 2.0', () => {
 
           const parentMessage = generateMsg({
             id: thread.id,
-            deleted_at: new Date().toISOString(),
+            deleted_at: new Date(),
             type: 'deleted',
           }) as MessageResponse;
 
@@ -1349,10 +1361,12 @@ describe('Threads 2.0', () => {
           const stateAfter = thread.state.getLatestValue();
 
           expect(stateAfter.deletedAt).to.be.a('date');
-          expect(stateAfter.deletedAt!.toISOString()).to.equal(parentMessage.deleted_at);
+          expect(stateAfter.deletedAt!.toISOString()).to.equal(
+            parentMessage.deleted_at!.toISOString(),
+          );
           expect(stateAfter.parentMessage.deleted_at).to.be.a('date');
           expect(stateAfter.parentMessage.deleted_at!.toISOString()).to.equal(
-            parentMessage.deleted_at,
+            parentMessage.deleted_at!.toISOString(),
           );
         });
 
@@ -1828,9 +1842,12 @@ describe('Threads 2.0', () => {
         });
       });
 
-      it('reloads after connection drop', () => {
+      it('reloads after connection drop if the thread list was activated at least once', () => {
         const thread = createTestThread();
-        threadManager.state.partialNext({ threads: [thread] });
+        threadManager.state.partialNext({
+          threads: [thread],
+          wasActivatedAtLeastOnce: true,
+        });
         threadManager.registerSubscriptions();
         const stub = sinon.stub(client, 'queryThreads').resolves({
           threads: [],
@@ -1850,6 +1867,33 @@ describe('Threads 2.0', () => {
         clock.runAll();
 
         expect(stub.calledOnce).to.be.true;
+
+        threadManager.unregisterSubscriptions();
+        clock.restore();
+      });
+
+      it('does not reload after connection drop if the thread list was never activated', () => {
+        const thread = createTestThread();
+        threadManager.state.partialNext({ threads: [thread] });
+        threadManager.registerSubscriptions();
+        const stub = sinon.stub(client, 'queryThreadsAndHydrate').resolves({
+          threads: [],
+          next: undefined,
+        });
+        const clock = sinon.useFakeTimers();
+
+        client.dispatchEvent({
+          type: 'connection.changed',
+          online: false,
+        });
+
+        const { lastConnectionDropAt } = threadManager.state.getLatestValue();
+        expect(lastConnectionDropAt).to.be.a('date');
+
+        client.dispatchEvent({ type: 'connection.recovered' });
+        clock.runAll();
+
+        expect(stub.called).to.be.false;
 
         threadManager.unregisterSubscriptions();
         clock.restore();
@@ -1904,7 +1948,7 @@ describe('Threads 2.0', () => {
       >;
 
       beforeEach(() => {
-        stubbedQueryThreads = sinon.stub(client, 'queryThreads').resolves({
+        stubbedQueryThreads = sinon.stub(client, 'queryThreadsAndHydrate').resolves({
           threads: [],
           next: undefined,
         });
@@ -2040,7 +2084,7 @@ describe('Threads 2.0', () => {
           const newThread = createTestThread({
             thread_participants: [
               { user_id: 'u1' },
-            ] as ThreadResponse['thread_participants'],
+            ] as ThreadStateResponse['thread_participants'],
           });
           threadManager.state.partialNext({
             threads: [existingThread],
@@ -2228,7 +2272,10 @@ describe('Threads 2.0', () => {
         });
 
         it('applies sort parameters correctly', async () => {
-          const sort: ThreadSort = [{ created_at: -1 }, { last_message_at: 1 }];
+          const sort: ThreadSort = [
+            { field: 'created_at', direction: -1 },
+            { field: 'last_message_at', direction: 1 },
+          ];
 
           await threadManager.queryThreads({ sort });
 
@@ -2248,7 +2295,7 @@ describe('Threads 2.0', () => {
             created_by_user_id: { $eq: 'user1' },
             updated_at: { $gte: '2024-01-01T00:00:00Z' },
           };
-          const sort: ThreadSort = [{ last_message_at: -1 }];
+          const sort: ThreadSort = [{ field: 'last_message_at', direction: -1 }];
 
           await threadManager.queryThreads({ filter, sort });
 

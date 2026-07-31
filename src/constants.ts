@@ -19,7 +19,7 @@ export const RESERVED_UPDATED_MESSAGE_FIELDS = Object.freeze({
   own_reactions: true,
   reaction_counts: true,
   reply_count: true,
-  // Message text related fields that shouldn't be in update
+  // MessageRequest text related fields that shouldn't be in update
   i18n: true,
   type: true,
   html: true,
