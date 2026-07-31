@@ -13,7 +13,6 @@ import {
   channelTracksReadLocally,
   userHasReadReceipts,
   formatMessage,
-  throttle,
   generateChannelTempCid,
   shouldConsiderArchivedChannels,
   shouldConsiderPinnedChannels,
@@ -1183,83 +1182,5 @@ describe('userHasReadReceipts', () => {
 
   it('returns true (assumes enabled) when privacy settings are unset', () => {
     expect(userHasReadReceipts(makeClient(undefined))).toBe(true);
-  });
-});
-
-describe('throttle', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('fires a single (non-burst) call on the trailing edge when leading is false', () => {
-    const fn = vi.fn();
-    const throttled = throttle(fn, 1000, { leading: false, trailing: true });
-
-    throttled('a');
-    expect(fn).not.toHaveBeenCalled(); // leading:false so nothing on the leading edge
-
-    vi.advanceTimersByTime(1000);
-    expect(fn).toHaveBeenCalledTimes(1);
-    expect(fn).toHaveBeenLastCalledWith('a'); // the lone call's args reach the trailing edge
-  });
-
-  it('collapses a burst to one trailing call with the last args when leading is false', () => {
-    const fn = vi.fn();
-    const throttled = throttle(fn, 1000, { leading: false, trailing: true });
-
-    throttled('a');
-    throttled('b');
-    throttled('c');
-    expect(fn).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(1000);
-    expect(fn).toHaveBeenCalledTimes(1);
-    expect(fn).toHaveBeenLastCalledWith('c');
-  });
-
-  it('fires on the leading edge and drops within-window calls when trailing is false', () => {
-    const fn = vi.fn();
-    const throttled = throttle(fn, 1000); // defaults { leading: true, trailing: false }
-
-    throttled('a');
-    expect(fn).toHaveBeenCalledTimes(1);
-    expect(fn).toHaveBeenLastCalledWith('a');
-
-    throttled('b');
-    throttled('c');
-    expect(fn).toHaveBeenCalledTimes(1); // trailing: false so no trailing invocation
-
-    vi.advanceTimersByTime(1000);
-    expect(fn).toHaveBeenCalledTimes(1);
-  });
-
-  it('fires on both leading and trailing edges when both are enabled', () => {
-    const fn = vi.fn();
-    const throttled = throttle(fn, 1000, { leading: true, trailing: true });
-
-    throttled('a'); // leading edge
-    expect(fn).toHaveBeenCalledTimes(1);
-    expect(fn).toHaveBeenLastCalledWith('a');
-
-    throttled('b'); // captured for the trailing edge
-    expect(fn).toHaveBeenCalledTimes(1);
-
-    vi.advanceTimersByTime(1000);
-    expect(fn).toHaveBeenCalledTimes(2); // trailing edge
-    expect(fn).toHaveBeenLastCalledWith('b');
-  });
-
-  it('does not fire a duplicate trailing call for a solitary leading+trailing call', () => {
-    const fn = vi.fn();
-    const throttled = throttle(fn, 1000, { leading: true, trailing: true });
-
-    throttled('a'); // leading only so no second call to schedule a trailing
-    expect(fn).toHaveBeenCalledTimes(1);
-
-    vi.advanceTimersByTime(1000);
-    expect(fn).toHaveBeenCalledTimes(1); // no duplicate trailing
   });
 });

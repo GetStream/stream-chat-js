@@ -110,6 +110,10 @@ export const throttle = <T extends unknown[]>(
         clearTimeout(timer);
         timer = null;
       }
+      // We discard the pending trailing too, otherwise a later flush() would refire
+      // the invocation this cancel was meant to drop.
+      storedArgs = null;
+      storedThis = null;
     },
     flush: () => {
       if (timer) {

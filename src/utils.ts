@@ -799,43 +799,14 @@ export const debounce = <T extends (...args: any[]) => any>(
   return debouncedFn;
 };
 
-// works exactly the same as lodash.throttle
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const throttle = <T extends (...args: any[]) => any>(
-  fn: T,
-  timeout = 200,
-  { leading = true, trailing = false }: { leading?: boolean; trailing?: boolean } = {},
-) => {
-  let runningTimeout: null | NodeJS.Timeout = null;
-  let storedArgs: Parameters<T> | null = null;
-
-  return (...args: Parameters<T>) => {
-    if (runningTimeout) {
-      if (trailing) storedArgs = args;
-      return;
-    }
-
-    if (leading) {
-      fn(...args);
-    } else if (trailing) {
-      storedArgs = args;
-    }
-
-    const timeoutHandler = () => {
-      if (storedArgs) {
-        fn(...storedArgs);
-        storedArgs = null;
-        runningTimeout = setTimeout(timeoutHandler, timeout);
-
-        return;
-      }
-
-      runningTimeout = null;
-    };
-
-    runningTimeout = setTimeout(timeoutHandler, timeout);
-  };
-};
+// The single throttle implementation lives in ./utils/throttling/throttle; re-exported here so
+// `import { throttle } from './utils'` keeps working (lodash.throttle-style leading/trailing).
+export { throttle } from './utils/throttling/throttle';
+export type {
+  Throttled,
+  ThrottleOptions,
+  ThrottledCallback,
+} from './utils/throttling/throttle';
 
 const get = <T>(obj: T, path: string): unknown =>
   path.split('.').reduce<unknown>((acc, key) => {

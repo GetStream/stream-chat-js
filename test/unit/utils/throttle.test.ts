@@ -18,6 +18,20 @@ describe('throttle', () => {
     vi.restoreAllMocks();
   });
 
+  it('cancelTimer discards a pending trailing so a later flush does not re-fire it', () => {
+    const spy = vi.fn();
+    const t = throttle(spy as ThrottledCallback, 200, { leading: true, trailing: true });
+
+    t.throttledFn('a'); // leading edge fires 'a'
+    t.throttledFn('b'); // schedules a trailing invocation carrying 'b'
+    spy.mockClear();
+
+    t.cancelTimer(); // should discard the pending trailing entirely
+    t.flush(); // must be a no-op — the trailing was cancelled
+
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it('leading:true, trailing:false (default): fires immediately, drops during window, fires again after window on next call', () => {
     const spy = vi.fn();
     const t = throttle(spy as ThrottledCallback, 200).throttledFn;
