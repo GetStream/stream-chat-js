@@ -2997,10 +2997,10 @@ describe('BasePaginator', () => {
       });
 
       // A sibling holder (another paginator / WS echo) writes new content for an item held in a
-      // tracked interval view. Only the active window used to be refreshed by onMessagesChanged, so
+      // tracked interval view. Only the active window used to be refreshed on a sibling update, so
       // the off-window views (logicalHead/logicalTail/anchoredHead) kept stale item references. These
-      // two tests drive onMessagesChanged directly (the message-store subscriber hook) after replacing
-      // the stored item, mimicking a sibling write.
+      // two tests drive the store-agnostic reconcile hook (reconcileChangedIds) directly after
+      // replacing the stored item, mimicking a sibling write.
       it('refreshes logicalHead on a sibling update to an item that is off the active window', () => {
         const index = new ItemIndex<TestItem>({ getId: ({ id }) => id });
         const paginator = new Paginator({ itemIndex: index });
@@ -3024,10 +3024,8 @@ describe('BasePaginator', () => {
 
         // A sibling holder rewrites x's content (same id/order, e.g. a reaction) and notifies.
         index.setOne({ id: 'x', age: 100, name: 'x-reacted' });
-        paginator.onMessagesChanged({
-          changedIds: new Set(['x']),
-          removedIds: new Set(),
-        });
+        // @ts-expect-error driving the protected store-agnostic reconcile hook directly
+        paginator.reconcileChangedIds(new Set(['x']));
 
         // logicalHead republished with the new content...
         expect(logicalHead.tracker.fires).toBe(1);
@@ -3062,10 +3060,8 @@ describe('BasePaginator', () => {
 
         // A sibling holder rewrites m2's content (same id/order) and notifies.
         index.setOne({ id: 'm2', age: 40, name: 'm2-reacted' });
-        paginator.onMessagesChanged({
-          changedIds: new Set(['m2']),
-          removedIds: new Set(),
-        });
+        // @ts-expect-error driving the protected store-agnostic reconcile hook directly
+        paginator.reconcileChangedIds(new Set(['m2']));
 
         // anchoredHead republished with the new content, unchanged siblings preserved by id order...
         expect(anchoredHead.tracker.fires).toBe(1);

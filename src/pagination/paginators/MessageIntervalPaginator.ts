@@ -38,6 +38,7 @@ import type { FieldToDataResolver } from '../types.normalization';
 import { resolveDotPathValue } from '../utility.normalization';
 import { lowerBound } from '../utility.search';
 import type { ItemIndexApi } from '../ItemIndex';
+import type { MessageStoreChangeBatch } from '../../messageStore/MessageStore';
 import { deriveCreatedAtAroundPaginationFlags } from '../cursorDerivation';
 import { deriveIdAroundPaginationFlags } from '../cursorDerivation/idAroundPaginationFlags';
 import { deriveLinearPaginationFlags } from '../cursorDerivation/linearPaginationFlags';
@@ -161,6 +162,26 @@ export class MessageIntervalPaginator extends BasePaginator<
    */
   shouldIncludeMessageInInterval(message: LocalMessage): boolean {
     return !message.shadowed;
+  }
+
+  /**
+   * Message-store adapter (this paginator is a `MessageStoreSubscriber`): the `MessageStore` calls this
+   * on each holder with the subset of its watched ids that changed. Unwraps the batch and delegates to
+   * the base's store-agnostic {@link BasePaginator.reconcileChangedIds}. Lives here, not on the generic
+   * `BasePaginator`, so the base stays free of `MessageStore` types — only message paginators are
+   * store-backed.
+   */
+  onMessagesChanged({ changedIds }: MessageStoreChangeBatch): void {
+    this.reconcileChangedIds(changedIds);
+  }
+
+  /**
+   * Message-store subscriber flush (the optional `MessageStoreSubscriber.flushState`): the `MessageStore`
+   * calls this after an optimistic (local-user) write so the change renders without throttle delay.
+   * Delegates to the base's generic {@link BasePaginator.flushPendingPublishes}.
+   */
+  flushState(): void {
+    this.flushPendingPublishes();
   }
 
   protected get intervalItemIdsAreHeadFirst(): boolean {

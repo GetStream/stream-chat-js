@@ -151,7 +151,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
             return store
               ? new StoreBackedItemIndex({
                   store,
-                  owner,
+                  owner: owner as MessageIntervalPaginator,
                   getId: owner.getItemId.bind(owner),
                 })
               : new ItemIndex({ getId: owner.getItemId.bind(owner) });

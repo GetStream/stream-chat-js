@@ -8,7 +8,6 @@ import { isStateThrottlingEnabled } from './stateThrottling';
 import type { FieldToDataResolver } from '../types.normalization';
 import { ComparisonResult } from '../types.normalization';
 import { ItemIndex, type ItemIndexApi } from '../ItemIndex';
-import type { MessageStoreChangeBatch } from '../../messageStore/MessageStore';
 import { isEqual } from '../../utils/mergeWith/mergeWithCore';
 import { DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES } from '../../constants';
 
@@ -325,8 +324,8 @@ export type PaginatorOptions<T, Q> = {
    * burst of live mutations (WS `message.new`, reactions, reads) re-projects the active window and
    * publishes it ~2×/sec instead of once per event. Only the paginator's OWN writes to `state.items`
    * are batched — `state.getLatestValue()` is untouched (no `StateStore` change), pagination / jump /
-   * query publishes stay immediate, and optimistic (local-user) writes flush past it via
-   * {@link MessageStore.flushSubscribers} → `flushState`. Unset ⇒ no throttle (default). Enabled at
+   * query publishes stay immediate, and an immediate flush past it is available via
+   * {@link flushPendingPublishes}. Unset ⇒ no throttle (default). Enabled at
    * 500ms for the message list — see {@link MessagePaginator}.
    */
   stateThrottleMs?: number;
@@ -418,7 +417,7 @@ export abstract class BasePaginator<T, Q> {
 
   /**
    * Throttle for the active-window `state.items` publish (message list). Created only when
-   * `config.stateThrottleMs` is set; drives {@link scheduleWindowPublish} / {@link flushState}. See
+   * `config.stateThrottleMs` is set; drives {@link scheduleWindowPublish} / {@link flushPendingPublishes}. See
    * `stateThrottleMs` in {@link PaginatorOptions}.
    */
   private _windowPublishThrottle?: Throttled<[]>;
@@ -925,14 +924,13 @@ export abstract class BasePaginator<T, Q> {
   }
 
   /**
-   * {@link MessageStoreSubscriber.flushState}: emit any pending throttled window + interval-view
-   * publishes immediately. The message store calls this after an optimistic (local-user) write so it
-   * renders without throttle delay. No-op when throttling is off or nothing is pending.
+   * Flush any pending throttled window + interval-view publishes immediately. No-op when nothing
+   * is pending or throttling is off.
    */
-  flushState = (): void => {
+  protected flushPendingPublishes(): void {
     this._windowPublishThrottle?.flush();
     this._viewPublishThrottle?.flush();
-  };
+  }
 
   /**
    * {@link _viewPublishThrottle} boundary: apply every interval-view change buffered since the last
@@ -952,10 +950,10 @@ export abstract class BasePaginator<T, Q> {
    * swaps the item object those views reference, but only this paginator's own ingest/remove
    * ({@link commitInterval}/{@link dropInterval}) republish them — so a reaction/edit made elsewhere
    * would otherwise leave stale references in `anchoredHead`/`logicalHead`/`logicalTail` even though
-   * the active window (`state.items`, see {@link onMessagesChanged}) was refreshed.
+   * the active window (`state.items`, see {@link reconcileChangedIds}) was refreshed.
    *
    * Called immediately for un-throttled paginators, or from {@link flushIntervalViewPublish} at the
-   * view-publish throttle boundary when throttled — see {@link onMessagesChanged}. Handled
+   * view-publish throttle boundary when throttled — see {@link reconcileChangedIds}. Handled
    * independently of `state.items`. When the anchored head is also the active interval its content is
    * projected here as well as into `state.items`; deduping that double projection is a separate,
    * deferred perf follow-up.
@@ -989,7 +987,13 @@ export abstract class BasePaginator<T, Q> {
     return false;
   }
 
-  onMessagesChanged({ changedIds }: MessageStoreChangeBatch): void {
+  /**
+   * Reconcile the projected window + interval views against a set of changed ids: another holder
+   * swapped the shared item object those views reference. Refreshes any tracked interval view that
+   * holds a changed id and re-projects (or slot-swaps) the active window — coalesced through the
+   * publish throttles when throttling is on.
+   */
+  protected reconcileChangedIds(changedIds: ReadonlySet<string>): void {
     // A sibling holder changed shared content: refresh any tracked interval view (logical head/tail,
     // anchored head) holding a changed id — independent of the active window below, since a view can
     // hold a changed id the active window does not. When throttled, buffer the ids and tick the
@@ -1019,8 +1023,8 @@ export abstract class BasePaginator<T, Q> {
       return;
     }
 
-    // Fast path: a content update (a reaction/read/edit written through a sibling holder) changes
-    // messages in place without changing membership or order. When the current window still lines
+    // Fast path: a content update (an in-place edit written through a sibling holder) changes
+    // items in place without changing membership or order. When the current window still lines
     // up with the interval one-to-one, shallow-copy it and swap only the changed slots — this
     // preserves every unchanged item reference (so memoized rows bail) and avoids re-mapping and
     // re-sorting the whole active window on every event. Skipped when a boost is active (a boost
@@ -2624,13 +2628,12 @@ export abstract class BasePaginator<T, Q> {
   }
 
   /**
-   * Releases this paginator's hold on shared item content. With a store-backed index this unlinks
-   * every member id from the client-global message store, so the store no longer strong-references
-   * this paginator through its subscriber registry — otherwise a discarded owner (e.g. a
-   * {@link Thread} removed from the manager) stays pinned and keeps receiving store notifications,
-   * and its messages never garbage-collect. Call on teardown of the owner. This is a discard, not a
-   * reset: the owner is not expected to be reused afterwards (a re-appearing id gets a fresh
-   * instance); leftover interval/state caches die with the paginator when it is dropped.
+   * Releases this paginator's hold on its item content. With a shared, refcounted item index this
+   * unlinks every member id from the backing store, so the store no longer strong-references this
+   * paginator through its subscriber registry — otherwise a discarded owner stays pinned, keeps
+   * receiving change notifications, and its items never garbage-collect. Call on teardown of the
+   * owner: a discard, not a reset (the owner is not reused; a re-appearing id gets a fresh instance;
+   * leftover interval/state caches die with the paginator when it is dropped).
    */
   dispose(): void {
     this._itemIndex.clear();
