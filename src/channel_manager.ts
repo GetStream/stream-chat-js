@@ -275,9 +275,18 @@ export class ChannelManager extends WithSubscriptions {
     } = this.state.getLatestValue();
     this.client.offlineDb?.executeQuerySafely(
       (db) =>
+        // TODO: filters/sort must be passed explicitly (even though they live inside `options`)
+        // because `convertFilterSortToQuery` keys the offline query off the top-level filters/sort
+        // args, not `options.filter_conditions`/`options.sort`. Omitting them here writes reorders
+        // to a mismatched cache key, so the persisted channel order goes stale until a full requery.
+        // Proper fix: make `convertFilterSortToQuery` derive filters/sort from `options` so no call
+        // site has to pass them redundantly (requires a DB schema-version bump to flush stale
+        // `channelQueries` rows keyed by the old format).
         db.upsertCidsForQuery({
           cids: channels.map((channel) => channel.cid),
+          filters: options?.filter_conditions,
           options,
+          sort: options?.sort,
         }),
       { method: 'upsertCidsForQuery' },
     );
