@@ -868,12 +868,6 @@ export type Pager = {
 };
 
 export type MessageSetType = 'latest' | 'current' | 'new';
-export type MessageSet = {
-  isCurrent: boolean;
-  isLatest: boolean;
-  messages: LocalMessage[];
-  pagination: { hasNext: boolean; hasPrev: boolean };
-};
 
 export class StreamAPIError<T = APIError> extends Error {
   public code: number | undefined;
@@ -1125,3 +1119,35 @@ export type GiphyVersions = keyof Images;
 export type TranslationLanguage = TranslateMessageRequest['language'];
 
 export * from './gen/models';
+
+export type EventAPIResponse = APIResponse & {
+  event: Event;
+};
+
+export type PartializeKeys<T, K extends keyof T> = Partial<Pick<T, K>> & Omit<T, K>;
+
+type ErrorResponseDetails = {
+  code: number;
+  messages: string[];
+};
+
+export type APIErrorResponse = {
+  duration: string;
+  message: string;
+  more_info: string;
+  StatusCode: number;
+  code?: number;
+  details?: ErrorResponseDetails;
+};
+
+export type DraftMessagePayload = PartializeKeys<
+  Omit<DraftMessage, 'mentioned_groups'>,
+  'id'
+> & {
+  user_id?: string;
+};
+
+export type QueryRemindersOptions = Pager & {
+  filter?: ReminderFilters;
+  sort?: ReminderSort;
+};

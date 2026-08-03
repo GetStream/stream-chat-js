@@ -18,7 +18,7 @@ import {
   userResponseToMentionEntity,
 } from './middleware/textComposer/mentionUtils';
 import type { MessageComposer } from './messageComposer';
-import type { Command, DraftMessage, LocalMessage, UserResponse } from '../types';
+import type { Command, DraftMessage, Event, LocalMessage, UserResponse } from '../types';
 
 export type TextComposerOptions = {
   composer: MessageComposer;
@@ -120,6 +120,7 @@ const initState = ({
       mentionedUsers: [],
       mentions: [],
       text,
+      typing: {},
       selection: { start: text.length, end: text.length },
     };
   }
@@ -133,6 +134,7 @@ const initState = ({
     mentionedUsers,
     mentions,
     text,
+    typing: {},
     selection: { start: text.length, end: text.length },
   };
 };
@@ -226,6 +228,29 @@ export class TextComposer {
   get text() {
     return this.state.getLatestValue().text;
   }
+
+  get typing() {
+    return this.state.getLatestValue().typing;
+  }
+
+  set typing(typing: Record<string, Event>) {
+    this.state.partialNext({ typing });
+  }
+
+  setTyping = (typing: Record<string, Event>) => {
+    this.typing = typing;
+  };
+
+  setTypingEvent = (userId: string, event: Event) => {
+    this.typing = { ...this.typing, [userId]: event };
+  };
+
+  removeTypingEvent = (userId: string) => {
+    if (!this.typing[userId]) return;
+    const typing = { ...this.typing };
+    delete typing[userId];
+    this.typing = typing;
+  };
 
   get textIsEmpty() {
     return textIsEmpty(this.text);

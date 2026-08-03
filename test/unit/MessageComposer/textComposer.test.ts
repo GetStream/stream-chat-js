@@ -114,8 +114,9 @@ describe('TextComposer', () => {
         command: null,
         mentionedUsers: [],
         mentions: [],
-        text: '',
         selection: { start: 0, end: 0 },
+        text: '',
+        typing: {},
       });
     });
 
@@ -126,8 +127,9 @@ describe('TextComposer', () => {
         command: null,
         mentionedUsers: [],
         mentions: [],
-        text: defaultValue,
         selection: { start: defaultValue.length, end: defaultValue.length },
+        text: defaultValue,
+        typing: {},
       });
     });
 
@@ -271,8 +273,9 @@ describe('TextComposer', () => {
         command: null,
         mentionedUsers: [],
         mentions: [],
-        text: '',
         selection: { start: 0, end: 0 },
+        text: '',
+        typing: {},
       };
       const {
         messageComposer: { textComposer },

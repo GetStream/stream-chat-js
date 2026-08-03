@@ -277,7 +277,6 @@ describe('PollManager', () => {
       const channel = client.channel('messaging', mockChannelQueryResponse.channel.id);
       const { messages: prevMessages, pollMessages: prevPollMessages } =
         generateRandomMessagesWithPolls(5, `_prev`);
-      channel.state.addMessagesSorted(prevMessages);
       const { messages, pollMessages } = generateRandomMessagesWithPolls(5, ``);
       const mockedChannelQueryResponse = {
         ...mockChannelQueryResponse,

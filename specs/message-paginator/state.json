@@ -1,0 +1,14 @@
+{
+  "active_task": null,
+  "tasks": {
+    "Task 1": "done",
+    "Task 2": "done",
+    "Task 3": "done",
+    "Task 4": "done"
+  },
+  "flags": {
+    "blocked": false,
+    "needs-review": false
+  },
+  "last_updated": "2026-03-05"
+}

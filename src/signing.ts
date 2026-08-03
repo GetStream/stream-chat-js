@@ -226,12 +226,12 @@ export function decodeSqsPayload(body: string): Buffer {
 
 /**
  * Reverses an SNS HTTP notification envelope. When `notificationBody` is a JSON envelope
- * (`{"Type":"Notification","Message":"..."}`), the inner `Message` field is extracted and run
+ * (`{"Type":"Notification","MessageRequest":"..."}`), the inner `MessageRequest` field is extracted and run
  * through the SQS pipeline (base64-decode, then gzip-if-magic). When the input is not a JSON
- * envelope it is treated as the already-extracted `Message` string, so call sites that pre-unwrap
+ * envelope it is treated as the already-extracted `MessageRequest` string, so call sites that pre-unwrap
  * continue to work.
  *
- * @param notificationBody - The raw SNS notification body, or a pre-extracted `Message` string.
+ * @param notificationBody - The raw SNS notification body, or a pre-extracted `MessageRequest` string.
  * @returns The decoded (and decompressed, when gzipped) payload bytes.
  * @throws {@link InvalidWebhookError} when the body is not canonical base64 or the gzip envelope is malformed.
  */
@@ -255,11 +255,11 @@ function extractSnsMessage(notificationBody: string): string | null {
     parsed === null ||
     typeof parsed !== 'object' ||
     Array.isArray(parsed) ||
-    typeof (parsed as { Message?: unknown }).Message !== 'string'
+    typeof (parsed as { MessageRequest?: unknown }).MessageRequest !== 'string'
   ) {
     return null;
   }
-  return (parsed as { Message: string }).Message;
+  return (parsed as { MessageRequest: string }).MessageRequest;
 }
 
 /**
@@ -321,7 +321,7 @@ export function parseSqs(messageBody: string): WSEvent {
  * Decodes an SNS notification (unwraps the JSON envelope when needed; same inner format as SQS).
  * No application-level HMAC verification.
  *
- * @param notificationBody - The raw SNS notification body, or a pre-extracted `Message` string.
+ * @param notificationBody - The raw SNS notification body, or a pre-extracted `MessageRequest` string.
  * @returns The parsed WebSocket event.
  * @throws {@link InvalidWebhookError} when the body is malformed.
  */

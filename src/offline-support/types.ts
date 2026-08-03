@@ -27,7 +27,7 @@ export type PrepareBatchDBQueries =
  * Options to insert a reaction into a message.
  */
 export type DBInsertReactionType = {
-  /** Message to which the reaction is applied. */
+  /** MessageRequest to which the reaction is applied. */
   message: MessageResponse | LocalMessage;
   /** The reaction to insert. */
   reaction: ReactionResponse;
@@ -145,7 +145,7 @@ export type DBUpsertMembersType = {
  * Options to update a reaction.
  */
 export type DBUpdateReactionType = {
-  /** Message associated with the reaction. */
+  /** MessageRequest associated with the reaction. */
   message: MessageResponse | LocalMessage;
   /** The updated reaction. */
   reaction: ReactionResponse;
@@ -157,7 +157,7 @@ export type DBUpdateReactionType = {
  * Options to update a message.
  */
 export type DBUpdateMessageType = {
-  /** Message to update. */
+  /** MessageRequest to update. */
   message: MessageResponse | LocalMessage;
   /** Whether to immediately execute the operation. */
   execute?: boolean;

@@ -38,7 +38,7 @@ export class Moderation extends ModerationApi {
   /**
    * Flags a message.
    *
-   * @param messageId - Message ID to be flagged.
+   * @param messageId - MessageRequest ID to be flagged.
    * @param reason - Reason for flagging the message.
    * @param options - Additional options for flagging the message (optional, defaults to `{}`).
    * @param options.custom - Additional data to be stored with the flag (optional).

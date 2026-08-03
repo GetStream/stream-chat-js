@@ -2,7 +2,21 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { getClientWithUser } from './test-utils/getClient';
 import { generateMsg } from './test-utils/generateMessage';
-import type { ChannelResponse, Event } from '../../src';
+import { formatMessage } from '../../src';
+import type { Channel, ChannelResponse, Event } from '../../src';
+
+// CooldownTimer.refresh() derives the current user's latest message from the message paginator's
+// latest (head) window, so tests seed the paginator (formatted) rather than legacy channel state.
+const seedLatestWindow = (
+  channel: Channel,
+  ...messages: ReturnType<typeof generateMsg>[]
+) =>
+  channel.messagePaginator.ingestPage({
+    page: messages.map((m) => formatMessage(m)),
+    isHead: true,
+    isTail: true,
+    setActive: true,
+  });
 
 describe('CooldownTimer', () => {
   afterEach(() => {
@@ -23,7 +37,8 @@ describe('CooldownTimer', () => {
     };
 
     const lastOwnMessageAt = new Date('2026-01-01T00:00:00.000Z');
-    channel.state.addMessageSorted(
+    seedLatestWindow(
+      channel,
       generateMsg({
         created_at: lastOwnMessageAt,
         updated_at: lastOwnMessageAt,
@@ -59,7 +74,8 @@ describe('CooldownTimer', () => {
       own_capabilities: [],
     };
 
-    channel.state.addMessageSorted(
+    seedLatestWindow(
+      channel,
       generateMsg({
         created_at: now,
         updated_at: now,
@@ -73,7 +89,8 @@ describe('CooldownTimer', () => {
 
     channel.data.cooldown = 0;
 
-    channel.state.addMessageSorted(
+    seedLatestWindow(
+      channel,
       generateMsg({
         created_at: now,
         updated_at: now,
@@ -87,7 +104,8 @@ describe('CooldownTimer', () => {
 
     channel.data.cooldown = 10;
 
-    channel.state.addMessageSorted(
+    seedLatestWindow(
+      channel,
       generateMsg({
         created_at: now,
         updated_at: now,
@@ -119,7 +137,8 @@ describe('CooldownTimer', () => {
     };
 
     const lastOwnMessageAt = new Date('2026-01-01T00:00:00.000Z'); // 10s ago
-    channel.state.addMessageSorted(
+    seedLatestWindow(
+      channel,
       generateMsg({
         created_at: lastOwnMessageAt,
         updated_at: lastOwnMessageAt,
@@ -145,7 +164,8 @@ describe('CooldownTimer', () => {
       own_capabilities: ['skip-slow-mode'],
     };
 
-    channel.state.addMessageSorted(
+    seedLatestWindow(
+      channel,
       generateMsg({
         created_at: now,
         updated_at: now,
@@ -168,7 +188,8 @@ describe('CooldownTimer', () => {
 
     // timeSince = 2s
     const lastOwnMessageAt = new Date('2026-01-01T00:00:08.000Z');
-    channel.state.addMessageSorted(
+    seedLatestWindow(
+      channel,
       generateMsg({
         created_at: lastOwnMessageAt,
         updated_at: lastOwnMessageAt,
@@ -202,7 +223,8 @@ describe('CooldownTimer', () => {
 
     // timeSince = 2s
     const lastOwnMessageAt = new Date('2026-01-01T00:00:08.000Z');
-    channel.state.addMessageSorted(
+    seedLatestWindow(
+      channel,
       generateMsg({
         created_at: lastOwnMessageAt,
         updated_at: lastOwnMessageAt,
@@ -236,7 +258,8 @@ describe('CooldownTimer', () => {
 
     // timeSince = 2s
     const lastOwnMessageAt = new Date('2026-01-01T00:00:08.000Z');
-    channel.state.addMessageSorted(
+    seedLatestWindow(
+      channel,
       generateMsg({
         created_at: lastOwnMessageAt,
         updated_at: lastOwnMessageAt,
@@ -275,6 +298,7 @@ describe('CooldownTimer', () => {
       type: 'message.new',
       user: { id: client.userID as string },
       message: generateMsg({
+        cid: channel.cid, // must match the paginator filter so message.new ingests into an interval
         created_at: now,
         updated_at: now,
         user: { id: client.userID as string },

@@ -1,21 +1,19 @@
 import sinon from 'sinon';
 import { describe, beforeEach, afterEach, it, expect, vi } from 'vitest';
 
-import { generateMsg } from './test-utils/generateMessage';
 import { generateChannel } from './test-utils/generateChannel';
 import { generateMember } from './test-utils/generateMember';
 import { generateUser } from './test-utils/generateUser';
 import { getClientWithUser } from './test-utils/getClient';
-import { generateUUIDv4 as uuidv4 } from '../../src/utils';
 
 import {
   getAndWatchChannel,
-  addToMessageList,
   findIndexInSortedArray,
   channelHasReadEvents,
   channelTracksReadLocally,
   userHasReadReceipts,
   formatMessage,
+  throttle,
   generateChannelTempCid,
   shouldConsiderArchivedChannels,
   shouldConsiderPinnedChannels,
@@ -30,148 +28,9 @@ import {
   sleep,
 } from '../../src/utils';
 
-import type {
-  ChannelFilters,
-  ChannelOwnCapability,
-  ChannelSort,
-  FormatMessageResponse,
-  MessageResponse,
-} from '../../src';
+import type { ChannelFilters, ChannelOwnCapability, ChannelSort } from '../../src';
 import { StreamChat, Channel } from '../../src';
 import { chatLoggerSystem } from '../../src/logger';
-
-describe('addToMessageList', () => {
-  const timestamp = new Date('2024-09-18T15:30:00.000Z').getTime();
-  // messages with each created_at 10 seconds apart
-  let messagesBefore: FormatMessageResponse[];
-
-  const getNewFormattedMessage = ({
-    timeOffset,
-    id = uuidv4(),
-  }: {
-    timeOffset: number;
-    id?: string;
-  }) =>
-    formatMessage(
-      generateMsg({
-        id,
-        created_at: new Date(timestamp + timeOffset),
-      }) as MessageResponse,
-    );
-
-  beforeEach(() => {
-    messagesBefore = Array.from({ length: 5 }, (_, index) =>
-      formatMessage(
-        generateMsg({
-          created_at: new Date(timestamp + index * 10 * 1000),
-        }) as MessageResponse,
-      ),
-    );
-  });
-
-  it('new message is inserted at the correct index', () => {
-    const newMessage = getNewFormattedMessage({ timeOffset: 25 * 1000 });
-
-    const messagesAfter = addToMessageList(messagesBefore, newMessage);
-
-    expect(messagesAfter).to.not.equal(messagesBefore);
-    expect(messagesAfter).to.have.length(6);
-    expect(messagesAfter).to.contain(newMessage);
-    expect(messagesAfter[3]).to.equal(newMessage);
-  });
-
-  it('replaces the message which created_at changed to a server response created_at', () => {
-    const newMessage = getNewFormattedMessage({
-      timeOffset: 33 * 1000,
-      id: messagesBefore[2].id,
-    });
-
-    expect(newMessage.id).to.equal(messagesBefore[2].id);
-
-    const messagesAfter = addToMessageList(messagesBefore, newMessage, true);
-
-    expect(messagesAfter).to.not.equal(messagesBefore);
-    expect(messagesAfter).to.have.length(5);
-    expect(messagesAfter).to.contain(newMessage);
-    expect(messagesAfter[3]).to.equal(newMessage);
-  });
-
-  it('adds a new message to an empty message list', () => {
-    const newMessage = getNewFormattedMessage({ timeOffset: 0 });
-
-    const emptyMessagesBefore = [];
-
-    const messagesAfter = addToMessageList(emptyMessagesBefore, newMessage);
-
-    expect(messagesAfter).to.have.length(1);
-    expect(messagesAfter).to.contain(newMessage);
-  });
-
-  it("doesn't add a new message to an empty message list if timestampChanged & addIfDoesNotExist are false", () => {
-    const newMessage = getNewFormattedMessage({ timeOffset: 0 });
-
-    const emptyMessagesBefore = [];
-
-    const messagesAfter = addToMessageList(
-      emptyMessagesBefore,
-      newMessage,
-      false,
-      'created_at',
-      false,
-    );
-
-    expect(messagesAfter).to.have.length(0);
-  });
-
-  it("adds message to the end of the list if it's the newest one", () => {
-    const newMessage = getNewFormattedMessage({ timeOffset: 50 * 1000 });
-
-    const messagesAfter = addToMessageList(messagesBefore, newMessage);
-
-    expect(messagesAfter).to.have.length(6);
-    expect(messagesAfter).to.contain(newMessage);
-    expect(messagesAfter.at(-1)).to.equal(newMessage);
-  });
-
-  it("doesn't add a newest message to a message list if timestampChanged & addIfDoesNotExist are false", () => {
-    const newMessage = getNewFormattedMessage({ timeOffset: 50 * 1000 });
-
-    const messagesAfter = addToMessageList(
-      messagesBefore,
-      newMessage,
-      false,
-      'created_at',
-      false,
-    );
-
-    expect(messagesAfter).to.have.length(5);
-    // FIXME: it'd be nice if the function returned old
-    // unchanged array in case of no modification such as this one
-    expect(messagesAfter).to.deep.equal(messagesBefore);
-  });
-
-  it("updates an existing message that wasn't filtered due to changed timestamp (timestampChanged)", () => {
-    const newMessage = getNewFormattedMessage({
-      timeOffset: 30 * 1000,
-      id: messagesBefore[4].id,
-    });
-
-    expect(messagesBefore[4].id).to.equal(newMessage.id);
-    expect(messagesBefore[4].text).to.not.equal(newMessage.text);
-    expect(messagesBefore[4]).to.not.equal(newMessage);
-
-    const messagesAfter = addToMessageList(
-      messagesBefore,
-      newMessage,
-      false,
-      'created_at',
-      false,
-    );
-
-    expect(messagesAfter).to.have.length(5);
-    expect(messagesAfter[4]).to.equal(newMessage);
-  });
-});
 
 describe('findIndexInSortedArray', () => {
   it('finds index in the middle of haystack (asc)', () => {
@@ -1273,5 +1132,83 @@ describe('userHasReadReceipts', () => {
 
   it('returns true (assumes enabled) when privacy settings are unset', () => {
     expect(userHasReadReceipts(makeClient(undefined))).toBe(true);
+  });
+});
+
+describe('throttle', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('fires a single (non-burst) call on the trailing edge when leading is false', () => {
+    const fn = vi.fn();
+    const throttled = throttle(fn, 1000, { leading: false, trailing: true });
+
+    throttled('a');
+    expect(fn).not.toHaveBeenCalled(); // leading:false so nothing on the leading edge
+
+    vi.advanceTimersByTime(1000);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fn).toHaveBeenLastCalledWith('a'); // the lone call's args reach the trailing edge
+  });
+
+  it('collapses a burst to one trailing call with the last args when leading is false', () => {
+    const fn = vi.fn();
+    const throttled = throttle(fn, 1000, { leading: false, trailing: true });
+
+    throttled('a');
+    throttled('b');
+    throttled('c');
+    expect(fn).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1000);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fn).toHaveBeenLastCalledWith('c');
+  });
+
+  it('fires on the leading edge and drops within-window calls when trailing is false', () => {
+    const fn = vi.fn();
+    const throttled = throttle(fn, 1000); // defaults { leading: true, trailing: false }
+
+    throttled('a');
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fn).toHaveBeenLastCalledWith('a');
+
+    throttled('b');
+    throttled('c');
+    expect(fn).toHaveBeenCalledTimes(1); // trailing: false so no trailing invocation
+
+    vi.advanceTimersByTime(1000);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('fires on both leading and trailing edges when both are enabled', () => {
+    const fn = vi.fn();
+    const throttled = throttle(fn, 1000, { leading: true, trailing: true });
+
+    throttled('a'); // leading edge
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fn).toHaveBeenLastCalledWith('a');
+
+    throttled('b'); // captured for the trailing edge
+    expect(fn).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(1000);
+    expect(fn).toHaveBeenCalledTimes(2); // trailing edge
+    expect(fn).toHaveBeenLastCalledWith('b');
+  });
+
+  it('does not fire a duplicate trailing call for a solitary leading+trailing call', () => {
+    const fn = vi.fn();
+    const throttled = throttle(fn, 1000, { leading: true, trailing: true });
+
+    throttled('a'); // leading only so no second call to schedule a trailing
+    expect(fn).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(1000);
+    expect(fn).toHaveBeenCalledTimes(1); // no duplicate trailing
   });
 });

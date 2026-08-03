@@ -141,7 +141,7 @@ async function lastMessage() {
 	await channel.sendMessage({ text: 'Hello World' });
 	await channel.sendMessage({ text: 'Hello World...again' });
 
-	const message = await channel.lastMessage();
+	const message = await channel.messagePaginator.headmostItem;
 	delete message.__html; // __html is deprecated and removed from the types
 	return message;
 }

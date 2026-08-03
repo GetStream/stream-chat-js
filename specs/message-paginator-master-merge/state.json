@@ -1,0 +1,30 @@
+{
+  "tasks": {
+    "task-1-perform-merge-capture-conflicts": "done",
+    "task-2-resolve-pagination-index-and-textcomposer-types": "done",
+    "task-3-resolve-channel-and-client": "done",
+    "task-4-reconcile-tests-and-verify": "done",
+    "task-5-build-and-expose-for-react-linking": "in-progress"
+  },
+  "flags": {
+    "blocked": false,
+    "blocked_reason": "",
+    "needs-review": false,
+    "decisions_resolved": "D1=merge, D2=PR-base+reapply-master (channel.ts), D3=symlink",
+    "ready_to_execute": true,
+    "tests": "3467 pass / 0 fail"
+  },
+  "meta": {
+    "last_updated": "2026-07-03",
+    "active_task": null,
+    "worktree": "/Users/martincupela/Projects/stream/chat/stream-chat-js-worktrees/message-paginator-master-merge",
+    "branch": "feat/message-paginator-master-merge",
+    "base_branch": "origin/master",
+    "pr": "GetStream/stream-chat-js#1674",
+    "pr_head": "31eedab",
+    "merge_base": "ef2169f",
+    "master_commits_since_base": 92,
+    "pr_commits": 32,
+    "conflict_files_measured": 7
+  }
+}

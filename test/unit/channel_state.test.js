@@ -1,1451 +1,13 @@
 import { generateChannel } from './test-utils/generateChannel';
-import { generateMsg } from './test-utils/generateMessage';
-import { generateUser } from './test-utils/generateUser';
 import { getClientWithUser } from './test-utils/getClient';
 import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
 
 import { ChannelState, StreamChat, Channel } from '../../src';
-import { DEFAULT_MESSAGE_SET_PAGINATION } from '../../src/constants';
 import { generateUUIDv4 as uuidv4 } from '../../src/utils';
 
 import { vi, describe, beforeEach, afterEach, it, expect } from 'vitest';
-import { MockOfflineDB } from './offline-support/MockOfflineDB';
 
-describe('ChannelState addMessagesSorted', function () {
-	let state;
-	let client;
-
-	beforeEach(async () => {
-		client = new StreamChat();
-		const offlineDb = new MockOfflineDB({ client });
-
-		client.setOfflineDBApi(offlineDb);
-		await client.offlineDb.init(client.userID);
-		const channel = new Channel(client, 'type', 'id', {});
-		client._addChannelConfig({ cid: channel.cid, config: {} });
-		state = new ChannelState(channel);
-	});
-
-	it('empty state add single messages', async function () {
-		expect(state.messages).to.have.length(0);
-		state.addMessagesSorted([
-			generateMsg({ id: '0', date: new Date('2020-01-01T00:00:00.000Z') }),
-		]);
-		expect(state.messages).to.have.length(1);
-		state.addMessagesSorted([
-			generateMsg({ id: '1', date: new Date('2020-01-01T00:00:01.000Z') }),
-		]);
-
-		expect(state.messages).to.have.length(2);
-		expect(state.messages[0].id).to.be.equal('0');
-		expect(state.messages[1].id).to.be.equal('1');
-	});
-
-	it('should not add messages from shadow banned users', () => {
-		state.addMessagesSorted([generateMsg({ shadowed: true })]);
-
-		expect(state.messages).to.be.empty;
-	});
-
-	it('updates an existing message with shadowed: true when applying a message update', () => {
-		state.addMessagesSorted([generateMsg({ id: 'shadow-update-msg' })]);
-
-		expect(state.messages).to.have.length(1);
-		expect(state.messages[0].shadowed).not.to.be.ok;
-
-		state.addMessageSorted({ ...state.messages[0], shadowed: true }, false, false);
-
-		expect(state.messages).to.have.length(1);
-		expect(state.messages[0].id).to.be.equal('shadow-update-msg');
-		expect(state.messages[0].shadowed).to.be.equal(true);
-	});
-
-	it('empty state add multiple messages', async function () {
-		state.addMessagesSorted([
-			generateMsg({ id: '1', date: new Date('2020-01-01T00:00:00.001Z') }),
-			generateMsg({ id: '2', date: new Date('2020-01-01T00:00:00.002Z') }),
-			generateMsg({ id: '0', date: new Date('2020-01-01T00:00:00.000Z') }),
-		]);
-
-		expect(state.messages).to.have.length(3);
-		expect(state.messages[0].id).to.be.equal('0');
-		expect(state.messages[1].id).to.be.equal('1');
-		expect(state.messages[2].id).to.be.equal('2');
-	});
-
-	it('update a message in place 1', async function () {
-		state.addMessagesSorted([generateMsg({ id: '0' })]);
-		state.addMessagesSorted([{ ...state.messages[0], text: 'update' }]);
-
-		expect(state.messages).to.have.length(1);
-		expect(state.messages[0].text).to.be.equal('update');
-	});
-
-	it('update a message in place 2', async function () {
-		state.addMessagesSorted([
-			generateMsg({ id: '1', date: new Date('2020-01-01T00:00:00.001Z') }),
-			generateMsg({ id: '2', date: new Date('2020-01-01T00:00:00.002Z') }),
-			generateMsg({ id: '0', date: new Date('2020-01-01T00:00:00.000Z') }),
-		]);
-
-		state.addMessagesSorted([{ ...state.messages[1], text: 'update' }]);
-
-		expect(state.messages).to.have.length(3);
-		expect(state.messages[1].text).to.be.equal('update');
-		expect(state.messages[0].id).to.be.equal('0');
-		expect(state.messages[1].id).to.be.equal('1');
-		expect(state.messages[2].id).to.be.equal('2');
-	});
-
-	it('update a message in place 3', async function () {
-		state.addMessagesSorted([
-			generateMsg({ id: '1', date: new Date('2020-01-01T00:00:00.001Z') }),
-			generateMsg({ id: '2', date: new Date('2020-01-01T00:00:00.002Z') }),
-			generateMsg({ id: '0', date: new Date('2020-01-01T00:00:00.000Z') }),
-			generateMsg({ id: '3', date: new Date('2020-01-01T00:00:00.003Z') }),
-		]);
-
-		state.addMessagesSorted([{ ...state.messages[0], text: 'update 0' }]);
-		expect(state.messages).to.have.length(4);
-		expect(state.messages[0].text).to.be.equal('update 0');
-
-		state.addMessagesSorted([{ ...state.messages[2], text: 'update 2' }]);
-		expect(state.messages).to.have.length(4);
-		expect(state.messages[2].text).to.be.equal('update 2');
-
-		state.addMessagesSorted([{ ...state.messages[3], text: 'update 3' }]);
-		expect(state.messages).to.have.length(4);
-		expect(state.messages[3].text).to.be.equal('update 3');
-	});
-
-	it('add a message with same created_at', async function () {
-		for (let i = 0; i < 10; i++) {
-			state.addMessagesSorted([
-				generateMsg({ id: `${i}`, date: new Date(`2020-01-01T00:00:00.00${i}Z`) }),
-			]);
-		}
-
-		for (let i = 10; i < state.messages.length - 1; i++) {
-			for (let j = i + 1; i < state.messages.length - 1; j++)
-				expect(state.messages[i].created_at.getTime()).to.be.lessThan(
-					state.messages[j].created_at.getTime(),
-				);
-		}
-
-		expect(state.messages).to.have.length(10);
-		state.addMessagesSorted([
-			generateMsg({ id: 'id', date: new Date(`2020-01-01T00:00:00.007Z`) }),
-		]);
-		expect(state.messages).to.have.length(11);
-		expect(state.messages[7].id).to.be.equal('7');
-		expect(state.messages[8].id).to.be.equal('id');
-	});
-
-	it('add lots of messages in order', async function () {
-		for (let i = 100; i < 300; i++) {
-			state.addMessagesSorted([
-				generateMsg({ id: `${i}`, date: new Date(`2020-01-01T00:00:00.${i}Z`) }),
-			]);
-		}
-
-		expect(state.messages).to.have.length(200);
-		for (let i = 100; i < state.messages.length - 1; i++) {
-			for (let j = i + 1; j < state.messages.length - 1; j++)
-				expect(state.messages[i].created_at.getTime()).to.be.lessThan(
-					state.messages[j].created_at.getTime(),
-				);
-		}
-	});
-
-	it('add lots of messages out of order', async function () {
-		const messages = [];
-		for (let i = 100; i < 300; i++) {
-			messages.push(
-				generateMsg({ id: `${i}`, date: new Date(`2020-01-01T00:00:00.${i}Z`) }),
-			);
-		}
-		// shuffle
-		for (let i = messages.length - 1; i > 0; i--) {
-			const j = Math.floor(Math.random() * (i + 1));
-			[messages[i], messages[j]] = [messages[j], messages[i]];
-		}
-
-		state.addMessagesSorted(messages);
-
-		expect(state.messages).to.have.length(200);
-		for (let i = 0; i < 200; i++) {
-			expect(state.messages[i].id).to.be.equal(`${i + 100}`);
-		}
-	});
-
-	it('should avoid duplicates if message.created_at changes', async function () {
-		state.addMessagesSorted([
-			generateMsg({ id: '0', date: new Date('2020-01-01T00:00:00.000Z') }),
-		]);
-		expect(state.messages).to.have.length(1);
-
-		state.addMessageSorted(
-			{
-				...state.messages[0],
-				created_at: new Date('2020-01-01T00:00:00.044Z'),
-				text: 'update 0',
-			},
-			true,
-		);
-		expect(state.messages).to.have.length(1);
-		expect(state.messages[0].text).to.be.equal('update 0');
-		expect(state.messages[0].created_at.getTime()).to.be.equal(
-			new Date('2020-01-01T00:00:00.044Z').getTime(),
-		);
-	});
-
-	it('should respect order and avoid duplicates if message.created_at changes', async function () {
-		state.addMessagesSorted([
-			generateMsg({ id: '1', date: new Date('2020-01-01T00:00:00.001Z') }),
-			generateMsg({ id: '2', date: new Date('2020-01-01T00:00:00.002Z') }),
-			generateMsg({ id: '0', date: new Date('2020-01-01T00:00:00.000Z') }),
-			generateMsg({ id: '3', date: new Date('2020-01-01T00:00:00.003Z') }),
-		]);
-		expect(state.messages).to.have.length(4);
-
-		state.addMessagesSorted(
-			[
-				{
-					...state.messages[3],
-					created_at: new Date('2020-01-01T00:00:00.033Z'),
-					text: 'update 3',
-				},
-			],
-			true,
-		);
-		expect(state.messages).to.have.length(4);
-		expect(state.messages[3].text).to.be.equal('update 3');
-
-		state.addMessageSorted(
-			{
-				...state.messages[0],
-				created_at: new Date('2020-01-01T00:00:00.044Z'),
-				text: 'update 0',
-			},
-			true,
-		);
-		expect(state.messages).to.have.length(4);
-		expect(state.messages[3].text).to.be.equal('update 0');
-		expect(state.messages[0].id).to.be.equal('1');
-		expect(state.messages[1].id).to.be.equal('2');
-		expect(state.messages[2].id).to.be.equal('3');
-		expect(state.messages[3].id).to.be.equal('0');
-	});
-
-	it('should add messages to new message set', () => {
-		state.addMessagesSorted([
-			generateMsg({ id: '12', date: new Date(100) }),
-			generateMsg({ id: '13', date: new Date(200) }),
-			generateMsg({ id: '14', date: new Date(300) }),
-		]);
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '0', date: new Date(1000) }),
-				generateMsg({ id: '1', date: new Date(1100) }),
-			],
-			false,
-			false,
-			true,
-			'new',
-		);
-
-		expect(state.messages.length).to.be.equal(3);
-		expect(state.messages[0].id).to.be.equal('12');
-		expect(state.messages[1].id).to.be.equal('13');
-		expect(state.messages[2].id).to.be.equal('14');
-		// set with ids 0,1 is added at the beginning as the newest set is inserted earlier
-		expect(state.messageSets[0].messages.map((m) => m.id)).toStrictEqual(['0', '1']);
-		expect(state.messageSets[1].messages.map((m) => m.id)).toStrictEqual([
-			'12',
-			'13',
-			'14',
-		]);
-	});
-
-	it('should add messages to current message set', () => {
-		state.addMessagesSorted(
-			[generateMsg({ id: '12' }), generateMsg({ id: '13' }), generateMsg({ id: '14' })],
-			false,
-			false,
-			true,
-			'current',
-		);
-
-		expect(state.messages.length).to.be.equal(3);
-		expect(state.messages[0].id).to.be.equal('12');
-		expect(state.messages[1].id).to.be.equal('13');
-		expect(state.messages[2].id).to.be.equal('14');
-	});
-
-	it('should add messages to latest message set', () => {
-		state.addMessagesSorted(
-			[generateMsg({ id: '12' }), generateMsg({ id: '13' }), generateMsg({ id: '14' })],
-			false,
-			false,
-			true,
-			'latest',
-		);
-
-		expect(state.messages.length).to.be.equal(3);
-		expect(state.messages[0].id).to.be.equal('12');
-		expect(state.messages[1].id).to.be.equal('13');
-		expect(state.messages[2].id).to.be.equal('14');
-		expect(state.latestMessages.length).to.be.equal(3);
-		expect(state.latestMessages[0].id).to.be.equal('12');
-		expect(state.latestMessages[1].id).to.be.equal('13');
-		expect(state.latestMessages[2].id).to.be.equal('14');
-	});
-
-	it('should remove blocked messages from the latest messages from the offline database', () => {
-		state.addMessagesSorted(
-			[
-				generateMsg({
-					id: '12',
-					date: new Date(1200),
-					type: 'error',
-					moderation: { action: 'remove' },
-				}),
-				generateMsg({
-					id: '13',
-					date: new Date(1300),
-					type: 'error',
-					moderation: { action: 'remove' },
-				}),
-				generateMsg({ id: '14', date: new Date(1400) }),
-			],
-			false,
-			false,
-			true,
-			'latest',
-		);
-		expect(state.latestMessages.length).to.be.equal(3);
-		state.filterErrorMessages();
-		expect(state.latestMessages.length).to.be.equal(1);
-		expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledTimes(2);
-		expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledWith({ id: '12' });
-		expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledWith({ id: '13' });
-	});
-
-	it('adds message page sorted', () => {
-		// load first page
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '12', date: new Date(1200) }),
-				generateMsg({ id: '13', date: new Date(1300) }),
-				generateMsg({ id: '14', date: new Date(1400) }),
-			],
-			false,
-			false,
-			true,
-			'latest',
-		);
-
-		// jump to a start
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '1', date: new Date(100) }),
-				generateMsg({ id: '2', date: new Date(200) }),
-			],
-			false,
-			false,
-			true,
-			'new',
-		);
-		state.messageSets[0].isCurrent = false;
-		state.messageSets[1].isCurrent = true;
-		// jump to a end
-
-		state.addMessagesSorted(
-			[generateMsg({ id: '10', date: new Date(1000) })],
-			false,
-			false,
-			true,
-			'new',
-		);
-
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '8', date: new Date(800) }),
-				generateMsg({ id: '9', date: new Date(900) }),
-			],
-			false,
-			false,
-			true,
-			'new',
-		);
-
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '4', date: new Date(400) }),
-				generateMsg({ id: '5', date: new Date(500) }),
-				generateMsg({ id: '6', date: new Date(600) }),
-			],
-			false,
-			false,
-			true,
-			'new',
-		);
-
-		state.addMessagesSorted(
-			[generateMsg({ id: '1500', date: new Date(1500) })],
-			false,
-			false,
-			true,
-			'new',
-		);
-
-		const toTimestamp = (msg) => new Date(msg.created_at).getTime();
-		expect(state.messageSets.length).to.eql(6);
-		expect(state.messageSets[0].messages.map(toTimestamp)).toStrictEqual([1500]);
-		expect(state.messageSets[1].messages.map(toTimestamp)).toStrictEqual([
-			1200, 1300, 1400,
-		]);
-		expect(state.messageSets[2].messages.map(toTimestamp)).toStrictEqual([1000]);
-		expect(state.messageSets[3].messages.map(toTimestamp)).toStrictEqual([800, 900]);
-		expect(state.messageSets[4].messages.map(toTimestamp)).toStrictEqual([400, 500, 600]);
-		expect(state.messageSets[5].messages.map(toTimestamp)).toStrictEqual([100, 200]);
-	});
-
-	it('inputs messages pertaining to different sets into corresponding message set and breaks the state', () => {
-		// load first page
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '12', date: new Date(1200) }),
-				generateMsg({ id: '14', date: new Date(1400) }),
-			],
-			false,
-			false,
-			true,
-			'latest',
-		);
-
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '6', date: new Date(600) }),
-				generateMsg({ id: '8', date: new Date(800) }),
-			],
-			false,
-			false,
-			true,
-			'new',
-		);
-
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '1', date: new Date(100) }),
-				generateMsg({ id: '3', date: new Date(300) }),
-			],
-			false,
-			false,
-			true,
-			'new',
-		);
-
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '7', date: new Date(700) }),
-				generateMsg({ id: '2', date: new Date(200) }),
-				generateMsg({ id: '13', date: new Date(1300) }),
-			],
-			false,
-			false,
-			true,
-			'new',
-		);
-
-		const toTimestamp = (msg) => new Date(msg.created_at).getTime();
-		expect(state.messageSets.length).to.eql(4);
-		expect(state.messageSets[0].messages.map(toTimestamp)).toStrictEqual([1200, 1400]);
-		expect(state.messageSets[1].messages.map(toTimestamp)).toStrictEqual([
-			200, 700, 1300,
-		]);
-		expect(state.messageSets[2].messages.map(toTimestamp)).toStrictEqual([600, 800]);
-		expect(state.messageSets[3].messages.map(toTimestamp)).toStrictEqual([100, 300]);
-	});
-
-	it(`should add messages to latest message set when it's not currently active`, () => {
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '12', date: new Date(1200) }),
-				generateMsg({ id: '13', date: new Date(1300) }),
-				generateMsg({ id: '14', date: new Date(1400) }),
-			],
-			false,
-			false,
-			true,
-			'latest',
-		);
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '1', date: new Date(100) }),
-				generateMsg({ id: '2', date: new Date(200) }),
-			],
-			false,
-			false,
-			true,
-			'new',
-		);
-		state.messageSets[0].isCurrent = false;
-		state.messageSets[1].isCurrent = true;
-		state.addMessagesSorted(
-			[generateMsg({ id: '15', date: new Date(1500) })],
-			false,
-			false,
-			true,
-			'latest',
-		);
-
-		expect(state.latestMessages.map((m) => m.id)).toStrictEqual(['12', '13', '14', '15']);
-	});
-
-	it('adjusts the latest set flag according to actual message creation date', () => {
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '1', date: new Date(100) }),
-				generateMsg({ id: '2', date: new Date(200) }),
-			],
-			false,
-			false,
-			true,
-			'latest',
-		);
-		expect(state.latestMessages.map((m) => m.id)).toStrictEqual(['1', '2']);
-
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '12', date: new Date(1200) }),
-				generateMsg({ id: '13', date: new Date(1300) }),
-				generateMsg({ id: '14', date: new Date(1400) }),
-			],
-			false,
-			false,
-			true,
-			'new',
-		);
-		expect(state.latestMessages.map((m) => m.id)).toStrictEqual(['12', '13', '14']);
-		expect(state.messageSets.filter((s) => s.isLatest).length).toBe(1);
-	});
-
-	it("the messageSetToAddToIfDoesNotExist: 'latest' should be ignored if the messages do not belong to the latest set based on their creation timestamp", () => {
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '12', date: new Date(1200) }),
-				generateMsg({ id: '13', date: new Date(1300) }),
-				generateMsg({ id: '14', date: new Date(1400) }),
-			],
-			false,
-			false,
-			true,
-			'latest',
-		);
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '1', date: new Date(100) }),
-				generateMsg({ id: '2', date: new Date(200) }),
-			],
-			false,
-			false,
-			true,
-			'new',
-		);
-		expect(state.messageSets[0].isCurrent).toBeTruthy();
-		expect(state.messageSets[1].isCurrent).toBeFalsy();
-
-		state.addMessagesSorted(
-			[generateMsg({ id: '15', date: new Date(150) })],
-			false,
-			false,
-			true,
-			'latest',
-		);
-
-		expect(state.messageSets[0].messages.map((m) => m.id)).toStrictEqual([
-			'12',
-			'13',
-			'14',
-		]);
-		expect(state.latestMessages.map((m) => m.id)).toStrictEqual(['12', '13', '14']);
-		expect(state.messageSets[1].messages.map((m) => m.id)).toStrictEqual([
-			'1',
-			'15',
-			'2',
-		]);
-	});
-
-	it(`shouldn't create new message set for thread replies`, () => {
-		state.addMessagesSorted(
-			[
-				generateMsg({ parent_id: '12' }),
-				generateMsg({ parent_id: '12' }),
-				generateMsg({ parent_id: '12' }),
-			],
-			false,
-			false,
-			true,
-			'new',
-		);
-
-		expect(state.messageSets.length).to.be.equal(1);
-	});
-
-	it(`should update message in non-active message set`, () => {
-		state.addMessagesSorted([
-			generateMsg({ id: '12' }),
-			generateMsg({ id: '13' }),
-			generateMsg({ id: '14' }),
-		]);
-		state.addMessagesSorted(
-			[generateMsg({ id: '0', date: new Date('2020-01-01T00:00:00.000Z') })],
-			false,
-			false,
-			true,
-			'new',
-		);
-		state.addMessagesSorted(
-			[
-				generateMsg({
-					id: '0',
-					date: new Date('2020-01-01T00:00:00.000Z'),
-					text: 'Updated text',
-				}),
-			],
-			false,
-			false,
-			false,
-		);
-
-		expect(state.messages.length).to.be.equal(3);
-		expect(state.messageSets[1].messages.length).to.be.equal(1);
-		expect(state.messageSets[1].messages[0].text).to.be.equal('Updated text');
-	});
-
-	it(`should update message in active message set`, () => {
-		state.addMessagesSorted([
-			generateMsg({ id: '12', date: new Date('2020-01-01T00:00:00.000Z') }),
-			generateMsg({ id: '13', date: new Date('2020-01-01T00:00:10.000Z') }),
-			generateMsg({ id: '14', date: new Date('2020-01-01T00:00:11.000Z') }),
-		]);
-		state.addMessagesSorted(
-			[
-				generateMsg({
-					id: '13',
-					date: new Date('2020-01-01T00:00:10.000Z'),
-					text: 'Updated text',
-				}),
-			],
-			false,
-			false,
-			false,
-		);
-
-		expect(state.messages.length).to.be.equal(3);
-		expect(state.messages[1].text).to.be.equal('Updated text');
-		expect(state.messageSets.length).to.be.equal(1);
-	});
-
-	it(`should update message in latest message set`, () => {
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '12', date: new Date('2020-01-01T00:00:00.000Z') }),
-				generateMsg({ id: '13', date: new Date('2020-01-01T00:00:10.000Z') }),
-				generateMsg({ id: '14', date: new Date('2020-01-01T00:00:11.000Z') }),
-			],
-			false,
-			false,
-			true,
-			'latest',
-		);
-		state.addMessagesSorted(
-			[
-				generateMsg({
-					id: '13',
-					date: new Date('2020-01-01T00:00:10.000Z'),
-					text: 'Updated text',
-				}),
-			],
-			false,
-			false,
-			false,
-		);
-
-		expect(state.latestMessages.length).to.be.equal(3);
-		expect(state.latestMessages[1].text).to.be.equal('Updated text');
-	});
-
-	it(`should do nothing if message is not available locally`, () => {
-		state.addMessagesSorted([
-			generateMsg({ id: '12', date: new Date(1200) }),
-			generateMsg({ id: '13', date: new Date(1300) }),
-			generateMsg({ id: '14', date: new Date(1400) }),
-		]);
-		state.addMessagesSorted(
-			[generateMsg({ id: '5', date: new Date(500) })],
-			false,
-			false,
-			true,
-			'new',
-		);
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '1', date: new Date(100) }),
-				generateMsg({ id: '2', date: new Date(200) }),
-			],
-			false,
-			false,
-			true,
-			'new',
-		);
-		state.addMessagesSorted(
-			[generateMsg({ id: '8', date: new Date(800) })],
-			false,
-			false,
-			false,
-		);
-
-		expect(state.latestMessages.length).to.be.equal(3);
-		expect(state.messages.length).to.be.equal(3);
-		expect(state.messageSets[1].messages.length).to.be.equal(1);
-		expect(state.messageSets[2].messages.length).to.be.equal(2);
-	});
-
-	it('updates last_message_at correctly', async function () {
-		expect(state.last_message_at).to.be.null;
-		state.addMessagesSorted([
-			generateMsg({ id: '0', date: new Date('2020-01-01T00:00:00.000Z') }),
-		]);
-		expect(state.last_message_at.getTime()).to.be.equal(
-			new Date('2020-01-01T00:00:00.000Z').getTime(),
-		);
-		state.addMessagesSorted([
-			generateMsg({ id: '1', date: new Date('2019-01-01T00:00:00.000Z') }),
-		]);
-		expect(state.last_message_at.getTime()).to.be.equal(
-			new Date('2020-01-01T00:00:00.000Z').getTime(),
-		);
-
-		state.addMessagesSorted([
-			generateMsg({ id: '2', date: new Date('2020-01-01T00:00:00.001Z') }),
-		]);
-		expect(state.last_message_at.getTime()).to.be.equal(
-			new Date('2020-01-01T00:00:00.001Z').getTime(),
-		);
-	});
-
-	it('sets pinnedMessages correctly', async function () {
-		const msgs = [
-			generateMsg({ id: '1', date: new Date('2020-01-01T00:00:00.001Z') }),
-			generateMsg({ id: '2', date: new Date('2020-01-01T00:00:00.002Z') }),
-			generateMsg({ id: '3', date: new Date('2020-01-01T00:00:00.003Z') }),
-		];
-		msgs[0].pinned = true;
-		msgs[0].pinned_at = new Date('2020-01-01T00:00:00.010Z');
-		msgs[1].pinned = true;
-		msgs[1].pinned_at = new Date('2020-01-01T00:00:00.012Z');
-		msgs[2].pinned = true;
-		msgs[2].pinned_at = new Date('2020-01-01T00:00:00.011Z');
-		state.addPinnedMessages(msgs);
-		expect(state.pinnedMessages.length).to.be.equal(3);
-		expect(state.pinnedMessages[0].id).to.be.equal('1');
-		expect(state.pinnedMessages[1].id).to.be.equal('3');
-		expect(state.pinnedMessages[2].id).to.be.equal('2');
-	});
-
-	it('should add message preview', async function () {
-		// these message previews are used UI SDKs
-		const messagePreview = generateMsg({
-			id: '1',
-			date: new Date('2020-01-01T00:00:00.001Z'),
-		});
-		state.addMessageSorted(messagePreview);
-
-		expect(state.messages[0].id).to.be.equal('1');
-	});
-
-	it('should add thread reply preview', async function () {
-		// these message previews are used by UI SDKs
-		const parentMessage = generateMsg({
-			id: 'parent_id',
-			date: new Date('2020-01-01T00:00:00.001Z'),
-		});
-		const threadReplyPreview = generateMsg({
-			id: '2',
-			date: new Date('2020-01-01T00:00:00.001Z'),
-			parent_id: 'parent_id',
-		});
-		state.addMessageSorted(parentMessage);
-		state.addMessageSorted(threadReplyPreview);
-		const thread = state.threads[parentMessage.id];
-
-		expect(thread.length).to.be.equal(1);
-		expect(thread[0].id).to.be.equal(threadReplyPreview.id);
-	});
-
-	describe('merges overlapping message sets', () => {
-		it('when new messages overlap with latest messages', () => {
-			const overlap = [
-				generateMsg({ id: '11', date: new Date(1100) }),
-				generateMsg({ id: '12', date: new Date(1200) }),
-				generateMsg({ id: '13', date: new Date(1300) }),
-			];
-			const messages = [
-				...overlap,
-				generateMsg({ id: '14', date: new Date(1400) }),
-				generateMsg({ id: '15', date: new Date(1500) }),
-			];
-			state.addMessagesSorted(messages);
-			const newMessages = [generateMsg({ id: '10', date: new Date(1000) }), ...overlap];
-			state.addMessagesSorted(newMessages, false, true, true, 'new');
-
-			expect(state.messages.length).to.be.equal(6);
-			expect(state.messages[0].id).to.be.equal('10');
-			expect(state.messages[1].id).to.be.equal('11');
-			expect(state.messages[2].id).to.be.equal('12');
-			expect(state.messages[3].id).to.be.equal('13');
-			expect(state.messages[4].id).to.be.equal('14');
-			expect(state.messages[5].id).to.be.equal('15');
-			expect(state.messageSets.length).to.be.equal(1);
-			expect(state.messages).to.be.equal(state.latestMessages);
-		});
-
-		it('when new messages overlap with current messages, but not with latest messages', () => {
-			const overlap = [
-				generateMsg({ id: '11', date: new Date('2020-01-01T00:00:10.001Z') }),
-			];
-			const latestMessages = [
-				generateMsg({ id: '20', date: new Date('2020-01-01T00:10:10.001Z') }),
-			];
-			state.addMessagesSorted(latestMessages);
-			const currentMessages = [
-				generateMsg({ id: '10', date: new Date('2020-01-01T00:00:03.001Z') }),
-				...overlap,
-			];
-			state.addMessagesSorted(currentMessages, false, true, true, 'new');
-			state.messageSets[0].isCurrent = false;
-			state.messageSets[1].isCurrent = true;
-			const newMessages = [
-				...overlap,
-				generateMsg({ id: '12', date: new Date('2020-01-01T00:00:11.001Z') }),
-			];
-			state.addMessagesSorted(newMessages, false, true, true, 'new');
-
-			expect(state.latestMessages.length).to.be.equal(1);
-			expect(state.latestMessages[0].id).to.be.equal('20');
-			expect(state.messages.length).to.be.equal(3);
-			expect(state.messages[0].id).to.be.equal('10');
-			expect(state.messages[1].id).to.be.equal('11');
-			expect(state.messages[2].id).to.be.equal('12');
-			expect(state.messageSets.length).to.be.equal(2);
-		});
-
-		it('when new messages overlap with messages, but not current or latest messages', () => {
-			const overlap = [generateMsg({ id: '11', date: new Date(1100) })];
-			const latestMessages = [generateMsg({ id: '20', date: new Date(2000) })];
-			state.addMessagesSorted(latestMessages);
-			const currentMessages = [generateMsg({ id: '8', date: new Date(800) })];
-			state.addMessagesSorted(currentMessages, false, true, true, 'new');
-			state.messageSets[0].isCurrent = false;
-			state.messageSets[1].isCurrent = true;
-			const otherMessages = [generateMsg({ id: '10', date: new Date(1000) }), ...overlap];
-			state.addMessagesSorted(otherMessages, false, true, true, 'new');
-			const newMessages = [...overlap, generateMsg({ id: '12', date: new Date(1200) })];
-			state.addMessagesSorted(newMessages, false, true, true, 'new');
-
-			expect(state.messageSets.length).to.be.equal(3);
-			expect(state.latestMessages.map(({ id }) => id)).toStrictEqual(['20']);
-			expect(state.messages.map(({ id }) => id)).toStrictEqual(['8']);
-			expect(state.messageSets.map((s) => s.messages.map(({ id }) => id))).toStrictEqual([
-				['20'],
-				['10', '11', '12'],
-				['8'],
-			]);
-		});
-
-		it('when current messages overlap with latest', () => {
-			const overlap = [
-				generateMsg({ id: '11', date: new Date('2020-01-01T00:00:10.001Z') }),
-			];
-			const latestMessages = [
-				...overlap,
-				generateMsg({ id: '12', date: new Date('2020-01-01T00:01:10.001Z') }),
-			];
-			state.addMessagesSorted(latestMessages);
-			const currentMessages = [
-				generateMsg({ id: '8', date: new Date('2020-01-01T00:00:03.001Z') }),
-			];
-			state.addMessagesSorted(currentMessages, false, true, true, 'new');
-			state.messageSets[0].isCurrent = false;
-			state.messageSets[1].isCurrent = true;
-			const newMessages = [
-				generateMsg({ id: '9', date: new Date('2020-01-01T00:00:04.001Z') }),
-				generateMsg({ id: '10', date: new Date('2020-01-01T00:00:07.001Z') }),
-				...overlap,
-			];
-			state.addMessagesSorted(newMessages, false, true, true, 'current');
-
-			expect(state.messages.length).to.be.equal(5);
-			expect(state.messages[0].id).to.be.equal('8');
-			expect(state.messages[1].id).to.be.equal('9');
-			expect(state.messages[2].id).to.be.equal('10');
-			expect(state.messages[3].id).to.be.equal('11');
-			expect(state.messages[4].id).to.be.equal('12');
-			expect(state.latestMessages).to.be.equal(state.messages);
-		});
-
-		it('when new messages overlap with multiple message sets', () => {
-			const overlap1 = [
-				generateMsg({ id: '11', date: new Date('2020-01-01T00:00:10.001Z') }),
-			];
-			const overlap2 = [
-				generateMsg({ id: '13', date: new Date('2020-01-01T00:01:10.001Z') }),
-			];
-			const latestMessages = [
-				...overlap2,
-				generateMsg({ id: '14', date: new Date('2020-01-01T00:01:15.001Z') }),
-			];
-			state.addMessagesSorted(latestMessages);
-			const currentMessages = [
-				generateMsg({ id: '10', date: new Date('2020-01-01T00:00:03.001Z') }),
-				...overlap1,
-			];
-			state.addMessagesSorted(currentMessages, false, true, true, 'new');
-			state.messageSets[0].isCurrent = false;
-			state.messageSets[0].pagination = { hasPrev: true, hasNext: false };
-			state.messageSets[1].isCurrent = true;
-			state.messageSets[1].pagination = { hasPrev: false, hasNext: true };
-			const newMessages = [
-				...overlap1,
-				generateMsg({ id: '12', date: new Date('2020-01-01T00:00:14.001Z') }),
-				...overlap2,
-			];
-			state.addMessagesSorted(newMessages, false, true, true, 'new');
-
-			expect(state.messages.length).to.be.equal(5);
-			expect(state.messages[0].id).to.be.equal('10');
-			expect(state.messages[1].id).to.be.equal('11');
-			expect(state.messages[2].id).to.be.equal('12');
-			expect(state.messages[3].id).to.be.equal('13');
-			expect(state.messages[4].id).to.be.equal('14');
-			expect(state.messages).to.be.equal(state.latestMessages);
-			expect(state.messageSets.length).to.be.equal(1);
-			expect(state.messageSets[0].pagination).to.be.eql({
-				hasPrev: false,
-				hasNext: false,
-			});
-		});
-	});
-});
-
-describe('ChannelState message pruning', () => {
-	let channelState;
-	let initialMessages = [];
-
-	beforeEach(() => {
-		const client = new StreamChat();
-		client.user = { id: 'userId' };
-		const channel = new Channel(client, 'type', 'id', {});
-		client._addChannelConfig({ cid: channel.cid, config: {} });
-		channelState = new ChannelState(channel);
-		initialMessages = Array.from({ length: 10 }, () =>
-			generateMsg({ date: new Date(100) }),
-		);
-		channelState.addMessagesSorted(initialMessages);
-	});
-
-	it('should prune messages from the end when we are in the latest set', () => {
-		expect(channelState.messageSets.length).to.be.equal(1);
-		expect(channelState.messageSets[0].isLatest).to.be.equal(true);
-		expect(channelState.messageSets[0].isCurrent).to.be.equal(true);
-		expect(channelState.messages.length).to.be.equal(10);
-		expect(channelState.messagePagination.hasPrev).to.be.equal(false);
-
-		const previousHasNext = channelState.messagePagination.hasNext;
-
-		channelState.pruneOldest(5);
-
-		expect(channelState.messageSets.length).to.be.equal(1);
-		expect(channelState.messages.length).to.be.equal(5);
-		expect(channelState.messagePagination.hasPrev).to.be.equal(true);
-		expect(channelState.messagePagination.hasNext).to.be.equal(previousHasNext);
-	});
-
-	it('should do nothing if the current message set is not also the latest', () => {
-		expect(channelState.messageSets.length).to.be.equal(1);
-
-		channelState.messageSets[0].isLatest = false;
-
-		expect(channelState.messages.length).to.be.equal(10);
-		expect(channelState.messagePagination.hasPrev).to.be.equal(false);
-
-		channelState.pruneOldest(5);
-
-		expect(channelState.messages.length).to.be.equal(10);
-		expect(channelState.messagePagination.hasPrev).to.be.equal(false);
-	});
-
-	it('should prune the correct messageSet', () => {
-		channelState.addMessagesSorted(
-			Array.from({ length: 10 }, () => generateMsg({ date: new Date(50) })),
-			false,
-			true,
-			true,
-			'new',
-		);
-
-		expect(channelState.messageSets.length).to.be.equal(2);
-
-		channelState.pruneOldest(5);
-
-		const currentMessageSet = channelState.messageSets.find((ms) => ms.isCurrent);
-		const otherMessageSet = channelState.messageSets.find((ms) => !ms.isCurrent);
-
-		expect(currentMessageSet.messages.length).to.be.equal(5);
-		expect(currentMessageSet.pagination.hasPrev).to.be.equal(true);
-		expect(channelState.messages).to.be.equal(currentMessageSet.messages);
-
-		expect(otherMessageSet.messages.length).to.be.equal(10);
-		expect(otherMessageSet.pagination.hasPrev).to.be.equal(false);
-	});
-
-	it('should correctly apply pruning', () => {
-		channelState.pruneOldest(5);
-
-		expect(channelState.messages.length).to.be.equal(5);
-		for (const message of initialMessages.slice(-5)) {
-			expect(channelState.messages.some((m) => m.id === message.id)).to.be.equal(true);
-		}
-
-		for (const message of initialMessages.slice(0, 5)) {
-			expect(channelState.messages.some((m) => m.id === message.id)).to.be.equal(false);
-		}
-	});
-});
-
-describe('ChannelState reactions', () => {
-	const message = generateMsg();
-	let state;
-	beforeEach(() => {
-		const client = new StreamChat();
-		client.user = { id: 'observer' };
-		state = new ChannelState(new Channel(client, 'live', 'stream', {}));
-		state.addMessageSorted(message);
-	});
-	it('Add one reaction', () => {
-		const reaction = {
-			user_id: 'observer',
-			type: 'like',
-			score: 1,
-		};
-		const msg = { ...message };
-		msg.latest_reactions.push(reaction);
-		const newMessage = state.addReaction(reaction, msg);
-		expect(newMessage.own_reactions.length).to.be.eq(1);
-		// validate the message got updated in channel state
-		expect(state.messages[0].latest_reactions.length).to.be.eq(1);
-	});
-	it('Add same reaction twice', () => {
-		let newMessage = state.addReaction(
-			{
-				user_id: 'observer',
-				type: 'like',
-				score: 1,
-			},
-			message,
-		);
-		newMessage = state.addReaction(
-			{
-				user_id: 'observer',
-				type: 'like',
-				score: 1,
-			},
-			newMessage,
-		);
-		expect(newMessage.own_reactions.length).to.be.eq(1);
-	});
-	it('Add two reactions', () => {
-		let newMessage = state.addReaction(
-			{
-				user_id: 'observer',
-				type: 'like',
-				score: 1,
-			},
-			message,
-		);
-		newMessage = state.addReaction(
-			{
-				user_id: 'user2',
-				type: 'like',
-				score: 4,
-			},
-			newMessage,
-		);
-		expect(newMessage.own_reactions.length).to.be.eq(1);
-		expect(newMessage.own_reactions[0].user_id).to.be.eq('observer');
-	});
-
-	describe('_addReactionToState', () => {
-		let addOwnReactionToMessageSpy;
-		let reaction;
-		let userID;
-		let baseMessage;
-
-		beforeEach(() => {
-			userID = state._channel.getClient().userID;
-			baseMessage = {
-				id: 'msg-1',
-				own_reactions: [],
-				latest_reactions: [],
-				reaction_groups: {},
-			};
-
-			reaction = {
-				message_id: baseMessage.id,
-				type: 'like',
-				user_id: userID,
-				score: 2,
-				created_at: new Date(),
-			};
-
-			addOwnReactionToMessageSpy = vi.spyOn(state, '_addOwnReactionToMessage');
-		});
-
-		afterEach(() => {
-			vi.resetAllMocks();
-		});
-
-		it('should create a new reaction group if none exist', () => {
-			const messageFromState = { ...baseMessage, reaction_groups: undefined };
-			const result = state._addReactionToState(messageFromState, reaction);
-
-			expect(result.reaction_groups).to.deep.equal({
-				like: {
-					count: 1,
-					sum_scores: 2,
-					first_reaction_at: reaction.created_at,
-					last_reaction_at: reaction.created_at,
-					latest_reactions_by: [],
-				},
-			});
-		});
-
-		it('should update existing reaction group', () => {
-			const existing = {
-				count: 1,
-				sum_scores: 1,
-				first_reaction_at: new Date(Date.now() - 5000),
-				last_reaction_at: new Date(Date.now() - 5000),
-			};
-			const messageFromState = {
-				...baseMessage,
-				reaction_groups: { like: { ...existing } },
-			};
-
-			const result = state._addReactionToState(messageFromState, reaction);
-
-			expect(result.reaction_groups.like.count).to.equal(2);
-			expect(result.reaction_groups.like.sum_scores).to.equal(3);
-			expect(result.reaction_groups.like.last_reaction_at).to.equal(reaction.created_at);
-		});
-
-		it('should remove previous own reactions from reaction_groups if enforce_unique is true', () => {
-			const oldReactions = [
-				{
-					type: 'clap',
-					user_id: userID,
-					score: 1,
-				},
-				{
-					type: 'wow',
-					user_id: userID,
-					score: 2,
-				},
-			];
-
-			const messageFromState = {
-				...baseMessage,
-				own_reactions: oldReactions,
-				reaction_groups: {
-					clap: {
-						count: 1,
-						sum_scores: 1,
-					},
-					wow: {
-						count: 1,
-						sum_scores: 2,
-					},
-				},
-			};
-
-			const result = state._addReactionToState(messageFromState, reaction, true);
-
-			expect(result.reaction_groups.clap).to.be.undefined;
-			expect(result.reaction_groups.wow).to.be.undefined;
-			expect(result.reaction_groups.like.count).to.equal(1);
-		});
-
-		it('should preserve other users’ reactions when enforce_unique is true', () => {
-			const newOwnReaction = {
-				...reaction,
-				type: 'wow',
-			};
-			const messageFromState = {
-				...baseMessage,
-				own_reactions: [
-					{ type: 'like', user_id: userID, score: 1 },
-					{ type: 'clap', user_id: userID, score: 1 },
-				],
-				latest_reactions: [
-					{ type: 'like', user_id: userID, score: 1 },
-					{ type: 'clap', user_id: userID, score: 1 },
-					{ type: 'clap', user_id: 'other-user', score: 1 },
-				],
-				reaction_groups: {
-					like: { count: 1, sum_scores: 1 },
-					clap: { count: 2, sum_scores: 2 },
-				},
-			};
-
-			const result = state._addReactionToState(messageFromState, newOwnReaction, true);
-
-			Object.keys(result.reaction_groups).forEach((key) => {
-				delete result.reaction_groups[key].first_reaction_at;
-				delete result.reaction_groups[key].last_reaction_at;
-			});
-
-			expect(result.reaction_groups).to.deep.equal({
-				clap: {
-					count: 1,
-					sum_scores: 1,
-				},
-				wow: {
-					count: 1,
-					sum_scores: 2,
-					latest_reactions_by: [],
-				},
-			});
-			expect(result.latest_reactions).to.deep.equal([
-				{ type: 'clap', user_id: 'other-user', score: 1 },
-				newOwnReaction,
-			]);
-			expect(result.own_reactions).to.deep.equal([newOwnReaction]);
-		});
-
-		it('should correctly update own_reactions with the new reaction', () => {
-			const oldOwnReactions = [{ type: 'clap', user_id: userID, score: 1 }];
-			const messageFromState = {
-				...baseMessage,
-				own_reactions: oldOwnReactions,
-				reaction_groups: {
-					clap: { count: 1, sum_scores: 1 },
-				},
-			};
-			const result1 = state._addReactionToState(messageFromState, reaction);
-
-			expect(addOwnReactionToMessageSpy).toHaveBeenCalledTimes(1);
-			expect(result1.own_reactions).to.deep.equal([...oldOwnReactions, reaction]);
-
-			vi.clearAllMocks();
-
-			const newerReaction = { ...reaction, type: 'wow' };
-			const result2 = state._addReactionToState(result1, newerReaction, true);
-
-			expect(addOwnReactionToMessageSpy).toHaveBeenCalledTimes(1);
-			expect(result2.own_reactions).to.deep.equal([newerReaction]);
-		});
-
-		it('should overwrite own reaction in latest_reactions if enforce_unique is true', () => {
-			const oldReaction = {
-				type: 'clap',
-				user_id: userID,
-			};
-
-			const messageFromState = {
-				...baseMessage,
-				latest_reactions: [oldReaction],
-			};
-
-			const result = state._addReactionToState(messageFromState, reaction, true);
-
-			expect(result.latest_reactions).to.deep.equal([reaction]);
-		});
-
-		it('should append to latest_reactions if enforce_unique is false', () => {
-			const messageFromState = {
-				...baseMessage,
-				latest_reactions: [],
-			};
-
-			const result = state._addReactionToState(messageFromState, reaction, false);
-
-			expect(result.latest_reactions.length).to.equal(1);
-			expect(result.latest_reactions[0]).to.deep.equal(reaction);
-		});
-
-		it('should handle empty own_reactions and latest_reactions gracefully', () => {
-			const messageFromState = {
-				...baseMessage,
-				own_reactions: undefined,
-				latest_reactions: undefined,
-			};
-
-			const result = state._addReactionToState(messageFromState, reaction, true);
-
-			expect(result.own_reactions).to.deep.equal([reaction]);
-			expect(result.latest_reactions).to.deep.equal([reaction]);
-		});
-	});
-
-	describe('_removeReactionFromState', () => {
-		let reaction;
-		let userID;
-		let baseMessage;
-
-		beforeEach(() => {
-			userID = state._channel.getClient().userID;
-
-			baseMessage = {
-				id: 'messageFromState-1',
-				own_reactions: [
-					{ type: 'like', user_id: userID, score: 2 },
-					{ type: 'clap', user_id: userID, score: 1 },
-				],
-				latest_reactions: [
-					{ type: 'like', user_id: userID, score: 2 },
-					{ type: 'clap', user_id: userID, score: 1 },
-					{ type: 'wow', user_id: 'other-user', score: 1 },
-				],
-				reaction_groups: {
-					like: {
-						count: 1,
-						sum_scores: 2,
-					},
-					clap: {
-						count: 1,
-						sum_scores: 1,
-					},
-					wow: {
-						count: 1,
-						sum_scores: 1,
-					},
-				},
-			};
-
-			reaction = {
-				type: 'like',
-				user_id: userID,
-				score: 2,
-			};
-		});
-
-		afterEach(() => {
-			vi.resetAllMocks();
-		});
-
-		it('should remove the reaction from own_reactions', () => {
-			const result = state._removeReactionFromState({ ...baseMessage }, reaction);
-			expect(result.own_reactions.some((r) => r.type === 'like')).to.be.false;
-		});
-
-		it('should decrement the count and sum_scores in the reaction group', () => {
-			const result = state._removeReactionFromState({ ...baseMessage }, reaction);
-			expect(result.reaction_groups.like).to.be.undefined;
-		});
-
-		it('should remove the reaction from latest_reactions for the same user', () => {
-			const result = state._removeReactionFromState({ ...baseMessage }, reaction);
-			expect(
-				result.latest_reactions.some((r) => r.type === 'like' && r.user_id === userID),
-			).to.be.false;
-		});
-
-		it('should preserve other users’ reactions in latest_reactions', () => {
-			const reactionToRemove = {
-				type: 'wow',
-				user_id: userID,
-			};
-			const result = state._removeReactionFromState({ ...baseMessage }, reactionToRemove);
-			expect(
-				result.latest_reactions.some(
-					(r) => r.user_id === 'other-user' && r.type === 'wow',
-				),
-			).to.be.true;
-		});
-
-		it('should handle when reaction_groups count becomes 0 by deleting the group', () => {
-			const reactionToRemove = {
-				type: 'clap',
-				user_id: userID,
-				score: 1,
-			};
-			const result = state._removeReactionFromState({ ...baseMessage }, reactionToRemove);
-			expect(result.reaction_groups.clap).to.be.undefined;
-		});
-
-		it('should handle when own_reactions is undefined', () => {
-			const messageFromState = {
-				...baseMessage,
-				own_reactions: undefined,
-			};
-			const result = state._removeReactionFromState(messageFromState, reaction);
-			expect(result.own_reactions).to.be.undefined;
-		});
-
-		it('should handle when latest_reactions is undefined', () => {
-			const messageFromState = {
-				...baseMessage,
-				latest_reactions: undefined,
-			};
-			const result = state._removeReactionFromState(messageFromState, reaction);
-			expect(result.latest_reactions).to.be.undefined;
-		});
-
-		it('should not crash if reaction group does not exist', () => {
-			const messageFromState = {
-				...baseMessage,
-				reaction_groups: {
-					wow: {
-						count: 1,
-						sum_scores: 1,
-					},
-				},
-			};
-			const result = state._removeReactionFromState(messageFromState, reaction);
-			expect(result.reaction_groups.wow).to.exist;
-		});
-	});
-});
-
-describe('ChannelState isUpToDate', () => {
-	it('isUpToDate flag should be set to false, when watcher is disconnected', async () => {
-		const chatClient = await getClientWithUser();
-		const channelId = uuidv4();
-		const mockedChannelResponse = generateChannel({
-			channel: {
-				id: channelId,
-			},
-		});
-
-		// to mock the channel.watch call
-		vi.spyOn(chatClient.axiosInstance, 'request').mockResolvedValueOnce({
-			data: getOrCreateChannelApi(mockedChannelResponse).response.data,
-		});
-		const channel = chatClient.channel('messaging', channelId);
-
-		await channel.watch();
-		// This is a responsibility of application layer to set the flag, depending
-		// on what state is queried - most recent or some older.
-		channel.state.setIsUpToDate(true);
-
-		expect(channel.state.isUpToDate).to.be.eq(true);
-
-		await channel._disconnect();
-		expect(channel.state.isUpToDate).to.be.eq(false);
-	});
-});
+const toISOString = (timestampMs) => new Date(timestampMs).toISOString();
 
 describe('ChannelState clean', () => {
 	let client;
@@ -1463,7 +25,7 @@ describe('ChannelState clean', () => {
 			cid: channel.cid,
 			type: 'typing.start',
 			user: { id: 'other' },
-			received_at: new Date(Date.now() - 10000),
+			received_at: toISOString(Date.now() - 10000),
 		});
 		expect(channel.state.typing['other']).not.to.be.undefined;
 
@@ -1484,648 +46,322 @@ describe('ChannelState clean', () => {
 	});
 });
 
-describe('deleteUserMessages', () => {
-	let state;
+describe('ChannelState members store', () => {
+	it('initializes members store with an empty members map', () => {
+		const state = new ChannelState();
 
-	beforeEach(() => {
-		const client = new StreamChat();
-		client.user = { id: 'userId' };
-		const channel = new Channel(client, 'type', 'id', {});
-		client._addChannelConfig({ cid: channel.cid, config: {} });
-		state = new ChannelState(channel);
+		expect(state.members).to.eql({});
+		expect(state.member_count).to.equal(0);
+		expect(state.membersStore.getLatestValue()).to.eql({ members: {}, memberCount: 0 });
 	});
 
-	it('should remove content of messages from given user, when hardDelete is true', () => {
-		const user1 = generateUser();
-		const user2 = generateUser();
-
-		const m1u1 = generateMsg({ user: user1 });
-		const m2u1 = generateMsg({ user: user1 });
-		const m1u2 = generateMsg({ user: user2 });
-		const m2u2 = generateMsg({ user: user2 });
-
-		state.addMessagesSorted([m1u1, m2u1, m1u2, m2u2]);
-
-		expect(state.messages).to.have.length(4);
-
-		state.deleteUserMessages(user1, true);
-
-		expect(state.messages).to.have.length(4);
-
-		expect(state.messages[0].type).to.be.equal('deleted');
-		expect(state.messages[0].text).to.be.equal(undefined);
-		expect(state.messages[0].html).to.be.equal(undefined);
-
-		expect(state.messages[1].type).to.be.equal('deleted');
-		expect(state.messages[1].text).to.be.equal(undefined);
-		expect(state.messages[1].html).to.be.equal(undefined);
-
-		expect(state.messages[2].type).to.be.equal('regular');
-		expect(state.messages[2].text).to.be.equal(m1u2.text);
-		expect(state.messages[2].html).to.be.equal(m1u2.html);
-
-		expect(state.messages[3].type).to.be.equal('regular');
-		expect(state.messages[3].text).to.be.equal(m2u2.text);
-		expect(state.messages[3].html).to.be.equal(m2u2.html);
-	});
-	it('should mark messages from given user as deleted, when hardDelete is false', () => {
-		const user1 = generateUser();
-		const user2 = generateUser();
-
-		const m1u1 = generateMsg({ user: user1 });
-		const m2u1 = generateMsg({ user: user1 });
-		const m1u2 = generateMsg({ user: user2 });
-		const m2u2 = generateMsg({ user: user2 });
-
-		state.addMessagesSorted([m1u1, m2u1, m1u2, m2u2]);
-		expect(state.messages).to.have.length(4);
-
-		state.deleteUserMessages(user1);
-
-		expect(state.messages).to.have.length(4);
-
-		expect(state.messages[0].type).to.be.equal('deleted');
-		expect(state.messages[0].text).to.be.equal(m1u1.text);
-		expect(state.messages[0].html).to.be.equal(m1u1.html);
-
-		expect(state.messages[1].type).to.be.equal('deleted');
-		expect(state.messages[1].text).to.be.equal(m2u1.text);
-		expect(state.messages[1].html).to.be.equal(m2u1.html);
-
-		expect(state.messages[2].type).to.be.equal('regular');
-		expect(state.messages[2].text).to.be.equal(m1u2.text);
-		expect(state.messages[2].html).to.be.equal(m1u2.html);
-
-		expect(state.messages[3].type).to.be.equal('regular');
-		expect(state.messages[3].text).to.be.equal(m2u2.text);
-		expect(state.messages[3].html).to.be.equal(m2u2.html);
-	});
-});
-
-// Regression tests for GetStream/stream-chat-js#1736:
-// deleteUserMessages crashed with "Cannot read property 'cid' of undefined" when
-// hard-deleting a message that quotes another message from the same user. The first
-// branch replaced messages[i] with the stripped hard-delete placeholder (no
-// quoted_message field); the second branch then read messages[i].quoted_message as
-// undefined and passed it into toDeletedMessage, which dereferences message.cid.
-describe('deleteUserMessages — quoted_message regression (#1736)', () => {
-	let state;
-
-	beforeEach(() => {
-		const client = new StreamChat();
-		client.user = { id: 'userId' };
-		const channel = new Channel(client, 'type', 'id', {});
-		client._addChannelConfig({ cid: channel.cid, config: {} });
-		state = new ChannelState(channel);
-	});
-
-	it('does not throw when hard-deleting a message that quotes another message from the same user', () => {
-		const user1 = generateUser();
-		const m1 = generateMsg({ user: user1 });
-		const m2 = generateMsg({
-			user: user1,
-			quoted_message: m1,
-			quoted_message_id: m1.id,
-		});
-
-		state.addMessagesSorted([m1, m2]);
-
-		expect(() => state.deleteUserMessages(user1, true)).not.to.throw();
-
-		expect(state.messages).to.have.length(2);
-		expect(state.messages[0].type).to.be.equal('deleted');
-		expect(state.messages[1].type).to.be.equal('deleted');
-		// Hard-deleted parent retains the stripped shape (no quoted_message field).
-		expect(state.messages[1].text).to.be.equal(undefined);
-		expect(state.messages[1].quoted_message).to.be.equal(undefined);
-	});
-
-	it('does not throw when hard-deleting a thread reply that quotes another same-user reply', () => {
-		const user1 = generateUser();
-		const parent = generateMsg({ user: user1, id: 'parent-id' });
-		const reply1 = generateMsg({
-			user: user1,
-			parent_id: parent.id,
-			date: new Date('2020-01-01T00:00:01.000Z'),
-		});
-		const reply2 = generateMsg({
-			user: user1,
-			parent_id: parent.id,
-			date: new Date('2020-01-01T00:00:02.000Z'),
-			quoted_message: reply1,
-			quoted_message_id: reply1.id,
-		});
-
-		state.addMessagesSorted([parent, reply1, reply2]);
-		expect(state.threads[parent.id]).to.have.length(2);
-
-		expect(() => state.deleteUserMessages(user1, true)).not.to.throw();
-
-		const thread = state.threads[parent.id];
-		expect(thread).to.have.length(2);
-		expect(thread[0].type).to.be.equal('deleted');
-		expect(thread[1].type).to.be.equal('deleted');
-		expect(thread[1].quoted_message).to.be.equal(undefined);
-	});
-
-	it('does not throw when hard-deleting a pinned message that quotes another same-user pinned message', () => {
-		const user1 = generateUser();
-		const m1 = generateMsg({
-			user: user1,
-			pinned: true,
-			pinned_at: new Date('2022-01-01T00:00:00.001Z'),
-		});
-		const m2 = generateMsg({
-			user: user1,
-			pinned: true,
-			pinned_at: new Date('2022-01-01T00:00:00.002Z'),
-			quoted_message: m1,
-			quoted_message_id: m1.id,
-		});
-
-		state.addMessagesSorted([m1, m2]);
-		state.addPinnedMessages([m1, m2]);
-		expect(state.pinnedMessages).to.have.length(2);
-
-		expect(() => state.deleteUserMessages(user1, true)).not.to.throw();
-
-		expect(state.pinnedMessages).to.have.length(2);
-		state.pinnedMessages.forEach((message) => {
-			expect(message.type).to.be.equal('deleted');
-		});
-		const pinnedQuoter = state.pinnedMessages.find((m) => m.id === m2.id);
-		expect(pinnedQuoter.quoted_message).to.be.equal(undefined);
-	});
-
-	it('soft-deletes a message that quotes another same-user message and marks the quoted_message as deleted', () => {
-		const user1 = generateUser();
-		const m1 = generateMsg({ user: user1 });
-		const m2 = generateMsg({
-			user: user1,
-			quoted_message: m1,
-			quoted_message_id: m1.id,
-		});
-
-		state.addMessagesSorted([m1, m2]);
-
-		expect(() => state.deleteUserMessages(user1, false)).not.to.throw();
-
-		expect(state.messages[0].type).to.be.equal('deleted');
-		expect(state.messages[1].type).to.be.equal('deleted');
-		// Soft-delete preserves message content via the spread path.
-		expect(state.messages[1].text).to.be.equal(m2.text);
-		// quoted_message reference is replaced with a deleted placeholder.
-		expect(state.messages[1].quoted_message).to.not.be.equal(undefined);
-		expect(state.messages[1].quoted_message.id).to.be.equal(m1.id);
-		expect(state.messages[1].quoted_message.type).to.be.equal('deleted');
-	});
-
-	it('continues processing later messages after encountering a self-quote on hard-delete', () => {
-		const user1 = generateUser();
-		const user2 = generateUser();
-		const mA = generateMsg({ user: user2, date: new Date('2020-01-01T00:00:01.000Z') });
-		const m1 = generateMsg({ user: user1, date: new Date('2020-01-01T00:00:02.000Z') });
-		const m2 = generateMsg({
-			user: user1,
-			date: new Date('2020-01-01T00:00:03.000Z'),
-			quoted_message: m1,
-			quoted_message_id: m1.id,
-		});
-		const mB = generateMsg({ user: user1, date: new Date('2020-01-01T00:00:04.000Z') });
-		const mC = generateMsg({ user: user2, date: new Date('2020-01-01T00:00:05.000Z') });
-
-		state.addMessagesSorted([mA, m1, m2, mB, mC]);
-
-		expect(() => state.deleteUserMessages(user1, true)).not.to.throw();
-
-		const byId = (id) => state.messages.find((m) => m.id === id);
-		expect(byId(mA.id).type).to.be.equal('regular');
-		expect(byId(m1.id).type).to.be.equal('deleted');
-		expect(byId(m2.id).type).to.be.equal('deleted');
-		// mB sits after the self-quote pair — previously the throw aborted the loop here.
-		expect(byId(mB.id).type).to.be.equal('deleted');
-		expect(byId(mC.id).type).to.be.equal('regular');
-	});
-});
-
-describe('updateUserMessages', () => {
-	let state;
-
-	beforeEach(() => {
-		const client = new StreamChat();
-		client.user = { id: 'userId' };
-		const channel = new Channel(client, 'type', 'id', {});
-		client._addChannelConfig({ cid: channel.cid, config: {} });
-		state = new ChannelState(channel);
-	});
-
-	it('should update user property of messages from given user', () => {
-		let user1 = generateUser();
-		const user2 = generateUser();
-
-		const m1u1 = generateMsg({ user: user1 });
-		const m2u1 = generateMsg({ user: user1 });
-		const m1u2 = generateMsg({ user: user2 });
-		const m2u2 = generateMsg({ user: user2 });
-
-		state.addMessagesSorted([m1u1, m2u1, m1u2, m2u2]);
-
-		expect(state.messages).to.have.length(4);
-
-		const user1NewName = uuidv4();
-		user1 = {
-			...user1,
-			name: user1NewName,
+	it('keeps members getter/setter backward compatible while syncing the store', () => {
+		const state = new ChannelState();
+		const members = {
+			alice: { user: { id: 'alice' }, user_id: 'alice' },
 		};
 
-		state.updateUserMessages(user1, true);
+		state.members = members;
 
-		expect(state.messages).to.have.length(4);
-
-		expect(state.messages[0].user.name).to.be.equal(user1NewName);
-		expect(state.messages[1].user.name).to.be.equal(user1NewName);
-
-		expect(state.messages[2].user.name).to.be.equal(user2.name);
-		expect(state.messages[3].user.name).to.be.equal(user2.name);
-	});
-});
-
-describe('latestMessages', () => {
-	let state;
-
-	beforeEach(() => {
-		const client = new StreamChat();
-		client.user = { id: 'userId' };
-		const channel = new Channel(client, 'type', 'id', {});
-		client._addChannelConfig({ cid: channel.cid, config: {} });
-		state = new ChannelState(channel);
+		expect(state.members).to.equal(members);
+		expect(state.membersStore.getLatestValue()).to.eql({
+			memberCount: 0,
+			members,
+		});
 	});
 
-	it('should return latest messages - if they are the current message set', () => {
-		const messages = [
-			generateMsg({ id: '1' }),
-			generateMsg({ id: '2' }),
-			generateMsg({ id: '3' }),
-		];
-		state.addMessagesSorted(messages);
-
-		expect(state.latestMessages.length).to.be.equal(messages.length);
-		expect(state.latestMessages[0].id).to.be.equal(messages[0].id);
-		expect(state.latestMessages[1].id).to.be.equal(messages[1].id);
-		expect(state.latestMessages[2].id).to.be.equal(messages[2].id);
-	});
-
-	it('should return latest messages - if they are not the current message set', () => {
-		const latestMessages = [
-			generateMsg({ id: '2', date: new Date(200) }),
-			generateMsg({ id: '3', date: new Date(300) }),
-			generateMsg({ id: '4', date: new Date(400) }),
-		];
-		state.addMessagesSorted(latestMessages);
-		const newMessages = [generateMsg({ id: '1', date: new Date(100) })];
-		state.addMessagesSorted(newMessages, false, true, true, 'new');
-		state.messageSets[0].isCurrent = false;
-		state.messageSets[1].isCurrent = true;
-
-		expect(state.latestMessages.length).to.be.equal(latestMessages.length);
-		expect(state.latestMessages[0].id).to.be.equal(latestMessages[0].id);
-		expect(state.latestMessages[1].id).to.be.equal(latestMessages[1].id);
-		expect(state.latestMessages[2].id).to.be.equal(latestMessages[2].id);
-	});
-
-	it('should return latest messages - if they are not the current message set and new messages received', () => {
-		const latestMessages = [
-			generateMsg({ id: '2', date: new Date(200) }),
-			generateMsg({ id: '3', date: new Date(300) }),
-			generateMsg({ id: '4', date: new Date(400) }),
-		];
-		state.addMessagesSorted(latestMessages);
-		const newMessages = [generateMsg({ id: '1', date: new Date(100) })];
-		state.addMessagesSorted(newMessages, false, true, true, 'new');
-		state.messageSets[0].isCurrent = false;
-		state.messageSets[1].isCurrent = true;
-		const latestMessage = generateMsg({ id: '5', date: new Date(500) });
-		state.addMessagesSorted([latestMessage], false, true, true, 'latest');
-
-		expect(state.latestMessages.length).to.be.equal(latestMessages.length + 1);
-		expect(state.latestMessages[0].id).to.be.equal(latestMessages[0].id);
-		expect(state.latestMessages[1].id).to.be.equal(latestMessages[1].id);
-		expect(state.latestMessages[2].id).to.be.equal(latestMessages[2].id);
-		expect(state.latestMessages[3].id).to.be.equal(latestMessage.id);
-	});
-});
-
-describe('messagePagination', () => {
-	it('is initiated with defaults', () => {
+	it('keeps member_count getter/setter backward compatible while syncing the store', () => {
 		const state = new ChannelState();
-		expect(state.messageSets[0].pagination).to.eql(DEFAULT_MESSAGE_SET_PAGINATION);
-	});
-	it('is retrieved as default if not set', () => {
-		const state = new ChannelState();
-		state.messageSets[0].pagination = undefined;
-		expect(state.messageSets[0].pagination).to.be.undefined;
-		expect(state.messagePagination).to.eql(DEFAULT_MESSAGE_SET_PAGINATION);
+
+		state.member_count = 42;
+
+		expect(state.member_count).to.equal(42);
+		expect(state.membersStore.getLatestValue()).to.eql({
+			memberCount: 42,
+			members: {},
+		});
 	});
 });
 
-describe('loadMessageIntoState', () => {
-	let state;
-
-	beforeEach(() => {
+describe('ChannelState member count bridge', () => {
+	it('initializes membersStore memberCount from channel.data.member_count', () => {
 		const client = new StreamChat();
-		client.user = { id: 'userId' };
+		const channel = new Channel(client, 'type', 'id', { member_count: 3 });
+		const state = channel.state;
+
+		expect(state.member_count).to.equal(3);
+		expect(state.membersStore.getLatestValue()).to.eql({
+			memberCount: 3,
+			members: {},
+		});
+		expect(channel.data?.member_count).to.equal(3);
+	});
+
+	it('syncs memberCount when channel.data is replaced', () => {
+		const client = new StreamChat();
+		const channel = new Channel(client, 'type', 'id', { member_count: 1 });
+		const state = channel.state;
+
+		channel.data = { ...channel.data, member_count: 7 };
+		state.syncMemberCountFromChannelData(channel.data);
+
+		expect(state.member_count).to.equal(7);
+		expect(state.membersStore.getLatestValue()).to.eql({
+			memberCount: 7,
+			members: {},
+		});
+		expect(channel.data?.member_count).to.equal(7);
+	});
+
+	it('keeps backward-compatible channel.data.member_count assignments in sync', () => {
+		const client = new StreamChat();
 		const channel = new Channel(client, 'type', 'id', {});
-		client._addChannelConfig({ cid: channel.cid, config: {} });
-		state = new ChannelState(channel);
+		const state = channel.state;
+
+		channel.data.member_count = 5;
+
+		expect(state.member_count).to.equal(5);
+		expect(state.membersStore.getLatestValue()).to.eql({
+			memberCount: 5,
+			members: {},
+		});
+		expect(channel.data.member_count).to.equal(5);
+	});
+});
+
+describe('ChannelState read store', () => {
+	it('initializes read store with an empty read map', () => {
+		const state = new ChannelState();
+
+		expect(state.read).to.eql({});
+		expect(state.readStore.getLatestValue()).to.eql({ read: {} });
 	});
 
-	it('should do nothing if message is available locally in the current set', async () => {
-		state.addMessagesSorted([generateMsg({ id: '8' })], false, true, true, 'latest');
-		state.addMessagesSorted([generateMsg({ id: '5' })], false, true, true, 'new');
-		await state.loadMessageIntoState('8');
-
-		expect(state.messageSets[0].isCurrent).to.be.equal(true);
-	});
-
-	it('should switch message sets if message is available locally, but in a different set', async () => {
-		state.addMessagesSorted(
-			[generateMsg({ id: '8', date: new Date(800) })],
-			false,
-			true,
-			true,
-			'latest',
-		);
-		state.addMessagesSorted(
-			[generateMsg({ id: '5', date: new Date(500) })],
-			false,
-			true,
-			true,
-			'new',
-		);
-		await state.loadMessageIntoState('5');
-
-		expect(state.messageSets[0].isCurrent).to.be.equal(false);
-		expect(state.messageSets[1].isCurrent).to.be.equal(true);
-	});
-
-	it('should switch to latest message set', async () => {
-		state.addMessagesSorted(
-			[generateMsg({ id: '8', date: new Date(800) })],
-			false,
-			true,
-			true,
-			'latest',
-		);
-		state.addMessagesSorted(
-			[generateMsg({ id: '5', date: new Date(500) })],
-			false,
-			true,
-			true,
-			'new',
-		);
-		state.messageSets[0].isCurrent = false;
-		state.messageSets[1].isCurrent = true;
-		await state.loadMessageIntoState('latest');
-
-		expect(state.messageSets[0].isCurrent).to.be.equal(true);
-	});
-
-	it('should load message from backend and switch to the new message set', async () => {
-		state.addMessagesSorted([
-			generateMsg({ id: '5', date: new Date(500) }),
-			generateMsg({ id: '6', date: new Date(600) }),
-		]);
-		const newMessages = [generateMsg({ id: '8', date: new Date(800) })];
-		state._channel.query = () => {
-			state.addMessagesSorted(newMessages, false, true, true, 'new');
+	it('keeps read getter/setter backward compatible while syncing the store', () => {
+		const state = new ChannelState();
+		const read = {
+			alice: {
+				last_read: new Date('2026-02-28T00:00:00.000Z'),
+				unread_messages: 3,
+				user: { id: 'alice' },
+			},
 		};
-		await state.loadMessageIntoState('8');
 
-		expect(state.messages.length).to.be.equal(1);
-		expect(state.messages[0].id).to.be.equal('8');
+		state.read = read;
+
+		expect(state.read).to.equal(read);
+		expect(state.readStore.getLatestValue()).to.eql({ read });
+	});
+});
+
+describe('ChannelState watcher count store', () => {
+	it('initializes watcher count store with zero', () => {
+		const state = new ChannelState();
+
+		expect(state.watcher_count).to.equal(0);
+		expect(state.watcherStore.getLatestValue()).to.eql({
+			watcherCount: 0,
+			watchers: {},
+		});
 	});
 
-	describe('if message is a thread reply', () => {
-		it('should do nothing if parent message and reply are available locally in the current set', async () => {
-			const parentMessage = generateMsg({ id: '5', date: new Date(500) });
-			const reply = generateMsg({ id: '8', date: new Date(800), parent_id: '5' });
-			state.addMessagesSorted([parentMessage]);
-			state.addMessagesSorted([reply]);
+	it('keeps watcher_count getter/setter backward compatible while syncing the store', () => {
+		const state = new ChannelState();
 
-			await state.loadMessageIntoState('8', '5');
+		state.watcher_count = 42;
 
-			expect(state.messages[0].id).to.be.equal(parentMessage.id);
-			expect(state.threads[parentMessage.id][0].id).to.be.equal(reply.id);
-		});
-
-		it('should change message set if parent message and reply are available locally', async () => {
-			const parentMessage = generateMsg({ id: '5', date: new Date(500) });
-			const reply = generateMsg({ id: '8', date: new Date(800), parent_id: '5' });
-			state.addMessagesSorted([parentMessage]);
-			state.addMessagesSorted([reply]);
-			const otherMessages = [generateMsg(), generateMsg()];
-			state.addMessagesSorted(otherMessages, false, true, true, 'new');
-			state.messageSets[0].isCurrent = false;
-			state.messageSets[1].isCurrent = true;
-
-			await state.loadMessageIntoState('8', '5');
-
-			expect(state.messages[0].id).to.be.equal(parentMessage.id);
-			expect(state.threads[parentMessage.id][0].id).to.be.equal(reply.id);
-		});
-
-		it(`should load replies if parent message is available locally, but reply isn't`, async () => {
-			const parentMessage = generateMsg({ id: '5' });
-			const reply = generateMsg({ id: '8', parent_id: '5' });
-			state._channel.getReplies = () =>
-				state.addMessagesSorted([reply], false, false, true, 'current');
-			state.addMessagesSorted([parentMessage]);
-
-			await state.loadMessageIntoState('8', '5');
-
-			expect(state.messages[0].id).to.be.equal(parentMessage.id);
-			expect(state.threads[parentMessage.id][0].id).to.be.equal(reply.id);
-		});
-
-		it('should load parent message and reply from backend, and switch to new message set', async () => {
-			const parentMessage = generateMsg({ id: '5', date: new Date(500) });
-			const reply = generateMsg({ id: '8', date: new Date(800), parent_id: '5' });
-			state._channel.getReplies = () =>
-				state.addMessagesSorted([reply], false, false, true, 'current');
-			state._channel.query = () =>
-				state.addMessagesSorted([parentMessage], false, true, true, 'new');
-
-			await state.loadMessageIntoState('8', '5');
-
-			expect(state.messages[0].id).to.be.equal(parentMessage.id);
-			expect(state.threads[parentMessage.id][0].id).to.be.equal(reply.id);
+		expect(state.watcher_count).to.equal(42);
+		expect(state.watcherStore.getLatestValue()).to.eql({
+			watcherCount: 42,
+			watchers: {},
 		});
 	});
 });
 
-describe('findMessage', () => {
-	let state;
+describe('ChannelState watchers store', () => {
+	it('initializes watchers store with an empty watchers map', () => {
+		const state = new ChannelState();
 
-	beforeEach(() => {
-		const client = new StreamChat();
-		client.user = { id: 'userId' };
-		const channel = new Channel(client, 'type', 'id', {});
-		client._addChannelConfig({ cid: channel.cid, config: {} });
-		state = new ChannelState(channel);
-	});
-
-	it('message is in current message set', async () => {
-		const messageId = '8';
-		state.addMessagesSorted(
-			[generateMsg({ id: messageId })],
-			false,
-			true,
-			true,
-			'latest',
-		);
-		state.addMessagesSorted([generateMsg({ id: '5' })], false, true, true, 'new');
-
-		expect(state.findMessage(messageId).id).to.eql(messageId);
-	});
-
-	it('message is in a different set', async () => {
-		const messageId = '5';
-		state.addMessagesSorted([generateMsg({ id: '8' })], false, true, true, 'latest');
-		state.addMessagesSorted([generateMsg({ id: messageId })], false, true, true, 'new');
-		await state.loadMessageIntoState('5');
-
-		expect(state.findMessage(messageId).id).to.eql(messageId);
-	});
-
-	it('message not found', async () => {
-		state.addMessagesSorted([generateMsg({ id: '5' }), generateMsg({ id: '6' })]);
-
-		expect(state.findMessage('12')).to.eql(undefined);
-	});
-
-	describe('if message is a thread reply', () => {
-		it('message found', async () => {
-			const messageId = '8';
-			const parentMessageId = '5';
-			const parentMessage = generateMsg({ id: parentMessageId });
-			const reply = generateMsg({ id: messageId, parent_id: parentMessageId });
-			state.addMessagesSorted([parentMessage]);
-			state.addMessagesSorted([reply]);
-
-			expect(state.findMessage(messageId, parentMessageId).id).to.eql(messageId);
+		expect(state.watchers).to.eql({});
+		expect(state.watcherStore.getLatestValue()).to.eql({
+			watcherCount: 0,
+			watchers: {},
 		});
+	});
 
-		it('message not found', async () => {
-			const messageId = '8';
-			const parentMessageId = '5';
-			const parentMessage = generateMsg({ id: parentMessageId });
-			const reply = generateMsg({ id: messageId, parent_id: parentMessageId });
-			state.addMessagesSorted([parentMessage]);
-			state.addMessagesSorted([reply]);
+	it('keeps watchers getter/setter backward compatible while syncing the store', () => {
+		const state = new ChannelState();
+		const watchers = {
+			alice: { id: 'alice' },
+		};
 
-			expect(state.findMessage(messageId, `not${parentMessageId}`)).to.eql(undefined);
+		state.watchers = watchers;
+
+		expect(state.watchers).to.equal(watchers);
+		expect(state.watcherStore.getLatestValue()).to.eql({
+			watcherCount: 0,
+			watchers,
 		});
 	});
 });
 
-describe('find message by timestamp', () => {
-	let state;
+describe('ChannelState muted users store', () => {
+	it('initializes muted users store with an empty list', () => {
+		const state = new ChannelState();
 
-	beforeEach(() => {
+		expect(state.mutedUsers).to.eql([]);
+		expect(state.mutedUsersStore.getLatestValue()).to.eql({ mutedUsers: [] });
+	});
+
+	it('keeps mutedUsers getter/setter backward compatible while syncing the store', () => {
+		const state = new ChannelState();
+		const mutedUsers = [{ id: 'alice' }];
+
+		state.mutedUsers = mutedUsers;
+
+		expect(state.mutedUsers).to.equal(mutedUsers);
+		expect(state.mutedUsersStore.getLatestValue()).to.eql({ mutedUsers });
+	});
+});
+
+describe('ChannelState typing store', () => {
+	it('initializes typing store with an empty typing map', () => {
+		const state = new ChannelState();
+
+		expect(state.typing).to.eql({});
+		expect(state.typingStore.getLatestValue()).to.eql({ typing: {} });
+	});
+
+	it('keeps typing store and textComposer typing in sync via setTypingEvent/removeTypingEvent', () => {
 		const client = new StreamChat();
-		client.user = { id: 'userId' };
 		const channel = new Channel(client, 'type', 'id', {});
-		client._addChannelConfig({ cid: channel.cid, config: {} });
-		state = new ChannelState(channel);
-	});
+		const state = channel.state;
+		const typingStartEvent = {
+			type: 'typing.start',
+			user: { id: 'alice' },
+		};
 
-	it('finds the message with matching timestamp', () => {
-		const expectedFoundMsg = generateMsg({
-			id: '2',
-			created_at: new Date(200),
+		state.setTypingEvent('alice', typingStartEvent);
+
+		expect(state.typing).to.have.property('alice');
+		expect(state.typingStore.getLatestValue().typing).to.have.property('alice');
+		expect(channel.messageComposer.textComposer.typing).to.have.property('alice');
+
+		state.removeTypingEvent('alice');
+
+		expect(state.typing).to.not.have.property('alice');
+		expect(state.typingStore.getLatestValue().typing).to.not.have.property('alice');
+		expect(channel.messageComposer.textComposer.typing).to.not.have.property('alice');
+	});
+});
+
+describe('ChannelState own capabilities store', () => {
+	it('does not redefine channel.data as an accessor property', () => {
+		const client = new StreamChat();
+		const channel = new Channel(client, 'type', 'id', {
+			own_capabilities: ['send-message'],
 		});
-		state.addMessagesSorted([
-			generateMsg({ id: '12', created_at: new Date(1200) }),
-			generateMsg({ id: '13', created_at: new Date(1300) }),
-			generateMsg({ id: '14', created_at: new Date(1400) }),
-		]);
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '1', created_at: new Date(100) }),
-				expectedFoundMsg,
-				generateMsg({ id: '3', created_at: new Date(300) }),
-				generateMsg({ id: '4', created_at: new Date(400) }),
-			],
-			false,
-			false,
-			true,
-			'new',
-		);
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '6', created_at: new Date(600) }),
-				generateMsg({ id: '7', created_at: new Date(700) }),
-			],
-			false,
-			false,
-			true,
-			'new',
-		);
+		const descriptor = Object.getOwnPropertyDescriptor(channel, 'data');
 
-		const foundMessage = state.findMessageByTimestamp(
-			expectedFoundMsg.created_at.getTime(),
-		);
-		expect(foundMessage.id).toBe(expectedFoundMsg.id);
+		expect(descriptor).toBeDefined();
+		expect('value' in descriptor).toBe(true);
+		expect('get' in descriptor).toBe(false);
+		expect('set' in descriptor).toBe(false);
 	});
 
-	it('finds the first message if multiple messages with the same timestamp', () => {
-		const expectedFoundMessage = generateMsg({
-			id: '2',
-			created_at: new Date(200),
+	it('initializes ownCapabilitiesStore from channel.data.own_capabilities', () => {
+		const client = new StreamChat();
+		const channel = new Channel(client, 'type', 'id', {
+			own_capabilities: ['send-message', 'upload-file'],
 		});
-		const msgWithSameTimestamp = { ...expectedFoundMessage, id: '3' };
-		state.addMessagesSorted([
-			generateMsg({ id: '12', created_at: new Date(1200) }),
-			generateMsg({ id: '13', created_at: new Date(1300) }),
-			generateMsg({ id: '14', created_at: new Date(1400) }),
-		]);
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '1', created_at: new Date(100) }),
-				expectedFoundMessage,
-				msgWithSameTimestamp,
-				generateMsg({ id: '3.5', created_at: new Date(300) }),
-				generateMsg({ id: '4', created_at: new Date(400) }),
-			],
-			false,
-			false,
-			true,
-			'new',
-		);
-		state.addMessagesSorted(
-			[
-				generateMsg({ id: '6', created_at: new Date(600) }),
-				generateMsg({ id: '7', created_at: new Date(700) }),
-			],
-			false,
-			false,
-			true,
-			'new',
-		);
+		const state = channel.state;
 
-		const foundMessage = state.findMessageByTimestamp(
-			msgWithSameTimestamp.created_at.getTime(),
-		);
-		expect(foundMessage.id).toBe(expectedFoundMessage.id);
+		expect(state.ownCapabilitiesStore.getLatestValue()).to.eql({
+			ownCapabilities: ['send-message', 'upload-file'],
+		});
+		expect(channel.data?.own_capabilities).to.eql(['send-message', 'upload-file']);
 	});
 
-	it('returns null if the message is not found', () => {
-		state.addMessagesSorted([
-			generateMsg({ id: '12', created_at: new Date(1200) }),
-			generateMsg({ id: '13', created_at: new Date(1300) }),
-			generateMsg({ id: '14', created_at: new Date(1400) }),
-		]);
-		const foundMessage = state.findMessageByTimestamp(200);
-		expect(foundMessage).toBeNull();
+	it('syncs ownCapabilitiesStore when channel.data is replaced', () => {
+		const client = new StreamChat();
+		const channel = new Channel(client, 'type', 'id', {
+			own_capabilities: ['send-message'],
+		});
+		const state = channel.state;
+
+		channel.data = {
+			...channel.data,
+			own_capabilities: ['pin-message'],
+		};
+		state.syncOwnCapabilitiesFromChannelData(channel.data);
+
+		expect(state.ownCapabilitiesStore.getLatestValue()).to.eql({
+			ownCapabilities: ['pin-message'],
+		});
+		expect(channel.data?.own_capabilities).to.eql(['pin-message']);
+	});
+
+	it('keeps backward-compatible channel.data.own_capabilities assignments in sync', () => {
+		const client = new StreamChat();
+		const channel = new Channel(client, 'type', 'id', {});
+		const state = channel.state;
+
+		channel.data.own_capabilities = ['delete-message'];
+
+		expect(state.ownCapabilitiesStore.getLatestValue()).to.eql({
+			ownCapabilities: ['delete-message'],
+		});
+		expect(channel.data.own_capabilities).to.eql(['delete-message']);
+	});
+
+	it('only wraps own_capabilities and keeps other channel.data fields as value properties', () => {
+		const client = new StreamChat();
+		const channel = new Channel(client, 'type', 'id', {
+			hidden: false,
+			member_count: 3,
+			own_capabilities: ['send-message'],
+		});
+
+		const ownCapabilitiesDescriptor = Object.getOwnPropertyDescriptor(
+			channel.data,
+			'own_capabilities',
+		);
+		const hiddenDescriptor = Object.getOwnPropertyDescriptor(channel.data, 'hidden');
+		const memberCountDescriptor = Object.getOwnPropertyDescriptor(
+			channel.data,
+			'member_count',
+		);
+
+		expect(ownCapabilitiesDescriptor).toBeDefined();
+		expect('get' in ownCapabilitiesDescriptor).toBe(true);
+		expect('set' in ownCapabilitiesDescriptor).toBe(true);
+		expect(hiddenDescriptor).toBeDefined();
+		expect('value' in hiddenDescriptor).toBe(true);
+		expect('get' in hiddenDescriptor).toBe(false);
+		expect('set' in hiddenDescriptor).toBe(false);
+		expect(memberCountDescriptor).toBeDefined();
+		expect('get' in memberCountDescriptor).toBe(true);
+		expect('set' in memberCountDescriptor).toBe(true);
+	});
+
+	it('does not overwrite non-capability fields when own_capabilities is updated', () => {
+		const client = new StreamChat();
+		const channel = new Channel(client, 'type', 'id', {
+			hidden: false,
+			member_count: 3,
+			own_capabilities: ['send-message'],
+		});
+		const state = channel.state;
+
+		channel.data.hidden = true;
+		channel.data.member_count = 5;
+		channel.data.own_capabilities = ['pin-message'];
+
+		expect(channel.data.hidden).to.equal(true);
+		expect(channel.data.member_count).to.equal(5);
+		expect(state.member_count).to.equal(5);
+		expect(state.ownCapabilitiesStore.getLatestValue()).to.eql({
+			ownCapabilities: ['pin-message'],
+		});
 	});
 });

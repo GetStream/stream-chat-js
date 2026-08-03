@@ -55,9 +55,9 @@ export type Notification = {
    *   'validation:attachment:size:exceeded'    // File size too large
    *   'validation:attachment:count:exceeded'   // Too many attachments
    *
-   *   Message related errors
-   *   'api:message:send:failed'          // Message send failed
-   *   'validation:message:content:empty' // Message content validation failed
+   *   MessageRequest related errors
+   *   'api:message:send:failed'          // MessageRequest send failed
+   *   'validation:message:content:empty' // MessageRequest content validation failed
    *
    *   Channel related errors
    *   'api:channel:join:failed'          // Channel join failed

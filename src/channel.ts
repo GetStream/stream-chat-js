@@ -3,11 +3,15 @@ import { ChannelState } from './channel_state';
 import { CooldownTimer } from './CooldownTimer';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
+import type { ReadStoreReconcileMeta } from './messageDelivery';
+import { MessagePaginator, PinnedMessagePaginator } from './pagination/paginators';
+import { MessageOperations } from './messageOperations';
 import {
   channelHasReadEvents,
+  formatMessage,
   generateChannelTempCid,
+  localMessageToNewMessagePayload,
   logChatPromiseExecution,
-  messageSetPagination,
 } from './utils';
 import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
@@ -23,7 +27,9 @@ import type {
   ChannelStateResponseFields,
   ChannelUpdateOptions,
   CreateDraftResponse,
+  DeleteMessageOptions,
   Event,
+  EventAPIResponse,
   EventHandler,
   EventPayload,
   EventType,
@@ -32,6 +38,7 @@ import type {
   LocalMessage,
   MarkReadRequest,
   MarkUnreadRequest,
+  MessagePaginationOptions,
   MessageRequest,
   MessageResponse,
   MessageSetType,
@@ -41,13 +48,16 @@ import type {
   ReactionAPIResponse,
   ReactionResponse,
   SearchPayload,
+  SendMessageOptions,
   SharedLocation,
   UnBanUserOptions,
   UpdateChannelPartialRequest,
   UpdateLiveLocationRequest,
+  UpdateMessageOptions,
   UserResponse,
 } from './types';
 import type { RoleName } from './permissions';
+import { StateStore } from './store';
 import type {
   ChannelMemberRequest as Gen_ChannelMemberRequest,
   ChannelPushPreferencesResponse as Gen_ChannelPushPreferencesResponse,
@@ -66,6 +76,71 @@ import { ChannelApi } from './gen/chat/ChannelApi';
 
 const logger = chatLoggerSystem.getLogger('channel');
 const offlineDbLogger = chatLoggerSystem.getLogger('offline-db');
+
+// todo: move to dedicated file
+export type SendMessageWithStateUpdateParams = {
+  localMessage: LocalMessage;
+  message?: MessageRequest;
+  options?: SendMessageOptions;
+  /**
+   * Per-call override for the send/retry request (advanced).
+   * If set, it takes precedence over channel instance configuration handlers.
+   */
+  sendMessageRequestFn?: CustomSendMessageRequestFn;
+};
+
+export type RetrySendMessageWithLocalUpdateParams = Omit<
+  SendMessageWithStateUpdateParams,
+  'message'
+>;
+
+export type UpdateMessageWithStateUpdateParams = {
+  localMessage: LocalMessage;
+  options?: UpdateMessageOptions;
+  /**
+   * Per-call override for the update request (advanced).
+   * If set, it takes precedence over channel instance configuration handlers.
+   */
+  updateMessageRequestFn?: CustomUpdateMessageRequestFn;
+};
+
+export type DeleteMessageWithStateUpdateParams = {
+  localMessage: LocalMessage;
+  options?: DeleteMessageOptions;
+  /**
+   * Per-call override for the delete request (advanced).
+   * If set, it takes precedence over channel instance configuration handlers.
+   */
+  deleteMessageRequestFn?: CustomDeleteMessageRequestFn;
+};
+
+// Custom request function types for configuration
+export type CustomSendMessageRequestFn = (
+  params: Omit<SendMessageWithStateUpdateParams, 'sendMessageRequestFn'>,
+) => Promise<{ message: MessageResponse }>;
+
+export type CustomUpdateMessageRequestFn = (
+  params: Omit<UpdateMessageWithStateUpdateParams, 'updateMessageRequestFn'>,
+) => Promise<{ message: MessageResponse }>;
+
+export type CustomDeleteMessageRequestFn = (
+  params: Omit<DeleteMessageWithStateUpdateParams, 'deleteMessageRequestFn'>,
+) => Promise<{ message: MessageResponse }>;
+
+export type CustomMarkReadRequestFn = (params: {
+  channel: Channel;
+  options?: MarkReadRequest;
+}) => Promise<EventAPIResponse | null>;
+
+export type ChannelInstanceConfig = {
+  requestHandlers?: {
+    deleteMessageRequest?: CustomDeleteMessageRequestFn;
+    markReadRequest?: CustomMarkReadRequestFn;
+    sendMessageRequest?: CustomSendMessageRequestFn;
+    retrySendMessageRequest?: CustomSendMessageRequestFn;
+    updateMessageRequest?: CustomUpdateMessageRequestFn;
+  };
+};
 
 /**
  * The Channel class manages its own state.
@@ -98,8 +173,12 @@ export class Channel extends ChannelApi {
   isTyping: boolean;
   disconnected: boolean;
   push_preferences?: Gen_ChannelPushPreferencesResponse;
+  public readonly configState = new StateStore<ChannelInstanceConfig>({});
   public readonly messageComposer: MessageComposer;
   public readonly messageReceiptsTracker: MessageReceiptsTracker;
+  public readonly messagePaginator: MessagePaginator;
+  public readonly pinnedMessagesPaginator: PinnedMessagePaginator;
+  public readonly messageOperations: MessageOperations;
   public readonly cooldownTimer: CooldownTimer;
 
   /**
@@ -131,9 +210,9 @@ export class Channel extends ChannelApi {
 
     this._client = client;
     // used by the frontend, gets updated:
-    // this.data = data;
+    this.data = data as Partial<ChannelResponse>;
     // this._data is used for the requests...
-    this._data = data;
+    this._data = { ...data };
     this.cid = `${type}:${id}`;
     this.listeners = new Map();
     // perhaps the state variable should be private
@@ -149,14 +228,78 @@ export class Channel extends ChannelApi {
       compositionContext: this,
     });
 
-    this.messageReceiptsTracker = new MessageReceiptsTracker({
-      locateMessage: (timestampMs) => {
-        const msg = this.state.findMessageByTimestamp(timestampMs);
-        return msg && { timestampMs, msgId: msg.id };
-      },
-    });
+    // Created before MessageReceiptsTracker and CooldownTimer: both read the message paginator
+    // (receipts resolve read cursors via findItemByTimestamp; CooldownTimer.refresh reads the
+    // latest window at construction).
+    this.messagePaginator = new MessagePaginator({ channel: this });
+    this.pinnedMessagesPaginator = new PinnedMessagePaginator({ channel: this });
+
+    this.messageReceiptsTracker = new MessageReceiptsTracker({ channel: this });
+    this.messageReceiptsTracker.registerSubscriptions();
 
     this.cooldownTimer = new CooldownTimer({ channel: this });
+
+    this.messageOperations = new MessageOperations({
+      ingest: (m) => this.messagePaginator.ingestItem(m),
+      get: (id) => this.messagePaginator.getItem(id),
+      handlers: () => {
+        const { requestHandlers } = this.configState.getLatestValue();
+        const deleteMessageRequest = requestHandlers?.deleteMessageRequest;
+        const sendMessageRequest = requestHandlers?.sendMessageRequest;
+        const retrySendMessageRequest = requestHandlers?.retrySendMessageRequest;
+        const updateMessageRequest = requestHandlers?.updateMessageRequest;
+        return {
+          delete: deleteMessageRequest
+            ? (p) =>
+                deleteMessageRequest({
+                  localMessage: p.localMessage,
+                  options: p.options,
+                })
+            : undefined,
+          send: sendMessageRequest
+            ? (p) =>
+                sendMessageRequest({
+                  localMessage: p.localMessage,
+                  message: p.message,
+                  options: p.options,
+                })
+            : undefined,
+          retry: retrySendMessageRequest
+            ? (p) =>
+                retrySendMessageRequest({
+                  localMessage: p.localMessage,
+                  message: p.message,
+                  options: p.options,
+                })
+            : undefined,
+          update: updateMessageRequest
+            ? (p) =>
+                updateMessageRequest({
+                  localMessage: p.localMessage,
+                  options: p.options,
+                })
+            : undefined,
+        };
+      },
+      defaults: {
+        delete: async (id, o) => {
+          const result = await this.getClient().deleteMessage({ id, ...o });
+          return { message: result.message };
+        },
+        send: async (m, o) => {
+          const result = await this.sendMessage({ message: m, ...o });
+          return { message: result.message };
+        },
+        update: async (m, o) => {
+          const result = await this.getClient().updateMessage({
+            id: m.id,
+            message: localMessageToNewMessagePayload(m),
+            ...o,
+          });
+          return { message: result.message };
+        },
+      },
+    });
   }
 
   /**
@@ -216,7 +359,65 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Upload a file to this channel's file endpoint (multipart). Forwards to the client's `sendFile` implementation.
+   * Sends a message with optimistic local state update.
+   */
+  async sendMessageWithLocalUpdate(
+    params: SendMessageWithStateUpdateParams,
+  ): Promise<void> {
+    await this.messageOperations.send(
+      {
+        localMessage: params.localMessage,
+        message: params.message,
+        options: params.options,
+      },
+      params.sendMessageRequestFn,
+    );
+    if (this.messageComposer.config.text.publishTypingEvents) await this.stopTyping();
+  }
+
+  /**
+   * Retry sending a failed message.
+   */
+  async retrySendMessageWithLocalUpdate(
+    params: Omit<SendMessageWithStateUpdateParams, 'message'>,
+  ) {
+    await this.messageOperations.retry(
+      {
+        localMessage: { ...params.localMessage, type: 'regular' },
+        options: params.options,
+      },
+      params.sendMessageRequestFn,
+    );
+  }
+
+  /**
+   * Updates a message with optimistic local state update.
+   */
+  async updateMessageWithLocalUpdate(params: UpdateMessageWithStateUpdateParams) {
+    await this.messageOperations.update(
+      {
+        localMessage: params.localMessage,
+        options: params.options,
+      },
+      params.updateMessageRequestFn,
+    );
+  }
+
+  /**
+   * Deletes a message with local state update.
+   */
+  async deleteMessageWithLocalUpdate(params: DeleteMessageWithStateUpdateParams) {
+    await this.messageOperations.delete(
+      {
+        localMessage: params.localMessage,
+        options: params.options,
+      },
+      params.deleteMessageRequestFn,
+    );
+  }
+
+  /**
+   * Upload a file to this channel’s file endpoint (multipart). Forwards to the client’s `sendFile` implementation.
    *
    * @param uri - File source: URL string, `File`, `Buffer`, or readable stream (Node).
    * @param name - File name sent in the multipart body (optional).
@@ -377,7 +578,7 @@ export class Channel extends ChannelApi {
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
-        const message = this.state.messages.find(({ id }) => id === request.id);
+        const message = this.messagePaginator.getItem(request.id);
         const reaction = {
           message_id: request.id,
           type: request.type,
@@ -427,8 +628,10 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   override async update(request?: Gen_UpdateChannelRequest) {
+    const previousData = this.data;
     const data = await super.update(request);
     this.data = data.channel;
+    this._syncStateFromChannelData(this.data, previousData);
     return data;
   }
 
@@ -451,7 +654,9 @@ export class Channel extends ChannelApi {
       newCapabilities &&
       [...currentCapabilities].sort().join() !== [...newCapabilities].sort().join();
 
+    const previousData = this.data;
     this.data = channel;
+    this._syncStateFromChannelData(this.data, previousData);
     // If the capabiltities are changed, we trigger the `capabilities.changed` event.
     if (capabilitiesChanged) {
       this.getClient().dispatchEvent({
@@ -541,17 +746,17 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   async addMembers(
-    members: string[] | Gen_ChannelMemberRequest[],
+    members: string[] | Array<Gen_ChannelMemberRequest>,
     message?: MessageRequest,
     options: ChannelUpdateOptions = {},
   ) {
-    const adjustedMembers = members.map(
-      (memberOrId) =>
-        ({
-          user_id: typeof memberOrId === 'string' ? memberOrId : memberOrId.user_id,
-        }) satisfies Gen_ChannelMemberRequest,
-    );
-    return await this.update({ add_members: adjustedMembers, message, ...options });
+    return await this.update({
+      add_members: members.map((member) =>
+        typeof member === 'string' ? { user_id: member } : member,
+      ),
+      message,
+      ...options,
+    });
   }
 
   /**
@@ -627,18 +832,17 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   async inviteMembers(
-    members: string[] | Gen_ChannelMemberRequest[],
+    members: string[] | Required<Omit<Gen_ChannelMemberRequest, 'channel_role'>>[],
     message?: MessageRequest,
     options: ChannelUpdateOptions = {},
   ) {
-    const adjustedMembers = members.map(
-      (memberOrId) =>
-        ({
-          user_id: typeof memberOrId === 'string' ? memberOrId : memberOrId.user_id,
-        }) satisfies Gen_ChannelMemberRequest,
-    );
-
-    return await this.update({ invites: adjustedMembers, message, ...options });
+    return await this.update({
+      invites: members.map((member) =>
+        typeof member === 'string' ? { user_id: member } : member,
+      ),
+      message,
+      ...options,
+    });
   }
 
   /**
@@ -703,7 +907,7 @@ export class Channel extends ChannelApi {
    * await channel.unmute({ user_id: userId });
    *
    * @param options - Unmute options (optional, defaults to `{}`).
-   * @param opts.user_id - User ID (optional).
+   * @param options.user_id - User ID (optional).
    * @returns The server response.
    */
   async unmute(options?: Gen_UnmuteChannelRequest) {
@@ -774,7 +978,7 @@ export class Channel extends ChannelApi {
   sendAction(messageId: string, formData: Record<string, string>) {
     this._checkInitialized();
     if (!messageId) {
-      throw Error(`Message id is missing`);
+      throw Error(`Message ID is missing`);
     }
     return this.getClient().runMessageAction({
       id: messageId,
@@ -901,27 +1105,6 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Returns the last message, accounting for the fact that the last few messages might not be perfectly sorted.
-   *
-   * @returns The latest local message, or `undefined` if there are no messages.
-   */
-  lastMessage(): LocalMessage | undefined {
-    // get last 5 messages, sort, return the latest
-    // get a slice of the last 5
-    let min = this.state.latestMessages.length - 5;
-    if (min < 0) {
-      min = 0;
-    }
-    const max = this.state.latestMessages.length + 1;
-    const messageSlice = this.state.latestMessages.slice(min, max);
-
-    // sort by pk desc
-    messageSlice.sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
-
-    return messageSlice[0];
-  }
-
-  /**
    * Run this user's mark-read reporter for this channel. Delegates to
    * `MessageDeliveryReporter`, which batches the underlying `markRead` request
    * with the user's read receipts state.
@@ -987,7 +1170,7 @@ export class Channel extends ChannelApi {
       channel_type: this.type,
       cid: this.cid,
       created_at: new Date(),
-      last_read_message_id: this.lastMessage()?.id,
+      last_read_message_id: this.messagePaginator.headmostItem?.id,
       team: this.data?.team,
       type: 'message.read_locally',
       user: client.user as UserResponse,
@@ -1035,7 +1218,13 @@ export class Channel extends ChannelApi {
     const combined = { ...defaultOptions, ...options };
     const state = await this.query(combined, 'latest');
     this.initialized = true;
+    const previousData = this.data;
     this.data = state.channel;
+    this._syncStateFromChannelData(this.data, previousData);
+
+    // The message paginator is seeded synchronously inside query() (before read-state hydration),
+    // so a channel opened via watch() alone — a deep-link restore, a search result, a freshly
+    // created DM — already has its latest page loaded here.
 
     logger.withExtraTags('watch', this.cid).info('Started watching the channel.');
     return state;
@@ -1067,11 +1256,8 @@ export class Channel extends ChannelApi {
   async getReplies(request: GetRepliesRequest) {
     const data = await this.getClient().getReplies(request);
 
-    // add any messages to our thread state
-    if (data.messages) {
-      this.state.addMessagesSorted(data.messages);
-    }
-
+    // Thread reply state is owned by the Thread object (Thread.messagePaginator); the returned
+    // replies are consumed there. The channel message list is owned by channel.messagePaginator.
     return data;
   }
 
@@ -1164,10 +1350,10 @@ export class Channel extends ChannelApi {
    */
   countUnread(lastRead?: Date | null) {
     if (!lastRead) return this.state.unreadCount;
-    // todo: prevent finding the latest message set on each iteration
     let count = 0;
-    for (let i = 0; i < this.state.latestMessages.length; i += 1) {
-      const message = this.state.latestMessages[i];
+    const latestMessages = this.messagePaginator.headItems;
+    for (let i = 0; i < latestMessages.length; i += 1) {
+      const message = latestMessages[i];
       if (message.created_at > lastRead && this._countMessageAsUnread(message)) {
         count++;
       }
@@ -1185,8 +1371,9 @@ export class Channel extends ChannelApi {
     const userId = this.getClient().userId;
 
     let count = 0;
-    for (let i = 0; i < this.state.latestMessages.length; i += 1) {
-      const message = this.state.latestMessages[i];
+    const latestMessages = this.messagePaginator.headItems;
+    for (let i = 0; i < latestMessages.length; i += 1) {
+      const message = latestMessages[i];
       if (
         this._countMessageAsUnread(message) &&
         (!lastRead || message.created_at > lastRead) &&
@@ -1281,24 +1468,32 @@ export class Channel extends ChannelApi {
       });
     }
 
-    // add any messages to our channel state
-    const { messageSet, filteredMessageIds } = this._initializeState(
-      state,
-      messageSetToAddToIfDoesNotExist,
-    );
-    messageSet.pagination = {
-      ...messageSet.pagination,
-      ...messageSetPagination({
-        parentSet: messageSet,
-        messagePaginationOptions: options?.messages,
-        requestedPageSize:
-          options?.messages?.limit ?? DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
-        returnedPage: state.messages,
-        filteredReturnedPage: state.messages.filter(
-          (m) => !filteredMessageIds.includes(m.id),
-        ),
-      }),
-    };
+    // Seed the message paginator with the first (latest) page BEFORE _initializeState, which
+    // hydrates the read state and (via MessageReceiptsTracker) resolves read/delivered cursors
+    // against this paginator. Seeding first guarantees the tracker sees a populated timeline; a
+    // later async seed would run after the reconcile and mislabel delivery status. Only the
+    // latest-page open paths (watch/create) pass 'latest' — the paginator's own pagination queries
+    // use 'current' and must not be reseeded as a first page here.
+    if (messageSetToAddToIfDoesNotExist === 'latest' && Array.isArray(state.messages)) {
+      const requestedPageSize =
+        options?.messages?.limit ?? DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE;
+      // Pass the query's message pagination options through: a channel can be opened AROUND a
+      // message (id_around / created_at_around), in which case the fetched page is a jump window,
+      // not the latest page — the paginator must reconcile it with jump semantics.
+      this.messagePaginator.seedFirstPageSync(
+        state.messages.map(formatMessage),
+        requestedPageSize,
+        options?.messages,
+      );
+    }
+
+    // Seed read/members/pinned/thread-cleanup state; the message list is in the paginator.
+    this._initializeState(state);
+    // The queried page is the latest set unless this was a jump/around query.
+    const isLatestMessageSet =
+      messageSetToAddToIfDoesNotExist === 'latest' &&
+      !options?.messages?.id_around &&
+      !(options?.messages as MessagePaginationOptions | undefined)?.created_at_around;
 
     this.getClient().polls.hydratePollCache(state.messages, true);
     this.getClient().reminders.hydrateState(state.messages);
@@ -1314,7 +1509,9 @@ export class Channel extends ChannelApi {
       ]
         .sort()
         .join();
+    const previousData = this.data;
     this.data = channel;
+    this._syncStateFromChannelData(this.data, previousData);
     this.offlineMode = false;
     this.cooldownTimer.refresh();
 
@@ -1330,14 +1527,14 @@ export class Channel extends ChannelApi {
       type: 'channels.queried',
       queriedChannels: {
         channels: [state],
-        isLatestMessageSet: messageSet.isLatest,
+        isLatestMessageSet,
       },
     });
     this.getClient().offlineDb?.executeQuerySafely(
       (db) =>
         db.upsertChannels?.({
           channels: [state],
-          isLatestMessagesSet: messageSet.isLatest,
+          isLatestMessagesSet: isLatestMessageSet,
         }),
       { method: 'upsertChannels' },
     );
@@ -1591,6 +1788,56 @@ export class Channel extends ChannelApi {
     }
   }
 
+  private _patchReadState(
+    patch: (currentReadState: ChannelState['read']) => ChannelState['read'],
+    reconcileMeta?: ReadStoreReconcileMeta,
+  ) {
+    let hasStateChanged = false;
+    this.messageReceiptsTracker.setPendingReadStoreReconcileMeta(reconcileMeta);
+
+    this.state.readStore.next((currentReadStoreState) => {
+      const nextReadState = patch(currentReadStoreState.read);
+
+      if (nextReadState === currentReadStoreState.read) {
+        return currentReadStoreState;
+      }
+      hasStateChanged = true;
+
+      return {
+        ...currentReadStoreState,
+        read: nextReadState,
+      };
+    });
+
+    if (!hasStateChanged) {
+      this.messageReceiptsTracker.setPendingReadStoreReconcileMeta(undefined);
+    }
+  }
+
+  private _upsertReadState(
+    userId: string,
+    update: (
+      currentUserReadState: ChannelState['read'][string] | undefined,
+    ) => ChannelState['read'][string],
+    reconcileMeta?: ReadStoreReconcileMeta,
+  ) {
+    let nextUserReadState: ChannelState['read'][string] | undefined;
+
+    this._patchReadState((currentReadState) => {
+      const currentUserReadState = currentReadState[userId];
+      const updatedUserReadState = update(currentUserReadState);
+
+      nextUserReadState = updatedUserReadState;
+
+      return {
+        ...currentReadState,
+        [userId]: updatedUserReadState,
+      };
+    }, reconcileMeta);
+
+    return nextUserReadState;
+  }
+
   _handleChannelEvent(event: Event) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const channel = this;
@@ -1602,12 +1849,12 @@ export class Channel extends ChannelApi {
     switch (event.type) {
       case 'typing.start':
         if (event.user?.id) {
-          channelState.typing[event.user.id] = event;
+          channelState.setTypingEvent(event.user.id, event);
         }
         break;
       case 'typing.stop':
         if (event.user?.id) {
-          delete channelState.typing[event.user.id];
+          channelState.removeTypingEvent(event.user.id);
         }
         break;
       // `message.read_locally` is the client-only event dispatched by `markReadLocally()` when read
@@ -1617,22 +1864,45 @@ export class Channel extends ChannelApi {
       case 'message.read_locally':
       case 'message.read':
         if (event.user?.id && event.created_at) {
-          const previousReadState = channelState.read[event.user.id];
-          channelState.read[event.user.id] = {
-            // in case we already have delivery information
-            ...previousReadState,
-            last_read: new Date(event.created_at),
-            last_read_message_id: event.last_read_message_id,
-            user: event.user,
-            unread_messages: 0,
-          };
-          this.messageReceiptsTracker.onMessageRead({
-            user: event.user,
-            readAt: new Date(event.created_at),
-            lastReadMessageId: event.last_read_message_id,
-          });
-          const client = this.getClient();
+          const eventUser = event.user;
+          const readAtDate = new Date(event.created_at);
+          const toDate = (value?: string | Date) =>
+            value ? (value instanceof Date ? value : new Date(value)) : undefined;
+          const userReadState = this._upsertReadState(
+            eventUser.id,
+            (currentUserReadState) => {
+              const currentDeliveredAt = toDate(currentUserReadState?.last_delivered_at);
 
+              return {
+                // preserve delivery information already known for user
+                ...currentUserReadState,
+                ...(currentUserReadState?.last_read
+                  ? { last_read: toDate(currentUserReadState.last_read) }
+                  : null),
+                ...(currentDeliveredAt
+                  ? { last_delivered_at: currentDeliveredAt }
+                  : null),
+                last_read: readAtDate,
+                last_read_message_id: event.last_read_message_id,
+                last_delivered_at:
+                  !currentDeliveredAt || currentDeliveredAt < readAtDate
+                    ? readAtDate
+                    : currentDeliveredAt,
+                last_delivered_message_id:
+                  !currentDeliveredAt || currentDeliveredAt < readAtDate
+                    ? (event.last_read_message_id ??
+                      currentUserReadState?.last_delivered_message_id)
+                    : currentUserReadState?.last_delivered_message_id,
+                first_unread_message_id: undefined,
+                user: eventUser,
+                unread_messages: 0,
+              };
+            },
+            { changedUserIds: [eventUser.id] },
+          );
+          void userReadState;
+
+          const client = this.getClient();
           const isOwnEvent = event.user?.id === client.user?.id;
 
           if (isOwnEvent) {
@@ -1648,21 +1918,40 @@ export class Channel extends ChannelApi {
       case 'message.delivered':
         // todo: update also on thread
         if (event.user?.id && event.created_at) {
-          const previousReadState = channelState.read[event.user.id];
-          channelState.read[event.user.id] = {
-            ...previousReadState,
-            last_delivered_at: event.last_delivered_at
-              ? new Date(event.last_delivered_at)
-              : undefined,
-            last_delivered_message_id: event.last_delivered_message_id,
-            user: event.user,
-          };
+          const eventUser = event.user;
+          const createdAt = event.created_at;
+          const toDate = (value?: string | Date) =>
+            value ? (value instanceof Date ? value : new Date(value)) : undefined;
+          const resolvedDeliveredAt = new Date(event.last_delivered_at ?? createdAt);
+          const userReadState = this._upsertReadState(
+            eventUser.id,
+            (currentUserReadState) => {
+              const currentDeliveredAt = toDate(currentUserReadState?.last_delivered_at);
+              const currentReadAt = toDate(currentUserReadState?.last_read);
 
-          this.messageReceiptsTracker.onMessageDelivered({
-            user: event.user,
-            deliveredAt: event.created_at,
-            lastDeliveredMessageId: event.last_delivered_message_id,
-          });
+              return {
+                ...currentUserReadState,
+                ...(currentReadAt ? { last_read: currentReadAt } : null),
+                ...(currentDeliveredAt
+                  ? { last_delivered_at: currentDeliveredAt }
+                  : null),
+                last_delivered_at:
+                  currentDeliveredAt && currentDeliveredAt > resolvedDeliveredAt
+                    ? currentDeliveredAt
+                    : resolvedDeliveredAt,
+                last_delivered_message_id:
+                  currentDeliveredAt && currentDeliveredAt > resolvedDeliveredAt
+                    ? currentUserReadState?.last_delivered_message_id
+                    : event.last_delivered_message_id,
+                user: eventUser,
+                // delivery events can be received before read events
+                last_read: currentReadAt ?? new Date(createdAt),
+                unread_messages: currentUserReadState?.unread_messages ?? 0,
+              };
+            },
+            { changedUserIds: [eventUser.id] },
+          );
+          void userReadState;
 
           const client = this.getClient();
           const isOwnEvent = event.user?.id === client.user?.id;
@@ -1688,23 +1977,37 @@ export class Channel extends ChannelApi {
       case 'message.deleted':
         if (event.message) {
           this._extendEventWithOwnReactions(event);
-          if (event.hard_delete) channelState.removeMessage(event.message);
-          else channelState.addMessageSorted(event.message, false, false);
-
-          channelState.removeQuotedMessageReferences(event.message);
-
-          if (event.message.pinned) {
-            channelState.removePinnedMessage(event.message);
+          const formattedMessage = formatMessage(event.message);
+          const isThreadReply =
+            !!event.message.parent_id && !event.message.show_in_channel;
+          // Thread-only replies are handled by the Thread object; the channel owns the main list.
+          if (!isThreadReply) {
+            if (event.hard_delete) {
+              this.messagePaginator.removeItem({ id: event.message.id });
+              this.pinnedMessagesPaginator.removeItem({ id: event.message.id });
+            } else {
+              this.messagePaginator.ingestItem(formattedMessage);
+              this.pinnedMessagesPaginator.ingestItem(formattedMessage);
+            }
           }
+          this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
+          this.pinnedMessagesPaginator.reflectQuotedMessageUpdate(formattedMessage);
         }
         break;
       case 'user.messages.deleted':
         if (event.user) {
-          this.state.deleteUserMessages(
-            event.user,
-            !!event.hard_delete,
-            new Date(event.created_at ?? Date.now()),
-          );
+          const deletedAt = new Date(event.created_at ?? Date.now());
+          const hardDelete = !!event.hard_delete;
+          this.messagePaginator.applyMessageDeletionForUser({
+            userId: event.user.id,
+            hardDelete,
+            deletedAt,
+          });
+          this.pinnedMessagesPaginator.applyMessageDeletionForUser({
+            userId: event.user.id,
+            hardDelete,
+            deletedAt,
+          });
         }
         break;
       case 'message.new':
@@ -1715,12 +2018,13 @@ export class Channel extends ChannelApi {
           const isThreadMessage =
             event.message.parent_id && !event.message.show_in_channel;
 
-          if (this.state.isUpToDate || isThreadMessage) {
-            channelState.addMessageSorted(event.message, ownMessage);
-          }
-
-          if (event.message.pinned) {
-            channelState.addPinnedMessage(event.message);
+          if (!isThreadMessage) {
+            // ingestItem advances the paginator's tracked latest message (→ last_message_at). A
+            // message that arrives while the viewer has scrolled to an older window lands in the
+            // head interval, not the active one, so the view is preserved without an isUpToDate flag.
+            this.messagePaginator.ingestItem(formatMessage(event.message));
+            // ingestItem auto-adds when pinned (matchesFilter { pinned: true }).
+            this.pinnedMessagesPaginator.ingestItem(formatMessage(event.message));
           }
 
           // do not increase the unread count - the back-end does not increase the count neither in the following cases:
@@ -1733,23 +2037,54 @@ export class Channel extends ChannelApi {
           if (preventUnreadCountUpdate) break;
 
           if (event.user?.id) {
-            for (const userId in channelState.read) {
-              if (userId === event.user.id) {
-                channelState.read[event.user.id] = {
-                  last_read: event.created_at,
-                  user: event.user,
-                  unread_messages: 0,
-                  last_delivered_at: event.created_at,
-                  last_delivered_message_id: event.message.id,
-                };
-              } else {
-                channelState.read[userId].unread_messages += 1;
-              }
-            }
+            const eventUser = event.user;
+            const eventUserId = eventUser.id;
+            const createdAt = new Date(event.created_at ?? Date.now());
+            const eventMessageId = event.message.id;
+            this._patchReadState(
+              (currentReadState) => {
+                const userIds = Object.keys(currentReadState);
+                if (!userIds.length) return currentReadState;
+
+                const nextReadState = { ...currentReadState };
+
+                for (const userId of userIds) {
+                  if (userId === eventUserId) {
+                    nextReadState[eventUserId] = {
+                      last_read: createdAt,
+                      user: eventUser,
+                      unread_messages: 0,
+                      last_delivered_at: createdAt,
+                      last_delivered_message_id: eventMessageId,
+                    };
+                  } else {
+                    nextReadState[userId] = {
+                      ...currentReadState[userId],
+                      unread_messages:
+                        (currentReadState[userId]?.unread_messages ?? 0) + 1,
+                    };
+                  }
+                }
+
+                return nextReadState;
+              },
+              { changedUserIds: Object.keys(channelState.read) },
+            );
           }
 
-          if (this._countMessageAsUnread(event.message)) {
+          // Skip the own-unread bump when the user is actively viewing the latest messages (app
+          // foregrounded + newest message on screen). Without this, a message read in real time
+          // momentarily bumps `unreadCount`/the snapshot — the "N new" separator/banner + the
+          // channel-list badge would flash until the SDK's mark-read resets it. The SDK reports the
+          // viewing state via `messagePaginator.setViewingLive` and marks the message read itself.
+          // Only the OWN unread accounting is gated; the per-user read/receipt tracking above is
+          // intentionally left intact.
+          const isViewingLive = this.messagePaginator.isViewingLive;
+          if (!isViewingLive && this._countMessageAsUnread(event.message)) {
             channelState.unreadCount = channelState.unreadCount + 1;
+            this.messagePaginator.setUnreadSnapshot({
+              unreadCount: channelState.unreadCount,
+            });
           }
 
           client.syncDeliveredCandidates([this]);
@@ -1759,44 +2094,38 @@ export class Channel extends ChannelApi {
       case 'message.undeleted':
         if (event.message) {
           this._extendEventWithOwnReactions(event);
-          channelState.addMessageSorted(event.message, false, false);
-          channelState._updateQuotedMessageReferences({ message: event.message });
-          if (event.message.pinned) {
-            channelState.addPinnedMessage(event.message);
-          } else {
-            channelState.removePinnedMessage(event.message);
+          const formattedMessage = formatMessage(event.message);
+          if (!event.message.parent_id) {
+            this.messagePaginator.ingestItem(formattedMessage);
+            this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
+            // ingestItem auto-adds on pin / auto-removes on unpin (matchesFilter { pinned: true }).
+            this.pinnedMessagesPaginator.ingestItem(formattedMessage);
+            this.pinnedMessagesPaginator.reflectQuotedMessageUpdate(formattedMessage);
           }
         }
         break;
       case 'channel.truncated':
         if (event.channel?.truncated_at) {
-          const truncatedAt = +new Date(event.channel.truncated_at);
+          const truncatedAtDate = new Date(event.channel.truncated_at);
 
-          channelState.messageSets.forEach((messageSet, messageSetIndex) => {
-            messageSet.messages.forEach(({ created_at: createdAt, id }) => {
-              if (truncatedAt > +createdAt)
-                channelState.removeMessage({ id, messageSetIndex });
-            });
-          });
-
-          channelState.pinnedMessages.forEach(({ id, created_at: createdAt }) => {
-            if (truncatedAt > +createdAt)
-              channelState.removePinnedMessage({ id } as MessageResponse);
-          });
-          channelState.unreadCount = this.countUnread(
-            new Date(event.channel.truncated_at),
-          );
+          channelState.unreadCount = this.countUnread(truncatedAtDate);
+          // Partial truncation: keep messages newer than the cutoff. clearStateAndCache would wipe
+          // the whole paginator (readers now source from it), so use the partial truncate. The
+          // channel-wide read/unread context is reset by the truncation, so drop the unread snapshot
+          // too (clearStateAndCache did this for the full-truncate branch).
+          this.messagePaginator.truncate({ truncatedAt: truncatedAtDate });
+          this.messagePaginator.clearUnreadSnapshot();
+          this.pinnedMessagesPaginator.truncate({ truncatedAt: truncatedAtDate });
         } else {
-          channelState.clearMessages();
           channelState.unreadCount = 0;
+          this.messagePaginator.clearStateAndCache();
+          this.pinnedMessagesPaginator.clearStateAndCache();
         }
 
         // system messages don't increment unread counts
         if (event.message) {
-          channelState.addMessageSorted(event.message);
-          if (event.message.pinned) {
-            channelState.addPinnedMessage(event.message);
-          }
+          this.messagePaginator.ingestItem(formatMessage(event.message));
+          this.pinnedMessagesPaginator.ingestItem(formatMessage(event.message));
         }
 
         break;
@@ -1846,27 +2175,33 @@ export class Channel extends ChannelApi {
         break;
       case 'notification.mark_unread': {
         const ownMessage = event.user?.id === this.getClient().user?.id;
-        if (!ownMessage || !event.user) break;
-
+        if (!ownMessage || !event.user || !event.last_read_at) break;
+        const eventUser = event.user;
+        const lastReadAt = event.last_read_at;
         const unreadCount = event.unread_messages ?? 0;
-        const currentState = channelState.read[event.user.id];
-        channelState.read[event.user.id] = {
-          // keep the message delivery info
-          ...currentState,
-          first_unread_message_id: event.first_unread_message_id,
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          last_read: event.last_read_at!, // TODO: see why this is optional in OAPI spec
-          last_read_message_id: event.last_read_message_id,
-          user: event.user,
-          unread_messages: unreadCount,
-        };
+        this._upsertReadState(
+          eventUser.id,
+          (currentUserReadState) => ({
+            // keep the message delivery info
+            ...currentUserReadState,
+            first_unread_message_id: event.first_unread_message_id,
+            last_read: new Date(lastReadAt),
+            last_read_message_id: event.last_read_message_id,
+            user: eventUser,
+            unread_messages: unreadCount,
+          }),
+          { changedUserIds: [eventUser.id] },
+        );
+
+        this.messagePaginator.setUnreadSnapshot({
+          firstUnreadMessageId:
+            channelState.read[event.user.id].first_unread_message_id ?? null,
+          lastReadAt: channelState.read[event.user.id].last_read,
+          lastReadMessageId: channelState.read[event.user.id].last_read_message_id,
+          unreadCount,
+        });
 
         channelState.unreadCount = unreadCount;
-        this.messageReceiptsTracker.onNotificationMarkUnread({
-          user: event.user,
-          lastReadAt: event.last_read_at,
-          lastReadMessageId: event.last_read_message_id,
-        });
         break;
       }
       case 'channel.updated':
@@ -1877,59 +2212,93 @@ export class Channel extends ChannelApi {
           if (isFrozenChanged) {
             this.query({ state: false, messages: { limit: 0 }, watchers: { limit: 0 } });
           }
+          const previousChannelData = channel.data;
           const newChannelData = {
             ...event.channel,
             hidden: event.channel?.hidden ?? channel.data?.hidden,
+            member_count: event.channel?.member_count ?? channel.data?.member_count,
             own_capabilities:
               event.channel?.own_capabilities ?? channel.data?.own_capabilities,
           };
           channel.data = newChannelData;
+          channel._syncStateFromChannelData(channel.data, previousChannelData);
           this.cooldownTimer.refresh();
         }
         break;
       case 'reaction.new':
         if (event.message && event.reaction) {
-          const { message, reaction } = event;
-          event.message = channelState.addReaction(reaction, message);
+          const { reaction } = event;
+          if (!event.message?.parent_id) {
+            this.messagePaginator.reflectReaction({ message: event.message, reaction });
+            this.pinnedMessagesPaginator.reflectReaction({
+              message: event.message,
+              reaction,
+            });
+          }
         }
         break;
       case 'reaction.deleted':
         if (event.message && event.reaction) {
-          const { message, reaction } = event;
-          event.message = channelState.removeReaction(reaction, message);
+          const { reaction } = event;
+          if (event.message && !event.message.parent_id) {
+            this.messagePaginator.reflectReaction({
+              message: event.message,
+              reaction,
+              removed: true,
+            });
+            this.pinnedMessagesPaginator.reflectReaction({
+              message: event.message,
+              reaction,
+              removed: true,
+            });
+          }
         }
         break;
       case 'reaction.updated':
         if (event.message && event.reaction) {
-          const { message, reaction } = event;
+          const { reaction } = event;
           // assuming reaction.updated is only called if enforce_unique is true
-          event.message = channelState.addReaction(
-            reaction,
-            message,
-            true,
-          ) as MessageResponse;
+          if (!event.message?.parent_id) {
+            this.messagePaginator.reflectReaction({
+              enforceUnique: true,
+              message: event.message,
+              reaction,
+            });
+            this.pinnedMessagesPaginator.reflectReaction({
+              enforceUnique: true,
+              message: event.message,
+              reaction,
+            });
+          }
         }
         break;
-      case 'channel.hidden':
+      case 'channel.hidden': {
+        const previousChannelData = channel.data;
         channel.data = {
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           ...channel.data!,
           blocked: event.channel?.blocked ?? false,
           hidden: true,
         };
+        channel._syncStateFromChannelData(channel.data, previousChannelData);
         if (event.clear_history) {
-          channelState.clearMessages();
+          this.messagePaginator.clearStateAndCache();
+          this.pinnedMessagesPaginator.clearStateAndCache();
         }
         break;
-      case 'channel.visible':
+      }
+      case 'channel.visible': {
+        const previousChannelData = channel.data;
         channel.data = {
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           ...channel.data!,
           blocked: event.channel?.blocked ?? false,
           hidden: false,
         };
+        channel._syncStateFromChannelData(channel.data, previousChannelData);
         this.getClient().offlineDb?.handleChannelVisibilityEvent({ event });
         break;
+      }
       case 'user.banned':
         if (!event.user?.id) break;
         channelState.members[event.user.id] = {
@@ -1989,11 +2358,16 @@ export class Channel extends ChannelApi {
     }
   }
 
-  _initializeState(
-    state: ChannelStateResponseFields,
-    messageSetToAddToIfDoesNotExist: MessageSetType = 'latest',
+  _syncStateFromChannelData(
+    data: Channel['data'],
+    fallbackData: Channel['data'] = this.data,
   ) {
-    const { state: clientState, user, userId } = this.getClient();
+    this.state.syncOwnCapabilitiesFromChannelData(data, fallbackData);
+    this.state.syncMemberCountFromChannelData(data, fallbackData);
+  }
+
+  _initializeState(state: ChannelStateResponseFields) {
+    const { state: clientState, user, userID } = this.getClient();
 
     // add the members and users
     if (state.members) {
@@ -2010,22 +2384,18 @@ export class Channel extends ChannelApi {
       this.state.membership = state.membership;
     }
 
-    const messages = state.messages || [];
-    if (!this.state.messages) {
-      this.state.initMessages();
-    }
-    const { messageSet, filteredMessageIds } = this.state.addMessagesSorted(
-      messages,
-      false,
-      true,
-      true,
-      messageSetToAddToIfDoesNotExist,
-    );
+    // Seed the message paginator's `lastMessageAt` aggregate from the server's authoritative
+    // `last_message_at`. The first-page seed (Channel.query / client.hydrateActiveChannels) also
+    // advances it from ingested messages; both feed the same monotonic max, so this additionally
+    // covers the path where the paginator seed is skipped (an already-loaded channel the viewer has
+    // jumped away from, where re-seeding would clobber their window).
+    this.messagePaginator.seedLastMessageAt(state.channel?.last_message_at);
 
-    if (!this.state.pinnedMessages) {
-      this.state.pinnedMessages = [];
-    }
-    this.state.addPinnedMessages(state.pinned_messages || []);
+    // Seed the pinned-messages paginator from the same response.
+    this.pinnedMessagesPaginator.seedFirstPageSync(
+      (state.pinned_messages || []).map(formatMessage),
+      this.pinnedMessagesPaginator.pageSize,
+    );
     if (state.pending_messages) {
       this.state.pending_messages = state.pending_messages;
     }
@@ -2045,10 +2415,11 @@ export class Channel extends ChannelApi {
     // initialize read state to last message or current time if the channel is empty
     // if the user is a member, this value will be overwritten later on otherwise this ensures
     // that everything up to this point is not marked as unread
-    if (userId != null) {
-      const last_read = this.state.last_message_at || new Date();
+    const readUpdates: ChannelState['read'] = {};
+    if (userID != null) {
+      const last_read = this.messagePaginator.lastMessageAt || new Date();
       if (user) {
-        this.state.read[user.id] = {
+        readUpdates[user.id] = {
           user: user as UserResponse,
           last_read,
           unread_messages: 0,
@@ -2059,7 +2430,7 @@ export class Channel extends ChannelApi {
     // apply read state if part of the state
     if (state.read) {
       for (const read of state.read) {
-        this.state.read[read.user.id] = {
+        readUpdates[read.user.id] = {
           last_delivered_at: read.last_delivered_at
             ? new Date(read.last_delivered_at)
             : undefined,
@@ -2071,17 +2442,29 @@ export class Channel extends ChannelApi {
         };
 
         if (read.user.id === user?.id) {
-          this.state.unreadCount = this.state.read[read.user.id].unread_messages;
+          this.state.unreadCount = readUpdates[read.user.id].unread_messages;
         }
       }
-
-      this.messageReceiptsTracker.ingestInitial(state.read);
     }
 
-    return {
-      messageSet,
-      filteredMessageIds,
-    };
+    const entries = Object.entries(readUpdates);
+    if (entries.length) {
+      this._patchReadState(
+        (currentReadState) => {
+          let hasChanges = false;
+          const nextReadState = { ...currentReadState };
+
+          for (const [userId, readState] of entries) {
+            if (nextReadState[userId] === readState) continue;
+            nextReadState[userId] = readState;
+            hasChanges = true;
+          }
+
+          return hasChanges ? nextReadState : currentReadState;
+        },
+        { changedUserIds: entries.map(([userId]) => userId) },
+      );
+    }
   }
 
   _extendEventWithOwnReactions(
@@ -2090,8 +2473,11 @@ export class Channel extends ChannelApi {
     if (!event.message) {
       return;
     }
-    const message = this.state.findMessage(event.message.id, event.message.parent_id);
-    if (message?.own_reactions) {
+    // The channel message list is owned by the paginator; enrich from it. Thread-only replies are
+    // not in the paginator (getItem returns undefined) — the Thread object preserves their
+    // own_reactions on its own reply store.
+    const message = this.messagePaginator.getItem(event.message.id);
+    if (message) {
       event.message.own_reactions = message.own_reactions;
     }
   }
@@ -2133,7 +2519,7 @@ export class Channel extends ChannelApi {
     logger.withExtraTags('_disconnect', this.cid).info('Disconnecting the channel.');
 
     this.disconnected = true;
+    this.messageReceiptsTracker.unregisterSubscriptions();
     this.cooldownTimer.clearTimeout();
-    this.state.setIsUpToDate(false);
   }
 }

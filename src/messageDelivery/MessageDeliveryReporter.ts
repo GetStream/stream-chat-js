@@ -3,6 +3,7 @@ import { Channel } from '../channel';
 import type { ThreadUserReadState } from '../thread';
 import { Thread } from '../thread';
 import type {
+  EventAPIResponse,
   LocalMessage,
   MarkDeliveredRequest,
   MarkReadRequest,
@@ -141,14 +142,18 @@ export class MessageDeliveryReporter {
     let lastReadAt: Date | undefined;
     let key: string | undefined = undefined;
 
+    // todo: unify the API for read state access btw channel and threads
     if (isChannel(collection)) {
-      latestMessages = collection.state.latestMessages;
+      latestMessages = collection.messagePaginator.headItems;
       const ownReadState = collection.state.read[ownUserId] ?? {};
       lastReadAt = ownReadState?.last_read;
       lastDeliveredAt = ownReadState?.last_delivered_at;
       key = collection.cid;
     } else if (isThread(collection)) {
-      latestMessages = collection.state.getLatestValue().replies;
+      // Use the head (newest-loaded) window, not the active/visible interval: the candidate logic
+      // below inspects the newest message, which the active interval only reflects when scrolled to
+      // the head. Mirrors the channel branch above.
+      latestMessages = collection.messagePaginator.headItems;
       const ownReadState =
         collection.state.getLatestValue().read[ownUserId] ?? ({} as ThreadUserReadState);
       lastReadAt = ownReadState?.lastReadAt;
@@ -295,15 +300,39 @@ export class MessageDeliveryReporter {
    */
   public markRead = async (collection: Channel | Thread, options?: MarkReadRequest) => {
     if (!userHasReadReceipts(this.client)) return null;
+    const isThreadCollection = isThread(collection);
+    const channel = isThreadCollection ? collection.channel : collection;
+    const requestOptions = isThreadCollection
+      ? { ...options, thread_id: collection.id }
+      : options;
 
-    let result: StreamResponse<Gen_MarkReadResponse> | null = null;
-    if (isChannel(collection)) {
-      result = await collection.markRead(options);
-    } else if (isThread(collection)) {
-      result = await collection.channel.markRead({
-        ...options,
-        thread_id: collection.id,
-      });
+    let result: EventAPIResponse | StreamResponse<Gen_MarkReadResponse> | null = null;
+
+    if (isThreadCollection) {
+      const markReadRequestHandler = collection.configState.getLatestValue()
+        .requestHandlers?.markReadRequest as
+        | ((params: {
+            thread: Thread;
+            options?: MarkReadRequest;
+          }) => Promise<EventAPIResponse | null> | void)
+        | undefined;
+      result = markReadRequestHandler
+        ? ((await markReadRequestHandler({
+            options: requestOptions,
+            thread: collection,
+          })) ?? null)
+        : await channel.markRead(requestOptions);
+    } else {
+      const markReadRequestHandler = channel.configState.getLatestValue().requestHandlers
+        ?.markReadRequest as
+        | ((params: {
+            channel: Channel;
+            options?: MarkReadRequest;
+          }) => Promise<EventAPIResponse | null> | void)
+        | undefined;
+      result = markReadRequestHandler
+        ? ((await markReadRequestHandler({ channel, options: requestOptions })) ?? null)
+        : await channel.markRead(requestOptions);
     }
 
     this.removeCandidateFor(collection);
@@ -316,8 +345,19 @@ export class MessageDeliveryReporter {
    * @param collection
    * @param options
    */
-  public throttledMarkRead = throttle(this.markRead, MARK_AS_READ_THROTTLE_TIMEOUT, {
-    leading: false,
-    trailing: true,
-  });
+  // Auto mark-read is throttled and fire-and-forget: it's triggered by state changes / WS events,
+  // not by an awaiting caller, so a rejection here has nowhere to propagate and would otherwise
+  // surface as an unhandled rejection (e.g. `channel.markRead` throwing when read events are
+  // disabled, or a transient network error). Swallow it — the auto path retries on the next
+  // trigger, and explicit `markRead()` callers still receive the error.
+  public throttledMarkRead = throttle(
+    (collection: Channel | Thread, options?: MarkReadRequest) => {
+      void this.markRead(collection, options).catch(() => undefined);
+    },
+    MARK_AS_READ_THROTTLE_TIMEOUT,
+    {
+      leading: true,
+      trailing: true,
+    },
+  );
 }

@@ -285,11 +285,11 @@ export class ReminderManager extends WithSubscriptions {
   };
 
   queryNextReminders = async () => {
-    await this.paginator.next();
+    await this.paginator.toTail();
   };
 
   queryPreviousReminders = async () => {
-    await this.paginator.prev();
+    await this.paginator.toHead();
   };
 
   // API calls END //

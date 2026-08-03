@@ -15,11 +15,11 @@ import { isWSFailure } from './errors';
 import { ApiClient } from './api-client';
 import {
   axiosParamsSerializer,
+  formatMessage,
   generateChannelTempCid,
   getEnv,
   isOnline,
   isOwnUserBaseProperty,
-  messageSetPagination,
   randomId,
 } from './utils';
 
@@ -80,11 +80,16 @@ import { ChannelManager } from './channel_manager';
 import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
-import { StateStore } from './store';
-import type { MessageComposer } from './messageComposer';
 import type { AbstractOfflineDB } from './offline-support';
 import { getPendingTaskChannelData } from './offline-support/util';
 import { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
+import type { MessageComposer } from './messageComposer';
+import type {
+  MessageComposerSetupState,
+  SetInstanceConfigurationFunctions,
+} from './configuration';
+import { InstanceConfigurationService } from './configuration/InstanceConfigurationService';
+import { StateStore } from './store';
 import type {
   GetApplicationResponse as Gen_GetApplicationResponse,
   MarkDeliveredRequest as Gen_MarkDeliveredRequest,
@@ -101,8 +106,6 @@ function isString(value: unknown): value is string {
 const logger = chatLoggerSystem.getLogger('client');
 const offlineDbLogger = chatLoggerSystem.getLogger('offline-db');
 
-type MessageComposerTearDownFunction = () => void;
-
 export type QueryChannelsResponseWithChannels = Omit<
   QueryChannelsResponse,
   'channels'
@@ -110,24 +113,10 @@ export type QueryChannelsResponseWithChannels = Omit<
   channels: Channel[];
 };
 
-type MessageComposerSetupFunction = ({
-  composer,
-}: {
-  composer: MessageComposer;
-}) => void | MessageComposerTearDownFunction;
-
 export type BlockedUsersState = { userIds: string[] };
 
-export type MessageComposerSetupState = {
-  /**
-   * Each `MessageComposer` runs this function each time its signature changes or
-   * whenever you run `MessageComposer.registerSubscriptions`. Function returned
-   * from `applyModifications` will be used as a cleanup function - it will be stored
-   * and ran before new modification is applied. Cleaning up only the
-   * modified parts is the general way to go but if your setup gets a bit
-   * complicated, feel free to restore the whole composer with `MessageComposer.restore`.
-   */
-  setupFunction: MessageComposerSetupFunction | null;
+export type ChannelConfigsState = {
+  configs: Configs;
 };
 
 export type ClientUser = PartializeAllBut<OwnUserResponse, 'id'> & { anon?: boolean };
@@ -158,7 +147,6 @@ export class StreamChat extends ChatApi {
   browser: boolean;
   cleaningIntervalRef?: NodeJS.Timeout;
   clientId?: string;
-  configs: Configs;
   key: string;
   listeners: Map<EventType, Set<EventHandler>>;
   /**
@@ -178,7 +166,8 @@ export class StreamChat extends ChatApi {
   preventThreadCleanup = false;
   moderation: Moderation;
   mutedChannels: ChannelMute[];
-  mutedUsers: UserMuteResponse[];
+  readonly mutedUsersStore: StateStore<{ mutedUsers: UserMuteResponse[] }>;
+  readonly configsStore: StateStore<ChannelConfigsState>;
   blockedUsers: StateStore<BlockedUsersState>;
   node: boolean;
   options: StreamChatOptions;
@@ -223,12 +212,8 @@ export class StreamChat extends ChatApi {
   appIdentifier?: AppIdentifier;
   private cachedUserAgent?: string;
   readonly messageComposerCache: FixedSizeQueueCache<string, MessageComposer>;
-  /**
-   * @private
-   */
-  _messageComposerSetupState = new StateStore<MessageComposerSetupState>({
-    setupFunction: null,
-  });
+  private nextRequestAbortController: AbortController | null = null;
+  instanceConfigurationService = new InstanceConfigurationService();
 
   /**
    * Initializes a client.
@@ -263,7 +248,12 @@ export class StreamChat extends ChatApi {
     this.state = new ClientState({ client: this });
     // a list of channels to hide ws events from
     this.mutedChannels = [];
-    this.mutedUsers = [];
+    this.mutedUsersStore = new StateStore<{ mutedUsers: UserMuteResponse[] }>({
+      mutedUsers: [],
+    });
+    this.configsStore = new StateStore<{ configs: Configs }>({
+      configs: {},
+    });
     this.blockedUsers = new StateStore<BlockedUsersState>({ userIds: [] });
 
     this.moderation = new Moderation(this);
@@ -331,6 +321,22 @@ export class StreamChat extends ChatApi {
     this.messageComposerCache = new FixedSizeQueueCache<string, MessageComposer>(64);
   }
 
+  get mutedUsers() {
+    return this.mutedUsersStore.getLatestValue().mutedUsers;
+  }
+
+  set mutedUsers(mutedUsers: UserMuteResponse[]) {
+    this.mutedUsersStore.next({ mutedUsers });
+  }
+
+  get configs() {
+    return this.configsStore.getLatestValue().configs;
+  }
+
+  set configs(configs: Configs) {
+    this.configsStore.next({ configs });
+  }
+
   /**
    * Returns a client instance.
    *
@@ -388,7 +394,15 @@ export class StreamChat extends ChatApi {
   public setMessageComposerSetupFunction = (
     setupFunction: MessageComposerSetupState['setupFunction'],
   ) => {
-    this._messageComposerSetupState.partialNext({ setupFunction });
+    this.instanceConfigurationService.setSetupFunctions({
+      MessageComposer: setupFunction,
+    });
+  };
+
+  public setInstanceConfigurationFunction = (
+    setupFunctions: SetInstanceConfigurationFunctions,
+  ) => {
+    this.instanceConfigurationService.setSetupFunctions(setupFunctions);
   };
 
   /**
@@ -846,17 +860,17 @@ export class StreamChat extends ChatApi {
    * @param user - The updated user.
    */
   _updateUserMessageReferences = (user: UserResponse) => {
-    const refMap = this.state.userChannelReferences[user.id] || {};
-
-    for (const channelId in refMap) {
-      const channel = this.activeChannels[channelId];
-
+    // Scan all active channels rather than a user->channel reference map. MessageRequest authors are no
+    // longer registered as channel references (that registration was removed along with
+    // `Channel._trackLatestMessage`); `reflectUserUpdate` filters by author id internally, so it is
+    // a no-op on channels without this user's messages.
+    // The next step is to have user ItemIndex, where the update would be O(1) complexity
+    for (const channel of Object.values(this.activeChannels)) {
       if (!channel) continue;
 
-      const state = channel.state;
-
       /** update the messages from this user. */
-      state?.updateUserMessages(user);
+      channel.pinnedMessagesPaginator.reflectUserUpdate(user);
+      channel.messagePaginator.reflectUserUpdate(user);
     }
   };
 
@@ -877,15 +891,21 @@ export class StreamChat extends ChatApi {
     hardDelete = false,
     deletedAt?: LocalMessage['deleted_at'],
   ) => {
-    const refMap = this.state.userChannelReferences[user.id] || {};
-
-    for (const channelId in refMap) {
-      const channel = this.activeChannels[channelId];
+    // Scan all active channels rather than a user->channel reference map (see
+    // `_updateUserMessageReferences`); `applyMessageDeletionForUser` filters by author id internally.
+    for (const channel of Object.values(this.activeChannels)) {
       if (channel) {
-        const state = channel.state;
-
         /** deleted the messages from this user. */
-        state?.deleteUserMessages(user, hardDelete, deletedAt);
+        channel.messagePaginator.applyMessageDeletionForUser({
+          userId: user.id,
+          hardDelete,
+          deletedAt: deletedAt ?? new Date(),
+        });
+        channel.pinnedMessagesPaginator.applyMessageDeletionForUser({
+          userId: user.id,
+          hardDelete,
+          deletedAt: deletedAt ?? new Date(),
+        });
       }
     }
   };
@@ -1397,44 +1417,51 @@ export class StreamChat extends ChatApi {
 
       this._addChannelConfig(channelState.channel);
       const c = this.channel(channelState.channel.type, channelState.channel.id);
+      const previousData = c.data;
       c.data = channelState.channel;
+      c._syncStateFromChannelData(c.data, previousData);
       c.offlineMode = offlineMode;
       c.initialized = !offlineMode;
       c.push_preferences = channelState.push_preferences;
 
-      let updatedMessagesSet;
-      let filteredMessageIds: string[] = [];
-      if (skipInitialization === undefined) {
-        const { messageSet, filteredMessageIds: _filteredMessageIds } =
-          c._initializeState(channelState, 'latest');
-        filteredMessageIds = _filteredMessageIds;
-        updatedMessagesSet = messageSet;
-      } else if (!skipInitialization.includes(channelState.channel.id)) {
-        c.state.clearMessages();
-        const { messageSet, filteredMessageIds: _filteredMessageIds } =
-          c._initializeState(channelState, 'latest');
-        filteredMessageIds = _filteredMessageIds;
-        updatedMessagesSet = messageSet;
+      const willInitialize =
+        skipInitialization === undefined ||
+        !skipInitialization.includes(channelState.channel.id);
+      const requestedPageSize =
+        queryChannelsOptions?.message_limit ??
+        DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE;
+
+      // Seed the paginator BEFORE _initializeState, which hydrates read state and (via
+      // MessageReceiptsTracker) resolves read/delivered cursors against this paginator. Seeding
+      // first guarantees the tracker sees a populated timeline; a later async seed would run after
+      // the reconcile and mislabel delivery status.
+      //
+      // Skip the re-seed when this (shared) channel's paginator is already loaded AND the user has
+      // jumped to an older window (active interval is not the head): a first-page re-seed forces the
+      // newest page to merge into that jumped interval across the gap (missing messages in the
+      // middle). A cold paginator, or one still at the head (offline/at-latest), re-seeds normally so
+      // cursors/hasMoreTail get (re)derived and pagination keeps working.
+      if (
+        willInitialize &&
+        (!c.messagePaginator.isInitialized || c.messagePaginator.isActiveIntervalAtHead)
+      ) {
+        c.messagePaginator.seedFirstPageSync(
+          channelState.messages.map(formatMessage),
+          requestedPageSize,
+        );
       }
 
-      if (updatedMessagesSet) {
-        updatedMessagesSet.pagination = {
-          ...updatedMessagesSet.pagination,
-          ...messageSetPagination({
-            parentSet: updatedMessagesSet,
-            requestedPageSize:
-              queryChannelsOptions?.message_limit ||
-              DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE,
-            returnedPage: channelState.messages,
-            filteredReturnedPage: channelState.messages.filter(
-              (m) => !filteredMessageIds.includes(m.id),
-            ),
-          }),
-        };
+      if (skipInitialization === undefined) {
+        c._initializeState(channelState);
+      } else if (!skipInitialization.includes(channelState.channel.id)) {
+        // The paginators are (re)seeded above and via _initializeState → seedFirstPageSync.
+        c._initializeState(channelState);
+      }
+
+      if (willInitialize) {
         this.polls.hydratePollCache(channelState.messages, true);
         this.reminders.hydrateState(channelState.messages);
       }
-
       c.messageComposer.initStateFromChannelResponse(channelState);
       c.cooldownTimer.refresh();
       channels.push(c);
@@ -1482,7 +1509,10 @@ export class StreamChat extends ChatApi {
 
   _addChannelConfig({ cid, config }: ChannelResponse) {
     if (this._cacheEnabled()) {
-      this.configs[cid] = config;
+      this.configs = {
+        ...this.configs,
+        [cid]: config,
+      };
     }
   }
 
@@ -1630,8 +1660,16 @@ export class StreamChat extends ChatApi {
       !this.activeChannels[cid].disconnected
     ) {
       const channel = this.activeChannels[cid];
-      if (Object.keys(custom).length > 0) {
+      // Only overwrite the existing channel's custom data when the caller actually provided some.
+      // A caller passing other fields (e.g. `{ members }`, or even `{ members: undefined }`) yields a
+      // non-empty object with no `.custom`; the previous `Object.keys(custom).length > 0` guard let
+      // that through and then set `custom: custom.custom` (undefined), wiping the channel's existing
+      // custom data (e.g. its name). Guarding on `custom.custom` keeps genuine custom updates while
+      // leaving the existing custom intact when the caller omits it.
+      if (custom.custom !== undefined) {
+        const previousData = channel.data;
         channel.data = { ...channel.data, custom: custom.custom };
+        channel._syncStateFromChannelData(channel.data, previousData);
         channel._data = { ...channel._data, custom: custom.custom };
       }
       return channel;
@@ -1737,7 +1775,7 @@ export class StreamChat extends ChatApi {
    * Mutes a user.
    *
    * @param targetId - The user to mute.
-   * @param options - Mute options (optional, defaults to `{}`).
+   * @param options - UserMuteResponse options (optional, defaults to `{}`).
    * @returns The server response.
    */
   async muteUser(targetId: string, options: MuteUserOptions = {}) {
@@ -1869,7 +1907,7 @@ export class StreamChat extends ChatApi {
   /**
    * Extracts a string message ID from either a message object or a message ID.
    *
-   * @param messageOrMessageId - Message object or message ID.
+   * @param messageOrMessageId - MessageRequest object or message ID.
    * @param errorText - Error message to report in case of message ID absence.
    * @returns The extracted message ID.
    */
@@ -1892,7 +1930,7 @@ export class StreamChat extends ChatApi {
   /**
    * Pins the message.
    *
-   * @param messageOrMessageId - Message object or message ID.
+   * @param messageOrMessageId - MessageRequest object or message ID.
    * @param timeoutOrExpirationDate - Expiration date or timeout. Use `number` to set the timeout
    *   in seconds, `string` or `Date` to set the exact expiration date (optional).
    * @param pinnedAt - Date when the message should be pinned. It affects the order of pinned
@@ -1922,7 +1960,7 @@ export class StreamChat extends ChatApi {
   /**
    * Unpins the message that was previously pinned.
    *
-   * @param messageOrMessageId - Message object or message ID.
+   * @param messageOrMessageId - MessageRequest object or message ID.
    * @returns The updated message response.
    */
   unpinMessage(messageOrMessageId: string | { id: string }) {

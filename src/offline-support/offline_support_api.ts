@@ -26,6 +26,7 @@ import { StateStore } from '../store';
 import {
   channelHasReadEvents,
   channelTracksReadLocally,
+  formatMessage,
   localMessageToNewMessagePayload,
   runDetached,
 } from '../utils';
@@ -1358,7 +1359,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
               timestampChanged: true,
             });
           }
-          channel.state.addMessageSorted(newMessage, true);
+          channel.messagePaginator.trackLastMessage(formatMessage(newMessage));
         }
         return newMessageResponse;
       }

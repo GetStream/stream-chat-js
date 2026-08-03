@@ -5,10 +5,8 @@ import type {
   ChannelSort,
   ChannelStateResponse,
   LocalMessage,
-  MessagePaginationOptions,
   MessageRequest,
   MessageResponse,
-  MessageSet,
   OwnUserBase,
   OwnUserResponse,
   PromoteChannelParams,
@@ -19,8 +17,8 @@ import type {
 import type { StreamChat } from './client';
 import type { Channel } from './channel';
 import type { AxiosRequestConfig } from 'axios';
-import { chatLoggerSystem } from './logger';
 import { LOCAL_MESSAGE_FIELDS, RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
+import { chatLoggerSystem } from './logger';
 
 const logger = chatLoggerSystem.getLogger('utils');
 
@@ -154,10 +152,9 @@ export function addFileToFormData(
 }
 
 /**
- * Returns a retry interval that increases according to the number of failures.
+ * retryInterval - A retry interval which increases acc to number of failures
  *
- * @param numberOfFailures - The current consecutive failure count.
- * @returns The duration to wait before the next retry, in milliseconds.
+ * @returns Duration to wait in milliseconds
  */
 export function retryInterval(numberOfFailures: number) {
   // try to reconnect in 0.25-25 seconds (random to spread out the load from failures)
@@ -267,9 +264,7 @@ export function isOnline() {
 }
 
 /**
- * Adds event listeners fired when the browser goes online or offline.
- *
- * @param cb - The handler to invoke on each `online` / `offline` event.
+ * listenForConnectionChanges - Adds an event listener fired on browser going online or offline
  */
 export function addConnectionEventListeners(cb: (e: Event) => void) {
   if (typeof window !== 'undefined' && window.addEventListener) {
@@ -309,22 +304,31 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
  * @param message - message object
  */
 export function formatMessage(message: MessageResponse | LocalMessage): LocalMessage {
+  const toLocalMessageBase = (
+    msg: MessageResponse | LocalMessage | null | undefined,
+  ): LocalMessage | null => {
+    if (!msg) return null;
+    return {
+      ...msg,
+      created_at: msg.created_at ? new Date(msg.created_at) : new Date(),
+      deleted_at: msg.deleted_at ? new Date(msg.deleted_at) : undefined,
+      pinned_at: msg.pinned_at ? new Date(msg.pinned_at) : undefined,
+      reaction_groups: maybeGetReactionGroupsFallback(
+        msg.reaction_groups,
+        msg.reaction_counts,
+        msg.reaction_scores,
+      ),
+      status: (msg as LocalMessage).status || 'received',
+      updated_at: msg.updated_at ? new Date(msg.updated_at) : new Date(),
+    };
+  };
+
   return {
-    ...message,
-    created_at: message.created_at ?? new Date(),
-    updated_at: message.updated_at ?? new Date(),
-    reaction_groups: maybeGetReactionGroupsFallback(
-      message.reaction_groups,
-      message.reaction_counts,
-      message.reaction_scores,
-    ),
-    status: (message as LocalMessage).status || 'received',
+    ...toLocalMessageBase(message),
     error: (message as LocalMessage).error ?? undefined,
-    quoted_message: message.quoted_message
-      ? formatMessage(message.quoted_message)
-      : undefined,
-    user_id: message?.user?.id,
-  } satisfies LocalMessage;
+    quoted_message:
+      toLocalMessageBase((message as MessageResponse).quoted_message) ?? undefined,
+  } as LocalMessage;
 }
 
 export const localMessageToNewMessagePayload = (
@@ -345,20 +349,21 @@ export const localMessageToNewMessagePayload = (
     reaction_counts: _reaction_counts,
     reaction_scores: _reaction_scores,
     reply_count: _reply_count,
-    // Message text related fields that shouldn't be in update
+    // MessageRequest text related fields that shouldn't be in update
     command: _command,
     html: _html,
     i18n: _i18n,
     mentioned_groups: _mentioned_groups,
     quoted_message: _quoted_message,
     mentioned_users,
-    // Message content related fields
+    // MessageRequest content related fields
     ...messageFields
   } = localMessage;
 
+  // `messageFields` still carries LocalMessage-only fields (cid, deleted_reply_count, mentioned_*,
+  // pinned, shadowed, …) that the stricter OpenAPI `MessageRequest` omits; the server ignores them.
   return {
     ...messageFields,
-    pinned_at: messageFields.pinned_at,
     mentioned_users: mentioned_users?.map((user) => user.id),
   } as MessageRequest;
 };
@@ -399,7 +404,7 @@ export const toDeletedMessage = ({
     /**
      * In case of hard delete, we need to strip down all text, html, attachments and all the custom properties on message
      * The hard-deleted message is kept in the UI until the messages are re-queried
-     * FIXME: we are returning an object that does not match LocalMessage | LocalMessageBase
+     * FIXME: we are returning an object that does not match LocalMessage
      */
     return {
       attachments: [],
@@ -425,39 +430,6 @@ export const toDeletedMessage = ({
       type: 'deleted',
       deleted_at: deletedAt,
     };
-  }
-};
-
-export const deleteUserMessages = ({
-  messages,
-  user,
-  hardDelete = false,
-  deletedAt,
-}: {
-  messages: Array<LocalMessage>;
-  user: UserResponse;
-  hardDelete: boolean;
-  deletedAt: LocalMessage['deleted_at'];
-}) => {
-  for (let i = 0; i < messages.length; i++) {
-    const message = messages[i];
-    if (message.user?.id === user.id) {
-      messages[i] =
-        message.type === 'deleted'
-          ? message
-          : (toDeletedMessage({ message, hardDelete, deletedAt }) as LocalMessage);
-    }
-
-    if (messages[i].quoted_message && message.quoted_message?.user?.id === user.id) {
-      messages[i].quoted_message =
-        message.quoted_message.type === 'deleted'
-          ? message.quoted_message
-          : (toDeletedMessage({
-              message: messages[i].quoted_message as LocalMessage,
-              hardDelete,
-              deletedAt,
-            }) as LocalMessage);
-    }
   }
 };
 
@@ -492,8 +464,8 @@ export const findIndexInSortedArray = <T, L>({
    */
   selectValueToCompare?: (arrayElement: T) => L | T;
   /**
-   * Sort direction (defaults to `'ascending'`).
-   *
+   * @default ascending
+   * @description
    * ```md
    * ascending  - [1,2,3,4,5...]
    * descending - [...5,4,3,2,1]
@@ -550,72 +522,6 @@ export const findIndexInSortedArray = <T, L>({
   return left;
 };
 
-export function addToMessageList<T extends LocalMessage>(
-  messages: readonly T[],
-  newMessage: T,
-  timestampChanged = false,
-  sortBy: 'pinned_at' | 'created_at' = 'created_at',
-  addIfDoesNotExist = true,
-) {
-  const addMessageToList = addIfDoesNotExist || timestampChanged;
-  let newMessages = [...messages];
-
-  // if created_at has changed, message should be filtered and re-inserted in correct order
-  // slow op but usually this only happens for a message inserted to state before actual response with correct timestamp
-  if (timestampChanged) {
-    newMessages = newMessages.filter(
-      (message) => !(message.id && newMessage.id === message.id),
-    );
-  }
-
-  // for empty list just concat and return unless it's an update or deletion
-  if (newMessages.length === 0 && addMessageToList) {
-    return newMessages.concat(newMessage);
-  } else if (newMessages.length === 0) {
-    return newMessages;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const messageTime = newMessage[sortBy]!.getTime();
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const messageIsNewest = newMessages.at(-1)![sortBy]!.getTime() < messageTime;
-
-  // if message is newer than last item in the list concat and return unless it's an update or deletion
-  if (messageIsNewest && addMessageToList) {
-    return newMessages.concat(newMessage);
-  } else if (messageIsNewest) {
-    return newMessages;
-  }
-
-  // find the closest index to push the new message
-  const insertionIndex = findIndexInSortedArray({
-    needle: newMessage,
-    sortedArray: newMessages,
-    sortDirection: 'ascending',
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    selectValueToCompare: (m) => m[sortBy]!.getTime(),
-    selectKey: (m) => m.id,
-  });
-
-  // message already exists and not filtered with timestampChanged, update and return
-  if (
-    !timestampChanged &&
-    newMessage.id &&
-    newMessages[insertionIndex] &&
-    newMessage.id === newMessages[insertionIndex].id
-  ) {
-    newMessages[insertionIndex] = newMessage;
-    return newMessages;
-  }
-
-  // do not add updated or deleted messages to the list if they already exist or come with a timestamp change
-  if (addMessageToList) {
-    newMessages.splice(insertionIndex, 0, newMessage);
-  }
-
-  return newMessages;
-}
-
 function maybeGetReactionGroupsFallback(
   groups: { [key: string]: ReactionGroupResponse } | null | undefined,
   counts: { [key: string]: number } | null | undefined,
@@ -629,14 +535,12 @@ function maybeGetReactionGroupsFallback(
     const fallback: { [key: string]: ReactionGroupResponse } = {};
 
     for (const type of Object.keys(counts)) {
+      // Best-effort fallback derived from counts/scores; the richer OpenAPI `ReactionGroupResponse`
+      // fields (first/last_reaction_at, latest_reactions_by) are not available here.
       fallback[type] = {
         count: counts[type],
         sum_scores: scores[type],
-        // empty
-        first_reaction_at: new Date(),
-        last_reaction_at: new Date(),
-        latest_reactions_by: [],
-      };
+      } as ReactionGroupResponse;
     }
 
     return fallback;
@@ -736,7 +640,11 @@ export const throttle = <T extends (...args: any[]) => any>(
       return;
     }
 
-    if (leading) fn(...args);
+    if (leading) {
+      fn(...args);
+    } else if (trailing) {
+      storedArgs = args;
+    }
 
     const timeoutHandler = () => {
       if (storedArgs) {
@@ -779,264 +687,6 @@ export const uniqBy = <T>(
   });
 };
 
-type MessagePaginationUpdatedParams = {
-  parentSet: MessageSet;
-  requestedPageSize: number;
-  returnedPage: MessageResponse[];
-  filteredReturnedPage: MessageResponse[];
-  messagePaginationOptions?: MessagePaginationOptions;
-};
-
-export function binarySearchByDateEqualOrNearestGreater(
-  array: {
-    created_at?: string | Date;
-  }[],
-  targetDate: Date,
-): number {
-  let left = 0;
-  let right = array.length - 1;
-
-  while (left <= right) {
-    const mid = Math.floor((left + right) / 2);
-    const midCreatedAt = array[mid].created_at;
-    if (!midCreatedAt) {
-      left += 1;
-      continue;
-    }
-    const midDate = midCreatedAt instanceof Date ? midCreatedAt : new Date(midCreatedAt);
-
-    if (midDate.getTime() === targetDate.getTime()) {
-      return mid;
-    } else if (midDate.getTime() < targetDate.getTime()) {
-      left = mid + 1;
-    } else {
-      right = mid - 1;
-    }
-  }
-
-  return left;
-}
-
-const messagePaginationCreatedAtAround = ({
-  parentSet,
-  requestedPageSize,
-  returnedPage,
-  filteredReturnedPage,
-  messagePaginationOptions,
-}: MessagePaginationUpdatedParams) => {
-  const newPagination = { ...parentSet.pagination };
-  if (!messagePaginationOptions?.created_at_around) return newPagination;
-  let hasPrev;
-  let hasNext;
-  let updateHasPrev;
-  let updateHasNext;
-  const createdAtAroundDate = new Date(messagePaginationOptions.created_at_around);
-  const [firstPageMsg, lastPageMsg] = [returnedPage[0], returnedPage.slice(-1)[0]];
-
-  // expect ASC order (from oldest to newest)
-  const wholePageHasNewerMessages =
-    !!firstPageMsg?.created_at && new Date(firstPageMsg.created_at) > createdAtAroundDate;
-  const wholePageHasOlderMessages =
-    !!lastPageMsg?.created_at && new Date(lastPageMsg.created_at) < createdAtAroundDate;
-
-  const requestedPageSizeNotMet =
-    requestedPageSize > parentSet.messages.length &&
-    requestedPageSize > returnedPage.length;
-  const noMoreMessages =
-    (requestedPageSize > parentSet.messages.length ||
-      parentSet.messages.length >= returnedPage.length) &&
-    requestedPageSize > returnedPage.length;
-
-  if (wholePageHasNewerMessages) {
-    hasPrev = false;
-    updateHasPrev = true;
-    if (requestedPageSizeNotMet) {
-      hasNext = false;
-      updateHasNext = true;
-    }
-  } else if (wholePageHasOlderMessages) {
-    hasNext = false;
-    updateHasNext = true;
-    if (requestedPageSizeNotMet) {
-      hasPrev = false;
-      updateHasPrev = true;
-    }
-  } else if (noMoreMessages) {
-    hasNext = hasPrev = false;
-    updateHasPrev = updateHasNext = true;
-  } else {
-    const [firstFilteredPageMsg, lastFilteredPageMsg] = [
-      filteredReturnedPage[0],
-      filteredReturnedPage.slice(-1)[0],
-    ];
-    const [firstPageMsgIsFirstInSet, lastPageMsgIsLastInSet] = [
-      firstFilteredPageMsg?.id && firstFilteredPageMsg.id === parentSet.messages[0]?.id,
-      lastFilteredPageMsg?.id &&
-        lastFilteredPageMsg.id === parentSet.messages.slice(-1)[0]?.id,
-    ];
-    updateHasPrev = firstPageMsgIsFirstInSet;
-    updateHasNext = lastPageMsgIsLastInSet;
-    const midPointByCount = Math.floor(returnedPage.length / 2);
-    const midPointByCreationDate = binarySearchByDateEqualOrNearestGreater(
-      returnedPage,
-      createdAtAroundDate,
-    );
-
-    if (midPointByCreationDate !== -1) {
-      hasPrev = midPointByCount <= midPointByCreationDate;
-      hasNext = midPointByCount >= midPointByCreationDate;
-    }
-  }
-
-  if (updateHasPrev && typeof hasPrev !== 'undefined') newPagination.hasPrev = hasPrev;
-  if (updateHasNext && typeof hasNext !== 'undefined') newPagination.hasNext = hasNext;
-
-  return newPagination;
-};
-
-const messagePaginationIdAround = ({
-  parentSet,
-  requestedPageSize,
-  returnedPage,
-  filteredReturnedPage,
-  messagePaginationOptions,
-}: MessagePaginationUpdatedParams) => {
-  const newPagination = { ...parentSet.pagination };
-  const { id_around } = messagePaginationOptions || {};
-  if (!id_around) return newPagination;
-  let hasPrev;
-  let hasNext;
-
-  const [firstFilteredPageMsg, lastFilteredPageMsg] = [
-    filteredReturnedPage[0],
-    filteredReturnedPage.slice(-1)[0],
-  ];
-  const [firstPageMsgIsFirstInSet, lastPageMsgIsLastInSet] = [
-    firstFilteredPageMsg?.id === parentSet.messages[0]?.id,
-    lastFilteredPageMsg?.id === parentSet.messages.slice(-1)[0]?.id,
-  ];
-  let updateHasPrev = firstPageMsgIsFirstInSet;
-  let updateHasNext = lastPageMsgIsLastInSet;
-
-  const midPoint = Math.floor(returnedPage.length / 2);
-  const noMoreMessages =
-    (requestedPageSize > parentSet.messages.length ||
-      parentSet.messages.length >= returnedPage.length) &&
-    requestedPageSize > returnedPage.length;
-
-  if (noMoreMessages) {
-    hasNext = hasPrev = false;
-    updateHasPrev = updateHasNext = true;
-  } else if (!returnedPage[midPoint]) {
-    return newPagination;
-  } else if (returnedPage[midPoint].id === id_around) {
-    hasPrev = hasNext = true;
-  } else {
-    let targetMsg;
-    const halves = [returnedPage.slice(0, midPoint), returnedPage.slice(midPoint)];
-    hasPrev = hasNext = true;
-    for (let i = 0; i < halves.length; i++) {
-      targetMsg = halves[i].find((message) => message.id === id_around);
-      if (targetMsg && i === 0) {
-        hasPrev = false;
-      }
-      if (targetMsg && i === 1) {
-        hasNext = false;
-      }
-    }
-  }
-
-  if (updateHasPrev && typeof hasPrev !== 'undefined') newPagination.hasPrev = hasPrev;
-  if (updateHasNext && typeof hasNext !== 'undefined') newPagination.hasNext = hasNext;
-
-  return newPagination;
-};
-
-const messagePaginationLinear = ({
-  parentSet,
-  requestedPageSize,
-  returnedPage,
-  filteredReturnedPage,
-  messagePaginationOptions,
-}: MessagePaginationUpdatedParams) => {
-  const newPagination = { ...parentSet.pagination };
-
-  let hasPrev;
-  let hasNext;
-
-  const [firstFilteredPageMsg, lastFilteredPageMsg] = [
-    filteredReturnedPage[0],
-    filteredReturnedPage.slice(-1)[0],
-  ];
-  const [firstPageMsgIsFirstInSet, lastPageMsgIsLastInSet] = [
-    firstFilteredPageMsg?.id && firstFilteredPageMsg.id === parentSet.messages[0]?.id,
-    lastFilteredPageMsg?.id &&
-      lastFilteredPageMsg.id === parentSet.messages.slice(-1)[0]?.id,
-  ];
-
-  const queriedNextMessages =
-    messagePaginationOptions &&
-    (messagePaginationOptions.created_at_after_or_equal ||
-      messagePaginationOptions.created_at_after ||
-      messagePaginationOptions.id_gt ||
-      messagePaginationOptions.id_gte);
-
-  const queriedPrevMessages =
-    typeof messagePaginationOptions === 'undefined'
-      ? true
-      : messagePaginationOptions.created_at_before_or_equal ||
-        messagePaginationOptions.created_at_before ||
-        messagePaginationOptions.id_lt ||
-        messagePaginationOptions.id_lte ||
-        messagePaginationOptions.offset;
-
-  const containsUnrecognizedOptionsOnly =
-    !queriedNextMessages &&
-    !queriedPrevMessages &&
-    !messagePaginationOptions?.id_around &&
-    !messagePaginationOptions?.created_at_around;
-
-  const hasMore = returnedPage.length >= requestedPageSize;
-
-  if (typeof queriedPrevMessages !== 'undefined' || containsUnrecognizedOptionsOnly) {
-    hasPrev = hasMore;
-  }
-  if (typeof queriedNextMessages !== 'undefined') {
-    hasNext = hasMore;
-  }
-  const returnedPageIsEmpty = returnedPage.length === 0;
-
-  if ((firstPageMsgIsFirstInSet || returnedPageIsEmpty) && typeof hasPrev !== 'undefined')
-    newPagination.hasPrev = hasPrev;
-  if ((lastPageMsgIsLastInSet || returnedPageIsEmpty) && typeof hasNext !== 'undefined')
-    newPagination.hasNext = hasNext;
-
-  return newPagination;
-};
-
-export const messageSetPagination = (params: MessagePaginationUpdatedParams) => {
-  if (
-    params.parentSet.messages.length +
-      (params.returnedPage.length - params.filteredReturnedPage.length) <
-    params.returnedPage.length
-  ) {
-    logger
-      .withExtraTags('messageSetPagination')
-      .error(
-        'Corrupted message set state: the parent set size is smaller than the returned page size.',
-      );
-    return params.parentSet.pagination;
-  }
-
-  if (params.messagePaginationOptions?.created_at_around) {
-    return messagePaginationCreatedAtAround(params);
-  } else if (params.messagePaginationOptions?.id_around) {
-    return messagePaginationIdAround(params);
-  } else {
-    return messagePaginationLinear(params);
-  }
-};
-
 /**
  * A utility object used to prevent duplicate invocation of channel.watch() to be triggered when
  * 'notification.message_new' and 'notification.added_to_channel' events arrive at the same time.
@@ -1055,17 +705,16 @@ type GetChannelParams = {
   type?: string;
 };
 /**
- * Calls `channel.watch()` if it was not already recently called. Waits for the watch promise to
- * resolve even if it was invoked previously. If the channel is not passed as a property, it will
- * get it either by its `channel.cid` or by its members list and do the same.
+ * Calls channel.watch() if it was not already recently called. Waits for watch promise to resolve even if it was invoked previously.
+ * If the channel is not passed as a property, it will get it either by its channel.cid or by its members list and do the same.
  *
- * @param channel - The channel to watch, when known (optional).
- * @param channel.client - The chat client used to look up the channel when one isn't supplied.
- * @param channel.members - The member IDs used to identify a members-based channel (optional).
- * @param channel.options - Options forwarded to `channel.watch()` (optional).
- * @param channel.type - The channel type to watch when no `channel` is supplied (optional).
- * @param channel.id - The channel ID to watch when no `channel` is supplied (optional).
- * @returns The watched channel.
+ * @param params - The channel query parameters.
+ * @param params.client - The chat client instance.
+ * @param params.members - Member user ids used to construct or identify the channel.
+ * @param params.options - Options forwarded to the underlying channel watch request.
+ * @param params.type - The channel type.
+ * @param params.id - The channel id.
+ * @param params.channel - An existing channel to watch (skips construction from type/id/members).
  */
 export const getAndWatchChannel = async ({
   channel,
@@ -1080,14 +729,15 @@ export const getAndWatchChannel = async ({
   }
 
   // unfortunately typescript is not able to infer that if (!channel && !type) === false, then channel or type has to be truthy
+
   const channelToWatch =
     channel ||
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    client.channel(type!, id, {
-      members: members?.map((userId) => ({ user_id: userId })),
+    // `members` are member IDs; the OpenAPI `ChannelData.members` expects member objects.
+    client.channel(type as string, id, {
+      members: members?.map((user_id) => ({ user_id })),
     });
 
-  // need to keep as with call to channel.watch the ID can be changed from undefined to an actual ID generated server-side
+  // need to keep as with call to channel.watch the id can be changed from undefined to an actual ID generated server-side
   const originalCid = channelToWatch.id
     ? channelToWatch.cid
     : members && members.length
@@ -1117,13 +767,12 @@ export const getAndWatchChannel = async ({
 };
 
 /**
- * Generates a temporary `channel.cid` for channels created without an ID, as they need to be
- * referenced by an identifier until the back-end generates the final ID. The CID is generated from
- * its member IDs, which are sorted so the same arguments always produce the same value.
+ * Generates a temporary channel.cid for channels created without ID, as they need to be referenced
+ * by an identifier until the back-end generates the final ID. The cid is generated by its member IDs
+ * which are sorted and can be recreated the same every time given the same arguments.
  *
  * @param channelType - The channel type.
- * @param members - The member IDs that uniquely identify this channel.
- * @returns The temporary CID, or `undefined` when `members` is empty.
+ * @param members - The member ids used to build the temporary cid.
  */
 export const generateChannelTempCid = (channelType: string, members: string[]) => {
   if (!members) return;
@@ -1133,11 +782,9 @@ export const generateChannelTempCid = (channelType: string, members: string[]) =
 };
 
 /**
- * Checks if a channel is pinned. Returns `true` only when `channel.state.membership.pinned_at`
- * exists.
+ * Checks if a channel is pinned or not. Will return true only if channel.state.membership.pinned_at exists.
  *
- * @param channel - The channel to inspect.
- * @returns `true` when the channel is pinned for the current user.
+ * @param channel - The channel to check.
  */
 export const isChannelPinned = (channel: Channel) => {
   if (!channel) return false;
@@ -1148,11 +795,9 @@ export const isChannelPinned = (channel: Channel) => {
 };
 
 /**
- * Checks if a channel is archived. Returns `true` only when `channel.state.membership.archived_at`
- * exists.
+ * Checks if a channel is archived or not. Will return true only if channel.state.membership.archived_at exists.
  *
- * @param channel - The channel to inspect.
- * @returns `true` when the channel is archived for the current user.
+ * @param channel - The channel to check.
  */
 export const isChannelArchived = (channel: Channel) => {
   if (!channel) return false;
@@ -1163,26 +808,26 @@ export const isChannelArchived = (channel: Channel) => {
 };
 
 /**
- * A utility that tells us whether we should consider archived channels based on filters. Returns
- * `true` only when `filters.archived` exists and is a boolean.
+ * A utility that tells us whether we should consider archived channels or not based
+ * on filters. Will return true only if filters.archived exists and is a boolean value.
  *
- * @param filters - The channel filters used in a `queryChannels` request.
- * @returns `true` when archived channels should be considered.
+ * @param filters - The channel filters to inspect.
  */
-export const shouldConsiderArchivedChannels = (filters?: ChannelFilters) => {
+export const shouldConsiderArchivedChannels = (filters: ChannelFilters | undefined) => {
   if (!filters) return false;
 
   return typeof filters.archived === 'boolean';
 };
 
 /**
- * Extracts the value of the sort parameter at a given index, for a targeted key. Can handle both
- * array and object versions of sort. Returns `null` if the index/key combination does not exist.
+ * Extracts the value of the sort parameter at a given index, for a targeted key. Can
+ * handle both array and object versions of sort. Will return null if the index/key
+ * combination does not exist.
  *
- * @param atIndex - The index at which we'll examine the sort value, when it's an array.
- * @param atIndex.sort - The sort value — both array and object notations are accepted.
- * @param atIndex.targetKey - The target key that must exist at the given index.
- * @returns The sort direction at the requested position, or `null`.
+ * @param params - The extraction parameters.
+ * @param params.atIndex - the index at which we'll examine the sort value, if it's an array one
+ * @param params.sort - the sort value - both array and object notations are accepted
+ * @param params.targetKey - the target key which needs to exist for the sort at a certain index
  */
 export const extractSortValue = ({
   atIndex,
@@ -1194,11 +839,10 @@ export const extractSortValue = ({
   sort?: ChannelSort;
 }) => {
   if (!sort) return null;
-
+  // `ChannelSort` is now `SortParamRequest[]` (`{ field, direction }[]`). Return the `direction` of
+  // the entry at `atIndex` when its `field` matches `targetKey`, otherwise null.
   const option = sort[atIndex] ?? null;
-
-  if (option?.field !== targetKey) return null;
-
+  if (!option || option.field !== targetKey) return null;
   return option.direction ?? null;
 };
 
@@ -1214,11 +858,11 @@ export const shouldConsiderPinnedChannels = (sort: ChannelSort) => {
 };
 
 /**
- * Checks whether the sort value of type object contains a `pinned_at` value, or if an array sort
- * value's first entry is an object containing `pinned_at`.
+ * Checks whether the sort value of type object contains a pinned_at value or if
+ * an array sort value type has the first value be an object containing pinned_at.
  *
- * @param sort - The sort value to inspect.
- * @returns The sort direction for `pinned_at` (`1` or `-1`), or `null` when not present.
+ * @param params - The sort container.
+ * @param params.sort - The sort value to inspect for a `pinned_at` order.
  */
 export const findPinnedAtSortOrder = ({ sort }: { sort: ChannelSort }) =>
   extractSortValue({
@@ -1228,11 +872,12 @@ export const findPinnedAtSortOrder = ({ sort }: { sort: ChannelSort }) =>
   });
 
 /**
- * Finds the index of the last consecutively pinned channel, starting from the start of the array.
- * Does not consider any pinned channels after the contiguous subsequence at the start of the array.
+ * Finds the index of the last consecutively pinned channel, starting from the start of the
+ * array. Will not consider any pinned channels after the contiguous subsequence at the
+ * start of the array.
  *
- * @param channels - The channel list to scan.
- * @returns The index of the last pinned channel in the leading run, or `null` when none are pinned.
+ * @param params - The channel list container.
+ * @param params.channels - The channels to scan from the start of the array.
  */
 export const findLastPinnedChannelIndex = ({ channels }: { channels: Channel[] }) => {
   let lastPinnedChannelIndex: number | null = null;
@@ -1251,17 +896,15 @@ export const findLastPinnedChannelIndex = ({ channels }: { channels: Channel[] }
 };
 
 /**
- * A utility used to move a channel towards the beginning of a list of channels (promote it to a
- * higher position). It considers pinned channels in the process if needed and makes sure to only
- * update the list reference if the list should actually change. It will try to move the channel as
- * high as it can within the list.
+ * A utility used to move a channel towards the beginning of a list of channels (promote it to a higher position). It
+ * considers pinned channels in the process if needed and makes sure to only update the list reference if the list
+ * should actually change. It will try to move the channel as high as it can within the list.
  *
- * @param channels - The list of channels we want to modify.
- * @param channels.channelToMove - The channel we want to promote.
- * @param channels.channelToMoveIndexWithinChannels - The index of the channel we want to move
- *   when it is known (optional; skips a manual lookup).
- * @param channels.sort - The sort value used to check for pinned channels.
- * @returns The (possibly new) channel list with the target channel promoted.
+ * @param params - The promotion parameters.
+ * @param params.channels - the list of channels we want to modify
+ * @param params.channelToMove - the channel we want to promote
+ * @param params.channelToMoveIndexWithinChannels - optionally, the index of the channel we want to move if we know it (will skip a manual check)
+ * @param params.sort - the sort value used to check for pinned channels
  */
 export const promoteChannel = ({
   channels,
@@ -1314,7 +957,7 @@ export const promoteChannel = ({
 export const isDate = (value: unknown): value is Date => !!(value as Date).getTime;
 
 export const isLocalMessage = (message: unknown): message is LocalMessage =>
-  typeof (message as LocalMessage | undefined)?.status === 'string';
+  isDate((message as LocalMessage).created_at);
 
 export const runDetached = <T>(
   callback: Promise<void | T>,
@@ -1324,7 +967,7 @@ export const runDetached = <T>(
     onErrorCallback?: (error: Error) => void | Promise<void>;
   },
 ) => {
-  const { context, onSuccessCallback = () => undefined, onErrorCallback } = options ?? {};
+  const { context, onSuccessCallback, onErrorCallback } = options ?? {};
   const defaultOnError = (error: Error) => {
     logger
       .withExtraTags('runDetached')
