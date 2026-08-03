@@ -1,3 +1,21 @@
+## [10.0.0-rc.1](https://github.com/GetStream/stream-chat-js/compare/v9.50.2...v10.0.0-rc.1) (2026-08-03)
+
+### ⚠ BREAKING CHANGES
+
+* paginator-based message storage replaces
+channel.state.messages and channel.state.last_message_at. The message
+list, thread replies and pinned messages are now owned by
+channel.messagePaginator, thread.messagePaginator and
+channel.pinnedMessagesPaginator. OpenAPI-generated clients replace the
+hand-written request/response types. See
+docs/breaking-changes-v14-v15.md for the full migration guide.
+
+### Features
+
+* add message/channel paginator stack with thread minimal-init and state stores ([#1795](https://github.com/GetStream/stream-chat-js/issues/1795)) ([62f0507](https://github.com/GetStream/stream-chat-js/commit/62f050786dc153b89920d59aacecaf5f051fbaed))
+* integrate OpenAPI generated clients ([#1760](https://github.com/GetStream/stream-chat-js/issues/1760)) ([0776bc4](https://github.com/GetStream/stream-chat-js/commit/0776bc460598a91afb91d4d04d3281a562073f13))
+* v10 ([cd3141e](https://github.com/GetStream/stream-chat-js/commit/cd3141efe47b49cf83d3d58725bb8ed3b4f88f08))
+
 ## [9.50.2](https://github.com/GetStream/stream-chat-js/compare/v9.50.1...v9.50.2) (2026-07-16)
 
 ### Bug Fixes
