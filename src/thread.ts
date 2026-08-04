@@ -543,21 +543,6 @@ export class Thread extends WithSubscriptions {
       this.state.partialNext({ read: nextRead });
     }).unsubscribe;
 
-  private incrementReplyCountLocally = () => {
-    this.state.next((current) => {
-      const nextReplyCount = current.replyCount + 1;
-
-      return {
-        ...current,
-        parentMessage: {
-          ...current.parentMessage,
-          reply_count: nextReplyCount,
-        },
-        replyCount: nextReplyCount,
-      };
-    });
-  };
-
   private subscribeRepliesRead = () =>
     this.client.on('message.read', (event) => {
       if (!event.user || !event.created_at || !event.thread) return;
