@@ -142,7 +142,7 @@ describe('MessagePaginator — state publish throttling', () => {
   });
 });
 
-// End-to-end optimistic path: a real store-backed paginator (StoreBackedItemIndex), driven through
+// End-to-end optimistic path: a real store-backed paginator (MessageStoreBackedItemIndex), driven through
 // the actual optimistic wiring (applyReactionLocally → store.upsert + store.flushSubscribers() →
 // holder.flushState() → throttle.flush()). This is the path the "your own sends/reactions appear
 // instantly" guarantee rides on — distinct from calling paginator.flushState() directly above.
@@ -164,7 +164,7 @@ describe('MessagePaginator — optimistic (local-user) writes bypass the throttl
       cid: 'channel-id',
       getReplies: vi.fn(),
       query: vi.fn(),
-      // MessagePaginator.createItemIndex reads this to build a StoreBackedItemIndex, so the paginator
+      // MessagePaginator.createItemIndex reads this to build a MessageStoreBackedItemIndex, so the paginator
       // is a real subscriber of `store` (gets onMessagesChanged + flushState).
       getClient: () => client,
     } as unknown as Channel;

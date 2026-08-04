@@ -13,7 +13,7 @@ import {
 import type { LocalMessage } from '../../types';
 import { StateStore } from '../../store';
 import { ItemIndex } from '../ItemIndex';
-import { StoreBackedItemIndex } from '../../messageStore/StoreBackedItemIndex';
+import { MessageStoreBackedItemIndex } from '../../messageStore/MessageStoreBackedItemIndex';
 
 export type {
   JumpToMessageOptions,
@@ -149,7 +149,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
           ((owner) => {
             const store = channel.getClient?.().messageStore;
             return store
-              ? new StoreBackedItemIndex({
+              ? new MessageStoreBackedItemIndex({
                   store,
                   owner: owner as MessageIntervalPaginator,
                   getId: owner.getItemId.bind(owner),

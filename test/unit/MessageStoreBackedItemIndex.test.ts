@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MessageStore } from '../../src/messageStore/MessageStore';
 import type { MessageStoreSubscriber } from '../../src/messageStore/MessageStore';
-import { StoreBackedItemIndex } from '../../src/messageStore/StoreBackedItemIndex';
+import { MessageStoreBackedItemIndex } from '../../src/messageStore/MessageStoreBackedItemIndex';
 import { formatMessage } from '../../src/utils';
 import { generateMsg } from './test-utils/generateMessage';
 import type { LocalMessage } from '../../src';
@@ -17,19 +17,19 @@ const spyOwner = (): MessageStoreSubscriber & {
 
 const getId = (m: LocalMessage) => m.id;
 
-describe('StoreBackedItemIndex', () => {
+describe('MessageStoreBackedItemIndex', () => {
   let store: MessageStore;
   let ownerA: ReturnType<typeof spyOwner>;
   let ownerB: ReturnType<typeof spyOwner>;
-  let a: StoreBackedItemIndex;
-  let b: StoreBackedItemIndex;
+  let a: MessageStoreBackedItemIndex;
+  let b: MessageStoreBackedItemIndex;
 
   beforeEach(() => {
     store = new MessageStore();
     ownerA = spyOwner();
     ownerB = spyOwner();
-    a = new StoreBackedItemIndex({ store, owner: ownerA, getId });
-    b = new StoreBackedItemIndex({ store, owner: ownerB, getId });
+    a = new MessageStoreBackedItemIndex({ store, owner: ownerA, getId });
+    b = new MessageStoreBackedItemIndex({ store, owner: ownerB, getId });
   });
 
   describe('membership scoping', () => {

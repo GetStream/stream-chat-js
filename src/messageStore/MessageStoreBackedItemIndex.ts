@@ -2,7 +2,7 @@ import type { ItemIndexApi } from '../pagination/ItemIndex';
 import type { MessageStore, MessageStoreSubscriber } from './MessageStore';
 import type { LocalMessage } from '../types';
 
-export type StoreBackedItemIndexOptions = {
+export type MessageStoreBackedItemIndexOptions = {
   store: MessageStore;
   /** The paginator that owns this index; used as the store subscriber + refcount holder. */
   owner: MessageStoreSubscriber;
@@ -28,13 +28,13 @@ export type StoreBackedItemIndexOptions = {
  *   still held by another paginator (e.g. a `show_in_channel` reply in both the channel
  *   list and its thread) survives; the store GCs it only when the last holder unlinks.
  */
-export class StoreBackedItemIndex implements ItemIndexApi<LocalMessage> {
+export class MessageStoreBackedItemIndex implements ItemIndexApi<LocalMessage> {
   private memberIds = new Set<string>();
   private readonly store: MessageStore;
   private readonly owner: MessageStoreSubscriber;
   private readonly getId: (item: LocalMessage) => string;
 
-  constructor({ store, owner, getId }: StoreBackedItemIndexOptions) {
+  constructor({ store, owner, getId }: MessageStoreBackedItemIndexOptions) {
     this.store = store;
     this.owner = owner;
     this.getId = getId;
