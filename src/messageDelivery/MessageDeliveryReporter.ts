@@ -3,16 +3,15 @@ import { Channel } from '../channel';
 import type { ThreadUserReadState } from '../thread';
 import { Thread } from '../thread';
 import type {
-  EventAPIResponse,
   LocalMessage,
   MarkDeliveredRequest,
   MarkReadRequest,
+  MarkReadResponse,
   StreamAPIError,
   StreamResponse,
 } from '../types';
 import { throttle, userHasReadReceipts } from '../utils';
 import { isAPIError, isErrorRetryable } from '../errors';
-import type { MarkReadResponse as Gen_MarkReadResponse } from '../gen/models';
 
 const MAX_DELIVERED_MESSAGE_COUNT_IN_PAYLOAD = 100 as const;
 const MARK_AS_DELIVERED_BUFFER_TIMEOUT = 1000 as const;
@@ -306,16 +305,11 @@ export class MessageDeliveryReporter {
       ? { ...options, thread_id: collection.id }
       : options;
 
-    let result: EventAPIResponse | StreamResponse<Gen_MarkReadResponse> | null = null;
+    let result: Partial<StreamResponse<MarkReadResponse>> | null = null;
 
     if (isThreadCollection) {
-      const markReadRequestHandler = collection.configState.getLatestValue()
-        .requestHandlers?.markReadRequest as
-        | ((params: {
-            thread: Thread;
-            options?: MarkReadRequest;
-          }) => Promise<EventAPIResponse | null> | void)
-        | undefined;
+      const markReadRequestHandler =
+        collection.configState.getLatestValue().requestHandlers?.markReadRequest;
       result = markReadRequestHandler
         ? ((await markReadRequestHandler({
             options: requestOptions,
@@ -323,13 +317,8 @@ export class MessageDeliveryReporter {
           })) ?? null)
         : await channel.markRead(requestOptions);
     } else {
-      const markReadRequestHandler = channel.configState.getLatestValue().requestHandlers
-        ?.markReadRequest as
-        | ((params: {
-            channel: Channel;
-            options?: MarkReadRequest;
-          }) => Promise<EventAPIResponse | null> | void)
-        | undefined;
+      const markReadRequestHandler =
+        channel.configState.getLatestValue().requestHandlers?.markReadRequest;
       result = markReadRequestHandler
         ? ((await markReadRequestHandler({ channel, options: requestOptions })) ?? null)
         : await channel.markRead(requestOptions);

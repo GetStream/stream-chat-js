@@ -5,7 +5,7 @@ import type {
   PaginatorOptions,
 } from './BasePaginator';
 import type {
-  QueryRemindersOptions,
+  QueryRemindersRequest,
   ReminderFilters,
   ReminderResponseData,
   ReminderSort,
@@ -25,7 +25,7 @@ const DEFAULT_SORT: ReminderSort = [{ direction: 1, field: 'created_at' }];
 
 export class ReminderPaginator extends BasePaginator<
   ReminderResponseData,
-  QueryRemindersOptions
+  QueryRemindersRequest
 > {
   private client: StreamChat;
   protected _filters: ReminderFilters | undefined;
@@ -52,7 +52,7 @@ export class ReminderPaginator extends BasePaginator<
 
   constructor(
     client: StreamChat,
-    options?: PaginatorOptions<ReminderResponseData, QueryRemindersOptions>,
+    options?: PaginatorOptions<ReminderResponseData, QueryRemindersRequest>,
   ) {
     super({
       initialCursor: ZERO_PAGE_CURSOR,
@@ -83,8 +83,8 @@ export class ReminderPaginator extends BasePaginator<
   protected getNextQueryShape({
     direction,
   }: Required<
-    Pick<PaginationQueryParams<QueryRemindersOptions>, 'direction'>
-  >): QueryRemindersOptions {
+    Pick<PaginationQueryParams<QueryRemindersRequest>, 'direction'>
+  >): QueryRemindersRequest {
     const cursor = this.cursor?.[direction];
     return {
       filter: this.filters,
@@ -96,7 +96,7 @@ export class ReminderPaginator extends BasePaginator<
 
   query = async ({
     queryShape,
-  }: PaginationQueryParams<QueryRemindersOptions>): Promise<
+  }: PaginationQueryParams<QueryRemindersRequest>): Promise<
     PaginationQueryReturnValue<ReminderResponseData>
   > => {
     const { reminders: items, next, prev } = await this.client.queryReminders(queryShape);

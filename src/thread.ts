@@ -7,10 +7,10 @@ import {
 import { applyReactionLocally } from './entityStore';
 import type {
   DraftResponse,
-  EventAPIResponse,
   EventType,
   LocalMessage,
   MarkReadRequest,
+  MarkReadResponseEvent,
   MessageResponse,
   ReactionRequest,
   ReadStateResponse,
@@ -75,7 +75,7 @@ const DEFAULT_ITEM_ORDER: SortParamRequest[] = [{ field: 'created_at', direction
 export type CustomThreadMarkReadRequestFn = (params: {
   thread: Thread;
   options?: MarkReadRequest;
-}) => Promise<EventAPIResponse | null> | void;
+}) => Promise<{ event: MarkReadResponseEvent } | null> | void;
 
 export type ThreadInstanceConfig = {
   requestHandlers?: {
@@ -139,7 +139,7 @@ export class Thread extends WithSubscriptions {
         participants: threadData.thread_participants,
         read: formatReadState(
           !threadData.read || threadData.read.length === 0
-            ? getPlaceholderReadResponse(client.userID)
+            ? getPlaceholderReadResponse(client.userId)
             : threadData.read,
         ),
         // Use the parent message's reply_count, not the top-level threadData.reply_count. The
@@ -180,7 +180,7 @@ export class Thread extends WithSubscriptions {
         isStateStale: false,
         parentMessage: formattedParentMessage,
         participants: [],
-        read: formatReadState(getPlaceholderReadResponse(client.userID)),
+        read: formatReadState(getPlaceholderReadResponse(client.userId)),
         replyCount: parentMessage.reply_count ?? 0,
         title: '',
         updatedAt: parentMessage.updated_at ? new Date(parentMessage.updated_at) : null,
@@ -305,7 +305,7 @@ export class Thread extends WithSubscriptions {
   }
 
   get ownUnreadCount() {
-    return ownUnreadCountSelector(this.client.userID)(this.state.getLatestValue());
+    return ownUnreadCountSelector(this.client.userId)(this.state.getLatestValue());
   }
 
   public activate = () => {
@@ -429,7 +429,7 @@ export class Thread extends WithSubscriptions {
     this.state.subscribeWithSelector(
       (nextValue) => ({
         active: nextValue.active,
-        unreadMessageCount: ownUnreadCountSelector(this.client.userID)(nextValue),
+        unreadMessageCount: ownUnreadCountSelector(this.client.userId)(nextValue),
       }),
       ({ active, unreadMessageCount }) => {
         if (!active || !unreadMessageCount) return;
@@ -452,8 +452,8 @@ export class Thread extends WithSubscriptions {
       const { channel } = this.state.getLatestValue();
 
       if (
-        !this.client.userID ||
-        this.client.userID !== event.user?.id ||
+        !this.client.userId ||
+        this.client.userId !== event.user?.id ||
         event.channel?.cid !== channel.cid
       ) {
         return;
@@ -491,11 +491,11 @@ export class Thread extends WithSubscriptions {
 
   private subscribeNewReplies = () =>
     this.client.on('message.new', (event) => {
-      if (!this.client.userID || event.message?.parent_id !== this.id) {
+      if (!this.client.userId || event.message?.parent_id !== this.id) {
         return;
       }
 
-      const isOwnMessage = event.message.user?.id === this.client.userID;
+      const isOwnMessage = event.message.user?.id === this.client.userId;
       const { active, read } = this.state.getLatestValue();
 
       this.upsertReplyLocally({
@@ -526,7 +526,7 @@ export class Thread extends WithSubscriptions {
               user: event.user,
               unreadMessageCount: 0,
             };
-          } else if (active && userId === this.client.userID) {
+          } else if (active && userId === this.client.userId) {
             // Do not increment unread count for the current user in an active thread
           } else {
             // Increment unread count for all users except the author of the new message

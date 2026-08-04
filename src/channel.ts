@@ -31,7 +31,6 @@ import type {
   CreateDraftResponse,
   DeleteMessageOptions,
   Event,
-  EventAPIResponse,
   EventHandler,
   EventPayload,
   EventType,
@@ -39,6 +38,7 @@ import type {
   GetRepliesRequest,
   LocalMessage,
   MarkReadRequest,
+  MarkReadResponseEvent,
   MarkUnreadRequest,
   MessagePaginationOptions,
   MessageRequest,
@@ -133,7 +133,7 @@ export type CustomDeleteMessageRequestFn = (
 export type CustomMarkReadRequestFn = (params: {
   channel: Channel;
   options?: MarkReadRequest;
-}) => Promise<EventAPIResponse | null>;
+}) => Promise<{ event: MarkReadResponseEvent } | null>;
 
 export type ChannelInstanceConfig = {
   requestHandlers?: {
