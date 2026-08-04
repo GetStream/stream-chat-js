@@ -310,7 +310,9 @@ describe('ChannelManager', () => {
 
         expect(client.offlineDb!.upsertCidsForQuery).toHaveBeenCalledExactlyOnceWith({
           cids: channels.map((channel) => channel.cid),
+          filters: options.filter_conditions,
           options,
+          sort: options.sort,
         });
       });
     });

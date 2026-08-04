@@ -11,7 +11,8 @@
     },
     {
       "name": "release-v10",
-      "prerelease": "rc"
+      "prerelease": "rc",
+      "channel": "rc"
     }
   ],
   "plugins": [
