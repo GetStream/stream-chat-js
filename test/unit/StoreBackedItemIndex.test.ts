@@ -168,4 +168,63 @@ describe('StoreBackedItemIndex', () => {
       expect(y.get('m1')?.text).toBe('y');
     });
   });
+
+  // Owner-less + store-less is the drop-in replacement for the former standalone `ItemIndex` class.
+  // These cover its plain-index CRUD surface and exercise the optional-`owner` default.
+  describe('owner-less private store — plain-index CRUD', () => {
+    let index: StoreBackedItemIndex<LocalMessage>;
+    beforeEach(() => {
+      index = new StoreBackedItemIndex<LocalMessage>({ getId });
+    });
+
+    it('starts empty', () => {
+      expect(index.entries()).toEqual([]);
+      expect(index.values()).toEqual([]);
+    });
+
+    it('setOne overwrites an existing id', () => {
+      index.setOne(msg({ id: 'm1', text: 'a' }));
+      const updated = msg({ id: 'm1', text: 'b' });
+      index.setOne(updated);
+      expect(index.get('m1')).toBe(updated);
+    });
+
+    it('setMany adds all items and overwrites on repeat', () => {
+      index.setMany([msg({ id: 'm1' }), msg({ id: 'm2' }), msg({ id: 'm3' })]);
+      expect(index.values().map(getId).sort()).toEqual(['m1', 'm2', 'm3']);
+      const m1b = msg({ id: 'm1', text: 'again' });
+      index.setMany([m1b]);
+      expect(index.get('m1')).toBe(m1b);
+      expect(index.values()).toHaveLength(3);
+    });
+
+    it('setMany([]) is a no-op', () => {
+      index.setMany([]);
+      expect(index.values()).toEqual([]);
+    });
+
+    it('entries returns [id, item] tuples', () => {
+      const m1 = msg({ id: 'm1' });
+      const m2 = msg({ id: 'm2' });
+      index.setMany([m1, m2]);
+      expect(index.entries().sort(([a], [b]) => a.localeCompare(b))).toEqual([
+        ['m1', m1],
+        ['m2', m2],
+      ]);
+    });
+
+    it('remove of a non-existent id is a no-op', () => {
+      index.setOne(msg({ id: 'm1' }));
+      index.remove('nope');
+      expect(index.has('m1')).toBe(true);
+      expect(index.values()).toHaveLength(1);
+    });
+
+    it('clear empties the index', () => {
+      index.setMany([msg({ id: 'm1' }), msg({ id: 'm2' })]);
+      index.clear();
+      expect(index.values()).toEqual([]);
+      expect(index.has('m1')).toBe(false);
+    });
+  });
 });

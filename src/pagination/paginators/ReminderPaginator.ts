@@ -11,7 +11,7 @@ import type {
   ReminderSort,
 } from '../../types';
 import type { StreamChat } from '../../client';
-import { ItemIndex } from '../ItemIndex';
+import { StoreBackedItemIndex } from '../../messageStore/StoreBackedItemIndex';
 import { makeComparator } from '../sortCompiler';
 import { resolveDotPathValue } from '../utility.normalization';
 
@@ -56,7 +56,7 @@ export class ReminderPaginator extends BasePaginator<
   ) {
     super({
       initialCursor: ZERO_PAGE_CURSOR,
-      itemIndex: new ItemIndex<ReminderResponseData>({ getId: getReminderId }),
+      itemIndex: new StoreBackedItemIndex<ReminderResponseData>({ getId: getReminderId }),
       ...options,
     });
     this.client = client;

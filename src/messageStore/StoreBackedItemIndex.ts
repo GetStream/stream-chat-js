@@ -2,23 +2,31 @@ import type { ItemIndexApi } from '../pagination/ItemIndex';
 import { EntityStore, type EntityStoreSubscriber } from './EntityStore';
 
 export type StoreBackedItemIndexOptions<T> = {
-  /** The paginator that owns this index; used as the store subscriber + refcount holder. */
-  owner: EntityStoreSubscriber;
   getId: (item: T) => string;
   /**
+   * The entity that owns this index; used as the store subscriber + refcount holder. Optional: an
+   * index over a private store (see `store`) has no one to fan out to, so an owner-less index just
+   * uses an internal no-op subscriber as its refcount holder. Message paginators pass themselves so
+   * cross-collection updates reach them; single-home collections (channels, reminders, …) omit it.
+   */
+  owner?: EntityStoreSubscriber;
+  /**
    * The shared, client-global store that holds the canonical content. Optional: when omitted the
-   * index provisions a **private** {@link EntityStore} of its own, so a detached consumer (e.g. a
-   * paginator built without a client, as in tests) behaves exactly like a plain, per-instance index
-   * — same code path, no shared fan-out.
+   * index provisions a **private** {@link EntityStore} of its own, so it behaves exactly like a
+   * plain, per-instance index — same code path, no shared content, no fan-out. This is the mode used
+   * by single-home collections and by detached paginators (e.g. built without a client, in tests).
    */
   store?: EntityStore<T>;
 };
+
+/** No-op subscriber used as the refcount holder for an owner-less (private-store) index. */
+const NOOP_OWNER: EntityStoreSubscriber = { onEntitiesChanged: () => undefined };
 
 /**
  * An {@link ItemIndexApi} implementation that keeps entity **content** in an {@link EntityStore}
  * while keeping **membership** local.
  *
- * A paginator sees the exact same CRUD surface as a plain {@link ItemIndex}, but:
+ * A consumer sees the same minimal CRUD surface ({@link ItemIndexApi}), but:
  *
  * - `get`/`has`/`values`/`entries` are scoped to *this* index's membership (`memberIds`), so
  *   `getItem(id)` still means "does THIS index hold the id" — even though the canonical object
@@ -47,7 +55,7 @@ export class StoreBackedItemIndex<T> implements ItemIndexApi<T> {
 
   constructor({ store, owner, getId }: StoreBackedItemIndexOptions<T>) {
     this.store = store ?? new EntityStore<T>({ getId });
-    this.owner = owner;
+    this.owner = owner ?? NOOP_OWNER;
     this.getId = getId;
   }
 

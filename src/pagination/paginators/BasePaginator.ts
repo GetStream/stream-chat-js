@@ -7,7 +7,8 @@ import { throttle, type Throttled } from '../../utils/throttling/throttle';
 import { isStateThrottlingEnabled } from './stateThrottling';
 import type { FieldToDataResolver } from '../types.normalization';
 import { ComparisonResult } from '../types.normalization';
-import { ItemIndex, type ItemIndexApi } from '../ItemIndex';
+import type { ItemIndexApi } from '../ItemIndex';
+import { StoreBackedItemIndex } from '../../messageStore/StoreBackedItemIndex';
 import { isEqual } from '../../utils/mergeWith/mergeWithCore';
 import { DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES } from '../../constants';
 
@@ -541,7 +542,7 @@ export abstract class BasePaginator<T, Q> {
     this._itemIndex =
       itemIndex ??
       createItemIndex?.(this) ??
-      new ItemIndex({ getId: this.getItemId.bind(this) });
+      new StoreBackedItemIndex({ getId: this.getItemId.bind(this) });
   }
 
   // ---------------------------------------------------------------------------

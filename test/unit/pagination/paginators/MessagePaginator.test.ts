@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ZERO_PAGE_CURSOR } from '../../../../src/pagination/paginators/BasePaginator';
 import type { Interval } from '../../../../src/pagination/paginators/BasePaginator';
 import { MessagePaginator } from '../../../../src/pagination/paginators/MessagePaginator';
-import { ItemIndex } from '../../../../src/pagination/ItemIndex';
+import { StoreBackedItemIndex } from '../../../../src/messageStore/StoreBackedItemIndex';
 import type { Channel } from '../../../../src/channel';
 import type {
   LocalMessage,
@@ -24,7 +24,7 @@ const createMessage = (overrides: Partial<MessageResponse>): LocalMessage =>
 
 describe('MessagePaginator', () => {
   let channel: Channel;
-  let itemIndex: ItemIndex<LocalMessage>;
+  let itemIndex: StoreBackedItemIndex<LocalMessage>;
 
   beforeEach(() => {
     channel = {
@@ -32,7 +32,9 @@ describe('MessagePaginator', () => {
       getReplies: vi.fn(),
       query: vi.fn(),
     } as unknown as Channel;
-    itemIndex = new ItemIndex<LocalMessage>({ getId: (message) => message.id });
+    itemIndex = new StoreBackedItemIndex<LocalMessage>({
+      getId: (message) => message.id,
+    });
   });
 
   describe('constructor()', () => {
@@ -1925,7 +1927,9 @@ describe('MessagePaginator', () => {
       return new MessagePaginator({
         channel: trackingChannel,
         parentMessageId,
-        itemIndex: new ItemIndex<LocalMessage>({ getId: (message) => message.id }),
+        itemIndex: new StoreBackedItemIndex<LocalMessage>({
+          getId: (message) => message.id,
+        }),
       });
     };
 

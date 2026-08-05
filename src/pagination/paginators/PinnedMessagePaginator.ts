@@ -12,7 +12,7 @@ import type { Channel } from '../../channel';
 import { formatMessage, generateUUIDv4 } from '../../utils';
 import { makeComparator } from '../sortCompiler';
 import { resolveDotPathValue } from '../utility.normalization';
-import type { ItemIndex } from '../ItemIndex';
+import type { ItemIndexApi } from '../ItemIndex';
 
 export type PinnedMessagePaginatorFilter = {
   cid: string;
@@ -22,7 +22,7 @@ export type PinnedMessagePaginatorFilter = {
 export type PinnedMessagePaginatorOptions = {
   channel: Channel;
   id?: string;
-  itemIndex?: ItemIndex<LocalMessage>;
+  itemIndex?: ItemIndexApi<LocalMessage>;
   paginatorOptions?: PaginatorOptions<LocalMessage, MessageQueryShape>;
 };
 
