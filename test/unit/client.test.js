@@ -921,8 +921,17 @@ describe('StreamChat.queryChannels', async () => {
 
 	it('seeds each queried channel paginator with its full message page', async () => {
 		const client = await getClientWithUser();
-		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
+		const mockedChannelsQueryResponse = Array.from({ length: 10 }, (_, i) => ({
 			...mockChannelQueryResponse,
+			// Distinct id/cid per response so the 10 responses hydrate 10 DISTINCT channels (each
+			// seeded once), instead of collapsing onto one shared cid and re-seeding that single
+			// channel 10x — the latter accumulates the paginator window and, under the state-publish
+			// throttle, makes this assertion flaky.
+			channel: {
+				...mockChannelQueryResponse.channel,
+				id: `${mockChannelQueryResponse.channel.id}-${i}`,
+				cid: `${mockChannelQueryResponse.channel.type}:${mockChannelQueryResponse.channel.id}-${i}`,
+			},
 			messages: Array.from(
 				{ length: DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE },
 				generateMsg,
@@ -943,8 +952,17 @@ describe('StreamChat.queryChannels', async () => {
 
 	it('seeds each queried channel paginator with its partial message page', async () => {
 		const client = await getClientWithUser();
-		const mockedChannelQueryResponse = Array.from({ length: 10 }, () => ({
+		const mockedChannelQueryResponse = Array.from({ length: 10 }, (_, i) => ({
 			...mockChannelQueryResponse,
+			// Distinct id/cid per response so the 10 responses hydrate 10 DISTINCT channels (each
+			// seeded once), instead of collapsing onto one shared cid and re-seeding that single
+			// channel 10x — the latter accumulates the paginator window and, under the state-publish
+			// throttle, makes this assertion flaky.
+			channel: {
+				...mockChannelQueryResponse.channel,
+				id: `${mockChannelQueryResponse.channel.id}-${i}`,
+				cid: `${mockChannelQueryResponse.channel.type}:${mockChannelQueryResponse.channel.id}-${i}`,
+			},
 			messages: Array.from(
 				{ length: DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE - 1 },
 				generateMsg,
