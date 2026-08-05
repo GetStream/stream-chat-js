@@ -399,6 +399,66 @@ describe('optimistic reactions', () => {
     });
   });
 
+  describe('pinned message fan-out', () => {
+    // A pinned message is the SAME message as in the main list. The pinned paginator is now
+    // store-backed (via MessageIntervalPaginator), so it shares the single canonical copy and must
+    // reflect a reaction applied through the main list — the gap that existed while it used a
+    // private ItemIndex.
+    const pinnedOwnTypes = (id: string) =>
+      (channel.pinnedMessagesPaginator.getItem(id)?.own_reactions ?? []).map(
+        (reaction) => reaction.type,
+      );
+
+    const setupPinnedAndMain = () => {
+      const message = generateMsg({
+        cid: channel.cid,
+        pinned: true,
+        pinned_at: '2020-01-01T00:00:00.000Z',
+      });
+      // The main list holds it...
+      seed(channel, message);
+      // ...and the pinned list holds the same id (a message pinned while it is on screen).
+      channel.pinnedMessagesPaginator.ingestPage({
+        isHead: true,
+        isTail: true,
+        page: [formatMessage(message)],
+        setActive: true,
+      });
+      return { message };
+    };
+
+    it('mirrors a main-list reaction onto the pinned copy (shared canonical message)', async () => {
+      const { message } = setupPinnedAndMain();
+      vi.spyOn(channel, 'sendReaction').mockResolvedValue(
+        apiReactionResponse(generateMsg({ id: message.id })),
+      );
+
+      const pending = channel.addReactionWithLocalUpdate({
+        messageId: message.id,
+        reaction: { type: 'love' },
+      });
+
+      expect(ownReactionTypes(channel.messagePaginator, message.id)).toContain('love');
+      expect(pinnedOwnTypes(message.id)).toContain('love');
+
+      await pending;
+    });
+
+    it('reverts the pinned copy when the request fails', async () => {
+      const { message } = setupPinnedAndMain();
+      vi.spyOn(channel, 'sendReaction').mockRejectedValue(networkError());
+
+      const pending = channel.addReactionWithLocalUpdate({
+        messageId: message.id,
+        reaction: { type: 'love' },
+      });
+      expect(pinnedOwnTypes(message.id)).toContain('love');
+
+      await expect(pending).rejects.toThrow('network down');
+      expect(pinnedOwnTypes(message.id)).toEqual([]);
+    });
+  });
+
   describe('thread parent message (own_reactions preservation)', () => {
     const parentOwnReactionTypes = (thread: Thread) =>
       (thread.state.getLatestValue().parentMessage?.own_reactions ?? []).map(

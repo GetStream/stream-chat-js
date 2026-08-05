@@ -12,7 +12,7 @@ import type { Channel } from '../../channel';
 import { formatMessage, generateUUIDv4 } from '../../utils';
 import { makeComparator } from '../sortCompiler';
 import { resolveDotPathValue } from '../utility.normalization';
-import { ItemIndex } from '../ItemIndex';
+import type { ItemIndex } from '../ItemIndex';
 
 export type PinnedMessagePaginatorFilter = {
   cid: string;
@@ -55,7 +55,10 @@ export class PinnedMessagePaginator extends MessageIntervalPaginator {
     super({
       channel,
       id: id ?? `pinned-message-paginator-${generateUUIDv4()}`,
-      itemIndex: itemIndex ?? new ItemIndex({ getId: (item) => item.id }),
+      // No explicit index: inherit the store-backed item index from MessageIntervalPaginator so a
+      // pinned message shares the single canonical copy with the main list / thread and reflects
+      // reactions & edits applied elsewhere. A caller may still inject a custom `itemIndex`.
+      itemIndex,
       paginatorOptions,
     });
 

@@ -40,6 +40,7 @@ import { resolveDotPathValue } from '../utility.normalization';
 import { lowerBound } from '../utility.search';
 import type { ItemIndexApi } from '../ItemIndex';
 import type { EntityStoreChangeBatch } from '../../messageStore/EntityStore';
+import { StoreBackedItemIndex } from '../../messageStore/StoreBackedItemIndex';
 import { deriveCreatedAtAroundPaginationFlags } from '../cursorDerivation';
 import { deriveIdAroundPaginationFlags } from '../cursorDerivation/idAroundPaginationFlags';
 import { deriveLinearPaginationFlags } from '../cursorDerivation/linearPaginationFlags';
@@ -217,6 +218,20 @@ export class MessageIntervalPaginator extends BasePaginator<
       initialCursor: ZERO_PAGE_CURSOR,
       itemIndex,
       ...paginatorOptions,
+      // Back every message-interval paginator (channel main list, thread reply list, pinned list)
+      // with the client-global message store, so a message held in more than one of them has a
+      // single canonical copy and updates (reactions/edits) fan out to all holders — no copy-to-copy
+      // sync. When the store is unavailable (e.g. a detached paginator in a test) the index falls
+      // back to a private store and behaves exactly like a plain per-instance index. Overridable per
+      // instance via `paginatorOptions.createItemIndex` or an explicit `itemIndex`.
+      createItemIndex:
+        paginatorOptions?.createItemIndex ??
+        ((owner) =>
+          new StoreBackedItemIndex<LocalMessage>({
+            store: channel.getClient?.().messageStore,
+            owner: owner as MessageIntervalPaginator,
+            getId: owner.getItemId.bind(owner),
+          })),
       pageSize: paginatorOptions?.pageSize ?? DEFAULT_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
     });
     this.config.deriveCursor = makeDeriveCursor(this);
