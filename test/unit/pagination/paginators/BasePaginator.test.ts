@@ -939,7 +939,7 @@ describe('BasePaginator', () => {
       it('returns false if does not match the filter', async () => {
         const paginator = new Paginator();
         // @ts-expect-error accessing protected property
-        paginator.buildFilters = () => ({
+        paginator.buildMatchFilters = () => ({
           name: { $eq: 'test1' },
         });
         expect(paginator.matchesFilter(item1)).toBeFalsy();
@@ -947,7 +947,7 @@ describe('BasePaginator', () => {
       it('returns true if item matches the filter', async () => {
         const paginator = new Paginator();
         // @ts-expect-error accessing protected property
-        paginator.buildFilters = () => ({
+        paginator.buildMatchFilters = () => ({
           $or: [{ name: { $eq: 'test1' } }, { teams: { $contains: 'abc' } }],
         });
         expect(paginator.matchesFilter(item1)).toBeTruthy();
@@ -2049,7 +2049,7 @@ describe('BasePaginator', () => {
           const paginator = new Paginator({ itemIndex, lockItemOrder });
 
           // @ts-expect-error accessing protected property
-          paginator.buildFilters = () => ({
+          paginator.buildMatchFilters = () => ({
             teams: { $eq: ['abc', 'efg'] }, // required membership in these two teams
           });
 
@@ -2105,7 +2105,7 @@ describe('BasePaginator', () => {
           setActive: true,
         });
         // @ts-expect-error accessing protected property
-        paginator.buildFilters = () => ({
+        paginator.buildMatchFilters = () => ({
           age: { $gt: 100 },
         });
 
@@ -2166,7 +2166,7 @@ describe('BasePaginator', () => {
           });
 
           // @ts-expect-error accessing protected property
-          paginator.buildFilters = () => ({
+          paginator.buildMatchFilters = () => ({
             age: { $gt: 100 },
           });
 
@@ -2205,7 +2205,7 @@ describe('BasePaginator', () => {
           });
 
           // @ts-expect-error accessing protected property
-          paginator.buildFilters = () => ({
+          paginator.buildMatchFilters = () => ({
             teams: { $contains: 'abc' },
           });
 
@@ -2238,7 +2238,7 @@ describe('BasePaginator', () => {
           });
 
           // @ts-expect-error accessing protected property
-          paginator.buildFilters = () => ({
+          paginator.buildMatchFilters = () => ({
             teams: { $contains: 'abc' },
           });
           paginator.sortComparator = makeComparator<TestItem>({
@@ -2275,7 +2275,7 @@ describe('BasePaginator', () => {
           });
 
           // @ts-expect-error accessing protected property
-          paginator.buildFilters = () => ({
+          paginator.buildMatchFilters = () => ({
             teams: { $contains: 'abc' },
           });
           paginator.sortComparator = makeComparator<TestItem>({
@@ -2316,7 +2316,7 @@ describe('BasePaginator', () => {
         (_, lockItemOrder) => {
           const paginator = new Paginator({ itemIndex, lockItemOrder });
           // @ts-expect-error accessing protected property
-          paginator.buildFilters = () => ({
+          paginator.buildMatchFilters = () => ({
             teams: { $contains: 'abc' },
           });
           paginator.sortComparator = makeComparator<TestItem>({
@@ -2410,7 +2410,7 @@ describe('BasePaginator', () => {
         (_, lockItemOrder) => {
           const paginator = new Paginator({ itemIndex, lockItemOrder });
           // @ts-expect-error accessing protected property
-          paginator.buildFilters = () => ({
+          paginator.buildMatchFilters = () => ({
             teams: { $contains: 'abc' },
           });
           paginator.sortComparator = makeComparator<TestItem>({
@@ -2504,7 +2504,7 @@ describe('BasePaginator', () => {
         (_, __, lockItemOrder) => {
           const paginator = new Paginator({ itemIndex, lockItemOrder });
           // @ts-expect-error accessing protected property
-          paginator.buildFilters = () => ({
+          paginator.buildMatchFilters = () => ({
             teams: { $contains: 'abc' },
           });
           paginator.sortComparator = makeComparator<TestItem>({
@@ -2601,7 +2601,7 @@ describe('BasePaginator', () => {
           setActive: true,
         });
         // @ts-expect-error accessing protected property
-        paginator.buildFilters = () => ({
+        paginator.buildMatchFilters = () => ({
           teams: { $contains: 'abc' },
         });
 
@@ -2632,7 +2632,7 @@ describe('BasePaginator', () => {
           setActive: true,
         });
         // @ts-expect-error accessing protected property
-        paginator.buildFilters = () => ({
+        paginator.buildMatchFilters = () => ({
           teams: { $contains: 'abc' },
         });
 
@@ -2705,7 +2705,7 @@ describe('BasePaginator', () => {
         });
 
         // @ts-expect-error accessing protected property
-        paginator.buildFilters = () => ({
+        paginator.buildMatchFilters = () => ({
           age: { $gt: 100 },
         });
 
@@ -2737,7 +2737,7 @@ describe('BasePaginator', () => {
         });
 
         // @ts-expect-error accessing protected property
-        paginator.buildFilters = () => ({
+        paginator.buildMatchFilters = () => ({
           age: { $gt: 100 },
         });
 
@@ -2766,7 +2766,7 @@ describe('BasePaginator', () => {
         paginator.ingestPage({ page: [item3, item1], setActive: true });
 
         // @ts-expect-error accessing protected property
-        paginator.buildFilters = () => ({
+        paginator.buildMatchFilters = () => ({
           teams: { $contains: 'abc' },
         });
 

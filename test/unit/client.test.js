@@ -792,6 +792,35 @@ describe('Client WSFallback', () => {
 });
 
 describe('StreamChat.queryChannels', async () => {
+	/**
+	 * A queryChannels response entry for a DISTINCT channel with messages carrying distinct,
+	 * deterministic timestamps.
+	 *
+	 * Both matter for the paginator assertions: spreading `mockChannelQueryResponse` repeatedly yields
+	 * N entries sharing one cid, so the same channel gets re-seeded N times with disjoint "newest"
+	 * pages — and because `generateMsg()` stamps `created_at` with `new Date()`, all those messages land
+	 * in the same millisecond, leaving the sort order to the random-uuid tiebreaker. A later page whose
+	 * head then happens to sort above the head interval force-merges into it (a first-page seed marks
+	 * the interval `isHead`), welding every page together, which made the item-count assertions fail in
+	 * roughly 5% of runs.
+	 */
+	const generateQueriedChannel = ({ index, messageCount }) => {
+		const id = `queried-channel-${index}`;
+		return {
+			...mockChannelQueryResponse,
+			channel: {
+				...mockChannelQueryResponse.channel,
+				id,
+				cid: `messaging:${id}`,
+			},
+			messages: Array.from({ length: messageCount }, (_, messageIndex) =>
+				generateMsg({
+					date: new Date(Date.UTC(2024, 0, 1, 0, 0, messageIndex)),
+				}),
+			),
+		};
+	};
+
 	it('should not hydrate activeChannels and channel configs when disableCache is true', async () => {
 		const client = await getClientWithUser();
 		client._cacheEnabled = () => false;
@@ -921,13 +950,12 @@ describe('StreamChat.queryChannels', async () => {
 
 	it('seeds each queried channel paginator with its full message page', async () => {
 		const client = await getClientWithUser();
-		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
-			...mockChannelQueryResponse,
-			messages: Array.from(
-				{ length: DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE },
-				generateMsg,
-			),
-		}));
+		const mockedChannelsQueryResponse = Array.from({ length: 10 }, (_, index) =>
+			generateQueriedChannel({
+				index,
+				messageCount: DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE,
+			}),
+		);
 		sinon
 			.stub(client, 'queryChannels')
 			.resolves({ channels: mockedChannelsQueryResponse });
@@ -943,13 +971,12 @@ describe('StreamChat.queryChannels', async () => {
 
 	it('seeds each queried channel paginator with its partial message page', async () => {
 		const client = await getClientWithUser();
-		const mockedChannelQueryResponse = Array.from({ length: 10 }, () => ({
-			...mockChannelQueryResponse,
-			messages: Array.from(
-				{ length: DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE - 1 },
-				generateMsg,
-			),
-		}));
+		const mockedChannelQueryResponse = Array.from({ length: 10 }, (_, index) =>
+			generateQueriedChannel({
+				index,
+				messageCount: DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE - 1,
+			}),
+		);
 		sinon
 			.stub(client, 'queryChannels')
 			.resolves({ channels: mockedChannelQueryResponse });

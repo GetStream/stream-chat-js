@@ -171,7 +171,9 @@ describe('ChannelPaginatorsOrchestrator', () => {
       const ch2 = makeChannel('messaging:102');
       const queryChannelSpy = vi
         .spyOn(client, 'queryChannelsAndHydrate')
-        .mockResolvedValue([ch1]);
+        // ChannelPaginator queries with `withResponse: true` to read `predefined_filter` metadata,
+        // so the mock has to resolve the full response shape.
+        .mockResolvedValue({ channels: [ch1], duration: '0.1ms' });
       const p1 = new ChannelPaginator({
         client,
         filters: { type: 'messaging' },
@@ -201,7 +203,7 @@ describe('ChannelPaginatorsOrchestrator', () => {
         expect(p2.hasMoreTail).toBe(true);
       });
 
-      queryChannelSpy.mockResolvedValue([ch2]);
+      queryChannelSpy.mockResolvedValue({ channels: [ch2], duration: '0.1ms' });
       await Promise.all([p1, p2].map((p) => p.toTail()));
 
       await vi.waitFor(() => {

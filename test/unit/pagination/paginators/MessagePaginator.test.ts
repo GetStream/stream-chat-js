@@ -144,7 +144,7 @@ describe('MessagePaginator', () => {
 
     it('builds filters using the channel cid', () => {
       const paginator = new MessagePaginator({ channel, itemIndex });
-      expect(paginator.buildFilters()).toEqual({ cid: 'channel-id' });
+      expect(paginator.buildMatchFilters()).toEqual({ cid: 'channel-id' });
     });
 
     it('builds thread-scoped filters when parentMessageId is provided', () => {
@@ -153,7 +153,7 @@ describe('MessagePaginator', () => {
         itemIndex,
         parentMessageId: 'parent-1',
       });
-      expect(paginator.buildFilters()).toEqual({
+      expect(paginator.buildMatchFilters()).toEqual({
         cid: 'channel-id',
         parent_id: 'parent-1',
       });

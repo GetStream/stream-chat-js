@@ -773,12 +773,18 @@ export abstract class BasePaginator<T, Q> {
     throw new Error('Paginator.getNextQueryShape() is not implemented');
   }
 
-  protected buildFilters(): object | null {
+  /**
+   * Filters an item is matched against locally (`matchesFilter`) — NOT the filters sent to the server.
+   * A paginator whose backend query is filtered has to build the request filters separately (see
+   * `ChannelPaginator.buildQueryFilters`), because the two can differ: the backend may resolve a
+   * server-side stored filter of its own, and some paginators filter locally without sending anything.
+   */
+  protected buildMatchFilters(): object | null {
     return null; // === no filters
   }
 
   matchesFilter(item: T): boolean {
-    const filters = this.buildFilters();
+    const filters = this.buildMatchFilters();
     if (filters == null) return true;
     return itemMatchesFilter<T>(item, filters, {
       resolvers: this._filterFieldToDataResolvers,

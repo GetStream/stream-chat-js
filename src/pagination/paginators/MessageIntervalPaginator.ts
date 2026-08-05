@@ -242,7 +242,7 @@ export class MessageIntervalPaginator extends BasePaginator<
   /**
    * Even though we do not send filters object to the server, we need to have filters for client-side item ingestion logic.
    */
-  buildFilters = (): MessagePaginatorFilter => ({
+  buildMatchFilters = (): MessagePaginatorFilter => ({
     cid: this.channel.cid,
     ...(this.parentMessageId ? { parent_id: this.parentMessageId } : {}),
   });
