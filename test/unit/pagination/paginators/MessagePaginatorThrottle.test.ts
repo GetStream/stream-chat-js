@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessagePaginator } from '../../../../src/pagination/paginators/MessagePaginator';
 import { setStateThrottlingEnabled } from '../../../../src/pagination/paginators/stateThrottling';
-import { MessageStore } from '../../../../src/messageStore/MessageStore';
+import { EntityStore } from '../../../../src/messageStore/EntityStore';
 import { applyReactionLocally } from '../../../../src/messageStore/applyReactionLocally';
 import { formatMessage } from '../../../../src';
 import { generateMsg } from '../../test-utils/generateMessage';
@@ -112,21 +112,21 @@ describe('MessagePaginator — state publish throttling', () => {
     expect(ids(p)).toEqual(['m1', 'm2', 'm3', 'm4']);
   });
 
-  it('an in-window content change (reaction/edit) coalesces via onMessagesChanged', () => {
+  it('an in-window content change (reaction/edit) coalesces via onEntitiesChanged', () => {
     const p = make();
     seed(p);
     // open the window with a leading ingest so subsequent activity is deferred
     p.ingestItem(msg('m3', 3));
     expect(ids(p)).toEqual(['m1', 'm2', 'm3']);
 
-    // simulate a content change on a held id (what MessageStore.onMessagesChanged delivers)
+    // simulate a content change on a held id (what EntityStore.onEntitiesChanged delivers)
     const changed = { ...msg('m3', 3), text: 'edited' } as LocalMessage;
     // update the backing index in place, then notify
     p.getItem('m3'); // sanity: it is held
     (
       p as unknown as { _itemIndex: { setOne: (m: LocalMessage) => void } }
     )._itemIndex.setOne(changed);
-    p.onMessagesChanged({ changedIds: new Set(['m3']) });
+    p.onEntitiesChanged({ changedIds: new Set(['m3']) });
     // deferred: the visible text is refreshed only on the trailing edge / flush
     p.flushState();
     expect(p.items?.find((m) => m.id === 'm3')?.text).toBe('edited');
@@ -142,12 +142,12 @@ describe('MessagePaginator — state publish throttling', () => {
   });
 });
 
-// End-to-end optimistic path: a real store-backed paginator (MessageStoreBackedItemIndex), driven through
+// End-to-end optimistic path: a real store-backed paginator (StoreBackedItemIndex), driven through
 // the actual optimistic wiring (applyReactionLocally → store.upsert + store.flushSubscribers() →
 // holder.flushState() → throttle.flush()). This is the path the "your own sends/reactions appear
 // instantly" guarantee rides on — distinct from calling paginator.flushState() directly above.
 describe('MessagePaginator — optimistic (local-user) writes bypass the throttle (end-to-end)', () => {
-  let store: MessageStore;
+  let store: EntityStore<LocalMessage>;
   let client: StreamChat;
   let channel: Channel;
 
@@ -155,7 +155,7 @@ describe('MessagePaginator — optimistic (local-user) writes bypass the throttl
     vi.useFakeTimers();
     vi.setSystemTime(0);
     setStateThrottlingEnabled(true);
-    store = new MessageStore();
+    store = new EntityStore<LocalMessage>({ getId: (m) => m.id });
     client = {
       messageStore: store,
       user: { id: 'me' },
@@ -164,8 +164,8 @@ describe('MessagePaginator — optimistic (local-user) writes bypass the throttl
       cid: 'channel-id',
       getReplies: vi.fn(),
       query: vi.fn(),
-      // MessagePaginator.createItemIndex reads this to build a MessageStoreBackedItemIndex, so the paginator
-      // is a real subscriber of `store` (gets onMessagesChanged + flushState).
+      // MessagePaginator.createItemIndex reads this to build a StoreBackedItemIndex, so the paginator
+      // is a real subscriber of `store` (gets onEntitiesChanged + flushState).
       getClient: () => client,
     } as unknown as Channel;
   });
@@ -273,7 +273,7 @@ describe('MessagePaginator — interval-view (anchoredHead) publish throttling',
   };
 
   const notify = (p: MessagePaginator, id: string) =>
-    p.onMessagesChanged({ changedIds: new Set([id]) });
+    p.onEntitiesChanged({ changedIds: new Set([id]) });
 
   it('coalesces a burst of sibling content updates into leading + trailing anchoredHead publishes', () => {
     const p = make();

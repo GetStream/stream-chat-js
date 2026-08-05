@@ -39,7 +39,7 @@ import type { FieldToDataResolver } from '../types.normalization';
 import { resolveDotPathValue } from '../utility.normalization';
 import { lowerBound } from '../utility.search';
 import type { ItemIndexApi } from '../ItemIndex';
-import type { MessageStoreChangeBatch } from '../../messageStore/MessageStore';
+import type { EntityStoreChangeBatch } from '../../messageStore/EntityStore';
 import { deriveCreatedAtAroundPaginationFlags } from '../cursorDerivation';
 import { deriveIdAroundPaginationFlags } from '../cursorDerivation/idAroundPaginationFlags';
 import { deriveLinearPaginationFlags } from '../cursorDerivation/linearPaginationFlags';
@@ -169,18 +169,18 @@ export class MessageIntervalPaginator extends BasePaginator<
   }
 
   /**
-   * Message-store adapter (this paginator is a `MessageStoreSubscriber`): the `MessageStore` calls this
+   * Entity-store adapter (this paginator is an `EntityStoreSubscriber`): the `EntityStore` calls this
    * on each holder with the subset of its watched ids that changed. Unwraps the batch and delegates to
    * the base's store-agnostic {@link BasePaginator.reconcileChangedIds}. Lives here, not on the generic
-   * `BasePaginator`, so the base stays free of `MessageStore` types — only message paginators are
+   * `BasePaginator`, so the base stays free of `EntityStore` types — only message paginators are
    * store-backed.
    */
-  onMessagesChanged({ changedIds }: MessageStoreChangeBatch): void {
+  onEntitiesChanged({ changedIds }: EntityStoreChangeBatch): void {
     this.reconcileChangedIds(changedIds);
   }
 
   /**
-   * Message-store subscriber flush (the optional `MessageStoreSubscriber.flushState`): the `MessageStore`
+   * Entity-store subscriber flush (the optional `EntityStoreSubscriber.flushState`): the `EntityStore`
    * calls this after an optimistic (local-user) write so the change renders without throttle delay.
    * Delegates to the base's generic {@link BasePaginator.flushPendingPublishes}.
    */

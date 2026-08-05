@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MessageStore } from '../../src/messageStore/MessageStore';
-import type { MessageStoreSubscriber } from '../../src/messageStore/MessageStore';
+import { EntityStore } from '../../src/messageStore/EntityStore';
+import type { EntityStoreSubscriber } from '../../src/messageStore/EntityStore';
 import { formatMessage } from '../../src/utils';
 import { generateMsg } from './test-utils/generateMessage';
 import type { LocalMessage } from '../../src';
@@ -8,17 +8,19 @@ import type { LocalMessage } from '../../src';
 const msg = (overrides: Partial<Parameters<typeof generateMsg>[0]> = {}): LocalMessage =>
   formatMessage(generateMsg(overrides));
 
-const spySubscriber = (): MessageStoreSubscriber & {
-  onMessagesChanged: ReturnType<typeof vi.fn>;
+const getId = (m: LocalMessage) => m.id;
+
+const spySubscriber = (): EntityStoreSubscriber & {
+  onEntitiesChanged: ReturnType<typeof vi.fn>;
 } => ({
-  onMessagesChanged: vi.fn(),
+  onEntitiesChanged: vi.fn(),
 });
 
-describe('MessageStore', () => {
-  let store: MessageStore;
+describe('EntityStore', () => {
+  let store: EntityStore<LocalMessage>;
 
   beforeEach(() => {
-    store = new MessageStore();
+    store = new EntityStore<LocalMessage>({ getId });
   });
 
   describe('reads / writes', () => {
@@ -78,10 +80,10 @@ describe('MessageStore', () => {
       store.link('m2', b);
 
       store.upsert(msg({ id: 'm1' }));
-      expect(a.onMessagesChanged).toHaveBeenCalledTimes(1);
-      expect(b.onMessagesChanged).not.toHaveBeenCalled();
+      expect(a.onEntitiesChanged).toHaveBeenCalledTimes(1);
+      expect(b.onEntitiesChanged).not.toHaveBeenCalled();
 
-      const batch = a.onMessagesChanged.mock.calls[0][0];
+      const batch = a.onEntitiesChanged.mock.calls[0][0];
       expect([...batch.changedIds]).toEqual(['m1']);
     });
 
@@ -92,8 +94,8 @@ describe('MessageStore', () => {
       store.link('m1', sibling);
 
       store.upsert(msg({ id: 'm1' }), origin);
-      expect(origin.onMessagesChanged).not.toHaveBeenCalled();
-      expect(sibling.onMessagesChanged).toHaveBeenCalledTimes(1);
+      expect(origin.onEntitiesChanged).not.toHaveBeenCalled();
+      expect(sibling.onEntitiesChanged).toHaveBeenCalledTimes(1);
     });
 
     it('does not notify a subscriber after it unlinks', () => {
@@ -101,7 +103,7 @@ describe('MessageStore', () => {
       store.link('m1', a);
       store.unlink('m1', a);
       store.upsert(msg({ id: 'm1' }));
-      expect(a.onMessagesChanged).not.toHaveBeenCalled();
+      expect(a.onEntitiesChanged).not.toHaveBeenCalled();
     });
   });
 
@@ -144,8 +146,8 @@ describe('MessageStore', () => {
         store.upsert(msg({ id: 'm3' }));
       });
 
-      expect(a.onMessagesChanged).toHaveBeenCalledTimes(1);
-      const batch = a.onMessagesChanged.mock.calls[0][0];
+      expect(a.onEntitiesChanged).toHaveBeenCalledTimes(1);
+      const batch = a.onEntitiesChanged.mock.calls[0][0];
       expect([...batch.changedIds].sort()).toEqual(['m1', 'm2', 'm3']);
     });
 
@@ -157,9 +159,9 @@ describe('MessageStore', () => {
         store.transaction(() => {
           store.upsert(msg({ id: 'm1' }));
         });
-        expect(a.onMessagesChanged).not.toHaveBeenCalled();
+        expect(a.onEntitiesChanged).not.toHaveBeenCalled();
       });
-      expect(a.onMessagesChanged).toHaveBeenCalledTimes(1);
+      expect(a.onEntitiesChanged).toHaveBeenCalledTimes(1);
     });
 
     it('does not notify a subscriber whose watched ids were untouched', () => {
@@ -172,8 +174,8 @@ describe('MessageStore', () => {
         store.upsert(msg({ id: 'm1' }));
       });
 
-      expect(a.onMessagesChanged).toHaveBeenCalledTimes(1);
-      expect(b.onMessagesChanged).not.toHaveBeenCalled();
+      expect(a.onEntitiesChanged).toHaveBeenCalledTimes(1);
+      expect(b.onEntitiesChanged).not.toHaveBeenCalled();
     });
   });
 });

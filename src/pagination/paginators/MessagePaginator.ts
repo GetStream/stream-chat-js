@@ -12,8 +12,7 @@ import {
 } from './MessageIntervalPaginator';
 import type { LocalMessage } from '../../types';
 import { StateStore } from '../../store';
-import { ItemIndex } from '../ItemIndex';
-import { MessageStoreBackedItemIndex } from '../../messageStore/MessageStoreBackedItemIndex';
+import { StoreBackedItemIndex } from '../../messageStore/StoreBackedItemIndex';
 
 export type {
   JumpToMessageOptions,
@@ -135,27 +134,24 @@ export class MessagePaginator extends MessageIntervalPaginator {
       paginatorOptions: {
         // Throttle message-list `state` publishes to at most once per 500ms (leading + trailing), so a
         // burst of events coalesces into ~2 renders/sec instead of one per event. Optimistic
-        // (local-user) writes bypass the throttle via MessageStore.flushSubscribers → flushState.
+        // (local-user) writes bypass the throttle via EntityStore.flushSubscribers → flushState.
         // Overridable per-instance via `paginatorOptions.stateThrottleMs`.
         stateThrottleMs: 500,
         ...options.paginatorOptions,
         // Back the channel main list and thread reply list with the client-global
         // message store so a message held in more than one of them (a channel message
         // also open in its thread, a `show_in_channel` reply in both) has a single
-        // canonical copy — no copy-to-copy fan-out. Falls back to a private index if
-        // the store is unavailable (e.g. a detached paginator in a test).
+        // canonical copy — no copy-to-copy fan-out. When the store is unavailable (e.g.
+        // a detached paginator in a test) the index falls back to a private store, so
+        // it behaves exactly like a plain per-instance index.
         createItemIndex:
           options.paginatorOptions?.createItemIndex ??
-          ((owner) => {
-            const store = channel.getClient?.().messageStore;
-            return store
-              ? new MessageStoreBackedItemIndex({
-                  store,
-                  owner: owner as MessageIntervalPaginator,
-                  getId: owner.getItemId.bind(owner),
-                })
-              : new ItemIndex({ getId: owner.getItemId.bind(owner) });
-          }),
+          ((owner) =>
+            new StoreBackedItemIndex({
+              store: channel.getClient?.().messageStore,
+              owner: owner as MessageIntervalPaginator,
+              getId: owner.getItemId.bind(owner),
+            })),
       },
     });
     this.unreadReferencePolicy = unreadReferencePolicy;

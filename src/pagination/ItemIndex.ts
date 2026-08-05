@@ -7,7 +7,7 @@ export type ItemIndexOptions<T> = {
  *
  * Extracted so a paginator can be backed either by the default per-instance
  * {@link ItemIndex} or by an adapter over a shared, client-global store
- * (see `MessageStoreBackedItemIndex`) without the call sites knowing the difference.
+ * (see `StoreBackedItemIndex`) without the call sites knowing the difference.
  */
 export interface ItemIndexApi<T> {
   setMany(items: T[]): void;

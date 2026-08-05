@@ -71,7 +71,7 @@ import { Moderation } from './moderation';
 import { ThreadManager } from './thread_manager';
 import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import { PollManager } from './poll_manager';
-import { MessageStore } from './messageStore/MessageStore';
+import { EntityStore } from './messageStore/EntityStore';
 import type {
   ChannelManagerEventHandlerOverrides,
   ChannelManagerOptions,
@@ -144,7 +144,7 @@ export class StreamChat extends ChatApi {
    * list and thread reply paginators read/write message content through it, so a message held in
    * more than one of them stays consistent without copy-to-copy fan-out.
    */
-  messageStore: MessageStore;
+  messageStore: EntityStore<LocalMessage>;
   offlineDb?: AbstractOfflineDB;
   notifications: NotificationManager;
   reminders: ReminderManager;
@@ -321,7 +321,7 @@ export class StreamChat extends ChatApi {
     this.defaultWSTimeout = 15 * 1000;
 
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
-    this.messageStore = new MessageStore();
+    this.messageStore = new EntityStore<LocalMessage>({ getId: (message) => message.id });
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
     this.reminders = new ReminderManager({ client: this });

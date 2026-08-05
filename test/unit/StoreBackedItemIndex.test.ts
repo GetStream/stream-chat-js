@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MessageStore } from '../../src/messageStore/MessageStore';
-import type { MessageStoreSubscriber } from '../../src/messageStore/MessageStore';
-import { MessageStoreBackedItemIndex } from '../../src/messageStore/MessageStoreBackedItemIndex';
+import { EntityStore } from '../../src/messageStore/EntityStore';
+import type { EntityStoreSubscriber } from '../../src/messageStore/EntityStore';
+import { StoreBackedItemIndex } from '../../src/messageStore/StoreBackedItemIndex';
 import { formatMessage } from '../../src/utils';
 import { generateMsg } from './test-utils/generateMessage';
 import type { LocalMessage } from '../../src';
@@ -9,27 +9,27 @@ import type { LocalMessage } from '../../src';
 const msg = (overrides: Partial<Parameters<typeof generateMsg>[0]> = {}): LocalMessage =>
   formatMessage(generateMsg(overrides));
 
-const spyOwner = (): MessageStoreSubscriber & {
-  onMessagesChanged: ReturnType<typeof vi.fn>;
+const spyOwner = (): EntityStoreSubscriber & {
+  onEntitiesChanged: ReturnType<typeof vi.fn>;
 } => ({
-  onMessagesChanged: vi.fn(),
+  onEntitiesChanged: vi.fn(),
 });
 
 const getId = (m: LocalMessage) => m.id;
 
-describe('MessageStoreBackedItemIndex', () => {
-  let store: MessageStore;
+describe('StoreBackedItemIndex', () => {
+  let store: EntityStore<LocalMessage>;
   let ownerA: ReturnType<typeof spyOwner>;
   let ownerB: ReturnType<typeof spyOwner>;
-  let a: MessageStoreBackedItemIndex;
-  let b: MessageStoreBackedItemIndex;
+  let a: StoreBackedItemIndex;
+  let b: StoreBackedItemIndex;
 
   beforeEach(() => {
-    store = new MessageStore();
+    store = new EntityStore<LocalMessage>({ getId });
     ownerA = spyOwner();
     ownerB = spyOwner();
-    a = new MessageStoreBackedItemIndex({ store, owner: ownerA, getId });
-    b = new MessageStoreBackedItemIndex({ store, owner: ownerB, getId });
+    a = new StoreBackedItemIndex({ store, owner: ownerA, getId });
+    b = new StoreBackedItemIndex({ store, owner: ownerB, getId });
   });
 
   describe('membership scoping', () => {
@@ -73,21 +73,21 @@ describe('MessageStoreBackedItemIndex', () => {
     it('does not notify the writing owner but notifies other holders (the fan-out)', () => {
       a.setOne(msg({ id: 'm1', text: 'v1' }));
       b.setOne(msg({ id: 'm1', text: 'v1' }));
-      ownerA.onMessagesChanged.mockClear();
-      ownerB.onMessagesChanged.mockClear();
+      ownerA.onEntitiesChanged.mockClear();
+      ownerB.onEntitiesChanged.mockClear();
 
       a.setOne(msg({ id: 'm1', text: 'v2' }));
 
-      expect(ownerA.onMessagesChanged).not.toHaveBeenCalled();
-      expect(ownerB.onMessagesChanged).toHaveBeenCalledTimes(1);
-      expect([...ownerB.onMessagesChanged.mock.calls[0][0].changedIds]).toEqual(['m1']);
+      expect(ownerA.onEntitiesChanged).not.toHaveBeenCalled();
+      expect(ownerB.onEntitiesChanged).toHaveBeenCalledTimes(1);
+      expect([...ownerB.onEntitiesChanged.mock.calls[0][0].changedIds]).toEqual(['m1']);
     });
 
     it('does not notify a holder of an id it does not hold', () => {
       a.setOne(msg({ id: 'm1' }));
-      ownerB.onMessagesChanged.mockClear();
+      ownerB.onEntitiesChanged.mockClear();
       a.setOne(msg({ id: 'm1', text: 'again' }));
-      expect(ownerB.onMessagesChanged).not.toHaveBeenCalled();
+      expect(ownerB.onEntitiesChanged).not.toHaveBeenCalled();
     });
   });
 
@@ -124,16 +124,48 @@ describe('MessageStoreBackedItemIndex', () => {
       b.setOne(msg({ id: 'm1' }));
       b.setOne(msg({ id: 'm2' }));
       b.setOne(msg({ id: 'm3' }));
-      ownerB.onMessagesChanged.mockClear();
+      ownerB.onEntitiesChanged.mockClear();
 
       a.setMany([msg({ id: 'm1' }), msg({ id: 'm2' }), msg({ id: 'm3' })]);
 
-      expect(ownerB.onMessagesChanged).toHaveBeenCalledTimes(1);
-      expect([...ownerB.onMessagesChanged.mock.calls[0][0].changedIds].sort()).toEqual([
+      expect(ownerB.onEntitiesChanged).toHaveBeenCalledTimes(1);
+      expect([...ownerB.onEntitiesChanged.mock.calls[0][0].changedIds].sort()).toEqual([
         'm1',
         'm2',
         'm3',
       ]);
+    });
+  });
+
+  describe('store-less (private store) fallback', () => {
+    it('behaves like a plain per-instance index when no shared store is passed', () => {
+      const owner = spyOwner();
+      const index = new StoreBackedItemIndex<LocalMessage>({ owner, getId });
+
+      const m1 = msg({ id: 'm1', text: 'v1' });
+      index.setOne(m1);
+      expect(index.get('m1')).toBe(m1);
+      expect(index.has('m1')).toBe(true);
+      // the owner is the sole holder + the write origin, so it never notifies itself
+      expect(owner.onEntitiesChanged).not.toHaveBeenCalled();
+
+      const updated = msg({ id: 'm1', text: 'v2' });
+      index.setOne(updated);
+      expect(index.get('m1')).toBe(updated);
+
+      // removal GCs immediately: nothing else holds the id
+      index.remove('m1');
+      expect(index.get('m1')).toBeUndefined();
+      expect(index.has('m1')).toBe(false);
+    });
+
+    it('two store-less indexes are isolated (each has its own canonical copy)', () => {
+      const x = new StoreBackedItemIndex<LocalMessage>({ owner: spyOwner(), getId });
+      const y = new StoreBackedItemIndex<LocalMessage>({ owner: spyOwner(), getId });
+      x.setOne(msg({ id: 'm1', text: 'x' }));
+      y.setOne(msg({ id: 'm1', text: 'y' }));
+      expect(x.get('m1')?.text).toBe('x');
+      expect(y.get('m1')?.text).toBe('y');
     });
   });
 });
