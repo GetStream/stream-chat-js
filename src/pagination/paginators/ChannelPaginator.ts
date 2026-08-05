@@ -9,6 +9,7 @@ import type {
   SetPaginatorItemsParams,
 } from './BasePaginator';
 import { BasePaginator } from './BasePaginator';
+import { DEFAULT_QUERY_CHANNELS_RETRY_COUNT } from '../../constants';
 import { chatLoggerSystem } from '../../logger';
 import type { FilterBuilderOptions } from '../FilterBuilder';
 import { FilterBuilder } from '../FilterBuilder';
@@ -281,6 +282,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     super({
       hasPaginationQueryShapeChanged,
       itemIndex: new ItemIndex<Channel>({ getId: (channel) => channel.cid }),
+      retryCount: DEFAULT_QUERY_CHANNELS_RETRY_COUNT,
       ...paginatorOptions,
     });
     const definedSort = sort ?? DEFAULT_BACKEND_SORT;

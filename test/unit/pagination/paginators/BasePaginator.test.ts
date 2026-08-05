@@ -18,6 +18,7 @@ import {
   ZERO_PAGE_CURSOR,
 } from '../../../../src';
 import { sleep } from '../../../../src/utils';
+import * as utils from '../../../../src/utils';
 import { makeComparator } from '../../../../src/pagination/sortCompiler';
 import { DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES } from '../../../../src/constants';
 import { ItemIndex } from '../../../../src/pagination/ItemIndex';
@@ -864,6 +865,80 @@ describe('BasePaginator', () => {
       expect(paginator.lastQueryError).toBeUndefined();
       expect(paginator.items).toEqual([{ id: 'id1' }]);
       expect(paginator.cursor).toEqual({ tailward: 'next1', headward: 'prev1' });
+      vi.useRealTimers();
+    });
+
+    // `retryCount` counts *retries*, so N retries mean N + 1 attempts. Failing every attempt and
+    // counting the query calls is the only way to pin that down — the test above resolves on the second
+    // attempt, which passes for either interpretation.
+    const failEveryAttempt = async (paginator: Paginator, attempts: number) => {
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        await toNextTick();
+        paginator.queryReject(new Error('Failed'));
+        await toNextTick();
+        vi.advanceTimersByTime(DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES);
+      }
+    };
+
+    it('does not retry by default', async () => {
+      vi.useFakeTimers();
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+      const promise = paginator.toTail();
+
+      await failEveryAttempt(paginator, 1);
+      await promise;
+
+      expect(paginator.config.retryCount).toBe(0);
+      expect(paginator.mockClientQuery).toHaveBeenCalledTimes(1);
+      vi.useRealTimers();
+    });
+
+    it('retries config.retryCount times, then gives up', async () => {
+      vi.useFakeTimers();
+      const retryCount = 3;
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR, retryCount });
+      const sleepSpy = vi.spyOn(utils, 'sleep');
+      const promise = paginator.toTail();
+
+      // one attempt more than the configured retries; the extra iteration proves it stops there
+      await failEveryAttempt(paginator, retryCount + 2);
+      await promise;
+
+      expect(paginator.mockClientQuery).toHaveBeenCalledTimes(retryCount + 1);
+      // `toNextTick` sleeps too, so count only the waits between attempts
+      const retryWaits = sleepSpy.mock.calls.filter(
+        ([ms]) => ms === DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES,
+      );
+      expect(retryWaits).toHaveLength(retryCount);
+      expect(paginator.lastQueryError).toEqual(new Error('Failed'));
+      vi.useRealTimers();
+    });
+
+    it('stops retrying as soon as an attempt succeeds', async () => {
+      vi.useFakeTimers();
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR, retryCount: 3 });
+      const promise = paginator.toTail();
+
+      await failEveryAttempt(paginator, 1);
+      await toNextTick();
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await promise;
+
+      expect(paginator.mockClientQuery).toHaveBeenCalledTimes(2);
+      expect(paginator.lastQueryError).toBeUndefined();
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      vi.useRealTimers();
+    });
+
+    it('lets a per-call retryCount override the configured one', async () => {
+      vi.useFakeTimers();
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR, retryCount: 3 });
+      const promise = paginator.toTail({ retryCount: 0 });
+
+      await failEveryAttempt(paginator, 2);
+      await promise;
+
+      expect(paginator.mockClientQuery).toHaveBeenCalledTimes(1);
       vi.useRealTimers();
     });
 

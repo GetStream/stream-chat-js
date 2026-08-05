@@ -15,6 +15,11 @@ import { getClientWithUser } from '../../test-utils/getClient';
 import { generateMsg } from '../../test-utils/generateMessage';
 import type { FieldToDataResolver } from '../../../../src/pagination/types.normalization';
 import { MockOfflineDB } from '../../offline-support/MockOfflineDB';
+import * as utils from '../../../../src/utils';
+import {
+  DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES,
+  DEFAULT_QUERY_CHANNELS_RETRY_COUNT,
+} from '../../../../src/constants';
 
 const user = { id: 'custom-id' };
 
@@ -859,6 +864,60 @@ describe('ChannelPaginator', () => {
         options: expect.objectContaining({ filter_conditions: filters, sort }),
         sort,
       });
+    });
+  });
+
+  describe('retries', () => {
+    it('retries a failing channel query DEFAULT_QUERY_CHANNELS_RETRY_COUNT times by default', async () => {
+      const paginator = new ChannelPaginator({ client });
+      expect(paginator.config.retryCount).toBe(DEFAULT_QUERY_CHANNELS_RETRY_COUNT);
+
+      const sleepSpy = vi.spyOn(utils, 'sleep').mockResolvedValue(undefined);
+      const queryChannels = vi
+        .spyOn(client, 'queryChannelsAndHydrate')
+        .mockRejectedValue(new Error('fail'));
+
+      await paginator.toTail();
+
+      // initial attempt + however many retries are configured (matches the legacy ChannelManager)
+      expect(queryChannels).toHaveBeenCalledTimes(DEFAULT_QUERY_CHANNELS_RETRY_COUNT + 1);
+      expect(
+        sleepSpy.mock.calls.filter(
+          ([ms]) => ms === DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES,
+        ),
+      ).toHaveLength(DEFAULT_QUERY_CHANNELS_RETRY_COUNT);
+      expect(paginator.lastQueryError).toEqual(new Error('fail'));
+    });
+
+    it('stops retrying once a query succeeds', async () => {
+      vi.spyOn(utils, 'sleep').mockResolvedValue(undefined);
+      const channelA = new Channel(client, 'type', 'retry-a', {});
+      const queryChannels = vi
+        .spyOn(client, 'queryChannelsAndHydrate')
+        .mockRejectedValueOnce(new Error('fail'))
+        .mockResolvedValue({ channels: [channelA], duration: '0.1ms' });
+
+      const paginator = new ChannelPaginator({ client });
+      await paginator.toTail();
+
+      expect(queryChannels).toHaveBeenCalledTimes(2);
+      expect(paginator.lastQueryError).toBeUndefined();
+      expect(paginator.items).toStrictEqual([channelA]);
+    });
+
+    it('accepts an explicit retryCount through paginatorOptions', async () => {
+      const paginator = new ChannelPaginator({
+        client,
+        paginatorOptions: { retryCount: 0 },
+      });
+      vi.spyOn(utils, 'sleep').mockResolvedValue(undefined);
+      const queryChannels = vi
+        .spyOn(client, 'queryChannelsAndHydrate')
+        .mockRejectedValue(new Error('fail'));
+
+      await paginator.toTail();
+
+      expect(queryChannels).toHaveBeenCalledTimes(1);
     });
   });
 

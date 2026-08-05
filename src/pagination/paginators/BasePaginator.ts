@@ -190,7 +190,10 @@ export type PaginationQueryParams<Q> = {
   queryShape?: Q;
   /** Per-call override of the reset behavior. */
   reset?: StateResetPolicy;
-  /** Should retry the failed request given number of times. Default is 0. */
+  /**
+   * How many times to **retry** a failed request, i.e. `retryCount + 1` attempts in total. Per-call
+   * override of `PaginatorOptions.retryCount`, which defaults to 0 (no retry).
+   */
   retryCount?: number;
   /**
    * Suppress `isLoading` transitions for this query (a silent, background refresh). When falsy
@@ -348,6 +351,12 @@ export type PaginatorOptions<T, Q> = {
   lockItemOrder?: boolean;
   /** The item page size to be requested from the server. */
   pageSize?: number;
+  /**
+   * How many times to **retry** a failed request before giving up, i.e. `retryCount + 1` attempts in
+   * total, with `DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES` between them. Defaults to 0 (no retry);
+   * `PaginationQueryParams.retryCount` overrides it per call.
+   */
+  retryCount?: number;
   /** Prevent silencing the errors thrown during the pagination execution. Default is false. */
   throwErrors?: boolean;
 };
@@ -376,6 +385,7 @@ export const DEFAULT_PAGINATION_OPTIONS: BasePaginatorConfig<any, any> = {
   lockItemOrder: false,
   pageSize: 10,
   hasPaginationQueryShapeChanged: baseHasPaginationQueryShapeChanged,
+  retryCount: 0,
   throwErrors: false,
 } as const;
 
@@ -2061,7 +2071,7 @@ export abstract class BasePaginator<T, Q> {
   protected async runQueryRetryable(
     params: PaginationQueryParams<Q> = {},
   ): Promise<PaginationQueryReturnValue<T> | null> {
-    const { retryCount } = params;
+    const remainingRetries = params.retryCount ?? 0;
     try {
       return await this.query(params);
     } catch (e) {
@@ -2071,12 +2081,11 @@ export abstract class BasePaginator<T, Q> {
         this.state.partialNext({ lastQueryError: e as Error });
       }
 
-      const nextRetryCount = (retryCount ?? 0) - 1;
-      if (nextRetryCount > 0) {
+      if (remainingRetries > 0) {
         await sleep(DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES);
         return await this.runQueryRetryable({
           ...params,
-          retryCount: nextRetryCount,
+          retryCount: remainingRetries - 1,
         });
       }
       if (this.config.throwErrors) {
@@ -2104,7 +2113,7 @@ export abstract class BasePaginator<T, Q> {
     keepPreviousItems,
     queryShape: forcedQueryShape,
     reset,
-    retryCount = 0,
+    retryCount = this.config.retryCount,
     silent,
     updateState = true,
   }: PaginationQueryParams<Q> = {}): Promise<ExecuteQueryReturnValue<T> | void> {
