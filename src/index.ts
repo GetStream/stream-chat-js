@@ -51,7 +51,6 @@ export {
   logChatPromiseExecution,
   localMessageToNewMessagePayload,
   formatMessage,
-  promoteChannel,
 } from './utils';
 export { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
 export * from './ChannelManager';

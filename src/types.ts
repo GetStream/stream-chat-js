@@ -1,4 +1,3 @@
-import type { Channel } from './channel';
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { StableWSConnection } from './connection';
 import type {
@@ -975,17 +974,6 @@ export type AIState =
   | 'AI_STATE_THINKING'
   | 'AI_STATE_GENERATING'
   | (string & {});
-
-export type PromoteChannelParams = {
-  channels: Array<Channel>;
-  channelToMove: Channel;
-  sort: ChannelSort;
-  /**
-   * If the index of the channel within `channels` list which is being moved upwards
-   * (`channelToMove`) is known, you can supply it to skip extra calculation.
-   */
-  channelToMoveIndexWithinChannels?: number;
-};
 
 /**
  * An identifier containing information about the downstream SDK using stream-chat. It

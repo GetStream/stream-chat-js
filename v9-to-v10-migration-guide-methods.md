@@ -434,9 +434,34 @@ Unchanged.
 
 Unchanged. `setUserAgent` is still marked `@deprecated` — prefer setting `sdkIdentifier`.
 
-#### `client.createChannelManager` / `client.setOfflineDBApi` / `client.setMessageComposerSetupFunction`
+#### `client.setOfflineDBApi` / `client.setMessageComposerSetupFunction`
 
 Unchanged (composer setup function is new in v10 but not a rename).
+
+#### `client.createChannelManager`
+
+Kept, but it builds the **new** `ChannelManager` (see [ChannelManager](#channelmanager) below) and takes the
+manager options directly instead of the legacy trio:
+
+```diff
+- const manager = client.createChannelManager({
+-   eventHandlerOverrides: { newMessageHandler: (setChannels, event) => { /* … */ } },
+-   options: { lockChannelOrder: true },
+-   queryChannelsOverride: (options, stateOptions) => client.queryChannelsAndHydrate(options, stateOptions),
+- });
+- await manager.queryChannels({ filter_conditions: { members: { $in: [userId] } }, sort, limit: 20 });
++ const paginator = new ChannelPaginator({
++   client,
++   filters: { members: { $in: [userId] } },
++   sort,
++   paginatorOptions: { pageSize: 20, lockItemOrder: true },
++ });
++ const manager = client.createChannelManager({ paginators: [paginator] });
++ manager.registerSubscriptions();
++ await paginator.toTail();
+```
+
+Calling it with no arguments is valid; every option is forwarded to the `ChannelManager` constructor.
 
 #### `client._enrichAxiosOptions` / `client._logApiRequest` / `client._logApiError` / `client._normalizeDate` / `client._setupConnection`
 
@@ -875,6 +900,180 @@ Mostly unchanged. The relevant tweaks:
 - `deleteUserMessages(...)` internally: `deletedAt` propagation now passes `undefined` where v9 defaulted to `null` — check for `null` guards in downstream code.
 - `removeReaction(reaction, message?)` return shape unchanged.
 - All other methods (`addMessageSorted`, `addMessagesSorted`, `addPinnedMessages`, `addPinnedMessage`, `removePinnedMessage`, `addReaction`, `_addReactionToState`, `_addOwnReactionToMessage`, `_removeOwnReactionFromMessage`, `_removeReactionFromState`, `_updateQuotedMessageReferences`, `removeQuotedMessageReferences`, `_updateMessage`, `setIsUpToDate`, `_addToMessageList`, `removeMessage`, `removeMessageFromArray`, `updateUserMessages`, `filterErrorMessages`, `clean`, `clearMessages`, `initMessages`, `loadMessageIntoState`, `findMessage`, `findMessageByTimestamp`, `pruneOldest`) — signatures unchanged.
+
+---
+
+## ChannelManager
+
+`ChannelManager` was **rewritten**, not renamed: v10's class (`src/ChannelManager.ts`) is the former
+`ChannelPaginatorsOrchestrator`, and the v9 `src/channel_manager.ts` is deleted. One manager now holds N
+channel lists — each a `ChannelPaginator` — instead of one hand-sorted array.
+
+### State
+
+| v9 (`manager.state`)       | v10                                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `channels: Channel[]`      | `paginator.state.items`                                                                                                  |
+| `pagination.hasNext`       | `paginator.state.hasMoreTail` (`hasNext` getter still exists, deprecated)                                                |
+| `pagination.isLoading`     | `paginator.state.isLoading`                                                                                              |
+| `pagination.isLoadingNext` | removed — one `isLoading` flag; combine with `hasMoreTail` if needed                                                     |
+| `pagination.options`       | the paginator's `filters` / `sort` / `options` / `pageSize`                                                              |
+| `initialized`              | removed — `paginator.state.items === undefined` means "never queried"; `paginator.isInitialized` for an imperative check |
+| `error`                    | `paginator.state.lastQueryError`                                                                                         |
+| —                          | `manager.state.paginators` (the lists this manager drives)                                                               |
+
+### Methods
+
+| v9                                           | v10                                                                    |
+| -------------------------------------------- | ---------------------------------------------------------------------- |
+| `manager.queryChannels(request, stateOpts?)` | `paginator.toTail({ reset: 'yes' })` (or `paginator.reload()`)         |
+| `manager.loadNext()`                         | `paginator.toTail()` / `paginator.toTailDebounced()`                   |
+| `manager.setChannels(valueOrFactory)`        | `paginator.setItems({ valueOrFactory })`                               |
+| `manager.setQueryChannelsRequest(fn)`        | `paginatorOptions.doRequest`                                           |
+| `manager.setOptions(...)`                    | per-paginator options (see below)                                      |
+| `manager.setEventHandlerOverrides(...)`      | `manager.setEventHandlers` / `addEventHandler` / `removeEventHandlers` |
+| `manager.registerSubscriptions()`            | unchanged, but now returns an unsubscribe and is ref-counted           |
+
+### Options
+
+| v9 option                                | v10                                                                                                                                                                                                                                                                                                                                                                               |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lockChannelOrder`                       | `paginatorOptions.lockItemOrder`                                                                                                                                                                                                                                                                                                                                                  |
+| `abortInFlightQuery`                     | removed — a query is never started while one is in flight; `paginator.cancelScheduledQuery()` cancels a debounced one                                                                                                                                                                                                                                                             |
+| `allowNotLoadedChannelPromotionForEvent` | removed — insert the exported `ignoreEventsForUnknownChannels` handler at the head of the pipeline (`index: 0`) for the event types you want to ignore: <br>`manager.addEventHandler({ eventType: 'message.new', handle: ignoreEventsForUnknownChannels, id: 'ignore-unknown', index: 0 })` <br>It stops the chain for any event whose channel is not in `client.activeChannels`. |
+
+### Event handlers
+
+The 10 named overrides (`newMessageHandler`, `channelDeletedHandler`, …), each receiving
+`(setChannels, event)`, are replaced by an `EventHandlerPipeline` per event type. Handlers receive
+`{ event, ctx: { channelManager } }` and can stop the chain by returning `{ action: 'stop' }`:
+
+```diff
+- const manager = client.createChannelManager({
+-   eventHandlerOverrides: {
+-     newMessageHandler: (setChannels, event) => setChannels((channels) => reorder(channels, event)),
+-   },
+- });
++ manager.setEventHandlers({
++   eventType: 'message.new',
++   handlers: [{ handle: ({ event, ctx: { channelManager } }) => { /* … */ }, id: 'my-handler' }],
++ });
+```
+
+Default-handler ids are `ChannelManager:default-handler:<event.type>` — pass them to `removeEventHandlers`
+or to `position` when inserting. Unlike v9, `channel.updated` and `channel.truncated` are **not** no-ops by
+default (they re-emit the affected lists), and `channel.hidden` re-evaluates the filters instead of removing
+the channel outright, so a list filtering `{ hidden: true }` keeps it.
+
+### Types
+
+Three separate situations — the first is the dangerous one, because that code still compiles.
+
+**1. Same name, different shape.** These keep their v9 names but now describe the new class:
+
+| Type                    | v9                                                                                                               | v10                                                                                                                        |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `ChannelManagerState`   | `{ channels: Channel[]; initialized: boolean; pagination: ChannelManagerPagination; error: Error \| undefined }` | `{ paginators: ChannelPaginator[] }` — the list state moved to `paginator.state` (see the table above)                     |
+| `ChannelManagerOptions` | `{ abortInFlightQuery?; allowNotLoadedChannelPromotionForEvent?; lockChannelOrder? }`                            | `{ client: StreamChat; paginators?: ChannelPaginator[]; eventHandlers?: ChannelManagerEventHandlers; ownershipResolver? }` |
+
+**2. Replaced by a differently-named type.** The mechanism changed, so this is a rewrite rather than a
+find-and-replace:
+
+| v9                                                                          | v10                                                                                                              |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `ChannelManagerEventHandlerOverrides` (handler-name → override fn)          | `ChannelManagerEventHandlers` (event type → ordered `LabeledEventHandler[]` pipeline)                            |
+| `EventHandlerType` / `EventHandlerOverrideType` / `GenericEventHandlerType` | `EventHandlerPipelineHandler<ChannelManagerEventHandlerContext>` — receives `{ event, ctx: { channelManager } }` |
+| `ChannelSetterParameterType` / `ChannelSetterType`                          | `SetPaginatorItemsParams<Channel>['valueOrFactory']` (passed to `paginator.setItems`)                            |
+| `QueryChannelsRequestType` / `QueryChannelsRequestOutput`                   | `PaginatorOptions<Channel, ChannelQueryShape>['doRequest']`                                                      |
+
+**3. Removed with no replacement:** `ChannelManagerPagination`, `ChannelManagerEventTypes`,
+`ChannelManagerEventHandlerNames`, `ExecuteChannelsQueryPayload`, `channelManagerEventToHandlerMapping`,
+`DEFAULT_CHANNEL_MANAGER_OPTIONS`, `DEFAULT_CHANNEL_MANAGER_PAGINATION_OPTIONS`.
+
+### Coming from a v10 release candidate?
+
+`10.0.0-rc.1` and earlier shipped this class as **`ChannelPaginatorsOrchestrator`**. If you are upgrading
+from an RC rather than from v9, the change is a pure rename:
+
+| RC                                                    | v10 final                           |
+| ----------------------------------------------------- | ----------------------------------- |
+| `ChannelPaginatorsOrchestrator`                       | `ChannelManager`                    |
+| `ChannelPaginatorsOrchestratorState`                  | `ChannelManagerState`               |
+| `ChannelPaginatorsOrchestratorOptions`                | `ChannelManagerOptions`             |
+| `ChannelPaginatorsOrchestratorEventHandlers`          | `ChannelManagerEventHandlers`       |
+| `ChannelPaginatorsOrchestratorEventHandlerContext`    | `ChannelManagerEventHandlerContext` |
+| handler ctx key `{ orchestrator }`                    | `{ channelManager }`                |
+| ids `ChannelPaginatorsOrchestrator:default-handler:*` | `ChannelManager:default-handler:*`  |
+| module `stream-chat` (unchanged)                      | `stream-chat` (unchanged)           |
+
+Nothing else in the RC API changed, and no deprecated alias is exported — the old names are gone.
+
+### Removed helpers (were exported from `stream-chat`)
+
+`promoteChannel`, `findLastPinnedChannelIndex`, `findPinnedAtSortOrder`, `shouldConsiderPinnedChannels`,
+`shouldConsiderArchivedChannels`, `extractSortValue`, `isChannelPinned`, `isChannelArchived`,
+`getAndWatchChannel` and the `PromoteChannelParams` type existed only to serve the v9 manager's
+hand-written ordering. Replacements:
+
+| Removed                                                                                                                     | Use instead                                                                                                                                              |
+| --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `promoteChannel`, `findLastPinnedChannelIndex`, `findPinnedAtSortOrder`, `shouldConsiderPinnedChannels`, `extractSortValue` | nothing — stop reordering the list yourself; see [If you called `promoteChannel`](#if-you-called-promotechannel)                                         |
+| `isChannelPinned`, `isChannelArchived`, `shouldConsiderArchivedChannels`                                                    | `paginator.matchesFilter(channel)` with `{ pinned: true }` / `{ archived: true }` filters                                                                |
+| `getAndWatchChannel`                                                                                                        | `client.channel(type, id).watch()`. The SDK's own helper (`getChannel`, which additionally coalesces concurrent watches of the same cid) stays internal. |
+
+#### If you called `promoteChannel`
+
+In v9 the list was a plain array you reordered by hand: `promoteChannel` moved a channel to the top, and
+the pinned-channel helpers existed to stop it from jumping above the pinned block. In v10 **you do not
+reorder the list at all** — position is derived from `sort` by a comparator the paginator compiles, and
+every `ingestItem` re-inserts the channel where that comparator says it belongs.
+
+So the replacement is a sort, declared once:
+
+```ts
+const paginator = new ChannelPaginator({
+  client,
+  filters: { members: { $in: [userId] } },
+  // pinned channels form a contiguous block at the top, most recently pinned first;
+  // everything else follows, most recent activity first
+  sort: [
+    { field: 'pinned_at', direction: -1 },
+    { field: 'last_message_at', direction: -1 },
+  ],
+});
+```
+
+Why that puts pins on top: an unpinned channel has no `pinned_at`, and the comparator sorts
+missing values to the tail **regardless of direction** — so a leading `pinned_at` splits the list into
+"pinned, then the rest", and each group is ordered by the next sort term. Note this only holds while
+`pinned_at` is the _first_ term; with anything ahead of it, that term dominates and the pins are no longer a
+block.
+
+Three consequences for code that used to call `promoteChannel` on a WS event:
+
+- **New message in a loaded channel** — nothing to do. `channel.messagePaginator.lastMessageAt` advances
+  when the message is ingested, so the next `ingestItem` (which the manager's default handlers perform)
+  places the channel correctly.
+- **Surfacing a channel that is not in the list** — a search result, a freshly created DM — use
+  `manager.ingestChannel(channel)`. It routes the channel into every list whose filter it matches (honoring
+  the ownership resolver) and removes it from those it no longer matches.
+- **Surfacing a channel whose sort key did not change** — use `paginator.boost(channel.cid, { ttlMs })`.
+  A boost outranks the sort for that one item until it expires. It is deliberately not pin-aware: if a list
+  should keep its pins on top, do not boost, and let the sort decide.
+
+### Paginator method rename
+
+`buildFilters()` is gone from the whole paginator stack, because it meant "request filters" on
+`ChannelPaginator` and "matching filters" on the base/message paginators:
+
+- **`ChannelPaginator.buildQueryFilters()`** — filters sent to the server (and used as the offline-db cache
+  key).
+- **`buildMatchFilters()`** (on `BasePaginator`, `ChannelPaginator`, `MessageIntervalPaginator`,
+  `PinnedMessagePaginator`) — filters items are matched against locally, consumed by `matchesFilter()`.
+
+`ChannelQueryShape` is now the `queryChannels` request itself (`filter_conditions`, `sort`, `limit`, …)
+plus `stateOptions`, rather than a `{ filters, sort, options }` wrapper — relevant if you implement
+`paginatorOptions.doRequest`.
 
 ---
 
