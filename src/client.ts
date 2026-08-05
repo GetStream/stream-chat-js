@@ -71,12 +71,8 @@ import { Moderation } from './moderation';
 import { ThreadManager } from './thread_manager';
 import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import { PollManager } from './poll_manager';
-import type {
-  ChannelManagerEventHandlerOverrides,
-  ChannelManagerOptions,
-  QueryChannelsRequestType,
-} from './channel_manager';
-import { ChannelManager } from './channel_manager';
+import type { ChannelManagerOptions } from './ChannelManager';
+import { ChannelManager } from './ChannelManager';
 import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
@@ -530,32 +526,22 @@ export class StreamChat extends ChatApi {
   };
 
   /**
-   * Creates an instance of `ChannelManager`.
+   * Creates an instance of `ChannelManager` — one or more `ChannelPaginator` channel lists kept in sync
+   * with WS events, with ownership arbitration between them.
    *
    * @internal
    *
-   * @param config - The channel manager configuration.
-   * @param config.eventHandlerOverrides - The overrides for event handlers to be used (optional,
-   *   defaults to `{}`).
-   * @param config.options - The options used for the channel manager (optional, defaults to `{}`).
-   * @param config.queryChannelsOverride - Override for the underlying `queryChannels` request (optional).
+   * @param config - The channel manager configuration, minus the client (optional).
+   * @param config.paginators - The channel lists to manage (optional, defaults to none; add them later
+   *   with `insertPaginator`).
+   * @param config.eventHandlers - Event handler pipelines keyed by event type (optional, defaults to
+   *   `ChannelManager.getDefaultHandlers()`).
+   * @param config.ownershipResolver - Decides which paginator(s) own a channel matched by several
+   *   (optional).
    * @returns A new `ChannelManager` instance.
    */
-  createChannelManager = ({
-    eventHandlerOverrides = {},
-    options = {},
-    queryChannelsOverride,
-  }: {
-    eventHandlerOverrides?: ChannelManagerEventHandlerOverrides;
-    options?: ChannelManagerOptions;
-    queryChannelsOverride?: QueryChannelsRequestType;
-  }) =>
-    new ChannelManager({
-      client: this,
-      eventHandlerOverrides,
-      options,
-      queryChannelsOverride,
-    });
+  createChannelManager = (config: Omit<ChannelManagerOptions, 'client'> = {}) =>
+    new ChannelManager({ ...config, client: this });
 
   /**
    * Creates a new WebSocket connection with the current user.

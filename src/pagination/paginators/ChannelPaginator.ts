@@ -539,12 +539,12 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   /**
    * Writes a cid order into the offline cache under the query that produced it.
    *
-   * `filters` and `sort` are passed separately even though `options` already contains them: the DB
-   * derives the cache row key from those two top-level arguments (see the TODO at
-   * `channel_manager.ts:276`), while `options` carries the full request — the only place
+   * `filters` and `sort` are passed separately even though `options` already contains them: the concrete
+   * (RN) DB implementation derives the cache row key from those two top-level arguments in
+   * `convertFilterSortToQuery`, while `options` carries the full request — the only place
    * `predefined_filter` / `filter_values` / `sort_values` appear, without which two predefined-filter
    * lists cannot be told apart. The duplication goes away once `convertFilterSortToQuery` derives the
-   * key from `options`, which is a change in the concrete (RN) DB implementation plus a schema bump.
+   * key from `options` (a change in that implementation plus a schema-version bump to flush stale rows).
    */
   protected cacheCidsForQuery({
     cids,
