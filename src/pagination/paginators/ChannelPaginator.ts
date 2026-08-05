@@ -1,4 +1,5 @@
 import type {
+  ItemCoordinates,
   PaginationQueryParams,
   PaginationQueryReturnValue,
   PaginationQueryShapeChangeIdentifier,
@@ -23,6 +24,7 @@ import type {
   ChannelSort,
   ChannelStateOptions,
   ParsedPredefinedFilterResponse,
+  QueryChannelsRequest,
 } from '../../types';
 import type { FieldToDataResolver, PathResolver } from '../types.normalization';
 import { resolveDotPathValue } from '../utility.normalization';
@@ -33,10 +35,16 @@ const DEFAULT_BACKEND_SORT: ChannelSort = [
   { direction: -1, field: 'updated_at' },
 ];
 
-export type ChannelQueryShape = {
-  filters: ChannelFilters;
-  sort?: ChannelSort;
-  options?: ChannelOptions;
+/**
+ * The `queryChannels` request this paginator will send, plus the client-only `stateOptions`.
+ *
+ * Deliberately the request's own shape (`filter_conditions`, `sort`, `limit`, `predefined_filter`, …)
+ * rather than a `{ filters, sort, options }` wrapper: the same object goes on the wire, keys the
+ * offline-db cache and is compared for query-shape changes, so any field mapping in between would be a
+ * place for those three to drift apart. `MessageQueryShape` is likewise the request params themselves.
+ */
+export type ChannelQueryShape = QueryChannelsRequest & {
+  /** Not part of the request — controls how the response is applied to client state. */
   stateOptions?: ChannelStateOptions;
 };
 
@@ -77,31 +85,27 @@ export type ChannelPaginatorOptions = {
   sortComparatorFactory?: ChannelSortComparatorFactory;
 };
 
-const getQueryShapeRelevantChannelOptions = (options: ChannelOptions) => {
+/**
+ * What identifies the query itself, as opposed to which page of it is being requested. Two shapes with
+ * the same identity continue one pagination; a different identity restarts it from the first page.
+ */
+const getQueryIdentity = (queryShape: ChannelQueryShape | undefined) => {
+  if (!queryShape) return queryShape;
   const {
     limit: _,
     member_limit: __,
     message_limit: ___,
     offset: ____,
 
-    ...relevantShape
-  } = options;
-  return relevantShape;
+    ...identity
+  } = queryShape;
+  return identity;
 };
 
 const hasPaginationQueryShapeChanged: PaginationQueryShapeChangeIdentifier<
   ChannelQueryShape
 > = (prevQueryShape, nextQueryShape) =>
-  !isEqual(
-    {
-      ...prevQueryShape,
-      options: getQueryShapeRelevantChannelOptions(prevQueryShape?.options ?? {}),
-    },
-    {
-      ...nextQueryShape,
-      options: getQueryShapeRelevantChannelOptions(nextQueryShape?.options ?? {}),
-    },
-  );
+  !isEqual(getQueryIdentity(prevQueryShape), getQueryIdentity(nextQueryShape));
 
 const archivedFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: (field) => field === 'archived',
@@ -507,12 +511,10 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   // invoked inside BasePaginator.executeQuery() to keep it as a query descriptor;
   protected getNextQueryShape(): ChannelQueryShape {
     const shape: ChannelQueryShape = {
-      filters: this.buildQueryFilters(),
-      options: {
-        ...this.options,
-        limit: this.pageSize,
-        offset: this.offset,
-      },
+      filter_conditions: this.buildQueryFilters(),
+      ...this.options,
+      limit: this.pageSize,
+      offset: this.offset,
     };
 
     if (this.sort) {
@@ -525,10 +527,58 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     return shape;
   }
 
+  /** The query that produced the currently loaded list, i.e. the cache key its cids belong under. */
+  protected get loadedQueryRequest(): QueryChannelsRequest {
+    const { stateOptions: _, ...request } =
+      this._lastQueryShape ?? this.getNextQueryShape();
+    return request;
+  }
+
+  /**
+   * Writes a cid order into the offline cache under the query that produced it.
+   *
+   * `filters` and `sort` are passed separately even though `options` already contains them: the DB
+   * derives the cache row key from those two top-level arguments (see the TODO at
+   * `channel_manager.ts:276`), while `options` carries the full request — the only place
+   * `predefined_filter` / `filter_values` / `sort_values` appear, without which two predefined-filter
+   * lists cannot be told apart. The duplication goes away once `convertFilterSortToQuery` derives the
+   * key from `options`, which is a change in the concrete (RN) DB implementation plus a schema bump.
+   */
+  protected cacheCidsForQuery({
+    cids,
+    request,
+  }: {
+    cids: string[];
+    request: QueryChannelsRequest;
+  }) {
+    this.client.offlineDb?.executeQuerySafely(
+      (db) =>
+        db.upsertCidsForQuery({
+          cids,
+          filters: request.filter_conditions,
+          options: request,
+          sort: request.sort,
+        }),
+      { method: 'upsertCidsForQuery' },
+    );
+  }
+
+  /**
+   * Persists the current cid order under the query that produced it. Called after every mutation of the
+   * loaded list — including live WS-driven inserts/removals, which reorder the list without any query
+   * running; skipping those would leave the cached order stale until the next full re-query.
+   */
+  protected persistLoadedCids() {
+    if (!this.client.offlineDb) return;
+
+    this.cacheCidsForQuery({
+      cids: (this.items ?? []).map((channel) => channel.cid),
+      request: this.loadedQueryRequest,
+    });
+  }
+
   preloadFirstPageFromOfflineDb = async ({
-    direction,
     queryShape,
-    reset,
   }: PaginationQueryParams<ChannelQueryShape>) => {
     if (
       !this.client.offlineDb?.getChannelsForQuery ||
@@ -537,29 +587,19 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     )
       return undefined;
 
+    const { stateOptions: _, ...request } = queryShape;
+
     try {
       const channelsFromDB = await this.client.offlineDb.getChannelsForQuery({
         userId: this.client.user.id,
-        options: { filter_conditions: queryShape.filters, sort: queryShape.sort },
+        options: request,
       });
 
       if (channelsFromDB) {
-        const offlineChannels = this.client.hydrateActiveChannels(channelsFromDB, {
+        return this.client.hydrateActiveChannels(channelsFromDB, {
           offlineMode: true,
           skipInitialization: [], // passing empty array will clear out the existing messages from channel state, this removes the possibility of duplicate messages
         });
-
-        return offlineChannels;
-      }
-
-      if (!this.client.offlineDb.syncManager.syncStatus) {
-        this.client.offlineDb.syncManager.scheduleSyncStatusChangeCallback(
-          this.id,
-          async () => {
-            await this.executeQuery({ direction, queryShape, reset });
-          },
-        );
-        return;
       }
     } catch (error) {
       chatLoggerSystem.getLogger('channel').error((error as Error).message);
@@ -576,34 +616,71 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     queryShape?: ChannelQueryShape;
   }) => {
     if (!items || !queryShape) return undefined;
+    const { stateOptions: _, ...request } = queryShape;
 
-    this.client.offlineDb?.executeQuerySafely(
-      (db) =>
-        db.upsertCidsForQuery({
-          cids: items.map((channel) => channel.cid),
-          filters: queryShape.filters,
-          sort: queryShape.sort,
-        }),
-      { method: 'upsertCidsForQuery' },
-    );
+    this.cacheCidsForQuery({
+      cids: items.map((channel) => channel.cid),
+      request,
+    });
   };
+
+  /**
+   * Postpones a first-page query while the offline sync is still in progress: the cached page is
+   * surfaced right away and the network query is handed to the sync manager, which re-runs it once
+   * reconciliation finished — querying (and persisting cids) against unsynced local state would race
+   * with the replay of pending local mutations. Mirrors `ChannelManager.queryChannels`, which deferred
+   * on every unsynced call and read the cache only when it had nothing loaded yet.
+   *
+   * Only first-page queries defer; paginating an already loaded list is unaffected (as was the legacy
+   * `loadNext`).
+   */
+  async executeQuery(params: PaginationQueryParams<ChannelQueryShape> = {}) {
+    const { offlineDb } = this.client;
+    const queryShape = params.queryShape ?? this.getNextQueryShape();
+    const shouldDeferUntilSynced =
+      !!offlineDb?.getChannelsForQuery &&
+      !!this.client.user?.id &&
+      !offlineDb.syncManager.syncStatus &&
+      this.isFirstPageQuery({ queryShape, reset: params.reset });
+
+    if (!shouldDeferUntilSynced) return await super.executeQuery(params);
+
+    if (!this.isInitialized) {
+      const state = this.getStateBeforeFirstQuery();
+      const cachedChannels = await this.preloadFirstPageFromOfflineDb({
+        ...params,
+        queryShape,
+      });
+      // `isLoading: false` — nothing is in flight while we wait for the sync, and leaving it set would
+      // make `canExecuteQuery` reject the query this schedules below.
+      this.state.next({
+        ...state,
+        isLoading: false,
+        items: cachedChannels ?? state.items,
+      });
+    }
+
+    offlineDb.syncManager.scheduleSyncStatusChangeCallback(this.id, async () => {
+      await this.executeQuery(params);
+    });
+  }
 
   query = async (): Promise<PaginationQueryReturnValue<Channel>> => {
     // get the params only if they were not generated previously
     if (!this._nextQueryShape) {
       this._nextQueryShape = this.getNextQueryShape();
     }
-    const { filters, sort, options, stateOptions } = this._nextQueryShape;
+    const { stateOptions, ...request } = this._nextQueryShape;
     let items: Channel[];
     if (this.config.doRequest) {
       items = (await this.config.doRequest(this._nextQueryShape)).items;
     } else {
       // withResponse gives access to response-level metadata (`predefined_filter`) which a
       // predefined-filter list needs to know what the backend actually filtered and sorted by.
-      const response = await this.client.queryChannelsAndHydrate(
-        { filter_conditions: filters, sort, ...options },
-        { ...stateOptions, withResponse: true },
-      );
+      const response = await this.client.queryChannelsAndHydrate(request, {
+        ...stateOptions,
+        withResponse: true,
+      });
       items = response.channels;
       this._pendingPredefinedFilter = response.predefined_filter;
     }
@@ -614,21 +691,20 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
 
   setItems(params: SetPaginatorItemsParams<Channel>) {
     super.setItems(params);
+    this.persistLoadedCids();
+  }
 
-    if (!this.client.offlineDb) return;
+  ingestItem(channel: Channel): boolean {
+    const changed = super.ingestItem(channel);
+    if (changed) this.persistLoadedCids();
+    return changed;
+  }
 
-    const { items: channels = [], sort } = this;
-    // the offline cache is keyed by the query that produced the list, not by local matching filters
-    const filters = this.buildQueryFilters();
-
-    this.client.offlineDb?.executeQuerySafely(
-      (db) =>
-        db.upsertCidsForQuery({
-          cids: channels.map((channel) => channel.cid),
-          filters,
-          sort,
-        }),
-      { method: 'upsertCidsForQuery' },
-    );
+  removeItem(params: { id?: string; item?: Channel }): ItemCoordinates {
+    const coordinates = super.removeItem(params);
+    if ((coordinates.state?.currentIndex ?? -1) > -1 || coordinates.interval) {
+      this.persistLoadedCids();
+    }
+    return coordinates;
   }
 }

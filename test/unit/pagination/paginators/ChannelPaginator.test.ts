@@ -856,7 +856,210 @@ describe('ChannelPaginator', () => {
       ).toHaveBeenCalledWith({
         cids: [channel1.cid],
         filters,
+        options: expect.objectContaining({ filter_conditions: filters, sort }),
         sort,
+      });
+    });
+  });
+
+  describe('offline support', () => {
+    const requestOptions: ChannelOptions = {
+      predefined_filter: 'user_messaging',
+      filter_values: { user_id: 'dan' },
+      sort_values: { sort_field: 'last_message_at' },
+    };
+    let offlineDb: MockOfflineDB;
+    let upsertCidsForQuery: MockInstance;
+    let getChannelsForQuery: MockInstance;
+    let scheduleSyncStatusChangeCallback: MockInstance;
+
+    const setUpOfflineDb = async ({ syncStatus }: { syncStatus: boolean }) => {
+      offlineDb = new MockOfflineDB({ client });
+      client.setOfflineDBApi(offlineDb);
+      (client.offlineDb!.initializeDB as unknown as MockInstance).mockReturnValue(true);
+      await client.offlineDb!.init(client.userID as string);
+      client.offlineDb!.syncManager.syncStatus = syncStatus;
+      upsertCidsForQuery = client.offlineDb!
+        .upsertCidsForQuery as unknown as MockInstance;
+      upsertCidsForQuery.mockImplementation(() => Promise.resolve(true));
+      getChannelsForQuery = client.offlineDb!
+        .getChannelsForQuery as unknown as MockInstance;
+      getChannelsForQuery.mockResolvedValue(null);
+      scheduleSyncStatusChangeCallback = vi.spyOn(
+        client.offlineDb!.syncManager,
+        'scheduleSyncStatusChangeCallback',
+      );
+    };
+
+    const makePaginator = ({
+      filters = { type: 'type' } as ChannelFilters | undefined,
+    } = {}) =>
+      new ChannelPaginator({
+        client,
+        filters,
+        requestOptions,
+        sort: [{ field: 'last_message_at', direction: -1 }],
+      });
+
+    it('reads the cache with the full query request, including predefined-filter options', async () => {
+      await setUpOfflineDb({ syncStatus: true });
+      vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+        channels: [],
+        duration: '0.1ms',
+      });
+      const paginator = makePaginator();
+
+      await paginator.toTail();
+
+      expect(getChannelsForQuery).toHaveBeenCalledWith({
+        userId: client.userID,
+        options: expect.objectContaining({
+          filter_conditions: { type: 'type' },
+          sort: [{ field: 'last_message_at', direction: -1 }],
+          ...requestOptions,
+        }),
+      });
+    });
+
+    it('persists cids under the full query request after a query', async () => {
+      await setUpOfflineDb({ syncStatus: true });
+      const channelA = new Channel(client, 'type', 'offline-a', {});
+      vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+        channels: [channelA],
+        duration: '0.1ms',
+      });
+      const paginator = makePaginator();
+
+      await paginator.toTail();
+
+      expect(upsertCidsForQuery).toHaveBeenCalledWith({
+        cids: [channelA.cid],
+        filters: { type: 'type' },
+        options: expect.objectContaining(requestOptions),
+        sort: [{ field: 'last_message_at', direction: -1 }],
+      });
+    });
+
+    it('persists the new cid order after a live ingest and after a removal', async () => {
+      await setUpOfflineDb({ syncStatus: true });
+      const channelA = new Channel(client, 'type', 'offline-a', {});
+      setLastMessageAt(channelA, new Date('1971-01-01T00:00:00.000Z'));
+      const channelB = new Channel(client, 'type', 'offline-b', {});
+      setLastMessageAt(channelB, new Date('1970-01-01T00:00:00.000Z'));
+      vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+        channels: [channelA, channelB],
+        duration: '0.1ms',
+      });
+      // no filters: these bare channels carry no `data.type`, and a live ingest of an item the filter
+      // rejects would (correctly) remove it instead of reordering
+      const paginator = makePaginator({ filters: {} });
+      await paginator.toTail();
+      upsertCidsForQuery.mockClear();
+
+      // channelB receives a newer message and moves to the top - a reorder no query performed
+      setLastMessageAt(channelB, new Date('1972-01-01T00:00:00.000Z'));
+      paginator.ingestItem(channelB);
+
+      expect(upsertCidsForQuery).toHaveBeenCalledWith(
+        expect.objectContaining({ cids: [channelB.cid, channelA.cid] }),
+      );
+
+      upsertCidsForQuery.mockClear();
+      paginator.removeItem({ item: channelA });
+
+      expect(upsertCidsForQuery).toHaveBeenCalledWith(
+        expect.objectContaining({ cids: [channelB.cid] }),
+      );
+    });
+
+    it('does not persist when a removal changed nothing', async () => {
+      await setUpOfflineDb({ syncStatus: true });
+      vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+        channels: [],
+        duration: '0.1ms',
+      });
+      const paginator = makePaginator();
+      await paginator.toTail();
+      upsertCidsForQuery.mockClear();
+
+      paginator.removeItem({ item: new Channel(client, 'type', 'not-in-list', {}) });
+
+      expect(upsertCidsForQuery).not.toHaveBeenCalled();
+    });
+
+    describe('while the offline sync is in progress', () => {
+      it('surfaces the cached page and defers the query until the sync completes', async () => {
+        await setUpOfflineDb({ syncStatus: false });
+        const cachedChannel = new Channel(client, 'type', 'cached', {});
+        getChannelsForQuery.mockResolvedValue([{ channel: cachedChannel.data }]);
+        vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue([cachedChannel]);
+        const queryChannels = vi
+          .spyOn(client, 'queryChannelsAndHydrate')
+          .mockResolvedValue({ channels: [], duration: '0.1ms' });
+        const paginator = makePaginator();
+
+        await paginator.toTail();
+
+        expect(paginator.items).toStrictEqual([cachedChannel]);
+        expect(queryChannels).not.toHaveBeenCalled();
+        expect(scheduleSyncStatusChangeCallback).toHaveBeenCalledTimes(1);
+        expect(scheduleSyncStatusChangeCallback.mock.calls[0][0]).toBe(paginator.id);
+
+        // the scheduled callback runs the deferred query once the sync manager reports completion
+        client.offlineDb!.syncManager.syncStatus = true;
+        await scheduleSyncStatusChangeCallback.mock.calls[0][1]();
+
+        expect(queryChannels).toHaveBeenCalledTimes(1);
+      });
+
+      it('defers even when nothing is cached and the list is already loaded', async () => {
+        await setUpOfflineDb({ syncStatus: true });
+        vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+          channels: [new Channel(client, 'type', 'offline-a', {})],
+          duration: '0.1ms',
+        });
+        const paginator = makePaginator();
+        await paginator.toTail();
+
+        client.offlineDb!.syncManager.syncStatus = false;
+        getChannelsForQuery.mockClear();
+        const queryChannels = vi
+          .spyOn(client, 'queryChannelsAndHydrate')
+          .mockResolvedValue({ channels: [], duration: '0.1ms' });
+        queryChannels.mockClear();
+
+        await paginator.reload();
+
+        expect(queryChannels).not.toHaveBeenCalled();
+        // the cache is only read when nothing is loaded yet
+        expect(getChannelsForQuery).not.toHaveBeenCalled();
+        expect(scheduleSyncStatusChangeCallback).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not defer a next-page query', async () => {
+        await setUpOfflineDb({ syncStatus: true });
+        const paginator = new ChannelPaginator({
+          client,
+          filters: { type: 'type' },
+          paginatorOptions: { pageSize: 1 },
+        });
+        const queryChannels = vi
+          .spyOn(client, 'queryChannelsAndHydrate')
+          .mockResolvedValue({
+            channels: [new Channel(client, 'type', 'offline-a', {})],
+            duration: '0.1ms',
+          });
+        await paginator.toTail();
+
+        client.offlineDb!.syncManager.syncStatus = false;
+        queryChannels.mockResolvedValue({
+          channels: [new Channel(client, 'type', 'offline-b', {})],
+          duration: '0.1ms',
+        });
+        await paginator.toTail();
+
+        expect(queryChannels).toHaveBeenCalledTimes(2);
+        expect(scheduleSyncStatusChangeCallback).not.toHaveBeenCalled();
       });
     });
   });
