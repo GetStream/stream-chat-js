@@ -1015,8 +1015,12 @@ describe('ChannelPaginator', () => {
       await paginator.toTail();
       upsertCidsForQuery.mockClear();
 
-      // channelB receives a newer message and moves to the top - a reorder no query performed
+      // channelB receives a newer message and moves to the top - a reorder with no query performed.
+      // Mirrors what the manager's `updateLists` does: boost, then ingest. The boost is what moves the
+      // channel — `ingestItem` alone cannot, because the mutated `Channel` is the same object the
+      // paginator already holds, so it has no previous sort key to relocate from.
       setLastMessageAt(channelB, new Date('1972-01-01T00:00:00.000Z'));
+      paginator.boost(channelB.cid, { seq: paginator.maxBoostSeq + 1 });
       paginator.ingestItem(channelB);
 
       expect(upsertCidsForQuery).toHaveBeenCalledWith(
