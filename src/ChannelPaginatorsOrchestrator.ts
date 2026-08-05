@@ -69,22 +69,27 @@ export const createPriorityOwnershipResolver = (
   };
 };
 
+/**
+ * The cid the event refers to. Events are inconsistent about how they identify their channel: some carry
+ * a top-level `cid`, some only `channel_type` + `channel_id`, and some (e.g.
+ * `notification.added_to_channel`) have all three optional and identify the channel solely through the
+ * required `event.channel`.
+ */
+const getCidFromEvent = (event: PipelineEvent): string | undefined => {
+  if (event.cid) return event.cid;
+  // todo: is there a central method to construct the cid from type and channel id?
+  if (event.channel_id && event.channel_type) {
+    return `${event.channel_type}:${event.channel_id}`;
+  }
+  return event.channel?.cid;
+};
+
 const getCachedChannelFromEvent = (
   event: PipelineEvent,
   cache: Record<string, Channel>,
 ): Channel | undefined => {
-  let channel: Channel | undefined = undefined;
-  if (event.cid) {
-    channel = cache[event.cid];
-  } else if (event.channel_id && event.channel_type) {
-    // todo: is there a central method to construct the cid from type and channel id?
-    channel = cache[`${event.channel_type}:${event.channel_id}`];
-  } else if (event.channel) {
-    channel = cache[event.channel.cid];
-  } else {
-    return;
-  }
-  return channel;
+  const cid = getCidFromEvent(event);
+  return cid ? cache[cid] : undefined;
 };
 
 const reEmit: EventHandlerPipelineHandler<EventHandlerContext> = ({
@@ -136,9 +141,8 @@ const updateLists: EventHandlerPipelineHandler<EventHandlerContext> = async ({
   );
 
   if (!channel) {
-    const [type, id] = event.cid
-      ? event.cid.split(':')
-      : [event.channel_type, event.channel_id];
+    const [type, id] = getCidFromEvent(event)?.split(':') ?? [];
+    if (!type) return;
 
     channel = await getChannel({
       client: orchestrator.client,
@@ -210,6 +214,11 @@ const channelTruncatedHandler: LabeledEventHandler<EventHandlerContext> = {
 const channelVisibleHandler: LabeledEventHandler<EventHandlerContext> = {
   handle: updateLists,
   id: 'ChannelPaginatorsOrchestrator:default-handler:channel.visible',
+};
+
+const channelHiddenHandler: LabeledEventHandler<EventHandlerContext> = {
+  handle: updateLists,
+  id: 'ChannelPaginatorsOrchestrator:default-handler:channel.hidden',
 };
 
 // members filter - should not be impacted as id is stable - cannot be updated
@@ -304,6 +313,7 @@ export class ChannelPaginatorsOrchestrator extends WithSubscriptions {
       'channel.deleted': [channelDeletedHandler],
       'channel.updated': [channelUpdatedHandler],
       'channel.truncated': [channelTruncatedHandler],
+      'channel.hidden': [channelHiddenHandler],
       'channel.visible': [channelVisibleHandler],
       'member.updated': [memberUpdatedHandler],
       'message.new': [messageNewHandler],

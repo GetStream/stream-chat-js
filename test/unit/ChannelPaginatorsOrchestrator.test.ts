@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getClientWithUser } from './test-utils/getClient';
 import {
+  type Channel,
   ChannelPaginator,
   ChannelResponse,
   EventTypes,
@@ -579,63 +580,163 @@ describe('ChannelPaginatorsOrchestrator', () => {
     return channel;
   }
 
-  describe.each(['channel.deleted', 'channel.hidden'] as EventTypes[])(
-    'event %s',
-    (eventType) => {
-      it('removes the channel from all paginators', async () => {
-        const cid = 'messaging:1';
-        const ch = makeChannel(cid);
+  // `channel.hidden` used to be parameterized in here, but every case dispatched a hardcoded
+  // `channel.deleted`, so the hidden variant was never exercised. It is not a removal either — see the
+  // `event channel.hidden` block below.
+  describe.each(['channel.deleted'] as EventTypes[])('event %s', (eventType) => {
+    it('removes the channel from all paginators', async () => {
+      const cid = 'messaging:1';
+      const ch = makeChannel(cid);
 
-        const p1 = new ChannelPaginator({ client });
-        const p2 = new ChannelPaginator({ client });
-        const r1 = vi.spyOn(p1, 'removeItem');
-        const r2 = vi.spyOn(p2, 'removeItem');
+      const p1 = new ChannelPaginator({ client });
+      const p2 = new ChannelPaginator({ client });
+      const r1 = vi.spyOn(p1, 'removeItem');
+      const r2 = vi.spyOn(p2, 'removeItem');
 
-        const orchestrator = new ChannelPaginatorsOrchestrator({
-          client,
-          paginators: [p1, p2],
-        });
-        client.activeChannels[cid] = ch;
+      const orchestrator = new ChannelPaginatorsOrchestrator({
+        client,
+        paginators: [p1, p2],
+      });
+      client.activeChannels[cid] = ch;
 
-        orchestrator.registerSubscriptions();
-        client.dispatchEvent({ type: 'channel.deleted', cid } as const);
+      orchestrator.registerSubscriptions();
+      client.dispatchEvent({ type: eventType, cid } as const);
 
-        await vi.waitFor(() => {
-          // client.activeChannels does not contain the deleted channel, therefore the search is performed with id
-          expect(r1).toHaveBeenCalledWith({ id: ch.cid, item: undefined });
-          expect(r2).toHaveBeenCalledWith({ id: ch.cid, item: undefined });
-        });
+      await vi.waitFor(() => {
+        // client.activeChannels does not contain the deleted channel, therefore the search is performed with id
+        expect(r1).toHaveBeenCalledWith({ id: ch.cid, item: undefined });
+        expect(r2).toHaveBeenCalledWith({ id: ch.cid, item: undefined });
+      });
+    });
+
+    it('is a no-op when cid is missing', async () => {
+      const orchestrator = new ChannelPaginatorsOrchestrator({ client });
+      const p = new ChannelPaginator({ client });
+      const r = vi.spyOn(p, 'removeItem');
+
+      orchestrator.insertPaginator({ paginator: p });
+      orchestrator.registerSubscriptions();
+
+      client.dispatchEvent({ type: eventType } as const); // no cid
+      await vi.waitFor(() => {
+        expect(r).not.toHaveBeenCalled();
+      });
+    });
+
+    it('tries to remove non-existent channel from all paginators', async () => {
+      const orchestrator = new ChannelPaginatorsOrchestrator({ client });
+      const p = new ChannelPaginator({ client });
+      const r = vi.spyOn(p, 'removeItem');
+
+      orchestrator.insertPaginator({ paginator: p });
+      orchestrator.registerSubscriptions();
+
+      client.dispatchEvent({ type: eventType, cid: 'messaging:404' }); // no such channel
+      await vi.waitFor(() => {
+        expect(r).toHaveBeenCalledWith({ id: 'messaging:404', item: undefined });
+      });
+    });
+  });
+
+  describe('event channel.hidden', () => {
+    const seed = (paginator: ChannelPaginator, channels: Channel[]) =>
+      paginator.setItems({
+        valueOrFactory: channels,
+        isFirstPage: true,
+        isLastPage: true,
       });
 
-      it('is a no-op when cid is missing', async () => {
-        const orchestrator = new ChannelPaginatorsOrchestrator({ client });
-        const p = new ChannelPaginator({ client });
-        const r = vi.spyOn(p, 'removeItem');
+    it('drops the channel from lists that exclude hidden channels, keeping it in a hidden-only list', async () => {
+      const cid = 'messaging:hidden-1';
+      const channel = makeChannel(cid);
+      client.activeChannels[cid] = channel;
 
-        orchestrator.insertPaginator({ paginator: p });
-        orchestrator.registerSubscriptions();
+      const regular = new ChannelPaginator({ client });
+      const hiddenOnly = new ChannelPaginator({ client, filters: { hidden: true } });
+      seed(regular, [channel]);
+      seed(hiddenOnly, [channel]);
 
-        client.dispatchEvent({ type: 'channel.deleted' } as const); // no cid
-        await vi.waitFor(() => {
-          expect(r).not.toHaveBeenCalled();
-        });
+      const orchestrator = new ChannelPaginatorsOrchestrator({
+        client,
+        paginators: [regular, hiddenOnly],
+      });
+      orchestrator.registerSubscriptions();
+
+      client.dispatchEvent({ type: 'channel.hidden', cid } as const);
+
+      await vi.waitFor(() => {
+        // Channel._handleChannelEvent runs before the client listeners, so the filters see the new value
+        expect(channel.data?.hidden).toBe(true);
+        expect(regular.items).toEqual([]);
+        expect(hiddenOnly.items?.map((c) => c.cid)).toEqual([cid]);
+      });
+    });
+
+    it('re-adds the channel on channel.visible', async () => {
+      const cid = 'messaging:hidden-2';
+      const channel = makeChannel(cid);
+      client.activeChannels[cid] = channel;
+
+      const regular = new ChannelPaginator({ client });
+      const orchestrator = new ChannelPaginatorsOrchestrator({
+        client,
+        paginators: [regular],
+      });
+      orchestrator.registerSubscriptions();
+
+      client.dispatchEvent({ type: 'channel.hidden', cid } as const);
+      await vi.waitFor(() => expect(regular.items ?? []).toEqual([]));
+
+      client.dispatchEvent({ type: 'channel.visible', cid } as const);
+
+      await vi.waitFor(() => {
+        expect(channel.data?.hidden).toBe(false);
+        expect(regular.items?.map((c) => c.cid)).toEqual([cid]);
+      });
+    });
+  });
+
+  describe('channel resolution from the event', () => {
+    it('falls back to event.channel.cid when the event carries no top-level identifiers', async () => {
+      const cid = 'messaging:added-1';
+      const paginator = new ChannelPaginator({ client });
+      const orchestrator = new ChannelPaginatorsOrchestrator({
+        client,
+        paginators: [paginator],
+      });
+      orchestrator.registerSubscriptions();
+
+      // notification.added_to_channel has optional cid / channel_type / channel_id — only
+      // event.channel is guaranteed
+      client.dispatchEvent({
+        type: 'notification.added_to_channel',
+        channel: { cid, id: 'added-1', type: 'messaging' } as ChannelResponse,
       });
 
-      it('tries to remove non-existent channel from all paginators', async () => {
-        const orchestrator = new ChannelPaginatorsOrchestrator({ client });
-        const p = new ChannelPaginator({ client });
-        const r = vi.spyOn(p, 'removeItem');
-
-        orchestrator.insertPaginator({ paginator: p });
-        orchestrator.registerSubscriptions();
-
-        client.dispatchEvent({ type: 'channel.deleted', cid: 'messaging:404' }); // no such channel
-        await vi.waitFor(() => {
-          expect(r).toHaveBeenCalledWith({ id: 'messaging:404', item: undefined });
-        });
+      await vi.waitFor(() => {
+        expect(mockGetChannel).toHaveBeenCalledWith(
+          expect.objectContaining({ id: 'added-1', type: 'messaging' }),
+        );
+        expect(paginator.items?.map((c) => c.cid)).toEqual([cid]);
       });
-    },
-  );
+    });
+
+    it('does not query a channel it cannot identify', async () => {
+      const paginator = new ChannelPaginator({ client });
+      const orchestrator = new ChannelPaginatorsOrchestrator({
+        client,
+        paginators: [paginator],
+      });
+      orchestrator.registerSubscriptions();
+
+      client.dispatchEvent({ type: 'notification.added_to_channel' } as never);
+
+      await vi.waitFor(() => {
+        expect(mockGetChannel).not.toHaveBeenCalled();
+        expect(paginator.items).toBeUndefined();
+      });
+    });
+  });
 
   describe.each(['notification.removed_from_channel'] as EventTypes[])(
     'event %s',
