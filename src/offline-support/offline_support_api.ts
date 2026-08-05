@@ -18,6 +18,7 @@ import type {
   PrepareBatchDBQueries,
 } from './types';
 import { OfflineError } from './types';
+import { isEphemeral } from '../errors';
 import type { StreamChat } from '../client';
 import type { AxiosError } from 'axios';
 import { OfflineDBSyncManager } from './offline_sync_manager';
@@ -1185,15 +1186,15 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
-   * A utility method that determines if a failed task should be added to the queue based on its
-   * error. Error code 4 — bad request data. Error code 17 — missing `own_capabilities` to execute
-   * the task.
+   * A utility method that determines if a failed task should be skipped (NOT added to the queue) -
+   * i.e. the failure is a definitive rejection rather than an ephemeral/retryable one. A task is
+   * kept in the queue only when its error is {@link isEphemeral} (connection/network error or a
+   * retryable server code). A non retryable server response (i.e bad request, not allowed etc) is
+   * skipped since retrying it would never succeed.
    *
-   * @param error - The failed task's Axios error.
-   * @returns `true` when the task should not be re-queued.
+   * @param error - The error thrown while executing the failed task.
    */
-  private shouldSkipQueueingTask = (error: AxiosError<APIError>) =>
-    error?.response?.data?.code === 4 || error?.response?.data?.code === 17;
+  private shouldSkipQueueingTask = (error: AxiosError<APIError>) => !isEphemeral(error);
 
   private mergeFailedMessageUpdateIntoPendingSendMessage = ({
     editedMessage,

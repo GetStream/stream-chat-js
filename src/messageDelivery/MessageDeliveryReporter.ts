@@ -359,5 +359,5 @@ export class MessageDeliveryReporter {
       leading: true,
       trailing: true,
     },
-  );
+  ).throttledFn;
 }

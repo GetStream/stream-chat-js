@@ -2954,6 +2954,88 @@ describe('BasePaginator', () => {
           anchoredHead: [],
         });
       });
+
+      // A sibling holder (another paginator / WS echo) writes new content for an item held in a
+      // tracked interval view. Only the active window used to be refreshed on a sibling update, so
+      // the off-window views (logicalHead/logicalTail/anchoredHead) kept stale item references. These
+      // two tests drive the store-agnostic reconcile hook (reconcileChangedIds) directly after
+      // replacing the stored item, mimicking a sibling write.
+      it('refreshes logicalHead on a sibling update to an item that is off the active window', () => {
+        const index = new ItemIndex<TestItem>({ getId: ({ id }) => id });
+        const paginator = new Paginator({ itemIndex: index });
+        paginator.sortComparator = descByAge();
+
+        // A bounded (non-head) window, loaded and active.
+        paginator.ingestPage({
+          page: [makeItem('m1', 50), makeItem('m2', 40)],
+          isHead: false,
+          isTail: false,
+          setActive: true,
+        });
+        // An out-of-order head item lands in the logical head (NOT the active interval).
+        paginator.ingestItem(makeItem('x', 100));
+        expect(paginator.logicalHeadItems.map((i) => i.id)).toEqual(['x']);
+
+        const activeItemsBefore = paginator.items;
+        const logicalHead = trackKey(paginator, 'logicalHead');
+        const logicalTail = trackKey(paginator, 'logicalTail');
+        const anchoredHead = trackKey(paginator, 'anchoredHead');
+
+        // A sibling holder rewrites x's content (same id/order, e.g. a reaction) and notifies.
+        index.setOne({ id: 'x', age: 100, name: 'x-reacted' });
+        // @ts-expect-error driving the protected store-agnostic reconcile hook directly
+        paginator.reconcileChangedIds(new Set(['x']));
+
+        // logicalHead republished with the new content...
+        expect(logicalHead.tracker.fires).toBe(1);
+        expect(paginator.logicalHeadItems.map((i) => i.name)).toEqual(['x-reacted']);
+        // ...the active window (x is not in it) and the other views are untouched.
+        expect(paginator.items).toBe(activeItemsBefore);
+        expect(logicalTail.tracker.fires).toBe(0);
+        expect(anchoredHead.tracker.fires).toBe(0);
+
+        logicalHead.unsub();
+        logicalTail.unsub();
+        anchoredHead.unsub();
+      });
+
+      it('refreshes anchoredHead on a sibling update to a message it holds', () => {
+        const index = new ItemIndex<TestItem>({ getId: ({ id }) => id });
+        const paginator = new Paginator({ itemIndex: index });
+        paginator.sortComparator = descByAge();
+
+        // The isHead page populates anchoredHead (and is the active interval).
+        paginator.ingestPage({
+          page: [makeItem('m1', 50), makeItem('m2', 40)],
+          isHead: true,
+          isTail: false,
+          setActive: true,
+        });
+        expect(paginator.anchoredHeadItems.map((i) => i.id)).toEqual(['m1', 'm2']);
+
+        const anchoredHead = trackKey(paginator, 'anchoredHead');
+        const logicalHead = trackKey(paginator, 'logicalHead');
+        const logicalTail = trackKey(paginator, 'logicalTail');
+
+        // A sibling holder rewrites m2's content (same id/order) and notifies.
+        index.setOne({ id: 'm2', age: 40, name: 'm2-reacted' });
+        // @ts-expect-error driving the protected store-agnostic reconcile hook directly
+        paginator.reconcileChangedIds(new Set(['m2']));
+
+        // anchoredHead republished with the new content, unchanged siblings preserved by id order...
+        expect(anchoredHead.tracker.fires).toBe(1);
+        expect(paginator.anchoredHeadItems.map((i) => i.name)).toEqual([
+          'm1',
+          'm2-reacted',
+        ]);
+        // ...no logical view was touched.
+        expect(logicalHead.tracker.fires).toBe(0);
+        expect(logicalTail.tracker.fires).toBe(0);
+
+        anchoredHead.unsub();
+        logicalHead.unsub();
+        logicalTail.unsub();
+      });
     });
 
     describe('removeItem', () => {
@@ -3071,6 +3153,24 @@ describe('BasePaginator', () => {
         expect(paginator.items).toBeUndefined();
         // @ts-expect-error accessing protected property
         expect(Array.from(paginator._itemIntervals.values())).toStrictEqual([]);
+      });
+
+      it('drops item-index membership so the id is no longer addressable', () => {
+        // Fresh index so the shared module-level one is not polluted across tests.
+        const index = new ItemIndex<TestItem>({ getId: ({ id }) => id });
+        const paginator = new Paginator({ itemIndex: index });
+        paginator.ingestPage({ page: [item1, item2, item3], setActive: true });
+        expect(paginator.getItem(item2.id)).toStrictEqual(item2);
+
+        paginator.removeItem({ id: item2.id });
+
+        // Regression: removeItem used to remove from intervals/state.items but leave the id in the
+        // item index. With a store-backed index that leaked a refcount (the message was never
+        // GC'd) and left getItem returning a no-longer-listed "ghost". Membership must drop too.
+        expect(paginator.getItem(item2.id)).toBeUndefined();
+        // untouched siblings stay addressable
+        expect(paginator.getItem(item1.id)).toStrictEqual(item1);
+        expect(paginator.getItem(item3.id)).toStrictEqual(item3);
       });
     });
 

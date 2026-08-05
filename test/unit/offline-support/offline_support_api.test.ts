@@ -1830,18 +1830,26 @@ describe('OfflineSupportApi', () => {
           offlineDb,
         );
 
-        expect(
-          shouldSkipQueueingTask({ response: { data: { code: 4 } } } as AxiosError),
-        ).toBe(true);
+        // The offline replay path surfaces a `StreamAPIError`, which exposes the Stream error code
+        // at the top-level `code` (copied from `response.data.code` by the api-client) alongside a
+        // `response`. `shouldSkipQueueingTask` is `!isEphemeral`, so a task is skipped only when the
+        // server responded with a NON-retryable code; retryable codes and pure network/connection
+        // failures (no `response`) are kept in the queue for a later retry.
+        const serverError = (code: number) =>
+          ({ code, response: {} }) as unknown as AxiosError;
 
-        expect(
-          shouldSkipQueueingTask({ response: { data: { code: 17 } } } as AxiosError),
-        ).toBe(true);
+        // Retryable server codes → ephemeral → keep queued (do NOT skip).
+        expect(shouldSkipQueueingTask(serverError(9))).toBe(false); // RateLimitError
+        expect(shouldSkipQueueingTask(serverError(23))).toBe(false); // RequestTimeoutError
 
-        expect(
-          shouldSkipQueueingTask({ response: { data: { code: 999 } } } as AxiosError),
-        ).toBe(false);
+        // Non-retryable server codes → skip (a retry would never succeed).
+        expect(shouldSkipQueueingTask(serverError(4))).toBe(true); // InputError
+        expect(shouldSkipQueueingTask(serverError(17))).toBe(true); // NotAllowedError
 
+        // Unknown server code (not in APIErrorCodes) → treated as non-retryable → skip.
+        expect(shouldSkipQueueingTask(serverError(999))).toBe(true);
+
+        // Network/connection failure — server never responded → ephemeral → keep queued.
         expect(shouldSkipQueueingTask({} as AxiosError)).toBe(false);
       });
 

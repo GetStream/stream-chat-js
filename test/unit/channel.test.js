@@ -3126,17 +3126,14 @@ describe('delete reaction flow', () => {
 			vi.resetAllMocks();
 		});
 
-		it('calls offlineDb.deleteReaction and queues task if offlineDb exists', async () => {
+		it('queues task if offlineDb exists', async () => {
 			await channel.deleteReaction(request);
 
-			expect(deleteReactionSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 
-			// The optimistic reaction now carries only message_id and type.
-			expect(deleteReactionSpy).toHaveBeenCalledWith({
-				message: channel.messagePaginator.getItem(messageId),
-				reaction: { message_id: messageId, type: reactionType },
-			});
+			// The optimistic reaction-row removal is handled by the local-update layer
+			// (`applyReactionLocally`); `deleteReaction` itself only queues the replay task.
+			expect(deleteReactionSpy).not.toHaveBeenCalled();
 
 			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
@@ -3170,7 +3167,7 @@ describe('delete reaction flow', () => {
 		});
 
 		it('falls back to _deleteReaction if offlineDb throws', async () => {
-			deleteReactionSpy.mockRejectedValue(new Error('Offline failure'));
+			queueTaskSpy.mockRejectedValue(new Error('Offline failure'));
 
 			await channel.deleteReaction(request);
 
