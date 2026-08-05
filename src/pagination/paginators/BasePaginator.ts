@@ -3,9 +3,11 @@ import { binarySearch } from '../sortCompiler';
 import { itemMatchesFilter } from '../filterCompiler';
 import { isPatch, StateStore, type ValueOrPatch } from '../../store';
 import { debounce, type DebouncedFunc, generateUUIDv4, sleep } from '../../utils';
+import { throttle, type Throttled } from '../../utils/throttling/throttle';
+import { isStateThrottlingEnabled } from './stateThrottling';
 import type { FieldToDataResolver } from '../types.normalization';
 import { ComparisonResult } from '../types.normalization';
-import { ItemIndex } from '../ItemIndex';
+import { ItemIndex, type ItemIndexApi } from '../ItemIndex';
 import { isEqual } from '../../utils/mergeWith/mergeWithCore';
 import { DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES } from '../../constants';
 
@@ -320,6 +322,17 @@ export type PaginatorOptions<T, Q> = {
   /** The number of milliseconds to debounce the search query. The default interval is 300ms. */
   debounceMs?: number;
   /**
+   * When set (and not disabled for tests — see `stateThrottling.ts`), coalesces the paginator's own
+   * live `state.items` publishes to at most once per `stateThrottleMs` (leading + trailing edge): a
+   * burst of live mutations (WS `message.new`, reactions, reads) re-projects the active window and
+   * publishes it ~2×/sec instead of once per event. Only the paginator's OWN writes to `state.items`
+   * are batched — `state.getLatestValue()` is untouched (no `StateStore` change), pagination / jump /
+   * query publishes stay immediate, and an immediate flush past it is available via
+   * {@link flushPendingPublishes}. Unset ⇒ no throttle (default). Enabled at
+   * 500ms for the message list — see {@link MessagePaginator}.
+   */
+  stateThrottleMs?: number;
+  /**
    * Function containing custom logic that decides, whether the next pagination query to be executed should be considered the first page query.
    * It makes sense to consider the next query as the first page query if filters, sort, options etc. (query params) excluding the page size have changed.
    */
@@ -337,7 +350,14 @@ export type PaginatorOptions<T, Q> = {
   /** In case of offset pagination, specify the initial offset value. */
   initialOffset?: number;
   /** If item index is provided, this index ensures updates in a single place and all consumers have access to a single source of data. */
-  itemIndex?: ItemIndex<T>;
+  itemIndex?: ItemIndexApi<T>;
+  /**
+   * Factory for the item index, invoked with the fully-constructed paginator as `owner`.
+   * Lets a subclass back the paginator with an adapter that needs a reference to the
+   * owner (e.g. a shared, client-global store) without the `this`-before-`super` problem.
+   * Ignored when an explicit `itemIndex` is supplied.
+   */
+  createItemIndex?: (owner: BasePaginator<T, Q>) => ItemIndexApi<T>;
   /**
    * Comparator defining in-memory item ordering for interval math and visible list rendering.
    * Defaults to `sortComparator` to preserve existing paginator behavior.
@@ -362,11 +382,13 @@ export type PaginatorOptions<T, Q> = {
 };
 
 type OptionalPaginatorConfigFields =
+  | 'stateThrottleMs'
   | 'deriveCursor'
   | 'doRequest'
   | 'initialCursor'
   | 'initialOffset'
   | 'itemIndex'
+  | 'createItemIndex'
   | 'itemOrderComparator'
   | 'throwErrors';
 
@@ -403,6 +425,24 @@ export abstract class BasePaginator<T, Q> {
   config: BasePaginatorConfig<T, Q>;
 
   /**
+   * Throttle for the active-window `state.items` publish (message list). Created only when
+   * `config.stateThrottleMs` is set; drives {@link scheduleWindowPublish} / {@link flushPendingPublishes}. See
+   * `stateThrottleMs` in {@link PaginatorOptions}.
+   */
+  private _windowPublishThrottle?: Throttled<[]>;
+
+  /**
+   * Throttle for the interval-view publishes (`anchoredHead` / `logicalHead` / `logicalTail`) driven
+   * by sibling store updates. Independent of {@link _windowPublishThrottle} so a view refresh lands on
+   * its own trailing edge even when `state.items` stays quiet. Created alongside it (only when
+   * `config.stateThrottleMs` is set); buffers changed ids in {@link _pendingViewChangedIds}.
+   */
+  private _viewPublishThrottle?: Throttled<[]>;
+
+  /** Changed ids buffered since the last {@link flushIntervalViewPublish} (throttled paginators only). */
+  private _pendingViewChangedIds = new Set<string>();
+
+  /**
    * Intervals keep items in disconnected ranges.
    * That is a scenario of jumping to non-sequential pages.
    * Intervals are populated only if itemIndex is provided.
@@ -415,7 +455,7 @@ export abstract class BasePaginator<T, Q> {
    * It serves as a single source of truth for all those that need to access the items
    * outside the paginator.
    */
-  protected _itemIndex: ItemIndex<T>;
+  protected _itemIndex: ItemIndexApi<T>;
 
   protected _executeQueryDebounced!: DebouncedExecQueryFunction<Q>;
   /** Last effective query shape produced by subclass for the most recent request. */
@@ -469,6 +509,7 @@ export abstract class BasePaginator<T, Q> {
     initialCursor,
     initialOffset,
     itemIndex,
+    createItemIndex,
     ...options
   }: PaginatorOptions<T, Q> = {}) {
     this.config = {
@@ -483,6 +524,22 @@ export abstract class BasePaginator<T, Q> {
       cursor: initialCursor,
       offset: initialOffset ?? 0,
     });
+    if (this.config.stateThrottleMs) {
+      // Coalesce the paginator's own live `state.items` publishes (see `stateThrottleMs` doc). The
+      // trailing edge re-projects the active window fresh, so a burst emits ~once per interval.
+      this._windowPublishThrottle = throttle(
+        () => this.flushWindowPublish(),
+        this.config.stateThrottleMs,
+        { leading: true, trailing: true },
+      );
+      // Interval view publishes ride their own throttle so they coalesce like `state.items` but land
+      // on an independent trailing edge (see {@link _viewPublishThrottle}).
+      this._viewPublishThrottle = throttle(
+        () => this.flushIntervalViewPublish(),
+        this.config.stateThrottleMs,
+        { leading: true, trailing: true },
+      );
+    }
     this.intervalViews = new StateStore<PaginatorIntervalViews<T>>({
       logicalHead: [],
       logicalTail: [],
@@ -491,7 +548,10 @@ export abstract class BasePaginator<T, Q> {
     this.setDebounceOptions({ debounceMs });
     this.sortComparator = noOrderChange;
     this._filterFieldToDataResolvers = [];
-    this._itemIndex = itemIndex ?? new ItemIndex({ getId: this.getItemId.bind(this) });
+    this._itemIndex =
+      itemIndex ??
+      createItemIndex?.(this) ??
+      new ItemIndex({ getId: this.getItemId.bind(this) });
   }
 
   // ---------------------------------------------------------------------------
@@ -750,6 +810,7 @@ export abstract class BasePaginator<T, Q> {
    * publishing. No-ops when the views are already empty so a reset does not emit needlessly.
    */
   protected clearIntervalViews() {
+    this._pendingViewChangedIds.clear();
     const { logicalHead, logicalTail, anchoredHead } =
       this.intervalViews.getLatestValue();
     // Clear whenever any view holds items; skip only when all are already empty, so a reset on an
@@ -818,6 +879,198 @@ export abstract class BasePaginator<T, Q> {
 
   getItem(id: string | undefined): T | undefined {
     return typeof id === 'string' ? this._itemIndex?.get(id) : undefined;
+  }
+
+  /**
+   * Whether this paginator's live `state.items` publishes are currently throttled — `stateThrottleMs`
+   * is set, throttling is not globally disabled (tests), and item order is not locked (a locked-order
+   * list must emit the caller-computed, order-preserved array, not a re-projection). When false, every
+   * live mutation publishes immediately, exactly as before this feature.
+   */
+  protected get isStateThrottled(): boolean {
+    return (
+      isStateThrottlingEnabled() &&
+      !!this._windowPublishThrottle &&
+      !this.config.lockItemOrder
+    );
+  }
+
+  /** Re-project the active window from its (live, source-of-truth) interval. `undefined` when inactive. */
+  private projectActiveWindow(): T[] | undefined {
+    if (!this._activeIntervalId) return undefined;
+    const active = this._itemIntervals.get(this._activeIntervalId);
+    return active ? this.intervalToItems(active) : undefined;
+  }
+
+  /**
+   * Publish the active window to `state`, re-projecting it fresh from the active interval at call time
+   * (the throttle boundary / flush). Because the intervals are mutated synchronously by every live op,
+   * this always reflects the latest settled state, so intermediate values within a window coalesce
+   * away. Clears the visible window when the active interval is gone (e.g. the last item was removed).
+   */
+  private flushWindowPublish(): void {
+    const items = this.projectActiveWindow();
+    if (items) {
+      this.state.partialNext({ items });
+      return;
+    }
+    if ((this.state.getLatestValue().items?.length ?? 0) > 0) {
+      this.state.partialNext({ items: [] });
+    }
+  }
+
+  /**
+   * Schedule a throttled active-window publish (leading + trailing). Called from live mutations
+   * (ingest / content-change / remove) INSTEAD of an inline `state.partialNext({ items })` when
+   * {@link isStateThrottled}. Safe to call many times within one op — they coalesce to a single emit.
+   */
+  protected scheduleWindowPublish(): void {
+    this._windowPublishThrottle?.throttledFn();
+  }
+
+  /**
+   * Flush any pending throttled window + interval-view publishes immediately. No-op when nothing
+   * is pending or throttling is off.
+   */
+  protected flushPendingPublishes(): void {
+    this._windowPublishThrottle?.flush();
+    this._viewPublishThrottle?.flush();
+  }
+
+  /**
+   * {@link _viewPublishThrottle} boundary: apply every interval-view change buffered since the last
+   * flush, then clear the buffer. Independent of the `state.items` window publish, so a view update
+   * lands within one throttle interval even when the active window stays quiet (e.g. a reaction on a
+   * head message while a non-head window is active). No-op when nothing was buffered.
+   */
+  private flushIntervalViewPublish(): void {
+    if (!this._pendingViewChangedIds.size) return;
+    this.refreshIntervalViewsForChangedIds(this._pendingViewChangedIds);
+    this._pendingViewChangedIds.clear();
+  }
+
+  /**
+   * Refresh any tracked {@link intervalViews} field (logical head, logical tail, anchored head) that
+   * holds one of `changedIds`. A sibling holder writing new content through the shared item store
+   * swaps the item object those views reference, but only this paginator's own ingest/remove
+   * ({@link commitInterval}/{@link dropInterval}) republish them — so a reaction/edit made elsewhere
+   * would otherwise leave stale references in `anchoredHead`/`logicalHead`/`logicalTail` even though
+   * the active window (`state.items`, see {@link reconcileChangedIds}) was refreshed.
+   *
+   * Called immediately for un-throttled paginators, or from {@link flushIntervalViewPublish} at the
+   * view-publish throttle boundary when throttled — see {@link reconcileChangedIds}. Handled
+   * independently of `state.items`. When the anchored head is also the active interval its content is
+   * projected here as well as into `state.items`; deduping that double projection is a separate,
+   * deferred perf follow-up.
+   */
+  private refreshIntervalViewsForChangedIds(changedIds: ReadonlySet<string>): void {
+    const head = this.liveHeadLogical;
+    if (head && this.intervalHoldsAnyChangedId(head, changedIds)) {
+      this.intervalViews.partialNext({ logicalHead: this.intervalToItems(head) });
+    }
+    const tail = this.liveTailLogical;
+    if (tail && this.intervalHoldsAnyChangedId(tail, changedIds)) {
+      this.intervalViews.partialNext({ logicalTail: this.intervalToItems(tail) });
+    }
+    let anchored: Interval | undefined;
+    for (const itv of this._itemIntervals.values()) {
+      if (!isLogicalInterval(itv) && itv.isHead) {
+        anchored = itv;
+        break;
+      }
+    }
+    if (anchored && this.intervalHoldsAnyChangedId(anchored, changedIds)) {
+      this.publishAsAnchoredHead(anchored);
+    }
+  }
+
+  private intervalHoldsAnyChangedId(
+    interval: AnyInterval,
+    changedIds: ReadonlySet<string>,
+  ): boolean {
+    for (const id of interval.itemIds) if (changedIds.has(id)) return true;
+    return false;
+  }
+
+  /**
+   * Reconcile the projected window + interval views against a set of changed ids: another holder
+   * swapped the shared item object those views reference. Refreshes any tracked interval view that
+   * holds a changed id and re-projects (or slot-swaps) the active window — coalesced through the
+   * publish throttles when throttling is on.
+   */
+  protected reconcileChangedIds(changedIds: ReadonlySet<string>): void {
+    // A sibling holder changed shared content: refresh any tracked interval view (logical head/tail,
+    // anchored head) holding a changed id — independent of the active window below, since a view can
+    // hold a changed id the active window does not. When throttled, buffer the ids and tick the
+    // view-publish throttle so refreshes coalesce (once per interval) yet still land on their own
+    // trailing edge even if `state.items` never publishes again; otherwise publish immediately.
+    if (this.isStateThrottled) {
+      for (const id of changedIds) this._pendingViewChangedIds.add(id);
+      this._viewPublishThrottle?.throttledFn();
+    } else {
+      this.refreshIntervalViewsForChangedIds(changedIds);
+    }
+
+    if (!this._activeIntervalId) return;
+    const activeInterval = this._itemIntervals.get(this._activeIntervalId);
+    if (!activeInterval) return;
+
+    // Throttled (message list): the slot-swap fast path below reads the last-published `items`, which
+    // lags the live intervals while throttled — so skip it. Gate on membership only and schedule a
+    // single coalesced re-projection; the boundary re-derives the window fresh from the interval.
+    if (this.isStateThrottled) {
+      for (const id of activeInterval.itemIds) {
+        if (changedIds.has(id)) {
+          this.scheduleWindowPublish();
+          return;
+        }
+      }
+      return;
+    }
+
+    // Fast path: a content update (an in-place edit written through a sibling holder) changes
+    // items in place without changing membership or order. When the current window still lines
+    // up with the interval one-to-one, shallow-copy it and swap only the changed slots — this
+    // preserves every unchanged item reference (so memoized rows bail) and avoids re-mapping and
+    // re-sorting the whole active window on every event. Skipped when a boost is active (a boost
+    // can reorder the visible window, which a slot-swap would not reflect) — then we fall through
+    // to the full projection below, which applies the boost order.
+    const currentItems = this.items;
+    this.clearExpiredBoosts();
+    if (
+      currentItems &&
+      currentItems.length === activeInterval.itemIds.length &&
+      (this.config.lockItemOrder || this.boosts.size === 0)
+    ) {
+      let next: T[] | undefined;
+      let needsFullProjection = false;
+      for (let i = 0; i < currentItems.length; i++) {
+        const id = this.getItemId(currentItems[i]);
+        if (!changedIds.has(id)) continue;
+        const updated = this._itemIndex.get(id);
+        if (!updated) {
+          // The id left the store (a removal, not an in-place update) — resync via a full projection.
+          needsFullProjection = true;
+          break;
+        }
+        if (updated === currentItems[i]) continue;
+        if (!next) next = currentItems.slice();
+        next[i] = updated;
+      }
+      if (!needsFullProjection) {
+        if (next) this.state.partialNext({ items: next });
+        return;
+      }
+    }
+
+    // Fallback: membership/order drifted (or no window to patch, or a boost is active). Re-project,
+    // but only if a changed id is actually in the active interval.
+    for (const id of activeInterval.itemIds) {
+      if (changedIds.has(id)) {
+        this.state.partialNext({ items: this.intervalToItems(activeInterval) });
+        return;
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -911,6 +1164,14 @@ export abstract class BasePaginator<T, Q> {
 
     // When lockItemOrder is true, we must *not* reflect boosts in state.items.
     if (this.config.lockItemOrder) {
+      return items;
+    }
+
+    // itemIds are maintained in itemOrder, so the mapped items are already ordered; only an active
+    // boost can reorder the visible window. Skip the otherwise-redundant full re-sort when none are
+    // active (the common case), so a page ingest / full projection is a map, not a map + sort.
+    this.clearExpiredBoosts();
+    if (this.boosts.size === 0) {
       return items;
     }
 
@@ -1569,9 +1830,13 @@ export abstract class BasePaginator<T, Q> {
       isTail,
     });
 
-    for (const item of page) {
-      this._itemIndex.setOne(item);
-    }
+    // Coalesce per-item change notifications into a single flush, so a page of N
+    // items wakes each subscribing paginator once rather than N times.
+    this._itemIndex.batch(() => {
+      for (const item of page) {
+        this._itemIndex.setOne(item);
+      }
+    });
 
     const targetInterval = targetIntervalId
       ? this._itemIntervals.get(targetIntervalId)
@@ -1728,6 +1993,8 @@ export abstract class BasePaginator<T, Q> {
 
     // 3. If it no longer matches the filter, we’re done (it has been removed above).
     if (!this.matchesFilter(ingestedItem)) {
+      // Throttled: the removal above deferred its emit — publish the (settled) window once.
+      if (this.isStateThrottled && itemHasBeenRemoved) this.scheduleWindowPublish();
       return itemHasBeenRemoved;
     }
 
@@ -1793,6 +2060,7 @@ export abstract class BasePaginator<T, Q> {
           // Falls somewhere *inside* the global bounds, but we don't have that page loaded.
           // We’ve already removed any old occurrence, so from the paginator's perspective
           // this item won't be visible again until the relevant page is fetched.
+          if (this.isStateThrottled && itemHasBeenRemoved) this.scheduleWindowPublish();
           return itemHasBeenRemoved;
         }
       }
@@ -1830,32 +2098,36 @@ export abstract class BasePaginator<T, Q> {
         this._activeIntervalId,
       )
     ) {
-      const items = this.items ?? [];
-      /**
-       * Having config.lockItemOrder enabled when working with intervals will lead to
-       * discrepancies once active intervals are switched:
-       * 1. state.items [a,b,c] intervals [a,b,c], [d]
-       * 2. a changed and is moved to another interval state.items is now [a,b,c], intervals [b,c,], [d, a]
-       * 3. jumping / changing active interval to [d,a] - state.items is now [d,a], intervals  [b,c], [d,a]
-       */
-      if (keepOrderInState) {
-        // Item was visible before → reinsert at its old index
-        const nextView = items.slice();
-        const insertAt = Math.min(originalIndexInState, nextView.length);
-        nextView.splice(insertAt, 0, ingestedItem);
-        this.state.partialNext({ items: nextView });
+      if (this.isStateThrottled) {
+        this.scheduleWindowPublish();
       } else {
+        const items = this.items ?? [];
         /**
-         * Select a correct interval from which the state.items array is derived
+         * Having config.lockItemOrder enabled when working with intervals will lead to
+         * discrepancies once active intervals are switched:
+         * 1. state.items [a,b,c] intervals [a,b,c], [d]
+         * 2. a changed and is moved to another interval state.items is now [a,b,c], intervals [b,c,], [d, a]
+         * 3. jumping / changing active interval to [d,a] - state.items is now [d,a], intervals  [b,c], [d,a]
          */
-        this.state.partialNext({
-          items: this.intervalToItems(
-            this._activeIntervalId === removedItemCoordinates?.interval?.interval.id &&
-              this._activeIntervalId !== targetInterval.id
-              ? removedItemCoordinates.interval.interval
-              : targetInterval,
-          ),
-        });
+        if (keepOrderInState) {
+          // Item was visible before → reinsert at its old index
+          const nextView = items.slice();
+          const insertAt = Math.min(originalIndexInState, nextView.length);
+          nextView.splice(insertAt, 0, ingestedItem);
+          this.state.partialNext({ items: nextView });
+        } else {
+          /**
+           * Select a correct interval from which the state.items array is derived
+           */
+          this.state.partialNext({
+            items: this.intervalToItems(
+              this._activeIntervalId === removedItemCoordinates?.interval?.interval.id &&
+                this._activeIntervalId !== targetInterval.id
+                ? removedItemCoordinates.interval.interval
+                : targetInterval,
+            ),
+          });
+        }
       }
     }
 
@@ -1893,9 +2165,11 @@ export abstract class BasePaginator<T, Q> {
 
     // 2) Remove from visible state.items, if present
     if (stateLocation && stateLocation.currentIndex > -1) {
-      const newItems = [...(this.items ?? [])];
-      newItems.splice(stateLocation.currentIndex, 1);
-      this.state.partialNext({ items: newItems });
+      if (!this.isStateThrottled) {
+        const newItems = [...(this.items ?? [])];
+        newItems.splice(stateLocation.currentIndex, 1);
+        this.state.partialNext({ items: newItems });
+      }
 
       // keep insertionIndex consistent if someone uses it later
       if (stateLocation.insertionIndex > stateLocation.currentIndex) {
@@ -1926,7 +2200,11 @@ export abstract class BasePaginator<T, Q> {
     if (item) {
       const coords = this.locateByItem(item);
       if (!coords.state && !coords.interval) return noAction;
-      return this.removeItemAtCoordinates(coords);
+      const result = this.removeItemAtCoordinates(coords);
+      this._itemIndex.remove(this.getItemId(item));
+      // Throttled: removeItemAtCoordinates deferred its emit — publish the (settled) window once.
+      if (this.isStateThrottled) this.scheduleWindowPublish();
+      return result;
     }
 
     return noAction;
@@ -2352,6 +2630,22 @@ export abstract class BasePaginator<T, Q> {
     this.setIntervals([]);
     this.setActiveInterval(undefined);
     this.clearIntervalViews();
+  }
+
+  /**
+   * Releases this paginator's hold on its item content. With a shared, refcounted item index this
+   * unlinks every member id from the backing store, so the store no longer strong-references this
+   * paginator through its subscriber registry — otherwise a discarded owner stays pinned, keeps
+   * receiving change notifications, and its items never garbage-collect. Call on teardown of the
+   * owner: a discard, not a reset (the owner is not reused; a re-appearing id gets a fresh instance;
+   * leftover interval/state caches die with the paginator when it is dropped). Also cancels any
+   * pending throttled window/view publish, so nothing emits after teardown.
+   */
+  dispose(): void {
+    this._windowPublishThrottle?.cancelTimer();
+    this._viewPublishThrottle?.cancelTimer();
+    this._pendingViewChangedIds.clear();
+    this._itemIndex.clear();
   }
 
   toTail = (params: Omit<PaginationQueryParams<Q>, 'direction' | 'queryShape'> = {}) =>

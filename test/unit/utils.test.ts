@@ -12,16 +12,68 @@ import {
   channelTracksReadLocally,
   userHasReadReceipts,
   formatMessage,
-  throttle,
   generateChannelTempCid,
   uniqBy,
   runDetached,
   sleep,
+  computeOwnReactions,
 } from '../../src/utils';
 
-import type { ChannelFilters, ChannelOwnCapability, ChannelSort } from '../../src';
+import type {
+  ChannelFilters,
+  ChannelOwnCapability,
+  ChannelSort,
+  ReactionResponse,
+} from '../../src';
 import { StreamChat, Channel } from '../../src';
 import { chatLoggerSystem } from '../../src/logger';
+
+describe('computeOwnReactions', () => {
+  const ME = 'me';
+  const other = 'someone-else';
+  const reaction = (type: string, userId: string): ReactionResponse =>
+    ({ type, user_id: userId }) as ReactionResponse;
+
+  it('adds the current user reaction, de-duped by type', () => {
+    expect(
+      computeOwnReactions({ current: [], reaction: reaction('love', ME), userId: ME }),
+    ).toEqual([reaction('love', ME)]);
+  });
+
+  it('enforceUnique replaces the current user existing reaction', () => {
+    const result = computeOwnReactions({
+      current: [reaction('like', ME)],
+      reaction: reaction('love', ME),
+      userId: ME,
+      enforceUnique: true,
+    });
+    expect(result).toEqual([reaction('love', ME)]);
+  });
+
+  it('removed drops the current user reaction of that type', () => {
+    expect(
+      computeOwnReactions({
+        current: [reaction('love', ME)],
+        reaction: reaction('love', ME),
+        userId: ME,
+        removed: true,
+      }),
+    ).toEqual([]);
+  });
+
+  // Regression: a cross-user reaction.updated (enforceUnique is passed for every reaction.updated)
+  // must NOT touch the current user's own_reactions. It previously returned [] in this case, wiping
+  // the current user's reaction highlight until a refresh.
+  it('preserves current-user own_reactions on a cross-user enforceUnique reaction.updated', () => {
+    const result = computeOwnReactions({
+      current: [reaction('love', ME)],
+      reaction: reaction('like', other),
+      userId: ME,
+      enforceUnique: true,
+    });
+    expect(result).toEqual([reaction('love', ME)]);
+  });
+});
 
 describe('findIndexInSortedArray', () => {
   it('finds index in the middle of haystack (asc)', () => {
@@ -586,83 +638,5 @@ describe('userHasReadReceipts', () => {
 
   it('returns true (assumes enabled) when privacy settings are unset', () => {
     expect(userHasReadReceipts(makeClient(undefined))).toBe(true);
-  });
-});
-
-describe('throttle', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('fires a single (non-burst) call on the trailing edge when leading is false', () => {
-    const fn = vi.fn();
-    const throttled = throttle(fn, 1000, { leading: false, trailing: true });
-
-    throttled('a');
-    expect(fn).not.toHaveBeenCalled(); // leading:false so nothing on the leading edge
-
-    vi.advanceTimersByTime(1000);
-    expect(fn).toHaveBeenCalledTimes(1);
-    expect(fn).toHaveBeenLastCalledWith('a'); // the lone call's args reach the trailing edge
-  });
-
-  it('collapses a burst to one trailing call with the last args when leading is false', () => {
-    const fn = vi.fn();
-    const throttled = throttle(fn, 1000, { leading: false, trailing: true });
-
-    throttled('a');
-    throttled('b');
-    throttled('c');
-    expect(fn).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(1000);
-    expect(fn).toHaveBeenCalledTimes(1);
-    expect(fn).toHaveBeenLastCalledWith('c');
-  });
-
-  it('fires on the leading edge and drops within-window calls when trailing is false', () => {
-    const fn = vi.fn();
-    const throttled = throttle(fn, 1000); // defaults { leading: true, trailing: false }
-
-    throttled('a');
-    expect(fn).toHaveBeenCalledTimes(1);
-    expect(fn).toHaveBeenLastCalledWith('a');
-
-    throttled('b');
-    throttled('c');
-    expect(fn).toHaveBeenCalledTimes(1); // trailing: false so no trailing invocation
-
-    vi.advanceTimersByTime(1000);
-    expect(fn).toHaveBeenCalledTimes(1);
-  });
-
-  it('fires on both leading and trailing edges when both are enabled', () => {
-    const fn = vi.fn();
-    const throttled = throttle(fn, 1000, { leading: true, trailing: true });
-
-    throttled('a'); // leading edge
-    expect(fn).toHaveBeenCalledTimes(1);
-    expect(fn).toHaveBeenLastCalledWith('a');
-
-    throttled('b'); // captured for the trailing edge
-    expect(fn).toHaveBeenCalledTimes(1);
-
-    vi.advanceTimersByTime(1000);
-    expect(fn).toHaveBeenCalledTimes(2); // trailing edge
-    expect(fn).toHaveBeenLastCalledWith('b');
-  });
-
-  it('does not fire a duplicate trailing call for a solitary leading+trailing call', () => {
-    const fn = vi.fn();
-    const throttled = throttle(fn, 1000, { leading: true, trailing: true });
-
-    throttled('a'); // leading only so no second call to schedule a trailing
-    expect(fn).toHaveBeenCalledTimes(1);
-
-    vi.advanceTimersByTime(1000);
-    expect(fn).toHaveBeenCalledTimes(1); // no duplicate trailing
   });
 });

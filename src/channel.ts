@@ -1,6 +1,8 @@
 import type { AxiosRequestConfig } from 'axios';
 import { ChannelState } from './channel_state';
 import { CooldownTimer } from './CooldownTimer';
+import { isEphemeral } from './errors';
+import { applyReactionLocally } from './messageStore';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';
@@ -46,9 +48,10 @@ import type {
   PinnedMessagesSort,
   QueryMembersPayload,
   ReactionAPIResponse,
-  ReactionResponse,
+  ReactionRequest,
   SearchPayload,
   SendMessageOptions,
+  SendReactionRequest,
   SharedLocation,
   UnBanUserOptions,
   UpdateChannelPartialRequest,
@@ -240,7 +243,10 @@ export class Channel extends ChannelApi {
     this.cooldownTimer = new CooldownTimer({ channel: this });
 
     this.messageOperations = new MessageOperations({
-      ingest: (m) => this.messagePaginator.ingestItem(m),
+      ingest: (m) => {
+        this.messagePaginator.ingestItem(m);
+        this.getClient().messageStore.flushSubscribers(m.id);
+      },
       get: (id) => this.messagePaginator.getItem(id),
       handlers: () => {
         const { requestHandlers } = this.configState.getLatestValue();
@@ -417,6 +423,76 @@ export class Channel extends ChannelApi {
   }
 
   /**
+   * Adds a reaction with an optimistic local state update: the reaction is applied to the cached
+   * message immediately ({@link applyReactionLocally}), then the request is
+   * fired via {@link Channel.sendReaction} (which owns the offline-DB write + queue). The
+   * server-authoritative counts reconcile on the response; the message is rolled back on failure.
+   */
+  async addReactionWithLocalUpdate({
+    messageId,
+    reaction,
+    options,
+  }: {
+    messageId: string;
+    reaction: ReactionRequest;
+    options?: Pick<SendReactionRequest, 'enforce_unique' | 'skip_push'>;
+  }) {
+    const client = this.getClient();
+    const undo = applyReactionLocally(client, {
+      enforceUnique: options?.enforce_unique ?? false,
+      messageId,
+      reaction,
+    });
+
+    try {
+      const response = await this.sendReaction({ id: messageId, reaction, ...options });
+      // reconcile the server copy only if we still hold it — a bare upsert of an unheld id would
+      // orphan it (the store's refcount GC only reclaims held ids).
+      if (response?.message && client.messageStore.has(response.message.id)) {
+        client.messageStore.upsert(formatMessage(response.message));
+      }
+    } catch (error) {
+      if (undo && (!client.offlineDb || !isEphemeral(error as Error))) {
+        undo();
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Removes the current user's reaction with an optimistic local state update, mirroring
+   * {@link Channel.addReactionWithLocalUpdate}.
+   */
+  async deleteReactionWithLocalUpdate({
+    messageId,
+    type,
+  }: {
+    messageId: string;
+    type: string;
+  }) {
+    const client = this.getClient();
+    const undo = applyReactionLocally(client, {
+      messageId,
+      reaction: { type },
+      removed: true,
+    });
+
+    try {
+      const response = await this.deleteReaction({ id: messageId, type });
+      // reconcile the server copy only if we still hold it — a bare upsert of an unheld id would
+      // orphan it (the store's refcount GC only reclaims held ids).
+      if (response?.message && client.messageStore.has(response.message.id)) {
+        client.messageStore.upsert(formatMessage(response.message));
+      }
+    } catch (error) {
+      if (undo && (!client.offlineDb || !isEphemeral(error as Error))) {
+        undo();
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Upload a file to this channel’s file endpoint (multipart). Forwards to the client’s `sendFile` implementation.
    *
    * @param uri - File source: URL string, `File`, `Buffer`, or readable stream (Node).
@@ -549,6 +625,8 @@ export class Channel extends ChannelApi {
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
+        // The optimistic reaction row is written by the local-update layer
+        // (`applyReactionLocally`); here we only queue the request for replay.
         return await offlineDb.queueTask<ReactionAPIResponse>({
           task: {
             channelId: this.id as string,
@@ -578,19 +656,8 @@ export class Channel extends ChannelApi {
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
-        const message = this.messagePaginator.getItem(request.id);
-        const reaction = {
-          message_id: request.id,
-          type: request.type,
-        } as ReactionResponse;
-
-        if (message) {
-          await offlineDb.deleteReaction({
-            message,
-            reaction,
-          });
-        }
-
+        // The optimistic reaction-row removal is handled by the local-update layer
+        // (`applyReactionLocally`); here we only queue the request for replay.
         return await offlineDb.queueTask<ReactionAPIResponse>({
           task: {
             channelId: this.id as string,
@@ -2228,7 +2295,9 @@ export class Channel extends ChannelApi {
       case 'reaction.new':
         if (event.message && event.reaction) {
           const { reaction } = event;
-          if (!event.message?.parent_id) {
+          // Reflect main messages AND show_in_channel replies (both live in these paginators);
+          // pure replies are handled by the thread's own reaction subscription.
+          if (!event.message?.parent_id || event.message.show_in_channel) {
             this.messagePaginator.reflectReaction({ message: event.message, reaction });
             this.pinnedMessagesPaginator.reflectReaction({
               message: event.message,
@@ -2240,7 +2309,10 @@ export class Channel extends ChannelApi {
       case 'reaction.deleted':
         if (event.message && event.reaction) {
           const { reaction } = event;
-          if (event.message && !event.message.parent_id) {
+          if (
+            event.message &&
+            (!event.message.parent_id || event.message.show_in_channel)
+          ) {
             this.messagePaginator.reflectReaction({
               message: event.message,
               reaction,
@@ -2258,7 +2330,7 @@ export class Channel extends ChannelApi {
         if (event.message && event.reaction) {
           const { reaction } = event;
           // assuming reaction.updated is only called if enforce_unique is true
-          if (!event.message?.parent_id) {
+          if (!event.message?.parent_id || event.message.show_in_channel) {
             this.messagePaginator.reflectReaction({
               enforceUnique: true,
               message: event.message,
@@ -2521,5 +2593,10 @@ export class Channel extends ChannelApi {
     this.disconnected = true;
     this.messageReceiptsTracker.unregisterSubscriptions();
     this.cooldownTimer.clearTimeout();
+    // Release the store-backed paginators so the message store no longer pins this removed channel
+    // (and its whole message graph) through its subscriber registry. The channel is being discarded
+    // here (disconnected + deleted from activeChannels, never reused), mirroring Thread teardown.
+    this.messagePaginator.dispose();
+    this.pinnedMessagesPaginator.dispose();
   }
 }

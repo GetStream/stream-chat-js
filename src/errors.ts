@@ -48,6 +48,18 @@ export function isErrorRetryable(error: APIError) {
   return err.retryable;
 }
 
+/**
+ * Whether an error is EPHEMERAL — a transient failure worth queueing/retrying rather than a
+ * definitive rejection. True when the server never responded (connection/network/offline error - no
+ * `response`, i.e an axios network error or an `OfflineError`) and when the server responded with a
+ * retryable code (see {@link APIErrorCodes}); false only when the server responded with a
+ * non-retryable code (InputError 4, DoesNotExist 16, NotAllowed 17, …).
+ */
+export function isEphemeral(error: Error): boolean {
+  if (!(error as { response?: unknown }).response) return true;
+  return isErrorRetryable(error as APIError);
+}
+
 export function isConnectionIDError(error: APIError) {
   return error.code === 46; // ConnectionIDNotFoundError
 }

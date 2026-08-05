@@ -28,12 +28,18 @@ import type {
 } from '../../types';
 import type { Channel } from '../../channel';
 import { StateStore } from '../../store';
-import { formatMessage, generateUUIDv4, toDeletedMessage } from '../../utils';
+import {
+  computeOwnReactions,
+  formatMessage,
+  generateUUIDv4,
+  toDeletedMessage,
+} from '../../utils';
 import { makeComparator } from '../sortCompiler';
 import type { FieldToDataResolver } from '../types.normalization';
 import { resolveDotPathValue } from '../utility.normalization';
 import { lowerBound } from '../utility.search';
-import { ItemIndex } from '../ItemIndex';
+import type { ItemIndexApi } from '../ItemIndex';
+import type { MessageStoreChangeBatch } from '../../messageStore/MessageStore';
 import { deriveCreatedAtAroundPaginationFlags } from '../cursorDerivation';
 import { deriveIdAroundPaginationFlags } from '../cursorDerivation/idAroundPaginationFlags';
 import { deriveLinearPaginationFlags } from '../cursorDerivation/linearPaginationFlags';
@@ -117,7 +123,7 @@ export const getMessageCreatedAtTimestamp = (message: LocalMessage): number | nu
 export type MessagePaginatorOptions = {
   channel: Channel;
   id?: string;
-  itemIndex?: ItemIndex<LocalMessage>;
+  itemIndex?: ItemIndexApi<LocalMessage>;
   parentMessageId?: string;
   /**
    * Sort passed to backend message/replies query.
@@ -162,6 +168,26 @@ export class MessageIntervalPaginator extends BasePaginator<
     return !message.shadowed;
   }
 
+  /**
+   * Message-store adapter (this paginator is a `MessageStoreSubscriber`): the `MessageStore` calls this
+   * on each holder with the subset of its watched ids that changed. Unwraps the batch and delegates to
+   * the base's store-agnostic {@link BasePaginator.reconcileChangedIds}. Lives here, not on the generic
+   * `BasePaginator`, so the base stays free of `MessageStore` types — only message paginators are
+   * store-backed.
+   */
+  onMessagesChanged({ changedIds }: MessageStoreChangeBatch): void {
+    this.reconcileChangedIds(changedIds);
+  }
+
+  /**
+   * Message-store subscriber flush (the optional `MessageStoreSubscriber.flushState`): the `MessageStore`
+   * calls this after an optimistic (local-user) write so the change renders without throttle delay.
+   * Delegates to the base's generic {@link BasePaginator.flushPendingPublishes}.
+   */
+  flushState(): void {
+    this.flushPendingPublishes();
+  }
+
   protected get intervalItemIdsAreHeadFirst(): boolean {
     // Messages are stored in chronological order (created_at asc) within an interval.
     // Pagination "head" (newest side) is therefore at the END of the `itemIds` array.
@@ -177,7 +203,7 @@ export class MessageIntervalPaginator extends BasePaginator<
   constructor({
     channel,
     id,
-    itemIndex = new ItemIndex({ getId: (item) => item.id }),
+    itemIndex,
     parentMessageId,
     requestSort,
     sort,
@@ -798,36 +824,40 @@ export class MessageIntervalPaginator extends BasePaginator<
   }) => {
     const loadedMessages = this.items ?? [];
 
-    for (const message of loadedMessages) {
-      if (message.user?.id === userId) {
-        if (hardDelete) {
-          this.removeItem({ id: message.id });
-        } else {
-          this.ingestItem(
-            toDeletedMessage({
-              message,
+    // Batch: one logical operation touches many messages; coalesce the shared-store fan-out to a
+    // single flush (sibling holders are notified once) instead of once per affected message.
+    this._itemIndex.batch(() => {
+      for (const message of loadedMessages) {
+        if (message.user?.id === userId) {
+          if (hardDelete) {
+            this.removeItem({ id: message.id });
+          } else {
+            this.ingestItem(
+              toDeletedMessage({
+                message,
+                hardDelete,
+                deletedAt,
+              }) as LocalMessage,
+            );
+          }
+          continue;
+        }
+
+        if (
+          message.quoted_message?.user?.id === userId &&
+          message.quoted_message.type !== 'deleted'
+        ) {
+          this.ingestItem({
+            ...message,
+            quoted_message: toDeletedMessage({
+              message: formatMessage(message.quoted_message),
               hardDelete,
               deletedAt,
             }) as LocalMessage,
-          );
+          });
         }
-        continue;
       }
-
-      if (
-        message.quoted_message?.user?.id === userId &&
-        message.quoted_message.type !== 'deleted'
-      ) {
-        this.ingestItem({
-          ...message,
-          quoted_message: toDeletedMessage({
-            message: formatMessage(message.quoted_message),
-            hardDelete,
-            deletedAt,
-          }) as LocalMessage,
-        });
-      }
-    }
+    });
   };
 
   /**
@@ -840,14 +870,18 @@ export class MessageIntervalPaginator extends BasePaginator<
   reflectQuotedMessageUpdate = (message: LocalMessage) => {
     const cachedMessages = this._itemIndex.values();
 
-    for (const cachedMessage of cachedMessages) {
-      if (cachedMessage.quoted_message_id !== message.id) continue;
+    // Batch: several cached messages may quote the updated one; coalesce the shared-store fan-out
+    // to a single flush instead of one per re-ingested quoting message.
+    this._itemIndex.batch(() => {
+      for (const cachedMessage of cachedMessages) {
+        if (cachedMessage.quoted_message_id !== message.id) continue;
 
-      this.ingestItem({
-        ...cachedMessage,
-        quoted_message: message,
-      });
-    }
+        this.ingestItem({
+          ...cachedMessage,
+          quoted_message: message,
+        });
+      }
+    });
   };
 
   /**
@@ -862,11 +896,15 @@ export class MessageIntervalPaginator extends BasePaginator<
   reflectUserUpdate = (user: UserResponse) => {
     const activeIds = new Set((this.items ?? []).map((m) => this.getItemId(m)));
     let activeAffected = false;
-    for (const message of this._itemIndex.values()) {
-      if (message.user?.id !== user.id) continue;
-      this._itemIndex.setOne({ ...message, user });
-      if (activeIds.has(this.getItemId(message))) activeAffected = true;
-    }
+    // Batch: a user rename can touch many messages; coalesce the shared-store fan-out to sibling
+    // holders into a single flush. This paginator's own active window is re-emitted once below.
+    this._itemIndex.batch(() => {
+      for (const message of this._itemIndex.values()) {
+        if (message.user?.id !== user.id) continue;
+        this._itemIndex.setOne({ ...message, user });
+        if (activeIds.has(this.getItemId(message))) activeAffected = true;
+      }
+    });
     if (activeAffected) {
       this.state.partialNext({
         items: (this.items ?? []).map((m) => this.getItem(this.getItemId(m)) ?? m),
@@ -898,6 +936,15 @@ export class MessageIntervalPaginator extends BasePaginator<
    * @param [params.enforceUnique=false] - When adding, first clear the current user's existing
    *   `own_reactions` so only the incoming one remains (used by `reaction.updated`, where a user's
    *   reaction replaces their previous one).
+   *
+   * TODO(reactive-store): reflect reactions ONCE at the store level, not per-paginator. Both the
+   * channel handler (channel.ts) and the thread handler (thread.ts) call this on every reaction.*
+   * event, so a message held in more than one collection (a show_in_channel reply, or the thread
+   * parent) is reflected TWICE: two writes to the same canonical slot, each fanning out to the
+   * other holder (double re-projection) and minting a fresh ref that defeats the reconcile
+   * ref-equality bail. Idempotent (counts come wholesale from the event) so the result is correct,
+   * just wasteful. The store already fans out to every holder, so reflect once (by id, if held) and
+   * retire the per-collection reflect calls + parent path + enforce_unique branch.
    */
   reflectReaction = ({
     enforceUnique = false,
@@ -913,34 +960,15 @@ export class MessageIntervalPaginator extends BasePaginator<
     const formatted = formatMessage(message);
     const existing = this.getItem(formatted.id);
     const baseOwnReactions = existing?.own_reactions ?? formatted.own_reactions ?? [];
-    const own_reactions = removed
-      ? this.removeOwnReactionOfType(baseOwnReactions, reaction)
-      : this.addOwnReaction(baseOwnReactions, reaction, enforceUnique);
+    const own_reactions = computeOwnReactions({
+      current: baseOwnReactions,
+      enforceUnique,
+      reaction,
+      removed,
+      userId: this.channel.getClient().userID,
+    });
     this.ingestItem({ ...formatted, own_reactions });
   };
-
-  private removeOwnReactionOfType(
-    ownReactions: ReactionResponse[],
-    reaction: ReactionResponse,
-  ): ReactionResponse[] {
-    return ownReactions.filter(
-      (r) => r.user_id !== reaction.user_id || r.type !== reaction.type,
-    );
-  }
-
-  private addOwnReaction(
-    ownReactions: ReactionResponse[],
-    reaction: ReactionResponse,
-    enforceUnique: boolean,
-  ): ReactionResponse[] {
-    const base = enforceUnique
-      ? []
-      : this.removeOwnReactionOfType(ownReactions, reaction);
-    if (this.channel.getClient().userID === reaction.user_id) {
-      return [...base, reaction];
-    }
-    return base;
-  }
 
   /**
    * Map a timestamp to a loaded message — the first message in the latest (head) window whose

@@ -3,6 +3,29 @@ export type ItemIndexOptions<T> = {
 };
 
 /**
+ * The minimal CRUD surface a paginator relies on from its item index.
+ *
+ * Extracted so a paginator can be backed either by the default per-instance
+ * {@link ItemIndex} or by an adapter over a shared, client-global store
+ * (see `MessageStoreBackedItemIndex`) without the call sites knowing the difference.
+ */
+export interface ItemIndexApi<T> {
+  setMany(items: T[]): void;
+  setOne(item: T): void;
+  get(id: string): T | undefined;
+  has(id: string): boolean;
+  remove(id: string): void;
+  clear(): void;
+  entries(): [string, T][];
+  values(): T[];
+  /**
+   * Runs `fn`, coalescing any change notifications it produces into a single flush.
+   * A plain {@link ItemIndex} has nothing to coalesce and simply runs `fn`.
+   */
+  batch<R>(fn: () => R): R;
+}
+
+/**
  * The ItemIndex is a canonical, ID-addressable storage layer for domain items.
  *
  * It provides a single source of truth for all items managed by one or more
@@ -68,7 +91,7 @@ export type ItemIndexOptions<T> = {
  *
  * @template T The domain item type managed by the index.
  */
-export class ItemIndex<T> {
+export class ItemIndex<T> implements ItemIndexApi<T> {
   private byId = new Map<string, T>();
   private readonly getId: (item: T) => string;
 
@@ -108,5 +131,9 @@ export class ItemIndex<T> {
 
   values() {
     return [...this.byId.values()];
+  }
+
+  batch<R>(fn: () => R): R {
+    return fn();
   }
 }
