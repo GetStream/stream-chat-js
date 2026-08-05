@@ -230,6 +230,26 @@ describe('ChannelManager', () => {
       expect(channelManager.paginators).toStrictEqual([paginator]);
     });
 
+    // ported from the legacy suite ("should only invoke event handlers if registerSubscriptions has been
+    // called" / "should unregister subscriptions if unregisterSubscriptions is called")
+    it('handles events only while subscribed', async () => {
+      const handler = vi.fn();
+      const channelManager = client.createChannelManager({
+        eventHandlers: { 'message.new': [{ handle: handler, id: 'test' }] },
+      });
+
+      client.dispatchEvent({ type: 'message.new', cid: 'messaging:1' });
+      await vi.waitFor(() => expect(handler).not.toHaveBeenCalled());
+
+      channelManager.registerSubscriptions();
+      client.dispatchEvent({ type: 'message.new', cid: 'messaging:1' });
+      await vi.waitFor(() => expect(handler).toHaveBeenCalledTimes(1));
+
+      channelManager.unregisterSubscriptions();
+      client.dispatchEvent({ type: 'message.new', cid: 'messaging:1' });
+      await vi.waitFor(() => expect(handler).toHaveBeenCalledTimes(1));
+    });
+
     it('ref-counts its subscriptions', () => {
       const channelManager = client.createChannelManager();
 
@@ -652,6 +672,26 @@ describe('ChannelManager', () => {
       });
     });
 
+    // ported from the legacy ChannelManager suite, which removed by `event.cid || event.channel?.cid`
+    it('removes the channel when only event.channel carries the cid', async () => {
+      const cid = 'messaging:nested-cid';
+      const channelManager = new ChannelManager({ client });
+      const p = new ChannelPaginator({ client });
+      const r = vi.spyOn(p, 'removeItem');
+
+      channelManager.insertPaginator({ paginator: p });
+      channelManager.registerSubscriptions();
+
+      client.dispatchEvent({
+        type: eventType,
+        channel: { cid, id: 'nested-cid', type: 'messaging' } as ChannelResponse,
+      });
+
+      await vi.waitFor(() => {
+        expect(r).toHaveBeenCalledWith({ id: cid, item: undefined });
+      });
+    });
+
     it('tries to remove non-existent channel from all paginators', async () => {
       const channelManager = new ChannelManager({ client });
       const p = new ChannelPaginator({ client });
@@ -663,6 +703,38 @@ describe('ChannelManager', () => {
       client.dispatchEvent({ type: eventType, cid: 'messaging:404' }); // no such channel
       await vi.waitFor(() => {
         expect(r).toHaveBeenCalledWith({ id: 'messaging:404', item: undefined });
+      });
+    });
+  });
+
+  // ported from the legacy suite's "predefined filter response metadata" block, which asserted the same
+  // thing through its WS handlers: a channel the backend-resolved filter excludes must not be promoted
+  // into the list by an event.
+  describe('backend-resolved predefined filter', () => {
+    it('a message.new in an archived channel does not add it to a list the backend filtered to { archived: false }', async () => {
+      const archived = makeChannel('messaging:archived-1');
+      archived.state.membership = {
+        user: { id: client.userID as string },
+        archived_at: '2025-09-03T12:19:39.101089Z',
+      };
+      client.activeChannels[archived.cid] = archived;
+
+      const paginator = new ChannelPaginator({ client });
+      // the query reports that the backend applied `{ archived: false }`, which the local filters do not say
+      vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+        channels: [],
+        duration: '0.1ms',
+        predefined_filter: { name: 'unarchived', filter: { archived: false } },
+      });
+      await paginator.toTail();
+
+      const channelManager = new ChannelManager({ client, paginators: [paginator] });
+      channelManager.registerSubscriptions();
+
+      client.dispatchEvent({ type: 'message.new', cid: archived.cid });
+
+      await vi.waitFor(() => {
+        expect(paginator.items).toEqual([]);
       });
     });
   });

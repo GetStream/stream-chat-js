@@ -1046,6 +1046,23 @@ describe('ChannelPaginator', () => {
       expect(upsertCidsForQuery).not.toHaveBeenCalled();
     });
 
+    // ported from the legacy suite ("continues with normal queryChannels flow if client.user is missing")
+    it('queries normally without touching the cache when there is no user', async () => {
+      await setUpOfflineDb({ syncStatus: false });
+      client.user = undefined;
+      const queryChannels = vi
+        .spyOn(client, 'queryChannelsAndHydrate')
+        .mockResolvedValue({ channels: [], duration: '0.1ms' });
+      const paginator = makePaginator();
+
+      await paginator.toTail();
+
+      // no user id means no cache key, so neither the read nor the sync deferral applies
+      expect(getChannelsForQuery).not.toHaveBeenCalled();
+      expect(scheduleSyncStatusChangeCallback).not.toHaveBeenCalled();
+      expect(queryChannels).toHaveBeenCalledTimes(1);
+    });
+
     describe('while the offline sync is in progress', () => {
       it('surfaces the cached page and defers the query until the sync completes', async () => {
         await setUpOfflineDb({ syncStatus: false });

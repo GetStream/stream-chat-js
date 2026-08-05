@@ -112,10 +112,13 @@ const removeItem: EventHandlerPipelineHandler<EventHandlerContext> = ({
   event,
   ctx: { channelManager },
 }) => {
-  if (!event.cid) return;
-  const channel = channelManager.client.activeChannels[event.cid];
+  // `getCidFromEvent`, not `event.cid`: on `channel.deleted` the cid can arrive nested in
+  // `event.channel` only, and the legacy ChannelManager removed by `event.cid || event.channel?.cid`
+  const cid = getCidFromEvent(event);
+  if (!cid) return;
+  const channel = channelManager.client.activeChannels[cid];
   channelManager.paginators.forEach((paginator) => {
-    paginator.removeItem({ id: event.cid, item: channel });
+    paginator.removeItem({ id: cid, item: channel });
   });
 };
 
