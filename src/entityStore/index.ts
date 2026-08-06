@@ -1,2 +1,2 @@
 export * from './applyReactionLocally';
-export * from './MessageStore';
+export * from './EntityStore';

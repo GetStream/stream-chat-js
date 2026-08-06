@@ -11,7 +11,7 @@ import { chatLoggerSystem } from '../../logger';
 import type { FilterBuilderOptions } from '../FilterBuilder';
 import { FilterBuilder } from '../FilterBuilder';
 import { makeComparator } from '../sortCompiler';
-import { ItemIndex } from '../ItemIndex';
+import { StoreBackedItemIndex } from '../../entityStore/StoreBackedItemIndex';
 import { generateUUIDv4 } from '../../utils';
 import type { StreamChat } from '../../client';
 import type { Channel } from '../../channel';
@@ -217,7 +217,9 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   }: ChannelPaginatorOptions) {
     super({
       hasPaginationQueryShapeChanged,
-      itemIndex: new ItemIndex<Channel>({ getId: (channel) => channel.cid }),
+      itemIndex: new StoreBackedItemIndex<Channel>({
+        getEntityId: (channel) => channel.cid,
+      }),
       ...paginatorOptions,
     });
     const definedSort = sort ?? DEFAULT_BACKEND_SORT;

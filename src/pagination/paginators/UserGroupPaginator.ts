@@ -7,7 +7,7 @@ import type {
 } from './BasePaginator';
 import type { ListUserGroupsOptions, UserGroupResponse } from '../../types';
 import type { StreamChat } from '../../client';
-import { ItemIndex } from '../ItemIndex';
+import { StoreBackedItemIndex } from '../../entityStore/StoreBackedItemIndex';
 
 type UserGroupListCursor = {
   created_at_gt: string;
@@ -49,7 +49,9 @@ export class UserGroupPaginator extends BasePaginator<
   ) {
     super({
       initialCursor: { ...ZERO_PAGE_CURSOR, headward: null },
-      itemIndex: new ItemIndex<UserGroupResponse>({ getId: (group) => group.id }),
+      itemIndex: new StoreBackedItemIndex<UserGroupResponse>({
+        getEntityId: (group) => group.id,
+      }),
       ...options,
     });
     this.client = client;
