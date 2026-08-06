@@ -4,9 +4,9 @@ import { EntityStore, type EntityStoreSubscriber } from './EntityStore';
 export type StoreBackedItemIndexOptions<T> = {
   getId: (item: T) => string;
   /**
-   * The entity that owns this index; used as the store subscriber + refcount holder. Optional: an
-   * index over a private store (see `store`) has no one to fan out to, so an owner-less index just
-   * uses an internal no-op subscriber as its refcount holder. Message paginators pass themselves so
+   * The entity that owns this index; used as the store subscriber, which also holds its refcount.
+   * Optional: an index over a private store (see `store`) has no one to fan out to, so an
+   * owner-less index just uses an internal no-op subscriber to hold its refcount. Message paginators pass themselves so
    * cross-collection updates reach them; single-home collections (channels, reminders, …) omit it.
    */
   owner?: EntityStoreSubscriber;
@@ -19,7 +19,7 @@ export type StoreBackedItemIndexOptions<T> = {
   store?: EntityStore<T>;
 };
 
-/** No-op subscriber used as the refcount holder for an owner-less (private-store) index. */
+/** No-op subscriber that holds the refcount for an owner-less (private-store) index. */
 const NOOP_OWNER: EntityStoreSubscriber = { onEntitiesChanged: () => undefined };
 
 /**
@@ -33,16 +33,16 @@ const NOOP_OWNER: EntityStoreSubscriber = { onEntitiesChanged: () => undefined }
  *   lives in the (possibly shared) store. This is what keeps e.g. reaction routing
  *   (`threadPaginator.getItem(id) ? thread : channel`) correct and keeps the `.values()` scans
  *   from ever walking other channels' entities.
- * - `setOne` writes content once into the store and links the owner as a holder (drives both
- *   notification fan-out and refcount GC). The write passes the owner as `origin`, so the owner is
- *   not notified of its own write (it re-emits its window inline); other holders of the same id ARE
- *   notified and re-project.
+ * - `setOne` writes content once into the store and links the owner as a subscriber (drives both
+ *   notification fan-out and refcount GC). The write passes the owner as the `subscriber` to skip, so
+ *   the owner is not notified of its own write (it re-emits its window inline); other subscribers of
+ *   the same id ARE notified and re-project.
  * - `remove`/`clear` unlink the owner rather than hard-deleting content, so an entity still held by
  *   another index (e.g. a `show_in_channel` reply in both the channel list and its thread) survives;
- *   the store GCs it only when the last holder unlinks.
+ *   the store GCs it only when the last subscriber unlinks.
  *
  * When no shared store is supplied the index holds a private store — every id it links has exactly
- * one holder (its own owner), so no fan-out ever fires and removal GCs immediately, matching a plain
+ * one subscriber (its own owner), so no fan-out ever fires and removal GCs immediately, matching a plain
  * per-instance index.
  *
  * @template T The domain item type held by the index; collocated with the {@link EntityStore}'s.

@@ -93,38 +93,38 @@ export class EntityStore<T> {
 
   /**
    * Replaces the canonical copy of `entity` and notifies every subscriber watching its id —
-   * except `origin`, which is expected to re-render itself (the paginator that performed the
-   * write already emits its own window inline, so it must not be notified a second time through
-   * the subscription).
+   * except `subscriber`, the one that performed the write, which is expected to re-render itself
+   * (the paginator that performed the write already emits its own window inline, so it must not be
+   * notified a second time through the subscription).
    */
-  upsert(entity: T, origin?: EntityStoreSubscriber): void {
+  upsert(entity: T, subscriber?: EntityStoreSubscriber): void {
     const id = this.getId(entity);
     const previous = this.byId.get(id);
     // do not notify if the value hasn't changed (mirrors StateStore.next)
     if (previous === entity) return;
     this.byId.set(id, entity);
-    this.markDirty(id, origin);
+    this.markDirty(id, subscriber);
     this.autoFlush();
   }
 
   // ---- subscription registry / refcount ----
 
-  /** Registers `subscriber` as a holder of `id` (notification target + refcount). */
+  /** Registers `subscriber` for `id` (notification target + refcount). */
   link(id: string, subscriber: EntityStoreSubscriber): void {
-    let holders = this.subscribers.get(id);
-    if (!holders) {
-      holders = new Set();
-      this.subscribers.set(id, holders);
+    let subscribers = this.subscribers.get(id);
+    if (!subscribers) {
+      subscribers = new Set();
+      this.subscribers.set(id, subscribers);
     }
-    holders.add(subscriber);
+    subscribers.add(subscriber);
   }
 
-  /** Drops `subscriber` as a holder of `id`; GCs the canonical copy when none remain. */
+  /** Drops `subscriber` from `id`; GCs the canonical copy when none remain. */
   unlink(id: string, subscriber: EntityStoreSubscriber): void {
-    const holders = this.subscribers.get(id);
-    if (!holders) return;
-    holders.delete(subscriber);
-    if (holders.size === 0) {
+    const subscribers = this.subscribers.get(id);
+    if (!subscribers) return;
+    subscribers.delete(subscriber);
+    if (subscribers.size === 0) {
       this.subscribers.delete(id);
       // refcount GC: nobody holds this entity any longer.
       this.byId.delete(id);
@@ -162,26 +162,30 @@ export class EntityStore<T> {
   }
 
   /**
-   * Immediately flushes any throttled/pending state publish on the holders of `id` (via
+   * Immediately flushes any throttled/pending state publish on the subscribers of `id` (via
    * {@link EntityStoreSubscriber.flushState}). Called after an optimistic (local-user) write to
-   * `id` so it renders without the throttle delay. Only that id's own holders are flushed — the
-   * write touched no other id — and flushing a holder with nothing pending is a no-op.
+   * `id` so it renders without the throttle delay. Only that id's own subscribers are flushed — the
+   * write touched no other id — and flushing a subscriber with nothing pending is a no-op.
    */
   flushSubscribers(id: string): void {
-    const holders = this.subscribers.get(id);
-    if (!holders) return;
-    for (const holder of holders) holder.flushState?.();
+    const subscribers = this.subscribers.get(id);
+    if (!subscribers) return;
+    for (const subscriber of subscribers) subscriber.flushState?.();
   }
 
-  private markDirty(id: string, origin?: EntityStoreSubscriber): void {
-    const holders = this.subscribers.get(id);
-    if (!holders) return;
-    for (const holder of holders) {
-      if (holder === origin) continue;
-      let changed = this.pendingChanged.get(holder);
+  /**
+   * Records `id` as changed for every subscriber watching it, except `subscriber` — the one that
+   * wrote it and is resposible for updating itself (see {@link EntityStore.upsert}).
+   */
+  private markDirty(id: string, subscriber?: EntityStoreSubscriber): void {
+    const subscribers = this.subscribers.get(id);
+    if (!subscribers) return;
+    for (const other of subscribers) {
+      if (other === subscriber) continue;
+      let changed = this.pendingChanged.get(other);
       if (!changed) {
         changed = new Set();
-        this.pendingChanged.set(holder, changed);
+        this.pendingChanged.set(other, changed);
       }
       changed.add(id);
     }

@@ -87,14 +87,14 @@ describe('EntityStore', () => {
       expect([...batch.changedIds]).toEqual(['m1']);
     });
 
-    it('skips the origin subscriber but notifies other holders', () => {
-      const origin = spySubscriber();
+    it('skips the writing subscriber but notifies other subscribers', () => {
+      const subscriber = spySubscriber();
       const sibling = spySubscriber();
-      store.link('m1', origin);
+      store.link('m1', subscriber);
       store.link('m1', sibling);
 
-      store.upsert(msg({ id: 'm1' }), origin);
-      expect(origin.onEntitiesChanged).not.toHaveBeenCalled();
+      store.upsert(msg({ id: 'm1' }), subscriber);
+      expect(subscriber.onEntitiesChanged).not.toHaveBeenCalled();
       expect(sibling.onEntitiesChanged).toHaveBeenCalledTimes(1);
     });
 
@@ -108,7 +108,7 @@ describe('EntityStore', () => {
   });
 
   describe('refcount GC', () => {
-    it('drops the canonical copy when the last holder unlinks', () => {
+    it('drops the canonical copy when the last subscriber unlinks', () => {
       const a = spySubscriber();
       store.upsert(msg({ id: 'm1' }));
       store.link('m1', a);
@@ -118,7 +118,7 @@ describe('EntityStore', () => {
       expect(store.get('m1')).toBeUndefined();
     });
 
-    it('keeps the message alive while another holder remains', () => {
+    it('keeps the message alive while another subscriber remains', () => {
       const a = spySubscriber();
       const b = spySubscriber();
       store.upsert(msg({ id: 'm1' }));

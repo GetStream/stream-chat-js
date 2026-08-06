@@ -70,7 +70,7 @@ describe('StoreBackedItemIndex', () => {
   });
 
   describe('notification', () => {
-    it('does not notify the writing owner but notifies other holders (the fan-out)', () => {
+    it('does not notify the writing owner but notifies other subscribers (the fan-out)', () => {
       a.setOne(msg({ id: 'm1', text: 'v1' }));
       b.setOne(msg({ id: 'm1', text: 'v1' }));
       ownerA.onEntitiesChanged.mockClear();
@@ -83,7 +83,7 @@ describe('StoreBackedItemIndex', () => {
       expect([...ownerB.onEntitiesChanged.mock.calls[0][0].changedIds]).toEqual(['m1']);
     });
 
-    it('does not notify a holder of an id it does not hold', () => {
+    it('does not notify a subscriber of an id it does not hold', () => {
       a.setOne(msg({ id: 'm1' }));
       ownerB.onEntitiesChanged.mockClear();
       a.setOne(msg({ id: 'm1', text: 'again' }));
@@ -120,7 +120,7 @@ describe('StoreBackedItemIndex', () => {
 
   describe('batching', () => {
     it('setMany coalesces sibling notifications to one', () => {
-      // b holds m1..m3 first so it is a sibling holder for each
+      // b holds m1..m3 first so it is a sibling subscriber for each
       b.setOne(msg({ id: 'm1' }));
       b.setOne(msg({ id: 'm2' }));
       b.setOne(msg({ id: 'm3' }));
@@ -146,7 +146,7 @@ describe('StoreBackedItemIndex', () => {
       index.setOne(m1);
       expect(index.get('m1')).toBe(m1);
       expect(index.has('m1')).toBe(true);
-      // the owner is the sole holder + the write origin, so it never notifies itself
+      // the owner is the sole subscriber and the one that wrote, so it never notifies itself
       expect(owner.onEntitiesChanged).not.toHaveBeenCalled();
 
       const updated = msg({ id: 'm1', text: 'v2' });
