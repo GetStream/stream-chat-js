@@ -364,13 +364,52 @@ describe('BasePaginator', () => {
       expect(paginator.mockClientQuery).toHaveBeenCalledTimes(3);
     });
 
-    it('keeps hasMoreHead unchanged on a keepPreviousItems first-page refresh (offset)', async () => {
-      // Regression: hasMoreHead is derived from the start offset only when the first page resets
-      // the window (isFirstPage && !keepPreviousItems). A keepPreviousItems refresh is isFirstPage
-      // but does NOT reset the offset, so it must not re-derive hasMoreHead from the grown offset.
+    it('reload() re-fetches the FIRST page (offset 0) after paginating, not the current page', async () => {
+      // Regression: executeQuery derived the query shape (which carries `offset`) BEFORE the reset
+      // restored the initial offset, so reload() on an already-paginated list re-fetched the current
+      // page (e.g. page 2) and replaced page 1 with it. Probe `this.offset` when the shape is derived
+      // to prove the reset applies to the OUTGOING request, not just to state after the fact.
+      const offsetAtQueryShape: number[] = [];
+      class OffsetProbePaginator extends IncompletePaginator {
+        getNextQueryShape = vi.fn(() => {
+          offsetAtQueryShape.push(this.offset);
+          return defaultNextQueryShape;
+        });
+      }
+      const paginator = new OffsetProbePaginator({ pageSize: 1 });
+
+      // Page 1 (offset 0 -> 1)
+      let nextPromise = paginator.toTail();
+      await sleep(0);
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await nextPromise;
+      expect(paginator.offset).toBe(1);
+
+      // Page 2 (offset 1 -> 2)
+      nextPromise = paginator.toTail();
+      paginator.queryResolve({ items: [{ id: 'id2' }] });
+      await nextPromise;
+      expect(paginator.offset).toBe(2);
+
+      // reload() must derive its request from offset 0, not the paginated 2.
+      nextPromise = paginator.reload();
+      await sleep(0);
+      expect(offsetAtQueryShape.at(-1)).toBe(0);
+
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await nextPromise;
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+    });
+
+    it('keepPreviousItems + reset resets the window to page 1 while keeping items visible (offset)', async () => {
+      // `reset` and `keepPreviousItems` are orthogonal: reset re-establishes the window from page 1
+      // (offset back to 0, fresh page replaces), while keepPreviousItems only keeps the CURRENT items
+      // visible during the fetch instead of blanking. Guards: (a) the refresh fetches page 1, not the
+      // grown offset; (b) items stay visible while the fetch is in flight; (c) the fresh page replaces
+      // (not merges); (d) hasMoreHead is anchored from the start offset (0), not the grown offset.
       const paginator = new Paginator({ pageSize: 1 });
 
-      // First page from offset 0 -> head is loaded.
+      // Page 1 (offset 0 -> 1)
       let nextPromise = paginator.toTail();
       await sleep(0);
       paginator.queryResolve({ items: [{ id: 'id1' }] });
@@ -378,21 +417,25 @@ describe('BasePaginator', () => {
       expect(paginator.hasMoreHead).toBe(false);
       expect(paginator.offset).toBe(1);
 
-      // Grow the tail so the offset is well past 0.
+      // Page 2 (offset 1 -> 2)
       nextPromise = paginator.toTail();
       paginator.queryResolve({ items: [{ id: 'id2' }] });
       await nextPromise;
       expect(paginator.offset).toBe(2);
-      expect(paginator.hasMoreHead).toBe(false);
+      expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]);
 
-      // A non-destructive first-page refresh (isFirstPage via reset, keepPreviousItems) must NOT
-      // flip hasMoreHead to true off the grown offset (2 > 0) — the window still starts at 0.
+      // keepPreviousItems reset: the window resets (offset 0) but the current items stay visible.
       const refreshPromise = paginator.executeQuery({
         keepPreviousItems: true,
         reset: 'yes',
       });
+      expect(paginator.offset).toBe(0); // window reset to the first page
+      expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]); // still visible during the fetch
+
+      // The fresh first page replaces the list (not merged onto the stale window).
       paginator.queryResolve({ items: [{ id: 'id1' }] });
       await refreshPromise;
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
       expect(paginator.hasMoreHead).toBe(false);
     });
 
