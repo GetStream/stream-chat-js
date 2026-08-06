@@ -30,7 +30,7 @@ export type EntityStoreSubscriber = {
 
 export type EntityStoreOptions<T> = {
   /** Extracts the canonical id an entity is stored and addressed under. */
-  getId: (entity: T) => string;
+  getEntityId: (entity: T) => string;
 };
 
 /**
@@ -42,7 +42,7 @@ export type EntityStoreOptions<T> = {
  * subscribers holding that id — replacing the manual copy-to-copy fan-out that keeping N
  * per-consumer copies in sync required.
  *
- * The store is entity-agnostic: it learns how to extract an id from a `T` via the `getId`
+ * The store is entity-agnostic: it learns how to extract an id from a `T` via the `getEntityId`
  * function passed to its constructor. The client holds one as `client.messageStore`, an
  * `EntityStore<LocalMessage>`, for message content.
  *
@@ -70,13 +70,13 @@ export type EntityStoreOptions<T> = {
 export class EntityStore<T> {
   private byId = new Map<string, T>();
   private subscribers = new Map<string, Set<EntityStoreSubscriber>>();
-  private readonly getId: (entity: T) => string;
+  private readonly getEntityId: (entity: T) => string;
 
   private transactionDepth = 0;
   private pendingChanged = new Map<EntityStoreSubscriber, Set<string>>();
 
-  constructor({ getId }: EntityStoreOptions<T>) {
-    this.getId = getId;
+  constructor({ getEntityId }: EntityStoreOptions<T>) {
+    this.getEntityId = getEntityId;
   }
 
   // ---- reads ----
@@ -98,7 +98,7 @@ export class EntityStore<T> {
    * notified a second time through the subscription).
    */
   upsert(entity: T, subscriber?: EntityStoreSubscriber): void {
-    const id = this.getId(entity);
+    const id = this.getEntityId(entity);
     const previous = this.byId.get(id);
     // do not notify if the value hasn't changed (mirrors StateStore.next)
     if (previous === entity) return;

@@ -217,7 +217,9 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   }: ChannelPaginatorOptions) {
     super({
       hasPaginationQueryShapeChanged,
-      itemIndex: new StoreBackedItemIndex<Channel>({ getId: (channel) => channel.cid }),
+      itemIndex: new StoreBackedItemIndex<Channel>({
+        getEntityId: (channel) => channel.cid,
+      }),
       ...paginatorOptions,
     });
     const definedSort = sort ?? DEFAULT_BACKEND_SORT;

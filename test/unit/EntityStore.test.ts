@@ -8,7 +8,7 @@ import type { LocalMessage } from '../../src';
 const msg = (overrides: Partial<Parameters<typeof generateMsg>[0]> = {}): LocalMessage =>
   formatMessage(generateMsg(overrides));
 
-const getId = (m: LocalMessage) => m.id;
+const getEntityId = (m: LocalMessage) => m.id;
 
 const spySubscriber = (): EntityStoreSubscriber & {
   onEntitiesChanged: ReturnType<typeof vi.fn>;
@@ -20,7 +20,7 @@ describe('EntityStore', () => {
   let store: EntityStore<LocalMessage>;
 
   beforeEach(() => {
-    store = new EntityStore<LocalMessage>({ getId });
+    store = new EntityStore<LocalMessage>({ getEntityId });
   });
 
   describe('reads / writes', () => {

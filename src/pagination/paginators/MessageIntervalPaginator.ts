@@ -230,7 +230,7 @@ export class MessageIntervalPaginator extends BasePaginator<
           new StoreBackedItemIndex<LocalMessage>({
             store: channel.getClient?.().messageStore,
             owner: owner as MessageIntervalPaginator,
-            getId: owner.getItemId.bind(owner),
+            getEntityId: owner.getItemId.bind(owner),
           })),
       pageSize: paginatorOptions?.pageSize ?? DEFAULT_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
     });

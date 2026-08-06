@@ -33,7 +33,7 @@ describe('MessagePaginator', () => {
       query: vi.fn(),
     } as unknown as Channel;
     itemIndex = new StoreBackedItemIndex<LocalMessage>({
-      getId: (message) => message.id,
+      getEntityId: (message) => message.id,
     });
   });
 
@@ -1928,7 +1928,7 @@ describe('MessagePaginator', () => {
         channel: trackingChannel,
         parentMessageId,
         itemIndex: new StoreBackedItemIndex<LocalMessage>({
-          getId: (message) => message.id,
+          getEntityId: (message) => message.id,
         }),
       });
     };

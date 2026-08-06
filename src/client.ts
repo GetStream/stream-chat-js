@@ -321,7 +321,9 @@ export class StreamChat extends ChatApi {
     this.defaultWSTimeout = 15 * 1000;
 
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
-    this.messageStore = new EntityStore<LocalMessage>({ getId: (message) => message.id });
+    this.messageStore = new EntityStore<LocalMessage>({
+      getEntityId: (message) => message.id,
+    });
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
     this.reminders = new ReminderManager({ client: this });

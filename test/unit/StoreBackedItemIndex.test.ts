@@ -15,7 +15,7 @@ const spyOwner = (): EntityStoreSubscriber & {
   onEntitiesChanged: vi.fn(),
 });
 
-const getId = (m: LocalMessage) => m.id;
+const getEntityId = (m: LocalMessage) => m.id;
 
 describe('StoreBackedItemIndex', () => {
   let store: EntityStore<LocalMessage>;
@@ -25,11 +25,11 @@ describe('StoreBackedItemIndex', () => {
   let b: StoreBackedItemIndex;
 
   beforeEach(() => {
-    store = new EntityStore<LocalMessage>({ getId });
+    store = new EntityStore<LocalMessage>({ getEntityId });
     ownerA = spyOwner();
     ownerB = spyOwner();
-    a = new StoreBackedItemIndex({ store, owner: ownerA, getId });
-    b = new StoreBackedItemIndex({ store, owner: ownerB, getId });
+    a = new StoreBackedItemIndex({ store, owner: ownerA, getEntityId });
+    b = new StoreBackedItemIndex({ store, owner: ownerB, getEntityId });
   });
 
   describe('membership scoping', () => {
@@ -47,14 +47,14 @@ describe('StoreBackedItemIndex', () => {
       a.setOne(msg({ id: 'm1' }));
       a.setOne(msg({ id: 'm2' }));
       b.setOne(msg({ id: 'm3' }));
-      expect(a.values().map(getId).sort()).toEqual(['m1', 'm2']);
+      expect(a.values().map(getEntityId).sort()).toEqual(['m1', 'm2']);
       expect(
         a
           .entries()
           .map(([id]) => id)
           .sort(),
       ).toEqual(['m1', 'm2']);
-      expect(b.values().map(getId)).toEqual(['m3']);
+      expect(b.values().map(getEntityId)).toEqual(['m3']);
     });
   });
 
@@ -140,7 +140,7 @@ describe('StoreBackedItemIndex', () => {
   describe('store-less (private store) fallback', () => {
     it('behaves like a plain per-instance index when no shared store is passed', () => {
       const owner = spyOwner();
-      const index = new StoreBackedItemIndex<LocalMessage>({ owner, getId });
+      const index = new StoreBackedItemIndex<LocalMessage>({ owner, getEntityId });
 
       const m1 = msg({ id: 'm1', text: 'v1' });
       index.setOne(m1);
@@ -160,8 +160,14 @@ describe('StoreBackedItemIndex', () => {
     });
 
     it('two store-less indexes are isolated (each has its own canonical copy)', () => {
-      const x = new StoreBackedItemIndex<LocalMessage>({ owner: spyOwner(), getId });
-      const y = new StoreBackedItemIndex<LocalMessage>({ owner: spyOwner(), getId });
+      const x = new StoreBackedItemIndex<LocalMessage>({
+        owner: spyOwner(),
+        getEntityId,
+      });
+      const y = new StoreBackedItemIndex<LocalMessage>({
+        owner: spyOwner(),
+        getEntityId,
+      });
       x.setOne(msg({ id: 'm1', text: 'x' }));
       y.setOne(msg({ id: 'm1', text: 'y' }));
       expect(x.get('m1')?.text).toBe('x');
@@ -174,7 +180,7 @@ describe('StoreBackedItemIndex', () => {
   describe('owner-less private store — plain-index CRUD', () => {
     let index: StoreBackedItemIndex<LocalMessage>;
     beforeEach(() => {
-      index = new StoreBackedItemIndex<LocalMessage>({ getId });
+      index = new StoreBackedItemIndex<LocalMessage>({ getEntityId });
     });
 
     it('starts empty', () => {
@@ -191,7 +197,7 @@ describe('StoreBackedItemIndex', () => {
 
     it('setMany adds all items and overwrites on repeat', () => {
       index.setMany([msg({ id: 'm1' }), msg({ id: 'm2' }), msg({ id: 'm3' })]);
-      expect(index.values().map(getId).sort()).toEqual(['m1', 'm2', 'm3']);
+      expect(index.values().map(getEntityId).sort()).toEqual(['m1', 'm2', 'm3']);
       const m1b = msg({ id: 'm1', text: 'again' });
       index.setMany([m1b]);
       expect(index.get('m1')).toBe(m1b);

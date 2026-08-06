@@ -2,7 +2,7 @@ import type { ItemIndexApi } from '../pagination/ItemIndex';
 import { EntityStore, type EntityStoreSubscriber } from './EntityStore';
 
 export type StoreBackedItemIndexOptions<T> = {
-  getId: (item: T) => string;
+  getEntityId: (item: T) => string;
   /**
    * The entity that owns this index; used as the store subscriber, which also holds its refcount.
    * Optional: an index over a private store (see `store`) has no one to fan out to, so an
@@ -51,12 +51,12 @@ export class StoreBackedItemIndex<T> implements ItemIndexApi<T> {
   private memberIds = new Set<string>();
   private readonly store: EntityStore<T>;
   private readonly owner: EntityStoreSubscriber;
-  private readonly getId: (item: T) => string;
+  private readonly getEntityId: (item: T) => string;
 
-  constructor({ store, owner, getId }: StoreBackedItemIndexOptions<T>) {
-    this.store = store ?? new EntityStore<T>({ getId });
+  constructor({ store, owner, getEntityId }: StoreBackedItemIndexOptions<T>) {
+    this.store = store ?? new EntityStore<T>({ getEntityId });
     this.owner = owner ?? NOOP_OWNER;
-    this.getId = getId;
+    this.getEntityId = getEntityId;
   }
 
   setMany(items: T[]) {
@@ -66,7 +66,7 @@ export class StoreBackedItemIndex<T> implements ItemIndexApi<T> {
   }
 
   setOne(item: T) {
-    const id = this.getId(item);
+    const id = this.getEntityId(item);
     this.store.link(id, this.owner);
     this.memberIds.add(id);
     this.store.upsert(item, this.owner);

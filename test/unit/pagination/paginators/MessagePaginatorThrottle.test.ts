@@ -155,7 +155,7 @@ describe('MessagePaginator — optimistic (local-user) writes bypass the throttl
     vi.useFakeTimers();
     vi.setSystemTime(0);
     setStateThrottlingEnabled(true);
-    store = new EntityStore<LocalMessage>({ getId: (m) => m.id });
+    store = new EntityStore<LocalMessage>({ getEntityId: (m) => m.id });
     client = {
       messageStore: store,
       user: { id: 'me' },

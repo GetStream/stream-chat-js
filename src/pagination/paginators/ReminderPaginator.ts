@@ -56,7 +56,9 @@ export class ReminderPaginator extends BasePaginator<
   ) {
     super({
       initialCursor: ZERO_PAGE_CURSOR,
-      itemIndex: new StoreBackedItemIndex<ReminderResponseData>({ getId: getReminderId }),
+      itemIndex: new StoreBackedItemIndex<ReminderResponseData>({
+        getEntityId: getReminderId,
+      }),
       ...options,
     });
     this.client = client;

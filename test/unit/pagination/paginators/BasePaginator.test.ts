@@ -91,7 +91,7 @@ class Paginator extends IncompletePaginator {
   getNextQueryShape = vi.fn().mockReturnValue(defaultNextQueryShape);
 }
 
-const itemIndex = new StoreBackedItemIndex<TestItem>({ getId: ({ id }) => id });
+const itemIndex = new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id });
 const a: TestItem = { id: 'a', age: 30, name: 'A' };
 const b: TestItem = { id: 'b', age: 25, name: 'B' };
 const c: TestItem = { id: 'c', age: 25, name: 'C' };
@@ -1900,7 +1900,7 @@ describe('BasePaginator', () => {
     describe('re-ingesting the sole item of the active interval', () => {
       it('keeps the item visible in state.items after an update', () => {
         const paginator = new Paginator({
-          itemIndex: new StoreBackedItemIndex<TestItem>({ getId: ({ id }) => id }),
+          itemIndex: new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id }),
         });
         paginator.sortComparator = makeComparator<TestItem>({
           sort: [{ field: 'age', direction: -1 }],
@@ -2799,7 +2799,7 @@ describe('BasePaginator', () => {
         });
       const withItemIndex = () =>
         new Paginator({
-          itemIndex: new StoreBackedItemIndex<TestItem>({ getId: ({ id }) => id }),
+          itemIndex: new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id }),
         });
 
       // Subscribe to a single `intervalViews` field via a scoped selector (as `useStateStore` does),
@@ -2963,7 +2963,7 @@ describe('BasePaginator', () => {
       // two tests drive the store-agnostic reconcile hook (reconcileChangedIds) directly after
       // replacing the stored item, mimicking a sibling write.
       it('refreshes logicalHead on a sibling update to an item that is off the active window', () => {
-        const index = new StoreBackedItemIndex<TestItem>({ getId: ({ id }) => id });
+        const index = new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id });
         const paginator = new Paginator({ itemIndex: index });
         paginator.sortComparator = descByAge();
 
@@ -3002,7 +3002,7 @@ describe('BasePaginator', () => {
       });
 
       it('refreshes anchoredHead on a sibling update to a message it holds', () => {
-        const index = new StoreBackedItemIndex<TestItem>({ getId: ({ id }) => id });
+        const index = new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id });
         const paginator = new Paginator({ itemIndex: index });
         paginator.sortComparator = descByAge();
 
@@ -3159,7 +3159,7 @@ describe('BasePaginator', () => {
 
       it('drops item-index membership so the id is no longer addressable', () => {
         // Fresh index so the shared module-level one is not polluted across tests.
-        const index = new StoreBackedItemIndex<TestItem>({ getId: ({ id }) => id });
+        const index = new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id });
         const paginator = new Paginator({ itemIndex: index });
         paginator.ingestPage({ page: [item1, item2, item3], setActive: true });
         expect(paginator.getItem(item2.id)).toStrictEqual(item2);
