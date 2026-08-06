@@ -8,7 +8,7 @@ import { isStateThrottlingEnabled } from './stateThrottling';
 import type { FieldToDataResolver } from '../types.normalization';
 import { ComparisonResult } from '../types.normalization';
 import type { ItemIndexApi } from '../ItemIndex';
-import { StoreBackedItemIndex } from '../../messageStore/StoreBackedItemIndex';
+import { StoreBackedItemIndex } from '../../entityStore/StoreBackedItemIndex';
 import { isEqual } from '../../utils/mergeWith/mergeWithCore';
 import { DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES } from '../../constants';
 

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ZERO_PAGE_CURSOR } from '../../../../src/pagination/paginators/BasePaginator';
 import type { Interval } from '../../../../src/pagination/paginators/BasePaginator';
 import { MessagePaginator } from '../../../../src/pagination/paginators/MessagePaginator';
-import { StoreBackedItemIndex } from '../../../../src/messageStore/StoreBackedItemIndex';
+import { StoreBackedItemIndex } from '../../../../src/entityStore/StoreBackedItemIndex';
 import type { Channel } from '../../../../src/channel';
 import type {
   LocalMessage,

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { EntityStore } from '../../src/messageStore/EntityStore';
-import type { EntityStoreSubscriber } from '../../src/messageStore/EntityStore';
+import { EntityStore } from '../../src/entityStore/EntityStore';
+import type { EntityStoreSubscriber } from '../../src/entityStore/EntityStore';
 import { formatMessage } from '../../src/utils';
 import { generateMsg } from './test-utils/generateMessage';
 import type { LocalMessage } from '../../src';

@@ -7,7 +7,7 @@ import type {
 } from './BasePaginator';
 import type { ListUserGroupsOptions, UserGroupResponse } from '../../types';
 import type { StreamChat } from '../../client';
-import { StoreBackedItemIndex } from '../../messageStore/StoreBackedItemIndex';
+import { StoreBackedItemIndex } from '../../entityStore/StoreBackedItemIndex';
 
 type UserGroupListCursor = {
   created_at_gt: string;

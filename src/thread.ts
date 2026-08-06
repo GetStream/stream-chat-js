@@ -4,7 +4,7 @@ import {
   formatMessage,
   localMessageToNewMessagePayload,
 } from './utils';
-import { applyReactionLocally } from './messageStore';
+import { applyReactionLocally } from './entityStore';
 import type {
   DraftResponse,
   EventAPIResponse,

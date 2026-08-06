@@ -10,12 +10,12 @@ export * from './insights';
 export * from './logger';
 export * from './messageComposer';
 export * from './messageDelivery';
-export { EntityStore } from './messageStore/EntityStore';
+export { EntityStore } from './entityStore/EntityStore';
 export type {
   EntityStoreChangeBatch,
   EntityStoreOptions,
   EntityStoreSubscriber,
-} from './messageStore/EntityStore';
+} from './entityStore/EntityStore';
 export * from './middleware';
 export * from './moderation';
 export * from './notifications';

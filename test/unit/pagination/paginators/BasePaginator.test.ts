@@ -20,7 +20,7 @@ import {
 import { sleep } from '../../../../src/utils';
 import { makeComparator } from '../../../../src/pagination/sortCompiler';
 import { DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES } from '../../../../src/constants';
-import { StoreBackedItemIndex } from '../../../../src/messageStore/StoreBackedItemIndex';
+import { StoreBackedItemIndex } from '../../../../src/entityStore/StoreBackedItemIndex';
 
 const toNextTick = async () => {
   const sleepPromise = sleep(0);

@@ -11,7 +11,7 @@ import type {
   ReminderSort,
 } from '../../types';
 import type { StreamChat } from '../../client';
-import { StoreBackedItemIndex } from '../../messageStore/StoreBackedItemIndex';
+import { StoreBackedItemIndex } from '../../entityStore/StoreBackedItemIndex';
 import { makeComparator } from '../sortCompiler';
 import { resolveDotPathValue } from '../utility.normalization';
 

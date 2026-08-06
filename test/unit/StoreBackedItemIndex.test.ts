@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { EntityStore } from '../../src/messageStore/EntityStore';
-import type { EntityStoreSubscriber } from '../../src/messageStore/EntityStore';
-import { StoreBackedItemIndex } from '../../src/messageStore/StoreBackedItemIndex';
+import { EntityStore } from '../../src/entityStore/EntityStore';
+import type { EntityStoreSubscriber } from '../../src/entityStore/EntityStore';
+import { StoreBackedItemIndex } from '../../src/entityStore/StoreBackedItemIndex';
 import { formatMessage } from '../../src/utils';
 import { generateMsg } from './test-utils/generateMessage';
 import type { LocalMessage } from '../../src';

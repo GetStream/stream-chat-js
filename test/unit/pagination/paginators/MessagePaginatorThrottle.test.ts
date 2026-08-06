@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessagePaginator } from '../../../../src/pagination/paginators/MessagePaginator';
 import { setStateThrottlingEnabled } from '../../../../src/pagination/paginators/stateThrottling';
-import { EntityStore } from '../../../../src/messageStore/EntityStore';
-import { applyReactionLocally } from '../../../../src/messageStore/applyReactionLocally';
+import { EntityStore } from '../../../../src/entityStore/EntityStore';
+import { applyReactionLocally } from '../../../../src/entityStore/applyReactionLocally';
 import { formatMessage } from '../../../../src';
 import { generateMsg } from '../../test-utils/generateMessage';
 import type { Channel } from '../../../../src/channel';

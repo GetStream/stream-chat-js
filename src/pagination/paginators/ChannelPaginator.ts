@@ -11,7 +11,7 @@ import { chatLoggerSystem } from '../../logger';
 import type { FilterBuilderOptions } from '../FilterBuilder';
 import { FilterBuilder } from '../FilterBuilder';
 import { makeComparator } from '../sortCompiler';
-import { StoreBackedItemIndex } from '../../messageStore/StoreBackedItemIndex';
+import { StoreBackedItemIndex } from '../../entityStore/StoreBackedItemIndex';
 import { generateUUIDv4 } from '../../utils';
 import type { StreamChat } from '../../client';
 import type { Channel } from '../../channel';

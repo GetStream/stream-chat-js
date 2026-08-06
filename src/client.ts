@@ -71,7 +71,7 @@ import { Moderation } from './moderation';
 import { ThreadManager } from './thread_manager';
 import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import { PollManager } from './poll_manager';
-import { EntityStore } from './messageStore/EntityStore';
+import { EntityStore } from './entityStore/EntityStore';
 import type {
   ChannelManagerEventHandlerOverrides,
   ChannelManagerOptions,
