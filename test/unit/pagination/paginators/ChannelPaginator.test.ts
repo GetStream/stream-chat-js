@@ -1126,6 +1126,37 @@ describe('ChannelPaginator', () => {
         expect(paginator.items).toStrictEqual([cachedChannel]);
       });
 
+      it('seeds the preloaded channels into the index so a concurrent ingest does not collapse the list', async () => {
+        // The cold start preload must SEED the paginator (populate the interval/index), not
+        // just set the displayed `items`. Otherwise a channel ingested concurrently during the presync
+        // window (i.e a message.new from the offline-send replay in executePendingTasks) rebuilds the
+        // list from an empty index and collapses it to just that one channel.
+        await setUpOfflineDb({ syncStatus: false });
+        const a = new Channel(client, 'type', 'a', {});
+        const b = new Channel(client, 'type', 'b', {});
+        const c = new Channel(client, 'type', 'c', {});
+        getChannelsForQuery.mockResolvedValue([{}, {}, {}]);
+        vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue([a, b, c]);
+        vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+          channels: [a, b, c],
+          duration: '0.1ms',
+        });
+        const paginator = makePaginator({ filters: {} });
+
+        await paginator.toTail(); // cold start: preload the cached channels + defer
+        expect(paginator.items?.map((ch) => ch.cid).sort()).toStrictEqual(
+          [a.cid, b.cid, c.cid].sort(),
+        );
+
+        // A pending-send message.new lands during the defer window (before sync completes).
+        paginator.ingestItem(a);
+
+        // The list must NOT collapse to just the ingested channel.
+        expect(paginator.items?.map((ch) => ch.cid).sort()).toStrictEqual(
+          [a.cid, b.cid, c.cid].sort(),
+        );
+      });
+
       it('defers even when nothing is cached and the list is already loaded', async () => {
         await setUpOfflineDb({ syncStatus: true });
         vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({

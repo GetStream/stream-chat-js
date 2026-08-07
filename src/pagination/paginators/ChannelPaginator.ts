@@ -648,18 +648,21 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     if (!shouldDeferUntilSynced) return await super.executeQuery(params);
 
     if (!this.isInitialized) {
-      const state = this.getStateBeforeFirstQuery();
       const cachedChannels = await this.preloadFirstPageFromOfflineDb({
         ...params,
         queryShape,
       });
-      // `isLoading: false` — nothing is in flight while we wait for the sync, and leaving it set would
-      // make `canExecuteQuery` reject the query this schedules below.
-      this.state.next({
-        ...state,
-        isLoading: false,
-        items: cachedChannels ?? state.items,
-      });
+      if (cachedChannels?.length) {
+        // Seed via `setItems` (which ingests the page into the interval/index storage), so that the items
+        // actually appear within the adequate index.
+        // TODO: Maybe find a better way to do this rather than 2 partialNext invocations
+        //       running. This all happens so fast it should never be noticeable but it's
+        //       a microoptimization.
+        this.setItems({ valueOrFactory: cachedChannels, isFirstPage: true });
+      }
+      // Nothing is in flight while we wait for the sync; leaving `isLoading` true would make
+      // `canExecuteQuery` reject the query scheduled below.
+      this.state.partialNext({ isLoading: false });
     }
 
     // When the sync completes, run the real query — but as a NON-DESTRUCTIVE refresh
