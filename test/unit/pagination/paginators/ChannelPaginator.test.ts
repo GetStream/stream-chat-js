@@ -1092,6 +1092,54 @@ describe('ChannelPaginator', () => {
         expect(queryChannels).toHaveBeenCalledTimes(1);
       });
 
+      it('runs the watching query directly when the sync completes during the preload', async () => {
+        // This test basically confirms a very intermittent regression that would cause the sync status
+        // to be changed to true way before the preload/initial population finishes. In that instance,
+        // we would drop all of the listeners and so the actual query would not fire.
+        await setUpOfflineDb({ syncStatus: false });
+        const cachedChannel = new Channel(client, 'type', 'cached', {});
+        // getChannelsForQuery IS the awaited preload: flipping syncStatus here mimics the sync landing
+        // mid-await (and the sync manager having already drained + cleared its callback map).
+        getChannelsForQuery.mockImplementation(async () => {
+          client.offlineDb!.syncManager.syncStatus = true;
+          return [{ channel: cachedChannel.data }];
+        });
+        vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue([cachedChannel]);
+        const queryChannels = vi
+          .spyOn(client, 'queryChannelsAndHydrate')
+          .mockResolvedValue({ channels: [cachedChannel], duration: '0.1ms' });
+        const paginator = makePaginator();
+
+        await paginator.toTail();
+
+        // The watching query ran in THIS call; nothing was left dangling on the already-cleared map.
+        expect(queryChannels).toHaveBeenCalledTimes(1);
+        expect(scheduleSyncStatusChangeCallback).not.toHaveBeenCalled();
+        // And the preloaded list was not blanked (non-destructive refresh).
+        expect(paginator.items).toStrictEqual([cachedChannel]);
+      });
+
+      it('runs the query directly even when the cache is empty and the sync lands during the preload', async () => {
+        // Same race, but nothing is cached: the preload returns nothing yet the sync still completes
+        // mid-await. We must not strand a callback — run the query directly so the (watched) list still lands.
+        await setUpOfflineDb({ syncStatus: false });
+        const fresh = new Channel(client, 'type', 'fresh', {});
+        getChannelsForQuery.mockImplementation(async () => {
+          client.offlineDb!.syncManager.syncStatus = true;
+          return null;
+        });
+        const queryChannels = vi
+          .spyOn(client, 'queryChannelsAndHydrate')
+          .mockResolvedValue({ channels: [fresh], duration: '0.1ms' });
+        const paginator = makePaginator({ filters: {} });
+
+        await paginator.toTail();
+
+        expect(queryChannels).toHaveBeenCalledTimes(1);
+        expect(scheduleSyncStatusChangeCallback).not.toHaveBeenCalled();
+        expect(paginator.items).toStrictEqual([fresh]);
+      });
+
       it('does not blank the list on the post-sync re-run when the offline cache was invalidated', async () => {
         // Regression: the deferred post-sync re-run must be a NON-DESTRUCTIVE refresh (keepPreviousItems).
         // Otherwise it re-preloads from the offline DB; if the sync invalidated the query cache (i.e. a

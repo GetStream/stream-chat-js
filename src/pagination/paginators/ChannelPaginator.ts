@@ -665,6 +665,13 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       this.state.partialNext({ isLoading: false });
     }
 
+    // Check if everything is synced up already and if so, just run the actual queryChannels request.
+    // Otherwise, the sync status change will never fire and so `executeQuery` will never really be
+    // run.
+    if (offlineDb.syncManager.syncStatus) {
+      return await super.executeQuery({ ...params, keepPreviousItems: true });
+    }
+
     // When the sync completes, run the real query — but as a NON-DESTRUCTIVE refresh
     // (`keepPreviousItems`) so the channels we already surfaced from the offline DB stay visible while it
     // runs. Without this the re-run goes through the first-page reset path and re-preloads from the DB;
