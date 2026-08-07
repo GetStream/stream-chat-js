@@ -2406,11 +2406,11 @@ export abstract class BasePaginator<T, Q> {
 
     const isFirstPage = this.isFirstPageQuery({ queryShape, reset });
 
-    if (isFirstPage && (!keepPreviousItems || reset === 'yes')) {
+    if (isFirstPage && !keepPreviousItems) {
       const state = this.getStateBeforeFirstQuery();
       if (reset === 'yes') {
-        // Drop the previously loaded interval storage and canonical index so the incoming page cannot
-        // merge into stale intervals. Driven by `reset`, independent of `keepPreviousItems`.
+        // A forced reset/reload starts from a clean slate: drop the previously loaded interval storage
+        // and canonical index so the incoming page cannot merge into stale intervals.
         //
         // A first page reached through ordinary shape-change detection (e.g. cursor pagination, whose
         // per-page cursor makes every page look like a new shape) must PRESERVE the cache so
@@ -2421,8 +2421,8 @@ export abstract class BasePaginator<T, Q> {
         this._itemIndex.clear();
         this.clearIntervalViews();
       }
-      let items: T[] | undefined = keepPreviousItems ? this.items : undefined;
-      if (!this.isInitialized && !keepPreviousItems) {
+      let items: T[] | undefined = undefined;
+      if (!this.isInitialized) {
         items =
           (await this.preloadFirstPageFromOfflineDb({
             direction,
@@ -2433,8 +2433,8 @@ export abstract class BasePaginator<T, Q> {
       }
       this.state.next({ ...state, items });
     } else if (!silent) {
-      // Non-first-page, or a keepPreviousItems refresh without a forced reset: surface loading without
-      // blanking the list. The freshly fetched page is merged into the active interval in postQueryReconcile.
+      // Non-first-page, or a keepPreviousItems refresh: surface loading without blanking the list. The
+      // freshly fetched page is merged into the still-loaded intervals in postQueryReconcile.
       this.state.partialNext({ isLoading: true });
     }
 

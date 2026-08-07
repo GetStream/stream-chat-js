@@ -401,12 +401,12 @@ describe('BasePaginator', () => {
       expect(paginator.items).toEqual([{ id: 'id1' }]);
     });
 
-    it('keepPreviousItems + reset resets the window to page 1 while keeping items visible (offset)', async () => {
-      // `reset` and `keepPreviousItems` are orthogonal: reset re-establishes the window from page 1
-      // (offset back to 0, fresh page replaces), while keepPreviousItems only keeps the CURRENT items
-      // visible during the fetch instead of blanking. Guards: (a) the refresh fetches page 1, not the
-      // grown offset; (b) items stay visible while the fetch is in flight; (c) the fresh page replaces
-      // (not merges); (d) hasMoreHead is anchored from the start offset (0), not the grown offset.
+    it('keepPreviousItems + reset is non-destructive: resets to page 1 but keeps the loaded items (offset)', async () => {
+      // `reset` restores the first-page offset (so the refresh fetches page 1, not the paginated page),
+      // while `keepPreviousItems` keeps the loaded items AND their storage intact — the fresh page is
+      // MERGED in, not blanked/collapsed. This is what keeps the channel list stable on a pull-to-refresh
+      // / reconnect refresh. Guards: (a) offset resets to page 1; (b) items stay visible during the fetch;
+      // (c) the list is merged (not collapsed to just page 1); (d) hasMoreHead stays anchored at 0.
       const paginator = new Paginator({ pageSize: 1 });
 
       // Page 1 (offset 0 -> 1)
@@ -424,19 +424,46 @@ describe('BasePaginator', () => {
       expect(paginator.offset).toBe(2);
       expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]);
 
-      // keepPreviousItems reset: the window resets (offset 0) but the current items stay visible.
+      // keepPreviousItems reset: offset resets to page 1, items stay visible during the fetch.
       const refreshPromise = paginator.executeQuery({
         keepPreviousItems: true,
         reset: 'yes',
       });
-      expect(paginator.offset).toBe(0); // window reset to the first page
+      expect(paginator.offset).toBe(0); // fetches page 1, not the paginated offset
       expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]); // still visible during the fetch
 
-      // The fresh first page replaces the list (not merged onto the stale window).
+      // The fresh page 1 merges in non-destructively — the loaded list is NOT collapsed to just page 1.
       paginator.queryResolve({ items: [{ id: 'id1' }] });
       await refreshPromise;
-      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      expect(paginator.items?.map((i) => i.id).sort()).toEqual(['id1', 'id2']);
       expect(paginator.hasMoreHead).toBe(false);
+    });
+
+    it('keepPreviousItems + reset keeps the loaded items when an item is ingested mid-refresh (no rebuild-from-empty)', async () => {
+      // Regression: a keepPreviousItems refresh must NOT clear the item index. Otherwise an item ingested
+      // concurrently while the refresh query is in flight (e.g. a message.new from the offline-send replay
+      // on reconnect) rebuilds the list from an empty index and collapses it to just that one item until
+      // the query resolves. The previously-loaded items must survive the mid-refresh ingest.
+      const paginator = new Paginator({ pageSize: 3 });
+      const loadPromise = paginator.toTail();
+      await sleep(0);
+      paginator.queryResolve({ items: [a, b, c] });
+      await loadPromise;
+      expect(paginator.items).toEqual([a, b, c]);
+
+      // Start a keepPreviousItems refresh (query in flight, not yet resolved).
+      const refreshPromise = paginator.executeQuery({
+        keepPreviousItems: true,
+        reset: 'yes',
+      });
+
+      // A concurrent ingest lands mid-refresh — the already-loaded items must NOT be wiped.
+      paginator.ingestItem(v);
+      const idsMidRefresh = paginator.items?.map((item) => item.id) ?? [];
+      expect(idsMidRefresh).toEqual(expect.arrayContaining(['a', 'b', 'c']));
+
+      paginator.queryResolve({ items: [a, b, c] });
+      await refreshPromise;
     });
 
     it('anchors hasMoreHead from a new start offset when the window is re-established via reset (offset)', async () => {
