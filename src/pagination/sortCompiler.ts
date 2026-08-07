@@ -59,6 +59,21 @@ export function binarySearch<T>({
       return { currentIndex: -1, insertionIndex: -1 };
     }
 
+    if (itemIdentityEquals(midItem, needle) && mid > 0) {
+      // The probe landed on the needle's own slot, where `compare` is 0 by definition and says
+      // nothing about where it belongs. That matters when relocating an item whose sort value just
+      // changed: the array is sorted EXCEPT at this slot, because items held by reference (a
+      // `Channel` mutated in place before the paginator is told) already carry the new value.
+      // Walking right on that 0 reports "insert just after where you are" — read downstream as
+      // "already in place" — so the item never moves. The left neighbour is the reliable signal;
+      // otherwise fall through, keeping the established end-of-plateau result.
+      const leftItem = getItemAt(mid - 1);
+      if (leftItem && compare(leftItem, needle) > 0) {
+        hi = mid;
+        continue;
+      }
+    }
+
     if (compare(midItem, needle) <= 0) {
       // midItem < needle ⇒ go right
       lo = mid + 1;
