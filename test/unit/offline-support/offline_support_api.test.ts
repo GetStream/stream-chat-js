@@ -32,7 +32,7 @@ describe('OfflineSupportApi', () => {
 
   beforeEach(async () => {
     client = await getClientWithUser();
-    channelManager = client.createChannelManager({});
+    channelManager = client.channelManager;
     channelManager.registerSubscriptions();
   });
 

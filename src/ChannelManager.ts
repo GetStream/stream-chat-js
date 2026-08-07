@@ -251,6 +251,26 @@ const notificationRemovedFromChannelHandler: LabeledEventHandler<EventHandlerCon
   id: 'ChannelManager:default-handler:notification.removed_from_channel',
 };
 
+/**
+ * `muted` is filterable (resolved from `client.mutedChannels`), but a mute change emits only this
+ * user-level event — nothing about the channel — so without re-routing here a channel would keep its
+ * old list until some unrelated event touched it. The client applies `event.me.channel_mutes` before
+ * its listeners run, so the filters already see the new state.
+ */
+const notificationChannelMutesUpdatedHandler: LabeledEventHandler<EventHandlerContext> = {
+  handle: ({ ctx: { channelManager } }) => {
+    const seen = new Set<string>();
+    channelManager.paginators.forEach((paginator) => {
+      (paginator.items ?? []).forEach((channel) => {
+        if (seen.has(channel.cid)) return; // prevent ingestig -> emitting more than once
+        seen.add(channel.cid);
+        channelManager.ingestChannel(channel);
+      });
+    });
+  },
+  id: 'ChannelManager:default-handler:notification.channel_mutes_updated',
+};
+
 // fixme: updates users for member object in all the channels which are loaded with that member - normalization would be beneficial
 const userPresenceChangedHandler: LabeledEventHandler<EventHandlerContext> = {
   handle: ({ event, ctx: { channelManager } }) => {
@@ -290,6 +310,13 @@ export type ChannelManagerEventHandlers = Partial<
 export type ChannelManagerOptions = {
   client: StreamChat;
   paginators?: ChannelPaginator[];
+  /**
+   * The complete set of event handlers to run, replacing the defaults rather than extending them.
+   * Start from `ChannelManager.getDefaultHandlers()` (a fresh copy) and enrich it, unless the
+   * intention really is to route events differently from scratch. Note that the manager the client
+   * instantiates (`client.channelManager`) is constructed without this option — customize that one
+   * through `addEventHandler` / `setEventHandlers` / `removeEventHandlers`.
+   */
   eventHandlers?: ChannelManagerEventHandlers;
   /**
    * Decide which paginator(s) should own a channel when multiple match.
@@ -308,8 +335,22 @@ export class ChannelManager extends WithSubscriptions {
     EventHandlerPipeline<EventHandlerContext>
   >();
   protected ownershipResolver?: PaginatorOwnershipResolver;
-  /** Track paginators already wrapped with ownership-aware filtering */
-  protected ownershipFilterAppliedPaginators = new WeakSet<ChannelPaginator>();
+  /**
+   * The `filterQueryResults` each registered paginator had before this manager wrapped it.
+   *
+   * A server query bypasses the manager — the paginator fetches and ingests a page on its own, and
+   * the backend knows nothing about client-side ownership — so a "Work" (`{ team: 'work' }`) channel
+   * comes back in a catch-all list's page too and would render in both. `wrapPaginatorFiltering`
+   * therefore composes the ownership check onto that hook, which every page passes through.
+   *
+   * Keys = already wrapped (so re-inserting does not wrap twice); values = what to restore on
+   * removal, since a detached paginator must stop applying rules resolved against lists it left.
+   * Weakly keyed so a dropped paginator is not kept alive by this manager.
+   */
+  protected filterQueryResultsBeforeWrapping = new WeakMap<
+    ChannelPaginator,
+    ChannelPaginator['filterQueryResults']
+  >();
 
   protected static readonly defaultEventHandlers: ChannelManagerEventHandlers = {
     'channel.deleted': [channelDeletedHandler],
@@ -320,6 +361,7 @@ export class ChannelManager extends WithSubscriptions {
     'member.updated': [memberUpdatedHandler],
     'message.new': [messageNewHandler],
     'notification.added_to_channel': [notificationAddedToChannelHandler],
+    'notification.channel_mutes_updated': [notificationChannelMutesUpdatedHandler],
     'notification.message_new': [notificationMessageNewHandler],
     'notification.removed_from_channel': [notificationRemovedFromChannelHandler],
     'user.presence.changed': [userPresenceChangedHandler],
@@ -334,12 +376,10 @@ export class ChannelManager extends WithSubscriptions {
     super();
     this.client = client;
     this.state = new StateStore({ paginators: paginators ?? [] });
-    if (ownershipResolver) {
-      this.ownershipResolver = Array.isArray(ownershipResolver)
-        ? createPriorityOwnershipResolver(ownershipResolver)
-        : ownershipResolver;
-    }
+    this.setOwnershipResolver(ownershipResolver);
 
+    // A supplied map replaces the defaults wholesale — an event type missing from it is simply not
+    // handled. `getDefaultHandlers()` returns a copy to enrich when that is what you want.
     const finalEventHandlers = eventHandlers ?? ChannelManager.getDefaultHandlers();
     for (const [type, handlers] of Object.entries(finalEventHandlers)) {
       if (handlers) this.ensurePipeline(type).replaceAll(handlers);
@@ -372,6 +412,25 @@ export class ChannelManager extends WithSubscriptions {
       out[type as SupportedEventType] = [...handlers];
     }
     return out;
+  }
+
+  /**
+   * Replace the rule deciding which paginator(s) own a channel matched by several of them. Pass an
+   * ordered array of paginator ids (highest priority first) for the built-in priority resolver, a
+   * custom resolver function, or `undefined` to go back to the default (a channel is kept in every
+   * paginator whose filter it matches).
+   *
+   * Available as a setter because the manager is constructed by the client, before the app has had
+   * a chance to create its paginators — their ids are therefore only known later.
+   */
+  setOwnershipResolver(ownershipResolver?: PaginatorOwnershipResolver | string[]) {
+    if (!ownershipResolver) {
+      this.ownershipResolver = undefined;
+      return;
+    }
+    this.ownershipResolver = Array.isArray(ownershipResolver)
+      ? createPriorityOwnershipResolver(ownershipResolver)
+      : ownershipResolver;
   }
 
   /**
@@ -443,21 +502,104 @@ export class ChannelManager extends WithSubscriptions {
   }
 
   /**
-   * Wrap paginator.filterQueryResults so that ownership rules are applied whenever
-   * the paginator ingests results from a server query (first page and subsequent pages).
+   * Makes a registered paginator apply this manager's ownership rules to the pages it fetches
+   * itself, by composing `filterItemsByOwnership` onto its `filterQueryResults`.
+   *
+   * A channel can enter a list through two doors, and only one of them goes through the manager:
+   * - **WS events / `ingestChannel`** — the manager routes the channel and consults
+   *   `resolveOwnership` before ingesting, so exclusivity holds by construction.
+   * - **A server query** — `paginator.next()` (a `ChannelList` scrolling, `reload()`) queries and
+   *   ingests on its own; the manager is not involved. Without this wrapper a page would land in
+   *   every list whose *server-side* filter matched it, so a channel matching both
+   *   `channels:archived` and `channels:default` would show up in both lists until some later event
+   *   re-routed it — the exact duplication the resolver exists to prevent.
+   *
+   * Wrapping (rather than subclassing or a constructor hook) is what lets the manager inject this
+   * into paginators it does not construct: `filterQueryResults` is an instance property, so the
+   * original is captured here and handed back by `unwrapPaginatorFiltering` when the paginator is
+   * detached. The paginator's own filtering runs first and stays authoritative — ownership only ever
+   * removes further items, never adds any back.
+   *
+   * Idempotent: the `WeakMap` guard keeps a re-inserted paginator from being wrapped twice, which
+   * would filter the same page repeatedly and, worse, lose the reference to the true original.
    */
   protected wrapPaginatorFiltering(paginator: ChannelPaginator) {
-    if (this.ownershipFilterAppliedPaginators.has(paginator)) return;
+    if (this.filterQueryResultsBeforeWrapping.has(paginator)) return;
     const original = paginator.filterQueryResults.bind(paginator);
     paginator.filterQueryResults = (items: Channel[]) => {
       const filtered = original(items) as Channel[];
       return this.filterItemsByOwnership({ paginator, items: filtered });
     };
-    this.ownershipFilterAppliedPaginators.add(paginator);
+    this.filterQueryResultsBeforeWrapping.set(paginator, original);
+  }
+
+  /**
+   * Undo `wrapPaginatorFiltering` — restore the `filterQueryResults` the paginator had before this
+   * manager wrapped it. A paginator that has left the manager must not keep applying its ownership
+   * rules: those are resolved against the paginators the manager still holds, so a detached
+   * paginator would drop channels owned by lists it is no longer part of.
+   */
+  protected unwrapPaginatorFiltering(paginator: ChannelPaginator) {
+    const original = this.filterQueryResultsBeforeWrapping.get(paginator);
+    if (!original) return;
+    paginator.filterQueryResults = original;
+    this.filterQueryResultsBeforeWrapping.delete(paginator);
   }
 
   getPaginatorById(id: string) {
     return this.paginators.find((p) => p.id === id);
+  }
+
+  /**
+   * Replace the whole set of lists in a single state update — the primitive `insertPaginator` and
+   * `removePaginator` build on, and what to use for a wholesale swap instead of publishing an
+   * intermediate state per step. Paginators dropped from the set are detached exactly as
+   * `removePaginator` detaches them; a repeated id keeps only its first occurrence.
+   *
+   * @param paginators - The lists this manager should hold, in render order.
+   */
+  setPaginators(paginators: ChannelPaginator[]) {
+    const nextPaginators: ChannelPaginator[] = [];
+    const seenIds = new Set<string>();
+    for (const paginator of paginators) {
+      if (seenIds.has(paginator.id)) continue;
+      seenIds.add(paginator.id);
+      nextPaginators.push(paginator);
+    }
+
+    const currentPaginators = this.paginators;
+    // Publishing an equivalent set would hand subscribers a new array for no reason — a
+    // `state.paginators` selector shallow-compares by reference, so every list would re-render.
+    const isUnchanged =
+      currentPaginators.length === nextPaginators.length &&
+      currentPaginators.every((paginator, i) => paginator === nextPaginators[i]);
+    if (isUnchanged) return;
+
+    const detached = currentPaginators.filter(
+      (paginator) => !nextPaginators.includes(paginator),
+    );
+
+    this.state.partialNext({ paginators: nextPaginators });
+
+    detached.forEach((paginator) => {
+      this.unwrapPaginatorFiltering(paginator);
+      paginator.cancelScheduledQuery();
+    });
+    // Wrap the current set to enforce ownership on their query results
+    nextPaginators.forEach((paginator) => this.wrapPaginatorFiltering(paginator));
+  }
+
+  /**
+   * Detach every list at once — the teardown counterpart of `setPaginators`. Each paginator is
+   * released exactly as `removePaginator` releases it (ownership-filtering wrapper removed,
+   * scheduled query canceled, loaded items kept), in a single state update.
+   *
+   * @returns The paginators the manager held, in the order it held them.
+   */
+  clearPaginators(): ChannelPaginator[] {
+    const cleared = this.paginators;
+    this.setPaginators([]);
+    return cleared;
   }
 
   /**
@@ -480,9 +622,44 @@ export class ChannelManager extends WithSubscriptions {
       Math.min(index ?? paginators.length, paginators.length),
     );
     paginators.splice(validIndex, 0, paginator);
-    this.state.partialNext({ paginators });
-    // Wrap newly inserted paginator to enforce ownership on query results
-    this.wrapPaginatorFiltering(paginator);
+    this.setPaginators(paginators);
+  }
+
+  /**
+   * Remove a paginator from the manager. The paginator stops receiving WS-driven updates and
+   * disappears from `state.paginators` (so UIs rendering one list per paginator drop its list), and
+   * gets its own `filterQueryResults` back — from here on it is an independent paginator again.
+   *
+   * Its loaded items are left untouched: the paginator can be re-inserted later, or kept and
+   * queried on its own. Any query scheduled through `nextDebounced` is canceled, so a list that was
+   * just removed does not fire one more request.
+   *
+   * @param paginatorOrId - The paginator to remove, or its id.
+   * @returns The removed paginator, or `undefined` when this manager did not hold it.
+   */
+  removePaginator(
+    paginatorOrId: ChannelPaginator | string,
+  ): ChannelPaginator | undefined {
+    const id = typeof paginatorOrId === 'string' ? paginatorOrId : paginatorOrId.id;
+    const removed = this.getPaginatorById(id);
+    if (!removed) return undefined;
+
+    this.setPaginators(this.paginators.filter((paginator) => paginator !== removed));
+    return removed;
+  }
+
+  /**
+   * Discard the loaded data of every registered list, keeping the registrations themselves: which
+   * lists exist is application configuration, while the channels in them belong to the connected
+   * user and become invalid on `disconnectUser`. Each paginator returns to "never queried"
+   * (`items: undefined`) with its debounced query canceled. Deliberately not named `resetState` —
+   * this manager's own `state` *is* the paginator list, which this must not touch.
+   */
+  resetPaginatorStates() {
+    this.paginators.forEach((paginator) => {
+      paginator.cancelScheduledQuery();
+      paginator.resetState();
+    });
   }
 
   addEventHandler({

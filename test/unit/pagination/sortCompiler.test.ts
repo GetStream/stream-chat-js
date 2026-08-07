@@ -584,4 +584,106 @@ describe('binarySearch (generic cursor-based)', () => {
       });
     });
   });
+
+  // Relocating an item whose sort value just changed: the array is sorted EXCEPT at the item's own
+  // slot, which already carries the new value (items held by reference — e.g. a `Channel` mutated
+  // in place by an event handler — are the same object the array holds). A probe landing on that
+  // slot compares 0 against itself, which says nothing about where the item belongs.
+  describe('needle whose value changed in place', () => {
+    type Obj = { id: string; value: number };
+    const compare = (a: Obj, b: Obj) => a.value - b.value;
+    const identityEquals = (a: Obj, b: Obj) => a.id === b.id;
+
+    /** Ascending values 0,10,20,… with the item at `index` re-valued to `newValue`. */
+    const arrayWithChangedItemAt = (size: number, index: number, newValue: number) => {
+      const arr: Obj[] = Array.from({ length: size }, (_, i) => ({
+        id: `id-${i}`,
+        value: i * 10,
+      }));
+      arr[index] = { ...arr[index], value: newValue };
+      return arr;
+    };
+
+    /**
+     * Where the item must end up once it is taken out of the array — the reference the caller
+     * (`removeItemIdFromInterval`) reconstructs from `insertionIndex` and `currentIndex`.
+     */
+    const expectedIndexAfterRemoval = (arr: Obj[], needle: Obj) => {
+      const others = arr.filter((item) => item.id !== needle.id);
+      const at = others.findIndex((item) => compare(item, needle) > 0);
+      return at === -1 ? others.length : at;
+    };
+
+    const locate = (arr: Obj[], needle: Obj) =>
+      binarySearch<Obj>({
+        needle,
+        length: arr.length,
+        getItemAt: (i) => arr[i],
+        itemIdentityEquals: identityEquals,
+        compare,
+        plateauScan: true,
+      });
+
+    // The failure is position-dependent: only a probed slot (for length 10 the probe sequence
+    // starts 5, then 2, then 1/0 …) ever compares the needle with itself, which is why the bug
+    // looked intermittent. Cover every index so no probe sequence can hide it.
+    it.each(Array.from({ length: 10 }, (_, index) => index))(
+      'relocates an item that became the smallest, from index %i',
+      (index) => {
+        const arr = arrayWithChangedItemAt(10, index, -1); // now sorts first
+        const needle = arr[index];
+
+        const { currentIndex, insertionIndex } = locate(arr, needle);
+
+        expect(currentIndex).toBe(index);
+        const finalIndex = insertionIndex - (insertionIndex > currentIndex ? 1 : 0);
+        expect(finalIndex).toBe(0);
+        expect(finalIndex).toBe(expectedIndexAfterRemoval(arr, needle));
+      },
+    );
+
+    it.each(Array.from({ length: 10 }, (_, index) => index))(
+      'relocates an item that became the largest, from index %i',
+      (index) => {
+        const arr = arrayWithChangedItemAt(10, index, 1000); // now sorts last
+        const needle = arr[index];
+
+        const { currentIndex, insertionIndex } = locate(arr, needle);
+
+        expect(currentIndex).toBe(index);
+        const finalIndex = insertionIndex - (insertionIndex > currentIndex ? 1 : 0);
+        expect(finalIndex).toBe(9);
+        expect(finalIndex).toBe(expectedIndexAfterRemoval(arr, needle));
+      },
+    );
+
+    it.each(Array.from({ length: 10 }, (_, index) => index))(
+      'relocates an item that moved into the middle, from index %i',
+      (index) => {
+        // 45 lands between the items valued 40 and 50
+        const arr = arrayWithChangedItemAt(10, index, 45);
+        const needle = arr[index];
+
+        const { currentIndex, insertionIndex } = locate(arr, needle);
+
+        expect(currentIndex).toBe(index);
+        const finalIndex = insertionIndex - (insertionIndex > currentIndex ? 1 : 0);
+        expect(finalIndex).toBe(expectedIndexAfterRemoval(arr, needle));
+      },
+    );
+
+    it.each(Array.from({ length: 10 }, (_, index) => index))(
+      'reports an unchanged item as already in place, at index %i',
+      (index) => {
+        const arr = arrayWithChangedItemAt(10, index, index * 10); // value unchanged
+        const needle = arr[index];
+
+        const { currentIndex, insertionIndex } = locate(arr, needle);
+
+        expect(currentIndex).toBe(index);
+        const finalIndex = insertionIndex - (insertionIndex > currentIndex ? 1 : 0);
+        expect(finalIndex).toBe(index);
+      },
+    );
+  });
 });

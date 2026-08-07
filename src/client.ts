@@ -72,7 +72,6 @@ import { ThreadManager } from './thread_manager';
 import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import { PollManager } from './poll_manager';
 import { MessageStore } from './messageStore/MessageStore';
-import type { ChannelManagerOptions } from './ChannelManager';
 import { ChannelManager } from './ChannelManager';
 import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
@@ -135,6 +134,18 @@ export class StreamChat extends ChatApi {
   };
   threads: ThreadManager;
   polls: PollManager;
+  /**
+   * Channel lists — one or more `ChannelPaginator`s kept in sync with WS events, with ownership
+   * arbitration between them. Instantiated with the client and living as long as it does; register
+   * the lists with `client.channelManager.insertPaginator()` and drop them again with
+   * `removePaginator()`. It only starts handling events once something calls its (ref-counted)
+   * `registerSubscriptions()`.
+   *
+   * It is deliberately not configurable through the client options — everything is set on the
+   * manager itself (`setOwnershipResolver`, `addEventHandler` / `setEventHandlers` /
+   * `removeEventHandlers`), which is also the only way to reconfigure it later.
+   */
+  channelManager: ChannelManager;
   /**
    * Client-global, normalized store holding one canonical copy of each message. The channel main
    * list and thread reply paginators read/write message content through it, so a message held in
@@ -320,6 +331,7 @@ export class StreamChat extends ChatApi {
     this.messageStore = new MessageStore();
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
+    this.channelManager = new ChannelManager({ client: this });
     this.reminders = new ReminderManager({ client: this });
     this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });
     this.messageComposerCache = new FixedSizeQueueCache<string, MessageComposer>(64);
@@ -534,24 +546,6 @@ export class StreamChat extends ChatApi {
   };
 
   /**
-   * Creates an instance of `ChannelManager` — one or more `ChannelPaginator` channel lists kept in sync
-   * with WS events, with ownership arbitration between them.
-   *
-   * @internal
-   *
-   * @param config - The channel manager configuration, minus the client (optional).
-   * @param config.paginators - The channel lists to manage (optional, defaults to none; add them later
-   *   with `insertPaginator`).
-   * @param config.eventHandlers - Event handler pipelines keyed by event type (optional, defaults to
-   *   `ChannelManager.getDefaultHandlers()`).
-   * @param config.ownershipResolver - Decides which paginator(s) own a channel matched by several
-   *   (optional).
-   * @returns A new `ChannelManager` instance.
-   */
-  createChannelManager = (config: Omit<ChannelManagerOptions, 'client'> = {}) =>
-    new ChannelManager({ ...config, client: this });
-
-  /**
    * Creates a new WebSocket connection with the current user.
    *
    * @returns The WebSocket connect promise, or an empty resolved promise if a connection is already active.
@@ -644,6 +638,13 @@ export class StreamChat extends ChatApi {
     this.state = new ClientState({ client: this });
     // reset thread manager
     this.threads.resetState();
+    // drop the channels loaded into the channel lists — they belong to the user being disconnected
+    // and have just been disconnected themselves. The lists stay registered: which lists exist is
+    // the application's configuration, not user data.
+    this.channelManager.resetPaginatorStates();
+    // channel mutes are per-user; leaving them would let `muted` filters resolve against the
+    // previous user until the next health check replaces them
+    this.mutedChannels = [];
     this.uploadManager.reset();
     this.messageComposerCache.clear();
 

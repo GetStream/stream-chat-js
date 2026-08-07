@@ -440,8 +440,9 @@ Unchanged (composer setup function is new in v10 but not a rename).
 
 #### `client.createChannelManager`
 
-Kept, but it builds the **new** `ChannelManager` (see [ChannelManager](#channelmanager) below) and takes the
-manager options directly instead of the legacy trio:
+Removed. The client instantiates the **new** `ChannelManager` (see [ChannelManager](#channelmanager)
+below) in its constructor and exposes it as `client.channelManager`; register the channel lists on it
+instead of building a manager of your own:
 
 ```diff
 - const manager = client.createChannelManager({
@@ -456,12 +457,17 @@ manager options directly instead of the legacy trio:
 +   sort,
 +   paginatorOptions: { pageSize: 20, lockItemOrder: true },
 + });
-+ const manager = client.createChannelManager({ paginators: [paginator] });
-+ manager.registerSubscriptions();
++ client.channelManager.insertPaginator({ paginator });
++ client.channelManager.registerSubscriptions();
 + await paginator.toTail();
 ```
 
-Calling it with no arguments is valid; every option is forwarded to the `ChannelManager` constructor.
+The manager is not configurable through the client options; everything is set on
+`client.channelManager` itself — `insertPaginator` / `removePaginator` for the lists,
+`setOwnershipResolver` for cross-list ownership, and `addEventHandler` / `setEventHandlers` /
+`removeEventHandlers` for the pipelines. `ChannelManagerOptions.eventHandlers` still exists for a
+manager you construct yourself; the client-owned one starts from
+`ChannelManager.getDefaultHandlers()` and is customized through those methods.
 
 #### `client._enrichAxiosOptions` / `client._logApiRequest` / `client._logApiError` / `client._normalizeDate` / `client._setupConnection`
 
@@ -909,6 +915,22 @@ Mostly unchanged. The relevant tweaks:
 `ChannelPaginatorsOrchestrator`, and the v9 `src/channel_manager.ts` is deleted. One manager now holds N
 channel lists — each a `ChannelPaginator` — instead of one hand-sorted array.
 
+The manager is no longer created by the integrator: the client builds it in its constructor and owns it
+for its whole lifetime as `client.channelManager`. Lists are registered on it with
+`insertPaginator({ paginator, index? })` and detached again with `removePaginator(paginatorOrId)` — a
+removed paginator leaves `manager.state.paginators` (so UIs rendering one list per paginator drop its
+list), stops receiving WS updates and gets its ownership-filtering wrapper removed, while keeping the
+items it had loaded. For batches use `setPaginators(paginators)` / `clearPaginators()`, the primitives
+those two build on: one state update for the whole set instead of one per paginator (and none at all
+when the set is unchanged). The manager still only handles events once something calls the ref-counted
+`registerSubscriptions()`.
+
+Because the manager now outlives any UI, `client.disconnectUser()` clears the lists' contents through
+`resetPaginatorStates()` — every registered paginator goes back to "never queried", since its channels
+belong to the user being disconnected — but the registrations survive, so the next connection reuses
+the lists the integrator configured. A UI that renders a list should therefore query whenever its
+paginator reports no loaded page, not only on mount.
+
 ### State
 
 | v9 (`manager.state`)       | v10                                                                                                                      |
@@ -962,8 +984,9 @@ The 10 named overrides (`newMessageHandler`, `channelDeletedHandler`, …), each
 
 Default-handler ids are `ChannelManager:default-handler:<event.type>` — pass them to `removeEventHandlers`
 or to `position` when inserting. Unlike v9, `channel.updated` and `channel.truncated` are **not** no-ops by
-default (they re-emit the affected lists), and `channel.hidden` re-evaluates the filters instead of removing
-the channel outright, so a list filtering `{ hidden: true }` keeps it.
+default (they re-emit the affected lists), `channel.hidden` re-evaluates the filters instead of removing
+the channel outright (so a list filtering `{ hidden: true }` keeps it), and
+`notification.channel_mutes_updated` re-routes every loaded channel so `muted` filters settle on their own.
 
 ### Types
 
