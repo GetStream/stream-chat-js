@@ -1185,6 +1185,50 @@ describe('ChannelPaginator', () => {
     });
   });
 
+  describe('reload', () => {
+    const mockPages = (pages: Channel[][]) => {
+      const spy = vi.spyOn(client, 'queryChannelsAndHydrate');
+      pages.forEach((channels) =>
+        spy.mockResolvedValueOnce({ channels, duration: '0.1ms' }),
+      );
+      return spy;
+    };
+
+    it('re-queries the first page, not the page the list had paginated to', async () => {
+      const paginator = new ChannelPaginator({
+        client,
+        paginatorOptions: { pageSize: 2 },
+      });
+      const spy = mockPages([[channel1, channel2], [channel1, channel2], [channel1]]);
+
+      await paginator.toTail(); // first page: offset 0
+      await paginator.toTail(); // second page: offset 2
+      expect(spy.mock.calls[1][0]).toMatchObject({ offset: 2 });
+
+      await paginator.reload();
+
+      // the reload must restart the pagination, not continue it
+      expect(spy.mock.calls[2][0]).toMatchObject({ limit: 2, offset: 0 });
+    });
+
+    it('leaves the offset where the restarted pagination lands', async () => {
+      const paginator = new ChannelPaginator({
+        client,
+        paginatorOptions: { pageSize: 2 },
+      });
+      mockPages([[channel1, channel2], [channel1, channel2], [channel1]]);
+
+      await paginator.toTail();
+      await paginator.toTail();
+      expect(paginator.offset).toBe(4);
+
+      await paginator.reload();
+
+      expect(paginator.offset).toBe(1);
+      expect(paginator.items?.map(({ cid }) => cid)).toEqual([channel1.cid]);
+    });
+  });
+
   describe('predefined filter response metadata', () => {
     const PREDEFINED_FILTER = {
       name: 'unarchived',
