@@ -662,8 +662,13 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       });
     }
 
+    // When the sync completes, run the real query — but as a NON-DESTRUCTIVE refresh
+    // (`keepPreviousItems`) so the channels we already surfaced from the offline DB stay visible while it
+    // runs. Without this the re-run goes through the first-page reset path and re-preloads from the DB;
+    // if the sync invalidated the offline query cache (i.e. a channel changed while the app was closed),
+    // that re-preload returns nothing and the list blanks to a second skeleton before the fresh page lands.
     offlineDb.syncManager.scheduleSyncStatusChangeCallback(this.id, async () => {
-      await this.executeQuery(params);
+      await this.executeQuery({ ...params, keepPreviousItems: true });
     });
   }
 

@@ -1092,6 +1092,40 @@ describe('ChannelPaginator', () => {
         expect(queryChannels).toHaveBeenCalledTimes(1);
       });
 
+      it('does not blank the list on the post-sync re-run when the offline cache was invalidated', async () => {
+        // Regression: the deferred post-sync re-run must be a NON-DESTRUCTIVE refresh (keepPreviousItems).
+        // Otherwise it re-preloads from the offline DB; if the sync invalidated the query cache (i.e. a
+        // channel changed while the app was closed), that re-preload returns nothing and the list blanks
+        // to a second skeleton before the fresh page lands.
+        await setUpOfflineDb({ syncStatus: false });
+        const cachedChannel = new Channel(client, 'type', 'cached', {});
+        getChannelsForQuery.mockResolvedValue([{ channel: cachedChannel.data }]);
+        vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue([cachedChannel]);
+        vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+          channels: [cachedChannel],
+          duration: '0.1ms',
+        });
+        const paginator = makePaginator();
+
+        await paginator.toTail(); // cold start: surface the cached page, defer the query
+        expect(paginator.items).toStrictEqual([cachedChannel]);
+
+        // The sync invalidates the offline query cache before the deferred re-run fires.
+        getChannelsForQuery.mockResolvedValue(null);
+        client.offlineDb!.syncManager.syncStatus = true;
+
+        // Watch for ANY transient blank (items === undefined) while the deferred re-run executes.
+        let blanked = false;
+        const unsubscribe = paginator.state.subscribe((next) => {
+          if (next.items === undefined) blanked = true;
+        });
+        await scheduleSyncStatusChangeCallback.mock.calls[0][1]();
+        unsubscribe();
+
+        expect(blanked).toBe(false);
+        expect(paginator.items).toStrictEqual([cachedChannel]);
+      });
+
       it('defers even when nothing is cached and the list is already loaded', async () => {
         await setUpOfflineDb({ syncStatus: true });
         vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
