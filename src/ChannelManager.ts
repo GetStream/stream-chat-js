@@ -180,12 +180,7 @@ const updateLists: EventHandlerPipelineHandler<EventHandlerContext> = async ({
     // Selected owner: optionally boost then ingest
     const channelBoost = paginator.getBoost(channel.cid);
     if (
-      [
-        'message.new',
-        'notification.message_new',
-        'notification.added_to_channel',
-        'channel.visible',
-      ].includes(event.type) &&
+      ['notification.added_to_channel', 'channel.visible'].includes(event.type) &&
       (!channelBoost || channelBoost.seq < paginator.maxBoostSeq)
     ) {
       paginator.boost(channel.cid, { seq: paginator.maxBoostSeq + 1 });

@@ -1525,12 +1525,7 @@ describe('ChannelManager', () => {
     });
   });
 
-  it.each([
-    'message.new',
-    'notification.message_new',
-    'notification.added_to_channel',
-    'channel.visible',
-  ] as EventTypes[])(
+  it.each(['notification.added_to_channel', 'channel.visible'] as EventTypes[])(
     'boosts ingested channel on %s if the item is not already boosted at the top',
     async (eventType) => {
       vi.useFakeTimers();
@@ -1597,6 +1592,11 @@ describe('ChannelManager', () => {
   );
 
   it.each([
+    // message events deliberately do NOT boost — a new message bumps last_message_at and the sort
+    // relocates the channel on its own (see the in-place relocate fix 60566820); boosting them would
+    // ignore the sort and jump the channel over pinned / archived ones.
+    'message.new',
+    'notification.message_new',
     'channel.updated',
     'channel.truncated',
     'member.updated',

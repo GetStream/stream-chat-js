@@ -1602,5 +1602,47 @@ describe('ChannelPaginator', () => {
       expect(cids?.[0]).toBe('type:c'); // moved to the head (top)
       expect(cids).toHaveLength(3); // no duplicates, nothing lost
     });
+
+    it('keeps a pinned channel on top when an unpinned channel receives a new message', async () => {
+      const pinned = new Channel(client, 'type', 'pinned', {});
+      const plainA = new Channel(client, 'type', 'plainA', {});
+      const plainB = new Channel(client, 'type', 'plainB', {});
+      pinned.state.membership = { pinned_at: '2020-01-01T00:00:00.000Z' };
+      plainA.state.membership = {};
+      plainB.state.membership = {};
+      setLastMessageAt(pinned, new Date('2020-01-01T00:00:00.000Z')); // old, but pinned → stays on top
+      setLastMessageAt(plainA, new Date('2020-03-01T00:00:00.000Z')); // newest unpinned
+      setLastMessageAt(plainB, new Date('2020-02-01T00:00:00.000Z')); // older unpinned
+
+      const paginator = new ChannelPaginator({
+        client,
+        sort: [
+          { field: 'pinned_at', direction: -1 },
+          { field: 'last_message_at', direction: -1 },
+        ],
+        paginatorOptions: {
+          doRequest: () => Promise.resolve({ items: [pinned, plainA, plainB] }),
+          pageSize: 10,
+        },
+      });
+      await paginator.executeQuery({});
+      expect(paginator.items?.map((ch) => ch.cid)).toEqual([
+        'type:pinned',
+        'type:plainA',
+        'type:plainB',
+      ]);
+
+      // plainB receives a new message → newest last_message_at; re-ingest as updateLists does (no boost).
+      setLastMessageAt(plainB, new Date('2020-05-01T00:00:00.000Z'));
+      paginator.ingestItem(plainB);
+
+      // plainB relocates ABOVE plainA (newer message) but stays BELOW the pinned channel — the sort's
+      // pinned partition holds. A boost would have shoved plainB to index 0, over the pinned channel.
+      expect(paginator.items?.map((ch) => ch.cid)).toEqual([
+        'type:pinned',
+        'type:plainB',
+        'type:plainA',
+      ]);
+    });
   });
 });
