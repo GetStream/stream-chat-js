@@ -1,3 +1,10 @@
+## [9.50.3](https://github.com/GetStream/stream-chat-js/compare/v9.50.2...v9.50.3) (2026-08-10)
+
+### Bug Fixes
+
+* handle offline db syncing errors more gracefully ([#1818](https://github.com/GetStream/stream-chat-js/issues/1818)) ([5b77c05](https://github.com/GetStream/stream-chat-js/commit/5b77c0587b8cd84baa8eb34e29ccad5ea6db408e))
+* **types:** add missing API response fields reported by scheduled type tests ([#1817](https://github.com/GetStream/stream-chat-js/issues/1817)) ([e957c9d](https://github.com/GetStream/stream-chat-js/commit/e957c9da5dd0206456a4d1f9d5d9a535a6dc17e7))
+
 ## [9.50.2](https://github.com/GetStream/stream-chat-js/compare/v9.50.1...v9.50.2) (2026-07-16)
 
 ### Bug Fixes
