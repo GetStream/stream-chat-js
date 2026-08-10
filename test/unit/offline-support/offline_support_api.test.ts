@@ -2397,6 +2397,84 @@ describe('OfflineDBSyncManager', () => {
     });
   });
 
+  describe('graceful recovery when the sync fails (issue #1816)', () => {
+    beforeEach(() => {
+      // Healthy defaults; each test opts into a specific failure below.
+      offlineDb.getPendingTasks.mockResolvedValue([]);
+      offlineDb.getAllChannelCids.mockResolvedValue([]);
+      offlineDb.resetDB.mockResolvedValue(undefined);
+      client.wsConnection = { isHealthy: true } as StableWSConnection;
+    });
+
+    it('recovers syncStatus to true when executePendingTasks() rejects, and still runs sync()', async () => {
+      offlineDb.getPendingTasks.mockRejectedValue(
+        new Error('missing userSyncStatus table'),
+      );
+
+      await syncManager.init();
+
+      expect(syncManager.syncStatus).toBe(true);
+      // The two steps are isolated, so a failure in executePendingTasks() must not
+      // prevent sync() from running (sync() reads channel cids first).
+      expect(offlineDb.getAllChannelCids).toHaveBeenCalled();
+    });
+
+    it('still registers the connection.changed listener and runs scheduled callbacks when the init sync throws', async () => {
+      offlineDb.getPendingTasks.mockRejectedValue(new Error('db read failure'));
+      const scheduledCallback = vi.fn().mockResolvedValue(undefined);
+      syncManager.scheduleSyncStatusChangeCallback('channel-list', scheduledCallback);
+
+      await syncManager.init();
+
+      expect(syncManager.connectionChangedListener).not.toBeNull();
+      expect(syncManager.syncStatus).toBe(true);
+      expect(scheduledCallback).toHaveBeenCalledTimes(1);
+      expect(syncManager['scheduledSyncStatusCallbacks'].size).toBe(0);
+    });
+
+    it('recovers syncStatus to true when sync() re-throws via a failing resetDB()', async () => {
+      offlineDb.getAllChannelCids.mockResolvedValue(['channel-1']);
+      offlineDb.getLastSyncedAt.mockResolvedValue(new Date().toString());
+      // Force sync() into its catch block, where the unguarded resetDB() itself
+      // throws and rerejects out of sync().
+      vi.spyOn(client, 'sync').mockRejectedValue(new Error('too many events'));
+      offlineDb.resetDB.mockRejectedValue(new Error('resetDB failed on corrupted DB'));
+
+      await syncManager.init();
+
+      expect(offlineDb.resetDB).toHaveBeenCalled();
+      expect(syncManager.syncStatus).toBe(true);
+    });
+
+    it('recovers syncStatus to true on reconnect even when the sync fails', async () => {
+      // Not connected at init time, so init() only registers the listener.
+      client.wsConnection = { isHealthy: false } as StableWSConnection;
+      offlineDb.getPendingTasks.mockRejectedValue(new Error('db failure on reconnect'));
+
+      await syncManager.init();
+
+      expect(syncManager.syncStatus).toBe(false);
+      expect(syncManager.connectionChangedListener).not.toBeNull();
+
+      client.dispatchEvent({ type: 'connection.changed', online: true });
+
+      // The listener is dispatched as a fire and forget, so poll until it settles.
+      await vi.waitFor(() => expect(syncManager.syncStatus).toBe(true));
+    });
+
+    it('leaves the success path unchanged: syncStatus true, deferred callbacks run once, queue cleared', async () => {
+      const scheduledCallback = vi.fn().mockResolvedValue(undefined);
+      syncManager.scheduleSyncStatusChangeCallback('tag-1', scheduledCallback);
+
+      await syncManager.init();
+
+      expect(syncManager.syncStatus).toBe(true);
+      expect(scheduledCallback).toHaveBeenCalledTimes(1);
+      expect(syncManager['scheduledSyncStatusCallbacks'].size).toBe(0);
+      expect(offlineDb.resetDB).not.toHaveBeenCalled();
+    });
+  });
+
   describe('sync status listeners and callbacks', () => {
     describe('onSyncStatusChange', () => {
       it('adds a listener to syncStatusListeners', () => {
@@ -2530,6 +2608,32 @@ describe('OfflineDBSyncManager', () => {
         expect(order).toContain('cb1');
         expect(order).toContain('cb2');
       });
+
+      it('keeps notifying other listeners and still sets syncStatus when a listener throws', async () => {
+        const goodListener = vi.fn();
+        syncManager.onSyncStatusChange(() => {
+          throw new Error('listener boom');
+        });
+        syncManager.onSyncStatusChange(goodListener);
+
+        await (syncManager as any).invokeSyncStatusListeners(true);
+
+        expect(goodListener).toHaveBeenCalledWith(true);
+        expect(syncManager['syncStatus']).toBe(true);
+      });
+
+      it('runs every scheduled callback and clears the queue even when one callback throws', async () => {
+        const goodCallback = vi.fn().mockResolvedValue(undefined);
+        syncManager.scheduleSyncStatusChangeCallback('bad', async () => {
+          throw new Error('callback boom');
+        });
+        syncManager.scheduleSyncStatusChangeCallback('good', goodCallback);
+
+        await (syncManager as any).invokeSyncStatusListeners(true);
+
+        expect(goodCallback).toHaveBeenCalledTimes(1);
+        expect(syncManager['scheduledSyncStatusCallbacks'].size).toBe(0);
+      });
     });
 
     describe('syncAndExecutePendingTasks', () => {
@@ -2553,23 +2657,27 @@ describe('OfflineDBSyncManager', () => {
         );
       });
 
-      it('throws if executePendingTasks fails', async () => {
+      // See issue #1816: syncAndExecutePendingTasks() must never throw, otherwise
+      // the subsequent invokeSyncStatusListeners(true) is skipped and syncStatus
+      // is stuck false, freezing all future channel queries.
+      it('does not throw when executePendingTasks fails and still performs sync', async () => {
         const error = new Error('Failed to execute pending tasks');
         executePendingTasksSpy.mockRejectedValueOnce(error);
 
-        await expect((syncManager as any).syncAndExecutePendingTasks()).rejects.toThrow(
-          error,
-        );
-        expect(syncSpy).not.toHaveBeenCalled();
+        await expect(
+          (syncManager as any).syncAndExecutePendingTasks(),
+        ).resolves.toBeUndefined();
+        // The two steps are isolated, so a failure in one does not skip the other.
+        expect(syncSpy).toHaveBeenCalled();
       });
 
-      it('throws if sync fails', async () => {
+      it('does not throw when sync fails, and still executes pending tasks', async () => {
         const error = new Error('Sync failed');
         syncSpy.mockRejectedValueOnce(error);
 
-        await expect((syncManager as any).syncAndExecutePendingTasks()).rejects.toThrow(
-          error,
-        );
+        await expect(
+          (syncManager as any).syncAndExecutePendingTasks(),
+        ).resolves.toBeUndefined();
         expect(executePendingTasksSpy).toHaveBeenCalled();
       });
     });
@@ -2717,6 +2825,19 @@ describe('OfflineDBSyncManager', () => {
 
         expect(resetDBSpy).toHaveBeenCalled();
         expect(upsertUserSyncStatusSpy).not.toHaveBeenCalled();
+      });
+
+      it('re-throws if resetDB itself throws while recovering from a sync API error', async () => {
+        const recentDate = new Date();
+        recentDate.setDate(recentDate.getDate() - 10);
+        getLastSyncedAtSpy.mockResolvedValueOnce(recentDate.toString());
+
+        syncApiSpy.mockRejectedValueOnce(new Error('too many events'));
+        resetDBSpy.mockRejectedValueOnce(new Error('resetDB failed on corrupted DB'));
+
+        await expect((syncManager as any).sync()).rejects.toThrow(
+          'resetDB failed on corrupted DB',
+        );
       });
 
       it('does not call executeSqlBatch if no queries are returned', async () => {
