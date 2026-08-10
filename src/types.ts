@@ -167,6 +167,7 @@ export type AppSettingsAPIResponse = APIResponse & {
     moderation_dashboard_preferences?: Record<string, unknown> | null;
     moderation_audio_call_moderation_enabled?: boolean;
     moderation_enabled?: boolean;
+    moderation_flood_rules_enabled?: boolean;
     moderation_llm_configurability_enabled?: boolean;
     moderation_multitenant_blocklist_enabled?: boolean;
     moderation_video_call_moderation_enabled?: boolean;
@@ -319,6 +320,8 @@ export type QueryFutureChannelBansOptions = {
 
 export type BlockListResponse = BlockList & {
   created_at?: string;
+  id?: string;
+  owner_user_id?: string;
   type?: string;
   updated_at?: string;
 };
@@ -1045,6 +1048,8 @@ export type UserResponse = CustomUserData & {
   anon?: boolean;
   banned?: boolean;
   blocked_user_ids?: string[];
+  /** Set on the user of a read event, marking when they last read the event's channel. */
+  channel_last_read_at?: string;
   created_at?: string;
   deactivated_at?: string;
   deleted_at?: string;
@@ -2588,6 +2593,7 @@ export type BlockList = {
   is_confusable_folding_enabled?: boolean;
   is_leet_check_enabled?: boolean;
   is_plural_check_enabled?: boolean;
+  is_substring_matching_enabled?: boolean;
 };
 
 export type ChannelConfig = ChannelConfigFields &
@@ -3098,6 +3104,8 @@ export type PermissionAPIObject = {
   level?: string;
   name?: string;
   owner?: boolean;
+  /** Resource type that defines ownership for this permission's action, e.g. 'Channel' for CreateMessage. */
+  owner_resource?: string;
   same_team?: boolean;
   tags?: string[];
 };
