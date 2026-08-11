@@ -648,22 +648,37 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     if (!shouldDeferUntilSynced) return await super.executeQuery(params);
 
     if (!this.isInitialized) {
-      const state = this.getStateBeforeFirstQuery();
       const cachedChannels = await this.preloadFirstPageFromOfflineDb({
         ...params,
         queryShape,
       });
-      // `isLoading: false` — nothing is in flight while we wait for the sync, and leaving it set would
-      // make `canExecuteQuery` reject the query this schedules below.
-      this.state.next({
-        ...state,
-        isLoading: false,
-        items: cachedChannels ?? state.items,
-      });
+      if (cachedChannels?.length) {
+        // Seed via `setItems` (which ingests the page into the interval/index storage), so that the items
+        // actually appear within the adequate index.
+        // TODO: Maybe find a better way to do this rather than 2 partialNext invocations
+        //       running. This all happens so fast it should never be noticeable but it's
+        //       a microoptimization.
+        this.setItems({ valueOrFactory: cachedChannels, isFirstPage: true });
+      }
+      // Nothing is in flight while we wait for the sync; leaving `isLoading` true would make
+      // `canExecuteQuery` reject the query scheduled below.
+      this.state.partialNext({ isLoading: false });
     }
 
+    // Check if everything is synced up already and if so, just run the actual queryChannels request.
+    // Otherwise, the sync status change will never fire and so `executeQuery` will never really be
+    // run.
+    if (offlineDb.syncManager.syncStatus) {
+      return await super.executeQuery({ ...params, keepPreviousItems: true });
+    }
+
+    // When the sync completes, run the real query — but as a NON-DESTRUCTIVE refresh
+    // (`keepPreviousItems`) so the channels we already surfaced from the offline DB stay visible while it
+    // runs. Without this the re-run goes through the first-page reset path and re-preloads from the DB;
+    // if the sync invalidated the offline query cache (i.e. a channel changed while the app was closed),
+    // that re-preload returns nothing and the list blanks to a second skeleton before the fresh page lands.
     offlineDb.syncManager.scheduleSyncStatusChangeCallback(this.id, async () => {
-      await this.executeQuery(params);
+      await this.executeQuery({ ...params, keepPreviousItems: true });
     });
   }
 

@@ -2546,11 +2546,20 @@ export abstract class BasePaginator<T, Q> {
       this._itemIndex.clear();
       this.clearIntervalViews();
       this.state.next(this.getStateBeforeFirstQuery());
+    } else if (reset === 'yes' && !forcedQueryShape) {
+      // A `keepPreviousItems` refresh (reconnect / pull-to-refresh) must still restart pagination from
+      // page 1, but WITHOUT clearing the loaded window — the list stays visible while the fresh first
+      // page loads. Reset only the pagination position; `getNextQueryShape()` below reads it from state.
+      this.state.partialNext({
+        cursor: this.config.initialCursor,
+        offset: this.config.initialOffset ?? 0,
+      });
     }
 
     const queryShape = forcedQueryShape ?? this.getNextQueryShape({ direction });
 
     const isFirstPage = this.isFirstPageQuery({ queryShape, reset });
+
     if (isFirstPage && !keepPreviousItems) {
       const state = this.getStateBeforeFirstQuery();
       let items: T[] | undefined = undefined;
@@ -2569,8 +2578,8 @@ export abstract class BasePaginator<T, Q> {
         this.state.next({ ...state, items });
       }
     } else if (!silent) {
-      // Non-first-page, or a keepPreviousItems refresh: surface loading without blanking the list.
-      // The freshly fetched page is merged into the active interval in postQueryReconcile.
+      // Non-first-page, or a keepPreviousItems refresh: surface loading without blanking the list. The
+      // freshly fetched page is merged into the still-loaded intervals in postQueryReconcile.
       this.state.partialNext({ isLoading: true });
     }
 

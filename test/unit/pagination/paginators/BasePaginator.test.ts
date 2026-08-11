@@ -364,13 +364,52 @@ describe('BasePaginator', () => {
       expect(paginator.mockClientQuery).toHaveBeenCalledTimes(3);
     });
 
-    it('keeps hasMoreHead unchanged on a keepPreviousItems first-page refresh (offset)', async () => {
-      // Regression: hasMoreHead is derived from the start offset only when the first page resets
-      // the window (isFirstPage && !keepPreviousItems). A keepPreviousItems refresh is isFirstPage
-      // but does NOT reset the offset, so it must not re-derive hasMoreHead from the grown offset.
+    it('reload() re-fetches the FIRST page (offset 0) after paginating, not the current page', async () => {
+      // Regression: executeQuery derived the query shape (which carries `offset`) BEFORE the reset
+      // restored the initial offset, so reload() on an already-paginated list re-fetched the current
+      // page (e.g. page 2) and replaced page 1 with it. Probe `this.offset` when the shape is derived
+      // to prove the reset applies to the OUTGOING request, not just to state after the fact.
+      const offsetAtQueryShape: number[] = [];
+      class OffsetProbePaginator extends IncompletePaginator {
+        getNextQueryShape = vi.fn(() => {
+          offsetAtQueryShape.push(this.offset);
+          return defaultNextQueryShape;
+        });
+      }
+      const paginator = new OffsetProbePaginator({ pageSize: 1 });
+
+      // Page 1 (offset 0 -> 1)
+      let nextPromise = paginator.toTail();
+      await sleep(0);
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await nextPromise;
+      expect(paginator.offset).toBe(1);
+
+      // Page 2 (offset 1 -> 2)
+      nextPromise = paginator.toTail();
+      paginator.queryResolve({ items: [{ id: 'id2' }] });
+      await nextPromise;
+      expect(paginator.offset).toBe(2);
+
+      // reload() must derive its request from offset 0, not the paginated 2.
+      nextPromise = paginator.reload();
+      await sleep(0);
+      expect(offsetAtQueryShape.at(-1)).toBe(0);
+
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await nextPromise;
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+    });
+
+    it('keepPreviousItems + reset is non-destructive: resets to page 1 but keeps the loaded items (offset)', async () => {
+      // `reset` restores the first-page offset (so the refresh fetches page 1, not the paginated page),
+      // while `keepPreviousItems` keeps the loaded items AND their storage intact — the fresh page is
+      // MERGED in, not blanked/collapsed. This is what keeps the channel list stable on a pull-to-refresh
+      // / reconnect refresh. Guards: (a) offset resets to page 1; (b) items stay visible during the fetch;
+      // (c) the list is merged (not collapsed to just page 1); (d) hasMoreHead stays anchored at 0.
       const paginator = new Paginator({ pageSize: 1 });
 
-      // First page from offset 0 -> head is loaded.
+      // Page 1 (offset 0 -> 1)
       let nextPromise = paginator.toTail();
       await sleep(0);
       paginator.queryResolve({ items: [{ id: 'id1' }] });
@@ -378,22 +417,53 @@ describe('BasePaginator', () => {
       expect(paginator.hasMoreHead).toBe(false);
       expect(paginator.offset).toBe(1);
 
-      // Grow the tail so the offset is well past 0.
+      // Page 2 (offset 1 -> 2)
       nextPromise = paginator.toTail();
       paginator.queryResolve({ items: [{ id: 'id2' }] });
       await nextPromise;
       expect(paginator.offset).toBe(2);
-      expect(paginator.hasMoreHead).toBe(false);
+      expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]);
 
-      // A non-destructive first-page refresh (isFirstPage via reset, keepPreviousItems) must NOT
-      // flip hasMoreHead to true off the grown offset (2 > 0) — the window still starts at 0.
+      // keepPreviousItems reset: offset resets to page 1, items stay visible during the fetch.
       const refreshPromise = paginator.executeQuery({
         keepPreviousItems: true,
         reset: 'yes',
       });
+      expect(paginator.offset).toBe(0); // fetches page 1, not the paginated offset
+      expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]); // still visible during the fetch
+
+      // The fresh page 1 merges in non-destructively — the loaded list is NOT collapsed to just page 1.
       paginator.queryResolve({ items: [{ id: 'id1' }] });
       await refreshPromise;
+      expect(paginator.items?.map((i) => i.id).sort()).toEqual(['id1', 'id2']);
       expect(paginator.hasMoreHead).toBe(false);
+    });
+
+    it('keepPreviousItems + reset keeps the loaded items when an item is ingested mid-refresh (no rebuild-from-empty)', async () => {
+      // Regression: a keepPreviousItems refresh must NOT clear the item index. Otherwise an item ingested
+      // concurrently while the refresh query is in flight (e.g. a message.new from the offline-send replay
+      // on reconnect) rebuilds the list from an empty index and collapses it to just that one item until
+      // the query resolves. The previously-loaded items must survive the mid-refresh ingest.
+      const paginator = new Paginator({ pageSize: 3 });
+      const loadPromise = paginator.toTail();
+      await sleep(0);
+      paginator.queryResolve({ items: [a, b, c] });
+      await loadPromise;
+      expect(paginator.items).toEqual([a, b, c]);
+
+      // Start a keepPreviousItems refresh (query in flight, not yet resolved).
+      const refreshPromise = paginator.executeQuery({
+        keepPreviousItems: true,
+        reset: 'yes',
+      });
+
+      // A concurrent ingest lands mid-refresh — the already-loaded items must NOT be wiped.
+      paginator.ingestItem(v);
+      const idsMidRefresh = paginator.items?.map((item) => item.id) ?? [];
+      expect(idsMidRefresh).toEqual(expect.arrayContaining(['a', 'b', 'c']));
+
+      paginator.queryResolve({ items: [a, b, c] });
+      await refreshPromise;
     });
 
     it('anchors hasMoreHead from a new start offset when the window is re-established via reset (offset)', async () => {

@@ -1526,77 +1526,14 @@ describe('ChannelManager', () => {
   });
 
   it.each([
-    'message.new',
-    'notification.message_new',
+    // The manager never boosts by default on ANY event — the sort is the single source of truth for
+    // order. A new message bumps last_message_at and the sort relocates the channel on its own (see the
+    // in-place relocate fix 60566820); an added / unhidden channel likewise relocates via its sort key.
+    // Boosting stays a public per-paginator primitive integrators can opt into (see ChannelManager.updateLists).
     'notification.added_to_channel',
     'channel.visible',
-  ] as EventTypes[])(
-    'boosts ingested channel on %s if the item is not already boosted at the top',
-    async (eventType) => {
-      vi.useFakeTimers();
-      const now = new Date('2025-01-01T00:00:00Z');
-      vi.setSystemTime(now);
-      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now.getTime());
-
-      const channelManager = new ChannelManager({ client });
-      const ch = makeChannel('messaging:5');
-      client.activeChannels[ch.cid] = ch;
-
-      const paginator = new ChannelPaginator({ client });
-      const matchesFilterSpy = vi.spyOn(paginator, 'matchesFilter').mockReturnValue(true);
-
-      channelManager.insertPaginator({ paginator });
-      channelManager.registerSubscriptions();
-
-      // @ts-expect-error accessing protected property
-      expect(paginator.boosts.size).toBe(0);
-
-      client.dispatchEvent({ type: eventType, cid: ch.cid });
-
-      await vi.waitFor(() => {
-        // @ts-expect-error accessing protected property
-        expect(Array.from(paginator.boosts.entries())).toEqual([
-          [ch.cid, { seq: 1, until: now.getTime() + 15000 }],
-        ]);
-      });
-
-      client.dispatchEvent({ type: eventType, cid: ch.cid });
-      await vi.waitFor(() => {
-        // already at the top
-        // @ts-expect-error accessing protected property
-        expect(Array.from(paginator.boosts.entries())).toEqual([
-          [ch.cid, { seq: 1, until: now.getTime() + 15000 }],
-        ]);
-      });
-
-      matchesFilterSpy.mockReturnValue(false);
-      client.dispatchEvent({ type: eventType, cid: ch.cid });
-
-      await vi.waitFor(() => {
-        // @ts-expect-error accessing protected property
-        expect(Array.from(paginator.boosts.entries())).toEqual([
-          [ch.cid, { seq: 1, until: now.getTime() + 15000 }],
-        ]);
-      });
-
-      matchesFilterSpy.mockReturnValue(true);
-      // @ts-expect-error accessing protected property
-      paginator._maxBoostSeq = 1000;
-      client.dispatchEvent({ type: eventType, cid: ch.cid });
-      await vi.waitFor(() => {
-        // some other channel has a higher boost
-        // @ts-expect-error accessing protected property
-        expect(Array.from(paginator.boosts.entries())).toEqual([
-          [ch.cid, { seq: 1001, until: now.getTime() + 15000 }],
-        ]);
-      });
-
-      nowSpy.mockRestore();
-      vi.useRealTimers();
-    },
-  );
-
-  it.each([
+    'message.new',
+    'notification.message_new',
     'channel.updated',
     'channel.truncated',
     'member.updated',

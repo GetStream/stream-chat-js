@@ -177,19 +177,10 @@ const updateLists: EventHandlerPipelineHandler<EventHandlerContext> = async ({
       return;
     }
 
-    // Selected owner: optionally boost then ingest
-    const channelBoost = paginator.getBoost(channel.cid);
-    if (
-      [
-        'message.new',
-        'notification.message_new',
-        'notification.added_to_channel',
-        'channel.visible',
-      ].includes(event.type) &&
-      (!channelBoost || channelBoost.seq < paginator.maxBoostSeq)
-    ) {
-      paginator.boost(channel.cid, { seq: paginator.maxBoostSeq + 1 });
-    }
+    // Selected owner: ingest. The manager never boosts by default on any event — the sort is the
+    // single source of truth for order, so a channel that just became relevant (new message, added,
+    // unhidden) relocates via its updated sort key. Boosting remains a public per-paginator primitive
+    // (`paginator.boost`) for integrators to opt into for specific channels (VIP/mention/deep-link).
     paginator.ingestItem(channel);
   });
 };
