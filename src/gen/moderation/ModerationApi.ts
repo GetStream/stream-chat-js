@@ -31,6 +31,8 @@ import type {
   QueueResponse,
   SubmitActionRequest,
   SubmitActionResponse,
+  UnmuteRequest,
+  UnmuteResponse,
   UpdateQueueRequest,
   UpsertActionConfigRequest,
   UpsertActionConfigResponse,
@@ -281,6 +283,7 @@ export class ModerationApi {
       key: request?.key,
       async: request?.async,
       team: request?.team,
+      ai_audio_config: request?.ai_audio_config,
       ai_image_config: request?.ai_image_config,
       ai_text_config: request?.ai_text_config,
       ai_video_config: request?.ai_video_config,
@@ -579,6 +582,7 @@ export class ModerationApi {
       delete_message: request?.delete_message,
       delete_reaction: request?.delete_reaction,
       delete_user: request?.delete_user,
+      delete_user_messages: request?.delete_user_messages,
       escalate: request?.escalate,
       flag: request?.flag,
       mark_reviewed: request?.mark_reviewed,
@@ -601,6 +605,25 @@ export class ModerationApi {
     );
 
     decoders['SubmitActionResponse']?.(response.body);
+
+    return { ...response.body, metadata: response.metadata };
+  }
+
+  async unmute(request: UnmuteRequest): Promise<StreamResponse<UnmuteResponse>> {
+    const body = {
+      target_ids: request?.target_ids,
+    };
+
+    const response = await this.apiClient.sendRequest<StreamResponse<UnmuteResponse>>(
+      'POST',
+      '/api/v2/moderation/unmute',
+      undefined,
+      undefined,
+      body,
+      'application/json',
+    );
+
+    decoders['UnmuteResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
