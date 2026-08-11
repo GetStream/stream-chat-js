@@ -15,7 +15,7 @@
 - One barrel removed from the package root, one added: **`./events` is gone; `./logger` is new.** The `./campaign`, `./channel_batch_updater`, and `./segment` barrels are still exported but the modules are emptied (they contain only a comment pointing at the server SDK) — importing anything by name from them will fail.
 - `Event` (type name) is kept, but its shape widened: `Event = WSEvent | LocalEvent | keyof CustomEventTypes`. `EventPayload<'<type>'>` narrows to a specific event.
 - `EventTypes` (plural) renamed to `EventType` (singular). `CustomEventTypes` interface is unchanged — augment it to add custom event-type keys, same as v9.
-- Filter payloads now carry **per-endpoint operator constraints** (`Query*FilterConditions` types) — previously-permissive filter objects may stop type-checking.
+- Filter payloads now carry **per-endpoint operator constraints** (inline `Filters<{ … }>` on each request type) — previously-permissive filter objects may stop type-checking. Only one operator per field is allowed, and `null` is no longer a valid `$in` element. `QueryPollsFilters`, `QueryVotesFilters`, and `ReminderFilters` were the last hand-written holdouts and now derive from their request types too.
 - `ChannelState.membership` initializes to `undefined` (was `{}`); `ChannelState.typing` values are now `EventPayload<'typing.start' | 'typing.stop'>` (were `Event`); read receipts merged with the generated `ReadStateResponse`.
 - Composer attachments now nest `mime_type` / `file_size` / `duration` under `.custom`; `LocationComposer` preview `end_at` is a `Date` (was ISO string).
 - `Role` type renamed to `RoleName`.
@@ -173,35 +173,74 @@ Because the v10 generic on `channel.on<T extends EventType | string>` accepts an
 
 ## Filter payloads — per-endpoint operator constraints
 
-New generated types under `src/gen/models/filter-conditions.ts` narrow what operators are legal per field per endpoint:
+The generated client is produced with `typed_filters` enabled, so each request interface declares its filter inline as `Filters<{ … }>` (the helper lives at the top of `src/gen/models/index.ts`) rather than as a permissive `Record<string, any>`. The filter spec names one entry per legal field:
 
-```
-QueryBannedUsersPayloadFilterConditions
-QueryChannelsRequestFilterConditions
-QueryMembersPayloadFilterConditions
-QueryMessageFlagsPayloadFilterConditions
-QueryReactionsRequestFilter
-QueryThreadsRequestFilter
-QueryUsersPayloadFilterConditions
-SearchPayloadFilterConditions
-SearchPayloadMessageFilterConditions
+```ts
+// src/gen/models/index.ts — QueryRemindersRequest
+filter?: Filters<{
+  channel_cid: { type: string; operators: '$eq' | '$in' };
+  created_at: { type: Date | string; operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte' };
+  message_id: { type: string; operators: '$eq' | '$in' };
+  remind_at: { type: Date | string; operators: '$eq' | '$exists' | '$gt' | '$gte' | '$lt' | '$lte' };
+}>;
 ```
 
-Each entry looks like `{ field_name: { type: <ts-type>; operators: '$eq' | '$in' | ... } }`. The public request types (`QueryChannelsRequest`, `QueryReactionsRequest`, `QueryBannedUsersPayload`, ...) are wrapped with `WithTypedFilters<Base, FilterConditions>` so `filter_conditions` at the call site can only use operator/value combinations declared in the corresponding constraint.
+Endpoints carrying a typed filter, and the property it sits on:
 
-**Breaking effect:** any v9 filter object that used an operator not declared for a given field will stop type-checking:
+| Request type                                                                                                                                                                                                                   | Property                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
+| `QueryBannedUsersPayload`, `QueryChannelsRequest`, `QueryMembersPayload`, `QueryMessageFlagsPayload`, `QueryUsersPayload`                                                                                                      | `filter_conditions`                                 |
+| `SearchPayload`                                                                                                                                                                                                                | `filter_conditions` and `message_filter_conditions` |
+| `QueryAppealsRequest`, `QueryDraftsRequest`, `QueryModerationConfigsRequest`, `QueryPollsRequest`, `QueryPollVotesRequest`, `QueryReactionsRequest`, `QueryRemindersRequest`, `QueryReviewQueueRequest`, `QueryThreadsRequest` | `filter`                                            |
+
+**Breaking effect 1 — undeclared operators.** Any v9 filter object using an operator not declared for a field stops type-checking:
 
 ```ts
 // v9 — accepted (typing was permissive)
 client.queryChannels({ frozen: { $exists: true } as any }, sort);
 
-// v10 — QueryChannelsRequestFilterConditions.frozen only declares `{ type: boolean; operators: '$eq' }`.
-// This now fails to compile — use { frozen: true } or { frozen: { $eq: true } } instead.
+// v10 — `frozen` declares only `{ type: boolean; operators: '$eq' }`.
+// Use { frozen: true } or { frozen: { $eq: true } } instead.
 ```
 
-Field-name typos in `filter_conditions` are now compile errors for endpoints that ship a constraint type (previously only some endpoints narrowed field names). If you were relying on the v9 permissive shape, casting through `as any` is the escape hatch; the correct fix is to use the declared operators.
+**Breaking effect 2 — one operator per field.** The generated shape uses `RequireOnlyOne`, so combining operators on a single field is now an error. Use `$and` to intersect:
 
-`ChannelFilters`, `MessageFilters`, `ReactionFilters`, `UserFilters` etc. still exist as convenience aliases but derive from the constrained request types.
+```ts
+// ✗ v10 — rejected
+const bad: ReminderFilters = { created_at: { $gt: a, $lt: b } };
+// ✓ v10
+const good: ReminderFilters = {
+  $and: [{ created_at: { $gt: a } }, { created_at: { $lt: b } }],
+};
+```
+
+**Breaking effect 3 — `null` is no longer a valid array element.** In v9 the hand-written filter types built on `PrimitiveFilter<T> = T | null`, which made `$in` an array of _nullable_ elements. The generated shape puts the nullability outside the array:
+
+```ts
+// v9: $in?: (string | null)[]      v10: $in: string[] | null
+const bad: ReminderFilters = { message_id: { $in: ['a', null] } }; // ✗ now rejected
+const good: ReminderFilters = { message_id: { $in: ['a', 'b'] } }; // ✓
+```
+
+Field-name typos in a typed filter are now compile errors. If you were relying on the v9 permissive shape, casting is the escape hatch; the correct fix is to use the declared fields and operators.
+
+### Filter aliases now derive from the request types
+
+`ChannelFilters`, `MessageFilters`, `ReactionFilters`, `ThreadFilters`, `UserFilters` still exist as convenience aliases but derive from the constrained request types. The three remaining hand-written poll/reminder filter types are now migrated the same way:
+
+| Alias                   | Now derives from                                                                |
+| ----------------------- | ------------------------------------------------------------------------------- |
+| `QueryPollsFilters`     | `NonNullable<QueryPollsRequest['filter']>`                                      |
+| `QueryVotesFilters`     | `NonNullable<QueryPollVotesRequest['filter']>`                                  |
+| `ReminderFilters`       | `NonNullable<QueryRemindersRequest['filter']>`                                  |
+| `QueryRemindersOptions` | `QueryRemindersRequest` (was `Pager & { filter?, sort? }` — an exact duplicate) |
+
+Beyond the three breaking effects above, the field sets shifted to match the API spec:
+
+- **Removed** — `ReminderFilters.user_id`, `QueryPollsFilters.user_id`, `QueryVotesFilters.created_by_id`. These were never declared by the endpoints; filter on a supported field instead (e.g. `created_by_id` for polls).
+- **Added** — `QueryVotesFilters` gains `poll_id`, and `QueryPollsFilters` gains a `custom.${string}` index signature for filtering on custom poll data.
+
+The legacy building blocks (`QueryFilter`, `PrimitiveFilter`, `QueryFilters`, `RequireOnlyOne`) remain exported for callers who compose their own filter types against `itemMatchesFilter` and the paginators.
 
 ---
 
