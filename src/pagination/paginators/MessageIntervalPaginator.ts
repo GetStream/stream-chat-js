@@ -39,7 +39,8 @@ import type { FieldToDataResolver } from '../types.normalization';
 import { resolveDotPathValue } from '../utility.normalization';
 import { lowerBound } from '../utility.search';
 import type { ItemIndexApi } from '../ItemIndex';
-import type { MessageStoreChangeBatch } from '../../messageStore/MessageStore';
+import type { EntityStoreChangeBatch } from '../../entityStore/EntityStore';
+import { StoreBackedItemIndex } from '../../entityStore/StoreBackedItemIndex';
 import { deriveCreatedAtAroundPaginationFlags } from '../cursorDerivation';
 import { deriveIdAroundPaginationFlags } from '../cursorDerivation/idAroundPaginationFlags';
 import { deriveLinearPaginationFlags } from '../cursorDerivation/linearPaginationFlags';
@@ -169,18 +170,18 @@ export class MessageIntervalPaginator extends BasePaginator<
   }
 
   /**
-   * Message-store adapter (this paginator is a `MessageStoreSubscriber`): the `MessageStore` calls this
+   * Entity-store adapter (this paginator is an `EntityStoreSubscriber`): the `EntityStore` calls this
    * on each holder with the subset of its watched ids that changed. Unwraps the batch and delegates to
    * the base's store-agnostic {@link BasePaginator.reconcileChangedIds}. Lives here, not on the generic
-   * `BasePaginator`, so the base stays free of `MessageStore` types — only message paginators are
+   * `BasePaginator`, so the base stays free of `EntityStore` types — only message paginators are
    * store-backed.
    */
-  onMessagesChanged({ changedIds }: MessageStoreChangeBatch): void {
+  onEntitiesChanged({ changedIds }: EntityStoreChangeBatch): void {
     this.reconcileChangedIds(changedIds);
   }
 
   /**
-   * Message-store subscriber flush (the optional `MessageStoreSubscriber.flushState`): the `MessageStore`
+   * Entity-store subscriber flush (the optional `EntityStoreSubscriber.flushState`): the `EntityStore`
    * calls this after an optimistic (local-user) write so the change renders without throttle delay.
    * Delegates to the base's generic {@link BasePaginator.flushPendingPublishes}.
    */
@@ -217,6 +218,20 @@ export class MessageIntervalPaginator extends BasePaginator<
       initialCursor: ZERO_PAGE_CURSOR,
       itemIndex,
       ...paginatorOptions,
+      // Back every message-interval paginator (channel main list, thread reply list, pinned list)
+      // with the client-global message store, so a message held in more than one of them has a
+      // single canonical copy and updates (reactions/edits) fan out to all holders — no copy-to-copy
+      // sync. When the store is unavailable (e.g. a detached paginator in a test) the index falls
+      // back to a private store and behaves exactly like a plain per-instance index. Overridable per
+      // instance via `paginatorOptions.createItemIndex` or an explicit `itemIndex`.
+      createItemIndex:
+        paginatorOptions?.createItemIndex ??
+        ((owner) =>
+          new StoreBackedItemIndex<LocalMessage>({
+            store: channel.getClient?.().messageStore,
+            owner: owner as MessageIntervalPaginator,
+            getEntityId: owner.getItemId.bind(owner),
+          })),
       pageSize: paginatorOptions?.pageSize ?? DEFAULT_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
     });
     this.config.deriveCursor = makeDeriveCursor(this);
