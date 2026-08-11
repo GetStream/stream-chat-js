@@ -1,6 +1,6 @@
 # v9 → v10 Migration Guide — Server-Side Integrations
 
-> **Scope:** this guide is for backend / server-side integrations that constructed `stream-chat` v9 with an API `secret`. **v10 of `stream-chat` has no server-side surface** — the constructor no longer accepts a secret, all admin endpoints have been removed, and the JWT-signing helpers are gone. Move to [`@stream-io/node-sdk`](https://github.com/GetStream/stream-node) instead.
+> **Scope:** this guide is for backend / server-side integrations that constructed `stream-chat` v9 with an API `secret`. **v10 of `stream-chat` has no server-side surface** — the constructor no longer accepts a secret, all admin endpoints are gone, and the JWT-signing / webhook / SNS / SQS helpers were dropped from `signing.ts` along with the runtime deps (`jsonwebtoken`, `ws`, `isomorphic-ws`, `base64-js`, `form-data`) that backed them. Move to [`@stream-io/node-sdk`](https://github.com/GetStream/stream-node) instead.
 >
 > If you were using `stream-chat` on the client (React / RN / browser, no secret), you are on the wrong guide — see [`v9-to-v10-migration-guide-client-construction.md`](./v9-to-v10-migration-guide-client-construction.md) and the other four sibling guides.
 
@@ -11,8 +11,8 @@
 - Instantiation keeps the v9 shape you already know: `new StreamClient(apiKey, secret, options?)`. The `secret` is now on the _node_ client, not on `stream-chat`.
 - Namespaces on the client: `client` (common), `client.chat`, `client.video`, `client.moderation`, `client.feeds`. Per-resource instances via `client.chat.channel(type, id)` and `client.video.call(type, id)`.
 - Token helpers moved 1:1 with new names — `createToken` → `generateUserToken`, `createCallToken` → `generateCallToken`, plus a new `generatePermanentUserToken`. The old names still exist as deprecated aliases.
-- Webhook helpers keep their v9 names — `verifyWebhook`, `verifyAndParseWebhook`, `parseSqs`, `parseSns` — and the secret is pulled from the `StreamClient` you constructed (no per-call secret argument).
-- If your backend also listens to WebSocket events, keep `stream-chat@10` alongside `@stream-io/node-sdk` — see [Two-client hybrid pattern](#two-client-hybrid-pattern). A single-client alternative is planned; see [TODO: custom WebSocket transport](#todo-custom-websocket-transport).
+- Webhook helpers keep their v9 names on the node client — `verifyWebhook`, `verifyAndParseWebhook`, `parseSqs`, `parseSns` — and the secret is pulled from the `StreamClient` you constructed (no per-call secret argument). The same helpers were also stripped out of `stream-chat/signing`: if you were still calling `import { verifyAndParseWebhook } from 'stream-chat'` under v10-rc, that import disappears in the upcoming release — route it through `@stream-io/node-sdk`.
+- If your backend also listens to WebSocket events, keep `stream-chat@10` alongside `@stream-io/node-sdk` — see [Two-client hybrid pattern](#two-client-hybrid-pattern). `stream-chat` no longer bundles a WebSocket polyfill: on Node 22+ this Just Works via the platform's global `WebSocket`; on Node 18/20 you inject one via the new [`WebSocketImpl`](#running-the-ws-client-under-node) option.
 
 ## Are you actually server-side?
 
@@ -22,8 +22,8 @@ Any one of these means yes — this guide applies to you:
 - You read `client.secret` or call `client._isUsingServerAuth()`.
 - You pass `allowServerSideConnect: true` in `StreamChatOptions`.
 - You call any admin method: `createToken`, `devToken`, `revokeUserToken(s)`, `updateAppSettings`, `getAppSettings`, `deleteUser`, `partialUpdateUser(s)`, `restoreUsers`, `deactivateUser(s)`, `reactivateUser(s)`, `exportUser(s)`, `createChannelType`, `updateChannelType`, `deleteChannelType`, `listChannelTypes`, `getChannelType`, `createCommand` / `updateCommand` / `deleteCommand` / `listCommands` / `getCommand`, `createRole` / `deleteRole` / `listRoles`, `createPermission` / `updatePermission` / `deletePermission` / `getPermission` / `listPermissions`, `createBlockList` / `updateBlockList` / `deleteBlockList` / `getBlockList` / `listBlockLists` / `importBlockList`, `upsertPushProvider` / `deletePushProvider` / `listPushProviders`, `checkPush` / `checkSNS` / `checkSQS`, `createImport` / `createImportURL` / `getImport` / `listImports`, retention-policy admin (`setRetentionPolicy` / `deleteRetentionPolicy` / `getRetentionPolicy` / `getRetentionPolicyRuns`), moderation config admin, campaign / segment methods.
-- You call `verifyWebhook`, `verifyAndParseWebhook`, `parseSqs`, or `parseSns` — these moved out of the SDK client in v10.
-- You import from removed barrel paths: `stream-chat/dist/.../campaign`, `.../segment`, or `.../channel_batch_updater`.
+- You call `verifyWebhook`, `verifyAndParseWebhook`, `parseSqs`, `parseSns`, `verifySignature`, or `CheckSignature` — the JWT helpers `JWTUserToken` / `JWTServerToken` / `DevToken` — these were all removed from `stream-chat/signing`.
+- You import from removed barrel paths: `stream-chat/dist/.../campaign`, `.../segment`, `.../channel_batch_updater`, `.../events`, `.../base64`.
 - You pass `user_id` overrides to per-user methods (`banUser`, `blockUser`, `muteUser`, `flagMessage`, `flagUser`) — those overrides are gone from `stream-chat@10` because they only made sense server-side.
 - Your code runs under Node (Express, Fastify, Lambda, Cloud Run, cron) with a secret and no user-token provider.
 
@@ -74,22 +74,24 @@ Only chat / user / moderation surfaces are enumerated here — the guide focuses
 
 ### Token generation
 
-| v9 (`stream-chat`)                                              | v10 (`@stream-io/node-sdk`)                                                                 | Notes                                                                            |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `client.createToken(userId, exp?, iat?)`                        | `client.generateUserToken({ user_id, exp?, iat?, validity_in_seconds? })`                   | Old name kept as deprecated `createToken(userId, exp?, iat?)`.                   |
-| `client.createToken(userId)` (no expiry)                        | `client.generatePermanentUserToken({ user_id })`                                            | Explicitly permanent — no `exp` claim.                                           |
-| `client.devToken(userId)`                                       | _Not exposed._ Use `generateUserToken` in tests, or sign your own with a hardcoded secret.  | Dev tokens were a v9-only shortcut.                                              |
-| `client.createCallToken(userId, cids)`                          | `client.generateCallToken({ user_id, call_cids, role?, exp?, iat?, validity_in_seconds? })` | Old name kept as deprecated `createCallToken(userIdOrObject, cids, exp?, iat?)`. |
-| `client.revokeUserToken(id, before?)` / `revokeUsersToken(...)` | Not on node-sdk yet — mint with a fresh `iat` / rotate the app secret.                      |                                                                                  |
+| v9 (`stream-chat`)                                                                                                                                                     | v10 (`@stream-io/node-sdk`)                                                                                                                   | Notes                                                                            |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `client.createToken(userId, exp?, iat?)`                                                                                                                               | `client.generateUserToken({ user_id, exp?, iat?, validity_in_seconds? })`                                                                     | Old name kept as deprecated `createToken(userId, exp?, iat?)`.                   |
+| `client.createToken(userId)` (no expiry)                                                                                                                               | `client.generatePermanentUserToken({ user_id })`                                                                                              | Explicitly permanent — no `exp` claim.                                           |
+| `client.devToken(userId)`                                                                                                                                              | _Not exposed._ Use `generateUserToken` in tests, or sign your own with a hardcoded secret.                                                    | Dev tokens were a v9-only shortcut.                                              |
+| `client.createCallToken(userId, cids)`                                                                                                                                 | `client.generateCallToken({ user_id, call_cids, role?, exp?, iat?, validity_in_seconds? })`                                                   | Old name kept as deprecated `createCallToken(userIdOrObject, cids, exp?, iat?)`. |
+| `client.revokeUserToken(id, before?)` / `revokeUsersToken(...)`                                                                                                        | Not on node-sdk yet — mint with a fresh `iat` / rotate the app secret.                                                                        |                                                                                  |
+| `JWTUserToken(secret, userId, extra?, opts?)` / `JWTServerToken(secret, opts?)` / `DevToken(userId)` (formerly importable from `stream-chat` or `stream-chat/signing`) | _Removed from `stream-chat`._ Use `client.generateUserToken` etc. — the node SDK signs internally with the secret you passed at construction. |                                                                                  |
 
 ### Webhook / SNS / SQS
 
-| v9                                              | v10 node-sdk                                    | Notes                                                                                 |
-| ----------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `client.verifyWebhook(body, signature)`         | `client.verifyWebhook(body, signature)`         | Same shape. Secret is taken from the constructed client.                              |
-| `client.verifyAndParseWebhook(body, signature)` | `client.verifyAndParseWebhook(body, signature)` | Gzip-aware; returns the parsed typed event. Throws `InvalidWebhookError` on mismatch. |
-| `client.parseSqs(body)`                         | `client.parseSqs(body)`                         | Same.                                                                                 |
-| `client.parseSns(body)`                         | `client.parseSns(body)`                         | Same.                                                                                 |
+| v9                                                                                   | v10 node-sdk                                                                                                                                       | Notes                                                                                 |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `client.verifyWebhook(body, signature)`                                              | `client.verifyWebhook(body, signature)`                                                                                                            | Same shape. Secret is taken from the constructed client.                              |
+| `client.verifyAndParseWebhook(body, signature)`                                      | `client.verifyAndParseWebhook(body, signature)`                                                                                                    | Gzip-aware; returns the parsed typed event. Throws `InvalidWebhookError` on mismatch. |
+| `client.parseSqs(body)`                                                              | `client.parseSqs(body)`                                                                                                                            | Same.                                                                                 |
+| `client.parseSns(body)`                                                              | `client.parseSns(body)`                                                                                                                            | Same.                                                                                 |
+| `verifySignature(body, sig, secret)` / `CheckSignature` (from `stream-chat/signing`) | _Removed._ Use the client-level helpers above, or call `crypto.createHmac('sha256', secret).update(body).digest('hex')` yourself for the raw path. | The `crypto` fallback matches v10's algorithm — HMAC-SHA256, timing-safe compare.     |
 
 `InvalidWebhookError` is re-exported from `@stream-io/node-sdk` if you want to `instanceof` it in your handler.
 
@@ -305,7 +307,8 @@ await client.uploadFile({
 - `client.secret` / `client._isUsingServerAuth()` — construct the client with a secret and check for its presence yourself if you must.
 - `client.validateServerSideAuth()` — the node SDK is always server-side.
 - Per-call `user_id` overrides on `banUser` / `blockUser` / `flagMessage` / `flagUser` — pass `user_id` in the request payload (all node-sdk mutations that act on behalf of a user take an explicit `user_id`).
-- `_normalizeDate` / internal sort/filter helpers — sort/filter shapes are typed at the request boundary; hand-rolled normalization isn't needed.
+- `JWTUserToken` / `JWTServerToken` / `DevToken` / `verifySignature` / `CheckSignature` / `InvalidWebhookError` / `InvalidWebhookErrorMessages` re-exported from `stream-chat` — all gone. `signing.ts` on `stream-chat` now exposes only `UserFromToken` (a client-side JWT decoder). Consume equivalents from `@stream-io/node-sdk`.
+- `stream-chat` runtime deps that used to underwrite the server surface — `jsonwebtoken`, `ws`, `isomorphic-ws`, `base64-js`, `form-data` — have been dropped from `package.json#dependencies`. If a build tool still complains that `stream-chat` imports these, upgrade to the release that lands the removal.
 - Hand-rolled event bus & `EVENT_MAP` — the node SDK is REST-only.
 
 ## Sort payloads
@@ -376,18 +379,60 @@ Things to know when running both clients:
 - **Token rotation.** `generateUserToken` defaults to a 1-hour expiry. For long-lived bots, either regenerate the token before it expires and call `ws.connectUser` again on the same `StreamChat` instance, or mint a permanent token via `generatePermanentUserToken`.
 - **`allowServerSideConnect: true` is still supported in v10 `stream-chat`** — this hybrid is the intended use case for it.
 
-<!-- CUSTOM_WS_TRANSPORT_TODO -->
+## Running the WS client under Node
 
-## TODO: custom WebSocket transport
+`stream-chat@10` no longer bundles `isomorphic-ws` or `ws` — the internal `StableWSConnection` picks up the runtime's global `WebSocket` (see `src/connection.ts`). What that means per runtime:
 
-> **TODO (future agent):** replace this section when `stream-chat` ships a pluggable WebSocket transport that runs under Node without the current caveats. Populate with:
->
-> 1. **Install / instantiation delta** — the new option name (likely something like `webSocketTransport` on `StreamChatOptions`), its expected interface (open/close/send/onmessage), and a link to the exported type.
-> 2. **Reference implementation** — the recommended Node-side transport (e.g. `ws` or `undici`-based), with a copy-pastable snippet.
-> 3. **Single-client hybrid rewrite** — port the [Two-client hybrid pattern](#two-client-hybrid-pattern) example to use one `StreamChat` instance that both listens to WS and calls admin endpoints via node-sdk peer, or (if server-side admin lands on `stream-chat` itself) a fully single-client version. Preserve the same bot use case for continuity.
-> 4. **Migration note** — a short "if you're on the two-client pattern, here's what changes" callout above the old example. Leave the old pattern documented for at least one major version so existing integrators can migrate deliberately.
->
-> Grep for the HTML comment `CUSTOM_WS_TRANSPORT_TODO` above this section to locate this block programmatically.
+| Runtime             | Do you need to do anything?                                                                                |
+| ------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Browser / RN**    | No — global `WebSocket` is native.                                                                         |
+| **Node.js 22+**     | No — Node ships a native global `WebSocket` since 22.0.                                                    |
+| **Node.js 18 / 20** | Yes — inject a WebSocket implementation via `WebSocketImpl` (see below).                                   |
+| **Bun / Deno**      | No — global `WebSocket` is native.                                                                         |
+| **Test suites**     | Yes — pass a mock/drivable class via `WebSocketImpl`; see the `connection.test.js` fixtures for the shape. |
+
+### `WebSocketImpl` option
+
+```ts
+export type StreamChatOptions = {
+  // ...
+  /**
+   * Overrides the `WebSocket` constructor used by `StableWSConnection`. Intended purely for
+   * testing so a mock/drivable WebSocket can be swapped in; production code should leave this
+   * unset and rely on the platform's global `WebSocket`.
+   */
+  WebSocketImpl?: typeof WebSocket;
+};
+```
+
+Signature is `typeof WebSocket` — the constructor, not an instance. `StableWSConnection` calls `new WS(wsURL)` internally, so anything that satisfies the browser `WebSocket` interface works:
+
+- `.readyState`, `.send(data)`, `.close(code?, reason?)`
+- events: `.onopen`, `.onmessage`, `.onclose`, `.onerror`
+
+### Making it work on Node 18 / 20
+
+The Node LTS versions below 22 don't ship a global `WebSocket`. Add the `ws` package and hand its constructor to `stream-chat`:
+
+```ts
+import { StreamChat } from 'stream-chat';
+import WebSocket from 'ws';
+
+const ws = new StreamChat(apiKey, {
+  allowServerSideConnect: true,
+  // WebSocketImpl accepts anything that mirrors the browser WebSocket constructor.
+  // The `ws` package's default export matches that shape at runtime.
+  WebSocketImpl: WebSocket as unknown as typeof globalThis.WebSocket,
+});
+```
+
+The cast is because `ws` types its constructor with a slightly different `MessageEvent` payload than the DOM lib. It's not a runtime concern — `StableWSConnection` only touches `.data`, `.code`, `.reason`, `.error`, all of which line up.
+
+> **Officially, `WebSocketImpl` is documented as "purely for testing."** In practice it is also the escape hatch for Node <22 until the LTS ships a native `WebSocket`. If you rely on it in production, pin the `ws` version (it's stable, but its lifecycle isn't tied to `stream-chat`'s releases) and keep an eye on the SDK changelog in case the option gains stricter typing.
+
+### Simplifying the hybrid example on Node 22+
+
+On Node 22+, the [Two-client hybrid pattern](#two-client-hybrid-pattern) snippet works verbatim — no `WebSocketImpl` needed. Drop the `WebSocketImpl` line when you can rely on the runtime. This is the recommended target: no extra dep, no cast, and no drift when Node itself ships fixes to its WebSocket implementation.
 
 ## Verification checklist
 
@@ -397,7 +442,8 @@ Before shipping the migrated backend:
 - [ ] `client.generateUserToken({ user_id: 'demo' })` returns a JWT that `stream-chat`'s `connectUser` accepts against the same API key.
 - [ ] `client.verifyAndParseWebhook(rawBody, signature)` round-trips a captured production event.
 - [ ] An admin call (`client.chat.queryChannels(...)`, `client.upsertUsers(...)`) succeeds against the dashboard.
-- [ ] All uses of `verifyWebhook` / `parseSqs` / `parseSns` / `createToken` are imported from `@stream-io/node-sdk`, not `stream-chat`.
-- [ ] No remaining imports from `stream-chat/dist/.../campaign`, `.../segment`, `.../channel_batch_updater`.
+- [ ] All uses of `verifyWebhook` / `parseSqs` / `parseSns` / `createToken` / `JWTUserToken` / `DevToken` are imported from `@stream-io/node-sdk`, not `stream-chat`.
+- [ ] No remaining imports from `stream-chat/dist/.../campaign`, `.../segment`, `.../channel_batch_updater`, `.../events`, `.../base64`.
 - [ ] If you kept a `stream-chat@10` client for WS: it is constructed **without** a secret, and `allowServerSideConnect: true` is set.
+- [ ] If you deploy on Node 18/20: `WebSocketImpl` is wired to the `ws` package and `ws` is pinned in `dependencies`. On Node 22+, no `WebSocketImpl` is needed.
 - [ ] Bot / worker users are upserted with `role: 'admin'` (or a role that grants the endpoints they need) before their WS token is minted.
