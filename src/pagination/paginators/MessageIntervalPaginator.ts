@@ -143,6 +143,37 @@ export type MessagePaginatorOptions = {
 };
 
 /**
+ * Options for {@link MessageIntervalPaginator.mergeNewestPage} that enable destructive
+ * reconciliation — removing messages that were hard-deleted (by anyone) while the client was
+ * offline. A hard delete emits no event to other clients, and the merge is otherwise additive, so
+ * without this such a message lingers as a ghost after reconnect.
+ *
+ * With NO options, `mergeNewestPage` still prunes any loaded message that falls WITHIN the returned
+ * page's `created_at` span but is absent from it — unconditionally safe (a message that arrived live
+ * during the caller's fetch is always strictly newer than the newest returned message, so it can
+ * never fall in that span). The options widen the reconcilable window:
+ */
+export type MergeNewestPageOptions = {
+  /**
+   * The `limit` the caller passed to the query that produced the page. Lets reconciliation tell
+   * "the page reached the channel's oldest message" (a returned count short of the request) from
+   * "the page is full and older messages remain". Only then may it prune loaded messages OLDER than
+   * the oldest returned message (e.g. the oldest loaded message was the one deleted). Clamped to the
+   * server's max page size so an over-request cannot be mistaken for reaching the start.
+   */
+  requestedLimit?: number;
+  /**
+   * A snapshot of the loaded message ids taken BEFORE the caller's fetch await. Required to prune
+   * messages NEWER than the newest returned message (a hard-deleted newest message) and to reconcile
+   * an empty page (a fully-emptied channel): at/above that top edge a just-deleted message and a
+   * message that arrived live during the fetch are indistinguishable by timestamp — only the
+   * pre-fetch snapshot separates them (a live arrival is not in it). Must be captured before the
+   * await; the paginator's own items at merge time already include any live arrival.
+   */
+  candidateIds?: ReadonlySet<string>;
+};
+
+/**
  * MessageIntervalPaginator allows configuring backend request sort, while keeping internal item ordering stable.
  * Filtering of ingested items is still limited to local predicates (`filterQueryResults`).
  */
@@ -549,23 +580,30 @@ export class MessageIntervalPaginator extends BasePaginator<
    *    page is new). Merge in place: existing items are reconciled by id (edits, soft deletes), new
    *    items are appended and every already loaded item (including older pages already paged in) is
    *    kept. `hasMoreTail`/`cursor.tailward` are left as-is so the page can be any size, so deriving
-   *    "has older items" from its length would wrongly clear it while older items remain.
+   *    "has older items" from its length would wrongly clear it while older items remain. Then
+   *    destructive reconciliation ({@link reconcileLoadedAgainstPage}) removes any loaded message
+   *    that the authoritative page proves was hard-deleted while offline (see that method + the
+   *    {@link MergeNewestPageOptions} for the exact, safe window).
    *
    * 2. DISJOINT - the incoming page shares no id with the loaded head (at least a full page is new).
    *    Merging would weld the two across the gap (the interval merge treats two head intervals as
    *    overlapping when one reaches further headward), hiding the items in between with no way to
    *    reach them. Instead the loaded set is discarded and rebuilt from the incoming page as a fresh
    *    contiguous head (`hasMoreTail: true`, cursor reanchored to the page's oldest item) so the
-   *    gap and older history load again when paginating older.
+   *    gap and older history load again when paginating older. No separate reconciliation is needed:
+   *    the rebuilt window IS the server truth, so any hard-deleted message is simply absent from it.
    *
-   * Both paths emit exactly once and never blank the loaded set. Noop unless the page is non empty
-   * and the newest slice is both loaded AND the interval currently in view (the head interval is
-   * anchored at the head and active); when the caller has jumped to a separate older window the
-   * merge is skipped so their position is preserved, and the incoming page is picked up on a later
-   * load.
+   * Never blanks the loaded set. Noop unless the newest slice is both loaded AND the interval
+   * currently in view (the head interval is anchored at the head and active); when the caller has
+   * jumped to a separate older window the merge is skipped so their position is preserved, and the
+   * incoming page is picked up on a later load. An empty page never wipes the list on its own, but
+   * — given a pre-fetch snapshot via `options.candidateIds` — is reconciled as "the channel has no
+   * messages" (every server-confirmed loaded message removed).
+   *
+   * @param page - The fetched newest window (may be empty). `created_at` order is normalized on ingest.
+   * @param options - See {@link MergeNewestPageOptions}. Omit to prune only within the page's own span.
    */
-  mergeNewestPage = (page: LocalMessage[]) => {
-    if (!page?.length) return;
+  mergeNewestPage = (page: LocalMessage[], options?: MergeNewestPageOptions) => {
     const headInterval = this.itemIntervals[0] as Interval | undefined;
     if (!headInterval?.isHead) return;
     // Only reconcile when the head is the interval currently in view. If the caller jumped to a
@@ -573,6 +611,14 @@ export class MessageIntervalPaginator extends BasePaginator<
     // reconciling would switch the view to the head and yank them to the newest. Skip to preserve
     // their position (the newest page is picked up on scroll / a later load).
     if (!this.isActiveInterval(headInterval)) return;
+
+    if (!page?.length) {
+      // Empty page: never blanks the list by itself. Only when the caller supplied a pre-fetch
+      // snapshot do we treat it as authoritative "channel emptied" and remove ghosts (a message that
+      // arrived live during the fetch is excluded by the snapshot).
+      this.reconcileLoadedAgainstPage([], options);
+      return;
+    }
 
     const loadedIds = new Set(headInterval.itemIds);
     const overlapsLoadedHead = page.some((item) => loadedIds.has(this.getItemId(item)));
@@ -614,7 +660,151 @@ export class MessageIntervalPaginator extends BasePaginator<
       // nothing newer to load. hasMoreTail / cursor are deliberately preserved (see above).
       hasMoreHead: false,
     });
+
+    // With the newest page merged in, drop any loaded message the page proves was hard-deleted.
+    this.reconcileLoadedAgainstPage(page, options);
   };
+
+  /**
+   * Whether a loaded message is server-confirmed and therefore eligible to be reconciled away when
+   * absent from an authoritative page. Excludes local-only messages the server has never
+   * acknowledged — optimistic (`sending`) and `failed` sends, and client-side `error` placeholders —
+   * so a legitimately-unsent message is never mistaken for a hard delete.
+   */
+  protected isServerConfirmedMessage(message: LocalMessage): boolean {
+    return (
+      message.status !== 'sending' &&
+      message.status !== 'failed' &&
+      message.type !== 'error'
+    );
+  }
+
+  /**
+   * Destructive half of {@link mergeNewestPage}: remove loaded messages that the freshly-fetched
+   * newest `page` proves were hard-deleted while offline (a hard delete emits no event to other
+   * clients, and the merge is additive, so they would otherwise linger forever).
+   *
+   * The reconcilable window is derived ENTIRELY from what the page returned — never a hardcoded page
+   * size — so it can only ever remove messages the page actually covers:
+   *
+   * - WITHIN the page's span (`oldest returned < created_at < newest returned`): a server-confirmed
+   *   loaded message absent from the page was hard-deleted. Safe with no snapshot — a message that
+   *   arrived live during the caller's fetch is always strictly newer than the newest returned
+   *   message, so it can never fall in this span.
+   * - BELOW the oldest returned message: only reconcilable when the page reached the channel's oldest
+   *   message (`requestedLimit` given and the page came back short, clamped to the server max page
+   *   size). Otherwise older messages simply were not fetched and are left untouched.
+   * - AT/ABOVE the newest returned message (a hard-deleted newest message) and the empty-page case:
+   *   only reconcilable with a pre-fetch `candidateIds` snapshot, which alone distinguishes a ghost
+   *   from a live arrival at that top edge.
+   *
+   * Removal goes through {@link removeItem} (batched) so the item index, intervals, shared message
+   * store and — via the {@link MessagePaginator} override — the tracked last message all stay
+   * correct, then the active window is re-emitted once.
+   */
+  protected reconcileLoadedAgainstPage(
+    page: LocalMessage[],
+    options?: MergeNewestPageOptions,
+  ) {
+    const headInterval = this.itemIntervals[0] as Interval | undefined;
+    if (!headInterval?.isHead || !this.isActiveInterval(headInterval)) return;
+
+    const loadedIds = headInterval.itemIds;
+    const candidateIds = options?.candidateIds;
+
+    // Empty page → the channel has no messages. Every server-confirmed loaded message is gone, but
+    // only remove ids from the pre-fetch snapshot so a message that landed during the fetch survives.
+    if (!page.length) {
+      if (!candidateIds) return;
+      const toRemove = loadedIds.filter((id) => {
+        if (!candidateIds.has(id)) return false;
+        const message = this.getItem(id);
+        return !!message && this.isServerConfirmedMessage(message);
+      });
+      this.removeReconciledIds(toRemove);
+      return;
+    }
+
+    const pageIds = new Set(page.map((message) => this.getItemId(message)));
+    const newestReturnedTs = getMessageCreatedAtTimestamp(page[page.length - 1]);
+    const oldestReturnedTs = getMessageCreatedAtTimestamp(page[0]);
+
+    // Only extend below the oldest returned message when the page proves it reached the channel's
+    // oldest message: it came back shorter than requested. Clamp the request to the server's max page
+    // size so asking for MORE than one page can return (an over-request) is not mistaken for reaching
+    // the start — in that case the shortfall is the server capping, not the channel ending.
+    const { requestedLimit } = options ?? {};
+    const reachedChannelStart =
+      typeof requestedLimit === 'number' &&
+      page.length < Math.min(requestedLimit, DEFAULT_CHANNEL_MESSAGE_LIST_PAGE_SIZE);
+    const windowLowTs = reachedChannelStart
+      ? Number.NEGATIVE_INFINITY
+      : (oldestReturnedTs ?? Number.POSITIVE_INFINITY);
+
+    const toRemove: string[] = [];
+    for (const id of loadedIds) {
+      if (pageIds.has(id)) continue; // present on the server → keep
+      const message = this.getItem(id);
+      if (!message || !this.isServerConfirmedMessage(message)) continue; // local-only → keep
+      const ts = getMessageCreatedAtTimestamp(message);
+      if (ts === null) continue; // no server timestamp (optimistic) → keep
+
+      if (newestReturnedTs !== null && ts >= newestReturnedTs) {
+        // At/above the newest returned message: a hard-deleted newest message and a message that
+        // arrived live during the fetch are indistinguishable here. Only remove ids present in the
+        // pre-fetch snapshot, which excludes live arrivals. (The newest returned message itself is
+        // in the page, so it is already skipped above.)
+        if (candidateIds?.has(id)) toRemove.push(id);
+        continue;
+      }
+      // Strictly within the page's span (below the newest returned message): a live arrival can never
+      // be here, so the absence is a hard delete regardless of a snapshot.
+      if (ts > windowLowTs) toRemove.push(id);
+    }
+
+    this.removeReconciledIds(toRemove);
+  }
+
+  /**
+   * Remove a set of reconciled (hard-deleted) ids in one batch — coalescing the shared-store fan-out
+   * to a single flush — then flush the deferred window publish so the list drops the ghosts
+   * synchronously (blanking to `[]` if the active window emptied, per {@link flushWindowPublish}).
+   * Finally, mirror the removal into the offline DB so a cold start does not re-seed the ghosts from
+   * SQLite. No-op for an empty set, so an unaffected merge does not touch state a second time.
+   */
+  private removeReconciledIds(ids: string[]) {
+    if (!ids.length) return;
+    this._itemIndex.batch(() => {
+      for (const id of ids) this.removeItem({ id });
+    });
+    this.flushPendingPublishes();
+    this.purgeReconciledFromOfflineDb(ids);
+  }
+
+  /**
+   * Mirror a destructive reconciliation into the offline DB. A hard delete performed while the client
+   * was offline reaches it via no event, so the offline store never ran its own hard-delete for these
+   * ids; the reconnect query re-hydrates the DB by UPSERT (which never removes what is absent from the
+   * page), so without this the ghosts survive in SQLite and a cold start would re-seed them after the
+   * in-memory list already dropped them.
+   *
+   * Owned by the state layer, NOT the SDK: the SDK only supplies the platform `offlineDb`
+   * implementation and never orchestrates DB writes for reconciliation. Fire-and-forget and
+   * best-effort — the in-memory removal is the source of truth for the live list, so a failed/absent
+   * DB write is no worse than before (the ghost merely re-appears on a cold start until the next
+   * reconcile). No-op when offline support is off (`client.offlineDb` undefined). The ids are already
+   * server-confirmed (the reconcile excludes pending/failed/optimistic), so a plain hard delete —
+   * without the pending-task teardown of a local failed message — is correct.
+   */
+  private purgeReconciledFromOfflineDb(ids: string[]) {
+    const offlineDb = this.channel.getClient?.()?.offlineDb;
+    if (!offlineDb) return;
+    Promise.all(ids.map((id) => offlineDb.hardDeleteMessage({ id, execute: false })))
+      .then((queryBatches) => offlineDb.executeSqlBatch(queryBatches.flat()))
+      .catch(() => {
+        // best-effort persistence cleanup — see doc comment; the live list is already correct.
+      });
+  }
 
   protected resolveUnreadBoundaryIdsByTimestamp = ({
     lastReadAt,

@@ -15,6 +15,7 @@ import { StateStore } from '../../store';
 
 export type {
   JumpToMessageOptions,
+  MergeNewestPageOptions,
   MessageFocusReason,
   MessageFocusSignal,
   MessageFocusSignalState,
