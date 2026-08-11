@@ -193,7 +193,10 @@ export type PaginationQueryParams<Q> = {
   queryShape?: Q;
   /** Per-call override of the reset behavior. */
   reset?: StateResetPolicy;
-  /** Should retry the failed request given number of times. Default is 0. */
+  /**
+   * How many times to **retry** a failed request, i.e. `retryCount + 1` attempts in total. Per-call
+   * override of `PaginatorOptions.retryCount`, which defaults to 0 (no retry).
+   */
   retryCount?: number;
   /**
    * Suppress `isLoading` transitions for this query (a silent, background refresh). When falsy
@@ -369,6 +372,12 @@ export type PaginatorOptions<T, Q> = {
   lockItemOrder?: boolean;
   /** The item page size to be requested from the server. */
   pageSize?: number;
+  /**
+   * How many times to **retry** a failed request before giving up, i.e. `retryCount + 1` attempts in
+   * total, with `DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES` between them. Defaults to 0 (no retry);
+   * `PaginationQueryParams.retryCount` overrides it per call.
+   */
+  retryCount?: number;
   /** Prevent silencing the errors thrown during the pagination execution. Default is false. */
   throwErrors?: boolean;
 };
@@ -399,6 +408,7 @@ export const DEFAULT_PAGINATION_OPTIONS: BasePaginatorConfig<any, any> = {
   lockItemOrder: false,
   pageSize: 10,
   hasPaginationQueryShapeChanged: baseHasPaginationQueryShapeChanged,
+  retryCount: 0,
   throwErrors: false,
 } as const;
 
@@ -835,12 +845,18 @@ export abstract class BasePaginator<T, Q> {
     throw new Error('Paginator.getNextQueryShape() is not implemented');
   }
 
-  protected buildFilters(): object | null {
+  /**
+   * Filters an item is matched against locally (`matchesFilter`) — NOT the filters sent to the server.
+   * A paginator whose backend query is filtered has to build the request filters separately (see
+   * `ChannelPaginator.buildQueryFilters`), because the two can differ: the backend may resolve a
+   * server-side stored filter of its own, and some paginators filter locally without sending anything.
+   */
+  protected buildMatchFilters(): object | null {
     return null; // === no filters
   }
 
   matchesFilter(item: T): boolean {
-    const filters = this.buildFilters();
+    const filters = this.buildMatchFilters();
     if (filters == null) return true;
     return itemMatchesFilter<T>(item, filters, {
       resolvers: this._filterFieldToDataResolvers,
@@ -1565,8 +1581,30 @@ export abstract class BasePaginator<T, Q> {
     }
   }
 
+  /**
+   * The interval whose `itemIds` lists this id, regardless of where the item now sorts.
+   */
+  protected findIntervalHoldingItem(item: T): AnyInterval | undefined {
+    const id = this.getItemId(item);
+    for (const interval of this.itemIntervals) {
+      if (interval.itemIds.includes(id)) return interval;
+    }
+    return undefined;
+  }
+
   protected locateByItemInIntervals(item: T): ItemCoordinates['interval'] | undefined {
-    const interval = this.locateIntervalForItem(item);
+    // Two different questions, asked in this order:
+    //  1. which interval's sort bounds does this item fall into (`locateIntervalForItem`)? The only
+    //     one that can answer for an item this paginator has never stored.
+    //  2. which interval actually lists this id (`findIntervalHoldingItem`)?
+    //
+    // They disagree when an item is updated in place: the interval holds the very object being
+    // ingested, so it already carries the item's NEW sort value, and an item that moved outside its
+    // own window's bounds is no longer found by (1) — even though (2) still lists it. The fallback
+    // is what lets `ingestItem` take the old entry out before re-inserting; without it the id stays
+    // behind in that interval and ends up stored in two places at once.
+    const interval =
+      this.locateIntervalForItem(item) ?? this.findIntervalHoldingItem(item);
     if (!interval) return undefined;
     const itemLocation = this.locateByItemInInterval({ item, interval });
     if (!itemLocation) return undefined;
@@ -1678,6 +1716,95 @@ export abstract class BasePaginator<T, Q> {
       ...interval,
       itemIds,
     };
+  }
+
+  /**
+   * Re-evaluates what the logical (live head / tail) intervals still hold against a freshly ingested
+   * page, returning the resulting anchored interval. Live updates park items there before any page
+   * exists — a channel archived while the archived list is untouched lands in the live head — and
+   * once a page covers such an item, leaving it gives the same id two homes, which is what renders
+   * as a duplicated row. The merge in `ingestPage` only folds logical intervals in when its
+   * `isHead`/overlap heuristics fire; this pass is unconditional and idempotent.
+   */
+  protected reconcileLogicalIntervalsAgainst(anchored: Interval): Interval {
+    let merged = anchored;
+
+    for (const logical of [this.liveHeadLogical, this.liveTailLogical]) {
+      if (!logical?.itemIds.length) continue;
+
+      const { mergedAnchored, remainingLogical } = this.mergeItemsFromLogicalInterval(
+        logical,
+        merged,
+      );
+      merged = mergedAnchored;
+
+      if (!remainingLogical) {
+        this.dropInterval(logical.id);
+        continue;
+      }
+      if (remainingLogical.itemIds.length !== logical.itemIds.length) {
+        this.commitInterval(remainingLogical);
+      }
+      this.moveMisfiledItemsToOppositeSide(remainingLogical, merged);
+    }
+
+    return merged;
+  }
+
+  /**
+   * Moves items the loaded window proves are parked on the wrong side: an item sitting in the live
+   * head that actually sorts past the tail edge of everything loaded belongs to the live tail (the
+   * unloaded region on that side), and vice versa. Leaving it claims the wrong end of the list —
+   * the archived channel would render above a page it sorts below.
+   *
+   * Compared against the outermost anchored interval, not the page just ingested: an item that
+   * lands between two loaded pages is not "beyond" either side, it is a gap item, and those stay
+   * where they are (`ingestPage` turns them into their own island once the merge reaches the edge).
+   */
+  protected moveMisfiledItemsToOppositeSide(
+    logical: LogicalInterval,
+    ingested: Interval,
+  ) {
+    const isHeadSide = isLiveHeadInterval(logical);
+    const anchoredIntervals = this.sortIntervals([
+      ...this.itemIntervals.filter(
+        (itv) => !isLogicalInterval(itv) && itv.id !== ingested.id,
+      ),
+      ingested,
+    ]) as Interval[];
+    const outermost = isHeadSide
+      ? this.getTailIntervalFromSortedIntervals(anchoredIntervals)
+      : this.getHeadIntervalFromSortedIntervals(anchoredIntervals);
+    const edges = outermost ? this.getIntervalPaginationEdges(outermost) : null;
+    if (!edges) return;
+
+    const stayIds: string[] = [];
+    const movedIds: string[] = [];
+    for (const id of logical.itemIds) {
+      const item = this.getItem(id);
+      const isBeyondOutermostEdge =
+        !!item &&
+        (isHeadSide
+          ? this.aIsMoreTailwardThanB(item, edges.tail)
+          : this.aIsMoreHeadwardThanB(item, edges.head));
+      (isBeyondOutermostEdge ? movedIds : stayIds).push(id);
+    }
+    if (!movedIds.length) return;
+
+    const oppositeId = isHeadSide ? LOGICAL_TAIL_INTERVAL_ID : LOGICAL_HEAD_INTERVAL_ID;
+    let opposite: LogicalInterval = (isHeadSide
+      ? this.liveTailLogical
+      : this.liveHeadLogical) ?? { id: oppositeId, itemIds: [] };
+    for (const id of movedIds) {
+      const item = this.getItem(id);
+      opposite = item
+        ? this.insertItemIdIntoInterval(opposite, item)
+        : { ...opposite, itemIds: [...opposite.itemIds, id] };
+    }
+
+    this.commitInterval(opposite);
+    if (stayIds.length) this.commitInterval({ ...logical, itemIds: stayIds });
+    else this.dropInterval(logical.id);
   }
 
   /**
@@ -1927,6 +2054,8 @@ export abstract class BasePaginator<T, Q> {
       }
     }
 
+    resultingInterval = this.reconcileLogicalIntervalsAgainst(resultingInterval);
+
     this.commitInterval(resultingInterval);
     // keep the intervals sorted
     this.setIntervals(this.sortIntervals(this.itemIntervals));
@@ -2003,6 +2132,7 @@ export abstract class BasePaginator<T, Q> {
     let targetInterval = stillBelongsToPreviousAnchoredInterval
       ? previousInterval
       : this.locateIntervalForItem(ingestedItem);
+
     const { liveHeadLogical, liveTailLogical } = this;
 
     if (!targetInterval) {
@@ -2034,13 +2164,28 @@ export abstract class BasePaginator<T, Q> {
                 itemIds: [this.getItemId(ingestedItem)],
               };
         } else if (tailEdges && this.aIsMoreTailwardThanB(ingestedItem, tailEdges.tail)) {
-          // Falls after the loaded tail → logical tail.
-          targetInterval = liveTailLogical
-            ? this.insertItemIdIntoInterval(liveTailLogical, ingestedItem)
-            : {
-                id: LOGICAL_TAIL_INTERVAL_ID,
-                itemIds: [this.getItemId(ingestedItem)],
-              };
+          // Falls after the loaded tail: normally the item moved into a page this paginator has
+          // not loaded, so it waits in the pending tail region. Not so when the window it left is
+          // anchored at the head — that window is "the first N items" and the item is one of them,
+          // it only slid to the bottom. Exiling it is what made unpinning the bottom-most loaded
+          // channel look like a deletion; its rank is then approximate until the next page settles
+          // it. A floating middle window has unloaded pages on both sides, so there it really is
+          // on another page.
+          const slidOutOfHeadAnchoredWindow =
+            !!previousInterval &&
+            !isLogicalInterval(previousInterval) &&
+            previousInterval.isHead &&
+            previousInterval.id === tailInterval?.id &&
+            (previousCoords?.interval?.currentIndex ?? -1) > -1;
+
+          targetInterval = slidOutOfHeadAnchoredWindow
+            ? this.insertItemIdIntoInterval(previousInterval, ingestedItem)
+            : liveTailLogical
+              ? this.insertItemIdIntoInterval(liveTailLogical, ingestedItem)
+              : {
+                  id: LOGICAL_TAIL_INTERVAL_ID,
+                  itemIds: [this.getItemId(ingestedItem)],
+                };
         } else {
           // Falls somewhere *inside* the global bounds, but we don't have that page loaded.
           // We’ve already removed any old occurrence, so from the paginator's perspective
@@ -2279,6 +2424,10 @@ export abstract class BasePaginator<T, Q> {
   isFirstPageQuery = (
     params: { queryShape?: unknown } & Pick<PaginationQueryParams<Q>, 'reset'>,
   ): boolean => {
+    // A paginator with no loaded window starts its pagination from the first page. Note the third
+    // branch below covers the case where items are present without any page having been loaded (a
+    // live event ingested one into a never-queried list): no query shape has been recorded yet, so
+    // `shouldResetStateBeforeQuery` reports a first page for it too.
     if (typeof this.items === 'undefined') return true;
     if (params.reset === 'yes') return true;
     if (params.reset === 'no') return false;
@@ -2334,7 +2483,7 @@ export abstract class BasePaginator<T, Q> {
   protected async runQueryRetryable(
     params: PaginationQueryParams<Q> = {},
   ): Promise<PaginationQueryReturnValue<T> | null> {
-    const { retryCount } = params;
+    const remainingRetries = params.retryCount ?? 0;
     try {
       return await this.query(params);
     } catch (e) {
@@ -2344,12 +2493,11 @@ export abstract class BasePaginator<T, Q> {
         this.state.partialNext({ lastQueryError: e as Error });
       }
 
-      const nextRetryCount = (retryCount ?? 0) - 1;
-      if (nextRetryCount > 0) {
+      if (remainingRetries > 0) {
         await sleep(DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES);
         return await this.runQueryRetryable({
           ...params,
-          retryCount: nextRetryCount,
+          retryCount: remainingRetries - 1,
         });
       }
       if (this.config.throwErrors) {
@@ -2377,31 +2525,44 @@ export abstract class BasePaginator<T, Q> {
     keepPreviousItems,
     queryShape: forcedQueryShape,
     reset,
-    retryCount = 0,
+    retryCount = this.config.retryCount,
     silent,
     updateState = true,
   }: PaginationQueryParams<Q> = {}): Promise<ExecuteQueryReturnValue<T> | void> {
-    const queryShape = forcedQueryShape ?? this.getNextQueryShape({ direction });
     if (!this.canExecuteQuery({ direction, reset })) return;
 
+    // A forced reset must happen BEFORE the request is built: `getNextQueryShape()` reads the
+    // pagination position (offset / cursor) out of state, so building first would re-query the page
+    // the previous pagination stopped at — a `reload()` at offset 20 would return the third page.
+    // `reset: 'yes'` is a first page by definition, so no query shape is needed to decide.
+    //
+    // Clearing the interval storage here also stops the incoming page from merging into stale
+    // intervals. Only a forced reset clears it: a first page reached through ordinary shape-change
+    // detection (cursor pagination looks like a new shape every page) must keep the cache so
+    // adjacent pages merge; filter/sort changes clear it via `resetState()` in their setters.
+    const isForcedReset = reset === 'yes' && !keepPreviousItems;
+    if (isForcedReset) {
+      this.setIntervals([]);
+      this.setActiveInterval(undefined);
+      this._itemIndex.clear();
+      this.clearIntervalViews();
+      this.state.next(this.getStateBeforeFirstQuery());
+    } else if (reset === 'yes' && !forcedQueryShape) {
+      // A `keepPreviousItems` refresh (reconnect / pull-to-refresh) must still restart pagination from
+      // page 1, but WITHOUT clearing the loaded window — the list stays visible while the fresh first
+      // page loads. Reset only the pagination position; `getNextQueryShape()` below reads it from state.
+      this.state.partialNext({
+        cursor: this.config.initialCursor,
+        offset: this.config.initialOffset ?? 0,
+      });
+    }
+
+    const queryShape = forcedQueryShape ?? this.getNextQueryShape({ direction });
+
     const isFirstPage = this.isFirstPageQuery({ queryShape, reset });
+
     if (isFirstPage && !keepPreviousItems) {
       const state = this.getStateBeforeFirstQuery();
-      if (reset === 'yes') {
-        // A forced reset / reload starts from a clean slate: drop the previously loaded interval
-        // storage and canonical index so the incoming page cannot merge into stale intervals.
-        // Without this, a reload would blank only `state.items`, leaving the old interval behind for
-        // `ingestPage` to merge the fresh page into.
-        //
-        // Only a forced reset clears the cache. A first page reached through ordinary shape-change
-        // detection (e.g. cursor pagination, whose per-page cursor makes every page look like a new
-        // shape) must PRESERVE the cache so adjacent/overlapping pages merge. Genuine filter/sort
-        // changes clear the cache separately via `resetState()` in the paginator's own setters.
-        this.setIntervals([]);
-        this.setActiveInterval(undefined);
-        this._itemIndex.clear();
-        this.clearIntervalViews();
-      }
       let items: T[] | undefined = undefined;
       if (!this.isInitialized) {
         items =
@@ -2412,10 +2573,14 @@ export abstract class BasePaginator<T, Q> {
             retryCount,
           })) ?? state.items;
       }
-      this.state.next({ ...state, items });
+      // A forced reset already published this state above; re-publishing an identical value would
+      // only emit a second time. Publish again solely when the offline preload produced items.
+      if (!isForcedReset || items !== undefined) {
+        this.state.next({ ...state, items });
+      }
     } else if (!silent) {
-      // Non-first-page, or a keepPreviousItems refresh: surface loading without blanking the list.
-      // The freshly fetched page is merged into the active interval in postQueryReconcile.
+      // Non-first-page, or a keepPreviousItems refresh: surface loading without blanking the list. The
+      // freshly fetched page is merged into the still-loaded intervals in postQueryReconcile.
       this.state.partialNext({ isLoading: true });
     }
 
@@ -2616,6 +2781,12 @@ export abstract class BasePaginator<T, Q> {
     this.setIntervals([]);
     this.setActiveInterval(undefined);
     this.clearIntervalViews();
+    // Nothing is loaded anymore, so the next query is a first page again. Without this the reset
+    // paginator would still report itself as initialized and a re-query with an unchanged shape
+    // (a filter/sort setter that resets, `ChannelManager.resetPaginatorStates()` on disconnect)
+    // would be treated as a continuation — ingested without `isHead`, leaving any live-updated
+    // logical interval unreconciled.
+    this._lastQueryShape = undefined;
   }
 
   /**

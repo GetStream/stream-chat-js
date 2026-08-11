@@ -15,6 +15,11 @@ import { getClientWithUser } from '../../test-utils/getClient';
 import { generateMsg } from '../../test-utils/generateMessage';
 import type { FieldToDataResolver } from '../../../../src/pagination/types.normalization';
 import { MockOfflineDB } from '../../offline-support/MockOfflineDB';
+import * as utils from '../../../../src/utils';
+import {
+  DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES,
+  DEFAULT_QUERY_CHANNELS_RETRY_COUNT,
+} from '../../../../src/constants';
 
 const user = { id: 'custom-id' };
 
@@ -75,7 +80,7 @@ describe('ChannelPaginator', () => {
         paginator.filterBuilder.buildFilters({ baseFilters: paginator.staticFilters }),
       ).toStrictEqual({});
       // @ts-expect-error accessing protected property
-      expect(paginator._filterFieldToDataResolvers).toHaveLength(9);
+      expect(paginator._filterFieldToDataResolvers).toHaveLength(10);
       expect(paginator.config.doRequest).toBeUndefined();
     });
 
@@ -139,7 +144,7 @@ describe('ChannelPaginator', () => {
         ...initialFilterBuilderContext,
       });
       // @ts-expect-error accessing protected property
-      expect(paginator._filterFieldToDataResolvers).toHaveLength(9);
+      expect(paginator._filterFieldToDataResolvers).toHaveLength(10);
       expect(paginator.config.debounceMs).toStrictEqual(paginatorOptions.debounceMs);
       expect(paginator.config.doRequest).toStrictEqual(doRequest);
       expect(paginator.config.hasPaginationQueryShapeChanged).toStrictEqual(
@@ -354,6 +359,81 @@ describe('ChannelPaginator', () => {
         user,
         archived_at: undefined,
       };
+      expect(paginator.matchesFilter(channel1)).toBeFalsy();
+    });
+
+    it('resolves field "hidden"', () => {
+      const paginator = new ChannelPaginator({ client, filters: { hidden: false } });
+      const hiddenChannelsPaginator = new ChannelPaginator({
+        client,
+        filters: { hidden: true },
+      });
+
+      // `hidden` is optional on ChannelResponse — undefined when the response omits it
+      expect(channel1.data!.hidden).toBeUndefined();
+      expect(paginator.matchesFilter(channel1)).toBeTruthy();
+      expect(hiddenChannelsPaginator.matchesFilter(channel1)).toBeFalsy();
+
+      channel1.data!.hidden = true;
+
+      expect(paginator.matchesFilter(channel1)).toBeFalsy();
+      expect(hiddenChannelsPaginator.matchesFilter(channel1)).toBeTruthy();
+    });
+
+    it('excludes hidden channels by default, as the backend query does', () => {
+      const paginator = new ChannelPaginator({ client, filters: { muted: false } });
+
+      expect(paginator.matchesFilter(channel1)).toBeTruthy();
+
+      channel1.data!.hidden = true;
+
+      expect(paginator.matchesFilter(channel1)).toBeFalsy();
+      // the default is a local matching rule, not a filter: the server already excludes hidden
+      // channels, so the request must stay untouched
+      expect(paginator.buildQueryFilters()).toEqual({ muted: false });
+    });
+
+    it('keeps the hidden-by-default rule out of the way of replaced filter resolvers', () => {
+      const paginator = new ChannelPaginator({ client, filters: { muted: false } });
+      paginator.setFilterResolvers([
+        { matchesField: (field) => field === 'muted', resolve: () => false },
+      ]);
+
+      expect(paginator.matchesFilter(channel1)).toBeTruthy();
+    });
+
+    it('does not apply the hidden default when the filter constrains "hidden"', () => {
+      const paginator = new ChannelPaginator({ client, filters: { hidden: true } });
+
+      channel1.data!.hidden = true;
+
+      expect(paginator.matchesFilter(channel1)).toBeTruthy();
+    });
+
+    it('detects a "hidden" constraint nested in a logical operator', () => {
+      const paginator = new ChannelPaginator({
+        client,
+        filters: { $or: [{ hidden: true }, { muted: true }] },
+      });
+
+      channel1.data!.hidden = true;
+
+      expect(paginator.matchesFilter(channel1)).toBeTruthy();
+    });
+
+    it('applies the hidden default when "hidden" only appears as an unrelated field path', () => {
+      const paginator = new ChannelPaginator({
+        client,
+        // @ts-expect-error using undeclared custom property
+        filters: { 'custom.hidden': { $eq: true } },
+      });
+
+      // @ts-expect-error using undeclared custom property
+      channel1.data!.custom = { hidden: true };
+      expect(paginator.matchesFilter(channel1)).toBeTruthy();
+
+      // `custom.hidden` is a different field, so it does not opt out of excluding hidden channels
+      channel1.data!.hidden = true;
       expect(paginator.matchesFilter(channel1)).toBeFalsy();
     });
 
@@ -666,6 +746,80 @@ describe('ChannelPaginator', () => {
       expect(paginator.sortComparator).not.toEqual(originalComparator);
     });
 
+    it('keeps consulting sortComparatorFactory on every comparator rebuild', async () => {
+      // orders by cid descending, ignoring the sort entirely
+      const factory = vi.fn(() => (a: Channel, b: Channel) => b.cid.localeCompare(a.cid));
+      const paginator = new ChannelPaginator({
+        client,
+        sort: [{ field: 'last_message_at', direction: 1 }],
+        sortComparatorFactory: factory,
+      });
+      const channelA = new Channel(client, 'type', 'aaa', {});
+      const channelZ = new Channel(client, 'type', 'zzz', {});
+
+      expect(paginator.sortComparator(channelA, channelZ)).toBeGreaterThan(0);
+      expect(factory).toHaveBeenCalledTimes(1);
+
+      // a sort change must not discard the custom ordering
+      paginator.sort = [{ field: 'last_message_at', direction: -1 }];
+      expect(factory).toHaveBeenCalledTimes(2);
+      expect(paginator.sortComparator(channelA, channelZ)).toBeGreaterThan(0);
+
+      // neither may a backend-resolved sort template
+      vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+        channels: [],
+        duration: '0.1ms',
+        predefined_filter: {
+          name: 'x',
+          filter: {},
+          sort: [{ field: 'last_message_at', direction: -1 }],
+        },
+      });
+      await paginator.toTail();
+
+      expect(factory).toHaveBeenCalledTimes(3);
+      expect(paginator.sortComparator(channelA, channelZ)).toBeGreaterThan(0);
+    });
+
+    it('passes the default comparator to sortComparatorFactory so it can delegate', () => {
+      const paginator = new ChannelPaginator({
+        client,
+        sort: [{ field: 'last_message_at', direction: 1 }],
+        // a factory that only delegates must preserve the built-in channel ordering
+        sortComparatorFactory:
+          ({ defaultComparator }) =>
+          (a, b) =>
+            defaultComparator(a, b),
+      });
+
+      // ascending: the older channel2 precedes channel1
+      expect(paginator.sortComparator(channel1, channel2)).toBeGreaterThan(0);
+    });
+
+    it('adopts a sortComparatorFactory assigned after construction', () => {
+      const paginator = new ChannelPaginator({ client });
+
+      paginator.sortComparatorFactory = () => (a, b) => b.cid.localeCompare(a.cid);
+      const channelA = new Channel(client, 'type', 'aaa', {});
+      const channelZ = new Channel(client, 'type', 'zzz', {});
+
+      expect(paginator.sortComparator(channelA, channelZ)).toBeGreaterThan(0);
+
+      paginator.sortComparatorFactory = undefined;
+
+      expect(paginator.sortComparator(channelA, channelZ)).toBeLessThan(0);
+    });
+
+    it('rebuilt comparator keeps resolving channel-specific sort paths', () => {
+      const paginator = new ChannelPaginator({ client, sort: [{ name: 1 }] });
+
+      paginator.sort = [{ field: 'last_message_at', direction: 1 }];
+
+      // `last_message_at` lives on the message paginator, not on channel.data, so a comparator built
+      // without the channel path resolver would read undefined for both and report a tie
+      expect(paginator.sortComparator(channel1, channel2)).toBeGreaterThan(0);
+    });
+
     it('options reset does not reset the paginator state', () => {
       const paginator = new ChannelPaginator({ client });
       const before = seed(paginator);
@@ -707,7 +861,398 @@ describe('ChannelPaginator', () => {
       ).toHaveBeenCalledWith({
         cids: [channel1.cid],
         filters,
+        options: expect.objectContaining({ filter_conditions: filters, sort }),
         sort,
+      });
+    });
+  });
+
+  describe('retries', () => {
+    it('retries a failing channel query DEFAULT_QUERY_CHANNELS_RETRY_COUNT times by default', async () => {
+      const paginator = new ChannelPaginator({ client });
+      expect(paginator.config.retryCount).toBe(DEFAULT_QUERY_CHANNELS_RETRY_COUNT);
+
+      const sleepSpy = vi.spyOn(utils, 'sleep').mockResolvedValue(undefined);
+      const queryChannels = vi
+        .spyOn(client, 'queryChannelsAndHydrate')
+        .mockRejectedValue(new Error('fail'));
+
+      await paginator.toTail();
+
+      // initial attempt + however many retries are configured (matches the legacy ChannelManager)
+      expect(queryChannels).toHaveBeenCalledTimes(DEFAULT_QUERY_CHANNELS_RETRY_COUNT + 1);
+      expect(
+        sleepSpy.mock.calls.filter(
+          ([ms]) => ms === DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES,
+        ),
+      ).toHaveLength(DEFAULT_QUERY_CHANNELS_RETRY_COUNT);
+      expect(paginator.lastQueryError).toEqual(new Error('fail'));
+    });
+
+    it('stops retrying once a query succeeds', async () => {
+      vi.spyOn(utils, 'sleep').mockResolvedValue(undefined);
+      const channelA = new Channel(client, 'type', 'retry-a', {});
+      const queryChannels = vi
+        .spyOn(client, 'queryChannelsAndHydrate')
+        .mockRejectedValueOnce(new Error('fail'))
+        .mockResolvedValue({ channels: [channelA], duration: '0.1ms' });
+
+      const paginator = new ChannelPaginator({ client });
+      await paginator.toTail();
+
+      expect(queryChannels).toHaveBeenCalledTimes(2);
+      expect(paginator.lastQueryError).toBeUndefined();
+      expect(paginator.items).toStrictEqual([channelA]);
+    });
+
+    it('accepts an explicit retryCount through paginatorOptions', async () => {
+      const paginator = new ChannelPaginator({
+        client,
+        paginatorOptions: { retryCount: 0 },
+      });
+      vi.spyOn(utils, 'sleep').mockResolvedValue(undefined);
+      const queryChannels = vi
+        .spyOn(client, 'queryChannelsAndHydrate')
+        .mockRejectedValue(new Error('fail'));
+
+      await paginator.toTail();
+
+      expect(queryChannels).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('offline support', () => {
+    const requestOptions: ChannelOptions = {
+      predefined_filter: 'user_messaging',
+      filter_values: { user_id: 'dan' },
+      sort_values: { sort_field: 'last_message_at' },
+    };
+    let offlineDb: MockOfflineDB;
+    let upsertCidsForQuery: MockInstance;
+    let getChannelsForQuery: MockInstance;
+    let scheduleSyncStatusChangeCallback: MockInstance;
+
+    const setUpOfflineDb = async ({ syncStatus }: { syncStatus: boolean }) => {
+      offlineDb = new MockOfflineDB({ client });
+      client.setOfflineDBApi(offlineDb);
+      (client.offlineDb!.initializeDB as unknown as MockInstance).mockReturnValue(true);
+      await client.offlineDb!.init(client.userID as string);
+      client.offlineDb!.syncManager.syncStatus = syncStatus;
+      upsertCidsForQuery = client.offlineDb!
+        .upsertCidsForQuery as unknown as MockInstance;
+      upsertCidsForQuery.mockImplementation(() => Promise.resolve(true));
+      getChannelsForQuery = client.offlineDb!
+        .getChannelsForQuery as unknown as MockInstance;
+      getChannelsForQuery.mockResolvedValue(null);
+      scheduleSyncStatusChangeCallback = vi.spyOn(
+        client.offlineDb!.syncManager,
+        'scheduleSyncStatusChangeCallback',
+      );
+    };
+
+    const makePaginator = ({
+      filters = { type: 'type' } as ChannelFilters | undefined,
+    } = {}) =>
+      new ChannelPaginator({
+        client,
+        filters,
+        requestOptions,
+        sort: [{ field: 'last_message_at', direction: -1 }],
+      });
+
+    it('reads the cache with the full query request, including predefined-filter options', async () => {
+      await setUpOfflineDb({ syncStatus: true });
+      vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+        channels: [],
+        duration: '0.1ms',
+      });
+      const paginator = makePaginator();
+
+      await paginator.toTail();
+
+      expect(getChannelsForQuery).toHaveBeenCalledWith({
+        userId: client.userID,
+        options: expect.objectContaining({
+          filter_conditions: { type: 'type' },
+          sort: [{ field: 'last_message_at', direction: -1 }],
+          ...requestOptions,
+        }),
+      });
+    });
+
+    it('persists cids under the full query request after a query', async () => {
+      await setUpOfflineDb({ syncStatus: true });
+      const channelA = new Channel(client, 'type', 'offline-a', {});
+      vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+        channels: [channelA],
+        duration: '0.1ms',
+      });
+      const paginator = makePaginator();
+
+      await paginator.toTail();
+
+      expect(upsertCidsForQuery).toHaveBeenCalledWith({
+        cids: [channelA.cid],
+        filters: { type: 'type' },
+        options: expect.objectContaining(requestOptions),
+        sort: [{ field: 'last_message_at', direction: -1 }],
+      });
+    });
+
+    it('persists the new cid order after a live ingest and after a removal', async () => {
+      await setUpOfflineDb({ syncStatus: true });
+      const channelA = new Channel(client, 'type', 'offline-a', {});
+      setLastMessageAt(channelA, new Date('1971-01-01T00:00:00.000Z'));
+      const channelB = new Channel(client, 'type', 'offline-b', {});
+      setLastMessageAt(channelB, new Date('1970-01-01T00:00:00.000Z'));
+      vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+        channels: [channelA, channelB],
+        duration: '0.1ms',
+      });
+      // no filters: these bare channels carry no `data.type`, and a live ingest of an item the filter
+      // rejects would (correctly) remove it instead of reordering
+      const paginator = makePaginator({ filters: {} });
+      await paginator.toTail();
+      upsertCidsForQuery.mockClear();
+
+      // channelB receives a newer message and moves to the top - a reorder with no query performed.
+      // Mirrors what the manager's `updateLists` does: boost, then ingest. The boost is what moves the
+      // channel — `ingestItem` alone cannot, because the mutated `Channel` is the same object the
+      // paginator already holds, so it has no previous sort key to relocate from.
+      setLastMessageAt(channelB, new Date('1972-01-01T00:00:00.000Z'));
+      paginator.boost(channelB.cid, { seq: paginator.maxBoostSeq + 1 });
+      paginator.ingestItem(channelB);
+
+      expect(upsertCidsForQuery).toHaveBeenCalledWith(
+        expect.objectContaining({ cids: [channelB.cid, channelA.cid] }),
+      );
+
+      upsertCidsForQuery.mockClear();
+      paginator.removeItem({ item: channelA });
+
+      expect(upsertCidsForQuery).toHaveBeenCalledWith(
+        expect.objectContaining({ cids: [channelB.cid] }),
+      );
+    });
+
+    it('does not persist when a removal changed nothing', async () => {
+      await setUpOfflineDb({ syncStatus: true });
+      vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+        channels: [],
+        duration: '0.1ms',
+      });
+      const paginator = makePaginator();
+      await paginator.toTail();
+      upsertCidsForQuery.mockClear();
+
+      paginator.removeItem({ item: new Channel(client, 'type', 'not-in-list', {}) });
+
+      expect(upsertCidsForQuery).not.toHaveBeenCalled();
+    });
+
+    // ported from the legacy suite ("continues with normal queryChannels flow if client.user is missing")
+    it('queries normally without touching the cache when there is no user', async () => {
+      await setUpOfflineDb({ syncStatus: false });
+      client.user = undefined;
+      const queryChannels = vi
+        .spyOn(client, 'queryChannelsAndHydrate')
+        .mockResolvedValue({ channels: [], duration: '0.1ms' });
+      const paginator = makePaginator();
+
+      await paginator.toTail();
+
+      // no user id means no cache key, so neither the read nor the sync deferral applies
+      expect(getChannelsForQuery).not.toHaveBeenCalled();
+      expect(scheduleSyncStatusChangeCallback).not.toHaveBeenCalled();
+      expect(queryChannels).toHaveBeenCalledTimes(1);
+    });
+
+    describe('while the offline sync is in progress', () => {
+      it('surfaces the cached page and defers the query until the sync completes', async () => {
+        await setUpOfflineDb({ syncStatus: false });
+        const cachedChannel = new Channel(client, 'type', 'cached', {});
+        getChannelsForQuery.mockResolvedValue([{ channel: cachedChannel.data }]);
+        vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue([cachedChannel]);
+        const queryChannels = vi
+          .spyOn(client, 'queryChannelsAndHydrate')
+          .mockResolvedValue({ channels: [], duration: '0.1ms' });
+        const paginator = makePaginator();
+
+        await paginator.toTail();
+
+        expect(paginator.items).toStrictEqual([cachedChannel]);
+        expect(queryChannels).not.toHaveBeenCalled();
+        expect(scheduleSyncStatusChangeCallback).toHaveBeenCalledTimes(1);
+        expect(scheduleSyncStatusChangeCallback.mock.calls[0][0]).toBe(paginator.id);
+
+        // the scheduled callback runs the deferred query once the sync manager reports completion
+        client.offlineDb!.syncManager.syncStatus = true;
+        await scheduleSyncStatusChangeCallback.mock.calls[0][1]();
+
+        expect(queryChannels).toHaveBeenCalledTimes(1);
+      });
+
+      it('runs the watching query directly when the sync completes during the preload', async () => {
+        // This test basically confirms a very intermittent regression that would cause the sync status
+        // to be changed to true way before the preload/initial population finishes. In that instance,
+        // we would drop all of the listeners and so the actual query would not fire.
+        await setUpOfflineDb({ syncStatus: false });
+        const cachedChannel = new Channel(client, 'type', 'cached', {});
+        // getChannelsForQuery IS the awaited preload: flipping syncStatus here mimics the sync landing
+        // mid-await (and the sync manager having already drained + cleared its callback map).
+        getChannelsForQuery.mockImplementation(async () => {
+          client.offlineDb!.syncManager.syncStatus = true;
+          return [{ channel: cachedChannel.data }];
+        });
+        vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue([cachedChannel]);
+        const queryChannels = vi
+          .spyOn(client, 'queryChannelsAndHydrate')
+          .mockResolvedValue({ channels: [cachedChannel], duration: '0.1ms' });
+        const paginator = makePaginator();
+
+        await paginator.toTail();
+
+        // The watching query ran in THIS call; nothing was left dangling on the already-cleared map.
+        expect(queryChannels).toHaveBeenCalledTimes(1);
+        expect(scheduleSyncStatusChangeCallback).not.toHaveBeenCalled();
+        // And the preloaded list was not blanked (non-destructive refresh).
+        expect(paginator.items).toStrictEqual([cachedChannel]);
+      });
+
+      it('runs the query directly even when the cache is empty and the sync lands during the preload', async () => {
+        // Same race, but nothing is cached: the preload returns nothing yet the sync still completes
+        // mid-await. We must not strand a callback — run the query directly so the (watched) list still lands.
+        await setUpOfflineDb({ syncStatus: false });
+        const fresh = new Channel(client, 'type', 'fresh', {});
+        getChannelsForQuery.mockImplementation(async () => {
+          client.offlineDb!.syncManager.syncStatus = true;
+          return null;
+        });
+        const queryChannels = vi
+          .spyOn(client, 'queryChannelsAndHydrate')
+          .mockResolvedValue({ channels: [fresh], duration: '0.1ms' });
+        const paginator = makePaginator({ filters: {} });
+
+        await paginator.toTail();
+
+        expect(queryChannels).toHaveBeenCalledTimes(1);
+        expect(scheduleSyncStatusChangeCallback).not.toHaveBeenCalled();
+        expect(paginator.items).toStrictEqual([fresh]);
+      });
+
+      it('does not blank the list on the post-sync re-run when the offline cache was invalidated', async () => {
+        // Regression: the deferred post-sync re-run must be a NON-DESTRUCTIVE refresh (keepPreviousItems).
+        // Otherwise it re-preloads from the offline DB; if the sync invalidated the query cache (i.e. a
+        // channel changed while the app was closed), that re-preload returns nothing and the list blanks
+        // to a second skeleton before the fresh page lands.
+        await setUpOfflineDb({ syncStatus: false });
+        const cachedChannel = new Channel(client, 'type', 'cached', {});
+        getChannelsForQuery.mockResolvedValue([{ channel: cachedChannel.data }]);
+        vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue([cachedChannel]);
+        vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+          channels: [cachedChannel],
+          duration: '0.1ms',
+        });
+        const paginator = makePaginator();
+
+        await paginator.toTail(); // cold start: surface the cached page, defer the query
+        expect(paginator.items).toStrictEqual([cachedChannel]);
+
+        // The sync invalidates the offline query cache before the deferred re-run fires.
+        getChannelsForQuery.mockResolvedValue(null);
+        client.offlineDb!.syncManager.syncStatus = true;
+
+        // Watch for ANY transient blank (items === undefined) while the deferred re-run executes.
+        let blanked = false;
+        const unsubscribe = paginator.state.subscribe((next) => {
+          if (next.items === undefined) blanked = true;
+        });
+        await scheduleSyncStatusChangeCallback.mock.calls[0][1]();
+        unsubscribe();
+
+        expect(blanked).toBe(false);
+        expect(paginator.items).toStrictEqual([cachedChannel]);
+      });
+
+      it('seeds the preloaded channels into the index so a concurrent ingest does not collapse the list', async () => {
+        // The cold start preload must SEED the paginator (populate the interval/index), not
+        // just set the displayed `items`. Otherwise a channel ingested concurrently during the presync
+        // window (i.e a message.new from the offline-send replay in executePendingTasks) rebuilds the
+        // list from an empty index and collapses it to just that one channel.
+        await setUpOfflineDb({ syncStatus: false });
+        const a = new Channel(client, 'type', 'a', {});
+        const b = new Channel(client, 'type', 'b', {});
+        const c = new Channel(client, 'type', 'c', {});
+        getChannelsForQuery.mockResolvedValue([{}, {}, {}]);
+        vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue([a, b, c]);
+        vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+          channels: [a, b, c],
+          duration: '0.1ms',
+        });
+        const paginator = makePaginator({ filters: {} });
+
+        await paginator.toTail(); // cold start: preload the cached channels + defer
+        expect(paginator.items?.map((ch) => ch.cid).sort()).toStrictEqual(
+          [a.cid, b.cid, c.cid].sort(),
+        );
+
+        // A pending-send message.new lands during the defer window (before sync completes).
+        paginator.ingestItem(a);
+
+        // The list must NOT collapse to just the ingested channel.
+        expect(paginator.items?.map((ch) => ch.cid).sort()).toStrictEqual(
+          [a.cid, b.cid, c.cid].sort(),
+        );
+      });
+
+      it('defers even when nothing is cached and the list is already loaded', async () => {
+        await setUpOfflineDb({ syncStatus: true });
+        vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+          channels: [new Channel(client, 'type', 'offline-a', {})],
+          duration: '0.1ms',
+        });
+        const paginator = makePaginator();
+        await paginator.toTail();
+
+        client.offlineDb!.syncManager.syncStatus = false;
+        getChannelsForQuery.mockClear();
+        const queryChannels = vi
+          .spyOn(client, 'queryChannelsAndHydrate')
+          .mockResolvedValue({ channels: [], duration: '0.1ms' });
+        queryChannels.mockClear();
+
+        await paginator.reload();
+
+        expect(queryChannels).not.toHaveBeenCalled();
+        // the cache is only read when nothing is loaded yet
+        expect(getChannelsForQuery).not.toHaveBeenCalled();
+        expect(scheduleSyncStatusChangeCallback).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not defer a next-page query', async () => {
+        await setUpOfflineDb({ syncStatus: true });
+        const paginator = new ChannelPaginator({
+          client,
+          filters: { type: 'type' },
+          paginatorOptions: { pageSize: 1 },
+        });
+        const queryChannels = vi
+          .spyOn(client, 'queryChannelsAndHydrate')
+          .mockResolvedValue({
+            channels: [new Channel(client, 'type', 'offline-a', {})],
+            duration: '0.1ms',
+          });
+        await paginator.toTail();
+
+        client.offlineDb!.syncManager.syncStatus = false;
+        queryChannels.mockResolvedValue({
+          channels: [new Channel(client, 'type', 'offline-b', {})],
+          duration: '0.1ms',
+        });
+        await paginator.toTail();
+
+        expect(queryChannels).toHaveBeenCalledTimes(2);
+        expect(scheduleSyncStatusChangeCallback).not.toHaveBeenCalled();
       });
     });
   });
@@ -750,6 +1295,215 @@ describe('ChannelPaginator', () => {
         message_limit: 3,
         offset: 0,
       });
+    });
+  });
+
+  describe('reload', () => {
+    const mockPages = (pages: Channel[][]) => {
+      const spy = vi.spyOn(client, 'queryChannelsAndHydrate');
+      pages.forEach((channels) =>
+        spy.mockResolvedValueOnce({ channels, duration: '0.1ms' }),
+      );
+      return spy;
+    };
+
+    it('re-queries the first page, not the page the list had paginated to', async () => {
+      const paginator = new ChannelPaginator({
+        client,
+        paginatorOptions: { pageSize: 2 },
+      });
+      const spy = mockPages([[channel1, channel2], [channel1, channel2], [channel1]]);
+
+      await paginator.toTail(); // first page: offset 0
+      await paginator.toTail(); // second page: offset 2
+      expect(spy.mock.calls[1][0]).toMatchObject({ offset: 2 });
+
+      await paginator.reload();
+
+      // the reload must restart the pagination, not continue it
+      expect(spy.mock.calls[2][0]).toMatchObject({ limit: 2, offset: 0 });
+    });
+
+    it('leaves the offset where the restarted pagination lands', async () => {
+      const paginator = new ChannelPaginator({
+        client,
+        paginatorOptions: { pageSize: 2 },
+      });
+      mockPages([[channel1, channel2], [channel1, channel2], [channel1]]);
+
+      await paginator.toTail();
+      await paginator.toTail();
+      expect(paginator.offset).toBe(4);
+
+      await paginator.reload();
+
+      expect(paginator.offset).toBe(1);
+      expect(paginator.items?.map(({ cid }) => cid)).toEqual([channel1.cid]);
+    });
+  });
+
+  describe('predefined filter response metadata', () => {
+    const PREDEFINED_FILTER = {
+      name: 'unarchived',
+      filter: { archived: false },
+    };
+
+    const mockQueryResponse = (
+      channels: Channel[],
+      predefinedFilter?: { name: string; filter: object; sort?: ChannelSort },
+    ) =>
+      vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+        channels,
+        duration: '0.1ms',
+        ...(predefinedFilter ? { predefined_filter: predefinedFilter } : {}),
+      });
+
+    const archive = (channel: Channel) => {
+      channel.state.membership = { user, archived_at: '2025-09-03T12:19:39.101089Z' };
+    };
+
+    it('matches items against the backend-resolved filter', async () => {
+      // no local filters -> everything matches until the backend tells us what it filtered by
+      const paginator = new ChannelPaginator({ client });
+      archive(channel1);
+      expect(paginator.matchesFilter(channel1)).toBeTruthy();
+
+      mockQueryResponse([], PREDEFINED_FILTER);
+      await paginator.toTail();
+
+      expect(paginator.predefinedFilter?.filter).toEqual({ archived: false });
+      expect(paginator.effectiveFilters).toEqual({ archived: false });
+      expect(paginator.matchesFilter(channel1)).toBeFalsy();
+    });
+
+    it('does not ingest a live item excluded by the backend-resolved filter', async () => {
+      const paginator = new ChannelPaginator({ client });
+      const channelA = new Channel(client, 'type', 'pf-a', {});
+
+      mockQueryResponse([channelA], PREDEFINED_FILTER);
+      await paginator.toTail();
+      expect(paginator.items).toStrictEqual([channelA]);
+
+      const archivedChannel = new Channel(client, 'type', 'pf-archived', {});
+      archive(archivedChannel);
+
+      expect(paginator.ingestItem(archivedChannel)).toBe(false);
+      expect(paginator.items).toStrictEqual([channelA]);
+    });
+
+    it('orders items by the backend-resolved sort', async () => {
+      const paginator = new ChannelPaginator({
+        client,
+        sort: [{ field: 'last_message_at', direction: 1 }],
+      });
+      // ascending: the older channel2 precedes channel1
+      expect(paginator.sortComparator(channel1, channel2)).toBeGreaterThan(0);
+
+      mockQueryResponse([], {
+        ...PREDEFINED_FILTER,
+        sort: [{ field: 'last_message_at', direction: -1 }],
+      });
+      await paginator.toTail();
+
+      expect(paginator.predefinedFilter?.sort).toEqual([
+        { field: 'last_message_at', direction: -1 },
+      ]);
+      expect(paginator.effectiveSort).toEqual([
+        { field: 'last_message_at', direction: -1 },
+      ]);
+      expect(paginator.sortComparator(channel1, channel2)).toBeLessThan(0);
+    });
+
+    it('does not send the predefined filter back to the server', async () => {
+      const channelA = new Channel(client, 'type', 'pf-a', {});
+      const channelB = new Channel(client, 'type', 'pf-b', {});
+      const paginator = new ChannelPaginator({
+        client,
+        filters: { type: 'type' },
+        sort: [{ field: 'last_message_at', direction: -1 }],
+        paginatorOptions: { pageSize: 1 },
+      });
+
+      const spy = mockQueryResponse([channelA], PREDEFINED_FILTER);
+      await paginator.toTail();
+      spy.mockResolvedValue({
+        channels: [channelB],
+        duration: '0.1ms',
+        predefined_filter: PREDEFINED_FILTER,
+      });
+      await paginator.toTail();
+
+      // the request still carries the locally configured filters, and offset 1 proves the query shape
+      // did not change under us (a changed shape would restart pagination from offset 0)
+      expect(spy).toHaveBeenLastCalledWith(
+        {
+          filter_conditions: { type: 'type' },
+          sort: [{ field: 'last_message_at', direction: -1 }],
+          limit: 1,
+          offset: 1,
+        },
+        { withResponse: true },
+      );
+    });
+
+    it('keeps the predefined-filter metadata while paginating, even if a later page omits it', async () => {
+      const channelA = new Channel(client, 'type', 'pf-a', {});
+      const channelB = new Channel(client, 'type', 'pf-b', {});
+      const paginator = new ChannelPaginator({
+        client,
+        paginatorOptions: { pageSize: 1 },
+      });
+
+      const spy = mockQueryResponse([channelA], PREDEFINED_FILTER);
+      await paginator.toTail();
+      spy.mockResolvedValue({ channels: [channelB], duration: '0.1ms' });
+      await paginator.toTail();
+
+      expect(paginator.predefinedFilter?.filter).toEqual({ archived: false });
+    });
+
+    it('clears the predefined-filter metadata when a first-page query is not a predefined-filter query', async () => {
+      const paginator = new ChannelPaginator({ client });
+      archive(channel1);
+
+      const spy = mockQueryResponse([], {
+        ...PREDEFINED_FILTER,
+        sort: [{ field: 'last_message_at', direction: -1 }],
+      });
+      await paginator.toTail();
+      expect(paginator.predefinedFilter?.filter).toEqual({ archived: false });
+
+      spy.mockResolvedValue({ channels: [], duration: '0.1ms' });
+      await paginator.reload();
+
+      expect(paginator.predefinedFilter).toBeUndefined();
+      expect(paginator.matchesFilter(channel1)).toBeTruthy();
+    });
+
+    it('keeps the predefined-filter metadata when a query fails', async () => {
+      const paginator = new ChannelPaginator({ client });
+
+      const spy = mockQueryResponse([], PREDEFINED_FILTER);
+      await paginator.toTail();
+
+      spy.mockRejectedValue(new Error('query failed'));
+      await paginator.reload();
+
+      expect(paginator.lastQueryError).toBeDefined();
+      expect(paginator.predefinedFilter?.filter).toEqual({ archived: false });
+    });
+
+    it('ignores the response metadata when items are fetched through doRequest', async () => {
+      const spy = mockQueryResponse([], PREDEFINED_FILTER);
+      const paginator = new ChannelPaginator({
+        client,
+        paginatorOptions: { doRequest: async () => ({ items: [] }) },
+      });
+
+      await paginator.toTail();
+
+      expect(spy).not.toHaveBeenCalled();
+      expect(paginator.predefinedFilter).toBeUndefined();
     });
   });
 
@@ -847,6 +1601,48 @@ describe('ChannelPaginator', () => {
       expect(cids).toContain('type:c'); // not dropped
       expect(cids?.[0]).toBe('type:c'); // moved to the head (top)
       expect(cids).toHaveLength(3); // no duplicates, nothing lost
+    });
+
+    it('keeps a pinned channel on top when an unpinned channel receives a new message', async () => {
+      const pinned = new Channel(client, 'type', 'pinned', {});
+      const plainA = new Channel(client, 'type', 'plainA', {});
+      const plainB = new Channel(client, 'type', 'plainB', {});
+      pinned.state.membership = { pinned_at: '2020-01-01T00:00:00.000Z' };
+      plainA.state.membership = {};
+      plainB.state.membership = {};
+      setLastMessageAt(pinned, new Date('2020-01-01T00:00:00.000Z')); // old, but pinned → stays on top
+      setLastMessageAt(plainA, new Date('2020-03-01T00:00:00.000Z')); // newest unpinned
+      setLastMessageAt(plainB, new Date('2020-02-01T00:00:00.000Z')); // older unpinned
+
+      const paginator = new ChannelPaginator({
+        client,
+        sort: [
+          { field: 'pinned_at', direction: -1 },
+          { field: 'last_message_at', direction: -1 },
+        ],
+        paginatorOptions: {
+          doRequest: () => Promise.resolve({ items: [pinned, plainA, plainB] }),
+          pageSize: 10,
+        },
+      });
+      await paginator.executeQuery({});
+      expect(paginator.items?.map((ch) => ch.cid)).toEqual([
+        'type:pinned',
+        'type:plainA',
+        'type:plainB',
+      ]);
+
+      // plainB receives a new message → newest last_message_at; re-ingest as updateLists does (no boost).
+      setLastMessageAt(plainB, new Date('2020-05-01T00:00:00.000Z'));
+      paginator.ingestItem(plainB);
+
+      // plainB relocates ABOVE plainA (newer message) but stays BELOW the pinned channel — the sort's
+      // pinned partition holds. A boost would have shoved plainB to index 0, over the pinned channel.
+      expect(paginator.items?.map((ch) => ch.cid)).toEqual([
+        'type:pinned',
+        'type:plainB',
+        'type:plainA',
+      ]);
     });
   });
 });

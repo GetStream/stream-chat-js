@@ -97,7 +97,7 @@ export class PinnedMessagePaginator extends MessageIntervalPaginator {
     };
   }
 
-  buildFilters = (): PinnedMessagePaginatorFilter => ({
+  buildMatchFilters = (): PinnedMessagePaginatorFilter => ({
     cid: this.channel.cid,
     pinned: true,
   });
