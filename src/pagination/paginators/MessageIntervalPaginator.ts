@@ -174,6 +174,28 @@ export type MergeNewestPageOptions = {
 };
 
 /**
+ * Options for {@link MessageIntervalPaginator.seedFirstPageSync}, the synchronous channel-open seed.
+ */
+export type SeedFirstPageOptions = {
+  /**
+   * When true and the paginator has already been seeded once, fold the fresh page via
+   * {@link MessageIntervalPaginator.mergeNewestPage} — merge in place, reconcile offline hard-deletes,
+   * re-derive the tail cursor, rebuild on a disjoint window, and skip when jumped away from the head —
+   * instead of a plain first-page ingest. Lets callers (channel.reload, the channel-list hydrate,
+   * React's `recoverState`) share one reconciling seed path. Left false for the differently-sorted
+   * pinned list, and a no-op on a cold open (nothing loaded to fold).
+   */
+  reconcile?: boolean;
+  /**
+   * Pre-fetch snapshot of loaded message ids (captured before the caller's network await), forwarded
+   * to {@link MergeNewestPageOptions.candidateIds} so a hard-deleted NEWEST message is reconciled
+   * without mistaking a message that arrived live during the fetch for a delete. Only consulted when
+   * {@link reconcile} is set and a window is already loaded.
+   */
+  candidateIds?: ReadonlySet<string>;
+};
+
+/**
  * MessageIntervalPaginator allows configuring backend request sort, while keeping internal item ordering stable.
  * Filtering of ingested items is still limited to local predicates (`filterQueryResults`).
  */
@@ -430,12 +452,22 @@ export class MessageIntervalPaginator extends BasePaginator<
     messages: LocalMessage[],
     requestedPageSize: number,
     messagePaginationOptions?: MessagePaginationOptions,
+    options?: SeedFirstPageOptions,
   ) {
     const queryShape: MessageQueryShape = {
       ...messagePaginationOptions,
       limit: requestedPageSize,
     };
     const isJump = this.isJumpQueryShape(queryShape);
+
+    if (options?.reconcile && !isJump && typeof this.items !== 'undefined') {
+      this.mergeNewestPage(messages, {
+        candidateIds: options.candidateIds,
+        requestedLimit: requestedPageSize,
+      });
+      return;
+    }
+
     this.postQueryReconcile({
       // A jump/around page spans both directions; a plain latest page paginates tailward (older).
       direction: isJump ? undefined : 'tailward',
@@ -579,9 +611,11 @@ export class MessageIntervalPaginator extends BasePaginator<
    * 1. OVERLAP - the incoming page shares at least one id with the loaded head (fewer than a full
    *    page is new). Merge in place: existing items are reconciled by id (edits, soft deletes), new
    *    items are appended and every already loaded item (including older pages already paged in) is
-   *    kept. `hasMoreTail`/`cursor.tailward` are left as-is so the page can be any size, so deriving
-   *    "has older items" from its length would wrongly clear it while older items remain. Then
-   *    destructive reconciliation ({@link reconcileLoadedAgainstPage}) removes any loaded message
+   *    kept. The tail boundary (`hasMoreTail`/`cursor.tailward`) is taken from the MERGED interval: a
+   *    partial page leaves it untouched, while a page reaching deeper than the loaded window (or a
+   *    stale offline-DB cursor) re-anchors it to the true loaded oldest so "load older" keeps working —
+   *    derived from the interval, never the page's length. Then destructive reconciliation
+   *    ({@link reconcileLoadedAgainstPage}) removes any loaded message
    *    that the authoritative page proves was hard-deleted while offline (see that method + the
    *    {@link MergeNewestPageOptions} for the exact, safe window).
    *
@@ -649,16 +683,46 @@ export class MessageIntervalPaginator extends BasePaginator<
       return;
     }
 
-    // Overlapping window: merge in place, preserving the older boundary.
+    // Overlapping window: merge in place, keeping every already-loaded (incl. older) item.
     const interval = this.ingestPage({ page, isHead: true, setActive: false });
     if (!interval) return;
+
+    // Re-compute hasMoreTail from the FETCHED PAGE, not the merged interval. The interval's isTail is
+    // "sticky" — mergeTwoAnchoredIntervals ORs isTail — so a stale offline-DB window persisted as
+    // "complete" (isTail:true) keeps hasMoreTail=false through the merge, and "load older" stays dead.
+    // A full page (length == the limit we asked for) means older messages remain; a short page means we
+    // reached the channel start. Without a caller-supplied limit (a live-edit merge of unknown size)
+    // fall back to the interval's own flag. Pagination reads off STATE, so writing it here is what
+    // unblocks "load older"; a later executeQuery re-derives per page. Mirrors postQueryReconcile,
+    // which likewise derives this flag from the page rather than the interval.
+    const { requestedLimit } = options ?? {};
+    const canDeriveTail = typeof requestedLimit === 'number';
+    const reachedChannelStart =
+      canDeriveTail &&
+      page.length < Math.min(requestedLimit, DEFAULT_CHANNEL_MESSAGE_LIST_PAGE_SIZE);
+    const hasMoreTail = canDeriveTail ? !reachedChannelStart : interval.hasMoreTail;
+
+    // Correct the INTERVAL flags too, not just state. `intervalsOverlap` (the merge test in
+    // ingestPage) consults `interval.isTail`: a sticky `isTail:true` inherited from a "complete"
+    // offline-DB window makes ANY older page count as overlapping this head interval — so a far
+    // jump's load-older welds two pages-apart sets into one. Derive isTail from the page here like the
+    // state above; mirrors postQueryReconcile (`interval.isTail = hasMoreTail === false`). Only a
+    // genuine channel-start interval (no older messages) keeps isTail:true.
+    interval.hasMoreTail = hasMoreTail;
+    interval.isTail = hasMoreTail === false;
 
     this.setActiveInterval(interval, { updateState: false });
     this.state.partialNext({
       items: this.intervalToItems(interval),
-      // The newest slice is loaded (head anchored), so after merging the head window there is
-      // nothing newer to load. hasMoreTail / cursor are deliberately preserved (see above).
+      // The newest slice is loaded (head anchored), so there is nothing newer to load.
       hasMoreHead: false,
+      hasMoreTail,
+      // Tailward = the oldest loaded id (interval item ids are created_at asc), null once we reached
+      // the channel start.
+      cursor: {
+        headward: null,
+        tailward: hasMoreTail ? (interval.itemIds[0] ?? null) : null,
+      },
     });
 
     // With the newest page merged in, drop any loaded message the page proves was hard-deleted.

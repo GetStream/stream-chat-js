@@ -1735,20 +1735,20 @@ describe('MessagePaginator', () => {
       expect(paginator.items?.map((message) => message.id)).toEqual(['m1', 'm2', 'm3']);
     });
 
-    it('preserves hasMoreTail / cursor.tailward when merging a partial newest window', () => {
+    it('keeps hasMoreTail and anchors the tail cursor to the loaded oldest when merging a partial newest window', () => {
       // Only the newest window is loaded and older items still exist (hasMoreTail true). Merging a
       // short page (fewer than pageSize) whose first item is the set's first item must NOT clear
-      // hasMoreTail: re-deriving it from this page's length would wrongly break "load older", so the
-      // merge preserves the existing hasMoreTail / cursor instead.
+      // hasMoreTail — re-deriving it from the page's LENGTH would wrongly break "load older". The tail
+      // boundary is taken from the MERGED interval, so hasMoreTail stays true and the cursor anchors to
+      // the loaded oldest (m1) — the correct "load older" anchor.
       const { paginator, m1, m2 } = setupLoadedHead({ isTail: false });
       expect(paginator.state.getLatestValue().hasMoreTail).toBe(true);
-      const tailwardBefore = paginator.state.getLatestValue().cursor?.tailward;
 
       const editedM3 = m('m3', '03', { text: 'edited' });
       paginator.mergeNewestPage([m1, m2, editedM3]);
 
       expect(paginator.state.getLatestValue().hasMoreTail).toBe(true);
-      expect(paginator.state.getLatestValue().cursor?.tailward).toBe(tailwardBefore);
+      expect(paginator.state.getLatestValue().cursor?.tailward).toBe('m1');
       expect(paginator.getItem('m3')?.text).toBe('edited');
     });
 
@@ -1817,7 +1817,6 @@ describe('MessagePaginator', () => {
 
     it('treats a window sharing only the loaded newest id as OVERLAP, not disjoint (boundary)', () => {
       const { paginator, m3 } = setupLoadedHead({ isTail: false });
-      const tailwardBefore = paginator.state.getLatestValue().cursor?.tailward;
       // Exactly one shared id (the loaded newest, m3): the minimal-overlap boundary. This must merge
       // (append m4/m5, keep older loadable), NOT reset to the window.
       paginator.mergeNewestPage([m3, m('m4', '04'), m('m5', '05')]);
@@ -1831,7 +1830,8 @@ describe('MessagePaginator', () => {
       ]);
       expect(paginator.itemIntervals).toHaveLength(1);
       expect(paginator.state.getLatestValue().hasMoreTail).toBe(true);
-      expect(paginator.state.getLatestValue().cursor?.tailward).toBe(tailwardBefore);
+      // The tail cursor anchors to the loaded oldest (m1), derived from the merged interval.
+      expect(paginator.state.getLatestValue().cursor?.tailward).toBe('m1');
     });
 
     // Builds the "jumped away" shape: the newest slice is loaded as one interval, and a separate
@@ -2377,6 +2377,363 @@ describe('MessagePaginator', () => {
       const paginator = loadHead([msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
       expect(() => paginator.mergeNewestPage([msg('m1', 1), msg('m3', 3)])).not.toThrow();
       expect(paginator.getItem('m2')).toBeUndefined();
+    });
+  });
+
+  // seedFirstPageSync is the synchronous channel-open seed (Channel.query / hydrateActiveChannels).
+  // With `options.reconcile` it doubles as the reconnect / re-hydrate fold: over an already-loaded
+  // window it delegates to mergeNewestPage (merge + destructive reconcile + disjoint rebuild), whose
+  // internals are covered above — these tests pin only the ROUTING decision (which branch it picks).
+  describe('seedFirstPageSync() — reconcile routing', () => {
+    const msg = (id: string, minute: number, overrides: Partial<MessageResponse> = {}) =>
+      createMessage({
+        cid: 'channel-id',
+        id,
+        created_at: new Date(Date.UTC(2020, 0, 1, 0, minute, 0)).toISOString(),
+        ...overrides,
+      });
+
+    // The plain-seed branch runs seedUnreadSnapshot (reads getClient().user); give the channel a
+    // benign client with no current user so it no-ops instead of throwing on the bare mock.
+    const reconcileChannel = {
+      cid: 'channel-id',
+      getReplies: vi.fn(),
+      query: vi.fn(),
+      getClient: () => ({ user: undefined }),
+    } as unknown as Channel;
+
+    const makePaginator = () =>
+      new MessagePaginator({
+        channel: reconcileChannel,
+        itemIndex: new StoreBackedItemIndex<LocalMessage>({
+          getEntityId: (message) => message.id,
+        }),
+      });
+
+    const loadHead = (messages: LocalMessage[]) => {
+      const paginator = makePaginator();
+      paginator.ingestPage({
+        page: messages,
+        isHead: true,
+        isTail: false,
+        setActive: true,
+      });
+      return paginator;
+    };
+
+    const ids = (paginator: MessagePaginator) =>
+      paginator.items?.map((message) => message.id);
+
+    it('REPRO(interval): reconnect re-establishes hasMoreTail over a stale "complete" INTERVAL (offline DB)', () => {
+      const paginator = makePaginator();
+      // Offline-DB window persisted as "complete" — the INTERVAL itself has isTail=true / hasMoreTail
+      // false, even though the channel has older messages the cache never held. (This is what my
+      // earlier state-only corruption failed to reproduce.)
+      paginator.ingestPage({
+        page: [msg('m1', 1), msg('m2', 2), msg('m3', 3)],
+        isHead: true,
+        isTail: true,
+        setActive: true,
+      });
+      expect(paginator.state.getLatestValue().hasMoreTail).toBe(false);
+
+      // Reconnect fetches a FULL page (requestedLimit == page length) → older messages remain, so
+      // hasMoreTail must be RE-COMPUTED from the page (not read off the stale interval flag).
+      paginator.seedFirstPageSync(
+        [msg('m1', 1), msg('m2', 2), msg('m3', 3)],
+        3,
+        undefined,
+        {
+          reconcile: true,
+        },
+      );
+
+      expect(paginator.state.getLatestValue().hasMoreTail).toBe(true);
+      expect(paginator.state.getLatestValue().cursor?.tailward).toBe('m1');
+    });
+
+    it('JOURNEY: a reconnect re-seed over a stale window keeps "load older" working end-to-end', async () => {
+      // The exact user flow that regressed: open a channel, its window is preloaded from the offline DB
+      // with a dead cursor, a reconnect re-seeds, then the user scrolls up. "Load older" must fetch and
+      // append the previous page — a component-level test (checking only which messages merged) missed
+      // this because the break was in the CURSOR, so drive the real executeQuery pagination here.
+      const older = [
+        msg('m01', 1),
+        msg('m02', 2),
+        msg('m03', 3),
+        msg('m04', 4),
+        msg('m05', 5),
+      ];
+      const doRequest = vi.fn().mockResolvedValue({
+        items: older,
+        cursor: { tailward: 'm01', headward: 'm05' },
+      });
+      const paginator = new MessagePaginator({
+        channel: reconcileChannel,
+        itemIndex: new StoreBackedItemIndex<LocalMessage>({ getEntityId: (m) => m.id }),
+        paginatorOptions: { doRequest },
+      });
+
+      const head = [
+        msg('m06', 6),
+        msg('m07', 7),
+        msg('m08', 8),
+        msg('m09', 9),
+        msg('m10', 10),
+      ];
+      // Offline-DB window persisted as "complete" — the INTERVAL itself is isTail:true / hasMoreTail
+      // false (the real stale shape; corrupting only state would miss the bug).
+      paginator.ingestPage({ page: head, isHead: true, isTail: true, setActive: true });
+      expect(paginator.state.getLatestValue().hasMoreTail).toBe(false);
+      paginator.seedFirstPageSync(head, 5, undefined, { reconcile: true }); // reconnect re-seed
+
+      // The user scrolls up. If the re-seed left the dead cursor, executeQuery no-ops (hasMoreTail
+      // false) and nothing loads; with the cursor re-derived it fetches and appends the older page.
+      await paginator.executeQuery({ direction: 'tailward' });
+
+      expect(doRequest).toHaveBeenCalled();
+      expect(paginator.items?.map((m) => m.id)).toEqual([
+        'm01',
+        'm02',
+        'm03',
+        'm04',
+        'm05',
+        'm06',
+        'm07',
+        'm08',
+        'm09',
+        'm10',
+      ]);
+    });
+
+    it('a reconnect re-seed while JUMPED AWAY does not weld the newest page into the active older window', () => {
+      const paginator = makePaginator();
+      // Head window (newest), loaded on open.
+      paginator.ingestPage({
+        page: [msg('m080', 80), msg('m090', 90), msg('m100', 100)],
+        isHead: true,
+        isTail: false,
+        setActive: true,
+      });
+      // Jump to a far, DISJOINT older window (like clicking a quoted message in another set) — it
+      // becomes the active interval and is NOT the head.
+      paginator.ingestPage({
+        page: [msg('m020', 20), msg('m021', 21), msg('m022', 22)],
+        isHead: false,
+        isTail: false,
+        setActive: true,
+      });
+      expect(paginator.isActiveIntervalAtHead).toBe(false);
+      const before = paginator.items?.map((m) => m.id);
+
+      // A reconnect re-seeds the newest page (channel.reload → watch → seedFirstPageSync). It must NOT
+      // weld the newest into the jumped-away window — the two message sets stay separate.
+      paginator.seedFirstPageSync(
+        [msg('m080', 80), msg('m090', 90), msg('m100', 100)],
+        3,
+        undefined,
+        { reconcile: true },
+      );
+
+      expect(paginator.isActiveIntervalAtHead).toBe(false); // still on the jumped window
+      expect(paginator.items?.map((m) => m.id)).toEqual(before); // unchanged — no weld
+    });
+
+    it('AUDIT: disjoint reconnect rebuilds to the fresh page instead of welding across the gap', () => {
+      const paginator = loadHead([msg('m01', 1), msg('m02', 2), msg('m03', 3)]);
+      // 100+ new arrived while offline → the fetched newest page shares NO id with the loaded window.
+      paginator.seedFirstPageSync(
+        [msg('m10', 10), msg('m11', 11), msg('m12', 12)],
+        3,
+        undefined,
+        {
+          reconcile: true,
+        },
+      );
+      // Must NOT weld m10..m12 across the gap into m01..m03 (which hides m04..m09 with no way to reach
+      // them). Rebuild to the fresh page so scrolling up reloads the gap contiguously.
+      expect(paginator.items?.map((m) => m.id)).toEqual(['m10', 'm11', 'm12']);
+    });
+
+    it('AUDIT: an empty reconnect page (no snapshot) does not blank the loaded window', () => {
+      const paginator = loadHead([msg('m01', 1), msg('m02', 2), msg('m03', 3)]);
+      // A transient empty page on reconnect must not wipe the list on its own.
+      paginator.seedFirstPageSync([], 3, undefined, { reconcile: true });
+      expect(paginator.items?.map((m) => m.id)).toEqual(['m01', 'm02', 'm03']);
+    });
+
+    it('AUDIT e2e: after a disjoint rebuild, "load older" reloads the gap, not the discarded stale window', async () => {
+      const gap = [msg('m175', 175), msg('m176', 176), msg('m177', 177)];
+      const doRequest = vi.fn().mockResolvedValue({
+        items: gap,
+        cursor: { tailward: 'm175', headward: 'm177' },
+      });
+      const paginator = new MessagePaginator({
+        channel: reconcileChannel,
+        itemIndex: new StoreBackedItemIndex<LocalMessage>({ getEntityId: (m) => m.id }),
+        paginatorOptions: { doRequest },
+      });
+      // The newest window loaded when the user went offline.
+      paginator.ingestPage({
+        page: [msg('m078', 78), msg('m079', 79), msg('m080', 80)],
+        isHead: true,
+        isTail: false,
+        setActive: true,
+      });
+      // Reconnect: 100+ new arrived, so the fetched newest page is DISJOINT from the loaded window.
+      paginator.seedFirstPageSync(
+        [msg('m178', 178), msg('m179', 179), msg('m180', 180)],
+        3,
+        undefined,
+        {
+          reconcile: true,
+        },
+      );
+      // Scroll up: the rebuilt window must reload the gap contiguously — the stale m078..m080 are gone,
+      // not welded in with the in-between messages hidden.
+      await paginator.executeQuery({ direction: 'tailward' });
+      const ids = paginator.items?.map((m) => m.id);
+      expect(ids).not.toContain('m078');
+      expect(ids).toEqual(['m175', 'm176', 'm177', 'm178', 'm179', 'm180']);
+    });
+
+    it('a jump to a far disjoint message stays SEPARATE from the latest, even through a re-seed', async () => {
+      const around = [msg('m20', 20), msg('m21', 21), msg('m22', 22)];
+      const doRequest = vi.fn().mockResolvedValue({
+        items: around,
+        cursor: { tailward: 'm20', headward: 'm22' },
+      });
+      const paginator = new MessagePaginator({
+        channel: reconcileChannel,
+        itemIndex: new StoreBackedItemIndex<LocalMessage>({ getEntityId: (m) => m.id }),
+        paginatorOptions: { doRequest },
+      });
+      paginator.ingestPage({
+        page: [msg('m80', 80), msg('m90', 90), msg('m100', 100)],
+        isHead: true,
+        isTail: false,
+        setActive: true,
+      });
+      await paginator.jumpToMessage('m21');
+      // A latest-window re-seed (what watch() → seedFirstPageSync fires) must NOT weld the jumped
+      // window into the latest — mergeNewestPage skips because the head is not the active interval.
+      paginator.seedFirstPageSync(
+        [msg('m80', 80), msg('m90', 90), msg('m100', 100)],
+        3,
+        undefined,
+        {
+          reconcile: true,
+        },
+      );
+      expect(paginator.items?.map((m) => m.id)).toEqual(['m20', 'm21', 'm22']);
+      expect(paginator.itemIntervals.length).toBe(2);
+    });
+
+    it('reconciling seed clears a sticky isTail so a far older page cannot weld across the gap', () => {
+      const paginator = new MessagePaginator({
+        channel: reconcileChannel,
+        itemIndex: new StoreBackedItemIndex<LocalMessage>({ getEntityId: (m) => m.id }),
+        paginatorOptions: {},
+      });
+      // An offline-DB latest window rehydrated as "complete" — isTail:true even though older
+      // messages exist on the server (the stale offline window). This is the flag intervalsOverlap
+      // consults to decide a merge.
+      paginator.ingestPage({
+        page: [msg('m90', 90), msg('m95', 95), msg('m100', 100)],
+        isHead: true,
+        isTail: true,
+        setActive: true,
+      });
+      expect((paginator.itemIntervals[0] as { isTail?: boolean }).isTail).toBe(true);
+
+      // The reconciling seed at the derived page size (a FULL page => older messages remain) must
+      // clear the sticky isTail — not just state's hasMoreTail.
+      paginator.seedFirstPageSync(
+        [msg('m90', 90), msg('m95', 95), msg('m100', 100)],
+        3,
+        undefined,
+        { reconcile: true },
+      );
+      expect((paginator.itemIntervals[0] as { isTail?: boolean }).isTail).toBe(false);
+      expect(paginator.hasMoreTail).toBe(true);
+
+      // Jump to a far OLDER window as a separate interval.
+      const island = paginator.ingestPage({
+        page: [msg('m10', 10), msg('m11', 11), msg('m12', 12)],
+        isHead: false,
+        isTail: false,
+        setActive: true,
+      });
+      expect(paginator.itemIntervals.length).toBe(2);
+
+      // Load older from the island: a page older than it, nowhere near the latest window. With a
+      // sticky isTail on the latest, intervalsOverlap would (wrongly) treat this as overlapping the
+      // latest and weld the two pages-apart sets into one.
+      paginator.ingestPage({
+        page: [msg('m7', 7), msg('m8', 8), msg('m9', 9)],
+        isTail: false,
+        setActive: false,
+        targetIntervalId: island?.id,
+      });
+
+      // Stays two separate intervals — the older page merges only into the island.
+      expect(paginator.itemIntervals.length).toBe(2);
+    });
+
+    it('reconcile + already-loaded: folds the fresh page and drops a within-span hard-delete', () => {
+      const paginator = loadHead([msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
+      // m2 hard-deleted while offline; the re-seed's authoritative page comes back without it.
+      paginator.seedFirstPageSync([msg('m1', 1), msg('m3', 3)], 3, undefined, {
+        reconcile: true,
+      });
+      expect(ids(paginator)).toEqual(['m1', 'm3']);
+      expect(paginator.getItem('m2')).toBeUndefined();
+    });
+
+    it('reconcile + snapshot: drops a trailing ghost while keeping a message that arrived during the fetch', () => {
+      const paginator = loadHead([msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
+      // A live message lands AFTER the pre-fetch snapshot was taken (so it is not in candidateIds).
+      paginator.ingestItem(msg('m4', 4));
+      const candidateIds = new Set(['m1', 'm2', 'm3']);
+      // The page (missing m3 — the hard-deleted newest — and predating m4) is the server truth.
+      paginator.seedFirstPageSync([msg('m1', 1), msg('m2', 2)], 3, undefined, {
+        reconcile: true,
+        candidateIds,
+      });
+      // m3 removed (in the snapshot, absent from the page, at the top edge); m4 kept (a live arrival).
+      expect(ids(paginator)).toEqual(['m1', 'm2', 'm4']);
+    });
+
+    it('reconcile on a cold (never-seeded) paginator: plain-seeds the page', () => {
+      const paginator = makePaginator();
+      expect(paginator.items).toBeUndefined();
+      paginator.seedFirstPageSync([msg('m1', 1), msg('m2', 2)], 25, undefined, {
+        reconcile: true,
+      });
+      expect(ids(paginator)).toEqual(['m1', 'm2']);
+    });
+
+    it('WITHOUT the reconcile flag: plain-seeds and never reconciles (the pinned-list contract)', () => {
+      const paginator = loadHead([msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
+      // Same missing-m2 page, but no reconcile flag → additive seed; m2 is NOT removed.
+      paginator.seedFirstPageSync([msg('m1', 1), msg('m3', 3)], 3);
+      expect(paginator.getItem('m2')).toBeDefined();
+    });
+
+    it('reconcile + a jump/around re-seed: applies jump semantics, never reconciles the latest window', () => {
+      const paginator = loadHead([msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
+      // An around open is not the latest window, so the loaded messages must not be reconciled away.
+      paginator.seedFirstPageSync(
+        [msg('m5', 5), msg('m6', 6)],
+        25,
+        { id_around: 'm5' },
+        {
+          reconcile: true,
+        },
+      );
+      expect(paginator.getItem('m1')).toBeDefined();
+      expect(paginator.getItem('m2')).toBeDefined();
+      expect(paginator.getItem('m3')).toBeDefined();
     });
   });
 

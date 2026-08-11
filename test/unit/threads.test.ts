@@ -441,6 +441,35 @@ describe('Threads 2.0', () => {
           expect(repliesOf(thread).map((reply) => reply.id)).to.include(failedMessage.id);
         });
 
+        it('re-derives a paginatable reply cursor over a stale window (Thread.reload stays paginatable offline)', () => {
+          const existingReply = generateMsg({
+            parent_id: parentMessageResponse.id,
+            created_at: '2020-01-01T00:00:00.000Z',
+          }) as MessageResponse;
+          // Head-anchored, older replies still to load (reply_count > loaded).
+          const thread = createTestThread({
+            latest_replies: [existingReply],
+            reply_count: 10,
+          });
+          // Simulate a reply window preloaded with a stale/"complete" cursor (offline DB): "load older
+          // replies" is dead if the reconnect hydrate PRESERVES it instead of re-deriving.
+          thread.messagePaginator.state.partialNext({
+            hasMoreTail: false,
+            cursor: { tailward: null, headward: null },
+          });
+          expect(thread.messagePaginator.state.getLatestValue().hasMoreTail).to.be.false;
+
+          // Reconnect hydrate (Thread.reload → hydrateState → mergeNewestPage) must RE-DERIVE the cursor
+          // from the merged reply window so pagination works again.
+          const hydrationThread = createTestThread({
+            latest_replies: [existingReply],
+            reply_count: 10,
+          });
+          thread.hydrateState(hydrationThread);
+
+          expect(thread.messagePaginator.state.getLatestValue().hasMoreTail).to.be.true;
+        });
+
         it('merges the incoming newest reply window into the reply paginator', () => {
           const existingReply = generateMsg({
             parent_id: parentMessageResponse.id,
@@ -583,6 +612,42 @@ describe('Threads 2.0', () => {
           await loadedThread.reload();
           expect(stub.secondCall.args[0]?.reply_limit).to.equal(7);
           expect(loadedThread.messagePaginator.pageSize).to.not.equal(7);
+        });
+
+        it('removes a reply hard-deleted while offline and keeps one that arrived during the fetch', async () => {
+          // End-to-end through the REAL reload orchestration (not a hand-built snapshot): this is what
+          // proves the snapshot-before-await guarantee — the thing the paginator-level tests assume.
+          const r1 = makeReply({ id: 'r1', created_at: '2020-01-01T00:00:01.000Z' });
+          const r2 = makeReply({ id: 'r2', created_at: '2020-01-01T00:00:02.000Z' });
+          // r3 is the newest loaded reply — hard-deleted by someone else while we were offline.
+          const r3 = makeReply({ id: 'r3', created_at: '2020-01-01T00:00:03.000Z' });
+          const thread = createTestThread({
+            latest_replies: [r1, r2, r3],
+            reply_count: 3,
+          });
+          expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1', 'r2', 'r3']);
+
+          // A brand-new reply that lands via WS DURING the reload fetch — after reload() snapshots the
+          // loaded ids, before hydrateState runs. Like the r3 ghost it is absent from the server page,
+          // so a naive "loaded − serverPage" would wrongly drop it; the pre-fetch snapshot must save it.
+          const r4 = makeReply({ id: 'r4', created_at: '2020-01-01T00:00:04.000Z' });
+
+          // The server's authoritative page (computed before r4 existed) has r3 hard-deleted, no r4.
+          const hydrationThread = createTestThread({
+            latest_replies: [r1, r2],
+            reply_count: 2,
+          });
+
+          sinon.stub(client, 'getThreadAndHydrate').callsFake(async () => {
+            thread.messagePaginator.ingestItem(formatMessage(r4)); // live arrival during the await
+            return hydrationThread;
+          });
+
+          await thread.reload();
+
+          // r3 (in the pre-fetch snapshot, absent from the server page) → hard-delete, removed.
+          // r4 (arrived AFTER the snapshot) → not in the snapshot → kept.
+          expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1', 'r2', 'r4']);
         });
       });
 

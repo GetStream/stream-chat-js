@@ -17,7 +17,6 @@ import {
 } from './utils';
 import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
-import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import type {
   AIState,
   APIResponse,
@@ -175,6 +174,8 @@ export class Channel extends ChannelApi {
   lastTypingEvent: Date | null;
   isTyping: boolean;
   disconnected: boolean;
+  /** Re-entrancy guard for {@link Channel.reload} (mirrors Thread.reload's isLoading guard). */
+  private _reloading = false;
   push_preferences?: Gen_ChannelPushPreferencesResponse;
   public readonly configState = new StateStore<ChannelInstanceConfig>({});
   public readonly messageComposer: MessageComposer;
@@ -1298,6 +1299,46 @@ export class Channel extends ChannelApi {
   }
 
   /**
+   * Re-watch the channel and refresh its FULL loaded message window — the channel analog of
+   * {@link Thread.reload}. Used on reconnect to catch up AND reconcile hard deletes that happened
+   * while offline: a hard delete reaches other clients via no event, so an offline client only learns
+   * of it by diffing the re-queried page.
+   *
+   * This is intentionally thin: it only re-issues `watch()` with a limit sized to the loaded window
+   * (`items.length`, so the whole loaded window is refreshed — not the smaller channel-list page). The
+   * actual fold + destructive reconciliation happens inside `query()` → `seedFirstPageSync`
+   * (the same path the channel-list re-hydrate and React's `recoverState` use), driven by the loaded-id
+   * snapshot `query()` captures before its await. Owning that single path is what lets the SDK stop
+   * passing the reconciliation window/snapshot itself.
+   *
+   * Preserves failed (unsent) messages: an overlap merge keeps them (the reconcile's provenance guard
+   * never prunes a non-server message); only a disjoint rebuild can drop them, so any that actually
+   * fell out are re-ingested below.
+   */
+  async reload() {
+    if (this._reloading || (!this.initialized && !this.offlineMode)) return;
+    this._reloading = true;
+    try {
+      const paginator = this.messagePaginator;
+      // Captured BEFORE the await: request our full loaded window (not the list's smaller page), and
+      // remember failed (unsent) messages so a disjoint rebuild does not silently drop them.
+      const requestedLimit = paginator.items?.length || paginator.pageSize;
+      const failedBefore = (paginator.items ?? []).filter(
+        (message) => message.status === 'failed',
+      );
+
+      await this.watch({ messages: { limit: requestedLimit } });
+      this.offlineMode = false;
+
+      for (const failed of failedBefore) {
+        if (!paginator.getItem(failed.id)) paginator.ingestItem(failed);
+      }
+    } finally {
+      this._reloading = false;
+    }
+  }
+
+  /**
    * Stops watching the channel.
    *
    * @param request - The stop-watching request payload (optional).
@@ -1482,6 +1523,24 @@ export class Channel extends ChannelApi {
     options: ChannelGetOrCreateRequest = {},
     messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
   ) {
+    // Snapshot the loaded message ids BEFORE the network await, for a latest-window (re)seed only.
+    // When this query re-seeds an already-loaded window (reconnect / re-hydrate), seedFirstPageSync
+    // reconciles the fresh page against what is loaded, and the snapshot lets it tell an offline
+    // hard-delete (in the snapshot, absent from the page) from a message that arrives live
+    // during the fetch (not in the snapshot). Captured here — the only place with the pre-await state —
+    // so callers (channel.reload, watch) need not thread it. Empty on a cold open, so it is harmless.
+    const candidateIds =
+      messageSetToAddToIfDoesNotExist === 'latest'
+        ? new Set(this.messagePaginator.items?.map((message) => message.id) ?? [])
+        : undefined;
+
+    // The INITIAL channel-open query honors the paginator's OWN pageSize (light on native, 25) rather
+    // than the server's larger default — opening loads the same page size it paginates by. A caller
+    // that already knows how much to fetch passes an explicit messages.limit, which is respected as-is:
+    // a reconnect/re-hydrate sizes it to the loaded window (channel.reload → items.length), and
+    // pagination/around pass their own cursors + limit.
+    const requestedPageSize = options?.messages?.limit ?? this.messagePaginator.pageSize;
+
     // Make sure we wait for the connect promise if there is a pending one
     await this.getClient().wsPromise;
 
@@ -1489,6 +1548,13 @@ export class Channel extends ChannelApi {
       data: this._data,
       state: true,
       ...options,
+      // Ask the server for exactly the initial-open page size (not its default), so the loaded window
+      // matches the paginator's pageSize. Explicit messages (reconnect/around/pagination) pass through.
+      messages:
+        options?.messages ??
+        (messageSetToAddToIfDoesNotExist === 'latest'
+          ? { limit: requestedPageSize }
+          : undefined),
     };
 
     const state = this.id
@@ -1542,8 +1608,6 @@ export class Channel extends ChannelApi {
     // latest-page open paths (watch/create) pass 'latest' — the paginator's own pagination queries
     // use 'current' and must not be reseeded as a first page here.
     if (messageSetToAddToIfDoesNotExist === 'latest' && Array.isArray(state.messages)) {
-      const requestedPageSize =
-        options?.messages?.limit ?? DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE;
       // Pass the query's message pagination options through: a channel can be opened AROUND a
       // message (id_around / created_at_around), in which case the fetched page is a jump window,
       // not the latest page — the paginator must reconcile it with jump semantics.
@@ -1551,6 +1615,8 @@ export class Channel extends ChannelApi {
         state.messages.map(formatMessage),
         requestedPageSize,
         options?.messages,
+        // Re-seed of an already-loaded window folds + reconciles instead of blanking (see above).
+        { candidateIds, reconcile: true },
       );
     }
 

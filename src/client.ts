@@ -1445,6 +1445,8 @@ export class StreamChat extends ChatApi {
         c.messagePaginator.seedFirstPageSync(
           channelState.messages.map(formatMessage),
           requestedPageSize,
+          undefined,
+          { reconcile: true },
         );
       }
 
