@@ -418,6 +418,12 @@ export type StreamChatOptions = {
    */
   wsConnection?: StableWSConnection;
   /**
+   * Overrides the `WebSocket` constructor used by `StableWSConnection`. Intended purely for
+   * testing so a mock/drivable WebSocket can be swapped in; production code should leave this
+   * unset and rely on the platform's global `WebSocket`.
+   */
+  WebSocketImpl?: typeof WebSocket;
+  /**
    * Sets a suffix to the wsUrl when it is being built in `wsConnection`. Is meant to be
    * used purely in testing suites and should not be used in production apps.
    */

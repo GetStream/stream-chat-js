@@ -1,7 +1,5 @@
-import type jwt from 'jsonwebtoken';
-
 import { chatLoggerSystem } from './logger';
-import { JWTServerToken, JWTUserToken, UserFromToken } from './signing';
+import { UserFromToken } from './signing';
 import { isFunction } from './utils';
 import type { TokenOrProvider } from './types';
 
@@ -16,27 +14,16 @@ export type TokenManagerMinimalUser = { id: string; anon?: boolean };
 export class TokenManager {
   loadTokenPromise: Promise<string> | null;
   type: 'static' | 'provider';
-  secret?: jwt.Secret;
   token?: string;
   tokenProvider?: TokenOrProvider;
   user?: TokenManagerMinimalUser;
   /**
-   * Initializes the token manager, optionally with a server-side API secret used to mint tokens
-   * locally.
-   *
-   * @param secret - Optional API secret. When provided, the manager will sign server tokens locally.
+   * Initializes the token manager.
    */
-  constructor(secret?: jwt.Secret) {
+  constructor() {
     this.loadTokenPromise = null;
-    if (secret) {
-      this.secret = secret;
-    }
 
     this.type = 'static';
-
-    if (this.secret) {
-      this.token = JWTServerToken(this.secret);
-    }
   }
 
   /**
@@ -63,11 +50,6 @@ export class TokenManager {
       this.type = 'static';
     }
 
-    if (!tokenOrProvider && this.user && this.secret) {
-      this.token = JWTUserToken(this.secret, user.id, {}, {});
-      this.type = 'static';
-    }
-
     await this.loadToken();
   };
 
@@ -87,11 +69,6 @@ export class TokenManager {
   validateToken = (tokenOrProvider: TokenOrProvider, user: TokenManagerMinimalUser) => {
     // allow empty token for anon user
     if (user && user.anon && !tokenOrProvider) return;
-
-    // Don't allow empty token for non-server side client.
-    if (!this.secret && !tokenOrProvider) {
-      throw new Error('User token can not be empty');
-    }
 
     if (
       tokenOrProvider &&
@@ -156,10 +133,6 @@ export class TokenManager {
 
     if (this.user && this.user.anon && !this.token) {
       return this.token;
-    }
-
-    if (this.secret) {
-      return JWTServerToken(this.secret);
     }
 
     throw new Error(

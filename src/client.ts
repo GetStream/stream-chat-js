@@ -3,7 +3,6 @@
 
 import type { AxiosInstance, AxiosRequestConfig } from 'axios';
 import axios from 'axios';
-import https from 'https';
 
 import { Channel } from './channel';
 import { ClientState } from './client_state';
@@ -248,7 +247,7 @@ export class StreamChat extends ChatApi {
    * @param options.logLevel - Minimum log level for the default sink (optional, defaults to `'info'`).
    * @param options.logOptions - Per-scope sink/level overrides for `chatLoggerSystem` (optional).
    * @param options.timeout - Request timeout (optional, defaults to `3000`).
-   * @param options.httpsAgent - Custom `httpsAgent` (optional, in Node defaults to `https.agent()`).
+   * @param options.httpsAgent - Custom `httpsAgent` (optional).
    */
   constructor(key: string, options: StreamChatOptions = {}) {
     // generated client requires ApiClient right away
@@ -290,9 +289,6 @@ export class StreamChat extends ChatApi {
     this.axiosInstance = axios.create({
       timeout: 3000,
       withCredentials: false,
-      httpsAgent: this.node
-        ? new https.Agent({ keepAlive: true, keepAliveMsecs: 3000 })
-        : undefined,
       ...this.options.axiosRequestConfig,
       paramsSerializer: axiosParamsSerializer,
     });

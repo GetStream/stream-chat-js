@@ -21,7 +21,7 @@ const modules = Object.keys({
 // do not externalize modules that are ignored in browser field
 // externalizing them will cause esbuild to not replace the imports
 // in the bundles
-const browserIgnoreModules = Object.keys(packageJson.browser);
+const browserIgnoreModules = []; // Object.keys(packageJson.browser);
 const browserExternal = modules.filter(
   (module) => !browserIgnoreModules.includes(module),
 );
