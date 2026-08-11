@@ -2,7 +2,7 @@ import type { AxiosRequestConfig } from 'axios';
 import { ChannelState } from './channel_state';
 import { CooldownTimer } from './CooldownTimer';
 import { isEphemeral } from './errors';
-import { applyReactionLocally } from './messageStore';
+import { applyReactionLocally } from './entityStore';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';

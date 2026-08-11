@@ -21,7 +21,7 @@ import { sleep } from '../../../../src/utils';
 import * as utils from '../../../../src/utils';
 import { makeComparator } from '../../../../src/pagination/sortCompiler';
 import { DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES } from '../../../../src/constants';
-import { ItemIndex } from '../../../../src/pagination/ItemIndex';
+import { StoreBackedItemIndex } from '../../../../src/entityStore/StoreBackedItemIndex';
 
 const toNextTick = async () => {
   const sleepPromise = sleep(0);
@@ -92,7 +92,7 @@ class Paginator extends IncompletePaginator {
   getNextQueryShape = vi.fn().mockReturnValue(defaultNextQueryShape);
 }
 
-const itemIndex = new ItemIndex<TestItem>({ getId: ({ id }) => id });
+const itemIndex = new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id });
 const a: TestItem = { id: 'a', age: 30, name: 'A' };
 const b: TestItem = { id: 'b', age: 25, name: 'B' };
 const c: TestItem = { id: 'c', age: 25, name: 'C' };
@@ -364,13 +364,52 @@ describe('BasePaginator', () => {
       expect(paginator.mockClientQuery).toHaveBeenCalledTimes(3);
     });
 
-    it('keeps hasMoreHead unchanged on a keepPreviousItems first-page refresh (offset)', async () => {
-      // Regression: hasMoreHead is derived from the start offset only when the first page resets
-      // the window (isFirstPage && !keepPreviousItems). A keepPreviousItems refresh is isFirstPage
-      // but does NOT reset the offset, so it must not re-derive hasMoreHead from the grown offset.
+    it('reload() re-fetches the FIRST page (offset 0) after paginating, not the current page', async () => {
+      // Regression: executeQuery derived the query shape (which carries `offset`) BEFORE the reset
+      // restored the initial offset, so reload() on an already-paginated list re-fetched the current
+      // page (e.g. page 2) and replaced page 1 with it. Probe `this.offset` when the shape is derived
+      // to prove the reset applies to the OUTGOING request, not just to state after the fact.
+      const offsetAtQueryShape: number[] = [];
+      class OffsetProbePaginator extends IncompletePaginator {
+        getNextQueryShape = vi.fn(() => {
+          offsetAtQueryShape.push(this.offset);
+          return defaultNextQueryShape;
+        });
+      }
+      const paginator = new OffsetProbePaginator({ pageSize: 1 });
+
+      // Page 1 (offset 0 -> 1)
+      let nextPromise = paginator.toTail();
+      await sleep(0);
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await nextPromise;
+      expect(paginator.offset).toBe(1);
+
+      // Page 2 (offset 1 -> 2)
+      nextPromise = paginator.toTail();
+      paginator.queryResolve({ items: [{ id: 'id2' }] });
+      await nextPromise;
+      expect(paginator.offset).toBe(2);
+
+      // reload() must derive its request from offset 0, not the paginated 2.
+      nextPromise = paginator.reload();
+      await sleep(0);
+      expect(offsetAtQueryShape.at(-1)).toBe(0);
+
+      paginator.queryResolve({ items: [{ id: 'id1' }] });
+      await nextPromise;
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+    });
+
+    it('keepPreviousItems + reset is non-destructive: resets to page 1 but keeps the loaded items (offset)', async () => {
+      // `reset` restores the first-page offset (so the refresh fetches page 1, not the paginated page),
+      // while `keepPreviousItems` keeps the loaded items AND their storage intact — the fresh page is
+      // MERGED in, not blanked/collapsed. This is what keeps the channel list stable on a pull-to-refresh
+      // / reconnect refresh. Guards: (a) offset resets to page 1; (b) items stay visible during the fetch;
+      // (c) the list is merged (not collapsed to just page 1); (d) hasMoreHead stays anchored at 0.
       const paginator = new Paginator({ pageSize: 1 });
 
-      // First page from offset 0 -> head is loaded.
+      // Page 1 (offset 0 -> 1)
       let nextPromise = paginator.toTail();
       await sleep(0);
       paginator.queryResolve({ items: [{ id: 'id1' }] });
@@ -378,22 +417,53 @@ describe('BasePaginator', () => {
       expect(paginator.hasMoreHead).toBe(false);
       expect(paginator.offset).toBe(1);
 
-      // Grow the tail so the offset is well past 0.
+      // Page 2 (offset 1 -> 2)
       nextPromise = paginator.toTail();
       paginator.queryResolve({ items: [{ id: 'id2' }] });
       await nextPromise;
       expect(paginator.offset).toBe(2);
-      expect(paginator.hasMoreHead).toBe(false);
+      expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]);
 
-      // A non-destructive first-page refresh (isFirstPage via reset, keepPreviousItems) must NOT
-      // flip hasMoreHead to true off the grown offset (2 > 0) — the window still starts at 0.
+      // keepPreviousItems reset: offset resets to page 1, items stay visible during the fetch.
       const refreshPromise = paginator.executeQuery({
         keepPreviousItems: true,
         reset: 'yes',
       });
+      expect(paginator.offset).toBe(0); // fetches page 1, not the paginated offset
+      expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id2' }]); // still visible during the fetch
+
+      // The fresh page 1 merges in non-destructively — the loaded list is NOT collapsed to just page 1.
       paginator.queryResolve({ items: [{ id: 'id1' }] });
       await refreshPromise;
+      expect(paginator.items?.map((i) => i.id).sort()).toEqual(['id1', 'id2']);
       expect(paginator.hasMoreHead).toBe(false);
+    });
+
+    it('keepPreviousItems + reset keeps the loaded items when an item is ingested mid-refresh (no rebuild-from-empty)', async () => {
+      // Regression: a keepPreviousItems refresh must NOT clear the item index. Otherwise an item ingested
+      // concurrently while the refresh query is in flight (e.g. a message.new from the offline-send replay
+      // on reconnect) rebuilds the list from an empty index and collapses it to just that one item until
+      // the query resolves. The previously-loaded items must survive the mid-refresh ingest.
+      const paginator = new Paginator({ pageSize: 3 });
+      const loadPromise = paginator.toTail();
+      await sleep(0);
+      paginator.queryResolve({ items: [a, b, c] });
+      await loadPromise;
+      expect(paginator.items).toEqual([a, b, c]);
+
+      // Start a keepPreviousItems refresh (query in flight, not yet resolved).
+      const refreshPromise = paginator.executeQuery({
+        keepPreviousItems: true,
+        reset: 'yes',
+      });
+
+      // A concurrent ingest lands mid-refresh — the already-loaded items must NOT be wiped.
+      paginator.ingestItem(v);
+      const idsMidRefresh = paginator.items?.map((item) => item.id) ?? [];
+      expect(idsMidRefresh).toEqual(expect.arrayContaining(['a', 'b', 'c']));
+
+      paginator.queryResolve({ items: [a, b, c] });
+      await refreshPromise;
     });
 
     it('anchors hasMoreHead from a new start offset when the window is re-established via reset (offset)', async () => {
@@ -1694,6 +1764,134 @@ describe('BasePaginator', () => {
         ]);
       });
 
+      // A live update can put an item into a logical interval before any page has been loaded (a
+      // channel archived while the archived list is still untouched). The first query must then be
+      // recognised as a first page, so the page is ingested with `isHead` and the logical interval
+      // it is holding gets reconciled instead of surviving next to the loaded window with the same
+      // id in it.
+      describe('first page after a live update into a logical interval', () => {
+        const intervalsOf = (p: Paginator) =>
+          // @ts-expect-error accessing protected property _itemIntervals
+          Array.from(p._itemIntervals.values()).map((itv) => ({
+            id: itv.id,
+            itemIds: itv.itemIds,
+          }));
+
+        const idHomes = (p: Paginator, id: string) =>
+          intervalsOf(p).filter((itv) => itv.itemIds.includes(id)).length;
+
+        const queryFirstPageAfterIngesting = async (
+          ingested: TestItem,
+          page: TestItem[],
+        ) => {
+          const freshPaginator = new Paginator({
+            itemIndex: new StoreBackedItemIndex<TestItem>({
+              getEntityId: ({ id }) => id,
+            }),
+            pageSize: page.length,
+          });
+          freshPaginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
+
+          freshPaginator.ingestItem(ingested); // live update → logical head
+          expect(freshPaginator.items).toStrictEqual([ingested]);
+          // items are present, but no page has been loaded — the next query is still a first page
+          expect(freshPaginator.isInitialized).toBe(false);
+
+          const queryPromise = freshPaginator.toTail();
+          await sleep(0);
+          freshPaginator.queryResolve({ items: page });
+          await queryPromise;
+
+          return freshPaginator;
+        };
+
+        // The ingest publishes `items`, but no page has been loaded — so the list's own query is
+        // still its first page and must be ingested as the head of the list. Treating it as a
+        // continuation leaves the loaded window claiming there are pages headward of it.
+        it('treats the query as a first page rather than a continuation', async () => {
+          const freshPaginator = new Paginator({
+            itemIndex: new StoreBackedItemIndex<TestItem>({
+              getEntityId: ({ id }) => id,
+            }),
+            pageSize: 3,
+          });
+          freshPaginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
+
+          freshPaginator.ingestItem(b);
+          expect(freshPaginator.items).toStrictEqual([b]); // items are published…
+          expect(
+            freshPaginator.isFirstPageQuery({ queryShape: defaultNextQueryShape }),
+          ).toBe(true); // …yet the next query still starts the list
+
+          const queryPromise = freshPaginator.toTail();
+          await sleep(0);
+          freshPaginator.queryResolve({ items: [a, b, d] });
+          await queryPromise;
+
+          expect(freshPaginator.hasMoreHead).toBe(false);
+          // @ts-expect-error accessing protected property _itemIntervals
+          expect(Array.from(freshPaginator._itemIntervals.values())).toStrictEqual([
+            expect.objectContaining({ hasMoreHead: false, isHead: true }),
+          ]);
+        });
+
+        // a(30) > b(25) > d(20) — distinct ages, so the expected order is unambiguous
+        it('absorbs the ingested item into the queried page', async () => {
+          const freshPaginator = await queryFirstPageAfterIngesting(b, [a, b, d]);
+
+          expect(idHomes(freshPaginator, b.id)).toBe(1);
+          expect(freshPaginator.items).toStrictEqual([a, b, d]);
+          expect(intervalsOf(freshPaginator)).toStrictEqual([
+            { id: expect.any(String), itemIds: ['a', 'b', 'd'] },
+          ]);
+        });
+
+        it('moves an ingested item the queried page sorts above to the other side', async () => {
+          // z(1) is the oldest item — it sorts past the tail of the page
+          const freshPaginator = await queryFirstPageAfterIngesting(z, [a, b, d]);
+
+          // stored exactly once, and no longer in the live head — that side means "newer than the
+          // loaded window", which the page just disproved
+          expect(idHomes(freshPaginator, z.id)).toBe(1);
+          expect(
+            intervalsOf(freshPaginator).find((itv) => itv.itemIds.includes(z.id))?.id,
+          ).toBe(LOGICAL_TAIL_INTERVAL_ID);
+          expect(freshPaginator.items).toStrictEqual([a, b, d]);
+        });
+
+        it('treats the query after resetState as a first page again', () => {
+          const freshPaginator = new Paginator({
+            itemIndex: new StoreBackedItemIndex<TestItem>({
+              getEntityId: ({ id }) => id,
+            }),
+          });
+          freshPaginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
+
+          freshPaginator.postQueryReconcile({
+            direction: 'tailward',
+            isFirstPage: true,
+            queryShape: defaultNextQueryShape,
+            requestedPageSize: 3,
+            results: { items: [a, b, c] },
+          });
+          expect(freshPaginator.isInitialized).toBe(true);
+
+          freshPaginator.resetState();
+
+          // same shape as before — only the reset tells the paginator nothing is loaded
+          expect(freshPaginator.isInitialized).toBe(false);
+          expect(
+            freshPaginator.isFirstPageQuery({ queryShape: defaultNextQueryShape }),
+          ).toBe(true);
+        });
+      });
+
       it('marks head and tail anchored intervals and removes existing logical intervals', () => {
         paginator.ingestItem(b);
         paginator.ingestPage({ page: [d] });
@@ -1975,7 +2173,7 @@ describe('BasePaginator', () => {
     describe('re-ingesting the sole item of the active interval', () => {
       it('keeps the item visible in state.items after an update', () => {
         const paginator = new Paginator({
-          itemIndex: new ItemIndex<TestItem>({ getId: ({ id }) => id }),
+          itemIndex: new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id }),
         });
         paginator.sortComparator = makeComparator<TestItem>({
           sort: [{ field: 'age', direction: -1 }],
@@ -1995,6 +2193,196 @@ describe('BasePaginator', () => {
         expect(paginator.items).toStrictEqual([confirmed]);
         // @ts-expect-error accessing protected property _activeIntervalId
         expect(paginator._activeIntervalId).toBe(LOGICAL_HEAD_INTERVAL_ID);
+      });
+    });
+
+    // A `Channel` is a mutable instance the paginator holds by reference: the event handler writes
+    // the new sort value into the very object the loaded page already contains, so by the time the
+    // paginator is asked to re-ingest it, the page is unsorted at exactly that one slot and the
+    // "previous snapshot" in the item index IS the updated object. Re-ingesting must still relocate
+    // it. The failure was position-dependent (only a slot the binary search probes compares the
+    // item with itself), so every index is covered.
+    describe('ingestItem for an item mutated in place', () => {
+      const indices = Array.from({ length: 10 }, (_, index) => index);
+
+      const setupLoadedPage = () => {
+        const page: TestItem[] = indices.map((i) => ({
+          id: `id-${i}`,
+          age: 100 - i * 10, // descending, matching the comparator below
+        }));
+        const paginator = new Paginator({
+          itemIndex: new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id }),
+        });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+        // first AND last page: the loaded window is the whole list, so an item moving to either end
+        // still belongs to it (mirrors a channel list that has loaded everything)
+        paginator.setItems({
+          isFirstPage: true,
+          isLastPage: true,
+          valueOrFactory: page,
+        });
+        return { page, paginator };
+      };
+
+      it.each(indices)('moves an item that became the first, from index %i', (index) => {
+        const { page, paginator } = setupLoadedPage();
+        const item = page[index];
+
+        item.age = 1000; // mutated in place — same object the paginator holds
+        paginator.ingestItem(item);
+
+        expect(paginator.items?.map(({ id }) => id)).toEqual([
+          item.id,
+          ...page.filter(({ id }) => id !== item.id).map(({ id }) => id),
+        ]);
+      });
+
+      it.each(indices)('moves an item that became the last, from index %i', (index) => {
+        const { page, paginator } = setupLoadedPage();
+        const item = page[index];
+
+        item.age = -1000;
+        paginator.ingestItem(item);
+
+        expect(paginator.items?.map(({ id }) => id)).toEqual([
+          ...page.filter(({ id }) => id !== item.id).map(({ id }) => id),
+          item.id,
+        ]);
+      });
+
+      it.each(indices)(
+        'moves an item into the middle of the page, from index %i',
+        (index) => {
+          const { page, paginator } = setupLoadedPage();
+          const item = page[index];
+
+          item.age = 45; // between the items aged 50 and 40
+          paginator.ingestItem(item);
+
+          const others = page.filter(({ id }) => id !== item.id);
+          const insertAt = others.findIndex(({ age }) => (age as number) < 45);
+          const expected = [
+            ...others.slice(0, insertAt),
+            item,
+            ...others.slice(insertAt),
+          ].map(({ id }) => id);
+          expect(paginator.items?.map(({ id }) => id)).toEqual(expected);
+        },
+      );
+
+      it.each(indices)('keeps an unchanged item in place, at index %i', (index) => {
+        const { page, paginator } = setupLoadedPage();
+
+        paginator.ingestItem(page[index]);
+
+        expect(paginator.items?.map(({ id }) => id)).toEqual(page.map(({ id }) => id));
+      });
+
+      // A partially loaded list (more pages tailward) whose loaded item moves to or past the end of
+      // the window: it is still an item the list has loaded, so it must stay visible. Exiling it to
+      // the pending region makes it vanish from the UI — unpin a channel sitting at the bottom of
+      // the loaded channel list and it disappears instead of settling back into place.
+      describe('an item moving to the edge of a partially loaded window', () => {
+        const setupPartiallyLoadedPage = () => {
+          const page: TestItem[] = indices.map((i) => ({
+            id: `id-${i}`,
+            age: 100 - i * 10,
+          }));
+          const paginator = new Paginator({
+            itemIndex: new StoreBackedItemIndex<TestItem>({
+              getEntityId: ({ id }) => id,
+            }),
+          });
+          paginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
+          // first page of several: the head is loaded, the tail is not
+          paginator.setItems({
+            isFirstPage: true,
+            isLastPage: false,
+            valueOrFactory: page,
+          });
+          return { page, paginator };
+        };
+
+        const intervalsHolding = (paginator: Paginator, id: string) =>
+          // @ts-expect-error accessing protected property _itemIntervals
+          Array.from(paginator._itemIntervals.values()).filter((itv) =>
+            itv.itemIds.includes(id),
+          );
+
+        // The item is the same object the interval holds, so by the time it is ingested the
+        // interval's bounds no longer contain it — a bounds-based lookup then fails to find it in
+        // the very interval it is a member of, and the stale entry is never taken out.
+        it('leaves no stale entry behind when an item moves past the loaded tail', () => {
+          const { page, paginator } = setupPartiallyLoadedPage();
+          const item = page[3];
+
+          item.age = -1000; // mutated in place, now sorts below everything loaded
+          paginator.ingestItem(item);
+
+          expect(intervalsHolding(paginator, item.id)).toHaveLength(1);
+        });
+
+        it('keeps an item that slid to the bottom of the head window', () => {
+          const { page, paginator } = setupPartiallyLoadedPage();
+          const item = page[3];
+
+          item.age = -1000;
+          paginator.ingestItem(item);
+
+          // it is still one of the first N the list has loaded — it must not disappear
+          expect(paginator.items?.map(({ id }) => id)).toEqual([
+            ...page.filter(({ id }) => id !== item.id).map(({ id }) => id),
+            item.id,
+          ]);
+        });
+
+        it('returns the last loaded item to its place across a pin/unpin round trip', () => {
+          const { page, paginator } = setupPartiallyLoadedPage();
+          const last = page[page.length - 1];
+
+          last.age = 1000; // pinned to the top
+          paginator.ingestItem(last);
+          expect(paginator.items?.[0]?.id).toBe(last.id);
+          expect(intervalsHolding(paginator, last.id)).toHaveLength(1);
+
+          last.age = 10; // unpinned — back to the end of the window
+          paginator.ingestItem(last);
+
+          expect(paginator.items?.map(({ id }) => id)).toEqual(page.map(({ id }) => id));
+          expect(intervalsHolding(paginator, last.id)).toHaveLength(1);
+        });
+
+        it('still hands an item leaving a floating middle window to the pending region', () => {
+          const page: TestItem[] = indices.map((i) => ({
+            id: `mid-${i}`,
+            age: 100 - i * 10,
+          }));
+          const paginator = new Paginator({
+            itemIndex: new StoreBackedItemIndex<TestItem>({
+              getEntityId: ({ id }) => id,
+            }),
+          });
+          paginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
+          // neither end of the list is loaded — the item really does belong to another page
+          paginator.ingestPage({ page, setActive: true });
+
+          const item = page[3];
+          item.age = -1000;
+          paginator.ingestItem(item);
+
+          expect(intervalsHolding(paginator, item.id).map((itv) => itv.id)).toEqual([
+            LOGICAL_TAIL_INTERVAL_ID,
+          ]);
+          expect(paginator.items?.map(({ id }) => id)).toEqual(
+            page.filter(({ id }) => id !== item.id).map(({ id }) => id),
+          );
+        });
       });
     });
 
@@ -2873,7 +3261,9 @@ describe('BasePaginator', () => {
           sort: [{ field: 'age', direction: -1 }], // newest (highest age) is the head
         });
       const withItemIndex = () =>
-        new Paginator({ itemIndex: new ItemIndex<TestItem>({ getId: ({ id }) => id }) });
+        new Paginator({
+          itemIndex: new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id }),
+        });
 
       // Subscribe to a single `intervalViews` field via a scoped selector (as `useStateStore` does),
       // ignoring the initial synchronous emit so `fires` counts only post-subscribe changes.
@@ -3036,7 +3426,7 @@ describe('BasePaginator', () => {
       // two tests drive the store-agnostic reconcile hook (reconcileChangedIds) directly after
       // replacing the stored item, mimicking a sibling write.
       it('refreshes logicalHead on a sibling update to an item that is off the active window', () => {
-        const index = new ItemIndex<TestItem>({ getId: ({ id }) => id });
+        const index = new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id });
         const paginator = new Paginator({ itemIndex: index });
         paginator.sortComparator = descByAge();
 
@@ -3075,7 +3465,7 @@ describe('BasePaginator', () => {
       });
 
       it('refreshes anchoredHead on a sibling update to a message it holds', () => {
-        const index = new ItemIndex<TestItem>({ getId: ({ id }) => id });
+        const index = new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id });
         const paginator = new Paginator({ itemIndex: index });
         paginator.sortComparator = descByAge();
 
@@ -3232,7 +3622,7 @@ describe('BasePaginator', () => {
 
       it('drops item-index membership so the id is no longer addressable', () => {
         // Fresh index so the shared module-level one is not polluted across tests.
-        const index = new ItemIndex<TestItem>({ getId: ({ id }) => id });
+        const index = new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id });
         const paginator = new Paginator({ itemIndex: index });
         paginator.ingestPage({ page: [item1, item2, item3], setActive: true });
         expect(paginator.getItem(item2.id)).toStrictEqual(item2);
@@ -3466,6 +3856,57 @@ describe('BasePaginator', () => {
     });
 
     describe('reload', () => {
+      // The request itself has to be built from the restart position: `getNextQueryShape()` reads
+      // the position out of state, so a reload that reset the state only afterwards would re-query
+      // the page the previous pagination had reached. Recording the position at shape-build time is
+      // what pins that down — asserting the resulting state cannot, since it is reset either way.
+      const recordPositionAtShapeBuild = (paginator: Paginator) => {
+        const positions: Array<{ cursor?: PaginatorCursor; offset: number }> = [];
+        paginator.getNextQueryShape = vi.fn(() => {
+          positions.push({ cursor: paginator.cursor, offset: paginator.offset });
+          return defaultNextQueryShape;
+        });
+        return positions;
+      };
+
+      it('builds the request from offset 0, not from where pagination stopped [offset pagination]', async () => {
+        const paginator = new Paginator({ pageSize: 2 });
+        paginator.state.next({
+          hasMoreHead: false,
+          hasMoreTail: true,
+          isLoading: false,
+          items: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }],
+          offset: 4,
+        });
+        const positions = recordPositionAtShapeBuild(paginator);
+
+        const reloadPromise = paginator.reload();
+        await sleep(0);
+        paginator.queryResolve({ items: [{ id: 'id1' }] });
+        await reloadPromise;
+
+        expect(positions).toEqual([{ cursor: undefined, offset: 0 }]);
+      });
+
+      it('builds the request from the initial cursor, not from the last one [cursor pagination]', async () => {
+        const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR, pageSize: 2 });
+        paginator.state.next({
+          cursor: { headward: 'headward1', tailward: 'tailward1' },
+          hasMoreHead: false,
+          hasMoreTail: true,
+          isLoading: false,
+          items: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }],
+        });
+        const positions = recordPositionAtShapeBuild(paginator);
+
+        const reloadPromise = paginator.reload();
+        await sleep(0);
+        paginator.queryResolve({ items: [{ id: 'id1' }] });
+        await reloadPromise;
+
+        expect(positions).toEqual([{ cursor: ZERO_PAGE_CURSOR, offset: 0 }]);
+      });
+
       it('starts the ended pagination from the beginning [offset pagination]', async () => {
         const paginator = new Paginator({ pageSize: 2 });
         paginator.state.next({

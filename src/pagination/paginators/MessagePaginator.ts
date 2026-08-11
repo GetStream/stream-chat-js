@@ -12,8 +12,6 @@ import {
 } from './MessageIntervalPaginator';
 import type { LocalMessage } from '../../types';
 import { StateStore } from '../../store';
-import { ItemIndex } from '../ItemIndex';
-import { MessageStoreBackedItemIndex } from '../../messageStore/MessageStoreBackedItemIndex';
 
 export type {
   JumpToMessageOptions,
@@ -129,34 +127,18 @@ export class MessagePaginator extends MessageIntervalPaginator {
     unreadReferencePolicy = 'snapshot',
     ...options
   }: MessagePaginatorOptions) {
-    const { channel } = options;
     super({
       ...options,
       paginatorOptions: {
         // Throttle message-list `state` publishes to at most once per 500ms (leading + trailing), so a
         // burst of events coalesces into ~2 renders/sec instead of one per event. Optimistic
-        // (local-user) writes bypass the throttle via MessageStore.flushSubscribers → flushState.
+        // (local-user) writes bypass the throttle via EntityStore.flushSubscribers → flushState.
         // Overridable per-instance via `paginatorOptions.stateThrottleMs`.
         stateThrottleMs: 500,
         ...options.paginatorOptions,
-        // Back the channel main list and thread reply list with the client-global
-        // message store so a message held in more than one of them (a channel message
-        // also open in its thread, a `show_in_channel` reply in both) has a single
-        // canonical copy — no copy-to-copy fan-out. Falls back to a private index if
-        // the store is unavailable (e.g. a detached paginator in a test).
-        createItemIndex:
-          options.paginatorOptions?.createItemIndex ??
-          ((owner) => {
-            const store = channel.getClient?.().messageStore;
-            return store
-              ? new MessageStoreBackedItemIndex({
-                  store,
-                  owner: owner as MessageIntervalPaginator,
-                  getId: owner.getItemId.bind(owner),
-                })
-              : new ItemIndex({ getId: owner.getItemId.bind(owner) });
-          }),
       },
+      // NB: the store-backed item index is provided by MessageIntervalPaginator (the common
+      // ancestor), so both the main list and the pinned list share the client-global message store.
     });
     this.unreadReferencePolicy = unreadReferencePolicy;
     this.unreadStateSnapshot = new StateStore<UnreadSnapshotState>({

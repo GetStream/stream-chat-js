@@ -8,7 +8,8 @@ import {
 
 /**
  * Applies a reaction to the single canonical copy of a message in the client-global
- * {@link MessageStore}, addressed purely by id — NOT through any paginator's membership. It reads the
+ * {@link EntityStore} (`client.messageStore`), addressed purely by id — NOT through any paginator's
+ * membership. It reads the
  * current message POJO (`store.get`), produces a new POJO with the reaction folded into its
  * `reaction_groups` / `latest_reactions` (shared count helpers) and `own_reactions`
  * ({@link computeOwnReactions}), and writes it back (`store.upsert`). The store then notifies every
