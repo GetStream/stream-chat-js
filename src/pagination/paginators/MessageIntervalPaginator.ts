@@ -799,11 +799,10 @@ export class MessageIntervalPaginator extends BasePaginator<
   private purgeReconciledFromOfflineDb(ids: string[]) {
     const offlineDb = this.channel.getClient?.()?.offlineDb;
     if (!offlineDb) return;
-    Promise.all(ids.map((id) => offlineDb.hardDeleteMessage({ id, execute: false })))
-      .then((queryBatches) => offlineDb.executeSqlBatch(queryBatches.flat()))
-      .catch(() => {
-        // best-effort persistence cleanup — see doc comment; the live list is already correct.
-      });
+    // The offline DB owns the batching (single transaction); we just hand it the reconciled ids.
+    offlineDb.hardDeleteMessages({ ids }).catch(() => {
+      // best-effort persistence cleanup — see doc comment; the live list is already correct.
+    });
   }
 
   protected resolveUnreadBoundaryIdsByTimestamp = ({

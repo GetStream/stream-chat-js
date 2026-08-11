@@ -2343,14 +2343,13 @@ describe('MessagePaginator', () => {
 
     // ── Offline DB is kept in lockstep, entirely from the LLC (no SDK orchestration) ─────────────
 
-    it('mirrors reconciled ghosts into the offline DB in one batch (LLC-owned)', async () => {
-      const hardDeleteMessage = vi.fn().mockResolvedValue([]);
-      const executeSqlBatch = vi.fn().mockResolvedValue(undefined);
+    it('mirrors reconciled ghosts into the offline DB via the DB batch API (LLC-owned)', () => {
+      const hardDeleteMessages = vi.fn().mockResolvedValue([]);
       const channelWithOfflineDb = {
         cid: 'channel-id',
         getReplies: vi.fn(),
         query: vi.fn(),
-        getClient: () => ({ offlineDb: { hardDeleteMessage, executeSqlBatch } }),
+        getClient: () => ({ offlineDb: { hardDeleteMessages } }),
       } as unknown as Channel;
       const paginator = new MessagePaginator({
         channel: channelWithOfflineDb,
@@ -2365,15 +2364,12 @@ describe('MessagePaginator', () => {
         setActive: true,
       });
 
-      // m3 hard-deleted while offline: gone from the in-memory list AND from SQLite.
+      // m3 hard-deleted while offline: gone from the in-memory list AND from SQLite. The paginator
+      // just hands the reconciled ids to the DB's batch helper — it owns the transaction.
       paginator.mergeNewestPage([msg('m1', 1), msg('m2', 2), msg('m4', 4)]);
 
       expect(paginator.getItem('m3')).toBeUndefined();
-      expect(hardDeleteMessage).toHaveBeenCalledWith({ id: 'm3', execute: false });
-      // The per-id delete queries are collected (execute:false) and run as a single transaction.
-      await Promise.resolve();
-      await Promise.resolve();
-      expect(executeSqlBatch).toHaveBeenCalledTimes(1);
+      expect(hardDeleteMessages).toHaveBeenCalledWith({ ids: ['m3'] });
     });
 
     it('reconciles in-memory without error when offline support is disabled (no offlineDb)', () => {
