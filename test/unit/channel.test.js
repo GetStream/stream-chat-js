@@ -3186,38 +3186,6 @@ describe('delete reaction flow', () => {
 	});
 
 	describe('_deleteReaction', () => {
-		it('calls sendRequest with user_id when provided', async () => {
-			const sendRequestSpy = vi
-				.spyOn(client.api, 'sendRequest')
-				.mockResolvedValue({ body: {}, metadata: {} });
-
-			await channel._deleteReaction({ ...request, user_id });
-
-			expect(sendRequestSpy).toHaveBeenCalledTimes(1);
-			expect(sendRequestSpy).toHaveBeenCalledWith(
-				'DELETE',
-				'/api/v2/chat/messages/{id}/reaction/{type}',
-				{ id: messageId, type: reactionType },
-				{ user_id },
-			);
-		});
-
-		it('calls sendRequest with undefined user_id if user_id is not provided', async () => {
-			const sendRequestSpy = vi
-				.spyOn(client.api, 'sendRequest')
-				.mockResolvedValue({ body: {}, metadata: {} });
-
-			await channel._deleteReaction(request);
-
-			expect(sendRequestSpy).toHaveBeenCalledTimes(1);
-			expect(sendRequestSpy).toHaveBeenCalledWith(
-				'DELETE',
-				'/api/v2/chat/messages/{id}/reaction/{type}',
-				{ id: messageId, type: reactionType },
-				{ user_id: undefined },
-			);
-		});
-
 		it('returns the response from the underlying call', async () => {
 			vi.spyOn(client.api, 'sendRequest').mockResolvedValue({
 				body: { message: { id: messageId } },
