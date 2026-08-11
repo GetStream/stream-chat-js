@@ -640,11 +640,16 @@ export class MessageIntervalPaginator extends BasePaginator<
   mergeNewestPage = (page: LocalMessage[], options?: MergeNewestPageOptions) => {
     const headInterval = this.itemIntervals[0] as Interval | undefined;
     if (!headInterval?.isHead) return;
-    // Only reconcile when the head is the interval currently in view. If the caller jumped to a
-    // separate (older) window, that window is active and the head is merely still-loaded underneath;
-    // reconciling would switch the view to the head and yank them to the newest. Skip to preserve
-    // their position (the newest page is picked up on scroll / a later load).
-    if (!this.isActiveInterval(headInterval)) return;
+    // If the caller jumped to a separate (older) window, that window is active and the head is merely
+    // still-loaded underneath. Don't MERGE the fresh page or switch the view (that would yank them to
+    // the newest) — but STILL prune offline hard-deletes out of the hidden head, otherwise returning to
+    // it later (scroll-to-latest) surfaces ghosts that were deleted while jumped away. Reconciliation
+    // targets the head interval regardless of which interval is active, and removing a hidden-head ghost
+    // leaves the active island's items untouched.
+    if (!this.isActiveInterval(headInterval)) {
+      this.reconcileLoadedAgainstPage(page, options);
+      return;
+    }
 
     if (!page?.length) {
       // Empty page: never blanks the list by itself. Only when the caller supplied a pre-fetch
@@ -771,7 +776,7 @@ export class MessageIntervalPaginator extends BasePaginator<
     options?: MergeNewestPageOptions,
   ) {
     const headInterval = this.itemIntervals[0] as Interval | undefined;
-    if (!headInterval?.isHead || !this.isActiveInterval(headInterval)) return;
+    if (!headInterval?.isHead) return;
 
     const loadedIds = headInterval.itemIds;
     const candidateIds = options?.candidateIds;
