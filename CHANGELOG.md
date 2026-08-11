@@ -1,3 +1,18 @@
+## [10.0.0-rc.2](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.1...v10.0.0-rc.2) (2026-08-11)
+
+### ⚠ BREAKING CHANGES
+
+* `ChannelManager` keeps its name but is a different class 
+table
+
+Co-authored-by: Ivan Sekovanikj <31964049+isekovanic@users.noreply.github.com>
+
+### Features
+
+* generalize entity store in V10 ([#1814](https://github.com/GetStream/stream-chat-js/issues/1814)) ([d066ba0](https://github.com/GetStream/stream-chat-js/commit/d066ba0db126b1fe13f949f1d9e697a93d1b2248))
+* migrate ChannelPaginatorsOrchestrator to ChannelManager ([#1813](https://github.com/GetStream/stream-chat-js/issues/1813)) ([c694930](https://github.com/GetStream/stream-chat-js/commit/c6949300aba166b24eff7fe83339a1644abeeb04))
+* optimistic reactions ([#1808](https://github.com/GetStream/stream-chat-js/issues/1808)) ([54740f1](https://github.com/GetStream/stream-chat-js/commit/54740f18f47f94559f5dd87c1877619820fcecf9))
+
 ## [10.0.0-rc.1](https://github.com/GetStream/stream-chat-js/compare/v9.50.2...v10.0.0-rc.1) (2026-08-03)
 
 ### ⚠ BREAKING CHANGES
