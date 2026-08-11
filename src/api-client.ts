@@ -82,17 +82,15 @@ export class ApiClient {
 
   sendFile(
     url: string,
-    uri: string | NodeJS.ReadableStream | Buffer | File,
+    uri: string | File,
     name?: string,
-    contentType?: string,
     user?: UserResponse,
     axiosRequestConfig?: AxiosRequestConfig,
   ) {
-    const data = addFileToFormData(uri, name, contentType || 'multipart/form-data');
+    const data = addFileToFormData(uri, name);
     if (user != null) data.append('user', JSON.stringify(user));
 
     return this._doRequest<SendFileAPIResponse>('post', url, data, {
-      headers: data.getHeaders ? data.getHeaders() : {},
       timeout: 0,
       maxContentLength: Infinity,
       maxBodyLength: Infinity,

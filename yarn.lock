@@ -1563,12 +1563,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:^22.19.19":
-  version: 22.19.19
-  resolution: "@types/node@npm:22.19.19"
+"@types/node@npm:^22":
+  version: 22.20.1
+  resolution: "@types/node@npm:22.20.1"
   dependencies:
     undici-types: "npm:~6.21.0"
-  checksum: 10c0/402e0f088c94cabda3cd721546bd8e4e75e098e0b342f6e03b90ca1e19c28986f9650112c64fcfd09fc8cebc0f8b20291a513153e90489331cf666e1e5503e16
+  checksum: 10c0/f2ba54d3d1fb92e1c57c78d32c3a17655b1e87363b707136f55c422b4838d4054901ce5d27f75bb0e5ecb7ebfee3804e0987822d22b473473008091857a09353
   languageName: node
   linkType: hard
 
@@ -7271,7 +7271,7 @@ __metadata:
     "@semantic-release/changelog": "npm:^6.0.3"
     "@semantic-release/git": "npm:^10.0.1"
     "@stream-io/logger": "npm:^2.0.0"
-    "@types/node": "npm:^22.19.19"
+    "@types/node": "npm:^22"
     "@types/sinon": "npm:^10.0.6"
     "@vitest/coverage-v8": "npm:^4.1.7"
     axios: "npm:^1.16.1"

@@ -158,7 +158,7 @@ export class StreamChat extends ChatApi {
   axiosInstance: AxiosInstance;
   baseURL?: string;
   browser: boolean;
-  cleaningIntervalRef?: NodeJS.Timeout;
+  cleaningIntervalRef?: ReturnType<typeof setTimeout>;
   clientId?: string;
   key: string;
   listeners: Map<EventType, Set<EventHandler>>;
@@ -2279,15 +2279,13 @@ export class StreamChat extends ChatApi {
    *
    * @param uri - The file to upload.
    * @param name - The name of the file (optional).
-   * @param contentType - The content type of the file (optional).
    * @param user - User information (optional).
    * @param axiosRequestConfig - Axios config, e.g. `onUploadProgress` for progress tracking (optional).
    * @returns Response containing the file URL.
    */
   uploadFile_(
-    uri: string | NodeJS.ReadableStream | Buffer | File,
+    uri: string | File,
     name?: string,
-    contentType?: string,
     user?: UserResponse,
     axiosRequestConfig?: AxiosRequestConfig,
   ) {
@@ -2295,7 +2293,6 @@ export class StreamChat extends ChatApi {
       `${this.baseURL}/uploads/file`,
       uri,
       name,
-      contentType,
       user,
       axiosRequestConfig,
     );
@@ -2306,15 +2303,13 @@ export class StreamChat extends ChatApi {
    *
    * @param uri - The image to upload.
    * @param name - The name of the image (optional).
-   * @param contentType - The content type of the image (optional).
    * @param user - User information (optional).
    * @param axiosRequestConfig - Axios config, e.g. `onUploadProgress` for progress tracking (optional).
    * @returns Response containing the image URL.
    */
   uploadImage_(
-    uri: string | NodeJS.ReadableStream | File,
+    uri: string | File,
     name?: string,
-    contentType?: string,
     user?: UserResponse,
     axiosRequestConfig?: AxiosRequestConfig,
   ) {
@@ -2322,7 +2317,6 @@ export class StreamChat extends ChatApi {
       `${this.baseURL}/uploads/image`,
       uri,
       name,
-      contentType,
       user,
       axiosRequestConfig,
     );
