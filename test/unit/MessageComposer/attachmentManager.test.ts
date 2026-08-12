@@ -1493,9 +1493,15 @@ describe('AttachmentManager', () => {
         await attachmentManager.fileToLocalUploadAttachment(file),
       );
 
-      expect(mockChannel.sendImage).toHaveBeenCalledWith(file, undefined, undefined, {
-        signal: expect.any(AbortSignal),
-      });
+      expect(mockChannel.sendImage).toHaveBeenCalledWith(
+        file,
+        undefined,
+        undefined,
+        undefined,
+        {
+          signal: expect.any(AbortSignal),
+        },
+      );
     });
 
     it('when false, omits uploadProgress on attachment while upload is in flight', async () => {
@@ -1611,7 +1617,7 @@ describe('AttachmentManager', () => {
         expect(mockChannel.sendImage).toHaveBeenCalled();
       });
 
-      const axiosOpts = mockChannel.sendImage.mock.calls[0][3] as {
+      const axiosOpts = mockChannel.sendImage.mock.calls[0][4] as {
         signal?: AbortSignal;
       };
       expect(axiosOpts?.signal).toBeInstanceOf(AbortSignal);
@@ -1712,9 +1718,15 @@ describe('AttachmentManager', () => {
 
       expect(mockChannel.sendImage).toHaveBeenCalledTimes(1);
       expect(mockChannel.sendFile).not.toHaveBeenCalled();
-      expect(mockChannel.sendImage).toHaveBeenCalledWith(file, undefined, undefined, {
-        onUploadProgress: expect.any(Function),
-      });
+      expect(mockChannel.sendImage).toHaveBeenCalledWith(
+        file,
+        undefined,
+        undefined,
+        undefined,
+        {
+          onUploadProgress: expect.any(Function),
+        },
+      );
     });
 
     it('passes onUploadProgress to sendFile when onProgress is provided (File)', async () => {
@@ -1729,9 +1741,15 @@ describe('AttachmentManager', () => {
 
       expect(mockChannel.sendFile).toHaveBeenCalledTimes(1);
       expect(mockChannel.sendImage).not.toHaveBeenCalled();
-      expect(mockChannel.sendFile).toHaveBeenCalledWith(file, undefined, undefined, {
-        onUploadProgress: expect.any(Function),
-      });
+      expect(mockChannel.sendFile).toHaveBeenCalledWith(
+        file,
+        undefined,
+        undefined,
+        undefined,
+        {
+          onUploadProgress: expect.any(Function),
+        },
+      );
     });
 
     it('passes onUploadProgress to sendImage when onProgress is provided (FileReference)', async () => {
@@ -1752,6 +1770,7 @@ describe('AttachmentManager', () => {
       expect(mockChannel.sendImage).toHaveBeenCalledWith(
         fileRef.uri,
         fileRef.name,
+        fileRef.type,
         undefined,
         { onUploadProgress: expect.any(Function) },
       );
@@ -1775,6 +1794,7 @@ describe('AttachmentManager', () => {
       expect(mockChannel.sendFile).toHaveBeenCalledWith(
         fileRef.uri,
         fileRef.name,
+        fileRef.type,
         undefined,
         { onUploadProgress: expect.any(Function) },
       );
@@ -1796,9 +1816,11 @@ describe('AttachmentManager', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
       );
       expect(mockChannel.sendFile).toHaveBeenCalledWith(
         pdf,
+        undefined,
         undefined,
         undefined,
         undefined,
@@ -1817,9 +1839,15 @@ describe('AttachmentManager', () => {
         abortSignal: controller.signal,
       });
 
-      expect(mockChannel.sendImage).toHaveBeenCalledWith(file, undefined, undefined, {
-        signal: controller.signal,
-      });
+      expect(mockChannel.sendImage).toHaveBeenCalledWith(
+        file,
+        undefined,
+        undefined,
+        undefined,
+        {
+          signal: controller.signal,
+        },
+      );
     });
 
     it('maps lengthComputable upload progress to rounded percent for sendImage', async () => {
@@ -1832,7 +1860,7 @@ describe('AttachmentManager', () => {
 
       await attachmentManager.doDefaultUploadRequest(file, { onProgress });
 
-      const axiosOpts = vi.mocked(mockChannel.sendImage).mock.calls[0][3] as {
+      const axiosOpts = vi.mocked(mockChannel.sendImage).mock.calls[0][4] as {
         onUploadProgress: (e: {
           loaded: number;
           total?: number;
@@ -1864,7 +1892,7 @@ describe('AttachmentManager', () => {
 
       await attachmentManager.doDefaultUploadRequest(file, { onProgress });
 
-      const axiosOpts = vi.mocked(mockChannel.sendFile).mock.calls[0][3] as {
+      const axiosOpts = vi.mocked(mockChannel.sendFile).mock.calls[0][4] as {
         onUploadProgress: (e: {
           loaded: number;
           total?: number;
@@ -1889,7 +1917,7 @@ describe('AttachmentManager', () => {
 
       await attachmentManager.doDefaultUploadRequest(file, { onProgress });
 
-      const axiosOpts = vi.mocked(mockChannel.sendImage).mock.calls[0][3] as {
+      const axiosOpts = vi.mocked(mockChannel.sendImage).mock.calls[0][4] as {
         onUploadProgress: (e: {
           loaded: number;
           total?: number;

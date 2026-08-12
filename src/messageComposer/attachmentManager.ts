@@ -551,6 +551,7 @@ export class AttachmentManager {
       return this.channel[isImageFile(fileLike) ? 'sendImage' : 'sendFile'](
         fileLike.uri,
         fileLike.name,
+        fileLike.type,
         undefined,
         axiosUploadConfig,
       );
@@ -566,7 +567,7 @@ export class AttachmentManager {
 
     const { duration: _duration, ...result } = await this.channel[
       isImageFile(fileLike) ? 'sendImage' : 'sendFile'
-    ](file, undefined, undefined, axiosUploadConfig);
+    ](file, undefined, undefined, undefined, axiosUploadConfig);
     return result;
   };
 

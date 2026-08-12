@@ -2279,6 +2279,7 @@ export class StreamChat extends ChatApi {
    *
    * @param uri - The file to upload.
    * @param name - The name of the file (optional).
+   * @param contentType - MIME type; required for React Native URI uploads (optional).
    * @param user - User information (optional).
    * @param axiosRequestConfig - Axios config, e.g. `onUploadProgress` for progress tracking (optional).
    * @returns Response containing the file URL.
@@ -2286,6 +2287,7 @@ export class StreamChat extends ChatApi {
   uploadFile_(
     uri: string | File,
     name?: string,
+    contentType?: string,
     user?: UserResponse,
     axiosRequestConfig?: AxiosRequestConfig,
   ) {
@@ -2293,6 +2295,7 @@ export class StreamChat extends ChatApi {
       `${this.baseURL}/uploads/file`,
       uri,
       name,
+      contentType,
       user,
       axiosRequestConfig,
     );
@@ -2303,6 +2306,7 @@ export class StreamChat extends ChatApi {
    *
    * @param uri - The image to upload.
    * @param name - The name of the image (optional).
+   * @param contentType - MIME type; required for React Native URI uploads (optional).
    * @param user - User information (optional).
    * @param axiosRequestConfig - Axios config, e.g. `onUploadProgress` for progress tracking (optional).
    * @returns Response containing the image URL.
@@ -2310,6 +2314,7 @@ export class StreamChat extends ChatApi {
   uploadImage_(
     uri: string | File,
     name?: string,
+    contentType?: string,
     user?: UserResponse,
     axiosRequestConfig?: AxiosRequestConfig,
   ) {
@@ -2317,6 +2322,7 @@ export class StreamChat extends ChatApi {
       `${this.baseURL}/uploads/image`,
       uri,
       name,
+      contentType,
       user,
       axiosRequestConfig,
     );

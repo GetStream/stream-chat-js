@@ -100,14 +100,31 @@ export const channelTracksReadLocally = (channel?: Channel) =>
 export const userHasReadReceipts = (client: StreamChat) =>
   client.user?.privacy_settings?.read_receipts?.enabled ?? true;
 
-export function addFileToFormData(uri: string | Blob, name?: string) {
+export function addFileToFormData(
+  uri: string | Blob,
+  name?: string,
+  contentType?: string,
+) {
   const data = new FormData();
 
   if (isBlobWebAPI(uri)) {
     if (name) data.append('file', uri, name);
     else data.append('file', uri);
   } else {
-    data.append('file', uri);
+    // React Native has no Blob-backed uploads: files are referenced by local URI
+    // (`file://`, `content://`, `ph://`) and its FormData polyfill expects a
+    // `{ uri, name, type }` part descriptor. Appending the bare URI string instead produces
+    // a *text* form field, which the API rejects with `400 http: no such file`.
+    //
+    // The MIME type cannot be recovered from the URI at this layer either: Android aborts the
+    // whole request when a `uri` part carries no content-type header, and `content://` /
+    // `ph://` URIs have no file extension for the platform to guess from.
+    data.append('file', {
+      uri,
+      name: name || uri.split('/').reverse()[0],
+      contentType: contentType || undefined,
+      type: contentType || undefined,
+    } as unknown as Blob);
   }
 
   return data;
