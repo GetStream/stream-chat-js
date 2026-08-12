@@ -2324,6 +2324,49 @@ describe('MessagePaginator', () => {
       expect(paginator.getItem('msg-004')).toBeDefined();
     });
 
+    it('over-request: a server-capped page keeps hasMoreTail and anchors the tail cursor to the true loaded oldest', () => {
+      const all = Array.from({ length: 105 }, (_, i) =>
+        msg(`msg-${String(i).padStart(3, '0')}`, i),
+      );
+      const paginator = loadHead(all, { isTail: true });
+
+      paginator.mergeNewestPage(all.slice(5), {
+        candidateIds: new Set(all.map((message) => message.id)),
+        requestedLimit: 105,
+      });
+
+      const state = paginator.state.getLatestValue();
+      expect(state.hasMoreTail).toBe(true);
+      expect(state.cursor?.tailward).toBe('msg-000');
+    });
+
+    it('reached channel start: a page shorter than the clamped limit clears hasMoreTail, nulls the tail cursor and sets isTail', () => {
+      // The complementary branch: the loaded window believes older messages exist (isTail:false →
+      // hasMoreTail true), then the newest two are hard-deleted so the reconnect page comes back short
+      // of the requested limit. A short page (3 < min(5,100)) proves we reached the channel start, so
+      // hasMoreTail drops to false, the tail cursor nulls, and the interval's isTail flips true.
+      const paginator = loadHead([
+        msg('m1', 1),
+        msg('m2', 2),
+        msg('m3', 3),
+        msg('m4', 4),
+        msg('m5', 5),
+      ]);
+      expect(paginator.state.getLatestValue().hasMoreTail).toBe(true);
+
+      // m4 + m5 hard-deleted while offline: only the surviving newest come back.
+      paginator.mergeNewestPage([msg('m1', 1), msg('m2', 2), msg('m3', 3)], {
+        candidateIds: new Set(['m1', 'm2', 'm3', 'm4', 'm5']),
+        requestedLimit: 5,
+      });
+
+      const state = paginator.state.getLatestValue();
+      expect(ids(paginator)).toEqual(['m1', 'm2', 'm3']);
+      expect(state.hasMoreTail).toBe(false);
+      expect(state.cursor?.tailward).toBeNull();
+      expect((paginator.itemIntervals[0] as { isTail?: boolean }).isTail).toBe(true);
+    });
+
     it('reconciles a deletion inside the returned page while keeping messages beyond it', () => {
       const all = Array.from({ length: 105 }, (_, i) =>
         msg(`msg-${String(i).padStart(3, '0')}`, i),
