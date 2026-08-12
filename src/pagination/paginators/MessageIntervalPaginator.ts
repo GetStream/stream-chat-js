@@ -843,10 +843,12 @@ export class MessageIntervalPaginator extends BasePaginator<
    */
   private removeReconciledIds(ids: string[]) {
     if (!ids.length) return;
-    this._itemIndex.batch(() => {
-      for (const id of ids) this.removeItem({ id });
-    });
-    this.flushPendingPublishes();
+    this.batch(
+      () => {
+        for (const id of ids) this.removeItem({ id });
+      },
+      { flush: true },
+    );
     this.purgeReconciledFromOfflineDb(ids);
   }
 
@@ -1099,7 +1101,7 @@ export class MessageIntervalPaginator extends BasePaginator<
 
     // Batch: one logical operation touches many messages; coalesce the shared-store fan-out to a
     // single flush (sibling holders are notified once) instead of once per affected message.
-    this._itemIndex.batch(() => {
+    this.batch(() => {
       for (const message of loadedMessages) {
         if (message.user?.id === userId) {
           if (hardDelete) {
@@ -1145,7 +1147,7 @@ export class MessageIntervalPaginator extends BasePaginator<
 
     // Batch: several cached messages may quote the updated one; coalesce the shared-store fan-out
     // to a single flush instead of one per re-ingested quoting message.
-    this._itemIndex.batch(() => {
+    this.batch(() => {
       for (const cachedMessage of cachedMessages) {
         if (cachedMessage.quoted_message_id !== message.id) continue;
 
@@ -1171,7 +1173,7 @@ export class MessageIntervalPaginator extends BasePaginator<
     let activeAffected = false;
     // Batch: a user rename can touch many messages; coalesce the shared-store fan-out to sibling
     // holders into a single flush. This paginator's own active window is re-emitted once below.
-    this._itemIndex.batch(() => {
+    this.batch(() => {
       for (const message of this._itemIndex.values()) {
         if (message.user?.id !== user.id) continue;
         this._itemIndex.setOne({ ...message, user });

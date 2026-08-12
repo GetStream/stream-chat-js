@@ -2264,6 +2264,28 @@ export abstract class BasePaginator<T, Q> {
     return true;
   }
 
+  /**
+   * Run `fn` as one batched mutation over this paginator's items, collapsing the redundant emits a
+   * naive per item loop would produce, in two independent ways:
+   *
+   * - **Shared-store fan-out** (the `_itemIndex.batch` wrapper): per-item store notifications fold
+   *   into a single flush, so sibling holders of the same ids (e.g. a thread / pinned paginator
+   *   sharing the entity) re-project once, not once per item. Inert for single-home paginators
+   *   (channels, reminders, user groups) whose index is over a private store with no sibling
+   *   subscribers — there it is a plain passthrough.
+   * - **This paginator's own active window** (`flush: true`): when state throttling is on (the message
+   *   list in production), each `ingestItem` / `removeItem` inside `fn` defers its window publish via
+   *   {@link scheduleWindowPublish}; the trailing {@link flushPendingPublishes} then emits the settled
+   *   window exactly once. Pass it for oneshot operations (reconciliation) that must settle
+   *   synchronously. Leave it `false` inside WS event handlers so successive events keep coalescing
+   *   across the throttle trailing edge instead of each forcing an emit. Flushing is of course still
+   *   possible if that is deemed necessary at a certain point.
+   */
+  batch(fn: () => void, { flush = false }: { flush?: boolean } = {}): void {
+    this._itemIndex.batch(fn);
+    if (flush) this.flushPendingPublishes();
+  }
+
   // ---------------------------------------------------------------------------
   // Remove / contains
   // ---------------------------------------------------------------------------

@@ -1328,9 +1328,14 @@ export class Channel extends ChannelApi {
       await this.watch({ messages: { limit: requestedLimit } });
       this.offlineMode = false;
 
-      for (const failed of failedBefore) {
-        if (!paginator.getItem(failed.id)) paginator.ingestItem(failed);
-      }
+      paginator.batch(
+        () => {
+          for (const failed of failedBefore) {
+            if (!paginator.getItem(failed.id)) paginator.ingestItem(failed);
+          }
+        },
+        { flush: true },
+      );
     } finally {
       this._reloading = false;
     }
