@@ -790,7 +790,7 @@ export class MessageIntervalPaginator extends BasePaginator<
         const message = this.getItem(id);
         return !!message && this.isServerConfirmedMessage(message);
       });
-      this.removeReconciledIds(toRemove);
+      this.removeReconciledItems(toRemove);
       return;
     }
 
@@ -831,17 +831,28 @@ export class MessageIntervalPaginator extends BasePaginator<
       if (ts > windowLowTs) toRemove.push(id);
     }
 
-    this.removeReconciledIds(toRemove);
+    this.removeReconciledItems(toRemove);
   }
 
   /**
-   * Remove a set of reconciled (hard-deleted) ids in one batch — coalescing the shared-store fan-out
-   * to a single flush — then flush the deferred window publish so the list drops the ghosts
-   * synchronously (blanking to `[]` if the active window emptied, per {@link flushWindowPublish}).
-   * Finally, mirror the removal into the offline DB so a cold start does not re-seed the ghosts from
-   * SQLite. No-op for an empty set, so an unaffected merge does not touch state a second time.
+   * Remove a set of reconciled (hard-deleted) ids from this paginator's loaded state in one coalesced
+   * batch. Each id goes through {@link removeItem}, which drops it from THREE places — not a single
+   * interval:
+   *
+   * 1. the item index — unlinks this paginator's membership from the shared entity store (GC'ing the
+   *    content if this was the last holder);
+   * 2. the interval that holds it — located by id, so it is NOT head-specific in general; in practice
+   *    it is always the head interval, because the sole caller ({@link reconcileHeadAgainstPage})
+   *    sources these ids from `headInterval.itemIds` and an item has single-interval membership;
+   * 3. the active window (`state.items`) if visible — blanking to `[]` when the window empties, per
+   *    {@link flushWindowPublish}.
+   *
+   * The coalesced batch collapses all of that into a single `state.items` publish. Then mirror the
+   * removal into the offline DB (see {@link purgeReconciledFromOfflineDb}) so a cold start does not
+   * re-seed the ghosts from SQLite. No-op for an empty set, so an unaffected merge does not touch
+   * state a second time.
    */
-  private removeReconciledIds(ids: string[]) {
+  private removeReconciledItems(ids: string[]) {
     if (!ids.length) return;
     this.batch(
       () => {
