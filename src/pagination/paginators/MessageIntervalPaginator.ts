@@ -615,7 +615,7 @@ export class MessageIntervalPaginator extends BasePaginator<
    *    partial page leaves it untouched, while a page reaching deeper than the loaded window (or a
    *    stale offline-DB cursor) re-anchors it to the true loaded oldest so "load older" keeps working —
    *    derived from the interval, never the page's length. Then destructive reconciliation
-   *    ({@link reconcileLoadedAgainstPage}) removes any loaded message
+   *    ({@link reconcileHeadAgainstPage}) removes any loaded message
    *    that the authoritative page proves was hard-deleted while offline (see that method + the
    *    {@link MergeNewestPageOptions} for the exact, safe window).
    *
@@ -647,7 +647,7 @@ export class MessageIntervalPaginator extends BasePaginator<
     // targets the head interval regardless of which interval is active, and removing a hidden-head ghost
     // leaves the active island's items untouched.
     if (!this.isActiveInterval(headInterval)) {
-      this.reconcileLoadedAgainstPage(page, options);
+      this.reconcileHeadAgainstPage(page, options);
       return;
     }
 
@@ -655,7 +655,7 @@ export class MessageIntervalPaginator extends BasePaginator<
       // Empty page: never blanks the list by itself. Only when the caller supplied a pre-fetch
       // snapshot do we treat it as authoritative "channel emptied" and remove ghosts (a message that
       // arrived live during the fetch is excluded by the snapshot).
-      this.reconcileLoadedAgainstPage([], options);
+      this.reconcileHeadAgainstPage([], options);
       return;
     }
 
@@ -731,7 +731,7 @@ export class MessageIntervalPaginator extends BasePaginator<
     });
 
     // With the newest page merged in, drop any loaded message the page proves was hard-deleted.
-    this.reconcileLoadedAgainstPage(page, options);
+    this.reconcileHeadAgainstPage(page, options);
   };
 
   /**
@@ -749,9 +749,9 @@ export class MessageIntervalPaginator extends BasePaginator<
   }
 
   /**
-   * Destructive half of {@link mergeNewestPage}: remove loaded messages that the freshly-fetched
-   * newest `page` proves were hard-deleted while offline (a hard delete emits no event to other
-   * clients, and the merge is additive, so they would otherwise linger forever).
+   * Destructive half of {@link mergeNewestPage}: remove messages in the loaded head interval that the
+   * freshly-fetched newest `page` proves were hard-deleted while offline (a hard delete emits no event
+   * to other clients, and the merge is additive, so they would otherwise linger forever).
    *
    * The reconcilable window is derived ENTIRELY from what the page returned — never a hardcoded page
    * size — so it can only ever remove messages the page actually covers:
@@ -771,7 +771,7 @@ export class MessageIntervalPaginator extends BasePaginator<
    * store and — via the {@link MessagePaginator} override — the tracked last message all stay
    * correct, then the active window is re-emitted once.
    */
-  protected reconcileLoadedAgainstPage(
+  protected reconcileHeadAgainstPage(
     page: LocalMessage[],
     options?: MergeNewestPageOptions,
   ) {
