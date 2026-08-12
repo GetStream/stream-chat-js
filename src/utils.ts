@@ -111,14 +111,7 @@ export function addFileToFormData(
     if (name) data.append('file', uri, name);
     else data.append('file', uri);
   } else {
-    // React Native has no Blob-backed uploads: files are referenced by local URI
-    // (`file://`, `content://`, `ph://`) and its FormData polyfill expects a
-    // `{ uri, name, type }` part descriptor. Appending the bare URI string instead produces
-    // a *text* form field, which the API rejects with `400 http: no such file`.
-    //
-    // The MIME type cannot be recovered from the URI at this layer either: Android aborts the
-    // whole request when a `uri` part carries no content-type header, and `content://` /
-    // `ph://` URIs have no file extension for the platform to guess from.
+    // React Native path
     data.append('file', {
       uri,
       name: name || uri.split('/').reverse()[0],
