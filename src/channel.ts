@@ -1334,7 +1334,7 @@ export class Channel extends ChannelApi {
             if (!paginator.getItem(failed.id)) paginator.ingestItem(failed);
           }
         },
-        { flush: true },
+        { coalesce: true },
       );
     } finally {
       this._reloading = false;

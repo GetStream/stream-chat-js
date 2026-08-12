@@ -847,7 +847,7 @@ export class MessageIntervalPaginator extends BasePaginator<
       () => {
         for (const id of ids) this.removeItem({ id });
       },
-      { flush: true },
+      { coalesce: true },
     );
     this.purgeReconciledFromOfflineDb(ids);
   }

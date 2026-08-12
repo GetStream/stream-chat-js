@@ -2367,6 +2367,91 @@ describe('MessagePaginator', () => {
       expect((paginator.itemIntervals[0] as { isTail?: boolean }).isTail).toBe(true);
     });
 
+    describe('batch({ coalesce: true }) — single deterministic window publish', () => {
+      it('coalesces N removals into a single state publish', () => {
+        const paginator = loadHead([
+          msg('m1', 1),
+          msg('m2', 2),
+          msg('m3', 3),
+          msg('m4', 4),
+        ]);
+        const spy = vi.spyOn(paginator.state, 'partialNext');
+
+        paginator.batch(
+          () => {
+            paginator.removeItem({ id: 'm1' });
+            paginator.removeItem({ id: 'm2' });
+            paginator.removeItem({ id: 'm3' });
+          },
+          { coalesce: true },
+        );
+
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(ids(paginator)).toEqual(['m4']);
+      });
+
+      it('coalesces N in-place updates into a single state publish', () => {
+        const paginator = loadHead([msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
+        const spy = vi.spyOn(paginator.state, 'partialNext');
+
+        paginator.batch(
+          () => {
+            paginator.ingestItem(msg('m1', 1, { text: 'a' }));
+            paginator.ingestItem(msg('m2', 2, { text: 'b' }));
+            paginator.ingestItem(msg('m3', 3, { text: 'c' }));
+          },
+          { coalesce: true },
+        );
+
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(paginator.getItem('m1')?.text).toBe('a');
+        expect(paginator.getItem('m3')?.text).toBe('c');
+      });
+
+      it('coalesces a mixed remove + ingest batch into a single state publish', () => {
+        const paginator = loadHead([msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
+        const spy = vi.spyOn(paginator.state, 'partialNext');
+
+        paginator.batch(
+          () => {
+            paginator.removeItem({ id: 'm2' });
+            paginator.ingestItem(msg('m3', 3, { text: 'edited' }));
+          },
+          { coalesce: true },
+        );
+
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(ids(paginator)).toEqual(['m1', 'm3']);
+        expect(paginator.getItem('m3')?.text).toBe('edited');
+      });
+
+      it('without coalesce, the same removals publish once per item (proves the scope does the work)', () => {
+        const paginator = loadHead([msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
+        const spy = vi.spyOn(paginator.state, 'partialNext');
+
+        paginator.batch(() => {
+          paginator.removeItem({ id: 'm1' });
+          paginator.removeItem({ id: 'm2' });
+        });
+
+        expect(spy).toHaveBeenCalledTimes(2);
+      });
+
+      it('does not publish when the coalesced batch leaves the active window unchanged', () => {
+        const paginator = loadHead([msg('m1', 1), msg('m2', 2)]);
+        const spy = vi.spyOn(paginator.state, 'partialNext');
+
+        paginator.batch(
+          () => {
+            paginator.removeItem({ id: 'does-not-exist' });
+          },
+          { coalesce: true },
+        );
+
+        expect(spy).not.toHaveBeenCalled();
+      });
+    });
+
     it('reconciles a deletion inside the returned page while keeping messages beyond it', () => {
       const all = Array.from({ length: 105 }, (_, i) =>
         msg(`msg-${String(i).padStart(3, '0')}`, i),

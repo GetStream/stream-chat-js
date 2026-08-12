@@ -444,6 +444,15 @@ export abstract class BasePaginator<T, Q> {
   private _pendingViewChangedIds = new Set<string>();
 
   /**
+   * Depth of active {@link batch} `coalesce` scopes. While > 0, `ingestItem` / `removeItem` record
+   * that the active window changed (see {@link _suspendedWindowDirty}) instead of publishing it, so
+   * the whole batch produces a single `state.items` emit — independent of state throttling.
+   */
+  private _windowPublishSuspendDepth = 0;
+  /** Set by a suspended op that changed the active window, so {@link batch} publishes once on exit. */
+  private _suspendedWindowDirty = false;
+
+  /**
    * Intervals keep items in disconnected ranges.
    * That is a scenario of jumping to non-sequential pages.
    * Intervals are populated only if itemIndex is provided.
@@ -894,6 +903,11 @@ export abstract class BasePaginator<T, Q> {
       !!this._windowPublishThrottle &&
       !this.config.lockItemOrder
     );
+  }
+
+  /** True while a coalescing {@link batch} scope is suspending this paginator's own window publishes. */
+  protected get isWindowPublishSuspended(): boolean {
+    return this._windowPublishSuspendDepth > 0;
   }
 
   /** Re-project the active window from its (live, source-of-truth) interval. `undefined` when inactive. */
@@ -2108,7 +2122,9 @@ export abstract class BasePaginator<T, Q> {
     // 3. If it no longer matches the filter, we’re done (it has been removed above).
     if (!this.matchesFilter(ingestedItem)) {
       // Throttled: the removal above deferred its emit — publish the (settled) window once.
-      if (this.isStateThrottled && itemHasBeenRemoved) this.scheduleWindowPublish();
+      // Suspended (coalescing batch): removeItemAtCoordinates recorded it; batch() emits once on exit.
+      if (!this.isWindowPublishSuspended && this.isStateThrottled && itemHasBeenRemoved)
+        this.scheduleWindowPublish();
       return itemHasBeenRemoved;
     }
 
@@ -2190,7 +2206,12 @@ export abstract class BasePaginator<T, Q> {
           // Falls somewhere *inside* the global bounds, but we don't have that page loaded.
           // We’ve already removed any old occurrence, so from the paginator's perspective
           // this item won't be visible again until the relevant page is fetched.
-          if (this.isStateThrottled && itemHasBeenRemoved) this.scheduleWindowPublish();
+          if (
+            !this.isWindowPublishSuspended &&
+            this.isStateThrottled &&
+            itemHasBeenRemoved
+          )
+            this.scheduleWindowPublish();
           return itemHasBeenRemoved;
         }
       }
@@ -2211,7 +2232,10 @@ export abstract class BasePaginator<T, Q> {
       activeIntervalIdBeforeRemoval === removedIntervalId &&
       targetInterval.id === removedIntervalId
     ) {
-      this.setActiveInterval(targetInterval);
+      this.setActiveInterval(
+        targetInterval,
+        this.isWindowPublishSuspended ? { updateState: false } : undefined,
+      );
     }
 
     const addedNewInterval = !this._itemIntervals.has(targetInterval.id);
@@ -2228,7 +2252,10 @@ export abstract class BasePaginator<T, Q> {
         this._activeIntervalId,
       )
     ) {
-      if (this.isStateThrottled) {
+      if (this.isWindowPublishSuspended) {
+        // Coalescing batch: record the change; batch() emits the settled window once on exit.
+        this._suspendedWindowDirty = true;
+      } else if (this.isStateThrottled) {
         this.scheduleWindowPublish();
       } else {
         const items = this.items ?? [];
@@ -2266,24 +2293,37 @@ export abstract class BasePaginator<T, Q> {
 
   /**
    * Run `fn` as one batched mutation over this paginator's items, collapsing the redundant emits a
-   * naive per item loop would produce, in two independent ways:
+   * naive per-item loop would produce:
    *
-   * - **Shared-store fan-out** (the `_itemIndex.batch` wrapper): per-item store notifications fold
-   *   into a single flush, so sibling holders of the same ids (e.g. a thread / pinned paginator
-   *   sharing the entity) re-project once, not once per item. Inert for single-home paginators
-   *   (channels, reminders, user groups) whose index is over a private store with no sibling
-   *   subscribers — there it is a plain passthrough.
-   * - **This paginator's own active window** (`flush: true`): when state throttling is on (the message
-   *   list in production), each `ingestItem` / `removeItem` inside `fn` defers its window publish via
-   *   {@link scheduleWindowPublish}; the trailing {@link flushPendingPublishes} then emits the settled
-   *   window exactly once. Pass it for oneshot operations (reconciliation) that must settle
-   *   synchronously. Leave it `false` inside WS event handlers so successive events keep coalescing
-   *   across the throttle trailing edge instead of each forcing an emit. Flushing is of course still
-   *   possible if that is deemed necessary at a certain point.
+   * - **Shared-store fan-out** (always, via the `_itemIndex.batch` wrapper): per-item store
+   *   notifications fold into a single flush, so sibling holders of the same ids (e.g. a thread /
+   *   pinned paginator sharing the entity) re-project once, not once per item. Inert for single-home
+   *   paginators (channels, reminders, user groups) whose index is over a private store with no
+   *   sibling subscribers — there it is a plain passthrough.
+   * - **This paginator's own active window** (`coalesce: true`): every `ingestItem` / `removeItem`
+   *   inside `fn` records that the window changed instead of publishing it, then `batch` emits the
+   *   settled window exactly once on exit via {@link flushWindowPublish}. This is deterministic and
+   *   independent of state throttling — unlike leaving it off, where an un-throttled paginator emits
+   *   once per item and a throttled one merely coalesces within its 500ms window. Use it for one-shot
+   *   operations (reconciliation, reload re-ingest) that must settle in a single update. Omit it in WS
+   *   event handlers, where per-event publishes should ride the throttle so successive events coalesce
+   *   across its trailing edge rather than each forcing a synchronous emit.
    */
-  batch(fn: () => void, { flush = false }: { flush?: boolean } = {}): void {
-    this._itemIndex.batch(fn);
-    if (flush) this.flushPendingPublishes();
+  batch(fn: () => void, { coalesce = false }: { coalesce?: boolean } = {}): void {
+    if (!coalesce) {
+      this._itemIndex.batch(fn);
+      return;
+    }
+    this._windowPublishSuspendDepth += 1;
+    try {
+      this._itemIndex.batch(fn);
+    } finally {
+      this._windowPublishSuspendDepth -= 1;
+    }
+    if (this._windowPublishSuspendDepth === 0 && this._suspendedWindowDirty) {
+      this._suspendedWindowDirty = false;
+      this.flushWindowPublish();
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -2317,7 +2357,9 @@ export abstract class BasePaginator<T, Q> {
 
     // 2) Remove from visible state.items, if present
     if (stateLocation && stateLocation.currentIndex > -1) {
-      if (!this.isStateThrottled) {
+      if (this.isWindowPublishSuspended) {
+        this._suspendedWindowDirty = true;
+      } else if (!this.isStateThrottled) {
         const newItems = [...(this.items ?? [])];
         newItems.splice(stateLocation.currentIndex, 1);
         this.state.partialNext({ items: newItems });
@@ -2355,7 +2397,8 @@ export abstract class BasePaginator<T, Q> {
       const result = this.removeItemAtCoordinates(coords);
       this._itemIndex.remove(this.getItemId(item));
       // Throttled: removeItemAtCoordinates deferred its emit — publish the (settled) window once.
-      if (this.isStateThrottled) this.scheduleWindowPublish();
+      if (!this.isWindowPublishSuspended && this.isStateThrottled)
+        this.scheduleWindowPublish();
       return result;
     }
 
