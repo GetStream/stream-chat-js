@@ -148,27 +148,29 @@ export type MessagePaginatorOptions = {
  * offline. A hard delete emits no event to other clients, and the merge is otherwise additive, so
  * without this such a message lingers as a ghost after reconnect.
  *
- * With NO options, `mergeNewestPage` still prunes any loaded message that falls WITHIN the returned
- * page's `created_at` span but is absent from it — unconditionally safe (a message that arrived live
- * during the caller's fetch is always strictly newer than the newest returned message, so it can
- * never fall in that span). The options widen the reconcilable window:
+ * Throughout, `page` is the newest window the server returned for `mergeNewestPage`, and "`page`'s
+ * newest / oldest message" are its bounds by `created_at`. With NO options, `mergeNewestPage` still
+ * prunes any loaded message that falls WITHIN `page`'s `created_at` span but is absent from it —
+ * unconditionally safe (a message that arrived live during the caller's fetch is always strictly
+ * newer than `page`'s newest message, so it can never fall in that span). The options widen the
+ * reconcilable window:
  */
 export type MergeNewestPageOptions = {
   /**
-   * The `limit` the caller passed to the query that produced the page. Lets reconciliation tell
-   * "the page reached the channel's oldest message" (a returned count short of the request) from
-   * "the page is full and older messages remain". Only then may it prune loaded messages OLDER than
-   * the oldest returned message (e.g. the oldest loaded message was the one deleted). Clamped to the
+   * The `limit` the caller passed to the query that produced `page`. Lets reconciliation tell "`page`
+   * reached the channel's own oldest message" (it came back shorter than requested) from "`page` is
+   * full and older messages remain". Only in the former may it prune loaded messages OLDER than
+   * `page`'s oldest message (e.g. the oldest loaded message was the one deleted). Clamped to the
    * server's max page size so an over-request cannot be mistaken for reaching the start.
    */
   requestedLimit?: number;
   /**
    * A snapshot of the loaded message ids taken BEFORE the caller's fetch await. Required to prune
-   * messages NEWER than the newest returned message (a hard-deleted newest message) and to reconcile
-   * an empty page (a fully-emptied channel): at/above that top edge a just-deleted message and a
-   * message that arrived live during the fetch are indistinguishable by timestamp — only the
-   * pre-fetch snapshot separates them (a live arrival is not in it). Must be captured before the
-   * await; the paginator's own items at merge time already include any live arrival.
+   * messages NEWER than `page`'s newest message (a hard-deleted newest message) and to reconcile an
+   * empty `page` (a fully-emptied channel): at/above that top edge a just-deleted message and a
+   * message that arrived live during the fetch are indistinguishable by timestamp — only the pre-fetch
+   * snapshot separates them (a live arrival is not in it). Must be captured before the await; the
+   * paginator's own items at merge time already include any live arrival.
    */
   candidateIds?: ReadonlySet<string>;
 };
@@ -749,27 +751,31 @@ export class MessageIntervalPaginator extends BasePaginator<
   }
 
   /**
-   * Destructive half of {@link mergeNewestPage}: remove messages in the loaded head interval that the
-   * freshly-fetched newest `page` proves were hard-deleted while offline (a hard delete emits no event
-   * to other clients, and the merge is additive, so they would otherwise linger forever).
+   * Destructive half of {@link mergeNewestPage}: remove messages in the loaded head interval that
+   * `page` proves were hard-deleted while offline (a hard delete emits no event to other clients, and
+   * the merge is additive, so they would otherwise linger forever).
    *
-   * The reconcilable window is derived ENTIRELY from what the page returned — never a hardcoded page
-   * size — so it can only ever remove messages the page actually covers:
+   * Here `page` is the freshly-fetched newest window the server returned for the query that produced
+   * it. Its two bounds — used throughout below — are its NEWEST message (`page`'s last item by
+   * `created_at`) and its OLDEST message (`page`'s first item). The reconcilable window is derived
+   * ENTIRELY from those two bounds — never a hardcoded page size — so it can only ever remove messages
+   * `page` actually covers. Three regions, by a loaded message's `created_at`:
    *
-   * - WITHIN the page's span (`oldest returned < created_at < newest returned`): a server-confirmed
-   *   loaded message absent from the page was hard-deleted. Safe with no snapshot — a message that
-   *   arrived live during the caller's fetch is always strictly newer than the newest returned
-   *   message, so it can never fall in this span.
-   * - BELOW the oldest returned message: only reconcilable when the page reached the channel's oldest
-   *   message (`requestedLimit` given and the page came back short, clamped to the server max page
-   *   size). Otherwise older messages simply were not fetched and are left untouched.
-   * - AT/ABOVE the newest returned message (a hard-deleted newest message) and the empty-page case:
-   *   only reconcilable with a pre-fetch `candidateIds` snapshot, which alone distinguishes a ghost
-   *   from a live arrival at that top edge.
+   * - WITHIN `page` (strictly between `page`'s oldest and newest message): a server-confirmed loaded
+   *   message absent from `page` was hard-deleted. Safe with no snapshot — a message that arrived live
+   *   during the caller's fetch is always strictly newer than `page`'s newest message, so it can never
+   *   fall in this span.
+   * - BELOW `page`'s oldest message: only reconcilable when `page` reached the channel's own oldest
+   *   message (`requestedLimit` given and `page` came back shorter than requested, clamped to the
+   *   server's max page size). Otherwise older messages simply were not fetched, so they are left
+   *   untouched.
+   * - AT/ABOVE `page`'s newest message (a hard-deleted newest message), and the empty-`page` case:
+   *   only reconcilable with a pre-fetch `candidateIds` snapshot, which alone tells a just-deleted
+   *   message from one that arrived live during the fetch at that top edge.
    *
    * Removal goes through {@link removeItem} (batched) so the item index, intervals, shared message
-   * store and — via the {@link MessagePaginator} override — the tracked last message all stay
-   * correct, then the active window is re-emitted once.
+   * store and — via the {@link MessagePaginator} override — the tracked last message all stay correct;
+   * the active window is then re-emitted once.
    */
   protected reconcileHeadAgainstPage(
     page: LocalMessage[],
