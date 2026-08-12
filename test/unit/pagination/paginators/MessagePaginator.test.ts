@@ -2630,15 +2630,45 @@ describe('MessagePaginator', () => {
       expect(paginator.itemIntervals.length).toBe(2);
     });
 
-    it('reconnect while jumped away still reconciles offline hard-deletes out of the hidden head', () => {
+    it('headItems is the hidden head window (not the active island) — the candidateIds source when jumped away', () => {
       const paginator = new MessagePaginator({
         channel: reconcileChannel,
         itemIndex: new StoreBackedItemIndex<LocalMessage>({ getEntityId: (m) => m.id }),
         paginatorOptions: {},
       });
-      // Head/latest window loaded and at head.
       paginator.ingestPage({
         page: [msg('m90', 90), msg('m95', 95), msg('m100', 100)],
+        isHead: true,
+        isTail: false,
+        setActive: true,
+      });
+      paginator.ingestPage({
+        page: [msg('m10', 10), msg('m11', 11), msg('m12', 12)],
+        isHead: false,
+        isTail: false,
+        setActive: true,
+      });
+      // `items` follows the active view (the island) — the WRONG snapshot for reconciling the head...
+      expect(paginator.items?.map((m) => m.id)).toEqual(['m10', 'm11', 'm12']);
+      // ...`headItems` is the hidden head, which is what channel.query snapshots for candidateIds.
+      expect(paginator.headItems.map((m) => m.id)).toEqual(['m90', 'm95', 'm100']);
+    });
+
+    it('reconnect while jumped away prunes the whole trailing run from the hidden head', () => {
+      const paginator = new MessagePaginator({
+        channel: reconcileChannel,
+        itemIndex: new StoreBackedItemIndex<LocalMessage>({ getEntityId: (m) => m.id }),
+        paginatorOptions: {},
+      });
+      // Head/latest window loaded and at head; m98,m99,m100 are the bottom-most (newest) messages.
+      paginator.ingestPage({
+        page: [
+          msg('m90', 90),
+          msg('m95', 95),
+          msg('m98', 98),
+          msg('m99', 99),
+          msg('m100', 100),
+        ],
         isHead: true,
         isTail: false,
         setActive: true,
@@ -2652,23 +2682,24 @@ describe('MessagePaginator', () => {
       });
       expect(paginator.isActiveIntervalAtHead).toBe(false);
 
-      // Reconnect: the fresh newest page proves m100 (bottom-most head message) was hard-deleted while
-      // offline — it is absent from the page and above the newest returned message, so only the
-      // pre-fetch snapshot can prune it.
-      const candidateIds = new Set(['m90', 'm95', 'm100', 'm10', 'm11', 'm12']);
+      // candidateIds is snapshotted by channel.query from `headItems` (the hidden head) — NOT `items`
+      // (the island). The whole trailing RUN m98,m99,m100 was hard-deleted offline; all three are above
+      // the newest survivor (m95), so only the head-derived snapshot can prune them.
+      const candidateIds = new Set(paginator.headItems.map((m) => m.id));
       paginator.mergeNewestPage([msg('m90', 90), msg('m95', 95)], {
         candidateIds,
         requestedLimit: 3,
       });
 
-      // View is preserved — still on the island, unchanged.
+      // View preserved (still on the island)...
       expect(paginator.isActiveIntervalAtHead).toBe(false);
       expect(paginator.items?.map((m) => m.id)).toEqual(['m10', 'm11', 'm12']);
-      // ...but the ghost is pruned from the hidden head, so scroll-to-latest won't surface it.
+      // ...and the ENTIRE trailing run is pruned from the hidden head — none surface on scroll-to-latest.
+      expect(paginator.getItem('m98')).toBeUndefined();
+      expect(paginator.getItem('m99')).toBeUndefined();
       expect(paginator.getItem('m100')).toBeUndefined();
-      expect((paginator.itemIntervals[0] as { itemIds: string[] }).itemIds).not.toContain(
-        'm100',
-      );
+      const headIds = (paginator.itemIntervals[0] as { itemIds: string[] }).itemIds;
+      expect(headIds).toEqual(['m90', 'm95']);
     });
 
     it('reconciling seed clears a sticky isTail so a far older page cannot weld across the gap', () => {

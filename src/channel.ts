@@ -1531,7 +1531,7 @@ export class Channel extends ChannelApi {
     // so callers (channel.reload, watch) need not thread it. Empty on a cold open, so it is harmless.
     const candidateIds =
       messageSetToAddToIfDoesNotExist === 'latest'
-        ? new Set(this.messagePaginator.items?.map((message) => message.id) ?? [])
+        ? new Set(this.messagePaginator.headItems.map((message) => message.id))
         : undefined;
 
     // The INITIAL channel-open query honors the paginator's OWN pageSize (light on native, 25) rather
