@@ -10,26 +10,53 @@ import type {
   CustomThreadData,
   CustomUserData,
 } from '../../custom_types';
+export type Filters<
+  FilterConditions extends Record<string, { type: any; operators: string }>,
+> = QueryFilters<{
+  [Property in keyof FCHelper<FilterConditions>]: FCHelper<FilterConditions>[Property]['operators'] extends string
+    ?
+        | RequireOnlyOne<{
+            [Operator in FCHelper<FilterConditions>[Property]['operators']]:
+              | (Operator extends '$in' | '$nin'
+                  ? Array<FCHelper<FilterConditions>[Property]['type']>
+                  : Operator extends '$exists'
+                    ? boolean
+                    : FCHelper<FilterConditions>[Property]['type'])
+              | null;
+          }>
+        | FCHelper<FilterConditions>[Property]['type']
+        | null
+    : undefined;
+}>;
 
-type Filters<FilterConditions extends Record<string, { type: any; operators: string }>> =
-  QueryFilters<{
-    [Property in keyof FilterConditions]: FilterConditions[Property]['operators'] extends string
-      ?
-          | RequireAtLeastOne<{
-              [Operator in FilterConditions[Property]['operators']]:
-                | (Operator extends '$in' | '$nin'
-                    ? Array<FilterConditions[Property]['type']>
-                    : Operator extends '$exists'
-                      ? boolean
-                      : FilterConditions[Property]['type'])
-                | null;
-            }>
-          | FilterConditions[Property]['type']
-          | null
-      : undefined;
-  }>;
+export type FCHelper<
+  FilterConditions extends Record<string, { type: any; operators: string }>,
+> = FilterConditions extends {
+  custom: { type: any; operators: string };
+}
+  ? Omit<FilterConditions, 'custom'> & CustomHelper<FilterConditions['custom']>
+  : FilterConditions;
 
-export type QueryFilters<Operators = {}> = {
+export type CustomHelper<T extends { type: any; operators: string }> = {
+  // string extends string = true
+  // string extends "custom-string" = false
+  // using this "hack" to omit Record<string, any> types when custom types are not specified
+  [P in keyof T['type'] as string extends P
+    ? never
+    : P extends string
+      ? `custom.${P}`
+      : never]-?: {
+    type: NonNullable<T['type'][P]>;
+    operators: T['operators'];
+  };
+} & {
+  [x: `custom.${string}`]: {
+    type: string | boolean | number | Date;
+    operators: T['operators'];
+  };
+};
+
+export type QueryFilters<Operators> = {
   [Key in keyof Operators]?: Operators[Key];
 } & QueryLogicalOperators<Operators>;
 
@@ -48,9 +75,23 @@ export type ArrayTwoOrMore<T> = {
   1: T;
 } & Array<T>;
 
-export type RequireAtLeastOne<T> = {
-  [K in keyof T]-?: Required<Pick<T, K>> & Partial<Omit<T, K>>;
-}[keyof T];
+export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Omit<T, Keys> &
+  {
+    [K in Keys]-?: Required<Pick<T, K>> & Partial<Record<Exclude<Keys, K>, undefined>>;
+  }[Keys];
+export interface AIAudioConfigRequest {
+  profile?: string;
+
+  rules?: Array<BodyguardRule>;
+}
+
+export interface AIAudioConfigResponse {
+  enabled: boolean;
+
+  profile: string;
+
+  rules: Array<BodyguardRule>;
+}
 
 export interface AIImageConfig {
   enabled: boolean;
@@ -696,6 +737,11 @@ export interface BanInfoResponse {
   created_at: Date;
 
   /**
+   * The channel this ban applies to. Empty if this is an app-wide (global) ban rather than a per-channel ban.
+   */
+  channel_cid?: string;
+
+  /**
    * When the ban expires
    */
   expires?: Date;
@@ -709,6 +755,8 @@ export interface BanInfoResponse {
    * Whether this is a shadow ban
    */
   shadow?: boolean;
+
+  channel?: ChannelMetadata;
 
   created_by?: UserResponse;
 
@@ -844,6 +892,8 @@ export interface BlockListResponse {
   created_at?: Date;
 
   id?: string;
+
+  owner_user_id?: string;
 
   team?: string;
 
@@ -1062,48 +1112,6 @@ export interface CallCustomPropertyParameters {
   property_key?: string;
 }
 
-export interface CallResponse {
-  backstage: boolean;
-
-  captioning: boolean;
-
-  cid: string;
-
-  created_at: Date;
-
-  current_session_id: string;
-
-  id: string;
-
-  recording: boolean;
-
-  transcribing: boolean;
-
-  translating: boolean;
-
-  type: string;
-
-  updated_at: Date;
-
-  blocked_user_ids: Array<string>;
-
-  custom: Record<string, any>;
-
-  channel_cid?: string;
-
-  ended_at?: Date;
-
-  join_ahead_time_seconds?: number;
-
-  routing_number?: string;
-
-  starts_at?: Date;
-
-  team?: string;
-
-  created_by?: UserResponse;
-}
-
 export interface CallRuleActionSequence {
   violation_number?: number;
 
@@ -1273,6 +1281,25 @@ export interface ChannelConfigWithInfo {
   grants?: Record<string, Array<string>>;
 }
 
+export interface ChannelContextResponse {
+  /**
+   * Channel CID (<type>:<id>)
+   */
+  cid: string;
+
+  /**
+   * Channel ID
+   */
+  id: string;
+
+  /**
+   * Channel type
+   */
+  type: string;
+
+  created_by?: UserResponse;
+}
+
 export interface ChannelCreatedEvent {
   /**
    * Date/time of creation
@@ -1425,6 +1452,11 @@ export interface ChannelGetOrCreateRequest {
    */
   watch?: boolean;
 
+  /**
+   * Top-level keys of the message sender's channel-member custom data to include under member.custom (max 8 keys, 64 chars each)
+   */
+  member_custom_include?: Array<string>;
+
   data?: ChannelInput;
 
   members?: PaginationParams;
@@ -1495,7 +1527,7 @@ export interface ChannelInput {
   auto_translation_enabled?: boolean;
 
   /**
-   * Switch auto translation language
+   * Language (or comma-separated list of languages) to translate to when auto translation is active
    */
   auto_translation_language?: string;
 
@@ -1595,6 +1627,23 @@ export interface ChannelKickedEvent {
   channel_custom?: CustomChannelData;
 }
 
+export interface ChannelMemberPartialResponse {
+  /**
+   * Role of the member in the channel
+   */
+  channel_role: string;
+
+  /**
+   * Whether the user muted notifications for this channel
+   */
+  notifications_muted: boolean;
+
+  /**
+   * Channel-member custom fields projected via `member_custom_include`
+   */
+  custom?: Record<string, any>;
+}
+
 export interface ChannelMemberRequest {
   user_id: string;
 
@@ -1645,7 +1694,17 @@ export interface ChannelMemberResponse {
    */
   ban_expires?: Date;
 
+  /**
+   * Whether the member's ban also applies to channels the channel's creator will create in the future (an active future channel ban by the creator targets this member)
+   */
+  ban_from_future_channels?: boolean;
+
   deleted_at?: Date;
+
+  /**
+   * Expiration date of the future channel ban; absent when the future channel ban is permanent
+   */
+  future_channel_ban_expires?: Date;
 
   /**
    * Date when invite was accepted
@@ -1687,6 +1746,26 @@ export interface ChannelMessageCountRuleParameters {
   operator?: string;
 
   threshold?: number;
+}
+
+export interface ChannelMetadata {
+  cid: string;
+
+  id: string;
+
+  type: string;
+
+  custom: Record<string, any>;
+
+  last_message_at?: Date;
+
+  member_count?: number;
+
+  message_count?: number;
+
+  push_level?: string;
+
+  team?: string;
 }
 
 export interface ChannelMute {
@@ -1810,7 +1889,7 @@ export interface ChannelResponse {
   auto_translation_enabled?: boolean;
 
   /**
-   * Language to translate to when auto translation is active
+   * Language (or comma-separated list of languages) to translate to when auto translation is active
    */
   auto_translation_language?: string;
 
@@ -2305,7 +2384,7 @@ export interface ChatMessageResponse {
 
   image_labels?: Record<string, Array<string>>;
 
-  member?: ChannelMemberResponse;
+  member?: ChannelMemberPartialResponse;
 
   moderation?: ChatModerationV2Response;
 
@@ -2469,6 +2548,8 @@ export interface ChatSharedLocationResponseData {
 }
 
 export interface ClosedCaptionRuleParameters {
+  severity?: string;
+
   threshold?: number;
 
   time_window?: string;
@@ -2624,6 +2705,8 @@ export interface ConfigResponse {
    * Names of Bodyguard credential profiles registered on this app. The dashboard uses this list to render the profile picker on the AI Text section.
    */
   available_bodyguard_profiles?: Array<BodyguardProfileSummary>;
+
+  ai_audio_config?: AIAudioConfigResponse;
 
   ai_image_config?: AIImageConfig;
 
@@ -2793,6 +2876,9 @@ export interface CreatePollOptionRequest {
    */
   text: string;
 
+  /**
+   * Custom data for this object
+   */
   custom?: CustomPollOptionData;
 }
 
@@ -2835,6 +2921,9 @@ export interface CreatePollRequest {
 
   options?: Array<PollOptionInput>;
 
+  /**
+   * Custom data for this object
+   */
   custom?: CustomPollData;
 }
 
@@ -3082,6 +3171,39 @@ export interface DeleteReminderResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
+}
+
+export interface DeleteUserMessagesRequestPayload {
+  /**
+   * Message deletion mode: soft, pruning, or hard
+   */
+
+  delete_messages: 'soft' | 'pruning' | 'hard';
+
+  /**
+   * Optional: scope deletion to a single channel (alternative to app-wide deletion)
+   */
+  channel_cid?: string;
+
+  /**
+   * Whether to also delete the user's reactions on other users' messages
+   */
+  delete_reactions?: boolean;
+
+  /**
+   * ID of the user whose messages should be deleted (alternative to item_id)
+   */
+  entity_id?: string;
+
+  /**
+   * Type of the entity
+   */
+  entity_type?: string;
+
+  /**
+   * Reason for the deletion
+   */
+  reason?: string;
 }
 
 export interface DeleteUserRequestPayload {
@@ -3685,6 +3807,14 @@ export interface FeedsReactionResponse {
   custom?: Record<string, any>;
 }
 
+export interface FeedsShareResponse {
+  activity_id: string;
+
+  created_at: Date;
+
+  user: UserResponse;
+}
+
 export interface FeedsV3ActivityResponse {
   bookmark_count: number;
 
@@ -3766,7 +3896,11 @@ export interface FeedsV3ActivityResponse {
 
   friend_reactions?: Array<FeedsReactionResponse>;
 
+  latest_shares?: Array<FeedsShareResponse>;
+
   current_feed?: FeedsFeedResponse;
+
+  i18n?: Record<string, string>;
 
   location?: FeedsActivityLocation;
 
@@ -3832,6 +3966,8 @@ export interface FeedsV3CommentResponse {
 
   custom?: Record<string, any>;
 
+  i18n?: Record<string, string>;
+
   moderation?: ModerationV2Response;
 
   reaction_groups?: Record<string, FeedsReactionGroupResponse>;
@@ -3890,6 +4026,11 @@ export interface FilterConfigResponse {
   llm_labels: Array<string>;
 
   /**
+   * AI image moderation labels available as filter values. Reflects the app's effective image taxonomy: custom Bodyguard taxonomy when enabled, otherwise the standard L1 label set.
+   */
+  ai_image_labels?: Array<string>;
+
+  /**
    * AI text moderation labels available as filter values
    */
   ai_text_labels?: Array<string>;
@@ -3903,6 +4044,11 @@ export interface FilterConfigResponse {
    * The moderation_payload.custom keys the app has configured as review-queue filter chips (via moderation_dashboard_preferences.filterable_custom_keys). Discovery hint for the dashboard only — the filter accepts any custom key regardless of this list.
    */
   filterable_custom_keys?: Array<string>;
+
+  /**
+   * AI image moderation labels available as filter values, as a map of L1 label to its L2 sub-labels. Reflects the app's effective image taxonomy: custom Bodyguard taxonomy when enabled, otherwise the standard catalogue of the org's enabled image providers.
+   */
+  ai_image_taxonomy?: Record<string, Array<string>>;
 }
 
 export interface FlagCountRuleParameters {
@@ -3978,6 +4124,8 @@ export interface FlagUserOptions {
 }
 
 export interface FloodConfig {
+  allowlist?: Array<string>;
+
   identical?: FloodIdenticalConfig;
 
   similar?: FloodSimilarConfig;
@@ -3993,6 +4141,14 @@ export interface FloodIdenticalConfig {
   time_window: string;
 }
 
+export interface FloodIdenticalRuleParameters {
+  threshold?: number;
+
+  time_window?: string;
+
+  allowlist?: Array<string>;
+}
+
 export interface FloodSimilarConfig {
   action: string;
 
@@ -4003,6 +4159,16 @@ export interface FloodSimilarConfig {
   threshold: number;
 
   time_window: string;
+}
+
+export interface FloodSimilarRuleParameters {
+  similarity_distance?: number;
+
+  threshold?: number;
+
+  time_window?: string;
+
+  allowlist?: Array<string>;
 }
 
 export interface FullUserResponse {
@@ -4370,6 +4536,22 @@ export interface HideChannelResponse {
   duration: string;
 }
 
+export interface IPContentCountRuleParameters {
+  threshold?: number;
+
+  time_window?: string;
+}
+
+export interface IPFlagCountRuleParameters {
+  severity?: string;
+
+  threshold?: number;
+
+  time_window?: string;
+
+  harm_labels?: Array<string>;
+}
+
 export interface ImageContentParameters {
   label_operator?: string;
 
@@ -4465,6 +4647,21 @@ export interface Images {
   original: ImageData;
 }
 
+export interface ImportBlockListRequest {
+  items: Array<string>;
+
+  chunk_size?: number;
+}
+
+export interface ImportBlockListResponse {
+  /**
+   * Duration of the request in milliseconds
+   */
+  duration: string;
+
+  task_id: string;
+}
+
 export interface KeyframeOCRRuleParameters {
   threshold?: number;
 
@@ -4539,6 +4736,8 @@ export interface ListBlockListResponse {
   duration: string;
 
   blocklists: Array<BlockListResponse>;
+
+  next_cursor?: string;
 }
 
 export interface ListDevicesResponse {
@@ -5176,6 +5375,8 @@ export interface MessageNewEvent {
 
 export interface MessageOptions {
   include_thread_participants?: boolean;
+
+  member_custom_include?: Array<string>;
 }
 
 export interface MessagePaginationParams {
@@ -5355,7 +5556,7 @@ export interface MessageRequest {
    * Contains type of the message. One of: regular, system
    */
 
-  type?: "''" | 'regular' | 'system';
+  type?: 'regular' | 'system';
 
   /**
    * Array of message attachments
@@ -5569,7 +5770,7 @@ export interface MessageResponse {
    */
   image_labels?: Record<string, Array<string>>;
 
-  member?: ChannelMemberResponse;
+  member?: ChannelMemberPartialResponse;
 
   moderation?: ModerationV2Response;
 
@@ -5887,7 +6088,7 @@ export interface MessageWithChannelResponse {
    */
   image_labels?: Record<string, Array<string>>;
 
-  member?: ChannelMemberResponse;
+  member?: ChannelMemberPartialResponse;
 
   moderation?: ModerationV2Response;
 
@@ -5945,6 +6146,48 @@ export interface ModerationActionConfigResponse {
 
 export interface ModerationBanResponse {
   duration: string;
+}
+
+export interface ModerationCallResponse {
+  backstage: boolean;
+
+  captioning: boolean;
+
+  cid: string;
+
+  created_at: Date;
+
+  current_session_id: string;
+
+  id: string;
+
+  recording: boolean;
+
+  transcribing: boolean;
+
+  translating: boolean;
+
+  type: string;
+
+  updated_at: Date;
+
+  blocked_user_ids: Array<string>;
+
+  custom: Record<string, any>;
+
+  channel_cid?: string;
+
+  ended_at?: Date;
+
+  join_ahead_time_seconds?: number;
+
+  routing_number?: string;
+
+  starts_at?: Date;
+
+  team?: string;
+
+  created_by?: UserResponse;
 }
 
 export interface ModerationCustomActionEvent {
@@ -6038,6 +6281,8 @@ export interface ModerationMarkReviewedEvent {
 }
 
 export interface ModerationPayload {
+  audios?: Array<string>;
+
   image_ordered_keys?: Array<string>;
 
   images?: Array<string>;
@@ -6056,6 +6301,11 @@ export interface ModerationPayload {
 }
 
 export interface ModerationPayloadResponse {
+  /**
+   * Audio URLs to moderate
+   */
+  audios?: Array<string>;
+
   /**
    * Caller-supplied keys for images, index-aligned with images[]
    */
@@ -6956,6 +7206,14 @@ export interface NotificationThreadMessageNewEvent {
   channel_custom?: CustomChannelData;
 }
 
+export interface OCRContentParameters {
+  label_operator?: string;
+
+  severity?: string;
+
+  harm_labels?: Array<string>;
+}
+
 export interface OCRRule {
   action: 'flag' | 'shadow' | 'remove' | 'bounce' | 'bounce_flag' | 'bounce_remove';
 
@@ -7488,7 +7746,161 @@ export interface QueryAppealsRequest {
   /**
    * Filter conditions for appeals
    */
-  filter?: Record<string, any>;
+  filter?: Filters<{
+    appeal_reason: {
+      type: string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    created_at: {
+      type: Date | string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    decided_by: {
+      type: string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    decision_reason: {
+      type: string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    entity_id: {
+      type: string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    entity_type: {
+      type: string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    id: {
+      type: string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    review_queue_item_id: {
+      type: string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    status: {
+      type: string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    updated_at: {
+      type: Date | string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    user_id: {
+      type: string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+  }>;
 }
 
 export interface QueryAppealsResponse {
@@ -7529,7 +7941,7 @@ export interface QueryBannedUsersPayload {
     };
 
     created_at: {
-      type: Date;
+      type: Date | string;
       operators:
         | '$eq'
         | '$exists'
@@ -7644,6 +8056,11 @@ export interface QueryChannelsRequest {
   watch?: boolean;
 
   /**
+   * Top-level keys of the message sender's channel-member custom data to include under member.custom (max 8 keys, 64 chars each)
+   */
+  member_custom_include?: Array<string>;
+
+  /**
    * List of sort parameters
    */
   sort?: Array<SortParamRequest>;
@@ -7687,7 +8104,7 @@ export interface QueryChannelsRequest {
     };
 
     created_at: {
-      type: Date;
+      type: Date | string;
       operators:
         | '$eq'
         | '$exists'
@@ -7712,6 +8129,22 @@ export interface QueryChannelsRequest {
         | '$lte'
         | '$ne'
         | '$nin';
+    };
+
+    custom: {
+      type: CustomChannelData;
+      operators:
+        | '$autocomplete'
+        | '$contains'
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$nin'
+        | '$q';
     };
 
     disabled: {
@@ -7778,7 +8211,7 @@ export interface QueryChannelsRequest {
     };
 
     last_message_at: {
-      type: Date;
+      type: Date | string;
       operators:
         | '$eq'
         | '$exists'
@@ -7792,7 +8225,7 @@ export interface QueryChannelsRequest {
     };
 
     last_updated: {
-      type: Date;
+      type: Date | string;
       operators:
         | '$eq'
         | '$exists'
@@ -7898,7 +8331,7 @@ export interface QueryChannelsRequest {
     };
 
     updated_at: {
-      type: Date;
+      type: Date | string;
       operators:
         | '$eq'
         | '$exists'
@@ -7949,7 +8382,22 @@ export interface QueryDraftsRequest {
   /**
    * Filter to apply to the query
    */
-  filter?: Record<string, any>;
+  filter?: Filters<{
+    channel_cid: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+
+    created_at: {
+      type: Date | string;
+      operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte';
+    };
+
+    parent_id: {
+      type: string;
+      operators: '$eq' | '$exists' | '$in';
+    };
+  }>;
 }
 
 export interface QueryDraftsResponse {
@@ -7975,6 +8423,11 @@ export interface QueryFutureChannelBansPayload {
   exclude_expired_bans?: boolean;
 
   /**
+   * When true, the response includes the total number of bans matching the query filter (independent of limit and offset, capped at 100000)
+   */
+  include_total?: boolean;
+
+  /**
    * Number of records to return
    */
   limit?: number;
@@ -7985,7 +8438,7 @@ export interface QueryFutureChannelBansPayload {
   offset?: number;
 
   /**
-   * Filter by the target user ID. For server-side requests only.
+   * Filter by the target user ID. Server-side: returns all bans against this user. Client-side: narrows the authenticated user's own bans to this target.
    */
   target_user_id?: string;
 }
@@ -8000,6 +8453,11 @@ export interface QueryFutureChannelBansResponse {
    * List of found future channel bans
    */
   bans: Array<FutureChannelBanResponse>;
+
+  /**
+   * Total number of bans matching the query filter, computed at query time and capped at 100000. Only present when include_total is set on the request; omitted when computing the total timed out
+   */
+  total?: number;
 }
 
 export interface QueryMembersPayload {
@@ -8025,7 +8483,7 @@ export interface QueryMembersPayload {
     };
 
     created_at: {
-      type: Date;
+      type: Date | string;
       operators:
         | '$eq'
         | '$exists'
@@ -8036,6 +8494,22 @@ export interface QueryMembersPayload {
         | '$lte'
         | '$ne'
         | '$nin';
+    };
+
+    custom: {
+      type: CustomMemberData;
+      operators:
+        | '$autocomplete'
+        | '$contains'
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$nin'
+        | '$q';
     };
 
     id: {
@@ -8068,7 +8542,7 @@ export interface QueryMembersPayload {
     };
 
     last_active: {
-      type: Date;
+      type: Date | string;
       operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte' | '$ne';
     };
 
@@ -8083,7 +8557,7 @@ export interface QueryMembersPayload {
     };
 
     updated_at: {
-      type: Date;
+      type: Date | string;
       operators:
         | '$eq'
         | '$exists'
@@ -8268,7 +8742,64 @@ export interface QueryModerationConfigsRequest {
   /**
    * Filter conditions for moderation configs
    */
-  filter?: Record<string, any>;
+  filter?: Filters<{
+    created_at: {
+      type: Date | string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    key: {
+      type: string;
+      operators:
+        | '$autocomplete'
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    team: {
+      type: string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    updated_at: {
+      type: Date | string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+  }>;
 }
 
 export interface QueryModerationConfigsResponse {
@@ -8299,7 +8830,42 @@ export interface QueryPollVotesRequest {
   /**
    * Filter to apply to the query
    */
-  filter?: Record<string, any>;
+  filter?: Filters<{
+    created_at: {
+      type: Date | string;
+      operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte';
+    };
+
+    id: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+
+    is_answer: {
+      type: boolean;
+      operators: '$eq';
+    };
+
+    option_id: {
+      type: string;
+      operators: '$eq' | '$exists' | '$in';
+    };
+
+    poll_id: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+
+    updated_at: {
+      type: Date | string;
+      operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte';
+    };
+
+    user_id: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+  }>;
 }
 
 export interface QueryPollsRequest {
@@ -8317,7 +8883,73 @@ export interface QueryPollsRequest {
   /**
    * Filter to apply to the query
    */
-  filter?: Record<string, any>;
+  filter?: Filters<{
+    allow_answers: {
+      type: boolean;
+      operators: '$eq';
+    };
+
+    allow_user_suggested_options: {
+      type: boolean;
+      operators: '$eq';
+    };
+
+    created_at: {
+      type: Date | string;
+      operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte';
+    };
+
+    created_by_id: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+
+    custom: {
+      type: CustomPollData;
+      operators:
+        | '$autocomplete'
+        | '$contains'
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$nin'
+        | '$q';
+    };
+
+    id: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+
+    is_closed: {
+      type: boolean;
+      operators: '$eq';
+    };
+
+    max_votes_allowed: {
+      type: number;
+      operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte' | '$ne';
+    };
+
+    name: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+
+    updated_at: {
+      type: Date | string;
+      operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte';
+    };
+
+    voting_visibility: {
+      type: string;
+      operators: '$eq';
+    };
+  }>;
 }
 
 export interface QueryPollsResponse {
@@ -8353,7 +8985,7 @@ export interface QueryReactionsRequest {
    */
   filter?: Filters<{
     created_at: {
-      type: Date;
+      type: Date | string;
       operators:
         | '$eq'
         | '$exists'
@@ -8406,7 +9038,27 @@ export interface QueryRemindersRequest {
   /**
    * Filter to apply to the query
    */
-  filter?: Record<string, any>;
+  filter?: Filters<{
+    channel_cid: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+
+    created_at: {
+      type: Date | string;
+      operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte';
+    };
+
+    message_id: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+
+    remind_at: {
+      type: Date | string;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$lt' | '$lte';
+    };
+  }>;
 }
 
 export interface QueryRemindersResponse {
@@ -8462,7 +9114,405 @@ export interface QueryReviewQueueRequest {
   /**
    * Filter conditions for review queue items. Accepts built-in fields (e.g. status, channel_cid, severity, recommended_action) and customer-supplied moderation_payload.custom keys: any key that is not a built-in field is matched against the item's custom moderation data (e.g. {"location_id": "loc-42"}). Use filter_config.filterable_custom_keys to discover which custom keys the app exposes as chips.
    */
-  filter?: Record<string, any>;
+  filter?: Filters<{
+    ai_text_severity: {
+      type: string;
+      operators: '$eq';
+    };
+
+    appeal: {
+      type: boolean;
+      operators: '$eq';
+    };
+
+    appeal_id: {
+      type: string;
+      operators: '$eq';
+    };
+
+    appeal_status: {
+      type: string;
+      operators: '$eq';
+    };
+
+    archived_at: {
+      type: Date | string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    bounce_count: {
+      type: number;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    category: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+
+    channel_cid: {
+      type: string;
+      operators: '$eq';
+    };
+
+    channel_id: {
+      type: string;
+      operators: '$eq';
+    };
+
+    completed_at: {
+      type: Date | string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    config_key: {
+      type: string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    created_at: {
+      type: Date | string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    custom: {
+      type: Record<string, any>;
+      operators:
+        | '$autocomplete'
+        | '$contains'
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$nin'
+        | '$q';
+    };
+
+    date_range: {
+      type: string;
+      operators: '$eq';
+    };
+
+    entity_creator_id: {
+      type: string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    entity_creator_name: {
+      type: string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    entity_id: {
+      type: string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    entity_type: {
+      type: string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    escalated: {
+      type: boolean;
+      operators: '$eq';
+    };
+
+    escalated_at: {
+      type: Date | string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    escalated_by: {
+      type: string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    escalation_priority: {
+      type: string;
+      operators: '$eq';
+    };
+
+    escalation_reason: {
+      type: string;
+      operators: '$eq';
+    };
+
+    flagged_user_id: {
+      type: string;
+      operators: '$eq';
+    };
+
+    flags_count: {
+      type: number;
+      operators: '$eq';
+    };
+
+    has_audio: {
+      type: boolean;
+      operators: '$eq';
+    };
+
+    has_image: {
+      type: boolean;
+      operators: '$eq';
+    };
+
+    has_text: {
+      type: boolean;
+      operators: '$eq';
+    };
+
+    has_video: {
+      type: boolean;
+      operators: '$eq';
+    };
+
+    id: {
+      type: string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    label: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+
+    language: {
+      type: string;
+      operators: '$contains' | '$eq' | '$in';
+    };
+
+    latest_moderator_action: {
+      type: string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    queue_type: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+
+    recommended_action: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+
+    reporter_id: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+
+    reporter_type: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+
+    reviewed: {
+      type: boolean;
+      operators: '$eq';
+    };
+
+    reviewed_at: {
+      type: Date | string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    severity: {
+      type: number;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    status: {
+      type: string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    teams: {
+      type: string;
+      operators: '$contains' | '$eq' | '$in';
+    };
+
+    type: {
+      type: string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    updated_at: {
+      type: Date | string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    user_report_reason: {
+      type: string;
+      operators: '$eq' | '$in';
+    };
+  }>;
 }
 
 export interface QueryReviewQueueResponse {
@@ -8546,7 +9596,7 @@ export interface QueryThreadsRequest {
     };
 
     created_at: {
-      type: Date;
+      type: Date | string;
       operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte';
     };
 
@@ -8555,13 +9605,29 @@ export interface QueryThreadsRequest {
       operators: '$eq' | '$in';
     };
 
+    custom: {
+      type: CustomThreadData;
+      operators:
+        | '$autocomplete'
+        | '$contains'
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$nin'
+        | '$q';
+    };
+
     has_unread: {
       type: boolean;
       operators: '$eq';
     };
 
     last_message_at: {
-      type: Date;
+      type: Date | string;
       operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte';
     };
 
@@ -8581,7 +9647,7 @@ export interface QueryThreadsRequest {
     };
 
     updated_at: {
-      type: Date;
+      type: Date | string;
       operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte';
     };
   }>;
@@ -8619,7 +9685,7 @@ export interface QueryUsersPayload {
     };
 
     created_at: {
-      type: Date;
+      type: Date | string;
       operators:
         | '$eq'
         | '$exists'
@@ -8629,6 +9695,20 @@ export interface QueryUsersPayload {
         | '$lt'
         | '$lte'
         | '$ne'
+        | '$nin';
+    };
+
+    custom: {
+      type: CustomUserData;
+      operators:
+        | '$contains'
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
         | '$nin';
     };
 
@@ -8658,7 +9738,7 @@ export interface QueryUsersPayload {
     };
 
     last_active: {
-      type: Date;
+      type: Date | string;
       operators:
         | '$eq'
         | '$exists'
@@ -8707,11 +9787,11 @@ export interface QueryUsersPayload {
 
     teams: {
       type: string;
-      operators: '$_none' | '$contains' | '$eq' | '$in';
+      operators: '$contains' | '$eq' | '$in';
     };
 
     updated_at: {
-      type: Date;
+      type: Date | string;
       operators:
         | '$eq'
         | '$exists'
@@ -9430,7 +10510,7 @@ export interface ReviewQueueItemResponse {
 
   assigned_to?: UserResponse;
 
-  call?: CallResponse;
+  call?: ModerationCallResponse;
 
   entity_creator?: EntityCreatorResponse;
 
@@ -9532,13 +10612,23 @@ export interface RuleBuilderCondition {
 
   content_flag_count_rule_params?: FlagCountRuleParameters;
 
+  flood_identical_params?: FloodIdenticalRuleParameters;
+
+  flood_similar_params?: FloodSimilarRuleParameters;
+
   image_content_params?: ImageContentParameters;
 
   image_rule_params?: ImageRuleParameters;
 
+  ip_content_count_rule_params?: IPContentCountRuleParameters;
+
+  ip_flag_count_rule_params?: IPFlagCountRuleParameters;
+
   keyframe_ocr_rule_params?: KeyframeOCRRuleParameters;
 
   keyframe_rule_params?: KeyframeRuleParameters;
+
+  ocr_content_params?: OCRContentParameters;
 
   text_content_params?: TextContentParameters;
 
@@ -9631,7 +10721,7 @@ export interface SearchPayload {
     };
 
     created_at: {
-      type: Date;
+      type: Date | string;
       operators:
         | '$eq'
         | '$exists'
@@ -9656,6 +10746,22 @@ export interface SearchPayload {
         | '$lte'
         | '$ne'
         | '$nin';
+    };
+
+    custom: {
+      type: CustomChannelData;
+      operators:
+        | '$autocomplete'
+        | '$contains'
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$nin'
+        | '$q';
     };
 
     disabled: {
@@ -9722,7 +10828,7 @@ export interface SearchPayload {
     };
 
     last_message_at: {
-      type: Date;
+      type: Date | string;
       operators:
         | '$eq'
         | '$exists'
@@ -9736,7 +10842,7 @@ export interface SearchPayload {
     };
 
     last_updated: {
-      type: Date;
+      type: Date | string;
       operators:
         | '$eq'
         | '$exists'
@@ -9842,7 +10948,7 @@ export interface SearchPayload {
     };
 
     updated_at: {
-      type: Date;
+      type: Date | string;
       operators:
         | '$eq'
         | '$exists'
@@ -9899,8 +11005,8 @@ export interface SearchPayload {
       operators: '$eq' | '$in';
     };
 
-    created_at: {
-      type: Date;
+    cid: {
+      type: string;
       operators:
         | '$eq'
         | '$exists'
@@ -9911,6 +11017,25 @@ export interface SearchPayload {
         | '$lte'
         | '$ne'
         | '$nin';
+    };
+
+    created_at: {
+      type: Date | string;
+      operators:
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte'
+        | '$ne'
+        | '$nin';
+    };
+
+    custom: {
+      type: CustomMessageData;
+      operators: '$eq' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     id: {
@@ -9997,7 +11122,7 @@ export interface SearchPayload {
     };
 
     updated_at: {
-      type: Date;
+      type: Date | string;
       operators:
         | '$eq'
         | '$exists'
@@ -10137,7 +11262,7 @@ export interface SearchResultMessage {
 
   image_labels?: Record<string, Array<string>>;
 
-  member?: ChannelMemberResponse;
+  member?: ChannelMemberPartialResponse;
 
   moderation?: ModerationV2Response;
 
@@ -10201,6 +11326,16 @@ export interface SendEventRequest {
 export interface SendMessageRequest {
   message: MessageRequest;
 
+  /**
+   * When true, the response includes channel_context: a slim channel object with cid, type, id and created_by
+   */
+  include_channel_context?: boolean;
+
+  /**
+   * When true, the response includes mentioned_members: for each mentioned user, whether that user is currently a channel member. Requires the ReadChannelMembers permission
+   */
+  include_mentioned_members?: boolean;
+
   keep_channel_hidden?: boolean;
 
   skip_enrich_url?: boolean;
@@ -10215,6 +11350,13 @@ export interface SendMessageResponse {
   duration: string;
 
   message: MessageResponse;
+
+  channel_context?: ChannelContextResponse;
+
+  /**
+   * Map of mentioned user ID to whether that user is currently an active channel member. Only set when include_mentioned_members was requested; omitted when the message has no mentions or the membership lookup failed
+   */
+  mentioned_members?: Record<string, boolean>;
 
   /**
    * Pending message metadata
@@ -10375,7 +11517,7 @@ export interface SortParamRequest {
 
 export interface SubmitActionRequest {
   /**
-   * Type of moderation action to perform. One of: mark_reviewed, delete_message, delete_activity, delete_comment, delete_reaction, ban, custom, unban, restore, delete_user, unblock, block, shadow_block, unmask, kick_user, end_call, escalate, de_escalate
+   * Type of moderation action to perform. One of: mark_reviewed, delete_message, delete_activity, delete_comment, delete_reaction, ban, custom, unban, restore, delete_user, delete_user_messages, unblock, block, shadow_block, unmask, kick_user, end_call, escalate, de_escalate
    */
 
   action_type:
@@ -10390,6 +11532,7 @@ export interface SubmitActionRequest {
     | 'unban'
     | 'restore'
     | 'delete_user'
+    | 'delete_user_messages'
     | 'unblock'
     | 'block'
     | 'shadow_block'
@@ -10428,6 +11571,8 @@ export interface SubmitActionRequest {
   delete_reaction?: DeleteReactionRequestPayload;
 
   delete_user?: DeleteUserRequestPayload;
+
+  delete_user_messages?: DeleteUserMessagesRequestPayload;
 
   escalate?: EscalatePayload;
 
@@ -10527,8 +11672,6 @@ export interface TextRuleParameters {
 }
 
 export interface ThreadParticipant {
-  app_pk: number;
-
   channel_cid: string;
 
   /**
@@ -10592,6 +11735,11 @@ export interface ThreadResponse {
   participant_count: number;
 
   /**
+   * Reply Count
+   */
+  reply_count: number;
+
+  /**
    * Title
    */
   title: string;
@@ -10615,11 +11763,6 @@ export interface ThreadResponse {
    * Last Message At
    */
   last_message_at?: Date;
-
-  /**
-   * Reply Count
-   */
-  reply_count?: number;
 
   /**
    * Thread Participants
@@ -10665,6 +11808,11 @@ export interface ThreadStateResponse {
   participant_count: number;
 
   /**
+   * Reply Count
+   */
+  reply_count: number;
+
+  /**
    * Title
    */
   title: string;
@@ -10690,11 +11838,6 @@ export interface ThreadStateResponse {
    * Last Message At
    */
   last_message_at?: Date;
-
-  /**
-   * Reply Count
-   */
-  reply_count?: number;
 
   read?: Array<ReadStateResponse>;
 
@@ -10935,6 +12078,11 @@ export interface UnbanActionRequestPayload {
    * Also remove the future channels ban for this user
    */
   remove_future_channels_ban?: boolean;
+
+  /**
+   * Optional: unban user directly without review item
+   */
+  target_user_id?: string;
 }
 
 export interface UnblockActionRequestPayload {
@@ -10965,6 +12113,13 @@ export interface UnmuteChannelRequest {
    * Channel CIDs to mute (if multiple channels)
    */
   channel_cids?: Array<string>;
+}
+
+export interface UnmuteRequest {
+  /**
+   * User IDs to unmute
+   */
+  target_ids: Array<string>;
 }
 
 export interface UnmuteResponse {
@@ -11243,6 +12398,9 @@ export interface UpdatePollOptionRequest {
    */
   text: string;
 
+  /**
+   * Custom data for this object
+   */
   custom?: CustomPollOptionData;
 }
 
@@ -11310,6 +12468,9 @@ export interface UpdatePollRequest {
    */
   options?: Array<PollOptionRequest>;
 
+  /**
+   * Custom data for this object
+   */
   custom?: CustomPollData;
 }
 
@@ -11551,6 +12712,8 @@ export interface UpsertConfigRequest {
    * Team associated with the configuration
    */
   team?: string;
+
+  ai_audio_config?: AIAudioConfigRequest;
 
   ai_image_config?: AIImageConfig;
 
@@ -12486,6 +13649,11 @@ export interface WSAuthMessage {
   token: string;
 
   user_details: ConnectUserDetailsRequest;
+
+  /**
+   * Channel-member custom keys to project onto message.member for messages this connection receives (opt-in; capped, off by default).
+   */
+  member_custom_include?: Array<string>;
 
   /**
    * List of products to subscribe to. One of: chat, video, feeds

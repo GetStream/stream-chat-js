@@ -45,6 +45,8 @@ import type {
   HideChannelResponse,
   ImageUploadRequest,
   ImageUploadResponse,
+  ImportBlockListRequest,
+  ImportBlockListResponse,
   ListBlockListResponse,
   ListDevicesResponse,
   ListUserGroupsResponse,
@@ -163,9 +165,13 @@ export class ChatApi {
 
   async listBlockLists(request?: {
     team?: string;
+    cursor?: string;
+    limit?: number;
   }): Promise<StreamResponse<ListBlockListResponse>> {
     const queryParams = {
       team: request?.team,
+      cursor: request?.cursor,
+      limit: request?.limit,
     };
 
     const response = await this.apiClient.sendRequest<
@@ -196,6 +202,33 @@ export class ChatApi {
     >('POST', '/api/v2/blocklists', undefined, undefined, body, 'application/json');
 
     decoders['CreateBlockListResponse']?.(response.body);
+
+    return { ...response.body, metadata: response.metadata };
+  }
+
+  async importBlockList(
+    request: ImportBlockListRequest & { id: string },
+  ): Promise<StreamResponse<ImportBlockListResponse>> {
+    const pathParams = {
+      id: request?.id,
+    };
+    const body = {
+      items: request?.items,
+      chunk_size: request?.chunk_size,
+    };
+
+    const response = await this.apiClient.sendRequest<
+      StreamResponse<ImportBlockListResponse>
+    >(
+      'POST',
+      '/api/v2/blocklists/{id}/import',
+      pathParams,
+      undefined,
+      body,
+      'application/json',
+    );
+
+    decoders['ImportBlockListResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -269,6 +302,7 @@ export class ChatApi {
       presence: request?.presence,
       state: request?.state,
       watch: request?.watch,
+      member_custom_include: request?.member_custom_include,
       sort: request?.sort,
       filter_conditions: request?.filter_conditions,
       filter_values: request?.filter_values,
@@ -396,6 +430,7 @@ export class ChatApi {
       state: request?.state,
       thread_unread_counts: request?.thread_unread_counts,
       watch: request?.watch,
+      member_custom_include: request?.member_custom_include,
       data: request?.data,
       members: request?.members,
       messages: request?.messages,
@@ -436,6 +471,34 @@ export class ChatApi {
     >('DELETE', '/api/v2/chat/channels/{type}/{id}', pathParams, queryParams);
 
     decoders['DeleteChannelResponse']?.(response.body);
+
+    return { ...response.body, metadata: response.metadata };
+  }
+
+  async getChannel(request: {
+    type: string;
+    id: string;
+    state?: boolean;
+    messages_limit?: number;
+    members_limit?: number;
+    watchers_limit?: number;
+  }): Promise<StreamResponse<ChannelStateResponse>> {
+    const queryParams = {
+      state: request?.state,
+      messages_limit: request?.messages_limit,
+      members_limit: request?.members_limit,
+      watchers_limit: request?.watchers_limit,
+    };
+    const pathParams = {
+      type: request?.type,
+      id: request?.id,
+    };
+
+    const response = await this.apiClient.sendRequest<
+      StreamResponse<ChannelStateResponse>
+    >('GET', '/api/v2/chat/channels/{type}/{id}', pathParams, queryParams);
+
+    decoders['ChannelStateResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -783,6 +846,8 @@ export class ChatApi {
     };
     const body = {
       message: request?.message,
+      include_channel_context: request?.include_channel_context,
+      include_mentioned_members: request?.include_mentioned_members,
       keep_channel_hidden: request?.keep_channel_hidden,
       skip_enrich_url: request?.skip_enrich_url,
       skip_push: request?.skip_push,
@@ -808,9 +873,11 @@ export class ChatApi {
     type: string;
     id: string;
     ids: Array<string>;
+    member_custom_include?: Array<string>;
   }): Promise<StreamResponse<GetManyMessagesResponse>> {
     const queryParams = {
       ids: request?.ids,
+      member_custom_include: request?.member_custom_include,
     };
     const pathParams = {
       type: request?.type,
@@ -846,6 +913,7 @@ export class ChatApi {
       state: request?.state,
       thread_unread_counts: request?.thread_unread_counts,
       watch: request?.watch,
+      member_custom_include: request?.member_custom_include,
       data: request?.data,
       members: request?.members,
       messages: request?.messages,
@@ -1056,12 +1124,10 @@ export class ChatApi {
   async deleteMessage(request: {
     id: string;
     hard?: boolean;
-    deleted_by?: string;
     delete_for_me?: boolean;
   }): Promise<StreamResponse<DeleteMessageResponse>> {
     const queryParams = {
       hard: request?.hard,
-      deleted_by: request?.deleted_by,
       delete_for_me: request?.delete_for_me,
     };
     const pathParams = {
@@ -1208,11 +1274,7 @@ export class ChatApi {
   async deleteReaction(request: {
     id: string;
     type: string;
-    user_id?: string;
   }): Promise<StreamResponse<DeleteReactionResponse>> {
-    const queryParams = {
-      user_id: request?.user_id,
-    };
     const pathParams = {
       id: request?.id,
       type: request?.type,
@@ -1220,7 +1282,7 @@ export class ChatApi {
 
     const response = await this.apiClient.sendRequest<
       StreamResponse<DeleteReactionResponse>
-    >('DELETE', '/api/v2/chat/messages/{id}/reaction/{type}', pathParams, queryParams);
+    >('DELETE', '/api/v2/chat/messages/{id}/reaction/{type}', pathParams, undefined);
 
     decoders['DeleteReactionResponse']?.(response.body);
 
@@ -1334,11 +1396,7 @@ export class ChatApi {
     message_id: string;
     poll_id: string;
     vote_id: string;
-    user_id?: string;
   }): Promise<StreamResponse<PollVoteResponse>> {
-    const queryParams = {
-      user_id: request?.user_id,
-    };
     const pathParams = {
       message_id: request?.message_id,
       poll_id: request?.poll_id,
@@ -1349,7 +1407,7 @@ export class ChatApi {
       'DELETE',
       '/api/v2/chat/messages/{message_id}/polls/{poll_id}/vote/{vote_id}',
       pathParams,
-      queryParams,
+      undefined,
     );
 
     decoders['PollVoteResponse']?.(response.body);
@@ -1434,6 +1492,7 @@ export class ChatApi {
     id_lt?: string;
     id_around?: string;
     sort?: Array<SortParamRequest>;
+    member_custom_include?: Array<string>;
   }): Promise<StreamResponse<GetRepliesResponse>> {
     const queryParams = {
       limit: request?.limit,
@@ -1443,6 +1502,7 @@ export class ChatApi {
       id_lt: request?.id_lt,
       id_around: request?.id_around,
       sort: request?.sort,
+      member_custom_include: request?.member_custom_include,
     };
     const pathParams = {
       parent_id: request?.parent_id,
@@ -1889,11 +1949,8 @@ export class ChatApi {
   }
 
   async queryPolls(
-    request?: QueryPollsRequest & { user_id?: string },
+    request?: QueryPollsRequest,
   ): Promise<StreamResponse<QueryPollsResponse>> {
-    const queryParams = {
-      user_id: request?.user_id,
-    };
     const body = {
       limit: request?.limit,
       next: request?.next,
@@ -1906,7 +1963,7 @@ export class ChatApi {
       'POST',
       '/api/v2/polls/query',
       undefined,
-      queryParams,
+      undefined,
       body,
       'application/json',
     );
@@ -1916,13 +1973,7 @@ export class ChatApi {
     return { ...response.body, metadata: response.metadata };
   }
 
-  async deletePoll(request: {
-    poll_id: string;
-    user_id?: string;
-  }): Promise<StreamResponse<Response>> {
-    const queryParams = {
-      user_id: request?.user_id,
-    };
+  async deletePoll(request: { poll_id: string }): Promise<StreamResponse<Response>> {
     const pathParams = {
       poll_id: request?.poll_id,
     };
@@ -1931,7 +1982,7 @@ export class ChatApi {
       'DELETE',
       '/api/v2/polls/{poll_id}',
       pathParams,
-      queryParams,
+      undefined,
     );
 
     decoders['Response']?.(response.body);
@@ -1939,13 +1990,7 @@ export class ChatApi {
     return { ...response.body, metadata: response.metadata };
   }
 
-  async getPoll(request: {
-    poll_id: string;
-    user_id?: string;
-  }): Promise<StreamResponse<PollResponse>> {
-    const queryParams = {
-      user_id: request?.user_id,
-    };
+  async getPoll(request: { poll_id: string }): Promise<StreamResponse<PollResponse>> {
     const pathParams = {
       poll_id: request?.poll_id,
     };
@@ -1954,7 +1999,7 @@ export class ChatApi {
       'GET',
       '/api/v2/polls/{poll_id}',
       pathParams,
-      queryParams,
+      undefined,
     );
 
     decoders['PollResponse']?.(response.body);
@@ -2041,11 +2086,7 @@ export class ChatApi {
   async deletePollOption(request: {
     poll_id: string;
     option_id: string;
-    user_id?: string;
   }): Promise<StreamResponse<Response>> {
-    const queryParams = {
-      user_id: request?.user_id,
-    };
     const pathParams = {
       poll_id: request?.poll_id,
       option_id: request?.option_id,
@@ -2055,7 +2096,7 @@ export class ChatApi {
       'DELETE',
       '/api/v2/polls/{poll_id}/options/{option_id}',
       pathParams,
-      queryParams,
+      undefined,
     );
 
     decoders['Response']?.(response.body);
@@ -2066,11 +2107,7 @@ export class ChatApi {
   async getPollOption(request: {
     poll_id: string;
     option_id: string;
-    user_id?: string;
   }): Promise<StreamResponse<PollOptionResponse>> {
-    const queryParams = {
-      user_id: request?.user_id,
-    };
     const pathParams = {
       poll_id: request?.poll_id,
       option_id: request?.option_id,
@@ -2080,7 +2117,7 @@ export class ChatApi {
       'GET',
       '/api/v2/polls/{poll_id}/options/{option_id}',
       pathParams,
-      queryParams,
+      undefined,
     );
 
     decoders['PollOptionResponse']?.(response.body);
@@ -2089,11 +2126,8 @@ export class ChatApi {
   }
 
   async queryPollVotes(
-    request: QueryPollVotesRequest & { poll_id: string; user_id?: string },
+    request: QueryPollVotesRequest & { poll_id: string },
   ): Promise<StreamResponse<PollVotesResponse>> {
-    const queryParams = {
-      user_id: request?.user_id,
-    };
     const pathParams = {
       poll_id: request?.poll_id,
     };
@@ -2109,7 +2143,7 @@ export class ChatApi {
       'POST',
       '/api/v2/polls/{poll_id}/votes',
       pathParams,
-      queryParams,
+      undefined,
       body,
       'application/json',
     );

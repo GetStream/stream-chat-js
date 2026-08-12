@@ -29,13 +29,13 @@ import type {
   PrivacySettingsResponse,
   PushPreferencesResponse,
   QueryChannelsRequest,
-  QueryFilters,
   QueryMembersPayload,
+  QueryPollsRequest,
+  QueryPollVotesRequest,
+  QueryRemindersRequest,
   QueryThreadsRequest,
   QueryUsersPayload,
   ReactionResponse,
-  ReminderResponseData,
-  RequireAtLeastOne,
   SearchPayload,
   SearchWarning,
   SendMessageRequest,
@@ -63,6 +63,10 @@ export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Omit<T, Keys> &
   {
     [K in Keys]-?: Required<Pick<T, K>> & Partial<Record<Exclude<Keys, K>, undefined>>;
   }[Keys];
+
+export type RequireAtLeastOne<T> = {
+  [K in keyof T]-?: Required<Pick<T, K>> & Partial<Omit<T, K>>;
+}[keyof T];
 
 export type UR = Record<string, unknown>;
 
@@ -494,116 +498,9 @@ export type VotesFiltersOptions = {
 
 export type QueryVotesOptions = Pager;
 
-export type QueryPollsFilters = QueryFilters<
-  {
-    id?:
-      | RequireOnlyOne<Pick<QueryFilter<PollResponse_old['id']>, '$eq' | '$in'>>
-      | PrimitiveFilter<PollResponse_old['id']>;
-  } & {
-    user_id?:
-      | RequireOnlyOne<Pick<QueryFilter<VotesFiltersOptions['user_id']>, '$eq' | '$in'>>
-      | PrimitiveFilter<VotesFiltersOptions['user_id']>;
-  } & {
-    is_closed?:
-      | RequireOnlyOne<Pick<QueryFilter<PollResponse_old['is_closed']>, '$eq'>>
-      | PrimitiveFilter<PollResponse_old['is_closed']>;
-  } & {
-    max_votes_allowed?:
-      | RequireOnlyOne<
-          Pick<
-            QueryFilter<PollResponse_old['max_votes_allowed']>,
-            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
-          >
-        >
-      | PrimitiveFilter<PollResponse_old['max_votes_allowed']>;
-  } & {
-    allow_answers?:
-      | RequireOnlyOne<Pick<QueryFilter<PollResponse_old['allow_answers']>, '$eq'>>
-      | PrimitiveFilter<PollResponse_old['allow_answers']>;
-  } & {
-    allow_user_suggested_options?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<PollResponse_old['allow_user_suggested_options']>, '$eq'>
-        >
-      | PrimitiveFilter<PollResponse_old['allow_user_suggested_options']>;
-  } & {
-    voting_visibility?:
-      | RequireOnlyOne<Pick<QueryFilter<PollResponse_old['voting_visibility']>, '$eq'>>
-      | PrimitiveFilter<PollResponse_old['voting_visibility']>;
-  } & {
-    created_at?:
-      | RequireOnlyOne<
-          Pick<
-            QueryFilter<PollResponse_old['created_at']>,
-            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
-          >
-        >
-      | PrimitiveFilter<PollResponse_old['created_at']>;
-  } & {
-    created_by_id?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<PollResponse_old['created_by_id']>, '$eq' | '$in'>
-        >
-      | PrimitiveFilter<PollResponse_old['created_by_id']>;
-  } & {
-    updated_at?:
-      | RequireOnlyOne<
-          Pick<
-            QueryFilter<PollResponse_old['updated_at']>,
-            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
-          >
-        >
-      | PrimitiveFilter<PollResponse_old['updated_at']>;
-  } & {
-    name?:
-      | RequireOnlyOne<Pick<QueryFilter<PollResponse_old['name']>, '$eq' | '$in'>>
-      | PrimitiveFilter<PollResponse_old['name']>;
-  }
->;
+export type QueryPollsFilters = NonNullable<QueryPollsRequest['filter']>;
 
-export type QueryVotesFilters = QueryFilters<
-  {
-    id?:
-      | RequireOnlyOne<Pick<QueryFilter<PollResponse_old['id']>, '$eq' | '$in'>>
-      | PrimitiveFilter<PollResponse_old['id']>;
-  } & {
-    option_id?:
-      | RequireOnlyOne<Pick<QueryFilter<VotesFiltersOptions['option_id']>, '$eq' | '$in'>>
-      | PrimitiveFilter<VotesFiltersOptions['option_id']>;
-  } & {
-    is_answer?:
-      | RequireOnlyOne<Pick<QueryFilter<VotesFiltersOptions['is_answer']>, '$eq'>>
-      | PrimitiveFilter<VotesFiltersOptions['is_answer']>;
-  } & {
-    user_id?:
-      | RequireOnlyOne<Pick<QueryFilter<VotesFiltersOptions['user_id']>, '$eq' | '$in'>>
-      | PrimitiveFilter<VotesFiltersOptions['user_id']>;
-  } & {
-    created_at?:
-      | RequireOnlyOne<
-          Pick<
-            QueryFilter<PollResponse_old['created_at']>,
-            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
-          >
-        >
-      | PrimitiveFilter<PollResponse_old['created_at']>;
-  } & {
-    created_by_id?:
-      | RequireOnlyOne<
-          Pick<QueryFilter<PollResponse_old['created_by_id']>, '$eq' | '$in'>
-        >
-      | PrimitiveFilter<PollResponse_old['created_by_id']>;
-  } & {
-    updated_at?:
-      | RequireOnlyOne<
-          Pick<
-            QueryFilter<PollResponse_old['updated_at']>,
-            '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
-          >
-        >
-      | PrimitiveFilter<PollResponse_old['updated_at']>;
-  }
->;
+export type QueryVotesFilters = NonNullable<QueryPollVotesRequest['filter']>;
 
 export type MessageFilters = NonNullable<SearchPayload['message_filter_conditions']>;
 
@@ -1024,35 +921,7 @@ export type ThreadFilters = NonNullable<QueryThreadsRequest['filter']>;
 
 export type CreateReminderOptions = Parameters<ChatApi['createReminder']>[0];
 
-export type ReminderFilters = QueryFilters<{
-  channel_cid?:
-    | RequireOnlyOne<
-        Pick<QueryFilter<ReminderResponseData['channel_cid']>, '$eq' | '$in'>
-      >
-    | PrimitiveFilter<ReminderResponseData['channel_cid']>;
-  created_at?:
-    | RequireOnlyOne<
-        Pick<
-          QueryFilter<ReminderResponseData['created_at']>,
-          '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
-        >
-      >
-    | PrimitiveFilter<ReminderResponseData['created_at']>;
-  message_id?:
-    | RequireOnlyOne<Pick<QueryFilter<ReminderResponseData['message_id']>, '$eq' | '$in'>>
-    | PrimitiveFilter<ReminderResponseData['message_id']>;
-  remind_at?:
-    | RequireOnlyOne<
-        Pick<
-          QueryFilter<ReminderResponseData['remind_at']>,
-          '$exists' | '$eq' | '$gt' | '$lt' | '$gte' | '$lte'
-        >
-      >
-    | PrimitiveFilter<ReminderResponseData['remind_at']>;
-  user_id?:
-    | RequireOnlyOne<Pick<QueryFilter<ReminderResponseData['user_id']>, '$eq' | '$in'>>
-    | PrimitiveFilter<ReminderResponseData['user_id']>;
-}>;
+export type ReminderFilters = NonNullable<QueryRemindersRequest['filter']>;
 
 export type ReminderSort = SortParamRequest[];
 
@@ -1135,7 +1004,4 @@ export type DraftMessagePayload = PartializeKeys<
   user_id?: string;
 };
 
-export type QueryRemindersOptions = Pager & {
-  filter?: ReminderFilters;
-  sort?: ReminderSort;
-};
+export type QueryRemindersOptions = QueryRemindersRequest;
