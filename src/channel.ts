@@ -1320,8 +1320,6 @@ export class Channel extends ChannelApi {
     this._reloading = true;
     try {
       const paginator = this.messagePaginator;
-      // Captured BEFORE the await: request our full loaded window (not the list's smaller page), and
-      // remember failed (unsent) messages so a disjoint rebuild does not silently drop them.
       const requestedLimit = paginator.items?.length || paginator.pageSize;
       const failedBefore = (paginator.items ?? []).filter(
         (message) => message.status === 'failed',
