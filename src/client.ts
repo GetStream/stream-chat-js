@@ -1332,6 +1332,8 @@ export class StreamChat extends ChatApi {
     options?: QueryChannelsRequest,
     stateOptions: ChannelStateOptions = {},
   ): Promise<Channel[] | QueryChannelsResponseWithChannels> {
+    // TODO(perf/cleanup): prefer a `memberIds` snapshot over `headItems.map` here too — see the
+    // matching TODO in channel.query() for the full rationale.
     const candidateIdsByCid = new Map<string, ReadonlySet<string>>();
     for (const cid of Object.keys(this.activeChannels)) {
       const head = this.activeChannels[cid]?.messagePaginator?.headItems;

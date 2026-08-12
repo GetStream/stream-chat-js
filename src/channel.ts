@@ -1529,6 +1529,12 @@ export class Channel extends ChannelApi {
     // hard-delete (in the snapshot, absent from the page) from a message that arrives live
     // during the fetch (not in the snapshot). Captured here — the only place with the pre-await state —
     // so callers (channel.reload, watch) need not thread it. Empty on a cold open, so it is harmless.
+    // TODO(perf/cleanup): `headItems` materializes full message objects (intervalToItems) just to map
+    // them down to ids. A cheaper, clearer equivalent is a straight copy of the paginator index's own
+    // id set — expose `memberIds` on StoreBackedItemIndex (e.g. `snapshotMembers()` returning
+    // `new Set(this.memberIds)`) and use it here AND in client.queryChannelsAndHydrate. The broader
+    // scope (all intervals vs just the head) is inert: the reconcile only consults head ids, older
+    // island ids are never at/above-newest, and local messages are guarded by isServerConfirmedMessage.
     const candidateIds =
       messageSetToAddToIfDoesNotExist === 'latest'
         ? new Set(this.messagePaginator.headItems.map((message) => message.id))
