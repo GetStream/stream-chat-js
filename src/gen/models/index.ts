@@ -1,4 +1,15 @@
-import type { CustomChannelData } from '../../custom_types';
+import type {
+  CustomAttachmentData,
+  CustomChannelData,
+  CustomEventData,
+  CustomMemberData,
+  CustomMessageData,
+  CustomPollData,
+  CustomPollOptionData,
+  CustomReactionData,
+  CustomThreadData,
+  CustomUserData,
+} from '../../custom_types';
 export type Filters<
   FilterConditions extends Record<string, { type: any; operators: string }>,
 > = QueryFilters<{
@@ -100,7 +111,7 @@ export interface AIIndicatorClearEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "ai_indicator.clear" in this case
@@ -131,7 +142,7 @@ export interface AIIndicatorStopEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "ai_indicator.stop" in this case
@@ -172,7 +183,7 @@ export interface AIIndicatorUpdateEvent {
    */
   message_id: string;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "ai_indicator.update" in this case
@@ -417,7 +428,7 @@ export interface AppUpdatedEvent {
 
   app: AppEventResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "app.updated" in this case
@@ -566,7 +577,7 @@ export interface AppealResponse {
 }
 
 export interface Attachment {
-  custom: Record<string, any>;
+  custom: CustomAttachmentData;
 
   asset_url?: string;
 
@@ -1289,7 +1300,7 @@ export interface ChannelCreatedEvent {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "channel.created" in this case
@@ -1338,7 +1349,7 @@ export interface ChannelDeletedEvent {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "channel.deleted" in this case
@@ -1385,7 +1396,7 @@ export interface ChannelFrozenEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "channel.frozen" in this case
@@ -1460,7 +1471,7 @@ export interface ChannelHiddenEvent {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "channel.hidden" in this case
@@ -1538,7 +1549,7 @@ export interface ChannelInput {
 
   created_by?: UserRequest;
 
-  custom?: Record<string, any>;
+  custom?: CustomChannelData;
 }
 
 export interface ChannelInputRequest {
@@ -1560,7 +1571,7 @@ export interface ChannelInputRequest {
 
   created_by?: UserRequest;
 
-  custom?: Record<string, any>;
+  custom?: CustomChannelData;
 }
 
 export interface ChannelKickedEvent {
@@ -1569,7 +1580,7 @@ export interface ChannelKickedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "channel.kicked" in this case
@@ -1633,7 +1644,7 @@ export interface ChannelMemberRequest {
    */
   channel_role?: string;
 
-  custom?: Record<string, any>;
+  custom?: CustomMemberData;
 
   user?: UserResponse;
 }
@@ -1666,7 +1677,7 @@ export interface ChannelMemberResponse {
    */
   updated_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomMemberData;
 
   archived_at?: Date;
 
@@ -1862,7 +1873,7 @@ export interface ChannelResponse {
   /**
    * Custom data for this object
    */
-  custom: Record<string, any>;
+  custom: CustomChannelData;
 
   /**
    * Whether auto translation is enabled or not
@@ -2062,7 +2073,7 @@ export interface ChannelTruncatedEvent {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "channel.truncated" in this case
@@ -2113,7 +2124,7 @@ export interface ChannelUnFrozenEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "channel.unfrozen" in this case
@@ -2146,7 +2157,7 @@ export interface ChannelUpdatedEvent {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "channel.updated" in this case
@@ -2199,7 +2210,7 @@ export interface ChannelVisibleEvent {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "channel.visible" in this case
@@ -2245,7 +2256,7 @@ export interface ChatDraftPayloadResponse {
 
   text: string;
 
-  custom: Record<string, any>;
+  custom: CustomMessageData;
 
   html?: string;
 
@@ -2321,7 +2332,7 @@ export interface ChatMessageResponse {
 
   restricted_visibility: Array<string>;
 
-  custom: Record<string, any>;
+  custom: CustomMessageData;
 
   reaction_counts: Record<string, number>;
 
@@ -2483,7 +2494,7 @@ export interface ChatReactionResponse {
 
   user_id: string;
 
-  custom: Record<string, any>;
+  custom: CustomReactionData;
 
   user: UserResponse;
 }
@@ -2728,7 +2739,7 @@ export interface ConnectUserDetailsRequest {
 
   name?: string;
 
-  custom?: Record<string, any>;
+  custom?: CustomUserData;
 
   privacy_settings?: PrivacySettingsResponse;
 }
@@ -2860,7 +2871,7 @@ export interface CreatePollOptionRequest {
   /**
    * Custom data for this object
    */
-  custom?: Record<string, any>;
+  custom?: CustomPollOptionData;
 }
 
 export interface CreatePollRequest {
@@ -2905,7 +2916,7 @@ export interface CreatePollRequest {
   /**
    * Custom data for this object
    */
-  custom?: Record<string, any>;
+  custom?: CustomPollData;
 }
 
 export interface CreateQueueRequest {
@@ -2972,7 +2983,7 @@ export interface CustomActionRequestPayload {
 export interface CustomEvent {
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   type: string;
 
@@ -3287,7 +3298,7 @@ export interface DraftDeletedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "draft.deleted" in this case
@@ -3320,7 +3331,7 @@ export interface DraftPayloadResponse {
    */
   text: string;
 
-  custom: Record<string, any>;
+  custom: CustomMessageData;
 
   /**
    * Contains HTML markup of the message
@@ -3392,7 +3403,7 @@ export interface DraftUpdatedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "draft.updated" in this case
@@ -3502,7 +3513,7 @@ export interface EntityCreatorResponse {
 
   teams: Array<string>;
 
-  custom: Record<string, any>;
+  custom: CustomUserData;
 
   avg_response_time?: number;
 
@@ -3551,7 +3562,7 @@ export interface EventRequest {
 
   parent_id?: string;
 
-  custom?: Record<string, any>;
+  custom?: CustomEventData;
 }
 
 export interface EventResponse {
@@ -4189,7 +4200,7 @@ export interface FullUserResponse {
 
   teams: Array<string>;
 
-  custom: Record<string, any>;
+  custom: CustomUserData;
 
   avg_response_time?: number;
 
@@ -4302,7 +4313,7 @@ export interface GetMessageResponse {
 export interface GetOGResponse {
   duration: string;
 
-  custom: Record<string, any>;
+  custom: CustomAttachmentData;
 
   /**
    * URL of detected video or audio
@@ -4492,7 +4503,7 @@ export interface HealthCheckEvent {
 
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   type: string;
 
@@ -4848,7 +4859,7 @@ export interface MarkUnreadRequest {
 export interface MaxStreakChangedEvent {
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   type: string;
 
@@ -4863,7 +4874,7 @@ export interface MemberAddedEvent {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   member: ChannelMemberResponse;
 
@@ -4917,7 +4928,7 @@ export interface MemberRemovedEvent {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   member: ChannelMemberResponse;
 
@@ -4971,7 +4982,7 @@ export interface MemberUpdatedEvent {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   member: ChannelMemberResponse;
 
@@ -5078,7 +5089,7 @@ export interface MessageDeletedEvent {
 
   message_id: string;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   message: MessageResponse;
 
@@ -5135,7 +5146,7 @@ export interface MessageDeliveredEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "message.delivered" in this case
@@ -5285,7 +5296,7 @@ export interface MessageNewEvent {
    */
   watcher_count: number;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   message: MessageResponse;
 
@@ -5423,7 +5434,7 @@ export interface MessageReadEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "message.read" in this case
@@ -5561,7 +5572,7 @@ export interface MessageRequest {
    */
   restricted_visibility?: Array<string>;
 
-  custom?: Record<string, any>;
+  custom?: CustomMessageData;
 
   shared_location?: SharedLocation;
 }
@@ -5659,7 +5670,7 @@ export interface MessageResponse {
    */
   restricted_visibility: Array<string>;
 
-  custom: Record<string, any>;
+  custom: CustomMessageData;
 
   /**
    * An object containing number of reactions of each type. Key: reaction type (string), value: number of reactions (int)
@@ -5776,7 +5787,7 @@ export interface MessageUndeletedEvent {
 
   message_id: string;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   message: MessageResponse;
 
@@ -5834,7 +5845,7 @@ export interface MessageUpdatedEvent {
 
   message_id: string;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   message: MessageResponse;
 
@@ -5977,7 +5988,7 @@ export interface MessageWithChannelResponse {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomMessageData;
 
   /**
    * An object containing number of reactions of each type. Key: reaction type (string), value: number of reactions (int)
@@ -6179,7 +6190,7 @@ export interface ModerationCustomActionEvent {
 
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   review_queue_item: ReviewQueueItemResponse;
 
@@ -6240,7 +6251,7 @@ export interface ModerationFlaggedEvent {
    */
   object_id: string;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   type: string;
 
@@ -6250,7 +6261,7 @@ export interface ModerationFlaggedEvent {
 export interface ModerationMarkReviewedEvent {
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   item: ReviewQueueItemResponse;
 
@@ -6439,7 +6450,7 @@ export interface NotificationAddedToChannelEvent {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   member: ChannelMemberResponse;
 
@@ -6485,7 +6496,7 @@ export interface NotificationChannelDeletedEvent {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "notification.channel_deleted" in this case
@@ -6547,7 +6558,7 @@ export interface NotificationChannelMutesUpdatedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   me: OwnUserResponse;
 
@@ -6567,7 +6578,7 @@ export interface NotificationChannelTruncatedEvent {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "notification.channel_truncated" in this case
@@ -6635,7 +6646,7 @@ export interface NotificationInviteAcceptedEvent {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   member: ChannelMemberResponse;
 
@@ -6689,7 +6700,7 @@ export interface NotificationInviteRejectedEvent {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   member: ChannelMemberResponse;
 
@@ -6743,7 +6754,7 @@ export interface NotificationInvitedEvent {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   member: ChannelMemberResponse;
 
@@ -6810,7 +6821,7 @@ export interface NotificationMarkReadEvent {
    */
   unread_count: number;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "notification.mark_read" in this case
@@ -6883,7 +6894,7 @@ export interface NotificationMarkUnreadEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "notification.mark_unread" in this case
@@ -6984,7 +6995,7 @@ export interface NotificationMutesUpdatedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   me: OwnUserResponse;
 
@@ -7011,7 +7022,7 @@ export interface NotificationNewMessageEvent {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   message: MessageResponse;
 
@@ -7072,7 +7083,7 @@ export interface NotificationRemovedFromChannelEvent {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   member: ChannelMemberResponse;
 
@@ -7138,7 +7149,7 @@ export interface NotificationThreadMessageNewEvent {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   message: MessageResponse;
 
@@ -7238,7 +7249,7 @@ export interface OwnUserResponse {
 
   teams: Array<string>;
 
-  custom: Record<string, any>;
+  custom: CustomUserData;
 
   avg_response_time?: number;
 
@@ -7292,7 +7303,7 @@ export interface PendingMessageEvent {
    */
   method: string;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "message.pending" in this case
@@ -7329,7 +7340,7 @@ export interface PollClosedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   poll: PollResponseData;
 
@@ -7359,7 +7370,7 @@ export interface PollDeletedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   poll: PollResponseData;
 
@@ -7386,7 +7397,7 @@ export interface PollDeletedEvent {
 export interface PollOptionInput {
   text?: string;
 
-  custom?: Record<string, any>;
+  custom?: CustomPollOptionData;
 }
 
 export interface PollOptionRequest {
@@ -7394,7 +7405,7 @@ export interface PollOptionRequest {
 
   text?: string;
 
-  custom?: Record<string, any>;
+  custom?: CustomPollOptionData;
 }
 
 export interface PollOptionResponse {
@@ -7411,7 +7422,7 @@ export interface PollOptionResponseData {
 
   text: string;
 
-  custom: Record<string, any>;
+  custom: CustomPollOptionData;
 }
 
 export interface PollResponse {
@@ -7454,7 +7465,7 @@ export interface PollResponseData {
 
   own_votes: Array<PollVoteResponseData>;
 
-  custom: Record<string, any>;
+  custom: CustomPollData;
 
   latest_votes_by_option: Record<string, Array<PollVoteResponseData>>;
 
@@ -7473,7 +7484,7 @@ export interface PollUpdatedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   poll: PollResponseData;
 
@@ -7503,7 +7514,7 @@ export interface PollVoteCastedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   poll: PollResponseData;
 
@@ -7535,7 +7546,7 @@ export interface PollVoteChangedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   poll: PollResponseData;
 
@@ -7567,7 +7578,7 @@ export interface PollVoteRemovedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   poll: PollResponseData;
 
@@ -8113,7 +8124,7 @@ export interface QueryChannelsRequest {
     };
 
     custom: {
-      type: Record<string, any>;
+      type: CustomChannelData;
       operators:
         | '$autocomplete'
         | '$contains'
@@ -8478,7 +8489,7 @@ export interface QueryMembersPayload {
     };
 
     custom: {
-      type: Record<string, any>;
+      type: CustomMemberData;
       operators:
         | '$autocomplete'
         | '$contains'
@@ -8886,7 +8897,7 @@ export interface QueryPollsRequest {
     };
 
     custom: {
-      type: Record<string, any>;
+      type: CustomPollData;
       operators:
         | '$autocomplete'
         | '$contains'
@@ -9587,7 +9598,7 @@ export interface QueryThreadsRequest {
     };
 
     custom: {
-      type: Record<string, any>;
+      type: CustomThreadData;
       operators:
         | '$autocomplete'
         | '$contains'
@@ -9680,7 +9691,7 @@ export interface QueryUsersPayload {
     };
 
     custom: {
-      type: Record<string, any>;
+      type: CustomUserData;
       operators:
         | '$contains'
         | '$eq'
@@ -9870,7 +9881,7 @@ export interface ReactionDeletedEvent {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "reaction.deleted" in this case
@@ -9974,7 +9985,7 @@ export interface ReactionNewEvent {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "reaction.new" in this case
@@ -10050,7 +10061,7 @@ export interface ReactionRequest {
    */
   updated_at?: Date;
 
-  custom?: Record<string, any>;
+  custom?: CustomReactionData;
 }
 
 export interface ReactionResponse {
@@ -10087,7 +10098,7 @@ export interface ReactionResponse {
   /**
    * Custom data for this object
    */
-  custom: Record<string, any>;
+  custom: CustomReactionData;
 
   user: UserResponse;
 }
@@ -10102,7 +10113,7 @@ export interface ReactionUpdatedEvent {
 
   channel: ChannelResponse;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   message: MessageResponse;
 
@@ -10196,7 +10207,7 @@ export interface ReminderCreatedEvent {
    */
   user_id: string;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "reminder.created" in this case
@@ -10234,7 +10245,7 @@ export interface ReminderDeletedEvent {
    */
   user_id: string;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "reminder.deleted" in this case
@@ -10272,7 +10283,7 @@ export interface ReminderNotificationEvent {
    */
   user_id: string;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "notification.reminder_due" in this case
@@ -10327,7 +10338,7 @@ export interface ReminderUpdatedEvent {
    */
   user_id: string;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "reminder.updated" in this case
@@ -10730,7 +10741,7 @@ export interface SearchPayload {
     };
 
     custom: {
-      type: Record<string, any>;
+      type: CustomChannelData;
       operators:
         | '$autocomplete'
         | '$contains'
@@ -11015,7 +11026,7 @@ export interface SearchPayload {
     };
 
     custom: {
-      type: Record<string, any>;
+      type: CustomMessageData;
       operators: '$eq' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
@@ -11197,7 +11208,7 @@ export interface SearchResultMessage {
 
   restricted_visibility: Array<string>;
 
-  custom: Record<string, any>;
+  custom: CustomMessageData;
 
   reaction_counts: Record<string, number>;
 
@@ -11662,7 +11673,7 @@ export interface ThreadParticipant {
 
   last_read_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomThreadData;
 
   last_thread_message_at?: Date;
 
@@ -11733,7 +11744,7 @@ export interface ThreadResponse {
   /**
    * Custom data for this object
    */
-  custom: Record<string, any>;
+  custom: CustomThreadData;
 
   /**
    * Deleted At
@@ -11808,7 +11819,7 @@ export interface ThreadStateResponse {
   /**
    * Custom data for this object
    */
-  custom: Record<string, any>;
+  custom: CustomThreadData;
 
   /**
    * Deleted At
@@ -11839,7 +11850,7 @@ export interface ThreadStateResponse {
 export interface ThreadUpdatedEvent {
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   type: string;
 
@@ -11974,7 +11985,7 @@ export interface TypingStartEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "typing.start" in this case
@@ -12012,7 +12023,7 @@ export interface TypingStopEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "typing.stop" in this case
@@ -12382,7 +12393,7 @@ export interface UpdatePollOptionRequest {
   /**
    * Custom data for this object
    */
-  custom?: Record<string, any>;
+  custom?: CustomPollOptionData;
 }
 
 export interface UpdatePollPartialRequest {
@@ -12452,7 +12463,7 @@ export interface UpdatePollRequest {
   /**
    * Custom data for this object
    */
-  custom?: Record<string, any>;
+  custom?: CustomPollData;
 }
 
 export interface UpdateQueueRequest {
@@ -12772,7 +12783,7 @@ export interface UserBannedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   user: UserResponseCommonFields;
 
@@ -12850,7 +12861,7 @@ export interface UserDeactivatedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   user: UserResponseCommonFields;
 
@@ -12900,7 +12911,7 @@ export interface UserDeletedEvent {
    */
   mark_messages_deleted: boolean;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   user: UserResponseCommonFields;
 
@@ -12938,7 +12949,7 @@ export interface UserGroupCreatedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "user_group.created" in this case
@@ -12958,7 +12969,7 @@ export interface UserGroupDeletedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "user_group.deleted" in this case
@@ -12995,7 +13006,7 @@ export interface UserGroupMemberAddedEvent {
    */
   members: Array<string>;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "user_group.member_added" in this case
@@ -13020,7 +13031,7 @@ export interface UserGroupMemberRemovedEvent {
    */
   members: Array<string>;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "user_group.member_removed" in this case
@@ -13058,7 +13069,7 @@ export interface UserGroupUpdatedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   /**
    * The type of event: "user_group.updated" in this case
@@ -13084,7 +13095,7 @@ export interface UserMessagesDeletedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   user: UserResponseCommonFields;
 
@@ -13145,7 +13156,7 @@ export interface UserMutedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   user: UserResponseCommonFields;
 
@@ -13170,7 +13181,7 @@ export interface UserPresenceChangedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   user: UserResponseCommonFields;
 
@@ -13188,7 +13199,7 @@ export interface UserReactivatedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   user: UserResponseCommonFields;
 
@@ -13225,7 +13236,7 @@ export interface UserRequest {
   /**
    * Custom user data
    */
-  custom?: Record<string, any>;
+  custom?: CustomUserData;
 
   privacy_settings?: PrivacySettingsResponse;
 }
@@ -13276,7 +13287,7 @@ export interface UserResponse {
   /**
    * Custom data for this object
    */
-  custom: Record<string, any>;
+  custom: CustomUserData;
 
   avg_response_time?: number;
 
@@ -13329,7 +13340,7 @@ export interface UserResponseCommonFields {
 
   teams: Array<string>;
 
-  custom: Record<string, any>;
+  custom: CustomUserData;
 
   avg_response_time?: number;
 
@@ -13367,7 +13378,7 @@ export interface UserResponsePrivacyFields {
 
   teams: Array<string>;
 
-  custom: Record<string, any>;
+  custom: CustomUserData;
 
   avg_response_time?: number;
 
@@ -13406,7 +13417,7 @@ export interface UserUnbannedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   user: UserResponseCommonFields;
 
@@ -13457,7 +13468,7 @@ export interface UserUpdatedEvent {
    */
   created_at: Date;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   user: UserResponsePrivacyFields;
 
@@ -13480,7 +13491,7 @@ export interface UserWatchingStartEvent {
    */
   watcher_count: number;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   user: UserResponseCommonFields;
 
@@ -13518,7 +13529,7 @@ export interface UserWatchingStopEvent {
    */
   watcher_count: number;
 
-  custom: Record<string, any>;
+  custom: CustomEventData;
 
   user: UserResponseCommonFields;
 
