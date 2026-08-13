@@ -2610,6 +2610,38 @@ describe('MessagePaginator', () => {
         resolveProbe();
         await expect(flushProbe(paginator)).resolves.toBeUndefined(); // no throw, guard bailed
       });
+
+      it('trailing deletes covered by new arrivals become within-span: removes them, merges the new, keeps the below-window oldest', async () => {
+        // Loaded fully before going offline.
+        const paginator = makePaginator(3);
+        loadFull(paginator, [
+          msg('m1', 1),
+          msg('m2', 2),
+          msg('m3', 3),
+          msg('m4', 4),
+          msg('m5', 5),
+        ]);
+
+        mockQuery().mockResolvedValue({ messages: [msg('m1', 1)] }); // probe: m1 IS older than m2 → keep it
+        paginator.mergeNewestPage(
+          [msg('m2', 2), msg('m3', 3), msg('m6', 6), msg('m7', 7), msg('m8', 8)],
+          { requestedLimit: 5, candidateIds: new Set(['m1', 'm2', 'm3', 'm4', 'm5']) },
+        );
+
+        // Sync: m4/m5 within-span → gone; m6/m7/m8 merged; m1 below the window kept pending the probe.
+        expect(paginator.getItem('m4')).toBeUndefined();
+        expect(paginator.getItem('m5')).toBeUndefined();
+        expect(ids(paginator)).toEqual(['m1', 'm2', 'm3', 'm6', 'm7', 'm8']);
+
+        await flushProbe(paginator);
+
+        // The below-window oldest (m1) was probed and is real → kept. Final = the server truth.
+        expect(channel.query).toHaveBeenCalledWith({
+          messages: { limit: 1, id_lt: 'm2' },
+        });
+        expect(paginator.getItem('m1')).toBeDefined();
+        expect(ids(paginator)).toEqual(['m1', 'm2', 'm3', 'm6', 'm7', 'm8']);
+      });
     });
 
     describe('batch({ coalesce: true }) — single deterministic window publish', () => {
