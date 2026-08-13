@@ -2,6 +2,7 @@ import { BaseSearchSource } from './BaseSearchSource';
 import { FilterBuilder, type FilterBuilderOptions } from '../pagination';
 import type { Channel } from '../channel';
 import type {
+  ApiRequestOptions,
   ChannelMemberResponse,
   MemberFilters,
   MemberSort,
@@ -63,10 +64,10 @@ export class ChannelMemberSearchSource<
   canExecuteQuery = (newSearchString?: string) => {
     const hasNewSearchQuery = typeof newSearchString !== 'undefined';
 
-    return this.isActive && !this.isLoading && (this.hasNext || hasNewSearchQuery);
+    return this.isActive && this.canDispatchQuery(hasNewSearchQuery);
   };
 
-  protected async query(searchQuery: string) {
+  protected async query(searchQuery: string, apiOptions: ApiRequestOptions = {}) {
     const filters = this.filterBuilder.buildFilters({
       baseFilters: this.filters,
       context: {
@@ -75,7 +76,12 @@ export class ChannelMemberSearchSource<
     });
     const sort = this.sort ?? [];
     const options = { ...this.searchOptions, limit: this.pageSize, offset: this.offset };
-    const { members } = await this.channel.queryMembers(filters ?? {}, sort, options);
+    const { members } = await this.channel.queryMembers(
+      filters ?? {},
+      sort,
+      options,
+      apiOptions,
+    );
     return { items: members };
   }
 

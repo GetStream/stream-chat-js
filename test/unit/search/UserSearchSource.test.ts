@@ -174,6 +174,7 @@ describe('UserSearchSource', () => {
       },
       { id: 1, created_at: -1 },
       { presence: true, limit: searchSource.pageSize, offset: searchSource.offset },
+      {},
     );
   });
 
@@ -187,6 +188,7 @@ describe('UserSearchSource', () => {
       expect.anything(),
       [{ created_at: -1 }, { id: 1 }],
       expect.anything(),
+      {},
     );
   });
 
@@ -201,6 +203,7 @@ describe('UserSearchSource', () => {
       expect.anything(),
       [{ id: -1 }, { created_at: -1 }],
       expect.anything(),
+      {},
     );
   });
 
@@ -214,6 +217,7 @@ describe('UserSearchSource', () => {
       expect.anything(),
       [{ id: 1 }],
       expect.anything(),
+      {},
     );
   });
 

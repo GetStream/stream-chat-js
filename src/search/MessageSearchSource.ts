@@ -1,5 +1,6 @@
 import { BaseSearchSource } from './BaseSearchSource';
 import type {
+  ApiRequestOptions,
   ChannelFilters,
   ChannelOptions,
   ChannelSort,
@@ -129,7 +130,7 @@ export class MessageSearchSource<
     });
   }
 
-  protected async query(searchQuery: string) {
+  protected async query(searchQuery: string, apiOptions: ApiRequestOptions = {}) {
     if (!this.client.userID || this.next === null) return { items: [] };
 
     const channelFilters = this.messageSearchChannelFilterBuilder.buildFilters({
@@ -170,8 +171,12 @@ export class MessageSearchSource<
       channelFilters,
       messageFilters,
       options,
+      apiOptions,
     );
     const items = results.map(({ message }) => message);
+
+    // a newer query already replaced this one - skip the cid scan and the hydration request
+    if (apiOptions.signal?.aborted) return { items, next };
 
     const cids = Array.from(
       items.reduce((acc, message) => {
@@ -194,6 +199,7 @@ export class MessageSearchSource<
           ...this.channelQuerySort,
         },
         this.channelQueryOptions,
+        apiOptions,
       );
     }
 

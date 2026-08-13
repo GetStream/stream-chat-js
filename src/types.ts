@@ -1189,7 +1189,13 @@ export type ChannelQueryOptions = {
   watchers?: PaginationOptions;
 };
 
-export type ChannelStateOptions = {
+/**
+ * Composed with ApiRequestOptions because `queryChannels` uses this bag for both state
+ * handling and request-level concerns - neither of which is serialized into the request.
+ * That makes passing an ApiRequestOptions here a declared relationship rather than
+ * incidental structural compatibility.
+ */
+export type ChannelStateOptions = ApiRequestOptions & {
   offlineMode?: boolean;
   skipInitialization?: string[];
   skipHydration?: boolean;
@@ -1571,6 +1577,12 @@ export type SearchOptions = {
   next?: string;
   offset?: number;
   sort?: SearchMessageSort;
+};
+
+/** Per-request options that are not part of the serialized request payload. */
+export type ApiRequestOptions = {
+  /** Aborts the request. See AbortController. */
+  signal?: AbortSignal;
 };
 
 export type StreamChatOptions = AxiosRequestConfig & {

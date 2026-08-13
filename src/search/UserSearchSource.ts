@@ -1,7 +1,13 @@
 import { BaseSearchSource } from './BaseSearchSource';
 import { FilterBuilder, type FilterBuilderOptions } from '../pagination';
 import type { StreamChat } from '../client';
-import type { UserFilters, UserOptions, UserResponse, UserSort } from '../types';
+import type {
+  ApiRequestOptions,
+  UserFilters,
+  UserOptions,
+  UserResponse,
+  UserSort,
+} from '../types';
 import type { SearchSourceOptions } from './types';
 
 type CustomContext = Record<string, unknown>;
@@ -55,7 +61,7 @@ export class UserSearchSource<
     });
   }
 
-  protected async query(searchQuery: string) {
+  protected async query(searchQuery: string, apiOptions: ApiRequestOptions = {}) {
     const filters = this.filterBuilder.buildFilters({
       baseFilters: this.filters,
       context: { searchQuery } as UserSearchSourceFilterBuilderContext<TFilterContext>,
@@ -68,7 +74,7 @@ export class UserSearchSource<
       sort = { id: 1, ...this.sort };
     }
     const options = { ...this.searchOptions, limit: this.pageSize, offset: this.offset };
-    const { users } = await this.client.queryUsers(filters, sort, options);
+    const { users } = await this.client.queryUsers(filters, sort, options, apiOptions);
     return { items: users };
   }
 

@@ -120,7 +120,11 @@ describe('User Groups', () => {
 
       const result = await client.searchUserGroups(options);
 
-      expect(getSpy).toHaveBeenCalledWith(`${client.baseURL}/usergroups/search`, options);
+      expect(getSpy).toHaveBeenCalledWith(
+        `${client.baseURL}/usergroups/search`,
+        options,
+        {},
+      );
       expect(result.user_groups).toHaveLength(1);
       expect(result.user_groups[0].name).toBe('Backend Support');
     });

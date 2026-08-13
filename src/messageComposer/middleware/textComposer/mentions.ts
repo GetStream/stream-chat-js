@@ -23,6 +23,7 @@ import type {
 } from './types';
 import type { StreamChat } from '../../../client';
 import type {
+  ApiRequestOptions,
   MemberFilters,
   MemberSort,
   SearchUserGroupsOptions,
@@ -427,7 +428,7 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
 
   canExecuteQuery = (newSearchString?: string) => {
     const hasNewSearchQuery = typeof newSearchString !== 'undefined';
-    return this.isActive && !this.isLoading && (hasNewSearchQuery || this.hasNext);
+    return this.isActive && this.canDispatchQuery(hasNewSearchQuery);
   };
 
   protected updatePaginationStateFromQuery() {
@@ -472,10 +473,13 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
         : []),
     ].filter(({ name }) => this.matchesPrefixSearchQuery(name, searchQuery));
 
-  getRoleMentionSuggestions = async (query: string): Promise<RoleMentionSuggestion[]> => {
+  getRoleMentionSuggestions = async (
+    query: string,
+    apiOptions: ApiRequestOptions = {},
+  ): Promise<RoleMentionSuggestion[]> => {
     if (!this.isMentionTypeAllowed('role')) return [];
     if (!query) return [];
-    const { roles } = await this.client.searchRoles({ query });
+    const { roles } = await this.client.searchRoles({ query }, apiOptions);
     return [...(roles?.map((role) => role.name) ?? [])]
       .sort((left, right) => left.localeCompare(right))
       .map((role) => this.toRoleMentionSuggestion(role, query));
@@ -558,23 +562,35 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
     };
   };
 
-  queryUsers = async (searchQuery: string, offset = 0) => {
+  queryUsers = async (
+    searchQuery: string,
+    offset = 0,
+    apiOptions: ApiRequestOptions = {},
+  ) => {
     const { filters, sort, options } = this.prepareQueryUsersParams(searchQuery, offset);
-    const { users } = await this.client.queryUsers(filters, sort, options);
+    const { users } = await this.client.queryUsers(filters, sort, options, apiOptions);
     return users;
   };
 
-  queryMembers = async (searchQuery: string, offset = 0) => {
+  queryMembers = async (
+    searchQuery: string,
+    offset = 0,
+    apiOptions: ApiRequestOptions = {},
+  ) => {
     const { filters, sort, options } = this.prepareQueryMembersParams(
       searchQuery,
       offset,
     );
-    const response = await this.channel.queryMembers(filters, sort, options);
+    const response = await this.channel.queryMembers(filters, sort, options, apiOptions);
 
     return response.members.map((member) => member.user) as UserResponse[];
   };
 
-  getUserSuggestionsPage = async (searchQuery: string, userOffset = 0) => {
+  getUserSuggestionsPage = async (
+    searchQuery: string,
+    userOffset = 0,
+    apiOptions: ApiRequestOptions = {},
+  ) => {
     if (!this.isMentionTypeAllowed('user')) {
       return {
         items: [],
@@ -587,7 +603,7 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
       this.allMembersLoadedWithInitialChannelQuery || !searchQuery;
 
     if (this.config.mentionAllAppUsers) {
-      users = await this.queryUsers(searchQuery, userOffset);
+      users = await this.queryUsers(searchQuery, userOffset, apiOptions);
     } else if (shouldSearchLocally) {
       const localUsers = this.searchMembersLocally(searchQuery);
       const items = localUsers
@@ -601,7 +617,7 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
             : undefined,
       };
     } else {
-      users = await this.queryMembers(searchQuery, userOffset);
+      users = await this.queryMembers(searchQuery, userOffset, apiOptions);
     }
 
     const items = users.map((user) => this.toUserSuggestion(user, searchQuery));
@@ -623,7 +639,11 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
     } satisfies UserGroupSearchCursor);
   };
 
-  getUserGroupSuggestionsPage = async (searchQuery: string, cursor?: string) => {
+  getUserGroupSuggestionsPage = async (
+    searchQuery: string,
+    cursor?: string,
+    apiOptions: ApiRequestOptions = {},
+  ) => {
     if (!this.isMentionTypeAllowed('user_group')) {
       return {
         items: [],
@@ -647,7 +667,7 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
       ...(userGroupCursor?.id_gt ? { id_gt: userGroupCursor.id_gt } : {}),
       ...(userGroupCursor?.name_gt ? { name_gt: userGroupCursor.name_gt } : {}),
     };
-    const { user_groups } = await this.client.searchUserGroups(options);
+    const { user_groups } = await this.client.searchUserGroups(options, apiOptions);
 
     return {
       items: user_groups.map((userGroup) =>
@@ -657,19 +677,27 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
     };
   };
 
-  async query(searchQuery: string) {
+  async query(searchQuery: string, apiOptions: ApiRequestOptions = {}) {
     const userOffset = this.offset ?? 0;
     const isFirstPage = userOffset === 0 && typeof this.userGroupCursor === 'undefined';
     const previousUserPaginationState = this.latestUserPaginationState;
     const previousUserGroupCursor = this.userGroupCursor;
     const [userResultsState, userGroupResultsState, roleSuggestionsState] =
       await Promise.allSettled([
-        this.getUserSuggestionsPage(searchQuery, userOffset),
-        this.getUserGroupSuggestionsPage(searchQuery, previousUserGroupCursor),
+        this.getUserSuggestionsPage(searchQuery, userOffset, apiOptions),
+        this.getUserGroupSuggestionsPage(
+          searchQuery,
+          previousUserGroupCursor,
+          apiOptions,
+        ),
         isFirstPage
-          ? this.getRoleMentionSuggestions(searchQuery)
+          ? this.getRoleMentionSuggestions(searchQuery, apiOptions)
           : Promise.resolve([] as RoleMentionSuggestion[]),
       ]);
+
+    // On abort the requests above reject and the fallback branches below would write
+    // empty results into the pagination cursors, corrupting them for the newer query.
+    if (apiOptions.signal?.aborted) return { items: [] };
 
     const userResults =
       userResultsState.status === 'fulfilled'

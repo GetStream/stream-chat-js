@@ -26,6 +26,11 @@ const getAutocompleteFilters = (searchQuery: string): Partial<MemberFilters> => 
   $or: [{ name: { $autocomplete: searchQuery } }, { id: { $eq: searchQuery } }],
 });
 
+/** Requests dispatched through search() carry the source's abort signal. */
+const withSignal = { signal: expect.any(AbortSignal) };
+/** query() invoked directly in tests is not driven by executeQuery, so it has none. */
+const withoutSignal = {};
+
 describe('ChannelMemberSearchSource', () => {
   const mockMembers: ChannelMemberResponse[] = [
     createChannelMember({ user_id: 'user-1', user: { id: 'user-1', name: 'Alice' } }),
@@ -130,10 +135,15 @@ describe('ChannelMemberSearchSource', () => {
       expect(searchSource.canExecuteQuery()).toBe(false);
     });
 
-    it('returns false while loading', () => {
+    it('lets a new search query preempt an in-flight one', () => {
       searchSource.state.partialNext({ isLoading: true });
 
-      expect(searchSource.canExecuteQuery('')).toBe(false);
+      expect(searchSource.canExecuteQuery('')).toBe(true);
+    });
+
+    it('returns false for pagination while loading', () => {
+      searchSource.state.partialNext({ isLoading: true });
+
       expect(searchSource.canExecuteQuery()).toBe(false);
     });
 
@@ -180,6 +190,7 @@ describe('ChannelMemberSearchSource', () => {
           limit: searchSource.pageSize,
           offset: searchSource.offset,
         },
+        withoutSignal,
       );
     });
 
@@ -192,16 +203,18 @@ describe('ChannelMemberSearchSource', () => {
   });
 
   describe('search', () => {
-    it('executes empty search queries after debounce', async () => {
+    it('executes empty search queries after the short-query debounce', async () => {
       searchSource.search('');
-      await vi.advanceTimersByTimeAsync(300);
+      await vi.advanceTimersByTimeAsync(500);
 
       expect(searchSource.items).toEqual(mockMembers);
       expect(searchSource.searchQuery).toBe('');
-      expect(channel.queryMembers).toHaveBeenCalledWith({}, [], {
-        limit: 10,
-        offset: 0,
-      });
+      expect(channel.queryMembers).toHaveBeenCalledWith(
+        {},
+        [],
+        { limit: 10, offset: 0 },
+        withSignal,
+      );
     });
 
     it('executes typed search queries with autocomplete filters', async () => {
@@ -213,6 +226,7 @@ describe('ChannelMemberSearchSource', () => {
         getAutocompleteFilters('john'),
         [],
         { limit: 10, offset: 0 },
+        withSignal,
       );
     });
 
@@ -228,6 +242,7 @@ describe('ChannelMemberSearchSource', () => {
         getAutocompleteFilters('john'),
         [],
         { limit: 10, offset: 0 },
+        withSignal,
       );
     });
 
@@ -243,6 +258,7 @@ describe('ChannelMemberSearchSource', () => {
         getAutocompleteFilters('second'),
         [],
         { limit: 10, offset: 0 },
+        withSignal,
       );
     });
 
@@ -262,18 +278,21 @@ describe('ChannelMemberSearchSource', () => {
       paginatedSource.activate();
 
       paginatedSource.search('');
-      await vi.advanceTimersByTimeAsync(300);
+      await vi.advanceTimersByTimeAsync(500);
 
       expect(paginatedSource.items).toEqual(firstPage);
       expect(paginatedSource.hasNext).toBe(true);
 
       paginatedSource.search();
-      await vi.advanceTimersByTimeAsync(300);
+      await vi.advanceTimersByTimeAsync(500);
 
-      expect(queryMembersMock).toHaveBeenNthCalledWith(2, {}, [], {
-        limit: 2,
-        offset: 2,
-      });
+      expect(queryMembersMock).toHaveBeenNthCalledWith(
+        2,
+        {},
+        [],
+        { limit: 2, offset: 2 },
+        withSignal,
+      );
       expect(paginatedSource.items).toEqual([...firstPage, ...secondPage]);
       expect(paginatedSource.hasNext).toBe(false);
     });
