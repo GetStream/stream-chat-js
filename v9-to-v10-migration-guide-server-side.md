@@ -11,8 +11,9 @@
 - Instantiation keeps the v9 shape you already know: `new StreamClient(apiKey, secret, options?)`. The `secret` is now on the _node_ client, not on `stream-chat`.
 - Namespaces on the client: `client` (common), `client.chat`, `client.video`, `client.moderation`, `client.feeds`. Per-resource instances via `client.chat.channel(type, id)` and `client.video.call(type, id)`.
 - Token helpers moved 1:1 with new names — `createToken` → `generateUserToken`, `createCallToken` → `generateCallToken`, plus a new `generatePermanentUserToken`. The old names still exist as deprecated aliases.
-- Webhook helpers keep their v9 names on the node client — `verifyWebhook`, `verifyAndParseWebhook`, `parseSqs`, `parseSns` — and the secret is pulled from the `StreamClient` you constructed (no per-call secret argument). The same helpers were also stripped out of `stream-chat/signing`: if you were still calling `import { verifyAndParseWebhook } from 'stream-chat'` under v10-rc, that import disappears in the upcoming release — route it through `@stream-io/node-sdk`.
+- Webhook helpers keep their v9 names on the node client — `verifyWebhook`, `verifyAndParseWebhook`, `parseSqs`, `parseSns` — and the secret is pulled from the `StreamClient` you constructed (no per-call secret argument). The same helpers were stripped out of `stream-chat/signing`: `import { verifyAndParseWebhook } from 'stream-chat'` no longer resolves in v10 — route it through `@stream-io/node-sdk`.
 - If your backend also listens to WebSocket events, keep `stream-chat@10` alongside `@stream-io/node-sdk` — see [Two-client hybrid pattern](#two-client-hybrid-pattern). `stream-chat` no longer bundles a WebSocket polyfill: on Node 22+ this Just Works via the platform's global `WebSocket`; on Node 18/20 you inject one via the new [`WebSocketImpl`](#running-the-ws-client-under-node) option.
+- Three Node-shaped behaviors disappeared with the dependencies that backed them, and they bite even integrations that never touched a secret: [file uploads from Node](#uploads-from-node-are-gone) (`form-data`), the [keep-alive `https.Agent`](#http-keep-alive-is-no-longer-configured-for-you) (`https`), and the `package.json#browser` field your [bundler shims](#bundler-shims-can-be-deleted) were compensating for.
 
 ## Are you actually server-side?
 
@@ -24,6 +25,7 @@ Any one of these means yes — this guide applies to you:
 - You call any admin method: `createToken`, `devToken`, `revokeUserToken(s)`, `updateAppSettings`, `getAppSettings`, `deleteUser`, `partialUpdateUser(s)`, `restoreUsers`, `deactivateUser(s)`, `reactivateUser(s)`, `exportUser(s)`, `createChannelType`, `updateChannelType`, `deleteChannelType`, `listChannelTypes`, `getChannelType`, `createCommand` / `updateCommand` / `deleteCommand` / `listCommands` / `getCommand`, `createRole` / `deleteRole` / `listRoles`, `createPermission` / `updatePermission` / `deletePermission` / `getPermission` / `listPermissions`, `createBlockList` / `updateBlockList` / `deleteBlockList` / `getBlockList` / `listBlockLists` / `importBlockList`, `upsertPushProvider` / `deletePushProvider` / `listPushProviders`, `checkPush` / `checkSNS` / `checkSQS`, `createImport` / `createImportURL` / `getImport` / `listImports`, retention-policy admin (`setRetentionPolicy` / `deleteRetentionPolicy` / `getRetentionPolicy` / `getRetentionPolicyRuns`), moderation config admin, campaign / segment methods.
 - You call `verifyWebhook`, `verifyAndParseWebhook`, `parseSqs`, `parseSns`, `verifySignature`, or `CheckSignature` — the JWT helpers `JWTUserToken` / `JWTServerToken` / `DevToken` — these were all removed from `stream-chat/signing`.
 - You import from removed barrel paths: `stream-chat/dist/.../campaign`, `.../segment`, `.../channel_batch_updater`, `.../events`, `.../base64`.
+- You upload files from Node — `channel.sendFile(fs.createReadStream(...))`, `client.uploadFile(buffer, ...)`, or anything else that hands a `Buffer` / readable stream to the upload methods. See [Uploads from Node are gone](#uploads-from-node-are-gone).
 - You pass `user_id` overrides to per-user methods (`banUser`, `blockUser`, `muteUser`, `flagMessage`, `flagUser`) — those overrides are gone from `stream-chat@10` because they only made sense server-side.
 - Your code runs under Node (Express, Fastify, Lambda, Cloud Run, cron) with a secret and no user-token provider.
 
@@ -308,8 +310,138 @@ await client.uploadFile({
 - `client.validateServerSideAuth()` — the node SDK is always server-side.
 - Per-call `user_id` overrides on `banUser` / `blockUser` / `flagMessage` / `flagUser` — pass `user_id` in the request payload (all node-sdk mutations that act on behalf of a user take an explicit `user_id`).
 - `JWTUserToken` / `JWTServerToken` / `DevToken` / `verifySignature` / `CheckSignature` / `InvalidWebhookError` / `InvalidWebhookErrorMessages` re-exported from `stream-chat` — all gone. `signing.ts` on `stream-chat` now exposes only `UserFromToken` (a client-side JWT decoder). Consume equivalents from `@stream-io/node-sdk`.
-- `stream-chat` runtime deps that used to underwrite the server surface — `jsonwebtoken`, `ws`, `isomorphic-ws`, `base64-js`, `form-data` — have been dropped from `package.json#dependencies`. If a build tool still complains that `stream-chat` imports these, upgrade to the release that lands the removal.
+- `stream-chat` runtime deps that used to underwrite the server surface — `jsonwebtoken`, `ws`, `isomorphic-ws`, `base64-js`, `form-data` — have been dropped from `package.json#dependencies`. `stream-chat@10` imports none of them; if a bundler still resolves one out of your tree, it is a stale lockfile, not the SDK.
+- `@types/jsonwebtoken` and `@types/ws` were v9 **runtime** dependencies, so their types leaked into your project for free. They are gone. Any of your own code annotated with `jwt.Secret`, `jwt.SignOptions`, `WebSocket.CloseEvent`, `WebSocket.Data` etc. now needs those packages in your own `devDependencies`.
+- The keep-alive `https.Agent` that v9 installed on the axios instance in Node — see [HTTP keep-alive is no longer configured for you](#http-keep-alive-is-no-longer-configured-for-you).
+- Node-side file uploads (`fs.createReadStream` / `Buffer`) — see [Uploads from Node are gone](#uploads-from-node-are-gone).
+- `TokenManager` no longer throws `'User token can not be empty'`. In v9, `setTokenOrProvider(undefined, user)` for a non-anonymous user failed fast because the manager could only fall back to a secret it no longer has. In v10 the call resolves and the failure surfaces later, from `getToken()`, when the connection is opened. If you relied on the early throw as validation, validate the token yourself before calling `connectUser`.
 - Hand-rolled event bus & `EVENT_MAP` — the node SDK is REST-only.
+
+## Uploads from Node are gone
+
+v9 shipped the `form-data` package so the upload helpers could accept Node sources. v10 dropped the dependency and builds a global `FormData` instead, so the accepted input narrowed:
+
+```ts
+// v9 signature
+sendFile(uri: string | NodeJS.ReadableStream | Buffer | File, ...)
+sendImage(uri: string | NodeJS.ReadableStream | File, ...)
+
+// v10 signature — both methods, on Channel and on StreamChat
+sendFile(uri: string | File, ...)
+sendImage(uri: string | File, ...)
+```
+
+This affects `channel.sendFile`, `channel.sendImage`, `client.uploadFile`, and `client.uploadImage`. Every v9 backend upload pattern is now a type error:
+
+```ts
+// v9 — worked on a backend
+const file = fs.createReadStream('./doc.pdf');
+await channel.sendFile(file, 'doc.pdf', 'application/pdf', user);
+
+// also gone: Buffer sources
+await client.uploadFile(await fs.promises.readFile('./doc.pdf'), 'doc.pdf');
+```
+
+**Casting your way past the type error will not work.** The remaining implementation has two branches: a `Blob`/`File` branch, and a React-Native branch that wraps a URI string into `{ uri, name, type }`. The `Blob` branch is gated on `typeof window !== 'undefined'`, so under Node — where there is no `window` — even a native `File` falls through to the React-Native branch and produces a malformed multipart part. `stream-chat@10` has **no** Node upload path.
+
+Use the node SDK, which takes a `File` and does its own multipart encoding — see [Uploads notes](#uploads-notes) above:
+
+```ts
+import { readFile } from 'node:fs/promises';
+import { File } from 'buffer';
+
+const buffer = await readFile('./doc.pdf');
+
+// client-level upload
+await client.uploadFile({
+  file: new File([buffer], 'doc.pdf', { type: 'application/pdf' }),
+  user: { id: 'server' },
+});
+
+// channel-scoped upload
+await client.chat.channel('messaging', channelId).uploadChannelFile({
+  file: new File([buffer], 'doc.pdf', { type: 'application/pdf' }),
+  user: { id: 'server' },
+});
+```
+
+One related change for client-side callers: `contentType` used to be optional-with-defaults, and `form-data` derived the part headers itself. On the React-Native URI path there is nothing left to infer from, so **pass `contentType` explicitly** for URI uploads. Browser `File` / `Blob` uploads still carry their own `type`.
+
+## HTTP keep-alive is no longer configured for you
+
+v9 (and the v10 release candidates) imported `node:https` and installed a keep-alive agent on the axios instance whenever the client detected Node:
+
+```ts
+// removed from src/client.ts
+httpsAgent: this.node
+  ? new https.Agent({ keepAlive: true, keepAliveMsecs: 3000 })
+  : undefined,
+```
+
+The `https` import is gone, so axios now falls back to Node's default agent — **one TCP connection and TLS handshake per request**. For a short-lived Lambda this is noise; for a long-running bot or worker that polls the REST API it is a measurable latency and file-descriptor regression. If your process depended on socket reuse, pass your own agent:
+
+```ts
+import https from 'node:https';
+import { StreamChat } from 'stream-chat';
+
+const ws = new StreamChat(apiKey, {
+  allowServerSideConnect: true,
+  axiosRequestConfig: {
+    httpsAgent: new https.Agent({ keepAlive: true, keepAliveMsecs: 3000 }),
+  },
+});
+```
+
+Note the nesting: `httpsAgent` moved under `axiosRequestConfig` in v10 — see [`v9-to-v10-migration-guide-client-construction.md`](./v9-to-v10-migration-guide-client-construction.md#httpsagent-location-moved). On the `@stream-io/node-sdk` side the equivalent knob is the `agent` option (an undici `Dispatcher`), not `httpsAgent`.
+
+## Bundler shims can be deleted
+
+v9 carried a `package.json#browser` field that zeroed out the Node-only deps so they would not leak into browser / React-Native bundles:
+
+```json
+// removed from package.json
+"browser": {
+  "crypto": false,
+  "https": false,
+  "jsonwebtoken": false,
+  "ws": false,
+  "zlib": false
+}
+```
+
+Nothing in `stream-chat@10` imports any of them, so the field was deleted outright. If you added build config to compensate — because your bundler ignored the `browser` field, or because you were resolving `stream-chat` through a path that bypassed it — you can now remove it:
+
+- **webpack / Next.js**: `resolve.fallback: { crypto: false, https: false, zlib: false, ... }` entries added for `stream-chat`.
+- **Metro / React Native**: `resolver.extraNodeModules` aliases and `node-libs-react-native` / `react-native-crypto` / `stream-browserify` shims installed for `stream-chat`.
+- **Vite / Rollup**: `resolve.alias` entries or `rollup-plugin-node-polyfills` configured for the same five modules.
+- **Jest / Vitest**: `moduleNameMapper` entries pointing `jsonwebtoken` or `ws` at a stub.
+
+Leave them in place only if another dependency needs them. They are no longer needed for `stream-chat`, and none of the five modules appears in its dependency tree anymore.
+
+## `atob` is now a runtime requirement
+
+`UserFromToken` — the one helper left in `signing.ts` — used to decode the JWT payload through the bundled `base64-js`. It now calls the global `atob`:
+
+```ts
+export function UserFromToken(token: string) {
+  const fragments = token.split('.');
+  if (fragments.length !== 3) return '';
+  const payload = atob(fragments[1]); // was decodeBase64(...) from './base64'
+  return JSON.parse(payload).user_id as string;
+}
+```
+
+`atob` is global in every browser, in Node 16+, in Bun, and in Deno. The exception is **older React Native builds on Hermes** — Hermes only gained `atob` / `btoa` in a 2024 release (React Native ≈0.74), so anything older has neither. Check your own target rather than trusting a version number: `typeof atob` in a debug build settles it. `UserFromToken` runs on the `connectUser` path, so where it is missing the client throws `ReferenceError: atob is not defined` at connect time. Install a polyfill before the first `connectUser`:
+
+```ts
+// polyfills.ts — imported once, before any stream-chat call
+import { decode, encode } from 'base-64';
+
+if (typeof global.atob === 'undefined') global.atob = decode;
+if (typeof global.btoa === 'undefined') global.btoa = encode;
+```
+
+The `encodeBase64` / `decodeBase64` helpers that `stream-chat` used to export from `./base64` were removed along with the module — if you were importing them for your own use, take them from a base64 package directly.
 
 ## Sort payloads
 
@@ -428,6 +560,8 @@ const ws = new StreamChat(apiKey, {
 
 The cast is because `ws` types its constructor with a slightly different `MessageEvent` payload than the DOM lib. It's not a runtime concern — `StableWSConnection` only touches `.data`, `.code`, `.reason`, `.error`, all of which line up.
 
+One internal detail that matters if you inject `ws`: v9 called `ws.removeAllListeners()` during disconnect and teardown, an `EventEmitter` method the DOM `WebSocket` interface does not have. Those calls are gone. Teardown now relies on `close()` plus an internal `wsID` generation guard that makes callbacks from a superseded socket no-ops, so a `WebSocketImpl` only has to implement the four `on*` properties — it does **not** need `removeAllListeners`, `addEventListener`, or `off`.
+
 > **Officially, `WebSocketImpl` is documented as "purely for testing."** In practice it is also the escape hatch for Node <22 until the LTS ships a native `WebSocket`. If you rely on it in production, pin the `ws` version (it's stable, but its lifecycle isn't tied to `stream-chat`'s releases) and keep an eye on the SDK changelog in case the option gains stricter typing.
 
 ### Simplifying the hybrid example on Node 22+
@@ -447,3 +581,8 @@ Before shipping the migrated backend:
 - [ ] If you kept a `stream-chat@10` client for WS: it is constructed **without** a secret, and `allowServerSideConnect: true` is set.
 - [ ] If you deploy on Node 18/20: `WebSocketImpl` is wired to the `ws` package and `ws` is pinned in `dependencies`. On Node 22+, no `WebSocketImpl` is needed.
 - [ ] Bot / worker users are upserted with `role: 'admin'` (or a role that grants the endpoints they need) before their WS token is minted.
+- [ ] No `fs.createReadStream(...)`, `Buffer`, or `File` reaches `channel.sendFile` / `sendImage` / `client.uploadFile` / `uploadImage` — every backend upload goes through `@stream-io/node-sdk`.
+- [ ] If keep-alive mattered, `axiosRequestConfig.httpsAgent` is set explicitly — the implicit Node keep-alive agent is gone.
+- [ ] Bundler / test shims added for `crypto`, `https`, `zlib`, `jsonwebtoken`, `ws` on account of `stream-chat` are removed (`resolve.fallback`, Metro `extraNodeModules`, `moduleNameMapper`).
+- [ ] `atob` exists in every runtime you ship to (`typeof atob` in a debug build) — on older React Native / Hermes targets, a polyfill is imported before the first `connectUser`.
+- [ ] `@types/jsonwebtoken` / `@types/ws` are in your own `devDependencies` if your code still annotates against them.

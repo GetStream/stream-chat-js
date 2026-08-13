@@ -12,7 +12,7 @@
 ## TL;DR
 
 - **Server-side is gone.** If you construct with a `secret` or call server-only admin endpoints, switch to `@stream-io/node-sdk`. The construction guide has the full list — every feature module below that was server-only is dropped for the same reason.
-- One barrel removed from the package root, one added: **`./events` is gone; `./logger` is new.** The `./campaign`, `./channel_batch_updater`, and `./segment` barrels are still exported but the modules are emptied (they contain only a comment pointing at the server SDK) — importing anything by name from them will fail.
+- Two barrels removed from the package root, one added: **`./events` and `./base64` are gone; `./logger` is new.** `./signing` survives with exactly one export left, `UserFromToken`. The `./campaign`, `./channel_batch_updater`, and `./segment` barrels are still exported but the modules are emptied (they contain only a comment pointing at the server SDK) — importing anything by name from them will fail.
 - `Event` (type name) is kept, but its shape widened: `Event = WSEvent | LocalEvent | keyof CustomEventTypes`. `EventPayload<'<type>'>` narrows to a specific event.
 - `EventTypes` (plural) renamed to `EventType` (singular). `CustomEventTypes` interface is unchanged — augment it to add custom event-type keys, same as v9.
 - Filter payloads now carry **per-endpoint operator constraints** (inline `Filters<{ … }>` on each request type) — previously-permissive filter objects may stop type-checking. Only one operator per field is allowed, and `null` is no longer a valid `$in` element. `QueryPollsFilters`, `QueryVotesFilters`, and `ReminderFilters` were the last hand-written holdouts and now derive from their request types too.
@@ -27,9 +27,10 @@
 
 `src/index.ts` barrel changes:
 
-| Removed export barrel      | Reason                                                                                                                                        |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `export * from './events'` | `src/events.ts` deleted along with `EVENT_MAP`. Event-type set is now derived from the generated event decoders, no longer a hand-rolled map. |
+| Removed export barrel      | Reason                                                                                                                                                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `export * from './events'` | `src/events.ts` deleted along with `EVENT_MAP`. Event-type set is now derived from the generated event decoders, no longer a hand-rolled map.                                                                                               |
+| `export * from './base64'` | `src/base64.ts` deleted along with the `base64-js` dependency. `encodeBase64` / `decodeBase64` are gone; `UserFromToken` now decodes through the global `atob`. Take base64 helpers from a package of your own if you were importing these. |
 
 | Emptied module (barrel still present, no named exports) | Reason                                                        |
 | ------------------------------------------------------- | ------------------------------------------------------------- |
@@ -41,7 +42,13 @@
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `export * from './logger'` | `chatLoggerSystem`, `LogLevel`, `LogLevelEnum`, `Sink`, `ScopedLogger`, `ChatLoggerScope`, `ConfigureLoggersOptions`. See logging guide. |
 
-Any consumer doing `import { Campaign, Segment, ChannelBatchUpdater, EVENT_MAP } from 'stream-chat'` will fail to resolve. Delete those imports; there is no drop-in replacement in this SDK. `CustomEventTypes` is still exported from `stream-chat` and its interface is unchanged — augment it to declare custom event-type keys the same way as in v9.
+Any consumer doing `import { Campaign, Segment, ChannelBatchUpdater, EVENT_MAP, encodeBase64, decodeBase64 } from 'stream-chat'` will fail to resolve. Delete those imports; there is no drop-in replacement in this SDK. `CustomEventTypes` is still exported from `stream-chat` and its interface is unchanged — augment it to declare custom event-type keys the same way as in v9.
+
+### `./signing` is down to one export
+
+The barrel is still there, but it holds a **single** function: `UserFromToken`. Everything else it used to carry — `JWTUserToken`, `JWTServerToken`, `DevToken`, `verifySignature`, `CheckSignature`, `verifyAndParseWebhook`, `parseSqs`, `parseSns`, `gunzipPayload`, `decodeSqsPayload`, `decodeSnsPayload`, `parseEvent`, `InvalidWebhookError`, `InvalidWebhookErrorMessages` — needed the API secret or a Node builtin, and went out with the server-side surface. See [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md).
+
+`UserFromToken` itself changed implementation: it decodes the JWT payload with the global `atob` instead of the removed `base64-js` helpers. It runs on the `connectUser` path, so older React Native / Hermes targets — Hermes only gained `atob` / `btoa` around React Native 0.74 — must install a base64 polyfill before the first `connectUser`, or connecting throws `ReferenceError: atob is not defined`. Verify with `typeof atob` on the target rather than by version number; browsers, Node 16+, Bun, and Deno all have it natively.
 
 ---
 
@@ -67,7 +74,7 @@ Beyond the individual server-side methods listed in the methods guide, entire su
 | **App-settings mutations**      | `updateAppSettings`, `testPushSettings`, `testSQSSettings`, `testSNSSettings`, `translate`, `translateMessage`, `getHookEvents`                                                                                                                         | removed. `getAppSettings` remains.                                                                                                                                                                                                                                                         |
 | **User admin**                  | `partialUpdateUser`, `deleteUser`, `restoreUsers`, `reactivateUser(s)`, `deactivateUser(s)`, `exportUser`, `revokeUserToken`, `revokeUsersToken`, `sendUserCustomEvent`, `deleteUsers`                                                                  | removed                                                                                                                                                                                                                                                                                    |
 | **Flag admin**                  | `_queryFlags`, `_queryFlagReports`, `_reviewFlagReport`, `updateFlags`                                                                                                                                                                                  | removed. `queryMessageFlags` remains via `ChatApi` inheritance (generated request shape). User/message flagging by the connected user remains via `client.flagMessage` / `client.flagUser`.                                                                                                |
-| **Webhook / SQS / SNS helpers** | `client.verifyWebhook`, `client.verifyAndParseWebhook`, `client.parseSqs`, `client.parseSns` (used `client.secret` implicitly)                                                                                                                          | Moved to module exports on `./signing`, `secret` now required explicitly. See methods guide for signatures.                                                                                                                                                                                |
+| **Webhook / SQS / SNS helpers** | `client.verifyWebhook`, `client.verifyAndParseWebhook`, `client.parseSqs`, `client.parseSns` (used `client.secret` implicitly)                                                                                                                          | removed. An intermediate v10 rc moved them to module exports on `./signing`; the final v10 drops them entirely, along with `verifySignature` / `CheckSignature` / `InvalidWebhookError`. Port the handler to `@stream-io/node-sdk`.                                                        |
 | **Misc.**                       | `commitMessage`, `undeleteMessage`, `getSharedLocations`, `updateLocation`, `getUnreadCountBatch`, `getBlockList`, `enrichURL`, `_normalizeDate`, `validateServerSideAuth`, `_setupConnection`, `_enrichAxiosOptions`, `_logApiRequest`, `_logApiError` | removed                                                                                                                                                                                                                                                                                    |
 
 If your call site was gated on `client._isUsingServerAuth()` (which is also removed), delete the branch — it was only ever true on the server-side path.
@@ -454,7 +461,7 @@ For any of these that survive as a generated shape, the replacement is the gener
 
 For each source file that touches the SDK:
 
-1. **Delete removed imports.** `EVENT_MAP`, `Campaign*`, `Segment*`, `ChannelBatchUpdater`, `Role` (rename), `MessageResponseBase`, `FormatMessageResponse`, `PredefinedFilterSort(Param)`, and any of the removed type utilities. `Event` and `CustomEventTypes` are kept — do not delete them.
+1. **Delete removed imports.** `EVENT_MAP`, `Campaign*`, `Segment*`, `ChannelBatchUpdater`, `encodeBase64`, `decodeBase64`, the webhook / JWT helpers from `./signing` (`verifyAndParseWebhook`, `parseSqs`, `parseSns`, `verifySignature`, `CheckSignature`, `InvalidWebhookError`, `JWTUserToken`, `JWTServerToken`, `DevToken`), `Role` (rename), `MessageResponseBase`, `FormatMessageResponse`, `PredefinedFilterSort(Param)`, and any of the removed type utilities. `Event`, `CustomEventTypes`, and `UserFromToken` are kept — do not delete them.
 2. **Rename `Role` → `RoleName`** at every import + annotation site.
 3. **Rewrite event-handler callback types where needed.** `Event` is still valid (its union widened) — prefer `EventPayload<'…'>` for narrowed access. Custom event-type augmentation still goes on `CustomEventTypes`, unchanged from v9. Rename any imports of the plural `EventTypes` to the singular `EventType`.
 4. **Guard `channel.state.membership` reads** with `?.` — it's `undefined` on freshly constructed channels.
@@ -464,3 +471,6 @@ For each source file that touches the SDK:
 8. **Rename `ReminderManager` call-site keys** `messageId` → `message_id`. Same for any place you were shaping a reminder-event body.
 9. **Delete any code that used `client.secret`, `client._isUsingServerAuth()`, `client.setAnonymousUser`, `client.markAllRead`, or assigned to `client.userID`.** Move server-side callers to `@stream-io/node-sdk`.
 10. **Rewrite `client.revokeTokens(isoString)`** to `client.revokeTokens(new Date(isoString))`.
+11. **Fix upload call sites.** `channel.sendFile` / `sendImage` / `client.uploadFile_` / `uploadImage_` take `string | File` now — no `Buffer`, no readable streams. Pass `contentType` explicitly when the source is a React-Native URI string.
+12. **Delete bundler shims** added for `stream-chat`'s Node-only deps (`crypto`, `https`, `zlib`, `jsonwebtoken`, `ws`) — `package.json#browser` is gone because nothing imports them anymore.
+13. **Polyfill `atob`** if your React Native / Hermes target lacks it (`typeof atob === 'undefined'`); `UserFromToken` depends on it during `connectUser`.
