@@ -11,8 +11,18 @@ rm -rf $OUTPUT_DIR
 # apply-custom-data-types matches `export interface` / `}` anchored to column 0,
 # but the generator emits them indented — format first so it can track which
 # interface each `custom` field belongs to.
-yarn exec prettier --write $OUTPUT_DIR
+yarn exec prettier --write $OUTPUT_DIR/models/index.ts
 
 node ./scripts/apply-custom-data-types.mts -i $OUTPUT_DIR/models/index.ts
 
 yarn lint-fix
+
+# TODO: temp solution until we figure out how to treat custom data
+# New models can carry a `custom` field with no entry in the codemod's mapping, in
+# which case they stay `Record<string, any>`. Let Claude audit the diff and add the
+# missing entries; see .claude/skills/check-custom-data-mapping/SKILL.md.
+if command -v claude >/dev/null 2>&1; then
+  claude -p "/check-custom-data-mapping" --permission-mode acceptEdits
+else
+  echo "claude CLI not found — run 'claude -p \"/check-custom-data-mapping\"' before committing." >&2
+fi
