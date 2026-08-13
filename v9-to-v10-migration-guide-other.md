@@ -242,6 +242,53 @@ Beyond the three breaking effects above, the field sets shifted to match the API
 
 The legacy building blocks (`QueryFilter`, `PrimitiveFilter`, `QueryFilters`, `RequireOnlyOne`) remain exported for callers who compose their own filter types against `itemMatchesFilter` and the paginators.
 
+### Removed — `ArrayOneOrMore` and `ArrayTwoOrMore`
+
+The two non-empty-array utilities are gone from `stream-chat`. In v9 they existed only to constrain the logical operators — `$and` / `$nor` required at least one element (`ArrayOneOrMore`), `$or` at least two (`ArrayTwoOrMore`):
+
+```ts
+// v9 — src/types.ts
+export type ArrayOneOrMore<T> = { 0: T } & Array<T>;
+export type ArrayTwoOrMore<T> = { 0: T; 1: T } & Array<T>;
+```
+
+**Why they were dropped.** That encoding is only satisfied by a value whose length TypeScript knows statically, so any array _variable_ is rejected. It probably wasn't a common use-case for the logical operators, but the helpers were generically named, and cause issues when used in other places, for example:
+
+```ts
+declare const ids: string[];
+
+// TS2322: Property '0' is missing in type 'string[]'
+const a: ChannelFilters = { members: { $in: ids } };
+// same
+const b: ChannelFilters = { members: { $in: [...ids] } };
+// only literals and non-empty tuples pass
+const c: ChannelFilters = { members: { $in: ['u1'] } };
+```
+
+No non-empty encoding avoids this: TypeScript cannot prove a `T[]` has at least one element, so the guarantee costs a hard compile error on working code. An empty array stays a runtime 400 with a clear message, which is the cheaper failure.
+
+**What to do.** Use a plain `Array<T>` (or `T[]`) wherever you referenced them:
+
+```ts
+// v9
+import type { ArrayOneOrMore, ArrayTwoOrMore } from 'stream-chat';
+
+type MyLogicalOperators<T> = {
+  $and?: ArrayOneOrMore<MyFilters<T>>;
+  $nor?: ArrayOneOrMore<MyFilters<T>>;
+  $or?: ArrayTwoOrMore<MyFilters<T>>;
+};
+
+// v10
+type MyLogicalOperators<T> = {
+  $and?: Array<MyFilters<T>>;
+  $nor?: Array<MyFilters<T>>;
+  $or?: Array<MyFilters<T>>;
+};
+```
+
+This mirrors what the SDK itself now does in `ExtendedQueryLogicalOperators` (`src/pagination/FilterBuilder.ts`). The change is widening, not narrowing: everything that compiled in v9 still compiles, and the array-variable cases above now compile too. The only thing you lose is the compile error on an empty (or single-element `$or`) array, which the API rejects at runtime anyway.
+
 ---
 
 ## State shape changes
