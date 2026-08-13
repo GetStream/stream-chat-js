@@ -8,4 +8,6 @@ rm -rf $OUTPUT_DIR
 
 ( cd $CHAT_DIR ; make openapi ; make -C projects/chat-manager build; build/chat-manager openapi generate-client --language ts --spec releases/v2/chat-clientside-api.yaml --output $OUTPUT_DIR --opt typed_filters=true)
 
+node ./scripts/apply-custom-data-types.mts -i ./src/gen/models/index.ts
+
 yarn lint-fix
