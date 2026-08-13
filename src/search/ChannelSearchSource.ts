@@ -1,9 +1,9 @@
-import { BaseSearchSource } from './BaseSearchSource';
+import { BaseSearchSource, type SearchQueryOptions } from './BaseSearchSource';
 import type { FilterBuilderOptions } from '../pagination';
 import { FilterBuilder } from '../pagination';
 import type { Channel } from '../channel';
 import type { StreamChat } from '../client';
-import type { AbortOptions, ChannelFilters, ChannelOptions, ChannelSort } from '../types';
+import type { ChannelFilters, ChannelOptions, ChannelSort } from '../types';
 import type { SearchSourceOptions } from './types';
 
 type CustomContext = Record<string, unknown>;
@@ -51,7 +51,7 @@ export class ChannelSearchSource<
     });
   }
 
-  protected async query(searchQuery: string, abortOptions: AbortOptions = {}) {
+  protected async query(searchQuery: string, queryOptions: SearchQueryOptions = {}) {
     const filters = this.filterBuilder.buildFilters({
       baseFilters: {
         ...(this.client.userID ? { members: { $in: [this.client.userID] } } : {}),
@@ -63,7 +63,7 @@ export class ChannelSearchSource<
     });
     const sort = this.sort ?? {};
     const options = { ...this.searchOptions, limit: this.pageSize, offset: this.offset };
-    const items = await this.client.queryChannels(filters, sort, options, abortOptions);
+    const items = await this.client.queryChannels(filters, sort, options, queryOptions);
     return { items };
   }
 

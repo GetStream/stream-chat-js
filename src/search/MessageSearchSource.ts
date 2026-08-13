@@ -1,6 +1,5 @@
-import { BaseSearchSource } from './BaseSearchSource';
+import { BaseSearchSource, type SearchQueryOptions } from './BaseSearchSource';
 import type {
-  AbortOptions,
   ChannelFilters,
   ChannelOptions,
   ChannelSort,
@@ -130,7 +129,7 @@ export class MessageSearchSource<
     });
   }
 
-  protected async query(searchQuery: string, abortOptions: AbortOptions = {}) {
+  protected async query(searchQuery: string, queryOptions: SearchQueryOptions = {}) {
     if (!this.client.userID || this.next === null) return { items: [] };
 
     const channelFilters = this.messageSearchChannelFilterBuilder.buildFilters({
@@ -171,12 +170,12 @@ export class MessageSearchSource<
       channelFilters,
       messageFilters,
       options,
-      abortOptions,
+      queryOptions,
     );
     const items = results.map(({ message }) => message);
 
     // a newer query already replaced this one - skip the cid scan and the hydration request
-    if (abortOptions.signal?.aborted) return { items, next };
+    if (queryOptions.signal?.aborted) return { items, next };
 
     const cids = Array.from(
       items.reduce((acc, message) => {
@@ -199,7 +198,7 @@ export class MessageSearchSource<
           ...this.channelQuerySort,
         },
         this.channelQueryOptions,
-        abortOptions,
+        queryOptions,
       );
     }
 

@@ -1,13 +1,7 @@
-import { BaseSearchSource } from './BaseSearchSource';
+import { BaseSearchSource, type SearchQueryOptions } from './BaseSearchSource';
 import { FilterBuilder, type FilterBuilderOptions } from '../pagination';
 import type { StreamChat } from '../client';
-import type {
-  AbortOptions,
-  UserFilters,
-  UserOptions,
-  UserResponse,
-  UserSort,
-} from '../types';
+import type { UserFilters, UserOptions, UserResponse, UserSort } from '../types';
 import type { SearchSourceOptions } from './types';
 
 type CustomContext = Record<string, unknown>;
@@ -61,7 +55,7 @@ export class UserSearchSource<
     });
   }
 
-  protected async query(searchQuery: string, abortOptions: AbortOptions = {}) {
+  protected async query(searchQuery: string, queryOptions: SearchQueryOptions = {}) {
     const filters = this.filterBuilder.buildFilters({
       baseFilters: this.filters,
       context: { searchQuery } as UserSearchSourceFilterBuilderContext<TFilterContext>,
@@ -74,7 +68,7 @@ export class UserSearchSource<
       sort = { id: 1, ...this.sort };
     }
     const options = { ...this.searchOptions, limit: this.pageSize, offset: this.offset };
-    const { users } = await this.client.queryUsers(filters, sort, options, abortOptions);
+    const { users } = await this.client.queryUsers(filters, sort, options, queryOptions);
     return { items: users };
   }
 

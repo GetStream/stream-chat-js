@@ -8,7 +8,17 @@ import type {
 } from './types';
 import type { APIError } from '../errors';
 import { isAPIError, isErrorRetryable } from '../errors';
-import type { AbortOptions } from '../types';
+
+/**
+ * Passed to a search source's `query()`. Carries a cancellation handle and makes no
+ * claim that the query performs a request: a source may resolve from local data and
+ * ignore the signal. Where a source does issue requests, forward this straight through
+ * as the request options.
+ */
+export type SearchQueryOptions = {
+  /** Aborted once a newer query supersedes this one. */
+  signal?: AbortSignal;
+};
 
 export type DebounceOptions = {
   /** Applies to both short and long queries unless overridden by the options below. */
@@ -295,7 +305,7 @@ export abstract class BaseSearchSource<T>
 
   protected abstract query(
     searchQuery: string,
-    options?: AbortOptions,
+    options?: SearchQueryOptions,
   ): Promise<QueryReturnValue<T>>;
 
   protected abstract filterQueryResults(items: T[]): T[] | Promise<T[]>;

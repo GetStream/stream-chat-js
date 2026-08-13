@@ -1190,12 +1190,12 @@ export type ChannelQueryOptions = {
 };
 
 /**
- * Composed with AbortOptions because `queryChannels` carries the abort signal in this
+ * Composed with RequestOptions because `queryChannels` carries the abort signal in this
  * bag; neither the state flags nor the signal are serialized into the request. Declaring
- * the composition keeps passing an AbortOptions here intentional rather than incidental
+ * the composition keeps passing a RequestOptions here intentional rather than incidental
  * structural compatibility.
  */
-export type ChannelStateOptions = AbortOptions & {
+export type ChannelStateOptions = RequestOptions & {
   offlineMode?: boolean;
   skipInitialization?: string[];
   skipHydration?: boolean;
@@ -1579,13 +1579,9 @@ export type SearchOptions = {
   sort?: SearchMessageSort;
 };
 
-/**
- * Carries a cancellation handle into an operation. Never part of a serialized request
- * payload, and it makes no claim that the operation performs one: a search source may
- * resolve from local data and simply ignore the signal.
- */
-export type AbortOptions = {
-  /** Aborts the operation. See AbortController. */
+/** Per-request options that are never part of the serialized request payload. */
+export type RequestOptions = {
+  /** Aborts the request. See AbortController. */
   signal?: AbortSignal;
 };
 

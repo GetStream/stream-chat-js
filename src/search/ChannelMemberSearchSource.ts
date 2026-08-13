@@ -1,8 +1,7 @@
-import { BaseSearchSource } from './BaseSearchSource';
+import { BaseSearchSource, type SearchQueryOptions } from './BaseSearchSource';
 import { FilterBuilder, type FilterBuilderOptions } from '../pagination';
 import type { Channel } from '../channel';
 import type {
-  AbortOptions,
   ChannelMemberResponse,
   MemberFilters,
   MemberSort,
@@ -67,7 +66,7 @@ export class ChannelMemberSearchSource<
     return this.isActive && this.canDispatchQuery(hasNewSearchQuery);
   };
 
-  protected async query(searchQuery: string, abortOptions: AbortOptions = {}) {
+  protected async query(searchQuery: string, queryOptions: SearchQueryOptions = {}) {
     const filters = this.filterBuilder.buildFilters({
       baseFilters: this.filters,
       context: {
@@ -80,7 +79,7 @@ export class ChannelMemberSearchSource<
       filters ?? {},
       sort,
       options,
-      abortOptions,
+      queryOptions,
     );
     return { items: members };
   }

@@ -41,7 +41,6 @@ import {
 } from './utils';
 
 import type {
-  AbortOptions,
   ActiveLiveLocationsAPIResponse,
   AddUserGroupMembersOptions,
   AddUserGroupMembersResponse,
@@ -220,6 +219,7 @@ import type {
   ReminderAPIResponse,
   RemoveUserGroupMembersOptions,
   RemoveUserGroupMembersResponse,
+  RequestOptions,
   ReviewFlagReportOptions,
   ReviewFlagReportResponse,
   SdkIdentifier,
@@ -1847,7 +1847,7 @@ export class StreamChat {
    * @param {UserSort} sort Sort options, for instance [{last_active: -1}].
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_active: -1}, {created_at: 1}]
    * @param {UserOptions} options Option object, {presence: true}
-   * @param {AbortOptions} [abortOptions] Carries an abort signal. Not sent in the request.
+   * @param {RequestOptions} [requestOptions] Carries an abort signal. Not sent in the request.
    *
    * @return {Promise<{ users: Array<UserResponse> }>} User Query Response
    */
@@ -1855,7 +1855,7 @@ export class StreamChat {
     filterConditions: UserFilters,
     sort: UserSort = [],
     options: UserOptions = {},
-    abortOptions: AbortOptions = {},
+    requestOptions: RequestOptions = {},
   ) {
     const defaultOptions = {
       presence: false,
@@ -1879,7 +1879,7 @@ export class StreamChat {
           ...options,
         },
       },
-      abortOptions,
+      requestOptions,
     );
 
     this.state.updateUsers(data.users);
@@ -1931,17 +1931,17 @@ export class StreamChat {
    * searchUserGroups - Search user groups by prefix for autocomplete
    *
    * @param {SearchUserGroupsOptions} options The search options
-   * @param abortOptions the api request options
+   * @param requestOptions the api request options
    * @return {Promise<SearchUserGroupsResponse>} User Group Search Response
    */
   async searchUserGroups(
     options: SearchUserGroupsOptions,
-    abortOptions: AbortOptions = {},
+    requestOptions: RequestOptions = {},
   ) {
     return await this.get<SearchUserGroupsResponse>(
       this.baseURL + '/usergroups/search',
       options,
-      abortOptions,
+      requestOptions,
     );
   }
 
@@ -2078,7 +2078,7 @@ export class StreamChat {
    * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
    * @param {ChannelOptions} [options] Options object. Can include predefined_filter, filter_values, and sort_values for using predefined filters.
-   * @param abortOptions the api request options.
+   * @param requestOptions the api request options.
    *
    * @return {Promise<QueryChannelsAPIResponse>} full search channels response
    */
@@ -2086,7 +2086,7 @@ export class StreamChat {
     filterConditions: ChannelFilters,
     sort: ChannelSort = [],
     options: ChannelOptions = {},
-    abortOptions: AbortOptions = {},
+    requestOptions: RequestOptions = {},
   ): Promise<QueryChannelsAPIResponse> {
     const defaultOptions: ChannelOptions = {
       state: true,
@@ -2123,7 +2123,7 @@ export class StreamChat {
     return await this.post<QueryChannelsAPIResponse>(
       this.baseURL + '/channels',
       payload,
-      abortOptions,
+      requestOptions,
     );
   }
 
@@ -2343,7 +2343,7 @@ export class StreamChat {
    * @param {ChannelFilters} filterConditions MongoDB style filter conditions
    * @param {MessageFilters | string} query search query or object MongoDB style filters
    * @param {SearchOptions} [options] Option object, {user_id: 'tommaso'}
-   * @param {AbortOptions} [abortOptions] Carries an abort signal. Not sent in the request.
+   * @param {RequestOptions} [requestOptions] Carries an abort signal. Not sent in the request.
    *
    * @return {Promise<SearchAPIResponse>} search messages response
    */
@@ -2351,7 +2351,7 @@ export class StreamChat {
     filterConditions: ChannelFilters,
     query: string | MessageFilters,
     options: SearchOptions = {},
-    abortOptions: AbortOptions = {},
+    requestOptions: RequestOptions = {},
   ) {
     if (options.offset && options.next) {
       throw Error(`Cannot specify offset with next`);
@@ -2377,7 +2377,7 @@ export class StreamChat {
     return await this.get<SearchAPIResponse>(
       this.baseURL + '/search',
       { payload },
-      abortOptions,
+      requestOptions,
     );
   }
 
@@ -4031,11 +4031,11 @@ export class StreamChat {
    *
    * @returns {Promise<APIResponse>}
    */
-  searchRoles(options: SearchRolesOptions, abortOptions: AbortOptions = {}) {
+  searchRoles(options: SearchRolesOptions, requestOptions: RequestOptions = {}) {
     return this.get<SearchRolesAPIResponse>(
       `${this.baseURL}/roles/search`,
       options,
-      abortOptions,
+      requestOptions,
     );
   }
 
