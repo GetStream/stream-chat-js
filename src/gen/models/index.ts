@@ -1633,7 +1633,7 @@ export interface ChannelMemberPartialResponse {
   /**
    * Channel-member custom fields projected via `member_custom_include`
    */
-  custom?: Record<string, any>;
+  custom?: CustomMemberData;
 }
 
 export interface ChannelMemberRequest {
@@ -1747,7 +1747,7 @@ export interface ChannelMetadata {
 
   type: string;
 
-  custom: Record<string, any>;
+  custom: CustomChannelData;
 
   last_message_at?: Date;
 

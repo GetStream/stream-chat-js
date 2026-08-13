@@ -87,12 +87,14 @@ Two prerequisites, or the output is meaningless:
 ## Step 2 — decide, per unmapped name
 
 Feeds, Moderation, and flag surfaces (`Feeds*`, `Moderation*`, `*FlagResponse`, `FlagRequest`,
-`UpsertActionConfig*`, `ActionLogResponse`, `ChannelMetadata`) stay unmapped — their `custom` is
-not part of the chat client's custom-data contract. Never add mapping entries for those.
+`UpsertActionConfig*`, `ActionLogResponse`) stay unmapped — their `custom` is not part of the
+chat client's custom-data contract. Never add mapping entries for those.
 
-Standing open question, unrelated to any one regeneration: `ChannelMemberPartialResponse.custom`
-looks like a genuine `CustomMemberData` candidate that was never mapped. If you are already
-working in this area, raise it — do not map it silently as a side effect.
+Judge by the fields, not the name. `ChannelMetadata` reads like an internal shape but carries
+`cid` / `member_count` / `last_message_at`, so its `custom` is channel custom data and it is
+mapped; `ModerationCallResponse` carries call fields, so its `custom` would need a call-scoped
+type that does not exist and it stays unmapped. When a name is unfamiliar, open the interface
+and look at what sits next to `custom`.
 
 The names Step 0 printed are new and each needs a decision. Map one when
 the model describes an entity the SDK exposes custom data on; pick the type by what the model
