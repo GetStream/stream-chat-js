@@ -1736,11 +1736,10 @@ describe('MessagePaginator', () => {
     });
 
     it('keeps hasMoreTail and anchors the tail cursor to the loaded oldest when merging a partial newest window', () => {
-      // Only the newest window is loaded and older items still exist (hasMoreTail true). Merging a
-      // short page (fewer than pageSize) whose first item is the set's first item must NOT clear
-      // hasMoreTail — re-deriving it from the page's LENGTH would wrongly break "load older". The tail
-      // boundary is taken from the MERGED interval, so hasMoreTail stays true and the cursor anchors to
-      // the loaded oldest (m1) — the correct "load older" anchor.
+      // Only the newest window is loaded and older items still exist (hasMoreTail true). A live partial
+      // merge passes no requestedLimit, so the flag stays conservative (true) — hasMoreTail is only ever
+      // lowered by a caller-supplied requestedLimit bounded by pageSize that comes back short. Here it
+      // stays true and the cursor anchors to the loaded oldest (m1) — the correct "load older" anchor.
       const { paginator, m1, m2 } = setupLoadedHead({ isTail: false });
       expect(paginator.state.getLatestValue().hasMoreTail).toBe(true);
 
@@ -2018,28 +2017,29 @@ describe('MessagePaginator', () => {
       // m2 slid into the window: page = [m2,m3,m5,m6]. Older m1 is below the page and MUST stay.
       paginator.mergeNewestPage(
         [msg('m2', 2), msg('m3', 3), msg('m5', 5), msg('m6', 6)],
-        {
-          requestedLimit: 4,
-        },
+        {},
       );
       expect(paginator.getItem('m4')).toBeUndefined(); // within-window delete removed
       expect(paginator.getItem('m1')).toBeDefined(); // older-than-page kept
       expect(ids(paginator)).toEqual(['m1', 'm2', 'm3', 'm5', 'm6']);
     });
 
-    it('removes the OLDEST loaded message once the page proves it reached the channel start', () => {
-      // Whole channel loaded. m1 (oldest) hard-deleted → a request for four returns only three.
+    it('keeps a below-window delete even when the page proves reached-start — reconcile is window-only (data-loss safe)', () => {
+      // m1 (oldest) hard-deleted → a bounded re-fetch (requestedLimit 4 <= pageSize) returns [m2,m3,m4],
+      // short, which DOES prove reached-start (hasMoreTail goes false). But m1 sits BELOW the returned
+      // window, and reconcile is window-only — it never removes anything older than the page's oldest —
+      // so m1 is KEPT rather than risk deleting a merely-not-fetched message; the stale ghost self-heals
+      // on a cold load. requestedLimit moved only the flag, never a deletion.
       const paginator = loadHead(
         [msg('m1', 1), msg('m2', 2), msg('m3', 3), msg('m4', 4)],
-        {
-          isTail: true,
-        },
+        { isTail: true },
       );
       paginator.mergeNewestPage([msg('m2', 2), msg('m3', 3), msg('m4', 4)], {
         requestedLimit: 4,
       });
-      expect(paginator.getItem('m1')).toBeUndefined();
-      expect(ids(paginator)).toEqual(['m2', 'm3', 'm4']);
+      expect(paginator.getItem('m1')).toBeDefined();
+      expect(ids(paginator)).toEqual(['m1', 'm2', 'm3', 'm4']);
+      expect(paginator.state.getLatestValue().hasMoreTail).toBe(false);
     });
 
     it('keeps the oldest loaded message when the page did NOT prove it reached the start', () => {
@@ -2050,9 +2050,7 @@ describe('MessagePaginator', () => {
         },
       );
       // A FULL page (returned === requested) that simply does not reach m1 → cannot claim m1 deleted.
-      paginator.mergeNewestPage([msg('m2', 2), msg('m3', 3), msg('m4', 4)], {
-        requestedLimit: 3,
-      });
+      paginator.mergeNewestPage([msg('m2', 2), msg('m3', 3), msg('m4', 4)], {});
       expect(paginator.getItem('m1')).toBeDefined();
       expect(ids(paginator)).toEqual(['m1', 'm2', 'm3', 'm4']);
     });
@@ -2070,9 +2068,7 @@ describe('MessagePaginator', () => {
       // m5 (newest) deleted; the page's newest is now m4. No snapshot ⇒ the top edge is ambiguous.
       paginator.mergeNewestPage(
         [msg('m1', 1), msg('m2', 2), msg('m3', 3), msg('m4', 4)],
-        {
-          requestedLimit: 5,
-        },
+        {},
       );
       expect(paginator.getItem('m5')).toBeDefined();
     });
@@ -2093,7 +2089,6 @@ describe('MessagePaginator', () => {
         [msg('m1', 1), msg('m2', 2), msg('m3', 3), msg('m4', 4)],
         {
           candidateIds,
-          requestedLimit: 5,
         },
       );
 
@@ -2115,7 +2110,6 @@ describe('MessagePaginator', () => {
 
       paginator.mergeNewestPage([msg('m1', 1), msg('m2', 2), msg('m3', 3)], {
         candidateIds,
-        requestedLimit: 5,
       });
 
       expect(ids(paginator)).toEqual(['m1', 'm2', 'm3']);
@@ -2145,7 +2139,6 @@ describe('MessagePaginator', () => {
         [msg('m1', 1), msg('m2', 2), msg('m3', 3), msg('m4', 4)],
         {
           candidateIds,
-          requestedLimit: 5,
         },
       );
 
@@ -2171,7 +2164,6 @@ describe('MessagePaginator', () => {
       // The server page only has the confirmed m1 + m5; the local-only ones the server never saw.
       paginator.mergeNewestPage([msg('m1', 1), msg('m5', 5)], {
         candidateIds,
-        requestedLimit: 5,
       });
 
       expect(paginator.getItem('sending')).toBeDefined();
@@ -2194,7 +2186,6 @@ describe('MessagePaginator', () => {
       // m3 hard-deleted; the failed send was never on the server. Page: [m1, m4].
       paginator.mergeNewestPage([msg('m1', 1), msg('m4', 4)], {
         candidateIds,
-        requestedLimit: 4,
       });
 
       expect(paginator.getItem('m3')).toBeUndefined();
@@ -2209,7 +2200,7 @@ describe('MessagePaginator', () => {
       const paginator = loadHead(loaded);
       const candidateIds = new Set(loaded.map((message) => message.id));
 
-      paginator.mergeNewestPage([], { candidateIds, requestedLimit: 3 });
+      paginator.mergeNewestPage([], { candidateIds });
 
       expect(paginator.items).toEqual([]);
       expect(paginator.lastMessage).toBeNull();
@@ -2228,7 +2219,7 @@ describe('MessagePaginator', () => {
 
       // A live message arrives during the fetch, then the (stale) empty page comes back.
       paginator.ingestItem(msg('m3', 3));
-      paginator.mergeNewestPage([], { candidateIds, requestedLimit: 2 });
+      paginator.mergeNewestPage([], { candidateIds });
 
       expect(paginator.getItem('m1')).toBeUndefined();
       expect(paginator.getItem('m2')).toBeUndefined();
@@ -2246,7 +2237,6 @@ describe('MessagePaginator', () => {
       // A fully-disjoint newest window (100+ arrived). Rebuild replaces the loaded set; no extra prune.
       paginator.mergeNewestPage([msg('m10', 10), msg('m11', 11), msg('m12', 12)], {
         candidateIds,
-        requestedLimit: 3,
       });
 
       expect(ids(paginator)).toEqual(['m10', 'm11', 'm12']);
@@ -2275,7 +2265,6 @@ describe('MessagePaginator', () => {
       // Active window is the older [m1,m2,m3]; the head holds m8,m9,m10 (m9 "deleted" server-side).
       paginator.mergeNewestPage([msg('m8', 8), msg('m10', 10)], {
         candidateIds: new Set(['m8', 'm9', 'm10']),
-        requestedLimit: 3,
       });
 
       // The view (the older window) is preserved — no yank to the head — but the hidden-head ghost m9
@@ -2290,49 +2279,53 @@ describe('MessagePaginator', () => {
 
       paginator.mergeNewestPage([msg('m1', 1), msg('m3', 3), msg('m4', 4)], {
         candidateIds: new Set(loaded.map((message) => message.id)),
-        requestedLimit: 4,
       });
       expect(ids(paginator)).toEqual(['m1', 'm3', 'm4']);
 
       paginator.mergeNewestPage([msg('m1', 1), msg('m3', 3), msg('m4', 4)], {
         candidateIds: new Set(['m1', 'm3', 'm4']),
-        requestedLimit: 4,
       });
       expect(ids(paginator)).toEqual(['m1', 'm3', 'm4']);
     });
 
-    // ── The "100 point" is data-driven, never hardcoded: reconcile only within the returned page ──
+    // ── Reconcile is window-only: nothing older than the returned page's oldest is ever removed (no cap) ──
 
-    it('never reconciles messages older than what the page returns, even on an over-request (clamp)', () => {
-      // 105 loaded (whole channel). The server caps its response at 100 (the newest 100). We requested
-      // more (105) but only 100 come back — that shortfall must NOT be read as "reached the channel
-      // start", or the 5 oldest (beyond the page) would be wrongly deleted.
+    it('keeps every loaded message older than the returned page — window-only reconcile never deletes below it (data-loss guard)', () => {
+      // DATA-LOSS GUARD. 105 loaded; a reload over-requests all 105 but the server caps the page at the
+      // newest 100 — the 5 oldest sit BELOW the returned page's oldest. Reconcile is window-only: it
+      // never removes anything older than the returned page's oldest, so none of the 5 are deleted.
+      // requestedLimit only tunes hasMoreTail, never a deletion — the window-only reconcile holds for ANY
+      // page that covers only part of the loaded window.
       const all = Array.from({ length: 105 }, (_, i) =>
         msg(`msg-${String(i).padStart(3, '0')}`, i),
       );
       const paginator = loadHead(all, { isTail: true });
-      const page = all.slice(5); // the newest 100 — the server's capped response
+      const page = all.slice(5); // a page covering only the newest 100 of the 105 loaded
 
       paginator.mergeNewestPage(page, {
+        requestedLimit: all.length, // reload asks for all 105; the server caps the returned page at 100
         candidateIds: new Set(all.map((message) => message.id)),
-        requestedLimit: 105,
       });
 
-      // All 105 kept: nothing was actually deleted, and the 5 oldest are beyond the page's reach.
+      // All 105 kept: nothing was actually deleted, and the 5 oldest are below the returned page.
       expect(paginator.items?.length).toBe(105);
       expect(paginator.getItem('msg-000')).toBeDefined();
       expect(paginator.getItem('msg-004')).toBeDefined();
     });
 
-    it('over-request: a server-capped page keeps hasMoreTail and anchors the tail cursor to the true loaded oldest', () => {
+    it('an over-request capped to the newest part keeps hasMoreTail and anchors the tail cursor to the true loaded oldest', () => {
+      // A reload over-requests all 105 but the server caps the page at the newest 100. An over-request
+      // (105 > pageSize 100) can be silently server-capped, so a short page CANNOT prove reached-start —
+      // hasMoreTail stays true and the tail cursor anchors to the true oldest LOADED (msg-000), not the
+      // page's oldest — so "load older" resumes contiguously from the real bottom of the window.
       const all = Array.from({ length: 105 }, (_, i) =>
         msg(`msg-${String(i).padStart(3, '0')}`, i),
       );
       const paginator = loadHead(all, { isTail: true });
 
       paginator.mergeNewestPage(all.slice(5), {
+        requestedLimit: all.length,
         candidateIds: new Set(all.map((message) => message.id)),
-        requestedLimit: 105,
       });
 
       const state = paginator.state.getLatestValue();
@@ -2340,11 +2333,12 @@ describe('MessagePaginator', () => {
       expect(state.cursor?.tailward).toBe('msg-000');
     });
 
-    it('reached channel start: a page shorter than the clamped limit clears hasMoreTail, nulls the tail cursor and sets isTail', () => {
-      // The complementary branch: the loaded window believes older messages exist (isTail:false →
-      // hasMoreTail true), then the newest two are hard-deleted so the reconnect page comes back short
-      // of the requested limit. A short page (3 < min(5,100)) proves we reached the channel start, so
-      // hasMoreTail drops to false, the tail cursor nulls, and the interval's isTail flips true.
+    it('a bounded short page reaches the channel start: trailing deletes still removed, hasMoreTail false, cursor cleared', () => {
+      // The newest two are hard-deleted so the reconnect page comes back short. The trailing deletes
+      // (m4, m5) are still removed — they are at/above the newest returned message and the pre-fetch
+      // snapshot proves them gone. The request was BOUNDED (requestedLimit 5 <= pageSize 100) and came
+      // back short, so it DOES prove reached-start: hasMoreTail goes false, the interval's isTail goes
+      // true, and the tail cursor is cleared. No spurious "load older".
       const paginator = loadHead([
         msg('m1', 1),
         msg('m2', 2),
@@ -2356,15 +2350,266 @@ describe('MessagePaginator', () => {
 
       // m4 + m5 hard-deleted while offline: only the surviving newest come back.
       paginator.mergeNewestPage([msg('m1', 1), msg('m2', 2), msg('m3', 3)], {
-        candidateIds: new Set(['m1', 'm2', 'm3', 'm4', 'm5']),
         requestedLimit: 5,
+        candidateIds: new Set(['m1', 'm2', 'm3', 'm4', 'm5']),
       });
 
       const state = paginator.state.getLatestValue();
-      expect(ids(paginator)).toEqual(['m1', 'm2', 'm3']);
+      expect(ids(paginator)).toEqual(['m1', 'm2', 'm3']); // trailing deletes removed via snapshot
       expect(state.hasMoreTail).toBe(false);
-      expect(state.cursor?.tailward).toBeNull();
+      expect(state.cursor?.tailward).toBe(null);
       expect((paginator.itemIntervals[0] as { isTail?: boolean }).isTail).toBe(true);
+    });
+
+    // ── hasMoreTail derivation: bounded (reliable) vs over-request (conservative), no hardcoded cap ──
+
+    describe('hasMoreTail derivation (requestedLimit vs pageSize)', () => {
+      it('a bounded short page proves reached-start → hasMoreTail false, cursor cleared (no spurious "load older")', () => {
+        // The channel is smaller than a page: a bounded open (requestedLimit <= pageSize) returns every
+        // message and comes back short. That reliably proves reached-start — pageSize <= the server's max
+        // page size is the same invariant executeQuery pagination relies on — so hasMoreTail is false.
+        // This is the fix for the spurious top spinner + double pagination on first open.
+        const paginator = loadHead([msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
+        paginator.mergeNewestPage([msg('m1', 1), msg('m2', 2), msg('m3', 3)], {
+          requestedLimit: 25,
+        });
+        const state = paginator.state.getLatestValue();
+        expect(ids(paginator)).toEqual(['m1', 'm2', 'm3']); // nothing removed
+        expect(state.hasMoreTail).toBe(false);
+        expect(state.cursor?.tailward).toBe(null);
+        expect((paginator.itemIntervals[0] as { isTail?: boolean }).isTail).toBe(true);
+      });
+
+      it('a bounded FULL page does NOT assert reached-start → hasMoreTail true (older may remain)', () => {
+        // A bounded request that comes back FULL (length === requested) means older messages may still
+        // exist, so "load older" stays enabled and the cursor anchors to the loaded oldest.
+        const paginator = loadHead([msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
+        paginator.mergeNewestPage([msg('m1', 1), msg('m2', 2), msg('m3', 3)], {
+          requestedLimit: 3,
+        });
+        const state = paginator.state.getLatestValue();
+        expect(state.hasMoreTail).toBe(true);
+        expect(state.cursor?.tailward).toBe('m1');
+      });
+
+      it('an OVER-request short page (> pageSize, possibly server-capped) never asserts reached-start → hasMoreTail true, below-window kept', () => {
+        // reload re-fetches the whole loaded window to reconcile as much as possible; that over-request
+        // (> pageSize) can be silently server-capped, so a short page proves nothing about reaching the
+        // start. Bias to true so a merely-capped page is never mistaken for the channel's start — the
+        // data-loss-safe direction, needing no hardcoded max page size.
+        const paginator = new MessagePaginator({
+          channel,
+          itemIndex: new StoreBackedItemIndex<LocalMessage>({
+            getEntityId: (message) => message.id,
+          }),
+          paginatorOptions: { pageSize: 3 },
+        });
+        paginator.ingestPage({
+          page: [msg('m1', 1), msg('m2', 2), msg('m3', 3), msg('m4', 4)],
+          isHead: true,
+          isTail: true,
+          setActive: true,
+        });
+        // reload over-requests 4 (> pageSize 3); the server caps the returned page at the newest 3.
+        paginator.mergeNewestPage([msg('m2', 2), msg('m3', 3), msg('m4', 4)], {
+          requestedLimit: 4,
+        });
+        expect(paginator.state.getLatestValue().hasMoreTail).toBe(true);
+        expect(paginator.getItem('m1')).toBeDefined(); // below-window delete never removed (data-loss safe)
+      });
+    });
+
+    // ── reached-start probe: the ONLY cap-free way to prune the oldest-run below the returned window ──
+
+    describe('reached-start probe (below-window reconciliation)', () => {
+      const mockQuery = () => channel.query as unknown as ReturnType<typeof vi.fn>;
+      const mockGetReplies = () =>
+        channel.getReplies as unknown as ReturnType<typeof vi.fn>;
+      const flushProbe = (p: MessagePaginator) =>
+        (p as unknown as { _belowWindowReconcile?: Promise<void> })._belowWindowReconcile;
+      const makePaginator = (pageSize: number, parentMessageId?: string) =>
+        new MessagePaginator({
+          channel,
+          parentMessageId,
+          itemIndex: new StoreBackedItemIndex<LocalMessage>({
+            getEntityId: (message) => message.id,
+          }),
+          paginatorOptions: { pageSize },
+        });
+      // Fully-loaded head (isTail → hasMoreTail false, so condition A holds).
+      const loadFull = (paginator: MessagePaginator, page: LocalMessage[]) =>
+        paginator.ingestPage({ page, isHead: true, isTail: true, setActive: true });
+
+      it('probe empty → prunes the oldest-run ghost below the window and settles hasMoreTail', async () => {
+        // pageSize 3 so requestedLimit 5 is an OVER-request: the sync merge cannot prove reached-start
+        // (biases hasMoreTail true, keeps m1 window-only) — the probe is the SOLE driver here.
+        const paginator = makePaginator(3);
+        loadFull(paginator, [
+          msg('m1', 1),
+          msg('m2', 2),
+          msg('m3', 3),
+          msg('m4', 4),
+          msg('m5', 5),
+        ]);
+        expect(paginator.state.getLatestValue().hasMoreTail).toBe(false); // A precondition
+
+        // m1 (oldest) hard-deleted offline; reload over-requests all 5, server returns the survivors.
+        mockQuery().mockResolvedValue({ messages: [] }); // nothing older than m2 → reached start
+        paginator.mergeNewestPage(
+          [msg('m2', 2), msg('m3', 3), msg('m4', 4), msg('m5', 5)],
+          { requestedLimit: 5, candidateIds: new Set(['m1', 'm2', 'm3', 'm4', 'm5']) },
+        );
+        // Sync merge kept m1 (window-only) and biased hasMoreTail true (over-request):
+        expect(paginator.getItem('m1')).toBeDefined();
+        expect(paginator.state.getLatestValue().hasMoreTail).toBe(true);
+
+        await flushProbe(paginator);
+
+        expect(channel.query).toHaveBeenCalledWith({
+          messages: { limit: 1, id_lt: 'm2' },
+        });
+        expect(paginator.getItem('m1')).toBeUndefined(); // pruned by the probe
+        expect(ids(paginator)).toEqual(['m2', 'm3', 'm4', 'm5']);
+        expect(paginator.state.getLatestValue().hasMoreTail).toBe(false); // settled
+        expect(paginator.state.getLatestValue().cursor?.tailward).toBe(null);
+      });
+
+      it('probe returns an older message → keeps the below-window items (truncated, not the start)', async () => {
+        const paginator = makePaginator(3);
+        loadFull(paginator, [
+          msg('m1', 1),
+          msg('m2', 2),
+          msg('m3', 3),
+          msg('m4', 4),
+          msg('m5', 5),
+        ]);
+        // Reload over-requests 5; server caps and returns only the newest 3 — m1,m2 fall below.
+        mockQuery().mockResolvedValue({ messages: [msg('m2', 2)] }); // older content exists
+        paginator.mergeNewestPage([msg('m3', 3), msg('m4', 4), msg('m5', 5)], {
+          requestedLimit: 5,
+          candidateIds: new Set(['m1', 'm2', 'm3', 'm4', 'm5']),
+        });
+
+        await flushProbe(paginator);
+
+        expect(channel.query).toHaveBeenCalledWith({
+          messages: { limit: 1, id_lt: 'm3' },
+        });
+        expect(paginator.getItem('m1')).toBeDefined(); // kept — no data loss on a truncated reload
+        expect(paginator.getItem('m2')).toBeDefined();
+        expect(ids(paginator)).toEqual(['m1', 'm2', 'm3', 'm4', 'm5']);
+      });
+
+      it('does NOT probe when we were not at the channel start (hasMoreTail was true)', async () => {
+        const paginator = makePaginator(3);
+        // isTail false → hasMoreTail true → condition A fails.
+        paginator.ingestPage({
+          page: [msg('m3', 3), msg('m4', 4), msg('m5', 5)],
+          isHead: true,
+          isTail: false,
+          setActive: true,
+        });
+        expect(paginator.state.getLatestValue().hasMoreTail).toBe(true);
+        paginator.mergeNewestPage([msg('m4', 4), msg('m5', 5)], {
+          requestedLimit: 3,
+          candidateIds: new Set(['m3', 'm4', 'm5']),
+        });
+        await flushProbe(paginator);
+        expect(channel.query).not.toHaveBeenCalled();
+        expect(paginator.getItem('m3')).toBeDefined();
+      });
+
+      it('does NOT probe a small-page caller (requestedLimit < loaded) — a list hydrate cannot reach the start', async () => {
+        const paginator = makePaginator(3);
+        loadFull(paginator, [
+          msg('m1', 1),
+          msg('m2', 2),
+          msg('m3', 3),
+          msg('m4', 4),
+          msg('m5', 5),
+        ]);
+        // A list-hydrate-style page: asked for only 2, far fewer than the 5 loaded.
+        paginator.mergeNewestPage([msg('m4', 4), msg('m5', 5)], {
+          requestedLimit: 2,
+          candidateIds: new Set(['m1', 'm2', 'm3', 'm4', 'm5']),
+        });
+        await flushProbe(paginator);
+        expect(channel.query).not.toHaveBeenCalled();
+        expect(ids(paginator)).toEqual(['m1', 'm2', 'm3', 'm4', 'm5']); // nothing pruned
+      });
+
+      it('does NOT probe when the oldest is still in the page (a middle delete — within-span handles it)', async () => {
+        const paginator = makePaginator(3);
+        loadFull(paginator, [
+          msg('m1', 1),
+          msg('m2', 2),
+          msg('m3', 3),
+          msg('m4', 4),
+          msg('m5', 5),
+        ]);
+        // m3 deleted; reload returns [m1,m2,m4,m5] — the oldest (m1) is still present.
+        paginator.mergeNewestPage(
+          [msg('m1', 1), msg('m2', 2), msg('m4', 4), msg('m5', 5)],
+          {
+            requestedLimit: 5,
+            candidateIds: new Set(['m1', 'm2', 'm3', 'm4', 'm5']),
+          },
+        );
+        await flushProbe(paginator);
+        expect(channel.query).not.toHaveBeenCalled();
+        expect(paginator.getItem('m3')).toBeUndefined(); // removed by within-span, not the probe
+        expect(ids(paginator)).toEqual(['m1', 'm2', 'm4', 'm5']);
+      });
+
+      it('threads probe via getReplies', async () => {
+        const paginator = makePaginator(3, 'parent-1');
+        const reply = (id: string, minute: number) =>
+          msg(id, minute, { parent_id: 'parent-1' });
+        loadFull(paginator, [
+          reply('r1', 1),
+          reply('r2', 2),
+          reply('r3', 3),
+          reply('r4', 4),
+        ]);
+        mockGetReplies().mockResolvedValue({ messages: [] }); // nothing older than r2
+        paginator.mergeNewestPage([reply('r2', 2), reply('r3', 3), reply('r4', 4)], {
+          requestedLimit: 4,
+          candidateIds: new Set(['r1', 'r2', 'r3', 'r4']),
+        });
+        await flushProbe(paginator);
+        expect(channel.getReplies).toHaveBeenCalledWith({
+          parent_id: 'parent-1',
+          limit: 1,
+          id_lt: 'r2',
+        });
+        expect(channel.query).not.toHaveBeenCalled();
+        expect(paginator.getItem('r1')).toBeUndefined();
+      });
+
+      it('aborts the prune if the head interval changed while the probe was in flight', async () => {
+        const paginator = makePaginator(3);
+        loadFull(paginator, [
+          msg('m1', 1),
+          msg('m2', 2),
+          msg('m3', 3),
+          msg('m4', 4),
+          msg('m5', 5),
+        ]);
+        let resolveProbe: () => void = () => undefined;
+        mockQuery().mockReturnValue(
+          new Promise((resolve) => {
+            resolveProbe = () => resolve({ messages: [] });
+          }),
+        );
+        paginator.mergeNewestPage(
+          [msg('m2', 2), msg('m3', 3), msg('m4', 4), msg('m5', 5)],
+          { requestedLimit: 5, candidateIds: new Set(['m1', 'm2', 'm3', 'm4', 'm5']) },
+        );
+        // The head interval goes away (a reset/jump) before the probe resolves.
+        paginator.setIntervals([]);
+        resolveProbe();
+        await expect(flushProbe(paginator)).resolves.toBeUndefined(); // no throw, guard bailed
+      });
     });
 
     describe('batch({ coalesce: true }) — single deterministic window publish', () => {
@@ -2463,7 +2708,6 @@ describe('MessagePaginator', () => {
 
       paginator.mergeNewestPage(page, {
         candidateIds: new Set(all.map((message) => message.id)),
-        requestedLimit: 105,
       });
 
       expect(paginator.getItem('msg-050')).toBeUndefined(); // within-page delete removed
@@ -2566,8 +2810,10 @@ describe('MessagePaginator', () => {
       });
       expect(paginator.state.getLatestValue().hasMoreTail).toBe(false);
 
-      // Reconnect fetches a FULL page (requestedLimit == page length) → older messages remain, so
-      // hasMoreTail must be RE-COMPUTED from the page (not read off the stale interval flag).
+      // Reconnect re-seeds the head window. The merge biases hasMoreTail to `true` (isTail:false),
+      // which clears the stale "complete" flag so "load older" works again — not read off the stale
+      // interval flag. (If the channel really is fully loaded, the next load-older returns empty and
+      // settles it.)
       paginator.seedFirstPageSync(
         [msg('m1', 1), msg('m2', 2), msg('m3', 3)],
         3,
@@ -2816,7 +3062,6 @@ describe('MessagePaginator', () => {
       const candidateIds = new Set(paginator.headItems.map((m) => m.id));
       paginator.mergeNewestPage([msg('m90', 90), msg('m95', 95)], {
         candidateIds,
-        requestedLimit: 3,
       });
 
       // View preserved (still on the island)...

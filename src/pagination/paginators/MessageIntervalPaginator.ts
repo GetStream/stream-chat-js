@@ -149,19 +149,24 @@ export type MessagePaginatorOptions = {
  * without this such a message lingers as a ghost after reconnect.
  *
  * Throughout, `page` is the newest window the server returned for `mergeNewestPage`, and "`page`'s
- * newest / oldest message" are its bounds by `created_at`. With NO options, `mergeNewestPage` still
- * prunes any loaded message that falls WITHIN `page`'s `created_at` span but is absent from it —
+ * newest / oldest message" are its bounds by `created_at`. With NO options, `mergeNewestPage` prunes
+ * any loaded message that falls WITHIN `page`'s `created_at` span but is absent from it —
  * unconditionally safe (a message that arrived live during the caller's fetch is always strictly
- * newer than `page`'s newest message, so it can never fall in that span). The options widen the
- * reconcilable window:
+ * newer than `page`'s newest message, so it can never fall in that span). `candidateIds` widens the
+ * reconcilable window at the TOP edge; `requestedLimit` only tunes the `hasMoreTail` affordance and
+ * can never remove a message:
  */
 export type MergeNewestPageOptions = {
   /**
-   * The `limit` the caller passed to the query that produced `page`. Lets reconciliation tell "`page`
-   * reached the channel's own oldest message" (it came back shorter than requested) from "`page` is
-   * full and older messages remain". Only in the former may it prune loaded messages OLDER than
-   * `page`'s oldest message (e.g. the oldest loaded message was the one deleted). Clamped to the
-   * server's max page size so an over-request cannot be mistaken for reaching the start.
+   * The `limit` the caller passed to the query that produced `page`. Used ONLY to derive
+   * `hasMoreTail` — whether `page` reached the channel's own oldest message — by comparing it to
+   * `page.length`. It NEVER removes a message (reconciliation stays window-only regardless), so the
+   * worst a wrong value can do is show/hide the "load older" affordance for one settle. Trusted only
+   * when no larger than the paginator's own `pageSize` (see
+   * {@link MessageIntervalPaginator.pageReachedChannelStart}); a larger over-request — e.g.
+   * `channel.reload` re-fetching the whole loaded window to reconcile as much as possible — may have
+   * been silently server-capped, so its short page is ignored rather than mistaken for reaching the
+   * start.
    */
   requestedLimit?: number;
   /**
@@ -215,6 +220,8 @@ export class MessageIntervalPaginator extends BasePaginator<
   protected _requestSort = DEFAULT_BACKEND_SORT;
   protected _itemOrder: MessagePaginatorSort = DEFAULT_BACKEND_SORT;
   protected _nextQueryShape: MessageQueryShape | undefined;
+  /** Pending below-window reached-start probe (exposed for deterministic test awaiting). */
+  private _belowWindowReconcile?: Promise<void>;
   sortComparator: (a: LocalMessage, b: LocalMessage) => number;
   /**
    * Single source of truth for whether a message should be included in paginator intervals/state.
@@ -613,10 +620,10 @@ export class MessageIntervalPaginator extends BasePaginator<
    * 1. OVERLAP - the incoming page shares at least one id with the loaded head (fewer than a full
    *    page is new). Merge in place: existing items are reconciled by id (edits, soft deletes), new
    *    items are appended and every already loaded item (including older pages already paged in) is
-   *    kept. The tail boundary (`hasMoreTail`/`cursor.tailward`) is taken from the MERGED interval: a
-   *    partial page leaves it untouched, while a page reaching deeper than the loaded window (or a
-   *    stale offline-DB cursor) re-anchors it to the true loaded oldest so "load older" keeps working —
-   *    derived from the interval, never the page's length. Then destructive reconciliation
+   *    kept. The tail boundary (`hasMoreTail`/`cursor.tailward`) is set from whether the page reached
+   *    the channel start ({@link pageReachedChannelStart}): a bounded page that came back short means
+   *    no more older, otherwise "load older" stays enabled and the cursor re-anchors to the true loaded
+   *    oldest (which also clears a stale offline-DB cursor). Then destructive reconciliation
    *    ({@link reconcileHeadAgainstPage}) removes any loaded message
    *    that the authoritative page proves was hard-deleted while offline (see that method + the
    *    {@link MergeNewestPageOptions} for the exact, safe window).
@@ -642,6 +649,10 @@ export class MessageIntervalPaginator extends BasePaginator<
   mergeNewestPage = (page: LocalMessage[], options?: MergeNewestPageOptions) => {
     const headInterval = this.itemIntervals[0] as Interval | undefined;
     if (!headInterval?.isHead) return;
+    // Captured BEFORE the merge overwrites state — inputs for the below-window reached-start probe
+    // (overlap branch only): did we believe we were at the channel start, and how much was loaded.
+    const wasAtChannelStart = !this.state.getLatestValue().hasMoreTail;
+    const preMergeLoadedCount = headInterval.itemIds.length;
     // If the caller jumped to a separate (older) window, that window is active and the head is merely
     // still-loaded underneath. Don't MERGE the fresh page or switch the view (that would yank them to
     // the newest) — but STILL prune offline hard-deletes out of the hidden head, otherwise returning to
@@ -694,29 +705,17 @@ export class MessageIntervalPaginator extends BasePaginator<
     const interval = this.ingestPage({ page, isHead: true, setActive: false });
     if (!interval) return;
 
-    // Re-compute hasMoreTail from the FETCHED PAGE, not the merged interval. The interval's isTail is
-    // "sticky" — mergeTwoAnchoredIntervals ORs isTail — so a stale offline-DB window persisted as
-    // "complete" (isTail:true) keeps hasMoreTail=false through the merge, and "load older" stays dead.
-    // A full page (length == the limit we asked for) means older messages remain; a short page means we
-    // reached the channel start. Without a caller-supplied limit (a live-edit merge of unknown size)
-    // fall back to the interval's own flag. Pagination reads off STATE, so writing it here is what
-    // unblocks "load older"; a later executeQuery re-derives per page. Mirrors postQueryReconcile,
-    // which likewise derives this flag from the page rather than the interval.
-    const { requestedLimit } = options ?? {};
-    const canDeriveTail = typeof requestedLimit === 'number';
-    const reachedChannelStart =
-      canDeriveTail &&
-      page.length < Math.min(requestedLimit, DEFAULT_CHANNEL_MESSAGE_LIST_PAGE_SIZE);
-    const hasMoreTail = canDeriveTail ? !reachedChannelStart : interval.hasMoreTail;
-
-    // Correct the INTERVAL flags too, not just state. `intervalsOverlap` (the merge test in
-    // ingestPage) consults `interval.isTail`: a sticky `isTail:true` inherited from a "complete"
-    // offline-DB window makes ANY older page count as overlapping this head interval — so a far
-    // jump's load-older welds two pages-apart sets into one. Derive isTail from the page here like the
-    // state above; mirrors postQueryReconcile (`interval.isTail = hasMoreTail === false`). Only a
-    // genuine channel-start interval (no older messages) keeps isTail:true.
+    // hasMoreTail: does the fetched page prove it reached the channel's own oldest message? Only a
+    // request bounded by our OWN pageSize gives that proof (a short page); an over-request may have
+    // been server-capped, so it biases to `true` — never asserting "no more older" from a page that
+    // may be truncated. See {@link pageReachedChannelStart} (no hardcoded max page size, per-paginator).
+    // This decides only the "load older" AFFORDANCE — it never removes a message (reconciliation stays
+    // window-only below). isTail mirrors it: `true` only when we RELIABLY reached the start, which also
+    // clears a stale offline-DB `isTail:true` and stops `intervalsOverlap` welding a far page across a
+    // gap. The tail cursor anchors to the oldest loaded id so "load older" stays contiguous.
+    const hasMoreTail = !this.pageReachedChannelStart(page, options);
     interval.hasMoreTail = hasMoreTail;
-    interval.isTail = hasMoreTail === false;
+    interval.isTail = !hasMoreTail;
 
     this.setActiveInterval(interval, { updateState: false });
     this.state.partialNext({
@@ -732,9 +731,91 @@ export class MessageIntervalPaginator extends BasePaginator<
       },
     });
 
-    // With the newest page merged in, drop any loaded message the page proves was hard-deleted.
-    this.reconcileHeadAgainstPage(page, options);
+    // With the newest page merged in, drop any loaded message the page proves was hard-deleted, and
+    // collect the below-window leftovers it cannot decide from the page alone.
+    const belowWindow = this.reconcileHeadAgainstPage(page, options);
+
+    // The leftovers are ambiguous (hard-deleted oldest vs server-capped over-request). Only a
+    // full-window reload (`requestedLimit >= loaded`, so NOT the small list hydrate) that we believed
+    // reached the start could have reached it — probe to settle them there; anything else can't, so skip.
+    const requestedLimit = options?.requestedLimit;
+    if (
+      belowWindow.length &&
+      wasAtChannelStart &&
+      typeof requestedLimit === 'number' &&
+      requestedLimit >= preMergeLoadedCount
+    ) {
+      this._belowWindowReconcile = this.pruneBelowWindowIfReachedStart(
+        belowWindow,
+        this.getItemId(page[0]),
+      );
+    }
   };
+
+  /**
+   * Whether `page` proves it reached the channel's own oldest message: the caller's request was
+   * bounded by this paginator's OWN `pageSize` AND `page` came back shorter than that request.
+   *
+   * `pageSize <= the server's max page size` is already the invariant normal pagination
+   * (`executeQuery`) relies on — `page.length < pageSize` ⟹ reached the end — so a request no larger
+   * than `pageSize` returns exactly what was asked unless the channel ended. This needs no hardcoded
+   * max page size and is per-paginator, so a thread reply paginator uses its own `pageSize`.
+   *
+   * An OVER-request (larger than `pageSize`, e.g. `channel.reload` re-fetching the whole loaded window
+   * to reconcile as much as possible) may have been silently capped by the server, so a short page
+   * there is NOT proof of reaching the start — return `false` and stay conservative. This only ever
+   * gates the `hasMoreTail` affordance; it never removes a message.
+   */
+  private pageReachedChannelStart(
+    page: LocalMessage[],
+    options?: MergeNewestPageOptions,
+  ): boolean {
+    const requestedLimit = options?.requestedLimit;
+    return (
+      typeof requestedLimit === 'number' &&
+      requestedLimit <= this.pageSize &&
+      page.length < requestedLimit
+    );
+  }
+
+  /**
+   * Settle the below-window leftovers {@link reconcileHeadAgainstPage} handed back (loaded messages
+   * older than `anchorId` — the returned page's oldest — and absent from the page). From the page alone
+   * they're ambiguous: a hard-deleted oldest vs a server-capped over-request. Ask the server "anything
+   * older than `anchorId`?" — the only cap-free way to tell. Nothing older ⇒ genuine deletes ⇒ remove
+   * them and settle the tail. A probe failure or a head change across the await keeps them (never a false
+   * delete). The caller decides WHEN this runs.
+   */
+  private async pruneBelowWindowIfReachedStart(
+    belowWindow: string[],
+    anchorId: string,
+  ): Promise<void> {
+    const headId = (this.itemIntervals[0] as Interval | undefined)?.id;
+    // older exists (or the probe failed), we we're not provably the start, so
+    // keep the leftovers
+    if (await this.hasMessagesOlderThan(anchorId).catch(() => true)) return;
+    // revalidate the head across the await (a jump/reset/newer merge aborts), then remove the leftovers
+    const head = this.itemIntervals[0] as Interval | undefined;
+    if (!head?.isHead || head.id !== headId) return;
+    this.removeReconciledItems(belowWindow);
+    head.hasMoreTail = false; // we now KNOW we reached the start, so settle the "load older" affordance
+    head.isTail = true;
+    if (this.isActiveInterval(head)) {
+      this.state.partialNext({
+        hasMoreTail: false,
+        cursor: { headward: null, tailward: null },
+      });
+    }
+  }
+
+  /** One `limit: 1` fetch of messages older than `id` (channel main list or thread replies). */
+  private async hasMessagesOlderThan(id: string): Promise<boolean> {
+    const pagination = { limit: 1, id_lt: id } as MessagePaginationParams;
+    const { messages } = this.parentMessageId
+      ? await this.channel.getReplies({ parent_id: this.parentMessageId, ...pagination })
+      : await this.channel.query({ messages: pagination });
+    return Array.isArray(messages) && messages.length > 0;
+  }
 
   /**
    * Whether a loaded message is server-confirmed and therefore eligible to be reconciled away when
@@ -756,33 +837,38 @@ export class MessageIntervalPaginator extends BasePaginator<
    * the merge is additive, so they would otherwise linger forever).
    *
    * Here `page` is the freshly-fetched newest window the server returned for the query that produced
-   * it. Its two bounds — used throughout below — are its NEWEST message (`page`'s last item by
-   * `created_at`) and its OLDEST message (`page`'s first item). The reconcilable window is derived
-   * ENTIRELY from those two bounds — never a hardcoded page size — so it can only ever remove messages
-   * `page` actually covers. Three regions, by a loaded message's `created_at`:
+   * it. Its two bounds are its NEWEST message (`page`'s last item by `created_at`) and its OLDEST
+   * message (`page`'s first item). Reconciliation removes ONLY messages `page` actually covers — no
+   * hardcoded page size is involved — in two regions, by a loaded message's `created_at`:
    *
    * - WITHIN `page` (strictly between `page`'s oldest and newest message): a server-confirmed loaded
    *   message absent from `page` was hard-deleted. Safe with no snapshot — a message that arrived live
    *   during the caller's fetch is always strictly newer than `page`'s newest message, so it can never
    *   fall in this span.
-   * - BELOW `page`'s oldest message: only reconcilable when `page` reached the channel's own oldest
-   *   message (`requestedLimit` given and `page` came back shorter than requested, clamped to the
-   *   server's max page size). Otherwise older messages simply were not fetched, so they are left
-   *   untouched.
    * - AT/ABOVE `page`'s newest message (a hard-deleted newest message), and the empty-`page` case:
    *   only reconcilable with a pre-fetch `candidateIds` snapshot, which alone tells a just-deleted
    *   message from one that arrived live during the fetch at that top edge.
    *
+   * A loaded message BELOW `page`'s oldest is NOT removed here (window-only) — from the page alone a
+   * hard-deleted oldest is indistinguishable from a server-capped over-request. Those messages are
+   * instead RETURNED (the below-window leftovers) so {@link pruneBelowWindowIfReachedStart} can settle
+   * them with a `limit: 1` "anything older?" probe — the only cap-free proof — and remove them only if
+   * the server confirms nothing older exists. Absent that proof they are kept (a later cold/fresh query
+   * omits any real delete).
+   *
    * Removal goes through {@link removeItem} (batched) so the item index, intervals, shared message
    * store and — via the {@link MessagePaginator} override — the tracked last message all stay correct;
    * the active window is then re-emitted once.
+   *
+   * @returns the below-window leftover ids (loaded, server-confirmed, older than `page`'s oldest, absent
+   *   from it) for the caller's reached-start probe. Empty for the no-head / empty-page paths.
    */
   protected reconcileHeadAgainstPage(
     page: LocalMessage[],
     options?: MergeNewestPageOptions,
-  ) {
+  ): string[] {
     const headInterval = this.itemIntervals[0] as Interval | undefined;
-    if (!headInterval?.isHead) return;
+    if (!headInterval?.isHead) return [];
 
     const loadedIds = headInterval.itemIds;
     const candidateIds = options?.candidateIds;
@@ -790,33 +876,27 @@ export class MessageIntervalPaginator extends BasePaginator<
     // Empty page → the channel has no messages. Every server-confirmed loaded message is gone, but
     // only remove ids from the pre-fetch snapshot so a message that landed during the fetch survives.
     if (!page.length) {
-      if (!candidateIds) return;
+      if (!candidateIds) return [];
       const toRemove = loadedIds.filter((id) => {
         if (!candidateIds.has(id)) return false;
         const message = this.getItem(id);
         return !!message && this.isServerConfirmedMessage(message);
       });
       this.removeReconciledItems(toRemove);
-      return;
+      return [];
     }
 
     const pageIds = new Set(page.map((message) => this.getItemId(message)));
     const newestReturnedTs = getMessageCreatedAtTimestamp(page[page.length - 1]);
     const oldestReturnedTs = getMessageCreatedAtTimestamp(page[0]);
 
-    // Only extend below the oldest returned message when the page proves it reached the channel's
-    // oldest message: it came back shorter than requested. Clamp the request to the server's max page
-    // size so asking for MORE than one page can return (an over-request) is not mistaken for reaching
-    // the start — in that case the shortfall is the server capping, not the channel ending.
-    const { requestedLimit } = options ?? {};
-    const reachedChannelStart =
-      typeof requestedLimit === 'number' &&
-      page.length < Math.min(requestedLimit, DEFAULT_CHANNEL_MESSAGE_LIST_PAGE_SIZE);
-    const windowLowTs = reachedChannelStart
-      ? Number.NEGATIVE_INFINITY
-      : (oldestReturnedTs ?? Number.POSITIVE_INFINITY);
+    // Window-only: never remove below the returned page's oldest here, because from the page alone a
+    // hard-deleted oldest is indistinguishable from a server-capped over-request. Below-window messages
+    // are collected into `belowWindow` and returned instead, for the reached-start probe to settle.
+    const windowLowTs = oldestReturnedTs ?? Number.POSITIVE_INFINITY;
 
     const toRemove: string[] = [];
+    const belowWindow: string[] = [];
     for (const id of loadedIds) {
       if (pageIds.has(id)) continue; // present on the server → keep
       const message = this.getItem(id);
@@ -832,12 +912,15 @@ export class MessageIntervalPaginator extends BasePaginator<
         if (candidateIds?.has(id)) toRemove.push(id);
         continue;
       }
-      // Strictly within the page's span (below the newest returned message): a live arrival can never
-      // be here, so the absence is a hard delete regardless of a snapshot.
+      // Below the newest returned message: within the page's span (a live arrival can never be here, so
+      // absence = a hard delete) → remove; at/below the page's oldest → a below-window leftover the page
+      // cannot decide, returned for the reached-start probe.
       if (ts > windowLowTs) toRemove.push(id);
+      else belowWindow.push(id);
     }
 
     this.removeReconciledItems(toRemove);
+    return belowWindow;
   }
 
   /**

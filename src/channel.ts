@@ -1320,10 +1320,9 @@ export class Channel extends ChannelApi {
     this._reloading = true;
     try {
       const paginator = this.messagePaginator;
-      const requestedLimit = paginator.items?.length || paginator.pageSize;
-      const failedBefore = (paginator.items ?? []).filter(
-        (message) => message.status === 'failed',
-      );
+      const headItems = paginator.headItems;
+      const requestedLimit = headItems.length || paginator.pageSize;
+      const failedBefore = headItems.filter((message) => message.status === 'failed');
 
       await this.watch({ messages: { limit: requestedLimit } });
       this.offlineMode = false;
