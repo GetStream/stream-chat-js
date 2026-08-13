@@ -155,25 +155,9 @@ export class Channel extends ChannelApi {
   /**  */
   listeners: Map<EventType, Set<EventHandler>>;
   state: ChannelState;
-  /**
-   * This boolean is a vague indication of whether the channel exists on chat backend.
-   *
-   * If the value is true, then that means the channel has been initialized by either calling
-   * channel.create() or channel.query() or channel.watch().
-   *
-   * If the value is false, then channel may or may not exist on the backend. The only way to ensure
-   * is by calling channel.create() or channel.query() or channel.watch().
-   */
-  initialized: boolean;
-  /**
-   * Indicates whether channel has been initialized by manually populating the state with some messages, members etc.
-   * Static state indicates that channel exists on backend, but is not being watched yet.
-   */
-  offlineMode: boolean;
   lastKeyStroke?: Date;
   lastTypingEvent: Date | null;
   isTyping: boolean;
-  disconnected: boolean;
   /** Re-entrancy guard for {@link Channel.reload} (mirrors Thread.reload's isLoading guard). */
   private _reloading = false;
   /** Refcount backing the reactive `active` flag (a shared Channel instance can be mounted more than once). */
@@ -225,11 +209,8 @@ export class Channel extends ChannelApi {
     this.listeners = new Map();
     // perhaps the state variable should be private
     this.state = new ChannelState(this);
-    this.initialized = false;
-    this.offlineMode = false;
     this.lastTypingEvent = null;
     this.isTyping = false;
-    this.disconnected = false;
 
     this.messageComposer = new MessageComposer({
       client: this._client,
@@ -314,6 +295,11 @@ export class Channel extends ChannelApi {
         },
       },
     });
+
+    // Seed the reactive mute state from the client's current `mutedChannels` (a channel created
+    // after connect may already be muted). Kept in sync afterwards by the client fan-out on
+    // `notification.channel_mutes_updated` / `health.check`.
+    this._syncMuteStatus();
   }
 
   /**
@@ -1050,6 +1036,27 @@ export class Channel extends ChannelApi {
     return this.getClient()._muteStatus(this.cid);
   }
 
+  /**
+   * Recomputes this channel's reactive `state.muteStatus` from the client's current `mutedChannels`
+   * and publishes it only when it actually changed — so the frequent `health.check` fan-out does not
+   * churn subscribers. Called from the constructor and by the client whenever `mutedChannels`
+   * updates. Unlike `muteStatus()`, this does not require the channel to be initialized.
+   */
+  _syncMuteStatus() {
+    if (this.disconnected) return;
+
+    const next = this.getClient()._muteStatus(this.cid);
+    const previous = this.state.getLatestValue().muteStatus;
+    const unchanged =
+      previous.muted === next.muted &&
+      (previous.createdAt?.getTime() ?? null) === (next.createdAt?.getTime() ?? null) &&
+      (previous.expiresAt?.getTime() ?? null) === (next.expiresAt?.getTime() ?? null);
+
+    if (unchanged) return;
+
+    this.state.partialNext({ muteStatus: next });
+  }
+
   sendAction(messageId: string, formData: Record<string, string>) {
     this._checkInitialized();
     if (!messageId) {
@@ -1207,6 +1214,43 @@ export class Channel extends ChannelApi {
     }
 
     return await super.markRead(data);
+  }
+
+  /**
+   * A vague indication of whether the channel exists on the chat backend — `true` once
+   * `create()`/`query()`/`watch()` has run. Store-backed and reactive: subscribe via
+   * `useStateStore(channel.state, (s) => ({ initialized: s.initialized }))`.
+   */
+  get initialized() {
+    return this.state.getLatestValue().initialized;
+  }
+
+  set initialized(initialized: boolean) {
+    this.state.partialNext({ initialized });
+  }
+
+  /**
+   * Whether the channel was initialized by manually populating its state (offline hydration) rather
+   * than a live watch. Store-backed and reactive.
+   */
+  get offlineMode() {
+    return this.state.getLatestValue().offlineMode;
+  }
+
+  set offlineMode(offlineMode: boolean) {
+    this.state.partialNext({ offlineMode });
+  }
+
+  /**
+   * Whether the channel has been torn down / evicted (deleted, or the current user removed).
+   * Store-backed and reactive.
+   */
+  get disconnected() {
+    return this.state.getLatestValue().disconnected;
+  }
+
+  set disconnected(disconnected: boolean) {
+    this.state.partialNext({ disconnected });
   }
 
   /**
@@ -2043,6 +2087,33 @@ export class Channel extends ChannelApi {
     return nextUserReadState;
   }
 
+  /**
+   * Resets the current user's unread count consistently across BOTH `state.unreadCount` and the
+   * reactive `read[userId].unread_messages` — the latter is what the unread badge actually reads.
+   * Channel-wide resets (`channel.truncated`, "all channels read") historically wrote only the
+   * former, leaving the badge stale (TODO #29); routing them through here keeps the two in sync.
+   */
+  _setOwnUnreadCount(unreadCount: number) {
+    if (this.disconnected) return;
+
+    this.state.unreadCount = unreadCount;
+
+    const userId = this.getClient().userID;
+    if (!userId) return;
+
+    const currentUserReadState = this.state.read[userId];
+    // only reconcile an existing read entry; never fabricate one just to store a count
+    if (!currentUserReadState || currentUserReadState.unread_messages === unreadCount) {
+      return;
+    }
+
+    this._upsertReadState(
+      userId,
+      () => ({ ...currentUserReadState, unread_messages: unreadCount }),
+      { changedUserIds: [userId] },
+    );
+  }
+
   _handleChannelEvent(event: Event) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const channel = this;
@@ -2313,7 +2384,7 @@ export class Channel extends ChannelApi {
         if (event.channel?.truncated_at) {
           const truncatedAtDate = new Date(event.channel.truncated_at);
 
-          channelState.unreadCount = this.countUnread(truncatedAtDate);
+          this._setOwnUnreadCount(this.countUnread(truncatedAtDate));
           // Partial truncation: keep messages newer than the cutoff. clearStateAndCache would wipe
           // the whole paginator (readers now source from it), so use the partial truncate. The
           // channel-wide read/unread context is reset by the truncation, so drop the unread snapshot
@@ -2322,7 +2393,7 @@ export class Channel extends ChannelApi {
           this.messagePaginator.clearUnreadSnapshot();
           this.pinnedMessagesPaginator.truncate({ truncatedAt: truncatedAtDate });
         } else {
-          channelState.unreadCount = 0;
+          this._setOwnUnreadCount(0);
           this.messagePaginator.clearStateAndCache();
           this.pinnedMessagesPaginator.clearStateAndCache();
         }
@@ -2572,8 +2643,7 @@ export class Channel extends ChannelApi {
     data: Channel['data'],
     fallbackData: Channel['data'] = this.data,
   ) {
-    this.state.syncOwnCapabilitiesFromChannelData(data, fallbackData);
-    this.state.syncMemberCountFromChannelData(data, fallbackData);
+    this.state.syncStateFromChannelData(data, fallbackData);
   }
 
   _initializeState(state: ChannelStateResponseFields) {
@@ -2728,9 +2798,12 @@ export class Channel extends ChannelApi {
   _disconnect() {
     logger.withExtraTags('_disconnect', this.cid).info('Disconnecting the channel.');
 
-    this.disconnected = true;
+    // Tear down the channel.state subscriptions BEFORE flipping `disconnected` — that setter now
+    // publishes to the store, and the auto-mark-active-read subscription's selector calls
+    // getClient(), which throws once the channel is disconnected.
     this.messageReceiptsTracker.unregisterSubscriptions();
     this._unsubscribeMarkActiveRead?.();
+    this.disconnected = true;
     this.cooldownTimer.clearTimeout();
     // Release the store-backed paginators so the message store no longer pins this removed channel
     // (and its whole message graph) through its subscriber registry. The channel is being discarded

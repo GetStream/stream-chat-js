@@ -106,7 +106,7 @@ describe('ChannelState member count bridge', () => {
 		const state = channel.state;
 
 		channel.data = { ...channel.data, member_count: 7 };
-		state.syncMemberCountFromChannelData(channel.data);
+		state.syncStateFromChannelData(channel.data);
 
 		expect(state.member_count).to.equal(7);
 		expect(state.getLatestValue()).to.deep.include({
@@ -116,19 +116,22 @@ describe('ChannelState member count bridge', () => {
 		expect(channel.data?.member_count).to.equal(7);
 	});
 
-	it('keeps backward-compatible channel.data.member_count assignments in sync', () => {
+	it('keeps the last known member_count when a data update omits it (sticky fallback)', () => {
 		const client = new StreamChat();
-		const channel = new Channel(client, 'type', 'id', {});
+		const channel = new Channel(client, 'type', 'id', { member_count: 4 });
 		const state = channel.state;
 
-		channel.data.member_count = 5;
+		const previousData = channel.data;
+		channel.data = { name: 'renamed' };
+		state.syncStateFromChannelData(channel.data, previousData);
 
-		expect(state.member_count).to.equal(5);
+		expect(state.member_count).to.equal(4);
 		expect(state.getLatestValue()).to.deep.include({
-			memberCount: 5,
+			memberCount: 4,
 			members: {},
 		});
-		expect(channel.data.member_count).to.equal(5);
+		// sticky value is written back onto the raw data so raw readers stay consistent
+		expect(channel.data.member_count).to.equal(4);
 	});
 });
 
@@ -277,7 +280,7 @@ describe('ChannelState own capabilities store', () => {
 			...channel.data,
 			own_capabilities: ['pin-message'],
 		};
-		state.syncOwnCapabilitiesFromChannelData(channel.data);
+		state.syncStateFromChannelData(channel.data);
 
 		expect(state.getLatestValue()).to.deep.include({
 			ownCapabilities: ['pin-message'],
@@ -285,20 +288,34 @@ describe('ChannelState own capabilities store', () => {
 		expect(channel.data?.own_capabilities).to.eql(['pin-message']);
 	});
 
-	it('keeps backward-compatible channel.data.own_capabilities assignments in sync', () => {
+	it('keeps the last known own_capabilities when a data update omits them (sticky fallback)', () => {
 		const client = new StreamChat();
-		const channel = new Channel(client, 'type', 'id', {});
+		const channel = new Channel(client, 'type', 'id', {
+			own_capabilities: ['send-message'],
+		});
 		const state = channel.state;
 
-		channel.data.own_capabilities = ['delete-message'];
+		const previousData = channel.data;
+		channel.data = { name: 'renamed' };
+		state.syncStateFromChannelData(channel.data, previousData);
 
 		expect(state.getLatestValue()).to.deep.include({
-			ownCapabilities: ['delete-message'],
+			ownCapabilities: ['send-message'],
 		});
-		expect(channel.data.own_capabilities).to.eql(['delete-message']);
+		// sticky value is written back onto the raw data so channelHasReadEvents stays consistent
+		expect(channel.data.own_capabilities).to.eql(['send-message']);
 	});
 
-	it('only wraps own_capabilities and keeps other channel.data fields as value properties', () => {
+	it('leaves own_capabilities undefined until known (#1732)', () => {
+		const client = new StreamChat();
+		const channel = new Channel(client, 'type', 'id', {});
+
+		// unknown on the raw data, but the store slice defaults to an empty array
+		expect(channel.data.own_capabilities).to.be.undefined;
+		expect(channel.state.getLatestValue().ownCapabilities).to.eql([]);
+	});
+
+	it('exposes member_count / own_capabilities as plain value properties (no accessors)', () => {
 		const client = new StreamChat();
 		const channel = new Channel(client, 'type', 'id', {
 			hidden: false,
@@ -306,29 +323,16 @@ describe('ChannelState own capabilities store', () => {
 			own_capabilities: ['send-message'],
 		});
 
-		const ownCapabilitiesDescriptor = Object.getOwnPropertyDescriptor(
-			channel.data,
-			'own_capabilities',
-		);
-		const hiddenDescriptor = Object.getOwnPropertyDescriptor(channel.data, 'hidden');
-		const memberCountDescriptor = Object.getOwnPropertyDescriptor(
-			channel.data,
-			'member_count',
-		);
-
-		expect(ownCapabilitiesDescriptor).toBeDefined();
-		expect('get' in ownCapabilitiesDescriptor).toBe(true);
-		expect('set' in ownCapabilitiesDescriptor).toBe(true);
-		expect(hiddenDescriptor).toBeDefined();
-		expect('value' in hiddenDescriptor).toBe(true);
-		expect('get' in hiddenDescriptor).toBe(false);
-		expect('set' in hiddenDescriptor).toBe(false);
-		expect(memberCountDescriptor).toBeDefined();
-		expect('get' in memberCountDescriptor).toBe(true);
-		expect('set' in memberCountDescriptor).toBe(true);
+		for (const key of ['own_capabilities', 'hidden', 'member_count']) {
+			const descriptor = Object.getOwnPropertyDescriptor(channel.data, key);
+			expect(descriptor).toBeDefined();
+			expect('value' in descriptor).toBe(true);
+			expect('get' in descriptor).toBe(false);
+			expect('set' in descriptor).toBe(false);
+		}
 	});
 
-	it('does not overwrite non-capability fields when own_capabilities is updated', () => {
+	it('does not overwrite non-capability fields when channel.data is replaced', () => {
 		const client = new StreamChat();
 		const channel = new Channel(client, 'type', 'id', {
 			hidden: false,
@@ -337,9 +341,14 @@ describe('ChannelState own capabilities store', () => {
 		});
 		const state = channel.state;
 
-		channel.data.hidden = true;
-		channel.data.member_count = 5;
-		channel.data.own_capabilities = ['pin-message'];
+		const previousData = channel.data;
+		channel.data = {
+			...channel.data,
+			hidden: true,
+			member_count: 5,
+			own_capabilities: ['pin-message'],
+		};
+		state.syncStateFromChannelData(channel.data, previousData);
 
 		expect(channel.data.hidden).to.equal(true);
 		expect(channel.data.member_count).to.equal(5);
@@ -399,5 +408,60 @@ describe('ChannelState unified store', () => {
 		// initial emit + the read change; the watcher_count write is filtered out by the selector
 		expect(seen).to.have.length(2);
 		expect(seen[1]).to.equal(read);
+	});
+
+	it('publishes channel.data reactively so name/image/frozen changes are subscribable', () => {
+		const client = new StreamChat();
+		const channel = new Channel(client, 'type', 'id', { name: 'orig' });
+		const state = channel.state;
+
+		expect(state.getLatestValue().data).to.deep.include({ name: 'orig' });
+
+		const names = [];
+		const unsubscribe = state.subscribeWithSelector(
+			(next) => ({ name: next.data?.name }),
+			({ name }) => {
+				names.push(name);
+			},
+		);
+
+		const previousData = channel.data;
+		channel.data = { ...channel.data, name: 'renamed' };
+		state.syncStateFromChannelData(channel.data, previousData);
+		unsubscribe();
+
+		expect(names).to.eql(['orig', 'renamed']);
+	});
+
+	it('proxies the lifecycle flags (initialized/offlineMode/disconnected) through the store', () => {
+		const client = new StreamChat();
+		client.user = { id: 'me' };
+		const channel = new Channel(client, 'messaging', 'lifecycle', {});
+		client.activeChannels[channel.cid] = channel;
+
+		expect(channel.initialized).to.equal(false);
+		expect(channel.offlineMode).to.equal(false);
+		expect(channel.disconnected).to.equal(false);
+		expect(channel.state.getLatestValue()).to.deep.include({
+			initialized: false,
+			offlineMode: false,
+			disconnected: false,
+		});
+
+		const seen = [];
+		const unsubscribe = channel.state.subscribeWithSelector(
+			(s) => ({ initialized: s.initialized }),
+			({ initialized }) => {
+				seen.push(initialized);
+			},
+		);
+
+		// writing the getter/setter goes through the store, so subscribers are notified
+		channel.initialized = true;
+		unsubscribe();
+
+		expect(channel.initialized).to.equal(true);
+		expect(channel.state.getLatestValue().initialized).to.equal(true);
+		expect(seen).to.eql([false, true]);
 	});
 });

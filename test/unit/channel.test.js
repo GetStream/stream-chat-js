@@ -958,6 +958,28 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.messagePaginator.headItems.length).to.be.equal(0);
 		});
 
+		it('resets read[userId].unread_messages together with unreadCount so the badge does not go stale (#29)', function () {
+			const userId = client.user.id;
+			channel.state.read = {
+				[userId]: {
+					unread_messages: 5,
+					last_read: new Date('2021-01-01T00:00:00.000Z'),
+					user: { id: userId },
+				},
+			};
+			channel.state.unreadCount = 5;
+
+			channel._handleChannelEvent({
+				type: 'channel.truncated',
+				user: { id: userId },
+				channel: {},
+			});
+
+			expect(channel.state.unreadCount).to.equal(0);
+			// the badge reads read[userId].unread_messages — it must not stay at the stale 5
+			expect(channel.state.read[userId].unread_messages).to.equal(0);
+		});
+
 		it('message.truncate clears messagePaginator unread snapshot', function () {
 			const cachedMessage = generateMsg({
 				date: '2020-01-01T00:00:00.000Z',
@@ -2198,6 +2220,67 @@ describe('Uninitialized Channel', () => {
 	});
 });
 
+describe('reactive channel mute status', () => {
+	let client;
+	let channel;
+
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client.user = { id: 'me' };
+		channel = client.channel('messaging', 'mute-reactivity');
+	});
+
+	it('seeds state.muteStatus from client.mutedChannels at construction', () => {
+		const preMutedClient = new StreamChat('apiKey');
+		preMutedClient.user = { id: 'me' };
+		preMutedClient.mutedChannels = [
+			{
+				channel: { cid: 'messaging:premuted' },
+				created_at: '2024-01-01T00:00:00.000Z',
+			},
+		];
+
+		const preMuted = preMutedClient.channel('messaging', 'premuted');
+
+		expect(preMuted.state.getLatestValue().muteStatus.muted).to.be.true;
+	});
+
+	it('reactively reflects notification.channel_mutes_updated into state.muteStatus', () => {
+		expect(channel.state.getLatestValue().muteStatus.muted).to.be.false;
+
+		const seen = [];
+		const unsubscribe = channel.state.subscribeWithSelector(
+			(s) => ({ muted: s.muteStatus.muted }),
+			({ muted }) => {
+				seen.push(muted);
+			},
+		);
+
+		client.dispatchEvent({
+			type: 'notification.channel_mutes_updated',
+			me: {
+				channel_mutes: [
+					{
+						channel: { cid: channel.cid },
+						created_at: '2024-01-01T00:00:00.000Z',
+					},
+				],
+			},
+		});
+		expect(channel.state.getLatestValue().muteStatus.muted).to.be.true;
+
+		client.dispatchEvent({
+			type: 'notification.channel_mutes_updated',
+			me: { channel_mutes: [] },
+		});
+		unsubscribe();
+
+		expect(channel.state.getLatestValue().muteStatus.muted).to.be.false;
+		// the selector only fires on real transitions — no health.check churn
+		expect(seen).to.eql([false, true, false]);
+	});
+});
+
 describe('Channels - Constructor', function () {
 	const client = new StreamChat('key', 'secret');
 	// client.channel() now requires a connected user (userId derives from client.user).
@@ -2238,10 +2321,10 @@ describe('Channels - Constructor', function () {
 	it('undefined ID no options', function () {
 		const channel = client.channel('messaging', undefined);
 		expect(channel.id).to.eql(undefined);
-		// own_capabilities stays undefined ("not yet loaded") until the channel is
-		// hydrated; the reactive getter is still defined (hence enumerable).
+		// own_capabilities stays undefined ("not yet loaded") until the channel is hydrated,
+		// and no fields are fabricated onto an empty channel's data.
 		expect(channel.data.own_capabilities).to.be.undefined;
-		expect(Object.keys(channel.data)).to.eql(['own_capabilities']);
+		expect(Object.keys(channel.data)).to.eql([]);
 	});
 
 	it('short version with options', function () {

@@ -1004,6 +1004,7 @@ export class StreamChat extends ChatApi {
       client.user = event.me;
       client.state.updateUser(event.me);
       client.mutedChannels = event.me.channel_mutes;
+      client._reflectMutedChannelsToActiveChannels();
       client.mutedUsers = event.me.mutes;
       client.blockedUsers.partialNext({ userIds: event.me.blocked_user_ids ?? [] });
     }
@@ -1015,6 +1016,7 @@ export class StreamChat extends ChatApi {
 
     if (event.type === 'notification.channel_mutes_updated' && event.me?.channel_mutes) {
       this.mutedChannels = event.me.channel_mutes;
+      this._reflectMutedChannelsToActiveChannels();
     }
 
     if (event.type === 'notification.mutes_updated' && event.me?.mutes) {
@@ -1023,9 +1025,10 @@ export class StreamChat extends ChatApi {
 
     if (event.type === 'notification.mark_read' && event.unread_channels === 0) {
       const activeChannelKeys = Object.keys(this.activeChannels);
-      activeChannelKeys.forEach(
-        (activeChannelKey) =>
-          (this.activeChannels[activeChannelKey].state.unreadCount = 0),
+      activeChannelKeys.forEach((activeChannelKey) =>
+        // resets both `state.unreadCount` and `read[userId].unread_messages` so the badge, which
+        // reads the latter, does not stay stale (TODO #29).
+        this.activeChannels[activeChannelKey]._setOwnUnreadCount(0),
       );
     }
 
@@ -1059,6 +1062,17 @@ export class StreamChat extends ChatApi {
     }
 
     return postListenerCallbacks;
+  }
+
+  /**
+   * Fans the client-owned `mutedChannels` out to every active channel's reactive `state.muteStatus`.
+   * Each channel republishes only when its own mute status actually changed, so this stays cheap on
+   * the frequent `health.check` path.
+   */
+  _reflectMutedChannelsToActiveChannels() {
+    for (const cid in this.activeChannels) {
+      this.activeChannels[cid]?._syncMuteStatus();
+    }
   }
 
   _muteStatus(cid: string) {

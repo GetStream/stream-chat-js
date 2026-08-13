@@ -45,6 +45,55 @@ export type OwnCapabilitiesState = {
   ownCapabilities: string[];
 };
 
+/**
+ * The channel's server-provided `data` (name, image, frozen, hidden, blocked, config,
+ * `member_count`, `own_capabilities`, …), mirrored reactively so consumers can subscribe to
+ * channel-level changes via `useStateStore(channel.state, (s) => ({ data: s.data }))`.
+ */
+export type ChannelDataState = {
+  data: Channel['data'];
+};
+
+/** Whether THIS channel is muted for the current user, mirrored from `client.mutedChannels`. */
+export type ChannelMuteStatus = {
+  muted: boolean;
+  createdAt: Date | null;
+  expiresAt: Date | null;
+};
+
+/**
+ * Reactive channel-mute state — is this channel muted for the current user. Mirrors the client-owned
+ * `client.mutedChannels` (updated on `notification.channel_mutes_updated` + `health.check`) and is
+ * subscribable via `useStateStore(channel.state, (s) => ({ muteStatus: s.muteStatus }))`. Muted
+ * USERS remain client-global on `client.mutedUsersStore` and are NOT part of channel state.
+ */
+export type MuteStatusState = {
+  muteStatus: ChannelMuteStatus;
+};
+
+/**
+ * Connection / initialization lifecycle flags for the channel. Previously plain fields on `Channel`;
+ * now store-backed so consumers can react to them via `useStateStore(channel.state, selector)`.
+ * Read/written through the `channel.initialized` / `channel.offlineMode` / `channel.disconnected`
+ * getters/setters, which proxy this slice.
+ */
+export type ChannelLifecycleState = {
+  /**
+   * A vague indication of whether the channel exists on the chat backend. `true` once the channel
+   * has been initialized by `channel.create()` / `channel.query()` / `channel.watch()`. `false`
+   * means the channel may or may not exist — only those calls confirm it.
+   */
+  initialized: boolean;
+  /**
+   * Whether the channel was initialized by manually populating its state (e.g. offline hydration)
+   * rather than a live watch. Such static state means the channel exists on the backend but is not
+   * being watched yet.
+   */
+  offlineMode: boolean;
+  /** Whether the channel has been torn down / evicted (deleted, or the current user removed). */
+  disconnected: boolean;
+};
+
 /** UI-driven channel lifecycle state (not returned by the API; set by the UI SDK). */
 export type ChannelUIState = {
   /**
@@ -69,6 +118,9 @@ export type ChannelStateData = WatcherState &
   ReadState &
   MembersState &
   OwnCapabilitiesState &
+  ChannelDataState &
+  MuteStatusState &
+  ChannelLifecycleState &
   ChannelUIState;
 
 /**
@@ -93,11 +145,15 @@ export class ChannelState extends StateStore<ChannelStateData> {
       members: {},
       memberCount: 0,
       ownCapabilities: [],
+      data: channel?.data,
+      muteStatus: { muted: false, createdAt: null, expiresAt: null },
+      initialized: false,
+      offlineMode: false,
+      disconnected: false,
       active: false,
     });
     this._channel = channel;
-    this.syncMemberCountFromChannelData(channel?.data);
-    this.syncOwnCapabilitiesFromChannelData(channel?.data);
+    this.syncStateFromChannelData(channel?.data);
     this.pending_messages = [];
     this.membership = {} as ChannelMemberResponse;
     this.unreadCount = 0;
@@ -141,7 +197,21 @@ export class ChannelState extends StateStore<ChannelStateData> {
     }
   }
 
-  syncMemberCountFromChannelData(
+  /**
+   * Reflects the channel's server-provided `data` into the unified store and derives the
+   * `memberCount` and `ownCapabilities` slices from it.
+   *
+   * `fallbackData` (the previous `channel.data`) makes both derived fields sticky: a data update
+   * that omits `member_count`/`own_capabilities` keeps the last known value rather than wiping it.
+   * The sticky value is written back onto `data` as a plain field (only when `data` itself is
+   * missing it) so raw readers — e.g. `channelHasReadEvents`, which inspects
+   * `channel.data.own_capabilities` directly — stay consistent with the store. `own_capabilities`
+   * is never coerced to `[]` while unknown, so "not yet loaded" is not mistaken for "explicitly no
+   * capabilities" (regression #1732). This replaces the previous `Object.defineProperty` machinery;
+   * direct in-place mutation of `channel.data.member_count`/`own_capabilities` no longer syncs to
+   * the store — reassign `channel.data` (as the WS handlers do) instead.
+   */
+  syncStateFromChannelData(
     data: Channel['data'],
     fallbackData: Channel['data'] = this._channel?.data,
   ) {
@@ -150,63 +220,41 @@ export class ChannelState extends StateStore<ChannelStateData> {
         ? fallbackData.member_count
         : this.getLatestValue().memberCount;
 
-    if (!data || typeof data !== 'object') {
-      this.partialNext({ memberCount: fallbackMemberCount ?? 0 });
-      return;
-    }
-
-    const dataDescriptor = Object.getOwnPropertyDescriptor(data, 'member_count');
-    let memberCount =
-      typeof data.member_count === 'number'
+    const memberCount =
+      typeof data?.member_count === 'number'
         ? data.member_count
         : typeof fallbackMemberCount === 'number'
           ? fallbackMemberCount
           : undefined;
 
-    this.partialNext({ memberCount: memberCount ?? 0 });
-
-    Object.defineProperty(data, 'member_count', {
-      configurable: true,
-      enumerable: dataDescriptor?.enumerable ?? false,
-      get: () => memberCount,
-      set: (nextMemberCount: number | undefined) => {
-        memberCount = typeof nextMemberCount === 'number' ? nextMemberCount : undefined;
-        this.partialNext({ memberCount: memberCount ?? 0 });
-      },
-    });
-  }
-
-  syncOwnCapabilitiesFromChannelData(
-    data: Channel['data'],
-    fallbackData: Channel['data'] = this._channel?.data,
-  ) {
-    if (!data || typeof data !== 'object') {
-      this.partialNext({ ownCapabilities: [] });
-      return;
-    }
-
-    let ownCapabilities: string[] | undefined = Array.isArray(data.own_capabilities)
+    const ownCapabilities = Array.isArray(data?.own_capabilities)
       ? [...data.own_capabilities]
       : Array.isArray(fallbackData?.own_capabilities)
         ? [...fallbackData.own_capabilities]
         : undefined;
 
-    this.partialNext({ ownCapabilities: ownCapabilities ?? [] });
+    // Carry a genuinely-known previous value forward onto the new `data` object when the update
+    // omits it — never fabricate one (an empty channel keeps `data === {}`, its `own_capabilities`
+    // undefined). This is a plain assignment, not an accessor.
+    if (data && typeof data === 'object') {
+      if (
+        typeof data.member_count !== 'number' &&
+        typeof fallbackData?.member_count === 'number'
+      ) {
+        data.member_count = fallbackData.member_count;
+      }
+      if (
+        !Array.isArray(data.own_capabilities) &&
+        Array.isArray(fallbackData?.own_capabilities)
+      ) {
+        data.own_capabilities = [...fallbackData.own_capabilities];
+      }
+    }
 
-    // Keep the reactive getter/setter so backward-compatible assignments still sync to
-    // the store, but return `undefined` until capabilities are actually known. Forcing
-    // `[]` on an unloaded channel would make read-events–gated logic (e.g. unread
-    // counting, regression #1732) treat "not yet loaded" as "explicitly no capabilities".
-    Object.defineProperty(data, 'own_capabilities', {
-      configurable: true,
-      enumerable: true,
-      get: () => ownCapabilities,
-      set: (nextOwnCapabilities: string[] | undefined) => {
-        ownCapabilities = Array.isArray(nextOwnCapabilities)
-          ? [...nextOwnCapabilities]
-          : undefined;
-        this.partialNext({ ownCapabilities: ownCapabilities ?? [] });
-      },
+    this.partialNext({
+      data,
+      memberCount: memberCount ?? 0,
+      ownCapabilities: ownCapabilities ?? [],
     });
   }
 

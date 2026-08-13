@@ -231,10 +231,17 @@ describe('Client active channels cache', () => {
 		client.user = user;
 		client.wsPromise = Promise.resolve();
 	};
+	const makeChannelMock = (unreadCount) => ({
+		state: { unreadCount },
+		_setOwnUnreadCount(next) {
+			this.state.unreadCount = next;
+		},
+	});
+
 	beforeEach(() => {
 		client.activeChannels = {
-			vish: { state: { unreadCount: 1 } },
-			vish2: { state: { unreadCount: 2 } },
+			vish: makeChannelMock(1),
+			vish2: makeChannelMock(2),
 		};
 	});
 
@@ -887,8 +894,13 @@ describe('StreamChat.queryChannels', async () => {
 			ownCapabilities: ['send-message', 'read-events'],
 		});
 
-		channel.data.member_count = 8;
-		channel.data.own_capabilities = ['send-message'];
+		const previousData = channel.data;
+		channel.data = {
+			...channel.data,
+			member_count: 8,
+			own_capabilities: ['send-message'],
+		};
+		channel._syncStateFromChannelData(channel.data, previousData);
 
 		expect(channel.state.member_count).to.equal(8);
 		expect(channel.state.getLatestValue()).to.deep.include({
