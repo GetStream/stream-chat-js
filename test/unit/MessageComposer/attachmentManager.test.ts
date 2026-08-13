@@ -1498,7 +1498,9 @@ describe('AttachmentManager', () => {
         undefined,
         undefined,
         undefined,
-        { signal: expect.any(AbortSignal) },
+        {
+          signal: expect.any(AbortSignal),
+        },
       );
     });
 
@@ -1721,7 +1723,9 @@ describe('AttachmentManager', () => {
         undefined,
         undefined,
         undefined,
-        { onUploadProgress: expect.any(Function) },
+        {
+          onUploadProgress: expect.any(Function),
+        },
       );
     });
 
@@ -1742,7 +1746,9 @@ describe('AttachmentManager', () => {
         undefined,
         undefined,
         undefined,
-        { onUploadProgress: expect.any(Function) },
+        {
+          onUploadProgress: expect.any(Function),
+        },
       );
     });
 
@@ -1838,7 +1844,9 @@ describe('AttachmentManager', () => {
         undefined,
         undefined,
         undefined,
-        { signal: controller.signal },
+        {
+          signal: controller.signal,
+        },
       );
     });
 

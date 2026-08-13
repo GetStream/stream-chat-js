@@ -28,13 +28,6 @@
       "default": "./dist/esm/index.mjs"
     }
   },
-  "browser": {
-    "crypto": false,
-    "https": false,
-    "jsonwebtoken": false,
-    "ws": false,
-    "zlib": false
-  },
   "license": "SEE LICENSE IN LICENSE",
   "keywords": [
     "chat",
@@ -51,15 +44,8 @@
   ],
   "dependencies": {
     "@stream-io/logger": "^2.0.0",
-    "@types/jsonwebtoken": "^9.0.8",
-    "@types/ws": "^8.18.1",
     "axios": "^1.16.1",
-    "base64-js": "^1.5.1",
-    "form-data": "^4.0.5",
-    "isomorphic-ws": "^5.0.0",
-    "jsonwebtoken": "^9.0.3",
-    "linkifyjs": "^4.3.3",
-    "ws": "^8.20.1"
+    "linkifyjs": "^4.3.3"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.0.1",
@@ -67,7 +53,7 @@
     "@eslint/js": "^9.39.4",
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/git": "^10.0.1",
-    "@types/node": "^22.19.19",
+    "@types/node": "^22",
     "@types/sinon": "^10.0.6",
     "@vitest/coverage-v8": "^4.1.7",
     "concurrently": "^9.2.1",

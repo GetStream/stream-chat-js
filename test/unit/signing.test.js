@@ -1,30 +1,25 @@
-import { CheckSignature } from '../../src';
+import { UserFromToken } from '../../src';
 
-import { describe, it, expect } from 'vitest';
-
-const MOCK_SECRET = 'porewqKAFDSAKZssecretsercretfads';
-const MOCK_TEXT = 'text';
-const MOCK_JSON_BODY = { a: 1 };
-const MOCK_TEXT_SHA256 =
-	'd0b770e93a56adc3ee9ac5734533cc0acd71eea8e5e8204a28042ca0f60de1f3';
-const MOCK_JSON_SHA256 =
-	'e527a6ad4993a4c9a30680c8be4b3eda1c36ab104f1f7d39c744bd27016a9624';
+import { describe, expect, it } from 'vitest';
 
 describe('Signing', () => {
-	describe('CheckSignature', () => {
-		it('validates correct text body and signature', () => {
-			const rawBody = Buffer.from(MOCK_TEXT);
-			expect(CheckSignature(rawBody, MOCK_SECRET, MOCK_TEXT_SHA256)).to.be.true;
+	describe('UserFromToken', () => {
+		it('extracts the user_id from a valid JWT payload', () => {
+			// payload: {"user_id":"amin"}
+			const token = '_.eyJ1c2VyX2lkIjoiYW1pbiJ9._';
+			expect(UserFromToken(token)).to.equal('amin');
 		});
 
-		it('validates correct json body and signature', () => {
-			const rawBody = Buffer.from(JSON.stringify(MOCK_JSON_BODY));
-			expect(CheckSignature(rawBody, MOCK_SECRET, MOCK_JSON_SHA256)).to.be.true;
+		it('returns an empty string for a token that is not three fragments', () => {
+			expect(UserFromToken('not-a-token')).to.equal('');
+			expect(UserFromToken('only.two')).to.equal('');
+			expect(UserFromToken('too.many.fragments.here')).to.equal('');
 		});
 
-		it('refutes incorrect json body', () => {
-			const rawBody = Buffer.from(JSON.stringify({ ...MOCK_JSON_BODY, b: 2 }));
-			expect(CheckSignature(rawBody, MOCK_SECRET, MOCK_JSON_SHA256)).to.be.false;
+		it('returns undefined when the payload has no user_id', () => {
+			// payload: {"foo":"bar"}
+			const token = 'eyJhbGciOiJIUzI1NiJ9.eyJmb28iOiJiYXIifQ.sig';
+			expect(UserFromToken(token)).to.be.undefined;
 		});
 	});
 });
