@@ -41,6 +41,11 @@ export type MembersState = {
   memberCount: number;
 };
 
+/** The current user's own membership in this channel (role, pinned_at, archived_at, …). */
+export type MembershipState = {
+  membership: ChannelMemberResponse;
+};
+
 export type OwnCapabilitiesState = {
   ownCapabilities: string[];
 };
@@ -117,6 +122,7 @@ export type ChannelStateData = WatcherState &
   TypingUsersState &
   ReadState &
   MembersState &
+  MembershipState &
   OwnCapabilitiesState &
   ChannelDataState &
   MuteStatusState &
@@ -134,7 +140,6 @@ export class ChannelState extends StateStore<ChannelStateData> {
   _channel: Channel;
   pending_messages: Array<PendingMessageResponse>;
   unreadCount: number;
-  membership: ChannelMemberResponse;
 
   constructor(channel: Channel) {
     super({
@@ -144,6 +149,7 @@ export class ChannelState extends StateStore<ChannelStateData> {
       read: {},
       members: {},
       memberCount: 0,
+      membership: {} as ChannelMemberResponse,
       ownCapabilities: [],
       data: channel?.data,
       muteStatus: { muted: false, createdAt: null, expiresAt: null },
@@ -155,8 +161,16 @@ export class ChannelState extends StateStore<ChannelStateData> {
     this._channel = channel;
     this.syncStateFromChannelData(channel?.data);
     this.pending_messages = [];
-    this.membership = {} as ChannelMemberResponse;
     this.unreadCount = 0;
+  }
+
+  /** The current user's own membership; store-backed so `useStateStore` can subscribe to it. */
+  get membership() {
+    return this.getLatestValue().membership;
+  }
+
+  set membership(membership: ChannelMemberResponse) {
+    this.partialNext({ membership });
   }
 
   get members() {
