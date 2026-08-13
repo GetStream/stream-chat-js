@@ -52,7 +52,10 @@ describe('ChannelState members store', () => {
 
 		expect(state.members).to.eql({});
 		expect(state.member_count).to.equal(0);
-		expect(state.membersStore.getLatestValue()).to.eql({ members: {}, memberCount: 0 });
+		expect(state.getLatestValue()).to.deep.include({
+			members: {},
+			memberCount: 0,
+		});
 	});
 
 	it('keeps members getter/setter backward compatible while syncing the store', () => {
@@ -64,7 +67,7 @@ describe('ChannelState members store', () => {
 		state.members = members;
 
 		expect(state.members).to.equal(members);
-		expect(state.membersStore.getLatestValue()).to.eql({
+		expect(state.getLatestValue()).to.deep.include({
 			memberCount: 0,
 			members,
 		});
@@ -76,7 +79,7 @@ describe('ChannelState members store', () => {
 		state.member_count = 42;
 
 		expect(state.member_count).to.equal(42);
-		expect(state.membersStore.getLatestValue()).to.eql({
+		expect(state.getLatestValue()).to.deep.include({
 			memberCount: 42,
 			members: {},
 		});
@@ -90,7 +93,7 @@ describe('ChannelState member count bridge', () => {
 		const state = channel.state;
 
 		expect(state.member_count).to.equal(3);
-		expect(state.membersStore.getLatestValue()).to.eql({
+		expect(state.getLatestValue()).to.deep.include({
 			memberCount: 3,
 			members: {},
 		});
@@ -106,7 +109,7 @@ describe('ChannelState member count bridge', () => {
 		state.syncMemberCountFromChannelData(channel.data);
 
 		expect(state.member_count).to.equal(7);
-		expect(state.membersStore.getLatestValue()).to.eql({
+		expect(state.getLatestValue()).to.deep.include({
 			memberCount: 7,
 			members: {},
 		});
@@ -121,7 +124,7 @@ describe('ChannelState member count bridge', () => {
 		channel.data.member_count = 5;
 
 		expect(state.member_count).to.equal(5);
-		expect(state.membersStore.getLatestValue()).to.eql({
+		expect(state.getLatestValue()).to.deep.include({
 			memberCount: 5,
 			members: {},
 		});
@@ -134,7 +137,7 @@ describe('ChannelState read store', () => {
 		const state = new ChannelState();
 
 		expect(state.read).to.eql({});
-		expect(state.readStore.getLatestValue()).to.eql({ read: {} });
+		expect(state.getLatestValue()).to.deep.include({ read: {} });
 	});
 
 	it('keeps read getter/setter backward compatible while syncing the store', () => {
@@ -150,7 +153,7 @@ describe('ChannelState read store', () => {
 		state.read = read;
 
 		expect(state.read).to.equal(read);
-		expect(state.readStore.getLatestValue()).to.eql({ read });
+		expect(state.getLatestValue()).to.deep.include({ read });
 	});
 });
 
@@ -159,7 +162,7 @@ describe('ChannelState watcher count store', () => {
 		const state = new ChannelState();
 
 		expect(state.watcher_count).to.equal(0);
-		expect(state.watcherStore.getLatestValue()).to.eql({
+		expect(state.getLatestValue()).to.deep.include({
 			watcherCount: 0,
 			watchers: {},
 		});
@@ -171,7 +174,7 @@ describe('ChannelState watcher count store', () => {
 		state.watcher_count = 42;
 
 		expect(state.watcher_count).to.equal(42);
-		expect(state.watcherStore.getLatestValue()).to.eql({
+		expect(state.getLatestValue()).to.deep.include({
 			watcherCount: 42,
 			watchers: {},
 		});
@@ -183,7 +186,7 @@ describe('ChannelState watchers store', () => {
 		const state = new ChannelState();
 
 		expect(state.watchers).to.eql({});
-		expect(state.watcherStore.getLatestValue()).to.eql({
+		expect(state.getLatestValue()).to.deep.include({
 			watcherCount: 0,
 			watchers: {},
 		});
@@ -198,29 +201,10 @@ describe('ChannelState watchers store', () => {
 		state.watchers = watchers;
 
 		expect(state.watchers).to.equal(watchers);
-		expect(state.watcherStore.getLatestValue()).to.eql({
+		expect(state.getLatestValue()).to.deep.include({
 			watcherCount: 0,
 			watchers,
 		});
-	});
-});
-
-describe('ChannelState muted users store', () => {
-	it('initializes muted users store with an empty list', () => {
-		const state = new ChannelState();
-
-		expect(state.mutedUsers).to.eql([]);
-		expect(state.mutedUsersStore.getLatestValue()).to.eql({ mutedUsers: [] });
-	});
-
-	it('keeps mutedUsers getter/setter backward compatible while syncing the store', () => {
-		const state = new ChannelState();
-		const mutedUsers = [{ id: 'alice' }];
-
-		state.mutedUsers = mutedUsers;
-
-		expect(state.mutedUsers).to.equal(mutedUsers);
-		expect(state.mutedUsersStore.getLatestValue()).to.eql({ mutedUsers });
 	});
 });
 
@@ -229,7 +213,7 @@ describe('ChannelState typing store', () => {
 		const state = new ChannelState();
 
 		expect(state.typing).to.eql({});
-		expect(state.typingStore.getLatestValue()).to.eql({ typing: {} });
+		expect(state.getLatestValue()).to.deep.include({ typing: {} });
 	});
 
 	it('keeps typing store and textComposer typing in sync via setTypingEvent/removeTypingEvent', () => {
@@ -244,13 +228,13 @@ describe('ChannelState typing store', () => {
 		state.setTypingEvent('alice', typingStartEvent);
 
 		expect(state.typing).to.have.property('alice');
-		expect(state.typingStore.getLatestValue().typing).to.have.property('alice');
+		expect(state.getLatestValue().typing).to.have.property('alice');
 		expect(channel.messageComposer.textComposer.typing).to.have.property('alice');
 
 		state.removeTypingEvent('alice');
 
 		expect(state.typing).to.not.have.property('alice');
-		expect(state.typingStore.getLatestValue().typing).to.not.have.property('alice');
+		expect(state.getLatestValue().typing).to.not.have.property('alice');
 		expect(channel.messageComposer.textComposer.typing).to.not.have.property('alice');
 	});
 });
@@ -276,7 +260,7 @@ describe('ChannelState own capabilities store', () => {
 		});
 		const state = channel.state;
 
-		expect(state.ownCapabilitiesStore.getLatestValue()).to.eql({
+		expect(state.getLatestValue()).to.deep.include({
 			ownCapabilities: ['send-message', 'upload-file'],
 		});
 		expect(channel.data?.own_capabilities).to.eql(['send-message', 'upload-file']);
@@ -295,7 +279,7 @@ describe('ChannelState own capabilities store', () => {
 		};
 		state.syncOwnCapabilitiesFromChannelData(channel.data);
 
-		expect(state.ownCapabilitiesStore.getLatestValue()).to.eql({
+		expect(state.getLatestValue()).to.deep.include({
 			ownCapabilities: ['pin-message'],
 		});
 		expect(channel.data?.own_capabilities).to.eql(['pin-message']);
@@ -308,7 +292,7 @@ describe('ChannelState own capabilities store', () => {
 
 		channel.data.own_capabilities = ['delete-message'];
 
-		expect(state.ownCapabilitiesStore.getLatestValue()).to.eql({
+		expect(state.getLatestValue()).to.deep.include({
 			ownCapabilities: ['delete-message'],
 		});
 		expect(channel.data.own_capabilities).to.eql(['delete-message']);
@@ -360,8 +344,60 @@ describe('ChannelState own capabilities store', () => {
 		expect(channel.data.hidden).to.equal(true);
 		expect(channel.data.member_count).to.equal(5);
 		expect(state.member_count).to.equal(5);
-		expect(state.ownCapabilitiesStore.getLatestValue()).to.eql({
+		expect(state.getLatestValue()).to.deep.include({
 			ownCapabilities: ['pin-message'],
 		});
+	});
+});
+
+describe('ChannelState unified store', () => {
+	it('publishes all slices through one StateStore and preserves siblings on single-key writes', () => {
+		const state = new ChannelState();
+		const members = { alice: { user: { id: 'alice' }, user_id: 'alice' } };
+		const read = {
+			alice: { last_read: new Date(0), unread_messages: 2, user: { id: 'alice' } },
+		};
+		const watchers = { bob: { id: 'bob' } };
+
+		state.members = members;
+		state.read = read;
+		state.watchers = watchers;
+		state.watcher_count = 3;
+		state.member_count = 5;
+		state.typing = { carol: { type: 'typing.start', user: { id: 'carol' } } };
+
+		// Every slice must survive: the setters go through partialNext, so a single-key write
+		// is a shallow merge — NOT a full replace that would wipe siblings. (Teeth-check: if any
+		// setter used `.next({ slice })` these references would be lost and this test would fail.)
+		const snapshot = state.getLatestValue();
+		expect(snapshot.members).to.equal(members);
+		expect(snapshot.read).to.equal(read);
+		expect(snapshot.watchers).to.equal(watchers);
+		expect(snapshot.watcherCount).to.equal(3);
+		expect(snapshot.memberCount).to.equal(5);
+		expect(snapshot.typing).to.have.property('carol');
+	});
+
+	it('is subscribable directly via subscribeWithSelector (useStateStore(channel.state, …))', () => {
+		const state = new ChannelState();
+		const seen = [];
+		const unsubscribe = state.subscribeWithSelector(
+			(next) => ({ read: next.read }),
+			({ read }) => {
+				seen.push(read);
+			},
+		);
+
+		const read = {
+			alice: { last_read: new Date(0), unread_messages: 1, user: { id: 'alice' } },
+		};
+		state.read = read;
+		// a non-read write must NOT emit to a read selector
+		state.watcher_count = 9;
+		unsubscribe();
+
+		// initial emit + the read change; the watcher_count write is filtered out by the selector
+		expect(seen).to.have.length(2);
+		expect(seen[1]).to.equal(read);
 	});
 });

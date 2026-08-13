@@ -1452,8 +1452,12 @@ export class StreamChat extends ChatApi {
       // newest page to merge into that jumped interval across the gap (missing messages in the
       // middle). A cold paginator, or one still at the head (offline/at-latest), re-seeds normally so
       // cursors/hasMoreTail get (re)derived and pagination keeps working.
+      // Also skip the re-seed for an ACTIVE (on-screen) channel: its own `channel.reload()` owns the
+      // loaded window (up to 100 msgs), so a 25-msg list re-seed here is a redundant second update
+      // that could perturb the fuller window. (Inert until a UI SDK calls `channel.activate()`.)
       if (
         willInitialize &&
+        !c.active &&
         (!c.messagePaginator.isInitialized || c.messagePaginator.isActiveIntervalAtHead)
       ) {
         c.messagePaginator.seedFirstPageSync(

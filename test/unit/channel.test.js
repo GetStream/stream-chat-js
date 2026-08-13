@@ -7,7 +7,7 @@ import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
 import sinon from 'sinon';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 
-import { ChannelState, StreamChat } from '../../src';
+import { Channel, ChannelState, StreamChat } from '../../src';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
 import { formatMessage, generateUUIDv4 as uuidv4 } from '../../src/utils';
@@ -1638,13 +1638,16 @@ describe('Channel _handleChannelEvent', function () {
 		it('should emit readStore subscription updates for single-user message.read events', () => {
 			channel.state.read[user.id] = initialReadState;
 			const changes = [];
-			const unsubscribe = channel.state.readStore.subscribe((next, prev) => {
-				if (!prev) return;
-				changes.push({
-					next: next.read[user.id],
-					prev: prev.read[user.id],
-				});
-			});
+			const unsubscribe = channel.state.subscribeWithSelector(
+				(s) => ({ read: s.read }),
+				(next, prev) => {
+					if (!prev) return;
+					changes.push({
+						next: next.read[user.id],
+						prev: prev.read[user.id],
+					});
+				},
+			);
 
 			channel._handleChannelEvent(messageReadEvent);
 			unsubscribe();
@@ -3599,5 +3602,61 @@ describe('Channel.reload', () => {
 		await inFlight;
 
 		expect(watchSpy).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('Channel active flag + auto-mark-read', () => {
+	let client;
+	let channel;
+
+	beforeEach(() => {
+		client = getClientWithUser({ id: 'me' });
+		channel = new Channel(client, 'messaging', 'active-x', {});
+		client.activeChannels[channel.cid] = channel;
+	});
+
+	it('refcounts activate()/deactivate() behind the reactive active flag', () => {
+		expect(channel.active).to.equal(false);
+		expect(channel.state.getLatestValue().active).to.equal(false);
+
+		channel.activate();
+		expect(channel.active).to.equal(true);
+
+		channel.activate(); // a second mount holds another ref
+		expect(channel.active).to.equal(true);
+
+		channel.deactivate(); // one holder remains → still active
+		expect(channel.active).to.equal(true);
+
+		channel.deactivate(); // last holder leaves → inactive
+		expect(channel.active).to.equal(false);
+
+		channel.deactivate(); // underflow guard → stays inactive
+		expect(channel.active).to.equal(false);
+	});
+
+	it('auto-marks the channel read only while active AND unread', () => {
+		const spy = vi
+			.spyOn(client.messageDeliveryReporter, 'throttledMarkRead')
+			.mockImplementation(() => undefined);
+
+		// unread but not active → no auto mark-read
+		channel.state.read = {
+			me: { last_read: new Date(0), unread_messages: 3, user: { id: 'me' } },
+		};
+		expect(spy).not.toHaveBeenCalled();
+
+		// becomes active while unread → marks read once, for this channel
+		channel.activate();
+		expect(spy).toHaveBeenCalledTimes(1);
+		expect(spy).toHaveBeenCalledWith(channel);
+
+		spy.mockClear();
+
+		// still active but unread cleared → no further mark-read
+		channel.state.read = {
+			me: { last_read: new Date(1), unread_messages: 0, user: { id: 'me' } },
+		};
+		expect(spy).not.toHaveBeenCalled();
 	});
 });

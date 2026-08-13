@@ -196,14 +196,19 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     if (this.hasSubscriptions) return;
 
     this.addUnsubscribeFunction(
-      this.channel.state.readStore.subscribe((next, prev) => {
-        this.reconcileFromReadStore({
-          previousReadState: prev?.read,
-          nextReadState: next.read,
-          meta: this.pendingReadStoreReconcileMeta,
-        });
-        this.pendingReadStoreReconcileMeta = undefined;
-      }),
+      // Subscribe to only the `read` slice of the unified channel state so this reconcile fires on
+      // read changes, not on every unrelated channel-state write (typing/members/…).
+      this.channel.state.subscribeWithSelector(
+        (currentState) => ({ read: currentState.read }),
+        (next, prev) => {
+          this.reconcileFromReadStore({
+            previousReadState: prev?.read,
+            nextReadState: next.read,
+            meta: this.pendingReadStoreReconcileMeta,
+          });
+          this.pendingReadStoreReconcileMeta = undefined;
+        },
+      ),
     );
   };
 

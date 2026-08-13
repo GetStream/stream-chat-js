@@ -36,10 +36,6 @@ export type ReadState = {
   read: ChannelReadStatus;
 };
 
-export type MutedUsersState = {
-  mutedUsers: Array<UserResponse>;
-};
-
 export type MembersState = {
   members: Record<string, ChannelMemberResponse>;
   memberCount: number;
@@ -49,38 +45,57 @@ export type OwnCapabilitiesState = {
   ownCapabilities: string[];
 };
 
+/** UI-driven channel lifecycle state (not returned by the API; set by the UI SDK). */
+export type ChannelUIState = {
+  /**
+   * Whether the channel is currently mounted / actively viewed on-screen. UI-driven and
+   * refcounted via `channel.activate()` / `channel.deactivate()`. While `active`, the channel
+   * auto-marks messages read, and channel-list hydration does NOT re-seed its message list
+   * (the channel's own `channel.reload()` owns that window).
+   */
+  active: boolean;
+};
+
 /**
- * ChannelState - A container class for the channel state.
+ * The single, unified reactive state for a channel. All per-channel reactive state is published
+ * through this one `StateStore` and subscribed to with `useStateStore(channel.state, selector)`
+ * (mirroring `thread.state`).
+ *
+ * The shape is FLAT — subscribe to any slice via a selector, e.g.
+ * `useStateStore(channel.state, (s) => ({ read: s.read }))`.
  */
-export class ChannelState {
+export type ChannelStateData = WatcherState &
+  TypingUsersState &
+  ReadState &
+  MembersState &
+  OwnCapabilitiesState &
+  ChannelUIState;
+
+/**
+ * ChannelState - the container for a channel's reactive state.
+ *
+ * It IS a `StateStore<ChannelStateData>` (so `useStateStore(channel.state, selector)` works,
+ * mirroring `thread.state`) while additionally exposing convenience getters/setters
+ * (`members`, `read`, `typing`, `watchers`, …) that read/write the same unified store.
+ */
+export class ChannelState extends StateStore<ChannelStateData> {
   _channel: Channel;
-  readonly watcherStore: StateStore<WatcherState>;
-  readonly typingStore: StateStore<TypingUsersState>;
-  readonly readStore: StateStore<ReadState>;
-  readonly membersStore: StateStore<MembersState>;
-  readonly ownCapabilitiesStore: StateStore<OwnCapabilitiesState>;
-  // todo: is this actually used somewhere?
-  readonly mutedUsersStore: StateStore<MutedUsersState>;
   pending_messages: Array<PendingMessageResponse>;
   unreadCount: number;
   membership: ChannelMemberResponse;
 
   constructor(channel: Channel) {
-    this._channel = channel;
-    this.watcherStore = new StateStore<WatcherState>({
+    super({
       watcherCount: 0,
       watchers: {},
-    });
-    this.typingStore = new StateStore<TypingUsersState>({
       typing: {},
-    });
-    this.readStore = new StateStore<ReadState>({ read: {} });
-    // a list of users to hide messages from
-    this.mutedUsersStore = new StateStore<MutedUsersState>({ mutedUsers: [] });
-    this.membersStore = new StateStore<MembersState>({ members: {}, memberCount: 0 });
-    this.ownCapabilitiesStore = new StateStore<OwnCapabilitiesState>({
+      read: {},
+      members: {},
+      memberCount: 0,
       ownCapabilities: [],
+      active: false,
     });
+    this._channel = channel;
     this.syncMemberCountFromChannelData(channel?.data);
     this.syncOwnCapabilitiesFromChannelData(channel?.data);
     this.pending_messages = [];
@@ -89,38 +104,37 @@ export class ChannelState {
   }
 
   get members() {
-    return this.membersStore.getLatestValue().members;
+    return this.getLatestValue().members;
   }
 
   set members(members: Record<string, ChannelMemberResponse>) {
-    this.membersStore.partialNext({ members });
+    this.partialNext({ members });
   }
 
   get member_count() {
-    return this.membersStore.getLatestValue().memberCount;
+    return this.getLatestValue().memberCount;
   }
 
   set member_count(memberCount: number) {
-    this.membersStore.partialNext({ memberCount });
+    this.partialNext({ memberCount });
   }
 
   get read() {
-    return this.readStore.getLatestValue().read;
+    return this.getLatestValue().read;
   }
 
   set read(read: ChannelReadStatus) {
-    this.readStore.next({ read });
+    this.partialNext({ read });
   }
 
   get typing() {
     return (
-      this._channel?.messageComposer?.textComposer.typing ??
-      this.typingStore.getLatestValue().typing
+      this._channel?.messageComposer?.textComposer.typing ?? this.getLatestValue().typing
     );
   }
 
   set typing(typing: Record<string, Event>) {
-    this.typingStore.next({ typing });
+    this.partialNext({ typing });
 
     if (this._channel?.messageComposer) {
       this._channel.messageComposer.textComposer.setTyping(typing);
@@ -134,10 +148,10 @@ export class ChannelState {
     const fallbackMemberCount =
       typeof fallbackData?.member_count === 'number'
         ? fallbackData.member_count
-        : this.membersStore.getLatestValue().memberCount;
+        : this.getLatestValue().memberCount;
 
     if (!data || typeof data !== 'object') {
-      this.membersStore.partialNext({ memberCount: fallbackMemberCount ?? 0 });
+      this.partialNext({ memberCount: fallbackMemberCount ?? 0 });
       return;
     }
 
@@ -149,7 +163,7 @@ export class ChannelState {
           ? fallbackMemberCount
           : undefined;
 
-    this.membersStore.partialNext({ memberCount: memberCount ?? 0 });
+    this.partialNext({ memberCount: memberCount ?? 0 });
 
     Object.defineProperty(data, 'member_count', {
       configurable: true,
@@ -157,7 +171,7 @@ export class ChannelState {
       get: () => memberCount,
       set: (nextMemberCount: number | undefined) => {
         memberCount = typeof nextMemberCount === 'number' ? nextMemberCount : undefined;
-        this.membersStore.partialNext({ memberCount: memberCount ?? 0 });
+        this.partialNext({ memberCount: memberCount ?? 0 });
       },
     });
   }
@@ -167,7 +181,7 @@ export class ChannelState {
     fallbackData: Channel['data'] = this._channel?.data,
   ) {
     if (!data || typeof data !== 'object') {
-      this.ownCapabilitiesStore.next({ ownCapabilities: [] });
+      this.partialNext({ ownCapabilities: [] });
       return;
     }
 
@@ -177,7 +191,7 @@ export class ChannelState {
         ? [...fallbackData.own_capabilities]
         : undefined;
 
-    this.ownCapabilitiesStore.next({ ownCapabilities: ownCapabilities ?? [] });
+    this.partialNext({ ownCapabilities: ownCapabilities ?? [] });
 
     // Keep the reactive getter/setter so backward-compatible assignments still sync to
     // the store, but return `undefined` until capabilities are actually known. Forcing
@@ -191,7 +205,7 @@ export class ChannelState {
         ownCapabilities = Array.isArray(nextOwnCapabilities)
           ? [...nextOwnCapabilities]
           : undefined;
-        this.ownCapabilitiesStore.next({ ownCapabilities: ownCapabilities ?? [] });
+        this.partialNext({ ownCapabilities: ownCapabilities ?? [] });
       },
     });
   }
@@ -208,28 +222,20 @@ export class ChannelState {
     this.typing = typing;
   }
 
-  get mutedUsers() {
-    return this.mutedUsersStore.getLatestValue().mutedUsers;
-  }
-
-  set mutedUsers(mutedUsers: Array<UserResponse>) {
-    this.mutedUsersStore.next({ mutedUsers });
-  }
-
   get watchers() {
-    return this.watcherStore.getLatestValue().watchers;
+    return this.getLatestValue().watchers;
   }
 
   set watchers(watchers: Record<string, UserResponse>) {
-    this.watcherStore.partialNext({ watchers });
+    this.partialNext({ watchers });
   }
 
   get watcher_count() {
-    return this.watcherStore.getLatestValue().watcherCount;
+    return this.getLatestValue().watcherCount;
   }
 
   set watcher_count(watcherCount: number) {
-    this.watcherStore.partialNext({ watcherCount });
+    this.partialNext({ watcherCount });
   }
 
   /**

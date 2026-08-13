@@ -883,7 +883,7 @@ describe('StreamChat.queryChannels', async () => {
 		const [channel] = await client.queryChannelsAndHydrate();
 
 		expect(channel.state.member_count).to.equal(7);
-		expect(channel.state.ownCapabilitiesStore.getLatestValue()).to.eql({
+		expect(channel.state.getLatestValue()).to.deep.include({
 			ownCapabilities: ['send-message', 'read-events'],
 		});
 
@@ -891,7 +891,7 @@ describe('StreamChat.queryChannels', async () => {
 		channel.data.own_capabilities = ['send-message'];
 
 		expect(channel.state.member_count).to.equal(8);
-		expect(channel.state.ownCapabilitiesStore.getLatestValue()).to.eql({
+		expect(channel.state.getLatestValue()).to.deep.include({
 			ownCapabilities: ['send-message'],
 		});
 
