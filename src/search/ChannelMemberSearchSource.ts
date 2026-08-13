@@ -2,7 +2,7 @@ import { BaseSearchSource } from './BaseSearchSource';
 import { FilterBuilder, type FilterBuilderOptions } from '../pagination';
 import type { Channel } from '../channel';
 import type {
-  ApiRequestOptions,
+  AbortOptions,
   ChannelMemberResponse,
   MemberFilters,
   MemberSort,
@@ -67,7 +67,7 @@ export class ChannelMemberSearchSource<
     return this.isActive && this.canDispatchQuery(hasNewSearchQuery);
   };
 
-  protected async query(searchQuery: string, apiOptions: ApiRequestOptions = {}) {
+  protected async query(searchQuery: string, abortOptions: AbortOptions = {}) {
     const filters = this.filterBuilder.buildFilters({
       baseFilters: this.filters,
       context: {
@@ -80,7 +80,7 @@ export class ChannelMemberSearchSource<
       filters ?? {},
       sort,
       options,
-      apiOptions,
+      abortOptions,
     );
     return { items: members };
   }

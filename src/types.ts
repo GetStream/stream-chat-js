@@ -1190,12 +1190,12 @@ export type ChannelQueryOptions = {
 };
 
 /**
- * Composed with ApiRequestOptions because `queryChannels` uses this bag for both state
- * handling and request-level concerns - neither of which is serialized into the request.
- * That makes passing an ApiRequestOptions here a declared relationship rather than
- * incidental structural compatibility.
+ * Composed with AbortOptions because `queryChannels` carries the abort signal in this
+ * bag; neither the state flags nor the signal are serialized into the request. Declaring
+ * the composition keeps passing an AbortOptions here intentional rather than incidental
+ * structural compatibility.
  */
-export type ChannelStateOptions = ApiRequestOptions & {
+export type ChannelStateOptions = AbortOptions & {
   offlineMode?: boolean;
   skipInitialization?: string[];
   skipHydration?: boolean;
@@ -1579,9 +1579,13 @@ export type SearchOptions = {
   sort?: SearchMessageSort;
 };
 
-/** Per-request options that are not part of the serialized request payload. */
-export type ApiRequestOptions = {
-  /** Aborts the request. See AbortController. */
+/**
+ * Carries a cancellation handle into an operation. Never part of a serialized request
+ * payload, and it makes no claim that the operation performs one: a search source may
+ * resolve from local data and simply ignore the signal.
+ */
+export type AbortOptions = {
+  /** Aborts the operation. See AbortController. */
   signal?: AbortSignal;
 };
 

@@ -2,7 +2,7 @@ import { BaseSearchSource } from './BaseSearchSource';
 import { FilterBuilder, type FilterBuilderOptions } from '../pagination';
 import type { StreamChat } from '../client';
 import type {
-  ApiRequestOptions,
+  AbortOptions,
   UserFilters,
   UserOptions,
   UserResponse,
@@ -61,7 +61,7 @@ export class UserSearchSource<
     });
   }
 
-  protected async query(searchQuery: string, apiOptions: ApiRequestOptions = {}) {
+  protected async query(searchQuery: string, abortOptions: AbortOptions = {}) {
     const filters = this.filterBuilder.buildFilters({
       baseFilters: this.filters,
       context: { searchQuery } as UserSearchSourceFilterBuilderContext<TFilterContext>,
@@ -74,7 +74,7 @@ export class UserSearchSource<
       sort = { id: 1, ...this.sort };
     }
     const options = { ...this.searchOptions, limit: this.pageSize, offset: this.offset };
-    const { users } = await this.client.queryUsers(filters, sort, options, apiOptions);
+    const { users } = await this.client.queryUsers(filters, sort, options, abortOptions);
     return { items: users };
   }
 

@@ -8,7 +8,7 @@ import type {
 } from './types';
 import type { APIError } from '../errors';
 import { isAPIError, isErrorRetryable } from '../errors';
-import type { ApiRequestOptions } from '../types';
+import type { AbortOptions } from '../types';
 
 export type DebounceOptions = {
   /** Applies to both short and long queries unless overridden by the options below. */
@@ -295,7 +295,7 @@ export abstract class BaseSearchSource<T>
 
   protected abstract query(
     searchQuery: string,
-    options?: ApiRequestOptions,
+    options?: AbortOptions,
   ): Promise<QueryReturnValue<T>>;
 
   protected abstract filterQueryResults(items: T[]): T[] | Promise<T[]>;

@@ -3,12 +3,7 @@ import type { FilterBuilderOptions } from '../pagination';
 import { FilterBuilder } from '../pagination';
 import type { Channel } from '../channel';
 import type { StreamChat } from '../client';
-import type {
-  ApiRequestOptions,
-  ChannelFilters,
-  ChannelOptions,
-  ChannelSort,
-} from '../types';
+import type { AbortOptions, ChannelFilters, ChannelOptions, ChannelSort } from '../types';
 import type { SearchSourceOptions } from './types';
 
 type CustomContext = Record<string, unknown>;
@@ -56,7 +51,7 @@ export class ChannelSearchSource<
     });
   }
 
-  protected async query(searchQuery: string, apiOptions: ApiRequestOptions = {}) {
+  protected async query(searchQuery: string, abortOptions: AbortOptions = {}) {
     const filters = this.filterBuilder.buildFilters({
       baseFilters: {
         ...(this.client.userID ? { members: { $in: [this.client.userID] } } : {}),
@@ -68,7 +63,7 @@ export class ChannelSearchSource<
     });
     const sort = this.sort ?? {};
     const options = { ...this.searchOptions, limit: this.pageSize, offset: this.offset };
-    const items = await this.client.queryChannels(filters, sort, options, apiOptions);
+    const items = await this.client.queryChannels(filters, sort, options, abortOptions);
     return { items };
   }
 
