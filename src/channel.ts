@@ -59,7 +59,7 @@ import type {
   UserResponse,
 } from './types';
 import type { RoleName } from './permissions';
-import { StateStore, type Unsubscribe } from './store';
+import { StateStore } from './store';
 import type {
   ChannelMemberRequest as Gen_ChannelMemberRequest,
   ChannelPushPreferencesResponse as Gen_ChannelPushPreferencesResponse,
@@ -162,8 +162,6 @@ export class Channel extends ChannelApi {
   private _reloading = false;
   /** Refcount backing the reactive `active` flag (a shared Channel instance can be mounted more than once). */
   private _activeRefCount = 0;
-  /** Teardown for the auto-mark-active-read subscription registered in the constructor. */
-  private _unsubscribeMarkActiveRead?: Unsubscribe;
   push_preferences?: Gen_ChannelPushPreferencesResponse;
   public readonly configState = new StateStore<ChannelInstanceConfig>({});
   public readonly messageComposer: MessageComposer;
@@ -225,9 +223,6 @@ export class Channel extends ChannelApi {
 
     this.messageReceiptsTracker = new MessageReceiptsTracker({ channel: this });
     this.messageReceiptsTracker.registerSubscriptions();
-
-    // Auto-mark-read while the channel is active (UI-driven; inert until a UI SDK calls activate()).
-    this._unsubscribeMarkActiveRead = this.subscribeMarkActiveChannelRead();
 
     this.cooldownTimer = new CooldownTimer({ channel: this });
 
@@ -1285,30 +1280,6 @@ export class Channel extends ChannelApi {
       this.state.partialNext({ active: false });
     }
   };
-
-  private throttledMarkRead = () => {
-    this.getClient().messageDeliveryReporter.throttledMarkRead(this);
-  };
-
-  /**
-   * Auto-marks the channel read whenever it is active and has unread messages (mirrors
-   * `Thread.subscribeMarkActiveThreadRead`). Registered once in the constructor; inert until a
-   * UI SDK calls `activate()`.
-   */
-  private subscribeMarkActiveChannelRead = () =>
-    this.state.subscribeWithSelector(
-      (nextValue) => {
-        const userId = this.getClient().userID;
-        return {
-          active: nextValue.active,
-          ownUnreadCount: (userId && nextValue.read[userId]?.unread_messages) || 0,
-        };
-      },
-      ({ active, ownUnreadCount }) => {
-        if (!active || !ownUnreadCount) return;
-        this.throttledMarkRead();
-      },
-    );
 
   /**
    * Marks the channel as unread from `messageId`. Only works when the `read_events` setting is enabled.
@@ -2799,10 +2770,8 @@ export class Channel extends ChannelApi {
     logger.withExtraTags('_disconnect', this.cid).info('Disconnecting the channel.');
 
     // Tear down the channel.state subscriptions BEFORE flipping `disconnected` — that setter now
-    // publishes to the store, and the auto-mark-active-read subscription's selector calls
-    // getClient(), which throws once the channel is disconnected.
+    // publishes to the store, so no subscriber handler runs against a half-torn-down channel.
     this.messageReceiptsTracker.unregisterSubscriptions();
-    this._unsubscribeMarkActiveRead?.();
     this.disconnected = true;
     this.cooldownTimer.clearTimeout();
     // Release the store-backed paginators so the message store no longer pins this removed channel

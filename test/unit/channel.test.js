@@ -3688,7 +3688,7 @@ describe('Channel.reload', () => {
 	});
 });
 
-describe('Channel active flag + auto-mark-read', () => {
+describe('Channel active flag (mark-read stays UI-driven)', () => {
 	let client;
 	let channel;
 
@@ -3718,28 +3718,21 @@ describe('Channel active flag + auto-mark-read', () => {
 		expect(channel.active).to.equal(false);
 	});
 
-	it('auto-marks the channel read only while active AND unread', () => {
+	it('does NOT auto-mark the channel read (mark-read is UI-driven, matching v10 destructive-reconciliation)', () => {
 		const spy = vi
 			.spyOn(client.messageDeliveryReporter, 'throttledMarkRead')
 			.mockImplementation(() => undefined);
 
-		// unread but not active → no auto mark-read
+		// Activate an unread channel and put it at the live edge — the channel must NOT auto-mark-read.
+		// Read is owned by the UI layer (MessageList marks read on viewability / scroll-to-bottom,
+		// gated on isViewingLive). A channel-level auto-read here would wipe the scroll-to-bottom unread
+		// badge while scrolled up — the "flash then vanish" regression. Parity guard so it can't return.
+		channel.activate();
+		channel.messagePaginator.setViewingLive(true);
 		channel.state.read = {
 			me: { last_read: new Date(0), unread_messages: 3, user: { id: 'me' } },
 		};
-		expect(spy).not.toHaveBeenCalled();
 
-		// becomes active while unread → marks read once, for this channel
-		channel.activate();
-		expect(spy).toHaveBeenCalledTimes(1);
-		expect(spy).toHaveBeenCalledWith(channel);
-
-		spy.mockClear();
-
-		// still active but unread cleared → no further mark-read
-		channel.state.read = {
-			me: { last_read: new Date(1), unread_messages: 0, user: { id: 'me' } },
-		};
 		expect(spy).not.toHaveBeenCalled();
 	});
 });
