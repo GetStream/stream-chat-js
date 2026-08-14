@@ -219,6 +219,7 @@ import type {
   ReminderAPIResponse,
   RemoveUserGroupMembersOptions,
   RemoveUserGroupMembersResponse,
+  RequestOptions,
   ReviewFlagReportOptions,
   ReviewFlagReportResponse,
   SdkIdentifier,
@@ -1312,6 +1313,9 @@ export class StreamChat {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any /**TODO: generalize error types  */) {
       e.client_request_id = requestConfig.headers?.['x-client-request-id'];
+      // An aborted request is a deliberate cancellation, not a failure - logging it
+      // and counting it towards the token-refresh backoff would be misleading.
+      if (axios.isCancel(e)) throw e;
       this._logApiError(type, url, e);
       this.consecutiveFailures += 1;
       if (e.response) {
@@ -1333,16 +1337,22 @@ export class StreamChat {
     }
   };
 
-  get<T>(url: string, params?: AxiosRequestConfig['params']) {
-    return this.doAxiosRequest<T>('get', url, null, { params });
+  get<T>(
+    url: string,
+    params?: AxiosRequestConfig['params'],
+    // `params` is omitted deliberately: _enrichAxiosOptions spreads `config` after the
+    // enriched params, so a `config.params` would drop api_key/user_id/connection_id.
+    config?: Omit<AxiosRequestConfig, 'params'>,
+  ) {
+    return this.doAxiosRequest<T>('get', url, null, { params, config });
   }
 
   put<T>(url: string, data?: unknown) {
     return this.doAxiosRequest<T>('put', url, data);
   }
 
-  post<T>(url: string, data?: unknown) {
-    return this.doAxiosRequest<T>('post', url, data);
+  post<T>(url: string, data?: unknown, config?: Omit<AxiosRequestConfig, 'params'>) {
+    return this.doAxiosRequest<T>('post', url, data, { config });
   }
 
   patch<T>(url: string, data?: unknown) {
@@ -1837,6 +1847,7 @@ export class StreamChat {
    * @param {UserSort} sort Sort options, for instance [{last_active: -1}].
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_active: -1}, {created_at: 1}]
    * @param {UserOptions} options Option object, {presence: true}
+   * @param {RequestOptions} [requestOptions] Carries an abort signal. Not sent in the request.
    *
    * @return {Promise<{ users: Array<UserResponse> }>} User Query Response
    */
@@ -1844,6 +1855,7 @@ export class StreamChat {
     filterConditions: UserFilters,
     sort: UserSort = [],
     options: UserOptions = {},
+    requestOptions: RequestOptions = {},
   ) {
     const defaultOptions = {
       presence: false,
@@ -1867,6 +1879,7 @@ export class StreamChat {
           ...options,
         },
       },
+      requestOptions,
     );
 
     this.state.updateUsers(data.users);
@@ -1918,13 +1931,17 @@ export class StreamChat {
    * searchUserGroups - Search user groups by prefix for autocomplete
    *
    * @param {SearchUserGroupsOptions} options The search options
-   *
+   * @param {RequestOptions} [requestOptions] Carries an abort signal. Not sent in the request.
    * @return {Promise<SearchUserGroupsResponse>} User Group Search Response
    */
-  async searchUserGroups(options: SearchUserGroupsOptions) {
+  async searchUserGroups(
+    options: SearchUserGroupsOptions,
+    requestOptions: RequestOptions = {},
+  ) {
     return await this.get<SearchUserGroupsResponse>(
       this.baseURL + '/usergroups/search',
       options,
+      requestOptions,
     );
   }
 
@@ -2061,6 +2078,7 @@ export class StreamChat {
    * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
    * @param {ChannelOptions} [options] Options object. Can include predefined_filter, filter_values, and sort_values for using predefined filters.
+   * @param {RequestOptions} [requestOptions] Carries an abort signal. Not sent in the request.
    *
    * @return {Promise<QueryChannelsAPIResponse>} full search channels response
    */
@@ -2068,6 +2086,7 @@ export class StreamChat {
     filterConditions: ChannelFilters,
     sort: ChannelSort = [],
     options: ChannelOptions = {},
+    requestOptions: RequestOptions = {},
   ): Promise<QueryChannelsAPIResponse> {
     const defaultOptions: ChannelOptions = {
       state: true,
@@ -2101,7 +2120,11 @@ export class StreamChat {
           ...restOptions,
         };
 
-    return await this.post<QueryChannelsAPIResponse>(this.baseURL + '/channels', payload);
+    return await this.post<QueryChannelsAPIResponse>(
+      this.baseURL + '/channels',
+      payload,
+      requestOptions,
+    );
   }
 
   /**
@@ -2147,6 +2170,7 @@ export class StreamChat {
    * - stateOptions.skipInitialization - Skips the initialization of the state for the channels matching the ids in the list.
    * - stateOptions.skipHydration - Skips returning the channels as instances of the Channel class and rather returns the raw query response.
    * - stateOptions.withResponse - Returns the full query response with hydrated channels. This is a compatibility bridge for internal callers that need response-level metadata while the default return value remains `Channel[]`.
+   * - stateOptions.signal - Aborts the request. See AbortController.
    *
    * @return {Promise<Array<Channel>>} search channels response
    */
@@ -2172,6 +2196,8 @@ export class StreamChat {
       filterConditions,
       sort,
       options,
+      // stateOptions is never serialized, so it carries the abort signal
+      { signal: stateOptions.signal },
     );
     const channels = queryChannelsResponse.channels;
 
@@ -2317,6 +2343,7 @@ export class StreamChat {
    * @param {ChannelFilters} filterConditions MongoDB style filter conditions
    * @param {MessageFilters | string} query search query or object MongoDB style filters
    * @param {SearchOptions} [options] Option object, {user_id: 'tommaso'}
+   * @param {RequestOptions} [requestOptions] Carries an abort signal. Not sent in the request.
    *
    * @return {Promise<SearchAPIResponse>} search messages response
    */
@@ -2324,6 +2351,7 @@ export class StreamChat {
     filterConditions: ChannelFilters,
     query: string | MessageFilters,
     options: SearchOptions = {},
+    requestOptions: RequestOptions = {},
   ) {
     if (options.offset && options.next) {
       throw Error(`Cannot specify offset with next`);
@@ -2346,7 +2374,11 @@ export class StreamChat {
     // Make sure we wait for the connect promise if there is a pending one
     await this.wsPromise;
 
-    return await this.get<SearchAPIResponse>(this.baseURL + '/search', { payload });
+    return await this.get<SearchAPIResponse>(
+      this.baseURL + '/search',
+      { payload },
+      requestOptions,
+    );
   }
 
   /**
@@ -3806,6 +3838,12 @@ export class StreamChat {
       ...axiosRequestConfigRest
     } = this.options.axiosRequestConfig || {};
 
+    // Most specific wins, and it is spread last so that a config carrying an explicit
+    // `signal: undefined` cannot clobber a client-wide one or an armed
+    // nextRequestAbortController.
+    const resolvedSignal =
+      options.config?.signal ?? axiosRequestConfigRest.signal ?? signal;
+
     return {
       params: {
         user_id: this.userID,
@@ -3821,9 +3859,9 @@ export class StreamChat {
         ...options.headers,
         ...(axiosRequestConfigHeaders || {}),
       },
-      ...(signal ? { signal } : {}),
       ...options.config,
-      ...(axiosRequestConfigRest || {}),
+      ...axiosRequestConfigRest,
+      ...(resolvedSignal ? { signal: resolvedSignal } : {}),
     };
   }
 
@@ -3993,8 +4031,12 @@ export class StreamChat {
    *
    * @returns {Promise<APIResponse>}
    */
-  searchRoles(options: SearchRolesOptions) {
-    return this.get<SearchRolesAPIResponse>(`${this.baseURL}/roles/search`, options);
+  searchRoles(options: SearchRolesOptions, requestOptions: RequestOptions = {}) {
+    return this.get<SearchRolesAPIResponse>(
+      `${this.baseURL}/roles/search`,
+      options,
+      requestOptions,
+    );
   }
 
   /** deleteRole - deletes a custom role

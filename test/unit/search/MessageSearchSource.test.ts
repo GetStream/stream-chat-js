@@ -234,6 +234,7 @@ describe('MessageSearchSource', () => {
         next: undefined,
         sort: { created_at: -1 },
       }),
+      {},
     );
     expect(result.items).toEqual(messages);
     expect(result.next).toBe('next-token');
@@ -264,6 +265,7 @@ describe('MessageSearchSource', () => {
         next: 'next-token-old',
         sort: { created_at: 1 }, // note: merges created_at with default -1, order may vary
       }),
+      {},
     );
   });
 
@@ -310,6 +312,7 @@ describe('MessageSearchSource', () => {
         next: 'next-token-old',
         sort: { created_at: 1 }, // note: merges created_at with default -1, order may vary
       }),
+      {},
     );
   });
 
@@ -333,6 +336,7 @@ describe('MessageSearchSource', () => {
         next: 'next-token-old',
         sort: { created_at: -1 }, // note: merges created_at with default -1, order may vary
       }),
+      {},
     );
   });
 
@@ -353,7 +357,25 @@ describe('MessageSearchSource', () => {
       { cid: { $in: ['cid2'] }, type: 'abc' },
       { last_message_at: -1 },
       undefined,
+      {},
     );
+  });
+
+  it('skips the channel hydration request when the query was aborted', async () => {
+    const m1 = generateMsg({ cid: 'cid1' });
+    client.activeChannels = {};
+    searchMock.mockResolvedValueOnce({
+      results: [{ message: m1 }],
+      next: undefined,
+    } as any);
+    const controller = new AbortController();
+    controller.abort();
+
+    // @ts-expect-error protected access
+    const result = await searchSource.query('query', { signal: controller.signal });
+
+    expect(queryChannelsMock).not.toHaveBeenCalled();
+    expect(result.items).toEqual([m1]);
   });
 
   it('does not call queryChannels if all channels are loaded locally', async () => {
@@ -393,6 +415,7 @@ describe('MessageSearchSource', () => {
       { cid: { $in: ['cid2'] }, type: 'efg' },
       { last_message_at: -1 },
       undefined,
+      {},
     );
   });
 

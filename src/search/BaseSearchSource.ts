@@ -9,10 +9,24 @@ import type {
 import type { APIError } from '../errors';
 import { isAPIError, isErrorRetryable } from '../errors';
 
-export type DebounceOptions = {
-  debounceMs: number;
+/**
+ * Passed to a search source's `query()`. Carries a cancellation handle and makes no
+ * claim that the query performs a request: a source may resolve from local data and
+ * ignore the signal. Where a source does issue requests, forward this straight through
+ * as the request options.
+ */
+export type SearchQueryOptions = {
+  /** Aborted once a newer query supersedes this one. */
+  signal?: AbortSignal;
 };
-type DebouncedExecQueryFunction = DebouncedFunc<(searchString?: string) => Promise<void>>;
+
+export type DebounceOptions = {
+  /** Applies to both short and long queries unless overridden by the options below. */
+  debounceMs?: number;
+  shortQueryDebounceMs?: number;
+  longQueryDebounceMs?: number;
+  shortQueryMaxLength?: number;
+};
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface ISearchSource<T = any> {
@@ -54,18 +68,44 @@ export interface SearchSourceSync<T = any> extends ISearchSource<T> {
   search(text?: string): void;
 }
 
-const DEFAULT_SEARCH_SOURCE_OPTIONS: Required<SearchSourceOptions> = {
-  debounceMs: 300,
+// Debounce defaults are resolved by resolveDebounceOptions, not here.
+const DEFAULT_SEARCH_SOURCE_OPTIONS: Required<
+  Omit<SearchSourceOptions, keyof DebounceOptions>
+> = {
   pageSize: 10,
   allowEmptySearchString: false,
   resetOnNewSearchQuery: true,
 } as const;
 
-abstract class BaseSearchSourceBase<T> implements ISearchSource<T> {
+/**
+ * An explicit `debounceMs` applies to both buckets, so integrators who already tuned it
+ * keep exactly their configured interval. Only when it is absent do the 500/300 defaults
+ * kick in.
+ */
+const resolveDebounceOptions = ({
+  debounceMs,
+  shortQueryDebounceMs,
+  longQueryDebounceMs,
+  shortQueryMaxLength,
+}: DebounceOptions) => ({
+  shortQueryDebounceMs: shortQueryDebounceMs ?? debounceMs ?? 500,
+  longQueryDebounceMs: longQueryDebounceMs ?? debounceMs ?? 300,
+  shortQueryMaxLength: shortQueryMaxLength ?? 2,
+});
+
+abstract class BaseSearchSourceBase<
+  T,
+  R extends void | Promise<void>,
+> implements ISearchSource<T> {
   state: StateStore<SearchSourceState<T>>;
   pageSize: number;
   protected allowEmptySearchString: boolean;
   protected resetOnNewSearchQuery: boolean;
+  // assigned by setDebounceOptions, which the constructor always calls
+  protected shortQueryDebounceMs!: number;
+  protected longQueryDebounceMs!: number;
+  protected shortQueryMaxLength!: number;
+  protected searchDebounced!: DebouncedFunc<(searchString?: string) => R>;
   abstract readonly type: SearchSourceType;
 
   protected constructor(options?: SearchSourceOptions) {
@@ -77,7 +117,43 @@ abstract class BaseSearchSourceBase<T> implements ISearchSource<T> {
     this.allowEmptySearchString = allowEmptySearchString;
     this.resetOnNewSearchQuery = resetOnNewSearchQuery;
     this.state = new StateStore<SearchSourceState<T>>(this.initialState);
+    // Field initializers run before this body, so setDebounceOptions is already
+    // assigned; it only captures getDebounceMs lazily.
+    this.setDebounceOptions(options ?? {});
   }
+
+  abstract executeQuery(newSearchString?: string): R;
+
+  setDebounceOptions = (options: DebounceOptions = {}) => {
+    const resolved = resolveDebounceOptions(options);
+    this.shortQueryDebounceMs = resolved.shortQueryDebounceMs;
+    this.longQueryDebounceMs = resolved.longQueryDebounceMs;
+    this.shortQueryMaxLength = resolved.shortQueryMaxLength;
+    this.searchDebounced = debounce(this.executeQuery.bind(this), (searchString) =>
+      this.getDebounceMs(searchString),
+    );
+  };
+
+  /**
+   * Short queries match too much and are slow server-side, so they get a longer debounce.
+   * Resolved per call, which is what lets the interval switch as the user keeps typing.
+   */
+  protected getDebounceMs = (searchString?: string) => {
+    const { length } = searchString ?? this.searchQuery;
+    return length <= this.shortQueryMaxLength
+      ? this.shortQueryDebounceMs
+      : this.longQueryDebounceMs;
+  };
+
+  /**
+   * A new search query preempts an in-flight one; pagination waits for it to finish
+   * and needs a next page to fetch.
+   */
+  protected canDispatchQuery(hasNewSearchQuery: boolean) {
+    return hasNewSearchQuery || (!this.isLoading && this.hasNext);
+  }
+
+  search = (searchQuery?: string) => this.searchDebounced(searchQuery);
 
   get lastQueryError() {
     return this.state.getLatestValue().lastQueryError;
@@ -99,7 +175,7 @@ abstract class BaseSearchSourceBase<T> implements ISearchSource<T> {
     return this.state.getLatestValue().isLoading;
   }
 
-  get initialState() {
+  get initialState(): SearchSourceState<T> {
     return {
       hasNext: true,
       isActive: false,
@@ -143,8 +219,7 @@ abstract class BaseSearchSourceBase<T> implements ISearchSource<T> {
     const searchString = newSearchString ?? this.searchQuery;
     return !!(
       this.isActive &&
-      !this.isLoading &&
-      (this.hasNext || hasNewSearchQuery) &&
+      this.canDispatchQuery(hasNewSearchQuery) &&
       (this.allowEmptySearchString || searchString)
     );
   };
@@ -217,34 +292,48 @@ abstract class BaseSearchSourceBase<T> implements ISearchSource<T> {
 }
 
 export abstract class BaseSearchSource<T>
-  extends BaseSearchSourceBase<T>
+  extends BaseSearchSourceBase<T, Promise<void>>
   implements SearchSource<T>
 {
-  protected searchDebounced!: DebouncedExecQueryFunction;
+  /** Aborts the in-flight request, if any, once a newer query is dispatched. */
+  protected queryAbortController: AbortController | null = null;
 
-  constructor(options?: SearchSourceOptions) {
-    const { debounceMs } = { ...DEFAULT_SEARCH_SOURCE_OPTIONS, ...options };
-    super(options);
-    this.setDebounceOptions({ debounceMs });
-  }
-
-  protected abstract query(searchQuery: string): Promise<QueryReturnValue<T>>;
+  protected abstract query(
+    searchQuery: string,
+    options?: SearchQueryOptions,
+  ): Promise<QueryReturnValue<T>>;
 
   protected abstract filterQueryResults(items: T[]): T[] | Promise<T[]>;
 
-  setDebounceOptions = ({ debounceMs }: DebounceOptions) => {
-    this.searchDebounced = debounce(this.executeQuery.bind(this), debounceMs);
-  };
+  /** Aborts the in-flight request, if any. Returns true when one was aborted. */
+  protected abortInFlightQuery() {
+    if (!this.queryAbortController) return false;
+    this.queryAbortController.abort();
+    this.queryAbortController = null;
+    return true;
+  }
+
+  resetState() {
+    // otherwise an in-flight response would repopulate the state we just cleared
+    this.abortInFlightQuery();
+    super.resetState();
+  }
 
   async executeQuery(newSearchString?: string) {
+    // Checked before anything is dispatched, so that the abort below always has a
+    // successor that will clear isLoading.
     if (!this.canExecuteQuery(newSearchString)) return;
+
+    // cancel the previous request before dispatching the new one
+    this.abortInFlightQuery();
+    const { signal } = (this.queryAbortController = new AbortController());
 
     const { hasNewSearchQuery, searchString } =
       this.prepareStateForQuery(newSearchString);
 
     let stateUpdate: Partial<SearchSourceState<T>> = {};
     try {
-      const results = await this.query(searchString);
+      const results = await this.query(searchString, { signal });
       if (!results) return;
 
       const { items } = results;
@@ -256,36 +345,33 @@ export abstract class BaseSearchSource<T>
         stateUpdate.hasNext = false;
       }
     } finally {
-      this.state.next(this.getStateAfterQuery(stateUpdate, hasNewSearchQuery));
+      // A newer query owns the state now - publishing here would clobber it with a
+      // stale result (and with the abort error).
+      if (!signal.aborted) {
+        this.state.next(this.getStateAfterQuery(stateUpdate, hasNewSearchQuery));
+      }
     }
   }
 
-  search = (searchQuery?: string) => this.searchDebounced(searchQuery);
-
   cancelScheduledQuery() {
     this.searchDebounced.cancel();
+    // Nothing will dispatch a successor query, so release the loading state the
+    // aborted query owned - its own finally block skips the state write.
+    if (this.abortInFlightQuery() && this.isLoading) {
+      this.state.partialNext({ isLoading: false });
+    }
   }
 }
 
+// Queries are resolved locally, so there is nothing to cancel here - only the
+// dynamic debounce applies.
 export abstract class BaseSearchSourceSync<T>
-  extends BaseSearchSourceBase<T>
+  extends BaseSearchSourceBase<T, void>
   implements SearchSourceSync<T>
 {
-  protected searchDebounced!: DebouncedExecQueryFunction;
-
-  constructor(options?: SearchSourceOptions) {
-    const { debounceMs } = { ...DEFAULT_SEARCH_SOURCE_OPTIONS, ...options };
-    super(options);
-    this.setDebounceOptions({ debounceMs });
-  }
-
   protected abstract query(searchQuery: string): QueryReturnValue<T>;
 
   protected abstract filterQueryResults(items: T[]): T[];
-
-  setDebounceOptions = ({ debounceMs }: DebounceOptions) => {
-    this.searchDebounced = debounce(this.executeQuery.bind(this), debounceMs);
-  };
 
   executeQuery(newSearchString?: string) {
     if (!this.canExecuteQuery(newSearchString)) return;
@@ -310,8 +396,6 @@ export abstract class BaseSearchSourceSync<T>
       this.state.next(this.getStateAfterQuery(stateUpdate, hasNewSearchQuery));
     }
   }
-
-  search = (searchQuery?: string) => this.searchDebounced(searchQuery);
 
   cancelScheduledQuery() {
     this.searchDebounced.cancel();

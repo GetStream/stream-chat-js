@@ -1189,7 +1189,13 @@ export type ChannelQueryOptions = {
   watchers?: PaginationOptions;
 };
 
-export type ChannelStateOptions = {
+/**
+ * Composed with RequestOptions because `queryChannels` carries the abort signal in this
+ * bag; neither the state flags nor the signal are serialized into the request. Declaring
+ * the composition keeps passing a RequestOptions here intentional rather than incidental
+ * structural compatibility.
+ */
+export type ChannelStateOptions = RequestOptions & {
   offlineMode?: boolean;
   skipInitialization?: string[];
   skipHydration?: boolean;
@@ -1571,6 +1577,12 @@ export type SearchOptions = {
   next?: string;
   offset?: number;
   sort?: SearchMessageSort;
+};
+
+/** Per-request options that are never part of the serialized request payload. */
+export type RequestOptions = {
+  /** Aborts the request. See AbortController. */
+  signal?: AbortSignal;
 };
 
 export type StreamChatOptions = AxiosRequestConfig & {

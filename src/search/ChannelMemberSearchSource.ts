@@ -1,4 +1,4 @@
-import { BaseSearchSource } from './BaseSearchSource';
+import { BaseSearchSource, type SearchQueryOptions } from './BaseSearchSource';
 import { FilterBuilder, type FilterBuilderOptions } from '../pagination';
 import type { Channel } from '../channel';
 import type {
@@ -15,6 +15,13 @@ export type ChannelMemberSearchSourceFilterBuilderContext<
   C extends CustomContext = CustomContext,
 > = { searchQuery?: string } & C;
 
+export type ChannelMemberSearchSourceOptions = SearchSourceOptions & {
+  /** Static base filters merged under the dynamically generated ones. */
+  filters?: MemberFilters;
+  sort?: MemberSort;
+  searchOptions?: Omit<QueryMembersOptions, 'limit' | 'offset'>;
+};
+
 export class ChannelMemberSearchSource<
   TFilterContext extends CustomContext = CustomContext,
 > extends BaseSearchSource<ChannelMemberResponse> {
@@ -30,14 +37,19 @@ export class ChannelMemberSearchSource<
 
   constructor(
     channel: Channel,
-    options?: SearchSourceOptions,
+    options?: ChannelMemberSearchSourceOptions,
     filterBuilderOptions: FilterBuilderOptions<
       MemberFilters,
       ChannelMemberSearchSourceFilterBuilderContext<TFilterContext>
     > = {},
   ) {
-    super(options);
+    const { filters, sort, searchOptions, ...restOptions } = options || {};
+    // members are listed with an empty query, so the initial load must be allowed
+    super({ ...restOptions, allowEmptySearchString: true });
     this.channel = channel;
+    this.filters = filters;
+    this.sort = sort;
+    this.searchOptions = searchOptions;
     this.filterBuilder = new FilterBuilder<
       MemberFilters,
       ChannelMemberSearchSourceFilterBuilderContext<TFilterContext>
@@ -60,13 +72,7 @@ export class ChannelMemberSearchSource<
     });
   }
 
-  canExecuteQuery = (newSearchString?: string) => {
-    const hasNewSearchQuery = typeof newSearchString !== 'undefined';
-
-    return this.isActive && !this.isLoading && (this.hasNext || hasNewSearchQuery);
-  };
-
-  protected async query(searchQuery: string) {
+  protected async query(searchQuery: string, queryOptions: SearchQueryOptions = {}) {
     const filters = this.filterBuilder.buildFilters({
       baseFilters: this.filters,
       context: {
@@ -75,7 +81,12 @@ export class ChannelMemberSearchSource<
     });
     const sort = this.sort ?? [];
     const options = { ...this.searchOptions, limit: this.pageSize, offset: this.offset };
-    const { members } = await this.channel.queryMembers(filters ?? {}, sort, options);
+    const { members } = await this.channel.queryMembers(
+      filters ?? {},
+      sort,
+      options,
+      queryOptions,
+    );
     return { items: members };
   }
 

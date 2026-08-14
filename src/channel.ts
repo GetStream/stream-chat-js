@@ -62,6 +62,7 @@ import type {
   QueryMembersOptions,
   Reaction,
   ReactionAPIResponse,
+  RequestOptions,
   SearchAPIResponse,
   SearchMessageSortBase,
   SearchOptions,
@@ -377,6 +378,7 @@ export class Channel {
    * @param {MemberSort} [sort] Sort options, for instance [{created_at: -1}].
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{name: -1}, {created_at: 1}]
    * @param {{ limit?: number; offset?: number }} [options] Option object, {limit: 10, offset:10}
+   * @param {RequestOptions} [requestOptions] Carries an abort signal. Not sent in the request.
    *
    * @return {Promise<ChannelMemberAPIResponse>} Query Members response
    */
@@ -384,6 +386,7 @@ export class Channel {
     filterConditions: MemberFilters,
     sort: MemberSort = [],
     options: QueryMembersOptions = {},
+    requestOptions: RequestOptions = {},
   ) {
     let id: string | undefined;
     const type = this.type;
@@ -406,6 +409,7 @@ export class Channel {
           ...options,
         },
       },
+      requestOptions,
     );
   }
 

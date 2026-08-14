@@ -474,7 +474,10 @@ describe('BaseSearchSource and implementations', () => {
 				searchSource.activate();
 				const querySpy = sinon.spy(searchSource, 'query');
 				await searchSource.executeQuery('');
-				sinon.assert.calledOnceWithExactly(querySpy, '');
+				sinon.assert.calledOnce(querySpy);
+				sinon.assert.calledWith(querySpy, '', {
+					signal: sinon.match.instanceOf(AbortSignal),
+				});
 				expect(searchSource.searchQuery).to.equal('');
 				expect(searchSource.items).to.be.eql(items);
 			});

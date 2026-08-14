@@ -154,6 +154,7 @@ describe('ChannelSearchSource', () => {
       },
       { last_message_at: -1 },
       { message_limit: 5, limit: searchSource.pageSize, offset: searchSource.offset },
+      {},
     );
   });
 

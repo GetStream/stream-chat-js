@@ -289,6 +289,7 @@ describe('Predefined Filters', () => {
           watch: true,
           presence: false,
         }),
+        { signal: undefined },
       );
       // Should NOT include filter_conditions when using predefined filter
       expect(postSpy).toHaveBeenCalledWith(
@@ -296,6 +297,7 @@ describe('Predefined Filters', () => {
         expect.not.objectContaining({
           filter_conditions: expect.anything(),
         }),
+        { signal: undefined },
       );
     });
 
@@ -324,6 +326,7 @@ describe('Predefined Filters', () => {
           sort_values: { sort_field: 'last_message_at' },
           limit: 50,
         }),
+        { signal: undefined },
       );
     });
 
@@ -352,12 +355,14 @@ describe('Predefined Filters', () => {
           ],
           limit: 20,
         }),
+        { signal: undefined },
       );
       expect(postSpy).toHaveBeenCalledWith(
         `${client.baseURL}/channels`,
         expect.not.objectContaining({
           filter_conditions: expect.anything(),
         }),
+        { signal: undefined },
       );
     });
 
@@ -382,6 +387,7 @@ describe('Predefined Filters', () => {
           sort: [{ field: 'last_message_at', direction: -1 }],
           limit: 20,
         }),
+        { signal: undefined },
       );
       // Should NOT include predefined_filter fields
       expect(postSpy).toHaveBeenCalledWith(
@@ -389,6 +395,7 @@ describe('Predefined Filters', () => {
         expect.not.objectContaining({
           predefined_filter: expect.anything(),
         }),
+        { signal: undefined },
       );
     });
 
@@ -411,6 +418,7 @@ describe('Predefined Filters', () => {
         expect.objectContaining({
           watch: false,
         }),
+        { signal: undefined },
       );
     });
 

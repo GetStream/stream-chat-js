@@ -9,7 +9,11 @@ import {
   userSuggestionToMentionEntity,
   userSuggestionToUserResponse,
 } from './mentionUtils';
-import { BaseSearchSource, type SearchSourceOptions } from '../../../search';
+import {
+  BaseSearchSource,
+  type SearchQueryOptions,
+  type SearchSourceOptions,
+} from '../../../search';
 import { mergeWith } from '../../../utils/mergeWith';
 import type {
   ChannelMentionSuggestion,
@@ -92,6 +96,13 @@ export const calculateLevenshtein = (query: string, name: string) => {
 };
 
 export type MentionsSearchSourceOptions = SearchSourceOptions & {
+  /** Static base filters for the app-wide user query (mentionAllAppUsers). */
+  userFilters?: UserFilters;
+  userSort?: UserSort;
+  /** Static base filters for the channel member query. */
+  memberFilters?: MemberFilters;
+  memberSort?: MemberSort;
+  searchOptions?: Omit<UserOptions, 'limit' | 'offset'>;
   mentionAllAppUsers?: boolean;
   suggestionFactoryMappers?: MentionSuggestionFactoryMapperOverrides;
   textComposerText?: string;
@@ -299,20 +310,34 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
   userSort: UserSort | undefined;
   memberSort: MemberSort | undefined; // todo: document there are filters and sort options for users and members
   searchOptions: Omit<UserOptions, 'limit' | 'offset'> | undefined;
-  config: MentionsSearchSourceOptions;
+  config: Pick<
+    MentionsSearchSourceOptions,
+    'mentionAllAppUsers' | 'suggestionFactoryMappers' | 'textComposerText' | 'trigger'
+  >;
 
   constructor(channel: Channel, options?: MentionsSearchSourceOptions) {
     const {
       mentionAllAppUsers,
+      memberFilters,
+      memberSort,
+      searchOptions,
       suggestionFactoryMappers,
       textComposerText,
       transliterate,
       trigger,
+      userFilters,
+      userSort,
       ...restOptions
     } = options || {};
-    super(restOptions);
+    // suggestions are shown for a bare trigger, so the empty query must be allowed
+    super({ ...restOptions, allowEmptySearchString: true });
     this.client = channel.getClient();
     this.channel = channel;
+    this.userFilters = userFilters;
+    this.userSort = userSort;
+    this.memberFilters = memberFilters;
+    this.memberSort = memberSort;
+    this.searchOptions = searchOptions;
     this.config = {
       mentionAllAppUsers,
       suggestionFactoryMappers,
@@ -425,11 +450,6 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
     };
   }
 
-  canExecuteQuery = (newSearchString?: string) => {
-    const hasNewSearchQuery = typeof newSearchString !== 'undefined';
-    return this.isActive && !this.isLoading && (hasNewSearchQuery || this.hasNext);
-  };
-
   protected updatePaginationStateFromQuery() {
     const userPaginationState = this.latestUserPaginationState ?? { itemCount: 0 };
 
@@ -472,10 +492,13 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
         : []),
     ].filter(({ name }) => this.matchesPrefixSearchQuery(name, searchQuery));
 
-  getRoleMentionSuggestions = async (query: string): Promise<RoleMentionSuggestion[]> => {
+  getRoleMentionSuggestions = async (
+    query: string,
+    queryOptions: SearchQueryOptions = {},
+  ): Promise<RoleMentionSuggestion[]> => {
     if (!this.isMentionTypeAllowed('role')) return [];
     if (!query) return [];
-    const { roles } = await this.client.searchRoles({ query });
+    const { roles } = await this.client.searchRoles({ query }, queryOptions);
     return [...(roles?.map((role) => role.name) ?? [])]
       .sort((left, right) => left.localeCompare(right))
       .map((role) => this.toRoleMentionSuggestion(role, query));
@@ -558,23 +581,40 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
     };
   };
 
-  queryUsers = async (searchQuery: string, offset = 0) => {
+  queryUsers = async (
+    searchQuery: string,
+    offset = 0,
+    queryOptions: SearchQueryOptions = {},
+  ) => {
     const { filters, sort, options } = this.prepareQueryUsersParams(searchQuery, offset);
-    const { users } = await this.client.queryUsers(filters, sort, options);
+    const { users } = await this.client.queryUsers(filters, sort, options, queryOptions);
     return users;
   };
 
-  queryMembers = async (searchQuery: string, offset = 0) => {
+  queryMembers = async (
+    searchQuery: string,
+    offset = 0,
+    queryOptions: SearchQueryOptions = {},
+  ) => {
     const { filters, sort, options } = this.prepareQueryMembersParams(
       searchQuery,
       offset,
     );
-    const response = await this.channel.queryMembers(filters, sort, options);
+    const response = await this.channel.queryMembers(
+      filters,
+      sort,
+      options,
+      queryOptions,
+    );
 
     return response.members.map((member) => member.user) as UserResponse[];
   };
 
-  getUserSuggestionsPage = async (searchQuery: string, userOffset = 0) => {
+  getUserSuggestionsPage = async (
+    searchQuery: string,
+    userOffset = 0,
+    queryOptions: SearchQueryOptions = {},
+  ) => {
     if (!this.isMentionTypeAllowed('user')) {
       return {
         items: [],
@@ -587,7 +627,7 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
       this.allMembersLoadedWithInitialChannelQuery || !searchQuery;
 
     if (this.config.mentionAllAppUsers) {
-      users = await this.queryUsers(searchQuery, userOffset);
+      users = await this.queryUsers(searchQuery, userOffset, queryOptions);
     } else if (shouldSearchLocally) {
       const localUsers = this.searchMembersLocally(searchQuery);
       const items = localUsers
@@ -601,7 +641,7 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
             : undefined,
       };
     } else {
-      users = await this.queryMembers(searchQuery, userOffset);
+      users = await this.queryMembers(searchQuery, userOffset, queryOptions);
     }
 
     const items = users.map((user) => this.toUserSuggestion(user, searchQuery));
@@ -623,7 +663,11 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
     } satisfies UserGroupSearchCursor);
   };
 
-  getUserGroupSuggestionsPage = async (searchQuery: string, cursor?: string) => {
+  getUserGroupSuggestionsPage = async (
+    searchQuery: string,
+    cursor?: string,
+    queryOptions: SearchQueryOptions = {},
+  ) => {
     if (!this.isMentionTypeAllowed('user_group')) {
       return {
         items: [],
@@ -647,7 +691,7 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
       ...(userGroupCursor?.id_gt ? { id_gt: userGroupCursor.id_gt } : {}),
       ...(userGroupCursor?.name_gt ? { name_gt: userGroupCursor.name_gt } : {}),
     };
-    const { user_groups } = await this.client.searchUserGroups(options);
+    const { user_groups } = await this.client.searchUserGroups(options, queryOptions);
 
     return {
       items: user_groups.map((userGroup) =>
@@ -657,19 +701,27 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
     };
   };
 
-  async query(searchQuery: string) {
+  async query(searchQuery: string, queryOptions: SearchQueryOptions = {}) {
     const userOffset = this.offset ?? 0;
     const isFirstPage = userOffset === 0 && typeof this.userGroupCursor === 'undefined';
     const previousUserPaginationState = this.latestUserPaginationState;
     const previousUserGroupCursor = this.userGroupCursor;
     const [userResultsState, userGroupResultsState, roleSuggestionsState] =
       await Promise.allSettled([
-        this.getUserSuggestionsPage(searchQuery, userOffset),
-        this.getUserGroupSuggestionsPage(searchQuery, previousUserGroupCursor),
+        this.getUserSuggestionsPage(searchQuery, userOffset, queryOptions),
+        this.getUserGroupSuggestionsPage(
+          searchQuery,
+          previousUserGroupCursor,
+          queryOptions,
+        ),
         isFirstPage
-          ? this.getRoleMentionSuggestions(searchQuery)
+          ? this.getRoleMentionSuggestions(searchQuery, queryOptions)
           : Promise.resolve([] as RoleMentionSuggestion[]),
       ]);
+
+    // On abort the requests above reject and the fallback branches below would write
+    // empty results into the pagination cursors, corrupting them for the newer query.
+    if (queryOptions.signal?.aborted) return { items: [] };
 
     const userResults =
       userResultsState.status === 'fulfilled'
