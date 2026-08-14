@@ -15,20 +15,34 @@ export type Filters<
 > = QueryFilters<{
   [Property in keyof FCHelper<FilterConditions>]:
     | RequireOnlyOne<{
-        [Operator in FCHelper<FilterConditions>[Property]['operators']]: Operator extends
-          | '$in'
-          | '$nin'
-          ? Array<FCHelper<FilterConditions>[Property]['type']>
-          : Operator extends '$exists'
-            ? boolean
-            : Operator extends '$eq' | '$ne'
-              ? FCHelper<FilterConditions>[Property]['type'] | null
-              : FCHelper<FilterConditions>[Property]['type'];
+        [Operator in FCHelper<FilterConditions>[Property]['operators']]: FilterValue<
+          FCHelper<FilterConditions>[Property],
+          Operator
+        >;
       }>
     | ('$eq' extends FCHelper<FilterConditions>[Property]['operators']
-        ? FCHelper<FilterConditions>[Property]['type'] | null
+        ? FilterValue<FCHelper<FilterConditions>[Property], '$eq'>
         : never);
 }>;
+
+// The value an operator takes on one filter key. `valueTypes` carries the
+// per-operator overrides the spec publishes and is checked first, so an override
+// also suppresses the `| null` the $eq/$ne rule would otherwise add — the backend
+// rejects null wherever an override applies. Everything else follows the two
+// universal rules ($in/$nin take an array of the key's type, $exists takes a
+// boolean) and finally the key's own type.
+export type FilterValue<
+  Entry extends { type: any },
+  Operator extends string,
+> = Entry extends { valueTypes: Record<Operator, infer V> }
+  ? V
+  : Operator extends '$in' | '$nin'
+    ? Array<Entry['type']>
+    : Operator extends '$exists'
+      ? boolean
+      : Operator extends '$eq' | '$ne'
+        ? Entry['type'] | null
+        : Entry['type'];
 
 export type FCHelper<
   FilterConditions extends Record<string, { type: any; operators: string }>,
@@ -8507,6 +8521,7 @@ export interface QueryChannelsRequest {
     filter_tags: {
       type: string;
       operators: '$eq' | '$in';
+      valueTypes: { $eq: Array<string> };
     };
 
     frozen: {
@@ -8607,6 +8622,7 @@ export interface QueryChannelsRequest {
     members: {
       type: string;
       operators: '$eq' | '$in' | '$nin';
+      valueTypes: { $eq: Array<string> };
     };
 
     message_count: {
@@ -11166,6 +11182,7 @@ export interface SearchPayload {
     filter_tags: {
       type: string;
       operators: '$eq' | '$in';
+      valueTypes: { $eq: Array<string> };
     };
 
     frozen: {
@@ -11266,6 +11283,7 @@ export interface SearchPayload {
     members: {
       type: string;
       operators: '$eq' | '$in' | '$nin';
+      valueTypes: { $eq: Array<string> };
     };
 
     message_count: {
