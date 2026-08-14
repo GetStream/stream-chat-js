@@ -10,12 +10,13 @@ import type {
   EventType,
   LocalMessage,
   MarkReadRequest,
-  MarkReadResponseEvent,
+  MarkReadResponse,
   MessageResponse,
   ReactionRequest,
   ReadStateResponse,
   SendReactionRequest,
   SortParamRequest,
+  StreamResponse,
   ThreadStateResponse,
   UserResponse,
 } from './types';
@@ -76,7 +77,7 @@ const DEFAULT_ITEM_ORDER: SortParamRequest[] = [{ field: 'created_at', direction
 export type CustomThreadMarkReadRequestFn = (params: {
   thread: Thread;
   options?: MarkReadRequest;
-}) => Promise<{ event: MarkReadResponseEvent } | null> | void;
+}) => Promise<Partial<StreamResponse<MarkReadResponse>> | null> | void;
 
 export type ThreadInstanceConfig = {
   requestHandlers?: {

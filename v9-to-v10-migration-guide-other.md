@@ -235,12 +235,13 @@ Field-name typos in a typed filter are now compile errors. If you were relying o
 
 `ChannelFilters`, `MessageFilters`, `ReactionFilters`, `ThreadFilters`, `UserFilters` still exist as convenience aliases but derive from the constrained request types. The three remaining hand-written poll/reminder filter types are now migrated the same way:
 
-| Alias                   | Now derives from                                                                |
-| ----------------------- | ------------------------------------------------------------------------------- |
-| `QueryPollsFilters`     | `NonNullable<QueryPollsRequest['filter']>`                                      |
-| `QueryVotesFilters`     | `NonNullable<QueryPollVotesRequest['filter']>`                                  |
-| `ReminderFilters`       | `NonNullable<QueryRemindersRequest['filter']>`                                  |
-| `QueryRemindersOptions` | `QueryRemindersRequest` (was `Pager & { filter?, sort? }` — an exact duplicate) |
+| Alias               | Now derives from                               |
+| ------------------- | ---------------------------------------------- |
+| `QueryPollsFilters` | `NonNullable<QueryPollsRequest['filter']>`     |
+| `QueryVotesFilters` | `NonNullable<QueryPollVotesRequest['filter']>` |
+| `ReminderFilters`   | `NonNullable<QueryRemindersRequest['filter']>` |
+
+`QueryRemindersOptions` is **not** in that table: unlike the aliases above it does not survive at all. v9 defined it as `Pager & { filter?: ReminderFilters; sort?: ReminderSort }`; v10 removes it with no replacement alias — use `QueryRemindersRequest` directly. (It is not a pure rename: `sort` is now `SortParamRequest[]` and `filter` is operator-constrained, per the sections above.) `ReminderPaginator`'s second generic parameter moved with it, so `PaginatorOptions<ReminderResponseData, QueryRemindersOptions>` becomes `PaginatorOptions<ReminderResponseData, QueryRemindersRequest>`.
 
 Beyond the three breaking effects above, the field sets shifted to match the API spec:
 
@@ -496,7 +497,7 @@ _user?: ClientUser
 
 The following v9 helper types are removed from the public surface. They mostly served the old hand-rolled types and are no longer needed:
 
-`Readable<T>`, `KnownKeys<T>`, `PartializeKeys`, `UnknownType`, `MessageResponseBase`, `LocalMessageBase`, `FormatMessageResponse`, `ChannelAPIResponse` variants, `QueryChannelsAPIResponse`, `QueryReactionsOptions`/`APIResponse`, `TranslateResponse`, `ModerationResult`, `AutomodDetails`, `FlagsResponse`, `MessageFlagsResponse`, `FlagReport(s)Response`, `ReviewFlagReportResponse`, `BannedUsersResponse`, `FutureChannelBan(s)Response`, `HookEvent(s)Response`, `CheckPush/SQS/SNSResponse`, `CommandResponse` family, `ExportChannel*`/`ExportUsers*` types, push-preference types (`ChatLevelPushPreference`, `CallLevelPushPreference`, `PushPreferenceLevel`, `ChatPreferences`, `PushPreference`).
+`Readable<T>`, `KnownKeys<T>`, `PartializeKeys`, `UnknownType`, `MessageResponseBase`, `LocalMessageBase`, `FormatMessageResponse`, `ChannelAPIResponse` variants, `QueryChannelsAPIResponse`, `QueryReactionsOptions`/`QueryReactionsAPIResponse`, `TranslateResponse`, `ModerationResult`, `AutomodDetails`, `FlagsResponse`, `MessageFlagsResponse`, `FlagReport(s)Response`, `ReviewFlagReportResponse`, `BannedUsersResponse`, `FutureChannelBan(s)Response`, `HookEvent(s)Response`, `CheckPush/SQS/SNSResponse`, `CommandResponse` family, `ExportChannel*`/`ExportUsers*` types, push-preference types (`ChatLevelPushPreference`, `CallLevelPushPreference`, `PushPreferenceLevel`, `ChatPreferences`, `PushPreference`).
 
 For any of these that survive as a generated shape, the replacement is the generator's `Gen_*` re-export (re-exported through `./types` or `./gen/models`). For the type utilities (`Readable`, `KnownKeys`, `PartializeKeys`, `UnknownType`) there is no replacement — inline the built-in equivalent or drop the constraint.
 

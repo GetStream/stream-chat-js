@@ -5,8 +5,10 @@ import { generateThreadResponse } from '../test-utils/generateThreadResponse';
 import {
   type APIError,
   Channel,
+  type CustomMarkReadRequestFn,
   Event,
   MarkDeliveredResponse,
+  MarkReadResponse,
   StreamAPIError,
   StreamChat,
   StreamResponse,
@@ -383,6 +385,62 @@ describe('MessageDeliveryReporter', () => {
 
     vi.advanceTimersByTime(1000);
     expect(markDeliveredSpy).not.toHaveBeenCalled();
+  });
+
+  // `CustomMarkReadRequestFn` returns `Promise<Partial<StreamResponse<MarkReadResponse>> | null>`.
+  // The `Partial<>` is what lets a handler delegate straight to `channel.markRead` — that resolves
+  // to `StreamResponse<MarkReadResponse>` whose `event` is optional, so a stricter
+  // `{ event: MarkReadResponseEvent }` return type would reject the delegation at compile time.
+  describe('custom markReadRequest handler', () => {
+    const markReadEvent = {
+      channel_id: channelId,
+      channel_type: channelType,
+      cid: `${channelType}:${channelId}`,
+      created_at: new Date(),
+      type: 'message.read',
+    };
+
+    it('accepts a handler that delegates straight to channel.markRead', async () => {
+      const response = {
+        duration: '0.1ms',
+        event: markReadEvent,
+      } as StreamResponse<MarkReadResponse>;
+      const markReadSpy = vi.spyOn(channel, 'markRead').mockResolvedValue(response);
+
+      const markReadRequest: CustomMarkReadRequestFn = ({ channel, options }) =>
+        channel.markRead(options);
+      const handler = vi.fn(markReadRequest);
+      channel.configState.partialNext({ requestHandlers: { markReadRequest: handler } });
+
+      const result = await channel.markReadViaReporter({ thread_id: 'threadId' });
+
+      expect(handler).toHaveBeenCalledWith({
+        channel,
+        options: { thread_id: 'threadId' },
+      });
+      expect(markReadSpy).toHaveBeenCalledWith({ thread_id: 'threadId' });
+      expect(result).toBe(response);
+    });
+
+    it('accepts a handler that returns only an event, without a duration', async () => {
+      const markReadSpy = vi.spyOn(channel, 'markRead');
+      const handler = vi.fn(async () => ({ event: markReadEvent }));
+      channel.configState.partialNext({ requestHandlers: { markReadRequest: handler } });
+
+      const result = await channel.markReadViaReporter();
+
+      expect(handler).toHaveBeenCalled();
+      // the handler replaces the request entirely — the SDK must not also issue one
+      expect(markReadSpy).not.toHaveBeenCalled();
+      expect(result).toEqual({ event: markReadEvent });
+    });
+
+    it('normalizes a nullish handler result to null', async () => {
+      const handler = vi.fn(async () => undefined);
+      channel.configState.partialNext({ requestHandlers: { markReadRequest: handler } });
+
+      await expect(channel.markReadViaReporter()).resolves.toBeNull();
+    });
   });
 
   const receiveMessages = (count: number, startId = 0) => {
