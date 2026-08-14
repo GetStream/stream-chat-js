@@ -185,6 +185,106 @@ describe('OfflineSupportApi', () => {
     });
   });
 
+  describe('sync event replay policy', () => {
+    const CID = 'messaging:1';
+
+    const setupSync = ({
+      syncMaxEventCount,
+      eventCount,
+    }: {
+      syncMaxEventCount?: number;
+      eventCount: number;
+    }) => {
+      const offlineDb = new MockOfflineDB({ client, syncMaxEventCount });
+      offlineDb.getAllChannelCids.mockResolvedValue([CID]);
+      // Recent lastSyncedAt => within the 30 day window => enters the /sync branch.
+      offlineDb.getLastSyncedAt.mockResolvedValue(new Date().toISOString());
+      offlineDb.executeSqlBatch.mockResolvedValue(undefined);
+      offlineDb.upsertUserSyncStatus.mockResolvedValue(undefined);
+
+      const events = Array.from(
+        { length: eventCount },
+        () => ({ type: 'message.new', cid: CID }) as Event,
+      );
+      const syncSpy = vi
+        .spyOn(client, 'sync')
+        .mockResolvedValue({ events } as unknown as Awaited<
+          ReturnType<StreamChat['sync']>
+        >);
+      // handleEvent returns a query so the under-limit path reaches executeSqlBatch.
+      const handleEventSpy = vi
+        .spyOn(offlineDb, 'handleEvent')
+        .mockResolvedValue([{ sql: 'MOCK_QUERY', args: [] }]);
+
+      return { offlineDb, syncSpy, handleEventSpy };
+    };
+
+    // sync() is private; drive it directly for a focused unit test.
+    const runSync = (offlineDb: MockOfflineDB) =>
+      (offlineDb.syncManager as unknown as { sync: () => Promise<void> }).sync();
+
+    it('leaves the sync manager syncMaxEventCount undefined (no limit) when not provided', () => {
+      const offlineDb = new MockOfflineDB({ client });
+      expect(offlineDb.syncManager.syncMaxEventCount).toBeUndefined();
+    });
+
+    it('replays every event when no limit is set, even for a large payload', async () => {
+      const { offlineDb, handleEventSpy } = setupSync({ eventCount: 500 });
+
+      await runSync(offlineDb);
+
+      expect(handleEventSpy).toHaveBeenCalledTimes(500);
+      expect(offlineDb.executeSqlBatch).toHaveBeenCalledOnce();
+      expect(offlineDb.upsertUserSyncStatus).toHaveBeenCalledOnce();
+      expect(offlineDb.resetDB).not.toHaveBeenCalled();
+    });
+
+    it('treats a non-positive limit as no limit (still replays)', async () => {
+      const { offlineDb, handleEventSpy } = setupSync({
+        syncMaxEventCount: 0,
+        eventCount: 5,
+      });
+
+      await runSync(offlineDb);
+
+      expect(handleEventSpy).toHaveBeenCalledTimes(5);
+      expect(offlineDb.executeSqlBatch).toHaveBeenCalledOnce();
+    });
+
+    it('replays events into the DB when the payload is at or below the limit', async () => {
+      const { offlineDb, handleEventSpy } = setupSync({
+        syncMaxEventCount: 3,
+        eventCount: 3,
+      });
+
+      await runSync(offlineDb);
+
+      expect(handleEventSpy).toHaveBeenCalledTimes(3);
+      expect(offlineDb.executeSqlBatch).toHaveBeenCalledOnce();
+      // Timestamp is still advanced, and the DB is not reset.
+      expect(offlineDb.upsertUserSyncStatus).toHaveBeenCalledOnce();
+      expect(offlineDb.resetDB).not.toHaveBeenCalled();
+    });
+
+    it('skips event replay when the payload exceeds the limit but still advances the timestamp', async () => {
+      const { offlineDb, handleEventSpy } = setupSync({
+        syncMaxEventCount: 3,
+        eventCount: 4,
+      });
+
+      await runSync(offlineDb);
+
+      // Replay is skipped entirely: no per-event handling, no batch write.
+      expect(handleEventSpy).not.toHaveBeenCalled();
+      expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+      // The last-sync timestamp is still advanced so the same oversized payload
+      // is not re-fetched and skipped on every subsequent sync.
+      expect(offlineDb.upsertUserSyncStatus).toHaveBeenCalledOnce();
+      // Skipping is NOT a reset — inactive channels wait for a future query.
+      expect(offlineDb.resetDB).not.toHaveBeenCalled();
+    });
+  });
+
   describe('queries and query utilities', () => {
     let offlineDb: MockOfflineDB;
 
