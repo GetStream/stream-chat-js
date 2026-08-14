@@ -20,16 +20,29 @@ export class OfflineDBSyncManager {
     new Map();
   private client: StreamChat;
   private offlineDb: AbstractOfflineDB;
+  /**
+   * Optional positive cap on the number of events a single `/sync` response may
+   * contain before this manager skips event replay into local storage and relies
+   * on the reconnect-time channel refresh (queryChannels + `channel.watch()`) to
+   * bring visible surfaces up to date.
+   *
+   * `undefined` or any non-positive value means "no limit" and event replay always
+   * runs with whatever maximum the server decides to return.
+   */
+  public readonly syncMaxEventCount?: number;
 
   constructor({
     client,
     offlineDb,
+    syncMaxEventCount,
   }: {
     client: StreamChat;
     offlineDb: AbstractOfflineDB;
+    syncMaxEventCount?: number;
   }) {
     this.client = client;
     this.offlineDb = offlineDb;
+    this.syncMaxEventCount = syncMaxEventCount;
   }
 
   /**
@@ -173,14 +186,29 @@ export class OfflineDBSyncManager {
           await this.offlineDb.resetDB();
         } else {
           const result = await this.client.sync(cids, lastSyncedAtDate.toISOString());
-          const queryPromises = result.events.map((event) =>
-            this.offlineDb.handleEvent({ event, execute: false }),
-          );
-          const queriesArray = await Promise.all(queryPromises);
-          const queries = queriesArray.flat() as ExecuteBatchDBQueriesType;
 
-          if (queries.length) {
-            await this.offlineDb.executeSqlBatch(queries);
+          // Opt-in positive cap owned by this manager; undefined/non-positive = no limit.
+          const { syncMaxEventCount } = this;
+          const exceedsLimit =
+            typeof syncMaxEventCount === 'number' &&
+            syncMaxEventCount > 0 &&
+            result.events.length > syncMaxEventCount;
+          if (exceedsLimit) {
+            this.client.logger(
+              'warn',
+              `Skipping sync event replay: received ${result.events.length} events, which exceeds the configured limit of ${syncMaxEventCount}. Visible channels are refreshed on reconnect instead.`,
+              { tags: ['sync', 'offline'] },
+            );
+          } else {
+            const queryPromises = result.events.map((event) =>
+              this.offlineDb.handleEvent({ event, execute: false }),
+            );
+            const queriesArray = await Promise.all(queryPromises);
+            const queries = queriesArray.flat() as ExecuteBatchDBQueriesType;
+
+            if (queries.length) {
+              await this.offlineDb.executeSqlBatch(queries);
+            }
           }
         }
       }

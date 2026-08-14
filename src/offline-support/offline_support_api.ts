@@ -40,9 +40,24 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   public syncManager: OfflineDBSyncManager;
   public state: StateStore<OfflineDBState>;
 
-  constructor({ client }: { client: StreamChat }) {
+  constructor({
+    client,
+    syncMaxEventCount,
+  }: {
+    client: StreamChat;
+    /**
+     * Optional positive cap forwarded to the {@link OfflineDBSyncManager}, which
+     * owns sync. `undefined` or any non-positive value means "no limit". See
+     * {@link OfflineDBSyncManager.syncMaxEventCount}.
+     */
+    syncMaxEventCount?: number;
+  }) {
     this.client = client;
-    this.syncManager = new OfflineDBSyncManager({ client, offlineDb: this });
+    this.syncManager = new OfflineDBSyncManager({
+      client,
+      offlineDb: this,
+      syncMaxEventCount,
+    });
     this.state = new StateStore<OfflineDBState>({
       initialized: false,
       userId: this.client.userID,
