@@ -30,7 +30,7 @@ The `secret` parameter, `client.secret`, `client._isUsingServerAuth()`, and all 
 
 The following `StreamChat` methods no longer exist. All were server-side or admin-only. Rewrites should either delete the call site or move it to the server SDK:
 
-`updateAppSettings`, `revokeUserToken`, `revokeUsersToken`, `testPushSettings`, `testSQSSettings`, `testSNSSettings`, `createToken`, `devToken`, user-groups mutations (`createUserGroup` / `getUserGroup` / `searchUserGroups` / `updateUserGroup` / `deleteUserGroup` / `addUserGroupMembers` / `removeUserGroupMembers`) — the read path is renamed, see below, `upsertPushProvider`, `deletePushProvider`, `listPushProviders`, `setPushPreferences`, `_queryFlags`, `_queryFlagReports`, `_reviewFlagReport`, `queryFutureChannelBans`-write paths, `getHookEvents`, `partialUpdateUser`, `deleteUser`, `restoreUsers`, `reactivateUser`, `reactivateUsers`, `deactivateUser`, `deactivateUsers`, `exportUser`, `getSharedLocations`, `translate`, `translateMessage`, `updateFlags`, `queryCampaigns`, `_createImportURL`, `_createImport`, `_getImport`, `_listImports`, `commitMessage`, `queryTeamUsageStats`, `updateLocation`, `updateChannelsBatch`, `deletePredefinedFilter`, `setRetentionPolicy`, `deleteRetentionPolicy`, `getRetentionPolicy`, `getRetentionPolicyRuns`, hand-rolled reminder client methods (`createReminder`/`updateReminder`/`deleteReminder` — see note under `Reminder` handling; the inherited `queryReminders` from `ChatApi` remains but with the generated request shape, not the v9 `QueryRemindersOptions`), `createCommand`/`getCommand`/`updateCommand`/`deleteCommand`/`listCommands`/`createChannelType`/`getChannelType`/`updateChannelType`/`deleteChannelType`/`listChannelTypes`/`exportChannel`/`exportChannels`/`exportUsers`/`getExportChannelStatus`/`getTask`/`enrichURL`/`sendUserCustomEvent`, `deleteChannels`, `deleteUsers`, `createRole`/`listRoles`/`deleteRole` (only `searchRoles` remains, inherited), `getPermission`/`createPermission`/`updatePermission`/`deletePermission`/`listPermissions`, `getBlockList` (only `listBlockLists`/`createBlockList`/`updateBlockList`/`deleteBlockList` remain, inherited), `verifyWebhook`, `verifyAndParseWebhook`, `parseSqs`, `parseSns` (moved — see below), `campaign`, `segment`, `channelBatchUpdater`, `validateServerSideAuth`, `createSegment`, `createUserSegment`, `createChannelSegment`, `getSegment`, `updateSegment`, `addSegmentTargets`, `querySegmentTargets`, `removeSegmentTargets`, `querySegments`, `deleteSegment`, `segmentTargetExists`, `createCampaign`, `getCampaign`, `startCampaign`, `updateCampaign`, `deleteCampaign`, `stopCampaign`, `_normalizeDate`. Note: `queryDrafts`, `queryPolls`, `queryPollVotes`, `queryMessageFlags`, and `markChannelsDelivered` — all of which were hand-rolled in v9 — now come from `ChatApi` inheritance with generated request shapes; they still exist on `client`.
+`updateAppSettings`, `revokeUserToken`, `revokeUsersToken`, `testPushSettings`, `testSQSSettings`, `testSNSSettings`, `createToken`, `devToken`, user-groups mutations (`createUserGroup` / `getUserGroup` / `searchUserGroups` / `updateUserGroup` / `deleteUserGroup` / `addUserGroupMembers` / `removeUserGroupMembers`) — the read path is renamed, see below, `upsertPushProvider`, `deletePushProvider`, `listPushProviders`, `setPushPreferences`, `_queryFlags`, `_queryFlagReports`, `_reviewFlagReport`, `queryFutureChannelBans`-write paths, `getHookEvents`, `partialUpdateUser`, `deleteUser`, `restoreUsers`, `reactivateUser`, `reactivateUsers`, `deactivateUser`, `deactivateUsers`, `exportUser`, `getSharedLocations`, `translate`, `translateMessage`, `updateFlags`, `queryCampaigns`, `_createImportURL`, `_createImport`, `_getImport`, `_listImports`, `commitMessage`, `queryTeamUsageStats`, `updateLocation`, `updateChannelsBatch`, `deletePredefinedFilter`, `setRetentionPolicy`, `deleteRetentionPolicy`, `getRetentionPolicy`, `getRetentionPolicyRuns`, hand-rolled reminder client methods (`createReminder`/`updateReminder`/`deleteReminder` — see note under `Reminder` handling; the inherited `queryReminders` from `ChatApi` remains but with the generated request shape, not the v9 `QueryRemindersOptions`), `createCommand`/`getCommand`/`updateCommand`/`deleteCommand`/`listCommands`/`createChannelType`/`getChannelType`/`updateChannelType`/`deleteChannelType`/`listChannelTypes`/`exportChannel`/`exportChannels`/`exportUsers`/`getExportChannelStatus`/`getTask`/`enrichURL`/`sendUserCustomEvent`, `deleteChannels`, `deleteUsers`, `createRole`/`listRoles`/`deleteRole` (only `searchRoles` remains, inherited), `getPermission`/`createPermission`/`updatePermission`/`deletePermission`/`listPermissions`, `getBlockList` (only `listBlockLists`/`createBlockList`/`updateBlockList`/`deleteBlockList` remain, inherited), `verifyWebhook`, `verifyAndParseWebhook`, `parseSqs`, `parseSns` (removed outright — see below), `campaign`, `segment`, `channelBatchUpdater`, `validateServerSideAuth`, `createSegment`, `createUserSegment`, `createChannelSegment`, `getSegment`, `updateSegment`, `addSegmentTargets`, `querySegmentTargets`, `removeSegmentTargets`, `querySegments`, `deleteSegment`, `segmentTargetExists`, `createCampaign`, `getCampaign`, `startCampaign`, `updateCampaign`, `deleteCampaign`, `stopCampaign`, `_normalizeDate`. Note: `queryDrafts`, `queryPolls`, `queryPollVotes`, `queryMessageFlags`, and `markChannelsDelivered` — all of which were hand-rolled in v9 — now come from `ChatApi` inheritance with generated request shapes; they still exist on `client`.
 
 ### Renamed / signature-changed
 
@@ -396,6 +396,22 @@ client.uploadImage_(uri, name?, contentType?, user?, axiosRequestConfig?);
 
 `uploadFile_` and `uploadImage_` are the direct replacements for v9 code that passed positional args (uri + name + contentType + user + axios config). Ports should prefer these unless the caller wants to switch to the request-object shape.
 
+The **type of `uri` narrowed**, on both these methods and their `Channel` counterparts:
+
+```ts
+// v9
+uploadFile(uri: string | NodeJS.ReadableStream | Buffer | File, ...)
+uploadImage(uri: string | NodeJS.ReadableStream | File, ...)
+
+// v10
+uploadFile_(uri: string | File, ...)
+uploadImage_(uri: string | File, ...)
+```
+
+v10 dropped the `form-data` dependency for the platform's global `FormData`, and with it every node-only input: `Buffer` and readable streams are no longer accepted, and there is no supported node upload path at all (the `Blob` branch is gated on `typeof window !== 'undefined'`, so a cast does not help). Backend uploads move to `@stream-io/node-sdk` — see [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md#uploads-from-node-are-gone).
+
+Browser `File` / `Blob` uploads are unchanged. On the React-Native path (a URI string), `contentType` is no longer inferred for you — pass it explicitly.
+
 #### `client.deleteFile` / `client.deleteImage`
 
 ```ts
@@ -528,27 +544,26 @@ client.updateBlockList(request);
 client.deleteBlockList(request);
 ```
 
-#### Webhook / SNS / SQS helpers
+#### Webhook / SNS / SQS helpers — removed outright
 
-Moved off the client to module-level exports (`src/signing.ts`):
+An intermediate v10 release candidate moved these off the client to module-level exports on `src/signing.ts`. **The final v10 removes them entirely** — there is no webhook, SNS, or SQS surface left in `stream-chat`:
 
 ```ts
-// v9
+// v9 — client methods, used client.secret implicitly
 client.verifyWebhook(requestBody, xSignature);
 client.verifyAndParseWebhook(rawBody, signature);
 client.parseSqs(messageBody);
 client.parseSns(notificationBody);
 
-// v10 — module exports; return WSEvent
+// v10-rc — module exports (do not migrate to this; it no longer resolves)
 import { verifySignature, verifyAndParseWebhook, parseSqs, parseSns } from 'stream-chat';
 
-verifySignature(body, signature, secret);
-verifyAndParseWebhook(rawBody, signature, secret);
-parseSqs(messageBody); // SQS deliveries carry no application-level HMAC — decode-only
-parseSns(notificationBody); // SNS deliveries carry no application-level HMAC — decode-only
+// v10 — nothing to import. Move the handler to @stream-io/node-sdk.
 ```
 
-The v9 `verifyWebhook` / `verifyAndParseWebhook` reused `client.secret` implicitly; the v10 module-level replacements require the secret to be passed in. `parseSqs` / `parseSns` do not take a `secret` — Stream never attaches an application-level HMAC to SQS/SNS deliveries; use `verifyAndParseWebhook` for HTTP webhooks when you need signature verification.
+Also gone from `stream-chat`, from the same module: `verifySignature`, `CheckSignature`, `gunzipPayload`, `decodeSqsPayload`, `decodeSnsPayload`, `parseEvent`, `InvalidWebhookError`, and `InvalidWebhookErrorMessages`. `signing.ts` now exports exactly one function, `UserFromToken` — the client-side JWT payload decoder. The JWT minting helpers (`JWTUserToken`, `JWTServerToken`, `DevToken`) are gone too.
+
+Webhook verification is inherently server-side work: it needs the API secret, which v10 refuses to hold. Port the handler to [`@stream-io/node-sdk`](https://github.com/GetStream/stream-node), which keeps the v9 method names on the client (`client.verifyWebhook`, `client.verifyAndParseWebhook`, `client.parseSqs`, `client.parseSns`) and takes the secret from construction. See [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md#webhook--sns--sqs) for the mapping table.
 
 ---
 
@@ -778,6 +793,30 @@ channel.markReadViaReporter(data?: MarkReadRequest);   // batched through Messag
 
 Migration rule: if you want to preserve the v9 batching behavior, rename `markRead` → `markReadViaReporter`. If your v9 code was calling `markAsReadRequest`, rename it to `markRead`.
 
+**Return types changed too**, and the batched path is the one that bites:
+
+```ts
+// v9 — both fields required
+channel.markRead(...)            : Promise<EventAPIResponse | null>              // { duration, event }
+
+// v10
+channel.markRead(...)            : Promise<StreamResponse<MarkReadResponse>>     // event? is optional
+channel.markReadViaReporter(...) : Promise<Partial<StreamResponse<MarkReadResponse>> | null>
+```
+
+On the reporter path **every** field is optional, `duration` included, because a caller-supplied `markReadRequest` handler is allowed to return a partial response. So v9 code like `const { event } = await channel.markRead(); event.cid` needs narrowing after the rename:
+
+```ts
+const response = await channel.markReadViaReporter();
+if (response?.event) {
+  // …
+}
+```
+
+`client.messageDeliveryReporter.markRead(collection, options?)` has the same return type — `MessageDeliveryReporter` is part of the public surface.
+
+`EventAPIResponse` itself no longer exists; see [the shape-change note](./v9-to-v10-migration-guide-type-renames.md#eventapiresponse--one-type-per-endpoint) for why `MarkReadResponseEvent` is not interchangeable with a WS `Event`.
+
 #### `channel.markUnread`
 
 ```ts
@@ -853,7 +892,7 @@ channel.deleteDraft(options?: { parent_id? });
 channel.getDraft(options?: { parent_id? });
 
 // v10 — inherited/override with generated shape
-channel.createDraft(request: Gen_CreateDraftRequest);   // { message: DraftPayload }
+channel.createDraft(request: Gen_CreateDraftRequest);   // { message: MessageRequest }
 channel.deleteDraft(request?: { parent_id? });
 channel.getDraft(request?: { parent_id? });             // inherited unchanged
 channel._createDraft(request);                          // same shape
@@ -888,7 +927,11 @@ channel.off(callback: EventHandler): void;
 
 Callers that imported `EventTypes` need to switch to `EventType` (`EventType = Event['type'] | 'all'`). The `CustomEventTypes` interface is still exported — augment it to add custom event-type keys, same as v9.
 
-#### `channel.sendFile` / `channel.sendImage` / `channel.deleteFile` / `channel.deleteImage` / `channel.getPinnedMessages` / `channel.getMessagesById` / `channel.lastRead` / `channel.countUnread` / `channel.countUnreadMentions` / `channel.lastMessage` / `channel.watch` / `channel.query`
+#### `channel.sendFile` / `channel.sendImage`
+
+Argument list unchanged; the **first parameter's type narrowed** to `string | File` (v9: `string | NodeJS.ReadableStream | Buffer | File` for `sendFile`, `string | NodeJS.ReadableStream | File` for `sendImage`). Same reason and same remedy as [`client.uploadFile` / `client.uploadImage`](#clientuploadfile--clientuploadimage) above: `form-data` is gone, node sources are not accepted, and `contentType` must be passed explicitly on the React-Native URI path.
+
+#### `channel.deleteFile` / `channel.deleteImage` / `channel.getPinnedMessages` / `channel.getMessagesById` / `channel.lastRead` / `channel.countUnread` / `channel.countUnreadMentions` / `channel.lastMessage` / `channel.watch` / `channel.query`
 
 Signatures unchanged.
 
@@ -1029,7 +1072,7 @@ from an RC rather than from v9, the change is a pure rename:
 | ids `ChannelPaginatorsOrchestrator:default-handler:*` | `ChannelManager:default-handler:*`  |
 | module `stream-chat` (unchanged)                      | `stream-chat` (unchanged)           |
 
-Nothing else in the RC API changed, and no deprecated alias is exported — the old names are gone.
+No deprecated alias is exported — the old names are gone. For the RC deltas outside `ChannelManager`, see [Coming from a v10 release candidate — removed type aliases](#coming-from-a-v10-release-candidate--removed-type-aliases) at the end of this guide.
 
 ### Removed helpers (were exported from `stream-chat`)
 
@@ -1183,6 +1226,36 @@ logger.info(msg, extra);
 `_setToken`, `_setUser`, `_setupConnection` are still present but `_setUser` now takes `TokenManagerMinimalUser`; `_setupConnection` is REMOVED.
 
 ---
+
+## Coming from a v10 release candidate — removed type aliases
+
+Skip this section if you are upgrading from v9; everything here is already covered above. It exists for integrations pinned to the `rc` dist-tag, because `10.0.0-rc.1` / `rc.2` still exported five aliases that v10 final deletes outright. **No back-compat alias remains for any of them.**
+
+| Removed after `rc.2`    | Replacement                     | Detail                                                                                                                     |
+| ----------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `EventAPIResponse`      | one generated type per endpoint | [shape-change note](./v9-to-v10-migration-guide-type-renames.md#eventapiresponse--one-type-per-endpoint)                   |
+| `APIErrorResponse`      | `APIError`                      | [shape-change note](./v9-to-v10-migration-guide-type-renames.md#apierrorresponse--apierror) — `StatusCode` → `status_code` |
+| `DraftMessagePayload`   | `MessageRequest`                | [shape-change note](./v9-to-v10-migration-guide-type-renames.md#draftmessagepayload--messagerequest)                       |
+| `PartializeKeys`        | none                            | type utility; inline the built-in equivalent — see `v9-to-v10-migration-guide-other.md`                                    |
+| `QueryRemindersOptions` | `QueryRemindersRequest`         | see `v9-to-v10-migration-guide-other.md`                                                                                   |
+
+`QueryRemindersOptions` is the one that moved twice: it was the full `Pager & { filter?, sort? }` shape in `rc.1`, a back-compat alias to `QueryRemindersRequest` in `rc.2`, and deleted in final. `ReminderPaginator`'s second generic parameter moved with it — `PaginatorOptions<ReminderResponseData, QueryRemindersOptions>` becomes `PaginatorOptions<ReminderResponseData, QueryRemindersRequest>`.
+
+### Custom mark-read request handlers
+
+`ChannelInstanceConfig.requestHandlers.markReadRequest` and its `ThreadInstanceConfig` counterpart are v10-only surface (there is nothing equivalent in v9), but their return type changed after `rc.2`:
+
+```ts
+// rc.1 / rc.2
+type CustomMarkReadRequestFn = (params) => Promise<EventAPIResponse | null>;
+
+// v10 final
+type CustomMarkReadRequestFn = (
+  params,
+) => Promise<Partial<StreamResponse<MarkReadResponse>> | null>;
+```
+
+The `Partial<>` is deliberate: it lets a handler return just `{ event }` without fabricating a `duration`, and it means a handler can delegate straight to the SDK — `markReadRequest: ({ channel, options }) => channel.markRead(options)` — which the `rc` signature rejected because `MarkReadResponse.event` is optional. `CustomThreadMarkReadRequestFn` takes `{ thread, options? }` instead of `{ channel, options? }` and additionally permits a `void` return.
 
 ## Logging (applies to every class)
 

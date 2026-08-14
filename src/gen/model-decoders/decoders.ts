@@ -120,6 +120,8 @@ decoders['BanInfoResponse'] = (input?: { [key: string]: any }) => {
 
     expires: { type: 'DatetimeType', isSingle: true },
 
+    channel: { type: 'ChannelMetadata', isSingle: true },
+
     created_by: { type: 'UserResponse', isSingle: true },
 
     user: { type: 'UserResponse', isSingle: true },
@@ -183,21 +185,6 @@ decoders['BulkAppealResult'] = (input?: { [key: string]: any }) => {
   return decode(typeMappings, input);
 };
 
-decoders['CallResponse'] = (input?: { [key: string]: any }) => {
-  const typeMappings: TypeMapping = {
-    created_at: { type: 'DatetimeType', isSingle: true },
-
-    updated_at: { type: 'DatetimeType', isSingle: true },
-
-    ended_at: { type: 'DatetimeType', isSingle: true },
-
-    starts_at: { type: 'DatetimeType', isSingle: true },
-
-    created_by: { type: 'UserResponse', isSingle: true },
-  };
-  return decode(typeMappings, input);
-};
-
 decoders['ChannelConfigWithInfo'] = (input?: { [key: string]: any }) => {
   const typeMappings: TypeMapping = {
     created_at: { type: 'DatetimeType', isSingle: true },
@@ -205,6 +192,13 @@ decoders['ChannelConfigWithInfo'] = (input?: { [key: string]: any }) => {
     updated_at: { type: 'DatetimeType', isSingle: true },
 
     commands: { type: 'Command', isSingle: false },
+  };
+  return decode(typeMappings, input);
+};
+
+decoders['ChannelContextResponse'] = (input?: { [key: string]: any }) => {
+  const typeMappings: TypeMapping = {
+    created_by: { type: 'UserResponse', isSingle: true },
   };
   return decode(typeMappings, input);
 };
@@ -278,6 +272,8 @@ decoders['ChannelMemberResponse'] = (input?: { [key: string]: any }) => {
 
     deleted_at: { type: 'DatetimeType', isSingle: true },
 
+    future_channel_ban_expires: { type: 'DatetimeType', isSingle: true },
+
     invite_accepted_at: { type: 'DatetimeType', isSingle: true },
 
     invite_rejected_at: { type: 'DatetimeType', isSingle: true },
@@ -285,6 +281,13 @@ decoders['ChannelMemberResponse'] = (input?: { [key: string]: any }) => {
     pinned_at: { type: 'DatetimeType', isSingle: true },
 
     user: { type: 'UserResponse', isSingle: true },
+  };
+  return decode(typeMappings, input);
+};
+
+decoders['ChannelMetadata'] = (input?: { [key: string]: any }) => {
+  const typeMappings: TypeMapping = {
+    last_message_at: { type: 'DatetimeType', isSingle: true },
   };
   return decode(typeMappings, input);
 };
@@ -499,8 +502,6 @@ decoders['ChatMessageResponse'] = (input?: { [key: string]: any }) => {
     thread_participants: { type: 'UserResponse', isSingle: false },
 
     draft: { type: 'ChatDraftResponse', isSingle: true },
-
-    member: { type: 'ChannelMemberResponse', isSingle: true },
 
     pinned_by: { type: 'UserResponse', isSingle: true },
 
@@ -775,6 +776,15 @@ decoders['FeedsReactionResponse'] = (input?: { [key: string]: any }) => {
   return decode(typeMappings, input);
 };
 
+decoders['FeedsShareResponse'] = (input?: { [key: string]: any }) => {
+  const typeMappings: TypeMapping = {
+    created_at: { type: 'DatetimeType', isSingle: true },
+
+    user: { type: 'UserResponse', isSingle: true },
+  };
+  return decode(typeMappings, input);
+};
+
 decoders['FeedsV3ActivityResponse'] = (input?: { [key: string]: any }) => {
   const typeMappings: TypeMapping = {
     created_at: { type: 'DatetimeType', isSingle: true },
@@ -804,6 +814,8 @@ decoders['FeedsV3ActivityResponse'] = (input?: { [key: string]: any }) => {
     expires_at: { type: 'DatetimeType', isSingle: true },
 
     friend_reactions: { type: 'FeedsReactionResponse', isSingle: false },
+
+    latest_shares: { type: 'FeedsShareResponse', isSingle: false },
 
     current_feed: { type: 'FeedsFeedResponse', isSingle: true },
 
@@ -1224,8 +1236,6 @@ decoders['MessageResponse'] = (input?: { [key: string]: any }) => {
 
     draft: { type: 'DraftResponse', isSingle: true },
 
-    member: { type: 'ChannelMemberResponse', isSingle: true },
-
     pinned_by: { type: 'UserResponse', isSingle: true },
 
     poll: { type: 'PollResponseData', isSingle: true },
@@ -1295,8 +1305,6 @@ decoders['MessageWithChannelResponse'] = (input?: { [key: string]: any }) => {
 
     draft: { type: 'DraftResponse', isSingle: true },
 
-    member: { type: 'ChannelMemberResponse', isSingle: true },
-
     pinned_by: { type: 'UserResponse', isSingle: true },
 
     poll: { type: 'PollResponseData', isSingle: true },
@@ -1308,6 +1316,21 @@ decoders['MessageWithChannelResponse'] = (input?: { [key: string]: any }) => {
     reminder: { type: 'ReminderResponseData', isSingle: true },
 
     shared_location: { type: 'SharedLocationResponseData', isSingle: true },
+  };
+  return decode(typeMappings, input);
+};
+
+decoders['ModerationCallResponse'] = (input?: { [key: string]: any }) => {
+  const typeMappings: TypeMapping = {
+    created_at: { type: 'DatetimeType', isSingle: true },
+
+    updated_at: { type: 'DatetimeType', isSingle: true },
+
+    ended_at: { type: 'DatetimeType', isSingle: true },
+
+    starts_at: { type: 'DatetimeType', isSingle: true },
+
+    created_by: { type: 'UserResponse', isSingle: true },
   };
   return decode(typeMappings, input);
 };
@@ -2043,7 +2066,7 @@ decoders['ReviewQueueItemResponse'] = (input?: { [key: string]: any }) => {
 
     assigned_to: { type: 'UserResponse', isSingle: true },
 
-    call: { type: 'CallResponse', isSingle: true },
+    call: { type: 'ModerationCallResponse', isSingle: true },
 
     entity_creator: { type: 'EntityCreatorResponse', isSingle: true },
 
@@ -2113,8 +2136,6 @@ decoders['SearchResultMessage'] = (input?: { [key: string]: any }) => {
 
     draft: { type: 'DraftResponse', isSingle: true },
 
-    member: { type: 'ChannelMemberResponse', isSingle: true },
-
     pinned_by: { type: 'UserResponse', isSingle: true },
 
     poll: { type: 'PollResponseData', isSingle: true },
@@ -2147,6 +2168,8 @@ decoders['SearchUserGroupsResponse'] = (input?: { [key: string]: any }) => {
 decoders['SendMessageResponse'] = (input?: { [key: string]: any }) => {
   const typeMappings: TypeMapping = {
     message: { type: 'MessageResponse', isSingle: true },
+
+    channel_context: { type: 'ChannelContextResponse', isSingle: true },
   };
   return decode(typeMappings, input);
 };

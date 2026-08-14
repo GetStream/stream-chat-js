@@ -1,4 +1,3 @@
-import FormData from 'form-data';
 import type {
   LocalMessage,
   MessageRequest,
@@ -47,30 +46,6 @@ export const chatCodes = {
   TOKEN_EXPIRED: 40,
   WS_CLOSED_SUCCESS: 1000,
 };
-
-function isReadableStream(obj: unknown): obj is NodeJS.ReadStream {
-  return (
-    obj !== null &&
-    typeof obj === 'object' &&
-    ((obj as NodeJS.ReadStream).readable ||
-      typeof (obj as NodeJS.ReadStream)._read === 'function')
-  );
-}
-
-function isBuffer(obj: unknown): obj is Buffer {
-  return (
-    obj != null &&
-    (obj as Buffer).constructor != null &&
-    // @ts-expect-error expected
-    typeof obj.constructor.isBuffer === 'function' &&
-    // @ts-expect-error expected
-    obj.constructor.isBuffer(obj)
-  );
-}
-
-function isFileWebAPI(uri: unknown): uri is File {
-  return typeof window !== 'undefined' && 'File' in window && uri instanceof File;
-}
 
 export function isOwnUser(
   user?: OwnUserResponse | UserResponse,
@@ -126,22 +101,23 @@ export const userHasReadReceipts = (client: StreamChat) =>
   client.user?.privacy_settings?.read_receipts?.enabled ?? true;
 
 export function addFileToFormData(
-  uri: string | NodeJS.ReadableStream | Buffer | File,
+  uri: string | Blob,
   name?: string,
   contentType?: string,
 ) {
   const data = new FormData();
 
-  if (isReadableStream(uri) || isBuffer(uri) || isFileWebAPI(uri) || isBlobWebAPI(uri)) {
+  if (isBlobWebAPI(uri)) {
     if (name) data.append('file', uri, name);
     else data.append('file', uri);
   } else {
+    // React Native path
     data.append('file', {
       uri,
-      name: name || (uri as string).split('/').reverse()[0],
+      name: name || uri.split('/').reverse()[0],
       contentType: contentType || undefined,
       type: contentType || undefined,
-    });
+    } as unknown as Blob);
   }
 
   return data;
@@ -709,7 +685,7 @@ export const debounce = <T extends (...args: any[]) => any>(
   timeout = 0,
   { leading = false, trailing = true }: { leading?: boolean; trailing?: boolean } = {},
 ): DebouncedFunc<T> => {
-  let runningTimeout: null | NodeJS.Timeout = null;
+  let runningTimeout: null | ReturnType<typeof setTimeout> = null;
   let argsForTrailingExecution: Parameters<T> | null = null;
   let lastResult: ReturnType<T> | undefined;
 
@@ -802,7 +778,7 @@ export const generateChannelTempCid = (channelType: string, members: string[]) =
 export const isDate = (value: unknown): value is Date => !!(value as Date).getTime;
 
 export const isLocalMessage = (message: unknown): message is LocalMessage =>
-  isDate((message as LocalMessage).created_at);
+  typeof (message as LocalMessage | undefined)?.status === 'string';
 
 export const runDetached = <T>(
   callback: Promise<void | T>,
@@ -835,7 +811,7 @@ export const isBlockedMessage = (message: LocalMessage) =>
 export const isBouncedMessage = (message: LocalMessage) =>
   message.type === 'error' && message?.moderation?.action === 'bounce';
 
-export const getEnv = (envKey: keyof NodeJS.ProcessEnv) => {
+export const getEnv = (envKey: string) => {
   if (
     typeof process !== 'undefined' &&
     (Object.hasOwn(process, 'env') || 'env' in process)

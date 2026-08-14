@@ -30,7 +30,6 @@ import type {
   CreateDraftResponse,
   DeleteMessageOptions,
   Event,
-  EventAPIResponse,
   EventHandler,
   EventPayload,
   EventType,
@@ -38,6 +37,7 @@ import type {
   GetRepliesRequest,
   LocalMessage,
   MarkReadRequest,
+  MarkReadResponse,
   MarkUnreadRequest,
   MessagePaginationOptions,
   MessageRequest,
@@ -52,6 +52,7 @@ import type {
   SendMessageOptions,
   SendReactionRequest,
   SharedLocation,
+  StreamResponse,
   UnBanUserOptions,
   UpdateChannelPartialRequest,
   UpdateLiveLocationRequest,
@@ -132,7 +133,7 @@ export type CustomDeleteMessageRequestFn = (
 export type CustomMarkReadRequestFn = (params: {
   channel: Channel;
   options?: MarkReadRequest;
-}) => Promise<EventAPIResponse | null>;
+}) => Promise<Partial<StreamResponse<MarkReadResponse>> | null>;
 
 export type ChannelInstanceConfig = {
   requestHandlers?: {
@@ -486,13 +487,13 @@ export class Channel extends ChannelApi {
    *
    * @param uri - File source: URL string, `File`, `Buffer`, or readable stream (Node).
    * @param name - File name sent in the multipart body (optional).
-   * @param contentType - MIME type; defaults are applied when omitted (optional).
+   * @param contentType - MIME type; required for React Native URI uploads (optional).
    * @param user - User payload appended to the form as JSON (optional).
    * @param axiosRequestConfig - Axios per-request config, merged after upload defaults, e.g. `onUploadProgress`, `signal` from `AbortController` (optional).
    * @returns A promise resolving to `{ file: string, ... }` with the CDN URL.
    */
   sendFile(
-    uri: string | NodeJS.ReadableStream | Buffer | File,
+    uri: string | File,
     name?: string,
     contentType?: string,
     user?: UserResponse,
@@ -513,13 +514,13 @@ export class Channel extends ChannelApi {
    *
    * @param uri - Image source: URL string, `File`, or readable stream (Node). For `Buffer` uploads, use `sendFile` toward the channel file endpoint instead.
    * @param name - File name sent in the multipart body (optional).
-   * @param contentType - MIME type (optional).
+   * @param contentType - MIME type; required for React Native URI uploads (optional).
    * @param user - User payload appended to the form as JSON (optional).
    * @param axiosRequestConfig - Axios per-request config, merged after upload defaults, e.g. `onUploadProgress`, `signal` (optional).
    * @returns A promise resolving to `{ file: string, ... }` with the CDN URL.
    */
   sendImage(
-    uri: string | NodeJS.ReadableStream | File,
+    uri: string | File,
     name?: string,
     contentType?: string,
     user?: UserResponse,

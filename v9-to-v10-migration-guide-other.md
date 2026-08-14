@@ -12,10 +12,10 @@
 ## TL;DR
 
 - **Server-side is gone.** If you construct with a `secret` or call server-only admin endpoints, switch to `@stream-io/node-sdk`. The construction guide has the full list — every feature module below that was server-only is dropped for the same reason.
-- One barrel removed from the package root, one added: **`./events` is gone; `./logger` is new.** The `./campaign`, `./channel_batch_updater`, and `./segment` barrels are still exported but the modules are emptied (they contain only a comment pointing at the server SDK) — importing anything by name from them will fail.
+- Two barrels removed from the package root, one added: **`./events` and `./base64` are gone; `./logger` is new.** `./signing` survives with exactly one export left, `UserFromToken`. The `./campaign`, `./channel_batch_updater`, and `./segment` barrels are still exported but the modules are emptied (they contain only a comment pointing at the server SDK) — importing anything by name from them will fail.
 - `Event` (type name) is kept, but its shape widened: `Event = WSEvent | LocalEvent | keyof CustomEventTypes`. `EventPayload<'<type>'>` narrows to a specific event.
 - `EventTypes` (plural) renamed to `EventType` (singular). `CustomEventTypes` interface is unchanged — augment it to add custom event-type keys, same as v9.
-- Filter payloads now carry **per-endpoint operator constraints** (`Query*FilterConditions` types) — previously-permissive filter objects may stop type-checking.
+- Filter payloads now carry **per-endpoint operator constraints** (inline `Filters<{ … }>` on each request type) — previously-permissive filter objects may stop type-checking. Only one operator per field is allowed, and `null` is no longer a valid `$in` element. `QueryPollsFilters`, `QueryVotesFilters`, and `ReminderFilters` were the last hand-written holdouts and now derive from their request types too.
 - `ChannelState.membership` initializes to `undefined` (was `{}`); `ChannelState.typing` values are now `EventPayload<'typing.start' | 'typing.stop'>` (were `Event`); read receipts merged with the generated `ReadStateResponse`.
 - Composer attachments now nest `mime_type` / `file_size` / `duration` under `.custom`; `LocationComposer` preview `end_at` is a `Date` (was ISO string).
 - `Role` type renamed to `RoleName`.
@@ -27,9 +27,10 @@
 
 `src/index.ts` barrel changes:
 
-| Removed export barrel      | Reason                                                                                                                                        |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `export * from './events'` | `src/events.ts` deleted along with `EVENT_MAP`. Event-type set is now derived from the generated event decoders, no longer a hand-rolled map. |
+| Removed export barrel      | Reason                                                                                                                                                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `export * from './events'` | `src/events.ts` deleted along with `EVENT_MAP`. Event-type set is now derived from the generated event decoders, no longer a hand-rolled map.                                                                                               |
+| `export * from './base64'` | `src/base64.ts` deleted along with the `base64-js` dependency. `encodeBase64` / `decodeBase64` are gone; `UserFromToken` now decodes through the global `atob`. Take base64 helpers from a package of your own if you were importing these. |
 
 | Emptied module (barrel still present, no named exports) | Reason                                                        |
 | ------------------------------------------------------- | ------------------------------------------------------------- |
@@ -41,7 +42,13 @@
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `export * from './logger'` | `chatLoggerSystem`, `LogLevel`, `LogLevelEnum`, `Sink`, `ScopedLogger`, `ChatLoggerScope`, `ConfigureLoggersOptions`. See logging guide. |
 
-Any consumer doing `import { Campaign, Segment, ChannelBatchUpdater, EVENT_MAP } from 'stream-chat'` will fail to resolve. Delete those imports; there is no drop-in replacement in this SDK. `CustomEventTypes` is still exported from `stream-chat` and its interface is unchanged — augment it to declare custom event-type keys the same way as in v9.
+Any consumer doing `import { Campaign, Segment, ChannelBatchUpdater, EVENT_MAP, encodeBase64, decodeBase64 } from 'stream-chat'` will fail to resolve. Delete those imports; there is no drop-in replacement in this SDK. `CustomEventTypes` is still exported from `stream-chat` and its interface is unchanged — augment it to declare custom event-type keys the same way as in v9.
+
+### `./signing` is down to one export
+
+The barrel is still there, but it holds a **single** function: `UserFromToken`. Everything else it used to carry — `JWTUserToken`, `JWTServerToken`, `DevToken`, `verifySignature`, `CheckSignature`, `verifyAndParseWebhook`, `parseSqs`, `parseSns`, `gunzipPayload`, `decodeSqsPayload`, `decodeSnsPayload`, `parseEvent`, `InvalidWebhookError`, `InvalidWebhookErrorMessages` — needed the API secret or a Node builtin, and went out with the server-side surface. See [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md).
+
+`UserFromToken` itself changed implementation: it decodes the JWT payload with the global `atob` instead of the removed `base64-js` helpers. It runs on the `connectUser` path, so older React Native / Hermes targets — Hermes only gained `atob` / `btoa` around React Native 0.74 — must install a base64 polyfill before the first `connectUser`, or connecting throws `ReferenceError: atob is not defined`. Verify with `typeof atob` on the target rather than by version number; browsers, Node 16+, Bun, and Deno all have it natively.
 
 ---
 
@@ -67,7 +74,7 @@ Beyond the individual server-side methods listed in the methods guide, entire su
 | **App-settings mutations**      | `updateAppSettings`, `testPushSettings`, `testSQSSettings`, `testSNSSettings`, `translate`, `translateMessage`, `getHookEvents`                                                                                                                         | removed. `getAppSettings` remains.                                                                                                                                                                                                                                                         |
 | **User admin**                  | `partialUpdateUser`, `deleteUser`, `restoreUsers`, `reactivateUser(s)`, `deactivateUser(s)`, `exportUser`, `revokeUserToken`, `revokeUsersToken`, `sendUserCustomEvent`, `deleteUsers`                                                                  | removed                                                                                                                                                                                                                                                                                    |
 | **Flag admin**                  | `_queryFlags`, `_queryFlagReports`, `_reviewFlagReport`, `updateFlags`                                                                                                                                                                                  | removed. `queryMessageFlags` remains via `ChatApi` inheritance (generated request shape). User/message flagging by the connected user remains via `client.flagMessage` / `client.flagUser`.                                                                                                |
-| **Webhook / SQS / SNS helpers** | `client.verifyWebhook`, `client.verifyAndParseWebhook`, `client.parseSqs`, `client.parseSns` (used `client.secret` implicitly)                                                                                                                          | Moved to module exports on `./signing`, `secret` now required explicitly. See methods guide for signatures.                                                                                                                                                                                |
+| **Webhook / SQS / SNS helpers** | `client.verifyWebhook`, `client.verifyAndParseWebhook`, `client.parseSqs`, `client.parseSns` (used `client.secret` implicitly)                                                                                                                          | removed. An intermediate v10 rc moved them to module exports on `./signing`; the final v10 drops them entirely, along with `verifySignature` / `CheckSignature` / `InvalidWebhookError`. Port the handler to `@stream-io/node-sdk`.                                                        |
 | **Misc.**                       | `commitMessage`, `undeleteMessage`, `getSharedLocations`, `updateLocation`, `getUnreadCountBatch`, `getBlockList`, `enrichURL`, `_normalizeDate`, `validateServerSideAuth`, `_setupConnection`, `_enrichAxiosOptions`, `_logApiRequest`, `_logApiError` | removed                                                                                                                                                                                                                                                                                    |
 
 If your call site was gated on `client._isUsingServerAuth()` (which is also removed), delete the branch — it was only ever true on the server-side path.
@@ -173,35 +180,122 @@ Because the v10 generic on `channel.on<T extends EventType | string>` accepts an
 
 ## Filter payloads — per-endpoint operator constraints
 
-New generated types under `src/gen/models/filter-conditions.ts` narrow what operators are legal per field per endpoint:
+The generated client is produced with `typed_filters` enabled, so each request interface declares its filter inline as `Filters<{ … }>` (the helper lives at the top of `src/gen/models/index.ts`) rather than as a permissive `Record<string, any>`. The filter spec names one entry per legal field:
 
-```
-QueryBannedUsersPayloadFilterConditions
-QueryChannelsRequestFilterConditions
-QueryMembersPayloadFilterConditions
-QueryMessageFlagsPayloadFilterConditions
-QueryReactionsRequestFilter
-QueryThreadsRequestFilter
-QueryUsersPayloadFilterConditions
-SearchPayloadFilterConditions
-SearchPayloadMessageFilterConditions
+```ts
+// src/gen/models/index.ts — QueryRemindersRequest
+filter?: Filters<{
+  channel_cid: { type: string; operators: '$eq' | '$in' };
+  created_at: { type: Date | string; operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte' };
+  message_id: { type: string; operators: '$eq' | '$in' };
+  remind_at: { type: Date | string; operators: '$eq' | '$exists' | '$gt' | '$gte' | '$lt' | '$lte' };
+}>;
 ```
 
-Each entry looks like `{ field_name: { type: <ts-type>; operators: '$eq' | '$in' | ... } }`. The public request types (`QueryChannelsRequest`, `QueryReactionsRequest`, `QueryBannedUsersPayload`, ...) are wrapped with `WithTypedFilters<Base, FilterConditions>` so `filter_conditions` at the call site can only use operator/value combinations declared in the corresponding constraint.
+Endpoints carrying a typed filter, and the property it sits on:
 
-**Breaking effect:** any v9 filter object that used an operator not declared for a given field will stop type-checking:
+| Request type                                                                                                                                                                                                                   | Property                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
+| `QueryBannedUsersPayload`, `QueryChannelsRequest`, `QueryMembersPayload`, `QueryMessageFlagsPayload`, `QueryUsersPayload`                                                                                                      | `filter_conditions`                                 |
+| `SearchPayload`                                                                                                                                                                                                                | `filter_conditions` and `message_filter_conditions` |
+| `QueryAppealsRequest`, `QueryDraftsRequest`, `QueryModerationConfigsRequest`, `QueryPollsRequest`, `QueryPollVotesRequest`, `QueryReactionsRequest`, `QueryRemindersRequest`, `QueryReviewQueueRequest`, `QueryThreadsRequest` | `filter`                                            |
+
+**Breaking effect 1 — undeclared operators.** Any v9 filter object using an operator not declared for a field stops type-checking:
 
 ```ts
 // v9 — accepted (typing was permissive)
 client.queryChannels({ frozen: { $exists: true } as any }, sort);
 
-// v10 — QueryChannelsRequestFilterConditions.frozen only declares `{ type: boolean; operators: '$eq' }`.
-// This now fails to compile — use { frozen: true } or { frozen: { $eq: true } } instead.
+// v10 — `frozen` declares only `{ type: boolean; operators: '$eq' }`.
+// Use { frozen: true } or { frozen: { $eq: true } } instead.
 ```
 
-Field-name typos in `filter_conditions` are now compile errors for endpoints that ship a constraint type (previously only some endpoints narrowed field names). If you were relying on the v9 permissive shape, casting through `as any` is the escape hatch; the correct fix is to use the declared operators.
+**Breaking effect 2 — one operator per field.** The generated shape uses `RequireOnlyOne`, so combining operators on a single field is now an error. Use `$and` to intersect:
 
-`ChannelFilters`, `MessageFilters`, `ReactionFilters`, `UserFilters` etc. still exist as convenience aliases but derive from the constrained request types.
+```ts
+// ✗ v10 — rejected
+const bad: ReminderFilters = { created_at: { $gt: a, $lt: b } };
+// ✓ v10
+const good: ReminderFilters = {
+  $and: [{ created_at: { $gt: a } }, { created_at: { $lt: b } }],
+};
+```
+
+**Breaking effect 3 — `null` is no longer a valid array element.** In v9 the hand-written filter types built on `PrimitiveFilter<T> = T | null`, which made `$in` an array of _nullable_ elements. The generated shape puts the nullability outside the array:
+
+```ts
+// v9: $in?: (string | null)[]      v10: $in: string[] | null
+const bad: ReminderFilters = { message_id: { $in: ['a', null] } }; // ✗ now rejected
+const good: ReminderFilters = { message_id: { $in: ['a', 'b'] } }; // ✓
+```
+
+Field-name typos in a typed filter are now compile errors. If you were relying on the v9 permissive shape, casting is the escape hatch; the correct fix is to use the declared fields and operators.
+
+### Filter aliases now derive from the request types
+
+`ChannelFilters`, `MessageFilters`, `ReactionFilters`, `ThreadFilters`, `UserFilters` still exist as convenience aliases but derive from the constrained request types. The three remaining hand-written poll/reminder filter types are now migrated the same way:
+
+| Alias               | Now derives from                               |
+| ------------------- | ---------------------------------------------- |
+| `QueryPollsFilters` | `NonNullable<QueryPollsRequest['filter']>`     |
+| `QueryVotesFilters` | `NonNullable<QueryPollVotesRequest['filter']>` |
+| `ReminderFilters`   | `NonNullable<QueryRemindersRequest['filter']>` |
+
+`QueryRemindersOptions` is **not** in that table: unlike the aliases above it does not survive at all. v9 defined it as `Pager & { filter?: ReminderFilters; sort?: ReminderSort }`; v10 removes it with no replacement alias — use `QueryRemindersRequest` directly. (It is not a pure rename: `sort` is now `SortParamRequest[]` and `filter` is operator-constrained, per the sections above.) `ReminderPaginator`'s second generic parameter moved with it, so `PaginatorOptions<ReminderResponseData, QueryRemindersOptions>` becomes `PaginatorOptions<ReminderResponseData, QueryRemindersRequest>`.
+
+Beyond the three breaking effects above, the field sets shifted to match the API spec:
+
+- **Removed** — `ReminderFilters.user_id`, `QueryPollsFilters.user_id`, `QueryVotesFilters.created_by_id`. These were never declared by the endpoints; filter on a supported field instead (e.g. `created_by_id` for polls).
+- **Added** — `QueryVotesFilters` gains `poll_id`, and `QueryPollsFilters` gains a `custom.${string}` index signature for filtering on custom poll data.
+
+The legacy building blocks (`QueryFilter`, `PrimitiveFilter`, `QueryFilters`, `RequireOnlyOne`) remain exported for callers who compose their own filter types against `itemMatchesFilter` and the paginators.
+
+### Removed — `ArrayOneOrMore` and `ArrayTwoOrMore`
+
+The two non-empty-array utilities are gone from `stream-chat`. In v9 they existed only to constrain the logical operators — `$and` / `$nor` required at least one element (`ArrayOneOrMore`), `$or` at least two (`ArrayTwoOrMore`):
+
+```ts
+// v9 — src/types.ts
+export type ArrayOneOrMore<T> = { 0: T } & Array<T>;
+export type ArrayTwoOrMore<T> = { 0: T; 1: T } & Array<T>;
+```
+
+**Why they were dropped.** That encoding is only satisfied by a value whose length TypeScript knows statically, so any array _variable_ is rejected. It probably wasn't a common use-case for the logical operators, but the helpers were generically named, and cause issues when used in other places, for example:
+
+```ts
+declare const ids: string[];
+
+// TS2322: Property '0' is missing in type 'string[]'
+const a: ChannelFilters = { members: { $in: ids } };
+// same
+const b: ChannelFilters = { members: { $in: [...ids] } };
+// only literals and non-empty tuples pass
+const c: ChannelFilters = { members: { $in: ['u1'] } };
+```
+
+No non-empty encoding avoids this: TypeScript cannot prove a `T[]` has at least one element, so the guarantee costs a hard compile error on working code. An empty array stays a runtime 400 with a clear message, which is the cheaper failure.
+
+**What to do.** Use a plain `Array<T>` (or `T[]`) wherever you referenced them:
+
+```ts
+// v9
+import type { ArrayOneOrMore, ArrayTwoOrMore } from 'stream-chat';
+
+type MyLogicalOperators<T> = {
+  $and?: ArrayOneOrMore<MyFilters<T>>;
+  $nor?: ArrayOneOrMore<MyFilters<T>>;
+  $or?: ArrayTwoOrMore<MyFilters<T>>;
+};
+
+// v10
+type MyLogicalOperators<T> = {
+  $and?: Array<MyFilters<T>>;
+  $nor?: Array<MyFilters<T>>;
+  $or?: Array<MyFilters<T>>;
+};
+```
+
+This mirrors what the SDK itself now does in `ExtendedQueryLogicalOperators` (`src/pagination/FilterBuilder.ts`). The change is widening, not narrowing: everything that compiled in v9 still compiles, and the array-variable cases above now compile too. The only thing you lose is the compile error on an empty (or single-element `$or`) array, which the API rejects at runtime anyway.
 
 ---
 
@@ -403,7 +497,7 @@ _user?: ClientUser
 
 The following v9 helper types are removed from the public surface. They mostly served the old hand-rolled types and are no longer needed:
 
-`Readable<T>`, `KnownKeys<T>`, `PartializeKeys`, `UnknownType`, `MessageResponseBase`, `LocalMessageBase`, `FormatMessageResponse`, `ChannelAPIResponse` variants, `QueryChannelsAPIResponse`, `QueryReactionsOptions`/`APIResponse`, `TranslateResponse`, `ModerationResult`, `AutomodDetails`, `FlagsResponse`, `MessageFlagsResponse`, `FlagReport(s)Response`, `ReviewFlagReportResponse`, `BannedUsersResponse`, `FutureChannelBan(s)Response`, `HookEvent(s)Response`, `CheckPush/SQS/SNSResponse`, `CommandResponse` family, `ExportChannel*`/`ExportUsers*` types, push-preference types (`ChatLevelPushPreference`, `CallLevelPushPreference`, `PushPreferenceLevel`, `ChatPreferences`, `PushPreference`).
+`Readable<T>`, `KnownKeys<T>`, `PartializeKeys`, `UnknownType`, `MessageResponseBase`, `LocalMessageBase`, `FormatMessageResponse`, `ChannelAPIResponse` variants, `QueryChannelsAPIResponse`, `QueryReactionsOptions`/`QueryReactionsAPIResponse`, `TranslateResponse`, `ModerationResult`, `AutomodDetails`, `FlagsResponse`, `MessageFlagsResponse`, `FlagReport(s)Response`, `ReviewFlagReportResponse`, `BannedUsersResponse`, `FutureChannelBan(s)Response`, `HookEvent(s)Response`, `CheckPush/SQS/SNSResponse`, `CommandResponse` family, `ExportChannel*`/`ExportUsers*` types, push-preference types (`ChatLevelPushPreference`, `CallLevelPushPreference`, `PushPreferenceLevel`, `ChatPreferences`, `PushPreference`).
 
 For any of these that survive as a generated shape, the replacement is the generator's `Gen_*` re-export (re-exported through `./types` or `./gen/models`). For the type utilities (`Readable`, `KnownKeys`, `PartializeKeys`, `UnknownType`) there is no replacement — inline the built-in equivalent or drop the constraint.
 
@@ -415,7 +509,7 @@ For any of these that survive as a generated shape, the replacement is the gener
 
 For each source file that touches the SDK:
 
-1. **Delete removed imports.** `EVENT_MAP`, `Campaign*`, `Segment*`, `ChannelBatchUpdater`, `Role` (rename), `MessageResponseBase`, `FormatMessageResponse`, `PredefinedFilterSort(Param)`, and any of the removed type utilities. `Event` and `CustomEventTypes` are kept — do not delete them.
+1. **Delete removed imports.** `EVENT_MAP`, `Campaign*`, `Segment*`, `ChannelBatchUpdater`, `encodeBase64`, `decodeBase64`, the webhook / JWT helpers from `./signing` (`verifyAndParseWebhook`, `parseSqs`, `parseSns`, `verifySignature`, `CheckSignature`, `InvalidWebhookError`, `JWTUserToken`, `JWTServerToken`, `DevToken`), `Role` (rename), `MessageResponseBase`, `FormatMessageResponse`, `PredefinedFilterSort(Param)`, and any of the removed type utilities. `Event`, `CustomEventTypes`, and `UserFromToken` are kept — do not delete them.
 2. **Rename `Role` → `RoleName`** at every import + annotation site.
 3. **Rewrite event-handler callback types where needed.** `Event` is still valid (its union widened) — prefer `EventPayload<'…'>` for narrowed access. Custom event-type augmentation still goes on `CustomEventTypes`, unchanged from v9. Rename any imports of the plural `EventTypes` to the singular `EventType`.
 4. **Guard `channel.state.membership` reads** with `?.` — it's `undefined` on freshly constructed channels.
@@ -425,3 +519,6 @@ For each source file that touches the SDK:
 8. **Rename `ReminderManager` call-site keys** `messageId` → `message_id`. Same for any place you were shaping a reminder-event body.
 9. **Delete any code that used `client.secret`, `client._isUsingServerAuth()`, `client.setAnonymousUser`, `client.markAllRead`, or assigned to `client.userID`.** Move server-side callers to `@stream-io/node-sdk`.
 10. **Rewrite `client.revokeTokens(isoString)`** to `client.revokeTokens(new Date(isoString))`.
+11. **Fix upload call sites.** `channel.sendFile` / `sendImage` / `client.uploadFile_` / `uploadImage_` take `string | File` now — no `Buffer`, no readable streams. Pass `contentType` explicitly when the source is a React-Native URI string.
+12. **Delete bundler shims** added for `stream-chat`'s Node-only deps (`crypto`, `https`, `zlib`, `jsonwebtoken`, `ws`) — `package.json#browser` is gone because nothing imports them anymore.
+13. **Polyfill `atob`** if your React Native / Hermes target lacks it (`typeof atob === 'undefined'`); `UserFromToken` depends on it during `connectUser`.
