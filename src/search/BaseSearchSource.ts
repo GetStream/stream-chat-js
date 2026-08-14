@@ -68,10 +68,6 @@ export interface SearchSourceSync<T = any> extends ISearchSource<T> {
   search(text?: string): void;
 }
 
-const DEFAULT_SHORT_QUERY_DEBOUNCE_MS = 500;
-const DEFAULT_LONG_QUERY_DEBOUNCE_MS = 300;
-const DEFAULT_SHORT_QUERY_MAX_LENGTH = 2;
-
 // Debounce defaults are resolved by resolveDebounceOptions, not here.
 const DEFAULT_SEARCH_SOURCE_OPTIONS: Required<
   Omit<SearchSourceOptions, keyof DebounceOptions>
@@ -92,25 +88,24 @@ const resolveDebounceOptions = ({
   longQueryDebounceMs,
   shortQueryMaxLength,
 }: DebounceOptions) => ({
-  shortQueryDebounceMs:
-    shortQueryDebounceMs ?? debounceMs ?? DEFAULT_SHORT_QUERY_DEBOUNCE_MS,
-  longQueryDebounceMs:
-    longQueryDebounceMs ?? debounceMs ?? DEFAULT_LONG_QUERY_DEBOUNCE_MS,
-  shortQueryMaxLength: shortQueryMaxLength ?? DEFAULT_SHORT_QUERY_MAX_LENGTH,
+  shortQueryDebounceMs: shortQueryDebounceMs ?? debounceMs ?? 500,
+  longQueryDebounceMs: longQueryDebounceMs ?? debounceMs ?? 300,
+  shortQueryMaxLength: shortQueryMaxLength ?? 2,
 });
 
 abstract class BaseSearchSourceBase<
   T,
-  TExecuteResult extends void | Promise<void>,
+  R extends void | Promise<void>,
 > implements ISearchSource<T> {
   state: StateStore<SearchSourceState<T>>;
   pageSize: number;
   protected allowEmptySearchString: boolean;
   protected resetOnNewSearchQuery: boolean;
-  protected shortQueryDebounceMs: number = DEFAULT_SHORT_QUERY_DEBOUNCE_MS;
-  protected longQueryDebounceMs: number = DEFAULT_LONG_QUERY_DEBOUNCE_MS;
-  protected shortQueryMaxLength: number = DEFAULT_SHORT_QUERY_MAX_LENGTH;
-  protected searchDebounced!: DebouncedFunc<(searchString?: string) => TExecuteResult>;
+  // assigned by setDebounceOptions, which the constructor always calls
+  protected shortQueryDebounceMs!: number;
+  protected longQueryDebounceMs!: number;
+  protected shortQueryMaxLength!: number;
+  protected searchDebounced!: DebouncedFunc<(searchString?: string) => R>;
   abstract readonly type: SearchSourceType;
 
   protected constructor(options?: SearchSourceOptions) {
@@ -127,7 +122,7 @@ abstract class BaseSearchSourceBase<
     this.setDebounceOptions(options ?? {});
   }
 
-  abstract executeQuery(newSearchString?: string): TExecuteResult;
+  abstract executeQuery(newSearchString?: string): R;
 
   setDebounceOptions = (options: DebounceOptions = {}) => {
     const resolved = resolveDebounceOptions(options);
@@ -180,7 +175,7 @@ abstract class BaseSearchSourceBase<
     return this.state.getLatestValue().isLoading;
   }
 
-  get initialState() {
+  get initialState(): SearchSourceState<T> {
     return {
       hasNext: true,
       isActive: false,
