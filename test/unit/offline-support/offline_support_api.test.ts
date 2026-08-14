@@ -816,6 +816,60 @@ describe('OfflineSupportApi', () => {
         });
       });
 
+      describe('hardDeleteMessages', () => {
+        beforeEach(() => {
+          offlineDb.hardDeleteMessage.mockResolvedValue([['DELETE hard']]);
+          offlineDb.executeSqlBatch.mockResolvedValue(undefined);
+        });
+
+        afterEach(() => {
+          vi.resetAllMocks();
+        });
+
+        it('hard deletes every id and runs all queries as a single batch', async () => {
+          const result = await offlineDb.hardDeleteMessages({ ids: ['a', 'b'] });
+
+          expect(offlineDb.hardDeleteMessage).toHaveBeenCalledTimes(2);
+          expect(offlineDb.hardDeleteMessage).toHaveBeenCalledWith({
+            id: 'a',
+            execute: false,
+          });
+          expect(offlineDb.hardDeleteMessage).toHaveBeenCalledWith({
+            id: 'b',
+            execute: false,
+          });
+          // Each id's queries are collected (execute:false) and flushed in one transaction.
+          expect(offlineDb.executeSqlBatch).toHaveBeenCalledTimes(1);
+          expect(offlineDb.executeSqlBatch).toHaveBeenCalledWith([
+            ['DELETE hard'],
+            ['DELETE hard'],
+          ]);
+          expect(result).toEqual([['DELETE hard'], ['DELETE hard']]);
+        });
+
+        it('returns the collected queries without executing them when execute is false', async () => {
+          const result = await offlineDb.hardDeleteMessages({
+            ids: ['a'],
+            execute: false,
+          });
+
+          expect(offlineDb.hardDeleteMessage).toHaveBeenCalledWith({
+            id: 'a',
+            execute: false,
+          });
+          expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+          expect(result).toEqual([['DELETE hard']]);
+        });
+
+        it('is a no-op for an empty id set (touches neither the delete nor the batch)', async () => {
+          const result = await offlineDb.hardDeleteMessages({ ids: [] });
+
+          expect(offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
+          expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+          expect(result).toEqual([]);
+        });
+      });
+
       describe('handleRead', () => {
         let readEvent: Event;
 

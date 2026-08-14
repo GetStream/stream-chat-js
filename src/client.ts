@@ -1328,6 +1328,14 @@ export class StreamChat extends ChatApi {
     options?: QueryChannelsRequest,
     stateOptions: ChannelStateOptions = {},
   ): Promise<Channel[] | QueryChannelsResponseWithChannels> {
+    // TODO(perf/cleanup): prefer a `memberIds` snapshot over `headItems.map` here too — see the
+    // matching TODO in channel.query() for the full rationale.
+    const candidateIdsByCid = new Map<string, ReadonlySet<string>>();
+    for (const cid of Object.keys(this.activeChannels)) {
+      const head = this.activeChannels[cid]?.messagePaginator?.headItems;
+      if (head?.length)
+        candidateIdsByCid.set(cid, new Set(head.map((message) => message.id)));
+    }
     const queryChannelsResponse = await this.queryChannels(options);
     const channels = queryChannelsResponse.channels;
 
@@ -1345,7 +1353,12 @@ export class StreamChat extends ChatApi {
       });
     }
 
-    const hydratedChannels = this.hydrateActiveChannels(channels, stateOptions, options);
+    const hydratedChannels = this.hydrateActiveChannels(
+      channels,
+      stateOptions,
+      options,
+      candidateIdsByCid,
+    );
 
     if (stateOptions.withResponse) {
       return {
@@ -1401,6 +1414,7 @@ export class StreamChat extends ChatApi {
     channelsFromApi: ChannelStateResponseFields[] = [],
     stateOptions: ChannelStateOptions = {},
     queryChannelsOptions?: ChannelOptions,
+    candidateIdsByCid?: Map<string, ReadonlySet<string>>,
   ) {
     const { skipInitialization, offlineMode = false } = stateOptions;
     const channels: Channel[] = [];
@@ -1441,6 +1455,8 @@ export class StreamChat extends ChatApi {
         c.messagePaginator.seedFirstPageSync(
           channelState.messages.map(formatMessage),
           requestedPageSize,
+          undefined,
+          { reconcile: true, candidateIds: candidateIdsByCid?.get(c.cid) },
         );
       }
 

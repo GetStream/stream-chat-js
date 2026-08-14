@@ -3426,3 +3426,146 @@ describe('share location', () => {
 		});
 	});
 });
+
+describe('Channel.query — initial page size', () => {
+	let client;
+	let channel;
+
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client.user = { id: 'user' };
+		const channelResponse = generateChannel();
+		channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
+		channel.initialized = true;
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('honors the paginator pageSize for the INITIAL open, not the server default', async () => {
+		channel.messagePaginator.pageSize = 25;
+		const getOrCreate = vi
+			.spyOn(channel, 'getOrCreate')
+			.mockResolvedValue(
+				generateChannel({ channel: { id: channel.id, type: channel.type } }),
+			);
+
+		await channel.query({}, 'latest');
+
+		// The initial open asks the server for exactly pageSize messages (not its larger default).
+		expect(getOrCreate).toHaveBeenCalledWith(
+			expect.objectContaining({ messages: { limit: 25 } }),
+		);
+	});
+
+	it('respects an explicit messages.limit (reconnect sizes it to the loaded window)', async () => {
+		channel.messagePaginator.pageSize = 25;
+		const getOrCreate = vi
+			.spyOn(channel, 'getOrCreate')
+			.mockResolvedValue(
+				generateChannel({ channel: { id: channel.id, type: channel.type } }),
+			);
+
+		// e.g. channel.reload → watch({ messages: { limit: items.length } }) — passed through as-is.
+		await channel.query({ messages: { limit: 80 } }, 'latest');
+
+		expect(getOrCreate).toHaveBeenCalledWith(
+			expect.objectContaining({ messages: { limit: 80 } }),
+		);
+	});
+});
+
+describe('Channel.reload', () => {
+	let client;
+	let channel;
+
+	const at = (minute) => new Date(Date.UTC(2020, 0, 1, 0, minute, 0));
+	// Messages need the channel cid so the main-list paginator's ingestItem filter ({ cid }) accepts them.
+	const msg = (id, minute, overrides = {}) =>
+		generateMsg({ id, cid: channel.cid, date: at(minute), ...overrides });
+
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client.user = { id: 'user' };
+		const channelResponse = generateChannel();
+		channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
+		channel.initialized = true;
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('reconciles a message hard-deleted while offline and keeps one that arrived during the fetch', async () => {
+		// m3 (newest loaded) is the one hard-deleted while offline.
+		seedLatestWindow(channel, [msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
+		expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
+
+		// The fold + reconcile now lives in query() → seedFirstPageSync (shared with the channel-list
+		// re-hydrate and React's recoverState); reload() is just watch() with the full-window limit.
+		// query() snapshots the loaded ids BEFORE this fetch, so a brand-new message that lands via WS
+		// DURING it (below) — absent from the server page — must survive. This exercises the whole
+		// snapshot-before-await + reconcile chain end to end, not the paginator in isolation.
+		vi.spyOn(channel, 'getOrCreate').mockImplementation(async () => {
+			channel.messagePaginator.ingestItem(formatMessage(msg('m4', 4)));
+			return generateChannel({
+				channel: { id: channel.id, type: channel.type },
+				messages: [msg('m1', 1), msg('m2', 2)],
+			});
+		});
+
+		await channel.reload();
+
+		// m3 (in the pre-fetch snapshot, absent from the page) removed; m4 (arrived after) kept.
+		expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['m1', 'm2', 'm4']);
+	});
+
+	it('requests the full loaded window (items.length), not the channel-list page size', async () => {
+		seedLatestWindow(channel, [msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
+		const watchSpy = vi
+			.spyOn(channel, 'watch')
+			.mockResolvedValue({ messages: [msg('m1', 1), msg('m2', 2), msg('m3', 3)] });
+
+		await channel.reload();
+
+		expect(watchSpy).toHaveBeenCalledWith({ messages: { limit: 3 } });
+	});
+
+	it('preserves a failed (unsent) message that a disjoint rebuild would otherwise drop', async () => {
+		seedLatestWindow(channel, [
+			msg('m1', 1),
+			msg('failed', 2, { status: 'failed' }),
+			msg('m3', 3),
+		]);
+		// A page that shares no id with the loaded window is disjoint, so the fold rebuilds and discards
+		// local-only messages — reload must re-ingest the failed one so it is not lost.
+		vi.spyOn(channel, 'getOrCreate').mockImplementation(async () =>
+			generateChannel({
+				channel: { id: channel.id, type: channel.type },
+				messages: [msg('n8', 8), msg('n9', 9)],
+			}),
+		);
+
+		await channel.reload();
+
+		expect(channel.messagePaginator.getItem('failed')).toBeDefined();
+	});
+
+	it('ignores a re-entrant reload while one is already in flight', async () => {
+		seedLatestWindow(channel, [msg('m1', 1)]);
+		let resolveWatch;
+		const watchSpy = vi.spyOn(channel, 'watch').mockReturnValue(
+			new Promise((resolve) => {
+				resolveWatch = () => resolve({ messages: [msg('m1', 1)] });
+			}),
+		);
+
+		const inFlight = channel.reload();
+		await channel.reload(); // guarded — returns immediately, must not call watch again
+		resolveWatch();
+		await inFlight;
+
+		expect(watchSpy).toHaveBeenCalledTimes(1);
+	});
+});

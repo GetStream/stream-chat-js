@@ -747,6 +747,34 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
+   * Hard-delete a set of messages by id in a single transaction. A convenience over N individual
+   * {@link hardDeleteMessage} calls: collects each delete's queries (`execute: false`) and runs them
+   * as one batch. Used e.g. by destructive reconciliation on reconnect to mirror a set of in-memory
+   * removals into the DB. No-op for an empty set.
+   *
+   * @param payload.ids - The ids of the messages to hard-delete.
+   * @param payload.execute - Whether to immediately execute the operation (optional, defaults to `true`).
+   */
+  public hardDeleteMessages = async ({
+    ids,
+    execute = true,
+  }: {
+    ids: string[];
+    execute?: boolean;
+  }) => {
+    if (!ids.length) return [];
+    const queries = (
+      await Promise.all(ids.map((id) => this.hardDeleteMessage({ id, execute: false })))
+    ).flat();
+
+    if (execute) {
+      await this.executeSqlBatch(queries);
+    }
+
+    return queries;
+  };
+
+  /**
    * A utility method to handle read events. It will calculate the state of the reads if
    * present in the event, or optionally rely on the hard override in unreadMessages.
    * The unreadMessages argument is useful for cases where we know the exact number of unreads
