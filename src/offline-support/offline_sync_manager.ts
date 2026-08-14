@@ -23,16 +23,29 @@ export class OfflineDBSyncManager {
     new Map();
   private client: StreamChat;
   private offlineDb: AbstractOfflineDB;
+  /**
+   * Optional positive cap on the number of events a single `/sync` response may
+   * contain before this manager skips event replay into local storage and relies
+   * on the reconnect-time channel refresh (queryChannels + `channel.watch()`) to
+   * bring visible surfaces up to date.
+   *
+   * `undefined` or any non-positive value means "no limit" and event replay always
+   * runs with whatever maximum the server decides to return.
+   */
+  public readonly syncMaxEventCount?: number;
 
   constructor({
     client,
     offlineDb,
+    syncMaxEventCount,
   }: {
     client: StreamChat;
     offlineDb: AbstractOfflineDB;
+    syncMaxEventCount?: number;
   }) {
     this.client = client;
     this.offlineDb = offlineDb;
+    this.syncMaxEventCount = syncMaxEventCount;
   }
 
   /**
@@ -116,14 +129,27 @@ export class OfflineDBSyncManager {
    */
   private invokeSyncStatusListeners = async (status: boolean) => {
     this.syncStatus = status;
-    this.syncStatusListeners.forEach((l) => l(status));
+    this.syncStatusListeners.forEach((l) => {
+      try {
+        l(status);
+      } catch (error) {
+        console.log('Error in a sync status listener.', error);
+      }
+    });
 
     if (status) {
-      const promises = Array.from(this.scheduledSyncStatusCallbacks.values()).map((cb) =>
-        cb(),
+      const promises = Array.from(this.scheduledSyncStatusCallbacks.values()).map(
+        async (cb) => {
+          try {
+            await cb();
+          } catch (error) {
+            console.log('Error executing a scheduled sync status callback.', error);
+          }
+        },
       );
+      // Every callback is isolated above, so Promise.all never rejects and clear()
+      // always runs (no double-execution on the next sync).
       await Promise.all(promises);
-
       this.scheduledSyncStatusCallbacks.clear();
     }
   };
@@ -168,14 +194,29 @@ export class OfflineDBSyncManager {
             channel_cids: cids,
             last_sync_at: lastSyncedAtDate,
           });
-          const queryPromises = result.events.map((event) =>
-            this.offlineDb.handleEvent({ event, execute: false }),
-          );
-          const queriesArray = await Promise.all(queryPromises);
-          const queries = queriesArray.flat() as ExecuteBatchDBQueriesType;
 
-          if (queries.length) {
-            await this.offlineDb.executeSqlBatch(queries);
+          // Opt-in positive cap owned by this manager; undefined/non-positive = no limit.
+          const { syncMaxEventCount } = this;
+          const exceedsLimit =
+            typeof syncMaxEventCount === 'number' &&
+            syncMaxEventCount > 0 &&
+            result.events.length > syncMaxEventCount;
+          if (exceedsLimit) {
+            logger
+              .withExtraTags('sync')
+              .warn(
+                `Skipping sync event replay: received ${result.events.length} events, which exceeds the configured limit of ${syncMaxEventCount}. Visible channels are refreshed on reconnect instead.`,
+              );
+          } else {
+            const queryPromises = result.events.map((event) =>
+              this.offlineDb.handleEvent({ event, execute: false }),
+            );
+            const queriesArray = await Promise.all(queryPromises);
+            const queries = queriesArray.flat() as ExecuteBatchDBQueriesType;
+
+            if (queries.length) {
+              await this.offlineDb.executeSqlBatch(queries);
+            }
           }
         }
       }
@@ -208,9 +249,27 @@ export class OfflineDBSyncManager {
 
   /**
    * Executes any tasks that were queued while offline and then performs a sync.
+   *
+   * Each step is isolated so a failure in one does not prevent the other, and
+   * neither can escape to the callers (init + the connection.changed handler).
+   * This guarantees the subsequent invokeSyncStatusListeners(true) always runs,
+   * so syncStatus recovers to true and gated channel queries are unblocked.
+   * Failed syncs degrade to "possibly stale data until the next query" rather
+   * than freezing all future queries. See issue #1816.
    */
   private syncAndExecutePendingTasks = async () => {
-    await this.offlineDb.executePendingTasks();
-    await this.sync();
+    try {
+      await this.offlineDb.executePendingTasks();
+    } catch (error) {
+      console.log('Error executing pending tasks during sync.', error);
+    }
+    // Note: sync() has its own try/catch, but its catch block calls resetDB(),
+    // which can itself throw on a corrupted DB and re-reject. This outer guard
+    // absorbs that case.
+    try {
+      await this.sync();
+    } catch (error) {
+      console.log('Error while syncing the DB.', error);
+    }
   };
 }

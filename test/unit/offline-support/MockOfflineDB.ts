@@ -2,8 +2,14 @@ import { AbstractOfflineDB, StreamChat } from '../../../src';
 import { vi } from 'vitest';
 
 export class MockOfflineDB extends AbstractOfflineDB {
-  constructor({ client }: { client: StreamChat }) {
-    super({ client });
+  constructor({
+    client,
+    syncMaxEventCount,
+  }: {
+    client: StreamChat;
+    syncMaxEventCount?: number;
+  }) {
+    super({ client, syncMaxEventCount });
   }
 
   upsertCidsForQuery = vi.fn();
