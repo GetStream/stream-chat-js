@@ -778,7 +778,7 @@ export const generateChannelTempCid = (channelType: string, members: string[]) =
 export const isDate = (value: unknown): value is Date => !!(value as Date).getTime;
 
 export const isLocalMessage = (message: unknown): message is LocalMessage =>
-  isDate((message as LocalMessage).created_at);
+  typeof (message as LocalMessage | undefined)?.status === 'string';
 
 export const runDetached = <T>(
   callback: Promise<void | T>,

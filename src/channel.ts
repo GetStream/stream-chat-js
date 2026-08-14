@@ -30,7 +30,6 @@ import type {
   CreateDraftResponse,
   DeleteMessageOptions,
   Event,
-  EventAPIResponse,
   EventHandler,
   EventPayload,
   EventType,
@@ -38,6 +37,7 @@ import type {
   GetRepliesRequest,
   LocalMessage,
   MarkReadRequest,
+  MarkReadResponse,
   MarkUnreadRequest,
   MessagePaginationOptions,
   MessageRequest,
@@ -52,6 +52,7 @@ import type {
   SendMessageOptions,
   SendReactionRequest,
   SharedLocation,
+  StreamResponse,
   UnBanUserOptions,
   UpdateChannelPartialRequest,
   UpdateLiveLocationRequest,
@@ -132,7 +133,7 @@ export type CustomDeleteMessageRequestFn = (
 export type CustomMarkReadRequestFn = (params: {
   channel: Channel;
   options?: MarkReadRequest;
-}) => Promise<EventAPIResponse | null>;
+}) => Promise<Partial<StreamResponse<MarkReadResponse>> | null>;
 
 export type ChannelInstanceConfig = {
   requestHandlers?: {
