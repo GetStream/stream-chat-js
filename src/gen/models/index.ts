@@ -13,20 +13,21 @@ import type {
 export type Filters<
   FilterConditions extends Record<string, { type: any; operators: string }>,
 > = QueryFilters<{
-  [Property in keyof FCHelper<FilterConditions>]: FCHelper<FilterConditions>[Property]['operators'] extends string
-    ?
-        | RequireOnlyOne<{
-            [Operator in FCHelper<FilterConditions>[Property]['operators']]:
-              | (Operator extends '$in' | '$nin'
-                  ? Array<FCHelper<FilterConditions>[Property]['type']>
-                  : Operator extends '$exists'
-                    ? boolean
-                    : FCHelper<FilterConditions>[Property]['type'])
-              | null;
-          }>
-        | FCHelper<FilterConditions>[Property]['type']
-        | null
-    : undefined;
+  [Property in keyof FCHelper<FilterConditions>]:
+    | RequireOnlyOne<{
+        [Operator in FCHelper<FilterConditions>[Property]['operators']]: Operator extends
+          | '$in'
+          | '$nin'
+          ? Array<FCHelper<FilterConditions>[Property]['type']>
+          : Operator extends '$exists'
+            ? boolean
+            : Operator extends '$eq' | '$ne'
+              ? FCHelper<FilterConditions>[Property]['type'] | null
+              : FCHelper<FilterConditions>[Property]['type'];
+      }>
+    | ('$eq' extends FCHelper<FilterConditions>[Property]['operators']
+        ? FCHelper<FilterConditions>[Property]['type'] | null
+        : never);
 }>;
 
 export type FCHelper<
@@ -61,19 +62,10 @@ export type QueryFilters<Operators> = {
 } & QueryLogicalOperators<Operators>;
 
 export type QueryLogicalOperators<Operators> = {
-  $and?: ArrayOneOrMore<QueryFilters<Operators>>;
-  $nor?: ArrayOneOrMore<QueryFilters<Operators>>;
-  $or?: ArrayTwoOrMore<QueryFilters<Operators>>;
+  $and?: Array<QueryFilters<Operators>>;
+  $nor?: Array<QueryFilters<Operators>>;
+  $or?: Array<QueryFilters<Operators>>;
 };
-
-export type ArrayOneOrMore<T> = {
-  0: T;
-} & Array<T>;
-
-export type ArrayTwoOrMore<T> = {
-  0: T;
-  1: T;
-} & Array<T>;
 
 export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Omit<T, Keys> &
   {
@@ -1641,7 +1633,7 @@ export interface ChannelMemberPartialResponse {
   /**
    * Channel-member custom fields projected via `member_custom_include`
    */
-  custom?: Record<string, any>;
+  custom?: CustomMemberData;
 }
 
 export interface ChannelMemberRequest {
@@ -1755,7 +1747,7 @@ export interface ChannelMetadata {
 
   type: string;
 
-  custom: Record<string, any>;
+  custom: CustomChannelData;
 
   last_message_at?: Date;
 

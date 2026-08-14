@@ -28,9 +28,11 @@ const CUSTOM_DATA_MAPPING: Record<string, string> = {
   // CustomChannelData
   ChannelInput: 'CustomChannelData',
   ChannelInputRequest: 'CustomChannelData',
+  ChannelMetadata: 'CustomChannelData',
   ChannelResponse: 'CustomChannelData',
 
   // CustomMemberData
+  ChannelMemberPartialResponse: 'CustomMemberData',
   ChannelMemberRequest: 'CustomMemberData',
   ChannelMemberResponse: 'CustomMemberData',
 

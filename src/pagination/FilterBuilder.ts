@@ -1,5 +1,5 @@
 import { StateStore } from '../store';
-import type { ArrayOneOrMore, ArrayTwoOrMore, QueryFilter } from '../types';
+import type { QueryFilter } from '../types';
 
 type ElementType<T> = T extends (infer U)[] ? U : T;
 
@@ -12,9 +12,9 @@ export type ExtendedQueryFilter<T = string> = QueryFilter<T> & {
 };
 
 export type ExtendedQueryLogicalOperators<T> = {
-  $and?: ArrayOneOrMore<ExtendedQueryFilters<T>>;
-  $nor?: ArrayOneOrMore<ExtendedQueryFilters<T>>;
-  $or?: ArrayTwoOrMore<ExtendedQueryFilters<T>>;
+  $and?: Array<ExtendedQueryFilters<T>>;
+  $nor?: Array<ExtendedQueryFilters<T>>;
+  $or?: Array<ExtendedQueryFilters<T>>;
 };
 
 export type ExtendedQueryFilters<T> = {
