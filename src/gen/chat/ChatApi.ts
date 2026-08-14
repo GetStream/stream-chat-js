@@ -482,12 +482,22 @@ export class ChatApi {
     messages_limit?: number;
     members_limit?: number;
     watchers_limit?: number;
+    messages_id_lt?: string;
+    messages_id_lte?: string;
+    messages_id_gt?: string;
+    messages_id_gte?: string;
+    messages_id_around?: string;
   }): Promise<StreamResponse<ChannelStateResponse>> {
     const queryParams = {
       state: request?.state,
       messages_limit: request?.messages_limit,
       members_limit: request?.members_limit,
       watchers_limit: request?.watchers_limit,
+      messages_id_lt: request?.messages_id_lt,
+      messages_id_lte: request?.messages_id_lte,
+      messages_id_gt: request?.messages_id_gt,
+      messages_id_gte: request?.messages_id_gte,
+      messages_id_around: request?.messages_id_around,
     };
     const pathParams = {
       type: request?.type,

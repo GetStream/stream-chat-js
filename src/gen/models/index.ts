@@ -342,8 +342,14 @@ export interface ActionLogResponse {
 
   review_queue_item?: ReviewQueueItemResponse;
 
+  /**
+   * User response object
+   */
   target_user?: UserResponse;
 
+  /**
+   * User response object
+   */
   user?: UserResponse;
 }
 
@@ -537,6 +543,9 @@ export interface AppealItemResponse {
 
   original_moderation_action?: ActionLogResponse;
 
+  /**
+   * User response object
+   */
   user?: UserResponse;
 }
 
@@ -634,6 +643,9 @@ export interface AutomodDetailsResponse {
 
   message_details?: FlagMessageDetailsResponse;
 
+  /**
+   * Result of the message moderation
+   */
   result?: MessageModerationResult;
 }
 
@@ -750,8 +762,14 @@ export interface BanInfoResponse {
 
   channel?: ChannelMetadata;
 
+  /**
+   * User response object
+   */
   created_by?: UserResponse;
 
+  /**
+   * User response object
+   */
   user?: UserResponse;
 }
 
@@ -805,6 +823,9 @@ export interface BanRequest {
    */
   timeout?: number;
 
+  /**
+   * User request object
+   */
   banned_by?: UserRequest;
 }
 
@@ -817,10 +838,19 @@ export interface BanResponse {
 
   shadow?: boolean;
 
+  /**
+   * User response object
+   */
   banned_by?: UserResponse;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 
+  /**
+   * User response object
+   */
   user?: UserResponse;
 }
 
@@ -953,8 +983,14 @@ export interface BlockedUserResponse {
    */
   user_id: string;
 
+  /**
+   * User response object
+   */
   blocked_user: UserResponse;
 
+  /**
+   * User response object
+   */
   user: UserResponse;
 }
 
@@ -1009,14 +1045,29 @@ export interface BulkActionAppealsRequest {
    */
   appeal_ids: Array<string>;
 
+  /**
+   * Configuration for mark reviewed action
+   */
   mark_reviewed?: MarkReviewedRequestPayload;
 
+  /**
+   * Configuration for rejecting an appeal
+   */
   reject_appeal?: RejectAppealRequestPayload;
 
+  /**
+   * Configuration for restore action
+   */
   restore?: RestoreActionRequestPayload;
 
+  /**
+   * Configuration for unban moderation action
+   */
   unban?: UnbanActionRequestPayload;
 
+  /**
+   * Configuration for unblock action
+   */
   unblock?: UnblockActionRequestPayload;
 }
 
@@ -1266,6 +1317,9 @@ export interface ChannelConfigWithInfo {
 
   blocklists?: Array<BlockListOptions>;
 
+  /**
+   * Sets thresholds for AI moderation
+   */
   automod_thresholds?: Thresholds;
 
   chat_preferences?: ChatPreferences;
@@ -1289,6 +1343,9 @@ export interface ChannelContextResponse {
    */
   type: string;
 
+  /**
+   * User response object
+   */
   created_by?: UserResponse;
 }
 
@@ -1298,6 +1355,9 @@ export interface ChannelCreatedEvent {
    */
   created_at: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomEventData;
@@ -1347,6 +1407,9 @@ export interface ChannelDeletedEvent {
    */
   created_at: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomEventData;
@@ -1469,6 +1532,9 @@ export interface ChannelHiddenEvent {
    */
   created_at: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomEventData;
@@ -1545,8 +1611,14 @@ export interface ChannelInput {
 
   members?: Array<ChannelMemberRequest>;
 
+  /**
+   * Channel configuration overrides
+   */
   config_overrides?: ChannelConfigOverrides;
 
+  /**
+   * User request object
+   */
   created_by?: UserRequest;
 
   custom?: CustomChannelData;
@@ -1567,8 +1639,14 @@ export interface ChannelInputRequest {
 
   members?: Array<ChannelMemberRequest>;
 
+  /**
+   * Channel configuration overrides
+   */
   config_overrides?: ConfigOverridesRequest;
 
+  /**
+   * User request object
+   */
   created_by?: UserRequest;
 
   custom?: CustomChannelData;
@@ -1646,6 +1724,9 @@ export interface ChannelMemberRequest {
 
   custom?: CustomMemberData;
 
+  /**
+   * User response object
+   */
   user?: UserResponse;
 }
 
@@ -1731,6 +1812,9 @@ export interface ChannelMemberResponse {
 
   deleted_messages?: Array<string>;
 
+  /**
+   * User response object
+   */
   user?: UserResponse;
 }
 
@@ -1776,8 +1860,14 @@ export interface ChannelMute {
    */
   expires?: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 
+  /**
+   * User response object
+   */
   user?: UserResponse;
 }
 
@@ -1962,8 +2052,14 @@ export interface ChannelResponse {
 
   config?: ChannelConfigWithInfo;
 
+  /**
+   * User response object
+   */
   created_by?: UserResponse;
 
+  /**
+   * User response object
+   */
   truncated_by?: UserResponse;
 }
 
@@ -1992,6 +2088,9 @@ export interface ChannelStateResponse {
 
   watchers?: Array<UserResponse>;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 
   draft?: DraftResponse;
@@ -2054,6 +2153,9 @@ export interface ChannelStateResponseFields {
    */
   watchers?: Array<UserResponse>;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 
   draft?: DraftResponse;
@@ -2071,6 +2173,9 @@ export interface ChannelTruncatedEvent {
    */
   created_at: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomEventData;
@@ -2113,6 +2218,9 @@ export interface ChannelTruncatedEvent {
 
   channel_custom?: CustomChannelData;
 
+  /**
+   * Represents any chat message
+   */
   message?: MessageResponse;
 
   user?: UserResponseCommonFields;
@@ -2155,6 +2263,9 @@ export interface ChannelUpdatedEvent {
    */
   created_at: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomEventData;
@@ -2197,6 +2308,9 @@ export interface ChannelUpdatedEvent {
 
   channel_custom?: CustomChannelData;
 
+  /**
+   * Represents any chat message
+   */
   message?: MessageResponse;
 
   user?: UserResponseCommonFields;
@@ -2208,6 +2322,9 @@ export interface ChannelVisibleEvent {
    */
   created_at: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomEventData;
@@ -2338,6 +2455,9 @@ export interface ChatMessageResponse {
 
   reaction_scores: Record<string, number>;
 
+  /**
+   * User response object
+   */
   user: UserResponse;
 
   command?: string;
@@ -2380,6 +2500,9 @@ export interface ChatMessageResponse {
 
   moderation?: ChatModerationV2Response;
 
+  /**
+   * User response object
+   */
   pinned_by?: UserResponse;
 
   poll?: PollResponseData;
@@ -2478,6 +2601,9 @@ export interface ChatReactionGroupUserResponse {
 
   user_id: string;
 
+  /**
+   * User response object
+   */
   user?: UserResponse;
 }
 
@@ -2496,6 +2622,9 @@ export interface ChatReactionResponse {
 
   custom: CustomReactionData;
 
+  /**
+   * User response object
+   */
   user: UserResponse;
 }
 
@@ -2514,6 +2643,9 @@ export interface ChatReminderResponseData {
 
   message?: ChatMessageResponse;
 
+  /**
+   * User response object
+   */
   user?: UserResponse;
 }
 
@@ -2800,6 +2932,9 @@ export interface CreateBlockListResponse {
    */
   duration: string;
 
+  /**
+   * Block list contains restricted words
+   */
   blocklist?: BlockListResponse;
 }
 
@@ -2832,6 +2967,9 @@ export interface CreateDeviceRequest {
 }
 
 export interface CreateDraftRequest {
+  /**
+   * Message data for creating or updating a message
+   */
   message: MessageRequest;
 }
 
@@ -2845,6 +2983,9 @@ export interface CreateDraftResponse {
 }
 
 export interface CreateGuestRequest {
+  /**
+   * User request object
+   */
   user: UserRequest;
 }
 
@@ -2859,6 +3000,9 @@ export interface CreateGuestResponse {
    */
   duration: string;
 
+  /**
+   * User response object
+   */
   user: UserResponse;
 }
 
@@ -3031,6 +3175,9 @@ export interface DeleteChannelResponse {
    */
   duration: string;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 }
 
@@ -3116,6 +3263,9 @@ export interface DeleteMessageResponse {
    */
   duration: string;
 
+  /**
+   * Represents any chat message
+   */
   message: MessageResponse;
 }
 
@@ -3153,6 +3303,9 @@ export interface DeleteReactionResponse {
    */
   duration: string;
 
+  /**
+   * Represents any chat message
+   */
   message: MessageResponse;
 
   reaction: ReactionResponse;
@@ -3386,14 +3539,26 @@ export interface DraftResponse {
 
   created_at: Date;
 
+  /**
+   * Contains the draft message content
+   */
   message: DraftPayloadResponse;
 
   parent_id?: string;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 
+  /**
+   * Represents any chat message
+   */
   parent_message?: MessageResponse;
 
+  /**
+   * Represents any chat message
+   */
   quoted_message?: MessageResponse;
 }
 
@@ -3571,6 +3736,9 @@ export interface EventResponse {
    */
   duration: string;
 
+  /**
+   * The discriminator object for all websocket events, it maps events' payload to the final type
+   */
   event: WSEvent;
 }
 
@@ -3589,6 +3757,9 @@ export interface FeedsBookmarkResponse {
 
   updated_at: Date;
 
+  /**
+   * User response object
+   */
   user: UserResponse;
 
   activity_id?: string;
@@ -3637,6 +3808,9 @@ export interface FeedsFeedResponse {
 
   updated_at: Date;
 
+  /**
+   * User response object
+   */
   created_by: UserResponse;
 
   deleted_at?: Date;
@@ -3792,6 +3966,9 @@ export interface FeedsReactionResponse {
 
   updated_at: Date;
 
+  /**
+   * User response object
+   */
   user: UserResponse;
 
   comment_id?: string;
@@ -3804,6 +3981,9 @@ export interface FeedsShareResponse {
 
   created_at: Date;
 
+  /**
+   * User response object
+   */
   user: UserResponse;
 }
 
@@ -3862,6 +4042,9 @@ export interface FeedsV3ActivityResponse {
 
   search_data: Record<string, any>;
 
+  /**
+   * User response object
+   */
   user: UserResponse;
 
   deleted_at?: Date;
@@ -3940,6 +4123,9 @@ export interface FeedsV3CommentResponse {
 
   own_reactions: Array<FeedsReactionResponse>;
 
+  /**
+   * User response object
+   */
   user: UserResponse;
 
   controversy_score?: number;
@@ -4234,8 +4420,14 @@ export interface FutureChannelBanResponse {
 
   shadow?: boolean;
 
+  /**
+   * User response object
+   */
   banned_by?: UserResponse;
 
+  /**
+   * User response object
+   */
   user?: UserResponse;
 }
 
@@ -4305,6 +4497,9 @@ export interface GetMessageResponse {
    */
   duration: string;
 
+  /**
+   * Represents any chat message
+   */
   message: MessageWithChannelResponse;
 
   pending_message_metadata?: Record<string, string>;
@@ -4815,6 +5010,9 @@ export interface MarkReadResponseEvent {
 
   team?: string;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 
   thread?: ThreadResponse;
@@ -4872,6 +5070,9 @@ export interface MemberAddedEvent {
    */
   created_at: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomEventData;
@@ -4926,6 +5127,9 @@ export interface MemberRemovedEvent {
    */
   created_at: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomEventData;
@@ -4980,6 +5184,9 @@ export interface MemberUpdatedEvent {
    */
   created_at: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomEventData;
@@ -5053,6 +5260,9 @@ export interface MessageActionResponse {
    */
   duration: string;
 
+  /**
+   * Represents any chat message
+   */
   message?: MessageResponse;
 }
 
@@ -5091,6 +5301,9 @@ export interface MessageDeletedEvent {
 
   custom: CustomEventData;
 
+  /**
+   * Represents any chat message
+   */
   message: MessageResponse;
 
   /**
@@ -5195,6 +5408,9 @@ export interface MessageDeliveredEvent {
    */
   team?: string;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 
   channel_custom?: CustomChannelData;
@@ -5221,14 +5437,26 @@ export interface MessageFlagResponse {
 
   details?: FlagDetailsResponse;
 
+  /**
+   * Represents any chat message
+   */
   message?: MessageResponse;
 
   moderation_feedback?: FlagFeedbackResponse;
 
+  /**
+   * Result of the message moderation
+   */
   moderation_result?: MessageModerationResult;
 
+  /**
+   * User response object
+   */
   reviewed_by?: UserResponse;
 
+  /**
+   * User response object
+   */
   user?: UserResponse;
 }
 
@@ -5280,6 +5508,9 @@ export interface MessageModerationResult {
 
   ai_moderation_response?: ModerationResponse;
 
+  /**
+   * Sets thresholds for AI moderation
+   */
   moderation_thresholds?: Thresholds;
 }
 
@@ -5298,6 +5529,9 @@ export interface MessageNewEvent {
 
   custom: CustomEventData;
 
+  /**
+   * Represents any chat message
+   */
   message: MessageResponse;
 
   /**
@@ -5356,6 +5590,9 @@ export interface MessageNewEvent {
    */
   thread_participants?: Array<UserResponseCommonFields>;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 
   channel_custom?: CustomChannelData;
@@ -5478,6 +5715,9 @@ export interface MessageReadEvent {
    */
   team?: string;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 
   channel_custom?: CustomChannelData;
@@ -5682,6 +5922,9 @@ export interface MessageResponse {
    */
   reaction_scores: Record<string, number>;
 
+  /**
+   * User response object
+   */
   user: UserResponse;
 
   /**
@@ -5766,10 +6009,16 @@ export interface MessageResponse {
 
   moderation?: ModerationV2Response;
 
+  /**
+   * User response object
+   */
   pinned_by?: UserResponse;
 
   poll?: PollResponseData;
 
+  /**
+   * Represents any chat message
+   */
   quoted_message?: MessageResponse;
 
   reaction_groups?: Record<string, ReactionGroupResponse>;
@@ -5789,6 +6038,9 @@ export interface MessageUndeletedEvent {
 
   custom: CustomEventData;
 
+  /**
+   * Represents any chat message
+   */
   message: MessageResponse;
 
   /**
@@ -5847,6 +6099,9 @@ export interface MessageUpdatedEvent {
 
   custom: CustomEventData;
 
+  /**
+   * Represents any chat message
+   */
   message: MessageResponse;
 
   /**
@@ -5986,6 +6241,9 @@ export interface MessageWithChannelResponse {
    */
   restricted_visibility: Array<string>;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomMessageData;
@@ -6000,6 +6258,9 @@ export interface MessageWithChannelResponse {
    */
   reaction_scores: Record<string, number>;
 
+  /**
+   * User response object
+   */
   user: UserResponse;
 
   /**
@@ -6084,10 +6345,16 @@ export interface MessageWithChannelResponse {
 
   moderation?: ModerationV2Response;
 
+  /**
+   * User response object
+   */
   pinned_by?: UserResponse;
 
   poll?: PollResponseData;
 
+  /**
+   * Represents any chat message
+   */
   quoted_message?: MessageResponse;
 
   reaction_groups?: Record<string, ReactionGroupResponse>;
@@ -6179,6 +6446,9 @@ export interface ModerationCallResponse {
 
   team?: string;
 
+  /**
+   * User response object
+   */
   created_by?: UserResponse;
 }
 
@@ -6203,6 +6473,9 @@ export interface ModerationCustomActionEvent {
    */
   action_options?: Record<string, any>;
 
+  /**
+   * Represents any chat message
+   */
   message?: MessageResponse;
 }
 
@@ -6231,10 +6504,16 @@ export interface ModerationFlagResponse {
 
   custom?: Record<string, any>;
 
+  /**
+   * Content payload for moderation
+   */
   moderation_payload?: ModerationPayloadResponse;
 
   review_queue_item?: ReviewQueueItemResponse;
 
+  /**
+   * User response object
+   */
   user?: UserResponse;
 }
 
@@ -6269,6 +6548,9 @@ export interface ModerationMarkReviewedEvent {
 
   received_at?: Date;
 
+  /**
+   * Represents any chat message
+   */
   message?: MessageResponse;
 }
 
@@ -6278,6 +6560,8 @@ export interface ModerationPayload {
   image_ordered_keys?: Array<string>;
 
   images?: Array<string>;
+
+  other_media?: Array<string>;
 
   text_ordered_keys?: Array<string>;
 
@@ -6307,6 +6591,11 @@ export interface ModerationPayloadResponse {
    * Image URLs to moderate
    */
   images?: Array<string>;
+
+  /**
+   * Media URLs from attachments outside the typed image/video/audio lists (custom attachment types such as GIF pickers)
+   */
+  other_media?: Array<string>;
 
   /**
    * Caller-supplied keys for texts (e.g. "title", "description"), index-aligned with texts[]
@@ -6448,6 +6737,9 @@ export interface NotificationAddedToChannelEvent {
    */
   created_at: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomEventData;
@@ -6494,6 +6786,9 @@ export interface NotificationChannelDeletedEvent {
    */
   created_at: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomEventData;
@@ -6576,6 +6871,9 @@ export interface NotificationChannelTruncatedEvent {
    */
   created_at: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomEventData;
@@ -6635,6 +6933,9 @@ export interface NotificationChannelTruncatedEvent {
 
   grouped_unread_channels?: Record<string, number>;
 
+  /**
+   * Represents any chat message
+   */
   message?: MessageResponse;
 }
 
@@ -6644,6 +6945,9 @@ export interface NotificationInviteAcceptedEvent {
    */
   created_at: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomEventData;
@@ -6698,6 +7002,9 @@ export interface NotificationInviteRejectedEvent {
    */
   created_at: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomEventData;
@@ -6752,6 +7059,9 @@ export interface NotificationInvitedEvent {
    */
   created_at: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomEventData;
@@ -6877,6 +7187,9 @@ export interface NotificationMarkReadEvent {
    */
   unread_threads?: number;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 
   channel_custom?: CustomChannelData;
@@ -6980,6 +7293,9 @@ export interface NotificationMarkUnreadEvent {
    */
   unread_threads?: number;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 
   channel_custom?: CustomChannelData;
@@ -7020,10 +7336,16 @@ export interface NotificationNewMessageEvent {
    */
   watcher_count: number;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomEventData;
 
+  /**
+   * Represents any chat message
+   */
   message: MessageResponse;
 
   /**
@@ -7081,6 +7403,9 @@ export interface NotificationRemovedFromChannelEvent {
    */
   created_at: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomEventData;
@@ -7147,10 +7472,16 @@ export interface NotificationThreadMessageNewEvent {
    */
   watcher_count: number;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomEventData;
 
+  /**
+   * Represents any chat message
+   */
   message: MessageResponse;
 
   /**
@@ -7312,8 +7643,14 @@ export interface PendingMessageEvent {
 
   received_at?: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 
+  /**
+   * Represents any chat message
+   */
   message?: MessageResponse;
 
   /**
@@ -7321,16 +7658,28 @@ export interface PendingMessageEvent {
    */
   metadata?: Record<string, string>;
 
+  /**
+   * User response object
+   */
   user?: UserResponse;
 }
 
 export interface PendingMessageResponse {
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 
+  /**
+   * Represents any chat message
+   */
   message?: MessageResponse;
 
   metadata?: Record<string, string>;
 
+  /**
+   * User response object
+   */
   user?: UserResponse;
 }
 
@@ -7475,6 +7824,9 @@ export interface PollResponseData {
 
   max_votes_allowed?: number;
 
+  /**
+   * User response object
+   */
   created_by?: UserResponse;
 }
 
@@ -7632,6 +7984,9 @@ export interface PollVoteResponseData {
 
   user_id?: string;
 
+  /**
+   * User response object
+   */
   user?: UserResponse;
 }
 
@@ -9879,6 +10234,9 @@ export interface ReactionDeletedEvent {
    */
   created_at: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomEventData;
@@ -9929,6 +10287,9 @@ export interface ReactionDeletedEvent {
 
   channel_custom?: CustomChannelData;
 
+  /**
+   * Represents any chat message
+   */
   message?: MessageResponse;
 
   reaction?: ReactionResponse;
@@ -9974,6 +10335,9 @@ export interface ReactionGroupUserResponse {
    */
   user_id: string;
 
+  /**
+   * User response object
+   */
   user?: UserResponse;
 }
 
@@ -9983,6 +10347,9 @@ export interface ReactionNewEvent {
    */
   created_at: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomEventData;
@@ -10033,6 +10400,9 @@ export interface ReactionNewEvent {
 
   channel_custom?: CustomChannelData;
 
+  /**
+   * Represents any chat message
+   */
   message?: MessageResponse;
 
   reaction?: ReactionResponse;
@@ -10100,6 +10470,9 @@ export interface ReactionResponse {
    */
   custom: CustomReactionData;
 
+  /**
+   * User response object
+   */
   user: UserResponse;
 }
 
@@ -10111,10 +10484,16 @@ export interface ReactionUpdatedEvent {
 
   message_id: string;
 
+  /**
+   * Represents channel in chat
+   */
   channel: ChannelResponse;
 
   custom: CustomEventData;
 
+  /**
+   * Represents any chat message
+   */
   message: MessageResponse;
 
   /**
@@ -10170,6 +10549,9 @@ export interface ReadStateResponse {
 
   unread_messages: number;
 
+  /**
+   * User response object
+   */
   user: UserResponse;
 
   last_delivered_at?: Date;
@@ -10310,10 +10692,19 @@ export interface ReminderResponseData {
 
   remind_at?: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 
+  /**
+   * Represents any chat message
+   */
   message?: MessageResponse;
 
+  /**
+   * User response object
+   */
   user?: UserResponse;
 }
 
@@ -10500,6 +10891,9 @@ export interface ReviewQueueItemResponse {
 
   appeal?: AppealItemResponse;
 
+  /**
+   * User response object
+   */
   assigned_to?: UserResponse;
 
   call?: ModerationCallResponse;
@@ -10518,6 +10912,9 @@ export interface ReviewQueueItemResponse {
 
   message?: ChatMessageResponse;
 
+  /**
+   * Content payload for moderation
+   */
   moderation_payload?: ModerationPayloadResponse;
 
   reaction?: Reaction;
@@ -11214,6 +11611,9 @@ export interface SearchResultMessage {
 
   reaction_scores: Record<string, number>;
 
+  /**
+   * User response object
+   */
   user: UserResponse;
 
   command?: string;
@@ -11246,6 +11646,9 @@ export interface SearchResultMessage {
 
   thread_participants?: Array<UserResponse>;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 
   draft?: DraftResponse;
@@ -11258,10 +11661,16 @@ export interface SearchResultMessage {
 
   moderation?: ModerationV2Response;
 
+  /**
+   * User response object
+   */
   pinned_by?: UserResponse;
 
   poll?: PollResponseData;
 
+  /**
+   * Represents any chat message
+   */
   quoted_message?: MessageResponse;
 
   reaction_groups?: Record<string, ReactionGroupResponse>;
@@ -11316,6 +11725,9 @@ export interface SendEventRequest {
 }
 
 export interface SendMessageRequest {
+  /**
+   * Message data for creating or updating a message
+   */
   message: MessageRequest;
 
   /**
@@ -11341,8 +11753,14 @@ export interface SendMessageResponse {
    */
   duration: string;
 
+  /**
+   * Represents any chat message
+   */
   message: MessageResponse;
 
+  /**
+   * Slim channel object: identity plus creator
+   */
   channel_context?: ChannelContextResponse;
 
   /**
@@ -11357,6 +11775,9 @@ export interface SendMessageResponse {
 }
 
 export interface SendReactionRequest {
+  /**
+   * Represents user reaction to a message
+   */
   reaction: ReactionRequest;
 
   /**
@@ -11376,6 +11797,9 @@ export interface SendReactionResponse {
    */
   duration: string;
 
+  /**
+   * Represents any chat message
+   */
   message: MessageResponse;
 
   reaction: ReactionResponse;
@@ -11446,8 +11870,14 @@ export interface SharedLocationResponse {
    */
   end_at?: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 
+  /**
+   * Represents any chat message
+   */
   message?: MessageResponse;
 }
 
@@ -11470,8 +11900,14 @@ export interface SharedLocationResponseData {
 
   end_at?: Date;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 
+  /**
+   * Represents any chat message
+   */
   message?: MessageResponse;
 }
 
@@ -11546,40 +11982,88 @@ export interface SubmitActionRequest {
    */
   item_id?: string;
 
+  /**
+   * Configuration for ban moderation action
+   */
   ban?: BanActionRequestPayload;
 
+  /**
+   * Configuration for block action
+   */
   block?: BlockActionRequestPayload;
 
   bypass?: BypassActionRequest;
 
+  /**
+   * Configuration for custom moderation action
+   */
   custom?: CustomActionRequestPayload;
 
+  /**
+   * Configuration for activity deletion action
+   */
   delete_activity?: DeleteActivityRequestPayload;
 
+  /**
+   * Configuration for comment deletion action
+   */
   delete_comment?: DeleteCommentRequestPayload;
 
+  /**
+   * Configuration for message deletion action
+   */
   delete_message?: DeleteMessageRequestPayload;
 
+  /**
+   * Configuration for reaction deletion action
+   */
   delete_reaction?: DeleteReactionRequestPayload;
 
+  /**
+   * Configuration for user deletion action
+   */
   delete_user?: DeleteUserRequestPayload;
 
+  /**
+   * Configuration for deleting all of a user's chat messages without banning them or deleting their account
+   */
   delete_user_messages?: DeleteUserMessagesRequestPayload;
 
+  /**
+   * Configuration for escalation action
+   */
   escalate?: EscalatePayload;
 
   flag?: FlagRequest;
 
+  /**
+   * Configuration for mark reviewed action
+   */
   mark_reviewed?: MarkReviewedRequestPayload;
 
+  /**
+   * Configuration for rejecting an appeal
+   */
   reject_appeal?: RejectAppealRequestPayload;
 
+  /**
+   * Configuration for restore action
+   */
   restore?: RestoreActionRequestPayload;
 
+  /**
+   * Configuration for shadow block action
+   */
   shadow_block?: ShadowBlockActionRequestPayload;
 
+  /**
+   * Configuration for unban moderation action
+   */
   unban?: UnbanActionRequestPayload;
 
+  /**
+   * Configuration for unblock action
+   */
   unblock?: UnblockActionRequestPayload;
 }
 
@@ -11692,6 +12176,9 @@ export interface ThreadParticipant {
    */
   user_id?: string;
 
+  /**
+   * User response object
+   */
   user?: UserResponse;
 }
 
@@ -11761,10 +12248,19 @@ export interface ThreadResponse {
    */
   thread_participants?: Array<ThreadParticipant>;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 
+  /**
+   * User response object
+   */
   created_by?: UserResponse;
 
+  /**
+   * Represents any chat message
+   */
   parent_message?: MessageResponse;
 }
 
@@ -11838,12 +12334,21 @@ export interface ThreadStateResponse {
    */
   thread_participants?: Array<ThreadParticipant>;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 
+  /**
+   * User response object
+   */
   created_by?: UserResponse;
 
   draft?: DraftResponse;
 
+  /**
+   * Represents any chat message
+   */
   parent_message?: MessageResponse;
 }
 
@@ -11961,6 +12466,9 @@ export interface TruncateChannelRequest {
    */
   member_ids?: Array<string>;
 
+  /**
+   * Message data for creating or updating a message
+   */
   message?: MessageRequest;
 }
 
@@ -11970,8 +12478,14 @@ export interface TruncateChannelResponse {
    */
   duration: string;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 
+  /**
+   * Represents any chat message
+   */
   message?: MessageResponse;
 }
 
@@ -12172,6 +12686,9 @@ export interface UpdateBlockListResponse {
    */
   duration: string;
 
+  /**
+   * Block list contains restricted words
+   */
   blocklist?: BlockListResponse;
 }
 
@@ -12192,6 +12709,9 @@ export interface UpdateChannelPartialResponse {
    */
   members: Array<ChannelMemberResponse>;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 }
 
@@ -12268,6 +12788,9 @@ export interface UpdateChannelRequest {
 
   data?: ChannelInputRequest;
 
+  /**
+   * Message data for creating or updating a message
+   */
   message?: MessageRequest;
 }
 
@@ -12282,8 +12805,14 @@ export interface UpdateChannelResponse {
    */
   members: Array<ChannelMemberResponse>;
 
+  /**
+   * Represents channel in chat
+   */
   channel?: ChannelResponse;
 
+  /**
+   * Represents any chat message
+   */
   message?: MessageResponse;
 }
 
@@ -12349,6 +12878,9 @@ export interface UpdateMessagePartialResponse {
    */
   duration: string;
 
+  /**
+   * Represents any chat message
+   */
   message?: MessageResponse;
 
   /**
@@ -12358,6 +12890,9 @@ export interface UpdateMessagePartialResponse {
 }
 
 export interface UpdateMessageRequest {
+  /**
+   * Message data for creating or updating a message
+   */
   message: MessageRequest;
 
   /**
@@ -12374,6 +12909,9 @@ export interface UpdateMessageResponse {
    */
   duration: string;
 
+  /**
+   * Represents any chat message
+   */
   message: MessageResponse;
 
   pending_message_metadata?: Record<string, string>;
@@ -12686,6 +13224,9 @@ export interface UpsertActionConfigRequest {
 export interface UpsertActionConfigResponse {
   duration: string;
 
+  /**
+   * Configuration for a moderation action
+   */
   action_config?: ModerationActionConfigResponse;
 }
 
@@ -13145,8 +13686,14 @@ export interface UserMuteResponse {
 
   expires?: Date;
 
+  /**
+   * User response object
+   */
   target?: UserResponse;
 
+  /**
+   * User response object
+   */
   user?: UserResponse;
 }
 
