@@ -310,7 +310,10 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
   userSort: UserSort | undefined;
   memberSort: MemberSort | undefined; // todo: document there are filters and sort options for users and members
   searchOptions: Omit<UserOptions, 'limit' | 'offset'> | undefined;
-  config: MentionsSearchSourceOptions;
+  config: Pick<
+    MentionsSearchSourceOptions,
+    'mentionAllAppUsers' | 'suggestionFactoryMappers' | 'textComposerText' | 'trigger'
+  >;
 
   constructor(channel: Channel, options?: MentionsSearchSourceOptions) {
     const {
@@ -326,7 +329,8 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
       userSort,
       ...restOptions
     } = options || {};
-    super(restOptions);
+    // suggestions are shown for a bare trigger, so the empty query must be allowed
+    super({ ...restOptions, allowEmptySearchString: true });
     this.client = channel.getClient();
     this.channel = channel;
     this.userFilters = userFilters;
@@ -445,11 +449,6 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
       items, // preserve items to avoid flickering
     };
   }
-
-  canExecuteQuery = (newSearchString?: string) => {
-    const hasNewSearchQuery = typeof newSearchString !== 'undefined';
-    return this.isActive && this.canDispatchQuery(hasNewSearchQuery);
-  };
 
   protected updatePaginationStateFromQuery() {
     const userPaginationState = this.latestUserPaginationState ?? { itemCount: 0 };

@@ -44,7 +44,8 @@ export class ChannelMemberSearchSource<
     > = {},
   ) {
     const { filters, sort, searchOptions, ...restOptions } = options || {};
-    super(restOptions);
+    // members are listed with an empty query, so the initial load must be allowed
+    super({ ...restOptions, allowEmptySearchString: true });
     this.channel = channel;
     this.filters = filters;
     this.sort = sort;
@@ -70,12 +71,6 @@ export class ChannelMemberSearchSource<
       ...filterBuilderOptions,
     });
   }
-
-  canExecuteQuery = (newSearchString?: string) => {
-    const hasNewSearchQuery = typeof newSearchString !== 'undefined';
-
-    return this.isActive && this.canDispatchQuery(hasNewSearchQuery);
-  };
 
   protected async query(searchQuery: string, queryOptions: SearchQueryOptions = {}) {
     const filters = this.filterBuilder.buildFilters({

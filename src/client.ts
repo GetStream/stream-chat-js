@@ -1931,7 +1931,7 @@ export class StreamChat {
    * searchUserGroups - Search user groups by prefix for autocomplete
    *
    * @param {SearchUserGroupsOptions} options The search options
-   * @param requestOptions the api request options
+   * @param {RequestOptions} [requestOptions] Carries an abort signal. Not sent in the request.
    * @return {Promise<SearchUserGroupsResponse>} User Group Search Response
    */
   async searchUserGroups(
@@ -2078,7 +2078,7 @@ export class StreamChat {
    * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
    * @param {ChannelOptions} [options] Options object. Can include predefined_filter, filter_values, and sort_values for using predefined filters.
-   * @param requestOptions the api request options.
+   * @param {RequestOptions} [requestOptions] Carries an abort signal. Not sent in the request.
    *
    * @return {Promise<QueryChannelsAPIResponse>} full search channels response
    */
