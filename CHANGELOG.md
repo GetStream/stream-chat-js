@@ -1,3 +1,17 @@
+## [9.51.0](https://github.com/GetStream/stream-chat-js/compare/v9.50.3...v9.51.0) (2026-08-14)
+
+### Features
+
+* **search:** adapt debounce to query length and cancel superseded requests ([#1823](https://github.com/GetStream/stream-chat-js/issues/1823)) ([1ca8bf7](https://github.com/GetStream/stream-chat-js/commit/1ca8bf75f046ac96c94867c12864809401b0715f))
+
+### Chores
+
+* **deps:** bump axios, form-data and dev dependencies ([#1825](https://github.com/GetStream/stream-chat-js/issues/1825)) ([940f2bc](https://github.com/GetStream/stream-chat-js/commit/940f2bc77b41160a775fda2e281c187e33c49b09))
+
+### Performance Improvements
+
+* introduce event sync limit for offline db ([#1826](https://github.com/GetStream/stream-chat-js/issues/1826)) ([46cb7df](https://github.com/GetStream/stream-chat-js/commit/46cb7dff822ca4b6324bb6c4aa1d213708c35477))
+
 ## [9.50.3](https://github.com/GetStream/stream-chat-js/compare/v9.50.2...v9.50.3) (2026-08-10)
 
 ### Bug Fixes
