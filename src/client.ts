@@ -3,7 +3,6 @@
 
 import type { AxiosInstance, AxiosRequestConfig } from 'axios';
 import axios from 'axios';
-import https from 'https';
 
 import { Channel } from './channel';
 import { ClientState } from './client_state';
@@ -159,7 +158,7 @@ export class StreamChat extends ChatApi {
   axiosInstance: AxiosInstance;
   baseURL?: string;
   browser: boolean;
-  cleaningIntervalRef?: NodeJS.Timeout;
+  cleaningIntervalRef?: ReturnType<typeof setTimeout>;
   clientId?: string;
   key: string;
   listeners: Map<EventType, Set<EventHandler>>;
@@ -248,7 +247,7 @@ export class StreamChat extends ChatApi {
    * @param options.logLevel - Minimum log level for the default sink (optional, defaults to `'info'`).
    * @param options.logOptions - Per-scope sink/level overrides for `chatLoggerSystem` (optional).
    * @param options.timeout - Request timeout (optional, defaults to `3000`).
-   * @param options.httpsAgent - Custom `httpsAgent` (optional, in Node defaults to `https.agent()`).
+   * @param options.httpsAgent - Custom `httpsAgent` (optional).
    */
   constructor(key: string, options: StreamChatOptions = {}) {
     // generated client requires ApiClient right away
@@ -290,9 +289,6 @@ export class StreamChat extends ChatApi {
     this.axiosInstance = axios.create({
       timeout: 3000,
       withCredentials: false,
-      httpsAgent: this.node
-        ? new https.Agent({ keepAlive: true, keepAliveMsecs: 3000 })
-        : undefined,
       ...this.options.axiosRequestConfig,
       paramsSerializer: axiosParamsSerializer,
     });
@@ -1332,6 +1328,14 @@ export class StreamChat extends ChatApi {
     options?: QueryChannelsRequest,
     stateOptions: ChannelStateOptions = {},
   ): Promise<Channel[] | QueryChannelsResponseWithChannels> {
+    // TODO(perf/cleanup): prefer a `memberIds` snapshot over `headItems.map` here too — see the
+    // matching TODO in channel.query() for the full rationale.
+    const candidateIdsByCid = new Map<string, ReadonlySet<string>>();
+    for (const cid of Object.keys(this.activeChannels)) {
+      const head = this.activeChannels[cid]?.messagePaginator?.headItems;
+      if (head?.length)
+        candidateIdsByCid.set(cid, new Set(head.map((message) => message.id)));
+    }
     const queryChannelsResponse = await this.queryChannels(options);
     const channels = queryChannelsResponse.channels;
 
@@ -1349,7 +1353,12 @@ export class StreamChat extends ChatApi {
       });
     }
 
-    const hydratedChannels = this.hydrateActiveChannels(channels, stateOptions, options);
+    const hydratedChannels = this.hydrateActiveChannels(
+      channels,
+      stateOptions,
+      options,
+      candidateIdsByCid,
+    );
 
     if (stateOptions.withResponse) {
       return {
@@ -1405,6 +1414,7 @@ export class StreamChat extends ChatApi {
     channelsFromApi: ChannelStateResponseFields[] = [],
     stateOptions: ChannelStateOptions = {},
     queryChannelsOptions?: ChannelOptions,
+    candidateIdsByCid?: Map<string, ReadonlySet<string>>,
   ) {
     const { skipInitialization, offlineMode = false } = stateOptions;
     const channels: Channel[] = [];
@@ -1445,6 +1455,8 @@ export class StreamChat extends ChatApi {
         c.messagePaginator.seedFirstPageSync(
           channelState.messages.map(formatMessage),
           requestedPageSize,
+          undefined,
+          { reconcile: true, candidateIds: candidateIdsByCid?.get(c.cid) },
         );
       }
 
@@ -2283,13 +2295,13 @@ export class StreamChat extends ChatApi {
    *
    * @param uri - The file to upload.
    * @param name - The name of the file (optional).
-   * @param contentType - The content type of the file (optional).
+   * @param contentType - MIME type; required for React Native URI uploads (optional).
    * @param user - User information (optional).
    * @param axiosRequestConfig - Axios config, e.g. `onUploadProgress` for progress tracking (optional).
    * @returns Response containing the file URL.
    */
   uploadFile_(
-    uri: string | NodeJS.ReadableStream | Buffer | File,
+    uri: string | File,
     name?: string,
     contentType?: string,
     user?: UserResponse,
@@ -2310,13 +2322,13 @@ export class StreamChat extends ChatApi {
    *
    * @param uri - The image to upload.
    * @param name - The name of the image (optional).
-   * @param contentType - The content type of the image (optional).
+   * @param contentType - MIME type; required for React Native URI uploads (optional).
    * @param user - User information (optional).
    * @param axiosRequestConfig - Axios config, e.g. `onUploadProgress` for progress tracking (optional).
    * @returns Response containing the image URL.
    */
   uploadImage_(
-    uri: string | NodeJS.ReadableStream | File,
+    uri: string | File,
     name?: string,
     contentType?: string,
     user?: UserResponse,

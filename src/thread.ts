@@ -32,6 +32,7 @@ import { MessageComposer } from './messageComposer';
 import { MessageOperations } from './messageOperations';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import { MessagePaginator } from './pagination';
+import type { MergeNewestPageOptions } from './pagination';
 import type { PipelineEvent } from './EventHandlerPipeline';
 
 export type ThreadState = {
@@ -325,17 +326,29 @@ export class Thread extends WithSubscriptions {
 
     try {
       const loadedReplyCount = this.messagePaginator.items?.length ?? 0;
+      const requestedReplyLimit = loadedReplyCount || this.messagePaginator.pageSize;
+      const reconcileCandidateIds = new Set(
+        (this.messagePaginator.items ?? []).map((reply) => reply.id),
+      );
       const thread = await this.client.getThreadAndHydrate(this.id, {
         watch: true,
-        reply_limit: loadedReplyCount || this.messagePaginator.pageSize,
+        reply_limit: requestedReplyLimit,
       });
-      this.hydrateState(thread);
+      this.hydrateState(thread, {
+        reconcile: {
+          requestedLimit: requestedReplyLimit,
+          candidateIds: reconcileCandidateIds,
+        },
+      });
     } finally {
       this.state.partialNext({ isLoading: false });
     }
   };
 
-  public hydrateState = (thread: Thread) => {
+  public hydrateState = (
+    thread: Thread,
+    options?: { reconcile?: MergeNewestPageOptions },
+  ) => {
     if (thread === this) {
       // skip if the instances are the same
       return;
@@ -383,6 +396,7 @@ export class Thread extends WithSubscriptions {
 
     this.messagePaginator.mergeNewestPage(
       thread.messagePaginator.state.getLatestValue().items ?? [],
+      options?.reconcile,
     );
     pendingReplies.forEach((reply) => this.messagePaginator.ingestItem(reply));
     // Carry the re-queried thread's last-activity floor so lastMessageAt stays fresh even when the

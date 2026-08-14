@@ -7,7 +7,8 @@
 - `secret` is gone. The constructor and `getInstance` no longer accept it. **v10 does not support server-side use.**
 - The constructor and `getInstance` are now a single signature: `(key, options?)`. The `(key, secret, options?)` overload has been removed.
 - `StreamChatOptions` no longer extends `AxiosRequestConfig`. Axios-level fields (`timeout`, `httpsAgent`, `withCredentials`, headers, etc.) must now be passed via the dedicated `axiosRequestConfig` property.
-- The same axios defaults (`timeout: 3000`, `withCredentials: false`, keep-alive `httpsAgent` in node) are still applied, but in v10 they can be overridden through `axiosRequestConfig`. In v9 they could not be — `axiosRequestConfig` only affected per-request calls.
+- The remaining axios defaults (`timeout: 3000`, `withCredentials: false`) are still applied, but in v10 they can be overridden through `axiosRequestConfig`. In v9 they could not be — `axiosRequestConfig` only affected per-request calls.
+- **The implicit keep-alive `httpsAgent` in node is gone.** v9 created an `https.Agent({ keepAlive: true, keepAliveMsecs: 3000 })` whenever node was detected; v10 no longer imports `node:https` at all. If you relied on connection reuse, pass your own agent — see [`httpsAgent` is no longer defaulted in node](#httpsagent-is-no-longer-defaulted-in-node).
 - `paramsSerializer` cannot be overridden. Any `paramsSerializer` passed in `axiosRequestConfig` is ignored; the client always uses its internal `axiosParamsSerializer`.
 
 ## Server-side users — stop here
@@ -96,7 +97,7 @@ client.axiosInstance.defaults.timeout; // 9999
 client.axiosInstance.defaults.withCredentials; // true
 ```
 
-The defaults (`timeout: 3000`, `withCredentials: false`, keep-alive `https.Agent` in node) still apply when `axiosRequestConfig` does not set them.
+The defaults (`timeout: 3000`, `withCredentials: false`) still apply when `axiosRequestConfig` does not set them.
 
 ### `httpsAgent` location moved
 
@@ -111,7 +112,30 @@ new StreamChat(API_KEY, {
 });
 ```
 
-In both versions, node mode (`browser: false` or auto-detected) auto-creates a keep-alive `https.Agent` when none is supplied. Browser mode does not.
+### `httpsAgent` is no longer defaulted in node
+
+In v9, node mode (`browser: false` or auto-detected) auto-created a keep-alive agent when none was supplied:
+
+```ts
+// v9 / v10-rc — removed from src/client.ts
+httpsAgent: this.node
+  ? new https.Agent({ keepAlive: true, keepAliveMsecs: 3000 })
+  : undefined,
+```
+
+v10 drops the `node:https` import along with the rest of the server-side surface, so axios falls back to Node's default agent — **a fresh TCP connection and TLS handshake per request**. Browser mode is unaffected (it never had an agent).
+
+Most client-side integrations do not care. If you run `stream-chat` under node — a bot, a worker, an SSR process, a test suite that makes many sequential requests — and want the old behavior back, supply the agent yourself:
+
+```ts
+import https from 'node:https';
+
+new StreamChat(API_KEY, {
+  axiosRequestConfig: {
+    httpsAgent: new https.Agent({ keepAlive: true, keepAliveMsecs: 3000 }),
+  },
+});
+```
 
 ### `paramsSerializer` is fixed
 
@@ -132,7 +156,7 @@ These are intentionally listed so agents don't "fix" them during migration:
 
 - `new StreamChat(key)` still works with no options.
 - `StreamChat.getInstance(key)` still returns the same cached instance on repeated calls and ignores the `key`/`options` of subsequent calls.
-- All non-axios options are unchanged: `allowServerSideConnect`, `baseURL`, `browser`, `device`, `disableCache`, `enableInsights`, `enableWSFallback`, `notifications`, `persistUserOnConnectionFailure`, `recoverStateOnReconnect`, `warmUp`, `wsConnection`, `wsUrlParams`.
+- All non-axios options are unchanged: `allowServerSideConnect`, `baseURL`, `browser`, `device`, `disableCache`, `enableInsights`, `enableWSFallback`, `notifications`, `persistUserOnConnectionFailure`, `recoverStateOnReconnect`, `warmUp`, `wsConnection`, `wsUrlParams`. One option is **new**: `WebSocketImpl?: typeof WebSocket`, which overrides the constructor `StableWSConnection` instantiates. It exists because v10 dropped the `isomorphic-ws` / `ws` dependency in favor of the platform's global `WebSocket`; it is meant for test doubles, and for node runtimes older than 22 that have no global `WebSocket` — see [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md#running-the-ws-client-under-node). Browser and React-Native apps should leave it unset.
 - `STREAM_LOCAL_TEST_RUN` / `STREAM_LOCAL_TEST_HOST` env-var overrides on `baseURL` still work the same way.
 - `browser` auto-detection (`typeof window !== 'undefined'`) and the `browser: true | false` override still work the same way.
 - The subsystem managers constructed on the client (`state`, `notifications`, `uploadManager`, `moderation`, `tokenManager`, `threads`, `polls`, `reminders`, `messageDeliveryReporter`, `messageComposerCache`, `insightMetrics`) are identical in v10.
@@ -147,3 +171,4 @@ These are intentionally listed so agents don't "fix" them during migration:
 3. For each option key in the `options` object, check whether it's an axios field (`timeout`, `withCredentials`, `httpsAgent`, `headers`, `adapter`, `proxy`, `responseType`, etc. — anything from `AxiosRequestConfig`). If yes, move it under a new `axiosRequestConfig` sub-object.
 4. Remove any reads of `client.secret` and any branches gated on `client._isUsingServerAuth()`.
 5. Drop any custom `paramsSerializer` you were passing — it has no effect in v10.
+6. If the client runs under node and you depended on HTTP keep-alive, add `axiosRequestConfig.httpsAgent` explicitly — v10 no longer creates one for you.

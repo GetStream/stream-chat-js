@@ -30,7 +30,7 @@ The `secret` parameter, `client.secret`, `client._isUsingServerAuth()`, and all 
 
 The following `StreamChat` methods no longer exist. All were server-side or admin-only. Rewrites should either delete the call site or move it to the server SDK:
 
-`updateAppSettings`, `revokeUserToken`, `revokeUsersToken`, `testPushSettings`, `testSQSSettings`, `testSNSSettings`, `createToken`, `devToken`, user-groups mutations (`createUserGroup` / `getUserGroup` / `searchUserGroups` / `updateUserGroup` / `deleteUserGroup` / `addUserGroupMembers` / `removeUserGroupMembers`) — the read path is renamed, see below, `upsertPushProvider`, `deletePushProvider`, `listPushProviders`, `setPushPreferences`, `_queryFlags`, `_queryFlagReports`, `_reviewFlagReport`, `queryFutureChannelBans`-write paths, `getHookEvents`, `partialUpdateUser`, `deleteUser`, `restoreUsers`, `reactivateUser`, `reactivateUsers`, `deactivateUser`, `deactivateUsers`, `exportUser`, `getSharedLocations`, `translate`, `translateMessage`, `updateFlags`, `queryCampaigns`, `_createImportURL`, `_createImport`, `_getImport`, `_listImports`, `commitMessage`, `queryTeamUsageStats`, `updateLocation`, `updateChannelsBatch`, `deletePredefinedFilter`, `setRetentionPolicy`, `deleteRetentionPolicy`, `getRetentionPolicy`, `getRetentionPolicyRuns`, hand-rolled reminder client methods (`createReminder`/`updateReminder`/`deleteReminder` — see note under `Reminder` handling; the inherited `queryReminders` from `ChatApi` remains but with the generated request shape, not the v9 `QueryRemindersOptions`), `createCommand`/`getCommand`/`updateCommand`/`deleteCommand`/`listCommands`/`createChannelType`/`getChannelType`/`updateChannelType`/`deleteChannelType`/`listChannelTypes`/`exportChannel`/`exportChannels`/`exportUsers`/`getExportChannelStatus`/`getTask`/`enrichURL`/`sendUserCustomEvent`, `deleteChannels`, `deleteUsers`, `createRole`/`listRoles`/`deleteRole` (only `searchRoles` remains, inherited), `getPermission`/`createPermission`/`updatePermission`/`deletePermission`/`listPermissions`, `getBlockList` (only `listBlockLists`/`createBlockList`/`updateBlockList`/`deleteBlockList` remain, inherited), `verifyWebhook`, `verifyAndParseWebhook`, `parseSqs`, `parseSns` (moved — see below), `campaign`, `segment`, `channelBatchUpdater`, `validateServerSideAuth`, `createSegment`, `createUserSegment`, `createChannelSegment`, `getSegment`, `updateSegment`, `addSegmentTargets`, `querySegmentTargets`, `removeSegmentTargets`, `querySegments`, `deleteSegment`, `segmentTargetExists`, `createCampaign`, `getCampaign`, `startCampaign`, `updateCampaign`, `deleteCampaign`, `stopCampaign`, `_normalizeDate`. Note: `queryDrafts`, `queryPolls`, `queryPollVotes`, `queryMessageFlags`, and `markChannelsDelivered` — all of which were hand-rolled in v9 — now come from `ChatApi` inheritance with generated request shapes; they still exist on `client`.
+`updateAppSettings`, `revokeUserToken`, `revokeUsersToken`, `testPushSettings`, `testSQSSettings`, `testSNSSettings`, `createToken`, `devToken`, user-groups mutations (`createUserGroup` / `getUserGroup` / `searchUserGroups` / `updateUserGroup` / `deleteUserGroup` / `addUserGroupMembers` / `removeUserGroupMembers`) — the read path is renamed, see below, `upsertPushProvider`, `deletePushProvider`, `listPushProviders`, `setPushPreferences`, `_queryFlags`, `_queryFlagReports`, `_reviewFlagReport`, `queryFutureChannelBans`-write paths, `getHookEvents`, `partialUpdateUser`, `deleteUser`, `restoreUsers`, `reactivateUser`, `reactivateUsers`, `deactivateUser`, `deactivateUsers`, `exportUser`, `getSharedLocations`, `translate`, `translateMessage`, `updateFlags`, `queryCampaigns`, `_createImportURL`, `_createImport`, `_getImport`, `_listImports`, `commitMessage`, `queryTeamUsageStats`, `updateLocation`, `updateChannelsBatch`, `deletePredefinedFilter`, `setRetentionPolicy`, `deleteRetentionPolicy`, `getRetentionPolicy`, `getRetentionPolicyRuns`, hand-rolled reminder client methods (`createReminder`/`updateReminder`/`deleteReminder` — see note under `Reminder` handling; the inherited `queryReminders` from `ChatApi` remains but with the generated request shape, not the v9 `QueryRemindersOptions`), `createCommand`/`getCommand`/`updateCommand`/`deleteCommand`/`listCommands`/`createChannelType`/`getChannelType`/`updateChannelType`/`deleteChannelType`/`listChannelTypes`/`exportChannel`/`exportChannels`/`exportUsers`/`getExportChannelStatus`/`getTask`/`enrichURL`/`sendUserCustomEvent`, `deleteChannels`, `deleteUsers`, `createRole`/`listRoles`/`deleteRole` (only `searchRoles` remains, inherited), `getPermission`/`createPermission`/`updatePermission`/`deletePermission`/`listPermissions`, `getBlockList` (only `listBlockLists`/`createBlockList`/`updateBlockList`/`deleteBlockList` remain, inherited), `verifyWebhook`, `verifyAndParseWebhook`, `parseSqs`, `parseSns` (removed outright — see below), `campaign`, `segment`, `channelBatchUpdater`, `validateServerSideAuth`, `createSegment`, `createUserSegment`, `createChannelSegment`, `getSegment`, `updateSegment`, `addSegmentTargets`, `querySegmentTargets`, `removeSegmentTargets`, `querySegments`, `deleteSegment`, `segmentTargetExists`, `createCampaign`, `getCampaign`, `startCampaign`, `updateCampaign`, `deleteCampaign`, `stopCampaign`, `_normalizeDate`. Note: `queryDrafts`, `queryPolls`, `queryPollVotes`, `queryMessageFlags`, and `markChannelsDelivered` — all of which were hand-rolled in v9 — now come from `ChatApi` inheritance with generated request shapes; they still exist on `client`.
 
 ### Renamed / signature-changed
 
@@ -396,6 +396,22 @@ client.uploadImage_(uri, name?, contentType?, user?, axiosRequestConfig?);
 
 `uploadFile_` and `uploadImage_` are the direct replacements for v9 code that passed positional args (uri + name + contentType + user + axios config). Ports should prefer these unless the caller wants to switch to the request-object shape.
 
+The **type of `uri` narrowed**, on both these methods and their `Channel` counterparts:
+
+```ts
+// v9
+uploadFile(uri: string | NodeJS.ReadableStream | Buffer | File, ...)
+uploadImage(uri: string | NodeJS.ReadableStream | File, ...)
+
+// v10
+uploadFile_(uri: string | File, ...)
+uploadImage_(uri: string | File, ...)
+```
+
+v10 dropped the `form-data` dependency for the platform's global `FormData`, and with it every node-only input: `Buffer` and readable streams are no longer accepted, and there is no supported node upload path at all (the `Blob` branch is gated on `typeof window !== 'undefined'`, so a cast does not help). Backend uploads move to `@stream-io/node-sdk` — see [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md#uploads-from-node-are-gone).
+
+Browser `File` / `Blob` uploads are unchanged. On the React-Native path (a URI string), `contentType` is no longer inferred for you — pass it explicitly.
+
 #### `client.deleteFile` / `client.deleteImage`
 
 ```ts
@@ -528,27 +544,26 @@ client.updateBlockList(request);
 client.deleteBlockList(request);
 ```
 
-#### Webhook / SNS / SQS helpers
+#### Webhook / SNS / SQS helpers — removed outright
 
-Moved off the client to module-level exports (`src/signing.ts`):
+An intermediate v10 release candidate moved these off the client to module-level exports on `src/signing.ts`. **The final v10 removes them entirely** — there is no webhook, SNS, or SQS surface left in `stream-chat`:
 
 ```ts
-// v9
+// v9 — client methods, used client.secret implicitly
 client.verifyWebhook(requestBody, xSignature);
 client.verifyAndParseWebhook(rawBody, signature);
 client.parseSqs(messageBody);
 client.parseSns(notificationBody);
 
-// v10 — module exports; return WSEvent
+// v10-rc — module exports (do not migrate to this; it no longer resolves)
 import { verifySignature, verifyAndParseWebhook, parseSqs, parseSns } from 'stream-chat';
 
-verifySignature(body, signature, secret);
-verifyAndParseWebhook(rawBody, signature, secret);
-parseSqs(messageBody); // SQS deliveries carry no application-level HMAC — decode-only
-parseSns(notificationBody); // SNS deliveries carry no application-level HMAC — decode-only
+// v10 — nothing to import. Move the handler to @stream-io/node-sdk.
 ```
 
-The v9 `verifyWebhook` / `verifyAndParseWebhook` reused `client.secret` implicitly; the v10 module-level replacements require the secret to be passed in. `parseSqs` / `parseSns` do not take a `secret` — Stream never attaches an application-level HMAC to SQS/SNS deliveries; use `verifyAndParseWebhook` for HTTP webhooks when you need signature verification.
+Also gone from `stream-chat`, from the same module: `verifySignature`, `CheckSignature`, `gunzipPayload`, `decodeSqsPayload`, `decodeSnsPayload`, `parseEvent`, `InvalidWebhookError`, and `InvalidWebhookErrorMessages`. `signing.ts` now exports exactly one function, `UserFromToken` — the client-side JWT payload decoder. The JWT minting helpers (`JWTUserToken`, `JWTServerToken`, `DevToken`) are gone too.
+
+Webhook verification is inherently server-side work: it needs the API secret, which v10 refuses to hold. Port the handler to [`@stream-io/node-sdk`](https://github.com/GetStream/stream-node), which keeps the v9 method names on the client (`client.verifyWebhook`, `client.verifyAndParseWebhook`, `client.parseSqs`, `client.parseSns`) and takes the secret from construction. See [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md#webhook--sns--sqs) for the mapping table.
 
 ---
 
@@ -888,7 +903,11 @@ channel.off(callback: EventHandler): void;
 
 Callers that imported `EventTypes` need to switch to `EventType` (`EventType = Event['type'] | 'all'`). The `CustomEventTypes` interface is still exported — augment it to add custom event-type keys, same as v9.
 
-#### `channel.sendFile` / `channel.sendImage` / `channel.deleteFile` / `channel.deleteImage` / `channel.getPinnedMessages` / `channel.getMessagesById` / `channel.lastRead` / `channel.countUnread` / `channel.countUnreadMentions` / `channel.lastMessage` / `channel.watch` / `channel.query`
+#### `channel.sendFile` / `channel.sendImage`
+
+Argument list unchanged; the **first parameter's type narrowed** to `string | File` (v9: `string | NodeJS.ReadableStream | Buffer | File` for `sendFile`, `string | NodeJS.ReadableStream | File` for `sendImage`). Same reason and same remedy as [`client.uploadFile` / `client.uploadImage`](#clientuploadfile--clientuploadimage) above: `form-data` is gone, node sources are not accepted, and `contentType` must be passed explicitly on the React-Native URI path.
+
+#### `channel.deleteFile` / `channel.deleteImage` / `channel.getPinnedMessages` / `channel.getMessagesById` / `channel.lastRead` / `channel.countUnread` / `channel.countUnreadMentions` / `channel.lastMessage` / `channel.watch` / `channel.query`
 
 Signatures unchanged.
 
