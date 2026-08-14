@@ -15,6 +15,13 @@ export type ChannelMemberSearchSourceFilterBuilderContext<
   C extends CustomContext = CustomContext,
 > = { searchQuery?: string } & C;
 
+export type ChannelMemberSearchSourceOptions = SearchSourceOptions & {
+  /** Static base filters merged under the dynamically generated ones. */
+  filters?: MemberFilters;
+  sort?: MemberSort;
+  searchOptions?: Omit<QueryMembersOptions, 'limit' | 'offset'>;
+};
+
 export class ChannelMemberSearchSource<
   TFilterContext extends CustomContext = CustomContext,
 > extends BaseSearchSource<ChannelMemberResponse> {
@@ -30,14 +37,18 @@ export class ChannelMemberSearchSource<
 
   constructor(
     channel: Channel,
-    options?: SearchSourceOptions,
+    options?: ChannelMemberSearchSourceOptions,
     filterBuilderOptions: FilterBuilderOptions<
       MemberFilters,
       ChannelMemberSearchSourceFilterBuilderContext<TFilterContext>
     > = {},
   ) {
-    super(options);
+    const { filters, sort, searchOptions, ...restOptions } = options || {};
+    super(restOptions);
     this.channel = channel;
+    this.filters = filters;
+    this.sort = sort;
+    this.searchOptions = searchOptions;
     this.filterBuilder = new FilterBuilder<
       MemberFilters,
       ChannelMemberSearchSourceFilterBuilderContext<TFilterContext>

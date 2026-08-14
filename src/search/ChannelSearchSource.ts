@@ -12,6 +12,13 @@ export type ChannelSearchSourceFilterBuilderContext<
   C extends CustomContext = CustomContext,
 > = { searchQuery?: string } & C;
 
+export type ChannelSearchSourceOptions = SearchSourceOptions & {
+  /** Static base filters merged under the dynamically generated ones. */
+  filters?: ChannelFilters;
+  sort?: ChannelSort;
+  searchOptions?: Omit<ChannelOptions, 'limit' | 'offset'>;
+};
+
 export class ChannelSearchSource<
   TFilterContext extends CustomContext = CustomContext,
 > extends BaseSearchSource<Channel> {
@@ -27,14 +34,18 @@ export class ChannelSearchSource<
 
   constructor(
     client: StreamChat,
-    options?: SearchSourceOptions,
+    options?: ChannelSearchSourceOptions,
     filterBuilderOptions: FilterBuilderOptions<
       ChannelFilters,
       ChannelSearchSourceFilterBuilderContext<TFilterContext>
     > = {},
   ) {
-    super(options);
+    const { filters, sort, searchOptions, ...restOptions } = options || {};
+    super(restOptions);
     this.client = client;
+    this.filters = filters;
+    this.sort = sort;
+    this.searchOptions = searchOptions;
     this.filterBuilder = new FilterBuilder<
       ChannelFilters,
       ChannelSearchSourceFilterBuilderContext<TFilterContext>

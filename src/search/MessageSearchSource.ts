@@ -54,6 +54,18 @@ export type MessageSearchSourceFilterBuilderOptions<
   >;
 }>;
 
+export type MessageSearchSourceOptions = SearchSourceOptions & {
+  /** Static base filters for the channel scope of the message search. */
+  messageSearchChannelFilters?: ChannelFilters;
+  /** Static base filters for the message search itself. */
+  messageSearchFilters?: MessageFilters;
+  messageSearchSort?: SearchMessageSort;
+  /** Static base filters for the follow-up query that hydrates unknown channels. */
+  channelQueryFilters?: ChannelFilters;
+  channelQuerySort?: ChannelSort;
+  channelQueryOptions?: Omit<ChannelOptions, 'limit' | 'offset'>;
+};
+
 export class MessageSearchSource<
   TContexts extends MessageSearchSourceContexts = {},
 > extends BaseSearchSource<MessageResponse> {
@@ -86,11 +98,26 @@ export class MessageSearchSource<
 
   constructor(
     client: StreamChat,
-    options?: SearchSourceOptions,
+    options?: MessageSearchSourceOptions,
     filterBuilderOptions?: MessageSearchSourceFilterBuilderOptions<TContexts>,
   ) {
-    super(options);
+    const {
+      messageSearchChannelFilters,
+      messageSearchFilters,
+      messageSearchSort,
+      channelQueryFilters,
+      channelQuerySort,
+      channelQueryOptions,
+      ...restOptions
+    } = options || {};
+    super(restOptions);
     this.client = client;
+    this.messageSearchChannelFilters = messageSearchChannelFilters;
+    this.messageSearchFilters = messageSearchFilters;
+    this.messageSearchSort = messageSearchSort;
+    this.channelQueryFilters = channelQueryFilters;
+    this.channelQuerySort = channelQuerySort;
+    this.channelQueryOptions = channelQueryOptions;
 
     this.messageSearchChannelFilterBuilder = new FilterBuilder<
       ChannelFilters,

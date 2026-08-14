@@ -96,6 +96,13 @@ export const calculateLevenshtein = (query: string, name: string) => {
 };
 
 export type MentionsSearchSourceOptions = SearchSourceOptions & {
+  /** Static base filters for the app-wide user query (mentionAllAppUsers). */
+  userFilters?: UserFilters;
+  userSort?: UserSort;
+  /** Static base filters for the channel member query. */
+  memberFilters?: MemberFilters;
+  memberSort?: MemberSort;
+  searchOptions?: Omit<UserOptions, 'limit' | 'offset'>;
   mentionAllAppUsers?: boolean;
   suggestionFactoryMappers?: MentionSuggestionFactoryMapperOverrides;
   textComposerText?: string;
@@ -308,15 +315,25 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
   constructor(channel: Channel, options?: MentionsSearchSourceOptions) {
     const {
       mentionAllAppUsers,
+      memberFilters,
+      memberSort,
+      searchOptions,
       suggestionFactoryMappers,
       textComposerText,
       transliterate,
       trigger,
+      userFilters,
+      userSort,
       ...restOptions
     } = options || {};
     super(restOptions);
     this.client = channel.getClient();
     this.channel = channel;
+    this.userFilters = userFilters;
+    this.userSort = userSort;
+    this.memberFilters = memberFilters;
+    this.memberSort = memberSort;
+    this.searchOptions = searchOptions;
     this.config = {
       mentionAllAppUsers,
       suggestionFactoryMappers,
