@@ -292,6 +292,140 @@ describe('Channel isViewingLive (unread bump gating)', function () {
 	});
 });
 
+describe('Channel AI indicator state (channel.state.aiState)', function () {
+	const setupChannel = () => {
+		const client = new StreamChat('apiKey');
+		client.user = { id: 'user' };
+		const channel = client.channel('messaging', 'ai-state-id');
+		channel.initialized = true;
+		return { channel };
+	};
+
+	it('defaults to AI_STATE_IDLE', () => {
+		const { channel } = setupChannel();
+		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_IDLE');
+	});
+
+	it('reflects ai_indicator.update into channel.state.aiState', () => {
+		const { channel } = setupChannel();
+		channel._handleChannelEvent({
+			type: 'ai_indicator.update',
+			ai_state: 'AI_STATE_GENERATING',
+		});
+		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_GENERATING');
+	});
+
+	it('resets to Idle on ai_indicator.clear', () => {
+		const { channel } = setupChannel();
+		channel._handleChannelEvent({
+			type: 'ai_indicator.update',
+			ai_state: 'AI_STATE_THINKING',
+		});
+		channel._handleChannelEvent({ type: 'ai_indicator.clear' });
+		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_IDLE');
+	});
+
+	it('sets AI_STATE_STOP on ai_indicator.stop', () => {
+		const { channel } = setupChannel();
+		channel._handleChannelEvent({
+			type: 'ai_indicator.update',
+			ai_state: 'AI_STATE_GENERATING',
+		});
+		channel._handleChannelEvent({ type: 'ai_indicator.stop' });
+		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_STOP');
+	});
+
+	it('is reactive via subscribeWithSelector', () => {
+		const { channel } = setupChannel();
+		const seen = [];
+		channel.state.subscribeWithSelector(
+			(s) => ({ aiState: s.aiState }),
+			({ aiState }) => seen.push(aiState),
+		);
+		channel._handleChannelEvent({
+			type: 'ai_indicator.update',
+			ai_state: 'AI_STATE_THINKING',
+		});
+		expect(seen).to.include('AI_STATE_THINKING');
+	});
+
+	it('clean() resets aiState to Idle when the WS connection is down', () => {
+		const { channel } = setupChannel();
+		channel.getClient().wsConnection = { isHealthy: false };
+		channel._handleChannelEvent({
+			type: 'ai_indicator.update',
+			ai_state: 'AI_STATE_GENERATING',
+		});
+		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_GENERATING');
+
+		channel.clean();
+
+		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_IDLE');
+	});
+
+	it('clean() leaves a live aiState untouched while the WS connection is healthy', () => {
+		const { channel } = setupChannel();
+		channel.getClient().wsConnection = { isHealthy: true };
+		channel._handleChannelEvent({
+			type: 'ai_indicator.update',
+			ai_state: 'AI_STATE_GENERATING',
+		});
+
+		channel.clean();
+
+		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_GENERATING');
+	});
+
+	it('closeConnection resets aiState to Idle across active channels', async () => {
+		const { channel } = setupChannel();
+		const client = channel.getClient();
+		client.activeChannels[channel.cid] = channel;
+		channel._handleChannelEvent({
+			type: 'ai_indicator.update',
+			ai_state: 'AI_STATE_GENERATING',
+		});
+		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_GENERATING');
+
+		await client.closeConnection();
+
+		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_IDLE');
+	});
+
+	it('clean() does not reset when the primary WS is down but the fallback is healthy', () => {
+		const { channel } = setupChannel();
+		channel.getClient().wsConnection = null;
+		channel.getClient().wsFallback = { isHealthy: () => true };
+		channel._handleChannelEvent({
+			type: 'ai_indicator.update',
+			ai_state: 'AI_STATE_GENERATING',
+		});
+
+		channel.clean();
+
+		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_GENERATING');
+	});
+
+	it('resetAIState() is a no-op (no notify) when already Idle', () => {
+		const { channel } = setupChannel();
+		const seen = [];
+		channel.state.subscribeWithSelector(
+			(s) => ({ aiState: s.aiState }),
+			({ aiState }) => seen.push(aiState),
+		);
+		seen.length = 0; // drop the initial subscribe emission
+
+		channel.state.resetAIState();
+
+		expect(seen).to.have.length(0);
+	});
+
+	it('falls back to Idle when ai_indicator.update carries no ai_state', () => {
+		const { channel } = setupChannel();
+		channel._handleChannelEvent({ type: 'ai_indicator.update' });
+		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_IDLE');
+	});
+});
+
 describe('Channel localized unread count (isLocalUnreadCountEnabled)', function () {
 	const user = { id: 'user' };
 	const otherUser = { id: 'other-user' };

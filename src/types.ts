@@ -872,11 +872,22 @@ export type ModerationFlagOptions = {
 };
 
 export type AIState =
+  | 'AI_STATE_IDLE'
   | 'AI_STATE_ERROR'
-  | 'AI_STATE_CHECKING_SOURCES'
+  | 'AI_STATE_EXTERNAL_SOURCES'
   | 'AI_STATE_THINKING'
   | 'AI_STATE_GENERATING'
+  | 'AI_STATE_STOP'
   | (string & {});
+
+export const AIStates = {
+  Error: 'AI_STATE_ERROR',
+  ExternalSources: 'AI_STATE_EXTERNAL_SOURCES',
+  Generating: 'AI_STATE_GENERATING',
+  Idle: 'AI_STATE_IDLE',
+  Stop: 'AI_STATE_STOP',
+  Thinking: 'AI_STATE_THINKING',
+} as const satisfies Record<string, AIState>;
 
 /**
  * An identifier containing information about the downstream SDK using stream-chat. It

@@ -59,6 +59,7 @@ import type {
   UpdateMessageOptions,
   UserResponse,
 } from './types';
+import { AIStates } from './types';
 import type { RoleName } from './permissions';
 import { StateStore } from './store';
 import type {
@@ -1341,6 +1342,17 @@ export class Channel extends ChannelApi {
     }
 
     this.state.clean();
+
+    // Clear a stuck AI indicator when we're offline (we'd miss the ending clear/stop). The cleaning
+    // interval keeps ticking through transient/internet drops; closeConnection stops it, and that
+    // path clears the indicator itself. Gate on health, not staleness — a healthy connection must
+    // never cut off a long-running response.
+    const client = this.getClient();
+    const connectionHealthy =
+      client.wsConnection?.isHealthy || client.wsFallback?.isHealthy();
+    if (!connectionHealthy) {
+      this.state.resetAIState();
+    }
   }
 
   /**
@@ -2104,6 +2116,17 @@ export class Channel extends ChannelApi {
         if (event.user?.id) {
           channelState.removeTypingEvent(event.user.id);
         }
+        break;
+      case 'ai_indicator.update':
+        channelState.partialNext({
+          aiState: (event.ai_state as AIState) ?? AIStates.Idle,
+        });
+        break;
+      case 'ai_indicator.clear':
+        channelState.partialNext({ aiState: AIStates.Idle });
+        break;
+      case 'ai_indicator.stop':
+        channelState.partialNext({ aiState: AIStates.Stop });
         break;
       // `message.read_locally` is the client-only event dispatched by `markReadLocally()` when read
       // events are disabled (e.g. livestreams with `isLocalUnreadCountEnabled`). It reuses the exact

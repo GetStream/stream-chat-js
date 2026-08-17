@@ -1,5 +1,6 @@
 import type { Channel } from './channel';
 import type {
+  AIState,
   ChannelMemberResponse,
   Event,
   LocalMessage,
@@ -7,6 +8,7 @@ import type {
   PendingMessageResponse,
   UserResponse,
 } from './types';
+import { AIStates } from './types';
 import { formatMessage } from './utils';
 import { StateStore } from './store';
 
@@ -103,11 +105,21 @@ export type ChannelLifecycleState = {
 export type ChannelUIState = {
   /**
    * Whether the channel is currently mounted / actively viewed on-screen. UI-driven and
-   * refcounted via `channel.activate()` / `channel.deactivate()`. While `active`, the channel
-   * auto-marks messages read, and channel-list hydration does NOT re-seed its message list
-   * (the channel's own `channel.reload()` owns that window).
+   * refcounted via `channel.activate()` / `channel.deactivate()`. Channel-list hydration does NOT
+   * re-seed the message list of an `active` channel (the channel's own `channel.reload()` owns that
+   * window).
    */
   active: boolean;
+};
+
+/**
+ * Reactive AI-indicator state — driven by the `ai_indicator.update` / `.clear` / `.stop` events (see
+ * `Channel._handleChannelEvent`). Seeded to `AIStates.Idle` and subscribable via
+ * `useStateStore(channel.state, (s) => ({ aiState: s.aiState }))`. Reset to `Idle` on unwatch /
+ * disconnect (a live server sends `ai_indicator.clear` when the AI response starts streaming).
+ */
+export type AIIndicatorState = {
+  aiState: AIState;
 };
 
 /**
@@ -127,7 +139,8 @@ export type ChannelStateData = WatcherState &
   ChannelDataState &
   MuteStatusState &
   ChannelLifecycleState &
-  ChannelUIState;
+  ChannelUIState &
+  AIIndicatorState;
 
 /**
  * ChannelState - the container for a channel's reactive state.
@@ -157,6 +170,7 @@ export class ChannelState extends StateStore<ChannelStateData> {
       offlineMode: false,
       disconnected: false,
       active: false,
+      aiState: AIStates.Idle,
     });
     this._channel = channel;
     this.syncStateFromChannelData(channel?.data);
@@ -328,5 +342,15 @@ export class ChannelState extends StateStore<ChannelStateData> {
         } as Event);
       }
     }
+  }
+
+  /**
+   * Resets the AI indicator to `Idle`. Called when the connection drops, as while the connection is
+   * severed we miss the `ai_indicator.clear`/`.stop` that ends a response and it isn't replayed on
+   * reconnect, so the indicator would otherwise stay stuck on "Generating". Noop when already `Idle`.
+   */
+  resetAIState() {
+    if (this.getLatestValue().aiState === AIStates.Idle) return;
+    this.partialNext({ aiState: AIStates.Idle });
   }
 }

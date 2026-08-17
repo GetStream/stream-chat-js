@@ -518,6 +518,8 @@ export class StreamChat extends ChatApi {
    *   successful disconnection. See https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent (optional).
    */
   closeConnection = async (timeout?: number) => {
+    this._resetAIStateOnActiveChannels();
+
     if (this.cleaningIntervalRef != null) {
       clearInterval(this.cleaningIntervalRef);
       this.cleaningIntervalRef = undefined;
@@ -1068,6 +1070,16 @@ export class StreamChat extends ChatApi {
   _reflectMutedChannelsToActiveChannels() {
     for (const cid in this.activeChannels) {
       this.activeChannels[cid]?._syncMuteStatus();
+    }
+  }
+
+  /**
+   * Resets the AI indicator state to `Idle` on every active channel. Invoked from `closeConnection`
+   * as it's a deliberate shutdown and will not natively trigger a WS event.
+   */
+  _resetAIStateOnActiveChannels() {
+    for (const cid in this.activeChannels) {
+      this.activeChannels[cid]?.state.resetAIState();
     }
   }
 
