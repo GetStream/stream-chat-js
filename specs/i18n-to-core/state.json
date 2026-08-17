@@ -1,0 +1,19 @@
+{
+  "active_task": "Phase 2 — stream-chat-react adopts",
+  "tasks": {
+    "Phase 0 — scoped identifiers in core": "done",
+    "Phase 1 — the stream-chat/i18n module": "done",
+    "Phase 1 — migration guide and initiative record": "done",
+    "Phase 2 — stream-chat-react adopts": "todo",
+    "Phase 3 — stream-chat-react-native adopts": "todo"
+  },
+  "flags": {
+    "blocked": false,
+    "needs-review": false
+  },
+  "notes": [
+    "Phase 2 is blocked on cutting two imports in stream-chat-react/src/i18n/types.ts: MessageContextValue from '../context' (circular UI dependency) and Moment from 'moment-timezone' (devDependency type leak).",
+    "Phase 3 is blocked on RN bumping its declared stream-chat range; the root resolutions entry masking it does not publish."
+  ],
+  "last_updated": "2026-08-18"
+}

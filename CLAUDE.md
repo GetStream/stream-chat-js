@@ -34,12 +34,14 @@ Single test runs use Vitest's CLI directly: `yarn test-unit path/to/file.test.ts
 `yarn build` runs two things concurrently:
 
 1. `tsc` — emits **declarations only** (`emitDeclarationOnly: true`) to `dist/types`. `rootDir` is `src/`.
-2. `scripts/bundle.mjs` (esbuild) — produces three bundles:
-   - `dist/cjs/index.node.js` (Node CJS, externalizes deps + Node builtins)
-   - `dist/cjs/index.browser.js` (browser CJS)
-   - `dist/esm/index.mjs` (browser ESM)
+2. `scripts/bundle.mjs` (esbuild) — produces bundles for **three entry points**:
+   - `index` (the root): `dist/cjs/index.node.js` (Node CJS, externalizes deps + Node builtins), `dist/cjs/index.browser.js` (browser CJS), `dist/esm/index.mjs` (browser ESM)
+   - `i18n` (`stream-chat/i18n`): the same three variants, `i18n.node.js` / `i18n.browser.js` / `i18n.mjs`
+   - `i18n-codegen` (`stream-chat/i18n/codegen`): Node only, CJS + ESM — it reads the filesystem, so there is deliberately no browser variant
 
-`package.json#exports` routes consumers to the right bundle by condition: `node` → node-cjs, `browser`/`react-native` → browser-cjs (require) or esm (import), default → esm. There is **no `package.json#browser` field** — it used to zero Node-only deps (`crypto`, `https`, `jsonwebtoken`, `ws`, `zlib`) for browser/RN builds, but the SDK no longer imports any of them (`src/index.ts` is platform-agnostic: global `WebSocket`, global `FormData`, global `atob`). `scripts/bundle.mjs` keeps a `browserIgnoreModules` hook, currently an empty array, for the day that changes. Prefer a platform global or a browser-safe dep over reintroducing a Node-only one.
+   After building, `assertBundleBoundaries` reads esbuild's `metafile` and fails the build if an entry reached something it must not (see the i18n section). Adding a new entry point without declaring its boundary in `ENTRY_BOUNDARIES` is itself an error.
+
+`package.json#exports` routes consumers to the right bundle by condition: `node` → node-cjs, `browser`/`react-native` → browser-cjs (require) or esm (import), default → esm. The `react-native` + `require` branch must stay pointed at CJS — React Native's Jest runs CJS with `customConditions: ["react-native"]` and does not transform `node_modules`, so an `.mjs` there is a syntax error across every RN suite that touches the module. `typesVersions` mirrors the subpaths for consumers still on `moduleResolution: "node"`. There is **no `package.json#browser` field** — it used to zero Node-only deps (`crypto`, `https`, `jsonwebtoken`, `ws`, `zlib`) for browser/RN builds, but the SDK no longer imports any of them (`src/index.ts` is platform-agnostic: global `WebSocket`, global `FormData`, global `atob`). `scripts/bundle.mjs` keeps a `browserIgnoreModules` hook, currently an empty array, for the day that changes. Prefer a platform global or a browser-safe dep over reintroducing a Node-only one.
 
 esbuild `define` injects two compile-time constants: `process.env.PKG_VERSION` (read from `package.json`) and `process.env.CLIENT_BUNDLE` (one of `node-cjs`, `browser-cjs`, `browser-esm`). Both are consumed by `StreamChat.getUserAgent()` to produce a bundle-aware UA string. **`tsc`-only code paths do not get this substitution** — these env vars only resolve in the esbuild bundles, so don't gate runtime logic on them in code that callers might import directly via `src/`.
 
@@ -70,6 +72,8 @@ This is a single-package SDK with **no monorepo**. The public surface is everyth
   - `pagination/` — `BasePaginator` (cursor-or-offset, debounced, exposes `state: StateStore<PaginatorState>`), plus `FilterBuilder` and `ReminderPaginator`.
   - `reminders/` — `Reminder`, `ReminderManager`, `ReminderTimer` (scheduled-offset reminders with debounced refresh).
   - `search/` — `BaseSearchSource` + concrete `MessageSearchSource`, `ChannelSearchSource`, `UserSearchSource` orchestrated by `SearchController`.
+  - `i18n/` — the translation layer shared by the React and React Native SDKs. **Not exported from `src/index.ts`** — see the i18n section below.
+  - `i18n-codegen/` — build-time translation-catalog generator. A **sibling** of `i18n/`, not a child, so the runtime layer physically cannot reach `node:fs`.
 - Top-level subsystem files: `poll`, `poll_manager`, `thread`, `thread_manager`, `moderation`, `campaign`, `segment`, `permissions`.
 - **`types.ts` (~5k lines) + `custom_types.ts` + `types.utility.ts`** — public type surface. **Custom data is extended via module augmentation on the `Custom*Data` interfaces in `custom_types.ts`** (generics were removed in v9; see README). When adding a field that callers may want to extend, expose it through a `Custom*Data` interface rather than reintroducing a generic.
 
@@ -122,6 +126,47 @@ The canonical flow is:
 4. `client.disconnectUser(timeout?)` — full teardown.
 
 Aliases to be aware of: `setUser` → `connectUser`, `disconnect` → `disconnectUser`. Both are deprecated but still present; new code should use the long names. Server-side use (no `window`, or `secret` provided) prints a warning unless `options.allowServerSideConnect: true` is set.
+
+## i18n
+
+`src/i18n/` holds the translation runtime shared by `stream-chat-react` and
+`stream-chat-react-native` — one `StreamI18n`, one set of formatters, one date layer. Before this, both
+SDKs carried ~1,300 lines of near-duplicate runtime plus a duplicated codegen. See
+`specs/i18n-to-core/` for the initiative and `v9-to-v10-migration-guide-i18n.md` for the consumer delta.
+
+**Three entry points, and the boundaries between them are enforced by the build.** `src/index.ts` must
+**never** `export * from './i18n'` — that is the one reflex to resist. `scripts/bundle.mjs` asserts from
+esbuild's metafile that the root bundle cannot reach `src/i18n/`, `i18next` or `dayjs`, and that
+`src/i18n/` cannot reach the Node-only `src/i18n-codegen/`. Both leaks fail invisibly (everything works,
+the bundle is just bigger), which is why they are machine-checked. `dist/esm/index.mjs` is expected to
+stay byte-identical when only i18n changes.
+
+- **`stream-chat/i18n`** — `StreamI18n`, four formatters, `getDateString`, catalog-generic type helpers,
+  `TranslationBuilder`, generated `LANGUAGE_NAMES`, `CORE_NOTIFICATION_TRANSLATION_KEY`.
+- **`stream-chat/i18n/codegen`** — the catalog generator. `typescript` is **injected** via config, never
+  imported, so core does not depend on the compiler.
+
+Things that will bite:
+
+- **Core ships no catalog.** Each UI SDK generates its own `keys.ts` from its `t()` call sites, so the
+  type helpers are generic over it (`StreamTFunctionFor<Catalog, Bundled>`). `Bundled` **must** default
+  to `never`; defaulting to `string` silently disables all key checking.
+- **`runtimeDefaults` is a constructor option**, not an import — the catalog belongs to the UI layer. It
+  is layered under _every_ language, which is what stops a partial dictionary from knocking out formatter
+  keys. That is guarantee G1 in `test/unit/i18n/StreamI18nGuarantees.test.ts`, which is the acceptance
+  contract for this module: three behavioural guarantees, each written against a real bug.
+- **No module-scope side effects.** Every `Dayjs.extend` goes through `ensureDayjsPlugins()`. This is
+  what makes `sideEffects: false` accurate — do not reintroduce a top-level `extend` or locale import.
+- **`durationFormatter` must use the date library's `.duration()`**, not parse the value as a timestamp.
+  Parsing reads `600000` as ten minutes past the epoch and renders "57 years ago". This is why
+  `DateTimeParser` is the _module_, not a parse function.
+- **i18next post-processing is global.** A `TranslationTopic` is invoked for every key and must pass
+  through calls it does not recognize, or it silently rewrites unrelated copy.
+- **Vitest forces `TZ=UTC`** (`vite.config.ts`). Date assertions are timezone-sensitive; without it a
+  local run disagrees with CI by the host's offset.
+- Notification identity lives in `src/notifications/types.ts` (`CORE_NOTIFICATION_TYPE`). Emit through
+  the map, never a raw literal — a test enforces both that and the reverse (every declared identifier
+  must actually be emitted, so a dead one cannot linger).
 
 ## Conventions to preserve
 
