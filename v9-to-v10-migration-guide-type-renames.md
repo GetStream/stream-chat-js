@@ -12,7 +12,7 @@
 
 For every entry in the table below:
 
-1. Rewrite every occurrence of the v9 name (imports, type annotations, generic arguments, casts, JSDoc) to the v10 name. Match on **whole-word boundaries** — do not blindly replace substrings. Several v9 names appear as prefixes of unrelated identifiers (`PollVote` is a substring of `castPollVote`, `PollVoteResponseData`, `PollVoteChanged`; `ReminderResponse` is a substring of `ReminderResponseData`; `Mute` is a substring of `MuteResponse`, `MuteUserOptions`, `UserMuteResponse`, and many method/field names). Blind `s/PollVote/PollVoteResponseData/g` will corrupt method names and produce identifiers like `castPollVoteResponseData` that do not exist.
+1. Rewrite every occurrence of the v9 name (imports, type annotations, generic arguments, casts, JSDoc) to the v10 name. Match on **whole-word boundaries** — do not blindly replace substrings. Several v9 names appear as prefixes or suffixes of unrelated identifiers (`PollVote` is a substring of `castPollVote`, `PollVoteResponseData`, `PollVoteChanged`; `ReminderResponse` is a substring of `ReminderResponseData`; `Mute` is a substring of `MuteResponse`, `MuteUserOptions`, `UserMuteResponse`, and many method/field names; `RequestOptions` is a substring of `UploadRequestOptions`, which is a **different** type and is not renamed). Blind `s/PollVote/PollVoteResponseData/g` will corrupt method names and produce identifiers like `castPollVoteResponseData` that do not exist.
 2. Keep the import path unchanged — `import { X } from 'stream-chat'` still works with the v10 name.
 3. Do **not** rewrite string literals, JSDoc prose, or command-name data (e.g. `{ name: 'mute', description: 'Mute a user' }`) — only identifiers used in type positions.
 
@@ -64,6 +64,7 @@ v10 exposes two generated types whose names collide with v9 aliases that pointed
 | `QueryUserGroupsResponse`      | `StreamResponse<ListUserGroupsResponse>` | Was a hand-rolled `APIResponse & { user_groups: UserGroupResponse[] }`; v10 uses the generated `ListUserGroupsResponse` wrapped in `StreamResponse<...>`, which adds a `metadata: RequestMetadata` field alongside `duration` and `user_groups`. Callers that only destructure `user_groups` are unaffected.                                                                                                                                                   |
 | `ReadResponse`                 | `ReadStateResponse`                      | Per-user read state on a channel/thread.                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `ReminderResponse`             | `ReminderResponseData`                   | The single-reminder entry returned by the reminders paginator. Note: this is only the type; helper names like `generateReminderResponse` in test utilities should stay as-is.                                                                                                                                                                                                                                                                                  |
+| `RequestOptions`               | `StreamRequestOptions`                   | Per-request options that are never serialized into the payload — still `{ signal?: AbortSignal }`, so the type itself is a 1:1 rename. **The positions that accept it changed**, see [below](#requestoptions--streamrequestoptions).                                                                                                                                                                                                                           |
 | `SharedLocationResponse`       | `SharedLocationResponseData`             | See collision note above — v10 also exports a different `SharedLocationResponse` from the generated shared-location endpoint. Use `SharedLocationResponseData` when replacing the v9 alias.                                                                                                                                                                                                                                                                    |
 | `StaticLocationPayload`        | `SharedLocation`                         | Payload for static (non-live) shared-location attachments.                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `ThreadResponse`               | `ThreadStateResponse`                    | The v9 alias wrapped the generated `ThreadStateResponse` with a `custom` overlay. In v10 the custom-overlay pattern is dropped and `ThreadResponse` in `stream-chat` refers to the minimal generated shape — which is missing `read`, `latest_replies`, and `draft`. Anything using those fields must switch to `ThreadStateResponse`. (`thread_participants` and `parent_message` are on both shapes.) `generateThreadResponse` in test-utils keeps its name. |
@@ -109,6 +110,33 @@ v9 used this one alias for three endpoints. v10 gives each its own generated res
 | `client.markChannelsDelivered` → v10 `markDelivered` | `StreamResponse<MarkDeliveredResponse>` | none — `{ duration }` only. Read the event off the WS stream here. |
 
 Two things to watch on the `markRead` row: `event` became optional, so destructuring it needs narrowing; and `MarkReadResponseEvent` is a **narrower shape than the WS `Event` union** (`type: string` rather than the `'message.read'` literal, and none of the WS read-event extras such as `total_unread_count` / `unread_channels`). It is not assignable to `Event` — do not feed it to code that expects a WS event.
+
+## Rows where the type is unchanged but the call sites moved
+
+### `RequestOptions` → `StreamRequestOptions`
+
+The type is a 1:1 rename — both are `{ signal?: AbortSignal }`, "per-request options that are never part of the serialized request payload". `StreamRequestOptions` is exported from the package root like every other row here. What changed is **where you pass it**.
+
+In v9 it arrived two ways: as a trailing positional parameter (`requestOptions: RequestOptions = {}`) on a handful of hand-written client/channel methods, and as part of `ChannelStateOptions`, which composed `RequestOptions` so that `queryChannels` could carry the abort signal in the same bag as its state flags. In v10:
+
+- `ChannelStateOptions` **no longer composes it** — it is `{ offlineMode?; skipInitialization?; skipHydration?; withResponse? }` only. A `{ ..., signal }` passed there is no longer read.
+- Every method generated from the OpenAPI spec takes `requestOptions?: StreamRequestOptions` as its **last parameter, immediately after the single request object** — e.g. `chatApi.search(request, requestOptions)`.
+- Hand-written overrides in `client.ts` / `channel.ts` only accept it when they forward their arguments wholesale (`...args: Parameters<ChatApi['x']>`). Overrides that narrowed their signature to a single request object dropped the parameter.
+
+Mapping for the v9 methods that took a `RequestOptions`:
+
+| v9 call site                                                      | v10                                                                     |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `client.queryUsers(filters, sort, options, requestOptions)`       | `client.queryUsers(request, requestOptions)` — still accepted           |
+| `client.searchRoles(options, requestOptions)`                     | `client.searchRoles(request, requestOptions)` — still accepted          |
+| `client.searchUserGroups(options, requestOptions)`                | `client.searchUserGroups(request, requestOptions)` — still accepted     |
+| `client.search(filterConditions, query, options, requestOptions)` | `client.search(request)` — **no `requestOptions` parameter**            |
+| `client.queryChannelsRequestWithResponse(…, requestOptions)`      | `client.queryChannels(request)` — **no `requestOptions` parameter**     |
+| `channel.queryMembers(filters, sort, options, requestOptions)`    | `channel.queryMembers({ payload })` — **no `requestOptions` parameter** |
+
+For the last three there is currently no way to cancel through the wrapper — the override hides the generated method, and `ChatApi` itself is not exported from the package root. The remaining route is `client.api.sendRequest(method, url, pathParams, queryParams, body, contentType, { signal })`, which is the layer that reads the option and puts `signal` on the axios request config.
+
+v9 also had `client.createAbortControllerForNextRequest()`, which armed a controller that the next outgoing request picked up implicitly. That is **removed** — pass a `signal` through `StreamRequestOptions` instead.
 
 ## Types that are **not** renamed (kept as-is)
 
