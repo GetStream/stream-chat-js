@@ -1761,7 +1761,7 @@ describe('Channel _handleChannelEvent', function () {
 		it('prevents reporting delivery just reported', () => {
 			// enable delivery events
 			client._addChannelConfig({
-				cid: channel.cid,
+				type: channel.type,
 				config: { ...channel.getConfig(), delivery_events: true },
 			});
 			channel.state.read[user.id] = initialReadState;
@@ -1787,7 +1787,7 @@ describe('Channel _handleChannelEvent', function () {
 		it('keeps reporting delivery if having newer deliveries', () => {
 			// enable delivery events
 			client._addChannelConfig({
-				cid: channel.cid,
+				type: channel.type,
 				config: { ...channel.getConfig(), delivery_events: true },
 			});
 			channel.state.read[user.id] = initialReadState;
@@ -1818,7 +1818,7 @@ describe('Channel _handleChannelEvent', function () {
 		it("does not sync the delivery buffer upon other user's delivery confirmation", () => {
 			// enable delivery events
 			client._addChannelConfig({
-				cid: channel.cid,
+				type: channel.type,
 				config: { ...channel.getConfig(), delivery_events: true },
 			});
 			channel.state.read[user.id] = initialReadState;
@@ -2660,7 +2660,7 @@ describe('Channel lastMessage', async () => {
 	beforeEach(async () => {
 		client = await getClientWithUser();
 		channel = client.channel('messaging', uuidv4());
-		client._addChannelConfig({ cid: channel.cid, config: {} });
+		client._addChannelConfig({ type: channel.type, config: {} });
 	});
 
 	it('should return last message - messages are in order', () => {
@@ -2717,7 +2717,7 @@ describe('Channel lastMessage', async () => {
 
 	it('should return last message - system message is ignored when skip_last_msg_update_for_system_msgs: true', () => {
 		client._addChannelConfig({
-			cid: channel.cid,
+			type: channel.type,
 			config: { skip_last_msg_update_for_system_msgs: true },
 		});
 		channel.state = new ChannelState(channel);
@@ -2741,7 +2741,7 @@ describe('Channel last_message_at', () => {
 	beforeEach(async () => {
 		client = await getClientWithUser();
 		channel = client.channel('messaging', uuidv4());
-		client._addChannelConfig({ cid: channel.cid, config: {} });
+		client._addChannelConfig({ type: channel.type, config: {} });
 		channel.state = new ChannelState(channel);
 	});
 

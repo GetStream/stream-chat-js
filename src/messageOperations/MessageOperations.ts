@@ -1,5 +1,6 @@
 // todo: add tests
 import type { MessageRequest, UpdateMessageOptions } from '../types';
+import { StateStore } from '../store';
 import { formatMessage, localMessageToNewMessagePayload } from '../utils';
 import { MessageOperationStatePolicy } from './MessageOperationStatePolicy';
 import type {
@@ -9,8 +10,17 @@ import type {
   OperationRequestFn,
 } from './types';
 
-const FAILED_SEND_CACHE_MAX_SIZE = 100;
-const FAILED_SEND_CACHE_TTL_MS = 5 * 60 * 1000;
+export type MessageOperationsConfig = {
+  /** Most failed sends kept for retry; the oldest is evicted past this (defaults to 100). */
+  failedSendCacheMaxSize: number;
+  /** How long a failed send stays retryable (defaults to 5 minutes). */
+  failedSendCacheTtlMs: number;
+};
+
+export const DEFAULT_MESSAGE_OPERATIONS_CONFIG: MessageOperationsConfig = {
+  failedSendCacheMaxSize: 100,
+  failedSendCacheTtlMs: 5 * 60 * 1000,
+};
 
 type FailedSendCacheEntry = {
   message: MessageRequest;
@@ -23,9 +33,28 @@ export class MessageOperations {
   private policy: MessageOperationStatePolicy;
   private failedSendCache = new Map<string, FailedSendCacheEntry>();
 
+  /**
+   * Resolved configuration, as a store — the shape every configurable class exposes
+   * (`configState` / `config` / `updateConfig`).
+   */
+  readonly configState: StateStore<MessageOperationsConfig>;
+
   constructor(ctx: MessageOperationsContext) {
     this.ctx = ctx;
     this.policy = new MessageOperationStatePolicy({ ingest: ctx.ingest, get: ctx.get });
+    this.configState = new StateStore<MessageOperationsConfig>({
+      ...DEFAULT_MESSAGE_OPERATIONS_CONFIG,
+    });
+  }
+
+  /** The current resolved configuration. `Readonly` — change it through {@link updateConfig}. */
+  get config(): Readonly<MessageOperationsConfig> {
+    return this.configState.getLatestValue();
+  }
+
+  /** Merges a partial configuration into the resolved config and notifies subscribers. */
+  updateConfig(config: Partial<MessageOperationsConfig>) {
+    this.configState.partialNext(config);
   }
 
   private normalizeMessage(message: MessageRequest): MessageRequest {
@@ -38,7 +67,7 @@ export class MessageOperations {
     const now = Date.now();
 
     for (const [messageId, entry] of this.failedSendCache) {
-      if (now - entry.cachedAt > FAILED_SEND_CACHE_TTL_MS) {
+      if (now - entry.cachedAt > this.config.failedSendCacheTtlMs) {
         this.clearCachedFailedSend(messageId);
       }
     }
@@ -53,7 +82,7 @@ export class MessageOperations {
 
     if (
       !this.failedSendCache.has(params.messageId) &&
-      this.failedSendCache.size >= FAILED_SEND_CACHE_MAX_SIZE
+      this.failedSendCache.size >= this.config.failedSendCacheMaxSize
     ) {
       const oldestMessageId = this.failedSendCache.keys().next().value;
       if (oldestMessageId) {
@@ -72,7 +101,7 @@ export class MessageOperations {
     const cached = this.failedSendCache.get(messageId);
     if (!cached) return;
 
-    if (Date.now() - cached.cachedAt > FAILED_SEND_CACHE_TTL_MS) {
+    if (Date.now() - cached.cachedAt > this.config.failedSendCacheTtlMs) {
       this.clearCachedFailedSend(messageId);
       return;
     }

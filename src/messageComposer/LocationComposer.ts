@@ -29,8 +29,6 @@ export type LocationComposerState = {
 
 export type LocationComposerSnapshot = LocationComposerState;
 
-const MIN_LIVE_LOCATION_SHARE_DURATION = 60 * 1000; // 1 minute;
-
 const initState = ({
   message,
 }: {
@@ -69,8 +67,7 @@ export class LocationComposer {
       location.message_id &&
       location.latitude &&
       location.longitude &&
-      (typeof durationMs === 'undefined' ||
-        durationMs >= MIN_LIVE_LOCATION_SHARE_DURATION)
+      (typeof durationMs === 'undefined' || durationMs >= this.config.minShareDurationMs)
     ) {
       return {
         ...location,

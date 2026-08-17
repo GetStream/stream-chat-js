@@ -7,6 +7,7 @@ export type ChatLoggerScope =
   | 'client'
   | 'connection'
   | 'connection-fallback'
+  | 'instance-configuration'
   | 'message-composer'
   | 'offline-db'
   | 'state-store'

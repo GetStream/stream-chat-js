@@ -31,7 +31,12 @@ export class SearchController {
    */
   _internalState: StateStore<InternalSearchControllerState>;
   state: StateStore<SearchControllerState>;
-  config: SearchControllerConfig;
+
+  /**
+   * Resolved configuration, as a store so consumers can react to it — the same shape every configurable
+   * class exposes (`configState` for the store, {@link config} for the current value).
+   */
+  readonly configState: StateStore<SearchControllerConfig>;
 
   constructor({ config, sources }: SearchControllerOptions = {}) {
     this.state = new StateStore<SearchControllerState>({
@@ -40,8 +45,25 @@ export class SearchController {
       sources: sources ?? [],
     });
     this._internalState = new StateStore<InternalSearchControllerState>({});
-    this.config = { keepSingleActiveSource: true, ...config };
+    this.configState = new StateStore<SearchControllerConfig>({
+      keepSingleActiveSource: true,
+      ...config,
+    });
   }
+
+  /**
+   * The current resolved configuration. `Readonly` because the value is the store's live object —
+   * assigning to a field of it would change state without notifying anyone. Use {@link updateConfig}.
+   */
+  get config(): Readonly<SearchControllerConfig> {
+    return this.configState.getLatestValue();
+  }
+
+  /** Merges a partial configuration into the resolved config and notifies subscribers. */
+  updateConfig(config: Partial<SearchControllerConfig>) {
+    this.configState.partialNext(config);
+  }
+
   get hasNext() {
     return this.sources.some((source) => source.hasNext);
   }

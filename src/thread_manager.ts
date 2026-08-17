@@ -16,7 +16,19 @@ import { WithSubscriptions } from './utils/WithSubscriptions';
 const eventIsHealthCheck = (event: Event): event is EventPayload<'health.check'> =>
   Object.hasOwn(event, 'me');
 
-const DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION = 1000;
+export type ThreadManagerConfig = {
+  /**
+   * Minimum gap between thread-list reloads triggered by connection recovery (defaults to 1000ms).
+   *
+   * Read when subscriptions are registered, since the throttle captures the interval in a closure — a
+   * change applies from the next `registerSubscriptions()`, not retroactively.
+   */
+  connectionRecoveryThrottleMs: number;
+};
+
+export const DEFAULT_THREAD_MANAGER_CONFIG: ThreadManagerConfig = {
+  connectionRecoveryThrottleMs: 1000,
+};
 const MAX_QUERY_THREADS_LIMIT = 25;
 export const THREAD_MANAGER_INITIAL_STATE = {
   active: false,
@@ -74,13 +86,32 @@ export class ThreadManager extends WithSubscriptions {
   // used for threads which are not stored in the list
   // private threadCache: Record<string, Thread | undefined> = {};
 
+  /**
+   * Resolved configuration, as a store — the shape every configurable class exposes
+   * (`configState` / `config` / `updateConfig`).
+   */
+  public readonly configState: StateStore<ThreadManagerConfig>;
+
   constructor({ client }: { client: StreamChat }) {
     super();
 
+    this.configState = new StateStore<ThreadManagerConfig>({
+      ...DEFAULT_THREAD_MANAGER_CONFIG,
+    });
     this.client = client;
     this.state = new StateStore<ThreadManagerState>(THREAD_MANAGER_INITIAL_STATE);
 
     this.threadsByIdGetterCache = { threads: [], threadsById: {} };
+  }
+
+  /** The current resolved configuration. `Readonly` — change it through {@link updateConfig}. */
+  public get config(): Readonly<ThreadManagerConfig> {
+    return this.configState.getLatestValue();
+  }
+
+  /** Merges a partial configuration into the resolved config and notifies subscribers. */
+  public updateConfig(config: Partial<ThreadManagerConfig>) {
+    this.configState.partialNext(config);
   }
 
   public get threadsById() {
@@ -226,7 +257,7 @@ export class ThreadManager extends WithSubscriptions {
         if (!lastConnectionDropAt || !wasActivatedAtLeastOnce) return;
         this.reload({ force: true });
       },
-      DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION,
+      this.config.connectionRecoveryThrottleMs,
       { trailing: true },
     ).throttledFn;
 

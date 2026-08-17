@@ -68,24 +68,30 @@ import { InsightMetrics, postInsights } from './insights';
 import { chatLoggerSystem } from './logger';
 import { Thread } from './thread';
 import { Moderation } from './moderation';
-import { ThreadManager } from './thread_manager';
+import { DEFAULT_THREAD_MANAGER_CONFIG, ThreadManager } from './thread_manager';
 import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import { PollManager } from './poll_manager';
 import { EntityStore } from './entityStore/EntityStore';
 import { ChannelManager } from './ChannelManager';
-import { MessageDeliveryReporter } from './messageDelivery';
+import {
+  DEFAULT_MESSAGE_DELIVERY_REPORTER_CONFIG,
+  MessageDeliveryReporter,
+} from './messageDelivery';
 import { NotificationManager } from './notifications';
-import { ReminderManager } from './reminders';
+import { DEFAULT_NOTIFICATION_MANAGER_CONFIG } from './notifications/configuration';
+import type { NotificationManagerConfig } from './notifications';
+import { DEFAULT_REMINDER_MANAGER_CONFIG, ReminderManager } from './reminders';
 import type { AbstractOfflineDB } from './offline-support';
 import { getPendingTaskChannelData } from './offline-support/util';
 import { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
+import { mergeWith } from './utils/mergeWith';
+import { isEqual } from './utils/mergeWith/mergeWithCore';
 import type { MessageComposer } from './messageComposer';
-import type {
-  MessageComposerSetupState,
-  SetInstanceConfigurationFunctions,
-} from './configuration';
+import type { MessageComposerSetupState } from './configuration';
 import { InstanceConfigurationService } from './configuration/InstanceConfigurationService';
+import { applyInstanceConfiguration } from './configuration/applyInstanceConfiguration';
 import { StateStore } from './store';
+import type { Unsubscribe } from './store';
 import type {
   GetApplicationResponse as Gen_GetApplicationResponse,
   MarkDeliveredRequest as Gen_MarkDeliveredRequest,
@@ -181,7 +187,17 @@ export class StreamChat extends ChatApi {
   moderation: Moderation;
   mutedChannels: ChannelMute[];
   readonly mutedUsersStore: StateStore<{ mutedUsers: UserMuteResponse[] }>;
-  readonly configsStore: StateStore<ChannelConfigsState>;
+  /**
+   * Reactive store behind {@link channelConfigsByType}. The only reactive way to observe server channel
+   * configuration today, which is why `stream-chat-react` reads it — a public, per-channel feature
+   * resolver is the intended replacement.
+   *
+   * Named for what it holds plus a `Store` suffix for what it is, matching {@link mutedUsersStore}. These
+   * are the backend's configs, not the ones you register through {@link config}.
+   *
+   * @internal
+   */
+  readonly channelConfigsByTypeStore: StateStore<ChannelConfigsState>;
   blockedUsers: StateStore<BlockedUsersState>;
   node: boolean;
   options: StreamChatOptions;
@@ -227,7 +243,16 @@ export class StreamChat extends ChatApi {
   private cachedUserAgent?: string;
   readonly messageComposerCache: FixedSizeQueueCache<string, MessageComposer>;
   private nextRequestAbortController: AbortController | null = null;
-  instanceConfigurationService = new InstanceConfigurationService();
+  /**
+   * Configuration you register for instances the SDK creates on your behalf — channels, threads,
+   * composers, and the client's own managers. See `InstanceConfigurationService`.
+   *
+   * Not to be confused with {@link channelConfigsByType}, which holds the **server-provided channel-type
+   * configs** keyed by channel type. This one is yours; that one is the backend's.
+   */
+  readonly config = new InstanceConfigurationService();
+  /** Teardown for the `'client'` setup function, released by {@link disconnectUser}. */
+  private unsubscribeClientConfiguration?: Unsubscribe;
 
   /**
    * Initializes a client.
@@ -265,7 +290,7 @@ export class StreamChat extends ChatApi {
     this.mutedUsersStore = new StateStore<{ mutedUsers: UserMuteResponse[] }>({
       mutedUsers: [],
     });
-    this.configsStore = new StateStore<{ configs: Configs }>({
+    this.channelConfigsByTypeStore = new StateStore<{ configs: Configs }>({
       configs: {},
     });
     this.blockedUsers = new StateStore<BlockedUsersState>({ userIds: [] });
@@ -316,7 +341,7 @@ export class StreamChat extends ChatApi {
     this.activeChannels = {};
 
     // mapping between channel groups and configs
-    this.configs = {};
+    this.channelConfigsByType = {};
     this.persistUserOnConnectionFailure = this.options?.persistUserOnConnectionFailure;
 
     // If its a server-side client, then lets initialize the tokenManager, since token will be
@@ -337,6 +362,75 @@ export class StreamChat extends ChatApi {
     this.reminders = new ReminderManager({ client: this });
     this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });
     this.messageComposerCache = new FixedSizeQueueCache<string, MessageComposer>(64);
+
+    // Seed the declarative configuration before wiring, so a tree passed via `options.config` reaches
+    // the managers above. `'client'` is the one key that cannot be configured after construction —
+    // this service is born here, so there is no earlier moment for a caller to register anything.
+    if (this.options.config) this.config.set(this.options.config);
+    this.initializeManagerConfig();
+
+    // Last statement: everything a setup function might reach now exists. `StateStore.subscribe` fires
+    // immediately, so a function registered later still applies at once.
+    this.wireClientConfiguration();
+  }
+
+  /**
+   * Subscribes the client's managers to the `'client'` configuration key.
+   *
+   * Called by the constructor and again by {@link _setUser}, because {@link disconnectUser} releases this
+   * subscription to run the setup function's teardown. A client is reusable — `getInstance` hands the same
+   * object back, and disconnect/connect is the documented multi-user and mobile-background flow — and the
+   * managers this key configures (`reminders`, `threads`, `messageDeliveryReporter`, `notifications`)
+   * outlive the user. Without the re-arm the key went permanently dead on the second connect: `setConfig`,
+   * `setSetupFunction` and `reset` all stopped reaching any manager, silently.
+   *
+   * Idempotent through the `unsubscribeClientConfiguration` guard, so the constructor's wiring is not
+   * duplicated by the first `connectUser`.
+   */
+  private wireClientConfiguration() {
+    if (this.unsubscribeClientConfiguration) return;
+    this.unsubscribeClientConfiguration = applyInstanceConfiguration({
+      args: { client: this },
+      config: this.config,
+      key: 'client',
+      applyConfig: () => this.initializeManagerConfig(),
+      reinitializeConfig: () => this.initializeManagerConfig(),
+    });
+  }
+
+  /**
+   * Derives each manager's configuration from package defaults plus the `client` declarative subtree.
+   * Shared by the constructor and `config.reset()`, so the two cannot drift.
+   *
+   * Defaults are spread first, and every manager is written unconditionally, because this is a
+   * derivation* rather than a patch — the same rule `Channel.initializeConfig` follows. Guarding on
+   * `if (config?.reminders)` and merging made `reset()` a no-op for this key: the store is cleared
+   * before instances re-derive, so the guards all failed and the registered values stayed in force.
+   * It also meant a field *removed* from the tree lingered, which is exactly what a merge cannot express.
+   */
+  private initializeManagerConfig() {
+    const config = this.config.getConfig('client');
+
+    this.reminders.updateConfig({
+      ...DEFAULT_REMINDER_MANAGER_CONFIG,
+      ...config?.reminders,
+    });
+    this.threads.updateConfig({
+      ...DEFAULT_THREAD_MANAGER_CONFIG,
+      ...config?.threads,
+    });
+    this.messageDeliveryReporter.updateConfig({
+      ...DEFAULT_MESSAGE_DELIVERY_REPORTER_CONFIG,
+      ...config?.messageDelivery,
+    });
+    // Deep-merged, not spread: `notifications.durations` is nested and the slice is a `DeepPartial`, so
+    // `{ durations: { error } }` must keep the three sibling durations rather than replace the object.
+    this.notifications.updateConfig(
+      mergeWith(
+        { ...DEFAULT_NOTIFICATION_MANAGER_CONFIG },
+        (config?.notifications ?? {}) as object,
+      ) as Partial<NotificationManagerConfig>,
+    );
   }
 
   get mutedUsers() {
@@ -347,12 +441,29 @@ export class StreamChat extends ChatApi {
     this.mutedUsersStore.next({ mutedUsers });
   }
 
-  get configs() {
-    return this.configsStore.getLatestValue().configs;
+  /**
+   * Cache of server-provided channel configuration, keyed by **channel type** — the settings are
+   * defined per type, so one entry serves every channel of that type.
+   *
+   * Read it through {@link Channel.getConfig} rather than here. Not to be confused with
+   * {@link config}, which is the configuration *you* register for SDK-created instances.
+   *
+   * This was `client.configs` through v9, keyed by **cid**. There is deliberately no `configs` alias:
+   * the name survived but its key space did not, so an alias would make `client.configs[cid]` return
+   * `undefined` instead of failing. Removing the name turns a silent wrong lookup into an obvious one.
+   *
+   * Assigning through this setter notifies subscribers; mutating the returned record in place does not.
+   * Prefer {@link _addChannelConfig}.
+   *
+   * @internal
+   */
+  get channelConfigsByType() {
+    return this.channelConfigsByTypeStore.getLatestValue().configs;
   }
 
-  set configs(configs: Configs) {
-    this.configsStore.next({ configs });
+  /** @internal */
+  set channelConfigsByType(configs: Configs) {
+    this.channelConfigsByTypeStore.next({ configs });
   }
 
   /**
@@ -409,18 +520,13 @@ export class StreamChat extends ChatApi {
 
   _hasConnectionID = () => Boolean(this._getConnectionID());
 
+  /**
+   * @deprecated Use `client.config.setSetupFunction('messageComposer', fn)`.
+   */
   public setMessageComposerSetupFunction = (
     setupFunction: MessageComposerSetupState['setupFunction'],
   ) => {
-    this.instanceConfigurationService.setSetupFunctions({
-      MessageComposer: setupFunction,
-    });
-  };
-
-  public setInstanceConfigurationFunction = (
-    setupFunctions: SetInstanceConfigurationFunctions,
-  ) => {
-    this.instanceConfigurationService.setSetupFunctions(setupFunctions);
+    this.config.setSetupFunction('messageComposer', setupFunction);
   };
 
   /**
@@ -506,6 +612,9 @@ export class StreamChat extends ChatApi {
     this.user = user;
     // this one is actually used for requests. This is a copy of current user provided to `connectUser` function.
     this._user = { ...user };
+    // Re-arm the `'client'` key if a previous `disconnectUser` released it. Teardown at disconnect,
+    // setup at connect — see {@link wireClientConfiguration}.
+    this.wireClientConfiguration();
   }
 
   /**
@@ -649,6 +758,9 @@ export class StreamChat extends ChatApi {
     this.mutedChannels = [];
     this.uploadManager.reset();
     this.messageComposerCache.clear();
+    // Runs the `'client'` setup function's teardown. Cleared so repeated calls cannot double-run it.
+    this.unsubscribeClientConfiguration?.();
+    this.unsubscribeClientConfiguration = undefined;
 
     // Since we wipe all user data already, we should reset token manager as well
     closePromise
@@ -1504,13 +1616,39 @@ export class StreamChat extends ChatApi {
     this.options.device = device;
   }
 
-  _addChannelConfig({ cid, config }: ChannelResponse) {
-    if (this._cacheEnabled()) {
-      this.configs = {
-        ...this.configs,
-        [cid]: config,
-      };
-    }
+  /**
+   * Caches a channel type's server configuration.
+   *
+   * Keyed by **type**, not cid: every field in `ChannelConfigWithInfo` is a channel-*type* setting
+   * (`automod`, `commands`, `max_message_length`, the feature flags), and `config.name` is the type
+   * name. Keying by cid stored one identical copy per channel and left channels of an
+   * already-seen type reporting no config at all until they were themselves queried.
+   *
+   * An absent `config` is ignored rather than stored. `ChannelResponse.config` is optional — the
+   * `notification.message_new` payload is one route that may omit it — and writing `undefined` would
+   * un-learn* a config already known for the type. Keyed by cid that voided one channel; keyed by type it
+   * voids every channel of the type, and since the composer reads `getConfig()` for `shared_locations` and
+   * `max_message_length`, the result is a server restriction silently lifted (**DV-16**).
+   *
+   * A config deep-equal to the one already stored is ignored too, which is what keeps a channel query from
+   * waking every live composer. The API returns a **fresh object** for the same channel type on every
+   * response, so the store's `===` no-op never applied and the by-type selector in
+   * `MessageComposer.subscribeChannelConfigChanged` fired on each one. Measured on a 10-channel
+   * `queryChannels` page with three open composers: 30 configuration re-resolutions and 30 subscriber runs,
+   * every one of them producing a value identical to the last. Comparing here rather than in the composer
+   * skips the work as well as the notification, and covers every other reader of this store too.
+   *
+   * @internal
+   */
+  _addChannelConfig({ config, type }: Pick<ChannelResponse, 'config' | 'type'>) {
+    if (!config) return;
+    if (!this._cacheEnabled()) return;
+    if (isEqual(this.channelConfigsByType[type], config)) return;
+
+    this.channelConfigsByType = {
+      ...this.channelConfigsByType,
+      [type]: config,
+    };
   }
 
   /**

@@ -1,4 +1,5 @@
 import type { StreamChat } from '../client';
+import { StateStore } from '../store';
 import { Channel } from '../channel';
 import type { ThreadUserReadState } from '../thread';
 import { Thread } from '../thread';
@@ -14,10 +15,29 @@ import { throttle, userHasReadReceipts } from '../utils';
 import { isAPIError, isErrorRetryable } from '../errors';
 import type { MarkReadResponse as Gen_MarkReadResponse } from '../gen/models';
 
-const MAX_DELIVERED_MESSAGE_COUNT_IN_PAYLOAD = 100 as const;
-const MARK_AS_DELIVERED_BUFFER_TIMEOUT = 1000 as const;
-const MARK_AS_READ_THROTTLE_TIMEOUT = 1000 as const;
-const RETRY_COUNT_LIMIT_FOR_TIMEOUT_INCREASE = 3 as const;
+export type MessageDeliveryReporterConfig = {
+  /** How long delivery reports are buffered before being sent as one batch (defaults to 1000ms). */
+  markAsDeliveredBufferTimeoutMs: number;
+  /**
+   * Minimum gap between automatic `markRead` calls (defaults to 1000ms).
+   *
+   * Read once, when the throttle is built — assigning it later does nothing, which is why
+   * {@link MessageDeliveryReporter.setMarkAsReadThrottleOptions} exists and why the declarative path
+   * routes through it.
+   */
+  markAsReadThrottleTimeoutMs: number;
+  /** Most delivery receipts sent in a single request; the remainder is carried to the next (100). */
+  maxDeliveredMessageCountInPayload: number;
+  /** Consecutive timeouts before the buffer window is widened (defaults to 3). */
+  retryCountLimitForTimeoutIncrease: number;
+};
+
+export const DEFAULT_MESSAGE_DELIVERY_REPORTER_CONFIG: MessageDeliveryReporterConfig = {
+  markAsDeliveredBufferTimeoutMs: 1000,
+  markAsReadThrottleTimeoutMs: 1000,
+  maxDeliveredMessageCountInPayload: 100,
+  retryCountLimitForTimeoutIncrease: 3,
+};
 
 const isChannel = (item: Channel | Thread): item is Channel => item instanceof Channel;
 const isThread = (item: Channel | Thread): item is Thread => item instanceof Thread;
@@ -45,13 +65,55 @@ export class MessageDeliveryReporter {
   protected markDeliveredRequestPromise: Promise<void> | null = null;
   protected markDeliveredTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  protected requestTimeoutMs: number = MARK_AS_DELIVERED_BUFFER_TIMEOUT;
-  // increased up to RETRY_COUNT_LIMIT_FOR_TIMEOUT_INCREASE
+  protected requestTimeoutMs: number =
+    DEFAULT_MESSAGE_DELIVERY_REPORTER_CONFIG.markAsDeliveredBufferTimeoutMs;
+  // increased up to config.retryCountLimitForTimeoutIncrease
   protected requestRetryCount: number = 0;
+
+  /**
+   * Resolved configuration, as a store — the shape every configurable class exposes
+   * (`configState` / `config` / `updateConfig`).
+   */
+  readonly configState: StateStore<MessageDeliveryReporterConfig>;
 
   constructor({ client }: MessageDeliveryReporterOptions) {
     this.client = client;
+    this.configState = new StateStore<MessageDeliveryReporterConfig>({
+      ...DEFAULT_MESSAGE_DELIVERY_REPORTER_CONFIG,
+    });
   }
+
+  /** The current resolved configuration. `Readonly` — change it through {@link updateConfig}. */
+  get config(): Readonly<MessageDeliveryReporterConfig> {
+    return this.configState.getLatestValue();
+  }
+
+  /**
+   * Merges a partial configuration in. `markAsReadThrottleTimeoutMs` is routed through its rebuild
+   * setter, because the throttle captured the old interval in a closure and would otherwise ignore it.
+   */
+  updateConfig(config: Partial<MessageDeliveryReporterConfig>) {
+    const { markAsReadThrottleTimeoutMs, ...rest } = config;
+    if (Object.keys(rest).length) this.configState.partialNext(rest);
+    if (typeof markAsReadThrottleTimeoutMs === 'number') {
+      this.setMarkAsReadThrottleOptions({ markAsReadThrottleTimeoutMs });
+    }
+  }
+
+  /**
+   * Rebuilds the `markRead` throttle for a new interval.
+   *
+   * Needed because the throttle is created as a field initializer — before any declarative
+   * configuration has been applied — so the interval is captured once. Assigning the config value
+   * alone would leave the original throttle in place, silently.
+   */
+  setMarkAsReadThrottleOptions = ({
+    markAsReadThrottleTimeoutMs,
+  }: Pick<MessageDeliveryReporterConfig, 'markAsReadThrottleTimeoutMs'>) => {
+    if (this.config.markAsReadThrottleTimeoutMs === markAsReadThrottleTimeoutMs) return;
+    this.configState.partialNext({ markAsReadThrottleTimeoutMs });
+    this.throttledMarkRead = this.buildThrottledMarkRead(markAsReadThrottleTimeoutMs);
+  };
 
   private get markDeliveredRequestInFlight() {
     return this.markDeliveredRequestPromise !== null;
@@ -75,13 +137,13 @@ export class MessageDeliveryReporter {
   }
 
   private increaseBackOff() {
-    if (this.requestRetryCount >= RETRY_COUNT_LIMIT_FOR_TIMEOUT_INCREASE) return;
+    if (this.requestRetryCount >= this.config.retryCountLimitForTimeoutIncrease) return;
     this.requestRetryCount = this.requestRetryCount + 1;
     this.requestTimeoutMs = this.requestTimeoutMs * 2;
   }
 
   private resetBackOff() {
-    this.requestTimeoutMs = MARK_AS_DELIVERED_BUFFER_TIMEOUT;
+    this.requestTimeoutMs = this.config.markAsDeliveredBufferTimeoutMs;
     this.requestRetryCount = 0;
   }
 
@@ -103,9 +165,11 @@ export class MessageDeliveryReporter {
 
   private confirmationsFromDeliveryReportCandidates() {
     const entries = Array.from(this.deliveryReportCandidates);
-    const sendBuffer = new Map(entries.slice(0, MAX_DELIVERED_MESSAGE_COUNT_IN_PAYLOAD));
+    const sendBuffer = new Map(
+      entries.slice(0, this.config.maxDeliveredMessageCountInPayload),
+    );
     this.deliveryReportCandidates = new Map(
-      entries.slice(MAX_DELIVERED_MESSAGE_COUNT_IN_PAYLOAD),
+      entries.slice(this.config.maxDeliveredMessageCountInPayload),
     );
 
     return { latest_delivered_messages: this.confirmationsFrom(sendBuffer), sendBuffer };
@@ -340,24 +404,26 @@ export class MessageDeliveryReporter {
   };
 
   /**
-   * Throttles the MessageDeliveryReporter.markRead call
+   * Builds the throttled `markRead`. A factory rather than an inline `throttle(...)` so the interval can
+   * be swapped later — see {@link setMarkAsReadThrottleOptions}.
    *
-   * @param collection
-   * @param options
+   * @param intervalMs - minimum gap between automatic `markRead` calls
    */
   // Auto mark-read is throttled and fire-and-forget: it's triggered by state changes / WS events,
   // not by an awaiting caller, so a rejection here has nowhere to propagate and would otherwise
   // surface as an unhandled rejection (e.g. `channel.markRead` throwing when read events are
   // disabled, or a transient network error). Swallow it — the auto path retries on the next
   // trigger, and explicit `markRead()` callers still receive the error.
-  public throttledMarkRead = throttle(
-    (collection: Channel | Thread, options?: MarkReadRequest) => {
-      void this.markRead(collection, options).catch(() => undefined);
-    },
-    MARK_AS_READ_THROTTLE_TIMEOUT,
-    {
-      leading: true,
-      trailing: true,
-    },
-  ).throttledFn;
+  private buildThrottledMarkRead = (intervalMs: number) =>
+    throttle(
+      (collection: Channel | Thread, options?: MarkReadRequest) => {
+        void this.markRead(collection, options).catch(() => undefined);
+      },
+      intervalMs,
+      { leading: true, trailing: true },
+    ).throttledFn;
+
+  public throttledMarkRead = this.buildThrottledMarkRead(
+    DEFAULT_MESSAGE_DELIVERY_REPORTER_CONFIG.markAsReadThrottleTimeoutMs,
+  );
 }

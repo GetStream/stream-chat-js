@@ -54,7 +54,7 @@ describe('MessageDeliveryReporter', () => {
 
     channel = client.channel(channelType, channelId);
     channel.initialized = true;
-    client.configs[channel.cid] = {
+    client.channelConfigsByType[channel.type] = {
       created_at: '',
       delivery_events: true,
       read_events: false,
@@ -109,7 +109,7 @@ describe('MessageDeliveryReporter', () => {
       return channel;
     });
     channels.forEach((ch) => {
-      client.configs[ch.cid] = {
+      client.channelConfigsByType[ch.type] = {
         created_at: '',
         delivery_events: true,
         read_events: false,
@@ -154,7 +154,7 @@ describe('MessageDeliveryReporter', () => {
   });
 
   it('does nothing when delievry events are disabled in channel config', async () => {
-    client.configs[channel.cid] = {
+    client.channelConfigsByType[channel.type] = {
       created_at: '',
       delivery_events: false,
       read_events: false,
@@ -207,7 +207,7 @@ describe('MessageDeliveryReporter', () => {
     thread.channel.initialized = true;
     // Grant delivery permission so we exercise the thread branch of
     // `getNextDeliveryReportCandidate`, not the earlier permission gate.
-    client.configs[thread.channel.cid] = {
+    client.channelConfigsByType[thread.channel.type] = {
       created_at: '',
       delivery_events: true,
       read_events: false,
@@ -300,7 +300,7 @@ describe('MessageDeliveryReporter', () => {
     const ch2 = client.channel('messaging', 'ch2');
     ch2.initialized = true;
 
-    client.configs[ch1.cid] = {
+    client.channelConfigsByType[ch1.type] = {
       created_at: '',
       delivery_events: true,
       read_events: false,
@@ -308,7 +308,7 @@ describe('MessageDeliveryReporter', () => {
       updated_at: '',
     };
 
-    client.configs[ch2.cid] = {
+    client.channelConfigsByType[ch2.type] = {
       created_at: '',
       delivery_events: true,
       read_events: false,
@@ -395,7 +395,7 @@ describe('MessageDeliveryReporter', () => {
       return channel;
     });
     channels.forEach((ch) => {
-      client.configs[ch.cid] = {
+      client.channelConfigsByType[ch.type] = {
         created_at: '',
         delivery_events: true,
         read_events: false,

@@ -8,6 +8,7 @@ import type {
   TextComposerConfig,
 } from './types';
 import { generateUUIDv4 } from '../../utils';
+import { deepFreezeConfig } from '../../utils/deepFreezeConfig';
 import { DEFAULT_COMMANDS_CONFIG } from './commands.configuration';
 
 export const DEFAULT_LINK_PREVIEW_MANAGER_CONFIG: LinkPreviewsManagerConfig = {
@@ -43,13 +44,21 @@ export const DEFAULT_TEXT_COMPOSER_CONFIG: TextComposerConfig = {
 export const DEFAULT_LOCATION_COMPOSER_CONFIG: LocationComposerConfig = {
   enabled: true,
   getDeviceId: () => generateUUIDv4(),
+  minShareDurationMs: 60 * 1000,
 };
 
-export const DEFAULT_COMPOSER_CONFIG: MessageComposerConfig = {
+/**
+ * Frozen, because `MessageComposer.requestedConfig` seeds its merge with a *shallow* spread of this
+ * object: any subtree no configuration layer names stays identical by reference to the one here, and is
+ * reachable through the public `composer.config`. Without the freeze,
+ * `composer.config.drafts.enabled = true` changed the default for every composer on every client in the
+ * process. See {@link deepFreezeConfig}.
+ */
+export const DEFAULT_COMPOSER_CONFIG: MessageComposerConfig = deepFreezeConfig({
   attachments: DEFAULT_ATTACHMENT_MANAGER_CONFIG,
   commands: DEFAULT_COMMANDS_CONFIG,
   drafts: { enabled: false },
   linkPreviews: DEFAULT_LINK_PREVIEW_MANAGER_CONFIG,
   location: DEFAULT_LOCATION_COMPOSER_CONFIG,
   text: DEFAULT_TEXT_COMPOSER_CONFIG,
-};
+});

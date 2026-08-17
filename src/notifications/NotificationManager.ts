@@ -12,11 +12,31 @@ import { DEFAULT_NOTIFICATION_MANAGER_CONFIG } from './configuration';
 export class NotificationManager {
   store: StateStore<NotificationState>;
   private timeouts: Map<string, NodeJS.Timeout> = new Map();
-  config: NotificationManagerConfig;
+
+  /**
+   * Resolved configuration, as a store so consumers can react to it — the same shape every configurable
+   * class exposes (`configState` for the store, {@link config} for the current value).
+   */
+  readonly configState: StateStore<NotificationManagerConfig>;
 
   constructor(config: Partial<NotificationManagerConfig> = {}) {
     this.store = new StateStore<NotificationState>({ notifications: [] });
-    this.config = mergeWith(DEFAULT_NOTIFICATION_MANAGER_CONFIG, config);
+    this.configState = new StateStore<NotificationManagerConfig>(
+      mergeWith(DEFAULT_NOTIFICATION_MANAGER_CONFIG, config),
+    );
+  }
+
+  /**
+   * The current resolved configuration. `Readonly` because the value is the store's live object —
+   * assigning to a field of it would change state without notifying anyone. Use {@link updateConfig}.
+   */
+  get config(): Readonly<NotificationManagerConfig> {
+    return this.configState.getLatestValue();
+  }
+
+  /** Deep-merges a partial configuration into the resolved config and notifies subscribers. */
+  updateConfig(config: Partial<NotificationManagerConfig>) {
+    this.configState.next((current) => mergeWith({ ...current }, config as object));
   }
 
   get notifications() {

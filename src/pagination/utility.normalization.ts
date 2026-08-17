@@ -84,11 +84,24 @@ export function tokenize(s: string): string[] {
   return normalizeString(s).split(/\s+/).filter(Boolean);
 }
 
-// dot-path accessor
-export function resolveDotPathValue(obj: any, path: string): unknown[] {
+/**
+ * Reads `a.b.c` off an item, for the filter and sort compilers.
+ *
+ * Descends through **anything indexable** — plain objects, arrays (`items.0.id`, `items.length`) and class
+ * instances (a `Reminder`, a `Poll`) — because a filter path legitimately reaches into all three. That is why
+ * this is not `getPath` from `src/utils/objectPath.ts`, which deliberately walks plain records only; the two
+ * are documented there as non-interchangeable.
+ *
+ * Stops at `null` / `undefined`, the only values that cannot be indexed. It used to stop at any *falsy*
+ * value, which made the result depend on a string's contents rather than on its shape: `name.length`
+ * resolved to `2` for `'ab'` and to `undefined` for `''`. A falsy value at the end of a path was never
+ * affected — the guard only ever ran against an intermediate — so `{ count: 0 }` on `'count'` has always
+ * returned `0`, and sorting and filtering on scalar fields were never wrong.
+ */
+export function resolveDotPathValue(obj: any, path: string): unknown {
   return path
     .split('.')
-    .reduce((reduced, key) => (!reduced ? undefined : reduced[key]), obj);
+    .reduce((reduced, key) => (reduced == null ? undefined : reduced[key]), obj);
 }
 
 export function isIterableButNotString(v: unknown): v is Iterable<unknown> {

@@ -64,6 +64,20 @@ export class CooldownTimer extends WithSubscriptions {
     return this.state.getLatestValue().ownLatestMessageDate;
   }
 
+  /**
+   * Opt-in event handling for a timer driven on its own.
+   *
+   * **Nothing in this package calls this**, and that is deliberate rather than an oversight: the owning
+   * `Channel` refreshes the timer imperatively from `query()`, from its `message.new` and `channel.updated`
+   * handlers, and from `updatePartial()`. Each subscription below therefore duplicates a refresh the
+   * channel already performs — `channel.updated` unconditionally, which is broader than the guard here.
+   *
+   * So do not read a subscription here as the thing that makes a case work. It shipped in v9.50.3
+   * unregistered too, and a `capabilities.changed` handler was added here on the assumption it closed a
+   * gap; the gap was real but the fix was inert, and it is `Channel.updatePartial` that closes it.
+   *
+   * Kept because it is released surface an integrator can still use to drive a timer the channel does not.
+   */
   public registerSubscriptions = () => {
     this.incrementRefCount();
     if (this.hasSubscriptions) return;
@@ -81,6 +95,15 @@ export class CooldownTimer extends WithSubscriptions {
       this.channel.on('channel.updated', (event) => {
         const cooldownChanged = event.channel?.cooldown !== this.cooldownConfigSeconds;
         if (!cooldownChanged) return;
+        this.refresh();
+      }).unsubscribe,
+    );
+
+    // `canSkipCooldown` derives from `own_capabilities`, which can change without `cooldown` changing — and
+    // the guard above filters exactly that case out. Unguarded on purpose: `refresh()` already no-ops
+    // unless one of its inputs actually moved.
+    this.addUnsubscribeFunction(
+      this.channel.on('capabilities.changed', () => {
         this.refresh();
       }).unsubscribe,
     );

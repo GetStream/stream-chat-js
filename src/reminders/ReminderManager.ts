@@ -76,6 +76,14 @@ export class ReminderManager extends WithSubscriptions {
   }
 
   // Config API START //
+  /**
+   * The current resolved configuration. `Readonly` because the value is the store's live object —
+   * assigning to a field of it would change state without notifying anyone. Use {@link updateConfig}.
+   */
+  get config(): Readonly<ReminderManagerConfig> {
+    return this.configState.getLatestValue();
+  }
+
   updateConfig(config: Partial<ReminderManagerConfig>) {
     if (
       typeof config.stopTimerRefreshBoundaryMs === 'number' &&

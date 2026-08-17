@@ -319,7 +319,35 @@ export interface PaginatorPlugin<T> {
  */
 // plugins?: PaginatorPlugin<T, Q>[];
 
+/**
+ * The value-level subset of paginator configuration that can be supplied declaratively through
+ * `client.config`. Structural inputs (`itemIndex`, `createItemIndex`) and subclass-installed behaviour
+ * (`doRequest`, `itemOrderComparator`, `deriveCursor`) are deliberately absent — see
+ * {@link BasePaginator.initializeConfig}.
+ *
+ * Declared standalone rather than derived from {@link PaginatorOptions} to avoid a circular type.
+ */
+export type DeclarativePaginatorConfig = {
+  debounceMs?: number;
+  hasPaginationQueryShapeChanged?: PaginationQueryShapeChangeIdentifier<any>;
+  initialCursor?: PaginatorCursor;
+  initialOffset?: number;
+  lockItemOrder?: boolean;
+  pageSize?: number;
+  retryCount?: number;
+  stateThrottleMs?: number;
+  throwErrors?: boolean;
+};
+
 export type PaginatorOptions<T, Q> = {
+  /**
+   * Declarative configuration for this paginator, supplied by whoever constructs it from
+   * `client.config`. Kept separate from the other options so {@link BasePaginator.initializeConfig}
+   * can re-derive with a *fresh* slice — a reset then drops declarative values while preserving
+   * constructor-injected ones. Excluded from {@link BasePaginatorConfig}: it is an input, not part of
+   * the resolved configuration.
+   */
+  declarativeConfig?: DeclarativePaginatorConfig;
   /** The number of milliseconds to debounce the search query. The default interval is 300ms. */
   debounceMs?: number;
   /**
@@ -388,16 +416,27 @@ type OptionalPaginatorConfigFields =
   | 'doRequest'
   | 'initialCursor'
   | 'initialOffset'
-  | 'itemIndex'
-  | 'createItemIndex'
   | 'itemOrderComparator'
   | 'throwErrors';
 
-export type BasePaginatorConfig<T, Q> = Pick<
+/**
+ * Construction-only inputs that are not part of the resolved configuration.
+ *
+ * `itemIndex` and `createItemIndex` are here rather than in {@link BasePaginatorConfig} because the
+ * constructor destructures them out before building the config and resolves them once into
+ * {@link BasePaginator._itemIndex}. They were typed as config members and never written, so
+ * `paginator.config.itemIndex` compiled and returned `undefined` for every paginator ever built.
+ */
+type ResolvedPaginatorOptions<T, Q> = Omit<
   PaginatorOptions<T, Q>,
+  'createItemIndex' | 'declarativeConfig' | 'itemIndex'
+>;
+
+export type BasePaginatorConfig<T, Q> = Pick<
+  ResolvedPaginatorOptions<T, Q>,
   OptionalPaginatorConfigFields
 > &
-  Required<Omit<PaginatorOptions<T, Q>, OptionalPaginatorConfigFields>>;
+  Required<Omit<ResolvedPaginatorOptions<T, Q>, OptionalPaginatorConfigFields>>;
 
 const baseHasPaginationQueryShapeChanged: PaginationQueryShapeChangeIdentifier<
   unknown
@@ -423,7 +462,30 @@ export abstract class BasePaginator<T, Q> {
    * active window + pagination status.
    */
   intervalViews: StateStore<PaginatorIntervalViews<T>>;
-  config: BasePaginatorConfig<T, Q>;
+
+  /**
+   * The paginator's resolved configuration, as a store so consumers can react to it.
+   *
+   * Every configurable class exposes its resolved configuration this way — `configState` for the store,
+   * {@link config} for the current value. Before this, paginators held a plain object that changed
+   * silently, so anything displaying a paginator's settings had to poll to notice a
+   * `client.config.set()` or `reset()`.
+   *
+   * This is *resolved* configuration, distinct from `client.config`, which holds the configuration you
+   * registered. The registered tree is an input to {@link initializeConfig}; this is its output.
+   */
+  readonly configState: StateStore<BasePaginatorConfig<T, Q>>;
+
+  /**
+   * Options this paginator was constructed with, kept so {@link initializeConfig} can rebuild the
+   * config from its real inputs instead of restoring a snapshot of the result. Excludes the
+   * declarative slice, which is supplied fresh on every call — that is what lets a reset drop
+   * declarative configuration while keeping constructor-injected options.
+   */
+  private readonly explicitOptions: Omit<
+    PaginatorOptions<T, Q>,
+    'createItemIndex' | 'declarativeConfig' | 'itemIndex'
+  >;
 
   /**
    * Throttle for the active-window `state.items` publish (message list). Created only when
@@ -507,40 +569,26 @@ export abstract class BasePaginator<T, Q> {
   }
 
   protected constructor({
+    declarativeConfig,
     initialCursor,
     initialOffset,
     itemIndex,
     createItemIndex,
     ...options
   }: PaginatorOptions<T, Q> = {}) {
-    this.config = {
+    this.explicitOptions = { initialCursor, initialOffset, ...options };
+    this.configState = new StateStore<BasePaginatorConfig<T, Q>>({
       ...DEFAULT_PAGINATION_OPTIONS,
-      initialCursor,
-      initialOffset,
-      ...options,
-    };
+      ...this.explicitOptions,
+      ...(declarativeConfig ?? {}),
+    });
     const { debounceMs } = this.config;
     this.state = new StateStore<PaginatorState<T>>({
       ...this.initialState,
       cursor: initialCursor,
       offset: initialOffset ?? 0,
     });
-    if (this.config.stateThrottleMs) {
-      // Coalesce the paginator's own live `state.items` publishes (see `stateThrottleMs` doc). The
-      // trailing edge re-projects the active window fresh, so a burst emits ~once per interval.
-      this._windowPublishThrottle = throttle(
-        () => this.flushWindowPublish(),
-        this.config.stateThrottleMs,
-        { leading: true, trailing: true },
-      );
-      // Interval view publishes ride their own throttle so they coalesce like `state.items` but land
-      // on an independent trailing edge (see {@link _viewPublishThrottle}).
-      this._viewPublishThrottle = throttle(
-        () => this.flushIntervalViewPublish(),
-        this.config.stateThrottleMs,
-        { leading: true, trailing: true },
-      );
-    }
+    this.setStateThrottleOptions({ stateThrottleMs: this.config.stateThrottleMs });
     this.intervalViews = new StateStore<PaginatorIntervalViews<T>>({
       logicalHead: [],
       logicalTail: [],
@@ -657,20 +705,37 @@ export abstract class BasePaginator<T, Q> {
     return this.state.getLatestValue().offset;
   }
 
+  /**
+   * The current resolved configuration.
+   *
+   * `Readonly` on purpose: the value is the store's live object, so assigning to a field of it would
+   * mutate state without notifying anyone. That used to be the only way to change these values, so the
+   * type is what turns those call sites into compile errors rather than silent non-reactive writes —
+   * use {@link updateConfig}.
+   */
+  get config(): Readonly<BasePaginatorConfig<T, Q>> {
+    return this.configState.getLatestValue();
+  }
+
+  /** Merges a partial configuration into the resolved config and notifies subscribers. */
+  updateConfig(config: Partial<BasePaginatorConfig<T, Q>>) {
+    this.configState.partialNext(config);
+  }
+
   get pageSize() {
     return this.config.pageSize;
   }
 
   set pageSize(size: number) {
-    this.config.pageSize = size;
+    this.updateConfig({ pageSize: size });
   }
 
   set initialCursor(cursor: PaginatorCursor) {
-    this.config.initialCursor = cursor;
+    this.updateConfig({ initialCursor: cursor });
   }
 
   set initialOffset(offset: number) {
-    this.config.initialOffset = offset;
+    this.updateConfig({ initialOffset: offset });
   }
 
   /** Single point of truth: always use the effective comparator */
@@ -2399,6 +2464,81 @@ export abstract class BasePaginator<T, Q> {
   setDebounceOptions = ({ debounceMs }: PaginatorDebounceOptions) => {
     this._executeQueryDebounced = debounce(this.executeQuery.bind(this), debounceMs);
   };
+
+  /**
+   * Rebuilds the state-publish throttles for a new interval, or drops them when the interval is unset.
+   *
+   * This exists because `stateThrottleMs` is read *once*: the throttles capture the interval in their
+   * closures, so assigning `config.stateThrottleMs` afterwards does nothing at all — an unthrottled
+   * paginator never gains a throttle, and a throttled one keeps its original interval. Anything
+   * changing the value at runtime (declarative configuration registered after construction, or
+   * `client.config.reset()`) has to come through here.
+   *
+   * Pending publishes are flushed first, so a swap cannot swallow a trailing-edge emit that was
+   * already scheduled.
+   */
+  setStateThrottleOptions = ({ stateThrottleMs }: { stateThrottleMs?: number }) => {
+    this.flushPendingPublishes();
+
+    // Guarded: `initializeConfig` has already written this value as part of the whole-config `next()`,
+    // and an unguarded `partialNext` always allocates a new object, so it would emit a second,
+    // identical notification on every re-derive.
+    if (this.config.stateThrottleMs !== stateThrottleMs) {
+      this.updateConfig({ stateThrottleMs } as Partial<BasePaginatorConfig<T, Q>>);
+    }
+    this._windowPublishThrottle = undefined;
+    this._viewPublishThrottle = undefined;
+
+    if (!stateThrottleMs) return;
+
+    // Coalesce the paginator's own live `state.items` publishes (see `stateThrottleMs` doc). The
+    // trailing edge re-projects the active window fresh, so a burst emits ~once per interval.
+    this._windowPublishThrottle = throttle(
+      () => this.flushWindowPublish(),
+      stateThrottleMs,
+      {
+        leading: true,
+        trailing: true,
+      },
+    );
+    // Interval view publishes ride their own throttle so they coalesce like `state.items` but land on
+    // an independent trailing edge (see {@link _viewPublishThrottle}).
+    this._viewPublishThrottle = throttle(
+      () => this.flushIntervalViewPublish(),
+      stateThrottleMs,
+      { leading: true, trailing: true },
+    );
+  };
+
+  /**
+   * Re-derives this paginator's configuration from its real inputs: package defaults, the options it
+   * was constructed with, and the declarative slice passed in.
+   *
+   * Called by the constructor and by `client.config.reset()` (through the owning `Channel` / `Thread`),
+   * so the two share one code path and cannot drift. Both read-once fields are routed through their
+   * rebuild setters, because assigning them would be silently discarded.
+   *
+   * Structural wiring is untouched here because it never reaches `config` in the first place:
+   * `itemIndex` and `createItemIndex` are destructured out of the constructor's options and resolved
+   * once into {@link _itemIndex}, so there is nothing in the derived config for a re-derivation to drop.
+   * Subclasses override this to re-install what *their* constructors install — see
+   * `PinnedMessagePaginator`, whose `doRequest` and comparators live nowhere else.
+   *
+   * Note that a subclass re-installing its wiring publishes a *second* `configState` notification for
+   * what is logically one re-derivation. Both carry a complete config, so no subscriber sees a
+   * half-applied state; collapsing them would mean routing every subclass's structural overlay through
+   * the base derivation, which is a larger change than the duplicate notification justifies.
+   */
+  initializeConfig(declarativeConfig?: DeclarativePaginatorConfig): void {
+    this.configState.next({
+      ...DEFAULT_PAGINATION_OPTIONS,
+      ...this.explicitOptions,
+      ...(declarativeConfig ?? {}),
+    } as BasePaginatorConfig<T, Q>);
+
+    this.setDebounceOptions({ debounceMs: this.config.debounceMs });
+    this.setStateThrottleOptions({ stateThrottleMs: this.config.stateThrottleMs });
+  }
 
   protected shouldResetStateBeforeQuery(
     prevQueryShape: unknown | undefined,

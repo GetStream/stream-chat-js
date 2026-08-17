@@ -104,10 +104,11 @@ const setup = ({
 } = {}) => {
   const mockClient = new StreamChat('test-api-key');
   mockClient.user = user;
-  const cid = 'messaging:test-channel-id';
+  const channelType = 'messaging';
   if (channelConfig) {
+    // Keyed by channel type, not cid — see `Configs`.
     // @ts-expect-error incomplete channel config object
-    mockClient.configs[cid] = channelConfig;
+    mockClient.channelConfigsByType[channelType] = channelConfig;
   }
   // Create a proper Channel instance with only the necessary attributes mocked
   const mockChannel = mockClient.channel('messaging', 'test-channel-id');
@@ -208,6 +209,7 @@ describe('MessageComposer', () => {
         location: {
           enabled: customConfig.location!.enabled,
           getDeviceId: DEFAULT_COMPOSER_CONFIG.location!.getDeviceId,
+          minShareDurationMs: DEFAULT_COMPOSER_CONFIG.location!.minShareDurationMs,
         },
         sendMessageRequestFn: customConfig.sendMessageRequestFn,
         text: {

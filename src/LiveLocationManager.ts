@@ -59,12 +59,33 @@ export type LiveLocationManagerConstructorParameters = {
 // Hard-coded minimal throttle timeout
 export const UPDATE_LIVE_LOCATION_REQUEST_MIN_THROTTLE_TIMEOUT = 3000;
 
+export type LiveLocationManagerConfig = {
+  /**
+   * Shortest gap between live-location update requests (defaults to 3000ms).
+   *
+   * A failsafe against rate limiting, not a protocol limit: integrators already control the update
+   * cadence through a custom `watchLocation`, and this floor stops a chatty one from flooding the API.
+   * Raising it is always safe; lowering it risks 429s, so only do so against a known quota.
+   */
+  minUpdateThrottleMs: number;
+};
+
+export const DEFAULT_LIVE_LOCATION_MANAGER_CONFIG: LiveLocationManagerConfig = {
+  minUpdateThrottleMs: UPDATE_LIVE_LOCATION_REQUEST_MIN_THROTTLE_TIMEOUT,
+};
+
 export class LiveLocationManager extends WithSubscriptions {
   public state: StateStore<LiveLocationManagerState>;
   private client: StreamChat;
   private getDeviceId: DeviceIdGenerator;
   private _deviceId: string;
   private watchLocation: WatchLocation;
+
+  /**
+   * Resolved configuration, as a store — the shape every configurable class exposes
+   * (`configState` / `config` / `updateConfig`).
+   */
+  readonly configState: StateStore<LiveLocationManagerConfig>;
 
   static symbol = Symbol(LiveLocationManager.name);
 
@@ -87,6 +108,19 @@ export class LiveLocationManager extends WithSubscriptions {
     this._deviceId = getDeviceId();
     this.getDeviceId = getDeviceId;
     this.watchLocation = watchLocation;
+    this.configState = new StateStore<LiveLocationManagerConfig>({
+      ...DEFAULT_LIVE_LOCATION_MANAGER_CONFIG,
+    });
+  }
+
+  /** The current resolved configuration. `Readonly` — change it through {@link updateConfig}. */
+  get config(): Readonly<LiveLocationManagerConfig> {
+    return this.configState.getLatestValue();
+  }
+
+  /** Merges a partial configuration into the resolved config and notifies subscribers. */
+  updateConfig(config: Partial<LiveLocationManagerConfig>) {
+    this.configState.partialNext(config);
   }
 
   public async init() {
@@ -174,8 +208,7 @@ export class LiveLocationManager extends WithSubscriptions {
       // but the minimal timeout still has to be set as a failsafe (to prevent rate-limitting)
       if (Date.now() < nextAllowedUpdateCallTimestamp) return;
 
-      nextAllowedUpdateCallTimestamp =
-        Date.now() + UPDATE_LIVE_LOCATION_REQUEST_MIN_THROTTLE_TIMEOUT;
+      nextAllowedUpdateCallTimestamp = Date.now() + this.config.minUpdateThrottleMs;
 
       withCancellation(LiveLocationManager.symbol, async () => {
         const promises: Promise<SharedLocationResponseData>[] = [];

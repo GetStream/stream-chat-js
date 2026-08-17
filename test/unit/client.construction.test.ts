@@ -78,7 +78,7 @@ describe('StreamChat construction', () => {
       expect(client.mutedChannels).to.deep.equal([]);
       expect(client.mutedUsers).to.deep.equal([]);
       expect(client.activeChannels).to.deep.equal({});
-      expect(client.configs).to.deep.equal({});
+      expect(client.channelConfigsByType).to.deep.equal({});
 
       expect(client.wsConnection).to.be.null;
       expect(client.wsPromise).to.be.null;
@@ -103,7 +103,7 @@ describe('StreamChat construction', () => {
       expect(a.mutedChannels).to.not.equal(b.mutedChannels);
       expect(a.mutedUsers).to.not.equal(b.mutedUsers);
       expect(a.activeChannels).to.not.equal(b.activeChannels);
-      expect(a.configs).to.not.equal(b.configs);
+      expect(a.channelConfigsByType).to.not.equal(b.channelConfigsByType);
       expect(a.blockedUsers).to.not.equal(b.blockedUsers);
       expect(a.options).to.not.equal(b.options);
       expect(a.axiosInstance).to.not.equal(b.axiosInstance);

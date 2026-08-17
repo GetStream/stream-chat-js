@@ -8,6 +8,7 @@ import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';
 import { MessagePaginator, PinnedMessagePaginator } from './pagination/paginators';
 import { MessageOperations } from './messageOperations';
+import { DEFAULT_MESSAGE_OPERATIONS_CONFIG } from './messageOperations/MessageOperations';
 import {
   channelHasReadEvents,
   formatMessage,
@@ -17,6 +18,12 @@ import {
 } from './utils';
 import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
+import { applyInstanceConfiguration } from './configuration/applyInstanceConfiguration';
+import type { ChannelDeclarativeConfig } from './configuration/types';
+import {
+  mergeDeclarativeMessageOperationsConfig,
+  mergeDeclarativePaginatorConfig,
+} from './configuration/types';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import type {
   AIState,
@@ -61,6 +68,7 @@ import type {
 } from './types';
 import type { RoleName } from './permissions';
 import { StateStore } from './store';
+import type { Unsubscribe } from './store';
 import type {
   ChannelMemberRequest as Gen_ChannelMemberRequest,
   ChannelPushPreferencesResponse as Gen_ChannelPushPreferencesResponse,
@@ -183,6 +191,12 @@ export class Channel extends ChannelApi {
   public readonly pinnedMessagesPaginator: PinnedMessagePaginator;
   public readonly messageOperations: MessageOperations;
   public readonly cooldownTimer: CooldownTimer;
+  /**
+   * Teardown for this channel's configuration subscription, released by {@link _disconnect}. Channels
+   * are retained in `client.activeChannels`, so leaving this subscribed would keep growing the
+   * configuration store's handler set across reconnects.
+   */
+  private unsubscribeConfiguration?: Unsubscribe;
 
   /**
    * Creates a `Channel` instance bound to the given chat client.
@@ -226,6 +240,19 @@ export class Channel extends ChannelApi {
     this.isTyping = false;
     this.disconnected = false;
 
+    // Read the declarative configuration *now*, so it can go into the sub-objects as constructor
+    // options. Some of their fields are read once during construction (`unreadReferencePolicy`, the
+    // initial cursor/offset), so configuring them afterwards would silently do nothing.
+    const declarativeConfig = client.config.getConfig('channel') ?? undefined;
+    // The general `messagePaginator` key applies to every MessagePaginator — this channel's list and
+    // every thread's replies. The per-parent slice below overrides it.
+    const messagePaginatorConfig = mergeDeclarativePaginatorConfig(
+      client.config.getConfig('messagePaginator') ?? undefined,
+      declarativeConfig?.messagePaginator,
+    );
+
+    // The composer reads its own key (`messageComposer`) from the client, so nothing is passed here —
+    // composer configuration is deliberately not nested under `channel`.
     this.messageComposer = new MessageComposer({
       client: this._client,
       compositionContext: this,
@@ -234,8 +261,15 @@ export class Channel extends ChannelApi {
     // Created before MessageReceiptsTracker and CooldownTimer: both read the message paginator
     // (receipts resolve read cursors via findItemByTimestamp; CooldownTimer.refresh reads the
     // latest window at construction).
-    this.messagePaginator = new MessagePaginator({ channel: this });
-    this.pinnedMessagesPaginator = new PinnedMessagePaginator({ channel: this });
+    this.messagePaginator = new MessagePaginator({
+      channel: this,
+      unreadReferencePolicy: messagePaginatorConfig?.unreadReferencePolicy,
+      paginatorOptions: { declarativeConfig: messagePaginatorConfig },
+    });
+    this.pinnedMessagesPaginator = new PinnedMessagePaginator({
+      channel: this,
+      paginatorOptions: { declarativeConfig: declarativeConfig?.pinnedMessagesPaginator },
+    });
 
     this.messageReceiptsTracker = new MessageReceiptsTracker({ channel: this });
     this.messageReceiptsTracker.registerSubscriptions();
@@ -306,6 +340,67 @@ export class Channel extends ChannelApi {
         },
       },
     });
+
+    // Share one derivation path with `config.reset()`, so the two cannot drift. Idempotent: the
+    // sub-objects were already configured through their constructors above; this re-applies the
+    // mutable half through the same code a reset uses.
+    this.initializeConfig(declarativeConfig);
+
+    // Last statement of the constructor: every sub-object a setup function might reach now exists.
+    // A throwing setup function is contained by the helper, so it cannot break `client.channel()`.
+    this.unsubscribeConfiguration = applyInstanceConfiguration({
+      args: { channel: this },
+      config: client.config,
+      key: 'channel',
+      applyConfig: (config) => this.initializeConfig(config),
+      // Reads the slice *fresh* rather than replaying a remembered one: by the time reset calls this,
+      // the declarative store has been cleared, so this correctly derives the un-configured baseline.
+      reinitializeConfig: () =>
+        this.initializeConfig(client.config.getConfig('channel') ?? undefined),
+      // This channel's message paginator also derives from the shared `messagePaginator` key, so a
+      // change there has to run the full cycle — declarative then setup function — rather than a bare
+      // re-derivation, which would drop the setup function's overrides.
+      alsoWatch: ['messagePaginator', 'messageOperations'],
+    });
+  }
+
+  /**
+   * Derives this channel's configuration — and its sub-objects' — from the declarative slice.
+   *
+   * Called by the constructor and by `client.config.reset()`. The channel owns only its own
+   * `requestHandlers`; each sub-object derives its own configuration, so the knowledge of what
+   * `messagePaginator.pageSize` means stays inside the paginator.
+   */
+  initializeConfig(declarativeConfig?: ChannelDeclarativeConfig): void {
+    // Replaces rather than merges: this is a derivation, so a handler dropped from the declarative
+    // tree must disappear. Anything else writing directly into `configState.requestHandlers` — the
+    // React SDK's per-component props do — has to re-apply after a re-derivation; see the note in
+    // `useChannelRequestHandlers`.
+    this.configState.next({ requestHandlers: declarativeConfig?.requestHandlers });
+
+    // The shared `messagePaginator` key applies to every MessagePaginator — this channel's list and
+    // every thread's replies — and the per-parent slice overrides it.
+    this.messagePaginator.initializeConfig(
+      mergeDeclarativePaginatorConfig(
+        this.getClient().config.getConfig('messagePaginator') ?? undefined,
+        declarativeConfig?.messagePaginator,
+      ),
+    );
+    // Single parent, so it stays nested and takes no share of the shared key.
+    this.pinnedMessagesPaginator.initializeConfig(
+      declarativeConfig?.pinnedMessagesPaginator,
+    );
+
+    // `MessageOperations` backs both channel and thread sends, so it has a shared top-level key with a
+    // per-parent override — the same shape as `messagePaginator`. Defaults are spread first so a field
+    // dropped from the declarative tree returns to its default rather than lingering.
+    this.messageOperations.updateConfig({
+      ...DEFAULT_MESSAGE_OPERATIONS_CONFIG,
+      ...mergeDeclarativeMessageOperationsConfig(
+        this.getClient().config.getConfig('messageOperations') ?? undefined,
+        declarativeConfig?.messageOperations,
+      ),
+    });
   }
 
   /**
@@ -327,7 +422,8 @@ export class Channel extends ChannelApi {
    */
   getConfig() {
     const client = this.getClient();
-    return client.configs[this.cid];
+    // Keyed by channel type — the config is a property of the type, not of this channel.
+    return client.channelConfigsByType[this.type];
   }
 
   _sendMessage(request: Gen_SendMessageRequest) {
@@ -726,6 +822,12 @@ export class Channel extends ChannelApi {
     this._syncStateFromChannelData(this.data, previousData);
     // If the capabiltities are changed, we trigger the `capabilities.changed` event.
     if (capabilitiesChanged) {
+      // `canSkipCooldown` is derived from `own_capabilities` and stored, so it has to be recomputed here.
+      // This channel drives its cooldown timer — `query()` and the `channel.updated` handler refresh it the
+      // same way — and this was the one route that announced a capability change without doing so, leaving
+      // a granted or revoked `skip-slow-mode` unobserved. The timer's own `capabilities.changed`
+      // subscription does not cover it: nothing registers the timer's subscriptions.
+      this.cooldownTimer.refresh();
       this.getClient().dispatchEvent({
         type: 'capabilities.changed',
         cid: this.cid,
@@ -1528,12 +1630,15 @@ export class Channel extends ChannelApi {
 
     this.getClient()._addChannelConfig(channel);
 
-    // the only config param that is necessary to be updated based on server config soon as the config is delivered
-    if (typeof channel.config?.shared_locations !== 'undefined') {
-      this.messageComposer.updateConfig({
-        location: { enabled: channel.config.shared_locations },
-      });
-    }
+    // The composer derives part of its configuration from this channel's server-side config, which for a
+    // channel opened via `client.channel(type, id)` arrives only now — after the composer was built. A
+    // composer with registered subscriptions hears about it through the store; one without has no other
+    // route, so it is told here.
+    //
+    // Restrictions, not a request: passing the server's value to `updateConfig` would record a server
+    // *permission* as something the client asked for, and so re-enable a feature an integrator had
+    // deliberately turned off (**DV-18**).
+    this.messageComposer.applyServerRestrictions();
 
     // Seed the message paginator with the first (latest) page BEFORE _initializeState, which
     // hydrates the read state and (via MessageReceiptsTracker) resolves read/delivered cursors
@@ -2591,6 +2696,10 @@ export class Channel extends ChannelApi {
     logger.withExtraTags('_disconnect', this.cid).info('Disconnecting the channel.');
 
     this.disconnected = true;
+    // Runs the `'channel'` setup function's teardown and removes this channel from the configuration
+    // store's subscribers. Cleared so a repeated `_disconnect` cannot double-run it.
+    this.unsubscribeConfiguration?.();
+    this.unsubscribeConfiguration = undefined;
     this.messageReceiptsTracker.unregisterSubscriptions();
     this.cooldownTimer.clearTimeout();
     // Release the store-backed paginators so the message store no longer pins this removed channel

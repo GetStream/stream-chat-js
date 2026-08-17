@@ -1,4 +1,5 @@
 import type {
+  DeclarativePaginatorConfig,
   ExecuteQueryReturnValue,
   Interval,
   PostQueryReconcileParams,
@@ -123,6 +124,13 @@ export class MessagePaginator extends MessageIntervalPaginator {
    */
   readonly aggregateState: StateStore<MessagePaginatorAggregateState>;
 
+  /**
+   * The message list raises `stateThrottleMs` from the base's `undefined` to 500ms. Remembered here so
+   * `initializeConfig` re-applies it: a bare re-derivation would otherwise inherit the base default and
+   * silently drop the list's render coalescing.
+   */
+  private readonly subclassDefaults: { stateThrottleMs?: number };
+
   constructor({
     unreadReferencePolicy = 'snapshot',
     ...options
@@ -141,6 +149,9 @@ export class MessagePaginator extends MessageIntervalPaginator {
       // ancestor), so both the main list and the pinned list share the client-global message store.
     });
     this.unreadReferencePolicy = unreadReferencePolicy;
+    this.subclassDefaults = {
+      stateThrottleMs: options.paginatorOptions?.stateThrottleMs ?? 500,
+    };
     this.unreadStateSnapshot = new StateStore<UnreadSnapshotState>({
       lastReadAt: null,
       firstUnreadMessageId: null,
@@ -153,6 +164,22 @@ export class MessagePaginator extends MessageIntervalPaginator {
     this.aggregateState = new StateStore<MessagePaginatorAggregateState>({
       lastMessage: null,
       seededLastMessageAt: null,
+    });
+  }
+
+  /**
+   * Re-derives configuration with this subclass's own default folded in. A declarative slice that names
+   * `stateThrottleMs` still wins — the fallback only fills the gap the base default would leave.
+   *
+   * Passed *into* the base derivation rather than re-applied afterwards: `configState` is a store now, so
+   * a second write would emit a second notification for what is logically one re-derivation. Precedence
+   * is unchanged, because `subclassDefaults` already resolves to the constructor's explicit value when
+   * one was given.
+   */
+  override initializeConfig(declarativeConfig?: DeclarativePaginatorConfig): void {
+    super.initializeConfig({
+      stateThrottleMs: this.subclassDefaults.stateThrottleMs,
+      ...declarativeConfig,
     });
   }
 

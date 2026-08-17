@@ -2,6 +2,7 @@ import type {
   AnyInterval,
   CursorDerivator,
   CursorDeriveResult,
+  DeclarativePaginatorConfig,
   Interval,
   PaginationDirection,
   PaginationQueryParams,
@@ -234,7 +235,6 @@ export class MessageIntervalPaginator extends BasePaginator<
           })),
       pageSize: paginatorOptions?.pageSize ?? DEFAULT_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
     });
-    this.config.deriveCursor = makeDeriveCursor(this);
     this.channel = channel;
     this.parentMessageId = parentMessageId;
     this._id = id ?? `message-paginator-${generateUUIDv4()}`;
@@ -252,16 +252,34 @@ export class MessageIntervalPaginator extends BasePaginator<
         return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
       },
     });
-    this.config.itemOrderComparator = makeComparator<LocalMessage>({
-      sort: this._itemOrder,
-      resolvePathValue: resolveDotPathValue,
-      tiebreaker: (l, r) => {
-        const leftId = this.getItemId(l);
-        const rightId = this.getItemId(r);
-        return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
-      },
-    });
+    this.installIntervalBehaviour();
     this.setFilterResolvers([dataFieldFilterResolver]);
+  }
+
+  /**
+   * Cursor derivation and in-memory item ordering, both of which this class installs directly on
+   * `config` rather than passing as constructor options. Kept in a method so the constructor and
+   * {@link initializeConfig} install them from one place — a re-derivation that rebuilt `config` from
+   * options alone would otherwise silently drop both.
+   */
+  protected installIntervalBehaviour(): void {
+    this.updateConfig({
+      deriveCursor: makeDeriveCursor(this),
+      itemOrderComparator: makeComparator<LocalMessage>({
+        sort: this._itemOrder,
+        resolvePathValue: resolveDotPathValue,
+        tiebreaker: (l, r) => {
+          const leftId = this.getItemId(l);
+          const rightId = this.getItemId(r);
+          return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
+        },
+      }),
+    });
+  }
+
+  override initializeConfig(declarativeConfig?: DeclarativePaginatorConfig): void {
+    super.initializeConfig(declarativeConfig);
+    this.installIntervalBehaviour();
   }
 
   get id() {

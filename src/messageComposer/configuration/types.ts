@@ -106,6 +106,12 @@ export type LocationComposerConfig = {
   enabled: boolean;
   /** Function that provides a stable ID for the device from which the location is shared. */
   getDeviceId: () => string;
+  /**
+   * Shortest live-location duration accepted as valid (defaults to 60s). A shorter `durationMs` makes
+   * the composed location invalid rather than clamping it, so this is a product decision about the
+   * minimum useful sharing window — not a protocol limit.
+   */
+  minShareDurationMs: number;
 };
 
 export type MessageComposerConfig = {

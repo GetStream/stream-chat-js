@@ -1,4 +1,8 @@
-import type { PaginatorCursor, PaginatorOptions } from './BasePaginator';
+import type {
+  DeclarativePaginatorConfig,
+  PaginatorCursor,
+  PaginatorOptions,
+} from './BasePaginator';
 import {
   MessageIntervalPaginator,
   type MessageQueryShape,
@@ -62,6 +66,16 @@ export class PinnedMessagePaginator extends MessageIntervalPaginator {
       paginatorOptions,
     });
 
+    this.installPinnedMessageBehaviour();
+  }
+
+  /**
+   * The ordering and request behaviour that makes this a *pinned*-message paginator rather than a plain
+   * one. Kept in a method so both the constructor and {@link initializeConfig} install it from the same
+   * place — a re-derivation that reset `config` would otherwise leave the base's `created_at` ordering
+   * and no `doRequest` at all.
+   */
+  private installPinnedMessageBehaviour(): void {
     // Order by pinned_at (ascending), overriding the base's created_at comparators. Ascending keeps
     // the head edge (most-recently-pinned) at the end of an interval, matching the base's interval
     // direction getters (which are shared with created_at-asc semantics).
@@ -76,25 +90,38 @@ export class PinnedMessagePaginator extends MessageIntervalPaginator {
       resolvePathValue: resolveDotPathValue,
       tiebreaker,
     });
-    this.config.itemOrderComparator = makeComparator<LocalMessage>({
-      sort: pinnedAtSort,
-      resolvePathValue: resolveDotPathValue,
-      tiebreaker,
-    });
+    this.updateConfig({
+      itemOrderComparator: makeComparator<LocalMessage>({
+        sort: pinnedAtSort,
+        resolvePathValue: resolveDotPathValue,
+        tiebreaker,
+      }),
 
-    // Fetch from the pinned-messages endpoint. The base `query` feeds the resolved query shape
-    // (including `id_around` jumps) here as `options`; we return both cursors and let the base gate
-    // them by direction.
-    this.config.doRequest = async (
-      options: MessageQueryShape,
-    ): Promise<{ cursor?: PaginatorCursor; items: LocalMessage[] }> => {
-      const { messages } = await this.channel.getPinnedMessages(
-        options as PinnedMessagePaginationOptions,
-        [{ direction: 1, field: 'pinned_at' }],
-      );
-      const items = messages.map(formatMessage);
-      return { cursor: this.getCursorFromQueryResults({ items }), items };
-    };
+      // Fetch from the pinned-messages endpoint. The base `query` feeds the resolved query shape
+      // (including `id_around` jumps) here as `options`; we return both cursors and let the base gate
+      // them by direction.
+      doRequest: async (
+        options: MessageQueryShape,
+      ): Promise<{ cursor?: PaginatorCursor; items: LocalMessage[] }> => {
+        const { messages } = await this.channel.getPinnedMessages(
+          options as PinnedMessagePaginationOptions,
+          [{ direction: 1, field: 'pinned_at' }],
+        );
+        const items = messages.map(formatMessage);
+        return { cursor: this.getCursorFromQueryResults({ items }), items };
+      },
+    });
+  }
+
+  /**
+   * Re-derives configuration, then **re-installs** the ordering and request behaviour this class sets up
+   * in its constructor. Those live nowhere but here — they are closures over `this`, so no snapshot of
+   * configuration values could restore them. Without this override a reset would leave the paginator
+   * ordering by `created_at` and querying the wrong endpoint.
+   */
+  override initializeConfig(declarativeConfig?: DeclarativePaginatorConfig): void {
+    super.initializeConfig(declarativeConfig);
+    this.installPinnedMessageBehaviour();
   }
 
   buildMatchFilters = (): PinnedMessagePaginatorFilter => ({

@@ -122,44 +122,47 @@ describe('StreamChat getInstance', () => {
 });
 
 describe('StreamChat config(s) store', () => {
-	it('initializes configsStore and keeps configs access backward compatible', () => {
+	it('initializes channelConfigsByTypeStore and keeps configs access backward compatible', () => {
 		const client = new StreamChat('key', 'secret');
 
-		expect(client.configs).to.eql({});
-		expect(client.configsStore.getLatestValue()).to.eql({ configs: {} });
+		expect(client.channelConfigsByType).to.eql({});
+		expect(client.channelConfigsByTypeStore.getLatestValue()).to.eql({ configs: {} });
 
 		const nextConfigs = { 'messaging:next': { typing_events: true } };
-		client.configs = nextConfigs;
+		client.channelConfigsByType = nextConfigs;
 
-		expect(client.configs).to.equal(nextConfigs);
-		expect(client.configsStore.getLatestValue()).to.eql({ configs: nextConfigs });
+		expect(client.channelConfigsByType).to.equal(nextConfigs);
+		expect(client.channelConfigsByTypeStore.getLatestValue()).to.eql({
+			configs: nextConfigs,
+		});
 	});
 
-	it('updates configsStore through _addChannelConfig when cache is enabled', () => {
+	it('updates channelConfigsByTypeStore through _addChannelConfig when cache is enabled', () => {
 		const client = new StreamChat('key', 'secret');
 
 		client._addChannelConfig({
-			cid: 'messaging:channel-1',
+			type: 'messaging',
 			config: { replies: true },
 		});
 
-		expect(client.configsStore.getLatestValue()).to.eql({
+		expect(client.channelConfigsByTypeStore.getLatestValue()).to.eql({
 			configs: {
-				'messaging:channel-1': { replies: true },
+				// Keyed by channel type, so one entry serves every channel of that type.
+				messaging: { replies: true },
 			},
 		});
 	});
 
-	it('does not update configsStore through _addChannelConfig when cache is disabled', () => {
+	it('does not update channelConfigsByTypeStore through _addChannelConfig when cache is disabled', () => {
 		const client = new StreamChat('key', 'secret');
 		client._cacheEnabled = () => false;
 
 		client._addChannelConfig({
-			cid: 'messaging:channel-1',
+			type: 'messaging',
 			config: { replies: true },
 		});
 
-		expect(client.configsStore.getLatestValue()).to.eql({ configs: {} });
+		expect(client.channelConfigsByTypeStore.getLatestValue()).to.eql({ configs: {} });
 	});
 });
 
@@ -836,7 +839,7 @@ describe('StreamChat.queryChannels', async () => {
 			.resolves({ channels: mockedChannelsQueryResponse });
 		await client.queryChannelsAndHydrate();
 		expect(Object.keys(client.activeChannels).length).to.be.equal(0);
-		expect(Object.keys(client.configs).length).to.be.equal(0);
+		expect(Object.keys(client.channelConfigsByType).length).to.be.equal(0);
 		sinon.restore();
 	});
 

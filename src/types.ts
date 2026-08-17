@@ -6,6 +6,8 @@ import type {
   CustomEventTypes,
 } from './custom_types';
 import type { NotificationManager } from './notifications';
+import type { InstanceConfigTree } from './configuration/types';
+import type { DeepPartial } from './types.utility';
 import type { RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
 import type {
   APIError,
@@ -391,6 +393,15 @@ export type StreamChatOptions = {
    */
   notifications?: NotificationManager;
   /**
+   * Declarative configuration for instances the SDK creates on your behalf, seeded before the client's
+   * own managers are constructed.
+   *
+   * Equivalent to calling `client.config.set(tree)` immediately after construction, except for the
+   * `client` subtree — the configuration service is created inside the constructor, so this is the only
+   * way to configure `reminders` / `notifications` before they are built.
+   */
+  config?: DeepPartial<InstanceConfigTree>;
+  /**
    * When true, user will be persisted on client. Otherwise if `connectUser` call fails, then you need to
    * call `connectUser` again to retry.
    * This is mainly useful for chat application working in offline mode, where you will need client.user to
@@ -765,6 +776,10 @@ export type CommandVariants =
   | 'unmute'
   | keyof CustomCommandData;
 
+/**
+ * Server-provided channel configuration, keyed by **channel type** (`messaging`, `livestream`, …) —
+ * every field in `ChannelConfigWithInfo` is a type-level setting. Read it via `channel.getConfig()`.
+ */
 export type Configs = Record<string, ChannelConfigWithInfo | undefined>;
 
 export type ConnectionOpen = EventPayload<'health.check'>;
