@@ -8110,156 +8110,57 @@ export interface QueryAppealsRequest {
   filter?: Filters<{
     appeal_reason: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     created_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     decided_by: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     decision_reason: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     entity_id: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     entity_type: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     id: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     review_queue_item_id: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     status: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     updated_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     user_id: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
   }>;
 }
@@ -8284,16 +8185,7 @@ export interface QueryBannedUsersPayload {
   filter_conditions: Filters<{
     banned_by_id: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     channel_cid: {
@@ -8303,16 +8195,7 @@ export interface QueryBannedUsersPayload {
 
     created_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     reason: {
@@ -8325,23 +8208,12 @@ export interface QueryBannedUsersPayload {
         | '$gte'
         | '$in'
         | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+        | '$lte';
     };
 
     user_id: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
   }>;
 
@@ -8452,44 +8324,17 @@ export interface QueryChannelsRequest {
 
     cid: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     created_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     created_by_id: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     custom: {
@@ -8504,7 +8349,6 @@ export interface QueryChannelsRequest {
         | '$in'
         | '$lt'
         | '$lte'
-        | '$nin'
         | '$q';
     };
 
@@ -8526,16 +8370,7 @@ export interface QueryChannelsRequest {
 
     frozen: {
       type: boolean;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     has_unread: {
@@ -8550,16 +8385,7 @@ export interface QueryChannelsRequest {
 
     id: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     invite: {
@@ -8574,69 +8400,33 @@ export interface QueryChannelsRequest {
 
     last_message_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     last_updated: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     'member.user.name': {
       type: string;
-      operators: '$autocomplete' | '$eq' | '$ne';
+      operators: '$autocomplete' | '$eq';
     };
 
     member_count: {
       type: number;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     members: {
       type: string;
-      operators: '$eq' | '$in' | '$nin';
+      operators: '$eq' | '$in';
       valueTypes: { $eq: Array<string> };
     };
 
     message_count: {
       type: number;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     muted: {
@@ -8655,8 +8445,6 @@ export interface QueryChannelsRequest {
         | '$in'
         | '$lt'
         | '$lte'
-        | '$ne'
-        | '$nin'
         | '$q';
     };
 
@@ -8667,44 +8455,17 @@ export interface QueryChannelsRequest {
 
     team: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     type: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     updated_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
   }>;
 
@@ -8847,16 +8608,7 @@ export interface QueryMembersPayload {
 
     created_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     custom: {
@@ -8871,22 +8623,12 @@ export interface QueryMembersPayload {
         | '$in'
         | '$lt'
         | '$lte'
-        | '$nin'
         | '$q';
     };
 
     id: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     invite: {
@@ -8896,7 +8638,7 @@ export interface QueryMembersPayload {
 
     is_moderator: {
       type: boolean;
-      operators: '$eq' | '$ne';
+      operators: '$eq';
     };
 
     joined: {
@@ -8906,12 +8648,12 @@ export interface QueryMembersPayload {
 
     last_active: {
       type: Date | string;
-      operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte' | '$ne';
+      operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte';
     };
 
     name: {
       type: string;
-      operators: '$autocomplete' | '$eq' | '$in' | '$ne' | '$nin' | '$q';
+      operators: '$autocomplete' | '$eq' | '$in' | '$q';
     };
 
     notifications_muted: {
@@ -8921,21 +8663,12 @@ export interface QueryMembersPayload {
 
     updated_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     'user.email': {
       type: string;
-      operators: '$autocomplete' | '$eq' | '$in' | '$ne' | '$nin' | '$q';
+      operators: '$autocomplete' | '$eq' | '$in' | '$q';
     };
 
     'user.nd_deactivated': {
@@ -8945,16 +8678,7 @@ export interface QueryMembersPayload {
 
     user_id: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
   }>;
 
@@ -9108,16 +8832,7 @@ export interface QueryModerationConfigsRequest {
   filter?: Filters<{
     created_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     key: {
@@ -9130,37 +8845,17 @@ export interface QueryModerationConfigsRequest {
         | '$gte'
         | '$in'
         | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+        | '$lte';
     };
 
     team: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     updated_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
   }>;
 }
@@ -9279,7 +8974,6 @@ export interface QueryPollsRequest {
         | '$in'
         | '$lt'
         | '$lte'
-        | '$nin'
         | '$q';
     };
 
@@ -9295,7 +8989,7 @@ export interface QueryPollsRequest {
 
     max_votes_allowed: {
       type: number;
-      operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte' | '$ne';
+      operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte';
     };
 
     name: {
@@ -9349,16 +9043,7 @@ export interface QueryReactionsRequest {
   filter?: Filters<{
     created_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     type: {
@@ -9500,30 +9185,12 @@ export interface QueryReviewQueueRequest {
 
     archived_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     bounce_count: {
       type: number;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     category: {
@@ -9543,44 +9210,17 @@ export interface QueryReviewQueueRequest {
 
     completed_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     config_key: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     created_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     custom: {
@@ -9595,7 +9235,6 @@ export interface QueryReviewQueueRequest {
         | '$in'
         | '$lt'
         | '$lte'
-        | '$nin'
         | '$q';
     };
 
@@ -9606,58 +9245,22 @@ export interface QueryReviewQueueRequest {
 
     entity_creator_id: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     entity_creator_name: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     entity_id: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     entity_type: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     escalated: {
@@ -9667,30 +9270,12 @@ export interface QueryReviewQueueRequest {
 
     escalated_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     escalated_by: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     escalation_priority: {
@@ -9735,16 +9320,7 @@ export interface QueryReviewQueueRequest {
 
     id: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     label: {
@@ -9759,16 +9335,7 @@ export interface QueryReviewQueueRequest {
 
     latest_moderator_action: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     queue_type: {
@@ -9798,44 +9365,17 @@ export interface QueryReviewQueueRequest {
 
     reviewed_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     severity: {
       type: number;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     status: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     teams: {
@@ -9845,30 +9385,12 @@ export interface QueryReviewQueueRequest {
 
     type: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     updated_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     user_report_reason: {
@@ -9980,7 +9502,6 @@ export interface QueryThreadsRequest {
         | '$in'
         | '$lt'
         | '$lte'
-        | '$nin'
         | '$q';
     };
 
@@ -10049,16 +9570,7 @@ export interface QueryUsersPayload {
 
     created_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     custom: {
@@ -10071,8 +9583,7 @@ export interface QueryUsersPayload {
         | '$gte'
         | '$in'
         | '$lt'
-        | '$lte'
-        | '$nin';
+        | '$lte';
     };
 
     email: {
@@ -10097,21 +9608,12 @@ export interface QueryUsersPayload {
 
     language: {
       type: string;
-      operators: '$eq' | '$ne';
+      operators: '$eq';
     };
 
     last_active: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     name: {
@@ -10124,23 +9626,12 @@ export interface QueryUsersPayload {
         | '$gte'
         | '$in'
         | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+        | '$lte';
     };
 
     role: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     shadow_banned: {
@@ -10155,16 +9646,7 @@ export interface QueryUsersPayload {
 
     updated_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     username: {
@@ -11113,44 +10595,17 @@ export interface SearchPayload {
 
     cid: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     created_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     created_by_id: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     custom: {
@@ -11165,7 +10620,6 @@ export interface SearchPayload {
         | '$in'
         | '$lt'
         | '$lte'
-        | '$nin'
         | '$q';
     };
 
@@ -11187,16 +10641,7 @@ export interface SearchPayload {
 
     frozen: {
       type: boolean;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     has_unread: {
@@ -11211,16 +10656,7 @@ export interface SearchPayload {
 
     id: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     invite: {
@@ -11235,69 +10671,33 @@ export interface SearchPayload {
 
     last_message_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     last_updated: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     'member.user.name': {
       type: string;
-      operators: '$autocomplete' | '$eq' | '$ne';
+      operators: '$autocomplete' | '$eq';
     };
 
     member_count: {
       type: number;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     members: {
       type: string;
-      operators: '$eq' | '$in' | '$nin';
+      operators: '$eq' | '$in';
       valueTypes: { $eq: Array<string> };
     };
 
     message_count: {
       type: number;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     muted: {
@@ -11316,8 +10716,6 @@ export interface SearchPayload {
         | '$in'
         | '$lt'
         | '$lte'
-        | '$ne'
-        | '$nin'
         | '$q';
     };
 
@@ -11328,44 +10726,17 @@ export interface SearchPayload {
 
     team: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     type: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     updated_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
   }>;
 
@@ -11414,30 +10785,12 @@ export interface SearchPayload {
 
     cid: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     created_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     custom: {
@@ -11447,16 +10800,7 @@ export interface SearchPayload {
 
     id: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     'mentioned_users.id': {
@@ -11466,16 +10810,7 @@ export interface SearchPayload {
 
     parent_id: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     pinned: {
@@ -11485,16 +10820,7 @@ export interface SearchPayload {
 
     reply_count: {
       type: number;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     text: {
@@ -11509,47 +10835,27 @@ export interface SearchPayload {
         | '$in'
         | '$lt'
         | '$lte'
-        | '$ne'
-        | '$nin'
         | '$q';
     };
 
     type: {
       type: string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     updated_at: {
       type: Date | string;
-      operators:
-        | '$eq'
-        | '$exists'
-        | '$gt'
-        | '$gte'
-        | '$in'
-        | '$lt'
-        | '$lte'
-        | '$ne'
-        | '$nin';
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
     'user.id': {
       type: string;
-      operators: '$eq' | '$in' | '$ne' | '$nin';
+      operators: '$eq' | '$in';
     };
 
     user_id: {
       type: string;
-      operators: '$eq' | '$in' | '$ne' | '$nin';
+      operators: '$eq' | '$in';
     };
   }>;
 
