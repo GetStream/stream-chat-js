@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, type MockInstance } from 'vitest';
 import {
   getAllowedMentionTypesFromCapabilities,
   MentionsSearchSource,
@@ -340,12 +340,15 @@ describe('MentionsSearchSource', () => {
 
     const result = await source.query('adm');
 
-    expect(client.searchUserGroups).toHaveBeenCalledWith({
-      limit: 10,
-      query: 'adm',
-      team_id: 'engineering',
-    } satisfies SearchUserGroupsOptions);
-    expect(client.searchRoles).toHaveBeenCalledWith({ query: 'adm' });
+    expect(client.searchUserGroups).toHaveBeenCalledWith(
+      {
+        limit: 10,
+        query: 'adm',
+        team_id: 'engineering',
+      } satisfies SearchUserGroupsOptions,
+      {},
+    );
+    expect(client.searchRoles).toHaveBeenCalledWith({ query: 'adm' }, {});
     expect(getSuggestion(result.items, 'role', 'admin')).toBeDefined();
     expect(getSuggestion(result.items, 'user_group', 'admins-group')).toBeDefined();
     expect(getSuggestion(result.items, 'channel', 'channel')).toBeUndefined();
@@ -359,7 +362,7 @@ describe('MentionsSearchSource', () => {
 
     const result = await source.query('mod');
 
-    expect(client.searchRoles).toHaveBeenCalledWith({ query: 'mod' });
+    expect(client.searchRoles).toHaveBeenCalledWith({ query: 'mod' }, {});
     expect(getSuggestion(result.items, 'role', 'moderator')).toBeDefined();
     expect(getSuggestion(result.items, 'role', 'channel_moderator')).toBeDefined();
   });
@@ -372,8 +375,8 @@ describe('MentionsSearchSource', () => {
     const firstResult = await source.query('adm');
     const secondResult = await source.query('mod');
 
-    expect(client.searchRoles).toHaveBeenNthCalledWith(1, { query: 'adm' });
-    expect(client.searchRoles).toHaveBeenNthCalledWith(2, { query: 'mod' });
+    expect(client.searchRoles).toHaveBeenNthCalledWith(1, { query: 'adm' }, {});
+    expect(client.searchRoles).toHaveBeenNthCalledWith(2, { query: 'mod' }, {});
     expect(getSuggestion(firstResult.items, 'role', 'admin')).toBeDefined();
     expect(getSuggestion(firstResult.items, 'role', 'moderator')).toBeUndefined();
     expect(getSuggestion(secondResult.items, 'role', 'moderator')).toBeDefined();
@@ -431,7 +434,7 @@ describe('MentionsSearchSource', () => {
 
     const result = await source.query('adm');
 
-    expect(client.searchRoles).toHaveBeenCalledWith({ query: 'adm' });
+    expect(client.searchRoles).toHaveBeenCalledWith({ query: 'adm' }, {});
     expect(client.searchUserGroups).not.toHaveBeenCalled();
     expect(getSuggestion(result.items, 'role', 'admin')).toBeDefined();
     expect(getSuggestion(result.items, 'user_group', 'admins-group')).toBeUndefined();
@@ -555,8 +558,11 @@ describe('MentionsSearchSource', () => {
     source.activate();
 
     expect(source.canExecuteQuery('test')).toBe(true);
+    // a new search query preempts an in-flight one
     source.state.partialNext({ isLoading: true });
-    expect(source.canExecuteQuery('test')).toBe(false);
+    expect(source.canExecuteQuery('test')).toBe(true);
+    // ... but pagination still waits for it
+    expect(source.canExecuteQuery()).toBe(false);
     source.state.partialNext({ isLoading: false });
     source.deactivate();
     expect(source.canExecuteQuery('test')).toBe(false);
@@ -578,18 +584,54 @@ describe('MentionsSearchSource', () => {
 
     await source.executeQuery();
 
-    expect(client.queryUsers).toHaveBeenCalledWith({
-      payload: expect.objectContaining({ limit: 10, offset: 3 }),
-    });
-    expect(client.searchUserGroups).toHaveBeenCalledWith({
-      id_gt: 'group-0',
-      limit: 10,
-      name_gt: 'Admins',
-      query: 'adm',
-      team_id: 'engineering',
-    } satisfies SearchUserGroupsOptions);
+    expect(client.queryUsers).toHaveBeenCalledWith(
+      {
+        payload: expect.objectContaining({ limit: 10, offset: 3 }),
+      },
+      { signal: expect.any(AbortSignal) },
+    );
+    expect(client.searchUserGroups).toHaveBeenCalledWith(
+      {
+        id_gt: 'group-0',
+        limit: 10,
+        name_gt: 'Admins',
+        query: 'adm',
+        team_id: 'engineering',
+      } satisfies SearchUserGroupsOptions,
+      { signal: expect.any(AbortSignal) },
+    );
     expect(source.state.getLatestValue().next).toBeUndefined();
     expect(source.state.getLatestValue().offset).toBe(7);
+  });
+
+  it('preserves pagination cursors when an aborted query rejects', async () => {
+    const source = new MentionsSearchSource(channel, { mentionAllAppUsers: true });
+    source.activate();
+    source.config.textComposerText = '@adm';
+    const cursor = JSON.stringify({ id_gt: 'group-0', name_gt: 'Admins' });
+    const internals = source as unknown as {
+      userGroupCursor?: string;
+      latestUserPaginationState?: { itemCount: number; nextOffset?: number };
+    };
+    internals.userGroupCursor = cursor;
+    internals.latestUserPaginationState = { itemCount: 4, nextOffset: 7 };
+
+    // an abort makes every sub-request reject, which would otherwise drive the
+    // fallback branches and overwrite the cursors with empty results
+    (client.queryUsers as unknown as MockInstance).mockRejectedValue(
+      new Error('canceled'),
+    );
+    (client.searchUserGroups as unknown as MockInstance).mockRejectedValue(
+      new Error('canceled'),
+    );
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await source.query('adm', { signal: controller.signal });
+
+    expect(result.items).toEqual([]);
+    expect(internals.userGroupCursor).toBe(cursor);
+    expect(internals.latestUserPaginationState).toEqual({ itemCount: 4, nextOffset: 7 });
   });
 
   it('should correctly get members and watchers without duplicates', () => {
@@ -667,9 +709,12 @@ describe('MentionsSearchSource', () => {
     source.config.mentionAllAppUsers = true;
 
     await source.query('test');
-    expect(client.queryUsers).toHaveBeenCalledWith({
-      payload: expect.objectContaining({ presence: true }),
-    });
+    expect(client.queryUsers).toHaveBeenCalledWith(
+      {
+        payload: expect.objectContaining({ presence: true }),
+      },
+      {},
+    );
   });
 
   it('should correctly calculate Levenshtein distance for fuzzy matching', () => {

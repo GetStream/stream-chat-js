@@ -1,4 +1,4 @@
-import { BaseSearchSource } from './BaseSearchSource';
+import { BaseSearchSource, type SearchQueryOptions } from './BaseSearchSource';
 import type { FilterBuilderOptions } from '../pagination';
 import { FilterBuilder } from '../pagination';
 import type { Channel } from '../channel';
@@ -11,6 +11,13 @@ type CustomContext = Record<string, unknown>;
 export type ChannelSearchSourceFilterBuilderContext<
   C extends CustomContext = CustomContext,
 > = { searchQuery?: string } & C;
+
+export type ChannelSearchSourceOptions = SearchSourceOptions & {
+  /** Static base filters merged under the dynamically generated ones. */
+  filters?: ChannelFilters;
+  sort?: ChannelSort;
+  searchOptions?: Omit<ChannelOptions, 'limit' | 'offset'>;
+};
 
 export class ChannelSearchSource<
   TFilterContext extends CustomContext = CustomContext,
@@ -27,14 +34,18 @@ export class ChannelSearchSource<
 
   constructor(
     client: StreamChat,
-    options?: SearchSourceOptions,
+    options?: ChannelSearchSourceOptions,
     filterBuilderOptions: FilterBuilderOptions<
       ChannelFilters,
       ChannelSearchSourceFilterBuilderContext<TFilterContext>
     > = {},
   ) {
-    super(options);
+    const { filters, sort, searchOptions, ...restOptions } = options || {};
+    super(restOptions);
     this.client = client;
+    this.filters = filters;
+    this.sort = sort;
+    this.searchOptions = searchOptions;
     this.filterBuilder = new FilterBuilder<
       ChannelFilters,
       ChannelSearchSourceFilterBuilderContext<TFilterContext>
@@ -51,7 +62,7 @@ export class ChannelSearchSource<
     });
   }
 
-  protected async query(searchQuery: string) {
+  protected async query(searchQuery: string, queryOptions: SearchQueryOptions = {}) {
     const filters = this.filterBuilder.buildFilters({
       baseFilters: {
         ...(this.client.userId ? { members: { $in: [this.client.userId] } } : {}),
@@ -70,6 +81,7 @@ export class ChannelSearchSource<
         ...options,
       },
       { withResponse: false },
+      queryOptions,
     );
     return { items };
   }

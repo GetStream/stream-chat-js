@@ -9,6 +9,9 @@ import type {
 } from '../../../src/types';
 import { getClientWithUser } from '../test-utils/getClient';
 
+/** query() invoked directly in tests is not driven by executeQuery, so it has no signal. */
+const withoutSignal = {};
+
 describe('UserSearchSource', () => {
   const user = { id: 'user-123', name: 'Test User' } as UserResponse;
   let client: StreamChat;
@@ -166,22 +169,25 @@ describe('UserSearchSource', () => {
     // @ts-expect-error accessing protected method
     await searchSource.query('John');
 
-    expect(queryUsersMock).toHaveBeenCalledWith({
-      payload: {
-        filter_conditions: {
-          $or: [{ id: { $autocomplete: 'John' } }, { name: { $autocomplete: 'John' } }],
-          name: { $autocomplete: 'John' },
-          role: { $eq: 'admin' },
+    expect(queryUsersMock).toHaveBeenCalledWith(
+      {
+        payload: {
+          filter_conditions: {
+            $or: [{ id: { $autocomplete: 'John' } }, { name: { $autocomplete: 'John' } }],
+            name: { $autocomplete: 'John' },
+            role: { $eq: 'admin' },
+          },
+          sort: [
+            { field: 'created_at', direction: -1 },
+            { field: 'id', direction: 1 },
+          ],
+          presence: true,
+          limit: searchSource.pageSize,
+          offset: searchSource.offset,
         },
-        sort: [
-          { field: 'created_at', direction: -1 },
-          { field: 'id', direction: 1 },
-        ],
-        presence: true,
-        limit: searchSource.pageSize,
-        offset: searchSource.offset,
       },
-    });
+      withoutSignal,
+    );
   });
 
   it('appends a default id sort when sort is an array without an id key', async () => {
@@ -190,14 +196,17 @@ describe('UserSearchSource', () => {
     // @ts-expect-error accessing protected method
     await searchSource.query('John');
 
-    expect(queryUsersMock).toHaveBeenCalledWith({
-      payload: expect.objectContaining({
-        sort: [
-          { field: 'created_at', direction: -1 },
-          { field: 'id', direction: 1 },
-        ],
-      }),
-    });
+    expect(queryUsersMock).toHaveBeenCalledWith(
+      {
+        payload: expect.objectContaining({
+          sort: [
+            { field: 'created_at', direction: -1 },
+            { field: 'id', direction: 1 },
+          ],
+        }),
+      },
+      withoutSignal,
+    );
   });
 
   it('leaves the sort array unchanged when it already contains an id key', async () => {
@@ -210,14 +219,17 @@ describe('UserSearchSource', () => {
     // @ts-expect-error accessing protected method
     await searchSource.query('John');
 
-    expect(queryUsersMock).toHaveBeenCalledWith({
-      payload: expect.objectContaining({
-        sort: [
-          { field: 'id', direction: -1 },
-          { field: 'created_at', direction: -1 },
-        ],
-      }),
-    });
+    expect(queryUsersMock).toHaveBeenCalledWith(
+      {
+        payload: expect.objectContaining({
+          sort: [
+            { field: 'id', direction: -1 },
+            { field: 'created_at', direction: -1 },
+          ],
+        }),
+      },
+      withoutSignal,
+    );
   });
 
   it('uses only the default id sort when sort is an empty array', async () => {
@@ -226,11 +238,14 @@ describe('UserSearchSource', () => {
     // @ts-expect-error accessing protected method
     await searchSource.query('John');
 
-    expect(queryUsersMock).toHaveBeenCalledWith({
-      payload: expect.objectContaining({
-        sort: [{ field: 'id', direction: 1 }],
-      }),
-    });
+    expect(queryUsersMock).toHaveBeenCalledWith(
+      {
+        payload: expect.objectContaining({
+          sort: [{ field: 'id', direction: 1 }],
+        }),
+      },
+      withoutSignal,
+    );
   });
 
   it('returns items from query', async () => {

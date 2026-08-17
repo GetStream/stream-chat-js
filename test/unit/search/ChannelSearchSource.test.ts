@@ -164,6 +164,8 @@ describe('ChannelSearchSource', () => {
         offset: searchSource.offset,
       },
       { withResponse: false },
+      // query() invoked directly in tests is not driven by executeQuery, so it has no signal.
+      {},
     );
   });
 

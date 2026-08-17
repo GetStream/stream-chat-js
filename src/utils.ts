@@ -678,11 +678,12 @@ export interface DebouncedFunc<T extends (...args: any[]) => any> {
   flush(): ReturnType<T> | undefined;
 }
 
-// works exactly the same as lodash.debounce
-
+// works exactly the same as lodash.debounce, except that the timeout can also be
+// a function of the call arguments, resolved on every call (e.g. to debounce short,
+// low-selectivity search queries harder than long ones)
 export const debounce = <T extends (...args: any[]) => any>(
   fn: T,
-  timeout = 0,
+  timeout: number | ((...args: Parameters<T>) => number) = 0,
   { leading = false, trailing = true }: { leading?: boolean; trailing?: boolean } = {},
 ): DebouncedFunc<T> => {
   let runningTimeout: null | ReturnType<typeof setTimeout> = null;
@@ -705,7 +706,8 @@ export const debounce = <T extends (...args: any[]) => any>(
       runningTimeout = null;
     };
 
-    runningTimeout = setTimeout(timeoutHandler, timeout);
+    const delay = typeof timeout === 'function' ? timeout(...args) : timeout;
+    runningTimeout = setTimeout(timeoutHandler, delay);
     return lastResult;
   };
 
