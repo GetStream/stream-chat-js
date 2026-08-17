@@ -1,3 +1,4 @@
+import { CORE_NOTIFICATION_TYPE } from '../notifications';
 import { AttachmentManager } from './attachmentManager';
 import { CustomDataManager } from './CustomDataManager';
 import { LinkPreviewsManager } from './linkPreviewsManager';
@@ -1008,7 +1009,7 @@ export class MessageComposer extends WithSubscriptions {
           context: { composer: this },
         },
         options: {
-          type: 'api:poll:create:failed',
+          type: CORE_NOTIFICATION_TYPE.pollCreateFailed,
           metadata: {
             reason: (error as Error).message,
           },
@@ -1034,7 +1035,7 @@ export class MessageComposer extends WithSubscriptions {
           context: { composer: this },
         },
         options: {
-          type: 'api:location:create:failed',
+          type: CORE_NOTIFICATION_TYPE.locationCreateFailed,
           metadata: {
             reason: (error as Error).message,
           },
