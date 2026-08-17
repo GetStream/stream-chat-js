@@ -29,13 +29,67 @@ const nodeExternal = [...modules, ...builtinModules];
 
 /** @type esbuild.BuildOptions */
 const commonBuildOptions = {
-  entryPoints: [resolve(__dirname, '../src/index.ts')],
+  // Name-keyed so `[name]` stays stable per entry. `i18n` is a separate entry point on purpose: it
+  // pulls in i18next and dayjs, and keeping those out of the root bundle is the whole reason
+  // `stream-chat/i18n` exists as a subpath. `assertBundleBoundaries` enforces that below.
+  entryPoints: {
+    index: resolve(__dirname, '../src/index.ts'),
+    i18n: resolve(__dirname, '../src/i18n/index.ts'),
+  },
   bundle: true,
+  metafile: true,
   target: 'ES2020',
   sourcemap: watchModeEnabled ? 'inline' : 'linked',
   define: {
     'process.env.PKG_VERSION': JSON.stringify(version),
   },
+};
+
+/** Dependencies that must never be reachable from the root bundle. */
+const I18N_ONLY_DEPENDENCIES = ['i18next', 'dayjs'];
+
+/**
+ * Fails the build if the entry-point boundaries have been crossed.
+ *
+ * Two directions, both of which are a single careless `export * from './i18n'` away:
+ *   - the root bundle must not reach `src/i18n/` or its dependencies, or every consumer of
+ *     `stream-chat` pays for i18next and dayjs whether they translate anything or not;
+ *   - the i18n bundle must not reach `src/i18n-codegen/`, which is Node-only build tooling.
+ *
+ * Checked here rather than left to review, because the failure is invisible: everything still works,
+ * the bundle is just quietly bigger.
+ */
+const assertBundleBoundaries = (metafile) => {
+  const failures = [];
+
+  for (const [outputFile, output] of Object.entries(metafile.outputs)) {
+    if (!output.entryPoint) continue;
+
+    const forbidden = output.entryPoint.endsWith('src/index.ts')
+      ? { deps: I18N_ONLY_DEPENDENCIES, sources: /(^|\/)src\/i18n\// }
+      : { deps: [], sources: /(^|\/)src\/i18n-codegen\// };
+
+    const leakedSources = Object.keys(output.inputs).filter((input) =>
+      forbidden.sources.test(input),
+    );
+    const leakedDeps = (output.imports ?? [])
+      .map(({ path }) => path)
+      .filter((path) =>
+        forbidden.deps.some((dep) => path === dep || path.startsWith(`${dep}/`)),
+      );
+
+    if (leakedSources.length || leakedDeps.length) {
+      failures.push(
+        `${outputFile} (entry ${output.entryPoint}) must not reach: ` +
+          [...new Set([...leakedSources, ...leakedDeps])].join(', '),
+      );
+    }
+  }
+
+  if (failures.length) {
+    console.error(`\nBundle boundary violated:\n  ${failures.join('\n  ')}\n`);
+    process.exit(1);
+  }
 };
 
 /**
@@ -86,5 +140,6 @@ if (watchModeEnabled) {
 
   console.log('ESBuild is watching for changes...');
 } else {
-  await Promise.all(bundles.map((config) => esbuild.build(config)));
+  const results = await Promise.all(bundles.map((config) => esbuild.build(config)));
+  results.forEach(({ metafile }) => metafile && assertBundleBoundaries(metafile));
 }
