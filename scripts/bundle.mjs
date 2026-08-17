@@ -49,12 +49,38 @@ const commonBuildOptions = {
 const I18N_ONLY_DEPENDENCIES = ['i18next', 'dayjs'];
 
 /**
- * Fails the build if the entry-point boundaries have been crossed.
+ * What each entry point is forbidden from reaching. Keyed on the entry explicitly rather than by
+ * elimination, so a new entry gets no rule by accident (and the codegen entry is not told off for
+ * reaching its own source).
+ */
+const ENTRY_BOUNDARIES = [
+  {
+    // The root bundle: no i18n at all, and none of its dependencies.
+    entry: 'src/index.ts',
+    forbiddenDeps: I18N_ONLY_DEPENDENCIES,
+    forbiddenSources: /(^|\/)src\/i18n(-codegen)?\//,
+  },
+  {
+    // The runtime i18n layer must not pull in the Node-only build tooling.
+    entry: 'src/i18n/index.ts',
+    forbiddenDeps: [],
+    forbiddenSources: /(^|\/)src\/i18n-codegen\//,
+  },
+  {
+    // The codegen is Node-only by design and has no restriction of its own.
+    entry: 'src/i18n-codegen/index.ts',
+    forbiddenDeps: [],
+    forbiddenSources: null,
+  },
+];
+
+/**
+ * Fails the build if an entry point reached something it must not.
  *
- * Two directions, both of which are a single careless `export * from './i18n'` away:
+ * Two directions, both a single careless `export * from './i18n'` away:
  *   - the root bundle must not reach `src/i18n/` or its dependencies, or every consumer of
  *     `stream-chat` pays for i18next and dayjs whether they translate anything or not;
- *   - the i18n bundle must not reach `src/i18n-codegen/`, which is Node-only build tooling.
+ *   - the runtime i18n bundle must not reach `src/i18n-codegen/`, which is Node-only build tooling.
  *
  * Checked here rather than left to review, because the failure is invisible: everything still works,
  * the bundle is just quietly bigger.
@@ -65,13 +91,25 @@ const assertBundleBoundaries = (metafile) => {
   for (const [outputFile, output] of Object.entries(metafile.outputs)) {
     if (!output.entryPoint) continue;
 
-    const forbidden = output.entryPoint.endsWith('src/index.ts')
-      ? { deps: I18N_ONLY_DEPENDENCIES, sources: /(^|\/)src\/i18n\// }
-      : { deps: [], sources: /(^|\/)src\/i18n-codegen\// };
-
-    const leakedSources = Object.keys(output.inputs).filter((input) =>
-      forbidden.sources.test(input),
+    const boundary = ENTRY_BOUNDARIES.find(({ entry }) =>
+      output.entryPoint.endsWith(entry),
     );
+    if (!boundary) {
+      failures.push(
+        `${outputFile} (entry ${output.entryPoint}) has no declared boundary — add one to ` +
+          `ENTRY_BOUNDARIES in scripts/bundle.mjs.`,
+      );
+      continue;
+    }
+
+    const forbidden = {
+      deps: boundary.forbiddenDeps,
+      sources: boundary.forbiddenSources,
+    };
+
+    const leakedSources = forbidden.sources
+      ? Object.keys(output.inputs).filter((input) => forbidden.sources.test(input))
+      : [];
     const leakedDeps = (output.imports ?? [])
       .map(({ path }) => path)
       .filter((path) =>
@@ -131,6 +169,30 @@ const bundles = [
       'process.env.CLIENT_BUNDLE': JSON.stringify('browser-esm'),
     },
   },
+  // Build-time codegen: Node only, so no browser variant. Kept a separate entry so it never becomes
+  // reachable from `stream-chat/i18n`, which `assertBundleBoundaries` enforces.
+  ['cjs', 'esm'].map((format) => ({
+    entryPoints: {
+      'i18n-codegen': resolve(__dirname, '../src/i18n-codegen/index.ts'),
+    },
+    bundle: true,
+    metafile: true,
+    target: 'node18',
+    platform: 'node',
+    format,
+    external: nodeExternal,
+    sourcemap: watchModeEnabled ? 'inline' : 'linked',
+    define: { 'process.env.PKG_VERSION': JSON.stringify(version) },
+    ...(format === 'cjs'
+      ? {
+          entryNames: '[dir]/[name].node',
+          outdir: resolve(__dirname, '../dist/cjs'),
+        }
+      : {
+          outExtension: { '.js': '.mjs' },
+          outdir: resolve(__dirname, '../dist/esm'),
+        }),
+  })),
 ].flat();
 
 if (watchModeEnabled) {

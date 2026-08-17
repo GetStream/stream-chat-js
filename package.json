@@ -40,12 +40,23 @@
       "node": "./dist/cjs/i18n.node.js",
       "default": "./dist/esm/i18n.mjs"
     },
+    "./i18n/codegen": {
+      "types": "./dist/types/i18n-codegen/index.d.ts",
+      "node": {
+        "import": "./dist/esm/i18n-codegen.mjs",
+        "require": "./dist/cjs/i18n-codegen.node.js"
+      },
+      "default": "./dist/esm/i18n-codegen.mjs"
+    },
     "./package.json": "./package.json"
   },
   "typesVersions": {
     "*": {
       "i18n": [
         "./dist/types/i18n/index.d.ts"
+      ],
+      "i18n/codegen": [
+        "./dist/types/i18n-codegen/index.d.ts"
       ]
     }
   },
