@@ -117,26 +117,25 @@ Two things to watch on the `markRead` row: `event` became optional, so destructu
 
 The type is a 1:1 rename — both are `{ signal?: AbortSignal }`, "per-request options that are never part of the serialized request payload". `StreamRequestOptions` is exported from the package root like every other row here. What changed is **where you pass it**.
 
-In v9 it arrived two ways: as a trailing positional parameter (`requestOptions: RequestOptions = {}`) on a handful of hand-written client/channel methods, and as part of `ChannelStateOptions`, which composed `RequestOptions` so that `queryChannels` could carry the abort signal in the same bag as its state flags. In v10:
+In v9 it arrived two ways: as a trailing positional parameter (`requestOptions: RequestOptions = {}`) on a handful of hand-written client/channel methods, and as part of `ChannelStateOptions`, which composed `RequestOptions` so that `queryChannels` could carry the abort signal in the same bag as its state flags. In v10 there is exactly one way to pass it:
 
-- `ChannelStateOptions` **no longer composes it** — it is `{ offlineMode?; skipInitialization?; skipHydration?; withResponse? }` only. A `{ ..., signal }` passed there is no longer read.
-- Every method generated from the OpenAPI spec takes `requestOptions?: StreamRequestOptions` as its **last parameter, immediately after the single request object** — e.g. `chatApi.search(request, requestOptions)`.
-- Hand-written overrides in `client.ts` / `channel.ts` only accept it when they forward their arguments wholesale (`...args: Parameters<ChatApi['x']>`). Overrides that narrowed their signature to a single request object dropped the parameter.
+- **It is always the last parameter**, immediately after the method's own arguments — on every method generated from the OpenAPI spec (`chatApi.search(request, requestOptions)`) and on every hand-written wrapper around one, on both `StreamChat` and `Channel`.
+- `ChannelStateOptions` **no longer composes it** — it is `{ offlineMode?; skipInitialization?; skipHydration?; withResponse? }` only. A `{ ..., signal }` passed there is no longer read. `client.queryChannelsAndHydrate` takes `requestOptions` as its own third parameter, after `stateOptions`.
 
-Mapping for the v9 methods that took a `RequestOptions`:
+Mapping for the v9 methods that took a `RequestOptions` — all six still accept one, only the arguments ahead of it changed shape:
 
-| v9 call site                                                      | v10                                                                     |
-| ----------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `client.queryUsers(filters, sort, options, requestOptions)`       | `client.queryUsers(request, requestOptions)` — still accepted           |
-| `client.searchRoles(options, requestOptions)`                     | `client.searchRoles(request, requestOptions)` — still accepted          |
-| `client.searchUserGroups(options, requestOptions)`                | `client.searchUserGroups(request, requestOptions)` — still accepted     |
-| `client.search(filterConditions, query, options, requestOptions)` | `client.search(request)` — **no `requestOptions` parameter**            |
-| `client.queryChannelsRequestWithResponse(…, requestOptions)`      | `client.queryChannels(request)` — **no `requestOptions` parameter**     |
-| `channel.queryMembers(filters, sort, options, requestOptions)`    | `channel.queryMembers({ payload })` — **no `requestOptions` parameter** |
+| v9 call site                                                      | v10                                                 |
+| ----------------------------------------------------------------- | --------------------------------------------------- |
+| `client.queryUsers(filters, sort, options, requestOptions)`       | `client.queryUsers(request, requestOptions)`        |
+| `client.searchRoles(options, requestOptions)`                     | `client.searchRoles(request, requestOptions)`       |
+| `client.searchUserGroups(options, requestOptions)`                | `client.searchUserGroups(request, requestOptions)`  |
+| `client.search(filterConditions, query, options, requestOptions)` | `client.search(request, requestOptions)`            |
+| `client.queryChannelsRequestWithResponse(…, requestOptions)`      | `client.queryChannels(request, requestOptions)`     |
+| `channel.queryMembers(filters, sort, options, requestOptions)`    | `channel.queryMembers({ payload }, requestOptions)` |
 
-For the last three there is currently no way to cancel through the wrapper — the override hides the generated method, and `ChatApi` itself is not exported from the package root. The remaining route is `client.api.sendRequest(method, url, pathParams, queryParams, body, contentType, { signal })`, which is the layer that reads the option and puts `signal` on the axios request config.
+For a request with no wrapper at all, `client.api.sendRequest(method, url, pathParams, queryParams, body, contentType, { signal })` is the layer that reads the option and puts `signal` on the axios request config.
 
-v9 also had `client.createAbortControllerForNextRequest()`, which armed a controller that the next outgoing request picked up implicitly. That is **removed** — pass a `signal` through `StreamRequestOptions` instead.
+v9 also had `client.createAbortControllerForNextRequest()`, which armed a controller that the **next** outgoing request picked up implicitly — with concurrent requests in flight, there was no telling which call the signal would land on. It is **removed**; pass a `signal` through `StreamRequestOptions` on the specific call instead. See `v9-to-v10-migration-guide-methods.md` for the before/after and the offline-queue interaction.
 
 ## Types that are **not** renamed (kept as-is)
 

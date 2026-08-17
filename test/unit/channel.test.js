@@ -3039,6 +3039,17 @@ describe('send reaction flow', () => {
 			expect(channel._sendReaction).not.toHaveBeenCalled();
 		});
 
+		it('queues requestOptions alongside the request so replay forwards them', async () => {
+			const controller = new AbortController();
+
+			await channel.sendReaction(request, { signal: controller.signal });
+
+			expect(queueTaskSpy.mock.calls[0][0].task.payload).to.deep.equal([
+				request,
+				{ signal: controller.signal },
+			]);
+		});
+
 		it('falls back to _sendReaction if offlineDb throws', async () => {
 			client.offlineDb.queueTask.mockRejectedValue(new Error('Offline failure'));
 
@@ -3475,6 +3486,7 @@ describe('Channel.query — initial page size', () => {
 		// The initial open asks the server for exactly pageSize messages (not its larger default).
 		expect(getOrCreate).toHaveBeenCalledWith(
 			expect.objectContaining({ messages: { limit: 25 } }),
+			undefined,
 		);
 	});
 
@@ -3491,6 +3503,7 @@ describe('Channel.query — initial page size', () => {
 
 		expect(getOrCreate).toHaveBeenCalledWith(
 			expect.objectContaining({ messages: { limit: 80 } }),
+			undefined,
 		);
 	});
 });

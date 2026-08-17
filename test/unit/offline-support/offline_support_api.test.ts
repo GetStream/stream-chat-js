@@ -23,7 +23,7 @@ import { generateReadResponse } from '../test-utils/generateReadResponse';
 import { generatePendingTask } from '../test-utils/generatePendingTask';
 import { getClientWithUser } from '../test-utils/getClient';
 import * as utils from '../../../src/utils';
-import { AxiosError } from 'axios';
+import { AxiosError, CanceledError } from 'axios';
 import { MockOfflineDB } from './MockOfflineDB';
 
 describe('OfflineSupportApi', () => {
@@ -2005,6 +2005,13 @@ describe('OfflineSupportApi', () => {
 
         // Network/connection failure — server never responded → ephemeral → keep queued.
         expect(shouldSkipQueueingTask({} as AxiosError)).toBe(false);
+
+        // Caller cancelled via `StreamRequestOptions.signal`. Also has no `response`, but it is a
+        // deliberate rejection rather than a transient failure, so it is skipped — queueing it
+        // would replay on reconnect the very request the caller aborted.
+        expect(shouldSkipQueueingTask(new CanceledError('canceled') as AxiosError)).toBe(
+          true,
+        );
       });
 
       describe('queueTask', () => {
@@ -2314,6 +2321,74 @@ describe('OfflineSupportApi', () => {
 
           expect(clientChannelSpy).toHaveBeenCalledWith(task.channelType, task.channelId);
           expect(mockChannel._sendReaction).toHaveBeenCalledWith(...task.payload);
+        });
+
+        // A task payload is the replayed method's argument list, so it carries that method's
+        // trailing `requestOptions` too.
+        it('forwards requestOptions queued in the payload on replay', async () => {
+          const controller = new AbortController();
+          const task = generatePendingTask('send-reaction') as PendingTask;
+          const taskWithOptions = {
+            ...task,
+            payload: [task.payload[0], { signal: controller.signal }],
+          } as PendingTask;
+
+          await offlineDb['executeTask']({ task: taskWithOptions });
+
+          expect(mockChannel._sendReaction).toHaveBeenCalledWith(task.payload[0], {
+            signal: controller.signal,
+          });
+        });
+
+        // A task that reached the pending-tasks table was serialized, so its signal revives as
+        // an inert `{}`. Replay must still go through - ApiClient is what drops the dead signal.
+        it('replays a task whose persisted signal did not survive serialization', async () => {
+          const task = generatePendingTask('send-reaction') as PendingTask;
+          const persisted = JSON.parse(
+            JSON.stringify({
+              ...task,
+              payload: [task.payload[0], { signal: new AbortController().signal }],
+            }),
+          ) as PendingTask;
+
+          await offlineDb['executeTask']({ task: persisted });
+
+          expect(mockChannel._sendReaction).toHaveBeenCalledWith(persisted.payload[0], {
+            signal: {},
+          });
+        });
+
+        // Cancelling is not a way to shed a task: an aborted request is a definitive rejection, so
+        // `queueTask` must not stash it for replay on reconnect.
+        it('does not queue a task whose request the caller cancelled', async () => {
+          const handleAddPendingTaskSpy = vi
+            .spyOn(offlineDb as any, 'handleAddPendingTask')
+            .mockResolvedValue(undefined);
+          (client as any).wsConnection = { isHealthy: true };
+          (mockChannel._sendReaction as unknown as MockInstance).mockRejectedValue(
+            new CanceledError('canceled'),
+          );
+          const task = generatePendingTask('send-reaction') as PendingTask;
+
+          await expect(offlineDb.queueTask({ task })).rejects.toThrow(CanceledError);
+
+          expect(handleAddPendingTaskSpy).not.toHaveBeenCalled();
+        });
+
+        // Contrast: a genuine network failure is transient, so it IS queued.
+        it('queues a task that failed on a network error', async () => {
+          const handleAddPendingTaskSpy = vi
+            .spyOn(offlineDb as any, 'handleAddPendingTask')
+            .mockResolvedValue(undefined);
+          (client as any).wsConnection = { isHealthy: true };
+          (mockChannel._sendReaction as unknown as MockInstance).mockRejectedValue(
+            new Error('network down'),
+          );
+          const task = generatePendingTask('send-reaction') as PendingTask;
+
+          await expect(offlineDb.queueTask({ task })).rejects.toThrow('network down');
+
+          expect(handleAddPendingTaskSpy).toHaveBeenCalledTimes(1);
         });
 
         it('should call _deleteReaction for delete-reaction task', async () => {

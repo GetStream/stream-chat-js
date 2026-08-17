@@ -1110,7 +1110,7 @@ describe('StreamChat.queryReactions', () => {
 		]);
 
 		expect(postStub).toHaveBeenCalledTimes(1);
-		expect(postStub).toHaveBeenCalledWith(request);
+		expect(postStub).toHaveBeenCalledWith(request, undefined);
 
 		expect(result).to.eql(postResponse);
 	});
@@ -1126,7 +1126,7 @@ describe('StreamChat.queryReactions', () => {
 		await client.queryReactionsAndHydrate(request);
 
 		expect(client.offlineDb.getReactions).not.toHaveBeenCalled();
-		expect(postStub).toHaveBeenCalledWith(request);
+		expect(postStub).toHaveBeenCalledWith(request, undefined);
 	});
 
 	it('should not dispatch event if offlineDb returns null', async () => {
@@ -1142,7 +1142,7 @@ describe('StreamChat.queryReactions', () => {
 
 		expect(client.offlineDb.getReactions).toHaveBeenCalledTimes(1);
 		expect(dispatchSpy).not.toHaveBeenCalled();
-		expect(postStub).toHaveBeenCalledWith(request);
+		expect(postStub).toHaveBeenCalledWith(request, undefined);
 	});
 
 	it('should log a warning if offlineDb.getReactions throws', async () => {
@@ -1167,12 +1167,15 @@ describe('StreamChat.queryReactions', () => {
 			}),
 		);
 		expect(dispatchSpy).not.toHaveBeenCalled();
-		expect(postStub).toHaveBeenCalledWith({
-			id: messageId,
-			filter,
-			sort,
-			limit: 50,
-		});
+		expect(postStub).toHaveBeenCalledWith(
+			{
+				id: messageId,
+				filter,
+				sort,
+				limit: 50,
+			},
+			undefined,
+		);
 
 		chatLoggerSystem.restoreDefaults();
 	});

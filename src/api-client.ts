@@ -250,12 +250,24 @@ export class ApiClient {
 }
 
 /**
+ * An `AbortSignal` that went through JSON persistence - as it does when an offline-db task
+ * payload is stored and replayed after a restart - revives as a plain `{}`: `aborted` is
+ * `undefined` and `addEventListener` is gone. Axios reaches straight for
+ * `signal.addEventListener`, so handing it such an object throws a `TypeError` and takes the
+ * replay down with it. Only forward a signal that can still be listened to.
+ */
+const isUsableAbortSignal = (signal: unknown): signal is AbortSignal =>
+  typeof (signal as AbortSignal | undefined)?.addEventListener === 'function';
+
+/**
  * Maps the SDK-level per-request options onto the axios request config they
  * translate to. Extend this when a new option is added to `StreamRequestOptions`.
  */
 const toAxiosRequestConfig = ({
   signal,
-}: StreamRequestOptions = {}): AxiosRequestConfig => ({ signal });
+}: StreamRequestOptions = {}): AxiosRequestConfig => ({
+  signal: isUsableAbortSignal(signal) ? signal : undefined,
+});
 
 const errorIsApiError = (error: unknown): error is AxiosError<APIError> => {
   if (!(error instanceof AxiosError)) return false;

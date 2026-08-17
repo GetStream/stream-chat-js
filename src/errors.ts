@@ -1,4 +1,5 @@
 import type { AxiosResponse } from 'axios';
+import { isCancel } from 'axios';
 import type { APIError as Gen_APIError } from './types';
 
 export const APIErrorCodes: Record<string, { name: string; retryable: boolean }> = {
@@ -52,10 +53,17 @@ export function isErrorRetryable(error: APIError) {
  * Whether an error is EPHEMERAL — a transient failure worth queueing/retrying rather than a
  * definitive rejection. True when the server never responded (connection/network/offline error - no
  * `response`, i.e an axios network error or an `OfflineError`) and when the server responded with a
- * retryable code (see {@link APIErrorCodes}); false only when the server responded with a
- * non-retryable code (InputError 4, DoesNotExist 16, NotAllowed 17, …).
+ * retryable code (see {@link APIErrorCodes}); false when the server responded with a
+ * non-retryable code (InputError 4, DoesNotExist 16, NotAllowed 17, …) and when the caller
+ * cancelled the request.
+ *
+ * Cancellation is deliberately NOT ephemeral even though an aborted request carries no `response`.
+ * A caller who aborts via `StreamRequestOptions.signal` wants the operation dropped, so treating it
+ * as transient would do the opposite of what was asked: the task would be queued and replayed on
+ * reconnect, and any optimistic local update would be kept rather than rolled back.
  */
 export function isEphemeral(error: Error): boolean {
+  if (isCancel(error)) return false;
   if (!(error as { response?: unknown }).response) return true;
   return isErrorRetryable(error as APIError);
 }

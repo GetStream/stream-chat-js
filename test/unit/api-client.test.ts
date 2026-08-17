@@ -66,6 +66,21 @@ describe('ApiClient request options', () => {
     expect(firstConfig().signal?.aborted).to.be.true;
   });
 
+  // An offline-db task payload carries the method's `requestOptions`, so a task that was
+  // persisted and replayed after a restart arrives with a JSON-revived signal: an inert `{}`.
+  // Axios reaches for `signal.addEventListener` unconditionally, so it must not get through.
+  it('drops a signal that did not survive JSON persistence', async () => {
+    const revived = JSON.parse(
+      JSON.stringify({ signal: new AbortController().signal }),
+    ) as { signal: AbortSignal };
+
+    expect(revived.signal.addEventListener).to.be.undefined;
+
+    await sendRequest(revived);
+
+    expect(firstConfig().signal).to.be.undefined;
+  });
+
   it('applies the options to a single request only', async () => {
     const controller = new AbortController();
 
