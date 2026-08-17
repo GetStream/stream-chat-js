@@ -40,7 +40,23 @@ export type ReadState = {
 
 export type MembersState = {
   members: Record<string, ChannelMemberResponse>;
+  /**
+   * Total member count, sourced from `channel.data.member_count`. Set on query / watch / hydration
+   * (incl. offline-DB rehydration) and on `channel.updated` — deliberately NOT on `member.added` /
+   * `member.removed`. `channel.updated` fires on every member change and is the authoritative count;
+   * incrementing per member event double-counted when several members changed at once.
+   * See https://github.com/GetStream/stream-chat-js/pull/1761.
+   */
   memberCount: number;
+};
+
+/**
+ * Whether this is a 1:1 direct channel, derived from `memberCount === 2`. Kept as its own slice so a
+ * consumer (e.g. the message footer) can subscribe to just this boolean and never re-render on the
+ * far more frequent `members` churn (presence, watchers, adds/removes).
+ */
+export type DirectChannelState = {
+  isDirectChannel: boolean;
 };
 
 /** The current user's own membership in this channel (role, pinned_at, archived_at, …). */
@@ -134,6 +150,7 @@ export type ChannelStateData = WatcherState &
   TypingUsersState &
   ReadState &
   MembersState &
+  DirectChannelState &
   MembershipState &
   OwnCapabilitiesState &
   ChannelDataState &
@@ -162,6 +179,7 @@ export class ChannelState extends StateStore<ChannelStateData> {
       read: {},
       members: {},
       memberCount: 0,
+      isDirectChannel: false,
       membership: {} as ChannelMemberResponse,
       ownCapabilities: [],
       data: channel?.data,
@@ -200,7 +218,17 @@ export class ChannelState extends StateStore<ChannelStateData> {
   }
 
   set member_count(memberCount: number) {
-    this.partialNext({ memberCount });
+    this.partialNext({ isDirectChannel: memberCount === 2, memberCount });
+  }
+
+  /**
+   * Non-reactive read of {@link DirectChannelState.isDirectChannel}. Use this when you only need the
+   * value once at render time and don't want a `useStateStore` subscription; use the reactive slice
+   * (`useStateStore(channel.state, (s) => ({ isDirectChannel: s.isDirectChannel }))`) when the UI
+   * must update if the channel flips between 1:1 and group.
+   */
+  get isDirectChannel() {
+    return this.getLatestValue().isDirectChannel;
   }
 
   get read() {
@@ -281,6 +309,7 @@ export class ChannelState extends StateStore<ChannelStateData> {
 
     this.partialNext({
       data,
+      isDirectChannel: (memberCount ?? 0) === 2,
       memberCount: memberCount ?? 0,
       ownCapabilities: ownCapabilities ?? [],
     });

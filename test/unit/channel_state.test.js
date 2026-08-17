@@ -135,6 +135,50 @@ describe('ChannelState member count bridge', () => {
 	});
 });
 
+describe('ChannelState isDirectChannel', () => {
+	it('is true when memberCount === 2 and false otherwise', () => {
+		const client = new StreamChat();
+		expect(
+			new Channel(client, 'type', 'a', { member_count: 2 }).state.isDirectChannel,
+		).to.equal(true);
+		expect(
+			new Channel(client, 'type', 'b', { member_count: 3 }).state.isDirectChannel,
+		).to.equal(false);
+		expect(
+			new Channel(client, 'type', 'c', { member_count: 1 }).state.isDirectChannel,
+		).to.equal(false);
+	});
+
+	it('tracks the member_count setter', () => {
+		const state = new ChannelState();
+		expect(state.isDirectChannel).to.equal(false);
+
+		state.member_count = 2;
+		expect(state.isDirectChannel).to.equal(true);
+		expect(state.getLatestValue().isDirectChannel).to.equal(true);
+
+		state.member_count = 5;
+		expect(state.isDirectChannel).to.equal(false);
+	});
+
+	it('does NOT change on a members-only update (the perf win)', () => {
+		const client = new StreamChat();
+		const state = new Channel(client, 'type', 'd', { member_count: 2 }).state;
+		const seen = [];
+		state.subscribeWithSelector(
+			(s) => ({ isDirectChannel: s.isDirectChannel }),
+			({ isDirectChannel }) => seen.push(isDirectChannel),
+		);
+		seen.length = 0; // drop the initial subscribe emission
+
+		// a members map churn (presence/watchers/etc.) must not re-notify isDirectChannel subscribers
+		state.members = { alice: { user: { id: 'alice' } }, bob: { user: { id: 'bob' } } };
+
+		expect(seen).to.have.length(0);
+		expect(state.isDirectChannel).to.equal(true);
+	});
+});
+
 describe('ChannelState read store', () => {
 	it('initializes read store with an empty read map', () => {
 		const state = new ChannelState();
