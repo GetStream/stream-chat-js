@@ -67,19 +67,9 @@
   "dependencies": {
     "@stream-io/logger": "^2.0.0",
     "axios": "^1.19.0",
-    "linkifyjs": "^4.3.3"
-  },
-  "peerDependencies": {
     "dayjs": "^1.11.13",
-    "i18next": "^26.3.6"
-  },
-  "peerDependenciesMeta": {
-    "dayjs": {
-      "optional": true
-    },
-    "i18next": {
-      "optional": true
-    }
+    "i18next": "^26.3.6",
+    "linkifyjs": "^4.3.3"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.0.1",
@@ -92,7 +82,6 @@
     "@vitest/coverage-v8": "^4.1.10",
     "concurrently": "^9.2.1",
     "conventional-changelog-conventionalcommits": "^9.3.1",
-    "dayjs": "^1.11.13",
     "dotenv": "^17.4.2",
     "esbuild": "^0.28.2",
     "eslint": "^9.39.4",
@@ -101,7 +90,6 @@
     "eslint-plugin-unused-imports": "^4.4.1",
     "globals": "^17.6.0",
     "husky": "^9.1.7",
-    "i18next": "^26.3.6",
     "lint-staged": "^17.0.5",
     "prettier": "^3.8.3",
     "semantic-release": "^25.0.9",
