@@ -5,7 +5,7 @@ import type { MessageResponse, SearchAPIResponse } from '../../../src/types';
 import { getClientWithUser } from '../test-utils/getClient';
 import { generateMsg } from '../test-utils/generateMessage';
 
-/** query() invoked directly in tests is not driven by executeQuery, so it has no signal. */
+/** query() invoked directly in tests is not driven by executeQuery, so it has none. */
 const withoutSignal = {};
 
 describe('MessageSearchSource', () => {

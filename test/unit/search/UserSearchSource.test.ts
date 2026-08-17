@@ -9,7 +9,7 @@ import type {
 } from '../../../src/types';
 import { getClientWithUser } from '../test-utils/getClient';
 
-/** query() invoked directly in tests is not driven by executeQuery, so it has no signal. */
+/** query() invoked directly in tests is not driven by executeQuery, so it has none. */
 const withoutSignal = {};
 
 describe('UserSearchSource', () => {
