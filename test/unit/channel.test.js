@@ -2621,9 +2621,15 @@ describe('Channel search', async () => {
 			.mockResolvedValue({ body: {}, metadata: {} });
 		const payload = { query: 'query', sort: [{ field: 'updated_at', direction: -1 }] };
 		await channel.search({ payload });
-		expect(sendRequest).toHaveBeenCalledWith('GET', '/api/v2/chat/search', undefined, {
-			payload,
-		});
+		expect(sendRequest).toHaveBeenCalledWith(
+			'GET',
+			'/api/v2/chat/search',
+			undefined,
+			{ payload },
+			undefined,
+			undefined,
+			undefined,
+		);
 	});
 	it('search with sorting by custom field', async () => {
 		const sendRequest = vi
@@ -2631,9 +2637,15 @@ describe('Channel search', async () => {
 			.mockResolvedValue({ body: {}, metadata: {} });
 		const payload = { query: 'query', sort: [{ field: 'custom_field', direction: -1 }] };
 		await channel.search({ payload });
-		expect(sendRequest).toHaveBeenCalledWith('GET', '/api/v2/chat/search', undefined, {
-			payload,
-		});
+		expect(sendRequest).toHaveBeenCalledWith(
+			'GET',
+			'/api/v2/chat/search',
+			undefined,
+			{ payload },
+			undefined,
+			undefined,
+			undefined,
+		);
 	});
 	it('sorting and offset works', async () => {
 		vi.spyOn(client.api, 'sendRequest').mockResolvedValue({ body: {}, metadata: {} });
@@ -3062,6 +3074,7 @@ describe('send reaction flow', () => {
 				undefined,
 				{ reaction, enforce_unique: true, skip_push: true },
 				'application/json',
+				undefined,
 			);
 		});
 
@@ -3300,11 +3313,14 @@ describe('message sending flow', () => {
 				undefined,
 				{
 					message,
+					include_channel_context: undefined,
+					include_mentioned_members: undefined,
 					keep_channel_hidden: undefined,
 					skip_enrich_url: undefined,
 					skip_push: true,
 				},
 				'application/json',
+				undefined,
 			);
 		});
 
@@ -3322,11 +3338,14 @@ describe('message sending flow', () => {
 				undefined,
 				{
 					message,
+					include_channel_context: undefined,
+					include_mentioned_members: undefined,
 					keep_channel_hidden: undefined,
 					skip_enrich_url: undefined,
 					skip_push: undefined,
 				},
 				'application/json',
+				undefined,
 			);
 		});
 	});

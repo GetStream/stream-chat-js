@@ -225,7 +225,6 @@ export class StreamChat extends ChatApi {
   appIdentifier?: AppIdentifier;
   private cachedUserAgent?: string;
   readonly messageComposerCache: FixedSizeQueueCache<string, MessageComposer>;
-  private nextRequestAbortController: AbortController | null = null;
   instanceConfigurationService = new InstanceConfigurationService();
 
   /**
@@ -1216,11 +1215,13 @@ export class StreamChat extends ChatApi {
    *   and options such as `presence`.
    * @returns The user query response.
    */
-  override async queryUsers(request?: { payload?: Gen_QueryUsersPayload }) {
+  override async queryUsers(...args: Parameters<ChatApi['queryUsers']>) {
+    const request = args[0] ?? {};
+    const options = args[1];
     // Make sure we wait for the connect promise if there is a pending one
     await this.wsPromise;
 
-    const data = await super.queryUsers(request);
+    const data = await super.queryUsers(request, options);
     this.state.updateUsers(data.users);
 
     return data;

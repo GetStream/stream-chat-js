@@ -6,6 +6,7 @@ import type {
   RateLimit,
   RequestMetadata,
   SendFileAPIResponse,
+  StreamRequestOptions,
   UserResponse,
 } from './types';
 import { StreamAPIError } from './types';
@@ -19,8 +20,6 @@ const logger = chatLoggerSystem.getLogger('api-client');
 export class ApiClient {
   client!: StreamChat;
 
-  private nextRequestAbortController: AbortController | null = null;
-
   constructor(client?: StreamChat) {
     if (client) this.client = client;
   }
@@ -31,10 +30,6 @@ export class ApiClient {
     return this.client.tokenManager.getToken();
   }
 
-  createAbortControllerForNextRequest() {
-    return (this.nextRequestAbortController = new AbortController());
-  }
-
   sendRequest<T>(
     method: Method,
     url: string,
@@ -42,12 +37,14 @@ export class ApiClient {
     queryParams?: Record<string, unknown>,
     body?: unknown,
     requestContentType?: string,
+    options?: StreamRequestOptions,
   ): Promise<{ body: T; metadata: RequestMetadata }> {
     const resolvedUrl = this.resolveUrl(url, pathParams);
 
     return this._doRequest<T>(method, resolvedUrl, body, {
       params: queryParams,
       headers: { 'Content-Type': requestContentType },
+      ...toAxiosRequestConfig(options),
     });
   }
 
@@ -114,19 +111,10 @@ export class ApiClient {
     return resolved;
   }
 
-  private getNextAbortSignal(): AbortSignal | undefined {
-    if (!this.nextRequestAbortController) return;
-
-    const signal = this.nextRequestAbortController.signal;
-    this.nextRequestAbortController = null;
-    return signal;
-  }
-
   populateRequestConfigWithDefaults(
     additonalConfig: AxiosRequestConfig,
   ): AxiosRequestConfig {
     const token = this._getToken();
-    const signal = this.getNextAbortSignal();
 
     return {
       ...additonalConfig,
@@ -151,7 +139,6 @@ export class ApiClient {
         connection_id:
           additonalConfig.params?.connection_id || this.client._getConnectionID(),
       },
-      signal,
     } satisfies AxiosRequestConfig;
   }
 
@@ -261,6 +248,14 @@ export class ApiClient {
     }
   }
 }
+
+/**
+ * Maps the SDK-level per-request options onto the axios request config they
+ * translate to. Extend this when a new option is added to `StreamRequestOptions`.
+ */
+const toAxiosRequestConfig = ({
+  signal,
+}: StreamRequestOptions = {}): AxiosRequestConfig => ({ signal });
 
 const errorIsApiError = (error: unknown): error is AxiosError<APIError> => {
   if (!(error instanceof AxiosError)) return false;
