@@ -202,7 +202,13 @@ describe("the 'channel' configuration key", () => {
       client.config.reset('channel');
 
       // Re-derivation re-installs it; a snapshot of config values never could have.
-      expect(channel.messagePaginator.config.itemOrderComparator).not.toBe(original);
+      //
+      // Asserted as `toBe(original)` rather than `not.toBe`. The old expectation pinned an
+      // implementation detail — the overlay used to rebuild its closures on every install, so the
+      // restored comparator was merely an equivalent one. The paginator now memoizes them, which the
+      // guard in `initializeConfig` needs to recognise an unchanged derivation, and which makes this the
+      // stronger claim: the reset restored *the* comparator, not a lookalike.
+      expect(channel.messagePaginator.config.itemOrderComparator).toBe(original);
       expect(typeof channel.messagePaginator.config.itemOrderComparator).toBe('function');
       const older = { id: 'a', created_at: new Date('2020-01-01') } as never;
       const newer = { id: 'b', created_at: new Date('2021-01-01') } as never;

@@ -45,11 +45,12 @@ describe('paginator initializeConfig', () => {
         expect(paginator.config[field]).toEqual(fromConstructor[field]);
       }
 
-      // Behavioural fields are re-installed as fresh closures over `this`, so their identities differ
-      // by design — what matters is that they are present rather than lost.
+      // Behavioural fields come from the memoized subclass overlay, so a re-derivation reinstates the
+      // very same functions — which is what lets `initializeConfig` recognise an unchanged derivation
+      // and skip the publish.
       for (const field of ['deriveCursor', 'itemOrderComparator'] as const) {
         expect(typeof fromConstructor[field]).toBe('function');
-        expect(typeof paginator.config[field]).toBe('function');
+        expect(paginator.config[field]).toBe(fromConstructor[field]);
       }
     });
 
@@ -196,6 +197,121 @@ describe('paginator initializeConfig', () => {
       paginator.initializeConfig();
 
       expect(paginator.config.stateThrottleMs).toBeUndefined();
+    });
+  });
+  describe('read-once fields take effect however they are set', () => {
+    // `updateConfig` used to store these and rebuild nothing, because the rebuild lived only in
+    // `initializeConfig`. So `paginator.updateConfig({ debounceMs: 900 })` reported 900 while the
+    // debounce kept running at 300 — resolved configuration contradicting behaviour, the same shape as
+    // the `unreadReferencePolicy` leak. Pairing the write with the rebuild is now the controller's job,
+    // so it holds for every route rather than the one someone remembered.
+    it('rebuilds the debounced query on a plain updateConfig', () => {
+      const paginator = new MessagePaginator({ channel });
+      const internals = paginator as unknown as { _executeQueryDebounced: unknown };
+      const before = internals._executeQueryDebounced;
+
+      paginator.updateConfig({ debounceMs: 900 });
+
+      expect(paginator.config.debounceMs).toBe(900);
+      expect(internals._executeQueryDebounced).not.toBe(before);
+    });
+
+    it('rebuilds the publish throttles on a plain updateConfig', () => {
+      const paginator = new MessagePaginator({ channel });
+      const internals = paginator as unknown as { _windowPublishThrottle: unknown };
+      const before = internals._windowPublishThrottle;
+
+      paginator.updateConfig({ stateThrottleMs: 111 });
+
+      expect(paginator.config.stateThrottleMs).toBe(111);
+      expect(internals._windowPublishThrottle).not.toBe(before);
+    });
+
+    it('drops the throttles when the interval is cleared', () => {
+      const paginator = new MessagePaginator({ channel });
+
+      paginator.updateConfig({ stateThrottleMs: undefined });
+
+      expect(
+        (paginator as unknown as { _windowPublishThrottle: unknown })
+          ._windowPublishThrottle,
+      ).toBeUndefined();
+    });
+  });
+
+  describe('one re-derivation is one complete publish', () => {
+    // The subclass overlay used to be a *second* write from an `initializeConfig` override. The base
+    // derivation knows nothing of that overlay, so its publish carried the config with `doRequest`,
+    // `deriveCursor` and `itemOrderComparator` stripped, and the subclass then put them back — three
+    // notifications for a pinned paginator, the first with no request function at all. The JSDoc claimed
+    // "both carry a complete config, so no subscriber sees a half-applied state"; it did not hold.
+    it('never publishes a pinned config missing its request function or comparators', () => {
+      const paginator = new PinnedMessagePaginator({ channel });
+      const publishes: {
+        deriveCursor: string;
+        doRequest: string;
+        itemOrderComparator: string;
+      }[] = [];
+      paginator.configState.subscribe((config) =>
+        publishes.push({
+          deriveCursor: typeof config.deriveCursor,
+          doRequest: typeof config.doRequest,
+          itemOrderComparator: typeof config.itemOrderComparator,
+        }),
+      );
+      publishes.length = 0;
+
+      paginator.initializeConfig({ pageSize: 42 });
+
+      expect(publishes).toEqual([
+        {
+          deriveCursor: 'function',
+          doRequest: 'function',
+          itemOrderComparator: 'function',
+        },
+      ]);
+      expect(paginator.config.pageSize).toBe(42);
+    });
+
+    it('does not publish at all when the derivation has not moved', () => {
+      const paginator = new PinnedMessagePaginator({ channel });
+      const listener = vi.fn();
+      paginator.configState.subscribe(listener);
+      listener.mockClear();
+
+      paginator.initializeConfig();
+      paginator.initializeConfig();
+
+      expect(listener).not.toHaveBeenCalled();
+      // …and the overlay is still installed, so the skip is a genuine no-op rather than a lost write.
+      expect(typeof paginator.config.doRequest).toBe('function');
+    });
+
+    it('keeps the overlay winning over a constructor-supplied doRequest', () => {
+      // Precedence used to come from the overlay being written *after* the base derivation. It now comes
+      // from being spread last inside it — same result, and worth pinning since the mechanism changed.
+      const ownDoRequest = vi.fn();
+      const paginator = new PinnedMessagePaginator({
+        channel,
+        paginatorOptions: { doRequest: ownDoRequest },
+      });
+
+      paginator.initializeConfig();
+
+      expect(paginator.config.doRequest).not.toBe(ownDoRequest);
+    });
+
+    it('updateConfig skips a patch whose every field is already equal', () => {
+      const paginator = new MessagePaginator({ channel });
+      const listener = vi.fn();
+      paginator.configState.subscribe(listener);
+      listener.mockClear();
+
+      paginator.updateConfig({ pageSize: paginator.config.pageSize });
+      expect(listener).not.toHaveBeenCalled();
+
+      paginator.updateConfig({ pageSize: paginator.config.pageSize + 1 });
+      expect(listener).toHaveBeenCalledTimes(1);
     });
   });
 });

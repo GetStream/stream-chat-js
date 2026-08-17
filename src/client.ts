@@ -68,26 +68,20 @@ import { InsightMetrics, postInsights } from './insights';
 import { chatLoggerSystem } from './logger';
 import { Thread } from './thread';
 import { Moderation } from './moderation';
-import { DEFAULT_THREAD_MANAGER_CONFIG, ThreadManager } from './thread_manager';
+import { ThreadManager } from './thread_manager';
 import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import { PollManager } from './poll_manager';
 import { EntityStore } from './entityStore/EntityStore';
 import { ChannelManager } from './ChannelManager';
-import {
-  DEFAULT_MESSAGE_DELIVERY_REPORTER_CONFIG,
-  MessageDeliveryReporter,
-} from './messageDelivery';
+import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
-import { DEFAULT_NOTIFICATION_MANAGER_CONFIG } from './notifications/configuration';
-import type { NotificationManagerConfig } from './notifications';
-import { DEFAULT_REMINDER_MANAGER_CONFIG, ReminderManager } from './reminders';
+import { ReminderManager } from './reminders';
 import type { AbstractOfflineDB } from './offline-support';
 import { getPendingTaskChannelData } from './offline-support/util';
 import { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
-import { mergeWith } from './utils/mergeWith';
 import { isEqual } from './utils/mergeWith/mergeWithCore';
 import type { MessageComposer } from './messageComposer';
-import type { MessageComposerSetupState } from './configuration';
+import type { InstanceSetupState } from './configuration';
 import { InstanceConfigurationService } from './configuration/InstanceConfigurationService';
 import { applyInstanceConfiguration } from './configuration/applyInstanceConfiguration';
 import { StateStore } from './store';
@@ -411,26 +405,10 @@ export class StreamChat extends ChatApi {
   private initializeManagerConfig() {
     const config = this.config.getConfig('client');
 
-    this.reminders.updateConfig({
-      ...DEFAULT_REMINDER_MANAGER_CONFIG,
-      ...config?.reminders,
-    });
-    this.threads.updateConfig({
-      ...DEFAULT_THREAD_MANAGER_CONFIG,
-      ...config?.threads,
-    });
-    this.messageDeliveryReporter.updateConfig({
-      ...DEFAULT_MESSAGE_DELIVERY_REPORTER_CONFIG,
-      ...config?.messageDelivery,
-    });
-    // Deep-merged, not spread: `notifications.durations` is nested and the slice is a `DeepPartial`, so
-    // `{ durations: { error } }` must keep the three sibling durations rather than replace the object.
-    this.notifications.updateConfig(
-      mergeWith(
-        { ...DEFAULT_NOTIFICATION_MANAGER_CONFIG },
-        (config?.notifications ?? {}) as object,
-      ) as Partial<NotificationManagerConfig>,
-    );
+    this.reminders.initializeConfig(config?.reminders);
+    this.threads.initializeConfig(config?.threads);
+    this.messageDeliveryReporter.initializeConfig(config?.messageDelivery);
+    this.notifications.initializeConfig(config?.notifications);
   }
 
   get mutedUsers() {
@@ -524,7 +502,7 @@ export class StreamChat extends ChatApi {
    * @deprecated Use `client.config.setSetupFunction('messageComposer', fn)`.
    */
   public setMessageComposerSetupFunction = (
-    setupFunction: MessageComposerSetupState['setupFunction'],
+    setupFunction: InstanceSetupState<'messageComposer'>['setupFunction'],
   ) => {
     this.config.setSetupFunction('messageComposer', setupFunction);
   };

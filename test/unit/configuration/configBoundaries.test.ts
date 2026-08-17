@@ -154,3 +154,124 @@ describe('configuration boundaries', () => {
     });
   });
 });
+
+describe('the composer resolves through the shared controller', () => {
+  /**
+   * Nine of `MessageComposer`'s config members were the generic pipeline under different names. Two are
+   * genuinely extra, and are declared hooks the controller offers and only this entity passes:
+   * `retainPatches` and `applyAuthority`.
+   *
+   * A third, `finalizeRequest`, was added for `commands.sendValidator` and then deleted along with the
+   * `applyCommandValidatorOverride` it called: both reached the same answer as the plain deep merge on
+   * every layer shape, because a merge only writes keys that are present, so a silent later layer cannot
+   * erase an earlier choice. The validator case below is the guard that the *behaviour* still holds.
+   */
+  it('retains an updateConfig request across a re-resolution (retainPatches)', () => {
+    const client = getClientWithUser({ id: 'user' });
+    client._addChannelConfig({
+      type: 'messaging',
+      config: { shared_locations: false } as never,
+    });
+    const composer = client.channel('messaging', 'c-layer').messageComposer;
+    // Without this the composer never hears the server change — it is the subscription, not the
+    // controller, that decides *when* to re-resolve.
+    composer.registerSubscriptions();
+
+    composer.updateConfig({ location: { enabled: true } });
+    // The server says no, so the effective value is false…
+    expect(composer.config.location.enabled).toBe(false);
+    // …but the request is retained, which is the whole point of DV-18.
+    expect(composer.requestedConfig.location.enabled).toBe(true);
+
+    client._addChannelConfig({
+      type: 'messaging',
+      config: { shared_locations: true } as never,
+    });
+
+    // The server changes its mind and the original request re-emerges, rather than having been
+    // overwritten by the server's earlier `false`.
+    expect(composer.config.location.enabled).toBe(true);
+  });
+
+  it('drops retained requests on reset, but not on a re-resolution', () => {
+    const client = getClientWithUser({ id: 'user' });
+    const composer = client.channel('messaging', 'c-reset').messageComposer;
+    composer.registerSubscriptions();
+    const defaultMax = composer.config.text.maxLengthOnSend;
+    composer.updateConfig({ text: { maxLengthOnSend: 7 } });
+
+    composer.applyServerRestrictions(); // a re-resolution — keeps the layer
+    expect(composer.config.text.maxLengthOnSend).toBe(7);
+
+    client.config.reset(); // a reset — clears it
+    expect(composer.config.text.maxLengthOnSend).toBe(defaultMax);
+  });
+
+  it('picks a sendValidator from the most specific layer that names one', () => {
+    const client = getClientWithUser({ id: 'user' });
+    const declarative = () => undefined;
+    const imperative = () => undefined;
+    client.config.set({ messageComposer: { commands: { sendValidator: declarative } } });
+    const composer = client.channel('messaging', 'c-validator').messageComposer;
+
+    expect(composer.config.commands.sendValidator).toBe(declarative);
+
+    composer.updateConfig({ commands: { sendValidator: imperative } });
+
+    // A function is chosen, never merged — and the most specific layer naming one wins.
+    expect(composer.config.commands.sendValidator).toBe(imperative);
+  });
+
+  it.each([
+    ['a later layer that says nothing about commands', { text: { enabled: true } }],
+    ['a later layer naming commands without a validator', { commands: {} }],
+    [
+      'a later layer setting the validator to undefined',
+      { commands: { sendValidator: undefined } },
+    ],
+  ])('does not lose an earlier validator to %s', (_name, laterLayer) => {
+    // These three shapes are exactly what `applyCommandValidatorOverride` was written to protect against.
+    // The merge handles them on its own — it only writes keys that are present, and skips `undefined` —
+    // which is why the helper was deleted. Pinned here so the deletion cannot silently regress.
+    const client = getClientWithUser({ id: 'user' });
+    const declarative = () => undefined;
+    client.config.set({ messageComposer: { commands: { sendValidator: declarative } } });
+    const composer = client.channel(
+      'messaging',
+      `c-silent-${_name.length}`,
+    ).messageComposer;
+
+    composer.updateConfig(laterLayer as never);
+
+    expect(composer.config.commands.sendValidator).toBe(declarative);
+  });
+
+  it('applies the server ceiling on every resolution (applyAuthority)', () => {
+    const client = getClientWithUser({ id: 'user' });
+    client._addChannelConfig({
+      type: 'messaging',
+      config: { max_message_length: 100 } as never,
+    });
+    const composer = client.channel('messaging', 'c-bounds').messageComposer;
+
+    composer.updateConfig({ text: { maxLengthOnSend: 5000 } });
+
+    // Tightest wins, and it is re-applied rather than accumulated, so the request stays 5000.
+    expect(composer.config.text.maxLengthOnSend).toBe(100);
+    expect(composer.requestedConfig.text.maxLengthOnSend).toBe(5000);
+  });
+
+  it('still resolves the documented layer order — construction argument over declarative', () => {
+    const client = getClientWithUser({ id: 'user' });
+    client.config.set({ messageComposer: { text: { maxLengthOnSend: 10 } } });
+
+    const composer = new MessageComposer({
+      client,
+      compositionContext: client.channel('messaging', 'c-order'),
+      config: { text: { maxLengthOnSend: 20 } },
+    });
+
+    // docs §3: the construction argument is stage 3, the declarative tree stage 2.
+    expect(composer.config.text.maxLengthOnSend).toBe(20);
+  });
+});

@@ -9,7 +9,10 @@
  */
 
 import { withCancellation } from './utils/concurrency';
+import { deepFreezeConfig } from './configuration/deepFreezeConfig';
 import { StateStore } from './store';
+import { ConfigController } from './configuration/ConfigController';
+import { applyInstanceConfiguration } from './configuration/applyInstanceConfiguration';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import type { StreamChat } from './client';
 import type { Unsubscribe } from './store';
@@ -70,9 +73,10 @@ export type LiveLocationManagerConfig = {
   minUpdateThrottleMs: number;
 };
 
-export const DEFAULT_LIVE_LOCATION_MANAGER_CONFIG: LiveLocationManagerConfig = {
-  minUpdateThrottleMs: UPDATE_LIVE_LOCATION_REQUEST_MIN_THROTTLE_TIMEOUT,
-};
+export const DEFAULT_LIVE_LOCATION_MANAGER_CONFIG: LiveLocationManagerConfig =
+  deepFreezeConfig({
+    minUpdateThrottleMs: UPDATE_LIVE_LOCATION_REQUEST_MIN_THROTTLE_TIMEOUT,
+  });
 
 export class LiveLocationManager extends WithSubscriptions {
   public state: StateStore<LiveLocationManagerState>;
@@ -81,11 +85,18 @@ export class LiveLocationManager extends WithSubscriptions {
   private _deviceId: string;
   private watchLocation: WatchLocation;
 
+  /** The shared configuration machinery — see {@link ConfigController}. */
+  private readonly configController: ConfigController<LiveLocationManagerConfig>;
+  /** Teardown for this manager's configuration subscription, released by {@link unregisterSubscriptions}. */
+  private unsubscribeConfiguration?: Unsubscribe;
+
   /**
    * Resolved configuration, as a store — the shape every configurable class exposes
    * (`configState` / `config` / `updateConfig`).
    */
-  readonly configState: StateStore<LiveLocationManagerConfig>;
+  get configState(): StateStore<LiveLocationManagerConfig> {
+    return this.configController.state;
+  }
 
   static symbol = Symbol(LiveLocationManager.name);
 
@@ -108,8 +119,23 @@ export class LiveLocationManager extends WithSubscriptions {
     this._deviceId = getDeviceId();
     this.getDeviceId = getDeviceId;
     this.watchLocation = watchLocation;
-    this.configState = new StateStore<LiveLocationManagerConfig>({
-      ...DEFAULT_LIVE_LOCATION_MANAGER_CONFIG,
+    this.configController = new ConfigController<LiveLocationManagerConfig>({
+      defaults: DEFAULT_LIVE_LOCATION_MANAGER_CONFIG,
+    });
+
+    // Last statement of the constructor, so a setup function sees a whole object. Registered here rather
+    // than in `registerSubscriptions` — this manager is constructed by whoever needs it and `init()` is
+    // async, so gating configuration on registration would leave a window where a registered value did
+    // not apply.
+    this.unsubscribeConfiguration = applyInstanceConfiguration({
+      args: { liveLocationManager: this },
+      config: client.config,
+      key: 'liveLocationManager',
+      applyConfig: (config) => this.initializeConfig(config),
+      reinitializeConfig: () =>
+        this.initializeConfig(
+          client.config.getConfig('liveLocationManager') ?? undefined,
+        ),
     });
   }
 
@@ -120,7 +146,12 @@ export class LiveLocationManager extends WithSubscriptions {
 
   /** Merges a partial configuration into the resolved config and notifies subscribers. */
   updateConfig(config: Partial<LiveLocationManagerConfig>) {
-    this.configState.partialNext(config);
+    this.configController.patch(config);
+  }
+
+  /** Rebuilds the resolved configuration from package defaults plus the declarative slice. */
+  initializeConfig(config?: Partial<LiveLocationManagerConfig>) {
+    this.configController.initialize(config);
   }
 
   public async init() {
@@ -136,7 +167,14 @@ export class LiveLocationManager extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeTargetMessagesChange());
   };
 
-  public unregisterSubscriptions = () => super.unregisterSubscriptions();
+  public unregisterSubscriptions = () => {
+    const released = super.unregisterSubscriptions();
+    // Ref-counted: only the last caller actually tears down, and the configuration subscription is not
+    // one of the ref-counted ones — it was registered by the constructor, so it is released here.
+    this.unsubscribeConfiguration?.();
+    this.unsubscribeConfiguration = undefined;
+    return released;
+  };
 
   get messages() {
     return this.state.getLatestValue().messages;

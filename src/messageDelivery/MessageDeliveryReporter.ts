@@ -1,5 +1,7 @@
 import type { StreamChat } from '../client';
-import { StateStore } from '../store';
+import { deepFreezeConfig } from '../configuration/deepFreezeConfig';
+import type { StateStore } from '../store';
+import { ConfigController } from '../configuration/ConfigController';
 import { Channel } from '../channel';
 import type { ThreadUserReadState } from '../thread';
 import { Thread } from '../thread';
@@ -32,12 +34,13 @@ export type MessageDeliveryReporterConfig = {
   retryCountLimitForTimeoutIncrease: number;
 };
 
-export const DEFAULT_MESSAGE_DELIVERY_REPORTER_CONFIG: MessageDeliveryReporterConfig = {
-  markAsDeliveredBufferTimeoutMs: 1000,
-  markAsReadThrottleTimeoutMs: 1000,
-  maxDeliveredMessageCountInPayload: 100,
-  retryCountLimitForTimeoutIncrease: 3,
-};
+export const DEFAULT_MESSAGE_DELIVERY_REPORTER_CONFIG: MessageDeliveryReporterConfig =
+  deepFreezeConfig({
+    markAsDeliveredBufferTimeoutMs: 1000,
+    markAsReadThrottleTimeoutMs: 1000,
+    maxDeliveredMessageCountInPayload: 100,
+    retryCountLimitForTimeoutIncrease: 3,
+  });
 
 const isChannel = (item: Channel | Thread): item is Channel => item instanceof Channel;
 const isThread = (item: Channel | Thread): item is Thread => item instanceof Thread;
@@ -70,16 +73,30 @@ export class MessageDeliveryReporter {
   // increased up to config.retryCountLimitForTimeoutIncrease
   protected requestRetryCount: number = 0;
 
+  /** The shared configuration machinery — see {@link ConfigController}. */
+  private readonly configController: ConfigController<MessageDeliveryReporterConfig>;
   /**
    * Resolved configuration, as a store — the shape every configurable class exposes
    * (`configState` / `config` / `updateConfig`).
    */
-  readonly configState: StateStore<MessageDeliveryReporterConfig>;
+  get configState(): StateStore<MessageDeliveryReporterConfig> {
+    return this.configController.state;
+  }
 
   constructor({ client }: MessageDeliveryReporterOptions) {
     this.client = client;
-    this.configState = new StateStore<MessageDeliveryReporterConfig>({
-      ...DEFAULT_MESSAGE_DELIVERY_REPORTER_CONFIG,
+    this.configController = new ConfigController<MessageDeliveryReporterConfig>({
+      defaults: DEFAULT_MESSAGE_DELIVERY_REPORTER_CONFIG,
+      // The markRead throttle captures its interval in a closure, so storing a new one is not enough —
+      // it has to be rebuilt. Doing that here rather than in `updateConfig` is what makes the pairing
+      // hold for *every* route, including a declarative change.
+      onChanged: (next, previous) => {
+        if (next.markAsReadThrottleTimeoutMs === previous.markAsReadThrottleTimeoutMs)
+          return;
+        this.throttledMarkRead = this.buildThrottledMarkRead(
+          next.markAsReadThrottleTimeoutMs,
+        );
+      },
     });
   }
 
@@ -93,11 +110,25 @@ export class MessageDeliveryReporter {
    * setter, because the throttle captured the old interval in a closure and would otherwise ignore it.
    */
   updateConfig(config: Partial<MessageDeliveryReporterConfig>) {
-    const { markAsReadThrottleTimeoutMs, ...rest } = config;
-    if (Object.keys(rest).length) this.configState.partialNext(rest);
-    if (typeof markAsReadThrottleTimeoutMs === 'number') {
-      this.setMarkAsReadThrottleOptions({ markAsReadThrottleTimeoutMs });
-    }
+    this.configController.patch(config);
+  }
+
+  /**
+   * Rebuilds the resolved configuration from package defaults plus the declarative slice.
+   *
+   * The derivation entry point every configurable entity exposes, so the owner routes a slice here and
+   * knows nothing about MessageDeliveryReporter's defaults or merge semantics. This logic used to live in the owner,
+   * which is how `reset()` became a no-op for the client key (F4) and how a registered
+   * `notifications.sortComparator` became unremovable (G8) — an owner writing another object's
+   * derivation gets that object's rules wrong sooner or later.
+   *
+   * Routed through {@link updateConfig} rather than replacing the store, which is exact here because
+   * every field of `MessageDeliveryReporterConfig` is required and present in the defaults, so a patch naming all of
+   * them amounts to a replacement. `NotificationManager` cannot do this — its `sortComparator` is
+   * optional with no default, so a patch can never remove one — which is why it replaces outright.
+   */
+  initializeConfig(config?: Partial<MessageDeliveryReporterConfig>) {
+    this.configController.initialize(config);
   }
 
   /**
@@ -110,9 +141,9 @@ export class MessageDeliveryReporter {
   setMarkAsReadThrottleOptions = ({
     markAsReadThrottleTimeoutMs,
   }: Pick<MessageDeliveryReporterConfig, 'markAsReadThrottleTimeoutMs'>) => {
-    if (this.config.markAsReadThrottleTimeoutMs === markAsReadThrottleTimeoutMs) return;
-    this.configState.partialNext({ markAsReadThrottleTimeoutMs });
-    this.throttledMarkRead = this.buildThrottledMarkRead(markAsReadThrottleTimeoutMs);
+    // Kept as released surface, but it no longer has to pair the write with the rebuild — the
+    // controller's `onChanged` does that for whichever route the value arrives by.
+    this.updateConfig({ markAsReadThrottleTimeoutMs });
   };
 
   private get markDeliveredRequestInFlight() {

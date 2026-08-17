@@ -1,6 +1,11 @@
 import { StateStore } from '../store';
+import type { Unsubscribe } from '../store';
 import type { MessageResponse } from '../types';
+import type { StreamChat } from '../client';
 import type { SearchSource } from './BaseSearchSource';
+import { ConfigController } from '../configuration/ConfigController';
+import { applyInstanceConfiguration } from '../configuration/applyInstanceConfiguration';
+import { deepFreezeConfig } from '../configuration/deepFreezeConfig';
 
 export type SearchControllerState = {
   isActive: boolean;
@@ -20,9 +25,22 @@ export type SearchControllerConfig = {
 };
 
 export type SearchControllerOptions = {
+  /**
+   * Required for this controller to take part in `client.config`.
+   *
+   * It is the one configurable class this package never constructs — an app or a downstream SDK does
+   * (`<Chat>` in `stream-chat-react`) — so there is no other route by which it could find the
+   * configuration service. Left out, the controller still works and `updateConfig` still applies;
+   * only the declarative key and its setup function go unheard.
+   */
+  client?: StreamChat;
   config?: Partial<SearchControllerConfig>;
   sources?: SearchSource[];
 };
+
+export const DEFAULT_SEARCH_CONTROLLER_CONFIG: SearchControllerConfig = deepFreezeConfig({
+  keepSingleActiveSource: true,
+});
 
 export class SearchController {
   /**
@@ -32,23 +50,46 @@ export class SearchController {
   _internalState: StateStore<InternalSearchControllerState>;
   state: StateStore<SearchControllerState>;
 
+  /** The shared configuration machinery — see {@link ConfigController}. */
+  private readonly configController: ConfigController<SearchControllerConfig>;
+  /** Teardown for the configuration subscription, when this controller was given a client. */
+  private unsubscribeConfiguration?: Unsubscribe;
+
   /**
    * Resolved configuration, as a store so consumers can react to it — the same shape every configurable
    * class exposes (`configState` for the store, {@link config} for the current value).
    */
-  readonly configState: StateStore<SearchControllerConfig>;
+  get configState(): StateStore<SearchControllerConfig> {
+    return this.configController.state;
+  }
 
-  constructor({ config, sources }: SearchControllerOptions = {}) {
+  constructor({ client, config, sources }: SearchControllerOptions = {}) {
     this.state = new StateStore<SearchControllerState>({
       isActive: false,
       searchQuery: '',
       sources: sources ?? [],
     });
     this._internalState = new StateStore<InternalSearchControllerState>({});
-    this.configState = new StateStore<SearchControllerConfig>({
-      keepSingleActiveSource: true,
-      ...config,
+    this.configController = new ConfigController<SearchControllerConfig>({
+      defaults: DEFAULT_SEARCH_CONTROLLER_CONFIG,
+      constructorOptions: config,
     });
+
+    if (!client) return;
+    this.unsubscribeConfiguration = applyInstanceConfiguration({
+      args: { searchController: this },
+      config: client.config,
+      key: 'searchController',
+      applyConfig: (slice) => this.initializeConfig(slice),
+      reinitializeConfig: () =>
+        this.initializeConfig(client.config.getConfig('searchController') ?? undefined),
+    });
+  }
+
+  /** Releases the configuration subscription, running the setup function's teardown. */
+  dispose() {
+    this.unsubscribeConfiguration?.();
+    this.unsubscribeConfiguration = undefined;
   }
 
   /**
@@ -61,7 +102,12 @@ export class SearchController {
 
   /** Merges a partial configuration into the resolved config and notifies subscribers. */
   updateConfig(config: Partial<SearchControllerConfig>) {
-    this.configState.partialNext(config);
+    this.configController.patch(config);
+  }
+
+  /** Rebuilds the resolved configuration from package defaults plus the declarative slice. */
+  initializeConfig(config?: Partial<SearchControllerConfig>) {
+    this.configController.initialize(config);
   }
 
   get hasNext() {

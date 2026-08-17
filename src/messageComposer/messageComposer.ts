@@ -5,7 +5,7 @@ import { LocationComposer } from './LocationComposer';
 import { MessageComposerEffectHandlers } from './MessageComposerEffectHandlers';
 import { PollComposer } from './pollComposer';
 import { TextComposer } from './textComposer';
-import { applyCommandValidatorOverride, DEFAULT_COMPOSER_CONFIG } from './configuration';
+import { DEFAULT_COMPOSER_CONFIG } from './configuration';
 import type { MessageComposerMiddlewareValue } from './middleware';
 import {
   MessageComposerMiddlewareExecutor,
@@ -14,10 +14,8 @@ import {
 import type { Unsubscribe } from '../store';
 import { StateStore } from '../store';
 import { formatMessage, generateUUIDv4, isLocalMessage } from '../utils';
-import { mergeWith } from '../utils/mergeWith';
-import { isEqual } from '../utils/mergeWith/mergeWithCore';
-import { copyConfigPatch } from '../utils/copyConfigPatch';
-import { deepFreezeConfig } from '../utils/deepFreezeConfig';
+import { ConfigController } from '../configuration/ConfigController';
+import { deepFreezeConfig } from '../configuration/deepFreezeConfig';
 import { mergeServerRestrictions } from '../configuration/serverAuthority';
 import type {
   ServerRestrictions,
@@ -184,7 +182,15 @@ export class MessageComposer extends WithSubscriptions {
   readonly channel: Channel;
   readonly state: StateStore<MessageComposerState>;
   readonly editingAuditState: StateStore<EditingAuditState>;
-  readonly configState: StateStore<MessageComposerConfig>;
+
+  /**
+   * Resolved configuration, as a store — the shape every configurable class exposes
+   * (`configState` / `config` / `updateConfig`). Delegates rather than holding a copy, so the field and
+   * the controller's store cannot drift.
+   */
+  get configState(): StateStore<MessageComposerConfig> {
+    return this.configController.state;
+  }
   readonly compositionContext: CompositionContext;
   readonly compositionMiddlewareExecutor: MessageComposerMiddlewareExecutor;
   readonly draftCompositionMiddlewareExecutor: MessageDraftComposerMiddlewareExecutor;
@@ -198,22 +204,19 @@ export class MessageComposer extends WithSubscriptions {
   private snapshots: MessageComposerSnapshot[] = [];
   private effectHandlers: MessageComposerEffectHandlers;
   /**
-   * Configuration passed to this composer's constructor, kept so {@link initializeConfig} can
-   * reproduce the constructor's derivation rather than restoring a snapshot of its result.
+   * The shared configuration machinery, with the three hooks this entity is the only one to need:
+   * `retainPatches` so an `updateConfig` request is *retained* and re-applied rather than written
+   * into the result (**DV-18**), and `applyAuthority` for the server's last word.
    *
-   * Copied on the way in — it is read on *every* resolution, for the composer's whole life, so holding
-   * the caller's object would let a later mutation of it change resolved configuration silently. Same
-   * boundary rule as {@link updateConfig} and `InstanceConfigurationService.setConfig`.
+   * A third hook, `finalizeRequest`, was added here for `commands.sendValidator` and then removed: the
+   * deep merge assigns function values directly and skips `undefined`, so the override it called reached
+   * the same answer on every layer shape — a later layer that stays silent cannot erase an earlier
+   * choice, because a merge only writes keys that are present.
    */
-  private readonly explicitConfig?: DeepPartial<MessageComposerConfig>;
-  /**
-   * Every {@link updateConfig} patch so far, merged in the order they arrived.
-   *
-   * Stages 4 and 5 of the resolution order both arrive through `updateConfig`, so this one layer holds a
-   * setup function's work and a caller's own changes alike — they are equally "asked for", and both have
-   * to outlive a re-resolution. Cleared by {@link initializeConfig}, which is what a reset means.
-   */
-  private imperativeConfig: DeepPartial<MessageComposerConfig> = {};
+  private readonly configController: ConfigController<
+    MessageComposerConfig,
+    DeepPartial<MessageComposerConfig>
+  >;
   // todo: mediaRecorder: MediaRecorderController;
 
   constructor({
@@ -240,8 +243,25 @@ export class MessageComposer extends WithSubscriptions {
       );
     }
 
-    this.explicitConfig = config && copyConfigPatch(config);
-    this.configState = new StateStore<MessageComposerConfig>(this.resolvedConfig);
+    this.configController = new ConfigController<
+      MessageComposerConfig,
+      DeepPartial<MessageComposerConfig>
+    >({
+      defaults: DEFAULT_COMPOSER_CONFIG,
+      constructorOptions: config as Partial<MessageComposerConfig> | undefined,
+      initialSlice: this.declarativeConfig as Partial<MessageComposerConfig> | undefined,
+      mergeSlice: 'deep',
+      // Stages 4 and 5 both arrive through `updateConfig`, and both have to outlive a re-resolution.
+      retainPatches: true,
+      applyAuthority: (requested) =>
+        deepFreezeConfig(
+          mergeServerRestrictions(
+            requested,
+            this.serverRestrictions,
+            this.serverUpperBounds,
+          ),
+        ) as MessageComposerConfig,
+    });
 
     let message: LocalMessage | DraftMessage | undefined = undefined;
     if (compositionIsDraftResponse(composition)) {
@@ -482,12 +502,24 @@ export class MessageComposer extends WithSubscriptions {
    * the server changing its mind.
    */
   updateConfig(config: DeepPartial<MessageComposerConfig>) {
-    // Copied at the boundary, for the same reason `InstanceConfigurationService.setConfig` does it:
-    // `mergeWith` reuses a source subtree verbatim where the target has nothing, and `imperativeConfig`
-    // starts empty — so without this a caller's `patch.text` was stored by reference, and a later
-    // `patch.text.maxLengthOnSend = 5` changed every subsequent resolution with no notification.
-    this.imperativeConfig = mergeWith(this.imperativeConfig, copyConfigPatch(config));
-    this.publishConfig();
+    this.configController.patch(config as Partial<MessageComposerConfig>);
+  }
+
+  /**
+   * What this composer has been **asked** for, before the server has any say — stages 1 to 5 of
+   * `docs/instance-configuration.md` §3.
+   *
+   * Available on every entity that retains its patches, not just this one: it is the controller's, and
+   * the split it exposes is what **FU-35** would extend elsewhere by switching on `retainPatches`.
+   */
+  get requestedConfig(): Readonly<MessageComposerConfig> {
+    return this.configController.requested;
+  }
+
+  /** The declarative slice for this composer, re-read live so a change is picked up. */
+  private get declarativeConfig(): DeepPartial<MessageComposerConfig> {
+    return (this.client.config.getConfig('messageComposer') ??
+      {}) as DeepPartial<MessageComposerConfig>;
   }
 
   /**
@@ -500,47 +532,6 @@ export class MessageComposer extends WithSubscriptions {
    */
   private get serverRestrictions(): ServerRestrictions<MessageComposerConfig> {
     return { location: { enabled: this.channel.getConfig()?.shared_locations } };
-  }
-
-  /**
-   * What this composer has been **asked** for, before the server has any say — stages 1 to 5 of
-   * `docs/instance-configuration.md` §3, later layers winning:
-   *
-   * 1. package defaults;
-   * 2. the declarative tree for the `messageComposer` key, re-read live so a change is picked up;
-   * 3. this composer's constructor argument;
-   * 4. and 5. every patch handed to {@link updateConfig} — which is where a setup function's work and a
-   *    caller's own imperative change both land, in the order they happened.
-   *
-   * Keeping this separate from the published configuration is what lets a restriction be *re-applied*
-   * rather than *accumulated*. Applying restrictions to the previous published result made them
-   * one-directional: a server `false` written into the config was indistinguishable from a client's own
-   * `false`, so it either became permanent or overwrote the client's intent, depending on which way the
-   * call was written (**DV-18**). Resolving from the request every time makes the operation idempotent,
-   * so neither can happen.
-   */
-  private get requestedConfig(): MessageComposerConfig {
-    const declarative = (this.client.config.getConfig('messageComposer') ??
-      {}) as DeepPartial<MessageComposerConfig>;
-    const layers: DeepPartial<MessageComposerConfig>[] = [
-      declarative,
-      this.explicitConfig ?? {},
-      this.imperativeConfig,
-    ];
-
-    const requested = layers.reduce<MessageComposerConfig>(
-      (resolved, layer) => mergeWith(resolved, layer),
-      { ...DEFAULT_COMPOSER_CONFIG },
-    );
-
-    // `sendValidator` is a function, and the deep merge is not the right tool for choosing between two of
-    // them — hence the explicit override, given the most specific layer that actually names one. Searched
-    // from the most specific end, so a later layer that stayed silent does not erase an earlier choice.
-    const validatorSource = [...layers]
-      .reverse()
-      .find((layer) => typeof layer.commands?.sendValidator === 'function');
-
-    return applyCommandValidatorOverride(requested, validatorSource);
   }
 
   /**
@@ -560,36 +551,11 @@ export class MessageComposer extends WithSubscriptions {
   }
 
   /**
-   * The requested configuration with the server's restrictions applied — the value callers read.
-   *
-   * Frozen on the way out, so the "nested writes are caught at runtime" guarantee holds for the whole
-   * tree rather than for whichever subtrees the merge happened to leave pointing at the frozen defaults.
-   * It did not: `serverRestrictions` names `location` and `serverUpperBounds` names `text` on *every*
-   * resolution, so those two were always copied into fresh, writable objects — and they are the two
-   * subtrees callers actually configure. `composer.config.text.maxLengthOnSend = 5` therefore mutated
-   * published state while notifying nobody, while the identical write to `drafts` threw.
-   *
-   * Freezing here rather than in {@link publishConfig} because the constructor seeds `configState` from
-   * this getter directly, and a composer that is never re-published would otherwise keep an unfrozen
-   * value for its whole life.
-   */
-  private get resolvedConfig(): MessageComposerConfig {
-    return deepFreezeConfig(
-      mergeServerRestrictions(
-        this.requestedConfig,
-        this.serverRestrictions,
-        this.serverUpperBounds,
-      ),
-    ) as MessageComposerConfig;
-  }
-
-  /**
    * Resolves the configuration and publishes it, unless the result is deep-equal to what is already there.
    *
    * The guard is needed because `StateStore.next`'s own `===` no-op can never apply here: every resolution
    * allocates a new object, so without a comparison *every* publish notifies, whether or not any value
-   * moved. In the React SDK that is a re-render for any consumer whose selector returns part of the config
-   * rather than a scalar.
+   * moved.
    *
    * Worth the walk: `isEqual` over a resolved composer config measures ~1.7µs, against a resolution at
    * ~3.5µs plus every subscriber's work. The dominant source of no-op publishes is fixed upstream in
@@ -598,9 +564,7 @@ export class MessageComposer extends WithSubscriptions {
    * registered, an empty `updateConfig({})`.
    */
   private publishConfig = () => {
-    const nextConfig = this.resolvedConfig;
-    if (isEqual(this.configState.getLatestValue(), nextConfig)) return;
-    this.configState.next(nextConfig);
+    this.configController.rederive(this.declarativeConfig);
   };
 
   /**
@@ -614,8 +578,7 @@ export class MessageComposer extends WithSubscriptions {
    * {@link applyServerRestrictions}, which keep them.
    */
   initializeConfig = () => {
-    this.imperativeConfig = {};
-    this.publishConfig();
+    this.configController.initialize(this.declarativeConfig);
   };
 
   /**

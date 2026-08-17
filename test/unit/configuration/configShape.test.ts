@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CONSTRUCTION_ONLY_CONFIG_PATHS,
   INSTANCE_CONFIG_TREE_KEYS,
-} from '../../../src/configuration/types';
+} from '../../../src/configuration/keys';
 import {
   flattenConfigShape,
   INSTANCE_CONFIG_TREE_SHAPE,

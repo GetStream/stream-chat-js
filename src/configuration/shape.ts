@@ -9,6 +9,8 @@ import type { DeclarativePaginatorConfig } from '../pagination/paginators/BasePa
 import type { MessageOperationsConfig } from '../messageOperations/MessageOperations';
 import type { MessageDeliveryReporterConfig } from '../messageDelivery/MessageDeliveryReporter';
 import type { ThreadManagerConfig } from '../thread_manager';
+import type { LiveLocationManagerConfig } from '../LiveLocationManager';
+import type { SearchControllerConfig } from '../search/SearchController';
 import type { NotificationManagerConfig } from '../notifications/types';
 import type { ReminderManagerConfig } from '../reminders/ReminderManager';
 import type {
@@ -360,6 +362,25 @@ const THREAD_MANAGER_FIELDS: Record<keyof ThreadManagerConfig, ConfigNode> = {
   },
 };
 
+const LIVE_LOCATION_MANAGER_FIELDS: Record<keyof LiveLocationManagerConfig, ConfigNode> =
+  {
+    minUpdateThrottleMs: {
+      description:
+        'Shortest gap between live-location update requests, in milliseconds. A rate-limit failsafe — raising it is always safe, lowering it risks 429s.',
+      kind: 'value',
+      type: 'number',
+    },
+  };
+
+const SEARCH_CONTROLLER_FIELDS: Record<keyof SearchControllerConfig, ConfigNode> = {
+  keepSingleActiveSource: {
+    description:
+      'Keeps exactly one search source active at a time, rather than letting several run together.',
+    kind: 'value',
+    type: 'boolean',
+  },
+};
+
 const NOTIFICATION_FIELDS: Record<keyof NotificationManagerConfig, ConfigNode> = {
   durations: {
     description:
@@ -480,6 +501,12 @@ export const INSTANCE_CONFIG_TREE_SHAPE: Record<
     fields: CLIENT_FIELDS,
     kind: 'group',
   },
+  liveLocationManager: {
+    description:
+      'Live-location sharing. Constructed by the integrator or a downstream SDK rather than by this package, and reaches this key by registering itself.',
+    fields: LIVE_LOCATION_MANAGER_FIELDS,
+    kind: 'group',
+  },
   messageComposer: {
     description:
       "Every MessageComposer — a channel's, a thread's, and the message-scoped ones built for editing. Its own key because the same settings mean the same thing under all three.",
@@ -496,6 +523,12 @@ export const INSTANCE_CONFIG_TREE_SHAPE: Record<
     description:
       'Every MessagePaginator at once — the channel message list and thread replies alike. `channel.messagePaginator` and `thread.messagePaginator` override it per parent.',
     fields: MESSAGE_PAGINATOR_FIELDS,
+    kind: 'group',
+  },
+  searchController: {
+    description:
+      'Message/channel/user search. Reaches this key only when constructed with a `client` — see SearchControllerOptions.',
+    fields: SEARCH_CONTROLLER_FIELDS,
     kind: 'group',
   },
   thread: {

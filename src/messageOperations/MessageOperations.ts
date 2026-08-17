@@ -1,6 +1,8 @@
 // todo: add tests
 import type { MessageRequest, UpdateMessageOptions } from '../types';
-import { StateStore } from '../store';
+import { deepFreezeConfig } from '../configuration/deepFreezeConfig';
+import type { StateStore } from '../store';
+import { ConfigController } from '../configuration/ConfigController';
 import { formatMessage, localMessageToNewMessagePayload } from '../utils';
 import { MessageOperationStatePolicy } from './MessageOperationStatePolicy';
 import type {
@@ -17,10 +19,11 @@ export type MessageOperationsConfig = {
   failedSendCacheTtlMs: number;
 };
 
-export const DEFAULT_MESSAGE_OPERATIONS_CONFIG: MessageOperationsConfig = {
-  failedSendCacheMaxSize: 100,
-  failedSendCacheTtlMs: 5 * 60 * 1000,
-};
+export const DEFAULT_MESSAGE_OPERATIONS_CONFIG: MessageOperationsConfig =
+  deepFreezeConfig({
+    failedSendCacheMaxSize: 100,
+    failedSendCacheTtlMs: 5 * 60 * 1000,
+  });
 
 type FailedSendCacheEntry = {
   message: MessageRequest;
@@ -33,17 +36,21 @@ export class MessageOperations {
   private policy: MessageOperationStatePolicy;
   private failedSendCache = new Map<string, FailedSendCacheEntry>();
 
+  /** The shared configuration machinery — see {@link ConfigController}. */
+  private readonly configController: ConfigController<MessageOperationsConfig>;
   /**
    * Resolved configuration, as a store — the shape every configurable class exposes
    * (`configState` / `config` / `updateConfig`).
    */
-  readonly configState: StateStore<MessageOperationsConfig>;
+  get configState(): StateStore<MessageOperationsConfig> {
+    return this.configController.state;
+  }
 
   constructor(ctx: MessageOperationsContext) {
     this.ctx = ctx;
     this.policy = new MessageOperationStatePolicy({ ingest: ctx.ingest, get: ctx.get });
-    this.configState = new StateStore<MessageOperationsConfig>({
-      ...DEFAULT_MESSAGE_OPERATIONS_CONFIG,
+    this.configController = new ConfigController<MessageOperationsConfig>({
+      defaults: DEFAULT_MESSAGE_OPERATIONS_CONFIG,
     });
   }
 
@@ -54,7 +61,25 @@ export class MessageOperations {
 
   /** Merges a partial configuration into the resolved config and notifies subscribers. */
   updateConfig(config: Partial<MessageOperationsConfig>) {
-    this.configState.partialNext(config);
+    this.configController.patch(config);
+  }
+
+  /**
+   * Rebuilds the resolved configuration from package defaults plus the declarative slice.
+   *
+   * The derivation entry point every configurable entity exposes, so the owner routes a slice here and
+   * knows nothing about MessageOperations's defaults or merge semantics. This logic used to live in the owner,
+   * which is how `reset()` became a no-op for the client key (F4) and how a registered
+   * `notifications.sortComparator` became unremovable (G8) — an owner writing another object's
+   * derivation gets that object's rules wrong sooner or later.
+   *
+   * Routed through {@link updateConfig} rather than replacing the store, which is exact here because
+   * every field of `MessageOperationsConfig` is required and present in the defaults, so a patch naming all of
+   * them amounts to a replacement. `NotificationManager` cannot do this — its `sortComparator` is
+   * optional with no default, so a patch can never remove one — which is why it replaces outright.
+   */
+  initializeConfig(config?: Partial<MessageOperationsConfig>) {
+    this.configController.initialize(config);
   }
 
   private normalizeMessage(message: MessageRequest): MessageRequest {

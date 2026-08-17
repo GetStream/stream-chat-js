@@ -3,11 +3,12 @@ import { generateChannel } from '../test-utils/generateChannel';
 import { generateMsg } from '../test-utils/generateMessage';
 import { generateThreadResponse } from '../test-utils/generateThreadResponse';
 import { getClientWithUser } from '../test-utils/getClient';
+import { MessagePaginator } from '../../../src/pagination/paginators/MessagePaginator';
 import { Thread } from '../../../src/thread';
 import {
   mergeDeclarativeMessageOperationsConfig,
   mergeDeclarativePaginatorConfig,
-} from '../../../src/configuration/types';
+} from '../../../src/configuration/declarativeSlices';
 import type { StreamChat } from '../../../src/client';
 
 /**
@@ -56,6 +57,94 @@ describe("the shared 'messagePaginator' configuration key", () => {
     spy.mockRestore();
 
     expect(warned.filter((m) => /read once during construction/.test(m))).toHaveLength(1);
+  });
+
+  /**
+   * `unreadReferencePolicy` rides in the `messagePaginator` subtree but is **not** a
+   * `BasePaginatorConfig` field — the paginator reads it once into a private member. It used to be passed
+   * straight through to `initializeConfig`, which spreads the slice, so it landed in the published config
+   * as an untyped key nothing reads. Worse on a late registration: the config reported the new value while
+   * the paginator kept behaving on the constructed one, so resolved configuration contradicted behaviour.
+   */
+  /**
+   * `docs/instance-configuration.md` §3 puts the declarative tree at stage 2 and the construction
+   * argument at stage 3. `MessageComposer` always followed that; `BasePaginator` layered them the other
+   * way round, so the same registration answered differently depending on which object read it.
+   *
+   * The order was never the problem — the layer contents were. A paginator built with no configuration
+   * at all already carried `pageSize`, `stateThrottleMs`, `initialCursor` and
+   * `hasPaginationQueryShapeChanged` as "construction arguments", because its subclasses spread their own
+   * defaults into `super({…})`. Promoting that layer wholesale broke 33 tests. Only what an *integrator*
+   * passes is stage 3 now; what the SDK supplies on the instance's behalf is stage 1.
+   */
+  describe('the documented layer order', () => {
+    it('lets a declarative registration beat an SDK-supplied default', () => {
+      client.config.set({ messagePaginator: { pageSize: 41 } });
+
+      expect(openChannel().messagePaginator.config.pageSize).toBe(41);
+      // Thread replies default to 50, supplied by `Thread` rather than by the integrator — so the
+      // registration wins there too.
+      expect(openThread().messagePaginator.config.pageSize).toBe(41);
+    });
+
+    it('lets an integrator construction argument beat a declarative registration', () => {
+      client.config.set({ messagePaginator: { pageSize: 41 } });
+
+      const paginator = new MessagePaginator({
+        channel: openChannel(),
+        paginatorOptions: {
+          declarativeConfig: { pageSize: 41 },
+          pageSize: 7,
+        },
+      });
+
+      expect(paginator.config.pageSize).toBe(7);
+    });
+
+    it('keeps the SDK default when nothing else names the field', () => {
+      expect(openChannel().messagePaginator.config.pageSize).toBe(100);
+      expect(openThread().messagePaginator.config.pageSize).toBe(50);
+      expect(openChannel().messagePaginator.config.stateThrottleMs).toBe(500);
+    });
+  });
+
+  describe('the construction-only argument does not leak into resolved config', () => {
+    it('is absent from config even when registered before construction', () => {
+      client.config.set({
+        messagePaginator: { unreadReferencePolicy: 'read-state-only' },
+      });
+
+      const paginator = openChannel().messagePaginator;
+
+      expect('unreadReferencePolicy' in paginator.config).toBe(false);
+      // …and the policy still arrived, through the constructor argument where it belongs.
+      expect(
+        (paginator as unknown as { unreadReferencePolicy: string }).unreadReferencePolicy,
+      ).toBe('read-state-only');
+    });
+
+    it('never reports a value the paginator is not using', () => {
+      const paginator = openChannel().messagePaginator;
+
+      // Registered too late to apply — the SDK warns about exactly this.
+      client.config.set({
+        messagePaginator: { unreadReferencePolicy: 'read-state-only' },
+      });
+
+      expect(
+        (paginator as unknown as { unreadReferencePolicy: string }).unreadReferencePolicy,
+      ).toBe('snapshot');
+      expect('unreadReferencePolicy' in paginator.config).toBe(false);
+    });
+
+    it('keeps carrying the paginator fields that share the subtree', () => {
+      // The split must take only the construction-only key with it.
+      client.config.set({
+        messagePaginator: { pageSize: 21, unreadReferencePolicy: 'read-state-only' },
+      });
+
+      expect(openChannel().messagePaginator.config.pageSize).toBe(21);
+    });
   });
 
   it('still reaches both parents when set through the shared key', () => {
@@ -198,14 +287,35 @@ describe("the shared 'messagePaginator' configuration key", () => {
     }
   });
 
-  it('routes read-once fields through their rebuild setters when set late', () => {
+  it('rebuilds the read-once fields when set late', () => {
+    // Asserted on the throttle itself rather than on whichever method rebuilds it. The pairing of "store
+    // the value" with "make it take effect" is no longer owned by one setter — it hangs off the config
+    // controller's change hook, so every route gets it.
     const channel = openChannel();
-    const setThrottle = vi.spyOn(channel.messagePaginator, 'setStateThrottleOptions');
+    const internals = channel.messagePaginator as unknown as {
+      _windowPublishThrottle: unknown;
+    };
+    const before = internals._windowPublishThrottle;
 
     client.config.set({ messagePaginator: { stateThrottleMs: 350 } });
 
-    expect(setThrottle).toHaveBeenCalledWith({ stateThrottleMs: 350 });
     expect(channel.messagePaginator.config.stateThrottleMs).toBe(350);
+    expect(internals._windowPublishThrottle).not.toBe(before);
+  });
+
+  it('does not rebuild a read-once field whose value did not move', () => {
+    const channel = openChannel();
+    const internals = channel.messagePaginator as unknown as {
+      _windowPublishThrottle: unknown;
+    };
+    const before = internals._windowPublishThrottle;
+
+    client.config.set({ messagePaginator: { pageSize: 33 } });
+
+    expect(channel.messagePaginator.config.pageSize).toBe(33);
+    // The old code re-ran the rebuild on every derivation regardless; flushing and swapping a throttle
+    // that nothing changed is pure churn on a path that runs per channel, per registration.
+    expect(internals._windowPublishThrottle).toBe(before);
   });
 
   describe('interaction with setup functions', () => {

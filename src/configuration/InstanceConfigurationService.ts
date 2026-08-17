@@ -26,17 +26,16 @@ import { StateStore } from '../store';
 import { chatLoggerSystem } from '../logger';
 import { mergeWith } from '../utils/mergeWith';
 import { isEqual } from '../utils/mergeWith/mergeWithCore';
-import { copyConfigPatch } from '../utils/copyConfigPatch';
+import { copyConfigPatch } from './copyConfigPatch';
 import { getPath, hasPath, isWalkableRecord } from '../utils/objectPath';
-import {
-  BUILT_IN_INSTANCE_KEYS,
-  CONSTRUCTION_ONLY_CONFIG_PATHS,
-  type InstanceConfigOf,
-  type InstanceConfigState,
-  type InstanceConfigTree,
-  type InstanceSetupFunction,
-  type InstanceSetupKey,
-  type InstanceSetupState,
+import { BUILT_IN_INSTANCE_KEYS, CONSTRUCTION_ONLY_CONFIG_PATHS } from './keys';
+import type {
+  InstanceConfigOf,
+  InstanceConfigState,
+  InstanceConfigTree,
+  InstanceSetupFunction,
+  InstanceSetupKey,
+  InstanceSetupState,
 } from './types';
 import type { DeepPartial } from '../types.utility';
 

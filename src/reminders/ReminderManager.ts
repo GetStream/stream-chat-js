@@ -1,6 +1,8 @@
 import { Reminder } from './Reminder';
+import { deepFreezeConfig } from '../configuration/deepFreezeConfig';
 import { DEFAULT_STOP_REFRESH_BOUNDARY_MS } from './ReminderTimer';
 import { StateStore } from '../store';
+import { ConfigController } from '../configuration/ConfigController';
 import { ReminderPaginator } from '../pagination';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { ReminderResponseBaseOrResponse } from './Reminder';
@@ -17,7 +19,7 @@ const oneMinute = 60 * 1000;
 const oneHour = 60 * oneMinute;
 const oneDay = 24 * oneHour;
 
-export const DEFAULT_REMINDER_MANAGER_CONFIG: ReminderManagerConfig = {
+export const DEFAULT_REMINDER_MANAGER_CONFIG: ReminderManagerConfig = deepFreezeConfig({
   scheduledOffsetsMs: [
     2 * oneMinute,
     30 * oneMinute,
@@ -27,7 +29,7 @@ export const DEFAULT_REMINDER_MANAGER_CONFIG: ReminderManagerConfig = {
     oneDay,
   ],
   stopTimerRefreshBoundaryMs: DEFAULT_STOP_REFRESH_BOUNDARY_MS,
-};
+});
 
 const isReminderExistsError = (error: Error) =>
   error.message.match('already has reminder created for this message_id');
@@ -57,19 +59,35 @@ export type ReminderManagerOptions = {
 
 export class ReminderManager extends WithSubscriptions {
   private client: StreamChat;
-  configState: StateStore<ReminderManagerConfig>;
+  /** The shared configuration machinery — see {@link ConfigController}. */
+  private readonly configController: ConfigController<ReminderManagerConfig>;
+
+  /**
+   * Resolved configuration, as a store — the shape every configurable class exposes
+   * (`configState` / `config` / `updateConfig`). Delegates rather than holding a copy, so the field and
+   * the controller's store cannot drift.
+   */
+  get configState(): StateStore<ReminderManagerConfig> {
+    return this.configController.state;
+  }
   state: StateStore<ReminderManagerState>;
   paginator: ReminderPaginator;
 
   constructor({ client, config }: ReminderManagerOptions) {
     super();
     this.client = client;
-    this.configState = new StateStore({
-      scheduledOffsetsMs:
-        config?.scheduledOffsetsMs ?? DEFAULT_REMINDER_MANAGER_CONFIG.scheduledOffsetsMs,
-      stopTimerRefreshBoundaryMs:
-        config?.stopTimerRefreshBoundaryMs ??
-        DEFAULT_REMINDER_MANAGER_CONFIG.stopTimerRefreshBoundaryMs,
+    this.configController = new ConfigController<ReminderManagerConfig>({
+      defaults: DEFAULT_REMINDER_MANAGER_CONFIG,
+      constructorOptions: config,
+      // Live timers hold the boundary, so a change has to be pushed to them. Previously this sat inside
+      // `updateConfig` and so ran only on that route; here it covers every write.
+      onChanged: (next, previous) => {
+        if (next.stopTimerRefreshBoundaryMs === previous.stopTimerRefreshBoundaryMs)
+          return;
+        this.reminders.forEach((reminder) => {
+          reminder.timer.stopRefreshBoundaryMs = next.stopTimerRefreshBoundaryMs;
+        });
+      },
     });
     this.state = new StateStore({ reminders: new Map<MessageId, Reminder>() });
     this.paginator = new ReminderPaginator(client);
@@ -85,16 +103,25 @@ export class ReminderManager extends WithSubscriptions {
   }
 
   updateConfig(config: Partial<ReminderManagerConfig>) {
-    if (
-      typeof config.stopTimerRefreshBoundaryMs === 'number' &&
-      config.stopTimerRefreshBoundaryMs !== this.stopTimerRefreshBoundaryMs
-    ) {
-      this.reminders.forEach((reminder) => {
-        reminder.timer.stopRefreshBoundaryMs =
-          config?.stopTimerRefreshBoundaryMs as number;
-      });
-    }
-    this.configState.partialNext(config);
+    this.configController.patch(config);
+  }
+
+  /**
+   * Rebuilds the resolved configuration from package defaults plus the declarative slice.
+   *
+   * The derivation entry point every configurable entity exposes, so the owner routes a slice here and
+   * knows nothing about ReminderManager's defaults or merge semantics. This logic used to live in the owner,
+   * which is how `reset()` became a no-op for the client key (F4) and how a registered
+   * `notifications.sortComparator` became unremovable (G8) — an owner writing another object's
+   * derivation gets that object's rules wrong sooner or later.
+   *
+   * Routed through {@link updateConfig} rather than replacing the store, which is exact here because
+   * every field of `ReminderManagerConfig` is required and present in the defaults, so a patch naming all of
+   * them amounts to a replacement. `NotificationManager` cannot do this — its `sortComparator` is
+   * optional with no default, so a patch can never remove one — which is why it replaces outright.
+   */
+  initializeConfig(config?: Partial<ReminderManagerConfig>) {
+    this.configController.initialize(config);
   }
 
   get stopTimerRefreshBoundaryMs() {

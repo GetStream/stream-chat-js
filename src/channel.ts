@@ -8,7 +8,6 @@ import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';
 import { MessagePaginator, PinnedMessagePaginator } from './pagination/paginators';
 import { MessageOperations } from './messageOperations';
-import { DEFAULT_MESSAGE_OPERATIONS_CONFIG } from './messageOperations/MessageOperations';
 import {
   channelHasReadEvents,
   formatMessage,
@@ -23,7 +22,8 @@ import type { ChannelDeclarativeConfig } from './configuration/types';
 import {
   mergeDeclarativeMessageOperationsConfig,
   mergeDeclarativePaginatorConfig,
-} from './configuration/types';
+  toDeclarativePaginatorConfig,
+} from './configuration/declarativeSlices';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import type {
   AIState,
@@ -68,6 +68,7 @@ import type {
 } from './types';
 import type { RoleName } from './permissions';
 import { StateStore } from './store';
+import { isEqual } from './utils/mergeWith/mergeWithCore';
 import type { Unsubscribe } from './store';
 import type {
   ChannelMemberRequest as Gen_ChannelMemberRequest,
@@ -263,8 +264,12 @@ export class Channel extends ChannelApi {
     // latest window at construction).
     this.messagePaginator = new MessagePaginator({
       channel: this,
+      // Split: the policy is a constructor argument, the rest is configuration. Passing the whole slice
+      // put a non-config key into the paginator's published `config` — see `toDeclarativePaginatorConfig`.
       unreadReferencePolicy: messagePaginatorConfig?.unreadReferencePolicy,
-      paginatorOptions: { declarativeConfig: messagePaginatorConfig },
+      paginatorOptions: {
+        declarativeConfig: toDeclarativePaginatorConfig(messagePaginatorConfig),
+      },
     });
     this.pinnedMessagesPaginator = new PinnedMessagePaginator({
       channel: this,
@@ -376,14 +381,28 @@ export class Channel extends ChannelApi {
     // tree must disappear. Anything else writing directly into `configState.requestHandlers` — the
     // React SDK's per-component props do — has to re-apply after a re-derivation; see the note in
     // `useChannelRequestHandlers`.
-    this.configState.next({ requestHandlers: declarativeConfig?.requestHandlers });
+    //
+    // Guarded for the same reason `MessageComposer.publishConfig` is: the object is freshly allocated
+    // every time, so `StateStore.next`'s `===` no-op can never apply and every re-derivation woke every
+    // subscriber with an identical value. This runs on each `alsoWatch` key change too — a
+    // `messagePaginator` or `messageOperations` registration re-runs the whole `channel` cycle — so the
+    // no-op publishes outnumber the real ones. Deep rather than `===` because `requestHandlers` is a
+    // record; `isEqual` compares its function values by identity, which is the right test for a handler.
+    const nextRequestHandlers = declarativeConfig?.requestHandlers;
+    if (
+      !isEqual(this.configState.getLatestValue().requestHandlers, nextRequestHandlers)
+    ) {
+      this.configState.next({ requestHandlers: nextRequestHandlers });
+    }
 
     // The shared `messagePaginator` key applies to every MessagePaginator — this channel's list and
     // every thread's replies — and the per-parent slice overrides it.
     this.messagePaginator.initializeConfig(
-      mergeDeclarativePaginatorConfig(
-        this.getClient().config.getConfig('messagePaginator') ?? undefined,
-        declarativeConfig?.messagePaginator,
+      toDeclarativePaginatorConfig(
+        mergeDeclarativePaginatorConfig(
+          this.getClient().config.getConfig('messagePaginator') ?? undefined,
+          declarativeConfig?.messagePaginator,
+        ),
       ),
     );
     // Single parent, so it stays nested and takes no share of the shared key.
@@ -394,13 +413,12 @@ export class Channel extends ChannelApi {
     // `MessageOperations` backs both channel and thread sends, so it has a shared top-level key with a
     // per-parent override — the same shape as `messagePaginator`. Defaults are spread first so a field
     // dropped from the declarative tree returns to its default rather than lingering.
-    this.messageOperations.updateConfig({
-      ...DEFAULT_MESSAGE_OPERATIONS_CONFIG,
-      ...mergeDeclarativeMessageOperationsConfig(
+    this.messageOperations.initializeConfig(
+      mergeDeclarativeMessageOperationsConfig(
         this.getClient().config.getConfig('messageOperations') ?? undefined,
         declarativeConfig?.messageOperations,
       ),
-    });
+    );
   }
 
   /**

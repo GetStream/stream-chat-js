@@ -8,11 +8,15 @@ export * from './channel_state';
 // https://github.com/microsoft/TypeScript/issues/46617
 export { applyInstanceConfiguration } from './configuration/applyInstanceConfiguration';
 export type { ApplyInstanceConfigurationParams } from './configuration/applyInstanceConfiguration';
+export { ConfigController } from './configuration/ConfigController';
+export type { ConfigControllerOptions } from './configuration/ConfigController';
+// Named in the signatures of `client.config.set` / `setConfig`, so a caller has to be able to write it.
+export type { DeepPartial } from './types.utility';
 export {
   BUILT_IN_INSTANCE_KEYS,
-  INSTANCE_CONFIG_TREE_KEYS,
   CONSTRUCTION_ONLY_CONFIG_PATHS,
-} from './configuration/types';
+  INSTANCE_CONFIG_TREE_KEYS,
+} from './configuration/keys';
 export type {
   ChannelDeclarativeConfig,
   ClientDeclarativeConfig,
@@ -27,9 +31,6 @@ export type {
   InstanceSetupKey,
   InstanceSetupState,
   InstanceSetupTearDownFunction,
-  MessageComposerSetupFunction,
-  MessageComposerSetupState,
-  MessageComposerTearDownFunction,
   ThreadDeclarativeConfig,
   UnreadReferencePolicy,
 } from './configuration/types';

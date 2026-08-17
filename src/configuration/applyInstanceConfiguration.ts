@@ -21,6 +21,18 @@ export type ApplyInstanceConfigurationParams<K extends InstanceSetupKey> = {
   config: InstanceConfigurationService;
   key: K;
   /**
+   * Other keys this instance derives from. `Channel` and `Thread` both read the shared `messagePaginator`
+   * and `messageOperations` keys, so a change there has to re-run this instance's own cycle rather than
+   * only re-deriving: re-deriving alone would drop the setup function's overrides, since tier 2 is
+   * applied after tier 1.
+   *
+   * Keys rather than stores, which buys two things beyond brevity. The instance is registered as a
+   * live instance of each, so `hasLiveInstances` is true for a shared key and its construction-only paths get
+   * same late-registration warning the per-parent slices already got. And there is no longer a structural
+   * store type needed to work around `StateStore`'s invariance.
+   */
+  alsoWatch?: readonly InstanceSetupKey[];
+  /**
    * Applies a declarative configuration slice to the instance. Omit it if the instance has no
    * declarative surface and only wants the setup function.
    *
@@ -35,25 +47,15 @@ export type ApplyInstanceConfigurationParams<K extends InstanceSetupKey> = {
    * clear-registrations-only reset semantics.
    */
   reinitializeConfig?: () => void;
-  /**
-   * Other keys this instance derives from. `Channel` and `Thread` both read the shared `messagePaginator`
-   * and `messageOperations` keys, so a change there has to re-run this instance's own cycle rather than
-   * only re-deriving: re-deriving alone would drop the setup function's overrides, since tier 2 is
-   * applied after tier 1.
-   *
-   * Keys rather than stores, which buys two things beyond brevity. The instance is registered as a
-   * live instance of each, so `hasLiveInstances` is true for a shared key and its construction-only paths get
-   * same late-registration warning the per-parent slices already got. And there is no longer a structural
-   * store type needed to work around `StateStore`'s invariance.
-   */
-  alsoWatch?: readonly InstanceSetupKey[];
 };
 
 /**
  * Subscribes one instance to the configuration registered for its key, and returns the unsubscribe.
  *
- * This is the single place the semantics live, so every configured instance behaves identically — including one
- * written outside this package for a custom key:
+ * This is the single place the *subscription* semantics live, so every configured instance behaves
+ * identically — including one written outside this package for a custom key. Pair it with a
+ * `ConfigController`, which is the single place the *resolution* semantics live; between them an outside
+ * class gets exactly what a built-in one gets:
  *
  * - applies whatever is already registered, immediately;
  * - re-applies on every change to either slot, declarative configuration first and the setup function

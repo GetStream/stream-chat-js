@@ -1,4 +1,12 @@
 import type { StreamChat } from '../client';
+import type {
+  LiveLocationManager,
+  LiveLocationManagerConfig,
+} from '../LiveLocationManager';
+import type {
+  SearchController,
+  SearchControllerConfig,
+} from '../search/SearchController';
 import type { MessageComposer } from '../messageComposer';
 import type { MessageComposerConfig } from '../messageComposer/configuration/types';
 import type { Channel, ChannelInstanceConfig } from '../channel';
@@ -32,44 +40,14 @@ import type { DeepPartial } from '../types.utility';
 export interface InstanceSetupFunctionArgs {
   channel: { channel: Channel };
   client: { client: StreamChat };
+  liveLocationManager: { liveLocationManager: LiveLocationManager };
   messageComposer: { composer: MessageComposer };
+  searchController: { searchController: SearchController };
   thread: { thread: Thread };
 }
 
 /** The four built-in keys, plus any key an integrator or a downstream SDK registers. */
 export type InstanceSetupKey = keyof InstanceSetupFunctionArgs | (string & {});
-
-/**
- * The keys this package wires itself. Used to scope diagnostics — never to reject a caller's key,
- * which would defeat the point of an open key space.
- */
-export const BUILT_IN_INSTANCE_KEYS: readonly (keyof InstanceSetupFunctionArgs)[] = [
-  'channel',
-  'client',
-  'messageComposer',
-  'thread',
-];
-
-/**
- * Every key of the declarative configuration tree.
- *
- * Distinct from {@link BUILT_IN_INSTANCE_KEYS}, which lists keys that take a *setup function* — that set
- * omits `messagePaginator`, which is configuration-only. Typed as an exhaustive `Record` rather than a
- * bare array so adding a key to {@link InstanceConfigTree} fails the build until it is listed here, which
- * is what keeps the two from drifting.
- */
-const INSTANCE_CONFIG_TREE_KEY_PRESENCE: Record<keyof InstanceConfigTree, true> = {
-  channel: true,
-  client: true,
-  messageComposer: true,
-  messageOperations: true,
-  messagePaginator: true,
-  thread: true,
-};
-
-export const INSTANCE_CONFIG_TREE_KEYS = Object.keys(
-  INSTANCE_CONFIG_TREE_KEY_PRESENCE,
-).sort() as readonly (keyof InstanceConfigTree)[];
 
 // ---------------------------------------------------------------------------
 // Tier 2 — setup functions
@@ -182,6 +160,12 @@ export type ClientDeclarativeConfig = {
 export interface InstanceConfigTree {
   channel: ChannelDeclarativeConfig;
   client: ClientDeclarativeConfig;
+  /**
+   * Constructed by whoever needs it — the React SDK's `useLiveLocationSharingManager`, or an app
+   * directly — never by this package. It reaches its configuration the way a `MessageComposer` does, by
+   * registering itself against this key, so its owner does not have to thread a slice through.
+   */
+  liveLocationManager: Partial<LiveLocationManagerConfig>;
   messageComposer: DeepPartial<MessageComposerConfig>;
   /**
    * Applies to **every** `MessageOperations` — the channel's and every thread's, since messages are sent
@@ -197,6 +181,12 @@ export interface InstanceConfigTree {
    * ordering and endpoint) rather than a `MessagePaginator`.
    */
   messagePaginator: DeclarativeMessagePaginatorConfig;
+  /**
+   * Same story as {@link InstanceConfigTree.liveLocationManager}, with one caveat: a `SearchController`
+   * only reaches this key when it was constructed with a `client` — it is the one configurable class the
+   * SDK does not hand a client to. See `SearchControllerOptions.client`.
+   */
+  searchController: Partial<SearchControllerConfig>;
   thread: ThreadDeclarativeConfig;
 }
 
@@ -207,94 +197,3 @@ export type InstanceConfigOf<K extends string> = K extends keyof InstanceConfigT
 export type InstanceConfigState<K extends string = InstanceSetupKey> = {
   config: DeepPartial<InstanceConfigOf<K>> | null;
 };
-
-/**
- * Layers a per-parent slice of a **shared** configuration key over the shared one, field by field.
- *
- * Two keys are shared between `Channel` and `Thread` — `messagePaginator` and `messageOperations`
- * (**DEC-25**, **DV-15**) — because both entities own one of each and most of the settings mean the same
- * thing under either parent. The shared key carries what is common; the per-parent slice overrides only the
- * fields it names.
- *
- * Fields the specific slice does not mention — including ones it sets to `undefined` explicitly — fall
- * through to the shared slice, so `{ messagePaginator: { pageSize: 50 } }` is not undone by a
- * `channel.messagePaginator` slice that only names `stateThrottleMs`. That `undefined` skip is the whole
- * reason this is not a plain object spread.
- *
- * One level deep on purpose: every field on both config types is a scalar or a function, so there is no
- * nested object for a deep merge to reach. Use `mergeWith` if that stops being true.
- */
-const mergeDeclarativeSlice = <TConfig extends object>(
-  general?: TConfig,
-  specific?: TConfig,
-): TConfig | undefined => {
-  if (!general) return specific;
-  if (!specific) return general;
-
-  const merged: TConfig = { ...general };
-  for (const [key, value] of Object.entries(specific)) {
-    if (typeof value === 'undefined') continue;
-    (merged as Record<string, unknown>)[key] = value;
-  }
-  return merged;
-};
-
-/** Layers `channel.messageOperations` / `thread.messageOperations` over the shared `messageOperations` key. */
-export const mergeDeclarativeMessageOperationsConfig = (
-  general?: Partial<MessageOperationsConfig>,
-  specific?: Partial<MessageOperationsConfig>,
-): Partial<MessageOperationsConfig> | undefined =>
-  mergeDeclarativeSlice(general, specific);
-
-/** Layers `channel.messagePaginator` / `thread.messagePaginator` over the shared `messagePaginator` key. */
-export const mergeDeclarativePaginatorConfig = (
-  general?: DeclarativeMessagePaginatorConfig,
-  specific?: DeclarativeMessagePaginatorConfig,
-): DeclarativeMessagePaginatorConfig | undefined =>
-  mergeDeclarativeSlice(general, specific);
-
-/**
- * Dot-paths, per key, that are read once during construction. Configuration registered *before* an
- * instance is built reaches these through constructor options; registered afterwards it cannot, so the
- * appliers warn rather than fail silently.
- *
- * `stateThrottleMs` and `debounceMs` are read once too but are **not** listed, because the paginators
- * expose rebuild methods (`setStateThrottleOptions`, `setDebounceOptions`) that make a late change
- * take effect.
- */
-export const CONSTRUCTION_ONLY_CONFIG_PATHS: Readonly<Record<string, readonly string[]>> =
-  {
-    // The shared key needs its own entry: paths here are relative to the key's own subtree, and the
-    // warning is looked up by top-level key. Without this, setting `unreadReferencePolicy` through
-    // `messagePaginator` was silent while the identical field under `channel`/`thread` warned — the same
-    // read-once field, warned through one route and not the other.
-    messagePaginator: ['initialCursor', 'initialOffset', 'unreadReferencePolicy'],
-    channel: [
-      'messagePaginator.initialCursor',
-      'messagePaginator.initialOffset',
-      'messagePaginator.unreadReferencePolicy',
-      'pinnedMessagesPaginator.initialCursor',
-      'pinnedMessagesPaginator.initialOffset',
-    ],
-    thread: [
-      'messagePaginator.initialCursor',
-      'messagePaginator.initialOffset',
-      'messagePaginator.unreadReferencePolicy',
-    ],
-  };
-
-// ---------------------------------------------------------------------------
-// Compatibility surface
-// ---------------------------------------------------------------------------
-
-// Only the `MessageComposer` key ever functioned: the `StreamChat`, `Channel` and `Thread` setup
-// functions were stored and never invoked, so no working code can have depended on their types. Aliases
-// for those were removed rather than deprecated — a type error is the signal that tells someone their
-// setup function was dead. v10 is a major, so this is the moment for that.
-
-/** @deprecated Use {@link InstanceSetupTearDownFunction}. */
-export type MessageComposerTearDownFunction = InstanceSetupTearDownFunction;
-/** @deprecated Use `InstanceSetupFunction<'messageComposer'>`. */
-export type MessageComposerSetupFunction = InstanceSetupFunction<'messageComposer'>;
-/** @deprecated Use `InstanceSetupState<'messageComposer'>`. */
-export type MessageComposerSetupState = InstanceSetupState<'messageComposer'>;

@@ -173,14 +173,23 @@ describe('instance configuration — cross-instance', () => {
     it('changes observable behaviour for the read-once paginator fields', () => {
       client.config.set({ channel: { messagePaginator: { stateThrottleMs: 250 } } });
       const channel = openChannel();
-      const setDebounce = vi.spyOn(channel.messagePaginator, 'setDebounceOptions');
-      const setThrottle = vi.spyOn(channel.messagePaginator, 'setStateThrottleOptions');
+      const internals = channel.messagePaginator as unknown as {
+        _executeQueryDebounced: unknown;
+        _windowPublishThrottle: unknown;
+      };
+      const debounceBefore = internals._executeQueryDebounced;
+      const throttleBefore = internals._windowPublishThrottle;
 
       client.config.setConfig('channel', { messagePaginator: { debounceMs: 900 } });
 
-      // Both go through their rebuild setters; a plain assignment would be discarded.
-      expect(setDebounce).toHaveBeenCalledWith({ debounceMs: 900 });
-      expect(setThrottle).toHaveBeenCalledWith({ stateThrottleMs: 250 });
+      // The debounce is rebuilt, because a plain assignment would be discarded — it is captured in a
+      // closure.
+      expect(channel.messagePaginator.config.debounceMs).toBe(900);
+      expect(internals._executeQueryDebounced).not.toBe(debounceBefore);
+      // The throttle is *not*, because 250 did not move. The old code rebuilt it on every derivation
+      // regardless, flushing pending publishes each time for nothing.
+      expect(channel.messagePaginator.config.stateThrottleMs).toBe(250);
+      expect(internals._windowPublishThrottle).toBe(throttleBefore);
     });
   });
 

@@ -151,6 +151,36 @@ client.config.set({
 `thread.markRead()` resolve to a different response shape — so return `null` after delegating rather
 than forwarding their result directly.
 
+### Two entities configure themselves
+
+`LiveLocationManager` and `SearchController` are the only configurable classes this package never
+constructs — an app builds them, or a downstream SDK does (`useLiveLocationSharingManager` and `<Chat>`
+in `stream-chat-react`). There is no owner to hand them a slice, so they register themselves against
+their own key:
+
+```ts
+client.config.set({
+  liveLocationManager: { minUpdateThrottleMs: 5_000 },
+  searchController: { keepSingleActiveSource: false },
+});
+```
+
+Both then behave like every other key: registered before or after construction, a setup function, and
+`reset()`.
+
+**One caveat, for `SearchController` only.** It reaches the configuration service through a `client`, and
+it is the one configurable class the SDK does not already hand one to — so pass it:
+
+```ts
+new SearchController({ client, sources: [...] });
+```
+
+Without a `client` the controller works exactly as before and `updateConfig` still applies; only the
+declarative key and its setup function go unheard. `stream-chat-react`'s `<Chat>` passes it for you.
+
+Release the subscription when you are done with the instance —
+`liveLocationManager.unregisterSubscriptions()` (which it already needs) or `searchController.dispose()`.
+
 ### Two setters, one open key space
 
 `setConfig(key, subtree)` accepts **any** key, so a class of your own participates without changing
@@ -277,9 +307,10 @@ that order re-runs.
 
 For any one instance, its resolved configuration is built from these layers, later ones winning:
 
-| #   | Stage                         | Scope                                      | Where it comes from                                  |
+| #   | Stage                         | Scope                                      | Where the stage comes from                           |
 | --- | ----------------------------- | ------------------------------------------ | ---------------------------------------------------- |
-| 1   | **Package defaults**          | every instance                             | `DEFAULT_*_CONFIG` constants                         |
+| 1a  | **Package defaults**          | every instance                             | `DEFAULT_*_CONFIG` constants                         |
+| 1b  | **Built-in defaults**         | every instance of one subclass or owner    | values the SDK supplies for the instance it builds   |
 | 2   | **Declarative tree** (tier 1) | per **entity type**                        | `client.config.set({ … })`                           |
 | 3   | **Construction argument**     | one instance                               | whoever called `new …({ config })`                   |
 | 4   | **Setup function** (tier 2)   | per **entity type**, but sees the instance | `client.config.setSetupFunction(key, fn)`            |
@@ -327,17 +358,92 @@ client.config.setSetupFunction('messageComposer', ({ composer }) => {
 That is stage 5 doing per-instance work. It is not a fourth tier: the _registration_ is still per type, and
 it re-runs for every instance, so the branch decides.
 
-**Stage 3 is worth one caveat.** Whether a construction argument beats the declarative tree depends on who
-supplies it, and the two cases genuinely differ:
+**Stage 1b exists because "construction argument" was ambiguous.** A value arriving through a constructor
+can come from two very different places, and the two must not rank the same:
 
-- `MessageComposer` puts its constructor `config` **after** the declarative tree — that argument comes from
-  an integrator building a composer deliberately, so it is the more specific intent.
-- `BasePaginator` puts its constructor options **before** the declarative tree — for `channel.messagePaginator`
-  and friends those options are the _SDK's own_ construction values (`channel.ts` supplies them), so your
-  declarative configuration should override them.
+- **An integrator** writing `new MessagePaginator({ paginatorOptions: { pageSize: 7 } })` is stating intent
+  for one specific object. That is stage 3, and stage 3 beats the declarative tree.
+- **The SDK** supplying a value on the instance's behalf — `MessageIntervalPaginator` setting `pageSize` to
+  100, `MessagePaginator` setting `stateThrottleMs` to 500, `Thread` giving its reply paginator a page size
+  of 50 — is stating a default, not an intent. That is stage 1b, and `client.config.set()` overrides it.
 
-Both orders are right for their case, but they are not the same order. If you construct a paginator
-yourself, expect the declarative tree to win.
+Both kinds arrive in the same constructor argument, so the SDK-supplied ones are passed separately and
+never mixed with the integrator's. Without that separation the documented order cannot be applied to a
+paginator at all: a paginator built with **no configuration whatsoever** already carries `pageSize`,
+`stateThrottleMs`, `initialCursor` and `hasPaginationQueryShapeChanged`, and treating those as stage 3
+would let them beat every registration.
+
+The order is now the same for every entity. Earlier versions of this SDK layered `MessageComposer` and
+`BasePaginator` in opposite orders, so the same registration answered differently depending on which
+object read it.
+
+### Where the stages live: a registry and a resolver
+
+Two objects carry out the stages above, and neither object holds what the other holds.
+
+|                       | `InstanceConfigurationService` — the registry                       | `ConfigController` — the resolver                            |
+| --------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Reached as            | `client.config` (public)                                            | nothing — the controller is internal                         |
+| Holds                 | what an integrator **asked for**                                    | what one instance **ended up with**                          |
+| How many exist        | one per client                                                      | one per configurable instance                                |
+| Keyed by              | the open key space (`'channel'`, `'messageComposer'`, a custom key) | nothing; the controller does not know the instance has a key |
+| Knows the defaults    | no                                                                  | yes, and freezes the defaults                                |
+| Knows other instances | yes — `reset()` and the late-registration warning both need that    | no                                                           |
+| Operations            | `set` / `setConfig` / `setSetupFunction` / `reset`                  | derive, re-derive, patch                                     |
+
+The registry is deliberately ignorant of resolution. The registry never reads a `DEFAULT_*_CONFIG`, never
+merges a layer, and never sees an instance's resolved value — reading a registry store answers "what was
+registered", never "what is in effect". The resolver is the mirror image: the resolver owns the defaults,
+the layer order, the server's authority and the no-op guard, and knows nothing about keys, registration, or
+any other instance.
+
+`applyInstanceConfiguration` is the bridge, and the only place that touches both:
+
+```
+client.config.set({ messagePaginator: { pageSize: 30 } })
+        │   registered intent, stored under a key
+        ▼
+InstanceConfigurationService          ← the registry: keys, setup functions, reset
+        │   applyInstanceConfiguration subscribes one instance to one key
+        ▼
+paginator.initializeConfig(slice)     ← the instance is handed its own subtree
+        │
+        ▼
+ConfigController                      ← the resolver: runs the stages, publishes once
+        │
+        ▼
+paginator.config                      ← the resolved value
+```
+
+Written as a pipeline, the stages of the previous section are:
+
+```
+package defaults        (1a)  DEFAULT_*_CONFIG, frozen
+   → built-in defaults  (1b)  what the subclass or the owner supplies for this instance
+   → declarative slice  (2)   the subtree registered under this instance's key
+   → construction args  (3)   what the integrator passed to the constructor
+   → patches            (4,5) every updateConfig — see the caveat below
+   → server authority   (6)   the channel's restrictions and ceilings, applied last
+```
+
+Each arrow is "the layer on the right wins for a field it names". The whole pipeline re-runs from the left
+on every change, which is what makes stage 6 idempotent — see the note above on re-resolution.
+
+The patches step is the one that differs by entity, exactly as the blockquote above says: `MessageComposer`
+**retains** each `updateConfig` as a layer and replays it on every derivation, so a request survives the
+server changing its mind. Every other entity writes a patch straight into the resolved value, where the
+next derivation replaces it. That is one option on the resolver rather than two implementations, so
+extending the retained behaviour to another entity is a switch rather than a rewrite.
+
+Stage 1b's precedence is pinned by tests in `test/unit/configuration/messagePaginator.config.test.ts`
+("the documented layer order"): a registration beats an SDK-supplied default, an integrator's construction
+argument beats a registration, and an untouched SDK default still applies.
+
+**Why the split is worth knowing.** The registry has to work before any instance exists, because
+registering configuration before `client.channel()` is the normal case, and it has to work for a key this
+package has never heard of. The resolver has to work for an instance nobody registered — a
+`SearchController` built without a client resolves configuration perfectly well and simply never hears a
+registration. Neither object could satisfy both requirements alone.
 
 ### The recalculation cycle
 
@@ -903,6 +1009,26 @@ deprecation exists to keep _released_ code compiling and no stable release ever 
 `client.configs` is also gone — it _did_ ship, but keyed by cid, and it is now keyed by channel type. An
 alias would let `client.configs[cid]` return `undefined` instead of failing, so the name was removed to
 keep the break loud. Read server channel configuration through `channel.getConfig()`.
+
+### Type aliases removed
+
+Three deprecated type aliases are gone. They named the `messageComposer` key's setup types before the key
+space was generalized:
+
+| Removed                           | Use instead                                |
+| --------------------------------- | ------------------------------------------ |
+| `MessageComposerSetupFunction`    | `InstanceSetupFunction<'messageComposer'>` |
+| `MessageComposerSetupState`       | `InstanceSetupState<'messageComposer'>`    |
+| `MessageComposerTearDownFunction` | `InstanceSetupTearDownFunction`            |
+
+Also listed in `v9-to-v10-migration-guide-type-renames.md`, so that table stays a complete record of
+removed type names.
+
+**No supported import path breaks.** They lived in `src/configuration/types.ts` and were never exported
+from the package root in v9, and `package.json#exports` routes consumers to the bundles rather than to
+source, so there was no way to import them. Deprecating a name nobody could reach costs a reader more than
+it saves anyone. `client.setMessageComposerSetupFunction` — which _did_ ship, in v9.9.0 — stays deprecated
+and now takes `InstanceSetupState<'messageComposer'>['setupFunction']`.
 
 `setInstanceConfigurationFunction` is worth a note of its own. It took
 `{ StreamChat, Channel, Thread, MessageComposer }`; three of those four keys were stored and never

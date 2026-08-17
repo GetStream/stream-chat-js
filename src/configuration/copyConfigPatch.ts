@@ -1,4 +1,4 @@
-import { isWalkableRecord } from './objectPath';
+import { isWalkableRecord } from '../utils/objectPath';
 
 /**
  * Copies a caller-supplied configuration patch, so the value the SDK stores shares no mutable object with

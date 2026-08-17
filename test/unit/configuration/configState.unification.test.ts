@@ -14,8 +14,15 @@ import type { StreamChat } from '../../../src/client';
  * displaying their settings had to poll to notice a `client.config.set()` or a `reset()`. These tests
  * pin the notification, which is the entire point of the change — a plain-object regression would still
  * satisfy every assertion about *values*.
+ *
+ * **Scope.** The three classes below are the ones that were converted; they are not the whole set. The
+ * class list above also predates two later changes: every configurable class now resolves through a
+ * `ConfigController` and exposes `configState` as a getter over its store, and `LiveLocationManager`
+ * joined the set. Reactivity for `LiveLocationManager` — and for `SearchController` reached through its
+ * own key — lives in `selfRegisteringEntities.test.ts`, because those two register themselves rather than
+ * being built by this package.
  */
-describe('resolved configuration is reactive on every configurable class', () => {
+describe('resolved configuration is reactive on the classes that were converted to a store', () => {
   let client: StreamChat;
   let channelResponse: ReturnType<typeof generateChannel>['channel'];
 

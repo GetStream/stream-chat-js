@@ -4,7 +4,9 @@ import { generateMsg } from '../test-utils/generateMessage';
 import { generateThreadResponse } from '../test-utils/generateThreadResponse';
 import { getClientWithUser } from '../test-utils/getClient';
 import { Thread } from '../../../src/thread';
-import { INSTANCE_CONFIG_TREE_KEYS } from '../../../src/configuration/types';
+import { LiveLocationManager } from '../../../src/LiveLocationManager';
+import { SearchController } from '../../../src/search/SearchController';
+import { INSTANCE_CONFIG_TREE_KEYS } from '../../../src/configuration/keys';
 import type { StreamChat } from '../../../src/client';
 
 /**
@@ -98,6 +100,27 @@ describe('every configurable object has a path in the configuration tree', () =>
       expected: 15,
       name: 'thread.messagePaginator',
       read: () => openThread().messagePaginator.config.pageSize,
+    },
+    {
+      // Neither of these is constructed by this package — an app or a downstream SDK builds them — so
+      // they register themselves against their key rather than being handed a slice by an owner.
+      apply: () =>
+        client.config.set({ liveLocationManager: { minUpdateThrottleMs: 9_000 } }),
+      expected: 9_000,
+      name: 'liveLocationManager',
+      read: () =>
+        new LiveLocationManager({
+          client,
+          getDeviceId: () => 'device',
+          watchLocation: () => () => undefined,
+        }).config.minUpdateThrottleMs,
+    },
+    {
+      apply: () =>
+        client.config.set({ searchController: { keepSingleActiveSource: false } }),
+      expected: false,
+      name: 'searchController (constructed with a client)',
+      read: () => new SearchController({ client }).config.keepSingleActiveSource,
     },
     {
       apply: () =>
