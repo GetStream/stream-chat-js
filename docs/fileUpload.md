@@ -95,7 +95,7 @@ const response = await channel.sendFile(
 
 ## `axiosRequestConfig` (channel and client uploads)
 
-Channel uploads use Axios under the hood. Both **`channel.sendFile`** and **`channel.sendImage`** accept an optional **fifth argument** `axiosRequestConfig` (`AxiosRequestConfig` from axios). The same optional argument exists on **`client.uploadFile`** and **`client.uploadImage`**.
+Channel uploads use Axios under the hood. Both **`channel.sendFile`** and **`channel.sendImage`** accept an optional **fifth argument** `axiosRequestConfig` (`AxiosRequestConfig` from axios). The same optional argument exists on **`client.uploadFile_`** and **`client.uploadImage_`** — the trailing-underscore names are the positional-argument uploads; the underscore-less `client.uploadFile` / `client.uploadImage` are the generated request-object methods (`{ file? }`) and take `requestOptions`, not an axios config.
 
 The client merges your config **after** its upload defaults (`timeout: 0`, large `maxContentLength` / `maxBodyLength`). Any property you set can override or extend those defaults. Multipart headers — including the boundary — are set by axios from the `FormData` body; the SDK no longer computes them itself (v9 took them from `form-data`'s `getHeaders()`).
 
@@ -105,11 +105,13 @@ Typical uses:
 - **`signal`** — pass `AbortSignal` from an `AbortController` to cancel an in-flight upload
 - Other Axios per-request options your runtime supports
 
+> **Uploads are the exception.** They are the only methods that still take a full axios config; every other request-issuing method on `StreamChat` and `Channel` takes a narrow `requestOptions` (`StreamRequestOptions`, currently `{ signal?: AbortSignal }`) as its **last** argument instead — e.g. `client.search(request, { signal })`. Either way you cancel by passing a `signal`: v9's `client.createAbortControllerForNextRequest()` is removed, because it armed one controller that whichever request went out next would consume. See `v9-to-v10-migration-guide-methods.md` for the before/after.
+
 ### Upload progress (`onUploadProgress`)
 
 ```js
-// client.uploadFile with progress
-const response = await client.uploadFile(file, file.name, file.type, undefined, {
+// client.uploadFile_ with progress
+const response = await client.uploadFile_(file, file.name, file.type, undefined, {
   onUploadProgress: (progressEvent) => {
     const percent = progressEvent.total
       ? Math.round((progressEvent.loaded * 100) / progressEvent.total)

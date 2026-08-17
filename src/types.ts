@@ -981,4 +981,8 @@ export type UpdateMessageAPIResponse = StreamResponse<UpdateMessageResponse>;
 export type GiphyVersions = keyof Images;
 export type TranslationLanguage = TranslateMessageRequest['language'];
 
+export type StreamRequestOptions = {
+  signal?: AbortSignal;
+};
+
 export * from './gen/models';

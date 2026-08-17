@@ -1206,6 +1206,26 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    *
    * It will return the response from the execution if it succeeded.
    *
+   * A task payload is the argument list of the method being replayed, so it carries that
+   * method's trailing `requestOptions` too. How far an `AbortSignal` in there survives depends on
+   * the path:
+   *
+   * - Step 1 above never leaves memory, so the signal is live and the call is cancellable exactly
+   *   as it would be outside the queue. This is the common case.
+   * - A task that reaches the pending-tasks table survives only as far as the concrete
+   *   implementation's storage allows. {@link OfflineDBApi.addPendingTask} and
+   *   {@link OfflineDBApi.getPendingTasks} make no serialization promise either way: a store that
+   *   hands back the object it was given keeps the signal live, while one that encodes the payload
+   *   (as a SQLite-backed store does) revives it as an inert `{}`. Across a process restart it is
+   *   always the latter.
+   *
+   * `ApiClient` drops a signal it cannot listen to rather than handing it to axios (which would
+   * throw), so a replay that lost its signal simply runs uncancellable.
+   *
+   * Note that cancelling is not a way to drop a queued task after the fact — an aborted request is
+   * a definitive rejection ({@link isEphemeral} is `false` for it), so it is never queued in the
+   * first place.
+   *
    * @param task - the pending task we want to execute
    */
   public queueTask = async <T>({ task }: { task: PendingTask }): Promise<T> => {
@@ -1233,7 +1253,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * i.e. the failure is a definitive rejection rather than an ephemeral/retryable one. A task is
    * kept in the queue only when its error is {@link isEphemeral} (connection/network error or a
    * retryable server code). A non retryable server response (i.e bad request, not allowed etc) is
-   * skipped since retrying it would never succeed.
+   * skipped since retrying it would never succeed, and so is a request the caller cancelled via
+   * `StreamRequestOptions.signal` - replaying it would defeat the point of aborting.
    *
    * @param error - The error thrown while executing the failed task.
    */
