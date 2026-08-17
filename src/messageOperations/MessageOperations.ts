@@ -1,6 +1,6 @@
 // todo: add tests
 import type { MessageRequest, UpdateMessageOptions } from '../types';
-import { deepFreezeConfig } from '../configuration/deepFreezeConfig';
+import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
 import type { StateStore } from '../store';
 import { ConfigController } from '../configuration/ConfigController';
 import { formatMessage, localMessageToNewMessagePayload } from '../utils';

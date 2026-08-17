@@ -6,8 +6,8 @@ export * from './channel_state';
 // Don't use * here: `export *` can break module augmentation of `InstanceSetupFunctionArgs` and
 // `InstanceConfigTree`, the same reason the `Custom*Data` interfaces below are listed explicitly.
 // https://github.com/microsoft/TypeScript/issues/46617
-export { applyInstanceConfiguration } from './configuration/applyInstanceConfiguration';
-export type { ApplyInstanceConfigurationParams } from './configuration/applyInstanceConfiguration';
+export { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
+export type { ApplyInstanceConfigurationParams } from './configuration/utils/applyInstanceConfiguration';
 export { ConfigController } from './configuration/ConfigController';
 export type { ConfigControllerOptions } from './configuration/ConfigController';
 // Named in the signatures of `client.config.set` / `setConfig`, so a caller has to be able to write it.
@@ -38,11 +38,11 @@ export type {
   ConfiguredInstance,
   InstanceConfigurationService,
 } from './configuration/InstanceConfigurationService';
-export { mergeServerRestrictions } from './configuration/serverAuthority';
+export { mergeServerRestrictions } from './configuration/utils/serverAuthority';
 export type {
   ServerRestrictions,
   ServerUpperBounds,
-} from './configuration/serverAuthority';
+} from './configuration/utils/serverAuthority';
 export { flattenConfigShape, INSTANCE_CONFIG_TREE_SHAPE } from './configuration/shape';
 export type {
   ConfigGroupNode,

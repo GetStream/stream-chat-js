@@ -1,6 +1,6 @@
-import type { DeclarativePaginatorConfig } from '../pagination/paginators/BasePaginator';
-import type { MessageOperationsConfig } from '../messageOperations/MessageOperations';
-import type { DeclarativeMessagePaginatorConfig } from './types';
+import type { DeclarativePaginatorConfig } from '../../pagination/paginators/BasePaginator';
+import type { MessageOperationsConfig } from '../../messageOperations/MessageOperations';
+import type { DeclarativeMessagePaginatorConfig } from '../types';
 
 /**
  * How a declarative subtree is combined before it reaches the object that owns it.

@@ -1,5 +1,5 @@
 import type { StreamChat } from '../client';
-import { deepFreezeConfig } from '../configuration/deepFreezeConfig';
+import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
 import type { StateStore } from '../store';
 import { ConfigController } from '../configuration/ConfigController';
 import { Channel } from '../channel';

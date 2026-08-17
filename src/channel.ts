@@ -17,13 +17,13 @@ import {
 } from './utils';
 import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
-import { applyInstanceConfiguration } from './configuration/applyInstanceConfiguration';
+import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
 import type { ChannelDeclarativeConfig } from './configuration/types';
 import {
   mergeDeclarativeMessageOperationsConfig,
   mergeDeclarativePaginatorConfig,
   toDeclarativePaginatorConfig,
-} from './configuration/declarativeSlices';
+} from './configuration/utils/declarativeSlices';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import type {
   AIState,

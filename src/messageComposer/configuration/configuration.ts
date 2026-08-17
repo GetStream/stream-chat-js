@@ -8,7 +8,7 @@ import type {
   TextComposerConfig,
 } from './types';
 import { generateUUIDv4 } from '../../utils';
-import { deepFreezeConfig } from '../../configuration/deepFreezeConfig';
+import { deepFreezeConfig } from '../../configuration/utils/deepFreezeConfig';
 import { DEFAULT_COMMANDS_CONFIG } from './commands.configuration';
 
 export const DEFAULT_LINK_PREVIEW_MANAGER_CONFIG: LinkPreviewsManagerConfig = {

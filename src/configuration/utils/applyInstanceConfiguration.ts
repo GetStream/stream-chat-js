@@ -1,16 +1,16 @@
-import { chatLoggerSystem } from '../logger';
+import { chatLoggerSystem } from '../../logger';
 import type {
   ConfiguredInstance,
   InstanceConfigurationService,
-} from './InstanceConfigurationService';
+} from '../InstanceConfigurationService';
 import type {
   InstanceConfigOf,
   InstanceSetupFunctionArgsOf,
   InstanceSetupKey,
   InstanceSetupTearDownFunction,
-} from './types';
-import type { DeepPartial } from '../types.utility';
-import type { Unsubscribe } from '../store';
+} from '../types';
+import type { DeepPartial } from '../../types.utility';
+import type { Unsubscribe } from '../../store';
 
 const logger = chatLoggerSystem.getLogger('instance-configuration');
 

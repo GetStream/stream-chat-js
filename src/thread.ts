@@ -33,13 +33,13 @@ import { MessageOperations } from './messageOperations';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import { isEqual } from './utils/mergeWith/mergeWithCore';
 import { MessagePaginator } from './pagination';
-import { applyInstanceConfiguration } from './configuration/applyInstanceConfiguration';
+import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
 import type { ThreadDeclarativeConfig } from './configuration/types';
 import {
   mergeDeclarativeMessageOperationsConfig,
   mergeDeclarativePaginatorConfig,
   toDeclarativePaginatorConfig,
-} from './configuration/declarativeSlices';
+} from './configuration/utils/declarativeSlices';
 import type { PipelineEvent } from './EventHandlerPipeline';
 
 export type ThreadState = {

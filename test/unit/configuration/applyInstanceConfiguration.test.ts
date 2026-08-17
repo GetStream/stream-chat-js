@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { InstanceConfigurationService } from '../../../src/configuration/InstanceConfigurationService';
-import { applyInstanceConfiguration } from '../../../src/configuration/applyInstanceConfiguration';
+import { applyInstanceConfiguration } from '../../../src/configuration/utils/applyInstanceConfiguration';
 
 /** Stands in for a keyed instance. `applyInstanceConfiguration` never inspects its argument. */
 const instance = () => ({ widget: {} }) as never;

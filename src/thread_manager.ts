@@ -1,5 +1,5 @@
 import { chatLoggerSystem } from './logger';
-import { deepFreezeConfig } from './configuration/deepFreezeConfig';
+import { deepFreezeConfig } from './configuration/utils/deepFreezeConfig';
 import { StateStore } from './store';
 import { ConfigController } from './configuration/ConfigController';
 import { throttle } from './utils';

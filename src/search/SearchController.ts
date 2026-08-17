@@ -4,8 +4,8 @@ import type { MessageResponse } from '../types';
 import type { StreamChat } from '../client';
 import type { SearchSource } from './BaseSearchSource';
 import { ConfigController } from '../configuration/ConfigController';
-import { applyInstanceConfiguration } from '../configuration/applyInstanceConfiguration';
-import { deepFreezeConfig } from '../configuration/deepFreezeConfig';
+import { applyInstanceConfiguration } from '../configuration/utils/applyInstanceConfiguration';
+import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
 
 export type SearchControllerState = {
   isActive: boolean;

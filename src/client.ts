@@ -83,7 +83,7 @@ import { isEqual } from './utils/mergeWith/mergeWithCore';
 import type { MessageComposer } from './messageComposer';
 import type { InstanceSetupState } from './configuration';
 import { InstanceConfigurationService } from './configuration/InstanceConfigurationService';
-import { applyInstanceConfiguration } from './configuration/applyInstanceConfiguration';
+import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
 import { StateStore } from './store';
 import type { Unsubscribe } from './store';
 import type {

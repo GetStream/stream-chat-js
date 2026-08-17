@@ -1,5 +1,5 @@
 import type { ItemLocation } from '../sortCompiler';
-import { deepFreezeConfig } from '../../configuration/deepFreezeConfig';
+import { deepFreezeConfig } from '../../configuration/utils/deepFreezeConfig';
 import { binarySearch } from '../sortCompiler';
 import { itemMatchesFilter } from '../filterCompiler';
 import { isPatch, StateStore, type ValueOrPatch } from '../../store';

@@ -8,7 +8,7 @@ import { Thread } from '../../../src/thread';
 import {
   mergeDeclarativeMessageOperationsConfig,
   mergeDeclarativePaginatorConfig,
-} from '../../../src/configuration/declarativeSlices';
+} from '../../../src/configuration/utils/declarativeSlices';
 import type { StreamChat } from '../../../src/client';
 
 /**

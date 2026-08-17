@@ -1,5 +1,5 @@
 import { Reminder } from './Reminder';
-import { deepFreezeConfig } from '../configuration/deepFreezeConfig';
+import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
 import { DEFAULT_STOP_REFRESH_BOUNDARY_MS } from './ReminderTimer';
 import { StateStore } from '../store';
 import { ConfigController } from '../configuration/ConfigController';

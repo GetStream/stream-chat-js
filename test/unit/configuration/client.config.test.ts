@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../src/client';
 import { DEFAULT_NOTIFICATION_MANAGER_CONFIG } from '../../../src/notifications/configuration';
 import { DEFAULT_REMINDER_MANAGER_CONFIG } from '../../../src/reminders/ReminderManager';
-import { applyInstanceConfiguration } from '../../../src/configuration/applyInstanceConfiguration';
+import { applyInstanceConfiguration } from '../../../src/configuration/utils/applyInstanceConfiguration';
 
 describe('client.config', () => {
   it('exposes config', () => {

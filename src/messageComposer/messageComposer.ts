@@ -15,12 +15,12 @@ import type { Unsubscribe } from '../store';
 import { StateStore } from '../store';
 import { formatMessage, generateUUIDv4, isLocalMessage } from '../utils';
 import { ConfigController } from '../configuration/ConfigController';
-import { deepFreezeConfig } from '../configuration/deepFreezeConfig';
-import { mergeServerRestrictions } from '../configuration/serverAuthority';
+import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
+import { mergeServerRestrictions } from '../configuration/utils/serverAuthority';
 import type {
   ServerRestrictions,
   ServerUpperBounds,
-} from '../configuration/serverAuthority';
+} from '../configuration/utils/serverAuthority';
 import { Channel } from '../channel';
 import { Thread } from '../thread';
 import type {
@@ -35,7 +35,7 @@ import type {
   UserResponse,
 } from '../types';
 import { chatLoggerSystem } from '../logger';
-import { applyInstanceConfiguration } from '../configuration/applyInstanceConfiguration';
+import { applyInstanceConfiguration } from '../configuration/utils/applyInstanceConfiguration';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { StreamChat } from '../client';
 import type { CommandSendability, MessageComposerConfig } from './configuration/types';

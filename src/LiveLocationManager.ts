@@ -9,10 +9,10 @@
  */
 
 import { withCancellation } from './utils/concurrency';
-import { deepFreezeConfig } from './configuration/deepFreezeConfig';
+import { deepFreezeConfig } from './configuration/utils/deepFreezeConfig';
 import { StateStore } from './store';
 import { ConfigController } from './configuration/ConfigController';
-import { applyInstanceConfiguration } from './configuration/applyInstanceConfiguration';
+import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import type { StreamChat } from './client';
 import type { Unsubscribe } from './store';

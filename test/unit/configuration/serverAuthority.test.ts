@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateChannel } from '../test-utils/generateChannel';
 import { getClientWithUser } from '../test-utils/getClient';
 import { mockChannelQueryResponse } from '../test-utils/mockChannelQueryResponse';
-import { mergeServerRestrictions } from '../../../src/configuration/serverAuthority';
+import { mergeServerRestrictions } from '../../../src/configuration/utils/serverAuthority';
 import type { StreamChat } from '../../../src/client';
 
 /**

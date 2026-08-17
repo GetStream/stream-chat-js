@@ -1,6 +1,6 @@
-import { mergeWith } from '../utils/mergeWith';
-import type { MergeWithCustomizer } from '../utils/mergeWith/mergeWithCore';
-import type { DeepPartial } from '../types.utility';
+import { mergeWith } from '../../utils/mergeWith';
+import type { MergeWithCustomizer } from '../../utils/mergeWith/mergeWithCore';
+import type { DeepPartial } from '../../types.utility';
 
 /**
  * The fields a server decides for some configurable object — a partial configuration holding *only* those

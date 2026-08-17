@@ -1,5 +1,5 @@
 import type { NotificationManagerConfig } from './types';
-import { deepFreezeConfig } from '../configuration/deepFreezeConfig';
+import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
 
 const DURATION_MS = 3000 as const;
 

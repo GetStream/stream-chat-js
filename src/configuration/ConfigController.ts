@@ -1,8 +1,8 @@
 import { StateStore } from '../store';
 import { mergeWith } from '../utils/mergeWith';
 import { isEqual } from '../utils/mergeWith/mergeWithCore';
-import { copyConfigPatch } from './copyConfigPatch';
-import { deepFreezeConfig } from './deepFreezeConfig';
+import { copyConfigPatch } from './utils/copyConfigPatch';
+import { deepFreezeConfig } from './utils/deepFreezeConfig';
 
 export type ConfigControllerOptions<TConfig extends Record<string, unknown>> = {
   /**
