@@ -12,6 +12,8 @@ import {
 } from './dayjs';
 import type { DayjsLocaleConfig } from './dayjs';
 import { predefinedFormatters } from './formatters';
+import { TranslationBuilder } from './TranslationBuilder';
+import type { TranslationTopicConstructor } from './TranslationBuilder';
 import {
   asDynamicKey,
   createDefaultTranslatorFunction,
@@ -63,6 +65,12 @@ export type StreamI18nOptions<C extends AnyTranslationCatalog = AnyTranslationCa
   runtimeDefaults?: Record<string, string>;
   /** A valid TZ identifier, e.g. `Europe/Prague`. */
   timezone?: string;
+  /**
+   * Post-processor topics for copy that cannot be resolved from a key alone — see
+   * {@link TranslationBuilder}. The key here must match the post-processor name in the translation
+   * value, i.e. `{{ value, topicName }}`.
+   */
+  translationBuilderTopics?: Record<string, TranslationTopicConstructor>;
   translationsForLanguage?: TranslationDictionaryOf<C>;
 };
 
@@ -126,6 +134,8 @@ export class StreamI18n<
 
   readonly state: StateStore<StreamI18nState<C, Bundled>>;
 
+  readonly translationBuilder: TranslationBuilder;
+
   /** The resource dictionaries handed to i18next, keyed by language. */
   translations: Record<string, Record<string, Record<string, string>>> = {};
 
@@ -151,6 +161,7 @@ export class StreamI18n<
   readonly formatters: PredefinedFormatters & CustomFormatters;
   readonly timezone?: string;
 
+  private readonly translationBuilderTopics: Record<string, TranslationTopicConstructor>;
   private readonly runtimeDefaults: Record<string, string>;
   private readonly disableDateTimeTranslations: boolean;
   private readonly i18nextConfig: InitOptions;
@@ -165,6 +176,8 @@ export class StreamI18n<
     this.timezone = options.timezone;
     this.formatters = { ...predefinedFormatters, ...options.formatters };
     this.isCustomDateTimeParser = Boolean(options.DateTimeParser);
+    this.translationBuilder = new TranslationBuilder(this.i18nInstance);
+    this.translationBuilderTopics = options.translationBuilderTopics ?? {};
 
     const language = options.language ?? DEFAULT_LANGUAGE;
 
@@ -229,6 +242,10 @@ export class StreamI18n<
       keySeparator: false,
       lng: language,
       nsSeparator: false,
+      // i18next only runs post-processors it was told about at init time.
+      ...(Object.keys(this.translationBuilderTopics).length > 0
+        ? { postProcess: Object.keys(this.translationBuilderTopics) }
+        : {}),
       ...options.i18nextConfigOverrides,
       // An integrator handler replaces ours wholesale, so it has to be guarded too — otherwise
       // supplying one silently blanks every prose key.
@@ -330,6 +347,12 @@ export class StreamI18n<
           name,
           formatter as (value: any, lng: string | undefined, options: any) => string,
         );
+      });
+
+      // After init, so the topics' post-processors are attached to a live instance and any buffered
+      // translator registrations flush.
+      Object.entries(this.translationBuilderTopics).forEach(([topic, Topic]) => {
+        this.translationBuilder.registerTopic(topic, Topic);
       });
 
       this.state.partialNext({
