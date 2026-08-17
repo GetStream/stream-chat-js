@@ -205,15 +205,24 @@ export type StreamTFunctionFor<
  * Structural on purpose: naming `moment-timezone` here would leak a type-only dependency into the
  * published `.d.ts`, so consumers without it installed got unresolved types. Bring-your-own-Moment
  * still works — it satisfies this shape.
+ *
+ * Declared with **method shorthand**, not property-with-function-type, and that is load-bearing: under
+ * `strictFunctionTypes` a function *property* is checked contravariantly, so `calendar?: (ref?:
+ * unknown) => string` demands an implementation accepting literally anything and Dayjs — whose
+ * `calendar` takes a narrower union — is not assignable. Method syntax is checked bivariantly, which is
+ * what duck-typing across two date libraries needs.
  */
 export type DateTimeLike = {
-  format: (template?: string) => string;
-  calendar?: (referenceTime?: unknown, formats?: Record<string, string>) => string;
-  fromNow?: (withoutSuffix?: boolean) => string;
-  diff: (other: unknown, unit?: string) => number;
-  startOf: (unit: string) => DateTimeLike;
-  valueOf: () => number;
+  format(template?: string): string;
+  calendar?(referenceTime?: DateTimeReference, formats?: Record<string, string>): string;
+  fromNow?(withoutSuffix?: boolean): string;
+  diff(other: DateTimeReference, unit?: string): number;
+  startOf(unit: string): DateTimeLike;
+  valueOf(): number;
 };
+
+/** Anything a date library will accept as a point in time. */
+type DateTimeReference = DateTimeLike | Date | string | number | null | undefined;
 
 export type TDateTimeParserInput = string | number | Date;
 
@@ -251,15 +260,22 @@ export type DateTimeParserModule = ((input?: TDateTimeParserInput) => DateTimeLi
  * ---------------------------------------------------------------------------------------------- */
 
 /**
- * A translate function loose enough for formatter internals.
+ * A translate function loose enough for formatter internals and for accepting any SDK's narrowed `t`.
  *
  * Formatters resolve keys they are handed at runtime (and their own `relativeTime.*` copy), so they
  * cannot be typed against a specific catalog.
+ *
+ * The parameters are `any` deliberately, and narrowing them breaks callers. An SDK's `t` is a
+ * four-overload callable whose key parameter is a union of its own catalog keys; under
+ * `strictFunctionTypes` a function *parameter* is checked contravariantly, so a `t` accepting only its
+ * own keys is **not** assignable to one declared as accepting any `string`. Typing these as `string` /
+ * `Record<string, unknown>` therefore forces a cast at every call site that passes a real `t` in —
+ * which was nine of them in `stream-chat-react` alone.
  */
 export type LooseTranslateFunction = (
-  key: string,
-  defaultValueOrOptions?: string | Record<string, unknown>,
-  options?: Record<string, unknown>,
+  key: any,
+  defaultValueOrOptions?: any,
+  options?: any,
 ) => string;
 
 /**
@@ -270,6 +286,8 @@ export type LooseTranslateFunction = (
  */
 export type FormatterContext = {
   currentLanguage: string;
+  /** The instance's logger, for diagnostics. A malformed formatter argument is not copy. */
+  logger: (message?: string) => void;
   /** The date library module. `durationFormatter` needs `.duration()`, which lives here. */
   dateTimeParser: DateTimeParserModule;
   /** Parses a single timestamp, with the active locale and timezone already applied. */

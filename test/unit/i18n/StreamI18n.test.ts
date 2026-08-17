@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { StreamI18n, type StreamI18nState } from '../../../src/i18n';
+import {
+  isDayOrMoment,
+  RELATIVE_TIME_CATALOG,
+  StreamI18n,
+  type StreamI18nState,
+  type TDateTimeParserOutput,
+} from '../../../src/i18n';
 import {
   fixtureRuntimeDefaults,
   type FixtureBundledKey,
@@ -241,5 +247,79 @@ describe('StreamI18n', () => {
       // ...while registeredLanguages stays narrower, which is what makes the G3 warning possible.
       expect(i18n.registeredLanguages.has('de')).toBe(false);
     });
+  });
+});
+
+describe('DateTimeLike', () => {
+  /**
+   * Regression: `DateTimeLike` must be declared with **method shorthand**, not
+   * property-with-function-type. Under `strictFunctionTypes` a function property is checked
+   * contravariantly, which makes a real Dayjs instance unassignable — its `calendar` takes a narrower
+   * reference type than a permissive structural signature demands. Method syntax is bivariant, which is
+   * what duck-typing across dayjs and moment needs.
+   *
+   * A type-level assertion, so this fails at `yarn types` rather than at runtime.
+   */
+  it('accepts a real dayjs instance', async () => {
+    const i18n = setup();
+    const { tDateTimeParser } = await i18n.init();
+    const parsed = tDateTimeParser('2026-03-13T14:32:00.000Z');
+
+    // If `DateTimeLike` regresses to property syntax, assigning the parser output fails to compile.
+    const asDateTimeLike: TDateTimeParserOutput = parsed;
+    expect(asDateTimeLike).toBeDefined();
+    expect(isDayOrMoment(asDateTimeLike)).toBe(true);
+  });
+});
+
+describe('RELATIVE_TIME_CATALOG', () => {
+  /**
+   * These keys are rendered by core but declared in each SDK's catalog, so the two have to agree. If a
+   * key here stops being emitted, an integrator silently loses the ability to translate it — the English
+   * default still renders, so nothing looks broken.
+   */
+  it('declares exactly the keys the relative-compact formatter renders', async () => {
+    const i18n = setup({
+      runtimeDefaults: {
+        ...fixtureRuntimeDefaults,
+        'timestamp.Relative':
+          '{{ timestamp | timestampFormatter(relativeCompact: true) }}',
+      },
+    });
+    const { t } = await i18n.init();
+    const render = (daysAgo: number) =>
+      (t as unknown as (k: string, o: Record<string, unknown>) => string)(
+        'timestamp.Relative',
+        { timestamp: new Date(Date.now() - daysAgo * 86_400_000).toISOString() },
+      );
+
+    expect(render(0)).toBe(RELATIVE_TIME_CATALOG['relativeTime.today']);
+    expect(render(1)).toBe(RELATIVE_TIME_CATALOG['relativeTime.yesterday']);
+    expect(render(3)).toBe('3d ago');
+    expect(render(14)).toBe('2w ago');
+  });
+
+  it('is translatable through a dictionary', async () => {
+    const i18n = setup({
+      language: 'de',
+      runtimeDefaults: {
+        ...fixtureRuntimeDefaults,
+        'timestamp.Relative':
+          '{{ timestamp | timestampFormatter(relativeCompact: true) }}',
+      },
+    });
+    i18n.registerTranslation('de', {
+      'relativeTime.daysAgo_other': 'vor {{ count }} Tagen',
+      'relativeTime.today': 'Heute',
+    } as never);
+    const { t } = await i18n.init();
+    const render = (daysAgo: number) =>
+      (t as unknown as (k: string, o: Record<string, unknown>) => string)(
+        'timestamp.Relative',
+        { timestamp: new Date(Date.now() - daysAgo * 86_400_000).toISOString() },
+      );
+
+    expect(render(0)).toBe('Heute');
+    expect(render(3)).toBe('vor 3 Tagen');
   });
 });

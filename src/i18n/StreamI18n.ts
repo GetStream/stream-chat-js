@@ -336,6 +336,7 @@ export class StreamI18n<
         const formatter = factory({
           currentLanguage: this.currentLanguage,
           dateTimeParser: this.DateTimeParser,
+          logger: this.logger,
           tDateTimeParser: this.tDateTimeParser,
           timezone: this.timezone,
           translate: this.translate,

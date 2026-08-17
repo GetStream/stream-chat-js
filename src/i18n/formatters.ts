@@ -10,6 +10,29 @@ import type {
   TimestampFormatterOptions,
 } from './types';
 
+/**
+ * The `relativeTime.*` keys this module renders, with their English copy.
+ *
+ * Exported as a catalog fragment because the *call sites* are here, in core, while the *catalog* is
+ * generated from each UI SDK's own source. Without this an SDK's codegen cannot see these keys, so they
+ * would drop out of its `TranslationCatalog` and an integrator could no longer type them in a
+ * dictionary — i.e. could no longer translate relative dates at all. A UI SDK intersects this into its
+ * catalog type.
+ *
+ * Plurals appear as `_one` / `_other` because that is how a dictionary supplies them; English needs no
+ * distinction, but a language with different forms does.
+ */
+export const RELATIVE_TIME_CATALOG = {
+  'relativeTime.daysAgo_one': '{{ count }}d ago',
+  'relativeTime.daysAgo_other': '{{ count }}d ago',
+  'relativeTime.today': 'Today',
+  'relativeTime.weeksAgo_one': '{{ count }}w ago',
+  'relativeTime.weeksAgo_other': '{{ count }}w ago',
+  'relativeTime.yesterday': 'Yesterday',
+} as const;
+
+export type RelativeTimeCatalog = typeof RELATIVE_TIME_CATALOG;
+
 /** Defaults for the relative-compact window, matching what both UI SDKs shipped. */
 const DEFAULT_RELATIVE_COMPACT_MAX_DAYS = 6;
 const DEFAULT_RELATIVE_COMPACT_MAX_WEEKS = 3;
@@ -36,16 +59,18 @@ const asNumber = (value: unknown, fallback: number) => {
  */
 const parseCalendarFormats = (
   value: TimestampFormatterOptions['calendarFormats'],
-  translate: LooseTranslateFunction,
+  logger: (message?: string) => void,
 ): Record<string, string> | undefined => {
   if (!value) return undefined;
   if (typeof value !== 'string') return value;
   try {
     return JSON.parse(value) as Record<string, string>;
-  } catch {
-    translate(
-      asDynamicKey('__invalidCalendarFormats'),
-      `StreamI18n: calendarFormats is not valid JSON, ignoring it: ${value}`,
+  } catch (error) {
+    // Reported through the instance's logger, not through `translate` -- a diagnostic is not copy.
+    logger(
+      `StreamI18n: calendarFormats is not valid JSON, ignoring it: ${value} (${
+        error instanceof Error ? error.message : String(error)
+      })`,
     );
     return undefined;
   }
@@ -79,22 +104,42 @@ const relativeCompactDateString = ({
 
   const daysAgo = now.startOf('day').diff(parsed.startOf('day'), 'day');
 
-  if (daysAgo <= 0) return translate('relativeTime.today', 'Today');
-  if (daysAgo === 1) return translate('relativeTime.yesterday', 'Yesterday');
+  // A future timestamp is not "Today" — fall straight through to a date.
+  if (daysAgo < 0) return parsed.format('DD/MM/YY');
+
+  if (daysAgo === 0)
+    return translate('relativeTime.today', RELATIVE_TIME_CATALOG['relativeTime.today']);
+  if (daysAgo === 1)
+    return translate(
+      'relativeTime.yesterday',
+      RELATIVE_TIME_CATALOG['relativeTime.yesterday'],
+    );
+  // Plural defaults rather than one `defaultValue`: English needs no distinction here, but a language
+  // whose plural categories differ has to be able to supply `_one` / `_other` and have i18next select.
   if (daysAgo <= maxDays) {
-    return translate('relativeTime.daysAgo', '{{ count }}d ago', { count: daysAgo });
+    return translate('relativeTime.daysAgo', {
+      count: daysAgo,
+      defaultValue_one: RELATIVE_TIME_CATALOG['relativeTime.daysAgo_one'],
+      defaultValue_other: RELATIVE_TIME_CATALOG['relativeTime.daysAgo_other'],
+    });
   }
 
+  // `maxWeeks > 0` and a full week elapsed, both required: with `maxWeeks: 0` a 3-day-old timestamp
+  // has `Math.floor(3 / 7) === 0`, which would otherwise match and render "0w ago".
   const weeksAgo = Math.floor(daysAgo / 7);
-  if (weeksAgo <= maxWeeks) {
-    return translate('relativeTime.weeksAgo', '{{ count }}w ago', { count: weeksAgo });
+  if (maxWeeks > 0 && daysAgo >= 7 && weeksAgo <= maxWeeks) {
+    return translate('relativeTime.weeksAgo', {
+      count: weeksAgo,
+      defaultValue_one: RELATIVE_TIME_CATALOG['relativeTime.weeksAgo_one'],
+      defaultValue_other: RELATIVE_TIME_CATALOG['relativeTime.weeksAgo_other'],
+    });
   }
 
   return parsed.format('DD/MM/YY');
 };
 
 const timestampFormatter: FormatterFactory<string | Date> =
-  ({ tDateTimeParser, translate }: FormatterContext) =>
+  ({ logger, tDateTimeParser, translate }: FormatterContext) =>
   (value, _lng, options) => {
     const {
       calendar,
@@ -122,10 +167,7 @@ const timestampFormatter: FormatterFactory<string | Date> =
 
     if (isDayOrMoment(parsed)) {
       if (calendar && typeof parsed.calendar === 'function') {
-        return parsed.calendar(
-          undefined,
-          parseCalendarFormats(calendarFormats, translate),
-        );
+        return parsed.calendar(undefined, parseCalendarFormats(calendarFormats, logger));
       }
       return parsed.format(format);
     }
@@ -222,15 +264,47 @@ export const getDateString = ({
 
   if (formatDate) return formatDate(new Date(messageCreatedAt));
 
+  // Before the translation-key path, so a caller can ask for relative-compact rendering directly
+  // rather than only through a key whose expression sets it. Falls through when it declines (a future
+  // date, or no dayjs-like parser), so the normal formatting still applies.
+  if (relativeCompact && t && tDateTimeParser) {
+    const relative = relativeCompactDateString({
+      maxDays: asNumber(relativeCompactMaxDays, DEFAULT_RELATIVE_COMPACT_MAX_DAYS),
+      maxWeeks: asNumber(relativeCompactMaxWeeks, DEFAULT_RELATIVE_COMPACT_MAX_WEEKS),
+      tDateTimeParser,
+      timestamp: messageCreatedAt,
+      translate: t,
+    });
+    if (relative) return relative;
+  }
+
   if (t && timestampTranslationKey) {
-    const translated = t(asDynamicKey(timestampTranslationKey), {
+    // Only forward options that were actually supplied.
+    //
+    // These reach i18next as interpolation values and are merged over the arguments the key's own
+    // formatter expression declares — so passing `format: undefined` explicitly *overrides*
+    // `timestampFormatter(format: HH:mm)` with nothing, and the timestamp renders as a raw ISO string.
+    // The caller is usually a component forwarding optional props, so most of these are undefined most
+    // of the time.
+    const overrides: Record<string, unknown> = {};
+    const supplied = {
       calendar,
       calendarFormats,
       format,
       relativeCompact,
       relativeCompactMaxDays,
       relativeCompactMaxWeeks,
-      timestamp: messageCreatedAt,
+    };
+    for (const [key, value] of Object.entries(supplied)) {
+      if (value !== undefined) overrides[key] = value;
+    }
+
+    const translated = t(asDynamicKey(timestampTranslationKey), {
+      ...overrides,
+      // A `Date`, not the raw value. Integrators override a `timestamp.*` key with their own
+      // formatter, and those read `options.timestamp` expecting a Date — passing the string through
+      // breaks them with `timestamp.toISOString is not a function`.
+      timestamp: new Date(messageCreatedAt),
     });
     // i18next echoes the key back when nothing resolved it, which is how a miss is detected.
     if (translated !== timestampTranslationKey) return translated;
