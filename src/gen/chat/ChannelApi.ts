@@ -58,6 +58,11 @@ export class ChannelApi {
     messages_limit?: number;
     members_limit?: number;
     watchers_limit?: number;
+    messages_id_lt?: string;
+    messages_id_lte?: string;
+    messages_id_gt?: string;
+    messages_id_gte?: string;
+    messages_id_around?: string;
   }): Promise<StreamResponse<ChannelStateResponse>> {
     if (!this.id) {
       throw new Error(
