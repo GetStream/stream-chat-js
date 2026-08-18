@@ -1,4 +1,8 @@
-import type { ModerationFlagOptions, UnmuteUserResponse } from './types';
+import type {
+  ModerationFlagOptions,
+  StreamRequestOptions,
+  UnmuteUserResponse,
+} from './types';
 import type { StreamChat } from './client';
 import { ModerationApi } from './gen/moderation/ModerationApi';
 
@@ -23,16 +27,26 @@ export class Moderation extends ModerationApi {
    * @param reason - Reason for flagging the user.
    * @param options - Additional options for flagging the user (optional, defaults to `{}`).
    * @param options.custom - Additional data to be stored with the flag (optional).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The flag response.
    */
-  flagUser(flaggedUserId: string, reason: string, options: ModerationFlagOptions = {}) {
-    return this.flag({
-      entity_type: MODERATION_ENTITY_TYPES.user,
-      entity_id: flaggedUserId,
-      entity_creator_id: '',
-      reason,
-      ...options,
-    });
+  flagUser(
+    flaggedUserId: string,
+    reason: string,
+    options: ModerationFlagOptions = {},
+    requestOptions?: StreamRequestOptions,
+  ) {
+    return this.flag(
+      {
+        entity_type: MODERATION_ENTITY_TYPES.user,
+        entity_id: flaggedUserId,
+        entity_creator_id: '',
+        reason,
+        ...options,
+      },
+      requestOptions,
+    );
   }
 
   /**
@@ -42,16 +56,26 @@ export class Moderation extends ModerationApi {
    * @param reason - Reason for flagging the message.
    * @param options - Additional options for flagging the message (optional, defaults to `{}`).
    * @param options.custom - Additional data to be stored with the flag (optional).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The flag response.
    */
-  flagMessage(messageId: string, reason: string, options: ModerationFlagOptions = {}) {
-    return this.flag({
-      entity_type: MODERATION_ENTITY_TYPES.message,
-      entity_id: messageId,
-      entity_creator_id: '',
-      reason,
-      ...options,
-    });
+  flagMessage(
+    messageId: string,
+    reason: string,
+    options: ModerationFlagOptions = {},
+    requestOptions?: StreamRequestOptions,
+  ) {
+    return this.flag(
+      {
+        entity_type: MODERATION_ENTITY_TYPES.message,
+        entity_id: messageId,
+        entity_creator_id: '',
+        reason,
+        ...options,
+      },
+      requestOptions,
+    );
   }
 
   /**

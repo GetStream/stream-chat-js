@@ -22,6 +22,17 @@ Before applying any per-method entry below, apply these repo-wide renames — th
 
 The `secret` parameter, `client.secret`, `client._isUsingServerAuth()`, and all server-only methods are gone. Where a v9 method took a `user_id?` / `userID?` / `currentUserID?` override, that argument has been dropped in v10 (the connected user is always used).
 
+**Every request-issuing method takes an optional trailing `requestOptions`.** The per-method signatures below omit it for readability, but every method generated from the OpenAPI spec ends with `requestOptions?: StreamRequestOptions` — currently `{ signal?: AbortSignal }` — and so does every hand-written wrapper around one, on both `StreamChat` and `Channel`. It is always **last**, immediately after the method's own arguments, and is never serialized into the request:
+
+```ts
+const controller = new AbortController();
+await client.search({ payload: { query: 'hello' } }, { signal: controller.signal });
+await channel.queryMembers({ payload: { limit: 10 } }, { signal: controller.signal });
+controller.abort();
+```
+
+This replaces v9's `client.createAbortControllerForNextRequest()` — see [below](#clientcreateabortcontrollerfornextrequest). The four upload methods (`client.uploadFile_` / `uploadImage_`, `channel.sendFile` / `sendImage`) are the exception: they keep their wider v9 `axiosRequestConfig` parameter, which already carries `signal` alongside `onUploadProgress`.
+
 ---
 
 ## StreamChat
@@ -378,6 +389,32 @@ client.api.sendFile(url, uri, name?, contentType?, user?, axiosRequestConfig?);
 ```
 
 `client.api` is a new getter returning the internal `ApiClient` instance.
+
+#### `client.createAbortControllerForNextRequest`
+
+**REMOVED.** Pass an `AbortSignal` through the target method's trailing `requestOptions` instead.
+
+```ts
+// v9 — arm a controller, and whichever request happened to go out next picked it up
+const controller = client.createAbortControllerForNextRequest();
+const users = await client.queryUsers({ id: { $in: ['jane'] } });
+controller.abort();
+
+// v10 — hand the signal to the call you actually want to cancel
+const controller = new AbortController();
+const users = await client.queryUsers(
+  { payload: { filter_conditions: { id: { $in: ['jane'] } } } },
+  { signal: controller.signal },
+);
+controller.abort();
+```
+
+Why it went away: the v9 mechanism armed a single controller on the client and the **next** outgoing request consumed it, whichever one that turned out to be. With concurrent requests in flight there was no way to say which call the signal would land on. The v10 parameter is explicit per call.
+
+- **Where it is accepted:** every generated method and every hand-written wrapper around one — see the global note above.
+- **Last resort:** for a request with no wrapper at all, `client.api.sendRequest(method, url, pathParams, queryParams, body, contentType, { signal })` is the layer that reads the option and puts `signal` on the axios request config.
+- **Search sources** already do this internally: `BaseSearchSource` owns an `AbortController` per query and passes `SearchQueryOptions` (`{ signal }`, structurally the same type) into each source's `query()`, which forwards it as the request options. A custom `BaseSearchSource` subclass should forward the `options` argument it receives rather than arm anything itself.
+- **With offline support enabled:** cancelling a call that can be queued (`sendMessage`, `sendReaction`, `deleteReaction`, `updateMessage`, `deleteMessage`, `createDraft`, `deleteDraft`) does **not** queue it for replay — an aborted request is treated as a definitive rejection, and any optimistic local update is rolled back. Cancelling means the operation is dropped, not deferred.
 
 #### `client.uploadFile` / `client.uploadImage`
 

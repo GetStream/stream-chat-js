@@ -2841,9 +2841,15 @@ describe('Channel search', async () => {
 			.mockResolvedValue({ body: {}, metadata: {} });
 		const payload = { query: 'query', sort: [{ field: 'updated_at', direction: -1 }] };
 		await channel.search({ payload });
-		expect(sendRequest).toHaveBeenCalledWith('GET', '/api/v2/chat/search', undefined, {
-			payload,
-		});
+		expect(sendRequest).toHaveBeenCalledWith(
+			'GET',
+			'/api/v2/chat/search',
+			undefined,
+			{ payload },
+			undefined,
+			undefined,
+			undefined,
+		);
 	});
 	it('search with sorting by custom field', async () => {
 		const sendRequest = vi
@@ -2851,9 +2857,15 @@ describe('Channel search', async () => {
 			.mockResolvedValue({ body: {}, metadata: {} });
 		const payload = { query: 'query', sort: [{ field: 'custom_field', direction: -1 }] };
 		await channel.search({ payload });
-		expect(sendRequest).toHaveBeenCalledWith('GET', '/api/v2/chat/search', undefined, {
-			payload,
-		});
+		expect(sendRequest).toHaveBeenCalledWith(
+			'GET',
+			'/api/v2/chat/search',
+			undefined,
+			{ payload },
+			undefined,
+			undefined,
+			undefined,
+		);
 	});
 	it('sorting and offset works', async () => {
 		vi.spyOn(client.api, 'sendRequest').mockResolvedValue({ body: {}, metadata: {} });
@@ -3247,6 +3259,17 @@ describe('send reaction flow', () => {
 			expect(channel._sendReaction).not.toHaveBeenCalled();
 		});
 
+		it('queues requestOptions alongside the request so replay forwards them', async () => {
+			const controller = new AbortController();
+
+			await channel.sendReaction(request, { signal: controller.signal });
+
+			expect(queueTaskSpy.mock.calls[0][0].task.payload).to.deep.equal([
+				request,
+				{ signal: controller.signal },
+			]);
+		});
+
 		it('falls back to _sendReaction if offlineDb throws', async () => {
 			client.offlineDb.queueTask.mockRejectedValue(new Error('Offline failure'));
 
@@ -3282,6 +3305,7 @@ describe('send reaction flow', () => {
 				undefined,
 				{ reaction, enforce_unique: true, skip_push: true },
 				'application/json',
+				undefined,
 			);
 		});
 
@@ -3520,11 +3544,14 @@ describe('message sending flow', () => {
 				undefined,
 				{
 					message,
+					include_channel_context: undefined,
+					include_mentioned_members: undefined,
 					keep_channel_hidden: undefined,
 					skip_enrich_url: undefined,
 					skip_push: true,
 				},
 				'application/json',
+				undefined,
 			);
 		});
 
@@ -3542,11 +3569,14 @@ describe('message sending flow', () => {
 				undefined,
 				{
 					message,
+					include_channel_context: undefined,
+					include_mentioned_members: undefined,
 					keep_channel_hidden: undefined,
 					skip_enrich_url: undefined,
 					skip_push: undefined,
 				},
 				'application/json',
+				undefined,
 			);
 		});
 	});
@@ -3676,6 +3706,7 @@ describe('Channel.query — initial page size', () => {
 		// The initial open asks the server for exactly pageSize messages (not its larger default).
 		expect(getOrCreate).toHaveBeenCalledWith(
 			expect.objectContaining({ messages: { limit: 25 } }),
+			undefined,
 		);
 	});
 
@@ -3692,6 +3723,7 @@ describe('Channel.query — initial page size', () => {
 
 		expect(getOrCreate).toHaveBeenCalledWith(
 			expect.objectContaining({ messages: { limit: 80 } }),
+			undefined,
 		);
 	});
 });

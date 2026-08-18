@@ -1,4 +1,4 @@
-import { BaseSearchSource } from './BaseSearchSource';
+import { BaseSearchSource, type SearchQueryOptions } from './BaseSearchSource';
 import { FilterBuilder, type FilterBuilderOptions } from '../pagination';
 import type { StreamChat } from '../client';
 import type { UserFilters, UserOptions, UserResponse, UserSort } from '../types';
@@ -9,6 +9,13 @@ type CustomContext = Record<string, unknown>;
 export type UserSearchSourceFilterBuilderContext<
   C extends CustomContext = CustomContext,
 > = { searchQuery?: string } & C;
+
+export type UserSearchSourceOptions = SearchSourceOptions & {
+  /** Static base filters merged under the dynamically generated ones. */
+  filters?: UserFilters;
+  sort?: UserSort;
+  searchOptions?: Omit<UserOptions, 'limit' | 'offset'>;
+};
 
 export class UserSearchSource<
   TFilterContext extends CustomContext = CustomContext,
@@ -25,14 +32,18 @@ export class UserSearchSource<
 
   constructor(
     client: StreamChat,
-    options?: SearchSourceOptions,
+    options?: UserSearchSourceOptions,
     filterBuilderOptions: FilterBuilderOptions<
       UserFilters,
       UserSearchSourceFilterBuilderContext<TFilterContext>
     > = {},
   ) {
-    super(options);
+    const { filters, sort, searchOptions, ...restOptions } = options || {};
+    super(restOptions);
     this.client = client;
+    this.filters = filters;
+    this.sort = sort;
+    this.searchOptions = searchOptions;
     this.filterBuilder = new FilterBuilder<
       UserFilters,
       UserSearchSourceFilterBuilderContext<TFilterContext>
@@ -55,7 +66,7 @@ export class UserSearchSource<
     });
   }
 
-  protected async query(searchQuery: string) {
+  protected async query(searchQuery: string, queryOptions: SearchQueryOptions = {}) {
     const filters = this.filterBuilder.buildFilters({
       baseFilters: this.filters,
       context: { searchQuery } as UserSearchSourceFilterBuilderContext<TFilterContext>,
@@ -66,13 +77,16 @@ export class UserSearchSource<
       ? baseSort
       : [...baseSort, { field: 'id', direction: 1 }];
     const options = { ...this.searchOptions, limit: this.pageSize, offset: this.offset };
-    const { users } = await this.client.queryUsers({
-      payload: {
-        filter_conditions: filters,
-        sort,
-        ...options,
+    const { users } = await this.client.queryUsers(
+      {
+        payload: {
+          filter_conditions: filters,
+          sort,
+          ...options,
+        },
       },
-    });
+      queryOptions,
+    );
     return { items: users };
   }
 
