@@ -9,15 +9,12 @@ import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
 import { UploadManager } from './uploadManager';
 import { TokenManager, type TokenManagerMinimalUser } from './token_manager';
-import { WSConnectionFallback } from './connection_fallback';
-import { isWSFailure } from './errors';
 import { ApiClient } from './api-client';
 import {
   axiosParamsSerializer,
   formatMessage,
   generateChannelTempCid,
   getEnv,
-  isOnline,
   isOwnUserBaseProperty,
   randomId,
 } from './utils';
@@ -26,7 +23,6 @@ import type {
   APIResponse,
   AppIdentifier,
   BanUserOptions,
-  BaseDeviceFields,
   ChannelData,
   ChannelMute,
   ChannelOptions,
@@ -85,16 +81,20 @@ import type {
 import { InstanceConfigurationService } from './configuration/InstanceConfigurationService';
 import { StateStore } from './store';
 import type {
+  ConnectUserDetailsRequest,
   GetApplicationResponse as Gen_GetApplicationResponse,
   MarkDeliveredRequest as Gen_MarkDeliveredRequest,
+  WSAuthMessage,
   WSEvent,
 } from './gen/models';
 import { ChatApi } from './gen-imports';
-import type { StreamResponse } from './types';
+import type { ConnectedEvent, StreamResponse } from './types';
 
 function isString(value: unknown): value is string {
   return typeof value === 'string' || value instanceof String;
 }
+
+const ANONYMOUS_TOKEN_PLACEHOLDER = 'anonymous';
 
 const logger = chatLoggerSystem.getLogger('client');
 const offlineDbLogger = chatLoggerSystem.getLogger('offline-db');
@@ -189,10 +189,10 @@ export class StreamChat extends ChatApi {
   userAgent?: string;
   wsBaseURL?: string;
   wsConnection: StableWSConnection | null;
-  wsFallback?: WSConnectionFallback;
   wsPromise: ConnectAPIResponse | null;
+
   get anonymous(): boolean {
-    return this.user?.anon ?? false;
+    return this.tokenManager.isAnonymous;
   }
   get userId() {
     return this.user?.id;
@@ -216,7 +216,6 @@ export class StreamChat extends ChatApi {
     return this.apiClient;
   }
   insightMetrics: InsightMetrics;
-  defaultWSTimeoutWithFallback: number;
   defaultWSTimeout: number;
   sdkIdentifier?: SdkIdentifier;
   deviceIdentifier?: DeviceIdentifier;
@@ -317,7 +316,6 @@ export class StreamChat extends ChatApi {
     this.tokenManager = new TokenManager();
     this.insightMetrics = new InsightMetrics();
 
-    this.defaultWSTimeoutWithFallback = 6 * 1000;
     this.defaultWSTimeout = 15 * 1000;
 
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
@@ -397,8 +395,7 @@ export class StreamChat extends ChatApi {
     this.wsBaseURL = this.baseURL.replace('http', 'ws').replace(':3030', ':8800');
   }
 
-  _getConnectionID = () =>
-    this.wsConnection?.connectionID || this.wsFallback?.connectionID;
+  _getConnectionID = () => this.wsConnection?.connectionID;
 
   _hasConnectionID = () => Boolean(this._getConnectionID());
 
@@ -520,10 +517,7 @@ export class StreamChat extends ChatApi {
       this.cleaningIntervalRef = undefined;
     }
 
-    await Promise.all([
-      this.wsConnection?.disconnect(timeout),
-      this.wsFallback?.disconnect(timeout),
-    ]);
+    await this.wsConnection?.disconnect(timeout);
 
     this.offlineDb?.executeQuerySafely(
       async (db) => {
@@ -559,10 +553,7 @@ export class StreamChat extends ChatApi {
       return this.wsPromise;
     }
 
-    if (
-      (this.wsConnection?.isHealthy || this.wsFallback?.isHealthy()) &&
-      this._hasConnectionID()
-    ) {
+    if (this.wsConnection?.isHealthy && this._hasConnectionID()) {
       logger
         .withExtraTags('openConnection')
         .debug('openConnection was called twice; a healthy connection already exists.');
@@ -979,7 +970,7 @@ export class StreamChat extends ChatApi {
     }
   };
 
-  _handleClientEvent(event: WSEvent) {
+  _handleClientEvent(event: WSEvent | ConnectedEvent) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const client = this;
     const postListenerCallbacks = [];
@@ -999,7 +990,7 @@ export class StreamChat extends ChatApi {
       this._deleteUserMessageReference(event.user, event.hard_delete, event.created_at);
     }
 
-    if (event.type === 'health.check' && event.me) {
+    if ((event.type === 'health.check' || event.type === 'connection.ok') && event.me) {
       client.user = event.me;
       client.state.updateUser(event.me);
       client.mutedChannels = event.me.channel_mutes;
@@ -1159,37 +1150,7 @@ export class StreamChat extends ChatApi {
       });
     }
 
-    try {
-      // if fallback is used before, continue using it instead of waiting for WS to fail
-      if (this.wsFallback) {
-        return await this.wsFallback.connect();
-      }
-
-      // if WSFallback is enabled, ws connect should timeout faster so fallback can try
-      return await this.wsConnection.connect(
-        this.options.enableWSFallback
-          ? this.defaultWSTimeoutWithFallback
-          : this.defaultWSTimeout,
-      );
-    } catch (error: any) {
-      // run fallback only if it's WS/Network error and not a normal API error
-      // make sure browser is online before even trying the longpoll
-      if (this.options.enableWSFallback && isWSFailure(error) && isOnline()) {
-        logger
-          .withExtraTags('connect')
-          .warn('The WebSocket connection failed; falling back to long-polling.');
-        this.dispatchEvent({ type: 'transport.changed', mode: 'longpoll' });
-
-        this.wsConnection._destroyCurrentWSConnection();
-        this.wsConnection.disconnect().then(); // close WS so no retry
-        this.wsFallback = new WSConnectionFallback({
-          client: this,
-        });
-        return await this.wsFallback.connect();
-      }
-
-      throw error;
-    }
+    return await this.wsConnection.connect(this.defaultWSTimeout);
   }
 
   /**
@@ -1516,25 +1477,6 @@ export class StreamChat extends ChatApi {
     await this.wsPromise;
 
     return await super.search(request, requestOptions);
-  }
-
-  /**
-   * Sets the device info for the current client. It will be sent via the WS connection automatically.
-   *
-   * @param device - The device object.
-   * @param device.id - Device ID.
-   * @param device.push_provider - The push provider.
-   */
-  setLocalDevice(device: BaseDeviceFields) {
-    if (
-      (this.wsConnection?.isConnecting && this.wsPromise) ||
-      ((this.wsConnection?.isHealthy || this.wsFallback?.isHealthy()) &&
-        this._hasConnectionID())
-    ) {
-      throw new Error('Device cannot be set before opening a WebSocket connection');
-    }
-
-    this.options.device = device;
   }
 
   _addChannelConfig({ cid, config }: ChannelResponse) {
@@ -2321,20 +2263,25 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Encodes the WS URL payload.
+   * Encodes the WebSocket auth message, sent as the first frame once the socket opens.
+   *
+   * `products` is not optional in practice: without `'chat'` the server treats the
+   * connection as video-only, which drops every chat event and unread count.
    *
    * @private
    *
-   * @param client_request_id - The client request ID (optional).
-   * @returns The JSON-encoded payload string.
+   * @returns The JSON-encoded auth message.
    */
-  _buildWSPayload = (client_request_id?: string) =>
+  _buildWSAuthMessage = () =>
     JSON.stringify({
-      user_id: this.userId,
-      user_details: this._user,
-      device: this.options.device,
-      client_request_id,
-    });
+      // The server requires a non-empty token even for anonymous connections, but
+      // skips JWT parsing for any string that is not shaped like one. Anonymous users
+      // have no token, so send a placeholder the server accepts and ignores.
+      token: this.tokenManager.getToken() || ANONYMOUS_TOKEN_PLACEHOLDER,
+      // `connect()` rejects before reaching this when `_user` is unset.
+      user_details: this._user as ConnectUserDetailsRequest,
+      products: ['chat'],
+    } satisfies WSAuthMessage);
 
   /**
    * Queries poll answers.

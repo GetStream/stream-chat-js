@@ -68,10 +68,6 @@ export function isEphemeral(error: Error): boolean {
   return isErrorRetryable(error as APIError);
 }
 
-export function isConnectionIDError(error: APIError) {
-  return error.code === 46; // ConnectionIDNotFoundError
-}
-
 export function isWSFailure(err: APIError): boolean {
   if (typeof err.isWSFailure === 'boolean') {
     return err.isWSFailure;

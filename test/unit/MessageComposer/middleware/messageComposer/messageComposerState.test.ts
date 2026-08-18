@@ -49,7 +49,6 @@ describe('stream-io/message-composer-middleware/own-state', () => {
     // Create a real StreamChat instance with minimal implementation
     client = new StreamChat('apiKey', {
       enableInsights: false,
-      enableWSFallback: false,
     });
 
     channel = new Channel(client, 'messaging', 'test-channel', {

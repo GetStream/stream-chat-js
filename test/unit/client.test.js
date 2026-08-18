@@ -5,7 +5,6 @@ import { getClientWithUser } from './test-utils/getClient';
 import * as utils from '../../src/utils';
 import { StreamChat } from '../../src/client';
 import { chatLoggerSystem } from '../../src/logger';
-import { ConnectionState } from '../../src/connection_fallback';
 import { StableWSConnection } from '../../src/connection';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 import { generateThreadResponse } from './test-utils/generateThreadResponse';
@@ -223,6 +222,103 @@ describe('Client userMuteStatus', function () {
 	});
 });
 
+describe('Client anonymous auth type', () => {
+	it('should stay anonymous after the hello event replaces client.user', async () => {
+		const client = new StreamChat('key', { allowServerSideConnect: true });
+		await client.tokenManager.setTokenOrProvider('', { id: 'local-anon-id', anon: true });
+		client._setUser({ id: 'local-anon-id', anon: true });
+
+		expect(client.anonymous).to.be.true;
+		expect(client.getAuthType()).to.equal('anonymous');
+
+		// The server's own-user payload has role 'anonymous' but NO `anon` flag. Reading
+		// the flag off client.user made every later HTTP request send stream-auth-type:
+		// jwt with an empty token, which the API rejects with 401 "token missing".
+		client.dispatchEvent({
+			type: 'connection.ok',
+			connection_id: 'id',
+			me: { id: '!anon', role: 'anonymous', mutes: [], channel_mutes: [] },
+		});
+
+		expect(client.user.id).to.equal('!anon');
+		expect(client.user.anon).to.be.undefined;
+		expect(client.anonymous).to.be.true;
+		expect(client.getAuthType()).to.equal('anonymous');
+	});
+
+	it('should send an empty token rather than omitting it for anonymous sessions', async () => {
+		const client = new StreamChat('key', { allowServerSideConnect: true });
+		await client.tokenManager.setTokenOrProvider('', { id: 'local-anon-id', anon: true });
+
+		expect(client.api._getToken()).to.equal('');
+	});
+
+	it('should report jwt for a regular user', async () => {
+		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const token =
+			'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYW1pbiJ9.1R88K_f1CC2yrR6j1_OzMEbasfS_dxRSNbundEDBlJI';
+		await client.tokenManager.setTokenOrProvider(token, { id: 'amin' });
+
+		expect(client.anonymous).to.be.false;
+		expect(client.getAuthType()).to.equal('jwt');
+		expect(client.api._getToken()).to.equal(token);
+	});
+
+	it('should reset the anonymous flag on disconnect', async () => {
+		const client = new StreamChat('key', { allowServerSideConnect: true });
+		await client.tokenManager.setTokenOrProvider('', { id: 'local-anon-id', anon: true });
+		expect(client.anonymous).to.be.true;
+
+		client.tokenManager.reset();
+
+		expect(client.anonymous).to.be.false;
+		expect(client.getAuthType()).to.equal('jwt');
+	});
+});
+
+describe('Client connection.ok hello event', () => {
+	const user = { id: 'user' };
+	const newConnectedClient = async () => {
+		const client = new StreamChat('', '');
+		client.connectUser = async () => {
+			client.user = user;
+			client.wsPromise = Promise.resolve();
+		};
+		await client.connectUser();
+		return client;
+	};
+
+	it('should populate own-user state from the v2 hello event', async () => {
+		const client = await newConnectedClient();
+		const mutes = [{ user, target: { id: 'mute1' } }];
+		const channel_mutes = [{ user, channel: { cid: 'messaging:muted' } }];
+
+		client.dispatchEvent({
+			type: 'connection.ok',
+			connection_id: 'id',
+			me: { ...user, mutes, channel_mutes, blocked_user_ids: ['blocked1'] },
+		});
+
+		expect(client.user.id).to.equal('user');
+		expect(client.mutedUsers).to.deep.equal(mutes);
+		expect(client.mutedChannels).to.deep.equal(channel_mutes);
+		expect(client.blockedUsers.getLatestValue().userIds).to.deep.equal(['blocked1']);
+		expect(client.userMuteStatus('mute1')).to.be.ok;
+	});
+
+	it('should default blocked users to an empty list', async () => {
+		const client = await newConnectedClient();
+
+		client.dispatchEvent({
+			type: 'connection.ok',
+			connection_id: 'id',
+			me: { ...user, mutes: [], channel_mutes: [] },
+		});
+
+		expect(client.blockedUsers.getLatestValue().userIds).to.deep.equal([]);
+	});
+});
+
 describe('Client active channels cache', () => {
 	const client = new StreamChat('', '');
 	const user = { id: 'user' };
@@ -394,7 +490,6 @@ describe('Client disconnectUser', () => {
 		};
 		const { resolve, promise } = Promise.withResolvers();
 		client.wsConnection = { disconnect: () => promise };
-		client.wsFallback = null;
 		const disconnectPromise = client.disconnectUser();
 		expect(client.tokenManager.reset.called).to.be.false;
 		resolve();
@@ -424,7 +519,6 @@ describe('Client disconnectUser', () => {
 		}));
 		const { resolve, promise } = Promise.withResolvers();
 		client.wsConnection = { disconnect: () => promise };
-		client.wsFallback = null;
 		const disconnectPromise = client.disconnectUser();
 		expect(Object.keys(client.uploadManager.uploads)).to.have.length(0);
 		resolve();
@@ -439,7 +533,6 @@ describe('Client disconnectUser', () => {
 
 		const { resolve, promise } = Promise.withResolvers();
 		client.wsConnection = { disconnect: () => promise };
-		client.wsFallback = null;
 		const disconnectPromise = client.disconnectUser();
 
 		expect(client.messageComposerCache.peek('cid:a')).to.be.undefined;
@@ -653,141 +746,6 @@ describe('message update', () => {
 			expect(response.message.text).toBe('edited');
 			expect(response.message.status).toBe('failed');
 		});
-	});
-});
-
-describe('Client setLocalDevice', async () => {
-	const device = { id: 'id1', push_provider: 'apn' };
-	const client = new StreamChat('', { device });
-
-	it('should update device info before ws open', async () => {
-		expect(client.options.device).to.deep.equal(device);
-		const newDevice = { id: 'id2', push_provider: 'firebase' };
-		client.setLocalDevice(newDevice);
-		expect(client.options.device).to.deep.equal(newDevice);
-	});
-
-	it('should throw error when updating device with ws open', async () => {
-		client.wsConnection = new StableWSConnection({});
-		client.wsConnection.isHealthy = true;
-		client.wsConnection.connectionID = 'ID';
-
-		expect(() =>
-			client.setLocalDevice({ id: 'id3', push_provider: 'firebase' }),
-		).to.throw();
-	});
-});
-
-describe('Client WSFallback', () => {
-	let client;
-	const userToken =
-		'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYW1pbiJ9.1R88K_f1CC2yrR6j1_OzMEbasfS_dxRSNbundEDBlJI';
-	beforeEach(() => {
-		sinon.restore();
-		client = new StreamChat('', { allowServerSideConnect: true, enableWSFallback: true });
-		client.defaultWSTimeout = 500;
-		client.defaultWSTimeoutWithFallback = 500;
-	});
-
-	it('_getConnectionID, _hasConnectionID', () => {
-		expect(client._hasConnectionID()).to.be.false;
-		expect(client._getConnectionID()).to.equal(undefined);
-		client.wsFallback = { connectionID: 'ID' };
-		expect(client._getConnectionID()).to.equal('ID');
-		expect(client._hasConnectionID()).to.be.true;
-	});
-
-	it('should try wsFallback if WebSocket fails', async () => {
-		const eventDate = new Date(Date.UTC(2009, 1, 3, 23, 3, 3));
-		const stub = sinon
-			.stub()
-			.onCall(0)
-			.resolves({ event: { connection_id: 'new_id', received_at: eventDate } });
-
-		client.api.doAxiosRequest = stub;
-		client.wsBaseURL = 'ws://getstream.io';
-		const health = await client.connectUser({ id: 'amin' }, userToken);
-		expect(health).to.be.eql({ connection_id: 'new_id', received_at: eventDate });
-		expect(client.wsFallback.state).to.be.eql(ConnectionState.Connected);
-		expect(client.wsFallback.connectionID).to.be.eql('new_id');
-		expect(client.wsFallback.consecutiveFailures).to.be.eql(0);
-
-		expect(client.wsConnection.isHealthy).to.be.false;
-		expect(client.wsConnection.isDisconnected).to.be.true;
-		expect(client.wsConnection.connectionID).to.be.undefined;
-		expect(client.wsConnection.totalFailures).to.be.greaterThan(1);
-		await client.disconnectUser();
-		expect(client.wsFallback.state).to.be.eql(ConnectionState.Disconnected);
-		stub.reset();
-	});
-
-	it('should fire transport.changed and health.check event', async () => {
-		const eventDate = new Date(Date.UTC(2009, 1, 3, 23, 3, 3));
-		sinon.spy(client, 'dispatchEvent');
-		client.api.doAxiosRequest = () => ({
-			event: { type: 'health.check', connection_id: 'new_id', received_at: eventDate },
-		});
-		client.wsBaseURL = 'ws://getstream.io';
-		const health = await client.connectUser({ id: 'amin' }, userToken);
-		await client.disconnectUser();
-		expect(health).to.be.eql({
-			type: 'health.check',
-			connection_id: 'new_id',
-			received_at: eventDate,
-		});
-
-		expect(
-			client.dispatchEvent.calledWithMatch({
-				type: 'transport.changed',
-				mode: 'longpoll',
-			}),
-		).to.be.true;
-		expect(
-			client.dispatchEvent.calledWithMatch({
-				type: 'health.check',
-				connection_id: 'new_id',
-				received_at: eventDate,
-			}),
-		).to.be.true;
-	});
-
-	it('should ignore fallback if flag is false', async () => {
-		client.wsBaseURL = 'ws://getstream.io';
-		client.options.enableWSFallback = false;
-
-		await expect(client.connectUser({ id: 'amin' }, userToken)).rejects.toThrow(
-			/"initial WS connection could not be established","isWSFailure":true/,
-		);
-
-		expect(client.wsFallback).to.be.undefined;
-	});
-
-	// FIXME: this test is wrong and all kinds of flaky
-	it.skip('should ignore fallback if browser is offline', async () => {
-		client.wsBaseURL = 'ws://getstream.io';
-		client.options.enableWSFallback = true;
-		sinon.stub(utils, 'isOnline').returns(false);
-
-		await expect(client.connectUser({ id: 'amin' }, userToken)).rejects.toThrow(
-			/"initial WS connection could not be established","isWSFailure":true/,
-		);
-
-		expect(client.wsFallback).to.be.undefined;
-	});
-
-	it('should reuse the fallback if already created', async () => {
-		client.options.enableWSFallback = true;
-		const fallback = {
-			isHealthy: () => false,
-			connect: sinon.stub().returns({ connection_id: 'id' }),
-		};
-		client.wsFallback = fallback;
-		sinon.stub(utils, 'isOnline').returns(false);
-
-		const health = await client.connectUser({ id: 'amin' }, userToken);
-
-		expect(health).to.be.eql({ connection_id: 'id' });
-		expect(client.wsFallback).to.be.equal(fallback);
 	});
 });
 

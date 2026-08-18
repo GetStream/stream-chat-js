@@ -13,7 +13,8 @@
 
 - **Server-side is gone.** If you construct with a `secret` or call server-only admin endpoints, switch to `@stream-io/node-sdk`. The construction guide has the full list — every feature module below that was server-only is dropped for the same reason.
 - Two barrels removed from the package root, one added: **`./events` and `./base64` are gone; `./logger` is new.** `./signing` survives with exactly one export left, `UserFromToken`. The `./campaign`, `./channel_batch_updater`, and `./segment` barrels are still exported but the modules are emptied (they contain only a comment pointing at the server SDK) — importing anything by name from them will fail.
-- `Event` (type name) is kept, but its shape widened: `Event = WSEvent | LocalEvent | keyof CustomEventTypes`. `EventPayload<'<type>'>` narrows to a specific event.
+- **The WebSocket connect endpoint moved to `/api/v2/connect`.** The hello event is now `connection.ok` rather than `health.check`, and the long-poll fallback (`enableWSFallback`, `transport.changed`) is gone.
+- `Event` (type name) is kept, but its shape widened: `Event = WSEvent | ConnectedEvent | LocalEvent | keyof CustomEventTypes`. `EventPayload<'<type>'>` narrows to a specific event.
 - `EventTypes` (plural) renamed to `EventType` (singular). `CustomEventTypes` interface is unchanged — augment it to add custom event-type keys, same as v9.
 - Filter payloads now carry **per-endpoint operator constraints** (inline `Filters<{ … }>` on each request type) — previously-permissive filter objects may stop type-checking. Only one operator per field is allowed, and `null` is no longer a valid `$in` element. `QueryPollsFilters`, `QueryVotesFilters`, and `ReminderFilters` were the last hand-written holdouts and now derive from their request types too.
 - `ChannelState.membership` initializes to `undefined` (was `{}`); `ChannelState.typing` values are now `EventPayload<'typing.start' | 'typing.stop'>` (were `Event`); read receipts merged with the generated `ReadStateResponse`.
@@ -101,7 +102,6 @@ type LocalEvent = (
         isLatestMessageSet: boolean;
       };
     })
-  | ({ type: 'transport.changed' } & { mode: string })
   | ({ type: 'connection.changed' } & { online: boolean })
   | { type: 'connection.recovered' }
   | ({ type: 'offline_reactions.queried' } & { offlineReactions: ReactionResponse[] })
@@ -120,8 +120,18 @@ type LocalEvent = (
     })
 ) & { received_at?: Date };
 
+// The hello event of the v2 connect endpoint (see "WebSocket transport" below).
+type ConnectedEvent = {
+  type: 'connection.ok';
+  connection_id: string;
+  created_at: Date;
+  me: OwnUserResponse;
+  chat?: { /* duplicates the mute + unread fields on `me`; prefer `me` */ } | null;
+  received_at?: Date;
+};
+
 // Public alias — same name as in v9, wider shape.
-export type Event = WSEvent | LocalEvent | keyof CustomEventTypes;
+export type Event = WSEvent | ConnectedEvent | LocalEvent | keyof CustomEventTypes;
 export type EventType = Event['type'] | 'all';
 export type EventHandler<T = string> = (event: Extract<Event, { type: T }>) => void;
 
@@ -175,6 +185,57 @@ declare module 'stream-chat' {
 Because the v10 generic on `channel.on<T extends EventType | string>` accepts any `string`, unknown listener keys still type-check without augmentation, but the event payload will not be narrowed. Augmenting `CustomEventTypes` adds the custom key to `Event['type']`, which flows through `EventType` and `EventHandler` narrowing.
 
 > **Larger topic** — the event system rewrite (removed hand-rolled event types across `poll`, `poll_manager`, `thread`, `reminders`, live-location, and the client itself; the shift from a hand-maintained `EVENT_MAP` to generated decoders) touches enough call sites that it may warrant a dedicated guide. Flag me if you want one written.
+
+---
+
+## WebSocket transport
+
+### The connect endpoint moved to `/api/v2/connect`
+
+v9 opened the WebSocket against `/connect`, passing the auth payload in the query string
+(`?json=…&authorization=…`). v10 uses `/api/v2/connect`, which authenticates off the **first
+frame the client sends** instead. The client handles this internally — the change is only
+visible in two places:
+
+- **The hello event is `connection.ok`, not `health.check`.** `connectUser()` /
+  `openConnection()` resolve with a `ConnectedEvent` carrying `connection_id` and `me`, the same
+  `OwnUserResponse` v9's `health.check` carried. Periodic health checks still arrive as
+  `health.check`, so listeners for that keep working; only the _first_ event changed.
+
+  ```diff
+  - client.on('health.check', (event) => { if (event.me) seedOwnUser(event.me); });
+  + client.on('connection.ok', (event) => seedOwnUser(event.me));
+  ```
+
+  `ConnectionOpen` (the resolved type of `connectUser`) is now a union of both events, so narrow
+  on `type` before touching event-specific fields.
+
+- **The device is no longer part of the connect payload.** See
+  [`client.setLocalDevice`](./v9-to-v10-migration-guide-methods.md#clientsetlocaldevice).
+
+Anonymous connections are unaffected: `connectAnonymousUser()` works the same way.
+
+### Long-poll fallback removed
+
+The HTTP long-poll transport that v9 fell back to when the WebSocket failed is gone. Removed
+with it:
+
+| Removed                                                                  | Notes                                                                                                                                                                                                       |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enableWSFallback` client option                                         | No replacement.                                                                                                                                                                                             |
+| `WSConnectionFallback`, `ConnectionState` (`src/connection_fallback.ts`) | Never exported from the package root; internal.                                                                                                                                                             |
+| `transport.changed` event                                                | Only ever dispatched when switching to long-poll. Remove listeners.                                                                                                                                         |
+| `client.defaultWSTimeoutWithFallback`                                    | `client.defaultWSTimeout` (15s) is now the only connect timeout. In v9, enabling the fallback shortened the WS timeout to 6s so the fallback could take over sooner; without it, connects get the full 15s. |
+
+```diff
+- const client = new StreamChat(API_KEY, { enableWSFallback: true });
+- client.on('transport.changed', ({ mode }) => reportTransport(mode));
++ const client = new StreamChat(API_KEY);
+```
+
+The WebSocket's own reconnect and health-check loop is unchanged and still handles transient
+network failures. If you need to react to connectivity, use `connection.changed` — it is
+unaffected.
 
 ---
 
@@ -521,4 +582,7 @@ For each source file that touches the SDK:
 10. **Rewrite `client.revokeTokens(isoString)`** to `client.revokeTokens(new Date(isoString))`.
 11. **Fix upload call sites.** `channel.sendFile` / `sendImage` / `client.uploadFile_` / `uploadImage_` take `string | File` now — no `Buffer`, no readable streams. Pass `contentType` explicitly when the source is a React-Native URI string.
 12. **Delete bundler shims** added for `stream-chat`'s Node-only deps (`crypto`, `https`, `zlib`, `jsonwebtoken`, `ws`) — `package.json#browser` is gone because nothing imports them anymore.
-13. **Polyfill `atob`** if your React Native / Hermes target lacks it (`typeof atob === 'undefined'`); `UserFromToken` depends on it during `connectUser`.
+13. **Handle the new connect hello event.** Anything keyed on the _first_ `health.check` (seeding `client.user`, unread counts, "connected" UI state) should listen for `connection.ok` instead; periodic `health.check` events are unchanged. Narrow on `event.type` before reading fields off the resolved `ConnectionOpen`.
+14. **Drop long-poll fallback code.** Remove `enableWSFallback` from client options, delete `transport.changed` listeners, and delete reads of `client.defaultWSTimeoutWithFallback`.
+15. **Replace `client.setLocalDevice(device)` / the `device` client option** with an explicit `await client.createDevice({ id, push_provider, push_provider_name? })` after connecting.
+16. **Polyfill `atob`** if your React Native / Hermes target lacks it (`typeof atob === 'undefined'`); `UserFromToken` depends on it during `connectUser`.
