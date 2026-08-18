@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  createDefaultTranslatorFunction,
   defaultDateTimeParser,
   getCalendarDateStringForA11y,
   getDateString,
@@ -16,6 +17,12 @@ import type { TDateTimeParserInput } from '../../../src/i18n';
 const KEY = 'timestamp.MessageTimestamp';
 const KEY_VALUE = '{{ timestamp | timestampFormatter(calendar: false; format: HH:mm) }}';
 const AT = '2019-04-03T14:42:47.087Z';
+
+/** `Streami18n` with the catalog left open, so a test can supply an arbitrary formatter expression. */
+const StreamI18nForLogger = Streami18n as unknown as new (options: {
+  logger: (message?: string) => void;
+  runtimeDefaults: Record<string, string>;
+}) => Streami18n;
 
 const setup = async (runtimeDefaults: Record<string, string> = { [KEY]: KEY_VALUE }) => {
   const i18n = new Streami18n({ logger: () => {}, runtimeDefaults });
@@ -243,5 +250,130 @@ describe('getCalendarDateStringForA11y', () => {
       }),
     ).toBeUndefined();
     expect(getCalendarDateStringForA11y({ messageCreatedAt: AT })).toBeUndefined();
+  });
+});
+
+/**
+ * The relative-compact branch matrix.
+ *
+ * Ported from the React SDK, which owned it before the runtime moved here — it was asserting this
+ * module's behaviour through a thin re-export. Four of these boundaries are regressions found while
+ * porting: a future timestamp rendering as "Today", `relativeCompactMaxWeeks: 0` rendering "0w ago",
+ * `relativeCompact` being ignored on the direct `getDateString` path, and the weeks branch firing
+ * before a full week had elapsed.
+ *
+ * `createDefaultTranslatorFunction` stands in for `t`: it honours the inline defaults and the
+ * `defaultValue_one` / `defaultValue_other` pair exactly as i18next would, which is the shape the
+ * formatter passes for the plural cases.
+ */
+describe('getDateString — relativeCompact', () => {
+  const FIXED_NOW = new Date('2025-02-19T12:00:00.000Z');
+  const t = createDefaultTranslatorFunction();
+  const tDateTimeParser = (input?: TDateTimeParserInput) => defaultDateTimeParser(input);
+  const daysBefore = (n: number) =>
+    new Date(FIXED_NOW.getTime() - n * 24 * 60 * 60 * 1000).toISOString();
+
+  const render = (messageCreatedAt: string, options: Record<string, unknown> = {}) =>
+    getDateString({
+      messageCreatedAt,
+      relativeCompact: true,
+      t,
+      tDateTimeParser,
+      ...options,
+    });
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(FIXED_NOW);
+  });
+
+  it('renders today and yesterday as words', () => {
+    expect(render(FIXED_NOW.toISOString())).toBe('Today');
+    expect(render(daysBefore(1))).toBe('Yesterday');
+  });
+
+  it('renders 2–6 days as a day count', () => {
+    expect(render(daysBefore(2))).toBe('2d ago');
+    expect(render(daysBefore(6))).toBe('6d ago');
+  });
+
+  it('renders 1–3 weeks as a week count', () => {
+    expect(render(daysBefore(7))).toBe('1w ago');
+    expect(render(daysBefore(21))).toBe('3w ago');
+  });
+
+  it('falls back to a date beyond the week window', () => {
+    expect(render(daysBefore(28))).toBe('22/01/25');
+  });
+
+  it('renders a future timestamp as a date, not as "Today"', () => {
+    const tomorrow = new Date(FIXED_NOW.getTime() + 24 * 60 * 60 * 1000).toISOString();
+    expect(render(tomorrow)).toBe('20/02/25');
+  });
+
+  it('never renders "0w ago" when relativeCompactMaxWeeks is 0', () => {
+    // `Math.floor(3 / 7) === 0`, which matched the weeks branch before the guard was added.
+    expect(render(daysBefore(3), { relativeCompactMaxWeeks: 0 })).toBe('3d ago');
+    expect(render(daysBefore(9), { relativeCompactMaxWeeks: 0 })).toBe('10/02/25');
+  });
+
+  it('honours relativeCompactMaxDays', () => {
+    expect(render(daysBefore(4), { relativeCompactMaxDays: 3 })).not.toBe('4d ago');
+    expect(render(daysBefore(3), { relativeCompactMaxDays: 3 })).toBe('3d ago');
+  });
+
+  it('is inert without both a translator and a parser', () => {
+    expect(render(daysBefore(1), { t: undefined })).not.toBe('Yesterday');
+    expect(render(daysBefore(1), { tDateTimeParser: undefined })).not.toBe('Yesterday');
+  });
+});
+
+/**
+ * `calendarFormats` arriving as a string is not a quirk: a bundled default embeds the config inside the
+ * i18next expression, so the formatter receives text. Malformed text is a developer mistake, and the
+ * report goes to the instance logger rather than through `translate` — a diagnostic is not copy, and
+ * routing it through the translator was the original bug here.
+ */
+describe('timestampFormatter — malformed calendarFormats', () => {
+  const KEY_BAD = 'timestamp.MessageTimestamp';
+
+  it('reports invalid JSON through the instance logger and still renders', async () => {
+    const logger = vi.fn();
+    const i18n = new StreamI18nForLogger({
+      logger,
+      runtimeDefaults: {
+        // A bare non-JSON word. A brace-wrapped malformation never reaches the formatter at all --
+        // i18next's own argument parser drops the whole argument first, so nothing is logged and the
+        // timestamp silently renders unformatted. Worth knowing: this guard only catches the subset
+        // i18next hands through.
+        [KEY_BAD]:
+          '{{ timestamp | timestampFormatter(calendar: true; calendarFormats: notjson) }}',
+      },
+    });
+    const { t } = await i18n.init();
+
+    const rendered = t(KEY_BAD, { timestamp: AT });
+
+    expect(logger).toHaveBeenCalledWith(
+      expect.stringContaining('calendarFormats is not valid JSON'),
+    );
+    // The malformed argument is dropped, not fatal — the calendar still renders, just with the
+    // locale's own formats.
+    expect(rendered).toBe('04/03/2019');
+  });
+
+  it('accepts a well-formed JSON string', async () => {
+    const logger = vi.fn();
+    const i18n = new StreamI18nForLogger({
+      logger,
+      runtimeDefaults: {
+        [KEY_BAD]:
+          '{{ timestamp | timestampFormatter(calendar: true; calendarFormats: {"sameElse":"YYYY"}) }}',
+      },
+    });
+    const { t } = await i18n.init();
+
+    expect(t(KEY_BAD, { timestamp: AT })).toBe('2019');
+    expect(logger).not.toHaveBeenCalled();
   });
 });

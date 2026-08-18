@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   type DateTimeParserModule,
+  defaultDateTimeParser,
   isDayOrMoment,
   RELATIVE_TIME_CATALOG,
   Streami18n,
@@ -248,6 +249,97 @@ describe('Streami18n', () => {
       // ...while registeredLanguages stays narrower, which is what makes the G3 warning possible.
       expect(i18n.registeredLanguages.has('de')).toBe(false);
     });
+  });
+});
+
+/**
+ * Behaviours the React SDK's suite owned before the runtime moved here. They were asserting this
+ * module through a thin subclass, so they belong on this side of the boundary — and none of them was
+ * covered here.
+ */
+describe('Streami18n — locale and timezone wiring', () => {
+  it('registers a dayjs locale config supplied at construction', async () => {
+    const i18n = setup({
+      dayjsLocaleConfigForLanguage: { calendar: { sameDay: '[custom today] LT' } },
+      language: 'nl',
+    });
+    const { tDateTimeParser } = await i18n.init();
+
+    const parsed = tDateTimeParser(new Date());
+    expect(isDayOrMoment(parsed)).toBe(true);
+    expect((parsed as { calendar: () => string }).calendar()).toContain('custom today');
+  });
+
+  it('registers a dayjs locale config supplied through registerTranslation', async () => {
+    const i18n = setup({ language: 'de' });
+    i18n.registerTranslation('de', { 'fixture.prose': 'Hallo' } as never, {
+      calendar: { sameDay: '[heute um] LT' },
+    });
+    const { tDateTimeParser } = await i18n.init();
+
+    expect(
+      (tDateTimeParser(new Date()) as { calendar: () => string }).calendar(),
+    ).toContain('heute um');
+  });
+
+  it('defaults to the local timezone', async () => {
+    const i18n = setup();
+    const { tDateTimeParser } = await i18n.init();
+    const date = new Date();
+
+    expect((tDateTimeParser(date) as { format: (t: string) => string }).format('H')).toBe(
+      date.getHours().toString(),
+    );
+  });
+
+  it('ignores a timezone when the parser cannot apply one', async () => {
+    // dayjs without the timezone plugin, i.e. no `.tz` on the module. The option must degrade to local
+    // time rather than throwing or silently producing a wrong hour.
+    const parserWithoutTz = Object.assign(
+      (input?: string | number | Date) => defaultDateTimeParser(input),
+      { duration: undefined, extend: undefined, locale: undefined },
+    );
+    const i18n = new Streami18n<FixtureCatalog, FixtureBundledKey>({
+      DateTimeParser: parserWithoutTz as never,
+      logger: () => {},
+      runtimeDefaults: fixtureRuntimeDefaults,
+      timezone: 'Europe/Prague',
+    });
+    const { tDateTimeParser } = await i18n.init();
+    const date = new Date();
+
+    expect((tDateTimeParser(date) as { format: (t: string) => string }).format('H')).toBe(
+      date.getHours().toString(),
+    );
+  });
+});
+
+describe('Streami18n — registerTranslation does not clobber', () => {
+  it('keeps a dictionary when setLanguage moves away and back', async () => {
+    const i18n = setup({ language: 'en' });
+    i18n.registerTranslation('de', { 'fixture.prose': 'Hallo' } as never);
+    i18n.registerTranslation('fr', { 'fixture.prose': 'Bonjour' } as never);
+    await i18n.init();
+
+    await i18n.setLanguage('de');
+    expect(i18n.t('fixture.prose', 'Hello')).toBe('Hallo');
+
+    await i18n.setLanguage('fr');
+    expect(i18n.t('fixture.prose', 'Hello')).toBe('Bonjour');
+
+    // Back again: switching must not have dropped the first dictionary.
+    await i18n.setLanguage('de');
+    expect(i18n.t('fixture.prose', 'Hello')).toBe('Hallo');
+  });
+
+  it('keeps a registered dictionary when setLanguage targets an unregistered language', async () => {
+    const i18n = setup({ language: 'en' });
+    i18n.registerTranslation('de', { 'fixture.prose': 'Hallo' } as never);
+    await i18n.init();
+
+    await i18n.setLanguage('ja');
+    await i18n.setLanguage('de');
+    expect(i18n.t('fixture.prose', 'Hello')).toBe('Hallo');
   });
 });
 
