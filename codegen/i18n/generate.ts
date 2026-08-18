@@ -4,6 +4,7 @@ import path from 'node:path';
 import { readCallSiteCopy } from './callSites';
 import {
   formatFailures,
+  guardBundledPluralShape,
   guardConflictingCopy,
   guardPrefixCollisions,
   guardShadowedKeys,
@@ -14,6 +15,15 @@ import type { GeneratedCatalog, GeneratorConfig } from './types';
 
 /** Values under these prefixes are dayjs/i18next expressions, not copy. */
 const BUILTIN_FORMATTER_PREFIXES = ['timestamp.', 'duration.'];
+
+/**
+ * A catalog entry that is one plural category of a key, e.g. `x.y_other`.
+ *
+ * These are excluded from the emitted `BundledTranslationKey` union: a call site passes the *bare* key
+ * and `StreamTFunctionFor`'s plural overload already accepts it, so listing the suffixed forms as
+ * bundled keys would offer `t('x.y_other')` — a call that resolves nothing.
+ */
+const PLURAL_CATEGORY_SUFFIX = /_(zero|one|two|few|many|other)$/;
 
 /**
  * Two ways English hides inside a formatter expression, both of which have to be reported: a translator
@@ -48,6 +58,7 @@ export const buildCatalog = (config: GeneratorConfig): GeneratedCatalog => {
   const {
     conflicts,
     copy: inlineCopy,
+    pluralWithoutCopy,
     withoutCopy,
   } = readCallSiteCopy({
     ignoreDirs: config.ignoreDirs,
@@ -61,7 +72,13 @@ export const buildCatalog = (config: GeneratorConfig): GeneratedCatalog => {
 
   const failures = [
     guardConflictingCopy(conflicts),
-    guardUnresolvableKeys({ runtimeDefaults, runtimeDefaultsPath, withoutCopy }),
+    guardUnresolvableKeys({
+      pluralWithoutCopy,
+      runtimeDefaults,
+      runtimeDefaultsPath,
+      withoutCopy,
+    }),
+    guardBundledPluralShape({ pluralWithoutCopy, runtimeDefaults, runtimeDefaultsPath }),
     guardShadowedKeys({ inlineCopy, runtimeDefaults, runtimeDefaultsPath }),
     guardPrefixCollisions(keys),
   ].filter((failure): failure is NonNullable<typeof failure> => failure !== null);
@@ -136,7 +153,7 @@ export const generateI18nKeys = (config: GeneratorConfig): GeneratedCatalog => {
   fs.writeFileSync(
     config.keysOut,
     renderKeysFile({
-      bundledKeys,
+      bundledKeys: bundledKeys.filter((key) => !PLURAL_CATEGORY_SUFFIX.test(key)),
       catalog,
       emitBundledKeyUnion: config.emitBundledKeyUnion,
     }),

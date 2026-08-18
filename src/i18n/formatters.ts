@@ -39,6 +39,15 @@ const DEFAULT_RELATIVE_COMPACT_MAX_DAYS = 6;
 const DEFAULT_RELATIVE_COMPACT_MAX_WEEKS = 3;
 
 /**
+ * Whether a string is not a date this module can render.
+ *
+ * `!Date.parse(value)` would be the obvious spelling and is wrong: `Date.parse` returns `0` for the
+ * Unix epoch, which is falsy, so a perfectly valid `'1970-01-01T00:00:00.000Z'` was classified as junk
+ * and dropped -- rendered as `''` by the formatter and as `null` by `getDateString`.
+ */
+const isUnparseableDateString = (value: string) => Number.isNaN(Date.parse(value));
+
+/**
  * Coerces a numeric formatter option.
  *
  * These arrive as strings, not numbers: they are written inside an i18next format expression
@@ -155,7 +164,7 @@ const timestampFormatter: FormatterFactory<string | Date> =
     // literal text "null" and an unparseable string as "Invalid Date", both of which are junk a user
     // can see. `getDateString` has always guarded this; the formatter is a separate path and did not.
     if (value === null || value === undefined) return '';
-    if (typeof value === 'string' && !Date.parse(value)) return '';
+    if (typeof value === 'string' && isUnparseableDateString(value)) return '';
 
     if (relativeCompact) {
       const relative = relativeCompactDateString({
@@ -255,7 +264,7 @@ export const getDateString = ({
 }: GetDateStringParams): string | number | null => {
   if (
     !messageCreatedAt ||
-    (typeof messageCreatedAt === 'string' && !Date.parse(messageCreatedAt))
+    (typeof messageCreatedAt === 'string' && isUnparseableDateString(messageCreatedAt))
   ) {
     return null;
   }
@@ -409,7 +418,7 @@ export const getCalendarDateStringForA11y = ({
 }: GetCalendarDateStringForA11yParams): string | undefined => {
   if (
     !messageCreatedAt ||
-    (typeof messageCreatedAt === 'string' && !Date.parse(messageCreatedAt)) ||
+    (typeof messageCreatedAt === 'string' && isUnparseableDateString(messageCreatedAt)) ||
     !tDateTimeParser
   ) {
     return undefined;

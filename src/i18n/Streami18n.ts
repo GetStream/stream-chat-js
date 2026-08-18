@@ -23,6 +23,7 @@ import type {
   AnyTranslationCatalog,
   CustomFormatters,
   DateTimeParserModule,
+  FormatterContext,
   LooseTranslateFunction,
   PredefinedFormatters,
   StreamTFunctionFor,
@@ -183,8 +184,9 @@ export class Streami18n<
 
     if (options.DateTimeParser) {
       this.DateTimeParser = options.DateTimeParser;
-      // A dayjs module the integrator supplied needs the same plugins as ours.
-      if (isDayjsLike(this.DateTimeParser)) ensureDayjsPlugins();
+      // The supplied module, not ours: it may be a second physical copy of dayjs, in which case
+      // extending ours leaves theirs plugin-less and every `LT` / `LLLL` token renders literally.
+      if (isDayjsLike(this.DateTimeParser)) ensureDayjsPlugins(this.DateTimeParser);
     } else {
       this.DateTimeParser = getDefaultDateTimeParserModule();
     }
@@ -305,47 +307,41 @@ export class Streami18n<
   /**
    * Initializes i18next. Idempotent and safe to call concurrently.
    *
-   * The promise is memoized and never cleared: two independent consumers (a UI SDK's chat root and its
-   * overlay host, say) both call this, and clearing it on completion would leave a window where a
-   * third caller re-entered initialization.
+   * The promise is memoized and never cleared **on success**: two independent consumers (a UI SDK's
+   * chat root and its overlay host, say) both call this, and clearing it on completion would leave a
+   * window where a third caller re-entered initialization.
+   *
+   * A rejection *is* cleared, so a retry is possible. `runInit` guards everything it does, so the only
+   * way to get here is something genuinely unexpected — most plausibly an integrator-supplied `logger`
+   * that throws. Latching that permanently would leave the instance uninitialized for the process
+   * lifetime, rendering the default English translator with no way back.
    */
   init(): Promise<Streami18nState<C, Bundled>> {
-    this.initPromise ??= this.runInit();
+    this.initPromise ??= this.runInit().catch((error: unknown) => {
+      this.initPromise = undefined;
+      throw error;
+    });
     return this.initPromise;
   }
 
   private async runInit(): Promise<Streami18nState<C, Bundled>> {
-    this.validateCurrentLanguage();
-    this.assertPluralRulesCoverage(this.currentLanguage);
-
-    const dayjsLocale = this.dayjsLocales[this.currentLanguage];
-    if (dayjsLocale) this.addOrUpdateLocale(this.currentLanguage, dayjsLocale);
-
     try {
+      // Inside the `try`, all three of them. These log and touch dayjs, so each can throw for reasons
+      // that have nothing to do with i18next — and a throw out of `runInit` is an unhandled rejection
+      // at both UI SDKs' call sites, which do not await this.
+      this.validateCurrentLanguage();
+      this.assertPluralRulesCoverage(this.currentLanguage);
+
+      const dayjsLocale = this.dayjsLocales[this.currentLanguage];
+      if (dayjsLocale) this.addOrUpdateLocale(this.currentLanguage, dayjsLocale);
+
       const t = await this.i18nInstance.init({
         ...this.i18nextConfig,
         lng: this.currentLanguage,
         resources: this.translations,
       });
 
-      Object.entries(this.formatters).forEach(([name, factory]) => {
-        if (!factory) return;
-        const formatter = factory({
-          currentLanguage: this.currentLanguage,
-          dateTimeParser: this.DateTimeParser,
-          logger: this.logger,
-          tDateTimeParser: this.tDateTimeParser,
-          timezone: this.timezone,
-          translate: this.translate,
-        });
-        // A custom formatter's value type is declared `never` so that any implementation is
-        // assignable to it (parameters are contravariant). i18next's own signature takes `any`, so
-        // the widening happens here rather than weakening the public type.
-        this.i18nInstance.services.formatter?.add(
-          name,
-          formatter as (value: any, lng: string | undefined, options: any) => string,
-        );
-      });
+      this.registerFormatters();
 
       // After init, so the topics' post-processors are attached to a live instance and any buffered
       // translator registrations flush.
@@ -367,6 +363,59 @@ export class Streami18n<
 
     return this.state.getLatestValue();
   }
+
+  /**
+   * Builds each formatter from its factory and hands it to i18next.
+   *
+   * Re-run on every language change, not just at `init()`. Factories receive the language through their
+   * context and virtually all of them **destructure** it, which snapshots the value — so a factory run
+   * once at initialization keeps formatting in the initial language forever, with no error. i18next's
+   * `formatter.add` replaces an existing name, so re-registering is the whole fix.
+   */
+  private registerFormatters = () => {
+    const context = this.createFormatterContext();
+
+    Object.entries(this.formatters).forEach(([name, factory]) => {
+      if (!factory) return;
+      const formatter = factory(context);
+      // A custom formatter's value type is declared `never` so that any implementation is assignable
+      // to it (parameters are contravariant). i18next's own signature takes `any`, so the widening
+      // happens here rather than weakening the public type.
+      this.i18nInstance.services.formatter?.add(
+        name,
+        formatter as (value: any, lng: string | undefined, options: any) => string,
+      );
+    });
+  };
+
+  /**
+   * What each formatter factory is handed.
+   *
+   * `currentLanguage` and `tDateTimeParser` are accessors rather than snapshots, which covers a
+   * formatter that holds the context and reads a property per call. A formatter that *destructures* the
+   * context still snapshots, which is why {@link registerFormatters} also re-runs on a language change
+   * — the two together are what make both styles correct.
+   *
+   * Nested arrow functions rather than an aliased `this`: a getter in an object literal binds `this` to
+   * the literal.
+   */
+  private createFormatterContext = (): FormatterContext => {
+    const readLanguage = () => this.currentLanguage;
+    const readDateTimeParser = () => this.tDateTimeParser;
+
+    return {
+      get currentLanguage() {
+        return readLanguage();
+      },
+      dateTimeParser: this.DateTimeParser,
+      logger: this.logger,
+      get tDateTimeParser() {
+        return readDateTimeParser();
+      },
+      timezone: this.timezone,
+      translate: this.translate,
+    };
+  };
 
   /* ---------------------------------------------------------------------------------------------
    * Languages and dictionaries
@@ -448,6 +497,12 @@ export class Streami18n<
    * language change and invite callers to cache it.
    */
   async setLanguage(language: string): Promise<void> {
+    const previousLanguage = this.state.getLatestValue().language;
+
+    // Published before the switch so `validateCurrentLanguage` reports on the language being adopted,
+    // and rolled back below if the switch does not happen -- otherwise the store advertises a language
+    // i18next never adopted, and `tDateTimeParser` starts formatting dates in a locale whose copy is
+    // not loaded.
     this.state.partialNext({ language });
     this.ensureLanguage(language);
 
@@ -460,10 +515,13 @@ export class Streami18n<
       const t = await this.i18nInstance.changeLanguage(language);
       const dayjsLocale = this.dayjsLocales[language];
       if (dayjsLocale) this.addOrUpdateLocale(language, dayjsLocale);
+      // Rebuilt against the new language -- see `registerFormatters`.
+      this.registerFormatters();
       if (!this.tOverridden) {
         this.state.partialNext({ t: t as unknown as StreamTFunctionFor<C, Bundled> });
       }
     } catch (error) {
+      this.state.partialNext({ language: previousLanguage });
       this.logger(`Streami18n: failed to set language: ${describeError(error)}`);
     }
   }

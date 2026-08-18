@@ -1,12 +1,12 @@
 import type { CallSiteCopy, GuardFailure } from './types';
 
 /**
- * The four hard-fail checks the catalog has to pass.
+ * The five hard-fail checks the catalog has to pass.
  *
- * Each is a pure function returning failures as data. The fifth guard both UI SDKs carried — checking
- * that an `EXTERNAL_STRING_KEYS` entry's wording matched the key's catalog copy — is gone, because the
- * map it policed is gone: notifications now resolve through a stable identifier instead of by matching
- * English prose.
+ * Each is a pure function returning failures as data. The guard both UI SDKs carried that is *not* here
+ * — checking that an `EXTERNAL_STRING_KEYS` entry's wording matched the key's catalog copy — is gone
+ * because the map it policed is gone: notifications now resolve through a stable identifier instead of
+ * by matching English prose.
  */
 
 /** A key must render one thing. */
@@ -33,15 +33,30 @@ export const guardConflictingCopy = (
  * `message.status.sent.text` where a word should be.
  */
 export const guardUnresolvableKeys = ({
+  pluralWithoutCopy,
   runtimeDefaults,
   runtimeDefaultsPath,
   withoutCopy,
 }: {
+  pluralWithoutCopy: CallSiteCopy['pluralWithoutCopy'];
   runtimeDefaults: Map<string, string>;
   runtimeDefaultsPath: string;
   withoutCopy: CallSiteCopy['withoutCopy'];
 }): GuardFailure | null => {
-  const unresolvable = [...withoutCopy].filter(([key]) => !runtimeDefaults.has(key));
+  const unresolvable = [
+    ...[...withoutCopy].filter(([key]) => !runtimeDefaults.has(key)),
+    // A plural resolves as `<key>_<category>`, so `_other` — the one category every language has — is
+    // what has to be bundled. Demanding the bare key here is what used to reject a correct catalog.
+    //
+    // A key bundled under the *bare* name is skipped here on purpose: it is not unresolvable, it is
+    // the wrong shape, and `guardBundledPluralShape` says so precisely. Reporting both would give two
+    // failures with different advice for one mistake.
+    ...[...pluralWithoutCopy]
+      .filter(
+        ([key]) => !runtimeDefaults.has(`${key}_other`) && !runtimeDefaults.has(key),
+      )
+      .map(([key, file]): [string, string] => [`${key}_other`, file]),
+  ];
   if (!unresolvable.length) return null;
   return {
     entries: unresolvable.map(([key, file]) => `${key}  (${file})`),
@@ -50,6 +65,39 @@ export const guardUnresolvableKeys = ({
       `${unresolvable.length} key(s) are called with no inline default and are missing from ` +
       `${runtimeDefaultsPath}.\nThey would render as the raw key. Either pass the English copy ` +
       `inline — t('key', 'Copy') — or add an entry to ${runtimeDefaultsPath}:`,
+  };
+};
+
+/**
+ * A bundled plural must be stored under its category suffixes, not under the bare key.
+ *
+ * i18next falls back to an unsuffixed entry when no `<key>_<category>` exists, so the bare form does
+ * render — it just renders the same string for every count, with plural selection silently dead and no
+ * error anywhere. Verified against i18next directly: a bundled `'x.y': '{{count}} items'` answers
+ * `count: 1` with "1 items".
+ */
+export const guardBundledPluralShape = ({
+  pluralWithoutCopy,
+  runtimeDefaults,
+  runtimeDefaultsPath,
+}: {
+  pluralWithoutCopy: CallSiteCopy['pluralWithoutCopy'];
+  runtimeDefaults: Map<string, string>;
+  runtimeDefaultsPath: string;
+}): GuardFailure | null => {
+  const bare = [...pluralWithoutCopy].filter(([key]) => runtimeDefaults.has(key));
+  if (!bare.length) return null;
+  return {
+    entries: bare.map(
+      ([key, file]) =>
+        `${key}\n    bundled as: ${JSON.stringify(runtimeDefaults.get(key))}\n` +
+        `    called as:  t('${key}', { count })  (${file})`,
+    ),
+    kind: 'bundled-plural-shape',
+    summary:
+      `${bare.length} key(s) are called with \`count\` but bundled under the bare key in ` +
+      `${runtimeDefaultsPath}.\ni18next resolves plurals as \`<key>_<category>\`, so this renders ` +
+      `one form for every count with no error. Split the entry into \`_one\` / \`_other\`:`,
   };
 };
 

@@ -66,6 +66,29 @@ describe('TranslationBuilder', () => {
     expect(render(t, { kind: 'anything', value: 'x' })).toBe('[x]');
   });
 
+  /**
+   * Removal has to reach the buffer too, not just a live topic.
+   *
+   * Registering and then removing before `init()` is a real sequence — an integrator swapping one
+   * translator out during setup — and if `removeTranslators` only looked at constructed topics, the
+   * removed translator would come back when the buffer flushed. Ported from the React SDK's suite,
+   * which owned this case before the plumbing moved here.
+   */
+  it('removes a buffered translator before the topic exists', async () => {
+    const i18n = setup();
+    i18n.translationBuilder.registerTranslators('kind', {
+      quiet: ({ options }) => String(options.value).toLowerCase(),
+      shout: ({ options }) => String(options.value).toUpperCase(),
+    });
+    i18n.translationBuilder.removeTranslators('kind', ['shout']);
+
+    const { t } = await i18n.init();
+
+    // `quiet` survived the flush; `shout` did not come back with it.
+    expect(render(t, { kind: 'quiet', value: 'HeLLo' })).toBe('hello');
+    expect(render(t, { kind: 'shout', value: 'HeLLo' })).toBe(FALLBACK);
+  });
+
   it('lets a later registration override an earlier one', async () => {
     const i18n = setup();
     const { t } = await i18n.init();

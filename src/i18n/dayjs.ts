@@ -41,6 +41,13 @@ export type CalendarFormats = {
 export type DayjsLocaleConfig = Partial<ILocale> & { calendar?: CalendarFormats };
 
 /**
+ * Anything `ensureDayjsPlugins` can register plugins on: our own `dayjs`, or a module an integrator
+ * supplied through `DateTimeParser`. Method shorthand, so a real `typeof dayjs` satisfies it -- as a
+ * function property it would be checked contravariantly and rejected.
+ */
+type DayjsExtendable = object & { extend?(plugin: unknown, option?: unknown): unknown };
+
+/**
  * The English locale skeleton a custom locale is merged over, so a partial config still has month and
  * weekday names to fall back on.
  */
@@ -77,10 +84,34 @@ const EN_LOCALE_FALLBACK = {
   ],
 };
 
-let pluginsRegistered = false;
+/**
+ * The plugins the formatters depend on, in dependency order: `timezone` builds on `utc`.
+ */
+const REQUIRED_PLUGINS = [
+  updateLocale,
+  utc,
+  timezone,
+  localizedFormat,
+  calendar,
+  localeData,
+  relativeTime,
+  duration,
+];
 
 /**
- * Registers the dayjs plugins the formatters need, once.
+ * Modules already extended. A `WeakSet` rather than a boolean because the module to extend is not
+ * always ours -- see {@link ensureDayjsPlugins}.
+ */
+const extendedModules = new WeakSet<object>();
+
+/**
+ * Registers the dayjs plugins the formatters need, once per module.
+ *
+ * Takes the module to extend, defaulting to our own `dayjs`. Passing it matters: an integrator
+ * supplying `DateTimeParser` may hand over a *different physical copy* of dayjs, and extending ours
+ * leaves theirs without the plugins. That failure is silent and total -- `.calendar()` is simply
+ * absent, and `format('LT')` returns the literal string `"LT"` because `localizedFormat` never
+ * registered the token.
  *
  * Deliberately **not** done at module scope. Module-scope `Dayjs.extend(...)` is a side effect, which
  * would force `stream-chat` to declare `sideEffects` and would make importing this module do work
@@ -88,26 +119,22 @@ let pluginsRegistered = false;
  * covers the two ways the formatters can be reached, including a standalone `getDateString()` call
  * with no `Streami18n` instance in play.
  *
- * Idempotent twice over: guarded here, and dayjs itself no-ops a repeated `extend` via the plugin's
- * `$i` marker.
+ * Idempotent twice over: tracked here, and dayjs itself no-ops a repeated `extend` via the plugin's
+ * `$i` marker. The module is recorded *after* the extends run, so a throw does not leave it marked as
+ * done.
  *
  * `timezone` is included because it depends on `utc` and callers can set `timezone` at any point;
  * registering it lazily on first use would leave the plugin missing for an instance that only sets
  * `timezone` later.
  */
-export const ensureDayjsPlugins = () => {
-  if (pluginsRegistered) return;
-  pluginsRegistered = true;
+export const ensureDayjsPlugins = (
+  module: DayjsExtendable = Dayjs as unknown as DayjsExtendable,
+) => {
+  if (extendedModules.has(module)) return;
+  if (typeof module.extend !== 'function') return;
 
-  // `updateLocale` and `utc` first: `timezone` builds on `utc`.
-  Dayjs.extend(updateLocale);
-  Dayjs.extend(utc);
-  Dayjs.extend(timezone);
-  Dayjs.extend(localizedFormat);
-  Dayjs.extend(calendar);
-  Dayjs.extend(localeData);
-  Dayjs.extend(relativeTime);
-  Dayjs.extend(duration);
+  for (const plugin of REQUIRED_PLUGINS) module.extend(plugin);
+  extendedModules.add(module);
 };
 
 /**

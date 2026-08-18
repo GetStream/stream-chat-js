@@ -499,3 +499,205 @@ describe('RELATIVE_TIME_CATALOG', () => {
     expect(render(3)).toBe('vor 3 Tagen');
   });
 });
+
+/**
+ * A dayjs module the integrator supplied gets the plugins too.
+ *
+ * `ensureDayjsPlugins()` used to always extend *our* `dayjs` import, whatever module was passed in.
+ * With a second physical copy of dayjs -- the normal case for an integrator who imports their own
+ * locales -- that left theirs plugin-less, and the failure was silent and total: `format('LT')` echoed
+ * the literal token back and `.calendar()` was simply absent.
+ */
+describe('Streami18n — an integrator-supplied dayjs module', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A stand-in for a second dayjs copy: records what was registered on it. */
+  const makeUnextendedDayjsLike = () => {
+    const registered: unknown[] = [];
+    const parser = ((input?: unknown) => ({
+      calendar: () => 'calendar',
+      diff: () => 0,
+      format: (template?: string) => `formatted:${template ?? ''}:${String(input)}`,
+      locale: () => parser(input),
+      startOf: () => ({ diff: () => 0 }),
+      valueOf: () => 0,
+    })) as unknown as DateTimeParserModule & { extend: (plugin: unknown) => unknown };
+
+    parser.extend = (plugin: unknown) => {
+      registered.push(plugin);
+      return parser;
+    };
+
+    return { parser, registered };
+  };
+
+  it('registers the plugins on the supplied module, not only on ours', () => {
+    const { parser, registered } = makeUnextendedDayjsLike();
+
+    setup({ DateTimeParser: parser });
+
+    // The eight the formatters need: updateLocale, utc, timezone, localizedFormat, calendar,
+    // localeData, relativeTime, duration.
+    expect(registered).toHaveLength(8);
+    expect(registered.every((plugin) => typeof plugin === 'function')).toBe(true);
+  });
+
+  it('does not re-register on a second instance sharing the module', () => {
+    const { parser, registered } = makeUnextendedDayjsLike();
+
+    setup({ DateTimeParser: parser });
+    setup({ DateTimeParser: parser });
+
+    expect(registered).toHaveLength(8);
+  });
+
+  it('leaves a module without `extend` alone rather than throwing', () => {
+    const momentish = ((input?: unknown) => ({
+      diff: () => 0,
+      format: () => String(input),
+      startOf: () => ({ diff: () => 0 }),
+      valueOf: () => 0,
+    })) as unknown as DateTimeParserModule;
+
+    expect(() => setup({ DateTimeParser: momentish })).not.toThrow();
+  });
+});
+
+/**
+ * `Date.parse` returns `0` for the epoch, so `!Date.parse(value)` classified a valid timestamp as junk.
+ */
+describe('Streami18n — the Unix epoch is a valid timestamp', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('formats an epoch timestamp string rather than rendering nothing', async () => {
+    const { t } = await setup().init();
+
+    expect(
+      t('timestamp.MessageTimestamp', { timestamp: '1970-01-01T00:00:00.000Z' }),
+    ).toBe('12:00 AM');
+  });
+
+  it('still renders nothing for a string that is genuinely not a date', async () => {
+    const { t } = await setup().init();
+
+    expect(t('timestamp.MessageTimestamp', { timestamp: 'not a date' })).toBe('');
+  });
+});
+
+/**
+ * Formatter factories run once, during `init()`, and are never re-run on a language change -- so the
+ * context has to expose accessors rather than the values it had at initialization.
+ */
+describe('Streami18n — the formatter context follows the active language', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('reports the language in force at call time, not at init time', async () => {
+    const seen: string[] = [];
+    const i18n = setup({
+      formatters: {
+        languageProbe:
+          ({ currentLanguage }: { currentLanguage: string }) =>
+          () => {
+            seen.push(currentLanguage);
+            return currentLanguage;
+          },
+      },
+      translationsForLanguage: {
+        'fixture.probe': '{{ value | languageProbe }}',
+      },
+    });
+    i18n.registerTranslation('de', {
+      'fixture.probe': '{{ value | languageProbe }}',
+    } as never);
+
+    const { t } = await i18n.init();
+    (t as (key: string, options: object) => string)('fixture.probe', { value: 'x' });
+
+    await i18n.setLanguage('de');
+    const after = i18n.state.getLatestValue().t as unknown as (
+      key: string,
+      options: object,
+    ) => string;
+    after('fixture.probe', { value: 'x' });
+
+    expect(seen).toEqual(['en', 'de']);
+  });
+});
+
+/**
+ * A failed language switch must not leave the store advertising a language i18next never adopted --
+ * `tDateTimeParser` reads it on every call, so dates would format in a locale whose copy is absent.
+ */
+describe('Streami18n — a failed setLanguage rolls back', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('restores the previous language when changeLanguage rejects', async () => {
+    const logger = vi.fn();
+    const i18n = setup({ logger });
+    await i18n.init();
+    expect(i18n.currentLanguage).toBe('en');
+
+    vi.spyOn(i18n.i18nInstance, 'changeLanguage').mockRejectedValue(new Error('nope'));
+    await i18n.setLanguage('de');
+
+    expect(i18n.currentLanguage).toBe('en');
+    expect(logger).toHaveBeenCalledWith(
+      expect.stringContaining('failed to set language: nope'),
+    );
+  });
+
+  it('keeps the new language when the switch succeeds', async () => {
+    const i18n = setup();
+    await i18n.init();
+    await i18n.setLanguage('de');
+
+    expect(i18n.currentLanguage).toBe('de');
+  });
+});
+
+/**
+ * A rejected `init()` must not be latched: both UI SDKs call `init()` without awaiting it, so a
+ * permanently rejected memo leaves the instance uninitialized for the process lifetime.
+ */
+describe('Streami18n — init() is retryable after a genuine failure', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('recovers when the cause is gone', async () => {
+    let shouldThrow = true;
+    const i18n = setup({
+      logger: (message?: string) => {
+        if (shouldThrow) throw new Error('logger exploded');
+        void message;
+      },
+      // Unregistered, so `validateCurrentLanguage` logs -- and the logger throws.
+      language: 'de',
+    });
+
+    await expect(i18n.init()).rejects.toThrow('logger exploded');
+    expect(i18n.initialized).toBe(false);
+
+    shouldThrow = false;
+    const state = await i18n.init();
+
+    expect(state.initialized).toBe(true);
+  });
+
+  it('hands the same promise to concurrent callers on the happy path', async () => {
+    const i18n = setup();
+    const first = i18n.init();
+
+    expect(i18n.init()).toBe(first);
+    await first;
+    expect(i18n.init()).toBe(first);
+  });
+});

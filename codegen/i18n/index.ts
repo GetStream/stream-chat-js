@@ -3,7 +3,7 @@
  *
  * **Node-only.** This reads the filesystem and uses the TypeScript parser API, so it must never be
  * reachable from `stream-chat/i18n` — which is why it lives beside `src/i18n/` rather than inside it.
- * `scripts/bundle.mjs` asserts that boundary at build time.
+ * `scripts/bundle.mts` asserts that boundary at build time.
  *
  * `typescript` is injected through {@link GeneratorConfig.ts} rather than imported, so `stream-chat`
  * does not depend on the compiler.

@@ -55,6 +55,7 @@ export const readCallSiteCopy = ({
 }): CallSiteCopy => {
   const copy = new Map<string, string>();
   const withoutCopy = new Map<string, string>();
+  const pluralWithoutCopy = new Map<string, string>();
   const conflicts: CallSiteCopy['conflicts'] = [];
 
   const record = (key: string, value: string, file: string) => {
@@ -87,16 +88,28 @@ export const readCallSiteCopy = ({
             // t('key', { count, defaultValue_one, defaultValue_other }) — the catalog holds the
             // `_one` / `_other` forms, never the bare key.
             let plurals = 0;
+            let hasCount = false;
             for (const prop of second.properties) {
+              // `count` can arrive shorthand (`{ count }`), which is not a PropertyAssignment.
+              if (
+                tsModule.isShorthandPropertyAssignment(prop) &&
+                prop.name.text === 'count'
+              ) {
+                hasCount = true;
+                continue;
+              }
               if (!tsModule.isPropertyAssignment(prop)) continue;
               const name = prop.name.getText(sourceFile).replace(/['"]/g, '');
+              if (name === 'count') hasCount = true;
               const suffix = name.match(/^defaultValue_(\w+)$/)?.[1];
               if (suffix && tsModule.isStringLiteralLike(prop.initializer)) {
                 record(`${key}_${suffix}`, prop.initializer.text, file);
                 plurals++;
               }
             }
-            if (!plurals) withoutCopy.set(key, file);
+            // A `count` with no inline plural copy is a *bundled plural*: i18next will look up
+            // `<key>_<category>`, so the guard has to demand that shape rather than the bare key.
+            if (!plurals) (hasCount ? pluralWithoutCopy : withoutCopy).set(key, file);
           } else {
             // t('key') — no inline copy, so it has to resolve from runtimeDefaults.
             withoutCopy.set(key, file);
@@ -109,5 +122,5 @@ export const readCallSiteCopy = ({
     visit(sourceFile);
   }
 
-  return { conflicts, copy, withoutCopy };
+  return { conflicts, copy, pluralWithoutCopy, withoutCopy };
 };

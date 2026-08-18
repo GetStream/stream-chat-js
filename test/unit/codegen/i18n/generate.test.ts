@@ -131,6 +131,81 @@ describe('guards', () => {
     expect(failures[0].entries.join('\n')).toContain('forgot.the.copy');
   });
 
+  /**
+   * A bundled plural, both ways round.
+   *
+   * i18next resolves `t('x.y', { count })` as `x.y_<category>`, never as `x.y`. The guards used to
+   * check the bare key for every no-inline-copy call site, which got both cases exactly backwards:
+   * the correct catalog was rejected and the broken one waved through.
+   */
+  it('accepts a bundled plural stored under its category suffixes', () => {
+    const dir = makeProject({
+      'src/Component.tsx': `const C = () => t('channel.unread.label', { count });`,
+      'src/i18n/runtimeDefaults.ts': runtimeDefaults({
+        'channel.unread.label_one': '{{count}} unread',
+        'channel.unread.label_other': '{{count}} unread',
+      }),
+    });
+
+    const { catalog, failures } = buildCatalog(configFor(dir));
+
+    expect(failures).toEqual([]);
+    expect([...catalog.keys()]).toEqual([
+      'channel.unread.label_one',
+      'channel.unread.label_other',
+    ]);
+  });
+
+  it('fails on a bundled plural stored under the bare key', () => {
+    const dir = makeProject({
+      'src/Component.tsx': `const C = () => t('channel.unread.label', { count });`,
+      'src/i18n/runtimeDefaults.ts': runtimeDefaults({
+        'channel.unread.label': '{{count}} unread',
+      }),
+    });
+
+    const { failures } = buildCatalog(configFor(dir));
+
+    expect(failures).toHaveLength(1);
+    expect(failures[0].kind).toBe('bundled-plural-shape');
+    expect(failures[0].entries[0]).toContain('channel.unread.label');
+    expect(failures[0].summary).toContain('_one');
+  });
+
+  it('names the suffixed key when a bundled plural is missing entirely', () => {
+    const dir = makeProject({
+      'src/Component.tsx': `const C = () => t('channel.unread.label', { count });`,
+      'src/i18n/runtimeDefaults.ts': runtimeDefaults({}),
+    });
+
+    const { failures } = buildCatalog(configFor(dir));
+
+    expect(failures).toHaveLength(1);
+    expect(failures[0].kind).toBe('unresolvable-key');
+    // The suffixed form, since that is what has to be added -- not the bare key the call site uses.
+    expect(failures[0].entries[0]).toContain('channel.unread.label_other');
+  });
+
+  it('reads `count` whether it is shorthand or written out', () => {
+    const dir = makeProject({
+      'src/Component.tsx': `
+        const C = () => {
+          t('a.one.label', { count });
+          t('b.two.label', { count: total });
+        };
+      `,
+      'src/i18n/runtimeDefaults.ts': runtimeDefaults({}),
+    });
+
+    const { failures } = buildCatalog(configFor(dir));
+
+    // Both treated as plurals, so both are reported under their `_other` form.
+    expect(failures[0].entries).toEqual([
+      expect.stringContaining('a.one.label_other'),
+      expect.stringContaining('b.two.label_other'),
+    ]);
+  });
+
   /** The bundled value wins, so the call site's copy would silently never render. */
   it('fails on a key present both inline and in the bundled defaults', () => {
     const dir = makeProject({
@@ -230,6 +305,35 @@ describe('output', () => {
   });
 
   /** `keys.ts` is type-only, so a test cannot iterate it — this is its data twin. */
+  it('leaves plural categories out of the bundled key union', () => {
+    const dir = makeProject({
+      'src/Component.tsx': `
+        const C = () => {
+          t('channel.unread.label', { count });
+          t('timestamp.Message', {});
+        };
+      `,
+      'src/i18n/runtimeDefaults.ts': runtimeDefaults({
+        'channel.unread.label_one': '{{count}} unread',
+        'channel.unread.label_other': '{{count}} unread',
+        'timestamp.Message': '{{ timestamp | timestampFormatter }}',
+      }),
+    });
+    const config = configFor(dir, { emitBundledKeyUnion: true });
+
+    generateI18nKeys(config);
+    const written = fs.readFileSync(config.keysOut, 'utf8');
+
+    // The plural overload already accepts the bare key; offering `t('…_other')` would resolve nothing.
+    expect(written).toContain(
+      'export type BundledTranslationKey =\n  | "timestamp.Message"',
+    );
+    expect(written).not.toContain('| "channel.unread.label_one"');
+    expect(written).not.toContain('| "channel.unread.label_other"');
+    // Still present in the catalog itself -- a dictionary has to be able to supply them.
+    expect(written).toContain('"channel.unread.label_other":');
+  });
+
   it('writes a JSON fixture twin when configured', () => {
     const dir = makeProject({
       'src/A.tsx': `t('common.cancel.label', 'Cancel');`,

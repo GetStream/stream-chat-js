@@ -60,6 +60,14 @@ export type CallSiteCopy = {
    * These must be present in `runtimeDefaults` or they render as the raw key.
    */
   withoutCopy: Map<string, string>;
+  /**
+   * `key -> file` for *plural* keys called with no inline copy — `t('x.y', { count })`.
+   *
+   * Tracked apart from {@link CallSiteCopy.withoutCopy} because i18next resolves these as
+   * `<key>_<category>`, never as the bare key. Checking them the same way demanded exactly the entry
+   * shape that does not work at runtime while accepting the one that silently never pluralizes.
+   */
+  pluralWithoutCopy: Map<string, string>;
   /** Keys seen with two different inline copies — a key must render one thing. */
   conflicts: Array<{ key: string; a: string; b: string; file: string }>;
 };
@@ -68,7 +76,8 @@ export type GuardFailureKind =
   | 'conflicting-copy'
   | 'unresolvable-key'
   | 'shadowed-key'
-  | 'prefix-collision';
+  | 'prefix-collision'
+  | 'bundled-plural-shape';
 
 /**
  * A guard failure, as data.
