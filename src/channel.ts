@@ -28,7 +28,6 @@ import {
   mergeDeclarativePaginatorConfig,
   toDeclarativePaginatorConfig,
 } from './configuration/utils/declarativeSlices';
-import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import type {
   AIState,
   APIResponse,
@@ -43,15 +42,13 @@ import type {
   CreateDraftResponse,
   DeleteMessageOptions,
   Event,
-  EventAPIResponse,
   EventHandler,
   EventPayload,
   EventType,
   GetRepliesAPIResponse,
-  GetRepliesRequest,
   LocalMessage,
   MarkReadRequest,
-  MarkUnreadRequest,
+  MarkReadResponse,
   MessagePaginationOptions,
   MessageRequest,
   MessageResponse,
@@ -61,10 +58,11 @@ import type {
   QueryMembersPayload,
   ReactionAPIResponse,
   ReactionRequest,
-  SearchPayload,
   SendMessageOptions,
   SendReactionRequest,
   SharedLocation,
+  StreamRequestOptions,
+  StreamResponse,
   UnBanUserOptions,
   UpdateChannelPartialRequest,
   UpdateLiveLocationRequest,
@@ -77,14 +75,8 @@ import type { Unsubscribe } from './store';
 import type {
   ChannelMemberRequest as Gen_ChannelMemberRequest,
   ChannelPushPreferencesResponse as Gen_ChannelPushPreferencesResponse,
-  ChannelStopWatchingRequest as Gen_ChannelStopWatchingRequest,
-  CreateDraftRequest as Gen_CreateDraftRequest,
-  HideChannelRequest as Gen_HideChannelRequest,
   MuteChannelRequest as Gen_MuteChannelRequest,
-  SendMessageRequest as Gen_SendMessageRequest,
-  ShowChannelRequest as Gen_ShowChannelRequest,
   UnmuteChannelRequest as Gen_UnmuteChannelRequest,
-  UpdateChannelRequest as Gen_UpdateChannelRequest,
   WSEvent,
 } from './gen/models';
 import type { ChatApi } from './gen/chat/ChatApi';
@@ -146,7 +138,7 @@ export type CustomDeleteMessageRequestFn = (
 export type CustomMarkReadRequestFn = (params: {
   channel: Channel;
   options?: MarkReadRequest;
-}) => Promise<EventAPIResponse | null>;
+}) => Promise<Partial<StreamResponse<MarkReadResponse>> | null>;
 
 /**
  * A channel's **resolved** configuration — what {@link Channel.config} returns.
@@ -255,6 +247,8 @@ export class Channel extends ChannelApi {
   lastTypingEvent: Date | null;
   isTyping: boolean;
   disconnected: boolean;
+  /** Re-entrancy guard for {@link Channel.reload} (mirrors Thread.reload's isLoading guard). */
+  private _reloading = false;
   push_preferences?: Gen_ChannelPushPreferencesResponse;
   /**
    * The shared configuration machinery. Owned rather than inherited — `Channel` already extends
@@ -594,18 +588,20 @@ export class Channel extends ChannelApi {
     return this.getClient().channelConfigsByType[this.type];
   }
 
-  _sendMessage(request: Gen_SendMessageRequest) {
-    return super.sendMessage(request);
+  _sendMessage(...args: Parameters<ChannelApi['sendMessage']>) {
+    return super.sendMessage(...args);
   }
 
   /**
    * Sends a message to this channel.
    *
-   * @param request - The send message request payload, including the message body and optional flags
-   *   such as `skip_enrich_url`, `skip_push`, and `keep_channel_hidden`.
+   * @param ...args - `[request, requestOptions]`. `request` holds the message body and optional
+   *   flags such as `skip_enrich_url`, `skip_push`, and `keep_channel_hidden`; `requestOptions`
+   *   carries per-request options such as an abort `signal` and is never serialized into the request.
    * @returns The server response.
    */
-  override async sendMessage(request: Gen_SendMessageRequest) {
+  override async sendMessage(...args: Parameters<ChannelApi['sendMessage']>) {
+    const [request] = args;
     try {
       const offlineDb = this.getClient().offlineDb;
       const messageId = request.message?.id;
@@ -615,7 +611,7 @@ export class Channel extends ChannelApi {
             channelId: this.id as string,
             channelType: this.type,
             messageId,
-            payload: [request],
+            payload: args,
             type: 'send-message',
           },
         });
@@ -625,7 +621,7 @@ export class Channel extends ChannelApi {
         .withExtraTags('sendMessage', this.cid)
         .error('Sending the message failed.', { error });
     }
-    return await this._sendMessage(request);
+    return await this._sendMessage(...args);
   }
 
   /**
@@ -761,13 +757,13 @@ export class Channel extends ChannelApi {
    *
    * @param uri - File source: URL string, `File`, `Buffer`, or readable stream (Node).
    * @param name - File name sent in the multipart body (optional).
-   * @param contentType - MIME type; defaults are applied when omitted (optional).
+   * @param contentType - MIME type; required for React Native URI uploads (optional).
    * @param user - User payload appended to the form as JSON (optional).
    * @param axiosRequestConfig - Axios per-request config, merged after upload defaults, e.g. `onUploadProgress`, `signal` from `AbortController` (optional).
    * @returns A promise resolving to `{ file: string, ... }` with the CDN URL.
    */
   sendFile(
-    uri: string | NodeJS.ReadableStream | Buffer | File,
+    uri: string | File,
     name?: string,
     contentType?: string,
     user?: UserResponse,
@@ -788,13 +784,13 @@ export class Channel extends ChannelApi {
    *
    * @param uri - Image source: URL string, `File`, or readable stream (Node). For `Buffer` uploads, use `sendFile` toward the channel file endpoint instead.
    * @param name - File name sent in the multipart body (optional).
-   * @param contentType - MIME type (optional).
+   * @param contentType - MIME type; required for React Native URI uploads (optional).
    * @param user - User payload appended to the form as JSON (optional).
    * @param axiosRequestConfig - Axios per-request config, merged after upload defaults, e.g. `onUploadProgress`, `signal` (optional).
    * @returns A promise resolving to `{ file: string, ... }` with the CDN URL.
    */
   sendImage(
-    uri: string | NodeJS.ReadableStream | File,
+    uri: string | File,
     name?: string,
     contentType?: string,
     user?: UserResponse,
@@ -810,34 +806,40 @@ export class Channel extends ChannelApi {
     );
   }
 
-  deleteFile(url: string) {
-    return this.deleteChannelFile({ url });
+  deleteFile(url: string, requestOptions?: StreamRequestOptions) {
+    return this.deleteChannelFile({ url }, requestOptions);
   }
 
-  deleteImage(url: string) {
-    return this.deleteChannelImage({ url });
+  deleteImage(url: string, requestOptions?: StreamRequestOptions) {
+    return this.deleteChannelImage({ url }, requestOptions);
   }
 
   /**
    * Sends an event on this channel.
    *
-   * @param event - For example `{ type: 'message.read' }`.
+   * @param request - For example `{ event: { type: 'message.read' } }`.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The server response.
    */
-  override async sendEvent(request: { event: Event }) {
+  override async sendEvent(
+    request: { event: Event },
+    requestOptions?: StreamRequestOptions,
+  ) {
     this._checkInitialized();
-    return await super.sendEvent(request);
+    return await super.sendEvent(request, requestOptions);
   }
 
   /**
    * Queries messages.
    *
-   * @param request - The search request payload (optional). The inner `payload` accepts
-   *   MongoDB-style filters and additional options such as `user_id`.
+   * @param ...args - `[request, requestOptions]`. The optional `request.payload` accepts
+   *   MongoDB-style filters and additional options such as `user_id`. `requestOptions` carries
+   *   per-request options such as an abort `signal` and is never serialized into the request.
    * @returns The search messages response.
    */
-  async search(request?: { payload?: SearchPayload }) {
-    return await this.getClient().search(request);
+  async search(...args: Parameters<ChatApi['search']>) {
+    return await this.getClient().search(...args);
   }
 
   /**
@@ -846,9 +848,14 @@ export class Channel extends ChannelApi {
    * @param request - The query members request payload (optional). The inner `payload` accepts
    *   MongoDB-style filters, sort directions (e.g. `[{ field: 'created_at', direction: -1 }]`),
    *   and pagination options (`limit`, `offset`).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The query members response.
    */
-  async queryMembers(request?: { payload?: Partial<QueryMembersPayload> }) {
+  async queryMembers(
+    request?: { payload?: Partial<QueryMembersPayload> },
+    requestOptions?: StreamRequestOptions,
+  ) {
     const payload = {
       type: this.type,
       // TODO: these should be probably optional in the OAPI spec
@@ -865,12 +872,15 @@ export class Channel extends ChannelApi {
       }));
     }
     // Return a list of members
-    return await this.getClient().queryMembers({
-      payload: {
-        ...payload,
-        ...request?.payload,
+    return await this.getClient().queryMembers(
+      {
+        payload: {
+          ...payload,
+          ...request?.payload,
+        },
       },
-    });
+      requestOptions,
+    );
   }
 
   /**
@@ -878,13 +888,15 @@ export class Channel extends ChannelApi {
    * that sending the reaction is queued up if it fails due to bad internet conditions and executed
    * later.
    *
-   * @param request - The send-reaction request payload, including the target message ID, the
+   * @param ...args - `[request, requestOptions]`. `request` holds the target message ID, the
    *   reaction object (e.g. `{ type: 'love' }`), and optional flags such as `enforce_unique` and
-   *   `skip_push`.
+   *   `skip_push`; `requestOptions` carries per-request options such as an abort `signal`.
+   *   When the call is queued for offline replay, `requestOptions` is queued with it - see the
+   *   note on signal persistence in `AbstractOfflineDB.queueTask`.
    * @returns The server response.
    */
-  async sendReaction(request: Parameters<ChatApi['sendReaction']>[0]) {
-    const { id: messageId } = request;
+  async sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
+    const [{ id: messageId }] = args;
 
     try {
       const offlineDb = this.getClient().offlineDb;
@@ -896,7 +908,7 @@ export class Channel extends ChannelApi {
             channelId: this.id as string,
             channelType: this.type,
             messageId,
-            payload: [request],
+            payload: args,
             type: 'send-reaction',
           },
         });
@@ -907,15 +919,16 @@ export class Channel extends ChannelApi {
         .error('Sending the reaction failed.', { error });
     }
 
-    return this._sendReaction(request);
+    return this._sendReaction(...args);
   }
 
-  _sendReaction(request: Parameters<ChatApi['sendReaction']>[0]) {
-    return this.getClient().sendReaction(request);
+  _sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
+    return this.getClient().sendReaction(...args);
   }
 
-  async deleteReaction(request: Parameters<ChatApi['deleteReaction']>[0]) {
+  async deleteReaction(...args: Parameters<ChatApi['deleteReaction']>) {
     this._checkInitialized();
+    const [request] = args;
 
     try {
       const offlineDb = this.getClient().offlineDb;
@@ -927,7 +940,7 @@ export class Channel extends ChannelApi {
             channelId: this.id as string,
             channelType: this.type,
             messageId: request.id,
-            payload: [request],
+            payload: args,
             type: 'delete-reaction',
           },
         });
@@ -938,29 +951,33 @@ export class Channel extends ChannelApi {
         .error('Deleting the reaction failed.', { error });
     }
 
-    return await this._deleteReaction(request);
+    return await this._deleteReaction(...args);
   }
 
   /**
    * Deletes a reaction by user and type.
    *
-   * @param request - The delete reaction request payload identifying the target message and reaction type.
+   * @param ...args - `[request, requestOptions]`. `request` identifies the target message and
+   *   reaction type; `requestOptions` carries per-request options such as an abort `signal` and is
+   *   never serialized into the request.
    * @returns The server response.
    */
-  async _deleteReaction(request: Parameters<ChatApi['deleteReaction']>[0]) {
-    return await this.getClient().deleteReaction(request);
+  async _deleteReaction(...args: Parameters<ChatApi['deleteReaction']>) {
+    return await this.getClient().deleteReaction(...args);
   }
 
   /**
    * Edit the channel using the inherited `update()` from `ChannelApi`. Caches the
    * server-returned channel onto `this.data`.
    *
-   * @param request - Channel update payload, e.g. `{ data: { name: 'foo' }, message }` (optional).
+   * @param ...args - `[request, requestOptions]`. `request` is the channel update payload, e.g.
+   *   `{ data: { name: 'foo' }, message }`; `requestOptions` carries per-request options such as an
+   *   abort `signal` and is never serialized into the request.
    * @returns The server response.
    */
-  override async update(request?: Gen_UpdateChannelRequest) {
+  override async update(...args: Parameters<ChannelApi['update']>) {
     const previousData = this.data;
-    const data = await super.update(request);
+    const data = await super.update(...args);
     this.data = data.channel;
     this._syncStateFromChannelData(this.data, previousData);
     return data;
@@ -970,10 +987,15 @@ export class Channel extends ChannelApi {
    * Partial update of channel properties.
    *
    * @param update - The partial update request.
+   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The server response.
    */
-  async updatePartial(update: UpdateChannelPartialRequest) {
-    const data = await this.updateChannelPartial(update);
+  async updatePartial(
+    update: UpdateChannelPartialRequest,
+    requestOptions?: StreamRequestOptions,
+  ) {
+    const data = await this.updateChannelPartial(update, requestOptions);
 
     if (!this.getClient()._cacheEnabled) return data;
 
@@ -1010,19 +1032,23 @@ export class Channel extends ChannelApi {
    * Enables slow mode.
    *
    * @param coolDownInterval - The cooldown interval in seconds.
+   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The server response.
    */
-  async enableSlowMode(coolDownInterval: number) {
-    return await this.update({ cooldown: coolDownInterval });
+  async enableSlowMode(coolDownInterval: number, requestOptions?: StreamRequestOptions) {
+    return await this.update({ cooldown: coolDownInterval }, requestOptions);
   }
 
   /**
    * Disables slow mode.
    *
+   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The server response.
    */
-  async disableSlowMode() {
-    return await this.update({ cooldown: 0 });
+  async disableSlowMode(requestOptions?: StreamRequestOptions) {
+    return await this.update({ cooldown: 0 }, requestOptions);
   }
 
   public async sendSharedLocation(location: SharedLocation & { message_id?: string }) {
@@ -1043,11 +1069,17 @@ export class Channel extends ChannelApi {
     return result;
   }
 
-  public async stopLiveLocationSharing(payload: UpdateLiveLocationRequest) {
-    const location = await this.getClient().updateLiveLocation({
-      ...payload,
-      end_at: new Date(),
-    });
+  public async stopLiveLocationSharing(
+    payload: UpdateLiveLocationRequest,
+    requestOptions?: StreamRequestOptions,
+  ) {
+    const location = await this.getClient().updateLiveLocation(
+      {
+        ...payload,
+        end_at: new Date(),
+      },
+      requestOptions,
+    );
     this.getClient().dispatchEvent({
       live_location: location,
       type: 'live_location_sharing.stopped',
@@ -1058,20 +1090,30 @@ export class Channel extends ChannelApi {
    * Accepts an invitation to the channel.
    *
    * @param options - The object to update the custom properties of this channel with (optional, defaults to `{}`).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The server response.
    */
-  async acceptInvite(options: ChannelUpdateOptions = {}) {
-    return await this.update({ accept_invite: true, ...options });
+  async acceptInvite(
+    options: ChannelUpdateOptions = {},
+    requestOptions?: StreamRequestOptions,
+  ) {
+    return await this.update({ accept_invite: true, ...options }, requestOptions);
   }
 
   /**
    * Rejects an invitation to the channel.
    *
    * @param options - The object to update the custom properties of this channel with (optional, defaults to `{}`).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The server response.
    */
-  async rejectInvite(options: ChannelUpdateOptions = {}) {
-    return await this.update({ reject_invite: true, ...options });
+  async rejectInvite(
+    options: ChannelUpdateOptions = {},
+    requestOptions?: StreamRequestOptions,
+  ) {
+    return await this.update({ reject_invite: true, ...options }, requestOptions);
   }
 
   /**
@@ -1080,20 +1122,26 @@ export class Channel extends ChannelApi {
    * @param members - An array of members to add to the channel.
    * @param message - Message object for channel members notification (optional).
    * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The server response.
    */
   async addMembers(
     members: string[] | Array<Gen_ChannelMemberRequest>,
     message?: MessageRequest,
     options: ChannelUpdateOptions = {},
+    requestOptions?: StreamRequestOptions,
   ) {
-    return await this.update({
-      add_members: members.map((member) =>
-        typeof member === 'string' ? { user_id: member } : member,
-      ),
-      message,
-      ...options,
-    });
+    return await this.update(
+      {
+        add_members: members.map((member) =>
+          typeof member === 'string' ? { user_id: member } : member,
+        ),
+        message,
+        ...options,
+      },
+      requestOptions,
+    );
   }
 
   /**
@@ -1102,14 +1150,20 @@ export class Channel extends ChannelApi {
    * @param tags - An array of tags to add to the channel.
    * @param message - Message object for channel members notification (optional).
    * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The server response.
    */
   async addFilterTags(
     tags: string[],
     message?: MessageRequest,
     options: ChannelUpdateOptions = {},
+    requestOptions?: StreamRequestOptions,
   ) {
-    return await this.update({ add_filter_tags: tags, message, ...options });
+    return await this.update(
+      { add_filter_tags: tags, message, ...options },
+      requestOptions,
+    );
   }
 
   /**
@@ -1118,14 +1172,20 @@ export class Channel extends ChannelApi {
    * @param tags - An array of tags to remove from the channel.
    * @param message - Message object for channel members notification (optional).
    * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The server response.
    */
   async removeFilterTags(
     tags: string[],
     message?: MessageRequest,
     options: ChannelUpdateOptions = {},
+    requestOptions?: StreamRequestOptions,
   ) {
-    return await this.update({ remove_filter_tags: tags, message, ...options });
+    return await this.update(
+      { remove_filter_tags: tags, message, ...options },
+      requestOptions,
+    );
   }
 
   /**
@@ -1134,14 +1194,20 @@ export class Channel extends ChannelApi {
    * @param members - An array of member identifiers.
    * @param message - Message object for channel members notification (optional).
    * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The server response.
    */
   async addModerators(
     members: string[],
     message?: MessageRequest,
     options: ChannelUpdateOptions = {},
+    requestOptions?: StreamRequestOptions,
   ) {
-    return await this.update({ add_moderators: members, message, ...options });
+    return await this.update(
+      { add_moderators: members, message, ...options },
+      requestOptions,
+    );
   }
 
   /**
@@ -1150,14 +1216,20 @@ export class Channel extends ChannelApi {
    * @param roles - List of role assignments.
    * @param message - Message object for channel members notification (optional).
    * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The server response.
    */
   async assignRoles(
     roles: { channel_role: RoleName; user_id: string }[],
     message?: MessageRequest,
     options: ChannelUpdateOptions = {},
+    requestOptions?: StreamRequestOptions,
   ) {
-    return await this.update({ assign_roles: roles, message, ...options });
+    return await this.update(
+      { assign_roles: roles, message, ...options },
+      requestOptions,
+    );
   }
 
   /**
@@ -1166,20 +1238,26 @@ export class Channel extends ChannelApi {
    * @param members - An array of members to invite to the channel.
    * @param message - Message object for channel members notification (optional).
    * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The server response.
    */
   async inviteMembers(
     members: string[] | Required<Omit<Gen_ChannelMemberRequest, 'channel_role'>>[],
     message?: MessageRequest,
     options: ChannelUpdateOptions = {},
+    requestOptions?: StreamRequestOptions,
   ) {
-    return await this.update({
-      invites: members.map((member) =>
-        typeof member === 'string' ? { user_id: member } : member,
-      ),
-      message,
-      ...options,
-    });
+    return await this.update(
+      {
+        invites: members.map((member) =>
+          typeof member === 'string' ? { user_id: member } : member,
+        ),
+        message,
+        ...options,
+      },
+      requestOptions,
+    );
   }
 
   /**
@@ -1188,14 +1266,20 @@ export class Channel extends ChannelApi {
    * @param members - An array of member identifiers.
    * @param message - Message object for channel members notification (optional).
    * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The server response.
    */
   async removeMembers(
     members: string[],
     message?: MessageRequest,
     options: ChannelUpdateOptions = {},
+    requestOptions?: StreamRequestOptions,
   ) {
-    return await this.update({ remove_members: members, message, ...options });
+    return await this.update(
+      { remove_members: members, message, ...options },
+      requestOptions,
+    );
   }
 
   /**
@@ -1204,14 +1288,20 @@ export class Channel extends ChannelApi {
    * @param members - An array of member identifiers.
    * @param message - Message object for channel members notification (optional).
    * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The server response.
    */
   async demoteModerators(
     members: string[],
     message?: MessageRequest,
     options: ChannelUpdateOptions = {},
+    requestOptions?: StreamRequestOptions,
   ) {
-    return await this.update({ demote_moderators: members, message, ...options });
+    return await this.update(
+      { demote_moderators: members, message, ...options },
+      requestOptions,
+    );
   }
 
   /**
@@ -1227,13 +1317,18 @@ export class Channel extends ChannelApi {
    *
    * @param options - Mute options (optional, defaults to `{}`).
    * @param options.expiration - Expiration in minutes (optional).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The server response.
    */
-  async mute(options?: Gen_MuteChannelRequest) {
-    return await this.getClient().muteChannel({
-      channel_cids: [this.cid],
-      ...options,
-    });
+  async mute(options?: Gen_MuteChannelRequest, requestOptions?: StreamRequestOptions) {
+    return await this.getClient().muteChannel(
+      {
+        channel_cids: [this.cid],
+        ...options,
+      },
+      requestOptions,
+    );
   }
 
   /**
@@ -1245,13 +1340,21 @@ export class Channel extends ChannelApi {
    *
    * @param options - Unmute options (optional, defaults to `{}`).
    * @param options.user_id - User ID (optional).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The server response.
    */
-  async unmute(options?: Gen_UnmuteChannelRequest) {
-    return await this.getClient().unmuteChannel({
-      channel_cids: [this.cid],
-      ...options,
-    });
+  async unmute(
+    options?: Gen_UnmuteChannelRequest,
+    requestOptions?: StreamRequestOptions,
+  ) {
+    return await this.getClient().unmuteChannel(
+      {
+        channel_cids: [this.cid],
+        ...options,
+      },
+      requestOptions,
+    );
   }
 
   /**
@@ -1260,10 +1363,12 @@ export class Channel extends ChannelApi {
    * @example
    * await channel.archive();
    *
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The server response.
    */
-  async archive() {
-    return await this.updateMemberPartial({ set: { archived: true } });
+  async archive(requestOptions?: StreamRequestOptions) {
+    return await this.updateMemberPartial({ set: { archived: true } }, requestOptions);
   }
 
   /**
@@ -1272,10 +1377,12 @@ export class Channel extends ChannelApi {
    * @example
    * await channel.unarchive();
    *
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The server response.
    */
-  async unarchive() {
-    return await this.updateMemberPartial({ set: { archived: false } });
+  async unarchive(requestOptions?: StreamRequestOptions) {
+    return await this.updateMemberPartial({ set: { archived: false } }, requestOptions);
   }
 
   /**
@@ -1284,10 +1391,12 @@ export class Channel extends ChannelApi {
    * @example
    * await channel.pin();
    *
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The server response.
    */
-  async pin() {
-    return await this.updateMemberPartial({ set: { pinned: true } });
+  async pin(requestOptions?: StreamRequestOptions) {
+    return await this.updateMemberPartial({ set: { pinned: true } }, requestOptions);
   }
 
   /**
@@ -1296,10 +1405,12 @@ export class Channel extends ChannelApi {
    * @example
    * await channel.unpin();
    *
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The server response.
    */
-  async unpin() {
-    return await this.updateMemberPartial({ set: { pinned: false } });
+  async unpin(requestOptions?: StreamRequestOptions) {
+    return await this.updateMemberPartial({ set: { pinned: false } }, requestOptions);
   }
 
   /**
@@ -1312,15 +1423,22 @@ export class Channel extends ChannelApi {
     return this.getClient()._muteStatus(this.cid);
   }
 
-  sendAction(messageId: string, formData: Record<string, string>) {
+  sendAction(
+    messageId: string,
+    formData: Record<string, string>,
+    requestOptions?: StreamRequestOptions,
+  ) {
     this._checkInitialized();
     if (!messageId) {
       throw Error(`Message ID is missing`);
     }
-    return this.getClient().runMessageAction({
-      id: messageId,
-      form_data: formData,
-    });
+    return this.getClient().runMessageAction(
+      {
+        id: messageId,
+        form_data: formData,
+      },
+      requestOptions,
+    );
   }
 
   /**
@@ -1331,8 +1449,14 @@ export class Channel extends ChannelApi {
    *
    * @param parentId - Set this field to `message.id` to indicate that the typing event is happening in a thread (optional).
    * @param options - Optional override carrying a `user_id` (optional).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    */
-  async keystroke(parentId?: string, options?: { user_id: string }) {
+  async keystroke(
+    parentId?: string,
+    options?: { user_id: string },
+    requestOptions?: StreamRequestOptions,
+  ) {
     if (!this._isTypingIndicatorsEnabled()) {
       return;
     }
@@ -1343,15 +1467,18 @@ export class Channel extends ChannelApi {
     // send a typing.start every 2 seconds
     if (diff === null || diff > 2000) {
       this.lastTypingEvent = new Date();
-      await this.sendEvent({
-        event: {
-          type: 'typing.start',
-          parent_id: parentId,
-          ...(options || {}),
-          created_at: new Date(),
-          custom: {},
+      await this.sendEvent(
+        {
+          event: {
+            type: 'typing.start',
+            parent_id: parentId,
+            ...(options || {}),
+            created_at: new Date(),
+            custom: {},
+          },
         },
-      });
+        requestOptions,
+      );
     }
   }
 
@@ -1363,50 +1490,68 @@ export class Channel extends ChannelApi {
    * @param state - The new state of the AI process, e.g. thinking, generating.
    * @param options - Parameters such as `ai_message` to include additional details in the event (optional, defaults to `{}`).
    * @param options.ai_message - Additional message detail to include in the event (optional).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    */
   async updateAIState(
     messageId: string,
     state: AIState,
     options: { ai_message?: string } = {},
+    requestOptions?: StreamRequestOptions,
   ) {
-    await this.sendEvent({
-      event: {
-        ...options,
-        type: 'ai_indicator.update',
-        message_id: messageId,
-        ai_state: state,
-        created_at: new Date(),
-        custom: {},
+    await this.sendEvent(
+      {
+        event: {
+          ...options,
+          type: 'ai_indicator.update',
+          message_id: messageId,
+          ai_state: state,
+          created_at: new Date(),
+          custom: {},
+        },
       },
-    });
+      requestOptions,
+    );
   }
 
   /**
    * Sends an event to notify watchers to clear the typing/thinking UI when the AI response starts streaming.
    * Typically used by the server connected to the AI service to inform clients that the AI response has started.
+   *
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    */
-  async clearAIIndicator() {
-    await this.sendEvent({
-      event: {
-        type: 'ai_indicator.clear',
-        created_at: new Date(),
-        custom: {},
+  async clearAIIndicator(requestOptions?: StreamRequestOptions) {
+    await this.sendEvent(
+      {
+        event: {
+          type: 'ai_indicator.clear',
+          created_at: new Date(),
+          custom: {},
+        },
       },
-    });
+      requestOptions,
+    );
   }
 
   /**
    * Sends an event to stop AI response generation, leaving the message in its current state.
    * Triggered by the user to halt the AI response process.
+   *
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    */
-  async stopAIResponse() {
-    await this.sendEvent({
-      event: {
-        type: 'ai_indicator.stop',
-        created_at: new Date(),
-        custom: {},
+  async stopAIResponse(requestOptions?: StreamRequestOptions) {
+    await this.sendEvent(
+      {
+        event: {
+          type: 'ai_indicator.stop',
+          created_at: new Date(),
+          custom: {},
+        },
       },
-    });
+      requestOptions,
+    );
   }
 
   /**
@@ -1416,22 +1561,31 @@ export class Channel extends ChannelApi {
    *
    * @param parentId - Set this field to `message.id` to indicate that the typing event is happening in a thread (optional).
    * @param options - Optional override carrying a `user_id` (optional).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    */
-  async stopTyping(parentId?: string, options?: { user_id: string }) {
+  async stopTyping(
+    parentId?: string,
+    options?: { user_id: string },
+    requestOptions?: StreamRequestOptions,
+  ) {
     if (!this._isTypingIndicatorsEnabled()) {
       return;
     }
     this.lastTypingEvent = null;
     this.isTyping = false;
-    await this.sendEvent({
-      event: {
-        type: 'typing.stop',
-        parent_id: parentId,
-        ...(options || {}),
-        created_at: new Date(),
-        custom: {},
+    await this.sendEvent(
+      {
+        event: {
+          type: 'typing.stop',
+          parent_id: parentId,
+          ...(options || {}),
+          created_at: new Date(),
+          custom: {},
+        },
       },
-    });
+      requestOptions,
+    );
   }
 
   _isTypingIndicatorsEnabled(): boolean {
@@ -1462,10 +1616,12 @@ export class Channel extends ChannelApi {
    * Override of the inherited `markRead()` from `ChannelApi` that requires the
    * channel to be initialized and respects the `read_events` channel config.
    *
-   * @param data - Mark read options (optional, defaults to `{}`).
+   * @param ...args - `[data, requestOptions]`. `data` holds the mark-read options;
+   *   `requestOptions` carries per-request options such as an abort `signal` and is never
+   *   serialized into the request.
    * @returns The server response, or `null` if the request was skipped.
    */
-  override async markRead(data?: MarkReadRequest) {
+  override async markRead(...args: Parameters<ChannelApi['markRead']>) {
     this._checkInitialized();
 
     if (!this.configController.value.readEvents.enabled) {
@@ -1474,16 +1630,18 @@ export class Channel extends ChannelApi {
       );
     }
 
-    return await super.markRead(data);
+    return await super.markRead(...args);
   }
 
   /**
    * Marks the channel as unread from `messageId`. Only works when the `read_events` setting is enabled.
    *
-   * @param data - Mark unread options.
+   * @param ...args - `[data, requestOptions]`. `data` holds the mark-unread options;
+   *   `requestOptions` carries per-request options such as an abort `signal` and is never
+   *   serialized into the request.
    * @returns An API response, or `null` if the request was skipped.
    */
-  override async markUnread(data?: MarkUnreadRequest) {
+  override async markUnread(...args: Parameters<ChannelApi['markUnread']>) {
     this._checkInitialized();
 
     if (!this.configController.value.readEvents.enabled) {
@@ -1492,7 +1650,7 @@ export class Channel extends ChannelApi {
       );
     }
 
-    return await super.markUnread(data);
+    return await super.markUnread(...args);
   }
 
   /**
@@ -1576,13 +1734,57 @@ export class Channel extends ChannelApi {
   }
 
   /**
+   * Re-watch the channel and refresh its FULL loaded message window — the channel analog of
+   * {@link Thread.reload}. Used on reconnect to catch up AND reconcile hard deletes that happened
+   * while offline: a hard delete reaches other clients via no event, so an offline client only learns
+   * of it by diffing the re-queried page.
+   *
+   * This is intentionally thin: it only re-issues `watch()` with a limit sized to the loaded window
+   * (`items.length`, so the whole loaded window is refreshed — not the smaller channel-list page). The
+   * actual fold + destructive reconciliation happens inside `query()` → `seedFirstPageSync`
+   * (the same path the channel-list re-hydrate and React's `recoverState` use), driven by the loaded-id
+   * snapshot `query()` captures before its await. Owning that single path is what lets the SDK stop
+   * passing the reconciliation window/snapshot itself.
+   *
+   * Preserves failed (unsent) messages: an overlap merge keeps them (the reconcile's provenance guard
+   * never prunes a non-server message); only a disjoint rebuild can drop them, so any that actually
+   * fell out are re-ingested below.
+   */
+  async reload() {
+    if (this._reloading || (!this.initialized && !this.offlineMode)) return;
+    this._reloading = true;
+    try {
+      const paginator = this.messagePaginator;
+      const headItems = paginator.headItems;
+      const requestedLimit = headItems.length || paginator.pageSize;
+      const failedBefore = headItems.filter((message) => message.status === 'failed');
+
+      await this.watch({ messages: { limit: requestedLimit } });
+      this.offlineMode = false;
+
+      paginator.batch(
+        () => {
+          for (const failed of failedBefore) {
+            if (!paginator.getItem(failed.id)) paginator.ingestItem(failed);
+          }
+        },
+        { coalesce: true },
+      );
+    } finally {
+      this._reloading = false;
+    }
+  }
+
+  /**
    * Stops watching the channel.
    *
-   * @param request - The stop-watching request payload (optional).
+   * @param ...args - `[request, requestOptions]`. `request` is the stop-watching payload;
+   *   `requestOptions` carries per-request options such as an abort `signal` and is never
+   *   serialized into the request.
    * @returns The server response.
    */
-  override async stopWatching(request?: Gen_ChannelStopWatchingRequest) {
-    const response = await super.stopWatching(request);
+  override async stopWatching(...args: Parameters<ChannelApi['stopWatching']>) {
+    const response = await super.stopWatching(...args);
 
     logger.withExtraTags('stopWatching', this.cid).info('Stopped watching the channel.');
 
@@ -1594,12 +1796,13 @@ export class Channel extends ChannelApi {
    *
    * The recommended way of working with threads is to use the `Thread` class.
    *
-   * @param request - The get-replies request payload, including the parent message ID, pagination
-   *   params, and optional sort directions for `created_at`.
+   * @param ...args - `[request, requestOptions]`. `request` holds the parent message ID, pagination
+   *   params, and optional sort directions for `created_at`; `requestOptions` carries per-request
+   *   options such as an abort `signal` and is never serialized into the request.
    * @returns A response with a list of messages.
    */
-  async getReplies(request: GetRepliesRequest) {
-    const data = await this.getClient().getReplies(request);
+  async getReplies(...args: Parameters<ChatApi['getReplies']>) {
+    const data = await this.getClient().getReplies(...args);
 
     // Thread reply state is owned by the Thread object (Thread.messagePaginator); the returned
     // replies are consumed there. The channel message list is owned by channel.messagePaginator.
@@ -1632,22 +1835,25 @@ export class Channel extends ChannelApi {
   /**
    * List the reactions; supports pagination.
    *
-   * @param request - The request payload, including the target message ID and
-   *   pagination options (`limit`, `offset`).
+   * @param ...args - `[request, requestOptions]`. `request` holds the target message ID and
+   *   pagination options (`limit`, `offset`); `requestOptions` carries per-request options such as
+   *   an abort `signal` and is never serialized into the request.
    * @returns The server response.
    */
-  getReactions(request: Parameters<ChatApi['getReactions']>[0]) {
-    return this.getClient().getReactions(request);
+  getReactions(...args: Parameters<ChatApi['getReactions']>) {
+    return this.getClient().getReactions(...args);
   }
 
   /**
    * Retrieves a list of messages by ID.
    *
    * @param messageIds - The IDs of the messages to retrieve from this channel.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns Server response.
    */
-  getMessagesById(messageIds: string[]) {
-    return this.getManyMessages({ ids: messageIds });
+  getMessagesById(messageIds: string[], requestOptions?: StreamRequestOptions) {
+    return this.getManyMessages({ ids: messageIds }, requestOptions);
   }
 
   /**
@@ -1754,12 +1960,39 @@ export class Channel extends ChannelApi {
    *   messages into state. Use `current` to load the initial channel state or to extend the
    *   currently displayed messages; use `latest` to load/extend the latest messages; `new` is
    *   used for loading a specific message and its surroundings (optional, defaults to `'current'`).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns A query response.
    */
   async query(
     options: ChannelGetOrCreateRequest = {},
     messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
+    requestOptions?: StreamRequestOptions,
   ) {
+    // Snapshot the loaded message ids BEFORE the network await, for a latest-window (re)seed only.
+    // When this query re-seeds an already-loaded window (reconnect / re-hydrate), seedFirstPageSync
+    // reconciles the fresh page against what is loaded, and the snapshot lets it tell an offline
+    // hard-delete (in the snapshot, absent from the page) from a message that arrives live
+    // during the fetch (not in the snapshot). Captured here — the only place with the pre-await state —
+    // so callers (channel.reload, watch) need not thread it. Empty on a cold open, so it is harmless.
+    // TODO(perf/cleanup): `headItems` materializes full message objects (intervalToItems) just to map
+    // them down to ids. A cheaper, clearer equivalent is a straight copy of the paginator index's own
+    // id set — expose `memberIds` on StoreBackedItemIndex (e.g. `snapshotMembers()` returning
+    // `new Set(this.memberIds)`) and use it here AND in client.queryChannelsAndHydrate. The broader
+    // scope (all intervals vs just the head) is inert: the reconcile only consults head ids, older
+    // island ids are never at/above-newest, and local messages are guarded by isServerConfirmedMessage.
+    const candidateIds =
+      messageSetToAddToIfDoesNotExist === 'latest'
+        ? new Set(this.messagePaginator.headItems.map((message) => message.id))
+        : undefined;
+
+    // The INITIAL channel-open query honors the paginator's OWN pageSize (light on native, 25) rather
+    // than the server's larger default — opening loads the same page size it paginates by. A caller
+    // that already knows how much to fetch passes an explicit messages.limit, which is respected as-is:
+    // a reconnect/re-hydrate sizes it to the loaded window (channel.reload → items.length), and
+    // pagination/around pass their own cursors + limit.
+    const requestedPageSize = options?.messages?.limit ?? this.messagePaginator.pageSize;
+
     // Make sure we wait for the connect promise if there is a pending one
     await this.getClient().wsPromise;
 
@@ -1767,14 +2000,24 @@ export class Channel extends ChannelApi {
       data: this._data,
       state: true,
       ...options,
+      // Ask the server for exactly the initial-open page size (not its default), so the loaded window
+      // matches the paginator's pageSize. Explicit messages (reconnect/around/pagination) pass through.
+      messages:
+        options?.messages ??
+        (messageSetToAddToIfDoesNotExist === 'latest'
+          ? { limit: requestedPageSize }
+          : undefined),
     };
 
     const state = this.id
-      ? await this.getOrCreate(queryPayload)
-      : await this.getClient().getOrCreateDistinctChannel({
-          type: this.type,
-          ...queryPayload,
-        });
+      ? await this.getOrCreate(queryPayload, requestOptions)
+      : await this.getClient().getOrCreateDistinctChannel(
+          {
+            type: this.type,
+            ...queryPayload,
+          },
+          requestOptions,
+        );
 
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const channel = state.channel!;
@@ -1823,8 +2066,6 @@ export class Channel extends ChannelApi {
     // latest-page open paths (watch/create) pass 'latest' — the paginator's own pagination queries
     // use 'current' and must not be reseeded as a first page here.
     if (messageSetToAddToIfDoesNotExist === 'latest' && Array.isArray(state.messages)) {
-      const requestedPageSize =
-        options?.messages?.limit ?? DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE;
       // Pass the query's message pagination options through: a channel can be opened AROUND a
       // message (id_around / created_at_around), in which case the fetched page is a jump window,
       // not the latest page — the paginator must reconcile it with jump semantics.
@@ -1832,6 +2073,8 @@ export class Channel extends ChannelApi {
         state.messages.map(formatMessage),
         requestedPageSize,
         options?.messages,
+        // Re-seed of an already-loaded window folds + reconciles instead of blanking (see above).
+        { candidateIds, reconcile: true },
       );
     }
 
@@ -1911,24 +2154,27 @@ export class Channel extends ChannelApi {
    * Hides the channel from `queryChannels` for the user until a message is added.
    * If `clear_history` is set to `true`, all messages will be removed for the user.
    *
-   * @param request - The hide channel request payload (optional). Pass `{ clear_history: true }`
-   *   to clear message history for the user.
+   * @param ...args - `[request, requestOptions]`. Pass `request: { clear_history: true }` to clear
+   *   message history for the user; `requestOptions` carries per-request options such as an abort
+   *   `signal` and is never serialized into the request.
    * @returns The server response.
    */
-  override async hide(request?: Gen_HideChannelRequest) {
+  override async hide(...args: Parameters<ChannelApi['hide']>) {
     this._checkInitialized();
-    return await super.hide(request);
+    return await super.hide(...args);
   }
 
   /**
    * Removes the hidden status for a channel. Ensures the channel is initialized first.
    *
-   * @param request - The show channel request payload (optional).
+   * @param ...args - `[request, requestOptions]`. `request` is the show-channel payload;
+   *   `requestOptions` carries per-request options such as an abort `signal` and is never
+   *   serialized into the request.
    * @returns The server response.
    */
-  override async show(request?: Gen_ShowChannelRequest) {
+  override async show(...args: Parameters<ChannelApi['show']>) {
     this._checkInitialized();
-    return await super.show(request);
+    return await super.show(...args);
   }
 
   /**
@@ -1980,27 +2226,29 @@ export class Channel extends ChannelApi {
   /**
    * Casts or cancels one or more votes on a poll.
    *
-   * @param request - The cast-poll-vote request payload, including the target message ID, poll ID,
-   *   and the vote to cast (or an empty payload to cancel).
+   * @param ...args - `[request, requestOptions]`. `request` holds the target message ID, poll ID,
+   *   and the vote to cast (or an empty payload to cancel); `requestOptions` carries per-request
+   *   options such as an abort `signal` and is never serialized into the request.
    * @returns The poll vote response.
    */
-  async vote(request: Parameters<ChatApi['castPollVote']>[0]) {
-    return await this.getClient().castPollVote(request);
+  async vote(...args: Parameters<ChatApi['castPollVote']>) {
+    return await this.getClient().castPollVote(...args);
   }
 
-  async removeVote(request: Parameters<ChatApi['deletePollVote']>[0]) {
-    return await this.getClient().deletePollVote(request);
+  async removeVote(...args: Parameters<ChatApi['deletePollVote']>) {
+    return await this.getClient().deletePollVote(...args);
   }
 
-  async _createDraft(request: Gen_CreateDraftRequest) {
-    return await super.createDraft(request);
+  async _createDraft(...args: Parameters<ChannelApi['createDraft']>) {
+    return await super.createDraft(...args);
   }
 
   /**
    * Creates or updates a draft message in a channel. If offline support is enabled, the
    * call is queued so it is replayed on reconnect.
    */
-  override async createDraft(request: Gen_CreateDraftRequest) {
+  override async createDraft(...args: Parameters<ChannelApi['createDraft']>) {
+    const [request] = args;
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
@@ -2009,7 +2257,7 @@ export class Channel extends ChannelApi {
             channelId: this.id as string,
             channelType: this.type,
             threadId: request.message?.parent_id,
-            payload: [request],
+            payload: args,
             type: 'create-draft',
           },
         })) as Awaited<ReturnType<ChannelApi['createDraft']>>;
@@ -2020,18 +2268,19 @@ export class Channel extends ChannelApi {
         .error('Creating the draft in the offline database failed.', { error });
     }
 
-    return this._createDraft(request);
+    return this._createDraft(...args);
   }
 
-  async _deleteDraft(request?: Parameters<ChannelApi['deleteDraft']>[0]) {
-    return await super.deleteDraft(request);
+  async _deleteDraft(...args: Parameters<ChannelApi['deleteDraft']>) {
+    return await super.deleteDraft(...args);
   }
 
   /**
    * Deletes a draft message from a channel or a thread. If offline support is enabled, the
    * call is queued so it is replayed on reconnect.
    */
-  override async deleteDraft(request?: Parameters<ChannelApi['deleteDraft']>[0]) {
+  override async deleteDraft(...args: Parameters<ChannelApi['deleteDraft']>) {
+    const [request] = args;
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
@@ -2040,7 +2289,7 @@ export class Channel extends ChannelApi {
             channelId: this.id as string,
             channelType: this.type,
             threadId: request?.parent_id,
-            payload: [request],
+            payload: args,
             type: 'delete-draft',
           },
         })) as Awaited<ReturnType<ChannelApi['deleteDraft']>>;
@@ -2051,7 +2300,7 @@ export class Channel extends ChannelApi {
         .error('Deleting the draft from the offline database failed.', { error });
     }
 
-    return this._deleteDraft(request);
+    return this._deleteDraft(...args);
   }
 
   /**

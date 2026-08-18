@@ -1,4 +1,3 @@
-import WebSocket from 'isomorphic-ws';
 import {
   addConnectionEventListeners,
   chatCodes,
@@ -24,12 +23,22 @@ const logger = chatLoggerSystem.getLogger('connection');
 
 // Type guards to check WebSocket error type
 const isCloseEvent = (
-  res: WebSocket.CloseEvent | WebSocket.Data | WebSocket.ErrorEvent,
-): res is WebSocket.CloseEvent => (res as WebSocket.CloseEvent).code !== undefined;
+  res: CloseEvent | MessageEvent | ErrorEvent | Event,
+): res is CloseEvent => (res as CloseEvent).code !== undefined;
 
 const isErrorEvent = (
-  res: WebSocket.CloseEvent | WebSocket.Data | WebSocket.ErrorEvent,
-): res is WebSocket.ErrorEvent => (res as WebSocket.ErrorEvent).error !== undefined;
+  res: CloseEvent | MessageEvent | ErrorEvent | Event,
+): res is ErrorEvent => (res as ErrorEvent).error !== undefined;
+
+class WSCloseError extends Error {
+  public reason?: string;
+  public wasClean?: boolean;
+  public code?: number;
+  public target?: EventTarget | null;
+  constructor(message?: string, errorOptions?: ErrorOptions) {
+    super(message, errorOptions);
+  }
+}
 
 /**
  * A WS connection that reconnects upon failure.
@@ -252,11 +261,6 @@ export class StableWSConnection {
 
     this.isHealthy = false;
 
-    // remove ws handlers...
-    if (this.ws && this.ws.removeAllListeners) {
-      this.ws.removeAllListeners();
-    }
-
     let isClosedPromise: Promise<void>;
     // and finally close...
     // Assigning to local here because we will remove it from this before the
@@ -264,7 +268,7 @@ export class StableWSConnection {
     const { ws } = this;
     if (ws && ws.close && ws.readyState === ws.OPEN) {
       isClosedPromise = new Promise((resolve) => {
-        const onclose = (event: WebSocket.CloseEvent) => {
+        const onclose = (event: CloseEvent) => {
           logger
             .withExtraTags('disconnect')
             .debug(
@@ -337,7 +341,10 @@ export class StableWSConnection {
         wsURL,
         requestID: this.requestID,
       });
-      this.ws = new WebSocket(wsURL);
+
+      const WS = this.client.options.WebSocketImpl ?? WebSocket;
+      this.ws = new WS(wsURL);
+
       this.ws.onopen = this.onopen.bind(this, this.wsID);
       this.ws.onclose = this.onclose.bind(this, this.wsID);
       this.ws.onerror = this.onerror.bind(this, this.wsID);
@@ -503,7 +510,7 @@ export class StableWSConnection {
     });
   };
 
-  onmessage = (wsId: number, event: WebSocket.MessageEvent) => {
+  onmessage = (wsId: number, event: MessageEvent) => {
     if (this.wsID !== wsId) return;
 
     logger.withExtraTags('onmessage').trace('WebSocket onmessage callback fired.', {
@@ -539,7 +546,7 @@ export class StableWSConnection {
     this.scheduleConnectionCheck();
   };
 
-  onclose = (wsId: number, event: WebSocket.CloseEvent) => {
+  onclose = (wsId: number, event: CloseEvent) => {
     if (this.wsID !== wsId) return;
 
     logger
@@ -552,9 +559,7 @@ export class StableWSConnection {
     if (event.code === chatCodes.WS_CLOSED_SUCCESS) {
       // this is a permanent error raised by stream..
       // usually caused by invalid auth details
-      const error = new Error(
-        `WS connection reject with error ${event.reason}`,
-      ) as Error & WebSocket.CloseEvent;
+      const error = new WSCloseError(`WS connection reject with error ${event.reason}`);
 
       error.reason = event.reason;
       error.code = event.code;
@@ -584,7 +589,7 @@ export class StableWSConnection {
     }
   };
 
-  onerror = (wsId: number, event: WebSocket.ErrorEvent) => {
+  onerror = (wsId: number, event: Event) => {
     if (this.wsID !== wsId) return;
 
     this.consecutiveFailures += 1;
@@ -630,7 +635,7 @@ export class StableWSConnection {
    * @returns A normalized error describing the WS failure.
    */
   _errorFromWSEvent = (
-    event: WebSocket.CloseEvent | WebSocket.Data | WebSocket.ErrorEvent,
+    event: CloseEvent | MessageEvent | ErrorEvent | Event,
     isWSFailure = true,
   ) => {
     let code;
@@ -679,7 +684,6 @@ export class StableWSConnection {
     this.wsID += 1;
 
     try {
-      this?.ws?.removeAllListeners();
       this?.ws?.close();
     } catch (e) {
       // we don't care

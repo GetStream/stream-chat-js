@@ -16,6 +16,7 @@ import { StateStore } from '../../store';
 
 export type {
   JumpToMessageOptions,
+  MergeNewestPageOptions,
   MessageFocusReason,
   MessageFocusSignal,
   MessageFocusSignalState,
@@ -23,6 +24,7 @@ export type {
   MessagePaginatorSort,
   MessagePaginatorState,
   MessageQueryShape,
+  SeedFirstPageOptions,
 } from './MessageIntervalPaginator';
 export { MessageIntervalPaginator } from './MessageIntervalPaginator';
 

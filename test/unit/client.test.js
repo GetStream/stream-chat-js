@@ -951,6 +951,34 @@ describe('StreamChat.queryChannels', async () => {
 		stub.restore();
 	});
 
+	it('reconciles a trailing offline hard-delete on channel-list re-hydrate (cold-boot path)', async () => {
+		const client = await getClientWithUser();
+		const full = [
+			generateMsg({ id: 'm5', created_at: '2023-11-14T12:00:05.000Z' }),
+			generateMsg({ id: 'm6', created_at: '2023-11-14T12:00:06.000Z' }),
+			generateMsg({ id: 'm7', created_at: '2023-11-14T12:00:07.000Z' }),
+		];
+		const stub = sinon.stub(client, 'queryChannels').resolves({
+			channels: [{ ...mockChannelQueryResponse, messages: full }],
+		});
+
+		// First hydrate seeds the (cold) paginator with m5,m6,m7 — m7 is the newest / bottom-most.
+		const [channel] = await client.queryChannelsAndHydrate({ message_limit: 3 });
+		expect(channel.messagePaginator.getItem('m7')).to.not.be.undefined;
+
+		// While the app was closed, m7 (the last message) was hard-deleted. The next channel-list query
+		// returns the window WITHOUT it. m7 is above the newest returned message (m6), so only the
+		// pre-fetch head snapshot lets the reconcile prune it — the cold-boot path must supply it.
+		stub.resolves({
+			channels: [{ ...mockChannelQueryResponse, messages: [full[0], full[1]] }],
+		});
+		await client.queryChannelsAndHydrate({ message_limit: 3 });
+
+		expect(channel.messagePaginator.getItem('m7')).to.be.undefined;
+
+		stub.restore();
+	});
+
 	it('seeds each queried channel paginator with its full message page', async () => {
 		const client = await getClientWithUser();
 		const mockedChannelsQueryResponse = Array.from({ length: 10 }, (_, index) =>
@@ -1085,7 +1113,7 @@ describe('StreamChat.queryReactions', () => {
 		]);
 
 		expect(postStub).toHaveBeenCalledTimes(1);
-		expect(postStub).toHaveBeenCalledWith(request);
+		expect(postStub).toHaveBeenCalledWith(request, undefined);
 
 		expect(result).to.eql(postResponse);
 	});
@@ -1101,7 +1129,7 @@ describe('StreamChat.queryReactions', () => {
 		await client.queryReactionsAndHydrate(request);
 
 		expect(client.offlineDb.getReactions).not.toHaveBeenCalled();
-		expect(postStub).toHaveBeenCalledWith(request);
+		expect(postStub).toHaveBeenCalledWith(request, undefined);
 	});
 
 	it('should not dispatch event if offlineDb returns null', async () => {
@@ -1117,7 +1145,7 @@ describe('StreamChat.queryReactions', () => {
 
 		expect(client.offlineDb.getReactions).toHaveBeenCalledTimes(1);
 		expect(dispatchSpy).not.toHaveBeenCalled();
-		expect(postStub).toHaveBeenCalledWith(request);
+		expect(postStub).toHaveBeenCalledWith(request, undefined);
 	});
 
 	it('should log a warning if offlineDb.getReactions throws', async () => {
@@ -1142,12 +1170,15 @@ describe('StreamChat.queryReactions', () => {
 			}),
 		);
 		expect(dispatchSpy).not.toHaveBeenCalled();
-		expect(postStub).toHaveBeenCalledWith({
-			id: messageId,
-			filter,
-			sort,
-			limit: 50,
-		});
+		expect(postStub).toHaveBeenCalledWith(
+			{
+				id: messageId,
+				filter,
+				sort,
+				limit: 50,
+			},
+			undefined,
+		);
 
 		chatLoggerSystem.restoreDefaults();
 	});

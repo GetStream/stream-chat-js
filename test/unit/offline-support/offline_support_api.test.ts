@@ -23,7 +23,7 @@ import { generateReadResponse } from '../test-utils/generateReadResponse';
 import { generatePendingTask } from '../test-utils/generatePendingTask';
 import { getClientWithUser } from '../test-utils/getClient';
 import * as utils from '../../../src/utils';
-import { AxiosError } from 'axios';
+import { AxiosError, CanceledError } from 'axios';
 import { MockOfflineDB } from './MockOfflineDB';
 
 describe('OfflineSupportApi', () => {
@@ -183,6 +183,106 @@ describe('OfflineSupportApi', () => {
 
         expect(client.offlineDb!.shouldInitialize('user123')).toBe(false);
       });
+    });
+  });
+
+  describe('sync event replay policy', () => {
+    const CID = 'messaging:1';
+
+    const setupSync = ({
+      syncMaxEventCount,
+      eventCount,
+    }: {
+      syncMaxEventCount?: number;
+      eventCount: number;
+    }) => {
+      const offlineDb = new MockOfflineDB({ client, syncMaxEventCount });
+      offlineDb.getAllChannelCids.mockResolvedValue([CID]);
+      // Recent lastSyncedAt => within the 30 day window => enters the /sync branch.
+      offlineDb.getLastSyncedAt.mockResolvedValue(new Date().toISOString());
+      offlineDb.executeSqlBatch.mockResolvedValue(undefined);
+      offlineDb.upsertUserSyncStatus.mockResolvedValue(undefined);
+
+      const events = Array.from(
+        { length: eventCount },
+        () => ({ type: 'message.new', cid: CID }) as Event,
+      );
+      const syncSpy = vi
+        .spyOn(client, 'sync')
+        .mockResolvedValue({ events } as unknown as Awaited<
+          ReturnType<StreamChat['sync']>
+        >);
+      // handleEvent returns a query so the under-limit path reaches executeSqlBatch.
+      const handleEventSpy = vi
+        .spyOn(offlineDb, 'handleEvent')
+        .mockResolvedValue([{ sql: 'MOCK_QUERY', args: [] }]);
+
+      return { offlineDb, syncSpy, handleEventSpy };
+    };
+
+    // sync() is private; drive it directly for a focused unit test.
+    const runSync = (offlineDb: MockOfflineDB) =>
+      (offlineDb.syncManager as unknown as { sync: () => Promise<void> }).sync();
+
+    it('leaves the sync manager syncMaxEventCount undefined (no limit) when not provided', () => {
+      const offlineDb = new MockOfflineDB({ client });
+      expect(offlineDb.syncManager.syncMaxEventCount).toBeUndefined();
+    });
+
+    it('replays every event when no limit is set, even for a large payload', async () => {
+      const { offlineDb, handleEventSpy } = setupSync({ eventCount: 500 });
+
+      await runSync(offlineDb);
+
+      expect(handleEventSpy).toHaveBeenCalledTimes(500);
+      expect(offlineDb.executeSqlBatch).toHaveBeenCalledOnce();
+      expect(offlineDb.upsertUserSyncStatus).toHaveBeenCalledOnce();
+      expect(offlineDb.resetDB).not.toHaveBeenCalled();
+    });
+
+    it('treats a non-positive limit as no limit (still replays)', async () => {
+      const { offlineDb, handleEventSpy } = setupSync({
+        syncMaxEventCount: 0,
+        eventCount: 5,
+      });
+
+      await runSync(offlineDb);
+
+      expect(handleEventSpy).toHaveBeenCalledTimes(5);
+      expect(offlineDb.executeSqlBatch).toHaveBeenCalledOnce();
+    });
+
+    it('replays events into the DB when the payload is at or below the limit', async () => {
+      const { offlineDb, handleEventSpy } = setupSync({
+        syncMaxEventCount: 3,
+        eventCount: 3,
+      });
+
+      await runSync(offlineDb);
+
+      expect(handleEventSpy).toHaveBeenCalledTimes(3);
+      expect(offlineDb.executeSqlBatch).toHaveBeenCalledOnce();
+      // Timestamp is still advanced, and the DB is not reset.
+      expect(offlineDb.upsertUserSyncStatus).toHaveBeenCalledOnce();
+      expect(offlineDb.resetDB).not.toHaveBeenCalled();
+    });
+
+    it('skips event replay when the payload exceeds the limit but still advances the timestamp', async () => {
+      const { offlineDb, handleEventSpy } = setupSync({
+        syncMaxEventCount: 3,
+        eventCount: 4,
+      });
+
+      await runSync(offlineDb);
+
+      // Replay is skipped entirely: no per-event handling, no batch write.
+      expect(handleEventSpy).not.toHaveBeenCalled();
+      expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+      // The last-sync timestamp is still advanced so the same oversized payload
+      // is not re-fetched and skipped on every subsequent sync.
+      expect(offlineDb.upsertUserSyncStatus).toHaveBeenCalledOnce();
+      // Skipping is NOT a reset — inactive channels wait for a future query.
+      expect(offlineDb.resetDB).not.toHaveBeenCalled();
     });
   });
 
@@ -813,6 +913,60 @@ describe('OfflineSupportApi', () => {
           await expect(offlineDb.handleRemoveMessage({ messageId })).rejects.toThrow(
             'hard delete failed',
           );
+        });
+      });
+
+      describe('hardDeleteMessages', () => {
+        beforeEach(() => {
+          offlineDb.hardDeleteMessage.mockResolvedValue([['DELETE hard']]);
+          offlineDb.executeSqlBatch.mockResolvedValue(undefined);
+        });
+
+        afterEach(() => {
+          vi.resetAllMocks();
+        });
+
+        it('hard deletes every id and runs all queries as a single batch', async () => {
+          const result = await offlineDb.hardDeleteMessages({ ids: ['a', 'b'] });
+
+          expect(offlineDb.hardDeleteMessage).toHaveBeenCalledTimes(2);
+          expect(offlineDb.hardDeleteMessage).toHaveBeenCalledWith({
+            id: 'a',
+            execute: false,
+          });
+          expect(offlineDb.hardDeleteMessage).toHaveBeenCalledWith({
+            id: 'b',
+            execute: false,
+          });
+          // Each id's queries are collected (execute:false) and flushed in one transaction.
+          expect(offlineDb.executeSqlBatch).toHaveBeenCalledTimes(1);
+          expect(offlineDb.executeSqlBatch).toHaveBeenCalledWith([
+            ['DELETE hard'],
+            ['DELETE hard'],
+          ]);
+          expect(result).toEqual([['DELETE hard'], ['DELETE hard']]);
+        });
+
+        it('returns the collected queries without executing them when execute is false', async () => {
+          const result = await offlineDb.hardDeleteMessages({
+            ids: ['a'],
+            execute: false,
+          });
+
+          expect(offlineDb.hardDeleteMessage).toHaveBeenCalledWith({
+            id: 'a',
+            execute: false,
+          });
+          expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+          expect(result).toEqual([['DELETE hard']]);
+        });
+
+        it('is a no-op for an empty id set (touches neither the delete nor the batch)', async () => {
+          const result = await offlineDb.hardDeleteMessages({ ids: [] });
+
+          expect(offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
+          expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+          expect(result).toEqual([]);
         });
       });
 
@@ -1851,6 +2005,13 @@ describe('OfflineSupportApi', () => {
 
         // Network/connection failure — server never responded → ephemeral → keep queued.
         expect(shouldSkipQueueingTask({} as AxiosError)).toBe(false);
+
+        // Caller cancelled via `StreamRequestOptions.signal`. Also has no `response`, but it is a
+        // deliberate rejection rather than a transient failure, so it is skipped — queueing it
+        // would replay on reconnect the very request the caller aborted.
+        expect(shouldSkipQueueingTask(new CanceledError('canceled') as AxiosError)).toBe(
+          true,
+        );
       });
 
       describe('queueTask', () => {
@@ -2162,6 +2323,74 @@ describe('OfflineSupportApi', () => {
           expect(mockChannel._sendReaction).toHaveBeenCalledWith(...task.payload);
         });
 
+        // A task payload is the replayed method's argument list, so it carries that method's
+        // trailing `requestOptions` too.
+        it('forwards requestOptions queued in the payload on replay', async () => {
+          const controller = new AbortController();
+          const task = generatePendingTask('send-reaction') as PendingTask;
+          const taskWithOptions = {
+            ...task,
+            payload: [task.payload[0], { signal: controller.signal }],
+          } as PendingTask;
+
+          await offlineDb['executeTask']({ task: taskWithOptions });
+
+          expect(mockChannel._sendReaction).toHaveBeenCalledWith(task.payload[0], {
+            signal: controller.signal,
+          });
+        });
+
+        // A task that reached the pending-tasks table was serialized, so its signal revives as
+        // an inert `{}`. Replay must still go through - ApiClient is what drops the dead signal.
+        it('replays a task whose persisted signal did not survive serialization', async () => {
+          const task = generatePendingTask('send-reaction') as PendingTask;
+          const persisted = JSON.parse(
+            JSON.stringify({
+              ...task,
+              payload: [task.payload[0], { signal: new AbortController().signal }],
+            }),
+          ) as PendingTask;
+
+          await offlineDb['executeTask']({ task: persisted });
+
+          expect(mockChannel._sendReaction).toHaveBeenCalledWith(persisted.payload[0], {
+            signal: {},
+          });
+        });
+
+        // Cancelling is not a way to shed a task: an aborted request is a definitive rejection, so
+        // `queueTask` must not stash it for replay on reconnect.
+        it('does not queue a task whose request the caller cancelled', async () => {
+          const handleAddPendingTaskSpy = vi
+            .spyOn(offlineDb as any, 'handleAddPendingTask')
+            .mockResolvedValue(undefined);
+          (client as any).wsConnection = { isHealthy: true };
+          (mockChannel._sendReaction as unknown as MockInstance).mockRejectedValue(
+            new CanceledError('canceled'),
+          );
+          const task = generatePendingTask('send-reaction') as PendingTask;
+
+          await expect(offlineDb.queueTask({ task })).rejects.toThrow(CanceledError);
+
+          expect(handleAddPendingTaskSpy).not.toHaveBeenCalled();
+        });
+
+        // Contrast: a genuine network failure is transient, so it IS queued.
+        it('queues a task that failed on a network error', async () => {
+          const handleAddPendingTaskSpy = vi
+            .spyOn(offlineDb as any, 'handleAddPendingTask')
+            .mockResolvedValue(undefined);
+          (client as any).wsConnection = { isHealthy: true };
+          (mockChannel._sendReaction as unknown as MockInstance).mockRejectedValue(
+            new Error('network down'),
+          );
+          const task = generatePendingTask('send-reaction') as PendingTask;
+
+          await expect(offlineDb.queueTask({ task })).rejects.toThrow('network down');
+
+          expect(handleAddPendingTaskSpy).toHaveBeenCalledTimes(1);
+        });
+
         it('should call _deleteReaction for delete-reaction task', async () => {
           const task = generatePendingTask('delete-reaction') as PendingTask;
 
@@ -2422,6 +2651,84 @@ describe('OfflineDBSyncManager', () => {
     });
   });
 
+  describe('graceful recovery when the sync fails (issue #1816)', () => {
+    beforeEach(() => {
+      // Healthy defaults; each test opts into a specific failure below.
+      offlineDb.getPendingTasks.mockResolvedValue([]);
+      offlineDb.getAllChannelCids.mockResolvedValue([]);
+      offlineDb.resetDB.mockResolvedValue(undefined);
+      client.wsConnection = { isHealthy: true } as StableWSConnection;
+    });
+
+    it('recovers syncStatus to true when executePendingTasks() rejects, and still runs sync()', async () => {
+      offlineDb.getPendingTasks.mockRejectedValue(
+        new Error('missing userSyncStatus table'),
+      );
+
+      await syncManager.init();
+
+      expect(syncManager.syncStatus).toBe(true);
+      // The two steps are isolated, so a failure in executePendingTasks() must not
+      // prevent sync() from running (sync() reads channel cids first).
+      expect(offlineDb.getAllChannelCids).toHaveBeenCalled();
+    });
+
+    it('still registers the connection.changed listener and runs scheduled callbacks when the init sync throws', async () => {
+      offlineDb.getPendingTasks.mockRejectedValue(new Error('db read failure'));
+      const scheduledCallback = vi.fn().mockResolvedValue(undefined);
+      syncManager.scheduleSyncStatusChangeCallback('channel-list', scheduledCallback);
+
+      await syncManager.init();
+
+      expect(syncManager.connectionChangedListener).not.toBeNull();
+      expect(syncManager.syncStatus).toBe(true);
+      expect(scheduledCallback).toHaveBeenCalledTimes(1);
+      expect(syncManager['scheduledSyncStatusCallbacks'].size).toBe(0);
+    });
+
+    it('recovers syncStatus to true when sync() re-throws via a failing resetDB()', async () => {
+      offlineDb.getAllChannelCids.mockResolvedValue(['channel-1']);
+      offlineDb.getLastSyncedAt.mockResolvedValue(new Date().toString());
+      // Force sync() into its catch block, where the unguarded resetDB() itself
+      // throws and rerejects out of sync().
+      vi.spyOn(client, 'sync').mockRejectedValue(new Error('too many events'));
+      offlineDb.resetDB.mockRejectedValue(new Error('resetDB failed on corrupted DB'));
+
+      await syncManager.init();
+
+      expect(offlineDb.resetDB).toHaveBeenCalled();
+      expect(syncManager.syncStatus).toBe(true);
+    });
+
+    it('recovers syncStatus to true on reconnect even when the sync fails', async () => {
+      // Not connected at init time, so init() only registers the listener.
+      client.wsConnection = { isHealthy: false } as StableWSConnection;
+      offlineDb.getPendingTasks.mockRejectedValue(new Error('db failure on reconnect'));
+
+      await syncManager.init();
+
+      expect(syncManager.syncStatus).toBe(false);
+      expect(syncManager.connectionChangedListener).not.toBeNull();
+
+      client.dispatchEvent({ type: 'connection.changed', online: true });
+
+      // The listener is dispatched as a fire and forget, so poll until it settles.
+      await vi.waitFor(() => expect(syncManager.syncStatus).toBe(true));
+    });
+
+    it('leaves the success path unchanged: syncStatus true, deferred callbacks run once, queue cleared', async () => {
+      const scheduledCallback = vi.fn().mockResolvedValue(undefined);
+      syncManager.scheduleSyncStatusChangeCallback('tag-1', scheduledCallback);
+
+      await syncManager.init();
+
+      expect(syncManager.syncStatus).toBe(true);
+      expect(scheduledCallback).toHaveBeenCalledTimes(1);
+      expect(syncManager['scheduledSyncStatusCallbacks'].size).toBe(0);
+      expect(offlineDb.resetDB).not.toHaveBeenCalled();
+    });
+  });
+
   describe('sync status listeners and callbacks', () => {
     describe('onSyncStatusChange', () => {
       it('adds a listener to syncStatusListeners', () => {
@@ -2555,6 +2862,32 @@ describe('OfflineDBSyncManager', () => {
         expect(order).toContain('cb1');
         expect(order).toContain('cb2');
       });
+
+      it('keeps notifying other listeners and still sets syncStatus when a listener throws', async () => {
+        const goodListener = vi.fn();
+        syncManager.onSyncStatusChange(() => {
+          throw new Error('listener boom');
+        });
+        syncManager.onSyncStatusChange(goodListener);
+
+        await (syncManager as any).invokeSyncStatusListeners(true);
+
+        expect(goodListener).toHaveBeenCalledWith(true);
+        expect(syncManager['syncStatus']).toBe(true);
+      });
+
+      it('runs every scheduled callback and clears the queue even when one callback throws', async () => {
+        const goodCallback = vi.fn().mockResolvedValue(undefined);
+        syncManager.scheduleSyncStatusChangeCallback('bad', async () => {
+          throw new Error('callback boom');
+        });
+        syncManager.scheduleSyncStatusChangeCallback('good', goodCallback);
+
+        await (syncManager as any).invokeSyncStatusListeners(true);
+
+        expect(goodCallback).toHaveBeenCalledTimes(1);
+        expect(syncManager['scheduledSyncStatusCallbacks'].size).toBe(0);
+      });
     });
 
     describe('syncAndExecutePendingTasks', () => {
@@ -2578,23 +2911,27 @@ describe('OfflineDBSyncManager', () => {
         );
       });
 
-      it('throws if executePendingTasks fails', async () => {
+      // See issue #1816: syncAndExecutePendingTasks() must never throw, otherwise
+      // the subsequent invokeSyncStatusListeners(true) is skipped and syncStatus
+      // is stuck false, freezing all future channel queries.
+      it('does not throw when executePendingTasks fails and still performs sync', async () => {
         const error = new Error('Failed to execute pending tasks');
         executePendingTasksSpy.mockRejectedValueOnce(error);
 
-        await expect((syncManager as any).syncAndExecutePendingTasks()).rejects.toThrow(
-          error,
-        );
-        expect(syncSpy).not.toHaveBeenCalled();
+        await expect(
+          (syncManager as any).syncAndExecutePendingTasks(),
+        ).resolves.toBeUndefined();
+        // The two steps are isolated, so a failure in one does not skip the other.
+        expect(syncSpy).toHaveBeenCalled();
       });
 
-      it('throws if sync fails', async () => {
+      it('does not throw when sync fails, and still executes pending tasks', async () => {
         const error = new Error('Sync failed');
         syncSpy.mockRejectedValueOnce(error);
 
-        await expect((syncManager as any).syncAndExecutePendingTasks()).rejects.toThrow(
-          error,
-        );
+        await expect(
+          (syncManager as any).syncAndExecutePendingTasks(),
+        ).resolves.toBeUndefined();
         expect(executePendingTasksSpy).toHaveBeenCalled();
       });
     });
@@ -2740,6 +3077,19 @@ describe('OfflineDBSyncManager', () => {
 
         expect(resetDBSpy).toHaveBeenCalled();
         expect(upsertUserSyncStatusSpy).not.toHaveBeenCalled();
+      });
+
+      it('re-throws if resetDB itself throws while recovering from a sync API error', async () => {
+        const recentDate = new Date();
+        recentDate.setDate(recentDate.getDate() - 10);
+        getLastSyncedAtSpy.mockResolvedValueOnce(recentDate.toString());
+
+        syncApiSpy.mockRejectedValueOnce(new Error('too many events'));
+        resetDBSpy.mockRejectedValueOnce(new Error('resetDB failed on corrupted DB'));
+
+        await expect((syncManager as any).sync()).rejects.toThrow(
+          'resetDB failed on corrupted DB',
+        );
       });
 
       it('does not call executeSqlBatch if no queries are returned', async () => {

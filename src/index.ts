@@ -1,4 +1,3 @@
-export * from './base64';
 export * from './client';
 export * from './client_state';
 export * from './channel';

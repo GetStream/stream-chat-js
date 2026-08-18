@@ -3,7 +3,6 @@
 
 import type { AxiosInstance, AxiosRequestConfig } from 'axios';
 import axios from 'axios';
-import https from 'https';
 
 import { Channel } from './channel';
 import { ClientState } from './client_state';
@@ -49,15 +48,14 @@ import type {
   OwnUserResponse,
   PartializeAllBut,
   PartialThreadUpdate,
-  QueryBannedUsersPayload,
   QueryChannelsRequest,
   QueryChannelsResponse,
   QueryReactionsRequestWithId,
   QueryThreadsRequest,
   ReactionResponse,
   SdkIdentifier,
-  SearchPayload,
   StreamChatOptions,
+  StreamRequestOptions,
   TokenOrProvider,
   UnBanUserOptions,
   UpdateUserPartialRequest,
@@ -89,7 +87,6 @@ import type { Unsubscribe } from './store';
 import type {
   GetApplicationResponse as Gen_GetApplicationResponse,
   MarkDeliveredRequest as Gen_MarkDeliveredRequest,
-  QueryUsersPayload as Gen_QueryUsersPayload,
   WSEvent,
 } from './gen/models';
 import { ChatApi } from './gen-imports';
@@ -159,7 +156,7 @@ export class StreamChat extends ChatApi {
   axiosInstance: AxiosInstance;
   baseURL?: string;
   browser: boolean;
-  cleaningIntervalRef?: NodeJS.Timeout;
+  cleaningIntervalRef?: ReturnType<typeof setTimeout>;
   clientId?: string;
   key: string;
   listeners: Map<EventType, Set<EventHandler>>;
@@ -236,7 +233,6 @@ export class StreamChat extends ChatApi {
   appIdentifier?: AppIdentifier;
   private cachedUserAgent?: string;
   readonly messageComposerCache: FixedSizeQueueCache<string, MessageComposer>;
-  private nextRequestAbortController: AbortController | null = null;
   /**
    * Configuration you register for instances the SDK creates on your behalf — channels, threads,
    * composers, and the client's own managers. See `InstanceConfigurationRegistry`.
@@ -267,7 +263,7 @@ export class StreamChat extends ChatApi {
    * @param options.logLevel - Minimum log level for the default sink (optional, defaults to `'info'`).
    * @param options.logOptions - Per-scope sink/level overrides for `chatLoggerSystem` (optional).
    * @param options.timeout - Request timeout (optional, defaults to `3000`).
-   * @param options.httpsAgent - Custom `httpsAgent` (optional, in Node defaults to `https.agent()`).
+   * @param options.httpsAgent - Custom `httpsAgent` (optional).
    */
   constructor(key: string, options: StreamChatOptions = {}) {
     // generated client requires ApiClient right away
@@ -309,9 +305,6 @@ export class StreamChat extends ChatApi {
     this.axiosInstance = axios.create({
       timeout: 3000,
       withCredentials: false,
-      httpsAgent: this.node
-        ? new https.Agent({ keepAlive: true, keepAliveMsecs: 3000 })
-        : undefined,
       ...this.options.axiosRequestConfig,
       paramsSerializer: axiosParamsSerializer,
     });
@@ -673,9 +666,11 @@ export class StreamChat extends ChatApi {
    * Revokes tokens for a connected user issued before the given time.
    *
    * @param before - Cutoff date; tokens issued before this are revoked (optional, defaults to the current time).
+   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The updated users response.
    */
-  async revokeTokens(before?: Date | null) {
+  async revokeTokens(before?: Date | null, requestOptions?: StreamRequestOptions) {
     if (!before) {
       before = new Date();
     }
@@ -690,16 +685,18 @@ export class StreamChat extends ChatApi {
       },
     ];
 
-    return await this.updateUsersPartial({ users });
+    return await this.updateUsersPartial({ users }, requestOptions);
   }
 
   /**
    * Retrieves application settings.
    *
+   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The application settings response.
    */
-  async getAppSettings() {
-    return await (this.appSettingsPromise = this.getApp());
+  async getAppSettings(requestOptions?: StreamRequestOptions) {
+    return await (this.appSettingsPromise = this.getApp(requestOptions));
   }
 
   /**
@@ -792,10 +789,12 @@ export class StreamChat extends ChatApi {
    * Sets up a temporary guest user.
    *
    * @param user - Data about this user, e.g. `{ name: 'john' }`.
+   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns A promise that resolves when the connection is set up.
    */
-  async setGuestUser(user: UserResponse) {
-    const response = await this.createGuest({ user });
+  async setGuestUser(user: UserResponse, requestOptions?: StreamRequestOptions) {
+    const response = await this.createGuest({ user }, requestOptions);
 
     const {
       created_at: _created_at,
@@ -1305,16 +1304,18 @@ export class StreamChat extends ChatApi {
   /**
    * Queries users and watches user presence.
    *
-   * @param request - The query users request payload (optional). The inner `payload` accepts
+   * @param ...args - `[request, requestOptions]`. The optional `request.payload` accepts
    *   MongoDB-style filter conditions, sort directions (e.g. `[{ field: 'last_active', direction: -1 }]`),
-   *   and options such as `presence`.
+   *   and options such as `presence`. `requestOptions` carries per-request options such as an
+   *   abort `signal` and is never serialized into the request.
    * @returns The user query response.
    */
-  override async queryUsers(request?: { payload?: Gen_QueryUsersPayload }) {
+  override async queryUsers(...args: Parameters<ChatApi['queryUsers']>) {
+    const [request, requestOptions] = args;
     // Make sure we wait for the connect promise if there is a pending one
     await this.wsPromise;
 
-    const data = await super.queryUsers(request);
+    const data = await super.queryUsers(request ?? {}, requestOptions);
     this.state.updateUsers(data.users);
 
     return data;
@@ -1323,15 +1324,16 @@ export class StreamChat extends ChatApi {
   /**
    * Queries user bans.
    *
-   * @param request - The query banned users request payload (optional). The inner `payload`
-   *   accepts MongoDB-style filter conditions, sort directions
+   * @param ...args - `[request, requestOptions]`. The optional `request.payload` accepts
+   *   MongoDB-style filter conditions, sort directions
    *   (e.g. `[{ field: 'created_at', direction: 1 }]`), and options such as `limit`, `offset`,
-   *   and `exclude_expired_bans`.
+   *   and `exclude_expired_bans`. `requestOptions` carries per-request options such as an abort
+   *   `signal` and is never serialized into the request.
    * @returns The ban query response.
    */
-  async queryBannedUsers(request?: { payload?: QueryBannedUsersPayload }) {
+  async queryBannedUsers(...args: Parameters<ChatApi['queryBannedUsers']>) {
     // Return a list of user bans
-    return await super.queryBannedUsers(request);
+    return await super.queryBannedUsers(...args);
   }
 
   /**
@@ -1343,12 +1345,14 @@ export class StreamChat extends ChatApi {
    * only the channel list. In the next major release, the request/response APIs should
    * be consolidated so callers can access the full response through the primary API.
    *
-   * @param request - The query channels request payload (optional). Accepts MongoDB-style filter
-   *   conditions, sort directions (e.g. `[{ field: 'created_at', direction: -1 }]`), and options
-   *   such as `predefined_filter`, `filter_values`, and `sort_values`.
+   * @param ...args - `[request, requestOptions]`. The optional `request` accepts MongoDB-style
+   *   filter conditions, sort directions (e.g. `[{ field: 'created_at', direction: -1 }]`), and
+   *   options such as `predefined_filter`, `filter_values`, and `sort_values`. `requestOptions`
+   *   carries per-request options such as an abort `signal` and is never serialized into the request.
    * @returns The full query channels response.
    */
-  override async queryChannels(request?: QueryChannelsRequest) {
+  override async queryChannels(...args: Parameters<ChatApi['queryChannels']>) {
+    const [request, requestOptions] = args;
     const defaultOptions: ChannelOptions = {
       state: true,
       watch: true,
@@ -1386,7 +1390,7 @@ export class StreamChat extends ChatApi {
           ...restOptions,
         };
 
-    return await super.queryChannels(payload);
+    return await super.queryChannels(payload, requestOptions);
   }
 
   /**
@@ -1408,21 +1412,34 @@ export class StreamChat extends ChatApi {
    * @param stateOptions.withResponse - Returns the full query response with hydrated channels.
    *   This is a compatibility bridge for internal callers that need response-level metadata while
    *   the default return value remains `Channel[]` (optional).
+   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The hydrated channel list, or the full response when `withResponse` is `true`.
    */
   async queryChannelsAndHydrate(
     options?: QueryChannelsRequest,
     stateOptions?: ChannelStateOptions & { withResponse: true },
+    requestOptions?: StreamRequestOptions,
   ): Promise<QueryChannelsResponseWithChannels>;
   async queryChannelsAndHydrate(
     options?: QueryChannelsRequest,
     stateOptions?: ChannelStateOptions,
+    requestOptions?: StreamRequestOptions,
   ): Promise<Channel[]>;
   async queryChannelsAndHydrate(
     options?: QueryChannelsRequest,
     stateOptions: ChannelStateOptions = {},
+    requestOptions?: StreamRequestOptions,
   ): Promise<Channel[] | QueryChannelsResponseWithChannels> {
-    const queryChannelsResponse = await this.queryChannels(options);
+    // TODO(perf/cleanup): prefer a `memberIds` snapshot over `headItems.map` here too — see the
+    // matching TODO in channel.query() for the full rationale.
+    const candidateIdsByCid = new Map<string, ReadonlySet<string>>();
+    for (const cid of Object.keys(this.activeChannels)) {
+      const head = this.activeChannels[cid]?.messagePaginator?.headItems;
+      if (head?.length)
+        candidateIdsByCid.set(cid, new Set(head.map((message) => message.id)));
+    }
+    const queryChannelsResponse = await this.queryChannels(options, requestOptions);
     const channels = queryChannelsResponse.channels;
 
     this.dispatchEvent({
@@ -1439,7 +1456,12 @@ export class StreamChat extends ChatApi {
       });
     }
 
-    const hydratedChannels = this.hydrateActiveChannels(channels, stateOptions, options);
+    const hydratedChannels = this.hydrateActiveChannels(
+      channels,
+      stateOptions,
+      options,
+      candidateIdsByCid,
+    );
 
     if (stateOptions.withResponse) {
       return {
@@ -1458,9 +1480,14 @@ export class StreamChat extends ChatApi {
    * @param request - The query reactions request payload, including the target message ID,
    *   MongoDB-style filters, sort directions (e.g. `[{ field: 'created_at', direction: -1 }]`),
    *   and pagination options.
+   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The query reactions response.
    */
-  async queryReactionsAndHydrate(request: QueryReactionsRequestWithId) {
+  async queryReactionsAndHydrate(
+    request: QueryReactionsRequestWithId,
+    requestOptions?: StreamRequestOptions,
+  ) {
     const { filter, next, id: messageId, sort, limit } = request;
 
     if (this.offlineDb?.getReactions && !next) {
@@ -1488,13 +1515,14 @@ export class StreamChat extends ChatApi {
     // Make sure we wait for the connect promise if there is a pending one
     await this.wsPromise;
 
-    return await this.queryReactions(request);
+    return await this.queryReactions(request, requestOptions);
   }
 
   hydrateActiveChannels(
     channelsFromApi: ChannelStateResponseFields[] = [],
     stateOptions: ChannelStateOptions = {},
     queryChannelsOptions?: ChannelOptions,
+    candidateIdsByCid?: Map<string, ReadonlySet<string>>,
   ) {
     const { skipInitialization, offlineMode = false } = stateOptions;
     const channels: Channel[] = [];
@@ -1535,6 +1563,8 @@ export class StreamChat extends ChatApi {
         c.messagePaginator.seedFirstPageSync(
           channelState.messages.map(formatMessage),
           requestedPageSize,
+          undefined,
+          { reconcile: true, candidateIds: candidateIdsByCid?.get(c.cid) },
         );
       }
 
@@ -1560,11 +1590,14 @@ export class StreamChat extends ChatApi {
   /**
    * Queries messages.
    *
-   * @param request - The search request payload (optional). The inner `payload` accepts
+   * @param ...args - `[request, requestOptions]`. The optional `request.payload` accepts
    *   MongoDB-style filter conditions, a search query, and options such as `user_id`.
+   *   `requestOptions` carries per-request options such as an abort `signal` and is never
+   *   serialized into the request.
    * @returns The search messages response.
    */
-  override async search(request?: { payload?: SearchPayload }) {
+  override async search(...args: Parameters<ChatApi['search']>) {
+    const [request, requestOptions] = args;
     if (request?.payload?.offset && request?.payload?.next) {
       throw Error(`Cannot specify "offset" with "next"`);
     }
@@ -1572,7 +1605,7 @@ export class StreamChat extends ChatApi {
     // Make sure we wait for the connect promise if there is a pending one
     await this.wsPromise;
 
-    return await super.search(request);
+    return await super.search(request, requestOptions);
   }
 
   /**
@@ -1850,10 +1883,13 @@ export class StreamChat extends ChatApi {
       ...options,
     });
   }
-  async blockUser(blockedUserId: string) {
-    const result = await this.blockUsers({
-      blocked_user_id: blockedUserId,
-    });
+  async blockUser(blockedUserId: string, requestOptions?: StreamRequestOptions) {
+    const result = await this.blockUsers(
+      {
+        blocked_user_id: blockedUserId,
+      },
+      requestOptions,
+    );
     if (this._cacheEnabled()) {
       this.blockedUsers.next(({ userIds }) => ({
         userIds: userIds.concat(blockedUserId),
@@ -1862,8 +1898,8 @@ export class StreamChat extends ChatApi {
     return result;
   }
 
-  override async getBlockedUsers() {
-    const result = await super.getBlockedUsers();
+  override async getBlockedUsers(...args: Parameters<ChatApi['getBlockedUsers']>) {
+    const result = await super.getBlockedUsers(...args);
     if (this._cacheEnabled()) {
       this.blockedUsers.partialNext({
         userIds: result.blocks.map(({ blocked_user_id }) => blocked_user_id),
@@ -1872,10 +1908,13 @@ export class StreamChat extends ChatApi {
     return result;
   }
 
-  async unblockUser(blockedUserId: string) {
-    const result = await this.unblockUsers({
-      blocked_user_id: blockedUserId,
-    });
+  async unblockUser(blockedUserId: string, requestOptions?: StreamRequestOptions) {
+    const result = await this.unblockUsers(
+      {
+        blocked_user_id: blockedUserId,
+      },
+      requestOptions,
+    );
     if (this._cacheEnabled()) {
       this.blockedUsers.next(({ userIds }) => ({
         userIds: userIds.filter((id) => id !== blockedUserId),
@@ -2049,42 +2088,56 @@ export class StreamChat extends ChatApi {
    * @param pinnedAt - Date when the message should be pinned. It affects the order of pinned
    *   messages. Use a negative number to set relative time in the past, `string` or `Date` to
    *   set the exact date of pin (optional).
+   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The updated message response.
    */
   pinMessage(
     messageOrMessageId: string | { id: string },
     timeoutOrExpirationDate?: null | number | string | Date,
     pinnedAt?: number | string | Date,
+    requestOptions?: StreamRequestOptions,
   ) {
     const id = this._validateAndGetMessageId(
       messageOrMessageId,
       'Please specify the message id when calling pinMessage',
     );
-    return this.updateMessagePartial({
-      id,
-      set: {
-        pinned: true,
-        pin_expires: this._normalizeExpiration(timeoutOrExpirationDate),
-        pinned_at: this._normalizeExpiration(pinnedAt),
+    return this.updateMessagePartial(
+      {
+        id,
+        set: {
+          pinned: true,
+          pin_expires: this._normalizeExpiration(timeoutOrExpirationDate),
+          pinned_at: this._normalizeExpiration(pinnedAt),
+        },
       },
-    });
+      requestOptions,
+    );
   }
 
   /**
    * Unpins the message that was previously pinned.
    *
    * @param messageOrMessageId - MessageRequest object or message ID.
+   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The updated message response.
    */
-  unpinMessage(messageOrMessageId: string | { id: string }) {
+  unpinMessage(
+    messageOrMessageId: string | { id: string },
+    requestOptions?: StreamRequestOptions,
+  ) {
     const id = this._validateAndGetMessageId(
       messageOrMessageId,
       'Please specify the message id when calling unpinMessage',
     );
-    return this.updateMessagePartial({
-      id,
-      set: { pinned: false },
-    });
+    return this.updateMessagePartial(
+      {
+        id,
+        set: { pinned: false },
+      },
+      requestOptions,
+    );
   }
 
   /**
@@ -2092,8 +2145,12 @@ export class StreamChat extends ChatApi {
    * so it is replayed on reconnect.
    */
   override async updateMessage(
-    request: Parameters<ChatApi['updateMessage']>[0] & { message: { cid?: string } },
+    ...args: [
+      request: Parameters<ChatApi['updateMessage']>[0] & { message: { cid?: string } },
+      requestOptions?: StreamRequestOptions,
+    ]
   ) {
+    const [request] = args;
     try {
       if (this.offlineDb) {
         return await this.offlineDb.queueTask<
@@ -2102,7 +2159,7 @@ export class StreamChat extends ChatApi {
           task: {
             ...getPendingTaskChannelData(request.message?.cid),
             messageId: request.id,
-            payload: [request],
+            payload: args,
             type: 'update-message',
           },
         });
@@ -2113,18 +2170,19 @@ export class StreamChat extends ChatApi {
         .error('Updating the message failed.', { error });
     }
 
-    return await this._updateMessage(request);
+    return await this._updateMessage(...args);
   }
 
-  async _updateMessage(request: Parameters<ChatApi['updateMessage']>[0]) {
-    return await super.updateMessage(request);
+  async _updateMessage(...args: Parameters<ChatApi['updateMessage']>) {
+    return await super.updateMessage(...args);
   }
 
   /**
    * Deletes a message. When an `offlineDb` is registered the call is queued so it
    * is replayed on reconnect.
    */
-  override async deleteMessage(request: Parameters<ChatApi['deleteMessage']>[0]) {
+  override async deleteMessage(...args: Parameters<ChatApi['deleteMessage']>) {
+    const [request] = args;
     try {
       if (this.offlineDb) {
         if (request.hard) {
@@ -2140,7 +2198,7 @@ export class StreamChat extends ChatApi {
         >({
           task: {
             messageId: request.id,
-            payload: [request],
+            payload: args,
             type: 'delete-message',
           },
         });
@@ -2151,11 +2209,12 @@ export class StreamChat extends ChatApi {
         .error('Deleting the message failed.', { error });
     }
 
-    return this._deleteMessage(request);
+    return this._deleteMessage(...args);
   }
 
-  async _deleteMessage(request: Parameters<ChatApi['deleteMessage']>[0]) {
-    const result = await super.deleteMessage(request);
+  async _deleteMessage(...args: Parameters<ChatApi['deleteMessage']>) {
+    const [request] = args;
+    const result = await super.deleteMessage(...args);
 
     // necessary to populate the below values as the server does not return the message in the response as deleted
     if (request.delete_for_me) {
@@ -2177,9 +2236,14 @@ export class StreamChat extends ChatApi {
    * @param options.reply_limit - Limits the number of replies returned per thread (optional).
    * @param options.filter - MongoDB style filters for threads (optional).
    * @param options.sort - MongoDB style sort for threads (optional).
+   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The list of threads and the next cursor.
    */
-  async queryThreadsAndHydrate(options: QueryThreadsRequest = {}) {
+  async queryThreadsAndHydrate(
+    options: QueryThreadsRequest = {},
+    requestOptions?: StreamRequestOptions,
+  ) {
     const optionsWithDefaults = {
       limit: 10,
       participant_limit: 10,
@@ -2203,7 +2267,7 @@ export class StreamChat extends ChatApi {
       requestBody.sort = optionsWithDefaults.sort;
     }
 
-    const response = await this.queryThreads(requestBody);
+    const response = await this.queryThreads(requestBody, requestOptions);
 
     // Hydrate the polls for the parent messages of the threads
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -2227,9 +2291,15 @@ export class StreamChat extends ChatApi {
    * @param options.watch - Subscribes the user to the channel of the thread (optional).
    * @param options.participant_limit - Limits the number of participants returned per thread (optional).
    * @param options.reply_limit - Limits the number of replies returned per thread (optional).
+   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The thread.
    */
-  async getThreadAndHydrate(messageId: string, options: GetThreadOptions = {}) {
+  async getThreadAndHydrate(
+    messageId: string,
+    options: GetThreadOptions = {},
+    requestOptions?: StreamRequestOptions,
+  ) {
     if (!messageId) {
       throw new Error('Please specify the messageId when calling getThreadAndHydrate');
     }
@@ -2241,10 +2311,13 @@ export class StreamChat extends ChatApi {
       ...options,
     };
 
-    const response = await this.getThread({
-      message_id: messageId,
-      ...optionsWithDefaults,
-    });
+    const response = await this.getThread(
+      {
+        message_id: messageId,
+        ...optionsWithDefaults,
+      },
+      requestOptions,
+    );
 
     return new Thread({ client: this, threadData: response.thread });
   }
@@ -2254,9 +2327,15 @@ export class StreamChat extends ChatApi {
    *
    * @param messageId - The ID of the thread message which needs to be updated.
    * @param partialThreadObject - Should contain `set` or `unset` params for any of the thread's non-reserved fields.
+   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
    * @returns The updated thread.
    */
-  async partialUpdateThread(messageId: string, partialThreadObject: PartialThreadUpdate) {
+  async partialUpdateThread(
+    messageId: string,
+    partialThreadObject: PartialThreadUpdate,
+    requestOptions?: StreamRequestOptions,
+  ) {
     if (!messageId) {
       throw Error('Please specify the message id when calling partialUpdateThread');
     }
@@ -2284,10 +2363,13 @@ export class StreamChat extends ChatApi {
       }
     }
 
-    return await this.updateThreadPartial({
-      message_id: messageId,
-      ...partialThreadObject,
-    });
+    return await this.updateThreadPartial(
+      {
+        message_id: messageId,
+        ...partialThreadObject,
+      },
+      requestOptions,
+    );
   }
 
   getUserAgent = (): string => {
@@ -2379,19 +2461,21 @@ export class StreamChat extends ChatApi {
    * @param request.filter - Vote filter conditions.
    * @returns The poll answers.
    */
-  async queryPollAnswers({
-    poll_id,
-    filter,
-    ...options
-  }: Parameters<ChatApi['queryPollVotes']>[0]) {
-    return await this.queryPollVotes({
-      poll_id,
-      filter: {
-        ...filter,
-        is_answer: true,
+  async queryPollAnswers(
+    { poll_id, filter, ...options }: Parameters<ChatApi['queryPollVotes']>[0],
+    requestOptions?: StreamRequestOptions,
+  ) {
+    return await this.queryPollVotes(
+      {
+        poll_id,
+        filter: {
+          ...filter,
+          is_answer: true,
+        },
+        ...options,
       },
-      ...options,
-    });
+      requestOptions,
+    );
   }
 
   /**
@@ -2399,13 +2483,13 @@ export class StreamChat extends ChatApi {
    *
    * @param uri - The file to upload.
    * @param name - The name of the file (optional).
-   * @param contentType - The content type of the file (optional).
+   * @param contentType - MIME type; required for React Native URI uploads (optional).
    * @param user - User information (optional).
    * @param axiosRequestConfig - Axios config, e.g. `onUploadProgress` for progress tracking (optional).
    * @returns Response containing the file URL.
    */
   uploadFile_(
-    uri: string | NodeJS.ReadableStream | Buffer | File,
+    uri: string | File,
     name?: string,
     contentType?: string,
     user?: UserResponse,
@@ -2426,13 +2510,13 @@ export class StreamChat extends ChatApi {
    *
    * @param uri - The image to upload.
    * @param name - The name of the image (optional).
-   * @param contentType - The content type of the image (optional).
+   * @param contentType - MIME type; required for React Native URI uploads (optional).
    * @param user - User information (optional).
    * @param axiosRequestConfig - Axios config, e.g. `onUploadProgress` for progress tracking (optional).
    * @returns Response containing the image URL.
    */
   uploadImage_(
-    uri: string | NodeJS.ReadableStream | File,
+    uri: string | File,
     name?: string,
     contentType?: string,
     user?: UserResponse,
@@ -2453,9 +2537,12 @@ export class StreamChat extends ChatApi {
    * @param request - Mark delivered options.
    * @returns The server response, or `undefined` if there are no messages to mark.
    */
-  async markChannelsDelivered(request?: Gen_MarkDeliveredRequest) {
+  async markChannelsDelivered(
+    request?: Gen_MarkDeliveredRequest,
+    requestOptions?: StreamRequestOptions,
+  ) {
     if (!request?.latest_delivered_messages?.length) return;
-    return await this.markDelivered(request);
+    return await this.markDelivered(request, requestOptions);
   }
 
   syncDeliveredCandidates(collections: Channel[]) {

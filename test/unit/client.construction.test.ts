@@ -1,7 +1,6 @@
 import axios from 'axios';
-import https from 'https';
 import sinon from 'sinon';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ClientState } from '../../src/client_state';
 import { FixedSizeQueueCache } from '../../src/utils/FixedSizeQueueCache';
@@ -221,15 +220,13 @@ describe('StreamChat construction', () => {
     });
 
     describe('httpsAgent', () => {
-      it('auto-creates a keep-alive https.Agent in node mode', () => {
+      it('does not auto-create an httpsAgent in node mode', () => {
         const client = new StreamChat(API_KEY, { browser: false });
-        const httpsAgent = client.axiosInstance.defaults.httpsAgent as https.Agent;
-        expect(httpsAgent).to.be.instanceOf(https.Agent);
-        expect(httpsAgent.keepAlive).to.equal(true);
+        expect(client.axiosInstance.defaults.httpsAgent).to.be.undefined;
       });
 
-      it('lets axiosRequestConfig.httpsAgent override the auto-created agent', () => {
-        const customAgent = new https.Agent({ keepAlive: false });
+      it('honors an axiosRequestConfig.httpsAgent supplied by the caller', () => {
+        const customAgent = vi.fn();
         const client = new StreamChat(API_KEY, {
           browser: false,
           axiosRequestConfig: { httpsAgent: customAgent },

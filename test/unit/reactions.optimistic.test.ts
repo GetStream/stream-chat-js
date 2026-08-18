@@ -1,3 +1,4 @@
+import { CanceledError } from 'axios';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { formatMessage, StreamChat, Thread } from '../../src';
 import type {
@@ -253,6 +254,24 @@ describe('optimistic reactions', () => {
       const message = buildMessage();
       seed(channel, message);
       vi.spyOn(channel, 'sendReaction').mockRejectedValue(apiError(4));
+
+      await expect(
+        channel.addReactionWithLocalUpdate({
+          messageId: message.id,
+          reaction: { type: 'love' },
+        }),
+      ).rejects.toThrow();
+
+      expect(ownReactionTypes(channel.messagePaginator, message.id)).toEqual([]);
+    });
+
+    // A cancelled request has no `response`, like a network error, but it is a caller decision
+    // rather than something a reconnect will fix — so the optimistic reaction has to go, otherwise
+    // the UI would show a reaction that is never sent.
+    it('reverts when the caller cancelled the request', async () => {
+      const message = buildMessage();
+      seed(channel, message);
+      vi.spyOn(channel, 'sendReaction').mockRejectedValue(new CanceledError('canceled'));
 
       await expect(
         channel.addReactionWithLocalUpdate({

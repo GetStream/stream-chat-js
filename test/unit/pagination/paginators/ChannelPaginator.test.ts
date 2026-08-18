@@ -1283,18 +1283,21 @@ describe('ChannelPaginator', () => {
       });
 
       await paginator.query();
-      expect(queryChannelsSpy).toHaveBeenCalledWith({
-        filter_conditions: {
-          muted: {
-            $eq: true,
+      expect(queryChannelsSpy).toHaveBeenCalledWith(
+        {
+          filter_conditions: {
+            muted: {
+              $eq: true,
+            },
+            name: 'A',
           },
-          name: 'A',
+          sort: [{ field: 'has_unread', direction: -1 }],
+          limit: 22,
+          message_limit: 3,
+          offset: 0,
         },
-        sort: [{ field: 'has_unread', direction: -1 }],
-        limit: 22,
-        message_limit: 3,
-        offset: 0,
-      });
+        undefined,
+      );
     });
   });
 
