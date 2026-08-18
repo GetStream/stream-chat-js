@@ -14,6 +14,12 @@
 
 ## TL;DR
 
+- **`engines.node` is now `>=22.18.0`** (was `>=18`). Node 22.18 is the release that unflagged
+  TypeScript type stripping, which the package's own build scripts need — `prepare` runs the build, so a
+  git-ref install has to be able to execute them. A registry install never builds, so if you are pinned
+  to an older Node the runtime code itself is unlikely to care; `engines` is advisory and most package
+  managers warn rather than fail. But 18 and 20 are no longer tested. See the note below on what this
+  means if you deploy the WebSocket client on Node 18 or 20.
 - **Server-side is gone.** If you construct with a `secret` or call server-only admin endpoints, switch to `@stream-io/node-sdk`. The construction guide has the full list — every feature module below that was server-only is dropped for the same reason.
 - Two barrels removed from the package root, one added: **`./events` and `./base64` are gone; `./logger` is new.** `./signing` survives with exactly one export left, `UserFromToken`. The `./campaign`, `./channel_batch_updater`, and `./segment` barrels are still exported but the modules are emptied (they contain only a comment pointing at the server SDK) — importing anything by name from them will fail.
 - `Event` (type name) is kept, but its shape widened: `Event = WSEvent | LocalEvent | keyof CustomEventTypes`. `EventPayload<'<type>'>` narrows to a specific event.
@@ -25,6 +31,27 @@
 - Assorted small tightenings: `TokenManager.setTokenOrProvider` user param narrowed, `revokeTokens(before)` no longer accepts `string`, `UserGroupPaginator` cursor field is a `Date`.
 
 ---
+
+## Node version floor
+
+`engines.node` moves from `>=18` to `>=22.18.0`.
+
+The driver is the build, not the runtime: the package's build scripts are `.mts`, executed by `node`
+with no loader, and unflagged type stripping landed in **22.18.0** (24.3.0 on the 24 line, 23.6.0 on
+the 23 line). Because `prepare` runs `yarn build`, anyone installing from a git ref has to be able to
+run them. Note that 22.12 — the `require(esm)` milestone — is _not_ sufficient for this; the two are
+often conflated.
+
+**If you install from the npm registry, nothing in the shipped runtime is known to need 22.18.** You get
+a prebuilt `dist/` and never run the build. `engines` is advisory, and npm/yarn warn rather than fail by
+default. Treat the bump as "18 and 20 are no longer tested" rather than "the code will not run".
+
+**One place this needs care:** [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md)
+documents running the WebSocket client on Node 18/20 by injecting a `WebSocketImpl` (Node only gained a
+global `WebSocket` in 22). That guidance still works mechanically, and is still the right answer if you
+are stuck on an older runtime — but it is now below the declared floor, so it is unsupported rather than
+supported. If you are on Node 18 or 20 and rely on that path, plan the upgrade to 22.18+, where no
+`WebSocketImpl` is needed at all.
 
 ## Public export surface
 

@@ -131,7 +131,7 @@
     "types:scripts": "tsc -p tsconfig.scripts.json"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22.18.0"
   },
   "packageManager": "yarn@4.15.0",
   "dependenciesMeta": {

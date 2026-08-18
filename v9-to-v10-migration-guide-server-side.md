@@ -562,6 +562,11 @@ The cast is because `ws` types its constructor with a slightly different `Messag
 
 One internal detail that matters if you inject `ws`: v9 called `ws.removeAllListeners()` during disconnect and teardown, an `EventEmitter` method the DOM `WebSocket` interface does not have. Those calls are gone. Teardown now relies on `close()` plus an internal `wsID` generation guard that makes callbacks from a superseded socket no-ops, so a `WebSocketImpl` only has to implement the four `on*` properties — it does **not** need `removeAllListeners`, `addEventListener`, or `off`.
 
+> **`engines.node` is `>=22.18.0` as of v10**, so Node 18 and 20 are below the declared floor and no
+> longer tested — see [the Node version floor](./v9-to-v10-migration-guide-other.md#node-version-floor).
+> Everything in this section still works mechanically, and is still the right answer if you are stuck on
+> an older runtime, but treat it as an unsupported bridge rather than a supported configuration.
+>
 > **Officially, `WebSocketImpl` is documented as "purely for testing."** In practice it is also the escape hatch for Node <22 until the LTS ships a native `WebSocket`. If you rely on it in production, pin the `ws` version (it's stable, but its lifecycle isn't tied to `stream-chat`'s releases) and keep an eye on the SDK changelog in case the option gains stricter typing.
 
 ### Simplifying the hybrid example on Node 22+

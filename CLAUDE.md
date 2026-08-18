@@ -6,7 +6,7 @@ Companion docs that apply to all agents: `AGENTS.md` (general agent rules) and `
 
 ## Toolchain
 
-- Node version is pinned in `.nvmrc` (use `nvm use`). `engines.node` requires `>=18`.
+- Node version is pinned in `.nvmrc` (use `nvm use`). `engines.node` requires `>=22.18.0` — the release that unflagged type stripping, which the `.mts` build scripts need. Node 22.12 is a different milestone (`require(esm)`) and is **not** enough to run them.
 - Package manager is **Yarn 4 (Berry)**, version pinned via `packageManager` in `package.json` and `yarnPath` in `.yarnrc.yml` (binary committed under `.yarn/releases/`). Any globally installed `yarn` launcher delegates to it. No Corepack setup needed.
 - `.yarnrc.yml` enables hardening: `enableHardenedMode: true`, `enableScripts: false`, `npmMinimalAgeGate: 3d`. Lifecycle scripts are blocked by default — only packages allowlisted in `package.json#dependenciesMeta` (currently `esbuild`, `husky`) may run install scripts. If a new dep needs lifecycle scripts, add it to `dependenciesMeta` rather than relaxing the global setting.
 - Clean installs (CI and local sanity checks): `yarn install --immutable`.
@@ -48,7 +48,7 @@ esbuild `define` injects two compile-time constants: `process.env.PKG_VERSION` (
 
 `postinstall` installs husky hooks; `prepare` runs `yarn run build` (so consumers installing from a git ref get a built package).
 
-**The build scripts are `.mts`, run by `node` with no loader** — Node strips the types itself, which needs Node 22.6+ (`--experimental-strip-types`) or 23.6+/24 where it is on by default. That is fine for this repo and CI (both `.nvmrc`-pinned to 24), but note it narrows the `prepare` path: a **git-ref** install on a Node older than that cannot build, even though `engines.node` still says `>=18`. Registry installs are unaffected — they get the prebuilt `dist/`.
+**The build scripts are `.mts`, run by `node` with no loader** — Node strips the types itself, which is unflagged from **22.18.0** (and 24.3.0 on the 24 line; 23.6.0 on the 23 line). `engines.node` is set to that floor deliberately, because `prepare` runs `yarn build`: a **git-ref** install has to be able to execute these scripts. Registry installs never run the build — they get the prebuilt `dist/`.
 
 Three separate things cover `scripts/`, and each was scoped to miss it at some point:
 

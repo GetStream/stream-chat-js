@@ -19,7 +19,7 @@
 - **`Notification.type` is now typed** as `CoreNotificationType | (string & {})` and enumerated in the exported `CORE_NOTIFICATION_TYPE` map. Additive — your own identifiers still pass.
 - **`Notification.message` is now documented as a developer-facing fallback, not display copy.** Its wording is not part of the public contract and may change in a minor release. Nothing breaks today, but anything user-facing should switch on `type`. See [Rendering notifications](#rendering-notifications).
 - **New subpath `stream-chat/i18n`** carries the shared translation runtime (`Streami18n`, formatters, date handling). Nothing is re-exported from `stream-chat`'s root, so the root bundle is unchanged.
-- **New subpath `stream-chat/i18n/codegen`** carries the build-time translation-catalog generator. Node-only, and ESM-only — `await import()` it from a CommonJS script, or `require()` it on Node 20.19+.
+- **New subpath `stream-chat/i18n/codegen`** carries the build-time translation-catalog generator. Node-only, and ESM-only — but `engines.node` is now `>=22.18.0`, and `require(esm)` has been unflagged since 22.12, so `require()` works on every supported Node as well as `import`.
 - **`stream-chat` now depends on `i18next` and `dayjs`.** Install footprint grows ~2.3 MB; **bundle size is unaffected** unless you import `stream-chat/i18n`.
 - Nothing in the JSDoc ever described a `Notification.code` field. There is no such field and never was — the block documenting the `domain:entity:operation:result` scheme was attached to `type` and mislabelled. It has been corrected.
 
@@ -239,8 +239,9 @@ API. It generates a type-only translation-key catalog from your `t()` call sites
 mistyped key becomes a compile error.
 
 There is one artifact and no CommonJS build, since the caller is always a build script you control. From
-an ESM script (`.mjs`, `.mts`, or a `"type": "module"` package) import it directly; from CommonJS use
-`await import('stream-chat/i18n/codegen')`, or a plain `require()` on Node 20.19+.
+an ESM script (`.mjs`, `.mts`, or a `"type": "module"` package) import it directly. A CommonJS script can
+`require()` it too: `require(esm)` was unflagged in Node 22.12 and this package's floor is now 22.18.0.
+`await import('stream-chat/i18n/codegen')` also works, on any Node.
 
 `typescript` is injected rather than imported, so `stream-chat` does not depend on the compiler:
 
