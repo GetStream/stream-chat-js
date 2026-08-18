@@ -155,3 +155,31 @@ describe('getDateString — options handed to a custom formatter', () => {
     expect((seen[0].timestamp as Date).toISOString()).toBe(AT);
   });
 });
+
+describe('timestampFormatter — nothing renderable', () => {
+  /**
+   * `null` used to render the literal text "null" and an unparseable string "Invalid Date". Both are
+   * junk a user can see, and both reached the UI because the formatter is a separate path from
+   * `getDateString`, which has always guarded this.
+   */
+  // `undefined` is deliberately absent: i18next skips interpolation when the value is undefined, so it
+  // never reaches the formatter and the raw expression comes through. That is unchanged behaviour, and a
+  // sign the option name is misspelled at the call site.
+  it.each([
+    ['null', null],
+    ['an unparseable string', 'not a date'],
+    ['an empty string', ''],
+  ])('renders empty for %s', async (_label, value) => {
+    const i18n = new StreamI18n({
+      logger: () => {},
+      runtimeDefaults: { [KEY]: KEY_VALUE },
+    });
+    const { t } = await i18n.init();
+
+    expect(
+      (t as unknown as (k: string, o: Record<string, unknown>) => string)(KEY, {
+        timestamp: value,
+      }),
+    ).toBe('');
+  });
+});

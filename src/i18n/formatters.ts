@@ -150,7 +150,11 @@ const timestampFormatter: FormatterFactory<string | Date> =
       relativeCompactMaxWeeks,
     } = options as TimestampFormatterOptions;
 
+    // Nothing renderable: empty rather than the stringified value. `null` used to come out as the
+    // literal text "null" and an unparseable string as "Invalid Date", both of which are junk a user
+    // can see. `getDateString` has always guarded this; the formatter is a separate path and did not.
     if (value === null || value === undefined) return '';
+    if (typeof value === 'string' && !Date.parse(value)) return '';
 
     if (relativeCompact) {
       const relative = relativeCompactDateString({
