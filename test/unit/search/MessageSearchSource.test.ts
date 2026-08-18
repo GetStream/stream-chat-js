@@ -5,6 +5,9 @@ import type { MessageResponse, SearchAPIResponse } from '../../../src/types';
 import { getClientWithUser } from '../test-utils/getClient';
 import { generateMsg } from '../test-utils/generateMessage';
 
+/** query() invoked directly in tests is not driven by executeQuery, so it has none. */
+const withoutSignal = {};
+
 describe('MessageSearchSource', () => {
   const user = { id: 'user-123' };
   let client: StreamChat;
@@ -224,17 +227,20 @@ describe('MessageSearchSource', () => {
     // @ts-expect-error protected access
     const result = await searchSource.query('');
 
-    expect(searchMock).toHaveBeenCalledWith({
-      payload: expect.objectContaining({
-        filter_conditions: {
-          members: { $in: [user.id] },
-        },
-        message_filter_conditions: { type: 'regular' },
-        limit: searchSource.pageSize,
-        next: undefined,
-        sort: [{ field: 'created_at', direction: -1 }],
-      }),
-    });
+    expect(searchMock).toHaveBeenCalledWith(
+      {
+        payload: expect.objectContaining({
+          filter_conditions: {
+            members: { $in: [user.id] },
+          },
+          message_filter_conditions: { type: 'regular' },
+          limit: searchSource.pageSize,
+          next: undefined,
+          sort: [{ field: 'created_at', direction: -1 }],
+        }),
+      },
+      withoutSignal,
+    );
     expect(result.items).toEqual(messages);
     expect(result.next).toBe('next-token');
   });
@@ -249,25 +255,28 @@ describe('MessageSearchSource', () => {
     // @ts-expect-error protected access
     await searchSource.query('hello');
 
-    expect(searchMock).toHaveBeenCalledWith({
-      payload: expect.objectContaining({
-        filter_conditions: {
-          members: { $in: [user.id] },
-          type: 'messaging',
-        },
-        message_filter_conditions: {
-          'mentioned_users.id': { $contains: 'abc' },
-          type: 'regular',
-          text: 'hello',
-        },
-        limit: searchSource.pageSize,
-        next: 'next-token-old',
-        sort: [
-          { field: 'created_at', direction: -1 },
-          { field: 'created_at', direction: 1 },
-        ],
-      }),
-    });
+    expect(searchMock).toHaveBeenCalledWith(
+      {
+        payload: expect.objectContaining({
+          filter_conditions: {
+            members: { $in: [user.id] },
+            type: 'messaging',
+          },
+          message_filter_conditions: {
+            'mentioned_users.id': { $contains: 'abc' },
+            type: 'regular',
+            text: 'hello',
+          },
+          limit: searchSource.pageSize,
+          next: 'next-token-old',
+          sort: [
+            { field: 'created_at', direction: -1 },
+            { field: 'created_at', direction: 1 },
+          ],
+        }),
+      },
+      withoutSignal,
+    );
   });
 
   it('overrides the static filters with dynamic ones', async () => {
@@ -298,25 +307,28 @@ describe('MessageSearchSource', () => {
     // @ts-expect-error protected access
     await searchSource.query(searchQuery);
 
-    expect(searchMock).toHaveBeenCalledWith({
-      payload: expect.objectContaining({
-        filter_conditions: {
-          members: { $in: [user.id] },
-          type: { $in: [searchQuery] },
-        },
-        message_filter_conditions: {
-          'mentioned_users.id': { $contains: searchQuery },
-          type: 'regular',
-          text: searchQuery,
-        },
-        limit: searchSource.pageSize,
-        next: 'next-token-old',
-        sort: [
-          { field: 'created_at', direction: -1 },
-          { field: 'created_at', direction: 1 },
-        ],
-      }),
-    });
+    expect(searchMock).toHaveBeenCalledWith(
+      {
+        payload: expect.objectContaining({
+          filter_conditions: {
+            members: { $in: [user.id] },
+            type: { $in: [searchQuery] },
+          },
+          message_filter_conditions: {
+            'mentioned_users.id': { $contains: searchQuery },
+            type: 'regular',
+            text: searchQuery,
+          },
+          limit: searchSource.pageSize,
+          next: 'next-token-old',
+          sort: [
+            { field: 'created_at', direction: -1 },
+            { field: 'created_at', direction: 1 },
+          ],
+        }),
+      },
+      withoutSignal,
+    );
   });
 
   it('overrides the message type', async () => {
@@ -326,20 +338,23 @@ describe('MessageSearchSource', () => {
     // @ts-expect-error protected access
     await searchSource.query('hello');
 
-    expect(searchMock).toHaveBeenCalledWith({
-      payload: expect.objectContaining({
-        filter_conditions: {
-          members: { $in: [user.id] },
-        },
-        message_filter_conditions: {
-          type: 'deleted',
-          text: 'hello',
-        },
-        limit: searchSource.pageSize,
-        next: 'next-token-old',
-        sort: [{ field: 'created_at', direction: -1 }],
-      }),
-    });
+    expect(searchMock).toHaveBeenCalledWith(
+      {
+        payload: expect.objectContaining({
+          filter_conditions: {
+            members: { $in: [user.id] },
+          },
+          message_filter_conditions: {
+            type: 'deleted',
+            text: 'hello',
+          },
+          limit: searchSource.pageSize,
+          next: 'next-token-old',
+          sort: [{ field: 'created_at', direction: -1 }],
+        }),
+      },
+      withoutSignal,
+    );
   });
 
   it('calls queryChannels when some cids are missing locally', async () => {
@@ -355,10 +370,14 @@ describe('MessageSearchSource', () => {
     // @ts-expect-error protected access
     await searchSource.query('query');
 
-    expect(queryChannelsMock).toHaveBeenCalledWith({
-      filter_conditions: { cid: { $in: ['cid2'] }, type: 'abc' },
-      sort: [{ direction: -1, field: 'last_message_at' }],
-    });
+    expect(queryChannelsMock).toHaveBeenCalledWith(
+      {
+        filter_conditions: { cid: { $in: ['cid2'] }, type: 'abc' },
+        sort: [{ direction: -1, field: 'last_message_at' }],
+      },
+      {},
+      withoutSignal,
+    );
   });
 
   it('does not call queryChannels if all channels are loaded locally', async () => {
@@ -394,10 +413,14 @@ describe('MessageSearchSource', () => {
     // @ts-expect-error protected access
     await searchSource.query('query');
 
-    expect(queryChannelsMock).toHaveBeenCalledWith({
-      filter_conditions: { cid: { $in: ['cid2'] }, type: 'efg' },
-      sort: [{ direction: -1, field: 'last_message_at' }],
-    });
+    expect(queryChannelsMock).toHaveBeenCalledWith(
+      {
+        filter_conditions: { cid: { $in: ['cid2'] }, type: 'efg' },
+        sort: [{ direction: -1, field: 'last_message_at' }],
+      },
+      {},
+      withoutSignal,
+    );
   });
 
   it('returns items and next from search', async () => {

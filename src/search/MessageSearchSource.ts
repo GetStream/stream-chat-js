@@ -1,4 +1,4 @@
-import { BaseSearchSource } from './BaseSearchSource';
+import { BaseSearchSource, type SearchQueryOptions } from './BaseSearchSource';
 import type {
   ChannelFilters,
   ChannelOptions,
@@ -54,6 +54,18 @@ export type MessageSearchSourceFilterBuilderOptions<
   >;
 }>;
 
+export type MessageSearchSourceOptions = SearchSourceOptions & {
+  /** Static base filters for the channel scope of the message search. */
+  messageSearchChannelFilters?: ChannelFilters;
+  /** Static base filters for the message search itself. */
+  messageSearchFilters?: MessageFilters;
+  messageSearchSort?: SearchMessageSort;
+  /** Static base filters for the follow-up query that hydrates unknown channels. */
+  channelQueryFilters?: ChannelFilters;
+  channelQuerySort?: ChannelSort;
+  channelQueryOptions?: Omit<ChannelOptions, 'limit' | 'offset'>;
+};
+
 export class MessageSearchSource<
   TContexts extends MessageSearchSourceContexts = {},
 > extends BaseSearchSource<MessageResponse> {
@@ -86,11 +98,26 @@ export class MessageSearchSource<
 
   constructor(
     client: StreamChat,
-    options?: SearchSourceOptions,
+    options?: MessageSearchSourceOptions,
     filterBuilderOptions?: MessageSearchSourceFilterBuilderOptions<TContexts>,
   ) {
-    super(options);
+    const {
+      messageSearchChannelFilters,
+      messageSearchFilters,
+      messageSearchSort,
+      channelQueryFilters,
+      channelQuerySort,
+      channelQueryOptions,
+      ...restOptions
+    } = options || {};
+    super(restOptions);
     this.client = client;
+    this.messageSearchChannelFilters = messageSearchChannelFilters;
+    this.messageSearchFilters = messageSearchFilters;
+    this.messageSearchSort = messageSearchSort;
+    this.channelQueryFilters = channelQueryFilters;
+    this.channelQuerySort = channelQuerySort;
+    this.channelQueryOptions = channelQueryOptions;
 
     this.messageSearchChannelFilterBuilder = new FilterBuilder<
       ChannelFilters,
@@ -129,7 +156,7 @@ export class MessageSearchSource<
     });
   }
 
-  protected async query(searchQuery: string) {
+  protected async query(searchQuery: string, queryOptions: SearchQueryOptions = {}) {
     if (!this.client.userId || this.next === null) return { items: [] };
 
     const channelFilters = this.messageSearchChannelFilterBuilder.buildFilters({
@@ -155,25 +182,31 @@ export class MessageSearchSource<
       >,
     });
 
-    const { next, results } = await this.client.search({
-      payload: {
-        filter_conditions: channelFilters,
-        message_filter_conditions: messageFilters,
-        limit: this.pageSize,
-        next: this.next,
-        sort: [
-          {
-            field: 'created_at',
-            direction: -1,
-          },
-          ...(this.messageSearchSort ?? []),
-        ],
+    const { next, results } = await this.client.search(
+      {
+        payload: {
+          filter_conditions: channelFilters,
+          message_filter_conditions: messageFilters,
+          limit: this.pageSize,
+          next: this.next,
+          sort: [
+            {
+              field: 'created_at',
+              direction: -1,
+            },
+            ...(this.messageSearchSort ?? []),
+          ],
+        },
       },
-    });
+      queryOptions,
+    );
 
     const items = results
       .map(({ message }) => message)
       .filter((m): m is NonNullable<typeof m> => Boolean(m));
+
+    // a newer query already replaced this one - skip the cid scan and the hydration request
+    if (queryOptions.signal?.aborted) return { items, next };
 
     const cids = Array.from(
       items.reduce((acc, message) => {
@@ -189,11 +222,15 @@ export class MessageSearchSource<
           MergeContext<BuiltInContexts['channelQuery'], TContexts['channelQueryContext']>
         >,
       });
-      await this.client.queryChannelsAndHydrate({
-        filter_conditions: channelQueryFilters,
-        sort: [{ direction: -1, field: 'last_message_at' }],
-        ...this.channelQueryOptions,
-      });
+      await this.client.queryChannelsAndHydrate(
+        {
+          filter_conditions: channelQueryFilters,
+          sort: [{ direction: -1, field: 'last_message_at' }],
+          ...this.channelQueryOptions,
+        },
+        {},
+        queryOptions,
+      );
     }
 
     return { items, next };
