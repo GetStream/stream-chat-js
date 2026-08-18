@@ -208,7 +208,14 @@ Release branches (`.releaserc.json`):
 
 - `master` → `latest` dist-tag (current major: v9).
 - `release-v8` → `v8` dist-tag, locked to `8.x` range.
-- `rc` → prerelease channel.
+- `release-v10` → `rc` dist-tag, `prerelease: "rc"`. **This is the branch v10 prereleases are cut
+  from** — not a branch literally named `rc`. `release.yml` is `workflow_dispatch` and releases from
+  whatever branch you dispatch it on, gated by
+  `startsWith(github.ref_name, 'release')`, so a v10 change has to land on `release-v10` before it can
+  reach npm. The `rc` name survives only as a legacy allowance in that gate.
+
+Unlike the React and React Native repos, the PR workflows here (`lint`, `unit`, `type`, `size`) carry
+**no branch filter**, so a PR into `release-v10` is fully gated with no workflow change needed.
 
 ## Things to double-check before claiming done
 
