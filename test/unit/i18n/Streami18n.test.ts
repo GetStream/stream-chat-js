@@ -253,6 +253,50 @@ describe('Streami18n', () => {
 });
 
 /**
+ * Region-coded languages. Ported from the React Native SDK's suite, which owned these before the
+ * runtime moved here.
+ *
+ * The hyphen must not be read as a separator of any kind — `keySeparator: false` and
+ * `nsSeparator: false` are what keep `pt-BR` a single language name rather than a namespace lookup,
+ * and a base-language dictionary must not shadow the region-coded one.
+ */
+describe('Streami18n — region-coded languages', () => {
+  it.each(['pt-BR', 'zh-TW', 'fr-CA', 'es-MX'])(
+    'resolves a dictionary for %s',
+    async (language) => {
+      const i18n = setup({ language });
+      i18n.registerTranslation(language, {
+        'fixture.prose': `cancel-${language}`,
+      } as never);
+      const { t } = await i18n.init();
+
+      expect(t('fixture.prose', 'Cancel')).toBe(`cancel-${language}`);
+      expect(i18n.currentLanguage).toBe(language);
+      expect(i18n.getAvailableLanguages()).toContain(language);
+    },
+  );
+
+  it('keeps a region-coded language distinct from its base language', async () => {
+    const i18n = setup({ language: 'pt-BR' });
+    i18n.registerTranslation('pt', { 'fixture.prose': 'Cancelar-pt' } as never);
+    i18n.registerTranslation('pt-BR', { 'fixture.prose': 'Cancelar-ptBR' } as never);
+    const { t } = await i18n.init();
+
+    expect(t('fixture.prose', 'Cancel')).toBe('Cancelar-ptBR');
+  });
+
+  it('still layers the bundled defaults under a region-coded language', async () => {
+    const i18n = setup({ language: 'pt-BR' });
+    const { t } = await i18n.init();
+
+    // Would render as the raw key if runtimeDefaults had not been layered under `pt-BR`.
+    expect(t('timestamp.MessageTimestamp', { timestamp: new Date(0) })).not.toBe(
+      'timestamp.MessageTimestamp',
+    );
+  });
+});
+
+/**
  * Behaviours the React SDK's suite owned before the runtime moved here. They were asserting this
  * module through a thin subclass, so they belong on this side of the boundary — and none of them was
  * covered here.
