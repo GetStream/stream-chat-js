@@ -527,13 +527,13 @@ export class MessageComposer extends WithSubscriptions {
    *
    * Reading them is the composer's job rather than the shared helper's: only the composer knows that
    * `location.enabled` is gated on `shared_locations`, and only an existing composer has a channel to
-   * ask. `getConfig()` is re-read on every call, so a restriction that changes mid-session is picked up
+   * ask. `serverConfig` is re-read on every call, so a restriction that changes mid-session is picked up
    * rather than captured once.
    *
    * Every entry here is a boolean gate, so `mergeServerRestrictions` ANDs it with what was requested and
    * either side may switch the feature off — a client asking for less than the server grants is always
    * legitimate. That is the whole point of mirroring these flags into configuration rather than leaving
-   * consumers to read `getConfig()` themselves: a raw server flag answers only the server's half, so a UI
+   * consumers to read `serverConfig` themselves: a raw server flag answers only the server's half, so a UI
    * reading it offers features the composer has already disabled and would refuse to compose.
    *
    * `commands` is deliberately absent. The server sends a *list* of commands rather than a gate, so there
@@ -544,7 +544,7 @@ export class MessageComposer extends WithSubscriptions {
   private serverRestrictionsFor(
     requested: MessageComposerConfig,
   ): ServerRestrictions<MessageComposerConfig> {
-    const channelConfig = this.channel.getConfig();
+    const channelConfig = this.channel.serverConfig;
 
     return {
       /**
@@ -565,6 +565,7 @@ export class MessageComposer extends WithSubscriptions {
       attachments: {
         enabled: requested.attachments.customCdn ? undefined : channelConfig?.uploads,
       },
+      linkPreviews: { enabled: channelConfig?.url_enrichment },
       location: { enabled: channelConfig?.shared_locations },
       polls: { enabled: channelConfig?.polls },
     };
@@ -579,7 +580,7 @@ export class MessageComposer extends WithSubscriptions {
    * then rejects, so the limit is enforced late and as an API error instead of in the editor.
    */
   private get serverUpperBounds(): ServerUpperBounds<MessageComposerConfig> {
-    const maxMessageLength = this.channel.getConfig()?.max_message_length;
+    const maxMessageLength = this.channel.serverConfig?.max_message_length;
 
     return {
       text: { maxLengthOnEdit: maxMessageLength, maxLengthOnSend: maxMessageLength },
@@ -813,7 +814,7 @@ export class MessageComposer extends WithSubscriptions {
   /**
    * The channel's server-side config (`client.channelConfigsByType[type]`) is populated by `query`/`watch`, which for
    * a channel opened via `client.channel(type, id)` happens *after* this composer was constructed. Left
-   * unwatched, the composer would keep the defaults it derived when `getConfig()` was still undefined —
+   * unwatched, the composer would keep the defaults it derived when `serverConfig` was still undefined —
    * so `location.enabled` would stay `true` for an app that disables `shared_locations` server-side.
    * Re-deriving when the config lands keeps the server authoritative.
    */

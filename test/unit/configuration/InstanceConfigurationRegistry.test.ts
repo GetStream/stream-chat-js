@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { InstanceConfigurationService } from '../../../src/configuration/InstanceConfigurationService';
+import { InstanceConfigurationRegistry } from '../../../src/configuration/InstanceConfigurationRegistry';
 import { chatLoggerSystem } from '../../../src/logger';
 
 const noop = () => undefined;
 
-describe('InstanceConfigurationService', () => {
-  let service: InstanceConfigurationService;
+describe('InstanceConfigurationRegistry', () => {
+  let service: InstanceConfigurationRegistry;
 
   beforeEach(() => {
-    service = new InstanceConfigurationService();
+    service = new InstanceConfigurationRegistry();
   });
 
   describe('stores', () => {
@@ -160,7 +160,7 @@ describe('InstanceConfigurationService', () => {
   });
 
   it('keeps two services independent, so configuration cannot leak between clients', () => {
-    const other = new InstanceConfigurationService();
+    const other = new InstanceConfigurationRegistry();
     service.setConfig('messageComposer', { drafts: { enabled: true } });
 
     expect(other.getConfig('messageComposer')).toBeNull();

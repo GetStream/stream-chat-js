@@ -1762,7 +1762,7 @@ describe('Channel _handleChannelEvent', function () {
 			// enable delivery events
 			client._addChannelConfig({
 				type: channel.type,
-				config: { ...channel.getConfig(), delivery_events: true },
+				config: { ...channel.serverConfig, delivery_events: true },
 			});
 			channel.state.read[user.id] = initialReadState;
 
@@ -1788,7 +1788,7 @@ describe('Channel _handleChannelEvent', function () {
 			// enable delivery events
 			client._addChannelConfig({
 				type: channel.type,
-				config: { ...channel.getConfig(), delivery_events: true },
+				config: { ...channel.serverConfig, delivery_events: true },
 			});
 			channel.state.read[user.id] = initialReadState;
 			const newerMessage = generateMsg({
@@ -1819,7 +1819,7 @@ describe('Channel _handleChannelEvent', function () {
 			// enable delivery events
 			client._addChannelConfig({
 				type: channel.type,
-				config: { ...channel.getConfig(), delivery_events: true },
+				config: { ...channel.serverConfig, delivery_events: true },
 			});
 			channel.state.read[user.id] = initialReadState;
 

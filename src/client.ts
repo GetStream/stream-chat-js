@@ -82,7 +82,7 @@ import { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
 import { isEqual } from './utils/mergeWith/mergeWithCore';
 import type { MessageComposer } from './messageComposer';
 import type { InstanceSetupState } from './configuration';
-import { InstanceConfigurationService } from './configuration/InstanceConfigurationService';
+import { InstanceConfigurationRegistry } from './configuration/InstanceConfigurationRegistry';
 import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
 import { StateStore } from './store';
 import type { Unsubscribe } from './store';
@@ -239,12 +239,12 @@ export class StreamChat extends ChatApi {
   private nextRequestAbortController: AbortController | null = null;
   /**
    * Configuration you register for instances the SDK creates on your behalf — channels, threads,
-   * composers, and the client's own managers. See `InstanceConfigurationService`.
+   * composers, and the client's own managers. See `InstanceConfigurationRegistry`.
    *
    * Not to be confused with {@link channelConfigsByType}, which holds the **server-provided channel-type
    * configs** keyed by channel type. This one is yours; that one is the backend's.
    */
-  readonly config = new InstanceConfigurationService();
+  readonly config = new InstanceConfigurationRegistry();
   /** Teardown for the `'client'` setup function, released by {@link disconnectUser}. */
   private unsubscribeClientConfiguration?: Unsubscribe;
 
@@ -359,7 +359,7 @@ export class StreamChat extends ChatApi {
 
     // Seed the declarative configuration before wiring, so a tree passed via `options.config` reaches
     // the managers above. `'client'` is the one key that cannot be configured after construction —
-    // this service is born here, so there is no earlier moment for a caller to register anything.
+    // this registry is born here, so there is no earlier moment for a caller to register anything.
     if (this.options.config) this.config.set(this.options.config);
     this.initializeManagerConfig();
 
@@ -423,7 +423,7 @@ export class StreamChat extends ChatApi {
    * Cache of server-provided channel configuration, keyed by **channel type** — the settings are
    * defined per type, so one entry serves every channel of that type.
    *
-   * Read it through {@link Channel.getConfig} rather than here. Not to be confused with
+   * Read it through {@link Channel.serverConfig} rather than here. Not to be confused with
    * {@link config}, which is the configuration *you* register for SDK-created instances.
    *
    * This was `client.configs` through v9, keyed by **cid**. There is deliberately no `configs` alias:
@@ -1605,7 +1605,7 @@ export class StreamChat extends ChatApi {
    * An absent `config` is ignored rather than stored. `ChannelResponse.config` is optional — the
    * `notification.message_new` payload is one route that may omit it — and writing `undefined` would
    * un-learn* a config already known for the type. Keyed by cid that voided one channel; keyed by type it
-   * voids every channel of the type, and since the composer reads `getConfig()` for `shared_locations` and
+   * voids every channel of the type, and since the composer reads `serverConfig` for `shared_locations` and
    * `max_message_length`, the result is a server restriction silently lifted (**DV-16**).
    *
    * A config deep-equal to the one already stored is ignored too, which is what keeps a channel query from

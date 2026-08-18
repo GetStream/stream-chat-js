@@ -10,6 +10,7 @@ import { TextComposerMiddleware } from '../../../../../src';
 import { createActiveCommandGuardMiddleware } from '../../../../../src/messageComposer/middleware/textComposer/activeCommandGuard';
 import { createCommandStringExtractionMiddleware } from '../../../../../src/messageComposer/middleware/textComposer/commandStringExtraction';
 import { getClientWithUser } from '../../../test-utils/getClient';
+import { stubServerConfig } from '../../../test-utils/stubServerConfig';
 
 // Mock dependencies
 
@@ -32,7 +33,7 @@ const setup = ({
   const channel = client.channel('channelType', 'channelId');
   channel.keystroke = vi.fn().mockResolvedValue({});
   channel.getClient = vi.fn().mockReturnValue(client);
-  channel.getConfig = vi.fn().mockReturnValue({
+  stubServerConfig(channel, {
     commands: [
       { name: 'ban', description: 'Ban a user' },
       { name: 'mute', description: 'Mute a user' },

@@ -5,7 +5,7 @@
  * patch may carry an explicit `undefined` — `{ messagePaginator: { initialCursor: undefined } }` — and a
  * caller that has to tell that apart from an absent key needs {@link hasPath}, since both read back as
  * `undefined`. That distinction is the whole reason the construction-only diagnostic in
- * `InstanceConfigurationService` can report a late registration at all.
+ * `InstanceConfigurationRegistry` can report a late registration at all.
  *
  * **Descends into plain objects only**, deliberately. A configuration tree holds class instances
  * (`itemIndex`), functions and arrays as leaf *values*, and walking into their internals would be both

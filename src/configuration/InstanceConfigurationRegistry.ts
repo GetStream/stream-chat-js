@@ -43,7 +43,7 @@ const logger = chatLoggerSystem.getLogger('instance-configuration');
 
 /**
  * Registered by `applyInstanceConfiguration` on behalf of one live instance. The service holds these
- * so `reset` can reach every live instance of a key, and so the service can tell whether a key has any
+ * so `reset` can reach every live instance of a key, and so the registry can tell whether a key has any
  * live instance at all.
  *
  * @internal
@@ -51,7 +51,7 @@ const logger = chatLoggerSystem.getLogger('instance-configuration');
 /**
  * A handle to one live instance that derives configuration from a key.
  *
- * Deliberately just the re-derivation hook rather than the instance itself: the service never reads an
+ * Deliberately just the re-derivation hook rather than the instance itself: the registry never reads an
  * instance's configuration, it only needs a way to tell the instance to rebuild.
  */
 export type ConfiguredInstance = {
@@ -64,7 +64,7 @@ export type ConfiguredInstance = {
 type AnySetupStore = StateStore<InstanceSetupState<InstanceSetupKey>>;
 type AnyConfigStore = StateStore<InstanceConfigState<InstanceSetupKey>>;
 
-export class InstanceConfigurationService {
+export class InstanceConfigurationRegistry {
   /**
    * **Setup functions** — the second of the two ways to configure, known as *tier 2* because tier 2 is
    * applied after tier 1 and therefore wins for the same field. Keyed by configuration key: the function
@@ -88,8 +88,8 @@ export class InstanceConfigurationService {
   /**
    * **Declarative configuration** — the first of the two ways to configure, known as *tier 1* because
    * tier 1 is applied before tier 2 and is therefore the layer a setup function overrides. Keyed by
-   * configuration key: the subtree registered through {@link InstanceConfigurationService.set} or
-   * {@link InstanceConfigurationService.setConfig}, `null` until a caller registers something.
+   * configuration key: the subtree registered through {@link InstanceConfigurationRegistry.set} or
+   * {@link InstanceConfigurationRegistry.setConfig}, `null` until a caller registers something.
    *
    * Plain data, no code — the ordinary way to configure, and the reason a configuration tree can be
    * written as JSON. Anything needing code goes through a setup function ({@link setupStates}).

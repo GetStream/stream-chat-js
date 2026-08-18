@@ -36,8 +36,8 @@ export type {
 } from './configuration/types';
 export type {
   ConfiguredInstance,
-  InstanceConfigurationService,
-} from './configuration/InstanceConfigurationService';
+  InstanceConfigurationRegistry,
+} from './configuration/InstanceConfigurationRegistry';
 export { mergeServerRestrictions } from './configuration/utils/serverAuthority';
 export type {
   ServerRestrictions,
@@ -77,7 +77,7 @@ export * from './store';
 export { Thread } from './thread';
 export type {
   CustomThreadMarkReadRequestFn,
-  ThreadInstanceConfig,
+  ThreadConfig,
   ThreadReadState,
   ThreadState,
   ThreadUserReadState,

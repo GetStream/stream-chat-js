@@ -11,6 +11,7 @@ import type { Command, DraftResponse, LocalMessage } from '../../../../../src/ty
 import { TextComposerMiddleware } from '../../../../../src';
 import type { UserSuggestion } from '../../../../../src/messageComposer/middleware/textComposer/types';
 import { getClientWithUser } from '../../../test-utils/getClient';
+import { stubServerConfig } from '../../../test-utils/stubServerConfig';
 
 // Mock dependencies
 vi.mock('../../../src/utils', () => ({
@@ -49,7 +50,7 @@ const setup = ({
   const channel = client.channel('channelType', 'channelId');
   channel.keystroke = vi.fn().mockResolvedValue({});
   channel.getClient = vi.fn().mockReturnValue(client);
-  channel.getConfig = vi.fn().mockReturnValue({
+  stubServerConfig(channel, {
     commands: [
       { name: 'ban', description: 'Ban a user' },
       { name: 'mute', description: 'Mute a user' },
@@ -335,7 +336,7 @@ describe('TextComposerMiddlewareExecutor', () => {
       messageComposer,
       messageComposer: { textComposer },
     } = setup();
-    channel.getConfig = vi.fn().mockReturnValue({
+    stubServerConfig(channel, {
       commands: [{ name: 'ban', description: 'Ban a user', set: 'moderation_set' }],
     });
     messageComposer.setQuotedMessage({

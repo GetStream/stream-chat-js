@@ -163,8 +163,8 @@ export class MessageDeliveryReporter {
   }
 
   private static hasPermissionToReportDeliveryFor(collection: Channel | Thread) {
-    if (isChannel(collection)) return !!collection.getConfig()?.delivery_events;
-    if (isThread(collection)) return !!collection.channel.getConfig()?.delivery_events;
+    if (isChannel(collection)) return collection.config.deliveryEvents.enabled;
+    if (isThread(collection)) return collection.channel.config.deliveryEvents.enabled;
   }
 
   private increaseBackOff() {

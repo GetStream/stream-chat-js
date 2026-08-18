@@ -110,8 +110,8 @@ const upperBoundCustomizer: MergeWithCustomizer<object> = (
  *
  * **What it deliberately does not do.** It knows nothing about *where* restrictions come from. Reading
  * them is the entity's job, because only the entity knows what to ask — a composer reads its channel's
- * `getConfig()`, something else might read capabilities — and the answer depends on an instance that
- * exists. That is also why this does not live in `InstanceConfigurationService`: that service merges
+ * `serverConfig`, something else might read capabilities — and the answer depends on an instance that
+ * exists. That is also why this does not live in `InstanceConfigurationRegistry`: that service merges
  * declarative layers before any instance exists, and its merges follow the opposite rule (a more specific
  * layer *may* re-enable what a broader one disabled), which rule 1 would break.
  *
@@ -120,7 +120,7 @@ const upperBoundCustomizer: MergeWithCustomizer<object> = (
  * // Inside a configurable class, on every path that resolves configuration:
  * this.configState.partialNext(
  *   mergeServerRestrictions(requestedConfig, {
- *     location: { enabled: this.channel.getConfig()?.shared_locations },
+ *     location: { enabled: this.channel.serverConfig?.shared_locations },
  *   }),
  * );
  * ```

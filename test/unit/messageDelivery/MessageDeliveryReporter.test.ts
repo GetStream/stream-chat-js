@@ -13,6 +13,7 @@ import {
   Thread,
 } from '../../../src';
 import type { AxiosResponse } from 'axios';
+import { stubServerConfig } from '../test-utils/stubServerConfig';
 
 const channelType = 'messaging';
 const channelId = 'channelId';
@@ -154,13 +155,16 @@ describe('MessageDeliveryReporter', () => {
   });
 
   it('does nothing when delievry events are disabled in channel config', async () => {
-    client.channelConfigsByType[channel.type] = {
+    // Through the store, not by mutating `channelConfigsByType`: the flag is reconciled into
+    // `channel.config.deliveryEvents` by the channel's own derivation, and the store write is what
+    // triggers it. A direct mutation changes the raw record and nothing else.
+    stubServerConfig(channel, {
       created_at: '',
       delivery_events: false,
       read_events: false,
       reminders: false,
       updated_at: '',
-    };
+    });
     const markDeliveredSpy = vi
       .spyOn(client, 'markDelivered')
       .mockResolvedValue({ ok: true } as any);

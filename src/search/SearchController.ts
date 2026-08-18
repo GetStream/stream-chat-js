@@ -30,7 +30,7 @@ export type SearchControllerOptions = {
    *
    * It is the one configurable class this package never constructs — an app or a downstream SDK does
    * (`<Chat>` in `stream-chat-react`) — so there is no other route by which it could find the
-   * configuration service. Left out, the controller still works and `updateConfig` still applies;
+   * configuration registry. Left out, the controller still works and `updateConfig` still applies;
    * only the declarative key and its setup function go unheard.
    */
   client?: StreamChat;

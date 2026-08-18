@@ -9,8 +9,8 @@ import type {
 } from '../search/SearchController';
 import type { MessageComposer } from '../messageComposer';
 import type { MessageComposerConfig } from '../messageComposer/configuration/types';
-import type { Channel, ChannelInstanceConfig } from '../channel';
-import type { Thread, ThreadInstanceConfig } from '../thread';
+import type { Channel, ChannelConfig } from '../channel';
+import type { Thread, ThreadConfig } from '../thread';
 import type { ReminderManagerConfig } from '../reminders/ReminderManager';
 import type { NotificationManagerConfig } from '../notifications/types';
 import type { MessageDeliveryReporterConfig } from '../messageDelivery/MessageDeliveryReporter';
@@ -46,7 +46,7 @@ export interface InstanceSetupFunctionArgs {
   thread: { thread: Thread };
 }
 
-/** The four built-in keys, plus any key an integrator or a downstream SDK registers. */
+/** The six built-in keys, plus any key an integrator or a downstream SDK registers. */
 export type InstanceSetupKey = keyof InstanceSetupFunctionArgs | (string & {});
 
 // ---------------------------------------------------------------------------
@@ -107,14 +107,25 @@ export type ChannelDeclarativeConfig = {
   messageOperations?: Partial<MessageOperationsConfig>;
   messagePaginator?: DeclarativeMessagePaginatorConfig;
   pinnedMessagesPaginator?: ImportedDeclarativePaginatorConfig;
-  requestHandlers?: ChannelInstanceConfig['requestHandlers'];
+  requestHandlers?: ChannelConfig['requestHandlers'];
+  /** Typing indicators, ANDed with the channel type's `typing_events`. */
+  typingEvents?: Partial<ChannelConfig['typingEvents']>;
+  /** Read receipts, ANDed with the channel type's `read_events`. */
+  readEvents?: Partial<ChannelConfig['readEvents']>;
+  /** Threaded replies, ANDed with the channel type's `replies`. */
+  replies?: Partial<ChannelConfig['replies']>;
+  /** Message reminders, ANDed with the channel type's `user_message_reminders`. */
+  userMessageReminders?: Partial<ChannelConfig['userMessageReminders']>;
+  /** Delivery receipts, ANDed with the channel type's `delivery_events`. */
+  deliveryEvents?: Partial<ChannelConfig['deliveryEvents']>;
+  // `commands` is deliberately absent: the server owns the list outright, so there is nothing to set.
 };
 
 export type ThreadDeclarativeConfig = {
   /** Overrides the shared top-level `messageOperations` key for thread replies only. */
   messageOperations?: Partial<MessageOperationsConfig>;
   messagePaginator?: DeclarativeMessagePaginatorConfig;
-  requestHandlers?: ThreadInstanceConfig['requestHandlers'];
+  requestHandlers?: ThreadConfig['requestHandlers'];
 };
 
 export type ClientDeclarativeConfig = {

@@ -14,7 +14,7 @@ import { DEFAULT_COMMANDS_CONFIG } from './commands.configuration';
 
 export const DEFAULT_LINK_PREVIEW_MANAGER_CONFIG: LinkPreviewsManagerConfig = {
   debounceURLEnrichmentMs: 1500,
-  enabled: false,
+  enabled: true,
   findURLFn: (text: string): string[] =>
     find(text, 'url', { defaultProtocol: 'https' }).reduce<string[]>((acc, link) => {
       try {

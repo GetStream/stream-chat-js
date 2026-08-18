@@ -20,6 +20,7 @@ import { DraftResponse, MessageResponse } from '../../../src/types';
 import { MockOfflineDB } from '../offline-support/MockOfflineDB';
 import { getCommandByName } from '../../../src/messageComposer/middleware/textComposer/commandUtils';
 import { generateMsg } from '../test-utils/generateMessage';
+import { stubServerConfig } from '../test-utils/stubServerConfig';
 
 const generateUuidV4Output = 'test-uuid';
 // Mock dependencies
@@ -303,6 +304,30 @@ describe('MessageComposer', () => {
         expect(messageComposer.config.polls.enabled).toBe(expected);
       },
     );
+
+    describe('link previews follow the server, not a client double-gate', () => {
+      // The default was `false`, which meant previews stayed off even where the channel type had
+      // `url_enrichment` on — the client half vetoed a feature the server had granted. `true` means "no
+      // opinion", so the server's answer decides, like every other server-gated feature.
+      it.each([
+        { expected: true, server: true },
+        { expected: false, server: false },
+      ])('server=$server -> $expected with no client opinion', ({ expected, server }) => {
+        const { messageComposer } = setup({ channelConfig: { url_enrichment: server } });
+
+        expect(messageComposer.config.linkPreviews.enabled).toBe(expected);
+        expect(messageComposer.linkPreviewsManager.enabled).toBe(expected);
+      });
+
+      it('still lets the integrator switch them off against a permissive server', () => {
+        const { messageComposer } = setup({
+          channelConfig: { url_enrichment: true },
+          config: { linkPreviews: { enabled: false } },
+        });
+
+        expect(messageComposer.config.linkPreviews.enabled).toBe(false);
+      });
+    });
 
     describe('storage outside Stream', () => {
       // `uploads` is a statement about Stream's upload endpoint. An integrator storing files elsewhere is
@@ -711,7 +736,7 @@ describe('MessageComposer', () => {
         },
       });
 
-      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      stubServerConfig(messageComposer.channel, {
         commands: [{ name: 'ban', description: 'Ban a user' }],
       });
 
@@ -743,7 +768,7 @@ describe('MessageComposer', () => {
     it('should apply the default ban command validator', () => {
       const { messageComposer } = setup();
 
-      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      stubServerConfig(messageComposer.channel, {
         commands: [{ name: 'ban', description: 'Ban a user' }],
       });
 
@@ -767,7 +792,7 @@ describe('MessageComposer', () => {
     it('should require mentions for default moderation target commands', () => {
       const { messageComposer } = setup();
 
-      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      stubServerConfig(messageComposer.channel, {
         commands: [
           { name: 'mute', description: 'Mute a user' },
           { name: 'unmute', description: 'Unmute a user' },
@@ -1030,7 +1055,7 @@ describe('MessageComposer', () => {
         },
       });
 
-      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      stubServerConfig(messageComposer.channel, {
         commands: [{ name: 'custom', description: 'Custom command' }],
       });
       const customCommand = { description: 'Custom command', name: 'custom' };
@@ -1059,7 +1084,7 @@ describe('MessageComposer', () => {
         },
       });
 
-      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      stubServerConfig(messageComposer.channel, {
         commands: [{ name: 'ban', description: 'Ban a user' }],
       });
       messageComposer.textComposer.state.partialNext({
@@ -2729,9 +2754,7 @@ describe('MessageComposer', () => {
         const { mockChannel, messageComposer } = setup({
           config: { linkPreviews: { enabled: true } },
         });
-        mockChannel.getConfig = vi
-          .fn()
-          .mockImplementation(() => ({ url_enrichment: true }));
+        stubServerConfig(mockChannel, { url_enrichment: true });
         const spy = vi.spyOn(messageComposer.linkPreviewsManager, 'findAndEnrichUrls');
 
         messageComposer.registerSubscriptions();

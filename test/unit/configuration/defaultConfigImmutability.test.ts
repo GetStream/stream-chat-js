@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { StreamChat } from '../../../src/client';
+import { DEFAULT_CHANNEL_CONFIG } from '../../../src/channel';
 import { DEFAULT_COMPOSER_CONFIG } from '../../../src/messageComposer/configuration';
 import { DEFAULT_LIVE_LOCATION_MANAGER_CONFIG } from '../../../src/LiveLocationManager';
 import { DEFAULT_MESSAGE_DELIVERY_REPORTER_CONFIG } from '../../../src/messageDelivery';
@@ -26,6 +27,7 @@ import { DEFAULT_THREAD_MANAGER_CONFIG } from '../../../src/thread_manager';
  */
 describe('package default configurations are immutable', () => {
   const DEFAULTS = {
+    DEFAULT_CHANNEL_CONFIG,
     DEFAULT_COMPOSER_CONFIG,
     DEFAULT_LIVE_LOCATION_MANAGER_CONFIG,
     DEFAULT_MESSAGE_DELIVERY_REPORTER_CONFIG,

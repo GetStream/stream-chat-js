@@ -19,8 +19,8 @@ import type {
   DraftsConfiguration,
   LinkPreviewsManagerConfig,
   LocationComposerConfig,
-  PollComposerConfig,
   MessageComposerConfig,
+  PollComposerConfig,
   TextComposerConfig,
 } from '../messageComposer/configuration/types';
 
@@ -487,6 +487,42 @@ const CHANNEL_FIELDS: Record<keyof ChannelDeclarativeConfig, ConfigNode> = {
     },
     kind: 'group',
   },
+  replies: {
+    description: 'Threaded replies for the channel.',
+    fields: {
+      enabled: {
+        description:
+          'Offers threaded replies. The server must also allow them per channel type (`replies`), and a server "no" wins.',
+        kind: 'value',
+        type: 'boolean',
+      },
+    },
+    kind: 'group',
+  },
+  userMessageReminders: {
+    description: 'Message reminders — "remind me" and "save for later".',
+    fields: {
+      enabled: {
+        description:
+          'Offers message reminders. The server must also allow them per channel type (`user_message_reminders`), and a server "no" wins.',
+        kind: 'value',
+        type: 'boolean',
+      },
+    },
+    kind: 'group',
+  },
+  deliveryEvents: {
+    description: 'Delivery receipts for the channel.',
+    fields: {
+      enabled: {
+        description:
+          'Reports message delivery. The server must also allow it per channel type (`delivery_events`), and a server "no" wins.',
+        kind: 'value',
+        type: 'boolean',
+      },
+    },
+    kind: 'group',
+  },
   readEvents: {
     description: 'Read receipts for the channel.',
     fields: {
@@ -530,11 +566,11 @@ const THREAD_FIELDS: Record<keyof ThreadDeclarativeConfig, ConfigNode> = {
  * site — `pageSize` is 10 for a bare paginator and larger for the channel message list — so a table of
  * them here would be a second source of truth that disagrees with the instances. Read current values from
  * the instance (`channel.messagePaginator.config`) and registered values from
- * {@link InstanceConfigurationService.getTree}. Construction-only paths are absent for the same reason:
+ * {@link InstanceConfigurationRegistry.getTree}. Construction-only paths are absent for the same reason:
  * `CONSTRUCTION_ONLY_CONFIG_PATHS` already lists them.
  *
  * **Built-in keys only.** The key space is open, so a key registered through module augmentation has no
- * entry here. Merge {@link InstanceConfigurationService.getTree} in to see those.
+ * entry here. Merge {@link InstanceConfigurationRegistry.getTree} in to see those.
  */
 export const INSTANCE_CONFIG_TREE_SHAPE: Record<
   keyof InstanceConfigTree,

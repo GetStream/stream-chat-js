@@ -112,7 +112,14 @@ export type AttachmentManagerConfig = {
 export type LinkPreviewsManagerConfig = {
   /** Number of milliseconds to debounce firing the URL enrichment queries when typing (defaults to `1500`). */
   debounceURLEnrichmentMs: number;
-  /** Allows for toggling the URL enrichment and link previews in `MessageInput` (defaults to `false`). */
+  /**
+   * Allows for toggling URL enrichment and link previews in `MessageInput` (defaults to `true`).
+   *
+   * ANDed with the channel type's `url_enrichment`, so previews appear only where the server will
+   * actually enrich the message. `true` is the default for the same reason every other server-gated
+   * feature uses it: it means "no opinion — let the server decide". A `false` default double-gated the
+   * feature, leaving it off even where the server had enabled it.
+   */
   enabled: boolean;
   /** Custom function to identify URLs in a string and request OG data */
   findURLFn: (text: string) => string[];

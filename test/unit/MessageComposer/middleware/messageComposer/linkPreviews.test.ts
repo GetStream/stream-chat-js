@@ -19,6 +19,7 @@ import {
   MiddlewareStatus,
 } from '../../../../../src';
 import { getClientWithUser } from '../../../test-utils/getClient';
+import { stubServerConfig } from '../../../test-utils/stubServerConfig';
 
 const enrichURLReturnValue = {
   asset_url: 'https://example.com/image.jpg',
@@ -79,7 +80,7 @@ const setup = ({
   const mockChannel = mockClient.channel('messaging', 'test-channel', {
     members: [],
   });
-  mockChannel.getConfig = vi.fn().mockImplementation(() => ({ url_enrichment: true }));
+  stubServerConfig(mockChannel, { url_enrichment: true });
   const messageComposer = new MessageComposer({
     client: mockClient,
     composition,
@@ -592,7 +593,7 @@ const setupForDraft = ({
   const mockChannel = mockClient.channel('messaging', 'test-channel', {
     members: [],
   });
-  mockChannel.getConfig = vi.fn().mockImplementation(() => ({ url_enrichment: true }));
+  stubServerConfig(mockChannel, { url_enrichment: true });
   const messageComposer = new MessageComposer({
     client: mockClient,
     composition,

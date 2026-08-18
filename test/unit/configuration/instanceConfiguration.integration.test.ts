@@ -356,7 +356,7 @@ describe('instance configuration — cross-instance', () => {
 
       // `b` was never queried, but the config belongs to the *type* — keying by cid used to leave it
       // reporting nothing until it was queried itself.
-      expect(b.getConfig()?.shared_locations).toBe(false);
+      expect(b.serverConfig?.shared_locations).toBe(false);
       expect(Object.keys(client.channelConfigsByType)).toEqual(['messaging']);
     });
 
@@ -366,7 +366,7 @@ describe('instance configuration — cross-instance', () => {
 
       setServerConfig(messaging, { shared_locations: false });
 
-      expect(livestream.getConfig()).toBeUndefined();
+      expect(livestream.serverConfig).toBeUndefined();
     });
 
     it('reaches a composer built before the config arrived, for any channel of the type', () => {
@@ -541,7 +541,7 @@ describe('instance configuration — cross-instance', () => {
 
   it('seeds the client key through StreamChatOptions.config', () => {
     // Constructed directly rather than via the test helper, because this is specifically about the
-    // constructor option — the only construction-time route for `client`, whose configuration service
+    // constructor option — the only construction-time route for `client`, whose configuration registry
     // is born inside that constructor.
     const seeded = new StreamChat('', {
       config: { client: { reminders: { scheduledOffsetsMs: [7] } } },

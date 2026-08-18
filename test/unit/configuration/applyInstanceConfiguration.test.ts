@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { InstanceConfigurationService } from '../../../src/configuration/InstanceConfigurationService';
+import { InstanceConfigurationRegistry } from '../../../src/configuration/InstanceConfigurationRegistry';
 import { applyInstanceConfiguration } from '../../../src/configuration/utils/applyInstanceConfiguration';
 
 /** Stands in for a keyed instance. `applyInstanceConfiguration` never inspects its argument. */
 const instance = () => ({ widget: {} }) as never;
 
 describe('applyInstanceConfiguration', () => {
-  let service: InstanceConfigurationService;
+  let service: InstanceConfigurationRegistry;
 
   beforeEach(() => {
-    service = new InstanceConfigurationService();
+    service = new InstanceConfigurationRegistry();
   });
 
   describe('setup functions', () => {

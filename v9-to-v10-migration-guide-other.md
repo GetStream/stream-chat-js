@@ -18,7 +18,7 @@
 - Filter payloads now carry **per-endpoint operator constraints** (`Query*FilterConditions` types) — previously-permissive filter objects may stop type-checking.
 - `ChannelState.membership` initializes to `undefined` (was `{}`); `ChannelState.typing` values are now `EventPayload<'typing.start' | 'typing.stop'>` (were `Event`); read receipts merged with the generated `ReadStateResponse`.
 - Composer attachments now nest `mime_type` / `file_size` / `duration` under `.custom`; `LocationComposer` preview `end_at` is a `Date` (was ISO string).
-- Composer configuration gained required `polls`, `attachments.enabled` and `attachments.customCdn` (all defaulted — only full-literal annotations break). The channel type's `uploads` / `polls` flags now resolve **into** that configuration, so read `composer.config` rather than `channel.getConfig()`. **Silent behaviour change:** a custom `doUploadRequest` no longer waives the `upload-file` capability — set `attachments.customCdn: true` if you upload to storage Stream does not host.
+- Composer configuration gained required `polls`, `attachments.enabled` and `attachments.customCdn` (all defaulted — only full-literal annotations break). The channel type's `uploads` / `polls` flags now resolve **into** that configuration, so read `composer.config` rather than `channel.serverConfig`. **Silent behaviour change:** a custom `doUploadRequest` no longer waives the `upload-file` capability — set `attachments.customCdn: true` if you upload to storage Stream does not host.
 - `Role` type renamed to `RoleName`.
 - Assorted small tightenings: `TokenManager.setTokenOrProvider` user param narrowed, `revokeTokens(before)` no longer accepts `string`, `UserGroupPaginator` cursor field is a `Date`.
 
@@ -333,11 +333,11 @@ const config: AttachmentManagerConfig = {
 
 They join `shared_locations`: the server flag is ANDed with the client's `attachments.enabled` / `polls.enabled`, so either side can switch a feature off and neither can widen.
 
-**Read the resolved value, not the raw flag.** UI that gates on `channel.getConfig()?.uploads` sees only the server's half and will offer features the composer has already disabled:
+**Read the resolved value, not the raw flag.** UI that gates on `channel.serverConfig?.uploads` sees only the server's half and will offer features the composer has already disabled:
 
 ```ts
 // v9 — the only available answer
-if (channel.getConfig()?.uploads) showAttachmentButton();
+if (channel.serverConfig?.uploads) showAttachmentButton();
 
 // v10 — the whole answer
 if (composer.attachmentManager.isUploadEnabled) showAttachmentButton();
@@ -345,7 +345,12 @@ if (composer.attachmentManager.isUploadEnabled) showAttachmentButton();
 if (composer.config.attachments.enabled) …
 ```
 
-`commands` is deliberately **not** mirrored — the server sends a list, not a gate. Keep reading it from `channel.getConfig()`.
+`commands` is deliberately **not** mirrored — the server sends a list, not a gate. It is carried on **`channel.config.availableCommands`** so there is one place to read from.
+
+Named for availability, not enablement: whether a given command can be _used_ right now is
+`messageComposer.isCommandDisabled(command)`, which depends on the message context — editing and quoting
+disable different ones. The name also keeps it distinct from `messageComposer.config.commands`, which is
+unrelated (it holds `{ sendValidator }`).
 
 ### `doUploadRequest` no longer waives the `upload-file` capability — use `customCdn`
 
@@ -370,6 +375,41 @@ Related: `AttachmentManager.isUploadEnabled` and `uploadFiles` now enforce the *
 
 See `docs/instance-configuration.md` for the reasoning behind all three.
 
+### Config setters no longer skip a write when the server is masking the field
+
+**Bug fix, worth knowing if you set configuration imperatively.** Setters such as
+`linkPreviewsManager.enabled`, `textComposer.maxLengthOnSend` and
+`attachmentManager.maxNumberOfFilesPerMessage` used to return early when the new value equalled the
+current one. The value they compared was the **effective** one — after the server's restrictions — while
+the write they skipped records what you **requested**.
+
+With a server that disables the feature, the effective value is always `false`, so:
+
+```ts
+linkPreviewsManager.enabled = true; // server says no → still false
+linkPreviewsManager.enabled = false; // your final answer… but the guard skipped the write
+// server later enables url_enrichment →  previews turn ON
+```
+
+The last instruction was "off" and the earlier "on" survived in the retained request layer. The guards are
+removed; `ConfigController` already declines to publish when the resolved value does not move, which is
+the same check applied to the right value. A request made while the server is masking the field is still
+recorded and honoured if the server later relents — that part is deliberate and unchanged.
+
+### `linkPreviews.enabled` now defaults to `true`
+
+**Behaviour change.** Link previews were off unless you switched them on. They are now on wherever the channel type has `url_enrichment` enabled.
+
+The old default double-gated the feature: the server flag said yes, and the client default said no, so previews stayed off in apps that had enabled them server-side and never knew there was a second switch. Every other server-gated setting defaults to `true`, meaning "no opinion — let the server decide", and this one now matches.
+
+To keep them off, say so:
+
+```ts
+client.config.set({ messageComposer: { linkPreviews: { enabled: false } } });
+```
+
+`drafts.enabled` is **unchanged** at `false`. It has no server flag, so there is nothing to defer to — that default is a product decision, not a double-gate.
+
 ### Channel-type `typing_events` / `read_events` now resolve into channel configuration
 
 `Channel` gained a resolved configuration of its own, carrying two new gates that AND the channel type's flags with what the integrator registered:
@@ -387,7 +427,7 @@ client.config.set({
 
 ```ts
 // v9 — the server's half only
-if (channel.getConfig()?.read_events) showReadReceipts();
+if (channel.serverConfig?.read_events) showReadReceipts();
 
 // v10 — the whole answer, and reactive
 useStateStore(channel.configState, ({ readEvents }) => ({ enabled: readEvents.enabled }));
@@ -395,7 +435,16 @@ useStateStore(channel.configState, ({ readEvents }) => ({ enabled: readEvents.en
 
 `markRead` / `markUnread` still throw when read events are off; the message now names both possible causes.
 
-**`channel.config` deliberately does not exist**, unlike other configurable classes. `channel.getConfig()` already returns the channel _type's server_ configuration, and a sibling `channel.config` holding the resolved _instance_ configuration would be two near-identical names for two different things. Read it through `channel.configState`.
+`Channel` now exposes the same shape as every other configurable class — `configState`, `config`, `initializeConfig` — which required renaming the member it would have collided with:
+
+| Before                | After                  | Returns                                                                             |
+| --------------------- | ---------------------- | ----------------------------------------------------------------------------------- |
+| `channel.getConfig()` | `channel.serverConfig` | The channel **type's** server configuration — `ChannelConfigWithInfo`, 37 fields    |
+| —                     | `channel.config`       | This channel's **resolved** configuration — 7 fields, server combined with your own |
+
+**`getConfig()` is removed, not deprecated.** `serverConfig` is a getter returning exactly what it returned, so migrating is dropping the parentheses.
+
+The two are **not** interchangeable. Only six flags have a resolved counterpart on `config`: `typing_events`, `read_events`, `replies`, `user_message_reminders`, `delivery_events` and `commands`. Read those from `config` — it is the whole answer, server and client combined. Everything else (`automod`, `max_message_length`, `mutes`, `quotes`, `search`, …) is server-only and stays on `serverConfig`.
 
 `DEFAULT_CHANNEL_CONFIG` is exported and deep-frozen, like every other default config constant.
 
@@ -525,10 +574,12 @@ For each source file that touches the SDK:
 5. **Fix filter objects that used undeclared operators** for constrained endpoints (`queryChannels`, `queryUsers`, `queryReactions`, `queryThreads`, `queryMembers`, `queryBannedUsers`, `queryMessageFlags`, `search`). If the filter must stay as-is, cast; otherwise use a declared operator.
 6. **Move composer attachment metadata reads** from `attachment.mime_type` / `attachment.file_size` / `attachment.duration` to `attachment.custom?.<same>`.
 7. **Add `enabled` / `customCdn` / `polls`** to any variable annotated as a complete `AttachmentManagerConfig` or `MessageComposerConfig` and built as an object literal. Partials are unaffected.
-8. **Set `attachments.customCdn: true`** if you supply a `doUploadRequest` that stores files outside Stream — otherwise uploads are refused for users without the `upload-file` capability. Nothing will fail to compile; this one is silent.
-9. **Replace raw `channel.getConfig()?.uploads` / `?.polls` / `?.shared_locations` reads** used to gate UI with the resolved composer values (`attachmentManager.isUploadEnabled`, `composer.config.polls.enabled`, `composer.config.location.enabled`). `commands` still comes from `getConfig()`.
-10. **Replace raw `channel.getConfig()?.typing_events` / `?.read_events` reads** used to gate UI with `channel.configState`'s `typingEvents.enabled` / `readEvents.enabled`, which are the reconciled values and are reactive.
-11. **Format `LocationComposer` preview `end_at` at read sites** — it's a `Date` now.
-12. **Rename `ReminderManager` call-site keys** `messageId` → `message_id`. Same for any place you were shaping a reminder-event body.
-13. **Delete any code that used `client.secret`, `client._isUsingServerAuth()`, `client.setAnonymousUser`, `client.markAllRead`, or assigned to `client.userID`.** Move server-side callers to `@stream-io/node-sdk`.
-14. **Rewrite `client.revokeTokens(isoString)`** to `client.revokeTokens(new Date(isoString))`.
+8. **Decide whether you want link previews.** They now default to on wherever `url_enrichment` is enabled server-side; set `linkPreviews.enabled: false` to keep the old behaviour. Nothing will fail to compile.
+9. **Set `attachments.customCdn: true`** if you supply a `doUploadRequest` that stores files outside Stream — otherwise uploads are refused for users without the `upload-file` capability. Nothing will fail to compile; this one is silent.
+10. **Drop the parentheses on every `channel.getConfig()` call** — it is removed; `channel.serverConfig` is a getter returning the same thing. Test mocks need `Object.defineProperty`, not `vi.fn()`.
+11. **Replace raw `serverConfig?.uploads` / `?.polls` / `?.shared_locations` reads** used to gate UI with the resolved composer values (`attachmentManager.isUploadEnabled`, `composer.config.polls.enabled`, `composer.config.location.enabled`).
+12. **Replace raw `serverConfig?.typing_events` / `?.read_events` / `?.replies` / `?.user_message_reminders` / `?.delivery_events` / `?.commands` reads** with `channel.config`'s equivalents (`commands` becomes `availableCommands`), which are also reactive through `channel.configState`.
+13. **Format `LocationComposer` preview `end_at` at read sites** — it's a `Date` now.
+14. **Rename `ReminderManager` call-site keys** `messageId` → `message_id`. Same for any place you were shaping a reminder-event body.
+15. **Delete any code that used `client.secret`, `client._isUsingServerAuth()`, `client.setAnonymousUser`, `client.markAllRead`, or assigned to `client.userID`.** Move server-side callers to `@stream-io/node-sdk`.
+16. **Rewrite `client.revokeTokens(isoString)`** to `client.revokeTokens(new Date(isoString))`.

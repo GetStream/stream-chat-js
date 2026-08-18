@@ -6,7 +6,7 @@ import { MessageComposer } from '../../../src/messageComposer/messageComposer';
  * Three boundaries, one rule each, all found by a second review pass over the same feature.
  *
  * The first two are the other half of the fix recorded as **F9**, which copied caller patches at
- * `InstanceConfigurationService.setConfig` on the reasoning that it was "the single boundary at which
+ * `InstanceConfigurationRegistry.setConfig` on the reasoning that it was "the single boundary at which
  * caller objects enter the SDK". It is not: `MessageComposer.updateConfig` and the composer's
  * constructor argument are two more, and both are read on *every* resolution for the composer's whole
  * life, so an aliased object there is longer-lived than one in the registry.

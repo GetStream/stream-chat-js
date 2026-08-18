@@ -150,7 +150,11 @@ export class AttachmentManager {
   set maxNumberOfFilesPerMessage(
     maxNumberOfFilesPerMessage: AttachmentManagerConfig['maxNumberOfFilesPerMessage'],
   ) {
-    if (maxNumberOfFilesPerMessage === this.maxNumberOfFilesPerMessage) return;
+    // No early return on "same value". The guard that used to be here compared against the *effective*
+    // value, while the write it skipped records the *requested* one — so asking for a value the server
+    // was currently masking recorded nothing, and the earlier request stayed in the patch layer to be
+    // honoured the moment the server relented. `ConfigController.write` already skips a publish when the
+    // resolved value does not move, which is the same guard applied to the right value.
     this.composer.updateConfig({ attachments: { maxNumberOfFilesPerMessage } });
   }
 

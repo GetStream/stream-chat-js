@@ -150,21 +150,24 @@ describe('resolved configuration is reactive on the classes that were converted 
   });
 
   /**
-   * `Channel` and `Thread` deliberately stop at `configState`: `channel.getConfig()` already returns the
-   * channel *type*'s server configuration, so a `channel.config` beside it would read as the same thing in
-   * getter form while meaning something unrelated, with nothing to catch the confusion.
+   * `Channel` was the one class that stopped at `configState`, because `channel.getConfig()` (now removed) already
+   * returned the channel *type*'s server configuration and a `channel.config` beside it would have read
+   * as the same thing in getter form while meaning something unrelated.
    *
-   * Pinned as an absence because the docs state it as a deliberate exception. If someone adds the getter,
-   * this fails and points at the table that has to change with it.
+   * That was a workaround for a name, so the name was fixed instead: the server side is now
+   * `channel.serverConfig` (with `getConfig()` deprecated), which frees `config` to mean what it means
+   * everywhere else. `Thread` follows the same shape.
    */
-  it('leaves Channel and Thread with the store alone, and no colliding getter', () => {
+  it('gives Channel the same shape as everything else, with the server config renamed out of the way', () => {
+    // This used to assert the opposite — `Channel` deliberately had no `config` getter, because
+    // `getConfig()` already meant the channel *type's server* configuration and the two names would
+    // have been indistinguishable. Renaming the server side to `serverConfig` removed the collision
+    // rather than working around it, so `Channel` no longer has to be the exception.
     const channel = client.channel('messaging', channelResponse.id);
 
     expect(channel.configState).toBeDefined();
-    expect('config' in channel).toBe(false);
-    expect('updateConfig' in channel).toBe(false);
-    // the member the name would have collided with, which does exist
-    expect(typeof channel.getConfig).toBe('function');
+    expect(channel.config).toBe(channel.configState.getLatestValue());
+    expect(channel.serverConfig).toBe(client.channelConfigsByType.messaging);
   });
 
   /**

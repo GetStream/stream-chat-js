@@ -1,8 +1,8 @@
 import { chatLoggerSystem } from '../../logger';
 import type {
   ConfiguredInstance,
-  InstanceConfigurationService,
-} from '../InstanceConfigurationService';
+  InstanceConfigurationRegistry,
+} from '../InstanceConfigurationRegistry';
 import type {
   InstanceConfigOf,
   InstanceSetupFunctionArgsOf,
@@ -17,8 +17,8 @@ const logger = chatLoggerSystem.getLogger('instance-configuration');
 export type ApplyInstanceConfigurationParams<K extends InstanceSetupKey> = {
   /** The instance's argument for its setup function — `{ channel }`, `{ composer }`, and so on. */
   args: InstanceSetupFunctionArgsOf<K>;
-  /** The client's configuration service, i.e. `client.config`. */
-  config: InstanceConfigurationService;
+  /** The client's configuration registry, i.e. `client.config`. */
+  config: InstanceConfigurationRegistry;
   key: K;
   /**
    * Other keys this instance derives from. `Channel` and `Thread` both read the shared `messagePaginator`

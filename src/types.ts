@@ -397,7 +397,7 @@ export type StreamChatOptions = {
    * own managers are constructed.
    *
    * Equivalent to calling `client.config.set(tree)` immediately after construction, except for the
-   * `client` subtree — the configuration service is created inside the constructor, so this is the only
+   * `client` subtree — the configuration registry is created inside the constructor, so this is the only
    * way to configure `reminders` / `notifications` before they are built.
    */
   config?: DeepPartial<InstanceConfigTree>;
@@ -778,7 +778,7 @@ export type CommandVariants =
 
 /**
  * Server-provided channel configuration, keyed by **channel type** (`messaging`, `livestream`, …) —
- * every field in `ChannelConfigWithInfo` is a type-level setting. Read it via `channel.getConfig()`.
+ * every field in `ChannelConfigWithInfo` is a type-level setting. Read it via `channel.serverConfig`.
  */
 export type Configs = Record<string, ChannelConfigWithInfo | undefined>;
 

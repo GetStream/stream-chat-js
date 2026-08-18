@@ -85,14 +85,14 @@ export type CustomThreadMarkReadRequestFn = (params: {
   options?: MarkReadRequest;
 }) => Promise<EventAPIResponse | null> | void;
 
-export type ThreadInstanceConfig = {
+export type ThreadConfig = {
   requestHandlers?: {
     markReadRequest?: CustomThreadMarkReadRequestFn;
   };
 };
 
 export class Thread extends WithSubscriptions {
-  public readonly configState = new StateStore<ThreadInstanceConfig>({});
+  public readonly configState = new StateStore<ThreadConfig>({});
   public readonly state: StateStore<ThreadState>;
   public readonly id: string;
   public readonly messageComposer: MessageComposer;
@@ -362,6 +362,11 @@ export class Thread extends WithSubscriptions {
     );
   }
 
+  /** This thread's resolved configuration — the shape every configurable class exposes. */
+  get config(): Readonly<ThreadConfig> {
+    return this.configState.getLatestValue();
+  }
+
   get channel() {
     return this.state.getLatestValue().channel;
   }
@@ -487,7 +492,7 @@ export class Thread extends WithSubscriptions {
    * - it sees the declarative slice **as it stood when the thread was constructed**, because the
    *   constructor applies it directly, but no *later* `client.config.set({ thread: … })` or
    *   `set({ messagePaginator: … })` reaches it;
-   * - it is absent from the service's `liveInstances`, so `client.config.reset()` skips it, and
+   * - it is absent from the registry's `liveInstances`, so `client.config.reset()` skips it, and
    *   `hasLiveInstances('thread')` does not count it when deciding whether to warn about a
    *   construction-only path registered too late.
    *

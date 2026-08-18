@@ -8,7 +8,7 @@ import { isWalkableRecord } from '../../utils/objectPath';
  * (`createNewTarget` returns `srcValue`), and the declarative registry's target starts empty — so the first
  * `client.config.set({ messageComposer: patch })` left `getConfig('messageComposer').text === patch.text`.
  * Two consequences, both silent: mutating `patch.text` afterwards changed resolved configuration behind
- * every live instance's back with no notification, and the service held the caller's objects for the
+ * every live instance's back with no notification, and the registry held the caller's objects for the
  * client's lifetime.
  *
  * **Why not `structuredClone`.** Configuration is not JSON — `commands.sendValidator`,

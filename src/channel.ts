@@ -18,6 +18,10 @@ import {
 import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
 import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
+import { ConfigController } from './configuration/ConfigController';
+import { deepFreezeConfig } from './configuration/utils/deepFreezeConfig';
+import { mergeServerRestrictions } from './configuration/utils/serverAuthority';
+import type { ServerRestrictions } from './configuration/utils/serverAuthority';
 import type { ChannelDeclarativeConfig } from './configuration/types';
 import {
   mergeDeclarativeMessageOperationsConfig,
@@ -35,6 +39,7 @@ import type {
   ChannelResponse,
   ChannelStateResponseFields,
   ChannelUpdateOptions,
+  Command,
   CreateDraftResponse,
   DeleteMessageOptions,
   Event,
@@ -67,8 +72,7 @@ import type {
   UserResponse,
 } from './types';
 import type { RoleName } from './permissions';
-import { StateStore } from './store';
-import { isEqual } from './utils/mergeWith/mergeWithCore';
+import type { StateStore } from './store';
 import type { Unsubscribe } from './store';
 import type {
   ChannelMemberRequest as Gen_ChannelMemberRequest,
@@ -144,7 +148,14 @@ export type CustomMarkReadRequestFn = (params: {
   options?: MarkReadRequest;
 }) => Promise<EventAPIResponse | null>;
 
-export type ChannelInstanceConfig = {
+/**
+ * A channel's **resolved** configuration — what {@link Channel.config} returns.
+ *
+ * Not `ChannelConfigWithInfo`, which is the generated type for the channel *type's server*
+ * configuration behind {@link Channel.serverConfig}. The two are related: the gates below are the
+ * server's flags already ANDed with what the integrator registered.
+ */
+export type ChannelConfig = {
   requestHandlers?: {
     deleteMessageRequest?: CustomDeleteMessageRequestFn;
     markReadRequest?: CustomMarkReadRequestFn;
@@ -152,7 +163,67 @@ export type ChannelInstanceConfig = {
     retrySendMessageRequest?: CustomSendMessageRequestFn;
     updateMessageRequest?: CustomUpdateMessageRequestFn;
   };
+  /**
+   * Typing indicators for this channel (defaults to enabled). ANDed with the channel type's
+   * `typing_events`, so either side can switch them off and neither can widen.
+   *
+   * This is the channel-wide gate, read by {@link Channel.keystroke} and {@link Channel.stopTyping}.
+   * `messageComposer.text.publishTypingEvents` sits on top of it as a per-composer refinement — a thread
+   * composer can stay quiet while the channel still permits typing events.
+   */
+  typingEvents: { enabled: boolean };
+  /**
+   * Read receipts for this channel (defaults to enabled). ANDed with the channel type's `read_events`,
+   * so either side can switch them off and neither can widen. Read by {@link Channel.markRead} and
+   * {@link Channel.markUnread}.
+   */
+  readEvents: { enabled: boolean };
+  /**
+   * Threaded replies for this channel (defaults to enabled). ANDed with the channel type's `replies`.
+   */
+  replies: { enabled: boolean };
+  /**
+   * Message reminders — "remind me" and "save for later" (defaults to enabled). ANDed with the channel
+   * type's `user_message_reminders`.
+   */
+  userMessageReminders: { enabled: boolean };
+  /**
+   * Delivery receipts (defaults to enabled). ANDed with the channel type's `delivery_events`.
+   */
+  deliveryEvents: { enabled: boolean };
+  /**
+   * The slash commands this channel type offers, as the server reports them.
+   *
+   * Named for availability rather than enablement on purpose: whether any given command can be *used*
+   * right now is `messageComposer.isCommandDisabled(command)`, which depends on the message context —
+   * editing and quoting disable different ones. A list called `enabledCommands` would routinely contain
+   * disabled entries.
+   *
+   * **Server-owned, and the one field here the integrator cannot set.** It is a list rather than a gate,
+   * so there is nothing to AND and no intent to express — the server's answer simply *is* the value, and
+   * it is absent from the declarative tree for that reason.
+   *
+   * It lives on the resolved configuration anyway so that consumers never need a second place to look:
+   * every question about what this channel permits is answered by `config`. Reading the raw
+   * {@link Channel.serverConfig} instead is what made a UI show features the client had disabled — the
+   * gates below have a client half, and mixing the two sources meant sometimes reading only one.
+   */
+  availableCommands: Command[];
 };
+
+/**
+ * Frozen for the same reason every other default config constant is: resolution spreads over it, so a
+ * subtree no layer touches stays identical by reference and would otherwise be mutable through the
+ * public `channel.config`. See `deepFreezeConfig`.
+ */
+export const DEFAULT_CHANNEL_CONFIG: ChannelConfig = deepFreezeConfig({
+  availableCommands: [],
+  deliveryEvents: { enabled: true },
+  readEvents: { enabled: true },
+  replies: { enabled: true },
+  typingEvents: { enabled: true },
+  userMessageReminders: { enabled: true },
+});
 
 /**
  * The Channel class manages its own state.
@@ -185,7 +256,15 @@ export class Channel extends ChannelApi {
   isTyping: boolean;
   disconnected: boolean;
   push_preferences?: Gen_ChannelPushPreferencesResponse;
-  public readonly configState = new StateStore<ChannelInstanceConfig>({});
+  /**
+   * The shared configuration machinery. Owned rather than inherited — `Channel` already extends
+   * `ChannelApi`, so single inheritance is spent.
+   *
+   * `mergeSlice: 'deep'` because the config has nested groups: registering `typingEvents.enabled` must
+   * not drop `readEvents`. `applyAuthority` is what makes `channel.config` the *whole* answer rather
+   * than the client's half — see {@link serverRestrictions}.
+   */
+  private readonly configController: ConfigController<ChannelConfig>;
   public readonly messageComposer: MessageComposer;
   public readonly messageReceiptsTracker: MessageReceiptsTracker;
   public readonly messagePaginator: MessagePaginator;
@@ -198,6 +277,10 @@ export class Channel extends ChannelApi {
    * configuration store's handler set across reconnects.
    */
   private unsubscribeConfiguration?: Unsubscribe;
+  /** Teardown for the server-config re-derivation subscription, released by {@link _disconnect}. */
+  private unsubscribeServerConfig?: Unsubscribe;
+  /** The declarative slice last derived from, so a late server answer can re-derive from the same one. */
+  private declarativeConfig?: Partial<ChannelConfig>;
 
   /**
    * Creates a `Channel` instance bound to the given chat client.
@@ -346,6 +429,29 @@ export class Channel extends ChannelApi {
       },
     });
 
+    this.configController = new ConfigController<ChannelConfig>({
+      defaults: DEFAULT_CHANNEL_CONFIG,
+      initialSlice: declarativeConfig as Partial<ChannelConfig> | undefined,
+      // Nested groups: naming `typingEvents.enabled` must not drop `readEvents`.
+      mergeSlice: 'deep',
+      applyAuthority: (requested) => ({
+        ...(mergeServerRestrictions(requested, this.serverRestrictions) as ChannelConfig),
+        // Assigned rather than merged: `mergeServerRestrictions` treats an array as an interior node
+        // and hands it to the deep merge, which would combine the two lists. The server owns this one
+        // outright, so it replaces.
+        availableCommands: this.serverConfig?.commands ?? [],
+      }),
+    });
+
+    // The server's answer usually arrives *after* construction — a channel built before it has been
+    // queried or watched reads `serverConfig` as undefined, so the restrictions state nothing and the
+    // defaults stand. Re-derive when the config for this channel type lands, or an app that disables
+    // `read_events` server-side would keep a channel that believes read receipts are on.
+    this.unsubscribeServerConfig = client.channelConfigsByTypeStore.subscribeWithSelector(
+      ({ configs }) => ({ channelConfig: configs[this.type] }),
+      () => this.configController.rederive(this.declarativeConfig),
+    );
+
     // Share one derivation path with `config.reset()`, so the two cannot drift. Idempotent: the
     // sub-objects were already configured through their constructors above; this re-applies the
     // mutable half through the same code a reset uses.
@@ -370,6 +476,25 @@ export class Channel extends ChannelApi {
   }
 
   /**
+   * The configuration fields this channel's *type* decides server-side.
+   *
+   * Both are boolean gates, so `mergeServerRestrictions` ANDs them with what was requested: either the
+   * server or the integrator may switch a feature off, and neither can widen. Re-read on every
+   * derivation rather than captured, so a flag that changes mid-session is picked up.
+   */
+  private get serverRestrictions(): ServerRestrictions<ChannelConfig> {
+    const channelConfig = this.serverConfig;
+
+    return {
+      deliveryEvents: { enabled: channelConfig?.delivery_events },
+      readEvents: { enabled: channelConfig?.read_events },
+      replies: { enabled: channelConfig?.replies },
+      typingEvents: { enabled: channelConfig?.typing_events },
+      userMessageReminders: { enabled: channelConfig?.user_message_reminders },
+    };
+  }
+
+  /**
    * Derives this channel's configuration — and its sub-objects' — from the declarative slice.
    *
    * Called by the constructor and by `client.config.reset()`. The channel owns only its own
@@ -377,23 +502,19 @@ export class Channel extends ChannelApi {
    * `messagePaginator.pageSize` means stays inside the paginator.
    */
   initializeConfig(declarativeConfig?: ChannelDeclarativeConfig): void {
-    // Replaces rather than merges: this is a derivation, so a handler dropped from the declarative
-    // tree must disappear. Anything else writing directly into `configState.requestHandlers` — the
-    // React SDK's per-component props do — has to re-apply after a re-derivation; see the note in
-    // `useChannelRequestHandlers`.
+    // Remembered so the server-config subscription can re-derive from the same slice without being
+    // handed it again — the server's answer arrives on its own schedule, not the tree's.
+    this.declarativeConfig = declarativeConfig as Partial<ChannelConfig> | undefined;
+
+    // A derivation, so it *replaces*: a handler dropped from the declarative tree has to disappear.
+    // Anything else writing directly into `configState.requestHandlers` — the React SDK's
+    // per-component props do — has to re-apply afterwards; see the note in `useChannelRequestHandlers`.
     //
-    // Guarded for the same reason `MessageComposer.publishConfig` is: the object is freshly allocated
-    // every time, so `StateStore.next`'s `===` no-op can never apply and every re-derivation woke every
-    // subscriber with an identical value. This runs on each `alsoWatch` key change too — a
-    // `messagePaginator` or `messageOperations` registration re-runs the whole `channel` cycle — so the
-    // no-op publishes outnumber the real ones. Deep rather than `===` because `requestHandlers` is a
-    // record; `isEqual` compares its function values by identity, which is the right test for a handler.
-    const nextRequestHandlers = declarativeConfig?.requestHandlers;
-    if (
-      !isEqual(this.configState.getLatestValue().requestHandlers, nextRequestHandlers)
-    ) {
-      this.configState.next({ requestHandlers: nextRequestHandlers });
-    }
+    // The no-op guard that used to live here is now the controller's: it skips the publish when the
+    // resolved value is deep-equal to the last one, which matters because this runs on every
+    // `alsoWatch` key change too (a `messagePaginator` or `messageOperations` registration re-runs the
+    // whole `channel` cycle), so the no-op publishes outnumber the real ones.
+    this.configController.initialize(declarativeConfig as Partial<ChannelConfig>);
 
     // The shared `messagePaginator` key applies to every MessagePaginator — this channel's list and
     // every thread's replies — and the per-parent slice overrides it.
@@ -434,14 +555,43 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Returns the config for this channel ID (CID).
+   * Resolved configuration, as a store. Delegates rather than holding a copy, so the field and the
+   * controller's store cannot drift.
    *
-   * @returns The channel config.
+   * Still directly writable, and deliberately so: the React SDK installs per-component request handlers
+   * by calling `partialNext({ requestHandlers })` on it. That write bypasses the controller, which is
+   * why `requestHandlers` is the one field a re-derivation replaces wholesale — see
+   * {@link initializeConfig}.
    */
-  getConfig() {
-    const client = this.getClient();
+  get configState(): StateStore<ChannelConfig> {
+    return this.configController.state;
+  }
+
+  /**
+   * This channel's **resolved** configuration — the shape every configurable class exposes.
+   *
+   * Not to be confused with {@link serverConfig}, which is the channel *type's* configuration as the
+   * server reports it. This one has already folded that in: `typingEvents.enabled` is the server's
+   * `typing_events` ANDed with whatever the integrator registered, so it is the whole answer. The
+   * near-collision is why the server side became `serverConfig`, a getter that says what it
+   * is.
+   */
+  get config(): Readonly<ChannelConfig> {
+    return this.configController.value;
+  }
+
+  /**
+   * The channel **type's** configuration, as the server reports it — feature flags such as `uploads`,
+   * `typing_events`, `read_events` and `commands`.
+   *
+   * Distinct from {@link config}, which is this instance's resolved configuration and already has the
+   * relevant flags below folded into it. Prefer `config` when deciding whether a feature is available:
+   * this getter answers only the server's half, so gating UI on it offers features the client has
+   * already disabled.
+   */
+  get serverConfig() {
     // Keyed by channel type — the config is a property of the type, not of this channel.
-    return client.channelConfigsByType[this.type];
+    return this.getClient().channelConfigsByType[this.type];
   }
 
   _sendMessage(request: Gen_SendMessageRequest) {
@@ -1285,7 +1435,11 @@ export class Channel extends ChannelApi {
   }
 
   _isTypingIndicatorsEnabled(): boolean {
-    if (!this.getConfig()?.typing_events || !this.getClient().wsConnection?.isHealthy) {
+    // The resolved value, not the raw server flag: it already ANDs the channel type's `typing_events`
+    // with what the integrator registered, so a client-side `typingEvents.enabled: false` is honoured
+    // too. The other two axes are runtime facts no configuration can express.
+    const { typingEvents } = this.configController.value;
+    if (!typingEvents.enabled || !this.getClient().wsConnection?.isHealthy) {
       return false;
     }
     return this.getClient().user?.privacy_settings?.typing_indicators?.enabled ?? true;
@@ -1314,8 +1468,10 @@ export class Channel extends ChannelApi {
   override async markRead(data?: MarkReadRequest) {
     this._checkInitialized();
 
-    if (!this.getConfig()?.read_events) {
-      throw new Error('Read events are disabled for this application');
+    if (!this.configController.value.readEvents.enabled) {
+      throw new Error(
+        "Read events are disabled — either by the channel type's `read_events` setting or by `channel.readEvents.enabled` in your configuration",
+      );
     }
 
     return await super.markRead(data);
@@ -1330,8 +1486,10 @@ export class Channel extends ChannelApi {
   override async markUnread(data?: MarkUnreadRequest) {
     this._checkInitialized();
 
-    if (!this.getConfig()?.read_events) {
-      throw new Error('Read events are disabled for this application');
+    if (!this.configController.value.readEvents.enabled) {
+      throw new Error(
+        "Read events are disabled — either by the channel type's `read_events` setting or by `channel.readEvents.enabled` in your configuration",
+      );
     }
 
     return await super.markUnread(data);
@@ -2718,6 +2876,8 @@ export class Channel extends ChannelApi {
     // store's subscribers. Cleared so a repeated `_disconnect` cannot double-run it.
     this.unsubscribeConfiguration?.();
     this.unsubscribeConfiguration = undefined;
+    this.unsubscribeServerConfig?.();
+    this.unsubscribeServerConfig = undefined;
     this.messageReceiptsTracker.unregisterSubscriptions();
     this.cooldownTimer.clearTimeout();
     // Release the store-backed paginators so the message store no longer pins this removed channel

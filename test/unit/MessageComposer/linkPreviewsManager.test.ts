@@ -11,6 +11,7 @@ import {
 } from '../../../src';
 import { DeepPartial } from '../../../src/types.utility';
 import { mergeWith } from '../../../src/utils/mergeWith';
+import { stubServerConfig } from '../test-utils/stubServerConfig';
 
 const existingLinkUrl = 'https://existing.com';
 const linkUrl = 'https://example.com';
@@ -92,14 +93,14 @@ const setup = ({
   mockClient.getOG = vi.fn().mockResolvedValue(enrichURLReturnValue);
 
   const mockChannel = mockClient.channel('channelType', 'channelId');
-  mockChannel.getConfig = vi.fn().mockImplementation(() => ({ url_enrichment: true }));
+  const setServerConfig = stubServerConfig(mockChannel, { url_enrichment: true });
   const messageComposer = new MessageComposer({
     client: mockClient,
     composition,
     compositionContext: mockChannel,
     config: config === null ? {} : mergeWith(DEFAULT_CONFIG, { linkPreviews: config }),
   });
-  return { mockClient, mockChannel, messageComposer };
+  return { messageComposer, mockChannel, mockClient, setServerConfig };
 };
 
 describe('LinkPreviewsManager', () => {
@@ -112,7 +113,9 @@ describe('LinkPreviewsManager', () => {
       const {
         messageComposer: { linkPreviewsManager },
       } = setup({ config: null });
-      expect(linkPreviewsManager.config.enabled).toBe(false);
+      // `true` means "no opinion — let the server decide", matching every other server-gated feature.
+      // The channel type's `url_enrichment` still has to allow it; the harness sets that flag to true.
+      expect(linkPreviewsManager.config.enabled).toBe(true);
       expect(linkPreviewsManager.config.debounceURLEnrichmentMs).toBe(
         DEFAULT_LINK_PREVIEW_MANAGER_CONFIG.debounceURLEnrichmentMs,
       );
@@ -417,14 +420,73 @@ describe('LinkPreviewsManager', () => {
     });
   });
 
+  describe('the setter against a disabling server', () => {
+    // The server has the last word, so `enabled = true` cannot win — that part always held. What did not
+    // is the *record* of what was asked for: the setter used to skip the write when the new value equalled
+    // the current one, and while the server masks the field the current one is always `false`. So asking
+    // for `false` after asking for `true` recorded nothing, the earlier `true` stayed in the retained
+    // patch layer, and the moment the server relented it was honoured — the opposite of the last
+    // instruction given.
+    const setup2 = (url_enrichment: boolean) => {
+      const client = new StreamChat('apiKey');
+      client.user = { id: 'user' } as never;
+      client.channelConfigsByTypeStore.partialNext({
+        configs: { channelType: { url_enrichment } as never },
+      });
+      const channel = client.channel('channelType', 'channelId');
+      const composer = new MessageComposer({
+        client,
+        compositionContext: channel,
+      });
+      composer.registerSubscriptions();
+      return { client, composer };
+    };
+
+    it('cannot enable previews the server has disabled', () => {
+      const { composer } = setup2(false);
+
+      composer.linkPreviewsManager.enabled = true;
+
+      expect(composer.linkPreviewsManager.enabled).toBe(false);
+      expect(composer.config.linkPreviews.enabled).toBe(false);
+    });
+
+    it('honours the last request once the server relents', () => {
+      const { client, composer } = setup2(false);
+
+      composer.linkPreviewsManager.enabled = true;
+      composer.linkPreviewsManager.enabled = false; // changed their mind, while masked
+
+      client.channelConfigsByTypeStore.partialNext({
+        configs: { channelType: { url_enrichment: true } as never },
+      });
+
+      expect(composer.linkPreviewsManager.enabled).toBe(false);
+    });
+
+    it('still applies a request made while masked, if it was the last one', () => {
+      const { client, composer } = setup2(false);
+
+      composer.linkPreviewsManager.enabled = true;
+
+      client.channelConfigsByTypeStore.partialNext({
+        configs: { channelType: { url_enrichment: true } as never },
+      });
+
+      expect(composer.linkPreviewsManager.enabled).toBe(true);
+    });
+  });
+
   describe('findAndEnrichUrls', () => {
     it('should not process URLs if disabled back-end url_enrichment', async () => {
-      const {
-        messageComposer: { linkPreviewsManager },
-        mockChannel,
-        mockClient,
-      } = setup();
-      mockChannel.getConfig.mockReturnValueOnce({ url_enrichment: false });
+      const { messageComposer, mockChannel, mockClient, setServerConfig } = setup();
+      const { linkPreviewsManager } = messageComposer;
+      // `url_enrichment` is reconciled into `config.linkPreviews.enabled` by the composer's server
+      // restrictions rather than read live, so a *late* change reaches it through the composer's
+      // subscription — the same route its four sibling gates already take. A real consumer registers
+      // these on mount.
+      messageComposer.registerSubscriptions();
+      setServerConfig({ url_enrichment: false });
       linkPreviewsManager.findAndEnrichUrls('Check out https://example.com');
       let enrichPromiseResolve;
       mockClient.getOG = vi.fn().mockImplementation(() => {

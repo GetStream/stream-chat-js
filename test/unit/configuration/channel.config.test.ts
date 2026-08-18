@@ -91,7 +91,7 @@ describe("the 'channel' configuration key", () => {
         channel: { messagePaginator: { unreadReferencePolicy: 'read-state-only' } },
       });
 
-      // Order-dependent by design; the service warns in this case rather than failing silently.
+      // Order-dependent by design; the registry warns in this case rather than failing silently.
       expect(
         (channel.messagePaginator as unknown as { unreadReferencePolicy: string })
           .unreadReferencePolicy,
@@ -246,6 +246,155 @@ describe("the 'channel' configuration key", () => {
       client.config.reset();
 
       expect(initializeConfig).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  /**
+   * `typing_events` and `read_events` were the last two channel-type flags with no declarative
+   * counterpart. The SDK already gated its *actions* on them (`keystroke`, `markRead`, `markUnread`), so
+   * this is not a correctness gap being closed — it is the two things that were missing: an off-switch
+   * for the integrator, and one reconciled value to read instead of the raw flag.
+   */
+  describe('typing and read events', () => {
+    const withServerConfig = (config: Record<string, unknown>, id = 'channel-id') => {
+      client.channelConfigsByTypeStore.partialNext({
+        configs: { messaging: config as never },
+      });
+      return openChannel(id);
+    };
+
+    it('defaults both to enabled when the server states nothing', () => {
+      const { readEvents, typingEvents } = openChannel().configState.getLatestValue();
+
+      expect(typingEvents.enabled).toBe(true);
+      expect(readEvents.enabled).toBe(true);
+    });
+
+    it.each([
+      { expected: true, requested: undefined, server: undefined },
+      { expected: false, requested: false, server: undefined },
+      { expected: false, requested: undefined, server: false },
+      { expected: false, requested: true, server: false },
+      { expected: true, requested: undefined, server: true },
+      { expected: false, requested: false, server: true },
+      { expected: true, requested: true, server: true },
+    ])(
+      'ANDs both gates: requested=$requested server=$server -> $expected',
+      ({ expected, requested, server }) => {
+        client.config.set({
+          channel: {
+            readEvents: { enabled: requested },
+            typingEvents: { enabled: requested },
+          },
+        });
+
+        const channel = withServerConfig({
+          read_events: server,
+          typing_events: server,
+        });
+        const { readEvents, typingEvents } = channel.configState.getLatestValue();
+
+        expect(typingEvents.enabled).toBe(expected);
+        expect(readEvents.enabled).toBe(expected);
+      },
+    );
+
+    it('re-derives when the server config arrives after construction', () => {
+      // The case the subscription exists for: a channel built before it has been queried reads
+      // `getConfig()` as undefined, so the restriction states nothing and the defaults stand. Without
+      // re-deriving, an app that disables read events server-side keeps a channel that believes they
+      // are on.
+      const channel = openChannel();
+      expect(channel.configState.getLatestValue().readEvents.enabled).toBe(true);
+
+      client.channelConfigsByTypeStore.partialNext({
+        configs: { messaging: { read_events: false } as never },
+      });
+
+      expect(channel.configState.getLatestValue().readEvents.enabled).toBe(false);
+    });
+
+    describe('_isTypingIndicatorsEnabled', () => {
+      // The other two axes have to be satisfied or the gate short-circuits before reaching configuration
+      // and the assertions below pass for the wrong reason — which they did, until reverting the gate to
+      // the raw server flag failed to break anything.
+      beforeEach(() => {
+        client.wsConnection = { isHealthy: true } as never;
+        client.user = { id: 'user' } as never;
+      });
+
+      it('is true when both the server and the integrator allow it', () => {
+        const channel = withServerConfig({ typing_events: true });
+
+        expect(channel._isTypingIndicatorsEnabled()).toBe(true);
+      });
+
+      it('is false when the integrator disables them, with a permissive server', () => {
+        client.config.set({ channel: { typingEvents: { enabled: false } } });
+        const channel = withServerConfig({ typing_events: true });
+
+        expect(channel._isTypingIndicatorsEnabled()).toBe(false);
+      });
+
+      it('is false when the server disables them, whatever the integrator asked', () => {
+        client.config.set({ channel: { typingEvents: { enabled: true } } });
+        const channel = withServerConfig({ typing_events: false });
+
+        expect(channel._isTypingIndicatorsEnabled()).toBe(false);
+      });
+    });
+
+    it('refuses markRead when the integrator disables read events', async () => {
+      client.config.set({ channel: { readEvents: { enabled: false } } });
+      const channel = withServerConfig({ read_events: true });
+      channel.initialized = true;
+
+      await expect(channel.markRead()).rejects.toThrow('Read events are disabled');
+    });
+
+    it('leaves the sibling group alone when only one is registered', () => {
+      // `mergeSlice: 'deep'` — naming one nested group must not drop the other.
+      client.config.set({ channel: { typingEvents: { enabled: false } } });
+
+      const { readEvents, typingEvents } = openChannel().configState.getLatestValue();
+
+      expect(typingEvents.enabled).toBe(false);
+      expect(readEvents.enabled).toBe(true);
+    });
+
+    it('mirrors the server command list, which the integrator cannot set', () => {
+      // A list, not a gate: nothing to AND and no intent to express, so the server's answer *is* the
+      // value. It lives on the resolved config anyway so consumers never need a second place to look.
+      const commands = [{ args: '', description: 'Ban', name: 'ban', set: 'moderation' }];
+      const channel = withServerConfig({ commands });
+
+      expect(channel.config.availableCommands).toEqual(commands);
+      // absent from the declarative tree, so registering it is not offered and does not take
+      client.config.set({ channel: { availableCommands: [] } } as never);
+      expect(channel.config.availableCommands).toEqual(commands);
+    });
+
+    it('ANDs the replies gate like the others', () => {
+      client.config.set({ channel: { replies: { enabled: true } } });
+      const channel = withServerConfig({ replies: false });
+
+      expect(channel.config.replies.enabled).toBe(false);
+    });
+
+    it('restores both on reset', () => {
+      client.config.set({
+        channel: {
+          readEvents: { enabled: false },
+          typingEvents: { enabled: false },
+        },
+      });
+      const channel = openChannel();
+
+      client.config.reset();
+
+      const { readEvents, typingEvents } = channel.configState.getLatestValue();
+      expect(typingEvents.enabled).toBe(true);
+      expect(readEvents.enabled).toBe(true);
     });
   });
 });

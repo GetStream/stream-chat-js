@@ -168,7 +168,7 @@ client.config.set({
 Both then behave like every other key: registered before or after construction, a setup function, and
 `reset()`.
 
-**One caveat, for `SearchController` only.** It reaches the configuration service through a `client`, and
+**One caveat, for `SearchController` only.** It reaches the configuration registry through a `client`, and
 it is the one configurable class the SDK does not already hand one to — so pass it:
 
 ```ts
@@ -381,7 +381,7 @@ object read it.
 
 Two objects carry out the stages above, and neither object holds what the other holds.
 
-|                       | `InstanceConfigurationService` — the registry                       | `ConfigController` — the resolver                            |
+|                       | `InstanceConfigurationRegistry` — the registry                      | `ConfigController` — the resolver                            |
 | --------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------ |
 | Reached as            | `client.config` (public)                                            | nothing — the controller is internal                         |
 | Holds                 | what an integrator **asked for**                                    | what one instance **ended up with**                          |
@@ -403,7 +403,7 @@ any other instance.
 client.config.set({ messagePaginator: { pageSize: 30 } })
         │   registered intent, stored under a key
         ▼
-InstanceConfigurationService          ← the registry: keys, setup functions, reset
+InstanceConfigurationRegistry          ← the registry: keys, setup functions, reset
         │   applyInstanceConfiguration subscribes one instance to one key
         ▼
 paginator.initializeConfig(slice)     ← the instance is handed its own subtree
@@ -850,18 +850,22 @@ authorization; it is stating that the authorization is about a different endpoin
 
 ### Requested vs effective
 
-Because the mechanisms differ, reading `config` means different things per feature:
+**Reading `config` gives the effective value, for every field.** That was not always true — `linkPreviews`
+used to be the exception, with the server's `url_enrichment` ANDed inside `linkPreviewsManager.enabled`
+rather than in the resolved configuration, so `composer.config.linkPreviews.enabled` was the requested
+value while its neighbours were effective. Same object, two rules, nothing marking which was which. The
+check moved into the composer's server restrictions and the getter now just reads the resolved value:
 
 ```ts
-composer.config.location.enabled; // effective — the server value was merged in
-composer.config.linkPreviews.enabled; // requested — the server check lives in the getter
-composer.linkPreviewsManager.enabled; // effective (server && requested)
+composer.config.location.enabled; // effective
+composer.config.linkPreviews.enabled; // effective — no longer the odd one out
+composer.linkPreviewsManager.enabled; // the same value, reached through the manager
 ```
 
 The model to hold: **the config store holds what is in force; what you asked for is kept separately and
-re-resolved, so reading it back after the server narrows a field does not tell you what you requested.**
-For the guarded features, a getter or an explicit check is what tells you the effective answer. When a declarative value is known to be narrowed by the server, the SDK logs it at
-debug level so the no-op is at least discoverable.
+re-resolved, so reading it back after the server narrows a field does not tell you what you requested** —
+`composer.requestedConfig` is where the unnarrowed values live. When a declarative value is known to be
+narrowed by the server, the SDK logs it at debug level so the no-op is at least discoverable.
 
 ---
 
@@ -1112,7 +1116,7 @@ or better, with a declarative `client.config.set({ … })`.
 
 ## Configuring the client itself at construction
 
-The `client` key is the one that cannot be configured after the fact — its configuration service is
+The `client` key is the one that cannot be configured after the fact — its configuration registry is
 created inside the `StreamChat` constructor, alongside the managers it configures. Pass a tree through
 the constructor when you need `reminders` or `notifications` configured before they are built:
 

@@ -1920,7 +1920,7 @@ describe('MessagePaginator', () => {
     const buildPaginator = (parentMessageId?: string) => {
       trackingChannel = {
         cid: 'channel-id',
-        getConfig: () => ({ skip_last_msg_update_for_system_msgs: skipSystemMessages }),
+        serverConfig: { skip_last_msg_update_for_system_msgs: skipSystemMessages },
         getReplies: vi.fn(),
         query: vi.fn(),
       } as unknown as Channel;

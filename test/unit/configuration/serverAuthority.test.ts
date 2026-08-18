@@ -176,7 +176,7 @@ describe('mergeServerRestrictions', () => {
   });
 
   it('treats an undefined restriction as "the server did not say"', () => {
-    // What `channel.getConfig()?.shared_locations` returns before the channel config is known. Reading it
+    // What `channel.serverConfig?.shared_locations` returns before the channel config is known. Reading it
     // as `false` would disable a feature the server never objected to.
     //
     // Note where this guarantee comes from: `mergeWith` already keeps the target when the source value is

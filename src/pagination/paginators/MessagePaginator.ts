@@ -200,7 +200,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
     const isThreadOnlyReply = !!message.parent_id && !message.show_in_channel;
     if (isThreadOnlyReply) return false;
     const skipSystemMessage =
-      !!this.channel.getConfig?.()?.skip_last_msg_update_for_system_msgs &&
+      !!this.channel.serverConfig?.skip_last_msg_update_for_system_msgs &&
       message.type === 'system';
     return !skipSystemMessage;
   }
