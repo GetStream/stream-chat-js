@@ -168,3 +168,48 @@ describe('G3 — an unregistered language warns and continues', () => {
     expect(t('common.loading.text', 'Loading...')).toBe('Loading...');
   });
 });
+
+describe('G3 — when the warning fires', () => {
+  /**
+   * Timing matters as much as the message. `registerTranslation()` legitimately runs *after*
+   * construction — it is the documented way to add a language — so warning in the constructor fires for
+   * every integrator doing the normal thing, and trains them to ignore it.
+   */
+  it('does not warn at construction, before registerTranslation has had a chance to run', () => {
+    const logger = vi.fn();
+
+    new StreamI18n<FixtureCatalog, FixtureBundledKey>({
+      language: 'de',
+      logger,
+      runtimeDefaults: fixtureRuntimeDefaults,
+    });
+
+    expect(logger).not.toHaveBeenCalledWith(
+      expect.stringMatching(/no translation dictionary is registered/i),
+    );
+  });
+
+  it('warns exactly once, at init, when no dictionary ever arrives', async () => {
+    const logger = vi.fn();
+    const i18n = setup({ language: 'de', logger });
+
+    await i18n.init();
+
+    const warnings = logger.mock.calls.filter(([message]) =>
+      /no translation dictionary is registered/i.test(String(message)),
+    );
+    expect(warnings).toHaveLength(1);
+  });
+
+  it('does not warn when a dictionary was registered before init', async () => {
+    const logger = vi.fn();
+    const i18n = setup({ language: 'de', logger });
+    i18n.registerTranslation('de', { 'common.cancel.label': 'Abbrechen' });
+
+    await i18n.init();
+
+    expect(logger).not.toHaveBeenCalledWith(
+      expect.stringMatching(/no translation dictionary is registered/i),
+    );
+  });
+});

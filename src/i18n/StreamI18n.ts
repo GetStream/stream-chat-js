@@ -258,8 +258,10 @@ export class StreamI18n<
           },
     };
 
-    this.validateCurrentLanguage();
-
+    // Deliberately *not* validating the language here. `registerTranslation()` legitimately runs after
+    // construction, so warning now would fire for every integrator who registers a dictionary the normal
+    // way. The check belongs in `init()`, which is the first moment the set of registered languages is
+    // final.
     if (options.dayjsLocaleConfigForLanguage) {
       this.addOrUpdateLocale(language, options.dayjsLocaleConfigForLanguage);
     } else if (!this.localeExists(language)) {
@@ -511,6 +513,15 @@ export class StreamI18n<
 
   /** Languages with a dictionary, including those carrying only the bundled defaults. */
   getAvailableLanguages = () => Object.keys(this.translations);
+
+  /**
+   * The resource dictionaries handed to i18next, keyed by language.
+   *
+   * Not the full English catalog: prose keys are never bundled — they render from the inline
+   * `defaultValue` at their call site — so `en` holds the bundled defaults plus whatever has been
+   * registered.
+   */
+  getTranslations = () => this.translations;
 
   /**
    * A loose translate used by formatters, which resolve keys handed to them at runtime.
