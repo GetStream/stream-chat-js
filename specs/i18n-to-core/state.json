@@ -1,19 +1,21 @@
 {
-  "active_task": "Phase 2 — stream-chat-react adopts",
+  "active_task": "Phase 3 \u2014 stream-chat-react-native adopts",
   "tasks": {
-    "Phase 0 — scoped identifiers in core": "done",
-    "Phase 1 — the stream-chat/i18n module": "done",
-    "Phase 1 — migration guide and initiative record": "done",
-    "Phase 2 — stream-chat-react adopts": "todo",
-    "Phase 3 — stream-chat-react-native adopts": "todo"
+    "Phase 0 \u2014 scoped identifiers in core": "done",
+    "Phase 1 \u2014 the stream-chat/i18n module": "done",
+    "Phase 1 \u2014 migration guide and initiative record": "done",
+    "Phase 2 \u2014 stream-chat-react adopts": "done",
+    "Phase 3 \u2014 stream-chat-react-native adopts": "todo"
   },
   "flags": {
     "blocked": false,
     "needs-review": false
   },
   "notes": [
-    "Phase 2 is blocked on cutting two imports in stream-chat-react/src/i18n/types.ts: MessageContextValue from '../context' (circular UI dependency) and Moment from 'moment-timezone' (devDependency type leak).",
-    "Phase 3 is blocked on RN bumping its declared stream-chat range; the root resolutions entry masking it does not publish."
+    "Phase 2 landed on stream-chat-react branch feat/i18n-adopt-shared-core (200de6eef). It needs stream-chat@10.0.0-rc.3 for the i18n subpath, so it cannot merge until core publishes; the lockfile was deliberately left untouched and must be regenerated then.",
+    "React's typecheck sits at a 3-error baseline unrelated to i18n: APIErrorResponse / EventAPIResponse were removed from core by 5073c676, after rc.2 published. React catches up when it bumps.",
+    "Phase 3 is blocked on RN bumping its declared stream-chat range; the root resolutions entry masking it does not publish.",
+    "Adopting in React found seven real defects in the shared layer, all fixed in 438b420b and 08a3fe58. Running a UI SDK's existing suite against the port is what found them -- none would have been caught by types, and all render wrong rather than throwing."
   ],
   "last_updated": "2026-08-18"
 }
