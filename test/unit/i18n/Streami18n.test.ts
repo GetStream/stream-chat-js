@@ -241,13 +241,27 @@ describe('Streami18n', () => {
     });
   });
 
-  describe('getAvailableLanguages', () => {
-    it('includes languages carrying only the bundled defaults', async () => {
+  describe('registeredLanguages', () => {
+    it('excludes a language carrying only the bundled defaults', async () => {
       const i18n = setup({ language: 'de' });
-      await i18n.init();
-      expect(i18n.getAvailableLanguages()).toContain('de');
-      // ...while registeredLanguages stays narrower, which is what makes the G3 warning possible.
+      const { t } = await i18n.init();
+
+      // The dictionary exists -- a bundled formatter key resolves rather than rendering its own
+      // dotted path...
+      expect(t('timestamp.MessageTimestamp', { timestamp: new Date(0) })).not.toBe(
+        'timestamp.MessageTimestamp',
+      );
+      // ...while `registeredLanguages` stays narrower, which is what makes the G3 warning possible.
       expect(i18n.registeredLanguages.has('de')).toBe(false);
+      expect(i18n.registeredLanguages.has('en')).toBe(true);
+    });
+
+    it('includes a language once a dictionary is registered for it', async () => {
+      const i18n = setup({ language: 'de' });
+      i18n.registerTranslation('de', { 'fixture.prose': 'Abbrechen' } as never);
+      await i18n.init();
+
+      expect(i18n.registeredLanguages.has('de')).toBe(true);
     });
   });
 });
@@ -272,7 +286,7 @@ describe('Streami18n — region-coded languages', () => {
 
       expect(t('fixture.prose', 'Cancel')).toBe(`cancel-${language}`);
       expect(i18n.currentLanguage).toBe(language);
-      expect(i18n.getAvailableLanguages()).toContain(language);
+      expect(i18n.registeredLanguages.has(language)).toBe(true);
     },
   );
 

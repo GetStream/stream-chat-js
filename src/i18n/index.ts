@@ -10,5 +10,6 @@ export * from './formatters';
 export * from './languageNames';
 export * from './Streami18n';
 export * from './TranslationBuilder';
+export * from './TranslationStore';
 export * from './translator';
 export * from './types';

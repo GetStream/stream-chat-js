@@ -232,6 +232,26 @@ Notable if you are building custom UI directly on `stream-chat`:
 - The keys with no inline default at their call site are injected via the `runtimeDefaults` option,
   because the catalog belongs to the UI layer rather than to core.
 
+### Removed from the `Streami18n` surface
+
+Both UI SDKs' v9 classes exposed these. They are gone rather than deprecated — v10 is a breaking
+release, so an old name is removed rather than carried with a countdown on it.
+
+| Removed                   | Why, and what to do instead                                                                                                                                                                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getTranslations()`       | Returned the raw i18next resource map, which is internal bookkeeping rather than a catalog: prose keys are never bundled, so it never held the SDK's English copy. It had no consumer in either SDK. To check that a key resolves, render it: `i18n.t('some.key')`. |
+| `getAvailableLanguages()` | Returned every language with a dictionary, **including** ones created only to carry the bundled defaults — so a language nobody registered appeared "available". Use `i18n.registeredLanguages`, which answers the question people were actually asking.            |
+
+`registeredLanguages` is now a `ReadonlySet<string>`. Reading it (`.has(code)`, spreading it) is
+unchanged; `.add()` no longer compiles, because adding to it would claim a language is registered with no
+dictionary behind it — exactly the state the unregistered-language warning exists to report. Call
+`registerTranslation()` instead.
+
+These are now internal (`private`), having never been part of either SDK's documented API:
+`translations`, `dayjsLocales`, `isCustomDateTimeParser`, `localeExists()`, `addOrUpdateLocale()`,
+`validateCurrentLanguage()`. To register a dayjs locale directly, `stream-chat/i18n` exports
+`addOrUpdateDayjsLocale()` and `dayjsLocaleExists()`.
+
 ## New subpath: `stream-chat/i18n/codegen`
 
 Build-time only, **Node-only** and **ESM-only**: it reads the filesystem and uses the TypeScript parser

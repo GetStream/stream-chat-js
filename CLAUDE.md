@@ -180,6 +180,10 @@ Things that will bite:
   is layered under _every_ language, which is what stops a partial dictionary from knocking out formatter
   keys. That is guarantee G1 in `test/unit/i18n/Streami18nGuarantees.test.ts`, which is the acceptance
   contract for this module: three behavioural guarantees, each written against a real bug.
+- **The layering itself lives in `TranslationStore`**, not in `Streami18n` — it needs neither i18next nor
+  dayjs, so it is tested directly (`test/unit/i18n/TranslationStore.test.ts`) rather than only through an
+  initialized instance. The store holds flat dictionaries; `Streami18n` adapts them to i18next's nested
+  `resources` shape, so nothing in the store has to know about namespaces.
 - **No module-scope side effects.** Every `Dayjs.extend` goes through `ensureDayjsPlugins()`. This is
   what makes `sideEffects: false` accurate — do not reintroduce a top-level `extend` or locale import.
 - **`durationFormatter` must use the date library's `.duration()`**, not parse the value as a timestamp.
