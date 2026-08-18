@@ -176,8 +176,36 @@ export class AttachmentManager {
     return this.availableUploadSlots > 0;
   }
 
+  /**
+   * Whether uploaded bytes reach Stream, and therefore whether Stream's rules govern attachments here.
+   *
+   * Declared through {@link AttachmentManagerConfig.customCdn}, not inferred from `doUploadRequest`. A
+   * custom upload function says how files are sent, not where: wrapping the request to add retries,
+   * headers or a proxy through your own backend still ends at Stream. Inferring a different destination
+   * from it waived Stream's constraints for those integrators too.
+   */
+  get usesStreamStorage() {
+    return !this.config.customCdn;
+  }
+
+  /**
+   * Whether this composer can accept a file right now — **the** answer to that question, for the SDK and
+   * for any UI deciding whether to offer an upload control. `uploadFiles` enforces exactly this; two
+   * predicates for one question could only agree by coincidence.
+   *
+   * - `config.enabled` — the configured answer, already ANDed with the channel type's `uploads` flag by
+   *   the composer's server restrictions (which apply only when files go to Stream, for the same reason
+   *   as below). The integrator's own switch, which nothing overrides.
+   * - a free slot under `maxNumberOfFilesPerMessage`.
+   * - the `upload-file` capability, **only when files go to Stream**. It governs Stream's upload
+   *   endpoint, so on storage Stream does not host there is nothing for it to permit or refuse.
+   */
   get isUploadEnabled() {
-    return this.hasUploadPermission && this.hasAvailableUploadSlots;
+    return (
+      this.config.enabled &&
+      this.hasAvailableUploadSlots &&
+      (!this.usesStreamStorage || this.hasUploadPermission)
+    );
   }
 
   get successfulUploads() {
@@ -739,11 +767,7 @@ export class AttachmentManager {
   };
 
   uploadFiles = async (files: FileReference[] | FileList | FileLike[]) => {
-    if (
-      (this.hasCustomDoUploadRequest && !this.hasAvailableUploadSlots) ||
-      (!this.hasCustomDoUploadRequest && !this.isUploadEnabled)
-    )
-      return;
+    if (!this.isUploadEnabled) return;
 
     const iterableFiles: FileReference[] | FileLike[] = isFileList(files)
       ? Array.from(files)

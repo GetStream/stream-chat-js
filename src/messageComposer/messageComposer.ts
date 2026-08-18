@@ -257,7 +257,7 @@ export class MessageComposer extends WithSubscriptions {
         deepFreezeConfig(
           mergeServerRestrictions(
             requested,
-            this.serverRestrictions,
+            this.serverRestrictionsFor(requested),
             this.serverUpperBounds,
           ),
         ) as MessageComposerConfig,
@@ -529,9 +529,45 @@ export class MessageComposer extends WithSubscriptions {
    * `location.enabled` is gated on `shared_locations`, and only an existing composer has a channel to
    * ask. `getConfig()` is re-read on every call, so a restriction that changes mid-session is picked up
    * rather than captured once.
+   *
+   * Every entry here is a boolean gate, so `mergeServerRestrictions` ANDs it with what was requested and
+   * either side may switch the feature off — a client asking for less than the server grants is always
+   * legitimate. That is the whole point of mirroring these flags into configuration rather than leaving
+   * consumers to read `getConfig()` themselves: a raw server flag answers only the server's half, so a UI
+   * reading it offers features the composer has already disabled and would refuse to compose.
+   *
+   * `commands` is deliberately absent. The server sends a *list* of commands rather than a gate, so there
+   * is nothing to AND and no integrator intent to mirror; consumers read it from the channel's config.
+   *
+   * Takes the requested configuration because one restriction is conditional — see `uploads` below.
    */
-  private get serverRestrictions(): ServerRestrictions<MessageComposerConfig> {
-    return { location: { enabled: this.channel.getConfig()?.shared_locations } };
+  private serverRestrictionsFor(
+    requested: MessageComposerConfig,
+  ): ServerRestrictions<MessageComposerConfig> {
+    const channelConfig = this.channel.getConfig();
+
+    return {
+      /**
+       * `uploads` describes **Stream's upload endpoint**, not the concept of attaching files. Setting
+       * `attachments.customCdn` says the bytes go to storage Stream neither hosts nor charges for, and
+       * the flag says nothing about whether that can work — applying it there would make "turn uploads
+       * on in Stream" a precondition for uploading to your own CDN, which is not this SDK's to require.
+       *
+       * Keyed on `customCdn` rather than on the presence of `doUploadRequest`: a custom upload function
+       * says how files are sent, not where, and one that still posts to Stream must stay subject to
+       * Stream's rules.
+       *
+       * `undefined` rather than `true`: the server is not asserting the opposite either, it simply has
+       * no say. `mergeServerRestrictions` leaves the request standing for a field it states nothing
+       * about, so the integrator's `attachments.enabled` decides alone — the same way an unset
+       * `shared_locations` behaves.
+       */
+      attachments: {
+        enabled: requested.attachments.customCdn ? undefined : channelConfig?.uploads,
+      },
+      location: { enabled: channelConfig?.shared_locations },
+      polls: { enabled: channelConfig?.polls },
+    };
   }
 
   /**

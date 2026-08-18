@@ -215,6 +215,7 @@ describe('resolved configuration is reactive on the classes that were converted 
         drafts: true,
         linkPreviews: true,
         location: true,
+        polls: true,
         text: true,
       });
     });

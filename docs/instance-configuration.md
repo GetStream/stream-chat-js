@@ -842,6 +842,12 @@ config and your configuration both enable something, the user may lack the capab
 configuration can grant one. Read it from `channel.state.ownCapabilitiesStore` (reactive) rather than
 `channel.data.own_capabilities`.
 
+One capability has a documented exception, and it is not a grant: `attachments.customCdn: true` declares
+that uploads go to storage Stream does not host, so `upload-file` — which authorizes Stream's upload
+endpoint — has nothing to permit or refuse and stops being consulted. Configuration is not overriding the
+authorization; it is stating that the authorization is about a different endpoint. See
+[`doUploadRequest` no longer implies a custom upload destination](#douploadrequest-no-longer-implies-a-custom-upload-destination).
+
 ### Requested vs effective
 
 Because the mechanisms differ, reading `config` means different things per feature:
@@ -1029,6 +1035,74 @@ from the package root in v9, and `package.json#exports` routes consumers to the 
 source, so there was no way to import them. Deprecating a name nobody could reach costs a reader more than
 it saves anyone. `client.setMessageComposerSetupFunction` — which _did_ ship, in v9.9.0 — stays deprecated
 and now takes `InstanceSetupState<'messageComposer'>['setupFunction']`.
+
+### Composer configuration gained required fields
+
+Three fields were added to `MessageComposerConfig`, all with defaults, so **nothing changes for callers
+who pass partials** — which is every caller using `client.config.set()`, `updateConfig()`, or the
+composer's `config` construction option, since all three take a `DeepPartial`.
+
+| Type                      | New field   | Default             | What it gates                |
+| ------------------------- | ----------- | ------------------- | ---------------------------- |
+| `MessageComposerConfig`   | `polls`     | `{ enabled: true }` | Poll composition             |
+| `AttachmentManagerConfig` | `enabled`   | `true`              | File attachments             |
+| `AttachmentManagerConfig` | `customCdn` | `false`             | Whether uploads reach Stream |
+
+**Who breaks:** only code that annotates a variable as the _complete_ `MessageComposerConfig` or
+`AttachmentManagerConfig` and builds it as an object literal — TypeScript will now ask for the new keys.
+Adding them with the defaults above is the whole migration.
+
+They are required rather than optional on purpose. An optional boolean's "off" value is `undefined`, and
+the composer retains its patches and merges them with a merge that skips `undefined` — so a field that
+defaults to absent can be switched on and never off again. `false` is a real value, so `customCdn` is
+reversible.
+
+### Channel-type flags now reconcile into composer configuration
+
+`uploads` and `polls` from the channel type join `shared_locations` in
+[§5 The server has the last word](#5-the-server-has-the-last-word): they are ANDed with `attachments.enabled` and `polls.enabled`
+respectively, so either the server or the integrator can switch a feature off and neither can widen.
+
+**Read the resolved value, not the raw flag.** `channel.getConfig()?.uploads` answers only the server's
+half; `composer.config.attachments.enabled` is the whole answer. UI that gates on the raw flag will offer
+features the composer has already disabled — which is the bug this closed in `stream-chat-react`'s
+`AttachmentSelector`.
+
+`commands` is deliberately _not_ mirrored. The server sends a list, not a gate: there is nothing to AND
+and no integrator intent to express, so consumers keep reading it from `channel.getConfig()`.
+
+### `doUploadRequest` no longer implies a custom upload destination
+
+**Behaviour change, and the one most likely to bite.** `AttachmentManager` used to waive Stream's
+`upload-file` capability whenever a custom `doUploadRequest` was supplied. That conflated two unrelated
+things: a custom upload function says _how_ files are sent, not _where_ they land. Wrapping the request to
+add retries or headers, or proxying it through your own backend, still ends at Stream.
+
+The waiver is now keyed on the new `attachments.customCdn` flag, which moves two groups in opposite
+directions:
+
+| You have                                          | Before                  | Now                                          |
+| ------------------------------------------------- | ----------------------- | -------------------------------------------- |
+| `doUploadRequest` that still posts to Stream      | capability **bypassed** | capability **enforced** — the correction     |
+| `doUploadRequest` to storage Stream does not host | capability bypassed     | **set `customCdn: true`** to keep the bypass |
+
+```ts
+client.config.set({
+  messageComposer: { attachments: { customCdn: true } },
+});
+```
+
+Miss it and uploads to your own storage start being refused for users without `upload-file`, and the
+attachment action disappears from the UI.
+
+`customCdn` also decides whether the channel type's `uploads` flag applies, for the same reason: Stream
+has no say over storage it does not host.
+
+Related: `AttachmentManager.isUploadEnabled` and `uploadFiles` now enforce **the same** predicate. They
+had drifted apart — `uploadFiles` carried the bypass, the getter did not — so a UI asking the getter could
+hide an action the SDK would have honoured. The new getter is
+`config.enabled && hasAvailableUploadSlots && (!usesStreamStorage || hasUploadPermission)`, and
+`uploadFiles` calls it. The `usesStreamStorage` getter is public.
 
 `setInstanceConfigurationFunction` is worth a note of its own. It took
 `{ StreamChat, Channel, Thread, MessageComposer }`; three of those four keys were stored and never

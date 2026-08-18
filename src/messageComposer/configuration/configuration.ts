@@ -5,6 +5,7 @@ import type {
   LinkPreviewsManagerConfig,
   LocationComposerConfig,
   MessageComposerConfig,
+  PollComposerConfig,
   TextComposerConfig,
 } from './types';
 import { generateUUIDv4 } from '../../utils';
@@ -31,6 +32,8 @@ export const DEFAULT_LINK_PREVIEW_MANAGER_CONFIG: LinkPreviewsManagerConfig = {
 
 export const DEFAULT_ATTACHMENT_MANAGER_CONFIG: AttachmentManagerConfig = {
   acceptedFiles: [], // an empty array means all files are accepted
+  customCdn: false,
+  enabled: true,
   fileUploadFilter: () => true,
   maxNumberOfFilesPerMessage: API_MAX_FILES_ALLOWED_PER_MESSAGE,
   trackUploadProgress: true,
@@ -39,6 +42,10 @@ export const DEFAULT_ATTACHMENT_MANAGER_CONFIG: AttachmentManagerConfig = {
 export const DEFAULT_TEXT_COMPOSER_CONFIG: TextComposerConfig = {
   enabled: true,
   publishTypingEvents: true,
+};
+
+export const DEFAULT_POLL_COMPOSER_CONFIG: PollComposerConfig = {
+  enabled: true,
 };
 
 export const DEFAULT_LOCATION_COMPOSER_CONFIG: LocationComposerConfig = {
@@ -60,5 +67,6 @@ export const DEFAULT_COMPOSER_CONFIG: MessageComposerConfig = deepFreezeConfig({
   drafts: { enabled: false },
   linkPreviews: DEFAULT_LINK_PREVIEW_MANAGER_CONFIG,
   location: DEFAULT_LOCATION_COMPOSER_CONFIG,
+  polls: DEFAULT_POLL_COMPOSER_CONFIG,
   text: DEFAULT_TEXT_COMPOSER_CONFIG,
 });

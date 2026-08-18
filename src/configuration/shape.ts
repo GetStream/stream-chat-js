@@ -19,6 +19,7 @@ import type {
   DraftsConfiguration,
   LinkPreviewsManagerConfig,
   LocationComposerConfig,
+  PollComposerConfig,
   MessageComposerConfig,
   TextComposerConfig,
 } from '../messageComposer/configuration/types';
@@ -179,11 +180,23 @@ const messageOperationsGroup = (description: string): ConfigGroupNode => ({
 // ---------------------------------------------------------------------------
 
 const ATTACHMENTS_FIELDS: Record<keyof AttachmentManagerConfig, ConfigNode> = {
+  enabled: {
+    description:
+      'Offers file attachments in the composer. The server must also allow them per channel type (`uploads`), and a server "no" wins.',
+    kind: 'value',
+    type: 'boolean',
+  },
   acceptedFiles: {
     description:
       'File types offered in the file picker, as extensions or MIME patterns. Empty means no restriction.',
     kind: 'value',
     type: 'string[]',
+  },
+  customCdn: {
+    description:
+      "Whether a custom upload request stores files somewhere Stream does not host. Left false — the default — files are treated as reaching Stream, so Stream's `uploads` flag and `upload-file` capability apply.",
+    kind: 'value',
+    type: 'boolean',
   },
   doUploadRequest: {
     description: 'Replaces the built-in upload request with your own.',
@@ -299,6 +312,15 @@ const TEXT_FIELDS: Record<keyof TextComposerConfig, ConfigNode> = {
   },
 };
 
+const POLLS_FIELDS: Record<keyof PollComposerConfig, ConfigNode> = {
+  enabled: {
+    description:
+      'Offers poll creation in the composer. The server must also allow it per channel type (`polls`), and a server "no" wins.',
+    kind: 'value',
+    type: 'boolean',
+  },
+};
+
 const MESSAGE_COMPOSER_FIELDS: Record<keyof MessageComposerConfig, ConfigNode> = {
   attachments: {
     description: 'Uploads and the file picker.',
@@ -319,6 +341,11 @@ const MESSAGE_COMPOSER_FIELDS: Record<keyof MessageComposerConfig, ConfigNode> =
   location: {
     description: 'Static and live location sharing.',
     fields: LOCATION_FIELDS,
+    kind: 'group',
+  },
+  polls: {
+    description: 'Poll creation.',
+    fields: POLLS_FIELDS,
     kind: 'group',
   },
   text: { description: 'The text input itself.', fields: TEXT_FIELDS, kind: 'group' },
@@ -448,6 +475,30 @@ const CHANNEL_FIELDS: Record<keyof ChannelDeclarativeConfig, ConfigNode> = {
     "The channel's pinned message list. Nested rather than top-level: a channel is its only parent.",
   ),
   requestHandlers: REQUEST_HANDLERS_NODE,
+  typingEvents: {
+    description: 'Typing indicators for the channel.',
+    fields: {
+      enabled: {
+        description:
+          'Publishes typing events from this channel. The server must also allow them per channel type (`typing_events`), and a server "no" wins. `messageComposer.text.publishTypingEvents` refines this per composer.',
+        kind: 'value',
+        type: 'boolean',
+      },
+    },
+    kind: 'group',
+  },
+  readEvents: {
+    description: 'Read receipts for the channel.',
+    fields: {
+      enabled: {
+        description:
+          'Allows marking the channel read or unread. The server must also allow it per channel type (`read_events`), and a server "no" wins.',
+        kind: 'value',
+        type: 'boolean',
+      },
+    },
+    kind: 'group',
+  },
 };
 
 const THREAD_FIELDS: Record<keyof ThreadDeclarativeConfig, ConfigNode> = {

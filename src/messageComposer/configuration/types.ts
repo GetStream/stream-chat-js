@@ -64,6 +64,11 @@ export type CommandsConfig = {
 };
 
 export type AttachmentManagerConfig = {
+  /**
+   * Allows for toggling file attachments (defaults to `true`). The feature also has to be enabled at the
+   * channel-level config via `uploads`; the two are ANDed, so either side can switch it off.
+   */
+  enabled: boolean;
   // todo: document removal of noFiles prop showing how to achieve the same with custom fileUploadFilter function
   /**
    * Function that allows to prevent uploading files based on the functions output.
@@ -79,6 +84,23 @@ export type AttachmentManagerConfig = {
   acceptedFiles: string[];
   /** Function that allows to customize the upload request. */
   doUploadRequest?: UploadRequestFn;
+  /**
+   * Whether a custom {@link AttachmentManagerConfig.doUploadRequest} stores files somewhere Stream does
+   * not host (defaults to `false`).
+   *
+   * Left `false`, uploads are treated as reaching Stream — which covers the built-in request *and* a
+   * custom one that still posts to Stream, such as a wrapper adding retries or headers, or a proxy
+   * through your own backend. Stream's rules then govern attachments: the `upload-file` capability and
+   * the channel type's `uploads` flag.
+   *
+   * Set it to `true` when the bytes never reach Stream. Stream has no say over storage it does not host,
+   * so neither rule applies and the feature is governed by {@link AttachmentManagerConfig.enabled} alone.
+   *
+   * Declared rather than inferred from the presence of `doUploadRequest`, because supplying an upload
+   * function says *how* files are sent, not *where* — and treating it as a destination waived Stream's
+   * constraints for integrators who were still uploading to Stream.
+   */
+  customCdn: boolean;
   /**
    * When `true`, the attachment manager sets `localMetadata.uploadProgress` and passes
    * `options.onProgress` to `doUploadRequest` (built-in and custom). Set to `false` to disable
@@ -114,6 +136,14 @@ export type LocationComposerConfig = {
   minShareDurationMs: number;
 };
 
+export type PollComposerConfig = {
+  /**
+   * Allows for toggling poll composition (defaults to `true`). The feature also has to be enabled at the
+   * channel-level config via `polls`; the two are ANDed, so either side can switch it off.
+   */
+  enabled: boolean;
+};
+
 export type MessageComposerConfig = {
   /** If true, enables creating drafts on the server */
   drafts: DraftsConfiguration;
@@ -125,6 +155,8 @@ export type MessageComposerConfig = {
   linkPreviews: LinkPreviewsManagerConfig;
   /** Configuration for the location composer */
   location: LocationComposerConfig;
+  /** Configuration for the poll composer */
+  polls: PollComposerConfig;
   /** Maximum number of characters in a message */
   text: TextComposerConfig;
 };
