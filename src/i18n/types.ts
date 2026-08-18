@@ -211,15 +211,37 @@ export type StreamTFunctionFor<
  * unknown) => string` demands an implementation accepting literally anything and Dayjs — whose
  * `calendar` takes a narrower union — is not assignable. Method syntax is checked bivariantly, which is
  * what duck-typing across two date libraries needs.
+ *
+ * `startOf` deliberately does **not** return `DateTimeLike`. Doing so made the whole type circular, and
+ * a real Moment then failed to satisfy it: checking `Moment` against `DateTimeLike` required
+ * `startOf`'s return `Moment` to satisfy `DateTimeLike`, which required `startOf` again. Method
+ * bivariance could not rescue it, and the failure was silent until a UI SDK's test passed `moment` in.
+ * Only `.diff()` is ever called on the result, so that is all the return type promises.
  */
 export type DateTimeLike = {
   format(template?: string): string;
   calendar?(referenceTime?: DateTimeReference, formats?: Record<string, string>): string;
   fromNow?(withoutSuffix?: boolean): string;
-  diff(other: DateTimeReference, unit?: string): number;
-  startOf(unit: string): DateTimeLike;
+  diff(other: DateTimeOperand, unit?: DateTimeUnit): number;
+  startOf(unit: DateTimeUnit): {
+    diff(other: DateTimeOperand, unit?: DateTimeUnit): number;
+  };
   valueOf(): number;
 };
+
+/**
+ * A calendar-unit name (`'day'`, `'week'`, …) and a `diff` operand.
+ *
+ * Both are `any`, and deliberately so: dayjs and moment each declare their own narrow unions here
+ * (`OpUnitType` vs `unitOfTime.Diff`, `ConfigType` vs `MomentInput`), and a structural bridge that must
+ * accept either library cannot name one without excluding the other. Narrowing them is what made a real
+ * Moment fail to satisfy this type. Core only ever passes literals both libraries accept, and these
+ * arguments are inputs — nothing downstream depends on their type.
+ */
+
+type DateTimeUnit = any;
+
+type DateTimeOperand = any;
 
 /** Anything a date library will accept as a point in time. */
 type DateTimeReference = DateTimeLike | Date | string | number | null | undefined;
@@ -247,12 +269,17 @@ export type DurationLike = {
  * Structural for the same reason as {@link DateTimeLike}: this admits `dayjs` and `moment` without
  * naming either. It is the module rather than a parse function because `durationFormatter` needs
  * `.duration()`, which lives on the module.
+ *
+ * Every member is **method shorthand**, and as with `DateTimeLike` that is load-bearing. As function
+ * properties they are checked contravariantly, so `locale?: (...args: unknown[]) => unknown` demanded
+ * an implementation accepting anything at all and rejected moment's overloaded, narrower `locale`.
+ * Method syntax is bivariant, which is what duck-typing across two libraries needs.
  */
 export type DateTimeParserModule = ((input?: TDateTimeParserInput) => DateTimeLike) & {
-  duration?: (input: number | string) => DurationLike;
-  extend?: (plugin: unknown, option?: unknown) => unknown;
+  duration?(input: number | string): DurationLike;
+  extend?(plugin: unknown, option?: unknown): unknown;
   tz?: unknown;
-  locale?: (...args: unknown[]) => unknown;
+  locale?(...args: never[]): unknown;
 };
 
 /* ------------------------------------------------------------------------------------------------

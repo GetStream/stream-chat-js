@@ -142,7 +142,7 @@ the bundle is just bigger), which is why they are machine-checked. `dist/esm/ind
 stay byte-identical when only i18n changes.
 
 - **`stream-chat/i18n`** — `StreamI18n`, four formatters, `getDateString`, catalog-generic type helpers,
-  `TranslationBuilder`, generated `LANGUAGE_NAMES`, `CORE_NOTIFICATION_TRANSLATION_KEY`.
+  `TranslationBuilder`, generated `LANGUAGE_NAMES`.
 - **`stream-chat/i18n/codegen`** — the catalog generator. `typescript` is **injected** via config, never
   imported, so core does not depend on the compiler.
 

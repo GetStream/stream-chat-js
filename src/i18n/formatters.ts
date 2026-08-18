@@ -1,4 +1,5 @@
 import { isDate, isDayOrMoment, isNumberOrString } from './dayjs';
+import type { CalendarFormats } from './dayjs';
 import { asDynamicKey } from './translator';
 import type {
   DurationFormatterOptions,
@@ -355,3 +356,81 @@ export const getDateStringForA11y = ({
     tDateTimeParser,
     timestampTranslationKey,
   });
+
+/**
+ * Calendar wording used by {@link getCalendarDateStringForA11y}, for the one bundled locale.
+ *
+ * Only English ships. A language an integrator registers supplies its own wording through
+ * `dayjsLocaleConfigForLanguage` (or `registerTranslation`'s third argument) — a per-locale block here
+ * is useless on its own without the matching `dayjs/locale/xx` beside it.
+ */
+export const A11Y_CALENDAR_FORMATS: Record<string, CalendarFormats> = {
+  en: {
+    lastDay: '[Yesterday]',
+    lastWeek: 'dddd',
+    nextDay: '[Tomorrow]',
+    nextWeek: 'dddd [at] LT',
+    sameDay: '[Today]',
+    sameElse: 'L',
+  },
+};
+
+export type GetCalendarDateStringForA11yParams = {
+  /**
+   * Calendar-format overrides applied over the locale defaults and the `sameElse: 'LL'` substitution.
+   * Use it where the visible date deliberately diverges — a channel preview shows `sameDay: 'LT'`, the
+   * time rather than "Today".
+   */
+  calendarFormatOverrides?: Partial<CalendarFormats>;
+  /** Calendar wording per language. Defaults to {@link A11Y_CALENDAR_FORMATS}. */
+  calendarFormats?: Record<string, CalendarFormats>;
+  messageCreatedAt?: string | Date;
+  tDateTimeParser?: TDateTimeParser;
+  /**
+   * The UI language, used to pick calendar wording. Plain `string`: it indexes `calendarFormats`, which
+   * an integrator extends for whatever language they registered — not `stream-chat`'s
+   * auto-translation `TranslationLanguage` union.
+   */
+  userLanguage?: string;
+};
+
+/**
+ * A TTS-friendly calendar string, preserving relative wording.
+ *
+ * Distinct from {@link getDateStringForA11y}, which spells the date out in full via `LLLL`. Both exist
+ * because the two UI SDKs arrived at different answers and both are defensible: this one keeps
+ * "Today"/"Yesterday"/weekday names from the locale's calendar and substitutes `LL` ("April 8, 2026")
+ * only into the `sameElse` slot, because iOS VoiceOver reads a numeric date like "04/08/2026"
+ * character by character. Do not collapse them into one — that would silently change one SDK's
+ * announced labels.
+ *
+ * Returns `undefined` when there is nothing to announce, including when the parser has no calendar
+ * plugin, so the caller omits the label rather than announcing a malformed date.
+ */
+export const getCalendarDateStringForA11y = ({
+  calendarFormatOverrides,
+  calendarFormats = A11Y_CALENDAR_FORMATS,
+  messageCreatedAt,
+  tDateTimeParser,
+  userLanguage,
+}: GetCalendarDateStringForA11yParams): string | undefined => {
+  if (
+    !messageCreatedAt ||
+    (typeof messageCreatedAt === 'string' && !Date.parse(messageCreatedAt)) ||
+    !tDateTimeParser
+  ) {
+    return undefined;
+  }
+
+  const parsed = tDateTimeParser(messageCreatedAt);
+  if (!isDayOrMoment(parsed) || !parsed.calendar) return undefined;
+
+  const localeFormats =
+    (userLanguage && calendarFormats[userLanguage]) || calendarFormats.en;
+
+  return parsed.calendar(undefined, {
+    ...localeFormats,
+    sameElse: 'LL',
+    ...calendarFormatOverrides,
+  });
+};

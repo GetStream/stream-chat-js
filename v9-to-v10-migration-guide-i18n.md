@@ -67,9 +67,11 @@ your own code are still valid — you only lose autocomplete for them.
 | `validation:poll:castVote:limit`           | `notification.pollCastVoteLimit`          |
 | `api:poll:create:failed`                   | `notification.pollCreateFailed`           |
 
-The right-hand column is `CORE_NOTIFICATION_TRANSLATION_KEY`, exported from `stream-chat/i18n`. It is
-what the React and React Native SDKs both key on, so a dictionary written against these keys is portable
-between them.
+The right-hand column is a suggestion, not an export. Each UI SDK uses its own key names — they predate
+this table and integrators' dictionaries are already written against them — so there is no single
+canonical set to publish. What _is_ exported, and what makes the mapping safe, is the
+`CORE_NOTIFICATION_TYPE` union: keying a `Record<CoreNotificationType, …>` on it turns a new identifier
+into a compile error until you map it, and rejects an entry for one that no longer exists.
 
 `validation:command:disabled` additionally carries `metadata.reason` (`'editing' | 'replying'`), which
 its English message varies by. Copy for that key should interpolate `{{ reason }}`.
@@ -108,16 +110,29 @@ and you have no way to localize it.
 // Before — the English sentence is the only thing identifying the notification
 toast(notification.message);
 
-// After — resolve the identifier, and fall back to `message` for one you do not recognize
-import { translateNotification } from 'stream-chat/i18n';
+// After — dispatch on the identifier, and fall back to `message` for one you do not recognize
+import { CORE_NOTIFICATION_TYPE } from 'stream-chat';
+import type { CoreNotificationType, Notification } from 'stream-chat';
 
-toast(translateNotification({ notification, t }));
+const copy: Record<CoreNotificationType, (n: Notification) => string> = {
+  [CORE_NOTIFICATION_TYPE.attachmentUploadFailed]: () => t('notification.uploadFailed'),
+  // `validation:command:disabled` carries metadata.reason, so branch on it here
+  [CORE_NOTIFICATION_TYPE.commandDisabled]: (n) =>
+    t('notification.commandDisabled', { reason: n.metadata?.reason }),
+  // …one entry per identifier; TypeScript will tell you which are missing
+};
+
+// `message` verbatim for anything unmapped, so a newer `stream-chat` cannot produce an empty toast.
+toast(
+  notification.type && copy[notification.type as CoreNotificationType]
+    ? copy[notification.type as CoreNotificationType](notification)
+    : notification.message,
+);
 ```
 
-`translateNotification` resolves `type` through `CORE_NOTIFICATION_TRANSLATION_KEY`, passes `metadata`
-as interpolation values, and returns `message` verbatim for an unrecognized identifier — so a newer
-`stream-chat` can never produce an empty toast. Pass `translationKeys` to extend the map with your own
-identifiers.
+Type the record as `Record<CoreNotificationType, …>` rather than `Record<string, …>` — that is the whole
+point, and it is why core does not ship a ready-made resolver: your keys are yours, and a helper that
+resolved them from a table would be invisible to a key-extraction step like the one both UI SDKs run.
 
 If you are using `stream-chat-react` or `stream-chat-react-native`, this is handled for you; see that
 SDK's own i18n guide.
@@ -273,7 +288,7 @@ find . -maxdepth 4 -name i18next -type d -path '*node_modules*'
 1. `grep -rn "api:messages:query:failed\|api:message:query:failed"` → replace with
    `CORE_NOTIFICATION_TYPE.messageJumpFailed` / `.messageJumpToLatestFailed`.
 2. `grep -rn "notification.message"` → for anything user-facing, switch on `notification.type` (use
-   `translateNotification` from `stream-chat/i18n` if you want the mapping done for you). Keep `message`
+   `CORE_NOTIFICATION_TYPE`). Keep `message`
    only as the unrecognized-identifier fallback.
 3. Typecheck. Every `PollComposerFieldErrors` read will fail: append `?.message`, or switch on `.code`.
 4. If you match notification identifiers anywhere, retype the local as `CoreNotificationType` to get the

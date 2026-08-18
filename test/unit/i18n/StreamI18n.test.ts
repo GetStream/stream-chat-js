@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  type DateTimeParserModule,
   isDayOrMoment,
   RELATIVE_TIME_CATALOG,
   StreamI18n,
@@ -269,6 +270,45 @@ describe('DateTimeLike', () => {
     const asDateTimeLike: TDateTimeParserOutput = parsed;
     expect(asDateTimeLike).toBeDefined();
     expect(isDayOrMoment(asDateTimeLike)).toBe(true);
+  });
+
+  /**
+   * Regression: a Moment must satisfy `DateTimeLike` too. The docs promise bring-your-own-Moment, and
+   * it was broken — `startOf` returned `DateTimeLike`, so checking Moment against it required Moment's
+   * `startOf` return (a Moment) to satisfy `DateTimeLike`, requiring `startOf` again. Method bivariance
+   * does not break that cycle. Narrow unit unions on `diff`/`startOf` compounded it.
+   *
+   * Moment itself is not a dependency here, so this is a hand-written stand-in reproducing the two
+   * properties that actually broke: narrow unit unions, and a self-returning `startOf`. It is a
+   * type-level assertion — it fails at `yarn types`, not at runtime. The React Native SDK's suite,
+   * which passes the real `moment` in, is the end-to-end check.
+   */
+  it('accepts a moment-shaped parser output', () => {
+    type MomentUnit = 'day' | 'week' | 'month' | 'year';
+    type MomentInput = MomentLike | Date | string | number;
+    type MomentLike = {
+      calendar(referenceTime?: MomentInput, formats?: Record<string, string>): string;
+      diff(other: MomentInput, unit?: MomentUnit): number;
+      format(template?: string): string;
+      fromNow(withoutSuffix?: boolean): string;
+      startOf(unit: MomentUnit): MomentLike;
+      valueOf(): number;
+    };
+
+    const momentLike = {} as MomentLike;
+    const asDateTimeLike: TDateTimeParserOutput = momentLike;
+    expect(asDateTimeLike).toBeDefined();
+
+    // The same failure mode one level up: `DateTimeParserModule`'s members must be method shorthand
+    // too, or moment's overloaded `locale` is rejected as a contravariant function property.
+    type MomentModuleLike = ((input?: string | number | Date) => MomentLike) & {
+      duration(input: number | string): { humanize(withSuffix?: boolean): string };
+      locale(language?: string, definition?: Record<string, unknown> | null): string;
+      tz?: unknown;
+    };
+
+    const asParserModule: DateTimeParserModule = {} as MomentModuleLike;
+    expect(asParserModule).toBeDefined();
   });
 });
 

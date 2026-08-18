@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getDateString, StreamI18n } from '../../../src/i18n';
+import {
+  defaultDateTimeParser,
+  getCalendarDateStringForA11y,
+  getDateString,
+  StreamI18n,
+} from '../../../src/i18n';
+import type { TDateTimeParserInput } from '../../../src/i18n';
 
 /**
  * A key whose formatter expression carries its own arguments — the shape a UI SDK actually ships.
@@ -181,5 +187,61 @@ describe('timestampFormatter — nothing renderable', () => {
         timestamp: value,
       }),
     ).toBe('');
+  });
+});
+
+/**
+ * The React Native SDK's a11y variant, which is deliberately *not* the same function as
+ * `getDateStringForA11y`. It keeps the locale's relative wording and substitutes `LL` only into
+ * `sameElse`, because iOS VoiceOver reads a numeric date character by character. Consolidating the two
+ * SDKs' i18n layers initially collapsed both into the `LLLL` variant, which would have silently
+ * changed every announced date label in the RN SDK.
+ */
+describe('getCalendarDateStringForA11y', () => {
+  const parser = (input?: TDateTimeParserInput) => defaultDateTimeParser(input);
+
+  // The suites above freeze the clock to `AT`; these assertions are about the distance between now and
+  // the timestamp, so they need the real one back.
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('keeps relative wording for a recent date', () => {
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    expect(
+      getCalendarDateStringForA11y({
+        messageCreatedAt: yesterday,
+        tDateTimeParser: parser,
+      }),
+    ).toBe('Yesterday');
+  });
+
+  it('spells an older date out rather than leaving it numeric', () => {
+    expect(
+      getCalendarDateStringForA11y({ messageCreatedAt: AT, tDateTimeParser: parser }),
+    ).toBe('April 3, 2019');
+  });
+
+  it('applies calendarFormatOverrides over the locale defaults', () => {
+    const now = new Date();
+    // What ChannelPreviewStatus does: show the time, not the word "Today".
+    const rendered = getCalendarDateStringForA11y({
+      calendarFormatOverrides: { sameDay: 'LT' },
+      messageCreatedAt: now,
+      tDateTimeParser: parser,
+    });
+    expect(rendered).not.toBe('Today');
+    expect(rendered).toMatch(/\d{1,2}:\d{2}/);
+  });
+
+  it('returns undefined rather than a malformed date when there is nothing to announce', () => {
+    expect(getCalendarDateStringForA11y({ tDateTimeParser: parser })).toBeUndefined();
+    expect(
+      getCalendarDateStringForA11y({
+        messageCreatedAt: 'not a date',
+        tDateTimeParser: parser,
+      }),
+    ).toBeUndefined();
+    expect(getCalendarDateStringForA11y({ messageCreatedAt: AT })).toBeUndefined();
   });
 });

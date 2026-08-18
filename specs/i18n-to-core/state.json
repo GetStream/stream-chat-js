@@ -1,21 +1,23 @@
 {
-  "active_task": "Phase 3 \u2014 stream-chat-react-native adopts",
+  "active_task": "Phase 3 \u2014 awaiting review",
   "tasks": {
     "Phase 0 \u2014 scoped identifiers in core": "done",
     "Phase 1 \u2014 the stream-chat/i18n module": "done",
     "Phase 1 \u2014 migration guide and initiative record": "done",
     "Phase 2 \u2014 stream-chat-react adopts": "done",
-    "Phase 3 \u2014 stream-chat-react-native adopts": "todo"
+    "Phase 3 \u2014 stream-chat-react-native adopts": "done"
   },
   "flags": {
     "blocked": false,
     "needs-review": false
   },
   "notes": [
-    "Phase 2 landed on stream-chat-react branch feat/i18n-adopt-shared-core (200de6eef). It needs stream-chat@10.0.0-rc.3 for the i18n subpath, so it cannot merge until core publishes; the lockfile was deliberately left untouched and must be regenerated then.",
+    "Phase 2 landed on stream-chat-react branch feat/i18n-adopt-shared-core (200de6eef, f78b42c67). It needs stream-chat@10.0.0-rc.3 for the i18n subpath, so it cannot merge until core publishes; the lockfile was deliberately left untouched and must be regenerated then.",
     "React's typecheck sits at a 3-error baseline unrelated to i18n: APIErrorResponse / EventAPIResponse were removed from core by 5073c676, after rc.2 published. React catches up when it bumps.",
-    "Phase 3 is blocked on RN bumping its declared stream-chat range; the root resolutions entry masking it does not publish.",
-    "Adopting in React found seven real defects in the shared layer, all fixed in 438b420b and 08a3fe58. Running a UI SDK's existing suite against the port is what found them -- none would have been caught by types, and all render wrong rather than throwing."
+    "Phase 3 is on stream-chat-react-native branch feat/i18n-adopt-shared-core, uncommitted at time of writing. Same publish dependency: the manifests now declare ^10.0.0-rc.3 and the root `resolutions` entry for stream-chat is deleted, so `yarn install --immutable` fails until core publishes.",
+    "RN's suite has a 38-suite / 289-test pre-existing baseline, unrelated to i18n: the mock builders spy on `client.axiosInstance`, but core routes most endpoints through the generated OpenAPI client since 0776bc46 (shipped in rc.1). Measured before and after the i18n port -- identical failing set. RN's own `yarn typecheck` also fails at 117 errors in the two example apps for the same reason; the port reduces it to 114.",
+    "Adopting in React found seven real defects in the shared layer, all fixed in 438b420b and 08a3fe58. Adopting in RN found four more: DateTimeLike was circular through startOf so a real Moment never satisfied it; DateTimeParserModule's members were contravariant function properties so moment's overloaded `locale` was rejected; getDateStringForA11y had flattened two genuinely different functions into React's (RN's calendar/VoiceOver variant is now getCalendarDateStringForA11y); and CalendarFormats / DayjsLocaleConfig silently stopped being exported from RN. A publicExports test now pins that surface.",
+    "src/i18n/notifications.ts (CORE_NOTIFICATION_TRANSLATION_KEY + translateNotification) was deleted before publishing: neither UI SDK used it, and it could not be used -- the catalog codegen reads the literal key at each t() call site, so a key resolved from a map never reaches the catalog. The drift protection lives in CORE_NOTIFICATION_TYPE / CoreNotificationType instead, which both SDKs key a Record<CoreNotificationType, translator> on. Key *names* stay per-SDK: each has shipped and integrators' dictionaries depend on them. v9-to-v10-migration-guide-i18n.md now shows the Record pattern directly and labels its key column a suggestion."
   ],
   "last_updated": "2026-08-18"
 }

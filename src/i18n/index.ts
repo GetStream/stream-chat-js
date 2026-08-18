@@ -8,7 +8,6 @@
 export * from './dayjs';
 export * from './formatters';
 export * from './languageNames';
-export * from './notifications';
 export * from './StreamI18n';
 export * from './TranslationBuilder';
 export * from './translator';
