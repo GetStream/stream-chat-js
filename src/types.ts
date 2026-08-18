@@ -981,8 +981,37 @@ export type UpdateMessageAPIResponse = StreamResponse<UpdateMessageResponse>;
 export type GiphyVersions = keyof Images;
 export type TranslationLanguage = TranslateMessageRequest['language'];
 
+/**
+ * A file descriptor, as produced by React Native image/document pickers. RN's `FormData`
+ * reads `uri`, `name` and `type` off this object; there is no `Blob` with a real body behind
+ * a picker URI, which is why the MIME type has to be carried explicitly.
+ *
+ * `name` falls back to the last path segment of `uri` when omitted.
+ */
+export type StreamFileDescriptor = { uri: string; name?: string; type?: string };
+
+/**
+ * A file accepted by the upload endpoints (`uploadFile`, `uploadImage`, `uploadChannelFile`,
+ * `uploadChannelImage`). Browsers pass a `File` or `Blob`; React Native passes a
+ * {@link StreamFileDescriptor}.
+ */
+export type StreamFile = File | Blob | StreamFileDescriptor;
+
+/**
+ * Structural subset of axios' `AxiosProgressEvent`, kept transport-agnostic on purpose so the
+ * public surface does not depend on axios.
+ */
+export type StreamProgressEvent = {
+  loaded: number;
+  total?: number;
+  lengthComputable?: boolean;
+  progress?: number;
+};
+
 export type StreamRequestOptions = {
   signal?: AbortSignal;
+  /** Only meaningful for upload (multipart) requests; ignored everywhere else. */
+  onUploadProgress?: (event: StreamProgressEvent) => void;
 };
 
 export * from './gen/models';

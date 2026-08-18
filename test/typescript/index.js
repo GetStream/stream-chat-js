@@ -354,14 +354,14 @@ const executables = [
 		type: "Unpacked<ReturnType<Channel['sendAction']>>",
 	},
 	{
-		f: rg.sendFile,
+		f: rg.uploadFile,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel['sendFile']>>",
+		type: "Unpacked<ReturnType<Channel['uploadFile']>>",
 	},
 	{
-		f: rg.sendImage,
+		f: rg.uploadImage,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel['sendImage']>>",
+		type: "Unpacked<ReturnType<Channel['uploadImage']>>",
 	},
 	{
 		f: rg.sendMessage,

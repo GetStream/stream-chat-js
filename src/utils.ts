@@ -6,6 +6,8 @@ import type {
   OwnUserResponse,
   ReactionGroupResponse,
   ReactionResponse,
+  StreamFile,
+  StreamFileDescriptor,
   UpdatedMessage,
   UserResponse,
 } from './types';
@@ -53,10 +55,6 @@ export function isOwnUser(
   return (user as OwnUserResponse)?.total_unread_count !== undefined;
 }
 
-function isBlobWebAPI(uri: unknown): uri is Blob {
-  return typeof window !== 'undefined' && 'Blob' in window && uri instanceof Blob;
-}
-
 export function isOwnUserBaseProperty(property: string) {
   const ownUserBaseProperties: {
     [Property in keyof Required<OwnUserBase>]: boolean;
@@ -100,26 +98,57 @@ export const channelTracksReadLocally = (channel?: Channel) =>
 export const userHasReadReceipts = (client: StreamChat) =>
   client.user?.privacy_settings?.read_receipts?.enabled ?? true;
 
-export function addFileToFormData(
-  uri: string | Blob,
-  name?: string,
-  contentType?: string,
-) {
-  const data = new FormData();
+const isWebFile = (value: unknown): value is Blob =>
+  typeof Blob !== 'undefined' && value instanceof Blob;
 
-  if (isBlobWebAPI(uri)) {
-    if (name) data.append('file', uri, name);
-    else data.append('file', uri);
-  } else {
-    // React Native path
-    data.append('file', {
-      uri,
-      name: name || uri.split('/').reverse()[0],
-      contentType: contentType || undefined,
-      type: contentType || undefined,
+const isFileDescriptor = (value: unknown): value is StreamFileDescriptor =>
+  !!value &&
+  typeof value === 'object' &&
+  typeof (value as StreamFileDescriptor).uri === 'string';
+
+/**
+ * Turns a bare URI string into a {@link StreamFileDescriptor} so the multipart encoder can
+ * derive a file name from it. `File`, `Blob` and descriptors pass through untouched.
+ */
+export const normalizeUploadFile = (file?: StreamFile | string) =>
+  typeof file === 'string' ? { uri: file } : file;
+
+/**
+ * Appends one request-body entry to a multipart form using Stream's encoding rules.
+ *
+ * Callers must pass **raw** values - objects and arrays are JSON-encoded here (that is what
+ * the API expects for `user` and `upload_sizes`), so pre-stringifying them double-encodes.
+ */
+export function appendToFormData(data: FormData, key: string, value: unknown) {
+  if (value === undefined || value === null) return;
+
+  if (isWebFile(value)) {
+    const name = (value as File).name;
+    if (name) data.append(key, value, name);
+    else data.append(key, value);
+  } else if (isFileDescriptor(value)) {
+    // React Native reads `uri`, `name` and `type` off this object. `contentType` is legacy
+    // (RN ignores it) and is kept so the emitted part is byte-for-byte what v10.0 sent.
+    data.append(key, {
+      uri: value.uri,
+      name: value.name || value.uri.split('/').reverse()[0],
+      contentType: value.type || undefined,
+      type: value.type || undefined,
     } as unknown as Blob);
+  } else if (typeof value === 'object') {
+    data.append(key, JSON.stringify(value));
+  } else {
+    data.append(key, String(value));
   }
+}
 
+/**
+ * Encodes a request body as `multipart/form-data`. Used by `ApiClient.sendRequest` for every
+ * generated operation declaring that content type.
+ */
+export function toFormData(body: Record<string, unknown>) {
+  const data = new FormData();
+  for (const [key, value] of Object.entries(body)) appendToFormData(data, key, value);
   return data;
 }
 
