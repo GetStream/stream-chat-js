@@ -53,22 +53,27 @@ const I18N_ONLY_DEPENDENCIES = ['i18next', 'dayjs'];
  * elimination, so a new entry gets no rule by accident (and the codegen entry is not told off for
  * reaching its own source).
  */
+/** The generator's source, which now lives outside `src/`. */
+const CODEGEN_SOURCES = /(^|\/)codegen\//;
+
 const ENTRY_BOUNDARIES = [
   {
     // The root bundle: no i18n at all, and none of its dependencies.
     entry: 'src/index.ts',
     forbiddenDeps: I18N_ONLY_DEPENDENCIES,
-    forbiddenSources: /(^|\/)src\/i18n(-codegen)?\//,
+    // Two directories rather than the one `src/i18n(-codegen)?/` pattern this used to be, now that the
+    // generator sits outside `src/`.
+    forbiddenSources: /(^|\/)(src\/i18n|codegen)\//,
   },
   {
     // The runtime i18n layer must not pull in the Node-only build tooling.
     entry: 'src/i18n/index.ts',
     forbiddenDeps: [],
-    forbiddenSources: /(^|\/)src\/i18n-codegen\//,
+    forbiddenSources: CODEGEN_SOURCES,
   },
   {
     // The codegen is Node-only by design and has no restriction of its own.
-    entry: 'src/i18n-codegen/index.ts',
+    entry: 'codegen/i18n/index.ts',
     forbiddenDeps: [],
     forbiddenSources: null,
   },
@@ -80,10 +85,14 @@ const ENTRY_BOUNDARIES = [
  * Two directions, both a single careless `export * from './i18n'` away:
  *   - the root bundle must not reach `src/i18n/` or its dependencies, or every consumer of
  *     `stream-chat` pays for i18next and dayjs whether they translate anything or not;
- *   - the runtime i18n bundle must not reach `src/i18n-codegen/`, which is Node-only build tooling.
+ *   - the runtime i18n bundle must not reach `codegen/`, which is Node-only build tooling.
  *
  * Checked here rather than left to review, because the failure is invisible: everything still works,
  * the bundle is just quietly bigger.
+ *
+ * The second direction is now *also* enforced by the type system, since `codegen/` sits outside the
+ * library tsconfig — an import from `src/i18n/` fails at `tsc` first, with a better error. This stays
+ * as the backstop for a deliberate `require`, which `tsc` would not see.
  */
 const assertBundleBoundaries = (metafile) => {
   const failures = [];
@@ -173,7 +182,7 @@ const bundles = [
   // reachable from `stream-chat/i18n`, which `assertBundleBoundaries` enforces.
   ['cjs', 'esm'].map((format) => ({
     entryPoints: {
-      'i18n-codegen': resolve(__dirname, '../src/i18n-codegen/index.ts'),
+      'i18n-codegen': resolve(__dirname, '../codegen/i18n/index.ts'),
     },
     bundle: true,
     metafile: true,

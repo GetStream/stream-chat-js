@@ -72,7 +72,8 @@ Two structural invariants enforced by the build rather than by review, because b
 
 - The **root bundle must not reach `src/i18n/`** or its dependencies. Asserted from esbuild's metafile;
   `dist/esm/index.mjs` is byte-identical at 907,599 bytes.
-- The **runtime i18n layer must not reach `src/i18n-codegen/`**, which is Node-only.
+- The **runtime i18n layer must not reach `codegen/`**, which is Node-only build tooling living
+  outside `src/`.
 
 ## Not in scope here
 

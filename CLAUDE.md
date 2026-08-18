@@ -37,7 +37,7 @@ Single test runs use Vitest's CLI directly: `yarn test-unit path/to/file.test.ts
 2. `scripts/bundle.mjs` (esbuild) — produces bundles for **three entry points**:
    - `index` (the root): `dist/cjs/index.node.js` (Node CJS, externalizes deps + Node builtins), `dist/cjs/index.browser.js` (browser CJS), `dist/esm/index.mjs` (browser ESM)
    - `i18n` (`stream-chat/i18n`): the same three variants, `i18n.node.js` / `i18n.browser.js` / `i18n.mjs`
-   - `i18n-codegen` (`stream-chat/i18n/codegen`): Node only, CJS + ESM — it reads the filesystem, so there is deliberately no browser variant
+   - `i18n-codegen` (`stream-chat/i18n/codegen`), built from `codegen/i18n/`: Node only, CJS + ESM — it reads the filesystem, so there is deliberately no browser variant
 
    After building, `assertBundleBoundaries` reads esbuild's `metafile` and fails the build if an entry reached something it must not (see the i18n section). Adding a new entry point without declaring its boundary in `ENTRY_BOUNDARIES` is itself an error.
 
@@ -73,7 +73,7 @@ This is a single-package SDK with **no monorepo**. The public surface is everyth
   - `reminders/` — `Reminder`, `ReminderManager`, `ReminderTimer` (scheduled-offset reminders with debounced refresh).
   - `search/` — `BaseSearchSource` + concrete `MessageSearchSource`, `ChannelSearchSource`, `UserSearchSource` orchestrated by `SearchController`.
   - `i18n/` — the translation layer shared by the React and React Native SDKs. **Not exported from `src/index.ts`** — see the i18n section below.
-  - `i18n-codegen/` — build-time translation-catalog generator. A **sibling** of `i18n/`, not a child, so the runtime layer physically cannot reach `node:fs`.
+  - the build-time translation-catalog generator is **not here** — it lives at `codegen/i18n/`, outside `src/` entirely, so the runtime layer physically cannot reach `node:fs`. See the i18n section.
 - Top-level subsystem files: `poll`, `poll_manager`, `thread`, `thread_manager`, `moderation`, `campaign`, `segment`, `permissions`.
 - **`types.ts` (~5k lines) + `custom_types.ts` + `types.utility.ts`** — public type surface. **Custom data is extended via module augmentation on the `Custom*Data` interfaces in `custom_types.ts`** (generics were removed in v9; see README). When adding a field that callers may want to extend, expose it through a `Custom*Data` interface rather than reintroducing a generic.
 
@@ -137,9 +137,25 @@ SDKs carried ~1,300 lines of near-duplicate runtime plus a duplicated codegen. S
 **Three entry points, and the boundaries between them are enforced by the build.** `src/index.ts` must
 **never** `export * from './i18n'` — that is the one reflex to resist. `scripts/bundle.mjs` asserts from
 esbuild's metafile that the root bundle cannot reach `src/i18n/`, `i18next` or `dayjs`, and that
-`src/i18n/` cannot reach the Node-only `src/i18n-codegen/`. Both leaks fail invisibly (everything works,
-the bundle is just bigger), which is why they are machine-checked. `dist/esm/index.mjs` is expected to
-stay byte-identical when only i18n changes.
+`src/i18n/` cannot reach the Node-only `codegen/`. Both leaks fail invisibly (everything works, the
+bundle is just bigger), which is why they are machine-checked. `dist/esm/index.mjs` is expected to stay
+byte-identical when only i18n changes.
+
+**The generator lives at `codegen/i18n/`, outside `src/`.** It is Node-only build tooling that reads the
+filesystem — the one thing the SDK's own source must never do — so it is not library source, even though
+it _is_ published (two other repos import `stream-chat/i18n/codegen` from their build scripts). Being
+outside the library tsconfig is what makes the boundary type-enforced: an import from `src/i18n/` fails
+at `tsc` before the metafile assertion ever runs, though the error is an oblique TS6059 "not under
+rootDir" rather than something self-explanatory.
+
+Three things are scoped to `src/` by default and had to be widened for it — check all three if you ever
+add another directory beside it, because each fails silently:
+
+- `tsconfig.codegen.json` emits its declarations to `dist/types/i18n-codegen/`, where `exports` and
+  `typesVersions` point. `rootDir` must stay `./codegen/i18n` or that path shifts.
+- `yarn types` runs **both** projects; `yarn build` runs both `tsc` invocations.
+- `eslint.config.mjs` rule blocks list `codegen/**/*.{js,ts}` alongside `src/**/*.{js,ts}`. Without it
+  the generator inherits no rules at all.
 
 - **`stream-chat/i18n`** — `Streami18n`, three formatters, `getDateString`, catalog-generic type helpers,
   `TranslationBuilder`, generated `LANGUAGE_NAMES`.

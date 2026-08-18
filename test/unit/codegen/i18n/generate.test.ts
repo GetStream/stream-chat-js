@@ -4,8 +4,8 @@ import path from 'node:path';
 import ts from 'typescript';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { buildCatalog, generateI18nKeys, readStringMap } from '../../../src/i18n-codegen';
-import type { GeneratorConfig } from '../../../src/i18n-codegen';
+import { buildCatalog, generateI18nKeys, readStringMap } from '../../../../codegen/i18n';
+import type { GeneratorConfig } from '../../../../codegen/i18n';
 
 /**
  * Fixtures are written to a scratch directory and the generator runs in-process against them.

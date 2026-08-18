@@ -73,6 +73,7 @@
   ],
   "files": [
     "/dist",
+    "/codegen",
     "/src"
   ],
   "dependencies": {
@@ -110,9 +111,9 @@
     "vitest": "^4.1.10"
   },
   "scripts": {
-    "build": "rm -rf dist && concurrently 'tsc' './scripts/bundle.mjs'",
+    "build": "rm -rf dist && concurrently 'tsc' 'tsc -p tsconfig.codegen.json' './scripts/bundle.mjs'",
     "start": "concurrently 'tsc --watch' './scripts/bundle.mjs --watch'",
-    "types": "tsc --noEmit",
+    "types": "tsc --noEmit && tsc -p tsconfig.codegen.json --noEmit",
     "lint": "yarn run prettier && yarn run eslint",
     "lint-fix": "yarn run eslint-fix; yarn run prettier-fix",
     "prettier": "prettier '**/*.{json,js,mjs,ts,yml,md}' --check",
