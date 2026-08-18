@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { asDynamicKey, StreamI18n } from '../../../src/i18n';
+import { asDynamicKey, Streami18n } from '../../../src/i18n';
 import {
   FORMATTER_KEY,
   fixtureRuntimeDefaults,
@@ -13,7 +13,7 @@ import {
  *
  * Ported from `stream-chat-react-native`'s `Streami18nGuarantees.test.ts`, where each one was written
  * against a real bug found reviewing the web implementation. They live here now because they describe
- * `StreamI18n` behaviour rather than anything React- or RN-specific, which means a third SDK cannot
+ * `Streami18n` behaviour rather than anything React- or RN-specific, which means a third SDK cannot
  * regress them and neither UI SDK has to keep its own copy.
  *
  * G1 — every language is layered over the SDK's bundled defaults, however it was selected.
@@ -25,7 +25,7 @@ type Dictionary = Partial<Record<keyof FixtureCatalog, string>>;
 
 /** Core has no catalog, so every instance is handed the fixture's bundled defaults. */
 const setup = (options: Record<string, unknown> = {}) =>
-  new StreamI18n<FixtureCatalog, FixtureBundledKey>({
+  new Streami18n<FixtureCatalog, FixtureBundledKey>({
     logger: () => {},
     runtimeDefaults: fixtureRuntimeDefaults,
     ...options,
@@ -34,7 +34,7 @@ const setup = (options: Record<string, unknown> = {}) =>
 describe('G1 — bundled defaults are layered under every language', () => {
   it('applies to a language selected via the `language` option', async () => {
     const i18n = setup({ language: 'de' });
-    const { t } = await i18n.getTranslators();
+    const { t } = await i18n.init();
 
     expect(t(FORMATTER_KEY)).not.toBe(FORMATTER_KEY);
   });
@@ -45,14 +45,14 @@ describe('G1 — bundled defaults are layered under every language', () => {
       'common.cancel.label': 'Abbrechen',
     } satisfies Dictionary);
     await i18n.setLanguage('de');
-    const { t } = await i18n.getTranslators();
+    const { t } = await i18n.init();
 
     expect(t(FORMATTER_KEY)).not.toBe(FORMATTER_KEY);
   });
 
   it('applies to `en` when no dictionary is supplied at all', async () => {
     const i18n = setup();
-    const { t } = await i18n.getTranslators();
+    const { t } = await i18n.init();
 
     expect(t(FORMATTER_KEY)).not.toBe(FORMATTER_KEY);
   });
@@ -63,7 +63,7 @@ describe('G1 — bundled defaults are layered under every language', () => {
       'common.cancel.label': 'Abbrechen',
     } satisfies Dictionary);
     i18n.registerTranslation('de', { 'common.loading.text': 'Lädt...' });
-    const { t } = await i18n.getTranslators();
+    const { t } = await i18n.init();
 
     // Registering twice must accumulate, and must not knock out the bundled formatter keys.
     expect(t(FORMATTER_KEY)).not.toBe(FORMATTER_KEY);
@@ -76,7 +76,7 @@ describe('G1 — bundled defaults are layered under every language', () => {
       language: 'de',
       translationsForLanguage: { 'common.cancel.label': 'Abbrechen' },
     });
-    const { t } = await i18n.getTranslators();
+    const { t } = await i18n.init();
 
     expect(t(FORMATTER_KEY)).toBe(fixtureRuntimeDefaults[FORMATTER_KEY]);
   });
@@ -88,7 +88,7 @@ describe('G2 — a partial dictionary renders English, not a dotted path', () =>
     i18n.registerTranslation('de', {
       'common.cancel.label': 'Abbrechen',
     } satisfies Dictionary);
-    const { t } = await i18n.getTranslators();
+    const { t } = await i18n.init();
 
     expect(t('common.loading.text', 'Loading...')).toBe('Loading...');
   });
@@ -98,14 +98,14 @@ describe('G2 — a partial dictionary renders English, not a dotted path', () =>
     i18n.registerTranslation('de', {
       'common.cancel.label': 'Abbrechen',
     } satisfies Dictionary);
-    const { t } = await i18n.getTranslators();
+    const { t } = await i18n.init();
 
     expect(t('common.cancel.label', 'Cancel')).toBe('Abbrechen');
   });
 
   it('never renders a raw dotted key for a prose key', async () => {
     const i18n = setup({ language: 'de' });
-    const { t } = await i18n.getTranslators();
+    const { t } = await i18n.init();
 
     const rendered = t('common.loading.text', 'Loading...');
     expect(rendered).not.toMatch(/^[a-z][a-zA-Z]*(\.[a-zA-Z]+)+$/);
@@ -116,7 +116,7 @@ describe('G2 — a partial dictionary renders English, not a dotted path', () =>
     // resource bundle — and the handler's return value replaces the rendered string. An unguarded
     // handler therefore blanks out most of the UI.
     const i18n = setup({ i18nextConfigOverrides: { parseMissingKeyHandler: () => '' } });
-    const { t } = await i18n.getTranslators();
+    const { t } = await i18n.init();
 
     expect(t('common.loading.text', 'Loading...')).toBe('Loading...');
   });
@@ -124,7 +124,7 @@ describe('G2 — a partial dictionary renders English, not a dotted path', () =>
   it('still reports a genuinely missing key to an integrator handler', async () => {
     const parseMissingKeyHandler = vi.fn(() => 'MISSING');
     const i18n = setup({ i18nextConfigOverrides: { parseMissingKeyHandler } });
-    const { t } = await i18n.getTranslators();
+    const { t } = await i18n.init();
 
     // No inline default and not in runtimeDefaults — this one really is missing.
     expect(t(asDynamicKey('nothing.declares.this'))).toBe('MISSING');
@@ -135,7 +135,7 @@ describe('G2 — a partial dictionary renders English, not a dotted path', () =>
 describe('G3 — an unregistered language warns and continues', () => {
   it('does not silently reset the language to en', async () => {
     const i18n = setup({ language: 'de' });
-    await i18n.getTranslators();
+    await i18n.init();
 
     expect(i18n.currentLanguage).toBe('de');
   });
@@ -143,7 +143,7 @@ describe('G3 — an unregistered language warns and continues', () => {
   it('warns that the language has no dictionary', async () => {
     const logger = vi.fn();
     const i18n = setup({ language: 'de', logger });
-    await i18n.getTranslators();
+    await i18n.init();
 
     // Specifically the *translation* warning — not an unrelated dayjs "locale config for de does not
     // exist" message, which would let this pass for the wrong reason.
@@ -155,7 +155,7 @@ describe('G3 — an unregistered language warns and continues', () => {
 
   it('keeps the language after setLanguage to an unregistered one', async () => {
     const i18n = setup();
-    await i18n.getTranslators();
+    await i18n.init();
     await i18n.setLanguage('de');
 
     expect(i18n.currentLanguage).toBe('de');
@@ -163,7 +163,7 @@ describe('G3 — an unregistered language warns and continues', () => {
 
   it('still renders English copy in the unregistered language', async () => {
     const i18n = setup({ language: 'de' });
-    const { t } = await i18n.getTranslators();
+    const { t } = await i18n.init();
 
     expect(t('common.loading.text', 'Loading...')).toBe('Loading...');
   });
@@ -178,7 +178,7 @@ describe('G3 — when the warning fires', () => {
   it('does not warn at construction, before registerTranslation has had a chance to run', () => {
     const logger = vi.fn();
 
-    new StreamI18n<FixtureCatalog, FixtureBundledKey>({
+    new Streami18n<FixtureCatalog, FixtureBundledKey>({
       language: 'de',
       logger,
       runtimeDefaults: fixtureRuntimeDefaults,

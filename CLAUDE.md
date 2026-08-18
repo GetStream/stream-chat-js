@@ -130,7 +130,7 @@ Aliases to be aware of: `setUser` → `connectUser`, `disconnect` → `disconnec
 ## i18n
 
 `src/i18n/` holds the translation runtime shared by `stream-chat-react` and
-`stream-chat-react-native` — one `StreamI18n`, one set of formatters, one date layer. Before this, both
+`stream-chat-react-native` — one `Streami18n`, one set of formatters, one date layer. Before this, both
 SDKs carried ~1,300 lines of near-duplicate runtime plus a duplicated codegen. See
 `specs/i18n-to-core/` for the initiative and `v9-to-v10-migration-guide-i18n.md` for the consumer delta.
 
@@ -141,7 +141,7 @@ esbuild's metafile that the root bundle cannot reach `src/i18n/`, `i18next` or `
 the bundle is just bigger), which is why they are machine-checked. `dist/esm/index.mjs` is expected to
 stay byte-identical when only i18n changes.
 
-- **`stream-chat/i18n`** — `StreamI18n`, four formatters, `getDateString`, catalog-generic type helpers,
+- **`stream-chat/i18n`** — `Streami18n`, three formatters, `getDateString`, catalog-generic type helpers,
   `TranslationBuilder`, generated `LANGUAGE_NAMES`.
 - **`stream-chat/i18n/codegen`** — the catalog generator. `typescript` is **injected** via config, never
   imported, so core does not depend on the compiler.
@@ -153,7 +153,7 @@ Things that will bite:
   to `never`; defaulting to `string` silently disables all key checking.
 - **`runtimeDefaults` is a constructor option**, not an import — the catalog belongs to the UI layer. It
   is layered under _every_ language, which is what stops a partial dictionary from knocking out formatter
-  keys. That is guarantee G1 in `test/unit/i18n/StreamI18nGuarantees.test.ts`, which is the acceptance
+  keys. That is guarantee G1 in `test/unit/i18n/Streami18nGuarantees.test.ts`, which is the acceptance
   contract for this module: three behavioural guarantees, each written against a real bug.
 - **No module-scope side effects.** Every `Dayjs.extend` goes through `ensureDayjsPlugins()`. This is
   what makes `sideEffects: false` accurate — do not reintroduce a top-level `extend` or locale import.

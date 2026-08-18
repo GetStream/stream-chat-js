@@ -18,7 +18,7 @@
 - **`PollComposerFieldErrors` values are now objects**, not bare English strings: `{ code, message, metadata? }`. Read `.message` for the previous value, or switch on `.code` to localize. **Breaking.**
 - **`Notification.type` is now typed** as `CoreNotificationType | (string & {})` and enumerated in the exported `CORE_NOTIFICATION_TYPE` map. Additive — your own identifiers still pass.
 - **`Notification.message` is now documented as a developer-facing fallback, not display copy.** Its wording is not part of the public contract and may change in a minor release. Nothing breaks today, but anything user-facing should switch on `type`. See [Rendering notifications](#rendering-notifications).
-- **New subpath `stream-chat/i18n`** carries the shared translation runtime (`StreamI18n`, formatters, date handling). Nothing is re-exported from `stream-chat`'s root, so the root bundle is unchanged.
+- **New subpath `stream-chat/i18n`** carries the shared translation runtime (`Streami18n`, formatters, date handling). Nothing is re-exported from `stream-chat`'s root, so the root bundle is unchanged.
 - **New subpath `stream-chat/i18n/codegen`** carries the build-time translation-catalog generator. Node-only.
 - **`stream-chat` now depends on `i18next` and `dayjs`.** Install footprint grows ~2.3 MB; **bundle size is unaffected** unless you import `stream-chat/i18n`.
 - Nothing in the JSDoc ever described a `Notification.code` field. There is no such field and never was — the block documenting the `domain:entity:operation:result` scheme was attached to `type` and mislabelled. It has been corrected.
@@ -214,7 +214,7 @@ SDK, you do not need to import this directly — the SDK re-exports what you nee
 catalog.
 
 ```ts
-import { StreamI18n, getDateString, predefinedFormatters } from 'stream-chat/i18n';
+import { Streami18n, getDateString, predefinedFormatters } from 'stream-chat/i18n';
 ```
 
 It is a separate entry point, not part of `stream-chat`'s root barrel, because it pulls in `i18next` and
@@ -223,7 +223,7 @@ from it.
 
 Notable if you are building custom UI directly on `stream-chat`:
 
-- `StreamI18n` is generic over your translation catalog: `new StreamI18n<MyCatalog, MyBundledKeys>(…)`.
+- `Streami18n` is generic over your translation catalog: `new Streami18n<MyCatalog, MyBundledKeys>(…)`.
 - Reactivity goes through `i18n.state`, a `StateStore`. `subscribe` fires synchronously with the current
   value, so there is no listener-registration ordering to get right.
 - `setLanguage()` returns `Promise<void>`. The new `t` is published to `state`; a returned translator

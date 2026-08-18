@@ -79,9 +79,9 @@ overlay host both do.
 
 ## `runtimeDefaults` injected, not imported
 
-The one addition the move forced. `StreamI18n` imported it from a sibling file, and that file is
+The one addition the move forced. `Streami18n` imported it from a sibling file, and that file is
 per-SDK catalog data core cannot import. Each SDK's public export becomes a thin subclass injecting its
-own, so `new StreamI18n(...)` keeps working verbatim for integrators while the layering guarantee (G1)
+own, so `new Streami18n(...)` keeps working verbatim for integrators while the layering guarantee (G1)
 stays tested in core.
 
 ## `TranslationBuilder`: plumbing down, topics stay up
@@ -94,20 +94,19 @@ Non-obvious property worth keeping in mind: i18next post-processing is configure
 topic is invoked for _every_ key and must pass through calls it does not recognize. Getting that wrong
 silently rewrites unrelated copy, so there is a test for it.
 
-## Formatters: four, with `relativeCompactDateFormatter` as an alias
+## Formatters: three, with no `relativeCompactDateFormatter`
 
-RN's standalone implementation hardcoded `'Today'` / `'Yesterday'` / `` `${n}d ago` ``, which no
-dictionary could translate — and because the wording lived in a formatter body rather than a catalog
-value, the codegen's English-prose guard never saw it. It is now an alias of
-`timestampFormatter(relativeCompact: true)`, whose wording goes through `t()`.
+The React Native SDK shipped a standalone `relativeCompactDateFormatter` that hardcoded `'Today'` and
+`` `${n}d ago` `` — untranslatable by any dictionary, and invisible to the English-prose guard. Its
+behaviour is `timestampFormatter` with `relativeCompact: true`, whose wording goes through `t()`.
 
-`durationFormatter` is typed `number | string`: dayjs accepts both at runtime, and its post-1.11
-signature narrowed to string only, which had forced a cast in React.
+It was initially kept as a `@deprecated` alias so existing `timestamp.*` expressions would keep working.
+That was rejected: a breaking release should not ship a second name for one behaviour with a countdown
+on it. The alias is gone, and the one expression that used it — the React Native SDK's
+`timestamp.PollVote` — becomes `{{ timestamp | timestampFormatter(relativeCompact: true) }}`.
 
-A regression test names the failure mode found while building this: a duration must go through the date
-library's `.duration()`. Parsing the number as a timestamp reads 600000 as ten minutes past the epoch
-and renders "57 years ago". That also forced `DateTimeParser` to be the date library _module_ rather
-than a parse function, since `.duration()` lives on the module.
+`durationFormatter` is also fixed to `FormatterFactory<number | string>`; the `<number>` / `<string>`
+split was a type bug that forced a cast in the React SDK.
 
 ## dayjs: no module-scope side effects
 
@@ -151,10 +150,15 @@ Guards return failures as data with a thin printer on top, so tests assert on th
 scraping stderr and run in-process rather than spawning. That is most of why the SDK-side suite was 381
 lines.
 
-## Naming: `StreamI18n`
+## Naming: `Streami18n`, matching what both SDKs already ship
 
-Both SDKs spell it `Streami18n`. Core normalizes the initialism; each SDK re-exports `Streami18n` as a
-deprecated alias for one cycle so no integrator code breaks on the rename alone.
+Core first named the class `StreamI18n` and each SDK re-exported `Streami18n` as a `@deprecated` alias
+for one cycle. That was rejected: the capital `I` is cosmetic, `Streami18n` is the name both SDKs have
+shipped and documented for years, and a deprecated alias in a breaking release is cruft with a countdown
+attached. Core is named `Streami18n`, so integrators rename nothing and no alias exists.
+
+`getTranslators()` went the same way — it was a `@deprecated` alias for `init()`. `init()` is the better
+name (it initializes; it is not a getter), so the old one is removed outright rather than carried.
 
 ## Notification `type`, not `code`
 

@@ -33,7 +33,7 @@ import type {
 const DEFAULT_NAMESPACE = 'translation';
 const DEFAULT_LANGUAGE = 'en';
 
-export type StreamI18nOptions<C extends AnyTranslationCatalog = AnyTranslationCatalog> = {
+export type Streami18nOptions<C extends AnyTranslationCatalog = AnyTranslationCatalog> = {
   /** A dayjs or moment module. Defaults to dayjs with the required plugins registered. */
   DateTimeParser?: DateTimeParserModule;
   dayjsLocaleConfigForLanguage?: DayjsLocaleConfig;
@@ -74,7 +74,7 @@ export type StreamI18nOptions<C extends AnyTranslationCatalog = AnyTranslationCa
   translationsForLanguage?: TranslationDictionaryOf<C>;
 };
 
-export type StreamI18nState<
+export type Streami18nState<
   C extends AnyTranslationCatalog = AnyTranslationCatalog,
   Bundled extends string = never,
 > = {
@@ -92,14 +92,14 @@ export type StreamI18nState<
  * at each call site, so the bundled data is just formatter expressions and the handful of keys
  * resolved by name at runtime. Every other language comes from the integrator.
  *
- * Reactivity goes through {@link StreamI18n.state}, a {@link StateStore}. `subscribe` fires
+ * Reactivity goes through {@link Streami18n.state}, a {@link StateStore}. `subscribe` fires
  * synchronously with the current value, so a consumer that attaches after `init()` still sees the live
  * `t` immediately and there is no callback-registration ordering to get wrong.
  *
  * ## Overriding some of the English copy
  *
  * ```ts
- * const i18n = new StreamI18n({
+ * const i18n = new Streami18n({
  *   translationsForLanguage: { 'autoCompleteInput.placeholder': 'Write something…' },
  * });
  * ```
@@ -109,7 +109,7 @@ export type StreamI18nState<
  * ```ts
  * import 'dayjs/locale/de';
  *
- * const i18n = new StreamI18n({ language: 'de' });
+ * const i18n = new Streami18n({ language: 'de' });
  * i18n.registerTranslation('de', de, {
  *   calendar: { sameDay: '[heute um] LT', lastDay: '[gestern um] LT', ... },
  * });
@@ -123,16 +123,16 @@ export type StreamI18nState<
  * new language needs both `import 'dayjs/locale/xx'` and a `calendar` config, or relative dates render
  * English scaffolding around translated day names.
  */
-export class StreamI18n<
+export class Streami18n<
   C extends AnyTranslationCatalog = AnyTranslationCatalog,
   Bundled extends string = never,
 > {
   /** Marks instances across bundle copies, where `instanceof` silently fails. */
-  static readonly brand = Symbol.for('stream-chat.StreamI18n');
+  static readonly brand = Symbol.for('stream-chat.Streami18n');
 
   readonly i18nInstance: I18nInstance = i18next.createInstance();
 
-  readonly state: StateStore<StreamI18nState<C, Bundled>>;
+  readonly state: StateStore<Streami18nState<C, Bundled>>;
 
   readonly translationBuilder: TranslationBuilder;
 
@@ -165,11 +165,11 @@ export class StreamI18n<
   private readonly runtimeDefaults: Record<string, string>;
   private readonly disableDateTimeTranslations: boolean;
   private readonly i18nextConfig: InitOptions;
-  private initPromise?: Promise<StreamI18nState<C, Bundled>>;
+  private initPromise?: Promise<Streami18nState<C, Bundled>>;
   /** Set by {@link overrideTFunction}, so `init()` does not clobber a swapped-in implementation. */
   private tOverridden = false;
 
-  constructor(options: StreamI18nOptions<C> = {}) {
+  constructor(options: Streami18nOptions<C> = {}) {
     this.logger = options.logger ?? ((message?: string) => console.warn(message));
     this.runtimeDefaults = options.runtimeDefaults ?? {};
     this.disableDateTimeTranslations = options.disableDateTimeTranslations ?? false;
@@ -206,7 +206,7 @@ export class StreamI18n<
       );
     };
 
-    this.state = new StateStore<StreamI18nState<C, Bundled>>({
+    this.state = new StateStore<Streami18nState<C, Bundled>>({
       initialized: false,
       language,
       t: createDefaultTranslatorFunction<C, Bundled>(),
@@ -253,7 +253,7 @@ export class StreamI18n<
         ? guardMissingKeyHandler(missingKeyHandler)
         : (key: string, defaultValue?: string) => {
             if (typeof defaultValue === 'string') return defaultValue;
-            this.logger(`StreamI18n: missing translation for key: ${key}`);
+            this.logger(`Streami18n: missing translation for key: ${key}`);
             return key;
           },
     };
@@ -266,7 +266,7 @@ export class StreamI18n<
       this.addOrUpdateLocale(language, options.dayjsLocaleConfigForLanguage);
     } else if (!this.localeExists(language)) {
       this.logger(
-        `StreamI18n: no dayjs locale is registered for '${language}', so dates render with the ` +
+        `Streami18n: no dayjs locale is registered for '${language}', so dates render with the ` +
           `English locale. Import it with "import 'dayjs/locale/${language}';" in your app, or pass ` +
           `a config via registerTranslation('${language}', translation, dayjsLocaleConfig).`,
       );
@@ -309,17 +309,12 @@ export class StreamI18n<
    * overlay host, say) both call this, and clearing it on completion would leave a window where a
    * third caller re-entered initialization.
    */
-  init(): Promise<StreamI18nState<C, Bundled>> {
+  init(): Promise<Streami18nState<C, Bundled>> {
     this.initPromise ??= this.runInit();
     return this.initPromise;
   }
 
-  /** @deprecated Use {@link init}, which returns the same state. */
-  getTranslators(): Promise<StreamI18nState<C, Bundled>> {
-    return this.init();
-  }
-
-  private async runInit(): Promise<StreamI18nState<C, Bundled>> {
+  private async runInit(): Promise<Streami18nState<C, Bundled>> {
     this.validateCurrentLanguage();
     this.assertPluralRulesCoverage(this.currentLanguage);
 
@@ -366,7 +361,7 @@ export class StreamI18n<
           : { t: t as unknown as StreamTFunctionFor<C, Bundled> }),
       });
     } catch (error) {
-      this.logger(`StreamI18n: initialization failed: ${describeError(error)}`);
+      this.logger(`Streami18n: initialization failed: ${describeError(error)}`);
       this.state.partialNext({ initialized: true });
     }
 
@@ -414,7 +409,7 @@ export class StreamI18n<
   ) {
     if (!translation) {
       this.logger(
-        'StreamI18n: registerTranslation called without a translation dictionary',
+        'Streami18n: registerTranslation called without a translation dictionary',
       );
       return;
     }
@@ -432,7 +427,7 @@ export class StreamI18n<
       this.dayjsLocales[language] = { ...dayjsLocaleConfig };
     } else if (!this.localeExists(language)) {
       this.logger(
-        `StreamI18n: no dayjs locale is registered for '${language}'. Import it with ` +
+        `Streami18n: no dayjs locale is registered for '${language}'. Import it with ` +
           `"import 'dayjs/locale/${language}';" in your app, or pass a config as the third ` +
           `argument to registerTranslation.`,
       );
@@ -448,7 +443,7 @@ export class StreamI18n<
   /**
    * Changes the active language.
    *
-   * Returns nothing: the new `t` is published to {@link StreamI18n.state}, which is the single source
+   * Returns nothing: the new `t` is published to {@link Streami18n.state}, which is the single source
    * of the current translator. Handing one back would offer a value that goes stale on the next
    * language change and invite callers to cache it.
    */
@@ -469,7 +464,7 @@ export class StreamI18n<
         this.state.partialNext({ t: t as unknown as StreamTFunctionFor<C, Bundled> });
       }
     } catch (error) {
-      this.logger(`StreamI18n: failed to set language: ${describeError(error)}`);
+      this.logger(`Streami18n: failed to set language: ${describeError(error)}`);
     }
   }
 
@@ -495,7 +490,7 @@ export class StreamI18n<
     if (this.registeredLanguages.has(language)) return;
 
     this.logger(
-      `StreamI18n: no translation dictionary is registered for '${language}', so the SDK's copy ` +
+      `Streami18n: no translation dictionary is registered for '${language}', so the SDK's copy ` +
         `renders in English. Call registerTranslation('${language}', {...}) to translate it. ` +
         `Registered: ${[...this.registeredLanguages].join(', ')}`,
     );
@@ -554,13 +549,13 @@ export class StreamI18n<
       const resolved = new Intl.PluralRules(language).resolvedOptions().locale;
       if (resolved.split('-')[0] === language.split('-')[0]) return;
       this.logger(
-        `StreamI18n: Intl.PluralRules has no data for '${language}' (it resolved to ` +
+        `Streami18n: Intl.PluralRules has no data for '${language}' (it resolved to ` +
           `'${resolved}'), so every count selects the '_other' form. On React Native, import ` +
           `'intl-pluralrules' before anything else in your entry file.`,
       );
     } catch {
       this.logger(
-        `StreamI18n: Intl.PluralRules is unavailable, so plural selection will not work. On React ` +
+        `Streami18n: Intl.PluralRules is unavailable, so plural selection will not work. On React ` +
           `Native, import 'intl-pluralrules' before anything else in your entry file.`,
       );
     }

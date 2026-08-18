@@ -19,8 +19,8 @@ Commit `766b1ddb`. Gate: `yarn lint && yarn types && yarn test-unit --run && yar
 
 Based on RN's implementation, which was the later and better of the two.
 
-- `StreamI18n` with a `StateStore`; catalog-generic type helpers; dayjs handling with no module-scope
-  side effects; four formatters; `getDateString`.
+- `Streami18n` with a `StateStore`; catalog-generic type helpers; dayjs handling with no module-scope
+  side effects; three formatters; `getDateString`.
 - Generated `languageNames`, the shared notification key registry, `TranslationBuilder` plumbing.
 - `stream-chat/i18n` and `stream-chat/i18n/codegen` exports; second and third bundle entries; build-time
   boundary assertion.
@@ -71,7 +71,7 @@ Prerequisites, each its own PR:
 Then: delete `src/utils/i18n/**`, same type/codegen shrink as React, drop the module-scope
 `Dayjs.updateLocale`, add the four `relativeTime.*` keys the translatable relative-compact formatter
 needs, replace `useStreami18n` with the `useStateStore` version, migrate
-`new Streami18n(opts, i18nextConfig)` call sites, and newly export `StreamI18nOptions` and the formatter
+`new Streami18n(opts, i18nextConfig)` call sites, and newly export `Streami18nOptions` and the formatter
 types — both unreachable today despite `options.formatters` referencing them.
 
 Optional, and a real gap: RN renders auto-translated message text

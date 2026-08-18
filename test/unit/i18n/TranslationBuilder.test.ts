@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { StreamI18n, TranslationTopic } from '../../../src/i18n';
+import { Streami18n, TranslationTopic } from '../../../src/i18n';
 import type { Translator } from '../../../src/i18n';
 
 /**
@@ -21,7 +21,7 @@ class KindTopic extends TranslationTopic<{ kind?: string }> {
 const FALLBACK = 'FALLBACK';
 
 const setup = (options: Record<string, unknown> = {}) =>
-  new StreamI18n({
+  new Streami18n({
     logger: () => {},
     runtimeDefaults: { 'translationBuilderTopic.kind': FALLBACK },
     translationBuilderTopics: { kind: KindTopic },
@@ -138,7 +138,7 @@ describe('TranslationBuilder', () => {
   });
 
   it('configures no post-processing when no topics are supplied', async () => {
-    const i18n = new StreamI18n({ logger: vi.fn(), runtimeDefaults: {} });
+    const i18n = new Streami18n({ logger: vi.fn(), runtimeDefaults: {} });
     const { t } = await i18n.init();
 
     expect((t as (k: string, d: string) => string)('common.thing', 'Thing')).toBe(

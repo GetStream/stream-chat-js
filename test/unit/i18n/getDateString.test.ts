@@ -4,7 +4,7 @@ import {
   defaultDateTimeParser,
   getCalendarDateStringForA11y,
   getDateString,
-  StreamI18n,
+  Streami18n,
 } from '../../../src/i18n';
 import type { TDateTimeParserInput } from '../../../src/i18n';
 
@@ -18,7 +18,7 @@ const KEY_VALUE = '{{ timestamp | timestampFormatter(calendar: false; format: HH
 const AT = '2019-04-03T14:42:47.087Z';
 
 const setup = async (runtimeDefaults: Record<string, string> = { [KEY]: KEY_VALUE }) => {
-  const i18n = new StreamI18n({ logger: () => {}, runtimeDefaults });
+  const i18n = new Streami18n({ logger: () => {}, runtimeDefaults });
   return i18n.init();
 };
 
@@ -138,7 +138,7 @@ describe('getDateString — options handed to a custom formatter', () => {
    */
   it('passes the timestamp as a Date', async () => {
     const seen: Record<string, unknown>[] = [];
-    const i18n = new StreamI18n({
+    const i18n = new Streami18n({
       logger: () => {},
       runtimeDefaults: { [KEY]: KEY_VALUE },
       formatters: {
@@ -176,7 +176,7 @@ describe('timestampFormatter — nothing renderable', () => {
     ['an unparseable string', 'not a date'],
     ['an empty string', ''],
   ])('renders empty for %s', async (_label, value) => {
-    const i18n = new StreamI18n({
+    const i18n = new Streami18n({
       logger: () => {},
       runtimeDefaults: { [KEY]: KEY_VALUE },
     });

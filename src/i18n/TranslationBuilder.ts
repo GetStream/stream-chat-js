@@ -76,7 +76,7 @@ export class TranslationBuilder {
   /**
    * Translators registered before their topic exists.
    *
-   * Topics are only created during `StreamI18n.init()`, but an integrator registers translators against
+   * Topics are only created during `Streami18n.init()`, but an integrator registers translators against
    * the constructed instance — so registrations that arrive first are buffered and flushed when the
    * topic appears, rather than silently dropped.
    */

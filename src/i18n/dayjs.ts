@@ -86,7 +86,7 @@ let pluginsRegistered = false;
  * would force `stream-chat` to declare `sideEffects` and would make importing this module do work
  * whether or not anything uses it. Calling it from both the constructor and `defaultDateTimeParser`
  * covers the two ways the formatters can be reached, including a standalone `getDateString()` call
- * with no `StreamI18n` instance in play.
+ * with no `Streami18n` instance in play.
  *
  * Idempotent twice over: guarded here, and dayjs itself no-ops a repeated `extend` via the plugin's
  * `$i` marker.
@@ -125,7 +125,7 @@ export const defaultDateTimeParser = (input?: TDateTimeParserInput) => {
 /**
  * The dayjs module itself, with plugins registered.
  *
- * `StreamI18n.DateTimeParser` has to be the *module*, not a parse function, because
+ * `Streami18n.DateTimeParser` has to be the *module*, not a parse function, because
  * `durationFormatter` calls `.duration()` — which lives on the module, not on a parsed instance.
  */
 export const getDefaultDateTimeParserModule = (): DateTimeParserModule => {

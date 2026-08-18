@@ -4,8 +4,8 @@ import {
   type DateTimeParserModule,
   isDayOrMoment,
   RELATIVE_TIME_CATALOG,
-  StreamI18n,
-  type StreamI18nState,
+  Streami18n,
+  type Streami18nState,
   type TDateTimeParserOutput,
 } from '../../../src/i18n';
 import {
@@ -15,13 +15,13 @@ import {
 } from './fixtures';
 
 const setup = (options: Record<string, unknown> = {}) =>
-  new StreamI18n<FixtureCatalog, FixtureBundledKey>({
+  new Streami18n<FixtureCatalog, FixtureBundledKey>({
     logger: () => {},
     runtimeDefaults: fixtureRuntimeDefaults,
     ...options,
   });
 
-describe('StreamI18n', () => {
+describe('Streami18n', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-13T14:32:00.000Z'));
@@ -102,7 +102,7 @@ describe('StreamI18n', () => {
       const i18n = setup();
       await i18n.init();
 
-      const seen: StreamI18nState<FixtureCatalog, FixtureBundledKey>[] = [];
+      const seen: Streami18nState<FixtureCatalog, FixtureBundledKey>[] = [];
       // `subscribe` fires synchronously with the current value — that is what removes the
       // callback-registration ordering problem the listener-based API had.
       const unsubscribe = i18n.state.subscribe((state) => seen.push(state));

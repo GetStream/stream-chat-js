@@ -69,7 +69,7 @@ const parseCalendarFormats = (
   } catch (error) {
     // Reported through the instance's logger, not through `translate` -- a diagnostic is not copy.
     logger(
-      `StreamI18n: calendarFormats is not valid JSON, ignoring it: ${value} (${
+      `Streami18n: calendarFormats is not valid JSON, ignoring it: ${value} (${
         error instanceof Error ? error.message : String(error)
       })`,
     );
@@ -210,17 +210,10 @@ const fromNowFormatter: FormatterFactory<string | Date> =
     );
   };
 
-/**
- * The formatters registered with i18next by default.
- *
- * `relativeCompactDateFormatter` is an alias rather than its own implementation — see the deprecation
- * note on {@link PredefinedFormatters}.
- */
+/** The formatters registered with i18next by default. */
 export const predefinedFormatters: PredefinedFormatters = {
   durationFormatter,
   fromNowFormatter,
-  relativeCompactDateFormatter: (context) => (value, lng, options) =>
-    timestampFormatter(context)(value, lng, { ...options, relativeCompact: true }),
   timestampFormatter,
 };
 

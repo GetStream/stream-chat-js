@@ -42,7 +42,7 @@ the work from greenfield to typing and gap-filling:
 
 ## Shipped
 
-- **`stream-chat/i18n` subpath** — `StreamI18n` (reactive via `StateStore`), four formatters,
+- **`stream-chat/i18n` subpath** — `Streami18n` (reactive via `StateStore`), three formatters,
   `getDateString`, catalog-generic type helpers, `TranslationBuilder` plumbing, generated language
   names, the shared notification key registry.
 - **`stream-chat/i18n/codegen` subpath** — the catalog generator, Node-only, with `typescript`

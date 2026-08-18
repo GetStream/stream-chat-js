@@ -264,7 +264,7 @@ export type DurationLike = {
 };
 
 /**
- * A date/time library *module*, as accepted by `StreamI18nOptions.DateTimeParser`.
+ * A date/time library *module*, as accepted by `Streami18nOptions.DateTimeParser`.
  *
  * Structural for the same reason as {@link DateTimeLike}: this admits `dayjs` and `moment` without
  * naming either. It is the module rather than a parse function because `durationFormatter` needs
@@ -308,7 +308,7 @@ export type LooseTranslateFunction = (
 /**
  * What a formatter is given about the instance it belongs to.
  *
- * Structural rather than the concrete class, so `types.ts` does not have to import `StreamI18n.ts`
+ * Structural rather than the concrete class, so `types.ts` does not have to import `Streami18n.ts`
  * and formatter factories stay testable in isolation.
  */
 export type FormatterContext = {
@@ -349,11 +349,14 @@ export type PredefinedFormatters = {
   durationFormatter: FormatterFactory<number | string>;
   fromNowFormatter: FormatterFactory<string | Date>;
   /**
-   * @deprecated Use `timestampFormatter` with `relativeCompact: true`, which routes the wording
-   * through `t()` and is therefore translatable. Kept as an alias so existing `timestamp.*` bundled
-   * defaults keep working.
+   * Renders a timestamp. `relativeCompact: true` selects the "Today" / "3d ago" wording, which routes
+   * through `t()` and is therefore translatable.
+   *
+   * The React Native SDK's separate `relativeCompactDateFormatter` is gone rather than aliased here: it
+   * hardcoded English that no dictionary could reach, and an alias would have been a second name for
+   * one behaviour. A `timestamp.*` expression that used it becomes
+   * `{{ timestamp | timestampFormatter(relativeCompact: true) }}`.
    */
-  relativeCompactDateFormatter: FormatterFactory<string | Date>;
   timestampFormatter: FormatterFactory<string | Date>;
 };
 
