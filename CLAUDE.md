@@ -37,7 +37,7 @@ Single test runs use Vitest's CLI directly: `yarn test-unit path/to/file.test.ts
 2. `scripts/bundle.mjs` (esbuild) — produces bundles for **three entry points**:
    - `index` (the root): `dist/cjs/index.node.js` (Node CJS, externalizes deps + Node builtins), `dist/cjs/index.browser.js` (browser CJS), `dist/esm/index.mjs` (browser ESM)
    - `i18n` (`stream-chat/i18n`): the same three variants, `i18n.node.js` / `i18n.browser.js` / `i18n.mjs`
-   - `i18n-codegen` (`stream-chat/i18n/codegen`), built from `codegen/i18n/`: Node only, CJS + ESM — it reads the filesystem, so there is deliberately no browser variant
+   - `i18n-codegen` (`stream-chat/i18n/codegen`), built from `codegen/i18n/`: **ESM only, Node only** — one artifact, `dist/esm/i18n-codegen.mjs`. No browser variant because it reads the filesystem; no CJS variant because nothing needs one (it is invoked by a build script, never bundled, never loaded by a test runner). The CJS flavours of the other two entries exist for React Native's Jest, which loads the _runtime_ in CJS; the generator never enters that path.
 
    After building, `assertBundleBoundaries` reads esbuild's `metafile` and fails the build if an entry reached something it must not (see the i18n section). Adding a new entry point without declaring its boundary in `ENTRY_BOUNDARIES` is itself an error.
 

@@ -45,7 +45,7 @@ the work from greenfield to typing and gap-filling:
 - **`stream-chat/i18n` subpath** — `Streami18n` (reactive via `StateStore`), three formatters,
   `getDateString`, catalog-generic type helpers, `TranslationBuilder` plumbing, generated language
   names, the shared notification key registry.
-- **`stream-chat/i18n/codegen` subpath** — the catalog generator, Node-only, with `typescript`
+- **`stream-chat/i18n/codegen` subpath** — the catalog generator, Node-only and ESM-only, with `typescript`
   injected rather than imported. Verified to reproduce both SDKs' real committed catalogs identically
   (React 634/634, RN 408/408 + 97 bundled).
 - **Scoped identifiers** — `CORE_NOTIFICATION_TYPE` / `CoreNotificationType` and

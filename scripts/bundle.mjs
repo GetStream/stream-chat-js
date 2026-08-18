@@ -178,9 +178,21 @@ const bundles = [
       'process.env.CLIENT_BUNDLE': JSON.stringify('browser-esm'),
     },
   },
-  // Build-time codegen: Node only, so no browser variant. Kept a separate entry so it never becomes
-  // reachable from `stream-chat/i18n`, which `assertBundleBoundaries` enforces.
-  ['cjs', 'esm'].map((format) => ({
+  // Build-time codegen: **ESM only, and Node only.**
+  //
+  // No browser variant because it reads the filesystem. No CJS variant because nothing needs one: it is
+  // invoked by a build script, never bundled and never loaded by a test runner. Both UI SDKs run it as
+  // `node scripts/generate-i18n-keys.mts`, and `.mts` is unambiguously ESM. The CJS flavours elsewhere
+  // in this file exist for React Native's Jest, which loads the *runtime* in CJS and does not transform
+  // `node_modules` — the generator never enters that path. Shipping a second flavour nothing exercises
+  // is worse than not shipping it.
+  //
+  // A CJS caller is still fine on `await import('stream-chat/i18n/codegen')`, and on plain `require()`
+  // from Node 20.19 / 22.12 onward.
+  //
+  // Kept a separate entry so it never becomes reachable from `stream-chat/i18n`, which
+  // `assertBundleBoundaries` enforces.
+  {
     entryPoints: {
       'i18n-codegen': resolve(__dirname, '../codegen/i18n/index.ts'),
     },
@@ -188,20 +200,13 @@ const bundles = [
     metafile: true,
     target: 'node18',
     platform: 'node',
-    format,
+    format: 'esm',
     external: nodeExternal,
     sourcemap: watchModeEnabled ? 'inline' : 'linked',
     define: { 'process.env.PKG_VERSION': JSON.stringify(version) },
-    ...(format === 'cjs'
-      ? {
-          entryNames: '[dir]/[name].node',
-          outdir: resolve(__dirname, '../dist/cjs'),
-        }
-      : {
-          outExtension: { '.js': '.mjs' },
-          outdir: resolve(__dirname, '../dist/esm'),
-        }),
-  })),
+    outExtension: { '.js': '.mjs' },
+    outdir: resolve(__dirname, '../dist/esm'),
+  },
 ].flat();
 
 if (watchModeEnabled) {

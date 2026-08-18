@@ -42,10 +42,6 @@
     },
     "./i18n/codegen": {
       "types": "./dist/types/i18n-codegen/index.d.ts",
-      "node": {
-        "import": "./dist/esm/i18n-codegen.mjs",
-        "require": "./dist/cjs/i18n-codegen.node.js"
-      },
       "default": "./dist/esm/i18n-codegen.mjs"
     },
     "./package.json": "./package.json"
