@@ -1,5 +1,16 @@
 import type { i18n as I18nInstance } from 'i18next';
 
+/**
+ * An i18next instance, as accepted by {@link TranslationTopic} and exposed as
+ * `Streami18n.i18nInstance`.
+ *
+ * Re-exported because it is part of this module's public surface: a consumer implementing a topic, or
+ * mocking one in a test, has to be able to name the type. Without this they would reach past
+ * `stream-chat` into `i18next` directly and have to declare it themselves — the same mistake the
+ * `moment-timezone` type leak was.
+ */
+export type { I18nInstance };
+
 import type { LooseTranslateFunction } from './types';
 
 /**
