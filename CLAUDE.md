@@ -19,6 +19,7 @@ Companion docs that apply to all agents: `AGENTS.md` (general agent rules) and `
 | Build (types + bundles)                 | `yarn build`                             |
 | Watch dev build                         | `yarn start`                             |
 | Typecheck only                          | `yarn types`                             |
+| Typecheck the build scripts only        | `yarn types:scripts`                     |
 | Lint (prettier + eslint, zero warnings) | `yarn lint`                              |
 | Auto-fix lint/format                    | `yarn lint-fix`                          |
 | Unit tests (Vitest)                     | `yarn test` (alias for `yarn test-unit`) |
@@ -34,18 +35,26 @@ Single test runs use Vitest's CLI directly: `yarn test-unit path/to/file.test.ts
 `yarn build` runs two things concurrently:
 
 1. `tsc` — emits **declarations only** (`emitDeclarationOnly: true`) to `dist/types`. `rootDir` is `src/`.
-2. `scripts/bundle.mjs` (esbuild) — produces bundles for **three entry points**:
+2. `scripts/bundle.mts` (esbuild) — produces bundles for **three entry points**:
    - `index` (the root): `dist/cjs/index.node.js` (Node CJS, externalizes deps + Node builtins), `dist/cjs/index.browser.js` (browser CJS), `dist/esm/index.mjs` (browser ESM)
    - `i18n` (`stream-chat/i18n`): the same three variants, `i18n.node.js` / `i18n.browser.js` / `i18n.mjs`
    - `i18n-codegen` (`stream-chat/i18n/codegen`), built from `codegen/i18n/`: **ESM only, Node only** — one artifact, `dist/esm/i18n-codegen.mjs`. No browser variant because it reads the filesystem; no CJS variant because nothing needs one (it is invoked by a build script, never bundled, never loaded by a test runner). The CJS flavours of the other two entries exist for React Native's Jest, which loads the _runtime_ in CJS; the generator never enters that path.
 
    After building, `assertBundleBoundaries` reads esbuild's `metafile` and fails the build if an entry reached something it must not (see the i18n section). Adding a new entry point without declaring its boundary in `ENTRY_BOUNDARIES` is itself an error.
 
-`package.json#exports` routes consumers to the right bundle by condition: `node` → node-cjs, `browser`/`react-native` → browser-cjs (require) or esm (import), default → esm. The `react-native` + `require` branch must stay pointed at CJS — React Native's Jest runs CJS with `customConditions: ["react-native"]` and does not transform `node_modules`, so an `.mjs` there is a syntax error across every RN suite that touches the module. `typesVersions` mirrors the subpaths for consumers still on `moduleResolution: "node"`. There is **no `package.json#browser` field** — it used to zero Node-only deps (`crypto`, `https`, `jsonwebtoken`, `ws`, `zlib`) for browser/RN builds, but the SDK no longer imports any of them (`src/index.ts` is platform-agnostic: global `WebSocket`, global `FormData`, global `atob`). `scripts/bundle.mjs` keeps a `browserIgnoreModules` hook, currently an empty array, for the day that changes. Prefer a platform global or a browser-safe dep over reintroducing a Node-only one.
+`package.json#exports` routes consumers to the right bundle by condition: `node` → node-cjs, `browser`/`react-native` → browser-cjs (require) or esm (import), default → esm. The `react-native` + `require` branch must stay pointed at CJS — React Native's Jest runs CJS with `customConditions: ["react-native"]` and does not transform `node_modules`, so an `.mjs` there is a syntax error across every RN suite that touches the module. `typesVersions` mirrors the subpaths for consumers still on `moduleResolution: "node"`. There is **no `package.json#browser` field** — it used to zero Node-only deps (`crypto`, `https`, `jsonwebtoken`, `ws`, `zlib`) for browser/RN builds, but the SDK no longer imports any of them (`src/index.ts` is platform-agnostic: global `WebSocket`, global `FormData`, global `atob`). `scripts/bundle.mts` keeps a `browserIgnoreModules` hook, currently an empty array, for the day that changes. Prefer a platform global or a browser-safe dep over reintroducing a Node-only one.
 
 esbuild `define` injects two compile-time constants: `process.env.PKG_VERSION` (read from `package.json`) and `process.env.CLIENT_BUNDLE` (one of `node-cjs`, `browser-cjs`, `browser-esm`). Both are consumed by `StreamChat.getUserAgent()` to produce a bundle-aware UA string. **`tsc`-only code paths do not get this substitution** — these env vars only resolve in the esbuild bundles, so don't gate runtime logic on them in code that callers might import directly via `src/`.
 
 `postinstall` installs husky hooks; `prepare` runs `yarn run build` (so consumers installing from a git ref get a built package).
+
+**The build scripts are `.mts`, run by `node` with no loader** — Node strips the types itself, which needs Node 22.6+ (`--experimental-strip-types`) or 23.6+/24 where it is on by default. That is fine for this repo and CI (both `.nvmrc`-pinned to 24), but note it narrows the `prepare` path: a **git-ref** install on a Node older than that cannot build, even though `engines.node` still says `>=18`. Registry installs are unaffected — they get the prebuilt `dist/`.
+
+Three separate things cover `scripts/`, and each was scoped to miss it at some point:
+
+- **Types:** `tsconfig.scripts.json`, run by `yarn types:scripts` and folded into `yarn types`. Without it `.mts` annotations are stripped but never checked, which is worse than the JSDoc `@type` comments they replaced.
+- **Format:** the `yarn prettier` glob had to gain `mts` — it listed `js,mjs,ts` only, so every `.mts` in the repo silently escaped the format gate.
+- **Lint:** `scripts/` is **still not linted.** `eslint.config.mjs` scopes every rule block to `src/**` and `codegen/**`. Widening it is a worthwhile follow-up; be aware the rules have never run there.
 
 ## Architecture
 
@@ -135,7 +144,7 @@ SDKs carried ~1,300 lines of near-duplicate runtime plus a duplicated codegen. S
 `specs/i18n-to-core/` for the initiative and `v9-to-v10-migration-guide-i18n.md` for the consumer delta.
 
 **Three entry points, and the boundaries between them are enforced by the build.** `src/index.ts` must
-**never** `export * from './i18n'` — that is the one reflex to resist. `scripts/bundle.mjs` asserts from
+**never** `export * from './i18n'` — that is the one reflex to resist. `scripts/bundle.mts` asserts from
 esbuild's metafile that the root bundle cannot reach `src/i18n/`, `i18next` or `dayjs`, and that
 `src/i18n/` cannot reach the Node-only `codegen/`. Both leaks fail invisibly (everything works, the
 bundle is just bigger), which is why they are machine-checked. `dist/esm/index.mjs` is expected to stay

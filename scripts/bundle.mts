@@ -13,21 +13,24 @@ const watchModeEnabled = process.argv.includes('--watch') || process.argv.includ
 
 const version = getPackageVersion();
 
-const modules = Object.keys({
-  ...packageJson.dependencies,
-  ...packageJson.peerDependencies,
-});
+const { dependencies = {}, peerDependencies = {} } = packageJson as {
+  dependencies?: Record<string, string>;
+  // There are none today. Kept in the spread so that adding one externalizes it automatically rather
+  // than silently bundling it — `tsc` rejected reading the absent field, which is how this surfaced.
+  peerDependencies?: Record<string, string>;
+};
+
+const modules = Object.keys({ ...dependencies, ...peerDependencies });
 
 // do not externalize modules that are ignored in browser field
 // externalizing them will cause esbuild to not replace the imports
 // in the bundles
-const browserIgnoreModules = []; // Object.keys(packageJson.browser);
+const browserIgnoreModules: string[] = []; // Object.keys(packageJson.browser);
 const browserExternal = modules.filter(
   (module) => !browserIgnoreModules.includes(module),
 );
 const nodeExternal = [...modules, ...builtinModules];
 
-/** @type esbuild.BuildOptions */
 const commonBuildOptions = {
   // Name-keyed so `[name]` stays stable per entry. `i18n` is a separate entry point on purpose: it
   // pulls in i18next and dayjs, and keeping those out of the root bundle is the whole reason
@@ -43,20 +46,33 @@ const commonBuildOptions = {
   define: {
     'process.env.PKG_VERSION': JSON.stringify(version),
   },
-};
+  // `satisfies` rather than a `: esbuild.BuildOptions` annotation. The annotation would widen every
+  // field to its optional declared type, so `...commonBuildOptions.define` below would spread a
+  // possibly-`undefined` value and stop typechecking. This checks the literal against `BuildOptions`
+  // while keeping its exact shape.
+} satisfies esbuild.BuildOptions;
 
 /** Dependencies that must never be reachable from the root bundle. */
 const I18N_ONLY_DEPENDENCIES = ['i18next', 'dayjs'];
+
+/** The generator's source, which lives outside `src/`. */
+const CODEGEN_SOURCES = /(^|\/)codegen\//;
+
+type EntryBoundary = {
+  /** Suffix-matched against esbuild's `entryPoint`. */
+  entry: string;
+  /** Bare module specifiers this entry must not import, matched exactly or as a subpath prefix. */
+  forbiddenDeps: string[];
+  /** Input paths this entry must not reach. `null` means no restriction. */
+  forbiddenSources: RegExp | null;
+};
 
 /**
  * What each entry point is forbidden from reaching. Keyed on the entry explicitly rather than by
  * elimination, so a new entry gets no rule by accident (and the codegen entry is not told off for
  * reaching its own source).
  */
-/** The generator's source, which now lives outside `src/`. */
-const CODEGEN_SOURCES = /(^|\/)codegen\//;
-
-const ENTRY_BOUNDARIES = [
+const ENTRY_BOUNDARIES: EntryBoundary[] = [
   {
     // The root bundle: no i18n at all, and none of its dependencies.
     entry: 'src/index.ts',
@@ -94,19 +110,19 @@ const ENTRY_BOUNDARIES = [
  * library tsconfig — an import from `src/i18n/` fails at `tsc` first, with a better error. This stays
  * as the backstop for a deliberate `require`, which `tsc` would not see.
  */
-const assertBundleBoundaries = (metafile) => {
-  const failures = [];
+const assertBundleBoundaries = (metafile: esbuild.Metafile) => {
+  const failures: string[] = [];
 
   for (const [outputFile, output] of Object.entries(metafile.outputs)) {
-    if (!output.entryPoint) continue;
+    const { entryPoint } = output;
+    if (!entryPoint) continue;
 
-    const boundary = ENTRY_BOUNDARIES.find(({ entry }) =>
-      output.entryPoint.endsWith(entry),
-    );
+    // Hoisted out of `output` because a narrowing does not survive into the callback below.
+    const boundary = ENTRY_BOUNDARIES.find(({ entry }) => entryPoint.endsWith(entry));
     if (!boundary) {
       failures.push(
-        `${outputFile} (entry ${output.entryPoint}) has no declared boundary — add one to ` +
-          `ENTRY_BOUNDARIES in scripts/bundle.mjs.`,
+        `${outputFile} (entry ${entryPoint}) has no declared boundary — add one to ` +
+          `ENTRY_BOUNDARIES in scripts/bundle.mts.`,
       );
       continue;
     }
@@ -116,8 +132,9 @@ const assertBundleBoundaries = (metafile) => {
       sources: boundary.forbiddenSources,
     };
 
-    const leakedSources = forbidden.sources
-      ? Object.keys(output.inputs).filter((input) => forbidden.sources.test(input))
+    const { sources: forbiddenSources } = forbidden;
+    const leakedSources = forbiddenSources
+      ? Object.keys(output.inputs).filter((input) => forbiddenSources.test(input))
       : [];
     const leakedDeps = (output.imports ?? [])
       .map(({ path }) => path)
@@ -127,7 +144,7 @@ const assertBundleBoundaries = (metafile) => {
 
     if (leakedSources.length || leakedDeps.length) {
       failures.push(
-        `${outputFile} (entry ${output.entryPoint}) must not reach: ` +
+        `${outputFile} (entry ${entryPoint}) must not reach: ` +
           [...new Set([...leakedSources, ...leakedDeps])].join(', '),
       );
     }
@@ -152,18 +169,20 @@ const assertBundleBoundaries = (metafile) => {
 // nice for import not to break on server).
 const bundles = [
   // CJS (browser & Node)
-  ['browser', 'node'].map((platform) => ({
-    ...commonBuildOptions,
-    format: 'cjs',
-    external: platform === 'browser' ? browserExternal : nodeExternal,
-    entryNames: `[dir]/[name].${platform}`,
-    outdir: resolve(__dirname, '../dist/cjs'),
-    platform,
-    define: {
-      ...commonBuildOptions.define,
-      'process.env.CLIENT_BUNDLE': JSON.stringify(`${platform}-cjs`),
-    },
-  })),
+  (['browser', 'node'] as const).map(
+    (platform): esbuild.BuildOptions => ({
+      ...commonBuildOptions,
+      format: 'cjs',
+      external: platform === 'browser' ? browserExternal : nodeExternal,
+      entryNames: `[dir]/[name].${platform}`,
+      outdir: resolve(__dirname, '../dist/cjs'),
+      platform,
+      define: {
+        ...commonBuildOptions.define,
+        'process.env.CLIENT_BUNDLE': JSON.stringify(`${platform}-cjs`),
+      },
+    }),
+  ),
   // ESM (browser only)
   {
     ...commonBuildOptions,
@@ -177,7 +196,7 @@ const bundles = [
       ...commonBuildOptions.define,
       'process.env.CLIENT_BUNDLE': JSON.stringify('browser-esm'),
     },
-  },
+  } satisfies esbuild.BuildOptions,
   // Build-time codegen: **ESM only, and Node only.**
   //
   // No browser variant because it reads the filesystem. No CJS variant because nothing needs one: it is
@@ -198,7 +217,7 @@ const bundles = [
     },
     bundle: true,
     metafile: true,
-    target: 'node18',
+    target: 'es2022',
     platform: 'node',
     format: 'esm',
     external: nodeExternal,
@@ -206,7 +225,7 @@ const bundles = [
     define: { 'process.env.PKG_VERSION': JSON.stringify(version) },
     outExtension: { '.js': '.mjs' },
     outdir: resolve(__dirname, '../dist/esm'),
-  },
+  } satisfies esbuild.BuildOptions,
 ].flat();
 
 if (watchModeEnabled) {
