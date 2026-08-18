@@ -54,7 +54,7 @@ Three separate things cover `scripts/`, and each was scoped to miss it at some p
 
 - **Types:** `tsconfig.scripts.json`, run by `yarn types:scripts` and folded into `yarn types`. Without it `.mts` annotations are stripped but never checked, which is worse than the JSDoc `@type` comments they replaced.
 - **Format:** the `yarn prettier` glob had to gain `mts` — it listed `js,mjs,ts` only, so every `.mts` in the repo silently escaped the format gate.
-- **Lint:** `scripts/` is **still not linted.** `eslint.config.mjs` scopes every rule block to `src/**` and `codegen/**`. Widening it is a worthwhile follow-up; be aware the rules have never run there.
+- **Lint:** `eslint.config.mjs`'s rule blocks list `scripts/**/*.mts` alongside `src/**` and `codegen/**`. Turning this on found `generate-filter-types.mts` importing `yaml` while nothing declared it — it resolved only because `lint-staged` happens to depend on it. `.lintstagedrc.json` has its **own** globs, which also omitted `mts`; both are widened, and note the eslint entry runs with `--max-warnings 0`, so a file matching no config block fails the hook with "no matching configuration was supplied" rather than passing silently.
 
 ## Architecture
 

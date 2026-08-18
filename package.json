@@ -104,7 +104,8 @@
     "sinon": "^12.0.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.4",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "yaml": "^2.8.4"
   },
   "scripts": {
     "build": "rm -rf dist && concurrently 'tsc' 'tsc -p tsconfig.codegen.json' './scripts/bundle.mts'",

@@ -7323,6 +7323,7 @@ __metadata:
     typescript: "npm:^6.0.3"
     typescript-eslint: "npm:^8.59.4"
     vitest: "npm:^4.1.10"
+    yaml: "npm:^2.8.4"
   dependenciesMeta:
     esbuild:
       built: true
