@@ -488,18 +488,6 @@ export type ConnectedEvent = {
   connection_id: string;
   created_at: Date;
   me: OwnUserResponse;
-  /**
-   * Duplicates the mute and unread fields already present on `me`. Prefer `me`: it is
-   * the same shape the v1 `health.check` carries, and unlike `chat` it is decoded.
-   */
-  chat?: {
-    mutes: UserMuteResponse[] | null;
-    channel_mutes: ChannelMute[] | null;
-    total_unread_count: number;
-    unread_channels: number;
-    unread_threads: number;
-    latest_hidden_channels?: string[] | null;
-  } | null;
   received_at?: Date;
 };
 

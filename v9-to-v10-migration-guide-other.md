@@ -126,7 +126,6 @@ type ConnectedEvent = {
   connection_id: string;
   created_at: Date;
   me: OwnUserResponse;
-  chat?: { /* duplicates the mute + unread fields on `me`; prefer `me` */ } | null;
   received_at?: Date;
 };
 
