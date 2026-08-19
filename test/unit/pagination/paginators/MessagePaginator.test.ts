@@ -32,6 +32,9 @@ describe('MessagePaginator', () => {
       getReplies: vi.fn(),
       query: vi.fn(),
     } as unknown as Channel;
+    // The paginator calls `channel.getClient().getReplies(...)`; point that at the same spy so
+    // the assertions below keep reading `channel.getReplies`.
+    (channel as unknown as { getClient: () => unknown }).getClient = () => channel;
     itemIndex = new StoreBackedItemIndex<LocalMessage>({
       getEntityId: (message) => message.id,
     });
@@ -435,6 +438,7 @@ describe('MessagePaginator', () => {
       (channel as unknown as { getClient: () => unknown }).getClient = () => ({
         user: undefined,
         notifications: { addError: () => {} },
+        getReplies: channel.getReplies,
       });
       (channel.query as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
         messages: [
@@ -468,6 +472,7 @@ describe('MessagePaginator', () => {
       (channel as unknown as { getClient: () => unknown }).getClient = () => ({
         user: undefined,
         notifications: { addError: () => {} },
+        getReplies: channel.getReplies,
       });
       (channel.query as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
         messages: [
@@ -540,6 +545,7 @@ describe('MessagePaginator', () => {
       // postQueryReconcile reads the client to take an unread snapshot; no user => snapshot skipped.
       (channel as unknown as { getClient: () => unknown }).getClient = () => ({
         user: undefined,
+        getReplies: channel.getReplies,
       });
       // No newer messages exist on the server → the headward query returns an empty page.
       (channel.getReplies as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -1126,6 +1132,7 @@ describe('MessagePaginator', () => {
     beforeEach(() => {
       (channel as unknown as { getClient: () => unknown }).getClient = () => ({
         userID: currentUserId,
+        getReplies: channel.getReplies,
       });
     });
 
@@ -1387,6 +1394,7 @@ describe('MessagePaginator', () => {
       // First-page reconcile reads the client for the unread snapshot; no user => snapshot skipped.
       (channel as unknown as { getClient: () => unknown }).getClient = () => ({
         user: undefined,
+        getReplies: channel.getReplies,
       });
       const paginator = new MessagePaginator({ channel, itemIndex });
       // Fewer messages than the requested page size => dataset edges reached both ways.
@@ -1400,6 +1408,7 @@ describe('MessagePaginator', () => {
     it('seeds an around/jump open as a middle window, not the head', () => {
       (channel as unknown as { getClient: () => unknown }).getClient = () => ({
         user: undefined,
+        getReplies: channel.getReplies,
       });
       const paginator = new MessagePaginator({ channel, itemIndex });
       // A full page centered on m6: messages exist on both sides beyond this window, so the
@@ -2750,11 +2759,12 @@ describe('MessagePaginator', () => {
 
     it('mirrors reconciled ghosts into the offline DB via the DB batch API (LLC-owned)', () => {
       const hardDeleteMessages = vi.fn().mockResolvedValue([]);
+      const getReplies = vi.fn();
       const channelWithOfflineDb = {
         cid: 'channel-id',
-        getReplies: vi.fn(),
+        getReplies,
         query: vi.fn(),
-        getClient: () => ({ offlineDb: { hardDeleteMessages } }),
+        getClient: () => ({ offlineDb: { hardDeleteMessages }, getReplies }),
       } as unknown as Channel;
       const paginator = new MessagePaginator({
         channel: channelWithOfflineDb,
@@ -2800,11 +2810,12 @@ describe('MessagePaginator', () => {
 
     // The plain-seed branch runs seedUnreadSnapshot (reads getClient().user); give the channel a
     // benign client with no current user so it no-ops instead of throwing on the bare mock.
+    const reconcileGetReplies = vi.fn();
     const reconcileChannel = {
       cid: 'channel-id',
-      getReplies: vi.fn(),
+      getReplies: reconcileGetReplies,
       query: vi.fn(),
-      getClient: () => ({ user: undefined }),
+      getClient: () => ({ user: undefined, getReplies: reconcileGetReplies }),
     } as unknown as Channel;
 
     const makePaginator = () =>

@@ -734,9 +734,9 @@ describe('Threads 2.0', () => {
 
           const older = makeReply({ created_at: '2020-01-02T00:00:00.000Z' });
           const getRepliesStub = sinon
-            .stub(thread.channel, 'getReplies')
+            .stub(thread.channel.getClient(), 'getReplies')
             .resolves({ messages: [older], duration: '' } as unknown as ReturnType<
-              Channel['getReplies']
+              StreamChat['getReplies']
             >);
 
           await thread.messagePaginator.toTail();
@@ -755,9 +755,9 @@ describe('Threads 2.0', () => {
 
           const older = makeReply({ created_at: '2020-01-02T00:00:00.000Z' });
           sinon
-            .stub(thread.channel, 'getReplies')
+            .stub(thread.channel.getClient(), 'getReplies')
             .resolves({ messages: [older], duration: '' } as unknown as ReturnType<
-              Channel['getReplies']
+              StreamChat['getReplies']
             >);
 
           await thread.messagePaginator.toTail();

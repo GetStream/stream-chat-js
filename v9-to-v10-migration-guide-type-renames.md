@@ -292,6 +292,10 @@ const payload: MessageRequest = { id, text }; // `type: 'reply'` is now a compil
 
 `MessageComposerMiddlewareState.message` is now `MessageRequest` rather than `MessageRequest | UpdatedMessage`. Custom composer middleware that annotated the union should drop the `UpdatedMessage` arm.
 
+### `PartialThreadUpdate` removed
+
+`PartialThreadUpdate` (`{ set?: Partial<Record<string, unknown>>; unset?: Array<string> }`) went with `client.partialUpdateThread`. Use the generated `UpdateThreadPartialRequest`, which is the same `set` / `unset` pair plus the required `message_id`. See [redundant guards and pass-throughs](./v9-to-v10-migration-guide-methods.md#removed-after-1000-rc4--redundant-guards-and-pass-throughs).
+
 ## Verification
 
 After applying the renames, `yarn types` should pass. If a call site errors with `Cannot find name 'X'` where X is one of the v9 names in the left column, the rewrite is incomplete.

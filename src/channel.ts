@@ -555,18 +555,6 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Queries messages.
-   *
-   * @param ...args - `[request, requestOptions]`. The optional `request.payload` accepts
-   *   MongoDB-style filters and additional options such as `user_id`. `requestOptions` carries
-   *   per-request options such as an abort `signal` and is never serialized into the request.
-   * @returns The search messages response.
-   */
-  async search(...args: Parameters<ChatApi['search']>) {
-    return await this.getClient().search(...args);
-  }
-
-  /**
    * Queries members.
    *
    * @param request - The query members request payload (optional). The inner `payload` accepts
@@ -1147,9 +1135,6 @@ export class Channel extends ChannelApi {
     requestOptions?: StreamRequestOptions,
   ) {
     this._checkInitialized();
-    if (!messageId) {
-      throw Error(`Message ID is missing`);
-    }
     return this.getClient().runMessageAction(
       {
         id: messageId,
@@ -1499,36 +1484,6 @@ export class Channel extends ChannelApi {
     logger.withExtraTags('stopWatching', this.cid).info('Stopped watching the channel.');
 
     return response;
-  }
-
-  /**
-   * List the message replies for a parent message.
-   *
-   * The recommended way of working with threads is to use the `Thread` class.
-   *
-   * @param ...args - `[request, requestOptions]`. `request` holds the parent message ID, pagination
-   *   params, and optional sort directions for `created_at`; `requestOptions` carries per-request
-   *   options such as an abort `signal` and is never serialized into the request.
-   * @returns A response with a list of messages.
-   */
-  async getReplies(...args: Parameters<ChatApi['getReplies']>) {
-    const data = await this.getClient().getReplies(...args);
-
-    // Thread reply state is owned by the Thread object (Thread.messagePaginator); the returned
-    // replies are consumed there. The channel message list is owned by channel.messagePaginator.
-    return data;
-  }
-
-  /**
-   * List the reactions; supports pagination.
-   *
-   * @param ...args - `[request, requestOptions]`. `request` holds the target message ID and
-   *   pagination options (`limit`, `offset`); `requestOptions` carries per-request options such as
-   *   an abort `signal` and is never serialized into the request.
-   * @returns The server response.
-   */
-  getReactions(...args: Parameters<ChatApi['getReactions']>) {
-    return this.getClient().getReactions(...args);
   }
 
   /**

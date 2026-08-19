@@ -117,12 +117,6 @@ export type LocalMessage = MessageResponse & {
   user_id?: string;
 };
 
-// TODO: Figure out a way to strongly type set and unset.
-export type PartialThreadUpdate = {
-  set?: Partial<Record<string, unknown>>;
-  unset?: Array<string>;
-};
-
 export type GetThreadOptions = Omit<Parameters<ChatApi['getThread']>[0], 'message_id'>;
 
 export type MuteUserResponse = APIResponse & {

@@ -1358,6 +1358,40 @@ type CustomMarkReadRequestFn = (
 
 The `Partial<>` is deliberate: it lets a handler return just `{ event }` without fabricating a `duration`, and it means a handler can delegate straight to the SDK — `markReadRequest: ({ channel, options }) => channel.markRead(options)` — which the `rc` signature rejected because `MarkReadResponse.event` is optional. `CustomThreadMarkReadRequestFn` takes `{ thread, options? }` instead of `{ channel, options? }` and additionally permits a `void` return.
 
+## Removed after `10.0.0-rc.4` — redundant guards and pass-throughs
+
+Skip this section if you are upgrading from v9 only in the sense that these methods still existed in `10.0.0-rc.4`; if you are on v9 they are simply gone in v10 final. Each was either a method whose entire body forwarded to another one, or a runtime check that restated something the type system already enforces.
+
+### `StreamChat`
+
+- **`client.queryBannedUsers(...)` — REMOVED.** Its whole body was `return await super.queryBannedUsers(...args)`; it was not even marked `override`. The inherited `ChatApi.queryBannedUsers` is unchanged, so **no call-site change is needed** — you were already reaching this implementation.
+
+- **`client.partialUpdateThread(messageId, partialThreadObject, requestOptions?)` — REMOVED.** Use the inherited `client.updateThreadPartial({ message_id, set, unset }, requestOptions?)`.
+
+  ```ts
+  // before
+  await client.partialUpdateThread(messageId, { set: { custom_field: 1 } });
+
+  // after
+  await client.updateThreadPartial({ message_id: messageId, set: { custom_field: 1 } });
+  ```
+
+  Two behaviour changes come with it:
+  1. **The reserved-field guard is gone.** It threw synchronously for keys in a hardcoded list, and that list had drifted from `ThreadResponse` in both directions: it rejected `id`, `type`, `user` and `participants` (none of which are fields on `ThreadResponse`, so legitimate custom fields with those names were blocked) while letting through `parent_message_id`, `channel_cid`, `created_by_user_id`, `thread_participants`, `reply_count`, `participant_count`, `active_participant_count` and `deleted_at`, all of which _are_ server-owned. The server rejects what it owns; the client no longer guesses. **A rejected write now surfaces as a rejected promise rather than a synchronous `throw`** — adjust any `try`/`catch` that wrapped the call expecting the latter.
+  2. **The empty-`messageId` check is gone.** `message_id` is a required field on `UpdateThreadPartialRequest`, so this is a compile error instead.
+
+  The `PartialThreadUpdate` type is removed with the method — `UpdateThreadPartialRequest` is its replacement.
+
+### `Channel`
+
+- **`channel.search(...)` — REMOVED.** Use `client.search(...)`. The removed method forwarded straight to `client.search()` **without scoping the query to the channel**, so despite the name it searched every channel the user could see. If you were relying on that behaviour, `client.search()` is the same call. If you assumed it was channel-scoped, add the scope to your filter explicitly — that is a real bug fix in your integration, not a regression.
+
+- **`channel.getReplies(...)` — REMOVED.** Use `client.getReplies(...)`. Pure forward; the removed method's own comment noted it did nothing with the result.
+
+- **`channel.getReactions(...)` — REMOVED.** Use `client.getReactions(...)`. Pure forward.
+
+- **`channel.sendAction(messageId, formData, requestOptions?)` — KEPT**, but its `if (!messageId) throw Error('Message ID is missing')` guard is gone. `runMessageAction` requires `id: string`, so an empty id is a compile error; a runtime empty string reaches the server and is rejected there.
+
 ## Logging (applies to every class)
 
 `options.logger` (function) and `client.logger(level, msg, extra?)` are gone. To capture logs in v10, configure the shared `chatLoggerSystem` before constructing the client:

@@ -421,7 +421,7 @@ export class MessageIntervalPaginator extends BasePaginator<
           : undefined;
     } else {
       const { messages } = this.parentMessageId
-        ? await this.channel.getReplies({
+        ? await this.channel.getClient().getReplies({
             parent_id: this.parentMessageId,
             ...options,
             sort: this.requestSort,
@@ -812,7 +812,9 @@ export class MessageIntervalPaginator extends BasePaginator<
   private async hasMessagesOlderThan(id: string): Promise<boolean> {
     const pagination = { limit: 1, id_lt: id } as MessagePaginationParams;
     const { messages } = this.parentMessageId
-      ? await this.channel.getReplies({ parent_id: this.parentMessageId, ...pagination })
+      ? await this.channel
+          .getClient()
+          .getReplies({ parent_id: this.parentMessageId, ...pagination })
       : await this.channel.query({ messages: pagination });
     return Array.isArray(messages) && messages.length > 0;
   }

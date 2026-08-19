@@ -45,7 +45,6 @@ import type {
   MuteUserResponse,
   OwnUserResponse,
   PartializeAllBut,
-  PartialThreadUpdate,
   QueryChannelsRequest,
   QueryChannelsResponse,
   QueryReactionsRequestWithId,
@@ -1219,21 +1218,6 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Queries user bans.
-   *
-   * @param ...args - `[request, requestOptions]`. The optional `request.payload` accepts
-   *   MongoDB-style filter conditions, sort directions
-   *   (e.g. `[{ field: 'created_at', direction: 1 }]`), and options such as `limit`, `offset`,
-   *   and `exclude_expired_bans`. `requestOptions` carries per-request options such as an abort
-   *   `signal` and is never serialized into the request.
-   * @returns The ban query response.
-   */
-  async queryBannedUsers(...args: Parameters<ChatApi['queryBannedUsers']>) {
-    // Return a list of user bans
-    return await super.queryBannedUsers(...args);
-  }
-
-  /**
    * Queries channels and returns the full API response including top-level metadata such as
    * `predefined_filter`.
    *
@@ -2172,56 +2156,6 @@ export class StreamChat extends ChatApi {
     );
 
     return new Thread({ client: this, threadData: response.thread });
-  }
-
-  /**
-   * Updates the given thread.
-   *
-   * @param messageId - The ID of the thread message which needs to be updated.
-   * @param partialThreadObject - Should contain `set` or `unset` params for any of the thread's non-reserved fields.
-   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
-   *   into the request (optional).
-   * @returns The updated thread.
-   */
-  async partialUpdateThread(
-    messageId: string,
-    partialThreadObject: PartialThreadUpdate,
-    requestOptions?: StreamRequestOptions,
-  ) {
-    if (!messageId) {
-      throw Error('Please specify the message id when calling partialUpdateThread');
-    }
-
-    // check for reserved fields from ThreadResponse type within partialThreadObject's set and unset.
-    // Throw error if any of the reserved field is found.
-    const reservedThreadFields = [
-      'created_at',
-      'id',
-      'last_message_at',
-      'type',
-      'updated_at',
-      'user',
-      'reply_count',
-      'participants',
-      'channel',
-      'custom',
-    ];
-
-    for (const key in { ...partialThreadObject.set, ...partialThreadObject.unset }) {
-      if (reservedThreadFields.includes(key)) {
-        throw Error(
-          `You cannot set ${key} field on Thread object. ${key} is reserved for server-side use. Please omit ${key} from your set object.`,
-        );
-      }
-    }
-
-    return await this.updateThreadPartial(
-      {
-        message_id: messageId,
-        ...partialThreadObject,
-      },
-      requestOptions,
-    );
   }
 
   getUserAgent = (): string => {
