@@ -84,11 +84,11 @@ import { InstanceConfigurationService } from './configuration/InstanceConfigurat
 import { StateStore } from './store';
 import type {
   ConnectUserDetailsRequest,
+  FileUploadRequest,
   GetApplicationResponse as Gen_GetApplicationResponse,
   MarkDeliveredRequest as Gen_MarkDeliveredRequest,
-  WSAuthMessage,
-  FileUploadRequest,
   ImageUploadRequest,
+  WSAuthMessage,
   WSEvent,
 } from './gen/models';
 import { ChatApi } from './gen-imports';
