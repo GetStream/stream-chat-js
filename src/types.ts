@@ -369,7 +369,6 @@ export type StreamChatOptions = {
    */
   baseURL?: string;
   browser?: boolean;
-  device?: BaseDeviceFields;
   /**
    * Disables the hydration of all caches within the JS Client. This includes this.activeChannels,
    * this.polls.pollCache and this.config.
@@ -386,8 +385,6 @@ export type StreamChatOptions = {
    * `channel.markReadLocally()`. It is never sent to the backend, but is persisted to the offline DB.
    */
   isLocalUnreadCountEnabled?: boolean;
-  /** experimental feature, please contact support if you want this feature enabled for you */
-  enableWSFallback?: boolean;
   /**
    * Custom notification manager service to use for the client.
    * If not provided, a default notification manager will be created.
@@ -458,7 +455,6 @@ type LocalEvent = (
         isLatestMessageSet: boolean;
       };
     })
-  | ({ type: 'transport.changed' } & { mode: string })
   | ({ type: 'connection.changed' } & { online: boolean })
   | { type: 'connection.recovered' }
   | ({ type: 'offline_reactions.queried' } & {
@@ -479,7 +475,23 @@ type LocalEvent = (
     })
 ) & { received_at?: Date };
 
-export type Event = WSEvent | LocalEvent | keyof CustomEventTypes;
+/**
+ * The hello event of the `/api/v2/connect` WebSocket endpoint, sent once the auth frame
+ * has been accepted. The v1 endpoint used `health.check` for this instead.
+ *
+ * Hand-written because the event is not published in the OpenAPI spec, so it cannot
+ * come from `src/gen`. Remove this — along with the `decodeConnectionEvent` shim in
+ * `connection.ts` — once the backend adds it to the spec and `src/gen` is regenerated.
+ */
+export type ConnectedEvent = {
+  type: 'connection.ok';
+  connection_id: string;
+  created_at: Date;
+  me: OwnUserResponse;
+  received_at?: Date;
+};
+
+export type Event = WSEvent | ConnectedEvent | LocalEvent | keyof CustomEventTypes;
 export type EventType = Event['type'] | 'all';
 
 export type EventHandler<T = string> = (event: Extract<Event, { type: T }>) => void;
@@ -670,7 +682,7 @@ export type CommandVariants =
 
 export type Configs = Record<string, ChannelConfigWithInfo | undefined>;
 
-export type ConnectionOpen = EventPayload<'health.check'>;
+export type ConnectionOpen = EventPayload<'health.check'> | EventPayload<'connection.ok'>;
 
 export type Device = DeviceFields & {
   provider?: string;

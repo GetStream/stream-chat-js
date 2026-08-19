@@ -503,9 +503,37 @@ Unchanged signature: `partialUpdateThread(messageId, partialThreadObject)`.
 
 Unchanged.
 
-#### `client.setLocalDevice` / `client.setBaseURL` / `client.setUserAgent` / `client.getUserAgent`
+#### `client.setBaseURL` / `client.setUserAgent` / `client.getUserAgent`
 
 Unchanged. `setUserAgent` is still marked `@deprecated` — prefer setting `sdkIdentifier`.
+
+#### `client.setLocalDevice`
+
+**Removed**, along with the `device` client option it wrote to (see
+[client construction](./v9-to-v10-migration-guide-client-construction.md#removed-options)).
+
+In v9 the device was serialized into the WebSocket connect payload and registered as a side
+effect of connecting. The v2 connect endpoint's auth message has no `device` field, so that
+side effect no longer exists and the method had nothing left to do.
+
+Register push devices explicitly instead. This also works at any point in the connection
+lifecycle — notably on push-token refresh, which a connect-time hook never covered:
+
+```diff
+- client.setLocalDevice({ id: pushToken, push_provider: 'firebase', push_provider_name: 'rn-fcm' });
+- await client.connectUser(user, token);
++ await client.connectUser(user, token);
++ await client.createDevice({
++   id: pushToken,
++   push_provider: 'firebase',
++   push_provider_name: 'rn-fcm',
++ });
+```
+
+This mechanism was undocumented and no Stream SDK used it — the React Native, React and Angular
+SDKs all register devices explicitly in application code — so most integrations need no change.
+Note that the v9 client-side `addDevice(id, provider, userId, providerName)` was itself renamed
+to `createDevice({ ... })` in v10; see [`client.addDevice` / `client.getDevices` / `client.removeDevice`](#clientadddevice--clientgetdevices--clientremovedevice).
 
 #### `client.setOfflineDBApi` / `client.setMessageComposerSetupFunction`
 
@@ -1344,4 +1372,4 @@ chatLoggerSystem.configureLoggers({
 });
 ```
 
-Class-internal call sites use scoped loggers such as `chatLoggerSystem.getLogger('client')`, `'channel'`, `'connection'`, `'api-client'`, `'thread'`, `'thread-manager'`, `'upload-manager'`, `'offline-db'`, `'state-store'`, `'token-manager'`, `'message-composer'`, `'text-composer'`, `'utils'`, `'channel-manager'`, `'connection-fallback'`. See `v9-to-v10-migration-guide-logging.md` for the full logging system reference.
+Class-internal call sites use scoped loggers such as `chatLoggerSystem.getLogger('client')`, `'channel'`, `'connection'`, `'api-client'`, `'thread'`, `'thread-manager'`, `'upload-manager'`, `'offline-db'`, `'state-store'`, `'token-manager'`, `'message-composer'`, `'text-composer'`, `'utils'`, `'channel-manager'`. See `v9-to-v10-migration-guide-logging.md` for the full logging system reference.

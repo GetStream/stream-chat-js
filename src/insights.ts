@@ -66,7 +66,6 @@ function buildWsBaseInsight(connection: StableWSConnection) {
     token: client.tokenManager.token,
     user_id: client.userId,
     user_details: client._user,
-    device: client.options.device,
     client_id: connection.connectionID,
     ws_details: connection.ws,
     ws_consecutive_failures: client.insightMetrics.wsConsecutiveFailures,

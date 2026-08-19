@@ -150,13 +150,37 @@ client.axiosInstance.defaults.paramsSerializer; // === axiosParamsSerializer (NO
 
 If you relied on a custom serializer, file an issue — there is no supported way to change this in v10.
 
+### Removed options
+
+Two options were dropped in v10. Both are silent no-ops if left in place — TypeScript will flag
+them, but a plain-JS call site will not error, so remove them explicitly.
+
+| Option             | Replacement                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `device`           | Call [`client.createDevice({ id, push_provider, push_provider_name? })`](./v9-to-v10-migration-guide-methods.md#clientsetlocaldevice) after connecting. |
+| `enableWSFallback` | None — see [long-poll fallback removed](./v9-to-v10-migration-guide-other.md#long-poll-fallback-removed).                                               |
+
+```diff
+  const client = new StreamChat(API_KEY, {
+-   device: { id: pushToken, push_provider: 'firebase' },
+-   enableWSFallback: true,
+  });
++ await client.createDevice({ id: pushToken, push_provider: 'firebase' });
+```
+
+`device` existed to have the device serialized into the WebSocket connect payload, where the
+server registered it as a side effect of connecting. The v2 connect endpoint's auth message has
+no `device` field, so the option had no remaining effect. It was undocumented and unused by every
+Stream SDK, so most integrations are unaffected. `client.setLocalDevice()`, the setter for this
+option, was removed with it.
+
 ## Unchanged behavior worth confirming
 
 These are intentionally listed so agents don't "fix" them during migration:
 
 - `new StreamChat(key)` still works with no options.
 - `StreamChat.getInstance(key)` still returns the same cached instance on repeated calls and ignores the `key`/`options` of subsequent calls.
-- All non-axios options are unchanged: `allowServerSideConnect`, `baseURL`, `browser`, `device`, `disableCache`, `enableInsights`, `enableWSFallback`, `notifications`, `persistUserOnConnectionFailure`, `recoverStateOnReconnect`, `warmUp`, `wsConnection`, `wsUrlParams`. One option is **new**: `WebSocketImpl?: typeof WebSocket`, which overrides the constructor `StableWSConnection` instantiates. It exists because v10 dropped the `isomorphic-ws` / `ws` dependency in favor of the platform's global `WebSocket`; it is meant for test doubles, and for node runtimes older than 22 that have no global `WebSocket` — see [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md#running-the-ws-client-under-node). Browser and React-Native apps should leave it unset.
+- All remaining non-axios options are unchanged: `allowServerSideConnect`, `baseURL`, `browser`, `disableCache`, `enableInsights`, `notifications`, `persistUserOnConnectionFailure`, `recoverStateOnReconnect`, `warmUp`, `wsConnection`, `wsUrlParams`. One option is **new**: `WebSocketImpl?: typeof WebSocket`, which overrides the constructor `StableWSConnection` instantiates. It exists because v10 dropped the `isomorphic-ws` / `ws` dependency in favor of the platform's global `WebSocket`; it is meant for test doubles, and for node runtimes older than 22 that have no global `WebSocket` — see [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md#running-the-ws-client-under-node). Browser and React-Native apps should leave it unset.
 - `STREAM_LOCAL_TEST_RUN` / `STREAM_LOCAL_TEST_HOST` env-var overrides on `baseURL` still work the same way.
 - `browser` auto-detection (`typeof window !== 'undefined'`) and the `browser: true | false` override still work the same way.
 - The subsystem managers constructed on the client (`state`, `notifications`, `uploadManager`, `moderation`, `tokenManager`, `threads`, `polls`, `reminders`, `messageDeliveryReporter`, `messageComposerCache`, `insightMetrics`) are identical in v10.

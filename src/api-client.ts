@@ -38,8 +38,6 @@ export class ApiClient {
   }
 
   _getToken(): string | undefined {
-    if (this.client.getAuthType() === 'anonymous') return;
-
     return this.client.tokenManager.getToken();
   }
 

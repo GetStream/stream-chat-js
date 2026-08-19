@@ -127,6 +127,16 @@ userReturn = client.connectUser({ id: 'john', phone: 2 }, async () => 'token');
 userReturn = client.setUser({ id: 'john', phone: 2 }, devToken);
 userReturn = client.setUser({ id: 'john', phone: 2 }, async () => 'token');
 
+// ConnectAPIResponse is a union since the v2 connect endpoint resolves with
+// `connection.ok` rather than `health.check`; both narrow to an OwnUserResponse.
+userReturn?.then((connectionOpen) => {
+  if (connectionOpen && connectionOpen.type === 'connection.ok') {
+    const ownUserId: string = connectionOpen.me.id;
+    const connectionId: string = connectionOpen.connection_id;
+    voidReturn = console.log(ownUserId, connectionId);
+  }
+});
+
 userReturn = client.connectAnonymousUser();
 userReturn = client.setAnonymousUser();
 userReturn = client.setGuestUser({ id: 'steven' });
