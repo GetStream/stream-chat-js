@@ -135,47 +135,23 @@ describe('ChannelState member count bridge', () => {
 	});
 });
 
-describe('ChannelState isDirectChannel', () => {
-	it('is true when memberCount === 2 and false otherwise', () => {
-		const client = new StreamChat();
-		expect(
-			new Channel(client, 'type', 'a', { member_count: 2 }).state.isDirectChannel,
-		).to.equal(true);
-		expect(
-			new Channel(client, 'type', 'b', { member_count: 3 }).state.isDirectChannel,
-		).to.equal(false);
-		expect(
-			new Channel(client, 'type', 'c', { member_count: 1 }).state.isDirectChannel,
-		).to.equal(false);
-	});
-
-	it('tracks the member_count setter', () => {
-		const state = new ChannelState();
-		expect(state.isDirectChannel).to.equal(false);
-
-		state.member_count = 2;
-		expect(state.isDirectChannel).to.equal(true);
-		expect(state.getLatestValue().isDirectChannel).to.equal(true);
-
-		state.member_count = 5;
-		expect(state.isDirectChannel).to.equal(false);
-	});
-
-	it('does NOT change on a members-only update (the perf win)', () => {
+describe('ChannelState memberCount subscribers', () => {
+	it('does NOT re-notify memberCount subscribers on a members-only update', () => {
 		const client = new StreamChat();
 		const state = new Channel(client, 'type', 'd', { member_count: 2 }).state;
 		const seen = [];
 		state.subscribeWithSelector(
-			(s) => ({ isDirectChannel: s.isDirectChannel }),
-			({ isDirectChannel }) => seen.push(isDirectChannel),
+			(s) => ({ memberCount: s.memberCount }),
+			({ memberCount }) => seen.push(memberCount),
 		);
 		seen.length = 0; // drop the initial subscribe emission
 
-		// a members map churn (presence/watchers/etc.) must not re-notify isDirectChannel subscribers
+		// a members map churn (presence/watchers/etc.) must not re-notify memberCount subscribers —
+		// this is what lets a consumer derive e.g. "is this a 1:1 channel" without paying for it
 		state.members = { alice: { user: { id: 'alice' } }, bob: { user: { id: 'bob' } } };
 
 		expect(seen).to.have.length(0);
-		expect(state.isDirectChannel).to.equal(true);
+		expect(state.member_count).to.equal(2);
 	});
 });
 
@@ -201,6 +177,51 @@ describe('ChannelState read store', () => {
 
 		expect(state.read).to.equal(read);
 		expect(state.getLatestValue()).to.deep.include({ read });
+	});
+});
+
+describe('ChannelState unreadCount', () => {
+	let client;
+	let channel;
+
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client.user = { id: 'me' };
+		channel = new Channel(client, 'messaging', 'unread-count-id', {});
+	});
+
+	it('derives the own count from the read state instead of storing it separately', () => {
+		expect(channel.state.unreadCount).to.equal(0);
+
+		channel.state.read = {
+			me: { last_read: new Date(0), unread_messages: 7, user: { id: 'me' } },
+			alice: { last_read: new Date(0), unread_messages: 3, user: { id: 'alice' } },
+		};
+
+		expect(channel.state.unreadCount).to.equal(7);
+		expect(channel.countUnread()).to.equal(7);
+	});
+
+	it('is 0 while the current user has no read row', () => {
+		channel.state.read = {
+			alice: { last_read: new Date(0), unread_messages: 3, user: { id: 'alice' } },
+		};
+
+		expect(channel.state.unreadCount).to.equal(0);
+	});
+
+	it('is 0 without a connected user, and does not throw on a disconnected channel', () => {
+		client.user = undefined;
+		expect(channel.state.unreadCount).to.equal(0);
+
+		client.user = { id: 'me' };
+		channel.state.read = {
+			me: { last_read: new Date(0), unread_messages: 4, user: { id: 'me' } },
+		};
+		channel.disconnected = true;
+
+		expect(() => channel.state.unreadCount).not.to.throw();
+		expect(channel.state.unreadCount).to.equal(4);
 	});
 });
 

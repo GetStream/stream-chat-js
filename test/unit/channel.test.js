@@ -25,6 +25,21 @@ const seedLatestWindow = (channel, messages) =>
 		setActive: true,
 	});
 
+// The own unread count is derived from `read[ownUserId].unread_messages` (there is no separate
+// counter to assign), so seed it through the own read row.
+const seedOwnUnreadCount = (channel, unread_messages) => {
+	const ownUser = channel.getClient().user;
+	channel.state.read = {
+		...channel.state.read,
+		[ownUser.id]: {
+			last_read: new Date(0),
+			user: ownUser,
+			...channel.state.read[ownUser.id],
+			unread_messages,
+		},
+	};
+};
+
 describe('Channel count unread', function () {
 	let lastRead;
 	let ignoredMessages;
@@ -119,9 +134,9 @@ describe('Channel count unread', function () {
 
 	it('countUnread should return state.unreadCount without lastRead', function () {
 		expect(channel.countUnread()).to.be.equal(channel.state.unreadCount);
-		channel.state.unreadCount = 10;
+		seedOwnUnreadCount(channel, 10);
 		expect(channel.countUnread()).to.be.equal(10);
-		channel.state.unreadCount = 0;
+		seedOwnUnreadCount(channel, 0);
 	});
 
 	it('countUnread should return correct count', function () {
@@ -243,7 +258,6 @@ describe('Channel isViewingLive (unread bump gating)', function () {
 		const channel = client.channel('messaging', 'live-mode-id');
 		channel.initialized = true;
 		channel.data = { ...channel.data, own_capabilities: ['read-events'] };
-		channel.state.unreadCount = 0;
 		return { channel };
 	};
 
@@ -454,7 +468,6 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 
 	it('message.new increments the unread count with read events off when the flag is set', function () {
 		const { channel } = setupChannel({ isLocalUnreadCountEnabled: true });
-		channel.state.unreadCount = 0;
 
 		channel._handleChannelEvent({
 			type: 'message.new',
@@ -471,9 +484,25 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 		expect(channel.countUnread()).to.be.equal(2);
 	});
 
+	it('seeds the own read row when a message counts as unread and the channel has none yet', function () {
+		const { channel } = setupChannel({ isLocalUnreadCountEnabled: true });
+		expect(channel.state.read[user.id]).to.be.undefined;
+
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user: otherUser,
+			message: generateMsg({ user: otherUser }),
+		});
+
+		// the count lives in the read row, so the row has to exist for it to be counted at all
+		expect(channel.state.read[user.id]).to.be.ok;
+		expect(channel.state.read[user.id].unread_messages).to.be.equal(1);
+		expect(channel.state.read[user.id].user.id).to.be.equal(user.id);
+		expect(channel.state.read[user.id].last_read.getTime()).to.be.equal(0);
+	});
+
 	it('message.new does not increment the unread count with read events off when the flag is not set', function () {
 		const { channel } = setupChannel({ isLocalUnreadCountEnabled: false });
-		channel.state.unreadCount = 0;
 
 		channel._handleChannelEvent({
 			type: 'message.new',
@@ -491,7 +520,6 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 			.mockResolvedValue({ body: {}, metadata: {} });
 		const lastMsg = generateMsg({ user: otherUser });
 		seedLatestWindow(channel, [lastMsg]);
-		channel.state.unreadCount = 5;
 		channel.state.read[user.id] = {
 			last_read: new Date('2020-01-01T00:00:00'),
 			unread_messages: 5,
@@ -545,7 +573,6 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 			.mockResolvedValue({ body: {}, metadata: {} });
 		const lastMsg = generateMsg({ user: otherUser });
 		seedLatestWindow(channel, [lastMsg]);
-		channel.state.unreadCount = 3;
 		delete channel.state.read[user.id];
 
 		channel.markReadLocally();
@@ -671,7 +698,7 @@ describe('Channel _handleChannelEvent', function () {
 
 	describe('message.new', () => {
 		it('message.new does not reset the unreadCount for current user messages', function () {
-			channel.state.unreadCount = 100;
+			seedOwnUnreadCount(channel, 100);
 			channel._handleChannelEvent({
 				type: 'message.new',
 				user,
@@ -682,7 +709,7 @@ describe('Channel _handleChannelEvent', function () {
 		});
 
 		it('message.new does not reset the unreadCount for own thread replies', function () {
-			channel.state.unreadCount = 100;
+			seedOwnUnreadCount(channel, 100);
 			channel._handleChannelEvent({
 				type: 'message.new',
 				user,
@@ -697,7 +724,7 @@ describe('Channel _handleChannelEvent', function () {
 		});
 
 		it('message.new does not reset the unreadCount for others thread replies', function () {
-			channel.state.unreadCount = 100;
+			seedOwnUnreadCount(channel, 100);
 			channel._handleChannelEvent({
 				type: 'message.new',
 				user: { id: 'id' },
@@ -740,7 +767,7 @@ describe('Channel _handleChannelEvent', function () {
 		});
 
 		it('message.new increment unreadCount properly', function () {
-			channel.state.unreadCount = 20;
+			seedOwnUnreadCount(channel, 20);
 			channel._handleChannelEvent({
 				type: 'message.new',
 				user: { id: 'id' },
@@ -756,7 +783,7 @@ describe('Channel _handleChannelEvent', function () {
 		});
 
 		it('message.new skip increment for silent/shadowed/muted messages', function () {
-			channel.state.unreadCount = 30;
+			seedOwnUnreadCount(channel, 30);
 			channel._handleChannelEvent({
 				type: 'message.new',
 				user: { id: 'id' },
@@ -1101,7 +1128,6 @@ describe('Channel _handleChannelEvent', function () {
 					user: { id: userId },
 				},
 			};
-			channel.state.unreadCount = 5;
 
 			channel._handleChannelEvent({
 				type: 'channel.truncated',
@@ -1637,7 +1663,6 @@ describe('Channel _handleChannelEvent', function () {
 		});
 
 		it('should update channel read state produced for current user', () => {
-			channel.state.unreadCount = initialCountUnread;
 			channel.state.read[user.id] = initialReadState;
 			const event = notificationMarkUnreadEvent;
 
@@ -1686,7 +1711,6 @@ describe('Channel _handleChannelEvent', function () {
 		});
 
 		it('should not update channel read state produced for another user or user is missing', () => {
-			channel.state.unreadCount = initialCountUnread;
 			channel.state.read[user.id] = initialReadState;
 			const { user: excludedUser, ...eventMissingUser } = notificationMarkUnreadEvent;
 			const eventWithAnotherUser = {
@@ -1740,7 +1764,6 @@ describe('Channel _handleChannelEvent', function () {
 		});
 
 		it('should update channel read state produced for current user', () => {
-			channel.state.unreadCount = initialCountUnread;
 			channel.state.read[user.id] = initialReadState;
 			const event = messageReadEvent;
 
@@ -1768,7 +1791,7 @@ describe('Channel _handleChannelEvent', function () {
 
 		it('should update channel read state produced for another user', () => {
 			const anotherUser = { id: 'another-user' };
-			channel.state.unreadCount = initialCountUnread;
+			seedOwnUnreadCount(channel, initialCountUnread);
 			channel.state.read[anotherUser.id] = initialReadState;
 			const event = { ...messageReadEvent, user: anotherUser };
 
@@ -1845,7 +1868,6 @@ describe('Channel _handleChannelEvent', function () {
 		});
 
 		it('should update channel read state produced for current user', () => {
-			channel.state.unreadCount = initialCountUnread;
 			channel.state.read[user.id] = initialReadState;
 
 			channel._handleChannelEvent(messageDeliveredEvent);
@@ -1893,7 +1915,7 @@ describe('Channel _handleChannelEvent', function () {
 
 		it('should update channel read state produced for another user', () => {
 			const anotherUser = { id: 'another-user' };
-			channel.state.unreadCount = initialCountUnread;
+			seedOwnUnreadCount(channel, initialCountUnread);
 			channel.state.read[anotherUser.id] = initialReadState;
 			const event = { ...messageDeliveredEvent, user: anotherUser };
 

@@ -154,7 +154,7 @@ export class Channel extends ChannelApi {
   isTyping: boolean;
   /** Re-entrancy guard for {@link Channel.reload} (mirrors Thread.reload's isLoading guard). */
   private _reloading = false;
-  /** Refcount backing the reactive `active` flag (a shared Channel instance can be mounted more than once). */
+  /** Refcount backing the reactive `active` flag (a shared Channel instance can have several consumers). */
   private _activeRefCount = 0;
   push_preferences?: Gen_ChannelPushPreferencesResponse;
   public readonly configState = new StateStore<ChannelInstanceConfig>({});
@@ -704,7 +704,7 @@ export class Channel extends ChannelApi {
     const previousData = this.data;
     const data = await super.update(...args);
     this.data = data.channel;
-    this._syncStateFromChannelData(this.data, previousData);
+    this.state.syncStateFromChannelData(this.data, previousData);
     return data;
   }
 
@@ -734,7 +734,7 @@ export class Channel extends ChannelApi {
 
     const previousData = this.data;
     this.data = channel;
-    this._syncStateFromChannelData(this.data, previousData);
+    this.state.syncStateFromChannelData(this.data, previousData);
     // If the capabiltities are changed, we trigger the `capabilities.changed` event.
     if (capabilitiesChanged) {
       this.getClient().dispatchEvent({
@@ -1393,8 +1393,14 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Whether the channel has been torn down / evicted (deleted, or the current user removed).
-   * Store-backed and reactive.
+   * Whether the channel has been torn down / evicted (deleted, the current user removed, or the
+   * client disconnected). Store-backed and reactive.
+   *
+   * One-way and terminal — there is no counterpart that revives the instance. A disconnected
+   * `Channel` is disposed of: it is skipped by the `client.activeChannels` lookups (so
+   * `client.channel(…)` mints a fresh instance), never re-watched on recovery, refused as a source
+   * of `channel.data` by the offline DB, and `getClient()` throws on it so a reference held across a
+   * `disconnectUser()` fails loudly instead of quietly requesting on a client with no user.
    */
   get disconnected() {
     return this.state.getLatestValue().disconnected;
@@ -1405,7 +1411,8 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Whether the channel is currently mounted / actively viewed on-screen. Reactive — subscribe via
+   * Whether a consumer has declared this channel as the one it is currently consuming (see
+   * {@link Channel.activate}). Reactive — subscribe via
    * `useStateStore(channel.state, (s) => ({ active: s.active }))`.
    */
   get active() {
@@ -1413,10 +1420,12 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Marks the channel as actively viewed on-screen (UI-driven; mirrors `thread.activate()`).
-   * Refcounted so a Channel instance mounted in several places stays active until the last unmount.
-   * While active the channel auto-marks messages read and its message list is not re-seeded by
-   * channel-list hydration (its own `channel.reload()` owns that window).
+   * Declares that a consumer is now consuming this channel's own state (mirrors
+   * `thread.activate()`). Refcounted, as a single `Channel` instance can be held by several
+   * consumers at once, so it stays active until the last one deactivates.
+   *
+   * While active, the channel's own state takes precedence over bulk state writes: channel-list
+   * hydration does not re-seed its message list (its own `channel.reload()` owns that window).
    */
   activate = () => {
     this._activeRefCount += 1;
@@ -1426,8 +1435,8 @@ export class Channel extends ChannelApi {
   };
 
   /**
-   * Marks the channel as no longer actively viewed (mirrors `thread.deactivate()`). Only flips
-   * `active` back to `false` once the last holder deactivates.
+   * Declares that a consumer has stopped consuming this channel (mirrors `thread.deactivate()`).
+   * Only flips `active` back to `false` once the last holder deactivates.
    */
   deactivate = () => {
     if (this._activeRefCount === 0) return;
@@ -1536,7 +1545,7 @@ export class Channel extends ChannelApi {
     this.initialized = true;
     const previousData = this.data;
     this.data = state.channel;
-    this._syncStateFromChannelData(this.data, previousData);
+    this.state.syncStateFromChannelData(this.data, previousData);
 
     // The message paginator is seeded synchronously inside query() (before read-state hydration),
     // so a channel opened via watch() alone — a deep-link restore, a search result, a freshly
@@ -1912,7 +1921,7 @@ export class Channel extends ChannelApi {
         .join();
     const previousData = this.data;
     this.data = channel;
-    this._syncStateFromChannelData(this.data, previousData);
+    this.state.syncStateFromChannelData(this.data, previousData);
     this.offlineMode = false;
     this.cooldownTimer.refresh();
 
@@ -2202,16 +2211,16 @@ export class Channel extends ChannelApi {
     let hasStateChanged = false;
     this.messageReceiptsTracker.setPendingReadStoreReconcileMeta(reconcileMeta);
 
-    this.state.next((currentReadStoreState) => {
-      const nextReadState = patch(currentReadStoreState.read);
+    this.state.next((currentState) => {
+      const nextReadState = patch(currentState.read);
 
-      if (nextReadState === currentReadStoreState.read) {
-        return currentReadStoreState;
+      if (nextReadState === currentState.read) {
+        return currentState;
       }
       hasStateChanged = true;
 
       return {
-        ...currentReadStoreState,
+        ...currentState,
         read: nextReadState,
       };
     });
@@ -2246,17 +2255,15 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Resets the current user's unread count consistently across BOTH `state.unreadCount` and the
-   * reactive `read[userId].unread_messages` — the latter is what the unread badge actually reads.
-   * Channel-wide resets (`channel.truncated`, "all channels read") historically wrote only the
-   * former, leaving the badge stale (TODO #29); routing them through here keeps the two in sync.
+   * Sets the current user's unread count. The count lives in exactly one place — the reactive
+   * `read[userId].unread_messages`, which is what the unread badge reads and what
+   * `state.unreadCount` derives from — so channel-wide resets (`channel.truncated`, "all channels
+   * read") must route through here rather than writing a count of their own.
    */
   _setOwnUnreadCount(unreadCount: number) {
     if (this.disconnected) return;
 
-    this.state.unreadCount = unreadCount;
-
-    const userId = this.getClient().userID;
+    const userId = this.getClient().userId;
     if (!userId) return;
 
     const currentUserReadState = this.state.read[userId];
@@ -2351,7 +2358,6 @@ export class Channel extends ChannelApi {
           const isOwnEvent = event.user?.id === client.user?.id;
 
           if (isOwnEvent) {
-            channelState.unreadCount = 0;
             // Delivery reporting buffers a `markChannelsDelivered` network request; the local read
             // must not hit the backend, so only sync for the real server `message.read`.
             if (event.type === 'message.read') {
@@ -2481,15 +2487,26 @@ export class Channel extends ChannelApi {
           }
           if (preventUnreadCountUpdate) break;
 
+          // The own unread count IS `read[ownUserId].unread_messages` (see
+          // `ChannelState.unreadCount`), so the own row is what carries the own-unread gating: a
+          // message that does not count as unread (silent/shadowed/muted) never bumps it, and neither
+          // does one arriving while the user is viewing the latest messages — the SDK is about to mark
+          // it read itself, and the count/snapshot would flash until it does. The other users' rows
+          // are receipt bookkeeping and keep their blanket bump.
+          const countsAsOwnUnread =
+            !this.messagePaginator.isViewingLive &&
+            this._countMessageAsUnread(event.message);
+
           if (event.user?.id) {
             const eventUser = event.user;
             const eventUserId = eventUser.id;
             const createdAt = new Date(event.created_at ?? Date.now());
             const eventMessageId = event.message.id;
+            const ownUserId = client.userId;
             this._patchReadState(
               (currentReadState) => {
                 const userIds = Object.keys(currentReadState);
-                if (!userIds.length) return currentReadState;
+                if (!userIds.length && !countsAsOwnUnread) return currentReadState;
 
                 const nextReadState = { ...currentReadState };
 
@@ -2502,6 +2519,9 @@ export class Channel extends ChannelApi {
                       last_delivered_at: createdAt,
                       last_delivered_message_id: eventMessageId,
                     };
+                  } else if (userId === ownUserId && !countsAsOwnUnread) {
+                    // does not count towards the own unread count — leave the row untouched
+                    continue;
                   } else {
                     nextReadState[userId] = {
                       ...currentReadState[userId],
@@ -2511,22 +2531,26 @@ export class Channel extends ChannelApi {
                   }
                 }
 
+                // Seed the own row when the channel has none yet — an uninitialized channel (see
+                // regression #1732) or one queried with `state: false`, where `_initializeState`
+                // never ran to seed it. Without this the own count has nowhere to live and stops
+                // accumulating. `last_read` is epoch: nothing has been read, which is exactly how
+                // every "no last read" consumer already treats a missing value.
+                if (ownUserId && countsAsOwnUnread && !currentReadState[ownUserId]) {
+                  nextReadState[ownUserId] = {
+                    last_read: new Date(0),
+                    unread_messages: 1,
+                    user: (client.user ?? { id: ownUserId }) as UserResponse,
+                  };
+                }
+
                 return nextReadState;
               },
               { changedUserIds: Object.keys(channelState.read) },
             );
           }
 
-          // Skip the own-unread bump when the user is actively viewing the latest messages (app
-          // foregrounded + newest message on screen). Without this, a message read in real time
-          // momentarily bumps `unreadCount`/the snapshot — the "N new" separator/banner + the
-          // channel-list badge would flash until the SDK's mark-read resets it. The SDK reports the
-          // viewing state via `messagePaginator.setViewingLive` and marks the message read itself.
-          // Only the OWN unread accounting is gated; the per-user read/receipt tracking above is
-          // intentionally left intact.
-          const isViewingLive = this.messagePaginator.isViewingLive;
-          if (!isViewingLive && this._countMessageAsUnread(event.message)) {
-            channelState.unreadCount = channelState.unreadCount + 1;
+          if (countsAsOwnUnread) {
             this.messagePaginator.setUnreadSnapshot({
               unreadCount: channelState.unreadCount,
             });
@@ -2645,8 +2669,6 @@ export class Channel extends ChannelApi {
           lastReadMessageId: channelState.read[event.user.id].last_read_message_id,
           unreadCount,
         });
-
-        channelState.unreadCount = unreadCount;
         break;
       }
       case 'channel.updated':
@@ -2666,7 +2688,7 @@ export class Channel extends ChannelApi {
               event.channel?.own_capabilities ?? channel.data?.own_capabilities,
           };
           channel.data = newChannelData;
-          channel._syncStateFromChannelData(channel.data, previousChannelData);
+          channel.state.syncStateFromChannelData(channel.data, previousChannelData);
           this.cooldownTimer.refresh();
         }
         break;
@@ -2730,7 +2752,7 @@ export class Channel extends ChannelApi {
           blocked: event.channel?.blocked ?? false,
           hidden: true,
         };
-        channel._syncStateFromChannelData(channel.data, previousChannelData);
+        channel.state.syncStateFromChannelData(channel.data, previousChannelData);
         if (event.clear_history) {
           this.messagePaginator.clearStateAndCache();
           this.pinnedMessagesPaginator.clearStateAndCache();
@@ -2745,7 +2767,7 @@ export class Channel extends ChannelApi {
           blocked: event.channel?.blocked ?? false,
           hidden: false,
         };
-        channel._syncStateFromChannelData(channel.data, previousChannelData);
+        channel.state.syncStateFromChannelData(channel.data, previousChannelData);
         this.getClient().offlineDb?.handleChannelVisibilityEvent({ event });
         break;
       }
@@ -2806,13 +2828,6 @@ export class Channel extends ChannelApi {
         `Channel ${this.cid} hasn't been initialized yet. Make sure to call .watch() and wait for it to resolve`,
       );
     }
-  }
-
-  _syncStateFromChannelData(
-    data: Channel['data'],
-    fallbackData: Channel['data'] = this.data,
-  ) {
-    this.state.syncStateFromChannelData(data, fallbackData);
   }
 
   _initializeState(state: ChannelStateResponseFields) {
@@ -2889,10 +2904,6 @@ export class Channel extends ChannelApi {
           unread_messages: read.unread_messages ?? 0,
           user: read.user,
         };
-
-        if (read.user.id === user?.id) {
-          this.state.unreadCount = readUpdates[read.user.id].unread_messages;
-        }
       }
     }
 

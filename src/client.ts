@@ -1027,8 +1027,8 @@ export class StreamChat extends ChatApi {
     if (event.type === 'notification.mark_read' && event.unread_channels === 0) {
       const activeChannelKeys = Object.keys(this.activeChannels);
       activeChannelKeys.forEach((activeChannelKey) =>
-        // resets both `state.unreadCount` and `read[userId].unread_messages` so the badge, which
-        // reads the latter, does not stay stale (TODO #29).
+        // resets `read[userId].unread_messages`, which is what the unread badge reads, so it does
+        // not stay stale.
         this.activeChannels[activeChannelKey]._setOwnUnreadCount(0),
       );
     }
@@ -1470,7 +1470,7 @@ export class StreamChat extends ChatApi {
       const c = this.channel(channelState.channel.type, channelState.channel.id);
       const previousData = c.data;
       c.data = channelState.channel;
-      c._syncStateFromChannelData(c.data, previousData);
+      c.state.syncStateFromChannelData(c.data, previousData);
       c.offlineMode = offlineMode;
       c.initialized = !offlineMode;
       c.push_preferences = channelState.push_preferences;
@@ -1729,7 +1729,7 @@ export class StreamChat extends ChatApi {
       if (custom.custom !== undefined) {
         const previousData = channel.data;
         channel.data = { ...channel.data, custom: custom.custom };
-        channel._syncStateFromChannelData(channel.data, previousData);
+        channel.state.syncStateFromChannelData(channel.data, previousData);
         channel._data = { ...channel._data, custom: custom.custom };
       }
       return channel;

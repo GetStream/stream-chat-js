@@ -50,15 +50,6 @@ export type MembersState = {
   memberCount: number;
 };
 
-/**
- * Whether this is a 1:1 direct channel, derived from `memberCount === 2`. Kept as its own slice so a
- * consumer (e.g. the message footer) can subscribe to just this boolean and never re-render on the
- * far more frequent `members` churn (presence, watchers, adds/removes).
- */
-export type DirectChannelState = {
-  isDirectChannel: boolean;
-};
-
 /** The current user's own membership in this channel (role, pinned_at, archived_at, …). */
 export type MembershipState = {
   membership: ChannelMemberResponse;
@@ -113,17 +104,26 @@ export type ChannelLifecycleState = {
    * being watched yet.
    */
   offlineMode: boolean;
-  /** Whether the channel has been torn down / evicted (deleted, or the current user removed). */
+  /**
+   * Whether the channel has been torn down / evicted (deleted, the current user removed, or the
+   * client disconnected). One-way and terminal — see {@link Channel.disconnected}: the instance is
+   * disposed of, never revived.
+   */
   disconnected: boolean;
 };
 
-/** UI-driven channel lifecycle state (not returned by the API; set by the UI SDK). */
-export type ChannelUIState = {
+/**
+ * Whether the channel is currently being consumed — consumer-declared, never returned by the API.
+ * Mirrors `thread.state.active`.
+ */
+export type ChannelActivationState = {
   /**
-   * Whether the channel is currently mounted / actively viewed on-screen. UI-driven and
-   * refcounted via `channel.activate()` / `channel.deactivate()`. Channel-list hydration does NOT
-   * re-seed the message list of an `active` channel (the channel's own `channel.reload()` owns that
-   * window).
+   * Whether a consumer has declared this channel as the one it is currently reading, via
+   * `channel.activate()` / `channel.deactivate()` (refcounted, as a single `Channel` instance can
+   * be held by several consumers at once). It carries no rendering semantics; it tells the client
+   * that the channel's own state is being consumed and takes precedence over bulk state writes —
+   * channel-list hydration does not re-seed the message list of an `active` channel (the channel's
+   * own `channel.reload()` owns that window).
    */
   active: boolean;
 };
@@ -150,13 +150,12 @@ export type ChannelStateData = WatcherState &
   TypingUsersState &
   ReadState &
   MembersState &
-  DirectChannelState &
   MembershipState &
   OwnCapabilitiesState &
   ChannelDataState &
   MuteStatusState &
   ChannelLifecycleState &
-  ChannelUIState &
+  ChannelActivationState &
   AIIndicatorState;
 
 /**
@@ -169,7 +168,6 @@ export type ChannelStateData = WatcherState &
 export class ChannelState extends StateStore<ChannelStateData> {
   _channel: Channel;
   pending_messages: Array<PendingMessageResponse>;
-  unreadCount: number;
 
   constructor(channel: Channel) {
     super({
@@ -179,7 +177,6 @@ export class ChannelState extends StateStore<ChannelStateData> {
       read: {},
       members: {},
       memberCount: 0,
-      isDirectChannel: false,
       membership: {} as ChannelMemberResponse,
       ownCapabilities: [],
       data: channel?.data,
@@ -193,7 +190,20 @@ export class ChannelState extends StateStore<ChannelStateData> {
     this._channel = channel;
     this.syncStateFromChannelData(channel?.data);
     this.pending_messages = [];
-    this.unreadCount = 0;
+  }
+
+  /**
+   * The current user's unread message count, derived from the `read` slice
+   * (`read[ownUserId].unread_messages`) rather than stored a second time — there is exactly one
+   * place holding this value, so the count the unread badge reads can never drift from the count
+   * `channel.countUnread()` returns. Written through `Channel._setOwnUnreadCount`.
+   */
+  get unreadCount() {
+    // read `_client` directly: `getClient()` throws on a disconnected channel, and reading a count
+    // off a disposed instance should yield 0, not blow up.
+    const userId = this._channel?._client?.userId;
+    if (!userId) return 0;
+    return this.getLatestValue().read[userId]?.unread_messages ?? 0;
   }
 
   /** The current user's own membership; store-backed so `useStateStore` can subscribe to it. */
@@ -218,17 +228,7 @@ export class ChannelState extends StateStore<ChannelStateData> {
   }
 
   set member_count(memberCount: number) {
-    this.partialNext({ isDirectChannel: memberCount === 2, memberCount });
-  }
-
-  /**
-   * Non-reactive read of {@link DirectChannelState.isDirectChannel}. Use this when you only need the
-   * value once at render time and don't want a `useStateStore` subscription; use the reactive slice
-   * (`useStateStore(channel.state, (s) => ({ isDirectChannel: s.isDirectChannel }))`) when the UI
-   * must update if the channel flips between 1:1 and group.
-   */
-  get isDirectChannel() {
-    return this.getLatestValue().isDirectChannel;
+    this.partialNext({ memberCount });
   }
 
   get read() {
@@ -309,7 +309,6 @@ export class ChannelState extends StateStore<ChannelStateData> {
 
     this.partialNext({
       data,
-      isDirectChannel: (memberCount ?? 0) === 2,
       memberCount: memberCount ?? 0,
       ownCapabilities: ownCapabilities ?? [],
     });
