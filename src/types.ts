@@ -1,10 +1,6 @@
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { StableWSConnection } from './connection';
-import type {
-  CustomChannelData,
-  CustomCommandData,
-  CustomEventTypes,
-} from './custom_types';
+import type { CustomChannelData, CustomEventTypes } from './custom_types';
 import type { NotificationManager } from './notifications';
 import type { RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
 import type {
@@ -19,7 +15,6 @@ import type {
   ChannelStateResponseFields,
   CreateDeviceRequest,
   DraftPayloadResponse,
-  Images,
   MessageResponse,
   ModerationPayload,
   OwnUserResponse,
@@ -64,8 +59,6 @@ export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Omit<T, Keys> &
 export type RequireAtLeastOne<T> = {
   [K in keyof T]-?: Required<Pick<T, K>> & Partial<Omit<T, K>>;
 }[keyof T];
-
-export type UR = Record<string, unknown>;
 
 export type Unpacked<T> = T extends (infer U)[]
   ? U
@@ -148,17 +141,6 @@ export type PartialThreadUpdate = {
 };
 
 export type GetThreadOptions = Omit<Parameters<ChatApi['getThread']>[0], 'message_id'>;
-
-export enum Product {
-  Chat = 'chat',
-  Video = 'video',
-  Moderation = 'moderation',
-  Feeds = 'feeds',
-}
-
-export type GetRepliesAPIResponse = APIResponse & {
-  messages: MessageResponse[];
-};
 
 export type MuteUserResponse = APIResponse & {
   mute?: UserMuteResponse;
@@ -281,29 +263,10 @@ export type ChannelStateOptions = {
   withResponse?: boolean;
 };
 
-export type PolicyRequest = {
-  action: 'Deny' | 'Allow' | (string & {});
-  /**
-   * @description User-friendly policy name
-   */
-  name: string;
-  /**
-   * @description Whether policy applies to resource owner or not
-   */
-  owner: boolean;
-  priority: number;
-  /**
-   * @description List of resources to apply policy to
-   */
-  resources: string[];
-  /**
-   * @description List of roles to apply policy to
-   */
-  roles: string[];
-};
-
-export type Automod = 'disabled' | 'simple' | 'AI' | (string & {});
-export type AutomodBehavior = 'flag' | 'block' | 'shadow_block' | (string & {});
+/** The channel-type automod mode, as reported by `channel.getConfig()`. */
+export type Automod = ChannelConfigWithInfo['automod'];
+/** What automod does when it trips, as reported by `channel.getConfig()`. */
+export type AutomodBehavior = ChannelConfigWithInfo['automod_behavior'];
 
 export type MuteUserOptions = {
   client_id?: string;
@@ -340,7 +303,6 @@ export type PinnedMessagePaginationOptions = Omit<
   'id' | 'sort' | 'type'
 >;
 
-export type GetRepliesRequest = Parameters<ChatApi['getReplies']>[0];
 export type QueryMembersOptions = Partial<Omit<QueryMembersPayload, 'filter_conditions'>>;
 
 export type StreamChatOptions = {
@@ -494,12 +456,6 @@ export type ChannelFilters = NonNullable<QueryChannelsRequest['filter_conditions
 
 export type QueryPollsOptions = Pager;
 
-export type VotesFiltersOptions = {
-  is_answer?: boolean;
-  option_id?: string;
-  user_id?: string;
-};
-
 export type QueryVotesOptions = Pager;
 
 export type QueryPollsFilters = NonNullable<QueryPollsRequest['filter']>;
@@ -559,44 +515,12 @@ export type VoteSort = SortParamRequest[];
  * Base Types
  */
 
-export type APNConfig = {
-  auth_key?: string;
-  auth_type?: string;
-  bundle_id?: string;
-  development?: boolean;
-  enabled?: boolean;
-  host?: string;
-  key_id?: string;
-  notification_template?: string;
-  p12_cert?: string;
-  team_id?: string;
-};
-
-export type AsyncModerationOptions = {
-  callback?: {
-    mode?: 'CALLBACK_MODE_NONE' | 'CALLBACK_MODE_REST' | 'CALLBACK_MODE_TWIRP';
-    server_url?: string;
-  };
-  timeout_ms?: number;
-};
-
 // export type Attachment = ReplacePropertyTypes<
 //   Attachment,
 //   { custom: CustomAttachmentData & { file_size?: number; mime_type?: string } }
 // >;
 
 export type OGAttachment = RequireLiteral<Attachment, 'og_scrape_url'>;
-
-export type BlockList = {
-  name: string;
-  words: string[];
-  team?: string;
-  type?: string;
-  validate?: boolean;
-  is_confusable_folding_enabled?: boolean;
-  is_leet_check_enabled?: boolean;
-  is_plural_check_enabled?: boolean;
-};
 
 export type ChannelData = ReplacePropertyTypes<
   ChannelInput,
@@ -605,91 +529,9 @@ export type ChannelData = ReplacePropertyTypes<
 
 export type PushProvider = CreateDeviceRequest['push_provider'];
 
-export type PushProviderConfig = PushProviderCommon &
-  PushProviderID &
-  PushProviderAPN &
-  PushProviderFirebase &
-  PushProviderHuawei &
-  PushProviderXiaomi;
-
-export type PushProviderID = {
-  name: string;
-  type: PushProvider;
-};
-
-export type PushProviderCommon = {
-  created_at: string;
-  updated_at: string;
-  description?: string;
-  disabled_at?: string;
-  disabled_reason?: string;
-};
-
-export type PushProviderAPN = {
-  apn_auth_key?: string;
-  apn_auth_type?: 'token' | 'certificate';
-  apn_development?: boolean;
-  apn_host?: string;
-  apn_key_id?: string;
-  apn_notification_template?: string;
-  apn_p12_cert?: string;
-  apn_team_id?: string;
-  apn_topic?: string;
-};
-
-export type PushProviderFirebase = {
-  firebase_apn_template?: string;
-  firebase_credentials?: string;
-  firebase_data_template?: string;
-  firebase_notification_template?: string;
-  firebase_server_key?: string;
-};
-
-export type PushProviderHuawei = {
-  huawei_app_id?: string;
-  huawei_app_secret?: string;
-};
-
-export type PushProviderXiaomi = {
-  xiaomi_package_name?: string;
-  xiaomi_secret?: string;
-};
-
-export type CommandVariants =
-  | 'all'
-  | 'ban'
-  | 'fun_set'
-  | 'giphy'
-  | 'moderation_set'
-  | 'mute'
-  | 'unban'
-  | 'unmute'
-  | keyof CustomCommandData;
-
 export type Configs = Record<string, ChannelConfigWithInfo | undefined>;
 
 export type ConnectionOpen = EventPayload<'health.check'> | EventPayload<'connection.ok'>;
-
-export type FirebaseConfig = {
-  apn_template?: string;
-  credentials_json?: string;
-  data_template?: string;
-  enabled?: boolean;
-  notification_template?: string;
-  server_key?: string;
-};
-
-export type HuaweiConfig = {
-  enabled?: boolean;
-  id?: string;
-  secret?: string;
-};
-
-export type XiaomiConfig = {
-  enabled?: boolean;
-  package_name?: string;
-  secret?: string;
-};
 
 export type MessageLabel =
   | 'deleted'
@@ -708,17 +550,6 @@ export type PermissionObject = {
   priority?: number;
   resources?: string[];
   roles?: string[];
-};
-
-export type Policy = {
-  action?: 0 | 1;
-  created_at?: string;
-  name?: string;
-  owner?: boolean;
-  priority?: number;
-  resources?: string[];
-  roles?: string[] | null;
-  updated_at?: string;
 };
 
 export type TokenOrProvider = null | string | TokenProvider | undefined;
@@ -958,7 +789,6 @@ export type DeleteMessageOptions = Omit<Parameters<ChatApi['deleteMessage']>[0],
 export type SendMessageAPIResponse = StreamResponse<SendMessageResponse>;
 export type UpdateMessageOptions = Omit<UpdateMessageRequest, 'message'>;
 export type UpdateMessageAPIResponse = StreamResponse<UpdateMessageResponse>;
-export type GiphyVersions = keyof Images;
 export type TranslationLanguage = TranslateMessageRequest['language'];
 
 export type FileReferenceBase = {

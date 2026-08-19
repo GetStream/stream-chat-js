@@ -1,6 +1,6 @@
 # v9 → v10 Migration Guide — Type Renames
 
-> Scope: this guide covers **type aliases that were hand-rolled in `types.ts` and have been removed in v10 in favor of a differently-named type**. In most cases, the removed alias pointed at a type generated from the OpenAPI spec (imported from `./gen/models`), and the v10 target is that generated name — now re-exported directly from `stream-chat`. A handful of entries (`Automod`, `AutomodBehavior`, `TranslationLanguage`) resolve to a hand-authored alias in `src/types.ts` instead of a raw gen re-export; those are noted per row. Consumers should switch to the v10 name in every case.
+> Scope: this guide covers **type aliases that were hand-rolled in `types.ts` and have been removed in v10 in favor of a differently-named type**. In most cases, the removed alias pointed at a type generated from the OpenAPI spec (imported from `./gen/models`), and the v10 target is that generated name — now re-exported directly from `stream-chat`. A handful of entries (`Automod`, `AutomodBehavior`, `TranslationLanguage`) resolve to a derived alias in `src/types.ts` — a lookup on a generated type rather than a raw re-export; those are noted per row. Consumers should switch to the v10 name in every case.
 >
 > This document is written for AI agents doing mechanical rewrites. Each entry lists the v9 name, the v10 name, and the file(s) where the type is exported from. All v10 names are still importable from the package root (`stream-chat`) or from `stream-chat/dist/types` — nothing has moved outside the package surface.
 >
@@ -34,8 +34,8 @@ v10 exposes two generated types whose names collide with v9 aliases that pointed
 | `AppSettingsAPIResponse`       | `GetApplicationResponse`                 | Return type of `client.getAppSettings()`.                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `AutomodDetails`               | `AutomodDetailsResponse`                 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `ChannelAPIResponse`           | `ChannelStateResponseFields`             | The per-channel entry inside a `queryChannels` response (fields only, no top-level `duration`).                                                                                                                                                                                                                                                                                                                                                                |
-| `ChannelConfigAutomod`         | `Automod`                                | The v10 `Automod` is a hand-authored string union (`'disabled' \| 'simple' \| 'AI' \| (string & {})`) in `src/types.ts`, not a generated re-export. Values are identical to v9.                                                                                                                                                                                                                                                                                |
-| `ChannelConfigAutomodBehavior` | `AutomodBehavior`                        | Same story — hand-authored union (`'flag' \| 'block' \| 'shadow_block' \| (string & {})`) in `src/types.ts`. Values are identical to v9.                                                                                                                                                                                                                                                                                                                       |
+| `ChannelConfigAutomod`         | `Automod`                                | ⚠️ **Narrowed after `rc.4`.** `Automod` is now `ChannelConfigWithInfo['automod']` — exactly `'disabled' \| 'simple' \| 'AI'`. It previously carried a `\| (string & {})` tail that let any string through.                                                                                                                                                                                                                                                     |
+| `ChannelConfigAutomodBehavior` | `AutomodBehavior`                        | ⚠️ **Narrowed after `rc.4`.** Now `ChannelConfigWithInfo['automod_behavior']` — exactly `'flag' \| 'block' \| 'shadow_block'`, without the `\| (string & {})` tail.                                                                                                                                                                                                                                                                                            |
 | `ChannelQueryOptions`          | `ChannelGetOrCreateRequest`              | Payload for `channel.watch()`, `channel.create()`, and `channel.query()`. The v9 alias masked the OpenAPI name; v10 uses the generated name directly.                                                                                                                                                                                                                                                                                                          |
 | `CommandResponse`              | `Command`                                | Slash-command descriptor — matches the shape stored under `channel.getConfig().commands`.                                                                                                                                                                                                                                                                                                                                                                      |
 | `CreatePollData`               | `CreatePollRequest`                      | Payload for `client.createPoll()` / `PollManager.createPoll()`.                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -194,6 +194,35 @@ Neither is a rename; both **gain** surface, so no call site breaks.
 | `PinnedMessagePaginationOptions` | omits `'id' \| 'member_custom_include' \| 'sort' \| 'type'` | omits `'id' \| 'sort' \| 'type'`        |
 
 `UpdateChannelRequest` has no `members` key (it has `add_members` / `remove_members`), so that omit was a no-op left over from an older payload shape. `member_custom_include` **is** accepted by `getPinnedMessages`, so omitting it was narrowing the API — it can now be passed through.
+
+### Orphans of the server-side split — removed, no replacement
+
+These described admin/server-side surface (push-provider credentials, permission policies, blocklists, channel-type config) that moved to `@stream-io/node-sdk` when the server-side API left this package. Nothing in the SDK referenced them and no endpoint here returns them.
+
+`APNConfig`, `AsyncModerationOptions`, `BlockList`, `CommandVariants`, `FirebaseConfig`, `GetRepliesRequest`, `GiphyVersions`, `HuaweiConfig`, `Policy`, `PolicyRequest`, `Product`, `PushProviderAPN`, `PushProviderCommon`, `PushProviderConfig`, `PushProviderFirebase`, `PushProviderHuawei`, `PushProviderID`, `PushProviderXiaomi`, `UR`, `VotesFiltersOptions`, `XiaomiConfig`.
+
+Two notes:
+
+- **`Product` was an `enum`**, so it was a runtime value in the bundle, not just a type. `import { Product } from 'stream-chat'` fails at runtime now, not only at compile time. Inline the string (`'chat'`, `'video'`, `'moderation'`, `'feeds'`).
+- **`UR`** (`Record<string, unknown>`) was a v9 type utility that outlived its callers. It joins `Readable`, `KnownKeys`, `PartializeKeys` and `UnknownType` in [Type utilities dropped](./v9-to-v10-migration-guide-other.md#type-utilities-dropped) — inline `Record<string, unknown>`.
+
+`PushProvider` is **kept** — it is `CreateDeviceRequest['push_provider']`, the union `client.createDevice()` accepts, and it derives from the generated request rather than restating it.
+
+### `Automod` / `AutomodBehavior` narrowed
+
+Both now read their union off the generated channel config instead of restating it:
+
+```ts
+// before rc.4
+type Automod = 'disabled' | 'simple' | 'AI' | (string & {});
+type AutomodBehavior = 'flag' | 'block' | 'shadow_block' | (string & {});
+
+// after
+type Automod = ChannelConfigWithInfo['automod']; //          'disabled' | 'simple' | 'AI'
+type AutomodBehavior = ChannelConfigWithInfo['automod_behavior']; // 'flag' | 'block' | 'shadow_block'
+```
+
+The `| (string & {})` tail meant the unions accepted _any_ string — the documented values were a hint, not a constraint. Assigning an arbitrary string to one of these now fails to compile. `channel.getConfig().automod` reads are unaffected; the generated config has always had the narrow type.
 
 ## Verification
 
