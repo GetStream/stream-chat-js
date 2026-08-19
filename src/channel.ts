@@ -297,7 +297,7 @@ export class Channel extends ChannelApi {
    * @returns The chat client.
    */
   getClient(): StreamChat {
-    if (this.disconnected === true) {
+    if (this.pendingDisposal === true) {
       throw Error(`You can't use a channel after client.disconnect() was called`);
     }
     return this._client;
@@ -1149,7 +1149,7 @@ export class Channel extends ChannelApi {
    * updates. Unlike `muteStatus()`, this does not require the channel to be initialized.
    */
   _syncMuteStatus() {
-    if (this.disconnected) return;
+    if (this.pendingDisposal) return;
 
     const next = this.getClient()._muteStatus(this.cid);
     const previous = this.state.getLatestValue().muteStatus;
@@ -1393,21 +1393,36 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Whether the channel has been torn down / evicted (deleted, the current user removed, or the
-   * client disconnected). Store-backed and reactive.
+   * Whether the channel has been torn down and is awaiting disposal (deleted, the current user
+   * removed, or the client disconnected). Store-backed and reactive.
    *
-   * One-way and terminal — there is no counterpart that revives the instance. A disconnected
-   * `Channel` is disposed of: it is skipped by the `client.activeChannels` lookups (so
-   * `client.channel(…)` mints a fresh instance), never re-watched on recovery, refused as a source
-   * of `channel.data` by the offline DB, and `getClient()` throws on it so a reference held across a
-   * `disconnectUser()` fails loudly instead of quietly requesting on a client with no user.
+   * One-way and terminal — there is no counterpart that revives the instance. Its resources are
+   * already released ({@link Channel._disconnect} disposes the paginators and unregisters the
+   * subscriptions) and the client drops it from `activeChannels` right after, so nothing should
+   * touch it: it is skipped by the `client.activeChannels` lookups (so `client.channel(…)` mints a
+   * fresh instance), never re-watched on recovery, refused as a source of `channel.data` by the
+   * offline DB, and `getClient()` throws on it so a reference held across a `disconnectUser()`
+   * fails loudly instead of quietly requesting on a client with no user.
    */
-  get disconnected() {
-    return this.state.getLatestValue().disconnected;
+  get pendingDisposal() {
+    return this.state.getLatestValue().pendingDisposal;
   }
 
-  set disconnected(disconnected: boolean) {
-    this.state.partialNext({ disconnected });
+  set pendingDisposal(pendingDisposal: boolean) {
+    this.state.partialNext({ pendingDisposal });
+  }
+
+  /**
+   * @deprecated Renamed to {@link Channel.pendingDisposal} — the flag is one-way and the instance is
+   * never reconnected, which the old name implied. This alias proxies the same state and will be
+   * removed in the next major.
+   */
+  get disconnected() {
+    return this.pendingDisposal;
+  }
+
+  set disconnected(pendingDisposal: boolean) {
+    this.pendingDisposal = pendingDisposal;
   }
 
   /**
@@ -2261,7 +2276,7 @@ export class Channel extends ChannelApi {
    * read") must route through here rather than writing a count of their own.
    */
   _setOwnUnreadCount(unreadCount: number) {
-    if (this.disconnected) return;
+    if (this.pendingDisposal) return;
 
     const userId = this.getClient().userId;
     if (!userId) return;
@@ -2978,14 +2993,14 @@ export class Channel extends ChannelApi {
   _disconnect() {
     logger.withExtraTags('_disconnect', this.cid).info('Disconnecting the channel.');
 
-    // Tear down the channel.state subscriptions BEFORE flipping `disconnected` — that setter now
-    // publishes to the store, so no subscriber handler runs against a half-torn-down channel.
+    // Tear down the channel.state subscriptions BEFORE flipping `pendingDisposal` — that setter
+    // now publishes to the store, so no subscriber handler runs against a half-torn-down channel.
     this.messageReceiptsTracker.unregisterSubscriptions();
-    this.disconnected = true;
+    this.pendingDisposal = true;
     this.cooldownTimer.clearTimeout();
     // Release the store-backed paginators so the message store no longer pins this removed channel
     // (and its whole message graph) through its subscriber registry. The channel is being discarded
-    // here (disconnected + deleted from activeChannels, never reused), mirroring Thread teardown.
+    // here (pending disposal + deleted from activeChannels, never reused), mirroring Thread teardown.
     this.messagePaginator.dispose();
     this.pinnedMessagesPaginator.dispose();
   }

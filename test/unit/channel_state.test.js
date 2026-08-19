@@ -210,7 +210,7 @@ describe('ChannelState unreadCount', () => {
 		expect(channel.state.unreadCount).to.equal(0);
 	});
 
-	it('is 0 without a connected user, and does not throw on a disconnected channel', () => {
+	it('is 0 without a connected user, and does not throw on a channel pending disposal', () => {
 		client.user = undefined;
 		expect(channel.state.unreadCount).to.equal(0);
 
@@ -218,7 +218,7 @@ describe('ChannelState unreadCount', () => {
 		channel.state.read = {
 			me: { last_read: new Date(0), unread_messages: 4, user: { id: 'me' } },
 		};
-		channel.disconnected = true;
+		channel.pendingDisposal = true;
 
 		expect(() => channel.state.unreadCount).not.to.throw();
 		expect(channel.state.unreadCount).to.equal(4);
@@ -498,7 +498,20 @@ describe('ChannelState unified store', () => {
 		expect(names).to.eql(['orig', 'renamed']);
 	});
 
-	it('proxies the lifecycle flags (initialized/offlineMode/disconnected) through the store', () => {
+	it('keeps the deprecated `disconnected` alias writing through to `pendingDisposal`', () => {
+		const client = new StreamChat();
+		client.user = { id: 'me' };
+		const channel = new Channel(client, 'messaging', 'alias', {});
+
+		channel.disconnected = true;
+		expect(channel.pendingDisposal).to.equal(true);
+		expect(channel.state.getLatestValue().pendingDisposal).to.equal(true);
+
+		channel.pendingDisposal = false;
+		expect(channel.disconnected).to.equal(false);
+	});
+
+	it('proxies the lifecycle flags (initialized/offlineMode/pendingDisposal) through the store', () => {
 		const client = new StreamChat();
 		client.user = { id: 'me' };
 		const channel = new Channel(client, 'messaging', 'lifecycle', {});
@@ -506,11 +519,13 @@ describe('ChannelState unified store', () => {
 
 		expect(channel.initialized).to.equal(false);
 		expect(channel.offlineMode).to.equal(false);
+		expect(channel.pendingDisposal).to.equal(false);
+		// the deprecated `disconnected` alias proxies the same slice
 		expect(channel.disconnected).to.equal(false);
 		expect(channel.state.getLatestValue()).to.deep.include({
 			initialized: false,
 			offlineMode: false,
-			disconnected: false,
+			pendingDisposal: false,
 		});
 
 		const seen = [];

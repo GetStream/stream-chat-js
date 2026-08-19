@@ -88,8 +88,8 @@ export type MuteStatusState = {
 /**
  * Connection / initialization lifecycle flags for the channel. Previously plain fields on `Channel`;
  * now store-backed so consumers can react to them via `useStateStore(channel.state, selector)`.
- * Read/written through the `channel.initialized` / `channel.offlineMode` / `channel.disconnected`
- * getters/setters, which proxy this slice.
+ * Read/written through the `channel.initialized` / `channel.offlineMode` /
+ * `channel.pendingDisposal` getters/setters, which proxy this slice.
  */
 export type ChannelLifecycleState = {
   /**
@@ -105,11 +105,11 @@ export type ChannelLifecycleState = {
    */
   offlineMode: boolean;
   /**
-   * Whether the channel has been torn down / evicted (deleted, the current user removed, or the
-   * client disconnected). One-way and terminal — see {@link Channel.disconnected}: the instance is
-   * disposed of, never revived.
+   * Whether the channel has been torn down and is awaiting disposal (deleted, the current user
+   * removed, or the client disconnected). One-way and terminal — see
+   * {@link Channel.pendingDisposal}: the instance is never revived.
    */
-  disconnected: boolean;
+  pendingDisposal: boolean;
 };
 
 /**
@@ -183,7 +183,7 @@ export class ChannelState extends StateStore<ChannelStateData> {
       muteStatus: { muted: false, createdAt: null, expiresAt: null },
       initialized: false,
       offlineMode: false,
-      disconnected: false,
+      pendingDisposal: false,
       active: false,
       aiState: AIStates.Idle,
     });
@@ -199,8 +199,8 @@ export class ChannelState extends StateStore<ChannelStateData> {
    * `channel.countUnread()` returns. Written through `Channel._setOwnUnreadCount`.
    */
   get unreadCount() {
-    // read `_client` directly: `getClient()` throws on a disconnected channel, and reading a count
-    // off a disposed instance should yield 0, not blow up.
+    // read `_client` directly: `getClient()` throws on a channel pending disposal, and reading a
+    // count off a dead instance should yield 0, not blow up.
     const userId = this._channel?._client?.userId;
     if (!userId) return 0;
     return this.getLatestValue().read[userId]?.unread_messages ?? 0;

@@ -1663,7 +1663,7 @@ export class StreamChat extends ChatApi {
     //                        we will replace it with `cid`
     for (const key in this.activeChannels) {
       const channel = this.activeChannels[key];
-      if (channel.disconnected) {
+      if (channel.pendingDisposal) {
         continue;
       }
 
@@ -1717,7 +1717,7 @@ export class StreamChat extends ChatApi {
     if (
       cid in this.activeChannels &&
       this.activeChannels[cid] &&
-      !this.activeChannels[cid].disconnected
+      !this.activeChannels[cid].pendingDisposal
     ) {
       const channel = this.activeChannels[cid];
       // Only overwrite the existing channel's custom data when the caller actually provided some.

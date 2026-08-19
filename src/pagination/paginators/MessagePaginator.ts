@@ -328,9 +328,9 @@ export class MessagePaginator extends MessageIntervalPaginator {
   seedUnreadSnapshot = () => {
     // A paginator query (BasePaginator.executeQuery) awaits the network before running its
     // synchronous postQueryReconcile, which calls this on the first page. If the channel was
-    // disconnected while that request was in flight, reading the client below throws ("You can't
+    // torn down while that request was in flight, reading the client below throws ("You can't
     // use a channel after client.disconnect()"), so guard against that.
-    if (this.channel.disconnected) return;
+    if (this.channel.pendingDisposal) return;
     const ownUserId = this.channel.getClient().user?.id;
     const ownReadState = ownUserId ? this.channel.state.read[ownUserId] : undefined;
     if (!ownReadState) return;
