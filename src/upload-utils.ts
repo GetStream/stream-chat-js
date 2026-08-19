@@ -29,12 +29,10 @@ export function appendToFormData(data: FormData, key: string, value: unknown) {
     if (name) data.append(key, value, name);
     else data.append(key, value);
   } else if (isFileReferenceBase(value)) {
-    // React Native reads `uri`, `name` and `type` off this object. `contentType` is legacy
-    // (RN ignores it) and is kept so the emitted part is byte-for-byte what v10.0 sent.
+    // React Native reads `uri`, `name` and `type` off this object.
     data.append(key, {
       uri: value.uri,
       name: value.name || value.uri.split('/').reverse()[0],
-      contentType: value.type || undefined,
       type: value.type || undefined,
     } as unknown as Blob);
   } else if (typeof value === 'object') {

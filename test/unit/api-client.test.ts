@@ -261,7 +261,6 @@ describe('ApiClient multipart encoding', () => {
       uri: 'file:///tmp/photo.heic',
       name: 'photo.heic',
       type: 'image/heic',
-      contentType: 'image/heic',
     });
   });
 
