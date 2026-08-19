@@ -981,8 +981,29 @@ export type UpdateMessageAPIResponse = StreamResponse<UpdateMessageResponse>;
 export type GiphyVersions = keyof Images;
 export type TranslationLanguage = TranslateMessageRequest['language'];
 
+export type FileReferenceBase = {
+  uri: string;
+  type: string;
+  name?: string;
+};
+
+export type FileUploadInput = File | Blob | FileReferenceBase | string;
+
+/**
+ * Structural subset of axios' `AxiosProgressEvent`, kept transport-agnostic on purpose so the
+ * public surface does not depend on axios.
+ */
+export type StreamProgressEvent = {
+  loaded: number;
+  total?: number;
+  lengthComputable?: boolean;
+  progress?: number;
+};
+
 export type StreamRequestOptions = {
   signal?: AbortSignal;
+  /** Only meaningful for upload (multipart) requests; ignored everywhere else. */
+  onUploadProgress?: (event: StreamProgressEvent) => void;
 };
 
 export * from './gen/models';

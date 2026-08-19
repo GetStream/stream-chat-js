@@ -11,7 +11,6 @@ import {
   APIResponse,
   GetApplicationResponse,
   UserResponse,
-  SendFileAPIResponse,
   UR,
   Channel,
   EventType,
@@ -140,13 +139,10 @@ clientRes = client.post<X>('https://chat.stream-io-api.com/', { id: 2 });
 clientRes = client.patch<X>('https://chat.stream-io-api.com/', { id: 2 });
 clientRes = client.delete<X>('https://chat.stream-io-api.com/', { id: 2 });
 
-const file: Promise<SendFileAPIResponse> = client.sendFile(
-  'aa',
-  'bb',
-  'text.jpg',
-  'image/jpg',
-  { id: 'james' },
-);
+const file = client.uploadFile({
+  file: { uri: 'file:///tmp/text.jpg', name: 'text.jpg', type: 'image/jpg' },
+  user: { id: 'james' },
+});
 
 const type: EventType = 'user.updated';
 const event: Event = {

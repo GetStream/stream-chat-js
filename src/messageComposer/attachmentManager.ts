@@ -31,7 +31,12 @@ import type {
   LocalUploadAttachment,
   UploadPermissionCheckResult,
 } from './types';
-import type { ChannelResponse, DraftMessage, LocalMessage } from '../types';
+import type {
+  ChannelResponse,
+  DraftMessage,
+  LocalMessage,
+  StreamRequestOptions,
+} from '../types';
 import type { MessageComposer } from './messageComposer';
 import { mergeWithDiff } from '../utils/mergeWith';
 
@@ -539,36 +544,35 @@ export class AttachmentManager {
         }
       : undefined;
 
-    const axiosUploadConfig =
-      progressHandler || options?.abortSignal
-        ? {
-            ...(progressHandler ? { onUploadProgress: progressHandler } : {}),
-            ...(options?.abortSignal ? { signal: options.abortSignal } : {}),
-          }
-        : undefined;
+    const requestOptions: StreamRequestOptions = {
+      ...(progressHandler ? { onUploadProgress: progressHandler } : {}),
+      ...(options?.abortSignal ? { signal: options.abortSignal } : {}),
+    };
 
-    if (isFileReference(fileLike)) {
-      return this.channel[isImageFile(fileLike) ? 'sendImage' : 'sendFile'](
-        fileLike.uri,
-        fileLike.name,
-        fileLike.type,
-        undefined,
-        axiosUploadConfig,
-      );
+    const file =
+      isFileReference(fileLike) || isFile(fileLike)
+        ? fileLike
+        : createFileFromBlobs({
+            blobsArray: [fileLike],
+            fileName: generateFileName(fileLike.type),
+            mimeType: fileLike.type,
+          });
+
+    const {
+      duration: _duration,
+      // per-request artifact - `doUploadRequest`'s result is public API
+      metadata: _metadata,
+      ...result
+    } = await this.channel[isImageFile(fileLike) ? 'uploadImage' : 'uploadFile'](
+      { file },
+      requestOptions,
+    );
+
+    if (!result.file) {
+      throw new Error('The upload succeeded but the response carried no file URL');
     }
 
-    const file = isFile(fileLike)
-      ? fileLike
-      : createFileFromBlobs({
-          blobsArray: [fileLike],
-          fileName: generateFileName(fileLike.type),
-          mimeType: fileLike.type,
-        });
-
-    const { duration: _duration, ...result } = await this.channel[
-      isImageFile(fileLike) ? 'sendImage' : 'sendFile'
-    ](file, undefined, undefined, undefined, axiosUploadConfig);
-    return result;
+    return result as MinimumUploadRequestResult;
   };
 
   /**
