@@ -339,20 +339,10 @@ export type MessagePaginationOptions = PaginationOptions & {
   id_around?: string;
 };
 
-export type PinnedMessagePaginationOptions = {
-  id_around?: string;
-  id_gt?: string;
-  id_gte?: string;
-  id_lt?: string;
-  id_lte?: string;
-  limit?: number;
-  offset?: number;
-  pinned_at_after?: string | Date;
-  pinned_at_after_or_equal?: string | Date;
-  pinned_at_around?: string | Date;
-  pinned_at_before?: string | Date;
-  pinned_at_before_or_equal?: string | Date;
-};
+export type PinnedMessagePaginationOptions = Omit<
+  Parameters<ChatApi['getPinnedMessages']>[0],
+  'id' | 'member_custom_include' | 'sort' | 'type'
+>;
 
 export type GetRepliesRequest = Parameters<ChatApi['getReplies']>[0];
 export type QueryMembersOptions = Partial<Omit<QueryMembersPayload, 'filter_conditions'>>;

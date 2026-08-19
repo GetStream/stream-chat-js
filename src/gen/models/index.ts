@@ -1070,7 +1070,7 @@ export interface BulkActionAppealsRequest {
   reject_appeal?: RejectAppealRequestPayload;
 
   /**
-   * Configuration for restore action
+   * Configuration for restore action. State-aware: reverses whichever of a delete, a block, or a shadow block currently applies to the content (including both a delete and a block/shadow block at once).
    */
   restore?: RestoreActionRequestPayload;
 
@@ -1080,7 +1080,7 @@ export interface BulkActionAppealsRequest {
   unban?: UnbanActionRequestPayload;
 
   /**
-   * Configuration for unblock action
+   * Deprecated: use restore instead — it now also reverses a block or shadow block. Configuration for unblock action.
    */
   unblock?: UnblockActionRequestPayload;
 }
@@ -4595,6 +4595,18 @@ export interface GetOGResponse {
   fields?: Array<Field>;
 
   giphy?: Images;
+}
+
+export interface GetPinnedMessagesResponse {
+  /**
+   * Duration of the request in milliseconds
+   */
+  duration: string;
+
+  /**
+   * Messages
+   */
+  messages: Array<MessageResponse>;
 }
 
 export interface GetReactionsResponse {
@@ -11371,7 +11383,7 @@ export interface SubmitActionRequest {
   reject_appeal?: RejectAppealRequestPayload;
 
   /**
-   * Configuration for restore action
+   * Configuration for restore action. State-aware: reverses whichever of a delete, a block, or a shadow block currently applies to the content (including both a delete and a block/shadow block at once).
    */
   restore?: RestoreActionRequestPayload;
 
@@ -11386,7 +11398,7 @@ export interface SubmitActionRequest {
   unban?: UnbanActionRequestPayload;
 
   /**
-   * Configuration for unblock action
+   * Deprecated: use restore instead — it now also reverses a block or shadow block. Configuration for unblock action.
    */
   unblock?: UnblockActionRequestPayload;
 }

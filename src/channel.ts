@@ -34,7 +34,6 @@ import type {
   EventPayload,
   EventType,
   FileUploadInput,
-  GetRepliesAPIResponse,
   LocalMessage,
   MarkReadRequest,
   MarkReadResponse,
@@ -42,8 +41,6 @@ import type {
   MessageRequest,
   MessageResponse,
   MessageSetType,
-  PinnedMessagePaginationOptions,
-  PinnedMessagesSort,
   QueryMembersPayload,
   ReactionAPIResponse,
   ReactionRequest,
@@ -1522,29 +1519,6 @@ export class Channel extends ChannelApi {
     // Thread reply state is owned by the Thread object (Thread.messagePaginator); the returned
     // replies are consumed there. The channel message list is owned by channel.messagePaginator.
     return data;
-  }
-
-  // TODO: find out v2 equivalent
-  /**
-   * List pinned messages of the channel.
-   *
-   * @param options - Pagination params, e.g. `{ limit: 10, id_lte: 10 }`.
-   * @param sort - Defines sorting direction of pinned messages (optional, defaults to `[]`).
-   * @returns A response with a list of messages.
-   */
-  async getPinnedMessages(
-    options: PinnedMessagePaginationOptions,
-    sort: PinnedMessagesSort = [],
-  ) {
-    return await this.getClient().api.get<GetRepliesAPIResponse>(
-      this._channelURL() + '/pinned_messages',
-      {
-        payload: {
-          ...options,
-          sort,
-        },
-      },
-    );
   }
 
   /**
