@@ -3,7 +3,8 @@ import { AxiosError } from 'axios';
 
 import type { APIError, RateLimit, RequestMetadata, StreamRequestOptions } from './types';
 import { StreamAPIError } from './types';
-import { chatCodes, randomId, retryInterval, toFormData } from './utils';
+import { chatCodes, randomId, retryInterval } from './utils';
+import { toFormData } from './upload-utils';
 import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
 import { runWithRetry } from './utils/retryable';

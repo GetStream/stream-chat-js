@@ -13,8 +13,8 @@ import {
   generateChannelTempCid,
   localMessageToNewMessagePayload,
   logChatPromiseExecution,
-  normalizeUploadFile,
 } from './utils';
+import { normalizeUploadFile } from './upload-utils';
 import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
 import type {

@@ -19,9 +19,9 @@ import {
   getEnv,
   isOnline,
   isOwnUserBaseProperty,
-  normalizeUploadFile,
   randomId,
 } from './utils';
+import { normalizeUploadFile } from './upload-utils';
 
 import type {
   APIResponse,
