@@ -4,6 +4,7 @@ import { getClientWithUser } from './test-utils/getClient';
 
 import * as utils from '../../src/utils';
 import { StreamChat } from '../../src/client';
+import { ChatApi } from '../../src/gen-imports';
 import { chatLoggerSystem } from '../../src/logger';
 import { StableWSConnection } from '../../src/connection';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
@@ -273,6 +274,73 @@ describe('Client anonymous auth type', () => {
 
 		expect(client.anonymous).to.be.false;
 		expect(client.getAuthType()).to.equal('jwt');
+	});
+});
+
+describe('Client createGuest', () => {
+	const guestResponse = {
+		access_token: 'guest.tok.en',
+		user: { id: 'guest-1', role: 'guest' },
+	};
+
+	// sinon stubs on ChatApi.prototype outlive the test that installed them
+	afterEach(() => sinon.restore());
+
+	it('should send the request as anonymous when the client has no token', async () => {
+		const client = new StreamChat('key', { allowServerSideConnect: true });
+		let authTypeDuringRequest;
+		let tokenDuringRequest;
+		sinon.stub(ChatApi.prototype, 'createGuest').callsFake(async () => {
+			// /api/v2/guest is only accepted with stream-auth-type: anonymous; a fresh
+			// client otherwise defaults to jwt with no token and the API returns 401.
+			authTypeDuringRequest = client.getAuthType();
+			tokenDuringRequest = client.api._getToken();
+			return guestResponse;
+		});
+
+		const result = await client.createGuest({ user: { id: 'guest-1' } });
+
+		expect(authTypeDuringRequest).to.equal('anonymous');
+		expect(tokenDuringRequest).to.equal('');
+		expect(result).to.equal(guestResponse);
+	});
+
+	it('should restore the un-authenticated state afterwards', async () => {
+		const client = new StreamChat('key', { allowServerSideConnect: true });
+		sinon.stub(ChatApi.prototype, 'createGuest').resolves(guestResponse);
+
+		await client.createGuest({ user: { id: 'guest-1' } });
+
+		expect(client.anonymous).to.be.false;
+		expect(client.tokenManager.token).to.be.undefined;
+	});
+
+	it('should restore state even when the request fails', async () => {
+		const client = new StreamChat('key', { allowServerSideConnect: true });
+		sinon.stub(ChatApi.prototype, 'createGuest').rejects(new Error('boom'));
+
+		await expect(client.createGuest({ user: { id: 'guest-1' } })).rejects.toThrow(/boom/);
+
+		expect(client.anonymous).to.be.false;
+		expect(client.tokenManager.token).to.be.undefined;
+	});
+
+	it('should not touch the auth mode of an already authenticated client', async () => {
+		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const token = 'xyz.eyJ1c2VyX2lkIjoiYW1pbiJ9.xyz';
+		await client.tokenManager.setTokenOrProvider(token, { id: 'amin' });
+
+		let authTypeDuringRequest;
+		sinon.stub(ChatApi.prototype, 'createGuest').callsFake(async () => {
+			authTypeDuringRequest = client.getAuthType();
+			return guestResponse;
+		});
+
+		await client.createGuest({ user: { id: 'guest-1' } });
+
+		// Swapping auth out from under a live session would be worse than the rejection.
+		expect(authTypeDuringRequest).to.equal('jwt');
+		expect(client.tokenManager.token).to.equal(token);
 	});
 });
 

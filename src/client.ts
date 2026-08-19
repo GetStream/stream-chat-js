@@ -94,8 +94,6 @@ function isString(value: unknown): value is string {
   return typeof value === 'string' || value instanceof String;
 }
 
-const ANONYMOUS_TOKEN_PLACEHOLDER = 'anonymous';
-
 const logger = chatLoggerSystem.getLogger('client');
 const offlineDbLogger = chatLoggerSystem.getLogger('offline-db');
 
@@ -685,6 +683,30 @@ export class StreamChat extends ChatApi {
 
     return this.openConnection();
   };
+
+  /**
+   * Creates a guest user and returns its access token.
+   *
+   * @param args - The guest creation request, plus optional per-request options.
+   * @returns The created guest user and its access token.
+   */
+  override async createGuest(...args: Parameters<ChatApi['createGuest']>) {
+    if (this.tokenManager.token || this.tokenManager.tokenProvider) {
+      return await super.createGuest(...args);
+    }
+
+    // Set token to anonymous so API accepts the request
+    await this.tokenManager.setTokenOrProvider('', {
+      id: this.userId ?? '!anon',
+      anon: true,
+    });
+
+    try {
+      return await super.createGuest(...args);
+    } finally {
+      this.tokenManager.reset();
+    }
+  }
 
   /**
    * Sets up a temporary guest user.
@@ -2277,7 +2299,7 @@ export class StreamChat extends ChatApi {
       // The server requires a non-empty token even for anonymous connections, but
       // skips JWT parsing for any string that is not shaped like one. Anonymous users
       // have no token, so send a placeholder the server accepts and ignores.
-      token: this.tokenManager.getToken() || ANONYMOUS_TOKEN_PLACEHOLDER,
+      token: this.tokenManager.getToken() || 'anonymous',
       // `connect()` rejects before reaching this when `_user` is unset.
       user_details: this._user as ConnectUserDetailsRequest,
       products: ['chat'],
