@@ -3,15 +3,14 @@ import type { StreamChat } from './client';
 import type {
   EventPayload,
   PartialPollUpdate,
-  PollEnrichData,
   PollOptionData,
-  PollResponse_old,
+  PollResponseData,
   PollVoteResponseData,
   QueryVotesFilters,
   QueryVotesOptions,
   RequireLiteral,
+  SortParamRequest,
   UpdatePollRequest,
-  VoteSort,
   VotingVisibility,
 } from './types';
 import type { PollResponseData as Gen_PollResponseData, WSEvent } from './gen/models';
@@ -35,18 +34,18 @@ export const isVoteAnswer = (
 export type PollAnswersQueryParams = {
   filter?: QueryVotesFilters;
   options?: QueryVotesOptions;
-  sort?: VoteSort;
+  sort?: SortParamRequest[];
 };
 
 export type PollOptionVotesQueryParams = {
   filter: { option_id: string } & QueryVotesFilters;
   options?: QueryVotesOptions;
-  sort?: VoteSort;
+  sort?: SortParamRequest[];
 };
 
 type OptionId = string;
 
-export type PollState = Omit<PollResponse_old, 'own_votes' | 'id'> & {
+export type PollState = Omit<PollResponseData, 'own_votes' | 'id'> & {
   lastActivityAt: Date; // todo: would be ideal to get this from the BE
   maxVotedOptionIds: OptionId[];
   ownVotesByOptionId: Record<OptionId, PollVoteResponseData>;
@@ -358,7 +357,7 @@ export class Poll {
 }
 
 function getMaxVotedOptionIds(
-  voteCountsByOption: PollResponse_old['vote_counts_by_option'],
+  voteCountsByOption: PollResponseData['vote_counts_by_option'],
 ) {
   let maxVotes = 0;
   let winningOptions: string[] = [];
@@ -398,7 +397,7 @@ export function extractPollData(pollResponse: Gen_PollResponseData): UpdatePollR
   };
 }
 
-export function mapPollStateToResponse(poll: Poll): PollResponse_old {
+export function mapPollStateToResponse(poll: Poll): PollResponseData {
   const {
     lastActivityAt: _lastActivityAt,
 
@@ -421,7 +420,10 @@ export function mapPollStateToResponse(poll: Poll): PollResponse_old {
 
 export function extractPollEnrichedData(
   pollResponse: Gen_PollResponseData,
-): Omit<PollEnrichData, 'own_votes' | 'latest_answers'> {
+): Pick<
+  Gen_PollResponseData,
+  'answers_count' | 'latest_votes_by_option' | 'vote_count' | 'vote_counts_by_option'
+> {
   return {
     answers_count: pollResponse.answers_count,
     latest_votes_by_option: pollResponse.latest_votes_by_option,

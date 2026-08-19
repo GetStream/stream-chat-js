@@ -1,6 +1,6 @@
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { StableWSConnection } from './connection';
-import type { CustomChannelData, CustomEventTypes } from './custom_types';
+import type { CustomEventTypes } from './custom_types';
 import type { NotificationManager } from './notifications';
 import type { RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
 import type {
@@ -8,7 +8,6 @@ import type {
   Attachment,
   AutomodDetailsResponse,
   ChannelConfigWithInfo,
-  ChannelInput,
   ChannelMemberResponse,
   ChannelOwnCapability,
   ChannelResponse,
@@ -18,8 +17,6 @@ import type {
   MessageResponse,
   ModerationPayload,
   OwnUserResponse,
-  PollResponseData,
-  PollVoteResponseData,
   QueryChannelsRequest,
   QueryMembersPayload,
   QueryPollsRequest,
@@ -32,9 +29,7 @@ import type {
   SearchWarning,
   SendMessageRequest,
   SendMessageResponse,
-  SharedLocation,
   SharedLocationResponseData,
-  SortParamRequest,
   TranslateMessageRequest,
   UpdateChannelRequest,
   UpdateMessageRequest,
@@ -206,47 +201,18 @@ export type BanUserOptions = UnBanUserOptions & {
   delete_reactions?: boolean;
 };
 
-export type ChannelOptions = {
-  limit?: number;
-  member_limit?: number;
-  message_limit?: number;
-  offset?: number;
-  presence?: boolean;
-  state?: boolean;
-  user_id?: string;
-  watch?: boolean;
-  /**
-   * Name of a predefined filter to use instead of sending raw
-   * `filter_conditions`.
-   *
-   * The backend resolves the filter template by name and interpolates it using
-   * `filter_values`.
-   *
-   * A regular `sort` can still be passed to `queryChannels()`, but backend
-   * precedence rules apply:
-   *
-   * - if the predefined filter has its own stored sort template, that stored
-   *   sort takes precedence and the request `sort` is ignored
-   * - if the predefined filter does not define a sort template, the request
-   *   `sort` can still be used
-   */
-  predefined_filter?: string;
-  /**
-   * Values used to interpolate placeholders inside the predefined filter's
-   * `filter` template.
-   *
-   * Example: a template value like `{{user_id}}` can be resolved with
-   * `{ user_id: 'alice' }`.
-   *
-   * Only used when `predefined_filter` is provided.
-   */
-  filter_values?: Record<string, unknown>;
-  /**
-   * Values to interpolate into the predefined filter sort template placeholders.
-   * Only used when predefined_filter is provided.
-   */
-  sort_values?: Record<string, unknown>;
-};
+/**
+ * Everything `queryChannels()` accepts apart from the filter and the sort.
+ *
+ * Derived from the generated request so new query options appear here automatically.
+ *
+ * On `predefined_filter`: the backend resolves the named filter template and interpolates it
+ * with `filter_values`. A regular `sort` can still be passed, but backend precedence applies —
+ * if the predefined filter has its own stored sort template that template wins and the request
+ * `sort` is ignored; if it does not, the request `sort` is used. `sort_values` interpolates the
+ * stored sort template's placeholders. All three are only read when `predefined_filter` is set.
+ */
+export type ChannelOptions = Omit<QueryChannelsRequest, 'filter_conditions' | 'sort'>;
 
 export type ChannelStateOptions = {
   offlineMode?: boolean;
@@ -385,12 +351,8 @@ export type UnBanUserOptions = {
   type?: string;
 };
 
-export type UserOptions = {
-  include_deactivated_users?: boolean;
-  limit?: number;
-  offset?: number;
-  presence?: boolean;
-};
+/** Everything `queryUsers()` accepts apart from the filter and the sort. */
+export type UserOptions = Omit<QueryUsersPayload, 'filter_conditions' | 'sort'>;
 
 type LocalEvent = (
   | ({ type: 'live_location_sharing.started' } & { message: MessageResponse })
@@ -454,9 +416,9 @@ export type QueryReactionsRequestWithId = Parameters<ChatApi['queryReactions']>[
 
 export type ChannelFilters = NonNullable<QueryChannelsRequest['filter_conditions']>;
 
-export type QueryPollsOptions = Pager;
+export type QueryPollsOptions = Omit<QueryPollsRequest, 'filter' | 'sort'>;
 
-export type QueryVotesOptions = Pager;
+export type QueryVotesOptions = Omit<QueryPollVotesRequest, 'filter' | 'sort'>;
 
 export type QueryPollsFilters = NonNullable<QueryPollsRequest['filter']>;
 
@@ -491,41 +453,11 @@ export type MemberFilters = QueryMembersPayload['filter_conditions'];
  * Sort Types
  */
 
-export type BannedUsersSort = SortParamRequest[];
-
-export type ReactionSort = SortParamRequest[];
-
-export type ChannelSort = SortParamRequest[];
-
-export type PinnedMessagesSort = SortParamRequest[];
-
-export type UserSort = SortParamRequest[];
-
-export type MemberSort = SortParamRequest[];
-
-export type SearchMessageSort = SortParamRequest[];
-
-export type DraftSort = SortParamRequest[];
-
-export type PollSort = SortParamRequest[];
-
-export type VoteSort = SortParamRequest[];
-
 /**
  * Base Types
  */
 
-// export type Attachment = ReplacePropertyTypes<
-//   Attachment,
-//   { custom: CustomAttachmentData & { file_size?: number; mime_type?: string } }
-// >;
-
 export type OGAttachment = RequireLiteral<Attachment, 'og_scrape_url'>;
-
-export type ChannelData = ReplacePropertyTypes<
-  ChannelInput,
-  { custom: CustomChannelData }
->;
 
 export type PushProvider = CreateDeviceRequest['push_provider'];
 
@@ -572,12 +504,6 @@ export type UpdatedMessage = Omit<
 
 export type TaskResponse = {
   task_id: string;
-};
-
-export type Pager = {
-  limit?: number;
-  next?: string;
-  prev?: string;
 };
 
 export type MessageSetType = 'latest' | 'current' | 'new';
@@ -648,21 +574,10 @@ export class StreamAPIError<T = APIError> extends Error {
   }
 }
 
-export type PollResponse_old = PollResponseData & PollEnrichData;
-
 export enum VotingVisibility {
   anonymous = 'anonymous',
   public = 'public',
 }
-
-export type PollEnrichData = {
-  answers_count: number;
-  latest_answers: PollVoteResponseData[]; // not updated with WS events, ordered DESC by created_at, seems like updated_at cannot be different from created_at
-  latest_votes_by_option: Record<string, PollVoteResponseData[]>; // not updated with WS events; always null in anonymous polls
-  vote_count: number;
-  vote_counts_by_option: Record<string, number>;
-  own_votes?: PollVoteResponseData[]; // not updated with WS events
-};
 
 export type PartialPollUpdate = {
   set?: Partial<UpdatePollRequest>;
@@ -730,17 +645,11 @@ export type SharedLiveLocationResponse = RequireLiteral<
   'end_at'
 >;
 
-export type LiveLocationPayload = RequireLiteral<SharedLocation, 'end_at'>;
-
-export type ThreadSort = SortParamRequest[];
-
 export type ThreadFilters = NonNullable<QueryThreadsRequest['filter']>;
 
 export type CreateReminderOptions = Parameters<ChatApi['createReminder']>[0];
 
 export type ReminderFilters = NonNullable<QueryRemindersRequest['filter']>;
-
-export type ReminderSort = SortParamRequest[];
 
 export type ListUserGroupsOptions = NonNullable<Parameters<ChatApi['listUserGroups']>[0]>;
 
@@ -769,17 +678,6 @@ export type EventPayload<T extends Event['type'] | (string & {})> = Extract<
 >;
 
 export type RequireLiteral<L, T extends keyof L> = Omit<L, T> & Required<Pick<L, T>>;
-
-export type ReplacePropertyTypes<
-  Base,
-  Replacement extends RequireAtLeastOne<Record<keyof Base, any>>,
-> = keyof Replacement extends keyof Base
-  ? Omit<Base, keyof Replacement> & {
-      [K in keyof Replacement as undefined extends Base[K] ? never : K]: Replacement[K];
-    } & {
-      [K in keyof Replacement as undefined extends Base[K] ? K : never]?: Replacement[K];
-    }
-  : never;
 
 export type PartializeAllBut<T, K extends keyof T> = {
   [P in K]-?: T[P];

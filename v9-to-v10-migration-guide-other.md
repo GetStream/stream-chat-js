@@ -293,7 +293,7 @@ Field-name typos in a typed filter are now compile errors. If you were relying o
 
 ### Filter aliases now derive from the request types
 
-`ChannelFilters`, `MessageFilters`, `ReactionFilters`, `ThreadFilters`, `UserFilters` still exist as convenience aliases but derive from the constrained request types. The three remaining hand-written poll/reminder filter types are now migrated the same way:
+`ChannelFilters`, `MessageFilters`, `ReactionFilters`, `ThreadFilters`, `UserFilters` still exist as convenience aliases but derive from the constrained request types. (The _sort_ aliases did not survive — unlike a filter alias, which resolves to a per-endpoint `Filters<{...}>` carrying that endpoint's declared operators, every sort alias was the same `SortParamRequest[]`. See the [sort guide](./v9-to-v10-migration-guide-sort.md#the-sort-aliases-are-gone).) The three remaining hand-written poll/reminder filter types are now migrated the same way:
 
 | Alias               | Now derives from                               |
 | ------------------- | ---------------------------------------------- |

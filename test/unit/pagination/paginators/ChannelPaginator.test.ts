@@ -4,7 +4,7 @@ import {
   type ChannelFilters,
   ChannelOptions,
   ChannelPaginator,
-  ChannelSort,
+  SortParamRequest,
   DEFAULT_PAGINATION_OPTIONS,
   type FilterBuilderGenerators,
   formatMessage,
@@ -847,7 +847,7 @@ describe('ChannelPaginator', () => {
       ).mockImplementation(() => Promise.resolve(true));
 
       const filters = { id: 'abc' };
-      const sort: ChannelSort = [{ field: 'id', direction: 1 }];
+      const sort: SortParamRequest[] = [{ field: 'id', direction: 1 }];
       const items1 = [channel1];
 
       const paginator = new ChannelPaginator({ client });
@@ -1261,7 +1261,7 @@ describe('ChannelPaginator', () => {
     it('is called with correct parameters', async () => {
       const queryChannelsSpy = vi.spyOn(client, 'queryChannels').mockResolvedValue([]);
       const filters: ChannelFilters = { name: 'A' };
-      const sort: ChannelSort = [{ field: 'has_unread', direction: -1 }];
+      const sort: SortParamRequest[] = [{ field: 'has_unread', direction: -1 }];
       const requestOptions: ChannelOptions = { message_limit: 3 };
       const paginator = new ChannelPaginator({
         client,
@@ -1353,7 +1353,7 @@ describe('ChannelPaginator', () => {
 
     const mockQueryResponse = (
       channels: Channel[],
-      predefinedFilter?: { name: string; filter: object; sort?: ChannelSort },
+      predefinedFilter?: { name: string; filter: object; sort?: SortParamRequest[] },
     ) =>
       vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
         channels,

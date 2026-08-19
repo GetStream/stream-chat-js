@@ -142,8 +142,8 @@ v9 also had `client.createAbortControllerForNextRequest()`, which armed a contro
 These v9 names look like they'd be caught by the same rewrite pass but are **not** simple aliases — they either have hand-authored shape on top of the generated type (via `RequireLiteral`, compound intersections, etc.) or point at a locally-defined type. Some names now re-export the generated shape directly through `export * from './gen/models'`; the name is the same but the shape may have narrowed since v9. Do not rewrite these:
 
 - `MessageResponse`, `UserResponse`, `OwnUserResponse`, `ReactionResponse`, `ChannelResponse`, `ChannelMemberResponse`, `DraftResponse`, `Attachment`, `PollResponseData`, `PollOptionResponseData`, `MessageRequest` — in v9 these were wrapped with `ReplacePropertyTypes<…, { custom: Custom*Data }>`; in v10 the custom-overlay pattern is dropped and the raw generated shape is re-exported. The v9 name is retained.
-- `PollOptionData`, `DraftMessage`, `SharedLiveLocationResponse`, `LiveLocationPayload`, `ChannelData` — compound types (locally-defined or `RequireLiteral<…, 'end_at'>`). Keep as-is.
-- `PollResponse_old` — the only remaining `_old`-suffixed compat holder. Still used internally by `poll.ts` / `poll_manager.ts` / `offline-support/types.ts` and not a simple alias (it intersects the generated `PollResponseData` with a local `PollEnrichData` overlay). Its own story; do not rename here.
+- `PollOptionData`, `DraftMessage`, `SharedLiveLocationResponse` — compound types (locally-defined or `RequireLiteral<…, 'end_at'>`). Keep as-is.
+- `LiveLocationPayload`, `ChannelData` and `PollResponse_old` **were** in this list and are now removed — see [below](#aliases-that-restated-a-generated-type).
 - `AppSettings` is the only "settings"-ish name that IS renamed here (to `AppResponseFields`). Do not confuse it with `AppSettingsAPIResponse` (also removed; renamed to `GetApplicationResponse`) — they were two different aliases that shared a prefix.
 
 ## Removed after `10.0.0-rc.4` — convergence on the generated types
@@ -223,6 +223,35 @@ type AutomodBehavior = ChannelConfigWithInfo['automod_behavior']; // 'flag' | 'b
 ```
 
 The `| (string & {})` tail meant the unions accepted _any_ string — the documented values were a hint, not a constraint. Assigning an arbitrary string to one of these now fails to compile. `channel.getConfig().automod` reads are unaffected; the generated config has always had the narrow type.
+
+### Aliases that restated a generated type
+
+Each of these was structurally identical to a type the generator already emits — verified by compiling a mutual-assignability assertion, not by inspection. They are removed; the replacement is a pure find/replace with no behaviour change.
+
+| Removed after `rc.4`   | Replacement                                      | Detail                                                                                                                                                             |
+| ---------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ChannelData`          | `ChannelInput`                                   | Was `ReplacePropertyTypes<ChannelInput, { custom: CustomChannelData }>`, but `ChannelInput.custom` is _already_ `CustomChannelData` — the mapped type was a no-op. |
+| `PollResponse_old`     | `PollResponseData`                               | Was `PollResponseData & PollEnrichData`; all six `PollEnrichData` fields are already on `PollResponseData`.                                                        |
+| `PollEnrichData`       | `PollResponseData`                               | Fully subsumed. Its fields are `answers_count`, `latest_answers`, `latest_votes_by_option`, `vote_count`, `vote_counts_by_option`, `own_votes`.                    |
+| `LiveLocationPayload`  | `SharedLocation`                                 | Was `RequireLiteral<SharedLocation, 'end_at'>`; its only consumer immediately did `Omit<…, 'end_at'>`, undoing the requirement.                                    |
+| `Pager`                | the request type's own `limit` / `next` / `prev` | Also removes its two aliases — see the row below.                                                                                                                  |
+| `ReplacePropertyTypes` | none                                             | Type utility whose only remaining consumer was `ChannelData`. Inline the `Omit<…> & {…}` if you were using it.                                                     |
+
+`ChannelOptions`, `UserOptions`, `QueryPollsOptions` and `QueryVotesOptions` keep their names but are now **derived** from the request types instead of restating them:
+
+```ts
+type ChannelOptions = Omit<QueryChannelsRequest, 'filter_conditions' | 'sort'>;
+type UserOptions = Omit<QueryUsersPayload, 'filter_conditions' | 'sort'>;
+type QueryPollsOptions = Omit<QueryPollsRequest, 'filter' | 'sort'>;
+type QueryVotesOptions = Omit<QueryPollVotesRequest, 'filter' | 'sort'>;
+```
+
+Two of those change shape:
+
+- **`ChannelOptions` gains `member_custom_include?: Array<string>`** (the endpoint has always accepted it) and **loses `user_id?: string`** (`QueryChannelsRequest` has no such field — it was never sent). Additive for almost everyone; if you were setting `user_id` here it was being dropped silently.
+- **`UserOptions` is unchanged field-for-field** — it happened to be an exact copy. It is derived now so it cannot drift.
+
+`ChannelUpdateOptions` and the `*Filters` family are deliberately **kept**: they were already derived (`Omit<UpdateChannelRequest, 'message'>`, `NonNullable<Request['filter']>`), so they update themselves when the spec moves and restate nothing.
 
 ## Verification
 

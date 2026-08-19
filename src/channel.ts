@@ -21,8 +21,8 @@ import type {
   AIState,
   APIResponse,
   BanUserOptions,
-  ChannelData,
   ChannelGetOrCreateRequest,
+  ChannelInput,
   ChannelMemberResponse,
   ChannelResponse,
   ChannelStateResponseFields,
@@ -143,7 +143,7 @@ export type ChannelInstanceConfig = {
 export class Channel extends ChannelApi {
   _client: StreamChat;
   data: Partial<ChannelResponse> | undefined;
-  _data: ChannelData;
+  _data: ChannelInput;
   cid: string;
   /**  */
   listeners: Map<EventType, Set<EventHandler>>;
@@ -191,7 +191,7 @@ export class Channel extends ChannelApi {
     client: StreamChat,
     type: string,
     id: string | undefined,
-    data: ChannelData,
+    data: ChannelInput,
   ) {
     const validTypeRe = /^[\w_-]+$/;
     const validIDRe = /^[\w!_-]+$/;

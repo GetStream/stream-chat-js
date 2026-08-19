@@ -24,7 +24,7 @@ import type {
   APIResponse,
   AppIdentifier,
   BanUserOptions,
-  ChannelData,
+  ChannelInput,
   ChannelMute,
   ChannelOptions,
   ChannelResponse,
@@ -1529,12 +1529,12 @@ export class StreamChat extends ChatApi {
    * @param custom - Custom data to attach to the channel (optional, defaults to `{}`).
    * @returns The channel object; initialize it using `channel.watch()`.
    */
-  channel(channelType: string, channelId?: string | null, custom?: ChannelData): Channel;
-  channel(channelType: string, custom?: ChannelData): Channel;
+  channel(channelType: string, channelId?: string | null, custom?: ChannelInput): Channel;
+  channel(channelType: string, custom?: ChannelInput): Channel;
   channel(
     channelType: string,
-    channelIdOrCustom?: string | ChannelData | null,
-    custom: ChannelData = {},
+    channelIdOrCustom?: string | ChannelInput | null,
+    custom: ChannelInput = {},
   ) {
     if (!this.userId) {
       throw Error('Call connectUser or connectAnonymousUser before creating a channel');
@@ -1581,7 +1581,7 @@ export class StreamChat extends ChatApi {
    * @param custom - Custom data to attach to the channel.
    * @returns The channel object; initialize it using `channel.watch()`.
    */
-  getChannelByMembers = (channelType: string, custom: ChannelData) => {
+  getChannelByMembers = (channelType: string, custom: ChannelInput) => {
     // Check if the channel already exists.
     // Only allow 1 channel object per cid
     const memberIds = (custom.members ?? []).map((member) =>
@@ -1645,7 +1645,7 @@ export class StreamChat extends ChatApi {
    * @param custom - Custom data to attach to the channel.
    * @returns The channel object; initialize it using `channel.watch()`.
    */
-  getChannelById = (channelType: string, channelId: string, custom: ChannelData) => {
+  getChannelById = (channelType: string, channelId: string, custom: ChannelInput) => {
     if (typeof channelId === 'string' && ~channelId.indexOf(':')) {
       throw Error(`Invalid channel id ${channelId}, can't contain the : character`);
     }

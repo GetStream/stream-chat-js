@@ -15,7 +15,7 @@ import {
   ThreadStateResponse,
   THREAD_MANAGER_INITIAL_STATE,
   ThreadFilters,
-  ThreadSort,
+  SortParamRequest,
 } from '../../src';
 
 import { describe, it, beforeEach, expect, afterEach } from 'vitest';
@@ -2337,7 +2337,7 @@ describe('Threads 2.0', () => {
         });
 
         it('applies sort parameters correctly', async () => {
-          const sort: ThreadSort = [
+          const sort: SortParamRequest[] = [
             { field: 'created_at', direction: -1 },
             { field: 'last_message_at', direction: 1 },
           ];
@@ -2360,7 +2360,7 @@ describe('Threads 2.0', () => {
             created_by_user_id: { $eq: 'user1' },
             updated_at: { $gte: '2024-01-01T00:00:00Z' },
           };
-          const sort: ThreadSort = [{ field: 'last_message_at', direction: -1 }];
+          const sort: SortParamRequest[] = [{ field: 'last_message_at', direction: -1 }];
 
           await threadManager.queryThreads({ filter, sort });
 

@@ -3,10 +3,10 @@ import type {
   CreatePollRequest,
   LocalMessage,
   MessageResponse,
-  PollResponse_old,
-  PollSort,
+  PollResponseData,
   QueryPollsFilters,
   QueryPollsOptions,
+  SortParamRequest,
 } from './types';
 import { Poll } from './poll';
 import { formatMessage } from './utils';
@@ -78,7 +78,7 @@ export class PollManager extends WithSubscriptions {
 
   public queryPolls = async (
     filter: QueryPollsFilters,
-    sort: PollSort = [],
+    sort: SortParamRequest[] = [],
     options: QueryPollsOptions = {},
   ) => {
     const { polls, next } = await this.client.queryPolls({
@@ -107,13 +107,13 @@ export class PollManager extends WithSubscriptions {
       if (!message.poll) {
         continue;
       }
-      const pollResponse = message.poll as PollResponse_old;
+      const pollResponse = message.poll as PollResponseData;
       this.setOrOverwriteInCache(pollResponse, overwriteState);
     }
   };
 
   private setOrOverwriteInCache = (
-    pollResponse: PollResponse_old,
+    pollResponse: PollResponseData,
     overwriteState?: boolean,
   ) => {
     if (!this.client._cacheEnabled()) {
