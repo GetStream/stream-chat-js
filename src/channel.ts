@@ -19,7 +19,6 @@ import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
 import type {
   AIState,
-  APIResponse,
   BanUserOptions,
   ChannelGetOrCreateRequest,
   ChannelInput,
@@ -42,7 +41,6 @@ import type {
   MessageResponse,
   MessageSetType,
   QueryMembersPayload,
-  ReactionAPIResponse,
   ReactionRequest,
   SendMessageOptions,
   SendReactionRequest,
@@ -629,7 +627,7 @@ export class Channel extends ChannelApi {
       if (offlineDb) {
         // The optimistic reaction row is written by the local-update layer
         // (`applyReactionLocally`); here we only queue the request for replay.
-        return await offlineDb.queueTask<ReactionAPIResponse>({
+        return await offlineDb.queueTask<Awaited<ReturnType<ChatApi['sendReaction']>>>({
           task: {
             channelId: this.id as string,
             channelType: this.type,
@@ -661,7 +659,7 @@ export class Channel extends ChannelApi {
       if (offlineDb) {
         // The optimistic reaction-row removal is handled by the local-update layer
         // (`applyReactionLocally`); here we only queue the request for replay.
-        return await offlineDb.queueTask<ReactionAPIResponse>({
+        return await offlineDb.queueTask<Awaited<ReturnType<ChatApi['deleteReaction']>>>({
           task: {
             channelId: this.id as string,
             channelType: this.type,
@@ -1970,15 +1968,17 @@ export class Channel extends ChannelApi {
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
-        return (await offlineDb.queueTask<APIResponse>({
-          task: {
-            channelId: this.id as string,
-            channelType: this.type,
-            threadId: request?.parent_id,
-            payload: args,
-            type: 'delete-draft',
+        return (await offlineDb.queueTask<Awaited<ReturnType<ChannelApi['deleteDraft']>>>(
+          {
+            task: {
+              channelId: this.id as string,
+              channelType: this.type,
+              threadId: request?.parent_id,
+              payload: args,
+              type: 'delete-draft',
+            },
           },
-        })) as Awaited<ReturnType<ChannelApi['deleteDraft']>>;
+        )) as Awaited<ReturnType<ChannelApi['deleteDraft']>>;
       }
     } catch (error) {
       offlineDbLogger

@@ -253,6 +253,45 @@ Two of those change shape:
 
 `ChannelUpdateOptions` and the `*Filters` family are deliberately **kept**: they were already derived (`Omit<UpdateChannelRequest, 'message'>`, `NonNullable<Request['filter']>`), so they update themselves when the spec moves and restate nothing.
 
+### The `APIResponse` envelope
+
+`APIResponse` was `{ duration: string }` — the response envelope from before the generated layer existed. Every generated response already carries `duration`, and the transport wraps results in `StreamResponse<T>`, which carries `metadata` (rate-limit headers, response code, client request id) as well. Anything typed with `APIResponse` was therefore not just redundant but **weaker** than the real return type.
+
+| Removed after `rc.4`       | Replacement                                       | Detail                                                                          |
+| -------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `SearchAPIResponse`        | `SearchResponse`                                  | `results` entries are `SearchResult`, not an inline `{ message }`.              |
+| `SendFileAPIResponse`      | `FileUploadResponse` / `ImageUploadResponse`      | Pick the one matching the endpoint you called.                                  |
+| `UpdateChannelAPIResponse` | `UpdateChannelResponse`                           |                                                                                 |
+| `UsersAPIResponse`         | `UpdateUsersResponse` / `QueryUsersResponse`      | Two endpoints shared this alias; pick by endpoint.                              |
+| `TaskResponse`             | the endpoint's own response type                  | Was `{ task_id: string }`; the generated responses name the field the same way. |
+| `ReactionAPIResponse`      | `SendReactionResponse` / `DeleteReactionResponse` | Was one alias for two endpoints.                                                |
+| `Flag`, `FlagDetails`      | `FlagDetailsResponse`                             | Neither had a reference anywhere in `src` — they only referred to each other.   |
+
+Every replacement is reached through `StreamResponse<…>` when it is a method return value, so it gains a required `metadata` field. Code that only destructures the payload (`const { message } = await …`) is unaffected; code that annotates a variable with the old alias needs the new name.
+
+**Still present, deliberately:** `APIResponse` itself, plus `FlagMessageResponse`, `FlagUserResponse`, `MuteUserResponse` and `UnmuteUserResponse`. Every remaining reference to these sits inside the hand-written `/moderation/*` methods on `StreamChat` that bypass the generated client; they are removed together with those methods, which is tracked separately.
+
+### `UpdatedMessage` → `MessageRequest`
+
+`UpdatedMessage` built a **request** type by subtracting a hand-maintained constant (`RESERVED_UPDATED_MESSAGE_FIELDS`) from a **response** type (`MessageResponse`), then re-adding the `mentioned_*` fields. The generated `MessageRequest` already is that shape, and gets two things right that `UpdatedMessage` did not:
+
+- **`type` is narrower.** `MessageRequest['type']` is `'regular' | 'system'`. `UpdatedMessage['type']` was `MessageLabel` — six members including `'deleted'`, `'error'`, `'ephemeral'` and `'reply'`, none of which a client may send.
+- **Server-owned fields no longer typecheck.** Anything on `MessageResponse` that was not in the reserved list — `cid`, `shadowed`, `reaction_groups`, and so on — was assignable to an update payload. It is not on `MessageRequest`.
+
+```ts
+// before
+import type { UpdatedMessage } from 'stream-chat';
+const payload: UpdatedMessage = { id, text, type: 'reply' }; // compiled, and was wrong
+
+// after
+import type { MessageRequest } from 'stream-chat';
+const payload: MessageRequest = { id, text }; // `type: 'reply'` is now a compile error
+```
+
+`MessageLabel` and `ReservedUpdatedMessageFields` are removed with it. The **runtime** constant `RESERVED_UPDATED_MESSAGE_FIELDS` stays — `toUpdatedMessagePayload()` still uses it to strip server-owned keys off a `LocalMessage`; it just no longer drives a type.
+
+`MessageComposerMiddlewareState.message` is now `MessageRequest` rather than `MessageRequest | UpdatedMessage`. Custom composer middleware that annotated the union should drop the `UpdatedMessage` arm.
+
 ## Verification
 
 After applying the renames, `yarn types` should pass. If a call site errors with `Cannot find name 'X'` where X is one of the v9 names in the left column, the rewrite is incomplete.

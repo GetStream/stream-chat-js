@@ -6,7 +6,6 @@ import type {
   OwnUserResponse,
   ReactionGroupResponse,
   ReactionResponse,
-  UpdatedMessage,
   UserResponse,
 } from './types';
 import type { StreamChat } from './client';
@@ -445,7 +444,7 @@ export const localMessageToNewMessagePayload = (
 
 export const toUpdatedMessagePayload = (
   message: LocalMessage | Partial<MessageResponse>,
-): UpdatedMessage => {
+): MessageRequest => {
   const reservedKeys = {
     ...RESERVED_UPDATED_MESSAGE_FIELDS,
     ...LOCAL_MESSAGE_FIELDS,
@@ -455,7 +454,7 @@ export const toUpdatedMessagePayload = (
     Object.entries(message).filter(
       ([key]) => !reservedKeys[key as keyof typeof reservedKeys],
     ),
-  ) as UpdatedMessage;
+  ) as MessageRequest;
 
   return {
     ...messageFields,

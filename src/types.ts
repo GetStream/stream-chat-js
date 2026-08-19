@@ -2,15 +2,11 @@ import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { StableWSConnection } from './connection';
 import type { CustomEventTypes } from './custom_types';
 import type { NotificationManager } from './notifications';
-import type { RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
 import type {
   APIError,
   Attachment,
-  AutomodDetailsResponse,
   ChannelConfigWithInfo,
-  ChannelMemberResponse,
   ChannelOwnCapability,
-  ChannelResponse,
   ChannelStateResponseFields,
   CreateDeviceRequest,
   DraftPayloadResponse,
@@ -26,7 +22,6 @@ import type {
   QueryUsersPayload,
   ReactionResponse,
   SearchPayload,
-  SearchWarning,
   SendMessageRequest,
   SendMessageResponse,
   SharedLocationResponseData,
@@ -67,22 +62,15 @@ export type Unpacked<T> = T extends (infer U)[]
  * Response Types
  */
 
+/**
+ * Legacy response envelope. Every generated response already carries `duration`, and the
+ * transport wraps results in `StreamResponse<T>`, which also carries `metadata`.
+ *
+ * Only still referenced by the hand-written `/moderation/*` methods on `StreamChat` that
+ * bypass the generated client. Delete this together with those.
+ */
 export type APIResponse = {
   duration: string;
-};
-
-export type FlagDetails = {
-  automod?: AutomodDetailsResponse;
-};
-
-export type Flag = {
-  created_at: string;
-  created_by_automod: boolean;
-  updated_at: string;
-  details?: FlagDetails;
-  target_message?: MessageResponse;
-  target_user?: UserResponse;
-  user?: UserResponse;
 };
 
 export type ChannelUpdateOptions = Omit<UpdateChannelRequest, 'message'>;
@@ -162,34 +150,7 @@ export type OwnUserBase = Pick<
   Exclude<keyof OwnUserResponse, keyof UserResponse>
 >;
 
-export type ReactionAPIResponse = APIResponse & {
-  message: MessageResponse;
-  reaction: ReactionResponse;
-};
-
-export type SearchAPIResponse = APIResponse & {
-  results: {
-    message: MessageResponse;
-  }[];
-  next?: string;
-  previous?: string;
-  results_warning?: SearchWarning | null;
-};
-
 // Thumb URL(thumb_url) is added considering video attachments as the backend will return the thumbnail in the response.
-export type SendFileAPIResponse = APIResponse & { file: string; thumb_url?: string };
-
-export type UpdateChannelAPIResponse = APIResponse & {
-  channel: ChannelResponse;
-  members: ChannelMemberResponse[];
-  message?: MessageResponse;
-};
-
-export type UsersAPIResponse = APIResponse & {
-  users: Array<UserResponse>;
-  membership_deletion_task_id?: string;
-};
-
 export type BanUserOptions = UnBanUserOptions & {
   ban_from_future_channels?: boolean;
   banned_by?: UserResponse;
@@ -465,14 +426,6 @@ export type Configs = Record<string, ChannelConfigWithInfo | undefined>;
 
 export type ConnectionOpen = EventPayload<'health.check'> | EventPayload<'connection.ok'>;
 
-export type MessageLabel =
-  | 'deleted'
-  | 'ephemeral'
-  | 'error'
-  | 'regular'
-  | 'reply'
-  | 'system';
-
 export type SendMessageOptions = Omit<SendMessageRequest, 'message'>;
 
 export type PermissionObject = {
@@ -487,24 +440,6 @@ export type PermissionObject = {
 export type TokenOrProvider = null | string | TokenProvider | undefined;
 
 export type TokenProvider = () => Promise<string>;
-
-export type ReservedUpdatedMessageFields = keyof typeof RESERVED_UPDATED_MESSAGE_FIELDS;
-
-export type UpdatedMessage = Omit<
-  MessageResponse,
-  ReservedUpdatedMessageFields | 'mentioned_groups'
-> & {
-  mentioned_users?: string[];
-  mentioned_channel?: boolean;
-  mentioned_here?: boolean;
-  mentioned_group_ids?: string[];
-  mentioned_roles?: string[];
-  type?: MessageLabel;
-};
-
-export type TaskResponse = {
-  task_id: string;
-};
 
 export type MessageSetType = 'latest' | 'current' | 'new';
 
