@@ -49,7 +49,7 @@ the work from greenfield to typing and gap-filling:
   injected rather than imported. Verified to reproduce both SDKs' real committed catalogs identically
   (React 634/634, RN 408/408 + 97 bundled).
 - **Scoped identifiers** — `CORE_NOTIFICATION_TYPE` / `CoreNotificationType` and
-  `POLL_VALIDATION_CODE` / `PollValidationError`, both exhaustiveness-checked.
+  `POLL_COMPOSER_VALIDATION_CODE` / `PollComposerValidationError`, both exhaustiveness-checked.
 - `i18next` and `dayjs` as direct dependencies of `stream-chat`.
 
 Consumer-facing delta: `v9-to-v10-migration-guide-i18n.md`.

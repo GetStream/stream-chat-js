@@ -1,6 +1,6 @@
 import type { MiddlewareExecutionResult } from '../../../middleware';
 import type { CreatePollRequest, VotingVisibility } from '../../../types';
-import type { PollValidationError } from './validation';
+import type { PollComposerValidationError } from './validation';
 
 export type PollComposerOption = {
   id: string;
@@ -23,12 +23,12 @@ export type UpdateFieldsData = Partial<Omit<PollComposerState['data'], 'options'
 /**
  * Field validation errors, keyed by field. `options` errors are keyed by option id.
  *
- * Values carry a stable {@link PollValidationError.code} rather than being bare English, so a UI can
- * localize them; see {@link POLL_VALIDATION_CODE}.
+ * Values carry a stable {@link PollComposerValidationError.code} rather than being bare English, so a UI can
+ * localize them; see {@link POLL_COMPOSER_VALIDATION_CODE}.
  */
 export type PollComposerFieldErrors = Partial<
-  Omit<Record<keyof CreatePollRequest, PollValidationError>, 'options'> & {
-    options?: Record<string, PollValidationError>;
+  Omit<Record<keyof CreatePollRequest, PollComposerValidationError>, 'options'> & {
+    options?: Record<string, PollComposerValidationError>;
   }
 >;
 

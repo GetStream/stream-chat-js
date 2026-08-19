@@ -151,16 +151,16 @@ type PollComposerFieldErrors = Partial<
 >;
 
 // v10
-type PollValidationError = {
-  code: PollValidationCode;
+type PollComposerValidationError = {
+  code: PollComposerValidationCode;
   /** Untranslated English fallback. Not part of the public contract. */
   message: string;
   metadata?: Record<string, unknown>;
 };
 
 type PollComposerFieldErrors = Partial<
-  Omit<Record<keyof CreatePollRequest, PollValidationError>, 'options'> & {
-    options?: Record<string, PollValidationError>;
+  Omit<Record<keyof CreatePollRequest, PollComposerValidationError>, 'options'> & {
+    options?: Record<string, PollComposerValidationError>;
   }
 >;
 ```
@@ -180,10 +180,11 @@ The one-property migration, if you do not want to localize:
 To localize, switch on `code`:
 
 ```ts
-import { POLL_VALIDATION_CODE } from 'stream-chat';
+import { POLL_COMPOSER_VALIDATION_CODE } from 'stream-chat';
+import type { PollComposerValidationCode } from 'stream-chat';
 
-const copy: Record<PollValidationCode, string> = {
-  [POLL_VALIDATION_CODE.maxVotesNotNumeric]: t('poll.maxVotes.notNumeric'),
+const copy: Record<PollComposerValidationCode, string> = {
+  [POLL_COMPOSER_VALIDATION_CODE.maxVotesNotNumeric]: t('poll.maxVotes.notNumeric'),
   // …
 };
 const text = errors.name ? (copy[errors.name.code] ?? errors.name.message) : undefined;

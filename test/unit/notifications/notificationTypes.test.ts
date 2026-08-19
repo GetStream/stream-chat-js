@@ -4,14 +4,14 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CORE_NOTIFICATION_TYPE,
-  isPollValidationError,
-  POLL_VALIDATION_CODE,
-  pollValidationError,
+  isPollComposerValidationError,
+  POLL_COMPOSER_VALIDATION_CODE,
+  pollComposerValidationError,
 } from '../../../src';
 import type {
   CoreNotificationType,
-  PollValidationCode,
-  PollValidationError,
+  PollComposerValidationCode,
+  PollComposerValidationError,
 } from '../../../src';
 
 const SRC = join(__dirname, '../../../src');
@@ -83,18 +83,18 @@ describe('CORE_NOTIFICATION_TYPE', () => {
   });
 });
 
-describe('POLL_VALIDATION_CODE', () => {
+describe('POLL_COMPOSER_VALIDATION_CODE', () => {
   it('is exported from the public barrel with its type and helpers', () => {
-    const code: PollValidationCode = POLL_VALIDATION_CODE.nameRequired;
-    const error: PollValidationError = pollValidationError(code);
+    const code: PollComposerValidationCode = POLL_COMPOSER_VALIDATION_CODE.nameRequired;
+    const error: PollComposerValidationError = pollComposerValidationError(code);
     expect(error).toEqual({ code, message: 'Question is required' });
-    expect(isPollValidationError(error)).toBe(true);
+    expect(isPollComposerValidationError(error)).toBe(true);
   });
 
   it('follows the same convention and has no duplicates', () => {
-    const values = Object.values(POLL_VALIDATION_CODE);
+    const values = Object.values(POLL_COMPOSER_VALIDATION_CODE);
     expect(new Set(values).size).toBe(values.length);
-    for (const [key, code] of Object.entries(POLL_VALIDATION_CODE)) {
+    for (const [key, code] of Object.entries(POLL_COMPOSER_VALIDATION_CODE)) {
       expect(code, `${key} must be validation:poll:<field>:<result>`).toMatch(
         /^validation:poll:[a-zA-Z][\w-]*:[a-zA-Z][\w-]*$/,
       );
@@ -102,34 +102,41 @@ describe('POLL_VALIDATION_CODE', () => {
   });
 
   it('pairs every code with a non-empty English fallback', () => {
-    for (const code of Object.values(POLL_VALIDATION_CODE)) {
-      expect(pollValidationError(code).message, `${code} has no fallback`).toBeTruthy();
+    for (const code of Object.values(POLL_COMPOSER_VALIDATION_CODE)) {
+      expect(
+        pollComposerValidationError(code).message,
+        `${code} has no fallback`,
+      ).toBeTruthy();
     }
   });
 
   it('emits every code it declares', () => {
-    const unused = Object.keys(POLL_VALIDATION_CODE).filter(
-      (key) => !allSource.includes(`POLL_VALIDATION_CODE.${key}`),
+    const unused = Object.keys(POLL_COMPOSER_VALIDATION_CODE).filter(
+      (key) => !allSource.includes(`POLL_COMPOSER_VALIDATION_CODE.${key}`),
     );
     expect(unused, 'declared but never emitted').toEqual([]);
   });
 
   it('attaches metadata only when supplied', () => {
-    expect(pollValidationError(POLL_VALIDATION_CODE.optionEmpty)).not.toHaveProperty(
-      'metadata',
-    );
     expect(
-      pollValidationError(POLL_VALIDATION_CODE.optionEmpty, { optionId: 'a' }).metadata,
+      pollComposerValidationError(POLL_COMPOSER_VALIDATION_CODE.optionEmpty),
+    ).not.toHaveProperty('metadata');
+    expect(
+      pollComposerValidationError(POLL_COMPOSER_VALIDATION_CODE.optionEmpty, {
+        optionId: 'a',
+      }).metadata,
     ).toEqual({ optionId: 'a' });
   });
 
   it('rejects non-errors in the narrowing guard', () => {
-    expect(isPollValidationError(undefined)).toBe(false);
-    expect(isPollValidationError('Option is empty')).toBe(false);
+    expect(isPollComposerValidationError(undefined)).toBe(false);
+    expect(isPollComposerValidationError('Option is empty')).toBe(false);
     // an `options` error record, which is the other shape a field error can take
     expect(
-      isPollValidationError({
-        'option-1': pollValidationError(POLL_VALIDATION_CODE.optionEmpty),
+      isPollComposerValidationError({
+        'option-1': pollComposerValidationError(
+          POLL_COMPOSER_VALIDATION_CODE.optionEmpty,
+        ),
       }),
     ).toBe(false);
   });
