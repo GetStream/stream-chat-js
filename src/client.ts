@@ -1,7 +1,7 @@
 /* eslint no-unused-vars: "off" */
 /* global process */
 
-import type { AxiosInstance, AxiosRequestConfig } from 'axios';
+import type { AxiosInstance } from 'axios';
 import axios from 'axios';
 
 import { Channel } from './channel';
@@ -18,6 +18,7 @@ import {
   isOwnUserBaseProperty,
   randomId,
 } from './utils';
+import { normalizeUploadFile } from './upload-utils';
 
 import type {
   APIResponse,
@@ -35,6 +36,7 @@ import type {
   Event,
   EventHandler,
   EventType,
+  FileUploadInput,
   FlagMessageResponse,
   FlagUserResponse,
   GetThreadOptions,
@@ -85,6 +87,8 @@ import type {
   GetApplicationResponse as Gen_GetApplicationResponse,
   MarkDeliveredRequest as Gen_MarkDeliveredRequest,
   WSAuthMessage,
+  FileUploadRequest,
+  ImageUploadRequest,
   WSEvent,
 } from './gen/models';
 import { ChatApi } from './gen-imports';
@@ -2332,58 +2336,39 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Uploads a file to the configured storage (defaults to Stream CDN).
+   * Uploads a file to the Stream CDN
    *
-   * @param uri - The file to upload.
-   * @param name - The name of the file (optional).
-   * @param contentType - MIME type; required for React Native URI uploads (optional).
-   * @param user - User information (optional).
-   * @param axiosRequestConfig - Axios config, e.g. `onUploadProgress` for progress tracking (optional).
+   * @param request - Upload payload. `request.file` is the file to upload.
+   * @param requestOptions - Per-request options, e.g. `onUploadProgress` or an abort `signal` (optional).
    * @returns Response containing the file URL.
    */
-  uploadFile_(
-    uri: string | File,
-    name?: string,
-    contentType?: string,
-    user?: UserResponse,
-    axiosRequestConfig?: AxiosRequestConfig,
+  override async uploadFile(
+    request?: Omit<FileUploadRequest, 'file'> & { file?: FileUploadInput },
+    requestOptions?: StreamRequestOptions,
   ) {
-    return this.api.sendFile(
-      `${this.baseURL}/uploads/file`,
-      uri,
-      name,
-      contentType,
-      user,
-      axiosRequestConfig,
+    return await super.uploadFile(
+      { ...request, file: normalizeUploadFile(request?.file) as unknown as string },
+      requestOptions,
     );
   }
 
   /**
-   * Uploads an image to the configured storage (defaults to Stream CDN).
+   * Uploads an image to Stream CDN
    *
-   * @param uri - The image to upload.
-   * @param name - The name of the image (optional).
-   * @param contentType - MIME type; required for React Native URI uploads (optional).
-   * @param user - User information (optional).
-   * @param axiosRequestConfig - Axios config, e.g. `onUploadProgress` for progress tracking (optional).
+   * @param request - Upload payload. `request.file` is the image to upload.
+   * @param requestOptions - Per-request options, e.g. `onUploadProgress` or an abort `signal` (optional).
    * @returns Response containing the image URL.
    */
-  uploadImage_(
-    uri: string | File,
-    name?: string,
-    contentType?: string,
-    user?: UserResponse,
-    axiosRequestConfig?: AxiosRequestConfig,
+  override async uploadImage(
+    request?: Omit<ImageUploadRequest, 'file'> & { file?: FileUploadInput },
+    requestOptions?: StreamRequestOptions,
   ) {
-    return this.api.sendFile(
-      `${this.baseURL}/uploads/image`,
-      uri,
-      name,
-      contentType,
-      user,
-      axiosRequestConfig,
+    return await super.uploadImage(
+      { ...request, file: normalizeUploadFile(request?.file) as unknown as string },
+      requestOptions,
     );
   }
+
   /**
    * Marks the channels as delivered for the given messages and the user.
    *

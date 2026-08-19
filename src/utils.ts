@@ -53,10 +53,6 @@ export function isOwnUser(
   return (user as OwnUserResponse)?.total_unread_count !== undefined;
 }
 
-function isBlobWebAPI(uri: unknown): uri is Blob {
-  return typeof window !== 'undefined' && 'Blob' in window && uri instanceof Blob;
-}
-
 export function isOwnUserBaseProperty(property: string) {
   const ownUserBaseProperties: {
     [Property in keyof Required<OwnUserBase>]: boolean;
@@ -99,29 +95,6 @@ export const channelTracksReadLocally = (channel?: Channel) =>
  */
 export const userHasReadReceipts = (client: StreamChat) =>
   client.user?.privacy_settings?.read_receipts?.enabled ?? true;
-
-export function addFileToFormData(
-  uri: string | Blob,
-  name?: string,
-  contentType?: string,
-) {
-  const data = new FormData();
-
-  if (isBlobWebAPI(uri)) {
-    if (name) data.append('file', uri, name);
-    else data.append('file', uri);
-  } else {
-    // React Native path
-    data.append('file', {
-      uri,
-      name: name || uri.split('/').reverse()[0],
-      contentType: contentType || undefined,
-      type: contentType || undefined,
-    } as unknown as Blob);
-  }
-
-  return data;
-}
 
 /**
  * retryInterval - A retry interval which increases acc to number of failures
