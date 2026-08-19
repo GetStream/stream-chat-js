@@ -1,3 +1,10 @@
+## [10.0.0-rc.4](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.3...v10.0.0-rc.4) (2026-08-19)
+
+### Features
+
+* move to WS API v2 ([#1833](https://github.com/GetStream/stream-chat-js/issues/1833)) ([d530f43](https://github.com/GetStream/stream-chat-js/commit/d530f438954213d3dcb2a00bc9c6c81e0f7bb3e8))
+* remove handwritten upload methods; align method names ([#1832](https://github.com/GetStream/stream-chat-js/issues/1832)) ([1a6bdb8](https://github.com/GetStream/stream-chat-js/commit/1a6bdb875aa20d657a5c5c71dc6f0b822d28f6c8))
+
 ## [10.0.0-rc.3](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.2...v10.0.0-rc.3) (2026-08-19)
 
 ### Bug Fixes
