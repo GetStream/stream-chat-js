@@ -2624,20 +2624,6 @@ export class Channel extends ChannelApi {
     );
   };
 
-  /**
-   * Returns the channel url.
-   *
-   * @returns The channel url.
-   */
-  _channelURL = () => {
-    if (!this.id) {
-      throw new Error('channel id is not defined');
-    }
-    return `${this.getClient().baseURL}/channels/${encodeURIComponent(
-      this.type,
-    )}/${encodeURIComponent(this.id)}`;
-  };
-
   _checkInitialized() {
     if (!this.initialized && !this.offlineMode) {
       throw Error(

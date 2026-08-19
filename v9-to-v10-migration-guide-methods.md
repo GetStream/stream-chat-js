@@ -656,7 +656,9 @@ Webhook verification is inherently server-side work: it needs the API secret, wh
 
 ### Constructor and lifecycle
 
-`getClient()`, `getConfig()`, `clean()`, `_channelURL()`, `_checkInitialized()`, `_initializeState(...)`, `_disconnect()`, and `create(options?)` are unchanged.
+`getClient()`, `getConfig()`, `clean()`, `_checkInitialized()`, `_initializeState(...)`, `_disconnect()`, and `create(options?)` are unchanged.
+
+`channel._channelURL()` — **REMOVED after `10.0.0-rc.4`**, no replacement. It built a `{baseURL}/channels/{type}/{id}` string for the hand-rolled request layer that no longer exists; every request now goes through the generated API client, which resolves its own paths. Nothing in the SDK called it. If you were using it to build a URL yourself, construct it inline.
 
 ### Removed with a rename → note
 

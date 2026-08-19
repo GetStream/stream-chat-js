@@ -14,7 +14,6 @@ import type {
   ChannelConfigWithInfo,
   ChannelInput,
   ChannelMemberResponse,
-  ChannelMute,
   ChannelOwnCapability,
   ChannelResponse,
   ChannelStateResponseFields,
@@ -26,8 +25,6 @@ import type {
   OwnUserResponse,
   PollResponseData,
   PollVoteResponseData,
-  PrivacySettingsResponse,
-  PushPreferencesResponse,
   QueryChannelsRequest,
   QueryMembersPayload,
   QueryPollsRequest,
@@ -100,7 +97,7 @@ export type Flag = {
   user?: UserResponse;
 };
 
-export type ChannelUpdateOptions = Omit<UpdateChannelRequest, 'message' | 'members'>;
+export type ChannelUpdateOptions = Omit<UpdateChannelRequest, 'message'>;
 
 export type ConnectAPIResponse = Promise<void | ConnectionOpen>;
 
@@ -174,20 +171,19 @@ export type UnmuteUserResponse = APIResponse & {
   non_existing_users?: string[];
 };
 
-export type OwnUserBase = {
-  channel_mutes: ChannelMute[];
-  devices: Device[];
-  mutes: UserMuteResponse[];
-  total_unread_count: number;
-  unread_channels: number;
-  unread_count: number;
-  unread_threads: number;
-  invisible?: boolean;
-  privacy_settings?: PrivacySettingsResponse;
-  push_preferences?: PushPreferencesResponse;
-  roles?: string[];
-  total_unread_count_by_team?: Record<string, number> | null;
-};
+/**
+ * The fields that exist on the connected user (`OwnUserResponse`) but not on a plain
+ * `UserResponse` — i.e. the own-user-only slice of the user object.
+ *
+ * Derived, never hand-listed: `client._handleUserEvent` uses this set (through
+ * `isOwnUserBaseProperty`) to decide which keys survive a `user.updated` event, so a field
+ * missing from it is silently deleted off `client.user`. Deriving it means a spec change
+ * cannot desynchronise the two.
+ */
+export type OwnUserBase = Pick<
+  OwnUserResponse,
+  Exclude<keyof OwnUserResponse, keyof UserResponse>
+>;
 
 export type ReactionAPIResponse = APIResponse & {
   message: MessageResponse;
@@ -341,7 +337,7 @@ export type MessagePaginationOptions = PaginationOptions & {
 
 export type PinnedMessagePaginationOptions = Omit<
   Parameters<ChatApi['getPinnedMessages']>[0],
-  'id' | 'member_custom_include' | 'sort' | 'type'
+  'id' | 'sort' | 'type'
 >;
 
 export type GetRepliesRequest = Parameters<ChatApi['getReplies']>[0];
@@ -673,24 +669,6 @@ export type CommandVariants =
 export type Configs = Record<string, ChannelConfigWithInfo | undefined>;
 
 export type ConnectionOpen = EventPayload<'health.check'> | EventPayload<'connection.ok'>;
-
-export type Device = DeviceFields & {
-  provider?: string;
-  user?: UserResponse;
-  user_id?: string;
-};
-
-export type BaseDeviceFields = {
-  id: string;
-  push_provider: PushProvider;
-  push_provider_name?: string;
-};
-
-export type DeviceFields = BaseDeviceFields & {
-  created_at: string;
-  disabled?: boolean;
-  disabled_reason?: string;
-};
 
 export type FirebaseConfig = {
   apn_template?: string;

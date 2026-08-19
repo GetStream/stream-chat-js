@@ -59,16 +59,16 @@ export function isOwnUserBaseProperty(property: string) {
   } = {
     channel_mutes: true,
     devices: true,
+    invisible: true,
+    latest_hidden_channels: true,
     mutes: true,
+    privacy_settings: true,
+    push_preferences: true,
     total_unread_count: true,
+    total_unread_count_by_team: true,
     unread_channels: true,
     unread_count: true,
     unread_threads: true,
-    invisible: true,
-    privacy_settings: true,
-    roles: true,
-    push_preferences: true,
-    total_unread_count_by_team: true,
   };
 
   return ownUserBaseProperties[property as keyof OwnUserBase];

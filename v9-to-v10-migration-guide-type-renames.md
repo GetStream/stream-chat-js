@@ -146,6 +146,55 @@ These v9 names look like they'd be caught by the same rewrite pass but are **not
 - `PollResponse_old` — the only remaining `_old`-suffixed compat holder. Still used internally by `poll.ts` / `poll_manager.ts` / `offline-support/types.ts` and not a simple alias (it intersects the generated `PollResponseData` with a local `PollEnrichData` overlay). Its own story; do not rename here.
 - `AppSettings` is the only "settings"-ish name that IS renamed here (to `AppResponseFields`). Do not confuse it with `AppSettingsAPIResponse` (also removed; renamed to `GetApplicationResponse`) — they were two different aliases that shared a prefix.
 
+## Removed after `10.0.0-rc.4` — convergence on the generated types
+
+Skip this section if you are upgrading from v9; everything below is already reflected in the tables above. It exists for integrations pinned to the `rc` dist-tag, because these types still shipped in `10.0.0-rc.4` and are deleted afterwards. **No back-compat alias remains for any of them.**
+
+Every removal here has the same rationale: the type restated something the OpenAPI generator already emits, so it was one more place a spec change had to be mirrored by hand — and several had already drifted from the spec they were copied from.
+
+### Own-user and device shapes
+
+| Removed after `rc.4` | Replacement      | Detail                                                      |
+| -------------------- | ---------------- | ----------------------------------------------------------- |
+| `Device`             | `DeviceResponse` | ⚠️ **Shape change.** See [below](#device--deviceresponse).  |
+| `DeviceFields`       | `DeviceResponse` | Same — the v10 trio collapsed into the one generated shape. |
+| `BaseDeviceFields`   | `DeviceResponse` | Same.                                                       |
+
+`OwnUserBase` keeps its name but **changes shape**: it is now derived as `Pick<OwnUserResponse, Exclude<keyof OwnUserResponse, keyof UserResponse>>` rather than hand-listed.
+
+- **Gained** `latest_hidden_channels?: Array<string>` — previously missing from the list, which caused a real defect (see below).
+- **Lost** `roles?: string[]` — this field does not exist on `OwnUserResponse` at all. If you were reading it, the value was always `undefined`; the nearest real field is `teams_role?: Record<string, string>`.
+- `devices` is now `Array<DeviceResponse>` instead of `Device[]`, and `total_unread_count_by_team` is `Record<string, number>` instead of `Record<string, number> | null`.
+
+#### Behaviour fix — `client.user.latest_hidden_channels` no longer disappears
+
+`client._handleUserEvent` prunes `client.user` on every `user.updated` event: any key that the event body does not carry, and that is not an own-user-only field, is deleted. It decided "own-user-only" from `OwnUserBase` via `isOwnUserBaseProperty()`.
+
+Because the hand-written list omitted `latest_hidden_channels`, and a `user.updated` event body is a plain `UserResponse` (which has no such field), **every `user.updated` event for the connected user deleted `client.user.latest_hidden_channels`**. Reading it after any user update returned `undefined` regardless of server state. Deriving the type fixes this; no call-site change is required.
+
+#### `Device` → `DeviceResponse`
+
+| Field                 | v10 `Device` (removed)                        | `DeviceResponse`   |
+| --------------------- | --------------------------------------------- | ------------------ |
+| `created_at`          | `string`                                      | `Date`             |
+| `push_provider`       | `'firebase' \| 'apn' \| 'huawei' \| 'xiaomi'` | `string`           |
+| `user_id`             | `string \| undefined`                         | `string`           |
+| `provider`, `user`    | present                                       | **gone**           |
+| `hardware_id`, `voip` | **absent**                                    | present (optional) |
+
+`created_at` is the one that bites: the response decoders have always produced a `Date` here, so the old `string` annotation was wrong. Call sites doing `new Date(device.created_at)` still work; ones doing `device.created_at.slice(...)` were already broken at runtime and now fail to compile.
+
+### Stale `Omit` keys — two types quietly widened
+
+Neither is a rename; both **gain** surface, so no call site breaks.
+
+| Type                             | Was                                                         | Now                                     |
+| -------------------------------- | ----------------------------------------------------------- | --------------------------------------- |
+| `ChannelUpdateOptions`           | `Omit<UpdateChannelRequest, 'message' \| 'members'>`        | `Omit<UpdateChannelRequest, 'message'>` |
+| `PinnedMessagePaginationOptions` | omits `'id' \| 'member_custom_include' \| 'sort' \| 'type'` | omits `'id' \| 'sort' \| 'type'`        |
+
+`UpdateChannelRequest` has no `members` key (it has `add_members` / `remove_members`), so that omit was a no-op left over from an older payload shape. `member_custom_include` **is** accepted by `getPinnedMessages`, so omitting it was narrowing the API — it can now be passed through.
+
 ## Verification
 
 After applying the renames, `yarn types` should pass. If a call site errors with `Cannot find name 'X'` where X is one of the v9 names in the left column, the rewrite is incomplete.
