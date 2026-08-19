@@ -1,4 +1,6 @@
 import type {
+  FileReferenceBase,
+  FileUploadInput,
   LocalMessage,
   MessageRequest,
   MessageResponse,
@@ -6,8 +8,6 @@ import type {
   OwnUserResponse,
   ReactionGroupResponse,
   ReactionResponse,
-  StreamFile,
-  StreamFileDescriptor,
   UpdatedMessage,
   UserResponse,
 } from './types';
@@ -101,16 +101,16 @@ export const userHasReadReceipts = (client: StreamChat) =>
 const isWebFile = (value: unknown): value is Blob =>
   typeof Blob !== 'undefined' && value instanceof Blob;
 
-const isFileDescriptor = (value: unknown): value is StreamFileDescriptor =>
+const isFileReferenceBase = (value: unknown): value is FileReferenceBase =>
   !!value &&
   typeof value === 'object' &&
-  typeof (value as StreamFileDescriptor).uri === 'string';
+  typeof (value as FileReferenceBase).uri === 'string';
 
 /**
- * Turns a bare URI string into a {@link StreamFileDescriptor} so the multipart encoder can
- * derive a file name from it. `File`, `Blob` and descriptors pass through untouched.
+ * Turns a bare URI string into a {@link FileReferenceBase} so the multipart encoder can derive a
+ * file name from it. `File`, `Blob` and picker objects pass through untouched.
  */
-export const normalizeUploadFile = (file?: StreamFile | string) =>
+export const normalizeUploadFile = (file?: FileUploadInput) =>
   typeof file === 'string' ? { uri: file } : file;
 
 /**
@@ -126,7 +126,7 @@ export function appendToFormData(data: FormData, key: string, value: unknown) {
     const name = (value as File).name;
     if (name) data.append(key, value, name);
     else data.append(key, value);
-  } else if (isFileDescriptor(value)) {
+  } else if (isFileReferenceBase(value)) {
     // React Native reads `uri`, `name` and `type` off this object. `contentType` is legacy
     // (RN ignores it) and is kept so the emitted part is byte-for-byte what v10.0 sent.
     data.append(key, {

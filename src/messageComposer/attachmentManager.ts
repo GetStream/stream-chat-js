@@ -35,7 +35,6 @@ import type {
   ChannelResponse,
   DraftMessage,
   LocalMessage,
-  StreamFile,
   StreamRequestOptions,
 } from '../types';
 import type { MessageComposer } from './messageComposer';
@@ -550,9 +549,8 @@ export class AttachmentManager {
       ...(options?.abortSignal ? { signal: options.abortSignal } : {}),
     };
 
-    const file: StreamFile = isFileReference(fileLike)
-      ? { uri: fileLike.uri, name: fileLike.name, type: fileLike.type }
-      : isFile(fileLike)
+    const file =
+      isFileReference(fileLike) || isFile(fileLike)
         ? fileLike
         : createFileFromBlobs({
             blobsArray: [fileLike],

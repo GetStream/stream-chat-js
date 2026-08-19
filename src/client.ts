@@ -40,6 +40,7 @@ import type {
   Event,
   EventHandler,
   EventType,
+  FileUploadInput,
   FlagMessageResponse,
   FlagUserResponse,
   GetThreadOptions,
@@ -56,7 +57,6 @@ import type {
   ReactionResponse,
   SdkIdentifier,
   StreamChatOptions,
-  StreamFile,
   StreamRequestOptions,
   TokenOrProvider,
   UnBanUserOptions,
@@ -2374,7 +2374,7 @@ export class StreamChat extends ChatApi {
    * @returns Response containing the file URL.
    */
   override async uploadFile(
-    request?: Omit<FileUploadRequest, 'file'> & { file?: StreamFile | string },
+    request?: Omit<FileUploadRequest, 'file'> & { file?: FileUploadInput },
     requestOptions?: StreamRequestOptions,
   ) {
     return await super.uploadFile(
@@ -2391,7 +2391,7 @@ export class StreamChat extends ChatApi {
    * @returns Response containing the image URL.
    */
   override async uploadImage(
-    request?: Omit<ImageUploadRequest, 'file'> & { file?: StreamFile | string },
+    request?: Omit<ImageUploadRequest, 'file'> & { file?: FileUploadInput },
     requestOptions?: StreamRequestOptions,
   ) {
     return await super.uploadImage(

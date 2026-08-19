@@ -1,22 +1,24 @@
 # File Upload
 
 `stream-chat` uploads files from the browser and from React Native. The upload methods take a
-request object whose `file` is a `StreamFile`:
+request object whose `file` is a `FileUploadInput`:
 
 ```ts
-type StreamFileDescriptor = { uri: string; name?: string; type?: string };
-type StreamFile = File | Blob | StreamFileDescriptor;
+type FileReferenceBase = { uri: string; type: string; name?: string };
+type FileLike = File | Blob;
+type FileUploadInput = FileLike | FileReferenceBase | string;
 ```
 
 - **Browser** — a `File` or `Blob` (typically from an `<input type="file">`). A `File` already
   carries its name and MIME type, so nothing else is needed.
-- **React Native** — a `{ uri, name, type }` descriptor. There is no `Blob` with a real body
-  behind a picker URI, so RN's `FormData` reads those three fields off the object: `type` becomes
-  the part's `Content-Type` and `name` its filename. Pass the MIME type explicitly — nothing can
-  infer it from a URI.
+- **React Native** — a `FileReferenceBase`; the `FileReference` produced by the pickers in
+  `stream-chat-react-native` satisfies it. There is no `Blob` with a real body behind a picker
+  URI, so RN's `FormData` reads `uri`, `name` and `type` off the object: `type` becomes the
+  part's `Content-Type` and `name` its filename. `type` is required — nothing can infer a MIME
+  type from a URI. `name` falls back to the URI's last path segment.
 
 A bare URI `string` is also accepted and normalized into `{ uri }`, with the file name derived
-from the last path segment.
+from the last path segment. Prefer the object form: a URI alone yields an untyped part.
 
 There are four upload methods, all taking `(request, requestOptions?)`:
 

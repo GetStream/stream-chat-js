@@ -327,11 +327,12 @@ sendFile(uri: string | NodeJS.ReadableStream | Buffer | File, ...)
 sendImage(uri: string | NodeJS.ReadableStream | File, ...)
 
 // v10 — positional args are gone; the methods take a request object
-uploadFile(request: { file?: StreamFile | string; user? }, requestOptions?)
-uploadImage(request: { file?: StreamFile | string; upload_sizes?; user? }, requestOptions?)
+uploadFile(request: { file?: FileUploadInput; user? }, requestOptions?)
+uploadImage(request: { file?: FileUploadInput; upload_sizes?; user? }, requestOptions?)
 
-type StreamFileDescriptor = { uri: string; name?: string; type?: string };
-type StreamFile = File | Blob | StreamFileDescriptor;
+type FileReferenceBase = { uri: string; type: string; name?: string };
+type FileLike = File | Blob;
+type FileUploadInput = FileLike | FileReferenceBase | string;
 ```
 
 This affects `channel.uploadFile` / `uploadImage` (v9: `channel.sendFile` / `sendImage`) and `client.uploadFile` / `uploadImage`. Every v9 backend upload pattern is now a type error:

@@ -1761,7 +1761,7 @@ describe('AttachmentManager', () => {
       await attachmentManager.doDefaultUploadRequest(fileRef, { onProgress });
 
       expect(mockChannel.uploadImage).toHaveBeenCalledWith(
-        { file: { uri: fileRef.uri, name: fileRef.name, type: fileRef.type } },
+        { file: fileRef },
         { onUploadProgress: expect.any(Function) },
       );
     });
@@ -1782,7 +1782,7 @@ describe('AttachmentManager', () => {
       await attachmentManager.doDefaultUploadRequest(fileRef, { onProgress });
 
       expect(mockChannel.uploadFile).toHaveBeenCalledWith(
-        { file: { uri: fileRef.uri, name: fileRef.name, type: fileRef.type } },
+        { file: fileRef },
         { onUploadProgress: expect.any(Function) },
       );
     });

@@ -425,18 +425,19 @@ client.uploadFile(uri, name?, contentType?, user?, axiosRequestConfig?);
 client.uploadImage(uri, name?, contentType?, user?, axiosRequestConfig?);
 
 // v10 — request object + narrow requestOptions
-client.uploadFile(request: { file?: StreamFile | string; user? }, requestOptions?);
-client.uploadImage(request: { file?: StreamFile | string; upload_sizes?; user? }, requestOptions?);
+client.uploadFile(request: { file?: FileUploadInput; user? }, requestOptions?);
+client.uploadImage(request: { file?: FileUploadInput; upload_sizes?; user? }, requestOptions?);
 ```
 
 `name` and `contentType` are gone as separate parameters — they moved **into** the file:
 
 ```ts
-type StreamFileDescriptor = { uri: string; name?: string; type?: string };
-type StreamFile = File | Blob | StreamFileDescriptor;
+type FileReferenceBase = { uri: string; type: string; name?: string };
+type FileLike = File | Blob;
+type FileUploadInput = FileLike | FileReferenceBase | string;
 ```
 
-A browser `File` already carries its name and MIME type, so it needs nothing else. React Native has no `Blob` with a real body behind a picker URI, so it passes the descriptor and RN's `FormData` reads `uri` / `name` / `type` off it — the MIME type is still required there, it just lives in a different place:
+A browser `File` already carries its name and MIME type, so it needs nothing else. React Native has no `Blob` with a real body behind a picker URI, so it passes a `FileReference` and RN's `FormData` reads `uri` / `name` / `type` off it — the MIME type is still required there, it just lives in a different place:
 
 ```ts
 // v9
@@ -997,7 +998,7 @@ await channel.uploadFile({ file, user? }, requestOptions?);
 await channel.uploadImage({ file, upload_sizes?, user? }, requestOptions?);
 ```
 
-These are aliases for the generated `channel.uploadChannelFile` / `channel.uploadChannelImage`; either name works. Everything in [`client.uploadFile` / `client.uploadImage`](#clientuploadfile--clientuploadimage) above applies here too — the `StreamFile` shape, the `requestOptions` replacing `axiosRequestConfig`, no node inputs, and the added `metadata` on the response.
+These are aliases for the generated `channel.uploadChannelFile` / `channel.uploadChannelImage`; either name works. Everything in [`client.uploadFile` / `client.uploadImage`](#clientuploadfile--clientuploadimage) above applies here too — the `FileUploadInput` shape, the `requestOptions` replacing `axiosRequestConfig`, no node inputs, and the added `metadata` on the response.
 
 **Routes changed** from `/channels/{type}/{id}/file` and `/image` to `POST /api/v2/chat/channels/{type}/{id}/file` and `/image`. The file response additionally carries `moderation_action`.
 

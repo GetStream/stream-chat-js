@@ -33,6 +33,7 @@ import type {
   EventHandler,
   EventPayload,
   EventType,
+  FileUploadInput,
   GetRepliesAPIResponse,
   LocalMessage,
   MarkReadRequest,
@@ -49,7 +50,6 @@ import type {
   SendMessageOptions,
   SendReactionRequest,
   SharedLocation,
-  StreamFile,
   StreamRequestOptions,
   StreamResponse,
   UnBanUserOptions,
@@ -499,7 +499,7 @@ export class Channel extends ChannelApi {
    * @returns A promise resolving to `{ file: string, ... }` with the CDN URL.
    */
   override async uploadChannelFile(
-    request?: Omit<UploadChannelFileRequest, 'file'> & { file?: StreamFile | string },
+    request?: Omit<UploadChannelFileRequest, 'file'> & { file?: FileUploadInput },
     requestOptions?: StreamRequestOptions,
   ) {
     return await super.uploadChannelFile(
@@ -516,7 +516,7 @@ export class Channel extends ChannelApi {
    * @returns A promise resolving to `{ file: string, ... }` with the CDN URL.
    */
   override async uploadChannelImage(
-    request?: Omit<UploadChannelRequest, 'file'> & { file?: StreamFile | string },
+    request?: Omit<UploadChannelRequest, 'file'> & { file?: FileUploadInput },
     requestOptions?: StreamRequestOptions,
   ) {
     return await super.uploadChannelImage(
