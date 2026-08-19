@@ -1050,6 +1050,14 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     }
 
     if (type === 'message.read' || type === 'notification.mark_read') {
+      // Mirrors the thread-read carve-out in `Channel._handleChannelEvent`, and like it
+      // covers `message.read` only — the event `markRead({ thread_id })` echoes back.
+      // `handleRead` is channel-scoped (cid-keyed), so persisting a thread read would store
+      // unread_messages: 0 for the whole channel and re-hydrate that 0 on the next restart.
+      // `notification.mark_read` is deliberately left alone: its in-memory counterpart in
+      // `StreamChat._handleClientEvent` does not check `thread`, and guarding only this layer
+      // would let the DB and the in-memory state disagree across a restart.
+      if (type === 'message.read' && event.thread) return [];
       return this.handleRead({ event, unreadMessages: 0, execute });
     }
 

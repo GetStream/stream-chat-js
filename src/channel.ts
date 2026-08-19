@@ -2007,6 +2007,16 @@ export class Channel {
       // delivery-report network sync below is skipped for it.
       case 'message.read_locally':
       case 'message.read':
+        // A thread read (`markRead({ thread_id })`) echoes back an event carrying
+        // `event.thread`. It concerns that thread alone — `Thread.subscribeRepliesRead`
+        // applies it — so none of the channel-scoped read state below may move, for any
+        // user: a reply being read says nothing about the channel messages around it.
+        // This also skips the delivery sync below; that only delays the next delivery
+        // report to the following `message.new` / `message.delivered` / channel query,
+        // which supersede it anyway (the report is a latest-delivered high-water mark).
+        // `markReadLocally()` never sets `thread`, so the shared placement above the
+        // `message.read_locally` label is inert for that event, not a behaviour change.
+        if (event.thread) break;
         if (event.user?.id && event.created_at) {
           const previousReadState = channelState.read[event.user.id];
           channelState.read[event.user.id] = {

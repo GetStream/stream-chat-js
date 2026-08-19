@@ -991,6 +991,57 @@ describe('Channel _handleChannelEvent', function () {
 				initialReadState.last_delivered_message_id,
 			);
 		});
+		// regression #1676: `markRead({ thread_id })` echoes a `message.read` carrying
+		// `event.thread`. It concerns the thread only — `Thread.subscribeRepliesRead` picks
+		// it up off the client event bus — so no channel read state may move.
+		it('should not touch channel read state for a thread read', () => {
+			channel.state.unreadCount = initialCountUnread;
+			channel.state.read[user.id] = initialReadState;
+			const onMessageRead = vi.spyOn(channel.messageReceiptsTracker, 'onMessageRead');
+			const event = {
+				...messageReadEvent,
+				thread: { parent_message_id: 'parent-message-id' },
+			};
+
+			channel._handleChannelEvent(event);
+
+			expect(channel.state.unreadCount).toBe(initialCountUnread);
+			expect(new Date(channel.state.read[user.id].last_read).getTime()).toBe(
+				new Date(initialReadState.last_read).getTime(),
+			);
+			expect(channel.state.read[user.id].last_read_message_id).toBe(
+				initialReadState.last_read_message_id,
+			);
+			expect(channel.state.read[user.id].unread_messages).toBe(initialCountUnread);
+			expect(onMessageRead).not.toHaveBeenCalled();
+		});
+
+		// The guard is not scoped to the connected user: another user reading a thread reply
+		// says nothing about the channel messages around it either, so their channel read
+		// marker (what "seen by" indicators render from) must not advance.
+		it('should not touch channel read state for another user’s thread read', () => {
+			const anotherUser = { id: 'another-user' };
+			channel.state.unreadCount = initialCountUnread;
+			channel.state.read[anotherUser.id] = initialReadState;
+			const onMessageRead = vi.spyOn(channel.messageReceiptsTracker, 'onMessageRead');
+			const event = {
+				...messageReadEvent,
+				user: anotherUser,
+				thread: { parent_message_id: 'parent-message-id' },
+			};
+
+			channel._handleChannelEvent(event);
+
+			expect(channel.state.unreadCount).toBe(initialCountUnread);
+			expect(new Date(channel.state.read[anotherUser.id].last_read).getTime()).toBe(
+				new Date(initialReadState.last_read).getTime(),
+			);
+			expect(channel.state.read[anotherUser.id].last_read_message_id).toBe(
+				initialReadState.last_read_message_id,
+			);
+			expect(channel.state.read[anotherUser.id].unread_messages).toBe(initialCountUnread);
+			expect(onMessageRead).not.toHaveBeenCalled();
+		});
 	});
 
 	describe('message.delivered', () => {
