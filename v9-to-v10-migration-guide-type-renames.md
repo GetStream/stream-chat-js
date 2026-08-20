@@ -326,6 +326,80 @@ const payload: MessageRequest = { id, text }; // `type: 'reply'` is now a compil
 
 `PartialThreadUpdate` (`{ set?: Partial<Record<string, unknown>>; unset?: Array<string> }`) went with `client.partialUpdateThread`. Use the generated `UpdateThreadPartialRequest`, which is the same `set` / `unset` pair plus the required `message_id`. See [redundant guards and pass-throughs](./v9-to-v10-migration-guide-methods.md#removed-after-1000-rc4--redundant-guards-and-pass-throughs).
 
+### `VotingVisibility` is now a type, not an enum
+
+`VotingVisibility` was a hand-written `enum` whose two members duplicated a union the
+generator already emits. It is now derived:
+
+```ts
+// before rc.4
+export enum VotingVisibility {
+  anonymous = 'anonymous',
+  public = 'public',
+}
+
+// after
+export type VotingVisibility = NonNullable<CreatePollRequest['voting_visibility']>;
+//                             'anonymous' | 'public'
+```
+
+⚠️ **This is a runtime break, not just a type change** — an `enum` is a value in the bundle,
+so `VotingVisibility.anonymous` no longer resolves. The member names and their string values
+were identical, so the rewrite is mechanical:
+
+```ts
+// before
+pollComposer.updateFields({ voting_visibility: VotingVisibility.anonymous });
+if (votingVisibility === VotingVisibility.anonymous) { … }
+
+// after
+pollComposer.updateFields({ voting_visibility: 'anonymous' });
+if (votingVisibility === 'anonymous') { … }
+```
+
+Uses in **type** position keep working unchanged, including the narrowing cast that reading
+a poll requires: `PollResponseData.voting_visibility` is typed `string` in the spec, not the
+narrow union, so `poll.data.voting_visibility as VotingVisibility` is still needed. That
+asymmetry is a spec gap on the response side, not something this change introduces.
+
+### `PollOptionData` removed — it described neither endpoint
+
+`PollOptionData` was `UpdatePollOptionRequest & { position?: number }`, and it typed the
+parameter of **both** `poll.createOption()` and `poll.updateOption()`. Both halves were wrong.
+
+- **`position` does not exist.** It appears nowhere in the OpenAPI spec — zero occurrences
+  across the whole generated model set — and the generated methods whitelist their body
+  fields explicitly (`createPollOption` sends `text` and `custom`; `updatePollOption` sends
+  `id`, `text` and `custom`). Anything passed as `position` was silently dropped before the
+  request left the client. It never reached the wire, so removing it changes no behaviour.
+- **`id` was required on create.** `UpdatePollOptionRequest.id` is required, so
+  `createOption()` demanded an option id that the create endpoint does not even send. Callers
+  worked around it with a cast — the React Native SDK did exactly this:
+  `poll.createOption({ text } as PollOptionData)`.
+
+Each method now takes the request type for the endpoint it actually calls:
+
+| Method                | Was              | Now                       |
+| --------------------- | ---------------- | ------------------------- |
+| `poll.createOption()` | `PollOptionData` | `CreatePollOptionRequest` |
+| `poll.updateOption()` | `PollOptionData` | `UpdatePollOptionRequest` |
+
+```ts
+// before — the cast existed only to satisfy the required `id`
+await poll.createOption({ text: optionText } as PollOptionData);
+
+// after — no cast needed
+await poll.createOption({ text: optionText });
+```
+
+If you were passing `position`, drop it; it was never sent. Option ordering is server-side.
+
+`PartialPollUpdate` is **kept**. Unlike `PollOptionData` it adds no fields and invents
+nothing — it narrows the generated `UpdatePollPartialRequest`
+(`{ set?: Record<string, any>; unset?: Array<string> }`) to `Partial<UpdatePollRequest>` and
+`Array<keyof UpdatePollRequest>`, both derived, so a spec change flows through it without a
+hand edit.
+
 ## Verification
 
 After applying the renames, `yarn types` should pass. If a call site errors with `Cannot find name 'X'` where X is one of the v9 names in the left column, the rewrite is incomplete.

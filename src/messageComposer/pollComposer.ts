@@ -4,7 +4,6 @@ import {
   VALID_MAX_VOTES_VALUE_REGEX,
 } from './middleware/pollComposer';
 import { StateStore } from '../store';
-import { VotingVisibility } from '../types';
 import { generateUUIDv4 } from '../utils';
 import type { MessageComposer } from './messageComposer';
 import type {
@@ -45,7 +44,7 @@ export class PollComposer {
         max_votes_allowed: '',
         name: '',
         options: [{ id: generateUUIDv4(), text: '' }],
-        voting_visibility: VotingVisibility.public,
+        voting_visibility: 'public',
       },
       errors: {},
     };

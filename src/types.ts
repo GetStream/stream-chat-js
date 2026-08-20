@@ -10,6 +10,7 @@ import type {
   ChannelOwnCapability,
   ChannelStateResponseFields,
   CreateDeviceRequest,
+  CreatePollRequest,
   DraftPayloadResponse,
   Images,
   MessageResponse,
@@ -31,7 +32,6 @@ import type {
   UpdateChannelRequest,
   UpdateMessageRequest,
   UpdateMessageResponse,
-  UpdatePollOptionRequest,
   UpdatePollRequest,
   UserResponse,
   WSEvent,
@@ -426,18 +426,14 @@ export class StreamAPIError<T = APIError> extends Error {
   }
 }
 
-export enum VotingVisibility {
-  anonymous = 'anonymous',
-  public = 'public',
-}
+/**
+ * Poll vote visibility. Derived from the generated request shape so it tracks the spec.
+ */
+export type VotingVisibility = NonNullable<CreatePollRequest['voting_visibility']>;
 
 export type PartialPollUpdate = {
   set?: Partial<UpdatePollRequest>;
   unset?: Array<keyof UpdatePollRequest>;
-};
-
-export type PollOptionData = UpdatePollOptionRequest & {
-  position?: number;
 };
 
 export type ModerationFlagOptions = {

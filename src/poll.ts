@@ -1,15 +1,16 @@
 import { StateStore } from './store';
 import type { StreamChat } from './client';
 import type {
+  CreatePollOptionRequest,
   EventPayload,
   PartialPollUpdate,
-  PollOptionData,
   PollResponseData,
   PollVoteResponseData,
   QueryVotesFilters,
   QueryVotesOptions,
   RequireLiteral,
   SortParamRequest,
+  UpdatePollOptionRequest,
   UpdatePollRequest,
   VotingVisibility,
 } from './types';
@@ -283,10 +284,10 @@ export class Poll {
 
   delete = async () => await this.client.deletePoll({ poll_id: this.id as string });
 
-  createOption = async (option: PollOptionData) =>
+  createOption = async (option: CreatePollOptionRequest) =>
     await this.client.createPollOption({ poll_id: this.id as string, ...option });
 
-  updateOption = async (option: PollOptionData) =>
+  updateOption = async (option: UpdatePollOptionRequest) =>
     await this.client.updatePollOption({ poll_id: this.id as string, ...option });
 
   deleteOption = async (option_id: string) =>
