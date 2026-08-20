@@ -436,9 +436,12 @@ both wrappers already take it as a positional argument, and because `options` is
 including it would have let `options.reason` silently override the positional one.
 
 Note that the wrappers still default `entity_creator_id` to `''` when you do not supply it,
-and an empty string **is** serialized (`JSON.stringify` drops `undefined`, not `''`). That
-predates this change and is left as-is; pass the real creator id if your moderation
-dashboard depends on the attribution.
+and an empty string **is** serialized (`JSON.stringify` drops `undefined`, not `''`) — so every
+flag this SDK sends carries `"entity_creator_id": ""`. That is harmless, verified against the
+live API rather than assumed: flagging a message and a user each three ways (`''`, omitted,
+and the real id) produced review-queue items whose `entity_creator_id` and resolved
+`entity_creator` were the correct author in **all** cases. The server derives the creator from
+the entity and discards the empty string, so the default is left as-is.
 
 `flagUser` / `flagMessage` themselves are **kept**. Unlike the ban and mute wrappers removed
 in [the moderation migration](./v9-to-v10-migration-guide-methods.md), they earn their place:
