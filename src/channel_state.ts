@@ -25,9 +25,27 @@ type ChannelReadStatus = Record<
   }
 >;
 
-export type WatcherState = {
+/**
+ * Everything about watching this channel: who else is watching it, and whether *we* are.
+ */
+export type ChannelWatchState = {
   watcherCount: number;
   watchers: Record<string, UserResponse>;
+  /**
+   * Whether this client currently holds a server-side watch on the channel — i.e. whether channel
+   * events are being delivered to it. Set when a query carrying `watch: true` succeeds
+   * (`channel.watch()`, `channel.query({ watch: true })`, `client.queryChannels()`), cleared by
+   * `channel.stopWatching()`, by teardown, and by **any loss of the WS connection**.
+   *
+   * The server keys watches by connection ID, so a dropped socket ends every watch this client held
+   * — even if it reconnects moments later with a fresh ID. That is why this is not simply "did we
+   * ask to watch once": it answers "are events flowing right now", which is what a consumer needs
+   * in order to decide whether a channel has to be re-queried.
+   *
+   * Note `channel.watch()` silently downgrades to a non-watching query when the client has no
+   * connection ID; this flag is what makes that observable.
+   */
+  watching: boolean;
 };
 
 export type TypingUsersState = {
@@ -146,7 +164,7 @@ export type AIIndicatorState = {
  * The shape is FLAT — subscribe to any slice via a selector, e.g.
  * `useStateStore(channel.state, (s) => ({ read: s.read }))`.
  */
-export type ChannelStateData = WatcherState &
+export type ChannelStateData = ChannelWatchState &
   TypingUsersState &
   ReadState &
   MembersState &
@@ -173,6 +191,7 @@ export class ChannelState extends StateStore<ChannelStateData> {
     super({
       watcherCount: 0,
       watchers: {},
+      watching: false,
       typing: {},
       read: {},
       members: {},

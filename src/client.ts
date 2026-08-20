@@ -515,6 +515,7 @@ export class StreamChat extends ChatApi {
    */
   closeConnection = async (timeout?: number) => {
     this._resetAIStateOnActiveChannels();
+    this._markActiveChannelsUnwatched();
 
     if (this.cleaningIntervalRef != null) {
       clearInterval(this.cleaningIntervalRef);
@@ -1103,6 +1104,26 @@ export class StreamChat extends ChatApi {
     }
   }
 
+  /**
+   * Clears `state.watching` on every active channel. The server keys watches by connection ID, so
+   * losing the socket ends every watch this client held — a reconnect issues a NEW id and the
+   * channels have to be re-queried to watch again.
+   *
+   * Invoked from two places, because neither covers the other: `StableWSConnection._setHealth(false)`
+   * for an abnormal close/error (immediately — NOT via the `connection.changed` event, which is
+   * 5s-debounced when going offline and is skipped entirely on a quick flap, both of which would
+   * leave this flag lying), and `closeConnection()` for a deliberate shutdown (e.g. mobile
+   * backgrounding), which sets `isHealthy` directly and so never reaches `_setHealth`.
+   */
+  _markActiveChannelsUnwatched() {
+    for (const cid in this.activeChannels) {
+      const channel = this.activeChannels[cid];
+      if (channel && !channel.pendingDisposal) {
+        channel.watching = false;
+      }
+    }
+  }
+
   _muteStatus(cid: string) {
     let muteStatus;
     for (let i = 0; i < this.mutedChannels.length; i++) {
@@ -1460,6 +1481,11 @@ export class StreamChat extends ChatApi {
       c.state.syncStateFromChannelData(c.data, previousData);
       c.offlineMode = offlineMode;
       c.initialized = !offlineMode;
+      // Same precedence `queryChannels` applies to the request: an explicit caller choice wins,
+      // otherwise we watch only if there is a connection to watch on. Offline hydration populates
+      // state without a live watch, so it never counts.
+      c.watching =
+        !offlineMode && (queryChannelsOptions?.watch ?? this._hasConnectionID());
       c.push_preferences = channelState.push_preferences;
 
       const willInitialize =

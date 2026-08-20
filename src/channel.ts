@@ -1406,6 +1406,19 @@ export class Channel extends ChannelApi {
   }
 
   /**
+   * Whether this client currently holds a server-side watch on the channel — see
+   * {@link ChannelWatchState.watching}. Store-backed and reactive: subscribe via
+   * `useStateStore(channel.state, (s) => ({ watching: s.watching }))`.
+   */
+  get watching() {
+    return this.state.getLatestValue().watching;
+  }
+
+  set watching(watching: boolean) {
+    this.state.partialNext({ watching });
+  }
+
+  /**
    * Whether a consumer has declared this channel as the one it is currently consuming (see
    * {@link Channel.activate}). Reactive — subscribe via
    * `useStateStore(channel.state, (s) => ({ active: s.active }))`.
@@ -1600,6 +1613,8 @@ export class Channel extends ChannelApi {
    */
   override async stopWatching(...args: Parameters<ChannelApi['stopWatching']>) {
     const response = await super.stopWatching(...args);
+
+    this.watching = false;
 
     logger.withExtraTags('stopWatching', this.cid).info('Stopped watching the channel.');
 
@@ -1888,6 +1903,13 @@ export class Channel extends ChannelApi {
         // Re-seed of an already-loaded window folds + reconciles instead of blanking (see above).
         { candidateIds, reconcile: true },
       );
+    }
+
+    // The request carrying `watch: true` came back, so the server has registered this connection as
+    // a watcher. Only ever set here because a `watch: false` query does NOT unwatch server-side, so it
+    // must not clear the flag.
+    if (queryPayload.watch) {
+      this.watching = true;
     }
 
     // Seed read/members/pinned/thread-cleanup state; the message list is in the paginator.
@@ -2974,6 +2996,7 @@ export class Channel extends ChannelApi {
     // Tear down the channel.state subscriptions BEFORE flipping `pendingDisposal` — that setter
     // now publishes to the store, so no subscriber handler runs against a half-torn-down channel.
     this.messageReceiptsTracker.unregisterSubscriptions();
+    this.watching = false;
     this.pendingDisposal = true;
     this.cooldownTimer.clearTimeout();
     // Release the store-backed paginators so the message store no longer pins this removed channel

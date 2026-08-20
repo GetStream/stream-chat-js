@@ -8,6 +8,7 @@ import sinon from 'sinon';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 
 import { Channel, ChannelState, StreamChat } from '../../src';
+import { StableWSConnection } from '../../src/connection';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
 import { formatMessage, generateUUIDv4 as uuidv4 } from '../../src/utils';
@@ -303,6 +304,171 @@ describe('Channel isViewingLive (unread bump gating)', function () {
 
 		channel.messagePaginator.setViewingLive(true);
 		expect(emissions).to.be.equal(1);
+	});
+});
+
+describe('Channel watching state (channel.state.watching)', function () {
+	const user = { id: 'user' };
+	let client;
+	let channel;
+
+	const mockQueryResponse = (channelResponse) => {
+		client.api.sendRequest = () =>
+			Promise.resolve({
+				body: getOrCreateChannelApi(channelResponse).response.data,
+				metadata: {},
+			});
+	};
+
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client.user = user;
+		client.user = { id: user.id };
+		client.wsPromise = Promise.resolve();
+		// a connection id is what makes a watch possible at all
+		client._hasConnectionID = () => true;
+		client.connectionId = 'connection-id';
+		channel = client.channel('messaging', 'watching-id');
+		client.activeChannels[channel.cid] = channel;
+		mockQueryResponse(generateChannel({ channel: { id: 'watching-id' } }));
+	});
+
+	it('defaults to false before anything is queried', () => {
+		expect(channel.watching).to.equal(false);
+		expect(channel.state.getLatestValue().watching).to.equal(false);
+	});
+
+	it('is true after watch() resolves', async () => {
+		await channel.watch();
+
+		expect(channel.watching).to.equal(true);
+	});
+
+	it('is reactive via the store', async () => {
+		const seen = [];
+		const unsubscribe = channel.state.subscribeWithSelector(
+			(s) => ({ watching: s.watching }),
+			({ watching }) => seen.push(watching),
+		);
+
+		await channel.watch();
+		unsubscribe();
+
+		expect(seen).to.eql([false, true]);
+	});
+
+	it('stays false for a query that does not ask to watch', async () => {
+		await channel.query({ watch: false });
+
+		expect(channel.watching).to.equal(false);
+	});
+
+	it('is NOT cleared by a later non-watching query (a watch:false query does not unwatch)', async () => {
+		await channel.watch();
+		expect(channel.watching).to.equal(true);
+
+		await channel.query({ watch: false });
+
+		expect(channel.watching).to.equal(true);
+	});
+
+	it('stays false when watch() downgrades for lack of a connection id', async () => {
+		client._hasConnectionID = () => false;
+
+		await channel.watch();
+
+		expect(channel.watching).to.equal(false);
+	});
+
+	it('is cleared by stopWatching()', async () => {
+		await channel.watch();
+
+		await channel.stopWatching();
+
+		expect(channel.watching).to.equal(false);
+	});
+
+	it('is cleared on teardown', async () => {
+		await channel.watch();
+
+		channel._disconnect();
+
+		expect(channel.state.getLatestValue().watching).to.equal(false);
+	});
+
+	it('is cleared on every active channel when the WS connection goes unhealthy', async () => {
+		await channel.watch();
+		const other = client.channel('messaging', 'other-id');
+		client.activeChannels[other.cid] = other;
+		other.watching = true;
+
+		client._markActiveChannelsUnwatched();
+
+		expect(channel.watching).to.equal(false);
+		expect(other.watching).to.equal(false);
+	});
+
+	it('is set by channel-list hydration, which watches by default', () => {
+		const response = generateChannel({ channel: { id: 'hydrated-id' } });
+
+		const [hydrated] = client.hydrateActiveChannels([response]);
+
+		expect(hydrated.watching).to.equal(true);
+	});
+
+	it('is NOT set by hydration when the caller opted out of watching', () => {
+		const response = generateChannel({ channel: { id: 'unwatched-id' } });
+
+		const [hydrated] = client.hydrateActiveChannels([response], {}, { watch: false });
+
+		expect(hydrated.watching).to.equal(false);
+	});
+
+	it('is NOT set by hydration without a connection id', () => {
+		client._hasConnectionID = () => false;
+		const response = generateChannel({ channel: { id: 'no-connection-id' } });
+
+		const [hydrated] = client.hydrateActiveChannels([response]);
+
+		expect(hydrated.watching).to.equal(false);
+	});
+
+	it('is NOT set by offline hydration (state without a live watch)', () => {
+		const response = generateChannel({ channel: { id: 'offline-id' } });
+
+		const [hydrated] = client.hydrateActiveChannels([response], { offlineMode: true });
+
+		expect(hydrated.watching).to.equal(false);
+		expect(hydrated.offlineMode).to.equal(true);
+	});
+
+	it('is cleared via closeConnection (deliberate shutdown never reaches _setHealth)', async () => {
+		await channel.watch();
+		expect(channel.watching).to.equal(true);
+
+		await client.closeConnection();
+
+		expect(channel.watching).to.equal(false);
+	});
+
+	it('is cleared when the WS connection reports itself unhealthy', async () => {
+		await channel.watch();
+		const sweep = vi.spyOn(client, '_markActiveChannelsUnwatched');
+		const connection = new StableWSConnection({ client });
+		connection.isHealthy = true;
+
+		connection._setHealth(false);
+
+		expect(sweep).toHaveBeenCalledTimes(1);
+	});
+
+	it('skips channels pending disposal when sweeping', async () => {
+		await channel.watch();
+		channel._disconnect();
+
+		// reading/writing state on a disposed channel must not resurrect it
+		expect(() => client._markActiveChannelsUnwatched()).not.to.throw();
+		expect(channel.state.getLatestValue().watching).to.equal(false);
 	});
 });
 
