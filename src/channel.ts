@@ -36,7 +36,7 @@ import type {
   LocalMessage,
   MarkReadRequest,
   MarkReadResponse,
-  MessagePaginationOptions,
+  MessagePaginationParams,
   MessageRequest,
   MessageResponse,
   MessageSetType,
@@ -1723,7 +1723,7 @@ export class Channel extends ChannelApi {
     const isLatestMessageSet =
       messageSetToAddToIfDoesNotExist === 'latest' &&
       !options?.messages?.id_around &&
-      !(options?.messages as MessagePaginationOptions | undefined)?.created_at_around;
+      !(options?.messages as MessagePaginationParams | undefined)?.created_at_around;
 
     this.getClient().polls.hydratePollCache(state.messages, true);
     this.getClient().reminders.hydrateState(state.messages);

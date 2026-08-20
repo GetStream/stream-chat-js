@@ -136,24 +136,6 @@ export type Automod = ChannelConfigWithInfo['automod'];
 /** What automod does when it trips, as reported by `channel.getConfig()`. */
 export type AutomodBehavior = ChannelConfigWithInfo['automod_behavior'];
 
-export type PaginationOptions = {
-  created_at_after?: string | Date;
-  created_at_after_or_equal?: string | Date;
-  created_at_before?: string | Date;
-  created_at_before_or_equal?: string | Date;
-  id_gt?: string;
-  id_gte?: string;
-  id_lt?: string;
-  id_lte?: string;
-  limit?: number;
-  offset?: number; // should be avoided with channel.query()
-};
-
-export type MessagePaginationOptions = PaginationOptions & {
-  created_at_around?: string | Date;
-  id_around?: string;
-};
-
 export type PinnedMessagePaginationOptions = Omit<
   Parameters<ChatApi['getPinnedMessages']>[0],
   'id' | 'sort' | 'type'

@@ -675,7 +675,7 @@ describe('MessagePaginator', () => {
 
       expect(ok).toBe(true);
       expect(executeQuerySpy).toHaveBeenCalledWith({
-        queryShape: { created_at_around: lastReadAt.toISOString(), limit: 25 },
+        queryShape: { created_at_around: lastReadAt, limit: 25 },
         updateState: false,
       });
       expect(jumpSpy).toHaveBeenCalledWith(

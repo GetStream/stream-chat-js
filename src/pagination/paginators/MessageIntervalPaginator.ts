@@ -18,7 +18,6 @@ import {
 } from './BasePaginator';
 import type {
   LocalMessage,
-  MessagePaginationOptions,
   MessagePaginationParams,
   MessageResponse,
   PinnedMessagePaginationOptions,
@@ -98,7 +97,7 @@ const DEFAULT_BACKEND_SORT: MessagePaginatorSort = [
 const DEFAULT_CHANNEL_MESSAGE_LIST_PAGE_SIZE = 100;
 
 export type MessagePaginatorState = PaginatorState<LocalMessage>;
-export type MessageQueryShape = MessagePaginationOptions | PinnedMessagePaginationOptions;
+export type MessageQueryShape = MessagePaginationParams | PinnedMessagePaginationOptions;
 
 /**
  * At the moment all the pagination parameters are just different types of cursors, e.g.
@@ -460,7 +459,7 @@ export class MessageIntervalPaginator extends BasePaginator<
   seedFirstPageSync(
     messages: LocalMessage[],
     requestedPageSize: number,
-    messagePaginationOptions?: MessagePaginationOptions,
+    messagePaginationOptions?: MessagePaginationParams,
     options?: SeedFirstPageOptions,
   ) {
     const queryShape: MessageQueryShape = {
@@ -494,7 +493,7 @@ export class MessageIntervalPaginator extends BasePaginator<
   isJumpQueryShape(queryShape: MessageQueryShape): boolean {
     return (
       !!queryShape?.id_around ||
-      !!(queryShape as MessagePaginationOptions)?.created_at_around
+      !!(queryShape as MessagePaginationParams)?.created_at_around
     );
   }
 
@@ -1445,11 +1444,11 @@ const makeDeriveCursor =
       return { cursor, hasMoreHead, hasMoreTail };
     };
 
-    if ((ctx.queryShape as MessagePaginationOptions)?.created_at_around) {
+    if ((ctx.queryShape as MessagePaginationParams)?.created_at_around) {
       return injectCursor(
         deriveCreatedAtAroundPaginationFlags<
           LocalMessage,
-          MessagePaginationOptions,
+          MessagePaginationParams,
           MessageIntervalPaginator
         >({
           ...ctx,
