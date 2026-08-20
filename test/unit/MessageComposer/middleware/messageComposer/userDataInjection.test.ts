@@ -55,7 +55,7 @@ describe('stream-io/message-composer-middleware/user-data-injection', () => {
       ...stateSeed,
       localMessage: {
         ...stateSeed.localMessage,
-        user: mockComposer.client.user,
+        user: { ...mockComposer.client.user, blocked_user_ids: [] },
         user_id: mockComposer.client.user.id,
       },
     });
@@ -100,7 +100,7 @@ describe('stream-io/message-composer-middleware/user-data-injection', () => {
       ...stateSeed,
       localMessage: {
         ...stateSeed.localMessage,
-        user: mockComposer.client.user,
+        user: { ...mockComposer.client.user, blocked_user_ids: [] },
         user_id: mockComposer.client.user.id,
       },
     });
