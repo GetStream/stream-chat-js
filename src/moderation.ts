@@ -23,6 +23,10 @@ export class Moderation extends ModerationApi {
    * @param reason - Reason for flagging the user.
    * @param options - Additional options for flagging the user (optional, defaults to `{}`).
    * @param options.custom - Additional data to be stored with the flag (optional).
+   * @param options.entity_creator_id - ID of the user who created the flagged entity.
+   *   Overrides the empty-string default (optional).
+   * @param options.moderation_payload - Content submitted for moderation alongside the
+   *   flag (optional).
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The flag response.
@@ -52,6 +56,10 @@ export class Moderation extends ModerationApi {
    * @param reason - Reason for flagging the message.
    * @param options - Additional options for flagging the message (optional, defaults to `{}`).
    * @param options.custom - Additional data to be stored with the flag (optional).
+   * @param options.entity_creator_id - ID of the user who created the flagged entity.
+   *   Overrides the empty-string default (optional).
+   * @param options.moderation_payload - Content submitted for moderation alongside the
+   *   flag (optional).
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The flag response.

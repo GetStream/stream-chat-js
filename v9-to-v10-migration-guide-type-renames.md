@@ -400,6 +400,51 @@ nothing — it narrows the generated `UpdatePollPartialRequest`
 `Array<keyof UpdatePollRequest>`, both derived, so a spec change flows through it without a
 hand edit.
 
+### `ModerationFlagOptions` derived — and its `user_id` was never sent
+
+`ModerationFlagOptions` types the `options` parameter of `moderation.flagUser()` and
+`moderation.flagMessage()`. It was hand-written, and it disagreed with `FlagRequest` in both
+directions:
+
+```ts
+// before rc.4
+export type ModerationFlagOptions = {
+  custom?: Record<string, unknown>;
+  moderation_payload?: ModerationPayload;
+  user_id?: string;
+};
+
+// after
+export type ModerationFlagOptions = Omit<
+  FlagRequest,
+  'entity_id' | 'entity_type' | 'reason'
+>;
+// { entity_creator_id?: string; custom?: Record<string, any>; moderation_payload?: ModerationPayload }
+```
+
+- **`user_id` is gone, and it never reached the server.** `FlagRequest` has no such field, and
+  the generated `flag()` whitelists its body explicitly — `entity_id`, `entity_type`,
+  `entity_creator_id`, `reason`, `custom`, `moderation_payload` — so a `user_id` passed here
+  was discarded before the request was built. Nothing to migrate: the acting user is already
+  sent as a query parameter on every request, taken from `client.userId` by the transport.
+- **`entity_creator_id` is now settable.** It is accepted by the endpoint but was absent from
+  the options type, so both wrappers pinned it to `''` with no way to override. `options` is
+  spread last, so passing it now wins over that default.
+
+`reason` is deliberately excluded from the options type even though `FlagRequest` carries it:
+both wrappers already take it as a positional argument, and because `options` is spread last,
+including it would have let `options.reason` silently override the positional one.
+
+Note that the wrappers still default `entity_creator_id` to `''` when you do not supply it,
+and an empty string **is** serialized (`JSON.stringify` drops `undefined`, not `''`). That
+predates this change and is left as-is; pass the real creator id if your moderation
+dashboard depends on the attribution.
+
+`flagUser` / `flagMessage` themselves are **kept**. Unlike the ban and mute wrappers removed
+in [the moderation migration](./v9-to-v10-migration-guide-methods.md), they earn their place:
+they resolve `entity_type` from `MODERATION_ENTITY_TYPES` (`'stream:user'`,
+`'stream:chat:v1:message'`), magic strings that the spec types only as `string`.
+
 ## Verification
 
 After applying the renames, `yarn types` should pass. If a call site errors with `Cannot find name 'X'` where X is one of the v9 names in the left column, the rewrite is incomplete.

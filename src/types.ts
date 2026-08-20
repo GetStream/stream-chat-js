@@ -12,9 +12,9 @@ import type {
   CreateDeviceRequest,
   CreatePollRequest,
   DraftPayloadResponse,
+  FlagRequest,
   Images,
   MessageResponse,
-  ModerationPayload,
   OwnUserResponse,
   QueryChannelsRequest,
   QueryMembersPayload,
@@ -436,11 +436,14 @@ export type PartialPollUpdate = {
   unset?: Array<keyof UpdatePollRequest>;
 };
 
-export type ModerationFlagOptions = {
-  custom?: Record<string, unknown>;
-  moderation_payload?: ModerationPayload;
-  user_id?: string;
-};
+/**
+ * Options accepted by `moderation.flagUser` / `moderation.flagMessage` on top of the
+ * entity they resolve and the `reason` they take positionally.
+ */
+export type ModerationFlagOptions = Omit<
+  FlagRequest,
+  'entity_id' | 'entity_type' | 'reason'
+>;
 
 export type AIState =
   | 'AI_STATE_ERROR'
