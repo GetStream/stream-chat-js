@@ -498,19 +498,6 @@ describe('ChannelState unified store', () => {
 		expect(names).to.eql(['orig', 'renamed']);
 	});
 
-	it('keeps the deprecated `disconnected` alias writing through to `pendingDisposal`', () => {
-		const client = new StreamChat();
-		client.user = { id: 'me' };
-		const channel = new Channel(client, 'messaging', 'alias', {});
-
-		channel.disconnected = true;
-		expect(channel.pendingDisposal).to.equal(true);
-		expect(channel.state.getLatestValue().pendingDisposal).to.equal(true);
-
-		channel.pendingDisposal = false;
-		expect(channel.disconnected).to.equal(false);
-	});
-
 	it('proxies the lifecycle flags (initialized/offlineMode/pendingDisposal) through the store', () => {
 		const client = new StreamChat();
 		client.user = { id: 'me' };
@@ -520,8 +507,6 @@ describe('ChannelState unified store', () => {
 		expect(channel.initialized).to.equal(false);
 		expect(channel.offlineMode).to.equal(false);
 		expect(channel.pendingDisposal).to.equal(false);
-		// the deprecated `disconnected` alias proxies the same slice
-		expect(channel.disconnected).to.equal(false);
 		expect(channel.state.getLatestValue()).to.deep.include({
 			initialized: false,
 			offlineMode: false,

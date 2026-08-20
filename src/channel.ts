@@ -1406,19 +1406,6 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * @deprecated Renamed to {@link Channel.pendingDisposal} — the flag is one-way and the instance is
-   * never reconnected, which the old name implied. This alias proxies the same state and will be
-   * removed in the next major.
-   */
-  get disconnected() {
-    return this.pendingDisposal;
-  }
-
-  set disconnected(pendingDisposal: boolean) {
-    this.pendingDisposal = pendingDisposal;
-  }
-
-  /**
    * Whether a consumer has declared this channel as the one it is currently consuming (see
    * {@link Channel.activate}). Reactive — subscribe via
    * `useStateStore(channel.state, (s) => ({ active: s.active }))`.
