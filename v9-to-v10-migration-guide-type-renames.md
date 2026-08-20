@@ -435,13 +435,17 @@ export type ModerationFlagOptions = Omit<
 both wrappers already take it as a positional argument, and because `options` is spread last,
 including it would have let `options.reason` silently override the positional one.
 
-Note that the wrappers still default `entity_creator_id` to `''` when you do not supply it,
-and an empty string **is** serialized (`JSON.stringify` drops `undefined`, not `''`) — so every
-flag this SDK sends carries `"entity_creator_id": ""`. That is harmless, verified against the
-live API rather than assumed: flagging a message and a user each three ways (`''`, omitted,
-and the real id) produced review-queue items whose `entity_creator_id` and resolved
-`entity_creator` were the correct author in **all** cases. The server derives the creator from
-the entity and discards the empty string, so the default is left as-is.
+The wrappers also **no longer pin `entity_creator_id` to `''`**. They used to send it
+unconditionally, and an empty string _is_ serialized (`JSON.stringify` drops `undefined`, not
+`''`), so every flag carried `"entity_creator_id": ""`. Now the field is simply absent unless
+you pass one.
+
+This was verified against the live API rather than reasoned about: flagging a message and a
+user each way — `''`, omitted, and the real id — produced review-queue items whose
+`entity_creator_id` and resolved `entity_creator` were the correct author in **every** case.
+The server derives the creator from the entity and discards the empty string, so the two are
+equivalent and dropping the default changes nothing observable. Attribution was never broken;
+the field was just dead weight on the wire.
 
 `flagUser` / `flagMessage` themselves are **kept**. Unlike the ban and mute wrappers removed
 in [the moderation migration](./v9-to-v10-migration-guide-methods.md), they earn their place:
