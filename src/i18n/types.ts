@@ -338,6 +338,18 @@ export type TimestampFormatterOptions = {
   relativeCompact?: boolean;
   relativeCompactMaxDays?: number;
   relativeCompactMaxWeeks?: number;
+  /**
+   * How a "weeks ago" label rounds, and what bounds the window.
+   *
+   * `floor` (the default) reports whole elapsed weeks and stops once that count passes
+   * `relativeCompactMaxWeeks` — 8 days is "1w ago", 27 days is "3w ago".
+   *
+   * `ceil` rounds up and bounds on *days* instead, stopping after `relativeCompactMaxWeeks * 7` — 8
+   * days is "2w ago", and 22 days falls through to a date. It exists because that is what
+   * `stream-chat-react` rendered before its formatter moved here, and changing those labels is a
+   * visible UI change rather than a refactor. New call sites should prefer `floor`.
+   */
+  relativeCompactWeekRounding?: 'ceil' | 'floor';
 };
 
 export type DurationFormatterOptions = {

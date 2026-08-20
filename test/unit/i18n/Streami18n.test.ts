@@ -678,32 +678,79 @@ describe('Streami18n — a failed setLanguage rolls back', () => {
 });
 
 /**
- * A rejected `init()` must not be latched: both UI SDKs call `init()` without awaiting it, so a
- * permanently rejected memo leaves the instance uninitialized for the process lifetime.
+ * A failed `init()` leaves the instance degraded but *safe*.
+ *
+ * Neither UI SDK awaits `init()`, so it must never reject. And `initialized` must stay false, because
+ * it means "i18next is usable" -- `registerTranslation` and `setLanguage` both branch on it, and a
+ * `true` there sends them into an instance whose own init rejected.
  */
-describe('Streami18n — init() is retryable after a genuine failure', () => {
+describe('Streami18n — a failed init()', () => {
   beforeEach(() => {
     vi.useRealTimers();
   });
 
-  it('recovers when the cause is gone', async () => {
-    let shouldThrow = true;
-    const i18n = setup({
-      logger: (message?: string) => {
-        if (shouldThrow) throw new Error('logger exploded');
-        void message;
-      },
-      // Unregistered, so `validateCurrentLanguage` logs -- and the logger throws.
-      language: 'de',
+  const failing = (logger = () => {}) => {
+    const i18n = setup({ logger });
+    vi.spyOn(i18n.i18nInstance, 'init').mockRejectedValue(new Error('i18next exploded'));
+    return i18n;
+  };
+
+  it('resolves rather than rejecting, and reports the failure', async () => {
+    const logger = vi.fn();
+    const i18n = failing(logger);
+
+    await expect(i18n.init()).resolves.toBeDefined();
+    expect(logger).toHaveBeenCalledWith(
+      expect.stringContaining('initialization failed: i18next exploded'),
+    );
+  });
+
+  it('leaves `initialized` false', async () => {
+    const i18n = failing();
+    const state = await i18n.init();
+
+    expect(state.initialized).toBe(false);
+    expect(i18n.initialized).toBe(false);
+  });
+
+  it('keeps rendering the inline English copy', async () => {
+    const i18n = failing();
+    const { t } = await i18n.init();
+
+    expect(t('fixture.prose', 'Cancel')).toBe('Cancel');
+  });
+
+  /** The bug this guards: `addResources` on a dead instance threw out of `registerTranslation`. */
+  it('does not throw from registerTranslation or setLanguage', async () => {
+    const i18n = failing();
+    await i18n.init();
+
+    expect(() =>
+      i18n.registerTranslation('de', { 'fixture.prose': 'Abbrechen' } as never),
+    ).not.toThrow();
+    await expect(i18n.setLanguage('de')).resolves.toBeUndefined();
+  });
+
+  /**
+   * The one path that escapes, recorded rather than guarded.
+   *
+   * The logger is called from the `catch`, so a logger that throws rejects out of `init()`. Both UI
+   * SDKs call `init()` without awaiting it, so that surfaces as an unhandled rejection — worth knowing
+   * before supplying a logger that can throw.
+   */
+  it('rejects when the logger itself throws', async () => {
+    const i18n = failing(() => {
+      throw new Error('logger exploded');
     });
 
     await expect(i18n.init()).rejects.toThrow('logger exploded');
     expect(i18n.initialized).toBe(false);
+  });
+});
 
-    shouldThrow = false;
-    const state = await i18n.init();
-
-    expect(state.initialized).toBe(true);
+describe('Streami18n — init() memoization', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
   });
 
   it('hands the same promise to concurrent callers on the happy path', async () => {
@@ -713,5 +760,115 @@ describe('Streami18n — init() is retryable after a genuine failure', () => {
     expect(i18n.init()).toBe(first);
     await first;
     expect(i18n.init()).toBe(first);
+  });
+});
+
+/**
+ * Locale configuration has to reach the module that formats the dates.
+ *
+ * `ensureDayjsPlugins` was fixed to extend a supplied module, but locale registration still wrote to
+ * core's own dayjs — so a second physical copy got the plugins and none of the `calendar` wording, and
+ * `dayjsLocaleConfigForLanguage` was silently inert.
+ */
+describe('Streami18n — locale config on a supplied dayjs module', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A stand-in for a second dayjs copy: its own `Ls` registry, and it records writes. */
+  const makeDayjsCopy = () => {
+    const registered: Array<{ method: string; name: string }> = [];
+    const parser = ((input?: unknown) => ({
+      calendar: () => 'calendar',
+      diff: () => 0,
+      format: () => String(input),
+      locale: () => parser(input),
+      startOf: () => ({ diff: () => 0 }),
+      valueOf: () => 0,
+    })) as unknown as DateTimeParserModule & Record<string, unknown>;
+
+    parser.extend = () => parser;
+    parser.Ls = { en: {} };
+    parser.locale = (preset: { name: string }) => {
+      registered.push({ method: 'locale', name: preset.name });
+      (parser.Ls as Record<string, unknown>)[preset.name] = preset;
+      return parser;
+    };
+    parser.updateLocale = (name: string) => {
+      registered.push({ method: 'updateLocale', name });
+      return parser;
+    };
+
+    return { parser, registered };
+  };
+
+  const calendar = {
+    lastDay: '[Gestern]',
+    lastWeek: 'dddd',
+    nextDay: '[Morgen]',
+    nextWeek: 'dddd [um] LT',
+    sameDay: '[Heute]',
+    sameElse: 'L',
+  };
+
+  it('registers a constructor-supplied locale config on that module', () => {
+    const { parser, registered } = makeDayjsCopy();
+
+    setup({
+      DateTimeParser: parser,
+      dayjsLocaleConfigForLanguage: { calendar },
+      language: 'de',
+    });
+
+    expect(registered).toEqual([{ method: 'locale', name: 'de' }]);
+  });
+
+  it('registers a registerTranslation locale config on that module', async () => {
+    const { parser, registered } = makeDayjsCopy();
+    const i18n = setup({ DateTimeParser: parser });
+
+    i18n.registerTranslation('de', { 'fixture.prose': 'Abbrechen' } as never, {
+      calendar,
+    });
+    // Locale configs are applied when the language becomes active, which needs an initialized
+    // instance -- `setLanguage` returns at its `initialized` guard otherwise.
+    await i18n.init();
+    await i18n.setLanguage('de');
+
+    expect(registered.some(({ name }) => name === 'de')).toBe(true);
+  });
+
+  it('consults the supplied module when deciding whether a locale exists', () => {
+    const logger = vi.fn();
+    const { parser } = makeDayjsCopy();
+
+    // `de` is absent from the supplied module's registry, so the missing-locale warning must fire --
+    // it used to be suppressed unconditionally for any custom parser.
+    setup({ DateTimeParser: parser, language: 'de', logger });
+
+    expect(logger).toHaveBeenCalledWith(
+      expect.stringContaining("no dayjs locale is registered for 'de'"),
+    );
+  });
+
+  it('reports rather than silently dropping a locale config for a non-dayjs parser', () => {
+    const logger = vi.fn();
+    const momentish = ((input?: unknown) => ({
+      diff: () => 0,
+      format: () => String(input),
+      startOf: () => ({ diff: () => 0 }),
+      valueOf: () => 0,
+    })) as unknown as DateTimeParserModule;
+
+    setup({
+      DateTimeParser: momentish,
+      dayjsLocaleConfigForLanguage: { calendar },
+      language: 'de',
+      logger,
+    });
+
+    expect(logger).toHaveBeenCalledWith(
+      expect.stringContaining('DateTimeParser is not dayjs, so it cannot be applied'),
+    );
   });
 });

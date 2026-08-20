@@ -41,11 +41,22 @@ export type CalendarFormats = {
 export type DayjsLocaleConfig = Partial<ILocale> & { calendar?: CalendarFormats };
 
 /**
- * Anything `ensureDayjsPlugins` can register plugins on: our own `dayjs`, or a module an integrator
- * supplied through `DateTimeParser`. Method shorthand, so a real `typeof dayjs` satisfies it -- as a
- * function property it would be checked contravariantly and rejected.
+ * The dayjs module surface this file drives: our own `dayjs`, or a module an integrator supplied
+ * through `DateTimeParser`. Method shorthand, so a real `typeof dayjs` satisfies it -- as function
+ * properties these would be checked contravariantly and rejected.
+ *
+ * `Ls`, `locale` and `updateLocale` are optional because a module only has them once the plugins are
+ * registered, and because a non-dayjs parser (a Moment) has a different shape entirely.
  */
-type DayjsExtendable = object & { extend?(plugin: unknown, option?: unknown): unknown };
+type DayjsExtendable = object & {
+  extend?(plugin: unknown, option?: unknown): unknown;
+  Ls?: Record<string, unknown>;
+  locale?(preset: unknown, object?: unknown, isLocal?: boolean): unknown;
+  updateLocale?(name: string, config: unknown): unknown;
+};
+
+/** The module locale helpers default to, when a caller does not name one. */
+const ownDayjs = () => Dayjs as unknown as DayjsExtendable;
 
 /**
  * The English locale skeleton a custom locale is merged over, so a partial config still has month and
@@ -160,19 +171,34 @@ export const getDefaultDateTimeParserModule = (): DateTimeParserModule => {
   return Dayjs as unknown as DateTimeParserModule;
 };
 
-/** Registers or updates a dayjs locale without changing the global locale. */
-export const addOrUpdateDayjsLocale = (language: string, config: DayjsLocaleConfig) => {
-  ensureDayjsPlugins();
-  if (dayjsLocaleExists(language)) {
-    Dayjs.updateLocale(language, { ...config });
+/**
+ * Registers or updates a dayjs locale without changing the global locale.
+ *
+ * Takes the module to register on, defaulting to ours. Passing it matters for the same reason
+ * {@link ensureDayjsPlugins} takes one: an integrator supplying `DateTimeParser` may hand over a second
+ * physical copy of dayjs, and registering on ours would leave the locale absent from the module that
+ * actually formats the dates -- so a `calendar` config or a `dayjsLocaleConfigForLanguage` would be
+ * silently ignored.
+ */
+export const addOrUpdateDayjsLocale = (
+  language: string,
+  config: DayjsLocaleConfig,
+  module: DayjsExtendable = ownDayjs(),
+) => {
+  ensureDayjsPlugins(module);
+
+  if (dayjsLocaleExists(language, module)) {
+    module.updateLocale?.(language, { ...config });
     return;
   }
   // Merged over the English skeleton so missing keys still resolve.
-  Dayjs.locale({ name: language, ...EN_LOCALE_FALLBACK, ...config }, undefined, true);
+  module.locale?.({ name: language, ...EN_LOCALE_FALLBACK, ...config }, undefined, true);
 };
 
-export const dayjsLocaleExists = (language: string) =>
-  Object.keys(Dayjs.Ls).includes(language);
+export const dayjsLocaleExists = (
+  language: string,
+  module: DayjsExtendable = ownDayjs(),
+) => Object.keys(module.Ls ?? {}).includes(language);
 
 /**
  * Whether a parser is dayjs, as opposed to a Moment the integrator brought.

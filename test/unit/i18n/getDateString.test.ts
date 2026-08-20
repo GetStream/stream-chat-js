@@ -377,3 +377,66 @@ describe('timestampFormatter — malformed calendarFormats', () => {
     expect(logger).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Week-label boundaries, both roundings.
+ *
+ * `floor` is what this module has always done and what `stream-chat-react-native` shipped. `ceil` is
+ * what `stream-chat-react` shipped before its formatter moved here, and the difference is user-visible
+ * at 8, 15 and 22 days — which is why the mode is explicit rather than chosen.
+ */
+describe('relativeCompact — week rounding', () => {
+  const NOW = new Date('2026-04-30T12:00:00.000Z');
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+
+  const render = (daysAgo: number, weekRounding?: 'ceil' | 'floor') =>
+    getDateString({
+      messageCreatedAt: new Date(NOW.getTime() - daysAgo * 24 * 3600 * 1000),
+      relativeCompact: true,
+      relativeCompactWeekRounding: weekRounding,
+      t: createDefaultTranslatorFunction(),
+      tDateTimeParser: defaultDateTimeParser,
+    });
+
+  // maxDays 6 / maxWeeks 3 are the defaults for both.
+  it.each([
+    [7, '1w ago', '1w ago'],
+    [8, '1w ago', '2w ago'],
+    [13, '1w ago', '2w ago'],
+    [14, '2w ago', '2w ago'],
+    [15, '2w ago', '3w ago'],
+    [21, '3w ago', '3w ago'],
+  ])('%i days ago — floor %s, ceil %s', (daysAgo, floorLabel, ceilLabel) => {
+    expect(render(daysAgo, 'floor')).toBe(floorLabel);
+    expect(render(daysAgo, 'ceil')).toBe(ceilLabel);
+  });
+
+  it('bounds the window on the week count under floor, and on days under ceil', () => {
+    // 22-27 days: three whole weeks elapsed, so `floor` still labels them...
+    expect(render(22, 'floor')).toBe('3w ago');
+    expect(render(27, 'floor')).toBe('3w ago');
+    // ...while `ceil` has already passed maxWeeks * 7 = 21 days and falls through to a date.
+    expect(render(22, 'ceil')).toMatch(/^\d{2}\/\d{2}\/\d{2}$/);
+    expect(render(27, 'ceil')).toMatch(/^\d{2}\/\d{2}\/\d{2}$/);
+  });
+
+  it('falls through to a date once both roundings are past the window', () => {
+    expect(render(28, 'floor')).toMatch(/^\d{2}\/\d{2}\/\d{2}$/);
+    expect(render(28, 'ceil')).toMatch(/^\d{2}\/\d{2}\/\d{2}$/);
+  });
+
+  it("defaults to floor, so an unset option keeps this module's long-standing behaviour", () => {
+    expect(render(8)).toBe('1w ago');
+    expect(render(22)).toBe('3w ago');
+  });
+
+  it('reads the option as text, the way an i18next expression supplies it', () => {
+    expect(render(8, 'ceil' as 'ceil')).toBe('2w ago');
+    // Anything unrecognised degrades to the default rather than throwing inside the formatter.
+    expect(render(8, 'nonsense' as unknown as 'ceil')).toBe('1w ago');
+  });
+});

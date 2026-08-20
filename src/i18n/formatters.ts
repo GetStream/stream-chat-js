@@ -48,6 +48,15 @@ const DEFAULT_RELATIVE_COMPACT_MAX_WEEKS = 3;
 const isUnparseableDateString = (value: string) => Number.isNaN(Date.parse(value));
 
 /**
+ * Coerces the week-rounding option, which arrives as text from an i18next format expression.
+ *
+ * Anything unrecognised falls back to `floor`, so a typo degrades to the default rather than throwing
+ * inside a formatter, where the only visible symptom would be a blank timestamp.
+ */
+const asWeekRounding = (value: unknown): 'ceil' | 'floor' =>
+  value === 'ceil' || value === true ? 'ceil' : 'floor';
+
+/**
  * Coerces a numeric formatter option.
  *
  * These arrive as strings, not numbers: they are written inside an i18next format expression
@@ -99,12 +108,14 @@ const relativeCompactDateString = ({
   tDateTimeParser,
   timestamp,
   translate,
+  weekRounding,
 }: {
   maxDays: number;
   maxWeeks: number;
   tDateTimeParser: TDateTimeParser;
   timestamp: string | Date;
   translate: LooseTranslateFunction;
+  weekRounding: 'ceil' | 'floor';
 }): string | null => {
   const parsed = tDateTimeParser(timestamp as string);
   if (!isDayOrMoment(parsed)) return null;
@@ -136,8 +147,15 @@ const relativeCompactDateString = ({
 
   // `maxWeeks > 0` and a full week elapsed, both required: with `maxWeeks: 0` a 3-day-old timestamp
   // has `Math.floor(3 / 7) === 0`, which would otherwise match and render "0w ago".
-  const weeksAgo = Math.floor(daysAgo / 7);
-  if (maxWeeks > 0 && daysAgo >= 7 && weeksAgo <= maxWeeks) {
+  //
+  // The two roundings bound the window differently, which is the whole reason both exist: `floor`
+  // stops on the week *count*, `ceil` on the day count. See `relativeCompactWeekRounding`.
+  const weeksAgo =
+    weekRounding === 'ceil' ? Math.ceil(daysAgo / 7) : Math.floor(daysAgo / 7);
+  const withinWindow =
+    weekRounding === 'ceil' ? daysAgo <= maxWeeks * 7 : weeksAgo <= maxWeeks;
+
+  if (maxWeeks > 0 && daysAgo >= 7 && withinWindow) {
     return translate('relativeTime.weeksAgo', {
       count: weeksAgo,
       defaultValue_one: RELATIVE_TIME_CATALOG['relativeTime.weeksAgo_one'],
@@ -158,6 +176,7 @@ const timestampFormatter: FormatterFactory<string | Date> =
       relativeCompact,
       relativeCompactMaxDays,
       relativeCompactMaxWeeks,
+      relativeCompactWeekRounding,
     } = options as TimestampFormatterOptions;
 
     // Nothing renderable: empty rather than the stringified value. `null` used to come out as the
@@ -173,6 +192,7 @@ const timestampFormatter: FormatterFactory<string | Date> =
         tDateTimeParser,
         timestamp: value,
         translate,
+        weekRounding: asWeekRounding(relativeCompactWeekRounding),
       });
       if (relative !== null) return relative;
     }
@@ -258,6 +278,7 @@ export const getDateString = ({
   relativeCompact,
   relativeCompactMaxDays,
   relativeCompactMaxWeeks,
+  relativeCompactWeekRounding,
   t,
   tDateTimeParser,
   timestampTranslationKey,
@@ -281,6 +302,7 @@ export const getDateString = ({
       tDateTimeParser,
       timestamp: messageCreatedAt,
       translate: t,
+      weekRounding: asWeekRounding(relativeCompactWeekRounding),
     });
     if (relative) return relative;
   }
@@ -301,6 +323,7 @@ export const getDateString = ({
       relativeCompact,
       relativeCompactMaxDays,
       relativeCompactMaxWeeks,
+      relativeCompactWeekRounding,
     };
     for (const [key, value] of Object.entries(supplied)) {
       if (value !== undefined) overrides[key] = value;

@@ -124,7 +124,6 @@ export class Streami18n<
   /** Applied when the language becomes active, not on registration: `Dayjs.locale()` is global. */
   private readonly dayjsLocales: Record<string, DayjsLocaleConfig> = {};
 
-  private readonly isCustomDateTimeParser: boolean;
   private readonly translationBuilderTopics: Record<string, TranslationTopicConstructor>;
   private readonly disableDateTimeTranslations: boolean;
   private readonly i18nextConfig: InitOptions;
@@ -138,7 +137,6 @@ export class Streami18n<
     this.disableDateTimeTranslations = options.disableDateTimeTranslations ?? false;
     this.timezone = options.timezone;
     this.formatters = { ...predefinedFormatters, ...options.formatters };
-    this.isCustomDateTimeParser = Boolean(options.DateTimeParser);
     this.translationBuilder = new TranslationBuilder(this.i18nInstance);
     this.translationBuilderTopics = options.translationBuilderTopics ?? {};
 
@@ -252,21 +250,25 @@ export class Streami18n<
   /**
    * Initializes i18next. Idempotent and safe to call concurrently.
    *
-   * Memoized on success, so two independent consumers (a chat root and its overlay host) share one
-   * initialization. Cleared on rejection, so a retry is possible rather than the instance staying
-   * uninitialized for the process lifetime.
+   * Memoized, so two independent consumers — a UI SDK's chat root and its overlay host — share one
+   * initialization.
+   *
+   * An i18next failure does **not** reject: neither UI SDK awaits this, so a rejection would surface
+   * as an unhandled rejection and the memo would latch it for the process lifetime. It is logged
+   * instead, leaving the instance *degraded but safe*: `state.initialized` stays false, which is what
+   * keeps the methods below off a dead i18next instance, and `t` remains the default translator, so
+   * every call site still renders its inline English. There is no retry — construct a new instance.
+   *
+   * One path does escape: an integrator `logger` that throws is called from the `catch` itself, so it
+   * rejects out of here. Rare enough not to guard, but it is why this is not an absolute guarantee.
    */
   init(): Promise<Streami18nState<C, Bundled>> {
-    this.initPromise ??= this.runInit().catch((error: unknown) => {
-      this.initPromise = undefined;
-      throw error;
-    });
+    this.initPromise ??= this.runInit();
     return this.initPromise;
   }
 
   private async runInit(): Promise<Streami18nState<C, Bundled>> {
-    // Everything is inside the `try`: neither UI SDK awaits `init()`, so a throw escaping here is an
-    // unhandled rejection.
+    // Everything is inside the `try` -- see `init()` for why an i18next failure must not reject.
     try {
       this.validateCurrentLanguage();
       this.assertPluralRulesCoverage(this.currentLanguage);
@@ -295,7 +297,6 @@ export class Streami18n<
       });
     } catch (error) {
       this.logger(`Streami18n: initialization failed: ${describeError(error)}`);
-      this.state.partialNext({ initialized: true });
     }
 
     return this.state.getLatestValue();
@@ -458,14 +459,32 @@ export class Streami18n<
     );
   };
 
-  /** Always true for a supplied parser -- we cannot inspect a foreign module's locale registry. */
+  /**
+   * Checked against the module that actually formats the dates.
+   *
+   * A supplied dayjs copy has its own locale registry, so consulting ours would answer for the wrong
+   * one. True for a non-dayjs parser, whose registry we cannot inspect.
+   */
   private localeExists = (language: string) => {
-    if (this.isCustomDateTimeParser) return true;
-    return dayjsLocaleExists(language);
+    if (!isDayjsLike(this.DateTimeParser)) return true;
+    return dayjsLocaleExists(language, this.DateTimeParser);
   };
 
+  /**
+   * Registers a locale on the module that formats the dates, not on ours.
+   *
+   * Only dayjs has a registry we can write to. For a Moment the config cannot be applied at all, so it
+   * is reported -- previously it was written to core's own dayjs, where nothing would ever read it.
+   */
   private addOrUpdateLocale(language: string, config: DayjsLocaleConfig) {
-    addOrUpdateDayjsLocale(language, config);
+    if (!isDayjsLike(this.DateTimeParser)) {
+      this.logger(
+        `Streami18n: a dayjs locale config was supplied for '${language}', but DateTimeParser is ` +
+          `not dayjs, so it cannot be applied. Configure the locale on your own date library instead.`,
+      );
+      return;
+    }
+    addOrUpdateDayjsLocale(language, config, this.DateTimeParser);
   }
 
   /**
