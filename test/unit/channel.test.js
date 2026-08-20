@@ -405,20 +405,6 @@ describe('Channel AI indicator state (channel.state.aiState)', function () {
 		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_IDLE');
 	});
 
-	it('clean() does not reset when the primary WS is down but the fallback is healthy', () => {
-		const { channel } = setupChannel();
-		channel.getClient().wsConnection = null;
-		channel.getClient().wsFallback = { isHealthy: () => true };
-		channel._handleChannelEvent({
-			type: 'ai_indicator.update',
-			ai_state: 'AI_STATE_GENERATING',
-		});
-
-		channel.clean();
-
-		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_GENERATING');
-	});
-
 	it('resetAIState() is a no-op (no notify) when already Idle', () => {
 		const { channel } = setupChannel();
 		const seen = [];

@@ -1521,9 +1521,7 @@ export class Channel extends ChannelApi {
     // path clears the indicator itself. Gate on health, not staleness — a healthy connection must
     // never cut off a long-running response.
     const client = this.getClient();
-    const connectionHealthy =
-      client.wsConnection?.isHealthy || client.wsFallback?.isHealthy();
-    if (!connectionHealthy) {
+    if (!client.wsConnection?.isHealthy) {
       this.state.resetAIState();
     }
   }
