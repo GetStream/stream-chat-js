@@ -199,7 +199,7 @@ Neither is a rename; both **gain** surface, so no call site breaks.
 
 These described admin/server-side surface (push-provider credentials, permission policies, blocklists, channel-type config) that moved to `@stream-io/node-sdk` when the server-side API left this package. Nothing in the SDK referenced them and no endpoint here returns them.
 
-`APNConfig`, `AsyncModerationOptions`, `BlockList`, `CommandVariants`, `FirebaseConfig`, `GetRepliesRequest`, `GiphyVersions`, `HuaweiConfig`, `Policy`, `PolicyRequest`, `Product`, `PushProviderAPN`, `PushProviderCommon`, `PushProviderConfig`, `PushProviderFirebase`, `PushProviderHuawei`, `PushProviderID`, `PushProviderXiaomi`, `UR`, `VotesFiltersOptions`, `XiaomiConfig`.
+`APNConfig`, `AsyncModerationOptions`, `BlockList`, `CommandVariants`, `FirebaseConfig`, `GetRepliesRequest`, `HuaweiConfig`, `Policy`, `PolicyRequest`, `Product`, `PushProviderAPN`, `PushProviderCommon`, `PushProviderConfig`, `PushProviderFirebase`, `PushProviderHuawei`, `PushProviderID`, `PushProviderXiaomi`, `UR`, `VotesFiltersOptions`, `XiaomiConfig`.
 
 Two notes:
 
@@ -207,6 +207,8 @@ Two notes:
 - **`UR`** (`Record<string, unknown>`) was a v9 type utility that outlived its callers. It joins `Readable`, `KnownKeys`, `PartializeKeys` and `UnknownType` in [Type utilities dropped](./v9-to-v10-migration-guide-other.md#type-utilities-dropped) — inline `Record<string, unknown>`.
 
 `PushProvider` is **kept** — it is `CreateDeviceRequest['push_provider']`, the union `client.createDevice()` accepts, and it derives from the generated request rather than restating it.
+
+`GiphyVersions` is **kept** for the same reason — it is `keyof Images`, derived from the generated attachment-images shape, so it cannot drift. The React SDK exposes it on `AttachmentProps.giphyVersion` and `AttachmentContextValue.giphyVersion`.
 
 ### `Automod` / `AutomodBehavior` narrowed
 
@@ -288,7 +290,9 @@ import type { MessageRequest } from 'stream-chat';
 const payload: MessageRequest = { id, text }; // `type: 'reply'` is now a compile error
 ```
 
-`MessageLabel` and `ReservedUpdatedMessageFields` are removed with it. The **runtime** constant `RESERVED_UPDATED_MESSAGE_FIELDS` stays — `toUpdatedMessagePayload()` still uses it to strip server-owned keys off a `LocalMessage`; it just no longer drives a type.
+`ReservedUpdatedMessageFields` is removed with it. The **runtime** constant `RESERVED_UPDATED_MESSAGE_FIELDS` stays — `toUpdatedMessagePayload()` still uses it to strip server-owned keys off a `LocalMessage`; it just no longer drives a type.
+
+`MessageLabel` itself is **kept**. It is what `UpdatedMessage['type']` used to be, and there is no generated equivalent — `MessageResponse['type']` is a bare `string`, so deriving it would widen rather than narrow. It stays available for typing message `type` values on the read side; it is just no longer valid as a _write_ payload type.
 
 `MessageComposerMiddlewareState.message` is now `MessageRequest` rather than `MessageRequest | UpdatedMessage`. Custom composer middleware that annotated the union should drop the `UpdatedMessage` arm.
 

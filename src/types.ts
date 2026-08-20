@@ -10,6 +10,7 @@ import type {
   ChannelStateResponseFields,
   CreateDeviceRequest,
   DraftPayloadResponse,
+  Images,
   MessageResponse,
   ModerationPayload,
   OwnUserResponse,
@@ -420,6 +421,21 @@ export type Configs = Record<string, ChannelConfigWithInfo | undefined>;
 
 export type ConnectionOpen = EventPayload<'health.check'> | EventPayload<'connection.ok'>;
 
+/**
+ * The message `type` values the server can return.
+ *
+ * Hand-written because there is no generated equivalent: `MessageResponse['type']` is a bare
+ * `string`, so deriving it would widen rather than narrow. Both the React and React Native
+ * SDKs use this as a discriminant (RN types its SQLite message rows with it).
+ */
+export type MessageLabel =
+  | 'deleted'
+  | 'ephemeral'
+  | 'error'
+  | 'regular'
+  | 'reply'
+  | 'system';
+
 export type SendMessageOptions = Omit<SendMessageRequest, 'message'>;
 
 export type PermissionObject = {
@@ -616,6 +632,11 @@ export type DeleteMessageOptions = Omit<Parameters<ChatApi['deleteMessage']>[0],
 export type SendMessageAPIResponse = StreamResponse<SendMessageResponse>;
 export type UpdateMessageOptions = Omit<UpdateMessageRequest, 'message'>;
 export type UpdateMessageAPIResponse = StreamResponse<UpdateMessageResponse>;
+/**
+ * The Giphy rendition names, derived from the generated `Images` shape so the two cannot
+ * drift. Consumed by the React and React Native SDKs to pick a rendition size.
+ */
+export type GiphyVersions = keyof Images;
 export type TranslationLanguage = TranslateMessageRequest['language'];
 
 export type FileReferenceBase = {
