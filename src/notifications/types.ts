@@ -42,7 +42,7 @@ export const CORE_NOTIFICATION_TYPE = {
   attachmentUploadBlocked: 'validation:attachment:upload:blocked',
   attachmentUploadFailed: 'api:attachment:upload:failed',
   attachmentUploadInProgress: 'validation:attachment:upload:in-progress',
-  /** Carries `metadata.reason` (`'editing' | 'replying'`), which the message depends on. */
+  /** Carries `metadata.reason` (`'editing' | 'quoted_message'`), which the message depends on. */
   commandDisabled: 'validation:command:disabled',
   commandNotReady: 'validation:command:not-ready',
   locationCreateFailed: 'api:location:create:failed',
