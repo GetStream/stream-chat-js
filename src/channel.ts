@@ -1,4 +1,3 @@
-import type { AxiosRequestConfig } from 'axios';
 import { ChannelState } from './channel_state';
 import { CooldownTimer } from './CooldownTimer';
 import { isEphemeral } from './errors';
@@ -15,6 +14,7 @@ import {
   localMessageToNewMessagePayload,
   logChatPromiseExecution,
 } from './utils';
+import { normalizeUploadFile } from './upload-utils';
 import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
 import type {
@@ -33,6 +33,7 @@ import type {
   EventHandler,
   EventPayload,
   EventType,
+  FileUploadInput,
   GetRepliesAPIResponse,
   LocalMessage,
   MarkReadRequest,
@@ -65,6 +66,8 @@ import type {
   ChannelPushPreferencesResponse as Gen_ChannelPushPreferencesResponse,
   MuteChannelRequest as Gen_MuteChannelRequest,
   UnmuteChannelRequest as Gen_UnmuteChannelRequest,
+  UploadChannelFileRequest,
+  UploadChannelRequest,
   WSEvent,
 } from './gen/models';
 import type { ChatApi } from './gen/chat/ChatApi';
@@ -478,58 +481,48 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Upload a file to this channel’s file endpoint (multipart). Forwards to the client’s `sendFile` implementation.
+   * Upload a file to this channel's file endpoint (multipart).
    *
-   * @param uri - File source: URL string, `File`, `Buffer`, or readable stream (Node).
-   * @param name - File name sent in the multipart body (optional).
-   * @param contentType - MIME type; required for React Native URI uploads (optional).
-   * @param user - User payload appended to the form as JSON (optional).
-   * @param axiosRequestConfig - Axios per-request config, merged after upload defaults, e.g. `onUploadProgress`, `signal` from `AbortController` (optional).
+   * @param request - Upload payload. `request.file` is the file to upload.
+   * @param requestOptions - Per-request options, e.g. `onUploadProgress` or an abort `signal` (optional).
    * @returns A promise resolving to `{ file: string, ... }` with the CDN URL.
    */
-  sendFile(
-    uri: string | File,
-    name?: string,
-    contentType?: string,
-    user?: UserResponse,
-    axiosRequestConfig?: AxiosRequestConfig,
+  override async uploadChannelFile(
+    request?: Omit<UploadChannelFileRequest, 'file'> & { file?: FileUploadInput },
+    requestOptions?: StreamRequestOptions,
   ) {
-    return this.getClient().api.sendFile(
-      `${this._channelURL()}/file`,
-      uri,
-      name,
-      contentType,
-      user,
-      axiosRequestConfig,
+    return await super.uploadChannelFile(
+      { ...request, file: normalizeUploadFile(request?.file) as unknown as string },
+      requestOptions,
     );
   }
 
   /**
-   * Upload an image to this channel's image endpoint (multipart). Uses the same transport as `sendFile`.
+   * Upload an image to this channel's image endpoint (multipart).
    *
-   * @param uri - Image source: URL string, `File`, or readable stream (Node). For `Buffer` uploads, use `sendFile` toward the channel file endpoint instead.
-   * @param name - File name sent in the multipart body (optional).
-   * @param contentType - MIME type; required for React Native URI uploads (optional).
-   * @param user - User payload appended to the form as JSON (optional).
-   * @param axiosRequestConfig - Axios per-request config, merged after upload defaults, e.g. `onUploadProgress`, `signal` (optional).
+   * @param request - Upload payload. `request.file` is the image to upload.
+   * @param requestOptions - Per-request options, e.g. `onUploadProgress` or an abort `signal` (optional).
    * @returns A promise resolving to `{ file: string, ... }` with the CDN URL.
    */
-  sendImage(
-    uri: string | File,
-    name?: string,
-    contentType?: string,
-    user?: UserResponse,
-    axiosRequestConfig?: AxiosRequestConfig,
+  override async uploadChannelImage(
+    request?: Omit<UploadChannelRequest, 'file'> & { file?: FileUploadInput },
+    requestOptions?: StreamRequestOptions,
   ) {
-    return this.getClient().api.sendFile(
-      `${this._channelURL()}/image`,
-      uri,
-      name,
-      contentType,
-      user,
-      axiosRequestConfig,
+    return await super.uploadChannelImage(
+      { ...request, file: normalizeUploadFile(request?.file) as unknown as string },
+      requestOptions,
     );
   }
+
+  /**
+   * Alias for {@link uploadChannelFile}, mirroring `client.uploadFile`.
+   */
+  uploadFile = (...args: Parameters<Channel['uploadChannelFile']>) =>
+    this.uploadChannelFile(...args);
+
+  /** Alias for {@link uploadChannelImage}, mirroring `client.uploadImage`. */
+  uploadImage = (...args: Parameters<Channel['uploadChannelImage']>) =>
+    this.uploadChannelImage(...args);
 
   deleteFile(url: string, requestOptions?: StreamRequestOptions) {
     return this.deleteChannelFile({ url }, requestOptions);

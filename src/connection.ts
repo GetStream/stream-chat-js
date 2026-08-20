@@ -13,13 +13,28 @@ import {
   postInsights,
 } from './insights';
 import { chatLoggerSystem } from './logger';
-import type { ConnectAPIResponse, ConnectionOpen, EventPayload } from './types';
+import type { ConnectAPIResponse, ConnectedEvent, ConnectionOpen } from './types';
 import type { StreamChat } from './client';
 import type { APIError } from './errors';
+import { decoders } from './gen/model-decoders/decoders';
 import { decodeWSEvent } from './gen/model-decoders/event-decoder-mapping';
 import type { WSEvent } from './gen/models';
 
 const logger = chatLoggerSystem.getLogger('connection');
+
+/**
+ * `connection.ok` is not published in the OpenAPI spec yet, so `decodeWSEvent` passes
+ * it through raw and its `created_at` / `me` fields would stay strings. Its payload is
+ * field-for-field what the `HealthCheckEvent` decoder already handles.
+ *
+ * Remove this once the backend adds the event to the spec and `src/gen` is regenerated.
+ */
+const decodeConnectionEvent = (
+  data: { type: string } & Record<string, unknown>,
+): WSEvent | ConnectedEvent =>
+  data.type === 'connection.ok'
+    ? (decoders.HealthCheckEvent(data) as ConnectedEvent)
+    : (decodeWSEvent(data) as WSEvent);
 
 // Type guards to check WebSocket error type
 const isCloseEvent = (
@@ -219,20 +234,14 @@ export class StableWSConnection {
    * @returns url string
    */
   _buildUrl = () => {
-    const qs = this.client._buildWSPayload(this.requestID);
-    const token = this.client.tokenManager.getToken();
-    const wsUrlParams = this.client.options.wsUrlParams;
-
-    const params = new URLSearchParams(wsUrlParams);
-    params.set('json', qs);
+    const params = new URLSearchParams(this.client.options.wsUrlParams);
     params.set('api_key', this.client.key);
-    // it is expected that the autorization parameter exists even if
-    // the token is undefined, so we interpolate it to be safe
-    params.set('authorization', `${token}`);
     params.set('stream-auth-type', this.client.getAuthType());
+    // Browsers cannot set headers on the WS handshake, so the server reads this
+    // from the query string too.
     params.set('X-Stream-Client', this.client.getUserAgent());
 
-    return `${this.client.wsBaseURL}/connect?${params.toString()}`;
+    return `${this.client.wsBaseURL}/api/v2/connect?${params.toString()}`;
   };
 
   /**
@@ -310,11 +319,8 @@ export class StableWSConnection {
    * @returns A promise that resolves once the first health check message is received.
    */
   async _connect() {
-    if (
-      this.isConnecting ||
-      (this.isDisconnected && this.client.options.enableWSFallback)
-    )
-      return; // simply ignore _connect if it's currently trying to connect
+    // simply ignore _connect if it's currently connecting, or if disconnect() was called
+    if (this.isConnecting || this.isDisconnected) return;
     this.isConnecting = true;
     this.requestID = randomId();
     this.client.insightMetrics.connectionStartTimestamp = new Date().getTime();
@@ -337,6 +343,10 @@ export class StableWSConnection {
 
       this._setupConnectionPromise();
       const wsURL = this._buildUrl();
+      // Built before the socket exists on purpose: the token is guaranteed loaded by
+      // this point, and a failure here must reject _connect rather than leave an open
+      // socket to die against the server's 10s auth-message deadline.
+      const authMessage = this.client._buildWSAuthMessage();
       logger.withExtraTags('_connect').info(`Connecting to ${wsURL}.`, {
         wsURL,
         requestID: this.requestID,
@@ -345,7 +355,7 @@ export class StableWSConnection {
       const WS = this.client.options.WebSocketImpl ?? WebSocket;
       this.ws = new WS(wsURL);
 
-      this.ws.onopen = this.onopen.bind(this, this.wsID);
+      this.ws.onopen = this.onopen.bind(this, this.wsID, authMessage);
       this.ws.onclose = this.onclose.bind(this, this.wsID);
       this.ws.onerror = this.onerror.bind(this, this.wsID);
       this.ws.onmessage = this.onmessage.bind(this, this.wsID);
@@ -423,7 +433,7 @@ export class StableWSConnection {
       return;
     }
 
-    if (this.isDisconnected && this.client.options.enableWSFallback) {
+    if (this.isDisconnected) {
       logger
         .withExtraTags('_reconnect')
         .debug('Aborting reconnect: disconnect() was called.');
@@ -502,12 +512,29 @@ export class StableWSConnection {
     }
   };
 
-  onopen = (wsId: number) => {
+  onopen = (wsId: number, authMessage: string) => {
     if (this.wsID !== wsId) return;
 
     logger.withExtraTags('onopen').debug('WebSocket onopen callback fired.', {
       wsID: wsId,
     });
+
+    // `/api/v2/connect` authenticates off the first frame the client sends, not off
+    // the query string. The server closes the socket if it does not arrive in 10s.
+    const { ws } = this;
+    // disconnect() deletes this.ws synchronously; the wsID guard above covers
+    // reconnects, this covers a socket torn down before `open` was dispatched.
+    if (!ws || ws.readyState !== ws.OPEN) return;
+
+    try {
+      ws.send(authMessage);
+    } catch (error) {
+      logger
+        .withExtraTags('onopen')
+        .error('Failed to send the WebSocket auth message.', { error });
+      this.rejectPromise?.(this._errorFromWSEvent(error as Event));
+      this._destroyCurrentWSConnection();
+    }
   };
 
   onmessage = (wsId: number, event: MessageEvent) => {
@@ -519,7 +546,7 @@ export class StableWSConnection {
     });
     if (typeof event.data !== 'string') return;
     const data = JSON.parse(event.data);
-    const decodedData = decodeWSEvent(data) as WSEvent;
+    const decodedData = decodeConnectionEvent(data);
 
     // we wait till the first message before we consider the connection open..
     // the reason for this is that auth errors and similar errors trigger a ws.onopen and immediately
@@ -531,14 +558,17 @@ export class StableWSConnection {
         return;
       }
 
-      this.resolvePromise?.(decodedData as EventPayload<'health.check'>);
+      this.resolvePromise?.(decodedData as ConnectionOpen);
       this._setHealth(true);
     }
 
     // trigger the event..
     this.lastEvent = new Date();
 
-    if (data.type === 'health.check') {
+    // `connection.ok` is the v2 hello event. The server only echoes health checks in
+    // response to an inbound frame, so failing to schedule here means we never ping
+    // and scheduleConnectionCheck tears the socket down 35s later, in a loop.
+    if (data.type === 'health.check' || data.type === 'connection.ok') {
       this.scheduleNextPing();
     }
 
