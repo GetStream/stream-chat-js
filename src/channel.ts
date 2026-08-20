@@ -53,7 +53,6 @@ import type {
   UpdateMessageOptions,
   UserResponse,
 } from './types';
-import type { RoleName } from './permissions';
 import { StateStore } from './store';
 import type {
   ChannelMemberRequest as Gen_ChannelMemberRequest,
@@ -912,28 +911,6 @@ export class Channel extends ChannelApi {
   ) {
     return await this.update(
       { add_moderators: members, message, ...options },
-      requestOptions,
-    );
-  }
-
-  /**
-   * Sets member roles in a channel.
-   *
-   * @param roles - List of role assignments.
-   * @param message - Message object for channel members notification (optional).
-   * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
-   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
-   *   into the request (optional).
-   * @returns The server response.
-   */
-  async assignRoles(
-    roles: { channel_role: RoleName; user_id: string }[],
-    message?: MessageRequest,
-    options: ChannelUpdateOptions = {},
-    requestOptions?: StreamRequestOptions,
-  ) {
-    return await this.update(
-      { assign_roles: roles, message, ...options },
       requestOptions,
     );
   }

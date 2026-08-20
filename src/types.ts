@@ -354,15 +354,6 @@ export type MessageLabel =
 
 export type SendMessageOptions = Omit<SendMessageRequest, 'message'>;
 
-export type PermissionObject = {
-  action?: 'Deny' | 'Allow';
-  name?: string;
-  owner?: boolean;
-  priority?: number;
-  resources?: string[];
-  roles?: string[];
-};
-
 export type TokenOrProvider = null | string | TokenProvider | undefined;
 
 export type TokenProvider = () => Promise<string>;

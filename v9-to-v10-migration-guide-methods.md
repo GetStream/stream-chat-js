@@ -1392,6 +1392,14 @@ Skip this section if you are upgrading from v9 only in the sense that these meth
 
 - **`channel.sendAction(messageId, formData, requestOptions?)` — KEPT**, but its `if (!messageId) throw Error('Message ID is missing')` guard is gone. `runMessageAction` requires `id: string`, so an empty id is a compile error; a runtime empty string reaches the server and is rejected there.
 
+## Removed after `10.0.0-rc.4` — server-side role assignment
+
+**`channel.assignRoles(roles, message?, options?, requestOptions?)` — REMOVED.** Assigning
+channel roles is a server-side operation; use
+[`@stream-io/node-sdk`](https://github.com/GetStream/stream-node). The `RoleName` type went
+with it, along with the rest of the v1 permission surface — see
+[the v1 permission system](./v9-to-v10-migration-guide-type-renames.md#the-v1-permission-system--removed).
+
 ## Removed after `10.0.0-rc.4` — moderation moves to the generated V2 API
 
 The `/moderation/*` methods on `StreamChat` were the last endpoints in the SDK that built

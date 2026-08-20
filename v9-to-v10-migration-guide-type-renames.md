@@ -195,6 +195,32 @@ Neither is a rename; both **gain** surface, so no call site breaks.
 
 `UpdateChannelRequest` has no `members` key (it has `add_members` / `remove_members`), so that omit was a no-op left over from an older payload shape. `member_custom_include` **is** accepted by `getPinnedMessages`, so omitting it was narrowing the API — it can now be passed through.
 
+### The v1 permission system — removed
+
+`src/permissions.ts` is gone, and with it the whole deprecated v1 permission surface. The
+module's own header already said to stop using it: _"deprecated permission object class, you
+should use the new permission system v2 and use permissions defined in BuiltinPermissions to
+configure your channel types."_ Permissions are channel-type **configuration**, which is
+server-side and left this package with the rest of that surface.
+
+Removed: `PermissionObject`, the `Permission` class, `AllowAll`, `DenyAll`, `Allow`, `Deny`,
+`AnyResource`, `AnyRole`, `MaxPriority`, `MinPriority`, `BuiltinRoles`,
+`BuiltinPermissions` and `RoleName`. Configure permissions with
+[`@stream-io/node-sdk`](https://github.com/GetStream/stream-node) or the dashboard.
+
+Note that `Permission`, `AllowAll` and `DenyAll` were runtime values, not just types, so
+`import { Permission } from 'stream-chat'` now fails at runtime as well as at compile time —
+the same caveat as [`Product`](#orphans-of-the-server-side-split--removed-no-replacement).
+
+`BuiltinPermissions` carried a latent bug worth knowing about if you copied its values:
+six entries had been corrupted by an over-broad `Message` -> `MessageRequest` rename, so
+`CreateMessage` read `'Create MessageRequest'`, `RunMessageAction` read
+`'Run MessageRequest Action'`, and similarly for `DeleteAnyMessage`, `DeleteOwnMessage`,
+`UpdateAnyMessage` and `UpdateOwnMessage`. Those are server-side permission names the API
+matches on, so the constants were emitting strings the backend does not recognise. If you
+hard-coded any of them, use the un-suffixed forms (`'Create Message'`, `'Run Message
+Action'`, ...).
+
 ### Orphans of the server-side split — removed, no replacement
 
 These described admin/server-side surface (push-provider credentials, permission policies, blocklists, channel-type config) that moved to `@stream-io/node-sdk` when the server-side API left this package. Nothing in the SDK referenced them and no endpoint here returns them.
