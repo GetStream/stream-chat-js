@@ -1780,12 +1780,12 @@ export class Channel extends ChannelApi {
    * @param options - Ban options.
    * @returns The server response.
    */
-  async banUser(targetUserId: string, options: BanUserOptions) {
+  async banUser(targetUserId: string, options: Omit<BanUserOptions, 'channel_cid'>) {
     this._checkInitialized();
-    return await this.getClient().banUser(targetUserId, {
+    return await this.getClient().moderation.ban({
       ...options,
-      type: this.type,
-      id: this.id,
+      target_user_id: targetUserId,
+      channel_cid: this.cid,
     });
   }
 
@@ -1827,36 +1827,6 @@ export class Channel extends ChannelApi {
     this._checkInitialized();
     return await this.getClient().unbanUser(targetUserId, {
       ...options,
-      type: this.type,
-      id: this.id,
-    });
-  }
-
-  /**
-   * Shadow bans a user from a channel.
-   *
-   * @param targetUserId - The user to shadow ban.
-   * @param options - Ban options.
-   * @returns The server response.
-   */
-  async shadowBan(targetUserId: string, options: BanUserOptions) {
-    this._checkInitialized();
-    return await this.getClient().shadowBan(targetUserId, {
-      ...options,
-      type: this.type,
-      id: this.id,
-    });
-  }
-
-  /**
-   * Removes the shadow ban for a user on a channel.
-   *
-   * @param targetUserId - The user to remove the shadow ban for.
-   * @returns The server response.
-   */
-  async removeShadowBan(targetUserId: string) {
-    this._checkInitialized();
-    return await this.getClient().removeShadowBan(targetUserId, {
       type: this.type,
       id: this.id,
     });

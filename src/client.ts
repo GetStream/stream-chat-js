@@ -23,7 +23,6 @@ import { normalizeUploadFile } from './upload-utils';
 import type {
   APIResponse,
   AppIdentifier,
-  BanUserOptions,
   ChannelInput,
   ChannelMute,
   ChannelOptions,
@@ -37,12 +36,8 @@ import type {
   EventHandler,
   EventType,
   FileUploadInput,
-  FlagMessageResponse,
-  FlagUserResponse,
   GetThreadOptions,
   LocalMessage,
-  MuteUserOptions,
-  MuteUserResponse,
   OwnUserResponse,
   PartializeAllBut,
   QueryChannelsRequest,
@@ -1665,20 +1660,6 @@ export class StreamChat extends ChatApi {
   };
 
   /**
-   * Bans a user from all channels.
-   *
-   * @param targetUserId - The user to ban.
-   * @param options - Ban options (optional).
-   * @returns The server response.
-   */
-  async banUser(targetUserId: string, options?: BanUserOptions) {
-    return await this.api.post<APIResponse>(this.baseURL + '/moderation/ban', {
-      target_user_id: targetUserId,
-      ...options,
-    });
-  }
-
-  /**
    * Revoke a global ban for a user.
    *
    * @param targetUserId - The user to unban.
@@ -1692,33 +1673,6 @@ export class StreamChat extends ChatApi {
     });
   }
 
-  /**
-   * Shadow bans a user from all channels.
-   *
-   * @param targetUserId - The user to shadow ban.
-   * @param options - Ban options (optional).
-   * @returns The server response.
-   */
-  async shadowBan(targetUserId: string, options?: BanUserOptions) {
-    return await this.banUser(targetUserId, {
-      shadow: true,
-      ...options,
-    });
-  }
-
-  /**
-   * Revoke a global shadow ban for a user.
-   *
-   * @param targetUserId - The user to remove the shadow ban for.
-   * @param options - Unban options (optional).
-   * @returns The server response.
-   */
-  async removeShadowBan(targetUserId: string, options?: UnBanUserOptions) {
-    return await this.unbanUser(targetUserId, {
-      shadow: true,
-      ...options,
-    });
-  }
   async blockUser(blockedUserId: string, requestOptions?: StreamRequestOptions) {
     const result = await this.blockUsers(
       {
@@ -1760,32 +1714,6 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Mutes a user.
-   *
-   * @param targetId - The user to mute.
-   * @param options - UserMuteResponse options (optional, defaults to `{}`).
-   * @returns The server response.
-   */
-  async muteUser(targetId: string, options: MuteUserOptions = {}) {
-    return await this.api.post<MuteUserResponse>(this.baseURL + '/moderation/mute', {
-      target_id: targetId,
-      ...options,
-    });
-  }
-
-  /**
-   * Unmutes a user.
-   *
-   * @param targetId - The user to unmute.
-   * @returns The server response.
-   */
-  async unmuteUser(targetId: string) {
-    return await this.api.post<APIResponse>(this.baseURL + '/moderation/unmute', {
-      target_id: targetId,
-    });
-  }
-
-  /**
    * Checks whether a user is muted. Can be used after `connectUser()` is called.
    *
    * @param targetId - The user ID to check.
@@ -1800,75 +1728,6 @@ export class StreamChat extends ChatApi {
       if (this.mutedUsers[i].target?.id === targetId) return true;
     }
     return false;
-  }
-
-  /**
-   * Flag a message.
-   *
-   * @param targetMessageId - The message to flag.
-   * @param options - Flag options (optional, defaults to `{}`).
-   * @param options.reason - Reason for flagging (optional).
-   * @returns The server response.
-   */
-  async flagMessage(targetMessageId: string, options: { reason?: string } = {}) {
-    return await this.api.post<FlagMessageResponse>(this.baseURL + '/moderation/flag', {
-      target_message_id: targetMessageId,
-      ...options,
-    });
-  }
-
-  /**
-   * Flag a user.
-   *
-   * @param targetId - The user to flag.
-   * @param options - Flag options (optional, defaults to `{}`).
-   * @param options.reason - Reason for flagging (optional).
-   * @returns The server response.
-   */
-  async flagUser(targetId: string, options: { reason?: string } = {}) {
-    return await this.api.post<FlagUserResponse>(this.baseURL + '/moderation/flag', {
-      target_user_id: targetId,
-      ...options,
-    });
-  }
-
-  /**
-   * Unflag a message.
-   *
-   * @param targetMessageId - The message to unflag.
-   * @returns The server response.
-   */
-  async unflagMessage(targetMessageId: string) {
-    return await this.api.post<FlagMessageResponse>(this.baseURL + '/moderation/unflag', {
-      target_message_id: targetMessageId,
-    });
-  }
-
-  /**
-   * Unflag a user.
-   *
-   * @param targetId - The user to unflag.
-   * @returns The server response.
-   */
-  async unflagUser(targetId: string) {
-    return await this.api.post<FlagUserResponse>(this.baseURL + '/moderation/unflag', {
-      target_user_id: targetId,
-    });
-  }
-
-  /**
-   * Unblocks a message blocked by automod.
-   *
-   * @param targetMessageId - The message to unblock.
-   * @returns The server response.
-   */
-  async unblockMessage(targetMessageId: string) {
-    return await this.api.post<APIResponse>(
-      this.baseURL + '/moderation/unblock_message',
-      {
-        target_message_id: targetMessageId,
-      },
-    );
   }
 
   /**

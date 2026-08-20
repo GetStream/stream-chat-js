@@ -5,6 +5,7 @@ import type { NotificationManager } from './notifications';
 import type {
   APIError,
   Attachment,
+  BanRequest,
   ChannelConfigWithInfo,
   ChannelOwnCapability,
   ChannelStateResponseFields,
@@ -32,7 +33,6 @@ import type {
   UpdateMessageResponse,
   UpdatePollOptionRequest,
   UpdatePollRequest,
-  UserMuteResponse,
   UserResponse,
   WSEvent,
 } from './gen/models';
@@ -78,40 +78,6 @@ export type ChannelUpdateOptions = Omit<UpdateChannelRequest, 'message'>;
 
 export type ConnectAPIResponse = Promise<void | ConnectionOpen>;
 
-export type FlagMessageResponse = APIResponse & {
-  flag: {
-    created_at: string;
-    created_by_automod: boolean;
-    target_message_id: string;
-    updated_at: string;
-    user: UserResponse;
-    approved_at?: string;
-    channel_cid?: string;
-    details?: object; // Any JSON
-    message_user_id?: string;
-    rejected_at?: string;
-    reviewed_at?: string;
-    reviewed_by?: string;
-  };
-  review_queue_item_id?: string;
-};
-
-export type FlagUserResponse = APIResponse & {
-  flag: {
-    created_at: string;
-    created_by_automod: boolean;
-    target_user: UserResponse;
-    updated_at: string;
-    user: UserResponse;
-    approved_at?: string;
-    details?: object; // Any JSON
-    rejected_at?: string;
-    reviewed_at?: string;
-    reviewed_by?: string;
-  };
-  review_queue_item_id?: string;
-};
-
 export type LocalMessage = MessageResponse & {
   status: string;
   error?: StreamAPIError;
@@ -119,17 +85,6 @@ export type LocalMessage = MessageResponse & {
 };
 
 export type GetThreadOptions = Omit<Parameters<ChatApi['getThread']>[0], 'message_id'>;
-
-export type MuteUserResponse = APIResponse & {
-  mute?: UserMuteResponse;
-  mutes?: Array<UserMuteResponse>;
-  own_user?: OwnUserResponse;
-  non_existing_users?: string[];
-};
-
-export type UnmuteUserResponse = APIResponse & {
-  non_existing_users?: string[];
-};
 
 /**
  * The fields that exist on the connected user (`OwnUserResponse`) but not on a plain
@@ -146,16 +101,7 @@ export type OwnUserBase = Pick<
 >;
 
 // Thumb URL(thumb_url) is added considering video attachments as the backend will return the thumbnail in the response.
-export type BanUserOptions = UnBanUserOptions & {
-  ban_from_future_channels?: boolean;
-  banned_by?: UserResponse;
-  banned_by_id?: string;
-  ip_ban?: boolean;
-  reason?: string;
-  timeout?: number;
-  delete_messages?: MessageDeletionStrategy;
-  delete_reactions?: boolean;
-};
+export type BanUserOptions = Omit<BanRequest, 'target_user_id'>;
 
 /**
  * Everything `queryChannels()` accepts apart from the filter and the sort.
@@ -189,18 +135,6 @@ export type ChannelStateOptions = {
 export type Automod = ChannelConfigWithInfo['automod'];
 /** What automod does when it trips, as reported by `channel.getConfig()`. */
 export type AutomodBehavior = ChannelConfigWithInfo['automod_behavior'];
-
-export type MuteUserOptions = {
-  client_id?: string;
-  connection_id?: string;
-  id?: string;
-  reason?: string;
-  target_user_id?: string;
-  timeout?: number;
-  type?: string;
-  user?: UserResponse;
-  user_id?: string;
-};
 
 export type PaginationOptions = {
   created_at_after?: string | Date;
@@ -532,9 +466,6 @@ export type PartialPollUpdate = {
 export type PollOptionData = UpdatePollOptionRequest & {
   position?: number;
 };
-
-export type MessageDeletionStrategy = 'soft' | 'hard' | 'pruning';
-// @deprecated use type MessageDeletionStrategy instead
 
 export type ModerationFlagOptions = {
   custom?: Record<string, unknown>;
