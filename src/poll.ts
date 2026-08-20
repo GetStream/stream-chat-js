@@ -1,4 +1,5 @@
 import { StateStore } from './store';
+import { CORE_NOTIFICATION_TYPE } from './notifications';
 import type { StreamChat } from './client';
 import type {
   EventPayload,
@@ -307,7 +308,7 @@ export class Poll {
           context: { messageId, optionId },
         },
         options: {
-          type: 'validation:poll:castVote:limit',
+          type: CORE_NOTIFICATION_TYPE.pollCastVoteLimit,
         },
       });
       return;

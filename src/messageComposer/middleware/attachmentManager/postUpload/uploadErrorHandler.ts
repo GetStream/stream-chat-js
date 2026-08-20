@@ -1,4 +1,5 @@
 import type { MiddlewareHandlerParams } from '../../../../middleware';
+import { CORE_NOTIFICATION_TYPE } from '../../../../notifications';
 import type { MessageComposer } from '../../../messageComposer';
 import type {
   AttachmentPostUploadMiddleware,
@@ -27,7 +28,7 @@ export const createUploadErrorHandlerMiddleware = (
           context: { attachment },
         },
         options: {
-          type: 'api:attachment:upload:failed',
+          type: CORE_NOTIFICATION_TYPE.attachmentUploadFailed,
           metadata: { reason },
           originalError: error,
         },

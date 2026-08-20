@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process';
 import packageJson from '../package.json' with { type: 'json' };
 
-// get the latest version so that "process.env.PKG_VERSION" can be replaced with it in the source code (used for reporting purposes), see bundle.mjs for source
+// get the latest version so that "process.env.PKG_VERSION" can be replaced with it in the source code (used for reporting purposes), see bundle.mts for source
 export default function getPackageVersion() {
   // "build" script ("prepare" hook) gets invoked when semantic-release runs "npm publish", at that point package.json#version already contains updated next version which we can use
   let version = packageJson.version;

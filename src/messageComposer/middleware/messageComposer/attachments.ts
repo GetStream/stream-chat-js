@@ -1,4 +1,5 @@
 import type { MiddlewareHandlerParams } from '../../../middleware';
+import { CORE_NOTIFICATION_TYPE } from '../../../notifications';
 import type { Attachment } from '../../../types';
 import type { MessageComposer } from '../../messageComposer';
 import type { LocalAttachment } from '../../types';
@@ -36,7 +37,7 @@ export const createAttachmentsCompositionMiddleware = (
             context: { composer },
           },
           options: {
-            type: 'validation:attachment:upload:in-progress',
+            type: CORE_NOTIFICATION_TYPE.attachmentUploadInProgress,
           },
         });
         return discard();

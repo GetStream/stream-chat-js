@@ -187,9 +187,7 @@ const { values } = parseArgs({
 const inputPath = values.input;
 
 if (!inputPath) {
-  console.error(
-    'Usage: node scripts/apply-custom-data-types.mts -i <path-to-file>',
-  );
+  console.error('Usage: node scripts/apply-custom-data-types.mts -i <path-to-file>');
   process.exit(1);
 }
 
@@ -197,8 +195,7 @@ const absoluteInputPath = resolve(process.cwd(), inputPath);
 const source = readFileSync(absoluteInputPath, 'utf8');
 
 const CUSTOM_FIELD_RE = /^(\s*)custom(\??):\s*Record<string,\s*any>;\s*$/;
-const CHANNEL_CUSTOM_FIELD_RE =
-  /^(\s*)channel_custom(\??):\s*Record<string,\s*any>;\s*$/;
+const CHANNEL_CUSTOM_FIELD_RE = /^(\s*)channel_custom(\??):\s*Record<string,\s*any>;\s*$/;
 const INTERFACE_OPEN_RE = /^export interface (\w+)\s*(?:extends [^{]+)?\{\s*$/;
 const INTERFACE_CLOSE_RE = /^\}\s*$/;
 const FILTER_OPEN_RE = /^\s*(\w+)\??:\s*Filters<\{\s*$/;
@@ -224,9 +221,8 @@ const skippedFilterKeys = new Set<string>();
 // (starts at 1 for the `Filters<{` itself); `inCustomEntry` tracks whether
 // we're currently inside the `custom: { ... }` sub-block that carries the
 // rewritable `type: Record<string, any>;` line.
-let filterContext:
-  | { key: string; braceDepth: number; inCustomEntry: boolean }
-  | null = null;
+let filterContext: { key: string; braceDepth: number; inCustomEntry: boolean } | null =
+  null;
 
 const countBraces = (line: string) => {
   let opens = 0;
@@ -380,11 +376,7 @@ function computeImportSpecifier(fromFileAbs: string, toRepoRelative: string) {
  * the top of the file, merging into an existing import from the same module
  * (deduped and sorted).
  */
-function applyImport(
-  fileLines: string[],
-  identifiers: string[],
-  specifier: string,
-) {
+function applyImport(fileLines: string[], identifiers: string[], specifier: string) {
   const importRe = new RegExp(
     `^import\\s+type\\s+\\{([^}]*)\\}\\s+from\\s+['"]${escapeRegex(specifier)}['"];?\\s*$`,
   );
