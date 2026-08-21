@@ -9,6 +9,10 @@ import {
   createPollComposerStateMiddleware,
   PollComposerStateMiddlewareFactoryOptions,
 } from '../../../../../src/messageComposer/middleware/pollComposer/state';
+import {
+  POLL_COMPOSER_VALIDATION_CODE,
+  pollComposerValidationError,
+} from '../../../../../src/messageComposer/middleware/pollComposer/validation';
 
 const setupHandlerParams = (initialState: PollComposerStateChangeMiddlewareValue) => {
   return {
@@ -212,8 +216,8 @@ describe('PollComposerStateMiddleware', () => {
         }),
       );
 
-      expect(result.state.nextState.errors.max_votes_allowed).toBe(
-        'Enforce unique vote is enabled',
+      expect(result.state.nextState.errors.max_votes_allowed?.code).toBe(
+        POLL_COMPOSER_VALIDATION_CODE.maxVotesUniqueVoteEnforced,
       );
       expect(result.state.nextState.data.max_votes_allowed).toBe('5');
       expect(result.status).toBeUndefined;
@@ -517,8 +521,8 @@ describe('PollComposerStateMiddleware', () => {
 
         expect(result.state.nextState.errors.options).toBeDefined();
         expect(Object.keys(result.state.nextState.errors.options!)).toHaveLength(1);
-        expect(result.state.nextState.errors.options!['option-id1']).toBe(
-          'Option is empty',
+        expect(result.state.nextState.errors.options!['option-id1'].code).toBe(
+          POLL_COMPOSER_VALIDATION_CODE.optionEmpty,
         );
       });
       it('should not validate options with only white spaces on blur', async () => {
@@ -538,11 +542,11 @@ describe('PollComposerStateMiddleware', () => {
 
         expect(result.state.nextState.errors.options).toBeDefined();
         expect(Object.keys(result.state.nextState.errors.options!)).toHaveLength(2);
-        expect(result.state.nextState.errors.options!['option-id1']).toBe(
-          'Option is empty',
+        expect(result.state.nextState.errors.options!['option-id1'].code).toBe(
+          POLL_COMPOSER_VALIDATION_CODE.optionEmpty,
         );
-        expect(result.state.nextState.errors.options!['option-id2']).toBe(
-          'Option already exists',
+        expect(result.state.nextState.errors.options!['option-id2'].code).toBe(
+          POLL_COMPOSER_VALIDATION_CODE.optionDuplicate,
         );
       });
 
@@ -580,7 +584,9 @@ describe('PollComposerStateMiddleware', () => {
         );
 
         expect(result.state.nextState.errors.options).toEqual({
-          'option-2': 'Option already exists',
+          'option-2': pollComposerValidationError(
+            POLL_COMPOSER_VALIDATION_CODE.optionDuplicate,
+          ),
         });
       });
 

@@ -1,0 +1,20 @@
+{
+  // The i18n catalog generator, published as `stream-chat/i18n/codegen`.
+  //
+  // A separate project because the generator lives outside `src/`: it is Node-only build tooling that
+  // reads the filesystem, which is the one thing the SDK's own source must never do. Keeping it out of
+  // the library project is what makes that boundary type-enforced -- an accidental import from
+  // `src/i18n/` now fails at `tsc` rather than at the metafile assertion in `scripts/bundle.mts`.
+  //
+  // `rootDir` is `./codegen/i18n` rather than `./codegen` so the emitted declarations land at
+  // `dist/types/i18n-codegen/`, exactly where `package.json`'s `exports` and `typesVersions` point. The
+  // published layout is unchanged by the move.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist/types/i18n-codegen",
+    "rootDir": "./codegen/i18n",
+    // The generator runs under Node, not in a browser or a bundler.
+    "lib": ["ES2022"]
+  },
+  "include": ["./codegen/**/*"]
+}

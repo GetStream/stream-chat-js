@@ -20,6 +20,7 @@ import {
   AttachmentPreUploadMiddlewareExecutor,
 } from './middleware/attachmentManager';
 import { StateStore } from '../store';
+import { CORE_NOTIFICATION_TYPE } from '../notifications';
 import { generateUUIDv4 } from '../utils';
 import { DEFAULT_UPLOAD_SIZE_LIMIT_BYTES } from '../constants';
 import type {
@@ -497,7 +498,7 @@ export class AttachmentManager {
       this.client.notifications.addError({
         message: 'File is required for upload attachment',
         origin: { emitter: 'AttachmentManager', context: { attachment } },
-        options: { type: 'validation:attachment:file:missing' },
+        options: { type: CORE_NOTIFICATION_TYPE.attachmentFileMissing },
       });
       return;
     }
@@ -506,7 +507,7 @@ export class AttachmentManager {
       this.client.notifications.addError({
         message: 'Local upload attachment missing local id',
         origin: { emitter: 'AttachmentManager', context: { attachment } },
-        options: { type: 'validation:attachment:id:missing' },
+        options: { type: CORE_NOTIFICATION_TYPE.attachmentIdMissing },
       });
       return;
     }
@@ -608,7 +609,7 @@ export class AttachmentManager {
           context: { attachment, blockedAttachment: localAttachment },
         },
         options: {
-          type: 'validation:attachment:upload:blocked',
+          type: CORE_NOTIFICATION_TYPE.attachmentUploadBlocked,
           metadata: {
             reason: localAttachment.localMetadata.uploadPermissionCheck?.reason,
           },
@@ -638,7 +639,7 @@ export class AttachmentManager {
           context: { attachment, failedAttachment },
         },
         options: {
-          type: 'api:attachment:upload:failed',
+          type: CORE_NOTIFICATION_TYPE.attachmentUploadFailed,
           metadata: { reason },
           originalError: error instanceof Error ? error : undefined,
         },

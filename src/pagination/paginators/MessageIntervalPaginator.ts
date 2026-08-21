@@ -26,6 +26,7 @@ import type {
   UserResponse,
 } from '../../types';
 import type { Channel } from '../../channel';
+import { CORE_NOTIFICATION_TYPE } from '../../notifications';
 import { StateStore } from '../../store';
 import {
   computeOwnReactions,
@@ -545,7 +546,7 @@ export class MessageIntervalPaginator extends BasePaginator<
         this.channel.getClient().notifications.addError({
           message: 'Jump to message unsuccessful',
           origin: { emitter: 'MessagePaginator.jumpToMessage', context: { messageId } },
-          options: { type: 'api:messages:query:failed' },
+          options: { type: CORE_NOTIFICATION_TYPE.messageJumpFailed },
         });
         return false;
       }
@@ -597,7 +598,7 @@ export class MessageIntervalPaginator extends BasePaginator<
       this.channel.getClient().notifications.addError({
         message: 'Jump to latest message unsuccessful',
         origin: { emitter: 'MessagePaginator.jumpToTheLatestMessage' },
-        options: { type: 'api:message:query:failed' },
+        options: { type: CORE_NOTIFICATION_TYPE.messageJumpToLatestFailed },
       });
       return false;
     }

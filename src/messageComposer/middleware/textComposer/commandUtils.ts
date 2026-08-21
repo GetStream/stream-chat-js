@@ -1,4 +1,5 @@
 import type { MessageComposer } from '../../messageComposer';
+import { CORE_NOTIFICATION_TYPE } from '../../../notifications';
 import type { Command, UserResponse } from '../../../types';
 import type { CommandSendability } from '../../configuration';
 import type { CommandSearchSource } from './commands';
@@ -72,7 +73,7 @@ export const notifyCommandDisabled = (composer: MessageComposer, command: Comman
       context: { command, composer },
     },
     options: {
-      type: 'validation:command:disabled',
+      type: CORE_NOTIFICATION_TYPE.commandDisabled,
       metadata: {
         command: command.name,
         reason: disabledReason,
@@ -99,7 +100,7 @@ export const notifyCommandNotReady = ({
       context: { command: sendability.command, composer },
     },
     options: {
-      type: 'validation:command:not-ready',
+      type: CORE_NOTIFICATION_TYPE.commandNotReady,
       metadata: {
         command: sendability.command.name,
         ...(sendability.reason ? { reason: sendability.reason } : {}),

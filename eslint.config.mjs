@@ -13,7 +13,7 @@ export default tseslint.config(
   {
     name: 'default',
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
-    files: ['src/**/*.{js,ts}'],
+    files: ['src/**/*.{js,ts}', 'codegen/**/*.{js,ts}', 'scripts/**/*.mts'],
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
@@ -100,7 +100,7 @@ export default tseslint.config(
   },
   {
     ignores: ['src/gen/**'],
-    files: ['src/**/*.{js,ts}'],
+    files: ['src/**/*.{js,ts}', 'codegen/**/*.{js,ts}', 'scripts/**/*.mts'],
     plugins: {
       jsdoc,
     },
