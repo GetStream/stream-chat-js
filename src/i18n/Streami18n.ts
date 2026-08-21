@@ -105,9 +105,6 @@ export class Streami18n<
   C extends AnyTranslationCatalog = AnyTranslationCatalog,
   Bundled extends string = never,
 > {
-  /** Marks instances across bundle copies, where `instanceof` silently fails. */
-  static readonly brand = Symbol.for('stream-chat.Streami18n');
-
   readonly i18nInstance: I18nInstance = i18next.createInstance();
 
   readonly state: StateStore<Streami18nState<C, Bundled>>;
