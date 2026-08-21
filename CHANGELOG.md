@@ -1,3 +1,59 @@
+## [10.0.0-rc.7](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.6...v10.0.0-rc.7) (2026-08-21)
+
+### ⚠ BREAKING CHANGES
+
+* `client.instanceConfigurationService` is replaced by `client.config`,
+and the exported class `InstanceConfigurationService` is renamed to
+`InstanceConfigurationRegistry`.
+* `client.setInstanceConfigurationFunction()` is removed. Register
+setup functions with `client.config.setSetupFunction(key, fn)`.
+`client.setMessageComposerSetupFunction()` is unchanged.
+* the per-class setup types are replaced by generic ones keyed by
+instance. Removed: `ChannelSetupFunction`, `ChannelSetupState`,
+`ChannelTearDownFunction`, `MessageComposerSetupFunction`, `MessageComposerSetupState`,
+`MessageComposerTearDownFunction`, `StreamChatSetupFunction`, `StreamChatSetupState`,
+`StreamChatTearDownFunction`, `ThreadSetupFunction`, `ThreadSetupState`,
+`ThreadTearDownFunction`, `SetInstanceConfigurationFunctions`,
+`SetInstanceConfigurationServiceStates` and `SetupFnOf`. Use `InstanceSetupFunction`,
+`InstanceSetupState`, `InstanceSetupTearDownFunction` and `InstanceSetupKey`.
+* `ChannelInstanceConfig` is renamed to `ChannelConfig` and
+`ThreadInstanceConfig` to `ThreadConfig`.
+* `Channel.getConfig()` is removed. Read the server's channel-type
+configuration from `channel.serverConfig`, or the resolved configuration from
+`channel.config`.
+* `client.configs` is renamed to `client.channelServerConfigs` and
+`client.configsStore` to `client.channelServerConfigsStore`. Keys are still cids, so
+lookups translate directly. Prefer `channel.serverConfig`.
+* `channel.config.commands` is renamed to
+`channel.config.availableCommands`. The server owns the list, so it is read-only and
+absent from the declarative configuration tree.
+* `applyCommandValidatorOverride` is no longer exported. Command
+validation is configured through the composer's configuration.
+* `MessageComposerConfig` gains a required `polls`;
+`AttachmentManagerConfig` gains required `enabled` and `customCdn`;
+`LocationComposerConfig` gains a required `minShareDurationMs`. A config object
+built literally must supply them.
+* `linkPreviews.enabled` now defaults to `true`, where it defaulted to
+`false`. It is ANDed with the channel type's `url_enrichment`, so `true` means "no
+opinion, let the server decide"; the old default double-gated the feature and kept it
+off even where the server had enabled it.
+* server flags gate the features they describe, ANDed with the
+registered value rather than the client value winning: `typingEvents` with
+`typing_events`, `readEvents` with `read_events`, `attachments` with `uploads`,
+`polls` with `polls`, `location` with `shared_locations`, and `linkPreviews` with
+`url_enrichment`. Code that set a flag to `true` and assumed it took effect may now
+find the feature off.
+* setters no longer discard a write when the server is masking the
+field. Previously the setter compared against the effective value, so the write was
+dropped and the earlier request was honoured once the server relented. Affects
+`linkPreviewsManager.enabled`, `textComposer.enabled`, `textComposer.maxLengthOnEdit`,
+`textComposer.maxLengthOnSend` and `attachmentManager.maxNumberOfFilesPerMessage`.
+
+### Features
+
+* add instance configuration service ([#1831](https://github.com/GetStream/stream-chat-js/issues/1831)) ([434966c](https://github.com/GetStream/stream-chat-js/commit/434966c266d357f2889c30ce8d98deee42dd50f4))
+* channel state migration ([#1834](https://github.com/GetStream/stream-chat-js/issues/1834)) ([9876add](https://github.com/GetStream/stream-chat-js/commit/9876add7e2a66bba5d5287545c56f1c36ccc555d))
+
 ## [10.0.0-rc.6](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.5...v10.0.0-rc.6) (2026-08-21)
 
 ### ⚠ BREAKING CHANGES
