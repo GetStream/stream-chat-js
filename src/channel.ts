@@ -295,13 +295,16 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Returns the chat client for this channel. Throws if `client.disconnect()` was called.
+   * Returns the chat client for this channel. Throws if the channel is pending disposal — see
+   * {@link Channel.pendingDisposal}.
    *
    * @returns The chat client.
    */
   getClient(): StreamChat {
-    if (this.pendingDisposal === true) {
-      throw Error(`You can't use a channel after client.disconnect() was called`);
+    if (this.pendingDisposal) {
+      throw Error(
+        `Channel ${this.cid} is pending disposal and cannot be used. Get a fresh instance via client.channel().`,
+      );
     }
     return this._client;
   }
