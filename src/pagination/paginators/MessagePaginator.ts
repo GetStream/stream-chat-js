@@ -434,7 +434,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
       if (!inferredLastReadMessageId) {
         const result = await this.executeQuery({
           queryShape: {
-            created_at_around: lastReadAt.toISOString(),
+            created_at_around: lastReadAt,
             limit: options?.pageSize,
           },
           updateState: false,

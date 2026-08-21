@@ -5,7 +5,7 @@ import { ChannelMemberSearchSource } from '../../../src/search/ChannelMemberSear
 import type {
   ChannelMemberResponse,
   MemberFilters,
-  MemberSort,
+  SortParamRequest,
 } from '../../../src/types';
 
 const createChannelMember = (
@@ -171,7 +171,7 @@ describe('ChannelMemberSearchSource', () => {
 
     it('passes filters, sort, and options to channel.queryMembers', async () => {
       const filters: MemberFilters = { user_id: 'user-2' };
-      const sort: MemberSort = [{ field: 'name', direction: 1 }];
+      const sort: SortParamRequest[] = [{ field: 'name', direction: 1 }];
       searchSource.filters = filters;
       searchSource.sort = sort;
       searchSource.searchOptions = { user_id_gt: 'user-0' };

@@ -4,7 +4,7 @@ import type {
   MessageCompositionMiddleware,
 } from './types';
 import type { MiddlewareHandlerParams } from '../../../middleware';
-import type { OwnUserResponse, RequireLiteral } from '../../../types';
+import type { UserResponse } from '../../../types';
 
 export const createUserDataInjectionMiddleware = (
   composer: MessageComposer,
@@ -23,10 +23,9 @@ export const createUserDataInjectionMiddleware = (
       // that provide no value for localMessage (and will never exist within message.user).
       // This way we make sure that our localMessage is enriched with data as close as
       // possible to the actual user.
-      // The reason why we need to explicitly cast is because OwnUserResponse only takes
-      // precedence after we connectUser the first time and we get the connection health
-      // check event. Due to how liberal the type of client.user is, we have to do it this
-      // way to maintain type safety.
+      // The cast below is needed because `client.user` is `ClientUser`, which makes every
+      // field but `id` optional — it is only fully populated once `connectUser` has run and
+      // the connection hello event has arrived.
 
       const {
         channel_mutes: _channel_mutes,
@@ -38,7 +37,13 @@ export const createUserDataInjectionMiddleware = (
         ...state,
         localMessage: {
           ...state.localMessage,
-          user: messageUser as RequireLiteral<OwnUserResponse, 'blocked_user_ids'>, // TODO: drop RequireLiteral once the oapi spec is adjusted,
+          // `blocked_user_ids` is optional on `OwnUserResponse` — the connect payload
+          // omits it when nothing is blocked — but required on `UserResponse`. Supply the
+          // empty case rather than assert it; `[]` is what the server sends for other users.
+          user: {
+            ...messageUser,
+            blocked_user_ids: messageUser.blocked_user_ids ?? [],
+          } as UserResponse,
           user_id: messageUser.id,
         },
       });

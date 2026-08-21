@@ -1,14 +1,9 @@
 import type { Middleware, MiddlewareExecutionResult } from '../../../middleware';
-import type {
-  LocalMessage,
-  MessageRequest,
-  SendMessageOptions,
-  UpdatedMessage,
-} from '../../../types';
+import type { LocalMessage, MessageRequest, SendMessageOptions } from '../../../types';
 import type { MessageComposer } from '../../messageComposer';
 
 export type MessageComposerMiddlewareState = {
-  message: MessageRequest | UpdatedMessage;
+  message: MessageRequest;
   localMessage: LocalMessage;
   sendOptions: SendMessageOptions;
 };

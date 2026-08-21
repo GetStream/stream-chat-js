@@ -1,7 +1,7 @@
 import { BaseSearchSource, type SearchQueryOptions } from './BaseSearchSource';
 import { FilterBuilder, type FilterBuilderOptions } from '../pagination';
 import type { StreamChat } from '../client';
-import type { UserFilters, UserOptions, UserResponse, UserSort } from '../types';
+import type { SortParamRequest, UserFilters, UserOptions, UserResponse } from '../types';
 import type { SearchSourceOptions } from './types';
 
 type CustomContext = Record<string, unknown>;
@@ -13,7 +13,7 @@ export type UserSearchSourceFilterBuilderContext<
 export type UserSearchSourceOptions = SearchSourceOptions & {
   /** Static base filters merged under the dynamically generated ones. */
   filters?: UserFilters;
-  sort?: UserSort;
+  sort?: SortParamRequest[];
   searchOptions?: Omit<UserOptions, 'limit' | 'offset'>;
 };
 
@@ -23,7 +23,7 @@ export class UserSearchSource<
   readonly type = 'users';
   client: StreamChat;
   filters: UserFilters | undefined;
-  sort: UserSort | undefined;
+  sort: SortParamRequest[] | undefined;
   searchOptions: Omit<UserOptions, 'limit' | 'offset'> | undefined;
   filterBuilder: FilterBuilder<
     UserFilters,
@@ -73,7 +73,7 @@ export class UserSearchSource<
     });
     const baseSort = this.sort ?? [];
     const hasIdSort = baseSort.some((entry) => entry.field === 'id');
-    const sort: UserSort = hasIdSort
+    const sort: SortParamRequest[] = hasIdSort
       ? baseSort
       : [...baseSort, { field: 'id', direction: 1 }];
     const options = { ...this.searchOptions, limit: this.pageSize, offset: this.offset };

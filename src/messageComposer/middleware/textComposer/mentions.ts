@@ -28,13 +28,12 @@ import type {
 import type { StreamChat } from '../../../client';
 import type {
   MemberFilters,
-  MemberSort,
   SearchUserGroupsOptions,
+  SortParamRequest,
   UserFilters,
   UserGroupResponse,
   UserOptions,
   UserResponse,
-  UserSort,
 } from '../../../types';
 import type { Channel } from '../../../channel';
 import { MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY } from '../../../constants';
@@ -98,10 +97,10 @@ export const calculateLevenshtein = (query: string, name: string) => {
 export type MentionsSearchSourceOptions = SearchSourceOptions & {
   /** Static base filters for the app-wide user query (mentionAllAppUsers). */
   userFilters?: UserFilters;
-  userSort?: UserSort;
+  userSort?: SortParamRequest[];
   /** Static base filters for the channel member query. */
   memberFilters?: MemberFilters;
-  memberSort?: MemberSort;
+  memberSort?: SortParamRequest[];
   searchOptions?: Omit<UserOptions, 'limit' | 'offset'>;
   mentionAllAppUsers?: boolean;
   suggestionFactoryMappers?: MentionSuggestionFactoryMapperOverrides;
@@ -307,8 +306,8 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
   protected userGroupCursor?: string;
   userFilters: UserFilters | undefined;
   memberFilters: MemberFilters | undefined;
-  userSort: UserSort | undefined;
-  memberSort: MemberSort | undefined; // todo: document there are filters and sort options for users and members
+  userSort: SortParamRequest[] | undefined;
+  memberSort: SortParamRequest[] | undefined; // todo: document there are filters and sort options for users and members
   searchOptions: Omit<UserOptions, 'limit' | 'offset'> | undefined;
   config: Pick<
     MentionsSearchSourceOptions,
@@ -562,13 +561,13 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
       ([
         { field: 'name', direction: 1 },
         { field: 'id', direction: 1 },
-      ] satisfies UserSort), // todo: document the change - the sort is overridden, not merged
+      ] satisfies SortParamRequest[]), // todo: document the change - the sort is overridden, not merged
     options: { ...this.searchOptions, limit: this.pageSize, offset },
   });
 
   prepareQueryMembersParams = (searchQuery: string, offset = 0) => {
     // QueryMembers failed with error: \"sort must contain at maximum 1 item\"
-    let sort: MemberSort = [{ field: 'user_id', direction: 1 }];
+    let sort: SortParamRequest[] = [{ field: 'user_id', direction: 1 }];
     if (!this.memberSort || !this.memberSort.length) {
       sort = [{ field: 'user_id', direction: 1 }];
     } else {

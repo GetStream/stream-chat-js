@@ -656,7 +656,9 @@ Webhook verification is inherently server-side work: it needs the API secret, wh
 
 ### Constructor and lifecycle
 
-`getClient()`, `getConfig()`, `clean()`, `_channelURL()`, `_checkInitialized()`, `_initializeState(...)`, `_disconnect()`, and `create(options?)` are unchanged.
+`getClient()`, `getConfig()`, `clean()`, `_checkInitialized()`, `_initializeState(...)`, `_disconnect()`, and `create(options?)` are unchanged.
+
+`channel._channelURL()` — **REMOVED after `10.0.0-rc.4`**, no replacement. It built a `{baseURL}/channels/{type}/{id}` string for the hand-rolled request layer that no longer exists; every request now goes through the generated API client, which resolves its own paths. Nothing in the SDK called it. If you were using it to build a URL yourself, construct it inline.
 
 ### Removed with a rename → note
 
@@ -1355,6 +1357,111 @@ type CustomMarkReadRequestFn = (
 ```
 
 The `Partial<>` is deliberate: it lets a handler return just `{ event }` without fabricating a `duration`, and it means a handler can delegate straight to the SDK — `markReadRequest: ({ channel, options }) => channel.markRead(options)` — which the `rc` signature rejected because `MarkReadResponse.event` is optional. `CustomThreadMarkReadRequestFn` takes `{ thread, options? }` instead of `{ channel, options? }` and additionally permits a `void` return.
+
+## Removed after `10.0.0-rc.4` — redundant guards and pass-throughs
+
+Skip this section if you are upgrading from v9 only in the sense that these methods still existed in `10.0.0-rc.4`; if you are on v9 they are simply gone in v10 final. Each was either a method whose entire body forwarded to another one, or a runtime check that restated something the type system already enforces.
+
+### `StreamChat`
+
+- **`client.queryBannedUsers(...)` — REMOVED.** Its whole body was `return await super.queryBannedUsers(...args)`; it was not even marked `override`. The inherited `ChatApi.queryBannedUsers` is unchanged, so **no call-site change is needed** — you were already reaching this implementation.
+
+- **`client.partialUpdateThread(messageId, partialThreadObject, requestOptions?)` — REMOVED.** Use the inherited `client.updateThreadPartial({ message_id, set, unset }, requestOptions?)`.
+
+  ```ts
+  // before
+  await client.partialUpdateThread(messageId, { set: { custom_field: 1 } });
+
+  // after
+  await client.updateThreadPartial({ message_id: messageId, set: { custom_field: 1 } });
+  ```
+
+  Two behaviour changes come with it:
+  1. **The reserved-field guard is gone.** It threw synchronously for keys in a hardcoded list, and that list had drifted from `ThreadResponse` in both directions: it rejected `id`, `type`, `user` and `participants` (none of which are fields on `ThreadResponse`, so legitimate custom fields with those names were blocked) while letting through `parent_message_id`, `channel_cid`, `created_by_user_id`, `thread_participants`, `reply_count`, `participant_count`, `active_participant_count` and `deleted_at`, all of which _are_ server-owned. The server rejects what it owns; the client no longer guesses. **A rejected write now surfaces as a rejected promise rather than a synchronous `throw`** — adjust any `try`/`catch` that wrapped the call expecting the latter.
+  2. **The empty-`messageId` check is gone.** `message_id` is a required field on `UpdateThreadPartialRequest`, so this is a compile error instead.
+
+  The `PartialThreadUpdate` type is removed with the method — `UpdateThreadPartialRequest` is its replacement.
+
+### `Channel`
+
+- **`channel.search(...)` — REMOVED.** Use `client.search(...)`. The removed method forwarded straight to `client.search()` **without scoping the query to the channel**, so despite the name it searched every channel the user could see. If you were relying on that behaviour, `client.search()` is the same call. If you assumed it was channel-scoped, add the scope to your filter explicitly — that is a real bug fix in your integration, not a regression.
+
+- **`channel.getReplies(...)` — REMOVED.** Use `client.getReplies(...)`. Pure forward; the removed method's own comment noted it did nothing with the result.
+
+- **`channel.getReactions(...)` — REMOVED.** Use `client.getReactions(...)`. Pure forward.
+
+- **`channel.sendAction(messageId, formData, requestOptions?)` — KEPT**, but its `if (!messageId) throw Error('Message ID is missing')` guard is gone. `runMessageAction` requires `id: string`, so an empty id is a compile error; a runtime empty string reaches the server and is rejected there.
+
+## Removed after `10.0.0-rc.4` — server-side role assignment
+
+**`channel.assignRoles(roles, message?, options?, requestOptions?)` — REMOVED.** Assigning
+channel roles is a server-side operation; use
+[`@stream-io/node-sdk`](https://github.com/GetStream/stream-node). The `RoleName` type went
+with it, along with the rest of the v1 permission surface — see
+[the v1 permission system](./v9-to-v10-migration-guide-type-renames.md#the-v1-permission-system--removed).
+
+## Removed after `10.0.0-rc.4` — moderation moves to the generated V2 API
+
+The `/moderation/*` methods on `StreamChat` were the last endpoints in the SDK that built
+their own request instead of calling the generated client. Every one that has a generated
+equivalent now delegates to it, and the ones no SDK used are gone.
+
+### Migrated to `client.moderation.*`
+
+These four are **removed** from `StreamChat`. The replacement is the generated V2 method,
+reachable through `client.moderation`:
+
+| Removed                                         | Replacement                                                         |
+| ----------------------------------------------- | ------------------------------------------------------------------- |
+| `client.banUser(targetUserId, options?)`        | `client.moderation.ban({ target_user_id, ...options })`             |
+| `client.muteUser(targetId, options?)`           | `client.moderation.mute({ target_ids: [targetId], ...options })`    |
+| `client.unmuteUser(targetId)`                   | `client.moderation.unmute({ target_ids: [targetId] })`              |
+| `client.flagMessage(targetMessageId, options?)` | `client.moderation.flagMessage(targetMessageId, reason?, options?)` |
+
+Note the shape change on mute/unmute: V2 takes `target_ids` as an **array**, so a single
+id becomes `[targetId]`.
+
+Three consequences worth checking in your integration:
+
+- **Return types change.** These now resolve to `StreamResponse<…>` of the generated
+  response, so they also carry `metadata`. Two lose fields: `mute` (singular) is no longer
+  on the mute response — use `mutes` — and the flag response is now
+  `FlagItemResponse { duration, item_id }` rather than a nested `flag` object. If you only
+  `await` these calls you are unaffected.
+- **Two ban options are gone.** V2 `BanRequest` has no `delete_reactions` and no
+  `ban_from_future_channels`. There is no replacement for either.
+- **`BanUserOptions` and `MuteUserOptions`.** `BanUserOptions` is now
+  `Omit<BanRequest, 'target_user_id'>` — derived, so it tracks the spec. `MuteUserOptions`
+  is removed; V2 mute accepts only `timeout`.
+
+`MuteUserResponse`, `FlagMessageResponse`, `FlagUserResponse` and `UnmuteUserResponse` are
+removed with them.
+
+### Removed with no replacement — unused by the React and React Native SDKs
+
+- **`client.flagUser(...)`** — use `client.moderation.flagUser(targetUserId, reason?)`.
+- **`client.unflagMessage(...)`, `client.unflagUser(...)`** — V2 has no unflag endpoint.
+- **`client.unblockMessage(...)`** — no V2 equivalent.
+- **`client.shadowBan(targetUserId, options?)`** → `client.moderation.ban({ target_user_id, shadow: true, ...options })`.
+- **`client.removeShadowBan(targetUserId, options?)`** → `client.unbanUser(targetUserId, { shadow: true, ...options })`.
+- **`channel.shadowBan(...)`** → `channel.banUser(targetUserId, { shadow: true })`.
+- **`channel.removeShadowBan(...)`** → `channel.unbanUser(targetUserId, { shadow: true })`.
+
+Shadow banning itself is unaffected — `shadow` is still a documented option on both ban
+paths. Only the convenience wrappers are gone.
+
+### Still hand-written: `unbanUser`
+
+`client.unbanUser(targetUserId, options?)` and `channel.unbanUser(...)` keep their v1
+implementation, because **the generated layer has no unban endpoint**: `ChatApi` exposes
+only the reads (`queryBannedUsers`, `queryFutureChannelBans`) and V2 moderation has `ban`
+without a matching `unban`. Ban and unban have to target the same system, so both stay
+reachable until the spec publishes one. `APIResponse` and `UnBanUserOptions` survive for
+the same reason.
+
+Note the asymmetry this creates while it lasts: `channel.banUser` scopes through V2's
+`channel_cid`, while `channel.unbanUser` still scopes through v1's `type` + `id`. Both
+still take a channel-scoped ban and clear it; only the wire format differs.
 
 ## Logging (applies to every class)
 

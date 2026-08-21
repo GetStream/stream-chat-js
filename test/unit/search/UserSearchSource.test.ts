@@ -3,7 +3,7 @@ import { UserSearchSource } from '../../../src/search/UserSearchSource';
 import type { StreamChat } from '../../../src/client';
 import type {
   UserFilters,
-  UserSort,
+  SortParamRequest,
   UserResponse,
   UsersAPIResponse,
 } from '../../../src/types';
@@ -210,7 +210,7 @@ describe('UserSearchSource', () => {
   });
 
   it('leaves the sort array unchanged when it already contains an id key', async () => {
-    const sort: UserSort = [
+    const sort: SortParamRequest[] = [
       { field: 'id', direction: -1 },
       { field: 'created_at', direction: -1 },
     ];

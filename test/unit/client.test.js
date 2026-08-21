@@ -1427,6 +1427,53 @@ describe('user.updated propagates to message + pinned paginators', () => {
 	});
 });
 
+describe('user.updated preserves the own-user-only fields on client.user', () => {
+	let client;
+
+	beforeEach(async () => {
+		client = await getClientWithUser({ id: 'own-user' });
+	});
+
+	// Regression: `OwnUserBase` used to be a hand-maintained field list that had drifted from
+	// `OwnUserResponse` — it omitted `latest_hidden_channels`, so every `user.updated` event
+	// deleted that field off `client.user`. The list is derived now; this pins the behaviour.
+	it('keeps own-user fields the event body does not carry, and drops the rest', () => {
+		client.user = {
+			...client.user,
+			// own-user-only — must all survive an event that omits them
+			channel_mutes: [],
+			devices: [],
+			invisible: false,
+			latest_hidden_channels: ['messaging:hidden'],
+			mutes: [],
+			privacy_settings: { read_receipts: { enabled: true } },
+			push_preferences: {},
+			total_unread_count: 3,
+			total_unread_count_by_team: { red: 1 },
+			unread_channels: 1,
+			unread_count: 3,
+			unread_threads: 0,
+			// not an own-user field — the event omitting it means it was cleared server-side
+			image: 'https://example.com/old.png',
+		};
+		client._user = { ...client.user };
+
+		client._handleClientEvent({
+			type: 'user.updated',
+			user: { id: 'own-user', name: 'New Name' },
+		});
+
+		expect(client.user.latest_hidden_channels).toEqual(['messaging:hidden']);
+		expect(client.user.total_unread_count).toBe(3);
+		expect(client.user.total_unread_count_by_team).toEqual({ red: 1 });
+		expect(client.user.unread_threads).toBe(0);
+		expect(client.user.privacy_settings).toEqual({ read_receipts: { enabled: true } });
+		expect(client.user.invisible).toBe(false);
+		expect(client.user.name).toBe('New Name');
+		expect(client.user.image).toBeUndefined();
+	});
+});
+
 describe('user.messages.deleted (client-level, cross-channel)', () => {
 	let client;
 	const bannedUser = { id: 'banned-user' };

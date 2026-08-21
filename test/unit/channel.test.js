@@ -3059,19 +3059,20 @@ describe('event subscription and unsubscription', () => {
 		expect(channel.listeners.get('all')?.size ?? 0).to.be.equal(0);
 	});
 });
-describe('Channel search', async () => {
+describe('Message search', async () => {
 	const client = await getClientWithUser();
-	const channel = client.channel('messaging', uuidv4());
 
-	// search now takes a single request object `{ payload }` and forwards the payload straight to
-	// the generated ChatApi.search (GET /search) via client.api.sendRequest. Sort normalization is
-	// no longer done inside search, so the caller passes the already-shaped `{ field, direction }`.
+	// `client.search()` was removed - it forwarded to `client.search()` without scoping the query
+	// to the channel, so it was a delegate with a misleading name. Search takes a single request
+	// object `{ payload }` and forwards the payload straight to the generated ChatApi.search
+	// (GET /search) via client.api.sendRequest. Sort normalization is not done inside search, so
+	// the caller passes the already-shaped `{ field, direction }`.
 	it('search with sorting by defined field', async () => {
 		const sendRequest = vi
 			.spyOn(client.api, 'sendRequest')
 			.mockResolvedValue({ body: {}, metadata: {} });
 		const payload = { query: 'query', sort: [{ field: 'updated_at', direction: -1 }] };
-		await channel.search({ payload });
+		await client.search({ payload });
 		expect(sendRequest).toHaveBeenCalledWith(
 			'GET',
 			'/api/v2/chat/search',
@@ -3087,7 +3088,7 @@ describe('Channel search', async () => {
 			.spyOn(client.api, 'sendRequest')
 			.mockResolvedValue({ body: {}, metadata: {} });
 		const payload = { query: 'query', sort: [{ field: 'custom_field', direction: -1 }] };
-		await channel.search({ payload });
+		await client.search({ payload });
 		expect(sendRequest).toHaveBeenCalledWith(
 			'GET',
 			'/api/v2/chat/search',
@@ -3101,7 +3102,7 @@ describe('Channel search', async () => {
 	it('sorting and offset works', async () => {
 		vi.spyOn(client.api, 'sendRequest').mockResolvedValue({ body: {}, metadata: {} });
 		await expect(
-			channel.search({
+			client.search({
 				payload: {
 					query: 'query',
 					offset: 1,
@@ -3112,7 +3113,7 @@ describe('Channel search', async () => {
 	});
 	it('next and offset fails', async () => {
 		await expect(
-			channel.search({ payload: { query: 'query', offset: 1, next: 'next' } }),
+			client.search({ payload: { query: 'query', offset: 1, next: 'next' } }),
 		).rejects.toThrow();
 	});
 });

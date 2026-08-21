@@ -49,7 +49,7 @@ export const getChannel = async ({
 
   const theChannel =
     channel ||
-    // `members` are member IDs; the OpenAPI `ChannelData.members` expects member objects.
+    // `members` are member IDs; the OpenAPI `ChannelInput.members` expects member objects.
     client.channel(type as string, id, {
       members: members?.map((user_id) => ({ user_id })),
     });

@@ -13,7 +13,6 @@ import {
   POLL_COMPOSER_VALIDATION_CODE,
   pollComposerValidationError,
 } from '../../../../../src/messageComposer/middleware/pollComposer/validation';
-import { VotingVisibility } from '../../../../../src/types';
 
 const setupHandlerParams = (initialState: PollComposerStateChangeMiddlewareValue) => {
   return {
@@ -44,7 +43,7 @@ const getInitialState = (): PollComposerState => ({
     max_votes_allowed: '',
     name: '',
     options: [{ id: 'option-id', text: '' }],
-    voting_visibility: VotingVisibility.public,
+    voting_visibility: 'public',
   },
   errors: {},
 });

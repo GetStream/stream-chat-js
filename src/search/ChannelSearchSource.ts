@@ -3,7 +3,7 @@ import type { FilterBuilderOptions } from '../pagination';
 import { FilterBuilder } from '../pagination';
 import type { Channel } from '../channel';
 import type { StreamChat } from '../client';
-import type { ChannelFilters, ChannelOptions, ChannelSort } from '../types';
+import type { ChannelFilters, ChannelOptions, SortParamRequest } from '../types';
 import type { SearchSourceOptions } from './types';
 
 type CustomContext = Record<string, unknown>;
@@ -15,7 +15,7 @@ export type ChannelSearchSourceFilterBuilderContext<
 export type ChannelSearchSourceOptions = SearchSourceOptions & {
   /** Static base filters merged under the dynamically generated ones. */
   filters?: ChannelFilters;
-  sort?: ChannelSort;
+  sort?: SortParamRequest[];
   searchOptions?: Omit<ChannelOptions, 'limit' | 'offset'>;
 };
 
@@ -25,7 +25,7 @@ export class ChannelSearchSource<
   readonly type = 'channels';
   client: StreamChat;
   filters: ChannelFilters | undefined;
-  sort: ChannelSort | undefined;
+  sort: SortParamRequest[] | undefined;
   searchOptions: Omit<ChannelOptions, 'limit' | 'offset'> | undefined;
   filterBuilder: FilterBuilder<
     ChannelFilters,
