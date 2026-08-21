@@ -148,6 +148,55 @@ describe('ConfigController', () => {
     });
   });
 
+  /**
+   * `serverAuthority.ts` says the restrictions have to run on every route a configuration can change by,
+   * because one applied at construction alone stops holding the first time anything updates the config.
+   * `patch` was the exception: without `retainPatches` it spreads into the resolved value and writes it
+   * directly, which is the one path that does not go through `resolve`.
+   */
+  describe('applyAuthority on the patch path', () => {
+    const cap = (config: Config) => ({
+      ...config,
+      pageSize: Math.min(config.pageSize, 25),
+    });
+
+    it('applies authority to a patch when patches are not retained', () => {
+      const controller = make({ applyAuthority: cap });
+
+      controller.patch({ pageSize: 500 });
+
+      expect(controller.value.pageSize).toBe(25);
+    });
+
+    it('applies authority to a patch when patches are retained', () => {
+      const controller = make({ applyAuthority: cap, retainPatches: true });
+
+      controller.patch({ pageSize: 500 });
+
+      expect(controller.value.pageSize).toBe(25);
+      // Retained, so the request survives for a later resolution to honour if the ceiling lifts.
+      expect(controller.requested.pageSize).toBe(500);
+    });
+
+    it('does not retain the request without retainPatches', () => {
+      const controller = make({ applyAuthority: cap });
+
+      controller.patch({ pageSize: 500 });
+
+      // Refused outright rather than remembered — the documented consequence of leaving retainPatches off
+      // on a controller a server can narrow.
+      expect(controller.requested.pageSize).toBe(DEFAULTS.pageSize);
+    });
+
+    it('still lets an explicit undefined clear a field', () => {
+      const controller = make({ applyAuthority: cap });
+
+      controller.patch({ debounceMs: undefined as never });
+
+      expect(controller.value.debounceMs).toBeUndefined();
+    });
+  });
+
   describe('onChanged', () => {
     it('is not called for the initial value', () => {
       const onChanged = vi.fn();

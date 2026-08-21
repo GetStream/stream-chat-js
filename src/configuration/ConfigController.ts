@@ -78,6 +78,11 @@ export type ConfigControllerOptions<TConfig extends Record<string, unknown>> = {
    * restrictions either makes the server's answer permanent or wipes the client's (**DV-18**). Retaining
    * the request makes the resolution idempotent instead. **FU-35** is the question of which other
    * entities should switch it on.
+   *
+   * Off is still safe alongside {@link ConfigControllerOptions.applyAuthority} — {@link
+   * ConfigController.patch} applies authority on that path too — but the request is written into the
+   * result rather than kept, so a field the server currently narrows is refused outright instead of
+   * taking effect if the server later relents.
    */
   retainPatches?: boolean;
   /**
@@ -85,8 +90,9 @@ export type ConfigControllerOptions<TConfig extends Record<string, unknown>> = {
    * restrictions and upper bounds.
    *
    * Kept as one opaque hook so the controller never learns the authority rules themselves; those live in
-   * `serverAuthority.ts`. Runs on *every* derivation, which is the point: a restriction applied only at
-   * construction stops holding the first time anything else updates the configuration.
+   * `serverAuthority.ts`. Runs on *every* derivation and on {@link ConfigController.patch}, which is the
+   * point: a restriction applied only at construction stops holding the first time anything else updates
+   * the configuration.
    */
   applyAuthority?: (requested: TConfig) => TConfig;
 };
@@ -203,16 +209,31 @@ export class ConfigController<
   /**
    * Applies a partial configuration, skipping the write when every field already matches.
    *
-   * Copied on the way in, because `mergeWith` reuses a source subtree verbatim where the target has
-   * nothing — so without this the entity would hold the caller's object, and a later mutation of it would
-   * change resolved configuration with no notification.
+   * Copied on the way in, because a deep merge can reuse the caller's nested object rather than copying it
+   * — the entity would then be holding an object the caller can still change, and changing it would move
+   * resolved configuration with nobody notified.
    */
   patch(patch: Partial<TConfig>): void {
     const owned = copyConfigPatch(patch);
     if (!this.options.retainPatches) {
+      // Written onto the current value rather than through `resolve`, because `resolve` rebuilds from the
+      // layers in `orderedLayers` and this patch is not one of them — `patchLayer` is only filled in on
+      // the retaining path below. Resolving here would produce a config without the patch, so the
+      // `updateConfig` call would do nothing. That is the whole difference between the two paths: whether
+      // a patch becomes an input that later derivations replay.
+      //
       // A plain spread, deliberately: an explicit `undefined` has to be able to clear a field, which is
-      // how a paginator's state throttle is switched off.
-      this.write({ ...this.value, ...owned } as TConfig);
+      // how a paginator's state throttle is switched off. `resolve` skips `undefined` keys and could not
+      // express it.
+      const patched = { ...this.value, ...owned } as TConfig;
+      // `resolve` applies authority itself, and this is the one write path that does not call it — so
+      // without this line the server's limits would hold everywhere except `updateConfig`.
+      //
+      // The patch is written into the value rather than stored, so if the server lowers a field here the
+      // caller's value is lost, and it is not restored if the server later allows it. Turning on
+      // `retainPatches` is what changes that.
+      const { applyAuthority } = this.options;
+      this.write(applyAuthority ? applyAuthority(patched) : patched);
       return;
     }
     this.patchLayer = mergeWith(

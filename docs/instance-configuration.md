@@ -439,6 +439,11 @@ server changing its mind. Every other entity writes a patch straight into the re
 next derivation replaces it. That is one option on the resolver rather than two implementations, so
 extending the retained behaviour to another entity is a switch rather than a rewrite.
 
+Stage 6 runs either way: a patch written straight into the resolved value still has the restrictions
+applied over it, so no route can publish more than the server allows. The difference is only what happens
+afterwards — a retained request is honoured if the server later relents, an unretained one was refused and
+is gone.
+
 Stage 1b's precedence is pinned by tests in `test/unit/configuration/messagePaginator.config.test.ts`
 ("the documented layer order"): a registration beats an SDK-supplied default, an integrator's construction
 argument beats a registration, and an untouched SDK default still applies.
