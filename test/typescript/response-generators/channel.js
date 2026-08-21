@@ -127,7 +127,7 @@ async function demoteModerators() {
 async function getConfig() {
 	const channel = await utils.createTestChannel(uuidv4(), johnID);
 
-	return await channel.getConfig();
+	return await channel.serverConfig;
 }
 
 async function hide() {

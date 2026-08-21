@@ -18,6 +18,7 @@ import { MessageDraftComposerMiddlewareValueState } from '../../../../../src/mes
 import { LocalMessage, MessageResponse } from '../../../../../src';
 import type { DeepPartial } from '../../../../../src/types.utility';
 import { generateChannel } from '../../../test-utils/generateChannel';
+import { stubServerConfig } from '../../../test-utils/stubServerConfig';
 
 const setupMiddleware = (
   custom: {
@@ -194,7 +195,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
     const { messageComposer, validationMiddleware } = setupMiddleware({
       editedMessage,
     });
-    vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+    stubServerConfig(messageComposer.channel, {
       commands: [{ name: 'ban', description: 'Ban a user' }],
     });
     const addWarningSpy = vi.spyOn(messageComposer.client.notifications, 'addWarning');
@@ -219,7 +220,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
 
   it('should discard raw moderation commands while replying', async () => {
     const { messageComposer, validationMiddleware } = setupMiddleware();
-    vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+    stubServerConfig(messageComposer.channel, {
       commands: [{ name: 'ban', description: 'Ban a user', set: 'moderation_set' }],
     });
     vi.spyOn(messageComposer, 'quotedMessage', 'get').mockReturnValue({
@@ -264,7 +265,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
         },
       },
     });
-    vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+    stubServerConfig(messageComposer.channel, {
       commands: [{ name: 'ban', description: 'Ban a user' }],
     });
     const addWarningSpy = vi.spyOn(messageComposer.client.notifications, 'addWarning');
@@ -341,7 +342,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
         },
       },
     });
-    vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+    stubServerConfig(messageComposer.channel, {
       commands: [{ name: 'custom', description: 'Custom command' }],
     });
 
@@ -360,7 +361,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
 
   it('should discard ban commands without a reason by default', async () => {
     const { messageComposer, validationMiddleware } = setupMiddleware();
-    vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+    stubServerConfig(messageComposer.channel, {
       commands: [{ name: 'ban', description: 'Ban a user' }],
     });
     vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue('/ban @user1');
@@ -389,7 +390,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
 
   it('should allow ban commands with mention and reason by default', async () => {
     const { messageComposer, validationMiddleware } = setupMiddleware();
-    vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+    stubServerConfig(messageComposer.channel, {
       commands: [{ name: 'ban', description: 'Ban a user' }],
     });
     vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue(
@@ -411,7 +412,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
   it('should discard mute, unmute and unban commands without a mention by default', async () => {
     for (const commandName of ['mute', 'unmute', 'unban'] as const) {
       const { messageComposer, validationMiddleware } = setupMiddleware();
-      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      stubServerConfig(messageComposer.channel, {
         commands: [{ name: commandName, description: `${commandName} a user` }],
       });
       vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue(
@@ -441,7 +442,7 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
 
   it('should allow raw known commands if command is not disabled', async () => {
     const { messageComposer, validationMiddleware } = setupMiddleware();
-    vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+    stubServerConfig(messageComposer.channel, {
       commands: [{ name: 'giphy', description: 'Post a random gif' }],
     });
     vi.spyOn(messageComposer.textComposer, 'text', 'get').mockReturnValue('/giphy hello');

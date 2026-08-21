@@ -12,6 +12,7 @@ const deviceId = 'deviceId';
 const defaultConfig: LocationComposerConfig = {
   enabled: true,
   getDeviceId: () => deviceId,
+  minShareDurationMs: 60 * 1000,
 };
 
 const user = { id: 'user-id' };

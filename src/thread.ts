@@ -34,6 +34,15 @@ import { MessageOperations } from './messageOperations';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import { MessagePaginator } from './pagination';
 import type { MergeNewestPageOptions } from './pagination';
+import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
+import { ConfigController } from './configuration/ConfigController';
+import { deepFreezeConfig } from './configuration/utils/deepFreezeConfig';
+import type { ThreadDeclarativeConfig } from './configuration/types';
+import {
+  mergeDeclarativeMessageOperationsConfig,
+  mergeDeclarativePaginatorConfig,
+  toDeclarativePaginatorConfig,
+} from './configuration/utils/declarativeSlices';
 import type { PipelineEvent } from './EventHandlerPipeline';
 
 export type ThreadState = {
@@ -79,14 +88,24 @@ export type CustomThreadMarkReadRequestFn = (params: {
   options?: MarkReadRequest;
 }) => Promise<Partial<StreamResponse<MarkReadResponse>> | null> | void;
 
-export type ThreadInstanceConfig = {
+export type ThreadConfig = {
   requestHandlers?: {
     markReadRequest?: CustomThreadMarkReadRequestFn;
   };
 };
 
+/**
+ * Empty because every field of `ThreadConfig` is optional — a thread's own configuration is one handler
+ * wide. Declared and frozen anyway, so the entity carries the same defaults layer as every other
+ * configurable class rather than a special case.
+ */
+export const DEFAULT_THREAD_CONFIG: ThreadConfig = deepFreezeConfig({});
+
 export class Thread extends WithSubscriptions {
-  public readonly configState = new StateStore<ThreadInstanceConfig>({});
+  /** The shared configuration machinery — see {@link ConfigController}. */
+  private readonly configController = new ConfigController<ThreadConfig>({
+    defaults: DEFAULT_THREAD_CONFIG,
+  });
   public readonly state: StateStore<ThreadState>;
   public readonly id: string;
   public readonly messageComposer: MessageComposer;
@@ -193,15 +212,33 @@ export class Thread extends WithSubscriptions {
 
     this.client = client;
 
-    this.messagePaginator = new MessagePaginator({
-      channel: this.channel,
-      parentMessageId: this.id,
-      requestSort: DEFAULT_SORT,
-      itemOrder: DEFAULT_ITEM_ORDER,
-      paginatorOptions: {
-        pageSize: DEFAULT_PAGE_LIMIT,
+    // Read the declarative configuration before the sub-objects exist, so it can go in as constructor
+    // options — the reply paginator's `unreadReferencePolicy` and initial cursor are read once.
+    const declarativeConfig = client.config.getConfig('thread') ?? undefined;
+    // Thread replies are backed by a MessagePaginator too, so the general key applies here as well;
+    // the per-parent slice overrides it (thread replies default to a smaller page than a channel).
+    const messagePaginatorConfig = mergeDeclarativePaginatorConfig(
+      client.config.getConfig('messagePaginator') ?? undefined,
+      declarativeConfig?.messagePaginator,
+    );
+
+    this.messagePaginator = new MessagePaginator(
+      {
+        channel: this.channel,
+        parentMessageId: this.id,
+        requestSort: DEFAULT_SORT,
+        itemOrder: DEFAULT_ITEM_ORDER,
+        // Split as in `Channel`: the policy is a constructor argument, not paginator configuration.
+        unreadReferencePolicy: messagePaginatorConfig?.unreadReferencePolicy,
+        paginatorOptions: {
+          declarativeConfig: toDeclarativePaginatorConfig(messagePaginatorConfig),
+        },
       },
-    });
+      // Thread replies default to a smaller page than a channel list. Supplied by the SDK, not by the
+      // integrator, so it sits at stage 1 — `client.config.set({ messagePaginator: { pageSize } })`
+      // overrides it, which would not be true of a construction argument.
+      { pageSize: DEFAULT_PAGE_LIMIT },
+    );
 
     // Seed the reply paginator from the thread's `latest_replies` so a thread we already hold
     // data for (queried via the ThreadManager or hydrated from a ThreadResponse) renders its
@@ -296,6 +333,67 @@ export class Thread extends WithSubscriptions {
         },
       },
     });
+
+    // Share one derivation path with `config.reset()`. Idempotent — the paginator was already
+    // configured through its constructor above; this re-applies the mutable half the way a reset does.
+    this.initializeConfig(declarativeConfig);
+  }
+
+  /**
+   * Derives this thread's configuration — and its reply paginator's — from the declarative slice.
+   *
+   * Called by the constructor and by `client.config.reset()`. The thread owns only its own
+   * `requestHandlers`; the paginator derives its own configuration.
+   */
+  initializeConfig(declarativeConfig?: ThreadDeclarativeConfig): void {
+    // Only the thread's own slice goes in. The paginator and the operations keys are handed to those
+    // objects below, so putting them here too would publish them on `thread.config` as well.
+    //
+    // Replaces rather than merges: a handler dropped from the declarative tree must disappear. The
+    // controller skips a write that changes nothing, which matters because `alsoWatch` re-runs this for
+    // any of three keys and `useThreadRequestHandlers` subscribes to the store.
+    this.configController.initialize({
+      requestHandlers: declarativeConfig?.requestHandlers,
+    });
+
+    this.messagePaginator.initializeConfig(
+      toDeclarativePaginatorConfig(
+        mergeDeclarativePaginatorConfig(
+          this.client.config.getConfig('messagePaginator') ?? undefined,
+          declarativeConfig?.messagePaginator,
+        ),
+      ),
+    );
+
+    // A thread sends messages too, so it owns a `MessageOperations` of its own and takes the same shared
+    // key the channel does, with its own per-parent override.
+    this.messageOperations.initializeConfig(
+      mergeDeclarativeMessageOperationsConfig(
+        this.client.config.getConfig('messageOperations') ?? undefined,
+        declarativeConfig?.messageOperations,
+      ),
+    );
+  }
+
+  /**
+   * Resolved configuration as a store, so consumers can react to it — the shape every configurable class
+   * exposes.
+   */
+  get configState(): StateStore<ThreadConfig> {
+    return this.configController.state;
+  }
+
+  /**
+   * This thread's resolved configuration. `Readonly` because the value is the store's live object —
+   * assigning to a field of it would change state without notifying anyone. Use {@link updateConfig}.
+   */
+  get config(): Readonly<ThreadConfig> {
+    return this.configController.value;
+  }
+
+  /** Merges a partial configuration into the resolved config and notifies subscribers. */
+  updateConfig(config: Partial<ThreadConfig>): void {
+    this.configController.patch(config);
   }
 
   get channel() {
@@ -411,6 +509,7 @@ export class Thread extends WithSubscriptions {
       return;
     }
 
+    this.addUnsubscribeFunction(this.subscribeThreadSetupStateChange());
     this.addUnsubscribeFunction(this.subscribeParentMessageFromStore());
     this.addUnsubscribeFunction(this.subscribeThreadUpdated());
     this.addUnsubscribeFunction(this.subscribeMarkActiveThreadRead());
@@ -423,6 +522,43 @@ export class Thread extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeMessageUpdated());
     this.addUnsubscribeFunction(this.subscribeUserMessagesDeleted());
   };
+
+  /**
+   * Subscribes this thread to the `'thread'` configuration key. Registered through
+   * `WithSubscriptions`, so `unregisterSubscriptions()` runs the setup function's teardown.
+   *
+   * **This is where `Thread` differs from `Channel`,** which subscribes from its constructor. Everything
+   * below follows from that, and applies to a thread that never calls `registerSubscriptions()`:
+   *
+   * - no *setup function* runs for it — matching how `MessageComposer` already behaves;
+   * - it sees the declarative slice **as it stood when the thread was constructed**, because the
+   *   constructor applies it directly, but no *later* `client.config.set({ thread: … })` or
+   *   `set({ messagePaginator: … })` reaches it;
+   * - it is absent from the registry's `liveInstances`, so `client.config.reset()` skips it, and
+   *   `hasLiveInstances('thread')` does not count it when deciding whether to warn about a
+   *   construction-only path registered too late.
+   *
+   * So read "declarative configuration is unaffected" as *at construction only*. A thread held by a
+   * `ThreadManager` that has itself registered is covered — `subscribeManageThreadSubscriptions` calls
+   * `registerSubscriptions()` on every thread entering its state — so the common path is fine. A thread
+   * constructed directly, or held by an unregistered manager, is not.
+   *
+   * The alternative — applying the setup function at construction — would break the teardown symmetry
+   * `WithSubscriptions` provides, which is why the asymmetry stands.
+   */
+  private subscribeThreadSetupStateChange = () =>
+    applyInstanceConfiguration({
+      args: { thread: this },
+      config: this.client.config,
+      key: 'thread',
+      applyConfig: (config) => this.initializeConfig(config),
+      // Read fresh: by the time reset calls this, the declarative store has been cleared.
+      reinitializeConfig: () =>
+        this.initializeConfig(this.client.config.getConfig('thread') ?? undefined),
+      // The reply paginator also derives from the shared `messagePaginator` key — run the full cycle
+      // on a change there, so the setup function's overrides survive.
+      alsoWatch: ['messagePaginator', 'messageOperations'],
+    });
 
   private subscribeThreadUpdated = () =>
     this.client.on('thread.updated', (event) => {

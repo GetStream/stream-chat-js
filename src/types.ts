@@ -2,6 +2,8 @@ import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { StableWSConnection } from './connection';
 import type { CustomEventTypes } from './custom_types';
 import type { NotificationManager } from './notifications';
+import type { InstanceConfigTree } from './configuration/types';
+import type { DeepPartial } from './types.utility';
 import type {
   APIError,
   Attachment,
@@ -178,6 +180,15 @@ export type StreamChatOptions = {
    */
   notifications?: NotificationManager;
   /**
+   * Declarative configuration for instances the SDK creates on your behalf, seeded before the client's
+   * own managers are constructed.
+   *
+   * Equivalent to calling `client.config.set(tree)` immediately after construction, except for the
+   * `client` subtree — the configuration registry is created inside the constructor, so this is the only
+   * way to configure `reminders` / `notifications` before they are built.
+   */
+  config?: DeepPartial<InstanceConfigTree>;
+  /**
    * When true, user will be persisted on client. Otherwise if `connectUser` call fails, then you need to
    * call `connectUser` again to retry.
    * This is mainly useful for chat application working in offline mode, where you will need client.user to
@@ -325,6 +336,11 @@ export type OGAttachment = RequireLiteral<Attachment, 'og_scrape_url'>;
 
 export type PushProvider = CreateDeviceRequest['push_provider'];
 
+/**
+ * Server-provided channel configuration, keyed by **cid** (`messaging:general`, …). Most of
+ * `ChannelConfigWithInfo` is a type-level setting, but a channel's `config_overrides` can narrow it for
+ * that channel alone, so the effective answer is per channel. Read it via `channel.serverConfig`.
+ */
 export type Configs = Record<string, ChannelConfigWithInfo | undefined>;
 
 export type ConnectionOpen = EventPayload<'health.check'> | EventPayload<'connection.ok'>;

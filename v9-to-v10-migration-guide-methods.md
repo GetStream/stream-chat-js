@@ -656,7 +656,7 @@ Webhook verification is inherently server-side work: it needs the API secret, wh
 
 ### Constructor and lifecycle
 
-`getClient()`, `getConfig()`, `clean()`, `_checkInitialized()`, `_initializeState(...)`, `_disconnect()`, and `create(options?)` are unchanged.
+`getClient()`, `clean()`, `_checkInitialized()`, `_initializeState(...)`, `_disconnect()`, and `create(options?)` are unchanged.
 
 `channel._channelURL()` — **REMOVED after `10.0.0-rc.4`**, no replacement. It built a `{baseURL}/channels/{type}/{id}` string for the hand-rolled request layer that no longer exists; every request now goes through the generated API client, which resolves its own paths. Nothing in the SDK called it. If you were using it to build a URL yourself, construct it inline.
 
@@ -666,6 +666,8 @@ Webhook verification is inherently server-side work: it needs the API secret, wh
 - `channel.updateMemberPartial(updates, options?: { userId? })` — REMOVED (v9 wrapper). Use the inherited `channel.updateMemberPartial(request?)` — same name, generated shape.
 - `channel.partialUpdateMember(user_id, updates)` — REMOVED. Use `channel.updateMemberPartial({ user_id, ...updates })`.
 - `channel.sendEvent(event)` — replaced by `channel.sendEvent(request: { event })` (override).
+- `channel.getConfig()` — **REMOVED**. Use the `channel.serverConfig` **getter**, which returns the same value: this channel's server configuration (`ChannelConfigWithInfo`) — mostly type-level, but narrowed by the channel's own `config_overrides` where it has any. It is a property now, not a call — `channel.getConfig()?.uploads` becomes `channel.serverConfig?.uploads`. If you mock it in tests, note that `vi.fn()` cannot stand in for a getter.
+  - **Not** to be confused with `channel.config`, which is new and different: the channel's _resolved_ configuration, where a handful of server flags have been combined with what you registered through `client.config`. See the table under "Composer & attachment shape" for which fields live where.
 
 ### Signature-changed methods
 

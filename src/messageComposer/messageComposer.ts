@@ -6,7 +6,7 @@ import { LocationComposer } from './LocationComposer';
 import { MessageComposerEffectHandlers } from './MessageComposerEffectHandlers';
 import { PollComposer } from './pollComposer';
 import { TextComposer } from './textComposer';
-import { applyCommandValidatorOverride, DEFAULT_COMPOSER_CONFIG } from './configuration';
+import { DEFAULT_COMPOSER_CONFIG } from './configuration';
 import type { MessageComposerMiddlewareValue } from './middleware';
 import {
   MessageComposerMiddlewareExecutor,
@@ -15,7 +15,13 @@ import {
 import type { Unsubscribe } from '../store';
 import { StateStore } from '../store';
 import { formatMessage, generateUUIDv4, isLocalMessage } from '../utils';
-import { mergeWith } from '../utils/mergeWith';
+import { ConfigController } from '../configuration/ConfigController';
+import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
+import { mergeServerRestrictions } from '../configuration/utils/serverAuthority';
+import type {
+  ServerRestrictions,
+  ServerUpperBounds,
+} from '../configuration/utils/serverAuthority';
 import { Channel } from '../channel';
 import { Thread } from '../thread';
 import type {
@@ -30,6 +36,7 @@ import type {
   UserResponse,
 } from '../types';
 import { chatLoggerSystem } from '../logger';
+import { applyInstanceConfiguration } from '../configuration/utils/applyInstanceConfiguration';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { StreamChat } from '../client';
 import type { CommandSendability, MessageComposerConfig } from './configuration/types';
@@ -45,7 +52,6 @@ import type { LocationComposerSnapshot } from './LocationComposer';
 import type { PollComposerSnapshot } from './pollComposer';
 import type { TextComposerSnapshot } from './textComposer';
 import type { DeepPartial } from '../types.utility';
-import type { MergeWithCustomizer } from '../utils/mergeWith/mergeWithCore';
 import {
   getMentionedUsersInText,
   stripCommandFromText,
@@ -177,7 +183,15 @@ export class MessageComposer extends WithSubscriptions {
   readonly channel: Channel;
   readonly state: StateStore<MessageComposerState>;
   readonly editingAuditState: StateStore<EditingAuditState>;
-  readonly configState: StateStore<MessageComposerConfig>;
+
+  /**
+   * Resolved configuration, as a store — the shape every configurable class exposes
+   * (`configState` / `config` / `updateConfig`). Delegates rather than holding a copy, so the field and
+   * the controller's store cannot drift.
+   */
+  get configState(): StateStore<MessageComposerConfig> {
+    return this.configController.state;
+  }
   readonly compositionContext: CompositionContext;
   readonly compositionMiddlewareExecutor: MessageComposerMiddlewareExecutor;
   readonly draftCompositionMiddlewareExecutor: MessageDraftComposerMiddlewareExecutor;
@@ -190,6 +204,20 @@ export class MessageComposer extends WithSubscriptions {
   customDataManager: CustomDataManager;
   private snapshots: MessageComposerSnapshot[] = [];
   private effectHandlers: MessageComposerEffectHandlers;
+  /**
+   * The shared configuration machinery, with the three hooks this entity is the only one to need:
+   * `retainPatches` so an `updateConfig` request is *retained* and re-applied rather than written
+   * into the result (**DV-18**), and `applyAuthority` for the server's last word.
+   *
+   * A third hook, `finalizeRequest`, was added here for `commands.sendValidator` and then removed: the
+   * deep merge assigns function values directly and skips `undefined`, so the override it called reached
+   * the same answer on every layer shape — a later layer that stays silent cannot erase an earlier
+   * choice, because a merge only writes keys that are present.
+   */
+  private readonly configController: ConfigController<
+    MessageComposerConfig,
+    DeepPartial<MessageComposerConfig>
+  >;
   // todo: mediaRecorder: MediaRecorderController;
 
   constructor({
@@ -216,43 +244,25 @@ export class MessageComposer extends WithSubscriptions {
       );
     }
 
-    /**
-     * Customizes config merges for the composer constructor.
-     *
-     * It catches two scalar override cases that should not use the default deep merge:
-     * - client-disabled `enabled` flags stay disabled even if the channel config tries to re-enable them
-     * - scalar channel-config values replace client defaults for matching config keys
-     *
-     * All other values fall back to the normal `mergeWith` behavior.
-     */
-    const mergeMessageComposerConfigCustomizer: MergeWithCustomizer<
+    this.configController = new ConfigController<
+      MessageComposerConfig,
       DeepPartial<MessageComposerConfig>
-    > = (originalVal, channelConfigVal, key) =>
-      typeof originalVal === 'object'
-        ? undefined
-        : originalVal === false && key === 'enabled' // prevent enabling features that are disabled client-side
-          ? false
-          : ['string', 'number', 'bigint', 'boolean', 'symbol'].includes(
-                // prevent enabling features that are disabled server-side
-                typeof channelConfigVal,
-              )
-            ? channelConfigVal // scalar values get overridden by server-side config
-            : originalVal;
-
-    this.configState = new StateStore<MessageComposerConfig>(
-      applyCommandValidatorOverride(
-        mergeWith(
-          mergeWith(DEFAULT_COMPOSER_CONFIG, config ?? {}),
-          {
-            location: {
-              enabled: this.channel.getConfig()?.shared_locations,
-            },
-          },
-          mergeMessageComposerConfigCustomizer,
-        ),
-        config,
-      ),
-    );
+    >({
+      defaults: DEFAULT_COMPOSER_CONFIG,
+      constructorOptions: config as Partial<MessageComposerConfig> | undefined,
+      initialSlice: this.declarativeConfig as Partial<MessageComposerConfig> | undefined,
+      mergeSlice: 'deep',
+      // Stages 4 and 5 both arrive through `updateConfig`, and both have to outlive a re-resolution.
+      retainPatches: true,
+      applyAuthority: (requested) =>
+        deepFreezeConfig(
+          mergeServerRestrictions(
+            requested,
+            this.serverRestrictionsFor(requested),
+            this.serverUpperBounds,
+          ),
+        ) as MessageComposerConfig,
+    });
 
     let message: LocalMessage | DraftMessage | undefined = undefined;
     if (compositionIsDraftResponse(composition)) {
@@ -306,7 +316,15 @@ export class MessageComposer extends WithSubscriptions {
 
   static generateId = generateUUIDv4;
 
-  get config(): MessageComposerConfig {
+  /**
+   * The current resolved configuration.
+   *
+   * `Readonly` for the same reason every other configurable class's getter is: the value is the store's
+   * live object, so assigning to a field would change state while notifying nobody. Use
+   * {@link updateConfig}. `Readonly` is shallow, so nested writes are caught at runtime instead — the
+   * whole resolution is deep-frozen by {@link resolvedConfig}, not only the untouched defaults.
+   */
+  get config(): Readonly<MessageComposerConfig> {
     return this.configState.getLatestValue();
   }
 
@@ -477,11 +495,151 @@ export class MessageComposer extends WithSubscriptions {
     return editedMessageWasUpdated || draftWasChanged || composingMessageFromScratch;
   }
 
+  /**
+   * Records a configuration change as something *you* asked for, then republishes.
+   *
+   * The patch is kept — see {@link imperativeConfig} — rather than merged into the published result and
+   * forgotten. That is what makes the request survive a later re-resolution, including one triggered by
+   * the server changing its mind.
+   */
   updateConfig(config: DeepPartial<MessageComposerConfig>) {
-    this.configState.partialNext(
-      applyCommandValidatorOverride(mergeWith(this.config, config), config),
-    );
+    this.configController.patch(config as Partial<MessageComposerConfig>);
   }
+
+  /**
+   * What this composer has been **asked** for, before the server has any say — stages 1 to 5 of
+   * `docs/instance-configuration.md` §3.
+   *
+   * Available on every entity that retains its patches, not just this one: it is the controller's, and
+   * the split it exposes is what **FU-35** would extend elsewhere by switching on `retainPatches`.
+   */
+  get requestedConfig(): Readonly<MessageComposerConfig> {
+    return this.configController.requested;
+  }
+
+  /** The declarative slice for this composer, re-read live so a change is picked up. */
+  private get declarativeConfig(): DeepPartial<MessageComposerConfig> {
+    return (this.client.config.getConfig('messageComposer') ??
+      {}) as DeepPartial<MessageComposerConfig>;
+  }
+
+  /**
+   * The configuration fields this composer's channel decides server-side.
+   *
+   * Reading them is the composer's job rather than the shared helper's: only the composer knows that
+   * `location.enabled` is gated on `shared_locations`, and only an existing composer has a channel to
+   * ask. `serverConfig` is re-read on every call, so a restriction that changes mid-session is picked up
+   * rather than captured once.
+   *
+   * Every entry here is a boolean gate, so `mergeServerRestrictions` ANDs it with what was requested and
+   * either side may switch the feature off — a client asking for less than the server grants is always
+   * legitimate. That is the whole point of mirroring these flags into configuration rather than leaving
+   * consumers to read `serverConfig` themselves: a raw server flag answers only the server's half, so a UI
+   * reading it offers features the composer has already disabled and would refuse to compose.
+   *
+   * `commands` is deliberately absent. The server sends a *list* of commands rather than a gate, so there
+   * is nothing to AND and no integrator intent to mirror; consumers read it from the channel's config.
+   *
+   * Takes the requested configuration because one restriction is conditional — see `uploads` below.
+   */
+  private serverRestrictionsFor(
+    requested: MessageComposerConfig,
+  ): ServerRestrictions<MessageComposerConfig> {
+    const channelConfig = this.channel.serverConfig;
+
+    return {
+      /**
+       * `uploads` describes **Stream's upload endpoint**, not the concept of attaching files. Setting
+       * `attachments.customCdn` says the bytes go to storage Stream neither hosts nor charges for, and
+       * the flag says nothing about whether that can work — applying it there would make "turn uploads
+       * on in Stream" a precondition for uploading to your own CDN, which is not this SDK's to require.
+       *
+       * Keyed on `customCdn` rather than on the presence of `doUploadRequest`: a custom upload function
+       * says how files are sent, not where, and one that still posts to Stream must stay subject to
+       * Stream's rules.
+       *
+       * `undefined` rather than `true`: the server is not asserting the opposite either, it simply has
+       * no say. `mergeServerRestrictions` leaves the request standing for a field it states nothing
+       * about, so the integrator's `attachments.enabled` decides alone — the same way an unset
+       * `shared_locations` behaves.
+       */
+      attachments: {
+        enabled: requested.attachments.customCdn ? undefined : channelConfig?.uploads,
+      },
+      linkPreviews: { enabled: channelConfig?.url_enrichment },
+      location: { enabled: channelConfig?.shared_locations },
+      polls: { enabled: channelConfig?.polls },
+    };
+  }
+
+  /**
+   * Ceilings this composer's channel imposes server-side.
+   *
+   * `max_message_length` caps both length limits rather than setting them: a composer asking for something
+   * shorter keeps its own number, and one asking for nothing at all inherits the server's — which is the
+   * default, and the case worth having. Left unlimited, the composer happily accepts text the send endpoint
+   * then rejects, so the limit is enforced late and as an API error instead of in the editor.
+   */
+  private get serverUpperBounds(): ServerUpperBounds<MessageComposerConfig> {
+    const maxMessageLength = this.channel.serverConfig?.max_message_length;
+
+    return {
+      text: { maxLengthOnEdit: maxMessageLength, maxLengthOnSend: maxMessageLength },
+    };
+  }
+
+  /**
+   * Resolves the configuration and publishes it, unless the result is deep-equal to what is already there.
+   *
+   * The guard is needed because `StateStore.next`'s own `===` no-op can never apply here: every resolution
+   * allocates a new object, so without a comparison *every* publish notifies, whether or not any value
+   * moved.
+   *
+   * Worth the walk: `isEqual` over a resolved composer config measures ~1.7µs, against a resolution at
+   * ~3.5µs plus every subscriber's work. The dominant source of no-op publishes is fixed upstream in
+   * `StreamChat._addChannelConfig`, which stops a repeated channel query from waking that channel's
+   * composer at all; this
+   * catches the rest — re-registering a declarative value that has not changed, a `reset` with nothing
+   * registered, an empty `updateConfig({})`.
+   */
+  private publishConfig = () => {
+    this.configController.rederive(this.declarativeConfig);
+  };
+
+  /**
+   * Rebuilds the configuration from its inputs and **discards imperative changes** — every
+   * {@link updateConfig} patch, including those made through a sub-composer setter such as
+   * `textComposer.defaultValue` or `attachmentManager.maxNumberOfFilesPerMessage`.
+   *
+   * Called by the constructor and by `client.config.reset()`, where dropping them is the point: a reset
+   * means "back to what is registered". Anything that merely needs the configuration re-resolved — the
+   * server's answer arriving, a declarative change — must use {@link publishConfig} or
+   * {@link applyServerRestrictions}, which keep them.
+   */
+  initializeConfig = () => {
+    this.configController.initialize(this.declarativeConfig);
+  };
+
+  /**
+   * Re-resolves the configuration against the channel's current server-side restrictions.
+   *
+   * Call this when the server's answer may have changed — its config has just arrived, or it was updated.
+   * Safe in both directions, which is the whole reason it exists: a feature you disabled stays disabled
+   * when the server permits it, and a feature the server *stops* restricting goes back to whatever you
+   * asked for, because the restriction is applied to your request rather than to the previous result.
+   *
+   * Reachable rather than public: `Channel.query` is the only caller, covering a composer that has not
+   * registered subscriptions and so cannot hear the answer change through
+   * {@link subscribeChannelConfigChanged}. Nothing outside this package needs it — registering subscriptions
+   * is the supported way to stay current, and a composer that has done so is already covered. Marked
+   * `@internal` so it is not read as a supported extension point; the name is kept because what it does
+   * is* re-assert the server's restrictions, even though the whole resolution is what performs that.
+   *
+   * @internal
+   */
+  applyServerRestrictions = () => {
+    this.publishConfig();
+  };
 
   refreshId = () => {
     this.state.partialNext({ id: MessageComposer.generateId() });
@@ -598,6 +756,7 @@ export class MessageComposer extends WithSubscriptions {
   public registerSubscriptions = (): UnregisterSubscriptions => {
     if (!this.hasSubscriptions) {
       this.addUnsubscribeFunction(this.subscribeMessageComposerSetupStateChange());
+      this.addUnsubscribeFunction(this.subscribeChannelConfigChanged());
       this.addUnsubscribeFunction(this.subscribeMessageUpdated());
       this.addUnsubscribeFunction(this.subscribeMessageDeleted());
 
@@ -641,24 +800,34 @@ export class MessageComposer extends WithSubscriptions {
     return () => unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
   };
 
-  private subscribeMessageComposerSetupStateChange = () => {
-    let tearDown: (() => void) | null = null;
-    const unsubscribe =
-      this.client.instanceConfigurationService.MessageComposer.subscribeWithSelector(
-        ({ setupFunction: setup }) => ({
-          setup,
-        }),
-        ({ setup }) => {
-          tearDown?.();
-          tearDown = setup?.({ composer: this }) ?? null;
-        },
-      );
+  private subscribeMessageComposerSetupStateChange = () =>
+    applyInstanceConfiguration({
+      args: { composer: this },
+      config: this.client.config,
+      key: 'messageComposer',
+      // Re-resolve rather than merge the slice in. `requestedConfig` reads the declarative slice live, so
+      // there is nothing to copy — and copying it through `updateConfig` would file it under *imperative*
+      // changes, letting a later declarative change override an imperative one. That inverts stages 2 and
+      // 5 of the documented order, which says the more specific, later request wins.
+      applyConfig: () => this.publishConfig(),
+      reinitializeConfig: this.initializeConfig,
+    });
 
-    return () => {
-      tearDown?.();
-      unsubscribe();
-    };
-  };
+  /**
+   * The channel's server-side config (`client.channelServerConfigs[cid]`) is populated by `query`/`watch`,
+   * which for a channel opened via `client.channel(type, id)` happens *after* this composer was
+   * constructed. Left unwatched, the composer would keep the defaults it derived when `serverConfig` was
+   * still undefined — so `location.enabled` would stay `true` for an app that disables `shared_locations`
+   * server-side. Re-deriving when the config lands keeps the server authoritative.
+   *
+   * Selected by cid, matching the store's key space: `shared_locations` and `max_message_length` are both
+   * overridable per channel, so a sibling channel's config is not this composer's answer.
+   */
+  private subscribeChannelConfigChanged = () =>
+    this.client.channelServerConfigsStore.subscribeWithSelector(
+      ({ configs }) => ({ channelConfig: configs[this.channel.cid] }),
+      () => this.applyServerRestrictions(),
+    );
 
   private subscribeMessageDeleted = () =>
     this.client.on('message.deleted', (event) => {

@@ -1,5 +1,7 @@
 import { chatLoggerSystem } from './logger';
+import { deepFreezeConfig } from './configuration/utils/deepFreezeConfig';
 import { StateStore } from './store';
+import { ConfigController } from './configuration/ConfigController';
 import { throttle } from './utils';
 
 import type { StreamChat } from './client';
@@ -18,7 +20,19 @@ const eventCarriesOwnUser = (
 ): event is EventPayload<'health.check'> | EventPayload<'connection.ok'> =>
   Object.hasOwn(event, 'me');
 
-const DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION = 1000;
+export type ThreadManagerConfig = {
+  /**
+   * Minimum gap between thread-list reloads triggered by connection recovery (defaults to 1000ms).
+   *
+   * Read when subscriptions are registered, since the throttle captures the interval in a closure — a
+   * change applies from the next `registerSubscriptions()`, not retroactively.
+   */
+  connectionRecoveryThrottleMs: number;
+};
+
+export const DEFAULT_THREAD_MANAGER_CONFIG: ThreadManagerConfig = deepFreezeConfig({
+  connectionRecoveryThrottleMs: 1000,
+});
 const MAX_QUERY_THREADS_LIMIT = 25;
 export const THREAD_MANAGER_INITIAL_STATE = {
   active: false,
@@ -76,13 +90,54 @@ export class ThreadManager extends WithSubscriptions {
   // used for threads which are not stored in the list
   // private threadCache: Record<string, Thread | undefined> = {};
 
+  /** The shared configuration machinery — see {@link ConfigController}. */
+  private readonly configController: ConfigController<ThreadManagerConfig>;
+  /**
+   * Resolved configuration, as a store — the shape every configurable class exposes
+   * (`configState` / `config` / `updateConfig`).
+   */
+  get configState(): StateStore<ThreadManagerConfig> {
+    return this.configController.state;
+  }
+
   constructor({ client }: { client: StreamChat }) {
     super();
 
+    this.configController = new ConfigController<ThreadManagerConfig>({
+      defaults: DEFAULT_THREAD_MANAGER_CONFIG,
+    });
     this.client = client;
     this.state = new StateStore<ThreadManagerState>(THREAD_MANAGER_INITIAL_STATE);
 
     this.threadsByIdGetterCache = { threads: [], threadsById: {} };
+  }
+
+  /** The current resolved configuration. `Readonly` — change it through {@link updateConfig}. */
+  public get config(): Readonly<ThreadManagerConfig> {
+    return this.configState.getLatestValue();
+  }
+
+  /** Merges a partial configuration into the resolved config and notifies subscribers. */
+  public updateConfig(config: Partial<ThreadManagerConfig>) {
+    this.configController.patch(config);
+  }
+
+  /**
+   * Rebuilds the resolved configuration from package defaults plus the declarative slice.
+   *
+   * The derivation entry point every configurable entity exposes, so the owner routes a slice here and
+   * knows nothing about ThreadManager's defaults or merge semantics. This logic used to live in the owner,
+   * which is how `reset()` became a no-op for the client key (F4) and how a registered
+   * `notifications.sortComparator` became unremovable (G8) — an owner writing another object's
+   * derivation gets that object's rules wrong sooner or later.
+   *
+   * Routed through {@link updateConfig} rather than replacing the store, which is exact here because
+   * every field of `ThreadManagerConfig` is required and present in the defaults, so a patch naming all of
+   * them amounts to a replacement. `NotificationManager` cannot do this — its `sortComparator` is
+   * optional with no default, so a patch can never remove one — which is why it replaces outright.
+   */
+  public initializeConfig(config?: Partial<ThreadManagerConfig>) {
+    this.configController.initialize(config);
   }
 
   public get threadsById() {
@@ -229,7 +284,7 @@ export class ThreadManager extends WithSubscriptions {
         if (!lastConnectionDropAt || !wasActivatedAtLeastOnce) return;
         this.reload({ force: true });
       },
-      DEFAULT_CONNECTION_RECOVERY_THROTTLE_DURATION,
+      this.config.connectionRecoveryThrottleMs,
       { trailing: true },
     ).throttledFn;
 

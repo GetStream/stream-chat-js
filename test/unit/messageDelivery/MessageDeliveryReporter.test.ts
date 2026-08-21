@@ -15,6 +15,7 @@ import {
   Thread,
 } from '../../../src';
 import type { AxiosResponse } from 'axios';
+import { stubServerConfig } from '../test-utils/stubServerConfig';
 
 const channelType = 'messaging';
 const channelId = 'channelId';
@@ -56,7 +57,7 @@ describe('MessageDeliveryReporter', () => {
 
     channel = client.channel(channelType, channelId);
     channel.initialized = true;
-    client.configs[channel.cid] = {
+    client.channelServerConfigs[channel.cid] = {
       created_at: '',
       delivery_events: true,
       read_events: false,
@@ -111,7 +112,7 @@ describe('MessageDeliveryReporter', () => {
       return channel;
     });
     channels.forEach((ch) => {
-      client.configs[ch.cid] = {
+      client.channelServerConfigs[ch.cid] = {
         created_at: '',
         delivery_events: true,
         read_events: false,
@@ -156,13 +157,16 @@ describe('MessageDeliveryReporter', () => {
   });
 
   it('does nothing when delievry events are disabled in channel config', async () => {
-    client.configs[channel.cid] = {
+    // Through the store, not by mutating `channelServerConfigs`: the flag is reconciled into
+    // `channel.config.deliveryEvents` by the channel's own derivation, and the store write is what
+    // triggers it. A direct mutation changes the raw record and nothing else.
+    stubServerConfig(channel, {
       created_at: '',
       delivery_events: false,
       read_events: false,
       reminders: false,
       updated_at: '',
-    };
+    });
     const markDeliveredSpy = vi
       .spyOn(client, 'markDelivered')
       .mockResolvedValue({ ok: true } as any);
@@ -209,7 +213,7 @@ describe('MessageDeliveryReporter', () => {
     thread.channel.initialized = true;
     // Grant delivery permission so we exercise the thread branch of
     // `getNextDeliveryReportCandidate`, not the earlier permission gate.
-    client.configs[thread.channel.cid] = {
+    client.channelServerConfigs[thread.channel.cid] = {
       created_at: '',
       delivery_events: true,
       read_events: false,
@@ -302,7 +306,7 @@ describe('MessageDeliveryReporter', () => {
     const ch2 = client.channel('messaging', 'ch2');
     ch2.initialized = true;
 
-    client.configs[ch1.cid] = {
+    client.channelServerConfigs[ch1.cid] = {
       created_at: '',
       delivery_events: true,
       read_events: false,
@@ -310,7 +314,7 @@ describe('MessageDeliveryReporter', () => {
       updated_at: '',
     };
 
-    client.configs[ch2.cid] = {
+    client.channelServerConfigs[ch2.cid] = {
       created_at: '',
       delivery_events: true,
       read_events: false,
@@ -453,7 +457,7 @@ describe('MessageDeliveryReporter', () => {
       return channel;
     });
     channels.forEach((ch) => {
-      client.configs[ch.cid] = {
+      client.channelServerConfigs[ch.cid] = {
         created_at: '',
         delivery_events: true,
         read_events: false,

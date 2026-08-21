@@ -156,18 +156,15 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
   }
 
   get enabled() {
-    /**
-     * We have to check whether the message will be enriched server side (url_enrichment).
-     * If not, then it does not make sense to do previews in composer.
-     */
-    return (
-      !!this.channel.getConfig()?.url_enrichment &&
-      this.composer.config.linkPreviews.enabled
-    );
+    return this.composer.config.linkPreviews.enabled;
   }
 
   set enabled(enabled: LinkPreviewsManagerConfig['enabled']) {
-    if (enabled === this.enabled) return;
+    // No early return on "same value". The guard that used to be here compared against the *effective*
+    // value, while the write it skipped records the *requested* one — so asking for a value the server
+    // was currently masking recorded nothing, and the earlier request stayed in the patch layer to be
+    // honoured the moment the server relented. `ConfigController.write` already skips a publish when the
+    // resolved value does not move, which is the same guard applied to the right value.
     this.composer.updateConfig({ linkPreviews: { enabled } });
   }
 

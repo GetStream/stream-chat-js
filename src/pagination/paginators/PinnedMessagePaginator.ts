@@ -1,4 +1,8 @@
-import type { PaginatorCursor, PaginatorOptions } from './BasePaginator';
+import type {
+  BasePaginatorConfig,
+  PaginatorCursor,
+  PaginatorOptions,
+} from './BasePaginator';
 import {
   MessageIntervalPaginator,
   type MessageQueryShape,
@@ -25,6 +29,8 @@ export type PinnedMessagePaginatorOptions = {
   itemIndex?: ItemIndexApi<LocalMessage>;
   paginatorOptions?: PaginatorOptions<LocalMessage, MessageQueryShape>;
 };
+
+const PINNED_AT_SORT: SortParamRequest[] = [{ field: 'pinned_at', direction: 1 }];
 
 /**
  * Pinned-message list paginator.
@@ -62,39 +68,75 @@ export class PinnedMessagePaginator extends MessageIntervalPaginator {
       paginatorOptions,
     });
 
+    this.installPinnedMessageBehaviour();
+  }
+
+  /**
+   * Memoized for the reason {@link MessageIntervalPaginator}'s overlay is: the base derivation folds
+   * this in and skips the publish when nothing moved, which needs stable references. Both close over
+   * `this` and over a fixed `pinned_at` sort, so there is nothing to rebuild.
+   */
+  private pinnedBehaviour?: Partial<BasePaginatorConfig<LocalMessage, MessageQueryShape>>;
+
+  private buildPinnedBehaviour(): Partial<
+    BasePaginatorConfig<LocalMessage, MessageQueryShape>
+  > {
+    if (!this.pinnedBehaviour) {
+      this.pinnedBehaviour = {
+        itemOrderComparator: makeComparator<LocalMessage>({
+          sort: PINNED_AT_SORT,
+          resolvePathValue: resolveDotPathValue,
+          tiebreaker: this.pinnedTiebreaker,
+        }),
+
+        // Fetch from the pinned-messages endpoint. The base `query` feeds the resolved query shape
+        // (including `id_around` jumps) here as `options`; we return both cursors and let the base gate
+        // them by direction.
+        doRequest: async (
+          options: MessageQueryShape,
+        ): Promise<{ cursor?: PaginatorCursor; items: LocalMessage[] }> => {
+          const { messages } = await this.channel.getPinnedMessages({
+            ...(options as PinnedMessagePaginationOptions),
+            sort: PINNED_AT_SORT,
+          });
+          const items = messages.map(formatMessage);
+          return { cursor: this.getCursorFromQueryResults({ items }), items };
+        },
+      };
+    }
+    return this.pinnedBehaviour;
+  }
+
+  private pinnedTiebreaker = (l: LocalMessage, r: LocalMessage) => {
+    const leftId = this.getItemId(l);
+    const rightId = this.getItemId(r);
+    return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
+  };
+
+  /**
+   * The ordering and request behaviour that makes this a *pinned*-message paginator, contributed to the
+   * base derivation so a re-derivation cannot drop it and does not need a second write to restore it.
+   * Spread over the interval overlay, so this class's `pinned_at` comparator wins.
+   */
+  protected override getBehaviourOverrides(): Partial<
+    BasePaginatorConfig<LocalMessage, MessageQueryShape>
+  > {
+    return { ...super.getBehaviourOverrides(), ...this.buildPinnedBehaviour() };
+  }
+
+  private installPinnedMessageBehaviour(): void {
     // Order by pinned_at (ascending), overriding the base's created_at comparators. Ascending keeps
     // the head edge (most-recently-pinned) at the end of an interval, matching the base's interval
     // direction getters (which are shared with created_at-asc semantics).
-    const tiebreaker = (l: LocalMessage, r: LocalMessage) => {
-      const leftId = this.getItemId(l);
-      const rightId = this.getItemId(r);
-      return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
-    };
-    const pinnedAtSort: SortParamRequest[] = [{ field: 'pinned_at', direction: 1 }];
+    //
+    // A plain field rather than config, so a re-derivation never touches it — which is why only the
+    // constructor sets it.
     this.sortComparator = makeComparator<LocalMessage>({
-      sort: pinnedAtSort,
+      sort: PINNED_AT_SORT,
       resolvePathValue: resolveDotPathValue,
-      tiebreaker,
+      tiebreaker: this.pinnedTiebreaker,
     });
-    this.config.itemOrderComparator = makeComparator<LocalMessage>({
-      sort: pinnedAtSort,
-      resolvePathValue: resolveDotPathValue,
-      tiebreaker,
-    });
-
-    // Fetch from the pinned-messages endpoint. The base `query` feeds the resolved query shape
-    // (including `id_around` jumps) here as `options`; we return both cursors and let the base gate
-    // them by direction.
-    this.config.doRequest = async (
-      options: MessageQueryShape,
-    ): Promise<{ cursor?: PaginatorCursor; items: LocalMessage[] }> => {
-      const { messages } = await this.channel.getPinnedMessages({
-        ...(options as PinnedMessagePaginationOptions),
-        sort: pinnedAtSort,
-      });
-      const items = messages.map(formatMessage);
-      return { cursor: this.getCursorFromQueryResults({ items }), items };
-    };
+    this.updateConfig(this.buildPinnedBehaviour());
   }
 
   buildMatchFilters = (): PinnedMessagePaginatorFilter => ({

@@ -38,8 +38,7 @@ export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion>
   }
 
   query(searchQuery: string) {
-    const channelConfig = this.channel.getConfig();
-    const commands = channelConfig?.commands || [];
+    const commands = this.channel.config.availableCommands;
     const selectedCommands: Command[] = commands.filter(
       (command): command is Command =>
         !!(

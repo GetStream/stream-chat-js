@@ -236,6 +236,8 @@ describe('AttachmentManager', () => {
       expect(attachmentManager.config).toEqual({
         ...config,
         acceptedFiles: [],
+        customCdn: false,
+        enabled: true,
         trackUploadProgress: true,
       });
     });
@@ -276,6 +278,43 @@ describe('AttachmentManager', () => {
       expect(attachmentManager.isUploadEnabled).toBe(false);
       // hasUploadPermission should also be false
       expect(attachmentManager.hasUploadPermission).toBe(false);
+    });
+
+    it('is true without the upload-file capability when files go to storage outside Stream', () => {
+      // The capability governs Stream's upload endpoint. On storage Stream does not host there is
+      // nothing for it to permit or refuse, so it must not decide.
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup({ config: { customCdn: true } });
+      mockChannel.data = { ...mockChannel.data, own_capabilities: [] };
+
+      expect(attachmentManager.usesStreamStorage).toBe(false);
+      expect(attachmentManager.hasUploadPermission).toBe(false);
+      expect(attachmentManager.isUploadEnabled).toBe(true);
+    });
+
+    it('still requires the capability for a custom request without customCdn', () => {
+      // A custom upload function is not a statement about the destination — see `usesStreamStorage`.
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup({
+        config: { doUploadRequest: () => Promise.resolve({ file: 'https://x/f' }) },
+      });
+      mockChannel.data = { ...mockChannel.data, own_capabilities: [] };
+
+      expect(attachmentManager.usesStreamStorage).toBe(true);
+      expect(attachmentManager.isUploadEnabled).toBe(false);
+    });
+
+    it('is false when attachments are disabled, whatever the destination', () => {
+      // The asymmetry: storage outside Stream escapes the permission, never the integrator's own switch.
+      const {
+        messageComposer: { attachmentManager },
+      } = setup({ config: { customCdn: true, enabled: false } });
+
+      expect(attachmentManager.isUploadEnabled).toBe(false);
     });
 
     it('should return false for isUploadEnabled when no upload slots are available', () => {
@@ -1921,6 +1960,64 @@ describe('AttachmentManager', () => {
   });
 
   describe('uploadFiles', () => {
+    it('refuses a custom request without customCdn when the capability is missing', async () => {
+      // **Behaviour change.** The permission bypass added for custom upload functions keyed on the mere
+      // presence of `doUploadRequest`, which waived Stream's capability for integrators who were still
+      // uploading to Stream. It is now keyed on `customCdn`, so this case is governed again. Nothing covered
+      // the old bypass, so this is also the first test either way round.
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup({
+        config: { doUploadRequest: () => Promise.resolve({ file: 'https://x/f' }) },
+      });
+      mockChannel.data = { ...mockChannel.data, own_capabilities: [] };
+      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
+
+      await attachmentManager.uploadFiles([file]);
+
+      expect(attachmentManager.attachments).toHaveLength(0);
+    });
+
+    it('uploads without the capability once customCdn is declared', async () => {
+      const doUploadRequest = vi.fn(() =>
+        Promise.resolve({ file: 'https://cdn.example/f' }),
+      );
+      const {
+        messageComposer: { attachmentManager },
+        mockChannel,
+      } = setup({ config: { customCdn: true, doUploadRequest } });
+      mockChannel.data = { ...mockChannel.data, own_capabilities: [] };
+      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
+
+      await attachmentManager.uploadFiles([file]);
+
+      expect(doUploadRequest).toHaveBeenCalled();
+      expect(attachmentManager.successfulUploadsCount).toBe(1);
+    });
+
+    it('refuses when attachments are disabled, even for storage outside Stream', async () => {
+      // Declaring `customCdn` waives Stream's `upload-file` permission, because those bytes never reach
+      // Stream. `config.enabled` is the integrator's *own* switch, so it has to survive that waiver —
+      // otherwise turning attachments off would keep working for exactly the people who configured the
+      // SDK most deliberately.
+      const {
+        messageComposer: { attachmentManager },
+      } = setup({
+        config: {
+          customCdn: true,
+          doUploadRequest: () => Promise.resolve({ file: 'https://cdn.example/f' }),
+          enabled: false,
+        },
+      });
+      const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
+
+      await attachmentManager.uploadFiles([file]);
+
+      expect(attachmentManager.successfulUploadsCount).toBe(0);
+      expect(attachmentManager.attachments).toHaveLength(0);
+    });
+
     it('should upload files successfully', async () => {
       const {
         messageComposer: { attachmentManager },

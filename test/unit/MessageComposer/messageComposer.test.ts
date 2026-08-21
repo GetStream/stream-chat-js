@@ -20,6 +20,7 @@ import { DraftResponse, MessageResponse } from '../../../src/types';
 import { MockOfflineDB } from '../offline-support/MockOfflineDB';
 import { getCommandByName } from '../../../src/messageComposer/middleware/textComposer/commandUtils';
 import { generateMsg } from '../test-utils/generateMessage';
+import { stubServerConfig } from '../test-utils/stubServerConfig';
 
 const generateUuidV4Output = 'test-uuid';
 // Mock dependencies
@@ -104,13 +105,16 @@ const setup = ({
 } = {}) => {
   const mockClient = new StreamChat('test-api-key');
   mockClient.user = user;
-  const cid = 'messaging:test-channel-id';
+  const channelType = 'messaging';
+  const channelId = 'test-channel-id';
   if (channelConfig) {
+    // Keyed by cid, not channel type — a channel's `config_overrides` make the effective config
+    // per channel. See `Configs`.
     // @ts-expect-error incomplete channel config object
-    mockClient.configs[cid] = channelConfig;
+    mockClient.channelServerConfigs[`${channelType}:${channelId}`] = channelConfig;
   }
   // Create a proper Channel instance with only the necessary attributes mocked
-  const mockChannel = mockClient.channel('messaging', 'test-channel-id');
+  const mockChannel = mockClient.channel(channelType, channelId);
 
   // Mock the getClient method
   vi.spyOn(mockChannel, 'getClient').mockReturnValue(mockClient);
@@ -193,6 +197,8 @@ describe('MessageComposer', () => {
       expect(messageComposer.config).toStrictEqual({
         attachments: {
           acceptedFiles: DEFAULT_COMPOSER_CONFIG.attachments.acceptedFiles,
+          customCdn: DEFAULT_COMPOSER_CONFIG.attachments.customCdn,
+          enabled: DEFAULT_COMPOSER_CONFIG.attachments.enabled,
           fileUploadFilter: DEFAULT_COMPOSER_CONFIG.attachments.fileUploadFilter,
           maxNumberOfFilesPerMessage:
             customConfig.attachments!.maxNumberOfFilesPerMessage,
@@ -208,7 +214,9 @@ describe('MessageComposer', () => {
         location: {
           enabled: customConfig.location!.enabled,
           getDeviceId: DEFAULT_COMPOSER_CONFIG.location!.getDeviceId,
+          minShareDurationMs: DEFAULT_COMPOSER_CONFIG.location!.minShareDurationMs,
         },
+        polls: DEFAULT_COMPOSER_CONFIG.polls,
         sendMessageRequestFn: customConfig.sendMessageRequestFn,
         text: {
           enabled: DEFAULT_COMPOSER_CONFIG.text.enabled,
@@ -270,6 +278,120 @@ describe('MessageComposer', () => {
         expect(messageComposer.config.location.enabled).toBe(
           expectedResult.location.enabled,
         );
+      });
+    });
+
+    it.each([
+      // `uploads` → `attachments.enabled` and `polls` → `polls.enabled` follow the same rule as
+      // `shared_locations` above: both sides are gates, so the stricter one wins whichever side it is on
+      // and an absent server flag leaves the request standing. Pinned per field rather than trusting the
+      // shared merge, because the bug these mirror was a consumer reading the *server* flag directly and
+      // therefore seeing only half the answer — the half that says yes.
+      { channel: undefined, expected: true, requested: undefined },
+      { channel: undefined, expected: false, requested: false },
+      { channel: false, expected: false, requested: undefined },
+      { channel: false, expected: false, requested: true },
+      { channel: true, expected: true, requested: undefined },
+      { channel: true, expected: false, requested: false },
+      { channel: true, expected: true, requested: true },
+    ])(
+      'ANDs the server flag with the request: requested=$requested channel=$channel -> $expected',
+      ({ channel, expected, requested }) => {
+        const { messageComposer } = setup({
+          channelConfig: { polls: channel, uploads: channel },
+          config: { attachments: { enabled: requested }, polls: { enabled: requested } },
+        });
+
+        expect(messageComposer.config.attachments.enabled).toBe(expected);
+        expect(messageComposer.config.polls.enabled).toBe(expected);
+      },
+    );
+
+    describe('link previews follow the server, not a client double-gate', () => {
+      // The default was `false`, which meant previews stayed off even where the channel type had
+      // `url_enrichment` on — the client half vetoed a feature the server had granted. `true` means "no
+      // opinion", so the server's answer decides, like every other server-gated feature.
+      it.each([
+        { expected: true, server: true },
+        { expected: false, server: false },
+      ])('server=$server -> $expected with no client opinion', ({ expected, server }) => {
+        const { messageComposer } = setup({ channelConfig: { url_enrichment: server } });
+
+        expect(messageComposer.config.linkPreviews.enabled).toBe(expected);
+        expect(messageComposer.linkPreviewsManager.enabled).toBe(expected);
+      });
+
+      it('still lets the integrator switch them off against a permissive server', () => {
+        const { messageComposer } = setup({
+          channelConfig: { url_enrichment: true },
+          config: { linkPreviews: { enabled: false } },
+        });
+
+        expect(messageComposer.config.linkPreviews.enabled).toBe(false);
+      });
+    });
+
+    describe('storage outside Stream', () => {
+      // `uploads` is a statement about Stream's upload endpoint. An integrator storing files elsewhere is
+      // not using that endpoint, so requiring them to switch it on would make a Stream setting a
+      // precondition for storage Stream has nothing to do with.
+      const doUploadRequest = () => Promise.resolve({ file: 'https://cdn.example/f' });
+
+      it('ignores the server uploads flag when customCdn is declared', () => {
+        const { messageComposer } = setup({
+          channelConfig: { uploads: false },
+          config: { attachments: { customCdn: true, doUploadRequest } },
+        });
+
+        expect(messageComposer.config.attachments.enabled).toBe(true);
+      });
+
+      it('still applies the server uploads flag to a custom request without customCdn', () => {
+        // The distinction the `customCdn` field exists for. A custom upload function says *how* files are
+        // sent, not *where* — wrapping the request or proxying it through your own backend still ends at
+        // Stream, and inferring otherwise waived Stream's rules for those integrators.
+        const { messageComposer } = setup({
+          channelConfig: { uploads: false },
+          config: { attachments: { doUploadRequest } },
+        });
+
+        expect(messageComposer.config.attachments.enabled).toBe(false);
+      });
+
+      it('still lets the integrator turn attachments off themselves', () => {
+        // The escape hatch removes the *server's* say, not the client's — otherwise declaring a custom
+        // CDN would quietly make the feature unswitchable.
+        const { messageComposer } = setup({
+          channelConfig: { uploads: false },
+          config: { attachments: { customCdn: true, enabled: false } },
+        });
+
+        expect(messageComposer.config.attachments.enabled).toBe(false);
+      });
+
+      it('picks up customCdn declared after construction', () => {
+        // The condition is evaluated on every resolution rather than captured once.
+        const { messageComposer } = setup({ channelConfig: { uploads: false } });
+        expect(messageComposer.config.attachments.enabled).toBe(false);
+
+        messageComposer.updateConfig({ attachments: { customCdn: true } });
+
+        expect(messageComposer.config.attachments.enabled).toBe(true);
+      });
+
+      it('can be switched back to Stream storage', () => {
+        // A boolean with a `false` default is reversible where an optional URL was not: the composer
+        // retains its patches and the merge skips `undefined`, so a field whose "off" value *is*
+        // `undefined` can never be turned off again. `false` is a real value, so this works.
+        const { messageComposer } = setup({
+          channelConfig: { uploads: false },
+          config: { attachments: { customCdn: true } },
+        });
+        expect(messageComposer.config.attachments.enabled).toBe(true);
+
+        messageComposer.updateConfig({ attachments: { customCdn: false } });
+
+        expect(messageComposer.config.attachments.enabled).toBe(false);
       });
     });
 
@@ -616,7 +738,7 @@ describe('MessageComposer', () => {
         },
       });
 
-      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      stubServerConfig(messageComposer.channel, {
         commands: [{ name: 'ban', description: 'Ban a user' }],
       });
 
@@ -648,7 +770,7 @@ describe('MessageComposer', () => {
     it('should apply the default ban command validator', () => {
       const { messageComposer } = setup();
 
-      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      stubServerConfig(messageComposer.channel, {
         commands: [{ name: 'ban', description: 'Ban a user' }],
       });
 
@@ -672,7 +794,7 @@ describe('MessageComposer', () => {
     it('should require mentions for default moderation target commands', () => {
       const { messageComposer } = setup();
 
-      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      stubServerConfig(messageComposer.channel, {
         commands: [
           { name: 'mute', description: 'Mute a user' },
           { name: 'unmute', description: 'Unmute a user' },
@@ -935,7 +1057,7 @@ describe('MessageComposer', () => {
         },
       });
 
-      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      stubServerConfig(messageComposer.channel, {
         commands: [{ name: 'custom', description: 'Custom command' }],
       });
       const customCommand = { description: 'Custom command', name: 'custom' };
@@ -964,7 +1086,7 @@ describe('MessageComposer', () => {
         },
       });
 
-      vi.spyOn(messageComposer.channel, 'getConfig').mockReturnValue({
+      stubServerConfig(messageComposer.channel, {
         commands: [{ name: 'ban', description: 'Ban a user' }],
       });
       messageComposer.textComposer.state.partialNext({
@@ -2634,9 +2756,7 @@ describe('MessageComposer', () => {
         const { mockChannel, messageComposer } = setup({
           config: { linkPreviews: { enabled: true } },
         });
-        mockChannel.getConfig = vi
-          .fn()
-          .mockImplementation(() => ({ url_enrichment: true }));
+        stubServerConfig(mockChannel, { url_enrichment: true });
         const spy = vi.spyOn(messageComposer.linkPreviewsManager, 'findAndEnrichUrls');
 
         messageComposer.registerSubscriptions();

@@ -1,5 +1,6 @@
 import type {
   AnyInterval,
+  BasePaginatorConfig,
   CursorDerivator,
   CursorDeriveResult,
   Interval,
@@ -263,40 +264,50 @@ export class MessageIntervalPaginator extends BasePaginator<
     return 'desc';
   }
 
-  constructor({
-    channel,
-    id,
-    itemIndex,
-    parentMessageId,
-    requestSort,
-    sort,
-    itemOrder,
-    paginatorOptions,
-  }: MessagePaginatorOptions) {
+  constructor(
+    {
+      channel,
+      id,
+      itemIndex,
+      parentMessageId,
+      requestSort,
+      sort,
+      itemOrder,
+      paginatorOptions,
+    }: MessagePaginatorOptions,
+    builtInDefaults: Partial<BasePaginatorConfig<LocalMessage, MessageQueryShape>> = {},
+  ) {
     const resolvedRequestSort = requestSort ?? sort ?? DEFAULT_BACKEND_SORT;
     const resolvedItemOrder = itemOrder ?? resolvedRequestSort;
-    super({
-      hasPaginationQueryShapeChanged,
-      initialCursor: ZERO_PAGE_CURSOR,
-      itemIndex,
-      ...paginatorOptions,
-      // Back every message-interval paginator (channel main list, thread reply list, pinned list)
-      // with the client-global message store, so a message held in more than one of them has a
-      // single canonical copy and updates (reactions/edits) fan out to all holders — no copy-to-copy
-      // sync. When the store is unavailable (e.g. a detached paginator in a test) the index falls
-      // back to a private store and behaves exactly like a plain per-instance index. Overridable per
-      // instance via `paginatorOptions.createItemIndex` or an explicit `itemIndex`.
-      createItemIndex:
-        paginatorOptions?.createItemIndex ??
-        ((owner) =>
-          new StoreBackedItemIndex<LocalMessage>({
-            store: channel.getClient?.().messageStore,
-            owner: owner as MessageIntervalPaginator,
-            getEntityId: owner.getItemId.bind(owner),
-          })),
-      pageSize: paginatorOptions?.pageSize ?? DEFAULT_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
-    });
-    this.config.deriveCursor = makeDeriveCursor(this);
+    super(
+      {
+        itemIndex,
+        ...paginatorOptions,
+        // Back every message-interval paginator (channel main list, thread reply list, pinned list)
+        // with the client-global message store, so a message held in more than one of them has a
+        // single canonical copy and updates (reactions/edits) fan out to all holders — no copy-to-copy
+        // sync. When the store is unavailable (e.g. a detached paginator in a test) the index falls
+        // back to a private store and behaves exactly like a plain per-instance index. Overridable per
+        // instance via `paginatorOptions.createItemIndex` or an explicit `itemIndex`.
+        createItemIndex:
+          paginatorOptions?.createItemIndex ??
+          ((owner) =>
+            new StoreBackedItemIndex<LocalMessage>({
+              store: channel.getClient?.().messageStore,
+              owner: owner as MessageIntervalPaginator,
+              getEntityId: owner.getItemId.bind(owner),
+            })),
+      },
+      // SDK-supplied, so a declarative registration overrides them. `hasPaginationQueryShapeChanged`
+      // and the zero cursor were previously spread into the caller's options, where they outranked
+      // every `client.config.set({ messagePaginator: … })`.
+      {
+        hasPaginationQueryShapeChanged,
+        initialCursor: ZERO_PAGE_CURSOR,
+        pageSize: DEFAULT_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
+        ...builtInDefaults,
+      },
+    );
     this.channel = channel;
     this.parentMessageId = parentMessageId;
     this._id = id ?? `message-paginator-${generateUUIDv4()}`;
@@ -314,16 +325,63 @@ export class MessageIntervalPaginator extends BasePaginator<
         return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
       },
     });
-    this.config.itemOrderComparator = makeComparator<LocalMessage>({
-      sort: this._itemOrder,
-      resolvePathValue: resolveDotPathValue,
-      tiebreaker: (l, r) => {
-        const leftId = this.getItemId(l);
-        const rightId = this.getItemId(r);
-        return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
-      },
-    });
+    this.installIntervalBehaviour();
     this.setFilterResolvers([dataFieldFilterResolver]);
+  }
+
+  /**
+   * Memoized so every derivation sees the *same* two functions. `initializeConfig` folds this into the
+   * config it publishes and skips the publish when nothing moved — which only works if these references
+   * are stable.
+   *
+   * Safe to build once: both close over `this` and read `_itemOrder`, which is assigned in the
+   * constructor and has no setter.
+   */
+  private intervalBehaviour?: Partial<
+    BasePaginatorConfig<LocalMessage, MessageQueryShape>
+  >;
+
+  private buildIntervalBehaviour(): Partial<
+    BasePaginatorConfig<LocalMessage, MessageQueryShape>
+  > {
+    if (!this.intervalBehaviour) {
+      this.intervalBehaviour = {
+        deriveCursor: makeDeriveCursor(this),
+        itemOrderComparator: makeComparator<LocalMessage>({
+          sort: this._itemOrder,
+          resolvePathValue: resolveDotPathValue,
+          tiebreaker: (l, r) => {
+            const leftId = this.getItemId(l);
+            const rightId = this.getItemId(r);
+            return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
+          },
+        }),
+      };
+    }
+    return this.intervalBehaviour;
+  }
+
+  /**
+   * Cursor derivation and in-memory item ordering, which this class installs on `config` rather than
+   * passing as constructor options.
+   *
+   * Contributed to the base derivation rather than written after it — see
+   * {@link BasePaginator.getBehaviourOverrides}. That is what keeps one re-derivation to one publish,
+   * and stops the intermediate publish that had these two stripped.
+   */
+  protected override getBehaviourOverrides(): Partial<
+    BasePaginatorConfig<LocalMessage, MessageQueryShape>
+  > {
+    return this.buildIntervalBehaviour();
+  }
+
+  /**
+   * The constructor's route to the same overlay. Deliberately calls the private builder rather than the
+   * overridable hook: this runs inside the constructor, and a subclass override would execute before its
+   * own fields were initialized.
+   */
+  protected installIntervalBehaviour(): void {
+    this.updateConfig(this.buildIntervalBehaviour());
   }
 
   get id() {

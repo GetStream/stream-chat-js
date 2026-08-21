@@ -1,4 +1,5 @@
 import type {
+  BasePaginatorConfig,
   ExecuteQueryReturnValue,
   Interval,
   PostQueryReconcileParams,
@@ -125,23 +126,25 @@ export class MessagePaginator extends MessageIntervalPaginator {
    */
   readonly aggregateState: StateStore<MessagePaginatorAggregateState>;
 
-  constructor({
-    unreadReferencePolicy = 'snapshot',
-    ...options
-  }: MessagePaginatorOptions) {
-    super({
-      ...options,
-      paginatorOptions: {
+  constructor(
+    { unreadReferencePolicy = 'snapshot', ...options }: MessagePaginatorOptions,
+    builtInDefaults: Partial<BasePaginatorConfig<LocalMessage, MessageQueryShape>> = {},
+  ) {
+    super(
+      // NB: the store-backed item index is provided by MessageIntervalPaginator (the common
+      // ancestor), so both the main list and the pinned list share the client-global message store.
+      options,
+      {
         // Throttle message-list `state` publishes to at most once per 500ms (leading + trailing), so a
         // burst of events coalesces into ~2 renders/sec instead of one per event. Optimistic
         // (local-user) writes bypass the throttle via EntityStore.flushSubscribers → flushState.
-        // Overridable per-instance via `paginatorOptions.stateThrottleMs`.
+        // A default rather than a construction argument, so `paginatorOptions.stateThrottleMs` and a
+        // declarative registration both override it — and so a re-derivation restores it without the
+        // subclass having to re-inject it, which is what the old `initializeConfig` override existed for.
         stateThrottleMs: 500,
-        ...options.paginatorOptions,
+        ...builtInDefaults,
       },
-      // NB: the store-backed item index is provided by MessageIntervalPaginator (the common
-      // ancestor), so both the main list and the pinned list share the client-global message store.
-    });
+    );
     this.unreadReferencePolicy = unreadReferencePolicy;
     this.unreadStateSnapshot = new StateStore<UnreadSnapshotState>({
       lastReadAt: null,
@@ -199,7 +202,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
     const isThreadOnlyReply = !!message.parent_id && !message.show_in_channel;
     if (isThreadOnlyReply) return false;
     const skipSystemMessage =
-      !!this.channel.getConfig?.()?.skip_last_msg_update_for_system_msgs &&
+      !!this.channel.serverConfig?.skip_last_msg_update_for_system_msgs &&
       message.type === 'system';
     return !skipSystemMessage;
   }

@@ -2,11 +2,12 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { CommandSearchSource } from '../../../../../src/messageComposer/middleware/textComposer/commands';
 import { Channel } from '../../../../../src/channel';
 import type { ChannelConfigWithInfo } from '../../../../../src/types';
+import { stubServerConfig } from '../../../test-utils/stubServerConfig';
 
 describe('CommandSearchSource', () => {
   let channel: Channel;
   let mockCommands: any[];
-  let getConfigMock: ReturnType<typeof vi.fn>;
+  let setServerConfig: (next: Record<string, unknown> | undefined) => void;
 
   beforeEach(() => {
     mockCommands = [
@@ -16,10 +17,18 @@ describe('CommandSearchSource', () => {
       { name: 'unmute', description: 'Unmute a user' },
     ];
 
-    getConfigMock = vi.fn().mockReturnValue({ commands: mockCommands });
-    channel = {
-      getConfig: getConfigMock,
-    } as any;
+    // A bare object with no client behind it, so there is no derivation to drive — the resolved shape
+    // is set directly. `availableCommands` is what the source reads; the server's `commands` list is
+    // mapped onto it by `Channel`'s own authority step, which does not exist here.
+    let availableCommands = mockCommands;
+    channel = { config: {} } as any;
+    Object.defineProperty(channel.config, 'availableCommands', {
+      configurable: true,
+      get: () => availableCommands,
+    });
+    setServerConfig = ({ commands }: { commands: any[] }) => {
+      availableCommands = commands;
+    };
   });
 
   it('should initialize with correct type', () => {
@@ -62,7 +71,7 @@ describe('CommandSearchSource', () => {
     expect(result.items).toHaveLength(1);
     expect(result.items[0].name).toBe('giphy');
 
-    getConfigMock.mockReturnValueOnce({
+    setServerConfig({
       commands: mockCommands.map((command) => ({
         ...command,
         name: command.name.toUpperCase(),
@@ -108,7 +117,7 @@ describe('CommandSearchSource', () => {
         { name: 'alpha', description: '' },
         { name: 'gamma', description: '' },
       ];
-      getConfigMock.mockReturnValue({ commands: mockCommands });
+      setServerConfig({ commands: mockCommands });
       const source = new CommandSearchSource(channel);
       source.activate();
 
@@ -137,7 +146,7 @@ describe('CommandSearchSource', () => {
       { name: 'mute', description: 'Mute a user', set: 'fun_set' },
       { name: 'moderation_set', description: 'Moderate a user' },
     ];
-    getConfigMock.mockReturnValue({ commands: mockCommands });
+    setServerConfig({ commands: mockCommands });
     const source = new CommandSearchSource(channel);
 
     const result = await source.query('');

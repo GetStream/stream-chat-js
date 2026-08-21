@@ -13,6 +13,7 @@ import { TextComposerConfig } from '../../../src/messageComposer/configuration';
 import { LinkPreviewStatus } from '../../../src/messageComposer/linkPreviewsManager';
 import type { LocalAttachment } from '../../../src/messageComposer/types';
 import { getClientWithUser } from '../test-utils/getClient';
+import { stubServerConfig } from '../test-utils/stubServerConfig';
 
 const textComposerMiddlewareExecuteOutput = {
   state: {
@@ -555,7 +556,7 @@ describe('TextComposer', () => {
         messageComposer: { textComposer },
         mockChannel,
       } = setup();
-      mockChannel.getConfig = vi.fn().mockReturnValue({
+      stubServerConfig(mockChannel, {
         commands: [{ name: 'ban', description: 'Ban a user' }],
       });
       messageComposer.attachmentManager.state.partialNext({ attachments: [attachment] });
@@ -616,7 +617,7 @@ describe('TextComposer', () => {
         messageComposer: { textComposer },
         mockChannel,
       } = setup();
-      mockChannel.getConfig = vi.fn().mockReturnValue({
+      stubServerConfig(mockChannel, {
         commands: [{ name: 'ban', description: 'Ban a user' }],
       });
       messageComposer.attachmentManager.state.partialNext({ attachments: [attachment] });
@@ -666,7 +667,7 @@ describe('TextComposer', () => {
         messageComposer: { textComposer },
         mockChannel,
       } = setup();
-      mockChannel.getConfig = vi.fn().mockReturnValue({
+      stubServerConfig(mockChannel, {
         commands: [{ name: 'ban', description: 'Ban a user' }],
       });
       textComposer.setText('Hello world');

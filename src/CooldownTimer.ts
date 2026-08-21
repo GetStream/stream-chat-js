@@ -64,26 +64,39 @@ export class CooldownTimer extends WithSubscriptions {
     return this.state.getLatestValue().ownLatestMessageDate;
   }
 
+  /**
+   * Subscribes the timer to the two stores it derives from — `channel.state` for `cooldown` and
+   * `ownCapabilities`, the message paginator's store for the current user's latest message.
+   *
+   * `Channel` calls this right after constructing the timer and unregisters it in `_disconnect`, the same
+   * way it drives `messageReceiptsTracker`. That replaces four imperative `cooldownTimer.refresh()` calls
+   * in `Channel`, and the three WS-event handlers that used to live here — which duplicated those calls
+   * and never ran, because nothing registered them. Between them the two arrangements still missed every
+   * `query()`, and any `updatePartial` that changed `cooldown` without changing capabilities.
+   */
   public registerSubscriptions = () => {
     this.incrementRefCount();
     if (this.hasSubscriptions) return;
 
     this.addUnsubscribeFunction(
-      this.channel.on('message.new', (event) => {
-        const isOwnMessage =
-          event.message?.user?.id && event.message.user.id === this.getOwnUserId();
-        if (!isOwnMessage) return;
-        this.setOwnLatestMessageDate(toDateOrUndefined(event.message?.created_at));
-      }).unsubscribe,
+      this.channel.state.subscribeWithSelector(
+        ({ data, ownCapabilities }) => ({ cooldown: data?.cooldown, ownCapabilities }),
+        () => this.refresh(),
+      ),
     );
 
+    // `ownLatestMessageDate` comes from the paginator's head interval. Selected on `items` rather than on
+    // the derived date: any ingest can change which message is the own-latest, and `refresh` already
+    // declines to publish unless one of its inputs actually moved.
     this.addUnsubscribeFunction(
-      this.channel.on('channel.updated', (event) => {
-        const cooldownChanged = event.channel?.cooldown !== this.cooldownConfigSeconds;
-        if (!cooldownChanged) return;
-        this.refresh();
-      }).unsubscribe,
+      this.channel.messagePaginator.state.subscribeWithSelector(
+        ({ items }) => ({ items }),
+        () => this.refresh(),
+      ),
     );
+
+    // The countdown has no reason to keep running once the timer stops deriving.
+    this.addUnsubscribeFunction(() => this.clearTimeout());
   };
 
   public setCooldownRemaining = (cooldownRemaining: number) => {

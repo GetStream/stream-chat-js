@@ -10,7 +10,10 @@
  */
 
 import { withCancellation } from './utils/concurrency';
+import { deepFreezeConfig } from './configuration/utils/deepFreezeConfig';
 import { StateStore } from './store';
+import { ConfigController } from './configuration/ConfigController';
+import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import type { StreamChat } from './client';
 import type { Unsubscribe } from './store';
@@ -60,12 +63,41 @@ export type LiveLocationManagerConstructorParameters = {
 // Hard-coded minimal throttle timeout
 export const UPDATE_LIVE_LOCATION_REQUEST_MIN_THROTTLE_TIMEOUT = 3000;
 
+export type LiveLocationManagerConfig = {
+  /**
+   * Shortest gap between live-location update requests (defaults to 3000ms).
+   *
+   * A failsafe against rate limiting, not a protocol limit: integrators already control the update
+   * cadence through a custom `watchLocation`, and this floor stops a chatty one from flooding the API.
+   * Raising it is always safe; lowering it risks 429s, so only do so against a known quota.
+   */
+  minUpdateThrottleMs: number;
+};
+
+export const DEFAULT_LIVE_LOCATION_MANAGER_CONFIG: LiveLocationManagerConfig =
+  deepFreezeConfig({
+    minUpdateThrottleMs: UPDATE_LIVE_LOCATION_REQUEST_MIN_THROTTLE_TIMEOUT,
+  });
+
 export class LiveLocationManager extends WithSubscriptions {
   public state: StateStore<LiveLocationManagerState>;
   private client: StreamChat;
   private getDeviceId: DeviceIdGenerator;
   private _deviceId: string;
   private watchLocation: WatchLocation;
+
+  /** The shared configuration machinery — see {@link ConfigController}. */
+  private readonly configController: ConfigController<LiveLocationManagerConfig>;
+  /** Teardown for this manager's configuration subscription, released by {@link dispose}. */
+  private unsubscribeConfiguration?: Unsubscribe;
+
+  /**
+   * Resolved configuration, as a store — the shape every configurable class exposes
+   * (`configState` / `config` / `updateConfig`).
+   */
+  get configState(): StateStore<LiveLocationManagerConfig> {
+    return this.configController.state;
+  }
 
   static symbol = Symbol(LiveLocationManager.name);
 
@@ -88,6 +120,51 @@ export class LiveLocationManager extends WithSubscriptions {
     this._deviceId = getDeviceId();
     this.getDeviceId = getDeviceId;
     this.watchLocation = watchLocation;
+    this.configController = new ConfigController<LiveLocationManagerConfig>({
+      defaults: DEFAULT_LIVE_LOCATION_MANAGER_CONFIG,
+    });
+
+    // Last statement of the constructor, so a setup function sees a whole object. Registered here rather
+    // than only in `registerSubscriptions` — this manager is constructed by whoever needs it and `init()`
+    // is async, so gating configuration on registration would leave a window where a registered value did
+    // not apply.
+    this.subscribeConfiguration();
+  }
+
+  /**
+   * Subscribes this instance to the `'liveLocationManager'` configuration key, if it is not subscribed
+   * already. Idempotent, which is what lets both the constructor and {@link registerSubscriptions} call
+   * it: the first gives a value registered before `init()` resolves somewhere to land, the second brings
+   * a manager back after {@link dispose}.
+   */
+  private subscribeConfiguration = () => {
+    if (this.unsubscribeConfiguration) return;
+
+    this.unsubscribeConfiguration = applyInstanceConfiguration({
+      args: { liveLocationManager: this },
+      config: this.client.config,
+      key: 'liveLocationManager',
+      applyConfig: (config) => this.initializeConfig(config),
+      reinitializeConfig: () =>
+        this.initializeConfig(
+          this.client.config.getConfig('liveLocationManager') ?? undefined,
+        ),
+    });
+  };
+
+  /** The current resolved configuration. `Readonly` — change it through {@link updateConfig}. */
+  get config(): Readonly<LiveLocationManagerConfig> {
+    return this.configState.getLatestValue();
+  }
+
+  /** Merges a partial configuration into the resolved config and notifies subscribers. */
+  updateConfig(config: Partial<LiveLocationManagerConfig>) {
+    this.configController.patch(config);
+  }
+
+  /** Rebuilds the resolved configuration from package defaults plus the declarative slice. */
+  initializeConfig(config?: Partial<LiveLocationManagerConfig>) {
+    this.configController.initialize(config);
   }
 
   public async init() {
@@ -97,13 +174,45 @@ export class LiveLocationManager extends WithSubscriptions {
 
   public registerSubscriptions = () => {
     this.incrementRefCount();
+    // Restores configuration after a {@link dispose}, so a manager that is torn down and then used again
+    // is configurable again — React StrictMode's mount/cleanup/mount runs exactly that sequence against
+    // one instance. A no-op in the ordinary case: the constructor already subscribed.
+    this.subscribeConfiguration();
+
     if (this.hasSubscriptions) return;
 
     this.addUnsubscribeFunction(this.subscribeLiveLocationSharingUpdates());
     this.addUnsubscribeFunction(this.subscribeTargetMessagesChange());
   };
 
+  /**
+   * Ref-counted, and deliberately does **not** touch the configuration subscription: several callers can
+   * share one manager, so an early caller leaving must not take anything the remaining ones still need.
+   * Use {@link dispose} for the instance-level teardown.
+   */
   public unregisterSubscriptions = () => super.unregisterSubscriptions();
+
+  /**
+   * Releases the configuration subscription, running the `'liveLocationManager'` setup function's
+   * teardown. Call it when you are finished with the manager.
+   *
+   * Separate from {@link unregisterSubscriptions} because the two have different lifetimes. Event
+   * subscriptions are shared and ref-counted; configuration is registered once, by the constructor, for
+   * the life of the instance. Releasing it from the ref-counted call meant the first of two callers to
+   * leave silently stopped a still-live manager from tracking `client.config` — permanently, since
+   * nothing but the constructor registers it. Mirrors `SearchController.dispose` and the configuration
+   * half of `Channel._disconnect`.
+   *
+   * Until this is called, the client's configuration registry holds a handle to this manager, so a
+   * long-lived client and many short-lived managers need it to be called.
+   *
+   * Recoverable: a later {@link registerSubscriptions} re-subscribes, so disposing a manager that is
+   * then reused costs a re-run of the setup function rather than silence.
+   */
+  public dispose = () => {
+    this.unsubscribeConfiguration?.();
+    this.unsubscribeConfiguration = undefined;
+  };
 
   get messages() {
     return this.state.getLatestValue().messages;
@@ -175,8 +284,7 @@ export class LiveLocationManager extends WithSubscriptions {
       // but the minimal timeout still has to be set as a failsafe (to prevent rate-limitting)
       if (Date.now() < nextAllowedUpdateCallTimestamp) return;
 
-      nextAllowedUpdateCallTimestamp =
-        Date.now() + UPDATE_LIVE_LOCATION_REQUEST_MIN_THROTTLE_TIMEOUT;
+      nextAllowedUpdateCallTimestamp = Date.now() + this.config.minUpdateThrottleMs;
 
       withCancellation(LiveLocationManager.symbol, async () => {
         const promises: Promise<SharedLocationResponseData>[] = [];

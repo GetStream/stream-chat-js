@@ -189,7 +189,7 @@ const executables = [
 	{
 		f: rg.getConfig,
 		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel['getConfig']>>",
+		type: "Unpacked<Channel['serverConfig']>",
 	},
 	{
 		f: rg.getDevices,
