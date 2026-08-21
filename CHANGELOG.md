@@ -1,3 +1,68 @@
+## [10.0.0-rc.6](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.5...v10.0.0-rc.6) (2026-08-21)
+
+### ⚠ BREAKING CHANGES
+
+* remove hand-written types and API wrappers (#1836)
+* **i18n:** `Streami18n.init()` now rejects when i18next fails to
+initialize, where it previously logged and resolved. Callers that ignore
+the returned promise will see an unhandled rejection. The instance
+remains usable in its degraded English form either way.
+`Streami18n.brand` is removed; nothing in either UI SDK read it, and a
+custom integration that recognized instances through it should compare
+against its own marker or accept the instance it was handed.
+
+### Bug Fixes
+
+* **i18n:** reject from init() and drop the Streami18n brand static ([#1839](https://github.com/GetStream/stream-chat-js/issues/1839)) ([67bb1c7](https://github.com/GetStream/stream-chat-js/commit/67bb1c74b3a8054109220f6c050746f60da983a0))
+
+### Features
+
+* remove hand-written types and API wrappers ([#1836](https://github.com/GetStream/stream-chat-js/issues/1836)) ([dc49a78](https://github.com/GetStream/stream-chat-js/commit/dc49a78d9cff9ddec4bcc97a178c230fba97cdad))
+
+## [10.0.0-rc.5](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.4...v10.0.0-rc.5) (2026-08-20)
+
+### ⚠ BREAKING CHANGES
+
+* **i18n:** share the translation runtime as stream-chat/i18n (#1830)
+
+### Features
+
+* **i18n:** share the translation runtime as stream-chat/i18n ([#1830](https://github.com/GetStream/stream-chat-js/issues/1830)) ([40cf062](https://github.com/GetStream/stream-chat-js/commit/40cf0629cbe033a8d8c9615fd886cb7d20dd29bc)), closes [GetStream/stream-chat-react#3271](https://github.com/GetStream/stream-chat-react/issues/3271) [GetStream/stream-chat-react-native#3777](https://github.com/GetStream/stream-chat-react-native/issues/3777)
+
+## [10.0.0-rc.4](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.3...v10.0.0-rc.4) (2026-08-19)
+
+### Features
+
+* move to WS API v2 ([#1833](https://github.com/GetStream/stream-chat-js/issues/1833)) ([d530f43](https://github.com/GetStream/stream-chat-js/commit/d530f438954213d3dcb2a00bc9c6c81e0f7bb3e8))
+* remove handwritten upload methods; align method names ([#1832](https://github.com/GetStream/stream-chat-js/issues/1832)) ([1a6bdb8](https://github.com/GetStream/stream-chat-js/commit/1a6bdb875aa20d657a5c5c71dc6f0b822d28f6c8))
+
+## [10.0.0-rc.3](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.2...v10.0.0-rc.3) (2026-08-19)
+
+### Bug Fixes
+
+* drop server-side remnants, add WS interface ([#1819](https://github.com/GetStream/stream-chat-js/issues/1819)) ([39c0c53](https://github.com/GetStream/stream-chat-js/commit/39c0c53ac7ab48a1b0956b46fc674615a9e4f9b5))
+* handle offline db syncing errors more gracefully ([#1818](https://github.com/GetStream/stream-chat-js/issues/1818)) ([5b77c05](https://github.com/GetStream/stream-chat-js/commit/5b77c0587b8cd84baa8eb34e29ccad5ea6db408e))
+* post-merge/OAPI-reconciliation adjustments ([#1812](https://github.com/GetStream/stream-chat-js/issues/1812)) ([5073c67](https://github.com/GetStream/stream-chat-js/commit/5073c676fb8c53bb2cb0fdd54e51f99beb7e6b95))
+* regenerate api layer (fix generated filter types) ([#1827](https://github.com/GetStream/stream-chat-js/issues/1827)) ([e540d88](https://github.com/GetStream/stream-chat-js/commit/e540d883c764dcecd7e767702a85bd23dc5b69d2))
+* signal api ([#1828](https://github.com/GetStream/stream-chat-js/issues/1828)) ([9032b1a](https://github.com/GetStream/stream-chat-js/commit/9032b1a6d1408f96053b6cd0bcff92bdea0828b3))
+* **types:** add missing API response fields reported by scheduled type tests ([#1817](https://github.com/GetStream/stream-chat-js/issues/1817)) ([e957c9d](https://github.com/GetStream/stream-chat-js/commit/e957c9da5dd0206456a4d1f9d5d9a535a6dc17e7))
+
+### Features
+
+* destructive reconciliation ([#1822](https://github.com/GetStream/stream-chat-js/issues/1822)) ([3c46fbf](https://github.com/GetStream/stream-chat-js/commit/3c46fbfc3a840bfd73ccad9dd2f22a200d015d10))
+* port search improvements ([#1829](https://github.com/GetStream/stream-chat-js/issues/1829)) ([7276299](https://github.com/GetStream/stream-chat-js/commit/7276299b5aad632ed44317aa78a38a91f81b9e5f)), closes [#1823](https://github.com/GetStream/stream-chat-js/issues/1823)
+* regenerate from latest open api spec ([#1821](https://github.com/GetStream/stream-chat-js/issues/1821)) ([22344ca](https://github.com/GetStream/stream-chat-js/commit/22344ca2304258e31ac805fe7651ce7db91a8294))
+* regenerate open api spec + improve tooling ([#1824](https://github.com/GetStream/stream-chat-js/issues/1824)) ([a3198e7](https://github.com/GetStream/stream-chat-js/commit/a3198e7059b20d666ac6bc56900762e0d41a6f68))
+* **search:** adapt debounce to query length and cancel superseded requests ([#1823](https://github.com/GetStream/stream-chat-js/issues/1823)) ([1ca8bf7](https://github.com/GetStream/stream-chat-js/commit/1ca8bf75f046ac96c94867c12864809401b0715f))
+
+### Chores
+
+* **deps:** bump axios, form-data and dev dependencies ([#1825](https://github.com/GetStream/stream-chat-js/issues/1825)) ([940f2bc](https://github.com/GetStream/stream-chat-js/commit/940f2bc77b41160a775fda2e281c187e33c49b09))
+
+### Performance Improvements
+
+* introduce event sync limit for offline db ([#1826](https://github.com/GetStream/stream-chat-js/issues/1826)) ([46cb7df](https://github.com/GetStream/stream-chat-js/commit/46cb7dff822ca4b6324bb6c4aa1d213708c35477))
+
 ## [10.0.0-rc.2](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.1...v10.0.0-rc.2) (2026-08-11)
 
 ### ⚠ BREAKING CHANGES

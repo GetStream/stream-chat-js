@@ -17,6 +17,7 @@ export class TokenManager {
   token?: string;
   tokenProvider?: TokenOrProvider;
   user?: TokenManagerMinimalUser;
+  private _isAnonymous = false;
   /**
    * Initializes the token manager.
    */
@@ -24,6 +25,10 @@ export class TokenManager {
     this.loadTokenPromise = null;
 
     this.type = 'static';
+  }
+
+  get isAnonymous() {
+    return this._isAnonymous;
   }
 
   /**
@@ -39,6 +44,7 @@ export class TokenManager {
   ) => {
     this.validateToken(tokenOrProvider, user);
     this.user = user;
+    this._isAnonymous = !!user.anon;
 
     if (isFunction(tokenOrProvider)) {
       this.tokenProvider = tokenOrProvider;
@@ -58,6 +64,7 @@ export class TokenManager {
    * Useful for client disconnection or switching user.
    */
   reset = () => {
+    this._isAnonymous = false;
     this.token = undefined;
     this.tokenProvider = undefined;
     this.type = 'static';
@@ -131,8 +138,8 @@ export class TokenManager {
       return this.token;
     }
 
-    if (this.user && this.user.anon && !this.token) {
-      return this.token;
+    if (this._isAnonymous) {
+      return '';
     }
 
     throw new Error(

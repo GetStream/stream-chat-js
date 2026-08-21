@@ -1,6 +1,6 @@
 # v9 → v10 Migration Guide — Type Renames
 
-> Scope: this guide covers **type aliases that were hand-rolled in `types.ts` and have been removed in v10 in favor of a differently-named type**. In most cases, the removed alias pointed at a type generated from the OpenAPI spec (imported from `./gen/models`), and the v10 target is that generated name — now re-exported directly from `stream-chat`. A handful of entries (`Automod`, `AutomodBehavior`, `TranslationLanguage`) resolve to a hand-authored alias in `src/types.ts` instead of a raw gen re-export; those are noted per row. Consumers should switch to the v10 name in every case.
+> Scope: this guide covers **type aliases that were hand-rolled in `types.ts` and have been removed in v10 in favor of a differently-named type**. In most cases, the removed alias pointed at a type generated from the OpenAPI spec (imported from `./gen/models`), and the v10 target is that generated name — now re-exported directly from `stream-chat`. A handful of entries (`Automod`, `AutomodBehavior`, `TranslationLanguage`) resolve to a derived alias in `src/types.ts` — a lookup on a generated type rather than a raw re-export; those are noted per row. Consumers should switch to the v10 name in every case.
 >
 > This document is written for AI agents doing mechanical rewrites. Each entry lists the v9 name, the v10 name, and the file(s) where the type is exported from. All v10 names are still importable from the package root (`stream-chat`) or from `stream-chat/dist/types` — nothing has moved outside the package surface.
 >
@@ -35,8 +35,8 @@ v10 exposes two generated types whose names collide with v9 aliases that pointed
 | `AppSettingsAPIResponse`          | `GetApplicationResponse`                   | Return type of `client.getAppSettings()`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `AutomodDetails`                  | `AutomodDetailsResponse`                   |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `ChannelAPIResponse`              | `ChannelStateResponseFields`               | The per-channel entry inside a `queryChannels` response (fields only, no top-level `duration`).                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `ChannelConfigAutomod`            | `Automod`                                  | The v10 `Automod` is a hand-authored string union (`'disabled' \| 'simple' \| 'AI' \| (string & {})`) in `src/types.ts`, not a generated re-export. Values are identical to v9.                                                                                                                                                                                                                                                                                                                                                                               |
-| `ChannelConfigAutomodBehavior`    | `AutomodBehavior`                          | Same story — hand-authored union (`'flag' \| 'block' \| 'shadow_block' \| (string & {})`) in `src/types.ts`. Values are identical to v9.                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `ChannelConfigAutomod`            | `Automod`                                  | ⚠️ **Narrowed after `rc.4`.** `Automod` is now `ChannelConfigWithInfo['automod']` — exactly `'disabled' \| 'simple' \| 'AI'`. It previously carried a `\| (string & {})` tail that let any string through.                                                                                                                                                                                                                                                                                                                                                    |
+| `ChannelConfigAutomodBehavior`    | `AutomodBehavior`                          | ⚠️ **Narrowed after `rc.4`.** Now `ChannelConfigWithInfo['automod_behavior']` — exactly `'flag' \| 'block' \| 'shadow_block'`, without the `\| (string & {})` tail.                                                                                                                                                                                                                                                                                                                                                                                           |
 | `ChannelQueryOptions`             | `ChannelGetOrCreateRequest`                | Payload for `channel.watch()`, `channel.create()`, and `channel.query()`. The v9 alias masked the OpenAPI name; v10 uses the generated name directly.                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `CommandResponse`                 | `Command`                                  | Slash-command descriptor — matches the shape stored under `channel.serverConfig.commands` (and `channel.config.availableCommands`).                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `CreatePollData`                  | `CreatePollRequest`                        | Payload for `client.createPoll()` / `PollManager.createPoll()`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -148,9 +148,315 @@ v9 also had `client.createAbortControllerForNextRequest()`, which armed a contro
 These v9 names look like they'd be caught by the same rewrite pass but are **not** simple aliases — they either have hand-authored shape on top of the generated type (via `RequireLiteral`, compound intersections, etc.) or point at a locally-defined type. Some names now re-export the generated shape directly through `export * from './gen/models'`; the name is the same but the shape may have narrowed since v9. Do not rewrite these:
 
 - `MessageResponse`, `UserResponse`, `OwnUserResponse`, `ReactionResponse`, `ChannelResponse`, `ChannelMemberResponse`, `DraftResponse`, `Attachment`, `PollResponseData`, `PollOptionResponseData`, `MessageRequest` — in v9 these were wrapped with `ReplacePropertyTypes<…, { custom: Custom*Data }>`; in v10 the custom-overlay pattern is dropped and the raw generated shape is re-exported. The v9 name is retained.
-- `PollOptionData`, `DraftMessage`, `SharedLiveLocationResponse`, `LiveLocationPayload`, `ChannelData` — compound types (locally-defined or `RequireLiteral<…, 'end_at'>`). Keep as-is.
-- `PollResponse_old` — the only remaining `_old`-suffixed compat holder. Still used internally by `poll.ts` / `poll_manager.ts` / `offline-support/types.ts` and not a simple alias (it intersects the generated `PollResponseData` with a local `PollEnrichData` overlay). Its own story; do not rename here.
+- `PollOptionData`, `DraftMessage`, `SharedLiveLocationResponse` — compound types (locally-defined or `RequireLiteral<…, 'end_at'>`). Keep as-is.
+- `LiveLocationPayload`, `ChannelData` and `PollResponse_old` **were** in this list and are now removed — see [below](#aliases-that-restated-a-generated-type).
 - `AppSettings` is the only "settings"-ish name that IS renamed here (to `AppResponseFields`). Do not confuse it with `AppSettingsAPIResponse` (also removed; renamed to `GetApplicationResponse`) — they were two different aliases that shared a prefix.
+
+## Removed after `10.0.0-rc.4` — convergence on the generated types
+
+Skip this section if you are upgrading from v9; everything below is already reflected in the tables above. It exists for integrations pinned to the `rc` dist-tag, because these types still shipped in `10.0.0-rc.4` and are deleted afterwards. **No back-compat alias remains for any of them.**
+
+Every removal here has the same rationale: the type restated something the OpenAPI generator already emits, so it was one more place a spec change had to be mirrored by hand — and several had already drifted from the spec they were copied from.
+
+### Own-user and device shapes
+
+| Removed after `rc.4` | Replacement      | Detail                                                      |
+| -------------------- | ---------------- | ----------------------------------------------------------- |
+| `Device`             | `DeviceResponse` | ⚠️ **Shape change.** See [below](#device--deviceresponse).  |
+| `DeviceFields`       | `DeviceResponse` | Same — the v10 trio collapsed into the one generated shape. |
+| `BaseDeviceFields`   | `DeviceResponse` | Same.                                                       |
+
+`OwnUserBase` keeps its name but **changes shape**: it is now derived as `Pick<OwnUserResponse, Exclude<keyof OwnUserResponse, keyof UserResponse>>` rather than hand-listed.
+
+- **Gained** `latest_hidden_channels?: Array<string>` — previously missing from the list, which caused a real defect (see below).
+- **Lost** `roles?: string[]` — this field does not exist on `OwnUserResponse` at all. If you were reading it, the value was always `undefined`; the nearest real field is `teams_role?: Record<string, string>`.
+- `devices` is now `Array<DeviceResponse>` instead of `Device[]`, and `total_unread_count_by_team` is `Record<string, number>` instead of `Record<string, number> | null`.
+
+#### Behaviour fix — `client.user.latest_hidden_channels` no longer disappears
+
+`client._handleUserEvent` prunes `client.user` on every `user.updated` event: any key that the event body does not carry, and that is not an own-user-only field, is deleted. It decided "own-user-only" from `OwnUserBase` via `isOwnUserBaseProperty()`.
+
+Because the hand-written list omitted `latest_hidden_channels`, and a `user.updated` event body is a plain `UserResponse` (which has no such field), **every `user.updated` event for the connected user deleted `client.user.latest_hidden_channels`**. Reading it after any user update returned `undefined` regardless of server state. Deriving the type fixes this; no call-site change is required.
+
+#### `Device` → `DeviceResponse`
+
+| Field                 | v10 `Device` (removed)                        | `DeviceResponse`   |
+| --------------------- | --------------------------------------------- | ------------------ |
+| `created_at`          | `string`                                      | `Date`             |
+| `push_provider`       | `'firebase' \| 'apn' \| 'huawei' \| 'xiaomi'` | `string`           |
+| `user_id`             | `string \| undefined`                         | `string`           |
+| `provider`, `user`    | present                                       | **gone**           |
+| `hardware_id`, `voip` | **absent**                                    | present (optional) |
+
+`created_at` is the one that bites: the response decoders have always produced a `Date` here, so the old `string` annotation was wrong. Call sites doing `new Date(device.created_at)` still work; ones doing `device.created_at.slice(...)` were already broken at runtime and now fail to compile.
+
+### Stale `Omit` keys — two types quietly widened
+
+Neither is a rename; both **gain** surface, so no call site breaks.
+
+| Type                             | Was                                                         | Now                                     |
+| -------------------------------- | ----------------------------------------------------------- | --------------------------------------- |
+| `ChannelUpdateOptions`           | `Omit<UpdateChannelRequest, 'message' \| 'members'>`        | `Omit<UpdateChannelRequest, 'message'>` |
+| `PinnedMessagePaginationOptions` | omits `'id' \| 'member_custom_include' \| 'sort' \| 'type'` | omits `'id' \| 'sort' \| 'type'`        |
+
+`UpdateChannelRequest` has no `members` key (it has `add_members` / `remove_members`), so that omit was a no-op left over from an older payload shape. `member_custom_include` **is** accepted by `getPinnedMessages`, so omitting it was narrowing the API — it can now be passed through.
+
+### The v1 permission system — removed
+
+`src/permissions.ts` is gone, and with it the whole deprecated v1 permission surface. The
+module's own header already said to stop using it: _"deprecated permission object class, you
+should use the new permission system v2 and use permissions defined in BuiltinPermissions to
+configure your channel types."_ Permissions are channel-type **configuration**, which is
+server-side and left this package with the rest of that surface.
+
+Removed: `PermissionObject`, the `Permission` class, `AllowAll`, `DenyAll`, `Allow`, `Deny`,
+`AnyResource`, `AnyRole`, `MaxPriority`, `MinPriority`, `BuiltinRoles`,
+`BuiltinPermissions` and `RoleName`. Configure permissions with
+[`@stream-io/node-sdk`](https://github.com/GetStream/stream-node) or the dashboard.
+
+Note that `Permission`, `AllowAll` and `DenyAll` were runtime values, not just types, so
+`import { Permission } from 'stream-chat'` now fails at runtime as well as at compile time —
+the same caveat as [`Product`](#orphans-of-the-server-side-split--removed-no-replacement).
+
+`BuiltinPermissions` carried a latent bug worth knowing about if you copied its values:
+six entries had been corrupted by an over-broad `Message` -> `MessageRequest` rename, so
+`CreateMessage` read `'Create MessageRequest'`, `RunMessageAction` read
+`'Run MessageRequest Action'`, and similarly for `DeleteAnyMessage`, `DeleteOwnMessage`,
+`UpdateAnyMessage` and `UpdateOwnMessage`. Those are server-side permission names the API
+matches on, so the constants were emitting strings the backend does not recognise. If you
+hard-coded any of them, use the un-suffixed forms (`'Create Message'`, `'Run Message
+Action'`, ...).
+
+### Orphans of the server-side split — removed, no replacement
+
+These described admin/server-side surface (push-provider credentials, permission policies, blocklists, channel-type config) that moved to `@stream-io/node-sdk` when the server-side API left this package. Nothing in the SDK referenced them and no endpoint here returns them.
+
+`APNConfig`, `AsyncModerationOptions`, `BlockList`, `CommandVariants`, `FirebaseConfig`, `GetRepliesRequest`, `HuaweiConfig`, `Policy`, `PolicyRequest`, `Product`, `PushProviderAPN`, `PushProviderCommon`, `PushProviderConfig`, `PushProviderFirebase`, `PushProviderHuawei`, `PushProviderID`, `PushProviderXiaomi`, `UR`, `VotesFiltersOptions`, `XiaomiConfig`.
+
+Two notes:
+
+- **`Product` was an `enum`**, so it was a runtime value in the bundle, not just a type. `import { Product } from 'stream-chat'` fails at runtime now, not only at compile time. Inline the string (`'chat'`, `'video'`, `'moderation'`, `'feeds'`).
+- **`UR`** (`Record<string, unknown>`) was a v9 type utility that outlived its callers. It joins `Readable`, `KnownKeys`, `PartializeKeys` and `UnknownType` in [Type utilities dropped](./v9-to-v10-migration-guide-other.md#type-utilities-dropped) — inline `Record<string, unknown>`.
+
+`PushProvider` is **kept** — it is `CreateDeviceRequest['push_provider']`, the union `client.createDevice()` accepts, and it derives from the generated request rather than restating it.
+
+`GiphyVersions` is **kept** for the same reason — it is `keyof Images`, derived from the generated attachment-images shape, so it cannot drift. The React SDK exposes it on `AttachmentProps.giphyVersion` and `AttachmentContextValue.giphyVersion`.
+
+### `Automod` / `AutomodBehavior` narrowed
+
+Both now read their union off the generated channel config instead of restating it:
+
+```ts
+// before rc.4
+type Automod = 'disabled' | 'simple' | 'AI' | (string & {});
+type AutomodBehavior = 'flag' | 'block' | 'shadow_block' | (string & {});
+
+// after
+type Automod = ChannelConfigWithInfo['automod']; //          'disabled' | 'simple' | 'AI'
+type AutomodBehavior = ChannelConfigWithInfo['automod_behavior']; // 'flag' | 'block' | 'shadow_block'
+```
+
+The `| (string & {})` tail meant the unions accepted _any_ string — the documented values were a hint, not a constraint. Assigning an arbitrary string to one of these now fails to compile. `channel.getConfig().automod` reads are unaffected; the generated config has always had the narrow type.
+
+### Aliases that restated a generated type
+
+Each of these was structurally identical to a type the generator already emits — verified by compiling a mutual-assignability assertion, not by inspection. They are removed; the replacement is a pure find/replace with no behaviour change.
+
+| Removed after `rc.4`   | Replacement                                      | Detail                                                                                                                                                             |
+| ---------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ChannelData`          | `ChannelInput`                                   | Was `ReplacePropertyTypes<ChannelInput, { custom: CustomChannelData }>`, but `ChannelInput.custom` is _already_ `CustomChannelData` — the mapped type was a no-op. |
+| `PollResponse_old`     | `PollResponseData`                               | Was `PollResponseData & PollEnrichData`; all six `PollEnrichData` fields are already on `PollResponseData`.                                                        |
+| `PollEnrichData`       | `PollResponseData`                               | Fully subsumed. Its fields are `answers_count`, `latest_answers`, `latest_votes_by_option`, `vote_count`, `vote_counts_by_option`, `own_votes`.                    |
+| `LiveLocationPayload`  | `SharedLocation`                                 | Was `RequireLiteral<SharedLocation, 'end_at'>`; its only consumer immediately did `Omit<…, 'end_at'>`, undoing the requirement.                                    |
+| `Pager`                | the request type's own `limit` / `next` / `prev` | Also removes its two aliases — see the row below.                                                                                                                  |
+| `ReplacePropertyTypes` | none                                             | Type utility whose only remaining consumer was `ChannelData`. Inline the `Omit<…> & {…}` if you were using it.                                                     |
+
+`ChannelOptions`, `UserOptions`, `QueryPollsOptions` and `QueryVotesOptions` keep their names but are now **derived** from the request types instead of restating them:
+
+```ts
+type ChannelOptions = Omit<QueryChannelsRequest, 'filter_conditions' | 'sort'>;
+type UserOptions = Omit<QueryUsersPayload, 'filter_conditions' | 'sort'>;
+type QueryPollsOptions = Omit<QueryPollsRequest, 'filter' | 'sort'>;
+type QueryVotesOptions = Omit<QueryPollVotesRequest, 'filter' | 'sort'>;
+```
+
+Two of those change shape:
+
+- **`ChannelOptions` gains `member_custom_include?: Array<string>`** (the endpoint has always accepted it) and **loses `user_id?: string`** (`QueryChannelsRequest` has no such field — it was never sent). Additive for almost everyone; if you were setting `user_id` here it was being dropped silently.
+- **`UserOptions` is unchanged field-for-field** — it happened to be an exact copy. It is derived now so it cannot drift.
+
+`ChannelUpdateOptions` and the `*Filters` family are deliberately **kept**: they were already derived (`Omit<UpdateChannelRequest, 'message'>`, `NonNullable<Request['filter']>`), so they update themselves when the spec moves and restate nothing.
+
+### The `APIResponse` envelope
+
+`APIResponse` was `{ duration: string }` — the response envelope from before the generated layer existed. Every generated response already carries `duration`, and the transport wraps results in `StreamResponse<T>`, which carries `metadata` (rate-limit headers, response code, client request id) as well. Anything typed with `APIResponse` was therefore not just redundant but **weaker** than the real return type.
+
+| Removed after `rc.4`       | Replacement                                       | Detail                                                                          |
+| -------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `SearchAPIResponse`        | `SearchResponse`                                  | `results` entries are `SearchResult`, not an inline `{ message }`.              |
+| `SendFileAPIResponse`      | `FileUploadResponse` / `ImageUploadResponse`      | Pick the one matching the endpoint you called.                                  |
+| `UpdateChannelAPIResponse` | `UpdateChannelResponse`                           |                                                                                 |
+| `UsersAPIResponse`         | `UpdateUsersResponse` / `QueryUsersResponse`      | Two endpoints shared this alias; pick by endpoint.                              |
+| `TaskResponse`             | the endpoint's own response type                  | Was `{ task_id: string }`; the generated responses name the field the same way. |
+| `ReactionAPIResponse`      | `SendReactionResponse` / `DeleteReactionResponse` | Was one alias for two endpoints.                                                |
+| `Flag`, `FlagDetails`      | `FlagDetailsResponse`                             | Neither had a reference anywhere in `src` — they only referred to each other.   |
+
+Every replacement is reached through `StreamResponse<…>` when it is a method return value, so it gains a required `metadata` field. Code that only destructures the payload (`const { message } = await …`) is unaffected; code that annotates a variable with the old alias needs the new name.
+
+**Still present, deliberately:** `APIResponse` itself, plus `FlagMessageResponse`, `FlagUserResponse`, `MuteUserResponse` and `UnmuteUserResponse`. Every remaining reference to these sits inside the hand-written `/moderation/*` methods on `StreamChat` that bypass the generated client; they are removed together with those methods, which is tracked separately.
+
+### `UpdatedMessage` → `MessageRequest`
+
+`UpdatedMessage` built a **request** type by subtracting a hand-maintained constant (`RESERVED_UPDATED_MESSAGE_FIELDS`) from a **response** type (`MessageResponse`), then re-adding the `mentioned_*` fields. The generated `MessageRequest` already is that shape, and gets two things right that `UpdatedMessage` did not:
+
+- **`type` is narrower.** `MessageRequest['type']` is `'regular' | 'system'`. `UpdatedMessage['type']` was `MessageLabel` — six members including `'deleted'`, `'error'`, `'ephemeral'` and `'reply'`, none of which a client may send.
+- **Server-owned fields no longer typecheck.** Anything on `MessageResponse` that was not in the reserved list — `cid`, `shadowed`, `reaction_groups`, and so on — was assignable to an update payload. It is not on `MessageRequest`.
+
+```ts
+// before
+import type { UpdatedMessage } from 'stream-chat';
+const payload: UpdatedMessage = { id, text, type: 'reply' }; // compiled, and was wrong
+
+// after
+import type { MessageRequest } from 'stream-chat';
+const payload: MessageRequest = { id, text }; // `type: 'reply'` is now a compile error
+```
+
+`ReservedUpdatedMessageFields` is removed with it. The **runtime** constant `RESERVED_UPDATED_MESSAGE_FIELDS` stays — `toUpdatedMessagePayload()` still uses it to strip server-owned keys off a `LocalMessage`; it just no longer drives a type.
+
+`MessageLabel` itself is **kept**. It is what `UpdatedMessage['type']` used to be, and there is no generated equivalent — `MessageResponse['type']` is a bare `string`, so deriving it would widen rather than narrow. It stays available for typing message `type` values on the read side; it is just no longer valid as a _write_ payload type.
+
+`MessageComposerMiddlewareState.message` is now `MessageRequest` rather than `MessageRequest | UpdatedMessage`. Custom composer middleware that annotated the union should drop the `UpdatedMessage` arm.
+
+### `PartialThreadUpdate` removed
+
+`PartialThreadUpdate` (`{ set?: Partial<Record<string, unknown>>; unset?: Array<string> }`) went with `client.partialUpdateThread`. Use the generated `UpdateThreadPartialRequest`, which is the same `set` / `unset` pair plus the required `message_id`. See [redundant guards and pass-throughs](./v9-to-v10-migration-guide-methods.md#removed-after-1000-rc4--redundant-guards-and-pass-throughs).
+
+### `VotingVisibility` is now a type, not an enum
+
+`VotingVisibility` was a hand-written `enum` whose two members duplicated a union the
+generator already emits. It is now derived:
+
+```ts
+// before rc.4
+export enum VotingVisibility {
+  anonymous = 'anonymous',
+  public = 'public',
+}
+
+// after
+export type VotingVisibility = NonNullable<CreatePollRequest['voting_visibility']>;
+//                             'anonymous' | 'public'
+```
+
+⚠️ **This is a runtime break, not just a type change** — an `enum` is a value in the bundle,
+so `VotingVisibility.anonymous` no longer resolves. The member names and their string values
+were identical, so the rewrite is mechanical:
+
+```ts
+// before
+pollComposer.updateFields({ voting_visibility: VotingVisibility.anonymous });
+if (votingVisibility === VotingVisibility.anonymous) { … }
+
+// after
+pollComposer.updateFields({ voting_visibility: 'anonymous' });
+if (votingVisibility === 'anonymous') { … }
+```
+
+Uses in **type** position keep working unchanged, including the narrowing cast that reading
+a poll requires: `PollResponseData.voting_visibility` is typed `string` in the spec, not the
+narrow union, so `poll.data.voting_visibility as VotingVisibility` is still needed. That
+asymmetry is a spec gap on the response side, not something this change introduces.
+
+### `PollOptionData` removed — it described neither endpoint
+
+`PollOptionData` was `UpdatePollOptionRequest & { position?: number }`, and it typed the
+parameter of **both** `poll.createOption()` and `poll.updateOption()`. Both halves were wrong.
+
+- **`position` does not exist.** It appears nowhere in the OpenAPI spec — zero occurrences
+  across the whole generated model set — and the generated methods whitelist their body
+  fields explicitly (`createPollOption` sends `text` and `custom`; `updatePollOption` sends
+  `id`, `text` and `custom`). Anything passed as `position` was silently dropped before the
+  request left the client. It never reached the wire, so removing it changes no behaviour.
+- **`id` was required on create.** `UpdatePollOptionRequest.id` is required, so
+  `createOption()` demanded an option id that the create endpoint does not even send. Callers
+  worked around it with a cast — the React Native SDK did exactly this:
+  `poll.createOption({ text } as PollOptionData)`.
+
+Each method now takes the request type for the endpoint it actually calls:
+
+| Method                | Was              | Now                       |
+| --------------------- | ---------------- | ------------------------- |
+| `poll.createOption()` | `PollOptionData` | `CreatePollOptionRequest` |
+| `poll.updateOption()` | `PollOptionData` | `UpdatePollOptionRequest` |
+
+```ts
+// before — the cast existed only to satisfy the required `id`
+await poll.createOption({ text: optionText } as PollOptionData);
+
+// after — no cast needed
+await poll.createOption({ text: optionText });
+```
+
+If you were passing `position`, drop it; it was never sent. Option ordering is server-side.
+
+`PartialPollUpdate` is **kept**. Unlike `PollOptionData` it adds no fields and invents
+nothing — it narrows the generated `UpdatePollPartialRequest`
+(`{ set?: Record<string, any>; unset?: Array<string> }`) to `Partial<UpdatePollRequest>` and
+`Array<keyof UpdatePollRequest>`, both derived, so a spec change flows through it without a
+hand edit.
+
+### `ModerationFlagOptions` derived — and its `user_id` was never sent
+
+`ModerationFlagOptions` types the `options` parameter of `moderation.flagUser()` and
+`moderation.flagMessage()`. It was hand-written, and it disagreed with `FlagRequest` in both
+directions:
+
+```ts
+// before rc.4
+export type ModerationFlagOptions = {
+  custom?: Record<string, unknown>;
+  moderation_payload?: ModerationPayload;
+  user_id?: string;
+};
+
+// after
+export type ModerationFlagOptions = Omit<
+  FlagRequest,
+  'entity_id' | 'entity_type' | 'reason'
+>;
+// { entity_creator_id?: string; custom?: Record<string, any>; moderation_payload?: ModerationPayload }
+```
+
+- **`user_id` is gone, and it never reached the server.** `FlagRequest` has no such field, and
+  the generated `flag()` whitelists its body explicitly — `entity_id`, `entity_type`,
+  `entity_creator_id`, `reason`, `custom`, `moderation_payload` — so a `user_id` passed here
+  was discarded before the request was built. Nothing to migrate: the acting user is already
+  sent as a query parameter on every request, taken from `client.userId` by the transport.
+- **`entity_creator_id` is now settable.** It is accepted by the endpoint but was absent from
+  the options type, so both wrappers pinned it to `''` with no way to override. `options` is
+  spread last, so passing it now wins over that default.
+
+`reason` is deliberately excluded from the options type even though `FlagRequest` carries it:
+both wrappers already take it as a positional argument, and because `options` is spread last,
+including it would have let `options.reason` silently override the positional one.
+
+The wrappers also **no longer pin `entity_creator_id` to `''`**. They used to send it
+unconditionally, and an empty string _is_ serialized (`JSON.stringify` drops `undefined`, not
+`''`), so every flag carried `"entity_creator_id": ""`. Now the field is simply absent unless
+you pass one.
+
+This was verified against the live API rather than reasoned about: flagging a message and a
+user each way — `''`, omitted, and the real id — produced review-queue items whose
+`entity_creator_id` and resolved `entity_creator` were the correct author in **every** case.
+The server derives the creator from the entity and discards the empty string, so the two are
+equivalent and dropping the default changes nothing observable. Attribution was never broken;
+the field was just dead weight on the wire.
+
+`flagUser` / `flagMessage` themselves are **kept**. Unlike the ban and mute wrappers removed
+in [the moderation migration](./v9-to-v10-migration-guide-methods.md), they earn their place:
+they resolve `entity_type` from `MODERATION_ENTITY_TYPES` (`'stream:user'`,
+`'stream:chat:v1:message'`), magic strings that the spec types only as `string`.
 
 ## Verification
 

@@ -15,7 +15,9 @@ import type {
 } from './types';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 
-const eventIsHealthCheck = (event: Event): event is EventPayload<'health.check'> =>
+const eventCarriesOwnUser = (
+  event: Event,
+): event is EventPayload<'health.check'> | EventPayload<'connection.ok'> =>
   Object.hasOwn(event, 'me');
 
 export type ThreadManagerConfig = {
@@ -191,6 +193,7 @@ export class ThreadManager extends WithSubscriptions {
     const unsubscribeFunctions = (
       [
         'health.check',
+        'connection.ok',
         'notification.mark_read',
         'notification.mark_unread',
         'notification.thread_message_new',
@@ -200,7 +203,7 @@ export class ThreadManager extends WithSubscriptions {
       (eventType) =>
         this.client.on(eventType, (event) => {
           const { unread_threads: unreadThreadCount } =
-            (eventIsHealthCheck(event) && event.me) ||
+            (eventCarriesOwnUser(event) && event.me) ||
             (event as Extract<typeof event, { unread_threads?: any }>);
 
           if (typeof unreadThreadCount === 'number') {

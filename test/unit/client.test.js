@@ -4,8 +4,8 @@ import { getClientWithUser } from './test-utils/getClient';
 
 import * as utils from '../../src/utils';
 import { StreamChat } from '../../src/client';
+import { ChatApi } from '../../src/gen-imports';
 import { chatLoggerSystem } from '../../src/logger';
-import { ConnectionState } from '../../src/connection_fallback';
 import { StableWSConnection } from '../../src/connection';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 import { generateThreadResponse } from './test-utils/generateThreadResponse';
@@ -226,6 +226,170 @@ describe('Client userMuteStatus', function () {
 	});
 });
 
+describe('Client anonymous auth type', () => {
+	it('should stay anonymous after the hello event replaces client.user', async () => {
+		const client = new StreamChat('key', { allowServerSideConnect: true });
+		await client.tokenManager.setTokenOrProvider('', { id: 'local-anon-id', anon: true });
+		client._setUser({ id: 'local-anon-id', anon: true });
+
+		expect(client.anonymous).to.be.true;
+		expect(client.getAuthType()).to.equal('anonymous');
+
+		// The server's own-user payload has role 'anonymous' but NO `anon` flag. Reading
+		// the flag off client.user made every later HTTP request send stream-auth-type:
+		// jwt with an empty token, which the API rejects with 401 "token missing".
+		client.dispatchEvent({
+			type: 'connection.ok',
+			connection_id: 'id',
+			me: { id: '!anon', role: 'anonymous', mutes: [], channel_mutes: [] },
+		});
+
+		expect(client.user.id).to.equal('!anon');
+		expect(client.user.anon).to.be.undefined;
+		expect(client.anonymous).to.be.true;
+		expect(client.getAuthType()).to.equal('anonymous');
+	});
+
+	it('should send an empty token rather than omitting it for anonymous sessions', async () => {
+		const client = new StreamChat('key', { allowServerSideConnect: true });
+		await client.tokenManager.setTokenOrProvider('', { id: 'local-anon-id', anon: true });
+
+		expect(client.api._getToken()).to.equal('');
+	});
+
+	it('should report jwt for a regular user', async () => {
+		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const token =
+			'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYW1pbiJ9.1R88K_f1CC2yrR6j1_OzMEbasfS_dxRSNbundEDBlJI';
+		await client.tokenManager.setTokenOrProvider(token, { id: 'amin' });
+
+		expect(client.anonymous).to.be.false;
+		expect(client.getAuthType()).to.equal('jwt');
+		expect(client.api._getToken()).to.equal(token);
+	});
+
+	it('should reset the anonymous flag on disconnect', async () => {
+		const client = new StreamChat('key', { allowServerSideConnect: true });
+		await client.tokenManager.setTokenOrProvider('', { id: 'local-anon-id', anon: true });
+		expect(client.anonymous).to.be.true;
+
+		client.tokenManager.reset();
+
+		expect(client.anonymous).to.be.false;
+		expect(client.getAuthType()).to.equal('jwt');
+	});
+});
+
+describe('Client createGuest', () => {
+	const guestResponse = {
+		access_token: 'guest.tok.en',
+		user: { id: 'guest-1', role: 'guest' },
+	};
+
+	// sinon stubs on ChatApi.prototype outlive the test that installed them
+	afterEach(() => sinon.restore());
+
+	it('should send the request as anonymous when the client has no token', async () => {
+		const client = new StreamChat('key', { allowServerSideConnect: true });
+		let authTypeDuringRequest;
+		let tokenDuringRequest;
+		sinon.stub(ChatApi.prototype, 'createGuest').callsFake(async () => {
+			// /api/v2/guest is only accepted with stream-auth-type: anonymous; a fresh
+			// client otherwise defaults to jwt with no token and the API returns 401.
+			authTypeDuringRequest = client.getAuthType();
+			tokenDuringRequest = client.api._getToken();
+			return guestResponse;
+		});
+
+		const result = await client.createGuest({ user: { id: 'guest-1' } });
+
+		expect(authTypeDuringRequest).to.equal('anonymous');
+		expect(tokenDuringRequest).to.equal('');
+		expect(result).to.equal(guestResponse);
+	});
+
+	it('should restore the un-authenticated state afterwards', async () => {
+		const client = new StreamChat('key', { allowServerSideConnect: true });
+		sinon.stub(ChatApi.prototype, 'createGuest').resolves(guestResponse);
+
+		await client.createGuest({ user: { id: 'guest-1' } });
+
+		expect(client.anonymous).to.be.false;
+		expect(client.tokenManager.token).to.be.undefined;
+	});
+
+	it('should restore state even when the request fails', async () => {
+		const client = new StreamChat('key', { allowServerSideConnect: true });
+		sinon.stub(ChatApi.prototype, 'createGuest').rejects(new Error('boom'));
+
+		await expect(client.createGuest({ user: { id: 'guest-1' } })).rejects.toThrow(/boom/);
+
+		expect(client.anonymous).to.be.false;
+		expect(client.tokenManager.token).to.be.undefined;
+	});
+
+	it('should not touch the auth mode of an already authenticated client', async () => {
+		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const token = 'xyz.eyJ1c2VyX2lkIjoiYW1pbiJ9.xyz';
+		await client.tokenManager.setTokenOrProvider(token, { id: 'amin' });
+
+		let authTypeDuringRequest;
+		sinon.stub(ChatApi.prototype, 'createGuest').callsFake(async () => {
+			authTypeDuringRequest = client.getAuthType();
+			return guestResponse;
+		});
+
+		await client.createGuest({ user: { id: 'guest-1' } });
+
+		// Swapping auth out from under a live session would be worse than the rejection.
+		expect(authTypeDuringRequest).to.equal('jwt');
+		expect(client.tokenManager.token).to.equal(token);
+	});
+});
+
+describe('Client connection.ok hello event', () => {
+	const user = { id: 'user' };
+	const newConnectedClient = async () => {
+		const client = new StreamChat('', '');
+		client.connectUser = async () => {
+			client.user = user;
+			client.wsPromise = Promise.resolve();
+		};
+		await client.connectUser();
+		return client;
+	};
+
+	it('should populate own-user state from the v2 hello event', async () => {
+		const client = await newConnectedClient();
+		const mutes = [{ user, target: { id: 'mute1' } }];
+		const channel_mutes = [{ user, channel: { cid: 'messaging:muted' } }];
+
+		client.dispatchEvent({
+			type: 'connection.ok',
+			connection_id: 'id',
+			me: { ...user, mutes, channel_mutes, blocked_user_ids: ['blocked1'] },
+		});
+
+		expect(client.user.id).to.equal('user');
+		expect(client.mutedUsers).to.deep.equal(mutes);
+		expect(client.mutedChannels).to.deep.equal(channel_mutes);
+		expect(client.blockedUsers.getLatestValue().userIds).to.deep.equal(['blocked1']);
+		expect(client.userMuteStatus('mute1')).to.be.ok;
+	});
+
+	it('should default blocked users to an empty list', async () => {
+		const client = await newConnectedClient();
+
+		client.dispatchEvent({
+			type: 'connection.ok',
+			connection_id: 'id',
+			me: { ...user, mutes: [], channel_mutes: [] },
+		});
+
+		expect(client.blockedUsers.getLatestValue().userIds).to.deep.equal([]);
+	});
+});
+
 describe('Client active channels cache', () => {
 	const client = new StreamChat('', '');
 	const user = { id: 'user' };
@@ -234,10 +398,17 @@ describe('Client active channels cache', () => {
 		client.user = user;
 		client.wsPromise = Promise.resolve();
 	};
+	const makeChannelMock = (unreadCount) => ({
+		state: { unreadCount },
+		_setOwnUnreadCount(next) {
+			this.state.unreadCount = next;
+		},
+	});
+
 	beforeEach(() => {
 		client.activeChannels = {
-			vish: { state: { unreadCount: 1 } },
-			vish2: { state: { unreadCount: 2 } },
+			vish: makeChannelMock(1),
+			vish2: makeChannelMock(2),
 		};
 	});
 
@@ -397,7 +568,6 @@ describe('Client disconnectUser', () => {
 		};
 		const { resolve, promise } = Promise.withResolvers();
 		client.wsConnection = { disconnect: () => promise };
-		client.wsFallback = null;
 		const disconnectPromise = client.disconnectUser();
 		expect(client.tokenManager.reset.called).to.be.false;
 		resolve();
@@ -427,7 +597,6 @@ describe('Client disconnectUser', () => {
 		}));
 		const { resolve, promise } = Promise.withResolvers();
 		client.wsConnection = { disconnect: () => promise };
-		client.wsFallback = null;
 		const disconnectPromise = client.disconnectUser();
 		expect(Object.keys(client.uploadManager.uploads)).to.have.length(0);
 		resolve();
@@ -442,7 +611,6 @@ describe('Client disconnectUser', () => {
 
 		const { resolve, promise } = Promise.withResolvers();
 		client.wsConnection = { disconnect: () => promise };
-		client.wsFallback = null;
 		const disconnectPromise = client.disconnectUser();
 
 		expect(client.messageComposerCache.peek('cid:a')).to.be.undefined;
@@ -659,141 +827,6 @@ describe('message update', () => {
 	});
 });
 
-describe('Client setLocalDevice', async () => {
-	const device = { id: 'id1', push_provider: 'apn' };
-	const client = new StreamChat('', { device });
-
-	it('should update device info before ws open', async () => {
-		expect(client.options.device).to.deep.equal(device);
-		const newDevice = { id: 'id2', push_provider: 'firebase' };
-		client.setLocalDevice(newDevice);
-		expect(client.options.device).to.deep.equal(newDevice);
-	});
-
-	it('should throw error when updating device with ws open', async () => {
-		client.wsConnection = new StableWSConnection({});
-		client.wsConnection.isHealthy = true;
-		client.wsConnection.connectionID = 'ID';
-
-		expect(() =>
-			client.setLocalDevice({ id: 'id3', push_provider: 'firebase' }),
-		).to.throw();
-	});
-});
-
-describe('Client WSFallback', () => {
-	let client;
-	const userToken =
-		'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYW1pbiJ9.1R88K_f1CC2yrR6j1_OzMEbasfS_dxRSNbundEDBlJI';
-	beforeEach(() => {
-		sinon.restore();
-		client = new StreamChat('', { allowServerSideConnect: true, enableWSFallback: true });
-		client.defaultWSTimeout = 500;
-		client.defaultWSTimeoutWithFallback = 500;
-	});
-
-	it('_getConnectionID, _hasConnectionID', () => {
-		expect(client._hasConnectionID()).to.be.false;
-		expect(client._getConnectionID()).to.equal(undefined);
-		client.wsFallback = { connectionID: 'ID' };
-		expect(client._getConnectionID()).to.equal('ID');
-		expect(client._hasConnectionID()).to.be.true;
-	});
-
-	it('should try wsFallback if WebSocket fails', async () => {
-		const eventDate = new Date(Date.UTC(2009, 1, 3, 23, 3, 3));
-		const stub = sinon
-			.stub()
-			.onCall(0)
-			.resolves({ event: { connection_id: 'new_id', received_at: eventDate } });
-
-		client.api.doAxiosRequest = stub;
-		client.wsBaseURL = 'ws://getstream.io';
-		const health = await client.connectUser({ id: 'amin' }, userToken);
-		expect(health).to.be.eql({ connection_id: 'new_id', received_at: eventDate });
-		expect(client.wsFallback.state).to.be.eql(ConnectionState.Connected);
-		expect(client.wsFallback.connectionID).to.be.eql('new_id');
-		expect(client.wsFallback.consecutiveFailures).to.be.eql(0);
-
-		expect(client.wsConnection.isHealthy).to.be.false;
-		expect(client.wsConnection.isDisconnected).to.be.true;
-		expect(client.wsConnection.connectionID).to.be.undefined;
-		expect(client.wsConnection.totalFailures).to.be.greaterThan(1);
-		await client.disconnectUser();
-		expect(client.wsFallback.state).to.be.eql(ConnectionState.Disconnected);
-		stub.reset();
-	});
-
-	it('should fire transport.changed and health.check event', async () => {
-		const eventDate = new Date(Date.UTC(2009, 1, 3, 23, 3, 3));
-		sinon.spy(client, 'dispatchEvent');
-		client.api.doAxiosRequest = () => ({
-			event: { type: 'health.check', connection_id: 'new_id', received_at: eventDate },
-		});
-		client.wsBaseURL = 'ws://getstream.io';
-		const health = await client.connectUser({ id: 'amin' }, userToken);
-		await client.disconnectUser();
-		expect(health).to.be.eql({
-			type: 'health.check',
-			connection_id: 'new_id',
-			received_at: eventDate,
-		});
-
-		expect(
-			client.dispatchEvent.calledWithMatch({
-				type: 'transport.changed',
-				mode: 'longpoll',
-			}),
-		).to.be.true;
-		expect(
-			client.dispatchEvent.calledWithMatch({
-				type: 'health.check',
-				connection_id: 'new_id',
-				received_at: eventDate,
-			}),
-		).to.be.true;
-	});
-
-	it('should ignore fallback if flag is false', async () => {
-		client.wsBaseURL = 'ws://getstream.io';
-		client.options.enableWSFallback = false;
-
-		await expect(client.connectUser({ id: 'amin' }, userToken)).rejects.toThrow(
-			/"initial WS connection could not be established","isWSFailure":true/,
-		);
-
-		expect(client.wsFallback).to.be.undefined;
-	});
-
-	// FIXME: this test is wrong and all kinds of flaky
-	it.skip('should ignore fallback if browser is offline', async () => {
-		client.wsBaseURL = 'ws://getstream.io';
-		client.options.enableWSFallback = true;
-		sinon.stub(utils, 'isOnline').returns(false);
-
-		await expect(client.connectUser({ id: 'amin' }, userToken)).rejects.toThrow(
-			/"initial WS connection could not be established","isWSFailure":true/,
-		);
-
-		expect(client.wsFallback).to.be.undefined;
-	});
-
-	it('should reuse the fallback if already created', async () => {
-		client.options.enableWSFallback = true;
-		const fallback = {
-			isHealthy: () => false,
-			connect: sinon.stub().returns({ connection_id: 'id' }),
-		};
-		client.wsFallback = fallback;
-		sinon.stub(utils, 'isOnline').returns(false);
-
-		const health = await client.connectUser({ id: 'amin' }, userToken);
-
-		expect(health).to.be.eql({ connection_id: 'id' });
-		expect(client.wsFallback).to.be.equal(fallback);
-	});
-});
-
 describe('StreamChat.queryChannels', async () => {
 	/**
 	 * A queryChannels response entry for a DISTINCT channel with messages carrying distinct,
@@ -886,15 +919,20 @@ describe('StreamChat.queryChannels', async () => {
 		const [channel] = await client.queryChannelsAndHydrate();
 
 		expect(channel.state.member_count).to.equal(7);
-		expect(channel.state.ownCapabilitiesStore.getLatestValue()).to.eql({
+		expect(channel.state.getLatestValue()).to.deep.include({
 			ownCapabilities: ['send-message', 'read-events'],
 		});
 
-		channel.data.member_count = 8;
-		channel.data.own_capabilities = ['send-message'];
+		const previousData = channel.data;
+		channel.data = {
+			...channel.data,
+			member_count: 8,
+			own_capabilities: ['send-message'],
+		};
+		channel.state.syncStateFromChannelData(channel.data, previousData);
 
 		expect(channel.state.member_count).to.equal(8);
-		expect(channel.state.ownCapabilitiesStore.getLatestValue()).to.eql({
+		expect(channel.state.getLatestValue()).to.deep.include({
 			ownCapabilities: ['send-message'],
 		});
 
@@ -1389,6 +1427,53 @@ describe('user.updated propagates to message + pinned paginators', () => {
 
 		expect(channel.messagePaginator.getItem('m1')?.user?.name).toBe('New Name');
 		expect(channel.pinnedMessagesPaginator.getItem('p1')?.user?.name).toBe('New Name');
+	});
+});
+
+describe('user.updated preserves the own-user-only fields on client.user', () => {
+	let client;
+
+	beforeEach(async () => {
+		client = await getClientWithUser({ id: 'own-user' });
+	});
+
+	// Regression: `OwnUserBase` used to be a hand-maintained field list that had drifted from
+	// `OwnUserResponse` — it omitted `latest_hidden_channels`, so every `user.updated` event
+	// deleted that field off `client.user`. The list is derived now; this pins the behaviour.
+	it('keeps own-user fields the event body does not carry, and drops the rest', () => {
+		client.user = {
+			...client.user,
+			// own-user-only — must all survive an event that omits them
+			channel_mutes: [],
+			devices: [],
+			invisible: false,
+			latest_hidden_channels: ['messaging:hidden'],
+			mutes: [],
+			privacy_settings: { read_receipts: { enabled: true } },
+			push_preferences: {},
+			total_unread_count: 3,
+			total_unread_count_by_team: { red: 1 },
+			unread_channels: 1,
+			unread_count: 3,
+			unread_threads: 0,
+			// not an own-user field — the event omitting it means it was cleared server-side
+			image: 'https://example.com/old.png',
+		};
+		client._user = { ...client.user };
+
+		client._handleClientEvent({
+			type: 'user.updated',
+			user: { id: 'own-user', name: 'New Name' },
+		});
+
+		expect(client.user.latest_hidden_channels).toEqual(['messaging:hidden']);
+		expect(client.user.total_unread_count).toBe(3);
+		expect(client.user.total_unread_count_by_team).toEqual({ red: 1 });
+		expect(client.user.unread_threads).toBe(0);
+		expect(client.user.privacy_settings).toEqual({ read_receipts: { enabled: true } });
+		expect(client.user.invisible).toBe(false);
+		expect(client.user.name).toBe('New Name');
+		expect(client.user.image).toBeUndefined();
 	});
 });
 

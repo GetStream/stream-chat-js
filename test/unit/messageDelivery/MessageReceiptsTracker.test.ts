@@ -42,9 +42,8 @@ const createChannelMock = ({
 
   return {
     channel: {
-      state: {
-        readStore,
-      },
+      // `channel.state` is the reactive store itself; the tracker subscribes to its `read` slice.
+      state: readStore,
       // The default receipts locator now resolves timestamps via the message paginator; this mock
       // fn (still named findMessageByTimestamp in tests) backs messagePaginator.findItemByTimestamp.
       messagePaginator: {

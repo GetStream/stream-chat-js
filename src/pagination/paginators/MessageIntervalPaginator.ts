@@ -19,7 +19,6 @@ import {
 } from './BasePaginator';
 import type {
   LocalMessage,
-  MessagePaginationOptions,
   MessagePaginationParams,
   MessageResponse,
   PinnedMessagePaginationOptions,
@@ -28,6 +27,7 @@ import type {
   UserResponse,
 } from '../../types';
 import type { Channel } from '../../channel';
+import { CORE_NOTIFICATION_TYPE } from '../../notifications';
 import { StateStore } from '../../store';
 import {
   computeOwnReactions,
@@ -99,7 +99,7 @@ const DEFAULT_BACKEND_SORT: MessagePaginatorSort = [
 const DEFAULT_CHANNEL_MESSAGE_LIST_PAGE_SIZE = 100;
 
 export type MessagePaginatorState = PaginatorState<LocalMessage>;
-export type MessageQueryShape = MessagePaginationOptions | PinnedMessagePaginationOptions;
+export type MessageQueryShape = MessagePaginationParams | PinnedMessagePaginationOptions;
 
 /**
  * At the moment all the pagination parameters are just different types of cursors, e.g.
@@ -479,7 +479,7 @@ export class MessageIntervalPaginator extends BasePaginator<
           : undefined;
     } else {
       const { messages } = this.parentMessageId
-        ? await this.channel.getReplies({
+        ? await this.channel.getClient().getReplies({
             parent_id: this.parentMessageId,
             ...options,
             sort: this.requestSort,
@@ -518,7 +518,7 @@ export class MessageIntervalPaginator extends BasePaginator<
   seedFirstPageSync(
     messages: LocalMessage[],
     requestedPageSize: number,
-    messagePaginationOptions?: MessagePaginationOptions,
+    messagePaginationOptions?: MessagePaginationParams,
     options?: SeedFirstPageOptions,
   ) {
     const queryShape: MessageQueryShape = {
@@ -552,7 +552,7 @@ export class MessageIntervalPaginator extends BasePaginator<
   isJumpQueryShape(queryShape: MessageQueryShape): boolean {
     return (
       !!queryShape?.id_around ||
-      !!(queryShape as MessagePaginationOptions)?.created_at_around
+      !!(queryShape as MessagePaginationParams)?.created_at_around
     );
   }
 
@@ -604,7 +604,7 @@ export class MessageIntervalPaginator extends BasePaginator<
         this.channel.getClient().notifications.addError({
           message: 'Jump to message unsuccessful',
           origin: { emitter: 'MessagePaginator.jumpToMessage', context: { messageId } },
-          options: { type: 'api:messages:query:failed' },
+          options: { type: CORE_NOTIFICATION_TYPE.messageJumpFailed },
         });
         return false;
       }
@@ -656,7 +656,7 @@ export class MessageIntervalPaginator extends BasePaginator<
       this.channel.getClient().notifications.addError({
         message: 'Jump to latest message unsuccessful',
         origin: { emitter: 'MessagePaginator.jumpToTheLatestMessage' },
-        options: { type: 'api:message:query:failed' },
+        options: { type: CORE_NOTIFICATION_TYPE.messageJumpToLatestFailed },
       });
       return false;
     }
@@ -870,7 +870,9 @@ export class MessageIntervalPaginator extends BasePaginator<
   private async hasMessagesOlderThan(id: string): Promise<boolean> {
     const pagination = { limit: 1, id_lt: id } as MessagePaginationParams;
     const { messages } = this.parentMessageId
-      ? await this.channel.getReplies({ parent_id: this.parentMessageId, ...pagination })
+      ? await this.channel
+          .getClient()
+          .getReplies({ parent_id: this.parentMessageId, ...pagination })
       : await this.channel.query({ messages: pagination });
     return Array.isArray(messages) && messages.length > 0;
   }
@@ -1501,11 +1503,11 @@ const makeDeriveCursor =
       return { cursor, hasMoreHead, hasMoreTail };
     };
 
-    if ((ctx.queryShape as MessagePaginationOptions)?.created_at_around) {
+    if ((ctx.queryShape as MessagePaginationParams)?.created_at_around) {
       return injectCursor(
         deriveCreatedAtAroundPaginationFlags<
           LocalMessage,
-          MessagePaginationOptions,
+          MessagePaginationParams,
           MessageIntervalPaginator
         >({
           ...ctx,

@@ -1,11 +1,6 @@
 import { StateStore } from '../store';
 import type { MessageComposer } from './messageComposer';
-import type {
-  DraftMessage,
-  LiveLocationPayload,
-  LocalMessage,
-  SharedLocation,
-} from '../types';
+import type { DraftMessage, LocalMessage, SharedLocation } from '../types';
 
 export type Coords = { latitude: number; longitude: number };
 
@@ -18,7 +13,7 @@ export type StaticLocationPreview = SharedLocation & {
   message_id?: string;
 };
 
-export type LiveLocationPreview = Omit<LiveLocationPayload, 'end_at'> & {
+export type LiveLocationPreview = Omit<SharedLocation, 'end_at'> & {
   durationMs?: number;
   message_id?: string;
 };

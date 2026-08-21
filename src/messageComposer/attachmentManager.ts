@@ -20,6 +20,7 @@ import {
   AttachmentPreUploadMiddlewareExecutor,
 } from './middleware/attachmentManager';
 import { StateStore } from '../store';
+import { CORE_NOTIFICATION_TYPE } from '../notifications';
 import { generateUUIDv4 } from '../utils';
 import { DEFAULT_UPLOAD_SIZE_LIMIT_BYTES } from '../constants';
 import type {
@@ -31,7 +32,12 @@ import type {
   LocalUploadAttachment,
   UploadPermissionCheckResult,
 } from './types';
-import type { ChannelResponse, DraftMessage, LocalMessage } from '../types';
+import type {
+  ChannelResponse,
+  DraftMessage,
+  LocalMessage,
+  StreamRequestOptions,
+} from '../types';
 import type { MessageComposer } from './messageComposer';
 import { mergeWithDiff } from '../utils/mergeWith';
 
@@ -524,7 +530,7 @@ export class AttachmentManager {
       this.client.notifications.addError({
         message: 'File is required for upload attachment',
         origin: { emitter: 'AttachmentManager', context: { attachment } },
-        options: { type: 'validation:attachment:file:missing' },
+        options: { type: CORE_NOTIFICATION_TYPE.attachmentFileMissing },
       });
       return;
     }
@@ -533,7 +539,7 @@ export class AttachmentManager {
       this.client.notifications.addError({
         message: 'Local upload attachment missing local id',
         origin: { emitter: 'AttachmentManager', context: { attachment } },
-        options: { type: 'validation:attachment:id:missing' },
+        options: { type: CORE_NOTIFICATION_TYPE.attachmentIdMissing },
       });
       return;
     }
@@ -571,36 +577,35 @@ export class AttachmentManager {
         }
       : undefined;
 
-    const axiosUploadConfig =
-      progressHandler || options?.abortSignal
-        ? {
-            ...(progressHandler ? { onUploadProgress: progressHandler } : {}),
-            ...(options?.abortSignal ? { signal: options.abortSignal } : {}),
-          }
-        : undefined;
+    const requestOptions: StreamRequestOptions = {
+      ...(progressHandler ? { onUploadProgress: progressHandler } : {}),
+      ...(options?.abortSignal ? { signal: options.abortSignal } : {}),
+    };
 
-    if (isFileReference(fileLike)) {
-      return this.channel[isImageFile(fileLike) ? 'sendImage' : 'sendFile'](
-        fileLike.uri,
-        fileLike.name,
-        fileLike.type,
-        undefined,
-        axiosUploadConfig,
-      );
+    const file =
+      isFileReference(fileLike) || isFile(fileLike)
+        ? fileLike
+        : createFileFromBlobs({
+            blobsArray: [fileLike],
+            fileName: generateFileName(fileLike.type),
+            mimeType: fileLike.type,
+          });
+
+    const {
+      duration: _duration,
+      // per-request artifact - `doUploadRequest`'s result is public API
+      metadata: _metadata,
+      ...result
+    } = await this.channel[isImageFile(fileLike) ? 'uploadImage' : 'uploadFile'](
+      { file },
+      requestOptions,
+    );
+
+    if (!result.file) {
+      throw new Error('The upload succeeded but the response carried no file URL');
     }
 
-    const file = isFile(fileLike)
-      ? fileLike
-      : createFileFromBlobs({
-          blobsArray: [fileLike],
-          fileName: generateFileName(fileLike.type),
-          mimeType: fileLike.type,
-        });
-
-    const { duration: _duration, ...result } = await this.channel[
-      isImageFile(fileLike) ? 'sendImage' : 'sendFile'
-    ](file, undefined, undefined, undefined, axiosUploadConfig);
-    return result;
+    return result as MinimumUploadRequestResult;
   };
 
   /**
@@ -636,7 +641,7 @@ export class AttachmentManager {
           context: { attachment, blockedAttachment: localAttachment },
         },
         options: {
-          type: 'validation:attachment:upload:blocked',
+          type: CORE_NOTIFICATION_TYPE.attachmentUploadBlocked,
           metadata: {
             reason: localAttachment.localMetadata.uploadPermissionCheck?.reason,
           },
@@ -666,7 +671,7 @@ export class AttachmentManager {
           context: { attachment, failedAttachment },
         },
         options: {
-          type: 'api:attachment:upload:failed',
+          type: CORE_NOTIFICATION_TYPE.attachmentUploadFailed,
           metadata: { reason },
           originalError: error instanceof Error ? error : undefined,
         },

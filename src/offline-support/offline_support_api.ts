@@ -7,8 +7,7 @@ import type {
   LocalMessage,
   MessageRequest,
   MessageResponse,
-  OwnUserResponse,
-  RequireLiteral,
+  UserResponse,
 } from '../types';
 
 import type {
@@ -588,7 +587,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
           event_.channel_type,
           event_.channel_id,
         );
-        if (channelFromState.initialized && !channelFromState.disconnected) {
+        if (channelFromState.initialized && !channelFromState.pendingDisposal) {
           channelData = channelFromState.data as unknown as ChannelResponse;
         }
       }
@@ -676,10 +675,15 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
                   last_read: ownReads?.last_read ?? new Date(0),
                   last_read_message_id: ownReads?.last_read_message_id,
                   unread_messages: unreadCount,
-                  user: client.user as RequireLiteral<
-                    OwnUserResponse,
-                    'blocked_user_ids'
-                  >, // TODO: drop RequireLiteral once the oapi spec is adjusted
+                  // `client.user` is `ClientUser` (everything optional but `id`), so a
+                  // cast to the populated shape is unavoidable — it holds after connect.
+                  // `blocked_user_ids` is supplied rather than asserted: the connect payload
+                  // omits it when nothing is blocked, while `UserResponse` always carries it
+                  // (the server sends `[]` for other users).
+                  user: {
+                    ...client.user,
+                    blocked_user_ids: client.user.blocked_user_ids ?? [],
+                  } as UserResponse,
                 },
               ],
             });
@@ -992,7 +996,11 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
               last_read: ownReads?.last_read ?? new Date(0),
               last_read_message_id: ownReads?.last_read_message_id,
               unread_messages: unreadCount,
-              user: ownUser as RequireLiteral<OwnUserResponse, 'blocked_user_ids'>, // TODO: drop RequireLiteral once the oapi spec is adjusted
+              // See the note above: supply `blocked_user_ids`, do not assert it.
+              user: {
+                ...ownUser,
+                blocked_user_ids: ownUser.blocked_user_ids ?? [],
+              } as UserResponse,
             },
           ],
         });

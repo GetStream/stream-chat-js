@@ -6,7 +6,6 @@ export type ChatLoggerScope =
   | 'channel-manager'
   | 'client'
   | 'connection'
-  | 'connection-fallback'
   | 'instance-configuration'
   | 'message-composer'
   | 'offline-db'

@@ -1,35 +1,23 @@
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import type { StableWSConnection } from './connection';
-import type {
-  CustomChannelData,
-  CustomCommandData,
-  CustomEventTypes,
-} from './custom_types';
+import type { CustomEventTypes } from './custom_types';
 import type { NotificationManager } from './notifications';
 import type { InstanceConfigTree } from './configuration/types';
 import type { DeepPartial } from './types.utility';
-import type { RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
 import type {
   APIError,
   Attachment,
-  AutomodDetailsResponse,
+  BanRequest,
   ChannelConfigWithInfo,
-  ChannelInput,
-  ChannelMemberResponse,
-  ChannelMute,
   ChannelOwnCapability,
-  ChannelResponse,
   ChannelStateResponseFields,
   CreateDeviceRequest,
+  CreatePollRequest,
   DraftPayloadResponse,
+  FlagRequest,
   Images,
   MessageResponse,
-  ModerationPayload,
   OwnUserResponse,
-  PollResponseData,
-  PollVoteResponseData,
-  PrivacySettingsResponse,
-  PushPreferencesResponse,
   QueryChannelsRequest,
   QueryMembersPayload,
   QueryPollsRequest,
@@ -39,19 +27,14 @@ import type {
   QueryUsersPayload,
   ReactionResponse,
   SearchPayload,
-  SearchWarning,
   SendMessageRequest,
   SendMessageResponse,
-  SharedLocation,
   SharedLocationResponseData,
-  SortParamRequest,
   TranslateMessageRequest,
   UpdateChannelRequest,
   UpdateMessageRequest,
   UpdateMessageResponse,
-  UpdatePollOptionRequest,
   UpdatePollRequest,
-  UserMuteResponse,
   UserResponse,
   WSEvent,
 } from './gen/models';
@@ -70,8 +53,6 @@ export type RequireAtLeastOne<T> = {
   [K in keyof T]-?: Required<Pick<T, K>> & Partial<Omit<T, K>>;
 }[keyof T];
 
-export type UR = Record<string, unknown>;
-
 export type Unpacked<T> = T extends (infer U)[]
   ? U
   : T extends (...args: any[]) => infer U
@@ -84,61 +65,20 @@ export type Unpacked<T> = T extends (infer U)[]
  * Response Types
  */
 
+/**
+ * Legacy response envelope. Every generated response already carries `duration`, and the
+ * transport wraps results in `StreamResponse<T>`, which also carries `metadata`.
+ *
+ * Only still referenced by the hand-written `/moderation/*` methods on `StreamChat` that
+ * bypass the generated client. Delete this together with those.
+ */
 export type APIResponse = {
   duration: string;
 };
 
-export type FlagDetails = {
-  automod?: AutomodDetailsResponse;
-};
-
-export type Flag = {
-  created_at: string;
-  created_by_automod: boolean;
-  updated_at: string;
-  details?: FlagDetails;
-  target_message?: MessageResponse;
-  target_user?: UserResponse;
-  user?: UserResponse;
-};
-
-export type ChannelUpdateOptions = Omit<UpdateChannelRequest, 'message' | 'members'>;
+export type ChannelUpdateOptions = Omit<UpdateChannelRequest, 'message'>;
 
 export type ConnectAPIResponse = Promise<void | ConnectionOpen>;
-
-export type FlagMessageResponse = APIResponse & {
-  flag: {
-    created_at: string;
-    created_by_automod: boolean;
-    target_message_id: string;
-    updated_at: string;
-    user: UserResponse;
-    approved_at?: string;
-    channel_cid?: string;
-    details?: object; // Any JSON
-    message_user_id?: string;
-    rejected_at?: string;
-    reviewed_at?: string;
-    reviewed_by?: string;
-  };
-  review_queue_item_id?: string;
-};
-
-export type FlagUserResponse = APIResponse & {
-  flag: {
-    created_at: string;
-    created_by_automod: boolean;
-    target_user: UserResponse;
-    updated_at: string;
-    user: UserResponse;
-    approved_at?: string;
-    details?: object; // Any JSON
-    rejected_at?: string;
-    reviewed_at?: string;
-    reviewed_by?: string;
-  };
-  review_queue_item_id?: string;
-};
 
 export type LocalMessage = MessageResponse & {
   status: string;
@@ -146,131 +86,37 @@ export type LocalMessage = MessageResponse & {
   user_id?: string;
 };
 
-// TODO: Figure out a way to strongly type set and unset.
-export type PartialThreadUpdate = {
-  set?: Partial<Record<string, unknown>>;
-  unset?: Array<string>;
-};
-
 export type GetThreadOptions = Omit<Parameters<ChatApi['getThread']>[0], 'message_id'>;
 
-export enum Product {
-  Chat = 'chat',
-  Video = 'video',
-  Moderation = 'moderation',
-  Feeds = 'feeds',
-}
-
-export type GetRepliesAPIResponse = APIResponse & {
-  messages: MessageResponse[];
-};
-
-export type MuteUserResponse = APIResponse & {
-  mute?: UserMuteResponse;
-  mutes?: Array<UserMuteResponse>;
-  own_user?: OwnUserResponse;
-  non_existing_users?: string[];
-};
-
-export type UnmuteUserResponse = APIResponse & {
-  non_existing_users?: string[];
-};
-
-export type OwnUserBase = {
-  channel_mutes: ChannelMute[];
-  devices: Device[];
-  mutes: UserMuteResponse[];
-  total_unread_count: number;
-  unread_channels: number;
-  unread_count: number;
-  unread_threads: number;
-  invisible?: boolean;
-  privacy_settings?: PrivacySettingsResponse;
-  push_preferences?: PushPreferencesResponse;
-  roles?: string[];
-  total_unread_count_by_team?: Record<string, number> | null;
-};
-
-export type ReactionAPIResponse = APIResponse & {
-  message: MessageResponse;
-  reaction: ReactionResponse;
-};
-
-export type SearchAPIResponse = APIResponse & {
-  results: {
-    message: MessageResponse;
-  }[];
-  next?: string;
-  previous?: string;
-  results_warning?: SearchWarning | null;
-};
+/**
+ * The fields that exist on the connected user (`OwnUserResponse`) but not on a plain
+ * `UserResponse` — i.e. the own-user-only slice of the user object.
+ *
+ * Derived, never hand-listed: `client._handleUserEvent` uses this set (through
+ * `isOwnUserBaseProperty`) to decide which keys survive a `user.updated` event, so a field
+ * missing from it is silently deleted off `client.user`. Deriving it means a spec change
+ * cannot desynchronise the two.
+ */
+export type OwnUserBase = Pick<
+  OwnUserResponse,
+  Exclude<keyof OwnUserResponse, keyof UserResponse>
+>;
 
 // Thumb URL(thumb_url) is added considering video attachments as the backend will return the thumbnail in the response.
-export type SendFileAPIResponse = APIResponse & { file: string; thumb_url?: string };
+export type BanUserOptions = Omit<BanRequest, 'target_user_id'>;
 
-export type UpdateChannelAPIResponse = APIResponse & {
-  channel: ChannelResponse;
-  members: ChannelMemberResponse[];
-  message?: MessageResponse;
-};
-
-export type UsersAPIResponse = APIResponse & {
-  users: Array<UserResponse>;
-  membership_deletion_task_id?: string;
-};
-
-export type BanUserOptions = UnBanUserOptions & {
-  ban_from_future_channels?: boolean;
-  banned_by?: UserResponse;
-  banned_by_id?: string;
-  ip_ban?: boolean;
-  reason?: string;
-  timeout?: number;
-  delete_messages?: MessageDeletionStrategy;
-  delete_reactions?: boolean;
-};
-
-export type ChannelOptions = {
-  limit?: number;
-  member_limit?: number;
-  message_limit?: number;
-  offset?: number;
-  presence?: boolean;
-  state?: boolean;
-  user_id?: string;
-  watch?: boolean;
-  /**
-   * Name of a predefined filter to use instead of sending raw
-   * `filter_conditions`.
-   *
-   * The backend resolves the filter template by name and interpolates it using
-   * `filter_values`.
-   *
-   * A regular `sort` can still be passed to `queryChannels()`, but backend
-   * precedence rules apply:
-   *
-   * - if the predefined filter has its own stored sort template, that stored
-   *   sort takes precedence and the request `sort` is ignored
-   * - if the predefined filter does not define a sort template, the request
-   *   `sort` can still be used
-   */
-  predefined_filter?: string;
-  /**
-   * Values used to interpolate placeholders inside the predefined filter's
-   * `filter` template.
-   *
-   * Example: a template value like `{{user_id}}` can be resolved with
-   * `{ user_id: 'alice' }`.
-   *
-   * Only used when `predefined_filter` is provided.
-   */
-  filter_values?: Record<string, unknown>;
-  /**
-   * Values to interpolate into the predefined filter sort template placeholders.
-   * Only used when predefined_filter is provided.
-   */
-  sort_values?: Record<string, unknown>;
-};
+/**
+ * Everything `queryChannels()` accepts apart from the filter and the sort.
+ *
+ * Derived from the generated request so new query options appear here automatically.
+ *
+ * On `predefined_filter`: the backend resolves the named filter template and interpolates it
+ * with `filter_values`. A regular `sort` can still be passed, but backend precedence applies —
+ * if the predefined filter has its own stored sort template that template wins and the request
+ * `sort` is ignored; if it does not, the request `sort` is used. `sort_values` interpolates the
+ * stored sort template's placeholders. All three are only read when `predefined_filter` is set.
+ */
+export type ChannelOptions = Omit<QueryChannelsRequest, 'filter_conditions' | 'sort'>;
 
 export type ChannelStateOptions = {
   offlineMode?: boolean;
@@ -287,76 +133,16 @@ export type ChannelStateOptions = {
   withResponse?: boolean;
 };
 
-export type PolicyRequest = {
-  action: 'Deny' | 'Allow' | (string & {});
-  /**
-   * @description User-friendly policy name
-   */
-  name: string;
-  /**
-   * @description Whether policy applies to resource owner or not
-   */
-  owner: boolean;
-  priority: number;
-  /**
-   * @description List of resources to apply policy to
-   */
-  resources: string[];
-  /**
-   * @description List of roles to apply policy to
-   */
-  roles: string[];
-};
+/** The channel-type automod mode, as reported by `channel.getConfig()`. */
+export type Automod = ChannelConfigWithInfo['automod'];
+/** What automod does when it trips, as reported by `channel.getConfig()`. */
+export type AutomodBehavior = ChannelConfigWithInfo['automod_behavior'];
 
-export type Automod = 'disabled' | 'simple' | 'AI' | (string & {});
-export type AutomodBehavior = 'flag' | 'block' | 'shadow_block' | (string & {});
+export type PinnedMessagePaginationOptions = Omit<
+  Parameters<ChatApi['getPinnedMessages']>[0],
+  'id' | 'sort' | 'type'
+>;
 
-export type MuteUserOptions = {
-  client_id?: string;
-  connection_id?: string;
-  id?: string;
-  reason?: string;
-  target_user_id?: string;
-  timeout?: number;
-  type?: string;
-  user?: UserResponse;
-  user_id?: string;
-};
-
-export type PaginationOptions = {
-  created_at_after?: string | Date;
-  created_at_after_or_equal?: string | Date;
-  created_at_before?: string | Date;
-  created_at_before_or_equal?: string | Date;
-  id_gt?: string;
-  id_gte?: string;
-  id_lt?: string;
-  id_lte?: string;
-  limit?: number;
-  offset?: number; // should be avoided with channel.query()
-};
-
-export type MessagePaginationOptions = PaginationOptions & {
-  created_at_around?: string | Date;
-  id_around?: string;
-};
-
-export type PinnedMessagePaginationOptions = {
-  id_around?: string;
-  id_gt?: string;
-  id_gte?: string;
-  id_lt?: string;
-  id_lte?: string;
-  limit?: number;
-  offset?: number;
-  pinned_at_after?: string | Date;
-  pinned_at_after_or_equal?: string | Date;
-  pinned_at_around?: string | Date;
-  pinned_at_before?: string | Date;
-  pinned_at_before_or_equal?: string | Date;
-};
-
-export type GetRepliesRequest = Parameters<ChatApi['getReplies']>[0];
 export type QueryMembersOptions = Partial<Omit<QueryMembersPayload, 'filter_conditions'>>;
 
 export type StreamChatOptions = {
@@ -371,7 +157,6 @@ export type StreamChatOptions = {
    */
   baseURL?: string;
   browser?: boolean;
-  device?: BaseDeviceFields;
   /**
    * Disables the hydration of all caches within the JS Client. This includes this.activeChannels,
    * this.polls.pollCache and this.config.
@@ -388,8 +173,6 @@ export type StreamChatOptions = {
    * `channel.markReadLocally()`. It is never sent to the backend, but is persisted to the offline DB.
    */
   isLocalUnreadCountEnabled?: boolean;
-  /** experimental feature, please contact support if you want this feature enabled for you */
-  enableWSFallback?: boolean;
   /**
    * Custom notification manager service to use for the client.
    * If not provided, a default notification manager will be created.
@@ -451,12 +234,8 @@ export type UnBanUserOptions = {
   type?: string;
 };
 
-export type UserOptions = {
-  include_deactivated_users?: boolean;
-  limit?: number;
-  offset?: number;
-  presence?: boolean;
-};
+/** Everything `queryUsers()` accepts apart from the filter and the sort. */
+export type UserOptions = Omit<QueryUsersPayload, 'filter_conditions' | 'sort'>;
 
 type LocalEvent = (
   | ({ type: 'live_location_sharing.started' } & { message: MessageResponse })
@@ -469,7 +248,6 @@ type LocalEvent = (
         isLatestMessageSet: boolean;
       };
     })
-  | ({ type: 'transport.changed' } & { mode: string })
   | ({ type: 'connection.changed' } & { online: boolean })
   | { type: 'connection.recovered' }
   | ({ type: 'offline_reactions.queried' } & {
@@ -490,7 +268,23 @@ type LocalEvent = (
     })
 ) & { received_at?: Date };
 
-export type Event = WSEvent | LocalEvent | keyof CustomEventTypes;
+/**
+ * The hello event of the `/api/v2/connect` WebSocket endpoint, sent once the auth frame
+ * has been accepted. The v1 endpoint used `health.check` for this instead.
+ *
+ * Hand-written because the event is not published in the OpenAPI spec, so it cannot
+ * come from `src/gen`. Remove this — along with the `decodeConnectionEvent` shim in
+ * `connection.ts` — once the backend adds it to the spec and `src/gen` is regenerated.
+ */
+export type ConnectedEvent = {
+  type: 'connection.ok';
+  connection_id: string;
+  created_at: Date;
+  me: OwnUserResponse;
+  received_at?: Date;
+};
+
+export type Event = WSEvent | ConnectedEvent | LocalEvent | keyof CustomEventTypes;
 export type EventType = Event['type'] | 'all';
 
 export type EventHandler<T = string> = (event: Extract<Event, { type: T }>) => void;
@@ -505,15 +299,9 @@ export type QueryReactionsRequestWithId = Parameters<ChatApi['queryReactions']>[
 
 export type ChannelFilters = NonNullable<QueryChannelsRequest['filter_conditions']>;
 
-export type QueryPollsOptions = Pager;
+export type QueryPollsOptions = Omit<QueryPollsRequest, 'filter' | 'sort'>;
 
-export type VotesFiltersOptions = {
-  is_answer?: boolean;
-  option_id?: string;
-  user_id?: string;
-};
-
-export type QueryVotesOptions = Pager;
+export type QueryVotesOptions = Omit<QueryPollVotesRequest, 'filter' | 'sort'>;
 
 export type QueryPollsFilters = NonNullable<QueryPollsRequest['filter']>;
 
@@ -544,140 +332,9 @@ export type UserFilters = QueryUsersPayload['filter_conditions'];
 
 export type MemberFilters = QueryMembersPayload['filter_conditions'];
 
-/**
- * Sort Types
- */
-
-export type BannedUsersSort = SortParamRequest[];
-
-export type ReactionSort = SortParamRequest[];
-
-export type ChannelSort = SortParamRequest[];
-
-export type PinnedMessagesSort = SortParamRequest[];
-
-export type UserSort = SortParamRequest[];
-
-export type MemberSort = SortParamRequest[];
-
-export type SearchMessageSort = SortParamRequest[];
-
-export type DraftSort = SortParamRequest[];
-
-export type PollSort = SortParamRequest[];
-
-export type VoteSort = SortParamRequest[];
-
-/**
- * Base Types
- */
-
-export type APNConfig = {
-  auth_key?: string;
-  auth_type?: string;
-  bundle_id?: string;
-  development?: boolean;
-  enabled?: boolean;
-  host?: string;
-  key_id?: string;
-  notification_template?: string;
-  p12_cert?: string;
-  team_id?: string;
-};
-
-export type AsyncModerationOptions = {
-  callback?: {
-    mode?: 'CALLBACK_MODE_NONE' | 'CALLBACK_MODE_REST' | 'CALLBACK_MODE_TWIRP';
-    server_url?: string;
-  };
-  timeout_ms?: number;
-};
-
-// export type Attachment = ReplacePropertyTypes<
-//   Attachment,
-//   { custom: CustomAttachmentData & { file_size?: number; mime_type?: string } }
-// >;
-
 export type OGAttachment = RequireLiteral<Attachment, 'og_scrape_url'>;
 
-export type BlockList = {
-  name: string;
-  words: string[];
-  team?: string;
-  type?: string;
-  validate?: boolean;
-  is_confusable_folding_enabled?: boolean;
-  is_leet_check_enabled?: boolean;
-  is_plural_check_enabled?: boolean;
-};
-
-export type ChannelData = ReplacePropertyTypes<
-  ChannelInput,
-  { custom: CustomChannelData }
->;
-
 export type PushProvider = CreateDeviceRequest['push_provider'];
-
-export type PushProviderConfig = PushProviderCommon &
-  PushProviderID &
-  PushProviderAPN &
-  PushProviderFirebase &
-  PushProviderHuawei &
-  PushProviderXiaomi;
-
-export type PushProviderID = {
-  name: string;
-  type: PushProvider;
-};
-
-export type PushProviderCommon = {
-  created_at: string;
-  updated_at: string;
-  description?: string;
-  disabled_at?: string;
-  disabled_reason?: string;
-};
-
-export type PushProviderAPN = {
-  apn_auth_key?: string;
-  apn_auth_type?: 'token' | 'certificate';
-  apn_development?: boolean;
-  apn_host?: string;
-  apn_key_id?: string;
-  apn_notification_template?: string;
-  apn_p12_cert?: string;
-  apn_team_id?: string;
-  apn_topic?: string;
-};
-
-export type PushProviderFirebase = {
-  firebase_apn_template?: string;
-  firebase_credentials?: string;
-  firebase_data_template?: string;
-  firebase_notification_template?: string;
-  firebase_server_key?: string;
-};
-
-export type PushProviderHuawei = {
-  huawei_app_id?: string;
-  huawei_app_secret?: string;
-};
-
-export type PushProviderXiaomi = {
-  xiaomi_package_name?: string;
-  xiaomi_secret?: string;
-};
-
-export type CommandVariants =
-  | 'all'
-  | 'ban'
-  | 'fun_set'
-  | 'giphy'
-  | 'moderation_set'
-  | 'mute'
-  | 'unban'
-  | 'unmute'
-  | keyof CustomCommandData;
 
 /**
  * Server-provided channel configuration, keyed by **cid** (`messaging:general`, …). Most of
@@ -686,47 +343,15 @@ export type CommandVariants =
  */
 export type Configs = Record<string, ChannelConfigWithInfo | undefined>;
 
-export type ConnectionOpen = EventPayload<'health.check'>;
+export type ConnectionOpen = EventPayload<'health.check'> | EventPayload<'connection.ok'>;
 
-export type Device = DeviceFields & {
-  provider?: string;
-  user?: UserResponse;
-  user_id?: string;
-};
-
-export type BaseDeviceFields = {
-  id: string;
-  push_provider: PushProvider;
-  push_provider_name?: string;
-};
-
-export type DeviceFields = BaseDeviceFields & {
-  created_at: string;
-  disabled?: boolean;
-  disabled_reason?: string;
-};
-
-export type FirebaseConfig = {
-  apn_template?: string;
-  credentials_json?: string;
-  data_template?: string;
-  enabled?: boolean;
-  notification_template?: string;
-  server_key?: string;
-};
-
-export type HuaweiConfig = {
-  enabled?: boolean;
-  id?: string;
-  secret?: string;
-};
-
-export type XiaomiConfig = {
-  enabled?: boolean;
-  package_name?: string;
-  secret?: string;
-};
-
+/**
+ * The message `type` values the server can return.
+ *
+ * Hand-written because there is no generated equivalent: `MessageResponse['type']` is a bare
+ * `string`, so deriving it would widen rather than narrow. Both the React and React Native
+ * SDKs use this as a discriminant (RN types its SQLite message rows with it).
+ */
 export type MessageLabel =
   | 'deleted'
   | 'ephemeral'
@@ -737,53 +362,9 @@ export type MessageLabel =
 
 export type SendMessageOptions = Omit<SendMessageRequest, 'message'>;
 
-export type PermissionObject = {
-  action?: 'Deny' | 'Allow';
-  name?: string;
-  owner?: boolean;
-  priority?: number;
-  resources?: string[];
-  roles?: string[];
-};
-
-export type Policy = {
-  action?: 0 | 1;
-  created_at?: string;
-  name?: string;
-  owner?: boolean;
-  priority?: number;
-  resources?: string[];
-  roles?: string[] | null;
-  updated_at?: string;
-};
-
 export type TokenOrProvider = null | string | TokenProvider | undefined;
 
 export type TokenProvider = () => Promise<string>;
-
-export type ReservedUpdatedMessageFields = keyof typeof RESERVED_UPDATED_MESSAGE_FIELDS;
-
-export type UpdatedMessage = Omit<
-  MessageResponse,
-  ReservedUpdatedMessageFields | 'mentioned_groups'
-> & {
-  mentioned_users?: string[];
-  mentioned_channel?: boolean;
-  mentioned_here?: boolean;
-  mentioned_group_ids?: string[];
-  mentioned_roles?: string[];
-  type?: MessageLabel;
-};
-
-export type TaskResponse = {
-  task_id: string;
-};
-
-export type Pager = {
-  limit?: number;
-  next?: string;
-  prev?: string;
-};
 
 export type MessageSetType = 'latest' | 'current' | 'new';
 
@@ -853,46 +434,42 @@ export class StreamAPIError<T = APIError> extends Error {
   }
 }
 
-export type PollResponse_old = PollResponseData & PollEnrichData;
-
-export enum VotingVisibility {
-  anonymous = 'anonymous',
-  public = 'public',
-}
-
-export type PollEnrichData = {
-  answers_count: number;
-  latest_answers: PollVoteResponseData[]; // not updated with WS events, ordered DESC by created_at, seems like updated_at cannot be different from created_at
-  latest_votes_by_option: Record<string, PollVoteResponseData[]>; // not updated with WS events; always null in anonymous polls
-  vote_count: number;
-  vote_counts_by_option: Record<string, number>;
-  own_votes?: PollVoteResponseData[]; // not updated with WS events
-};
+/**
+ * Poll vote visibility. Derived from the generated request shape so it tracks the spec.
+ */
+export type VotingVisibility = NonNullable<CreatePollRequest['voting_visibility']>;
 
 export type PartialPollUpdate = {
   set?: Partial<UpdatePollRequest>;
   unset?: Array<keyof UpdatePollRequest>;
 };
 
-export type PollOptionData = UpdatePollOptionRequest & {
-  position?: number;
-};
-
-export type MessageDeletionStrategy = 'soft' | 'hard' | 'pruning';
-// @deprecated use type MessageDeletionStrategy instead
-
-export type ModerationFlagOptions = {
-  custom?: Record<string, unknown>;
-  moderation_payload?: ModerationPayload;
-  user_id?: string;
-};
+/**
+ * Options accepted by `moderation.flagUser` / `moderation.flagMessage` on top of the
+ * entity they resolve and the `reason` they take positionally.
+ */
+export type ModerationFlagOptions = Omit<
+  FlagRequest,
+  'entity_id' | 'entity_type' | 'reason'
+>;
 
 export type AIState =
+  | 'AI_STATE_IDLE'
   | 'AI_STATE_ERROR'
-  | 'AI_STATE_CHECKING_SOURCES'
+  | 'AI_STATE_EXTERNAL_SOURCES'
   | 'AI_STATE_THINKING'
   | 'AI_STATE_GENERATING'
+  | 'AI_STATE_STOP'
   | (string & {});
+
+export const AIStates = {
+  Error: 'AI_STATE_ERROR',
+  ExternalSources: 'AI_STATE_EXTERNAL_SOURCES',
+  Generating: 'AI_STATE_GENERATING',
+  Idle: 'AI_STATE_IDLE',
+  Stop: 'AI_STATE_STOP',
+  Thinking: 'AI_STATE_THINKING',
+} as const satisfies Record<string, AIState>;
 
 /**
  * An identifier containing information about the downstream SDK using stream-chat. It
@@ -935,17 +512,11 @@ export type SharedLiveLocationResponse = RequireLiteral<
   'end_at'
 >;
 
-export type LiveLocationPayload = RequireLiteral<SharedLocation, 'end_at'>;
-
-export type ThreadSort = SortParamRequest[];
-
 export type ThreadFilters = NonNullable<QueryThreadsRequest['filter']>;
 
 export type CreateReminderOptions = Parameters<ChatApi['createReminder']>[0];
 
 export type ReminderFilters = NonNullable<QueryRemindersRequest['filter']>;
-
-export type ReminderSort = SortParamRequest[];
 
 export type ListUserGroupsOptions = NonNullable<Parameters<ChatApi['listUserGroups']>[0]>;
 
@@ -975,17 +546,6 @@ export type EventPayload<T extends Event['type'] | (string & {})> = Extract<
 
 export type RequireLiteral<L, T extends keyof L> = Omit<L, T> & Required<Pick<L, T>>;
 
-export type ReplacePropertyTypes<
-  Base,
-  Replacement extends RequireAtLeastOne<Record<keyof Base, any>>,
-> = keyof Replacement extends keyof Base
-  ? Omit<Base, keyof Replacement> & {
-      [K in keyof Replacement as undefined extends Base[K] ? never : K]: Replacement[K];
-    } & {
-      [K in keyof Replacement as undefined extends Base[K] ? K : never]?: Replacement[K];
-    }
-  : never;
-
 export type PartializeAllBut<T, K extends keyof T> = {
   [P in K]-?: T[P];
 } & { [P in Exclude<keyof T, K>]?: T[P] };
@@ -994,11 +554,36 @@ export type DeleteMessageOptions = Omit<Parameters<ChatApi['deleteMessage']>[0],
 export type SendMessageAPIResponse = StreamResponse<SendMessageResponse>;
 export type UpdateMessageOptions = Omit<UpdateMessageRequest, 'message'>;
 export type UpdateMessageAPIResponse = StreamResponse<UpdateMessageResponse>;
+/**
+ * The Giphy rendition names, derived from the generated `Images` shape so the two cannot
+ * drift. Consumed by the React and React Native SDKs to pick a rendition size.
+ */
 export type GiphyVersions = keyof Images;
 export type TranslationLanguage = TranslateMessageRequest['language'];
 
+export type FileReferenceBase = {
+  uri: string;
+  type: string;
+  name?: string;
+};
+
+export type FileUploadInput = File | Blob | FileReferenceBase | string;
+
+/**
+ * Structural subset of axios' `AxiosProgressEvent`, kept transport-agnostic on purpose so the
+ * public surface does not depend on axios.
+ */
+export type StreamProgressEvent = {
+  loaded: number;
+  total?: number;
+  lengthComputable?: boolean;
+  progress?: number;
+};
+
 export type StreamRequestOptions = {
   signal?: AbortSignal;
+  /** Only meaningful for upload (multipart) requests; ignored everywhere else. */
+  onUploadProgress?: (event: StreamProgressEvent) => void;
 };
 
 export * from './gen/models';

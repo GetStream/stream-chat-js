@@ -202,9 +202,9 @@ Only chat / user / moderation surfaces are enumerated here — the guide focuses
 | `channel.sendMessage(message, options?)`                                                                   | `channel.sendMessage({ message, ...options })`                                                              |
 | `channel.getManyMessages(ids)`                                                                             | `channel.getManyMessages({ ids })`                                                                          |
 | `channel.sendEvent(event)`                                                                                 | `channel.sendEvent({ event })`                                                                              |
-| `channel.sendFile(url, name, contentType, user)`                                                           | `channel.uploadChannelFile({ file, user })`                                                                 |
+| `channel.sendFile(url, name, contentType, user)`                                                           | `channel.uploadFile({ file, user })` (alias of `channel.uploadChannelFile`)                                 |
 | `channel.deleteFile(url)`                                                                                  | `channel.deleteChannelFile({ url })`                                                                        |
-| `channel.sendImage(url, name, contentType, user)`                                                          | `channel.uploadChannelImage({ file, user })`                                                                |
+| `channel.sendImage(url, name, contentType, user)`                                                          | `channel.uploadImage({ file, user })` (alias of `channel.uploadChannelImage`)                               |
 | `channel.deleteImage(url)`                                                                                 | `channel.deleteChannelImage({ url })`                                                                       |
 | `channel.updateMemberPartial(userId, { set, unset })`                                                      | `channel.updateMemberPartial({ user_id, set, unset })`                                                      |
 | `channel.queryMembers(filter, sort?, options?)`                                                            | `channel.queryMembers({ payload: { filter_conditions, sort?, ...options } })`                               |
@@ -280,8 +280,8 @@ Same names, moved to `client.chat`:
 | `client.removeDevice(id, userId?)`                                                                                         | `client.deleteDevice({ id, user_id })`                                                             |
 | `client.createPoll(request)` / `getPoll` / `updatePoll` / `updatePollPartial` / `deletePoll` / `queryPolls`                | `client.createPoll` / `getPoll` / `updatePoll` / `updatePollPartial` / `deletePoll` / `queryPolls` |
 | `client.createPollOption` / `deletePollOption` / `updatePollOption` / `castPollVote` / `deletePollVote` / `queryPollVotes` | Same names — some on `client`, `castPollVote` / `deletePollVote` on `client.chat`.                 |
-| `client.sendFile(url, file, name, user)`                                                                                   | `client.uploadFile({ file, user: JSON.stringify(user) })` — see [Uploads notes](#uploads-notes).   |
-| `client.sendImage(url, file, name, user)`                                                                                  | `client.uploadImage({ file, user: JSON.stringify(user), upload_sizes? })`                          |
+| `client.sendFile(url, file, name, user)`                                                                                   | `client.uploadFile({ file, user })` — see [Uploads notes](#uploads-notes).                         |
+| `client.sendImage(url, file, name, user)`                                                                                  | `client.uploadImage({ file, user, upload_sizes? })`                                                |
 | `client.deleteFile(url)` / `deleteImage(url)`                                                                              | `client.deleteFile({ url })` / `client.deleteImage({ url })`                                       |
 
 ### Live location
@@ -326,12 +326,16 @@ v9 shipped the `form-data` package so the upload helpers could accept Node sourc
 sendFile(uri: string | NodeJS.ReadableStream | Buffer | File, ...)
 sendImage(uri: string | NodeJS.ReadableStream | File, ...)
 
-// v10 signature — both methods, on Channel and on StreamChat
-sendFile(uri: string | File, ...)
-sendImage(uri: string | File, ...)
+// v10 — positional args are gone; the methods take a request object
+uploadFile(request: { file?: FileUploadInput; user? }, requestOptions?)
+uploadImage(request: { file?: FileUploadInput; upload_sizes?; user? }, requestOptions?)
+
+type FileReferenceBase = { uri: string; type: string; name?: string };
+type FileLike = File | Blob;
+type FileUploadInput = FileLike | FileReferenceBase | string;
 ```
 
-This affects `channel.sendFile`, `channel.sendImage`, `client.uploadFile`, and `client.uploadImage`. Every v9 backend upload pattern is now a type error:
+This affects `channel.uploadFile` / `uploadImage` (v9: `channel.sendFile` / `sendImage`) and `client.uploadFile` / `uploadImage`. Every v9 backend upload pattern is now a type error:
 
 ```ts
 // v9 — worked on a backend
@@ -342,7 +346,7 @@ await channel.sendFile(file, 'doc.pdf', 'application/pdf', user);
 await client.uploadFile(await fs.promises.readFile('./doc.pdf'), 'doc.pdf');
 ```
 
-**Casting your way past the type error will not work.** The remaining implementation has two branches: a `Blob`/`File` branch, and a React-Native branch that wraps a URI string into `{ uri, name, type }`. The `Blob` branch is gated on `typeof window !== 'undefined'`, so under Node — where there is no `window` — even a native `File` falls through to the React-Native branch and produces a malformed multipart part. `stream-chat@10` has **no** Node upload path.
+A Node `File` (from `node:buffer`) does reach the wire — the encoder no longer gates the `Blob` branch on `typeof window !== 'undefined'` — but `stream-chat@10` is a client-side SDK and this is not a tested or supported configuration. Backend uploads belong in `@stream-io/node-sdk`.
 
 Use the node SDK, which takes a `File` and does its own multipart encoding — see [Uploads notes](#uploads-notes) above:
 
@@ -562,6 +566,11 @@ The cast is because `ws` types its constructor with a slightly different `Messag
 
 One internal detail that matters if you inject `ws`: v9 called `ws.removeAllListeners()` during disconnect and teardown, an `EventEmitter` method the DOM `WebSocket` interface does not have. Those calls are gone. Teardown now relies on `close()` plus an internal `wsID` generation guard that makes callbacks from a superseded socket no-ops, so a `WebSocketImpl` only has to implement the four `on*` properties — it does **not** need `removeAllListeners`, `addEventListener`, or `off`.
 
+> **`engines.node` is `>=22.18.0` as of v10**, so Node 18 and 20 are below the declared floor and no
+> longer tested — see [the Node version floor](./v9-to-v10-migration-guide-other.md#node-version-floor).
+> Everything in this section still works mechanically, and is still the right answer if you are stuck on
+> an older runtime, but treat it as an unsupported bridge rather than a supported configuration.
+>
 > **Officially, `WebSocketImpl` is documented as "purely for testing."** In practice it is also the escape hatch for Node <22 until the LTS ships a native `WebSocket`. If you rely on it in production, pin the `ws` version (it's stable, but its lifecycle isn't tied to `stream-chat`'s releases) and keep an eye on the SDK changelog in case the option gains stricter typing.
 
 ### Simplifying the hybrid example on Node 22+
@@ -581,7 +590,7 @@ Before shipping the migrated backend:
 - [ ] If you kept a `stream-chat@10` client for WS: it is constructed **without** a secret, and `allowServerSideConnect: true` is set.
 - [ ] If you deploy on Node 18/20: `WebSocketImpl` is wired to the `ws` package and `ws` is pinned in `dependencies`. On Node 22+, no `WebSocketImpl` is needed.
 - [ ] Bot / worker users are upserted with `role: 'admin'` (or a role that grants the endpoints they need) before their WS token is minted.
-- [ ] No `fs.createReadStream(...)`, `Buffer`, or `File` reaches `channel.sendFile` / `sendImage` / `client.uploadFile` / `uploadImage` — every backend upload goes through `@stream-io/node-sdk`.
+- [ ] No `fs.createReadStream(...)`, `Buffer`, or `File` reaches `channel.uploadFile` / `uploadImage` / `client.uploadFile` / `uploadImage` — every backend upload goes through `@stream-io/node-sdk`.
 - [ ] If keep-alive mattered, `axiosRequestConfig.httpsAgent` is set explicitly — the implicit Node keep-alive agent is gone.
 - [ ] Bundler / test shims added for `crypto`, `https`, `zlib`, `jsonwebtoken`, `ws` on account of `stream-chat` are removed (`resolve.fallback`, Metro `extraNodeModules`, `moduleNameMapper`).
 - [ ] `atob` exists in every runtime you ship to (`typeof atob` in a debug build) — on older React Native / Hermes targets, a polyfill is imported before the first `connectUser`.

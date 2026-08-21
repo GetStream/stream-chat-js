@@ -1,19 +1,29 @@
 # v9 → v10 Migration Guide — Everything Else
 
-> Scope: this guide catches breaking changes **not** covered by the four topic-specific guides:
+> Scope: this guide catches breaking changes **not** covered by the topic-specific guides:
 >
 > - `v9-to-v10-migration-guide-client-construction.md` (constructor & options)
 > - `v9-to-v10-migration-guide-logging.md` (`chatLoggerSystem`, sinks, scopes)
 > - `v9-to-v10-migration-guide-methods.md` (per-method signatures on `StreamChat`, `Channel`, `ChannelState`, `Moderation`, `StableWSConnection`)
 > - `v9-to-v10-migration-guide-sort.md` (`SortParamRequest[]` shape)
+> - `v9-to-v10-migration-guide-server-side.md` (server-side surface removal, dropped Node-only deps)
+> - `v9-to-v10-migration-guide-type-renames.md` (hand-rolled type aliases → generated names)
+> - `v9-to-v10-migration-guide-i18n.md` (notification identity, poll-composer field errors, the `stream-chat/i18n` subpath)
 >
 > Read those first. This guide covers **exports, removed feature modules, event-type shape, filter constraints, small state/composer shape changes, and residual type/property renames** that the topic guides do not.
 
 ## TL;DR
 
+- **`engines.node` is now `>=22.18.0`** (was `>=18`). Node 22.18 is the release that unflagged
+  TypeScript type stripping, which the package's own build scripts need — `prepare` runs the build, so a
+  git-ref install has to be able to execute them. A registry install never builds, so if you are pinned
+  to an older Node the runtime code itself is unlikely to care; `engines` is advisory and most package
+  managers warn rather than fail. But 18 and 20 are no longer tested. See the note below on what this
+  means if you deploy the WebSocket client on Node 18 or 20.
 - **Server-side is gone.** If you construct with a `secret` or call server-only admin endpoints, switch to `@stream-io/node-sdk`. The construction guide has the full list — every feature module below that was server-only is dropped for the same reason.
 - Two barrels removed from the package root, one added: **`./events` and `./base64` are gone; `./logger` is new.** `./signing` survives with exactly one export left, `UserFromToken`. The `./campaign`, `./channel_batch_updater`, and `./segment` barrels are still exported but the modules are emptied (they contain only a comment pointing at the server SDK) — importing anything by name from them will fail.
-- `Event` (type name) is kept, but its shape widened: `Event = WSEvent | LocalEvent | keyof CustomEventTypes`. `EventPayload<'<type>'>` narrows to a specific event.
+- **The WebSocket connect endpoint moved to `/api/v2/connect`.** The hello event is now `connection.ok` rather than `health.check`, and the long-poll fallback (`enableWSFallback`, `transport.changed`) is gone.
+- `Event` (type name) is kept, but its shape widened: `Event = WSEvent | ConnectedEvent | LocalEvent | keyof CustomEventTypes`. `EventPayload<'<type>'>` narrows to a specific event.
 - `EventTypes` (plural) renamed to `EventType` (singular). `CustomEventTypes` interface is unchanged — augment it to add custom event-type keys, same as v9.
 - Filter payloads now carry **per-endpoint operator constraints** (inline `Filters<{ … }>` on each request type) — previously-permissive filter objects may stop type-checking. Only one operator per field is allowed, and `null` is no longer a valid `$in` element. `QueryPollsFilters`, `QueryVotesFilters`, and `ReminderFilters` were the last hand-written holdouts and now derive from their request types too.
 - `ChannelState.membership` initializes to `undefined` (was `{}`); `ChannelState.typing` values are now `EventPayload<'typing.start' | 'typing.stop'>` (were `Event`); read receipts merged with the generated `ReadStateResponse`.
@@ -23,6 +33,27 @@
 - Assorted small tightenings: `TokenManager.setTokenOrProvider` user param narrowed, `revokeTokens(before)` no longer accepts `string`, `UserGroupPaginator` cursor field is a `Date`.
 
 ---
+
+## Node version floor
+
+`engines.node` moves from `>=18` to `>=22.18.0`.
+
+The driver is the build, not the runtime: the package's build scripts are `.mts`, executed by `node`
+with no loader, and unflagged type stripping landed in **22.18.0** (24.3.0 on the 24 line, 23.6.0 on
+the 23 line). Because `prepare` runs `yarn build`, anyone installing from a git ref has to be able to
+run them. Note that 22.12 — the `require(esm)` milestone — is _not_ sufficient for this; the two are
+often conflated.
+
+**If you install from the npm registry, nothing in the shipped runtime is known to need 22.18.** You get
+a prebuilt `dist/` and never run the build. `engines` is advisory, and npm/yarn warn rather than fail by
+default. Treat the bump as "18 and 20 are no longer tested" rather than "the code will not run".
+
+**One place this needs care:** [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md)
+documents running the WebSocket client on Node 18/20 by injecting a `WebSocketImpl` (Node only gained a
+global `WebSocket` in 22). That guidance still works mechanically, and is still the right answer if you
+are stuck on an older runtime — but it is now below the declared floor, so it is unsupported rather than
+supported. If you are on Node 18 or 20 and rely on that path, plan the upgrade to 22.18+, where no
+`WebSocketImpl` is needed at all.
 
 ## Public export surface
 
@@ -102,7 +133,6 @@ type LocalEvent = (
         isLatestMessageSet: boolean;
       };
     })
-  | ({ type: 'transport.changed' } & { mode: string })
   | ({ type: 'connection.changed' } & { online: boolean })
   | { type: 'connection.recovered' }
   | ({ type: 'offline_reactions.queried' } & { offlineReactions: ReactionResponse[] })
@@ -121,8 +151,17 @@ type LocalEvent = (
     })
 ) & { received_at?: Date };
 
+// The hello event of the v2 connect endpoint (see "WebSocket transport" below).
+type ConnectedEvent = {
+  type: 'connection.ok';
+  connection_id: string;
+  created_at: Date;
+  me: OwnUserResponse;
+  received_at?: Date;
+};
+
 // Public alias — same name as in v9, wider shape.
-export type Event = WSEvent | LocalEvent | keyof CustomEventTypes;
+export type Event = WSEvent | ConnectedEvent | LocalEvent | keyof CustomEventTypes;
 export type EventType = Event['type'] | 'all';
 export type EventHandler<T = string> = (event: Extract<Event, { type: T }>) => void;
 
@@ -176,6 +215,57 @@ declare module 'stream-chat' {
 Because the v10 generic on `channel.on<T extends EventType | string>` accepts any `string`, unknown listener keys still type-check without augmentation, but the event payload will not be narrowed. Augmenting `CustomEventTypes` adds the custom key to `Event['type']`, which flows through `EventType` and `EventHandler` narrowing.
 
 > **Larger topic** — the event system rewrite (removed hand-rolled event types across `poll`, `poll_manager`, `thread`, `reminders`, live-location, and the client itself; the shift from a hand-maintained `EVENT_MAP` to generated decoders) touches enough call sites that it may warrant a dedicated guide. Flag me if you want one written.
+
+---
+
+## WebSocket transport
+
+### The connect endpoint moved to `/api/v2/connect`
+
+v9 opened the WebSocket against `/connect`, passing the auth payload in the query string
+(`?json=…&authorization=…`). v10 uses `/api/v2/connect`, which authenticates off the **first
+frame the client sends** instead. The client handles this internally — the change is only
+visible in two places:
+
+- **The hello event is `connection.ok`, not `health.check`.** `connectUser()` /
+  `openConnection()` resolve with a `ConnectedEvent` carrying `connection_id` and `me`, the same
+  `OwnUserResponse` v9's `health.check` carried. Periodic health checks still arrive as
+  `health.check`, so listeners for that keep working; only the _first_ event changed.
+
+  ```diff
+  - client.on('health.check', (event) => { if (event.me) seedOwnUser(event.me); });
+  + client.on('connection.ok', (event) => seedOwnUser(event.me));
+  ```
+
+  `ConnectionOpen` (the resolved type of `connectUser`) is now a union of both events, so narrow
+  on `type` before touching event-specific fields.
+
+- **The device is no longer part of the connect payload.** See
+  [`client.setLocalDevice`](./v9-to-v10-migration-guide-methods.md#clientsetlocaldevice).
+
+Anonymous connections are unaffected: `connectAnonymousUser()` works the same way.
+
+### Long-poll fallback removed
+
+The HTTP long-poll transport that v9 fell back to when the WebSocket failed is gone. Removed
+with it:
+
+| Removed                                                                  | Notes                                                                                                                                                                                                       |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enableWSFallback` client option                                         | No replacement.                                                                                                                                                                                             |
+| `WSConnectionFallback`, `ConnectionState` (`src/connection_fallback.ts`) | Never exported from the package root; internal.                                                                                                                                                             |
+| `transport.changed` event                                                | Only ever dispatched when switching to long-poll. Remove listeners.                                                                                                                                         |
+| `client.defaultWSTimeoutWithFallback`                                    | `client.defaultWSTimeout` (15s) is now the only connect timeout. In v9, enabling the fallback shortened the WS timeout to 6s so the fallback could take over sooner; without it, connects get the full 15s. |
+
+```diff
+- const client = new StreamChat(API_KEY, { enableWSFallback: true });
+- client.on('transport.changed', ({ mode }) => reportTransport(mode));
++ const client = new StreamChat(API_KEY);
+```
+
+The WebSocket's own reconnect and health-check loop is unchanged and still handles transient
+network failures. If you need to react to connectivity, use `connection.changed` — it is
+unaffected.
 
 ---
 
@@ -234,7 +324,7 @@ Field-name typos in a typed filter are now compile errors. If you were relying o
 
 ### Filter aliases now derive from the request types
 
-`ChannelFilters`, `MessageFilters`, `ReactionFilters`, `ThreadFilters`, `UserFilters` still exist as convenience aliases but derive from the constrained request types. The three remaining hand-written poll/reminder filter types are now migrated the same way:
+`ChannelFilters`, `MessageFilters`, `ReactionFilters`, `ThreadFilters`, `UserFilters` still exist as convenience aliases but derive from the constrained request types. (The _sort_ aliases did not survive — unlike a filter alias, which resolves to a per-endpoint `Filters<{...}>` carrying that endpoint's declared operators, every sort alias was the same `SortParamRequest[]`. See the [sort guide](./v9-to-v10-migration-guide-sort.md#the-sort-aliases-are-gone).) The three remaining hand-written poll/reminder filter types are now migrated the same way:
 
 | Alias               | Now derives from                               |
 | ------------------- | ---------------------------------------------- |
@@ -662,7 +752,7 @@ The following v9 helper types are removed from the public surface. They mostly s
 
 `Readable<T>`, `KnownKeys<T>`, `PartializeKeys`, `UnknownType`, `MessageResponseBase`, `LocalMessageBase`, `FormatMessageResponse`, `ChannelAPIResponse` variants, `QueryChannelsAPIResponse`, `QueryReactionsOptions`/`QueryReactionsAPIResponse`, `TranslateResponse`, `ModerationResult`, `AutomodDetails`, `FlagsResponse`, `MessageFlagsResponse`, `FlagReport(s)Response`, `ReviewFlagReportResponse`, `BannedUsersResponse`, `FutureChannelBan(s)Response`, `HookEvent(s)Response`, `CheckPush/SQS/SNSResponse`, `CommandResponse` family, `ExportChannel*`/`ExportUsers*` types, push-preference types (`ChatLevelPushPreference`, `CallLevelPushPreference`, `PushPreferenceLevel`, `ChatPreferences`, `PushPreference`).
 
-For any of these that survive as a generated shape, the replacement is the generator's `Gen_*` re-export (re-exported through `./types` or `./gen/models`). For the type utilities (`Readable`, `KnownKeys`, `PartializeKeys`, `UnknownType`) there is no replacement — inline the built-in equivalent or drop the constraint.
+For any of these that survive as a generated shape, the replacement is the generator's `Gen_*` re-export (re-exported through `./types` or `./gen/models`). The `APIResponse`-based aliases that outlived v9 (`SearchAPIResponse`, `SendFileAPIResponse`, `UpdateChannelAPIResponse`, `UsersAPIResponse`, `ReactionAPIResponse`, `TaskResponse`, `GetRepliesAPIResponse`, `Flag`, `FlagDetails`) are removed after `10.0.0-rc.4` — see [the `APIResponse` envelope](./v9-to-v10-migration-guide-type-renames.md#the-apiresponse-envelope). For the type utilities (`Readable`, `KnownKeys`, `PartializeKeys`, `UnknownType`) there is no replacement — inline the built-in equivalent or drop the constraint.
 
 > **Larger topic** — the `types.ts` cleanup (~4.6k lines removed, most hand-rolled response/request types replaced by generated shapes) is large enough that a per-type cheat sheet ("`FormatMessageResponse` → …", "`FlagReportsResponse` → …", …) may deserve its own guide. Flag me if you want one written.
 
@@ -688,7 +778,10 @@ For each source file that touches the SDK:
 14. **Rename `ReminderManager` call-site keys** `messageId` → `message_id`. Same for any place you were shaping a reminder-event body.
 15. **Delete any code that used `client.secret`, `client._isUsingServerAuth()`, `client.setAnonymousUser`, `client.markAllRead`, or assigned to `client.userID`.** Move server-side callers to `@stream-io/node-sdk`.
 16. **Rewrite `client.revokeTokens(isoString)`** to `client.revokeTokens(new Date(isoString))`.
-17. **Fix upload call sites.** `channel.sendFile` / `sendImage` / `client.uploadFile_` / `uploadImage_` take `string | File` now — no `Buffer`, no readable streams. Pass `contentType` explicitly when the source is a React-Native URI string.
+17. **Fix upload call sites.** `channel.sendFile` / `sendImage` are now `channel.uploadFile` / `uploadImage`, and take a request object: `{ file }`, where `file` is a `File`, a `Blob`, or a React-Native `{ uri, name, type }` descriptor — no `Buffer`, no readable streams. The MIME type still has to be explicit on the React-Native path, it just lives on the descriptor rather than in a separate `contentType` argument. `axiosRequestConfig` becomes `requestOptions` (`{ onUploadProgress, signal }`), and the routes moved to `/api/v2/…`.
 18. **Delete bundler shims** added for `stream-chat`'s Node-only deps (`crypto`, `https`, `zlib`, `jsonwebtoken`, `ws`) — `package.json#browser` is gone because nothing imports them anymore.
-19. **Polyfill `atob`** if your React Native / Hermes target lacks it (`typeof atob === 'undefined'`); `UserFromToken` depends on it during `connectUser`.
-20. **Call `liveLocationManager.dispose()`** when you are finished with a manager you constructed, alongside whatever `unregisterSubscriptions()` you already call. Nothing will fail to compile: `dispose()` is the _configuration_ teardown, and until it runs the client's configuration registry holds a handle to the manager — a long-lived client and many short-lived managers will accumulate them. `unregisterSubscriptions()` is unchanged and stays ref-counted, so it deliberately no longer releases configuration; it never should have, since with two callers sharing a manager the first to leave stopped a still-live instance from tracking `client.config`. `SearchController` already worked this way.
+19. **Handle the new connect hello event.** Anything keyed on the _first_ `health.check` (seeding `client.user`, unread counts, "connected" UI state) should listen for `connection.ok` instead; periodic `health.check` events are unchanged. Narrow on `event.type` before reading fields off the resolved `ConnectionOpen`.
+20. **Drop long-poll fallback code.** Remove `enableWSFallback` from client options, delete `transport.changed` listeners, and delete reads of `client.defaultWSTimeoutWithFallback`.
+21. **Replace `client.setLocalDevice(device)` / the `device` client option** with an explicit `await client.createDevice({ id, push_provider, push_provider_name? })` after connecting.
+22. **Polyfill `atob`** if your React Native / Hermes target lacks it (`typeof atob === 'undefined'`); `UserFromToken` depends on it during `connectUser`.
+23. **Call `liveLocationManager.dispose()`** when you are finished with a manager you constructed, alongside whatever `unregisterSubscriptions()` you already call. Nothing will fail to compile: `dispose()` is the _configuration_ teardown, and until it runs the client's configuration registry holds a handle to the manager — a long-lived client and many short-lived managers will accumulate them. `unregisterSubscriptions()` is unchanged and stays ref-counted, so it deliberately no longer releases configuration; it never should have, since with two callers sharing a manager the first to leave stopped a still-live instance from tracking `client.config`. `SearchController` already worked this way.

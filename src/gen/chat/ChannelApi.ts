@@ -9,6 +9,7 @@ import type {
   EventResponse,
   GetDraftResponse,
   GetManyMessagesResponse,
+  GetPinnedMessagesResponse,
   HideChannelRequest,
   HideChannelResponse,
   MarkReadRequest,
@@ -20,6 +21,7 @@ import type {
   SendMessageResponse,
   ShowChannelRequest,
   ShowChannelResponse,
+  SortParamRequest,
   TruncateChannelRequest,
   TruncateChannelResponse,
   UpdateChannelPartialRequest,
@@ -311,6 +313,37 @@ export class ChannelApi {
     }
 
     return this.chatApi.getManyMessages(
+      { id: this.id, type: this.type, ...request },
+      requestOptions,
+    );
+  }
+
+  getPinnedMessages(
+    request?: {
+      limit?: number;
+      offset?: number;
+      id_gte?: string;
+      id_gt?: string;
+      id_lte?: string;
+      id_lt?: string;
+      pinned_at_after_or_equal?: Date;
+      pinned_at_after?: Date;
+      pinned_at_before_or_equal?: Date;
+      pinned_at_before?: Date;
+      id_around?: string;
+      pinned_at_around?: Date;
+      sort?: Array<SortParamRequest>;
+      member_custom_include?: Array<string>;
+    },
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<GetPinnedMessagesResponse>> {
+    if (!this.id) {
+      throw new Error(
+        `Channel isn't yet created, call getOrCreateDistinctChannel() before this operation`,
+      );
+    }
+
+    return this.chatApi.getPinnedMessages(
       { id: this.id, type: this.type, ...request },
       requestOptions,
     );

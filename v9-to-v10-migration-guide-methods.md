@@ -31,7 +31,7 @@ await channel.queryMembers({ payload: { limit: 10 } }, { signal: controller.sign
 controller.abort();
 ```
 
-This replaces v9's `client.createAbortControllerForNextRequest()` — see [below](#clientcreateabortcontrollerfornextrequest). The four upload methods (`client.uploadFile_` / `uploadImage_`, `channel.sendFile` / `sendImage`) are the exception: they keep their wider v9 `axiosRequestConfig` parameter, which already carries `signal` alongside `onUploadProgress`.
+This replaces v9's `client.createAbortControllerForNextRequest()` — see [below](#clientcreateabortcontrollerfornextrequest). The upload methods are **not** an exception: they take the same `requestOptions`, which carries `onUploadProgress` alongside `signal`. v9's `axiosRequestConfig` parameter is gone everywhere.
 
 ---
 
@@ -385,7 +385,8 @@ client.sendFile(url, uri, name?, contentType?, user?, axiosRequestConfig?);
 client.api.doAxiosRequest(type, url, data?, options?);
 client.dispatchEvent(event: Event);                     // Event union expanded to WSEvent | LocalEvent | keyof CustomEventTypes
 client.api.errorFromResponse(response);                 // moved to ApiClient
-client.api.sendFile(url, uri, name?, contentType?, user?, axiosRequestConfig?);
+// client.sendFile — REMOVED, and there is no `client.api.sendFile` either. Multipart encoding
+// now lives in `ApiClient.sendRequest`; use the upload methods below.
 ```
 
 `client.api` is a new getter returning the internal `ApiClient` instance.
@@ -419,35 +420,54 @@ Why it went away: the v9 mechanism armed a single controller on the client and t
 #### `client.uploadFile` / `client.uploadImage`
 
 ```ts
-// v9
+// v9 — positional args
 client.uploadFile(uri, name?, contentType?, user?, axiosRequestConfig?);
 client.uploadImage(uri, name?, contentType?, user?, axiosRequestConfig?);
 
-// v10 — TWO shapes now exist, pick the right one:
-client.uploadFile(request: { file? });                  // inherited from ChatApi — generated payload
-client.uploadImage(request: { file? });                 // inherited from ChatApi
-
-client.uploadFile_(uri, name?, contentType?, user?, axiosRequestConfig?);   // v9 positional args preserved under trailing-underscore name
-client.uploadImage_(uri, name?, contentType?, user?, axiosRequestConfig?);
+// v10 — request object + narrow requestOptions
+client.uploadFile(request: { file?: FileUploadInput; user? }, requestOptions?);
+client.uploadImage(request: { file?: FileUploadInput; upload_sizes?; user? }, requestOptions?);
 ```
 
-`uploadFile_` and `uploadImage_` are the direct replacements for v9 code that passed positional args (uri + name + contentType + user + axios config). Ports should prefer these unless the caller wants to switch to the request-object shape.
+`name` and `contentType` are gone as separate parameters — they moved **into** the file:
 
-The **type of `uri` narrowed**, on both these methods and their `Channel` counterparts:
+```ts
+type FileReferenceBase = { uri: string; type: string; name?: string };
+type FileLike = File | Blob;
+type FileUploadInput = FileLike | FileReferenceBase | string;
+```
+
+A browser `File` already carries its name and MIME type, so it needs nothing else. React Native has no `Blob` with a real body behind a picker URI, so it passes a `FileReference` and RN's `FormData` reads `uri` / `name` / `type` off it — the MIME type is still required there, it just lives in a different place:
 
 ```ts
 // v9
-uploadFile(uri: string | NodeJS.ReadableStream | Buffer | File, ...)
-uploadImage(uri: string | NodeJS.ReadableStream | File, ...)
+await client.uploadImage(localUri, 'IMG_0001.HEIC', 'image/heic');
 
 // v10
-uploadFile_(uri: string | File, ...)
-uploadImage_(uri: string | File, ...)
+await client.uploadImage({
+  file: { uri: localUri, name: 'IMG_0001.HEIC', type: 'image/heic' },
+});
 ```
 
-v10 dropped the `form-data` dependency for the platform's global `FormData`, and with it every node-only input: `Buffer` and readable streams are no longer accepted, and there is no supported node upload path at all (the `Blob` branch is gated on `typeof window !== 'undefined'`, so a cast does not help). Backend uploads move to `@stream-io/node-sdk` — see [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md#uploads-from-node-are-gone).
+A bare URI `string` is still accepted and normalized into `{ uri }`, with the name derived from the last path segment.
 
-Browser `File` / `Blob` uploads are unchanged. On the React-Native path (a URI string), `contentType` is no longer inferred for you — pass it explicitly.
+> The v10 release-candidate names **`client.uploadFile_` / `client.uploadImage_` are removed**. They existed only because the generated `uploadFile` / `uploadImage` occupied the good names while being unusable; the generated methods now work and the underscore variants are gone.
+
+**Routes changed.** These now hit `POST /api/v2/uploads/file` and `POST /api/v2/uploads/image` (v9: `/uploads/file`, `/uploads/image`). If you have a proxy, a CSP `connect-src`, an MSW/nock handler, or analytics keyed on the old paths, update them.
+
+**Response shape.** The generated response adds `metadata` (per-request rate-limit/status info) and types `file` as optional. On a 2xx the server always returns `file`.
+
+**No node input.** v10 dropped the `form-data` dependency for the platform's global `FormData`, and with it every node-only input: `Buffer` and readable streams are no longer accepted. Backend uploads move to `@stream-io/node-sdk` — see [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md#uploads-from-node-are-gone).
+
+**`axiosRequestConfig` → `requestOptions`.** The last argument is now `StreamRequestOptions`, carrying `onUploadProgress` and `signal`. `timeout: 0` and unbounded `maxContentLength` / `maxBodyLength` are applied automatically for multipart and are no longer caller-overridable.
+
+```ts
+// v9
+await client.uploadFile(file, file.name, file.type, undefined, { onUploadProgress });
+
+// v10
+await client.uploadFile({ file }, { onUploadProgress });
+```
 
 #### `client.deleteFile` / `client.deleteImage`
 
@@ -483,9 +503,37 @@ Unchanged signature: `partialUpdateThread(messageId, partialThreadObject)`.
 
 Unchanged.
 
-#### `client.setLocalDevice` / `client.setBaseURL` / `client.setUserAgent` / `client.getUserAgent`
+#### `client.setBaseURL` / `client.setUserAgent` / `client.getUserAgent`
 
 Unchanged. `setUserAgent` is still marked `@deprecated` — prefer setting `sdkIdentifier`.
+
+#### `client.setLocalDevice`
+
+**Removed**, along with the `device` client option it wrote to (see
+[client construction](./v9-to-v10-migration-guide-client-construction.md#removed-options)).
+
+In v9 the device was serialized into the WebSocket connect payload and registered as a side
+effect of connecting. The v2 connect endpoint's auth message has no `device` field, so that
+side effect no longer exists and the method had nothing left to do.
+
+Register push devices explicitly instead. This also works at any point in the connection
+lifecycle — notably on push-token refresh, which a connect-time hook never covered:
+
+```diff
+- client.setLocalDevice({ id: pushToken, push_provider: 'firebase', push_provider_name: 'rn-fcm' });
+- await client.connectUser(user, token);
++ await client.connectUser(user, token);
++ await client.createDevice({
++   id: pushToken,
++   push_provider: 'firebase',
++   push_provider_name: 'rn-fcm',
++ });
+```
+
+This mechanism was undocumented and no Stream SDK used it — the React Native, React and Angular
+SDKs all register devices explicitly in application code — so most integrations need no change.
+Note that the v9 client-side `addDevice(id, provider, userId, providerName)` was itself renamed
+to `createDevice({ ... })` in v10; see [`client.addDevice` / `client.getDevices` / `client.removeDevice`](#clientadddevice--clientgetdevices--clientremovedevice).
 
 #### `client.setOfflineDBApi` / `client.setMessageComposerSetupFunction`
 
@@ -608,7 +656,9 @@ Webhook verification is inherently server-side work: it needs the API secret, wh
 
 ### Constructor and lifecycle
 
-`getClient()`, `clean()`, `_channelURL()`, `_checkInitialized()`, `_initializeState(...)`, `_disconnect()`, and `create(options?)` are unchanged.
+`getClient()`, `clean()`, `_checkInitialized()`, `_initializeState(...)`, `_disconnect()`, and `create(options?)` are unchanged.
+
+`channel._channelURL()` — **REMOVED after `10.0.0-rc.4`**, no replacement. It built a `{baseURL}/channels/{type}/{id}` string for the hand-rolled request layer that no longer exists; every request now goes through the generated API client, which resolves its own paths. Nothing in the SDK called it. If you were using it to build a URL yourself, construct it inline.
 
 ### Removed with a rename → note
 
@@ -968,7 +1018,21 @@ Callers that imported `EventTypes` need to switch to `EventType` (`EventType = E
 
 #### `channel.sendFile` / `channel.sendImage`
 
-Argument list unchanged; the **first parameter's type narrowed** to `string | File` (v9: `string | NodeJS.ReadableStream | Buffer | File` for `sendFile`, `string | NodeJS.ReadableStream | File` for `sendImage`). Same reason and same remedy as [`client.uploadFile` / `client.uploadImage`](#clientuploadfile--clientuploadimage) above: `form-data` is gone, node sources are not accepted, and `contentType` must be passed explicitly on the React-Native URI path.
+**REMOVED** — replaced by `channel.uploadFile` / `channel.uploadImage`, which take the same request-object shape as their client counterparts:
+
+```ts
+// v9
+await channel.sendFile(uri, name?, contentType?, user?, axiosRequestConfig?);
+await channel.sendImage(uri, name?, contentType?, user?, axiosRequestConfig?);
+
+// v10
+await channel.uploadFile({ file, user? }, requestOptions?);
+await channel.uploadImage({ file, upload_sizes?, user? }, requestOptions?);
+```
+
+These are aliases for the generated `channel.uploadChannelFile` / `channel.uploadChannelImage`; either name works. Everything in [`client.uploadFile` / `client.uploadImage`](#clientuploadfile--clientuploadimage) above applies here too — the `FileUploadInput` shape, the `requestOptions` replacing `axiosRequestConfig`, no node inputs, and the added `metadata` on the response.
+
+**Routes changed** from `/channels/{type}/{id}/file` and `/image` to `POST /api/v2/chat/channels/{type}/{id}/file` and `/image`. The file response additionally carries `moderation_action`.
 
 #### `channel.deleteFile` / `channel.deleteImage` / `channel.getPinnedMessages` / `channel.getMessagesById` / `channel.lastRead` / `channel.countUnread` / `channel.countUnreadMentions` / `channel.lastMessage` / `channel.watch` / `channel.query`
 
@@ -1252,15 +1316,15 @@ logger.info(msg, extra);
 
 ## Property renames on `StreamChat` (referenced by other classes)
 
-| v9                               | v10                                                   | Availability                                                                                                 |
-| -------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `client.userID`                  | `client.userId`                                       | Getter `userID` deprecated. Assignment (`client.userID = …`) no longer supported.                            |
-| `client.clientID`                | `client.clientId`                                     | Getter+setter `clientID` deprecated.                                                                         |
-| `client.secret`                  | —                                                     | REMOVED.                                                                                                     |
-| `client.logger`                  | —                                                     | REMOVED — see logging note below.                                                                            |
-| `client.appSettingsPromise` type | `Promise<StreamResponse<Gen_GetApplicationResponse>>` | Wrapper type changed.                                                                                        |
-| `client._user` type              | `ClientUser`                                          | Type alias replacing v9's `OwnUserResponse \| UserResponse`.                                                 |
-| `client.api`                     | new                                                   | Public getter that returns the internal `ApiClient` for `doAxiosRequest` / `sendFile` / `errorFromResponse`. |
+| v9                               | v10                                                   | Availability                                                                                    |
+| -------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `client.userID`                  | `client.userId`                                       | Getter `userID` deprecated. Assignment (`client.userID = …`) no longer supported.               |
+| `client.clientID`                | `client.clientId`                                     | Getter+setter `clientID` deprecated.                                                            |
+| `client.secret`                  | —                                                     | REMOVED.                                                                                        |
+| `client.logger`                  | —                                                     | REMOVED — see logging note below.                                                               |
+| `client.appSettingsPromise` type | `Promise<StreamResponse<Gen_GetApplicationResponse>>` | Wrapper type changed.                                                                           |
+| `client._user` type              | `ClientUser`                                          | Type alias replacing v9's `OwnUserResponse \| UserResponse`.                                    |
+| `client.api`                     | new                                                   | Public getter that returns the internal `ApiClient` for `doAxiosRequest` / `errorFromResponse`. |
 
 `_setToken`, `_setUser`, `_setupConnection` are still present but `_setUser` now takes `TokenManagerMinimalUser`; `_setupConnection` is REMOVED.
 
@@ -1296,6 +1360,111 @@ type CustomMarkReadRequestFn = (
 
 The `Partial<>` is deliberate: it lets a handler return just `{ event }` without fabricating a `duration`, and it means a handler can delegate straight to the SDK — `markReadRequest: ({ channel, options }) => channel.markRead(options)` — which the `rc` signature rejected because `MarkReadResponse.event` is optional. `CustomThreadMarkReadRequestFn` takes `{ thread, options? }` instead of `{ channel, options? }` and additionally permits a `void` return.
 
+## Removed after `10.0.0-rc.4` — redundant guards and pass-throughs
+
+Skip this section if you are upgrading from v9 only in the sense that these methods still existed in `10.0.0-rc.4`; if you are on v9 they are simply gone in v10 final. Each was either a method whose entire body forwarded to another one, or a runtime check that restated something the type system already enforces.
+
+### `StreamChat`
+
+- **`client.queryBannedUsers(...)` — REMOVED.** Its whole body was `return await super.queryBannedUsers(...args)`; it was not even marked `override`. The inherited `ChatApi.queryBannedUsers` is unchanged, so **no call-site change is needed** — you were already reaching this implementation.
+
+- **`client.partialUpdateThread(messageId, partialThreadObject, requestOptions?)` — REMOVED.** Use the inherited `client.updateThreadPartial({ message_id, set, unset }, requestOptions?)`.
+
+  ```ts
+  // before
+  await client.partialUpdateThread(messageId, { set: { custom_field: 1 } });
+
+  // after
+  await client.updateThreadPartial({ message_id: messageId, set: { custom_field: 1 } });
+  ```
+
+  Two behaviour changes come with it:
+  1. **The reserved-field guard is gone.** It threw synchronously for keys in a hardcoded list, and that list had drifted from `ThreadResponse` in both directions: it rejected `id`, `type`, `user` and `participants` (none of which are fields on `ThreadResponse`, so legitimate custom fields with those names were blocked) while letting through `parent_message_id`, `channel_cid`, `created_by_user_id`, `thread_participants`, `reply_count`, `participant_count`, `active_participant_count` and `deleted_at`, all of which _are_ server-owned. The server rejects what it owns; the client no longer guesses. **A rejected write now surfaces as a rejected promise rather than a synchronous `throw`** — adjust any `try`/`catch` that wrapped the call expecting the latter.
+  2. **The empty-`messageId` check is gone.** `message_id` is a required field on `UpdateThreadPartialRequest`, so this is a compile error instead.
+
+  The `PartialThreadUpdate` type is removed with the method — `UpdateThreadPartialRequest` is its replacement.
+
+### `Channel`
+
+- **`channel.search(...)` — REMOVED.** Use `client.search(...)`. The removed method forwarded straight to `client.search()` **without scoping the query to the channel**, so despite the name it searched every channel the user could see. If you were relying on that behaviour, `client.search()` is the same call. If you assumed it was channel-scoped, add the scope to your filter explicitly — that is a real bug fix in your integration, not a regression.
+
+- **`channel.getReplies(...)` — REMOVED.** Use `client.getReplies(...)`. Pure forward; the removed method's own comment noted it did nothing with the result.
+
+- **`channel.getReactions(...)` — REMOVED.** Use `client.getReactions(...)`. Pure forward.
+
+- **`channel.sendAction(messageId, formData, requestOptions?)` — KEPT**, but its `if (!messageId) throw Error('Message ID is missing')` guard is gone. `runMessageAction` requires `id: string`, so an empty id is a compile error; a runtime empty string reaches the server and is rejected there.
+
+## Removed after `10.0.0-rc.4` — server-side role assignment
+
+**`channel.assignRoles(roles, message?, options?, requestOptions?)` — REMOVED.** Assigning
+channel roles is a server-side operation; use
+[`@stream-io/node-sdk`](https://github.com/GetStream/stream-node). The `RoleName` type went
+with it, along with the rest of the v1 permission surface — see
+[the v1 permission system](./v9-to-v10-migration-guide-type-renames.md#the-v1-permission-system--removed).
+
+## Removed after `10.0.0-rc.4` — moderation moves to the generated V2 API
+
+The `/moderation/*` methods on `StreamChat` were the last endpoints in the SDK that built
+their own request instead of calling the generated client. Every one that has a generated
+equivalent now delegates to it, and the ones no SDK used are gone.
+
+### Migrated to `client.moderation.*`
+
+These four are **removed** from `StreamChat`. The replacement is the generated V2 method,
+reachable through `client.moderation`:
+
+| Removed                                         | Replacement                                                         |
+| ----------------------------------------------- | ------------------------------------------------------------------- |
+| `client.banUser(targetUserId, options?)`        | `client.moderation.ban({ target_user_id, ...options })`             |
+| `client.muteUser(targetId, options?)`           | `client.moderation.mute({ target_ids: [targetId], ...options })`    |
+| `client.unmuteUser(targetId)`                   | `client.moderation.unmute({ target_ids: [targetId] })`              |
+| `client.flagMessage(targetMessageId, options?)` | `client.moderation.flagMessage(targetMessageId, reason?, options?)` |
+
+Note the shape change on mute/unmute: V2 takes `target_ids` as an **array**, so a single
+id becomes `[targetId]`.
+
+Three consequences worth checking in your integration:
+
+- **Return types change.** These now resolve to `StreamResponse<…>` of the generated
+  response, so they also carry `metadata`. Two lose fields: `mute` (singular) is no longer
+  on the mute response — use `mutes` — and the flag response is now
+  `FlagItemResponse { duration, item_id }` rather than a nested `flag` object. If you only
+  `await` these calls you are unaffected.
+- **Two ban options are gone.** V2 `BanRequest` has no `delete_reactions` and no
+  `ban_from_future_channels`. There is no replacement for either.
+- **`BanUserOptions` and `MuteUserOptions`.** `BanUserOptions` is now
+  `Omit<BanRequest, 'target_user_id'>` — derived, so it tracks the spec. `MuteUserOptions`
+  is removed; V2 mute accepts only `timeout`.
+
+`MuteUserResponse`, `FlagMessageResponse`, `FlagUserResponse` and `UnmuteUserResponse` are
+removed with them.
+
+### Removed with no replacement — unused by the React and React Native SDKs
+
+- **`client.flagUser(...)`** — use `client.moderation.flagUser(targetUserId, reason?)`.
+- **`client.unflagMessage(...)`, `client.unflagUser(...)`** — V2 has no unflag endpoint.
+- **`client.unblockMessage(...)`** — no V2 equivalent.
+- **`client.shadowBan(targetUserId, options?)`** → `client.moderation.ban({ target_user_id, shadow: true, ...options })`.
+- **`client.removeShadowBan(targetUserId, options?)`** → `client.unbanUser(targetUserId, { shadow: true, ...options })`.
+- **`channel.shadowBan(...)`** → `channel.banUser(targetUserId, { shadow: true })`.
+- **`channel.removeShadowBan(...)`** → `channel.unbanUser(targetUserId, { shadow: true })`.
+
+Shadow banning itself is unaffected — `shadow` is still a documented option on both ban
+paths. Only the convenience wrappers are gone.
+
+### Still hand-written: `unbanUser`
+
+`client.unbanUser(targetUserId, options?)` and `channel.unbanUser(...)` keep their v1
+implementation, because **the generated layer has no unban endpoint**: `ChatApi` exposes
+only the reads (`queryBannedUsers`, `queryFutureChannelBans`) and V2 moderation has `ban`
+without a matching `unban`. Ban and unban have to target the same system, so both stay
+reachable until the spec publishes one. `APIResponse` and `UnBanUserOptions` survive for
+the same reason.
+
+Note the asymmetry this creates while it lasts: `channel.banUser` scopes through V2's
+`channel_cid`, while `channel.unbanUser` still scopes through v1's `type` + `id`. Both
+still take a channel-scoped ban and clear it; only the wire format differs.
+
 ## Logging (applies to every class)
 
 `options.logger` (function) and `client.logger(level, msg, extra?)` are gone. To capture logs in v10, configure the shared `chatLoggerSystem` before constructing the client:
@@ -1312,4 +1481,4 @@ chatLoggerSystem.configureLoggers({
 });
 ```
 
-Class-internal call sites use scoped loggers such as `chatLoggerSystem.getLogger('client')`, `'channel'`, `'connection'`, `'api-client'`, `'thread'`, `'thread-manager'`, `'upload-manager'`, `'offline-db'`, `'state-store'`, `'token-manager'`, `'message-composer'`, `'text-composer'`, `'utils'`, `'channel-manager'`, `'connection-fallback'`. See `v9-to-v10-migration-guide-logging.md` for the full logging system reference.
+Class-internal call sites use scoped loggers such as `chatLoggerSystem.getLogger('client')`, `'channel'`, `'connection'`, `'api-client'`, `'thread'`, `'thread-manager'`, `'upload-manager'`, `'offline-db'`, `'state-store'`, `'token-manager'`, `'message-composer'`, `'text-composer'`, `'utils'`, `'channel-manager'`. See `v9-to-v10-migration-guide-logging.md` for the full logging system reference.

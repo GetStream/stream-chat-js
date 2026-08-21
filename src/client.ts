@@ -1,33 +1,30 @@
 /* eslint no-unused-vars: "off" */
 /* global process */
 
-import type { AxiosInstance, AxiosRequestConfig } from 'axios';
+import type { AxiosInstance } from 'axios';
 import axios from 'axios';
 
 import { Channel } from './channel';
+import { ChannelWatchStatus } from './channel_state';
 import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
 import { UploadManager } from './uploadManager';
 import { TokenManager, type TokenManagerMinimalUser } from './token_manager';
-import { WSConnectionFallback } from './connection_fallback';
-import { isWSFailure } from './errors';
 import { ApiClient } from './api-client';
 import {
   axiosParamsSerializer,
   formatMessage,
   generateChannelTempCid,
   getEnv,
-  isOnline,
   isOwnUserBaseProperty,
   randomId,
 } from './utils';
+import { normalizeUploadFile } from './upload-utils';
 
 import type {
   APIResponse,
   AppIdentifier,
-  BanUserOptions,
-  BaseDeviceFields,
-  ChannelData,
+  ChannelInput,
   ChannelMute,
   ChannelOptions,
   ChannelResponse,
@@ -39,15 +36,11 @@ import type {
   Event,
   EventHandler,
   EventType,
-  FlagMessageResponse,
-  FlagUserResponse,
+  FileUploadInput,
   GetThreadOptions,
   LocalMessage,
-  MuteUserOptions,
-  MuteUserResponse,
   OwnUserResponse,
   PartializeAllBut,
-  PartialThreadUpdate,
   QueryChannelsRequest,
   QueryChannelsResponse,
   QueryReactionsRequestWithId,
@@ -85,12 +78,16 @@ import { applyInstanceConfiguration } from './configuration/utils/applyInstanceC
 import { StateStore } from './store';
 import type { Unsubscribe } from './store';
 import type {
+  ConnectUserDetailsRequest,
+  FileUploadRequest,
   GetApplicationResponse as Gen_GetApplicationResponse,
   MarkDeliveredRequest as Gen_MarkDeliveredRequest,
+  ImageUploadRequest,
+  WSAuthMessage,
   WSEvent,
 } from './gen/models';
 import { ChatApi } from './gen-imports';
-import type { StreamResponse } from './types';
+import type { ConnectedEvent, StreamResponse } from './types';
 
 function isString(value: unknown): value is string {
   return typeof value === 'string' || value instanceof String;
@@ -199,10 +196,10 @@ export class StreamChat extends ChatApi {
   userAgent?: string;
   wsBaseURL?: string;
   wsConnection: StableWSConnection | null;
-  wsFallback?: WSConnectionFallback;
   wsPromise: ConnectAPIResponse | null;
+
   get anonymous(): boolean {
-    return this.user?.anon ?? false;
+    return this.tokenManager.isAnonymous;
   }
   get userId() {
     return this.user?.id;
@@ -226,7 +223,6 @@ export class StreamChat extends ChatApi {
     return this.apiClient;
   }
   insightMetrics: InsightMetrics;
-  defaultWSTimeoutWithFallback: number;
   defaultWSTimeout: number;
   sdkIdentifier?: SdkIdentifier;
   deviceIdentifier?: DeviceIdentifier;
@@ -334,7 +330,6 @@ export class StreamChat extends ChatApi {
     this.tokenManager = new TokenManager();
     this.insightMetrics = new InsightMetrics();
 
-    this.defaultWSTimeoutWithFallback = 6 * 1000;
     this.defaultWSTimeout = 15 * 1000;
 
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
@@ -487,8 +482,7 @@ export class StreamChat extends ChatApi {
     this.wsBaseURL = this.baseURL.replace('http', 'ws').replace(':3030', ':8800');
   }
 
-  _getConnectionID = () =>
-    this.wsConnection?.connectionID || this.wsFallback?.connectionID;
+  _getConnectionID = () => this.wsConnection?.connectionID;
 
   _hasConnectionID = () => Boolean(this._getConnectionID());
 
@@ -603,15 +597,15 @@ export class StreamChat extends ChatApi {
    *   successful disconnection. See https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent (optional).
    */
   closeConnection = async (timeout?: number) => {
+    this._resetAIStateOnActiveChannels();
+    this._markActiveChannelsWatchInterrupted();
+
     if (this.cleaningIntervalRef != null) {
       clearInterval(this.cleaningIntervalRef);
       this.cleaningIntervalRef = undefined;
     }
 
-    await Promise.all([
-      this.wsConnection?.disconnect(timeout),
-      this.wsFallback?.disconnect(timeout),
-    ]);
+    await this.wsConnection?.disconnect(timeout);
 
     this.offlineDb?.executeQuerySafely(
       async (db) => {
@@ -647,10 +641,7 @@ export class StreamChat extends ChatApi {
       return this.wsPromise;
     }
 
-    if (
-      (this.wsConnection?.isHealthy || this.wsFallback?.isHealthy()) &&
-      this._hasConnectionID()
-    ) {
+    if (this.wsConnection?.isHealthy && this._hasConnectionID()) {
       logger
         .withExtraTags('openConnection')
         .debug('openConnection was called twice; a healthy connection already exists.');
@@ -785,6 +776,30 @@ export class StreamChat extends ChatApi {
 
     return this.openConnection();
   };
+
+  /**
+   * Creates a guest user and returns its access token.
+   *
+   * @param args - The guest creation request, plus optional per-request options.
+   * @returns The created guest user and its access token.
+   */
+  override async createGuest(...args: Parameters<ChatApi['createGuest']>) {
+    if (this.tokenManager.token || this.tokenManager.tokenProvider) {
+      return await super.createGuest(...args);
+    }
+
+    // Set token to anonymous so API accepts the request
+    await this.tokenManager.setTokenOrProvider('', {
+      id: this.userId ?? '!anon',
+      anon: true,
+    });
+
+    try {
+      return await super.createGuest(...args);
+    } finally {
+      this.tokenManager.reset();
+    }
+  }
 
   /**
    * Sets up a temporary guest user.
@@ -1070,7 +1085,7 @@ export class StreamChat extends ChatApi {
     }
   };
 
-  _handleClientEvent(event: WSEvent) {
+  _handleClientEvent(event: WSEvent | ConnectedEvent) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const client = this;
     const postListenerCallbacks = [];
@@ -1090,10 +1105,11 @@ export class StreamChat extends ChatApi {
       this._deleteUserMessageReference(event.user, event.hard_delete, event.created_at);
     }
 
-    if (event.type === 'health.check' && event.me) {
+    if ((event.type === 'health.check' || event.type === 'connection.ok') && event.me) {
       client.user = event.me;
       client.state.updateUser(event.me);
       client.mutedChannels = event.me.channel_mutes;
+      client._reflectMutedChannelsToActiveChannels();
       client.mutedUsers = event.me.mutes;
       client.blockedUsers.partialNext({ userIds: event.me.blocked_user_ids ?? [] });
     }
@@ -1105,6 +1121,7 @@ export class StreamChat extends ChatApi {
 
     if (event.type === 'notification.channel_mutes_updated' && event.me?.channel_mutes) {
       this.mutedChannels = event.me.channel_mutes;
+      this._reflectMutedChannelsToActiveChannels();
     }
 
     if (event.type === 'notification.mutes_updated' && event.me?.mutes) {
@@ -1113,9 +1130,10 @@ export class StreamChat extends ChatApi {
 
     if (event.type === 'notification.mark_read' && event.unread_channels === 0) {
       const activeChannelKeys = Object.keys(this.activeChannels);
-      activeChannelKeys.forEach(
-        (activeChannelKey) =>
-          (this.activeChannels[activeChannelKey].state.unreadCount = 0),
+      activeChannelKeys.forEach((activeChannelKey) =>
+        // resets `read[userId].unread_messages`, which is what the unread badge reads, so it does
+        // not stay stale.
+        this.activeChannels[activeChannelKey]._setOwnUnreadCount(0),
       );
     }
 
@@ -1149,6 +1167,50 @@ export class StreamChat extends ChatApi {
     }
 
     return postListenerCallbacks;
+  }
+
+  /**
+   * Fans the client-owned `mutedChannels` out to every active channel's reactive `state.muteStatus`.
+   * Each channel republishes only when its own mute status actually changed, so this stays cheap on
+   * the frequent `health.check` path.
+   */
+  _reflectMutedChannelsToActiveChannels() {
+    for (const cid in this.activeChannels) {
+      this.activeChannels[cid]?._syncMuteStatus();
+    }
+  }
+
+  /**
+   * Resets the AI indicator state to `Idle` on every active channel. Invoked from `closeConnection`
+   * as it's a deliberate shutdown and will not natively trigger a WS event.
+   */
+  _resetAIStateOnActiveChannels() {
+    for (const cid in this.activeChannels) {
+      this.activeChannels[cid]?.state.resetAIState();
+    }
+  }
+
+  /**
+   * Demotes every actively-watched channel to `WasWatching`. The server keys watches by connection
+   * ID, so losing the socket ends every watch this client held — a reconnect issues a NEW id and the
+   * channels have to be re-queried to watch again. `WasWatching` is what records that they should be.
+   *
+   * Only `Watching` is demoted: a channel the consumer stopped on purpose, or one that was torn
+   * down, stays `NotWatching` and must not be resurrected by a reconnect.
+   *
+   * Invoked from two places, because neither covers the other: `StableWSConnection._setHealth(false)`
+   * for an abnormal close/error (immediately — NOT via the `connection.changed` event, which is
+   * 5s-debounced when going offline and is skipped entirely on a quick flap, both of which would
+   * leave the status lying), and `closeConnection()` for a deliberate shutdown (e.g. mobile
+   * backgrounding), which sets `isHealthy` directly and so never reaches `_setHealth`.
+   */
+  _markActiveChannelsWatchInterrupted() {
+    for (const cid in this.activeChannels) {
+      const channel = this.activeChannels[cid];
+      if (channel?.watchStatus === ChannelWatchStatus.Watching) {
+        channel.watchStatus = ChannelWatchStatus.WasWatching;
+      }
+    }
   }
 
   _muteStatus(cid: string) {
@@ -1250,37 +1312,7 @@ export class StreamChat extends ChatApi {
       });
     }
 
-    try {
-      // if fallback is used before, continue using it instead of waiting for WS to fail
-      if (this.wsFallback) {
-        return await this.wsFallback.connect();
-      }
-
-      // if WSFallback is enabled, ws connect should timeout faster so fallback can try
-      return await this.wsConnection.connect(
-        this.options.enableWSFallback
-          ? this.defaultWSTimeoutWithFallback
-          : this.defaultWSTimeout,
-      );
-    } catch (error: any) {
-      // run fallback only if it's WS/Network error and not a normal API error
-      // make sure browser is online before even trying the longpoll
-      if (this.options.enableWSFallback && isWSFailure(error) && isOnline()) {
-        logger
-          .withExtraTags('connect')
-          .warn('The WebSocket connection failed; falling back to long-polling.');
-        this.dispatchEvent({ type: 'transport.changed', mode: 'longpoll' });
-
-        this.wsConnection._destroyCurrentWSConnection();
-        this.wsConnection.disconnect().then(); // close WS so no retry
-        this.wsFallback = new WSConnectionFallback({
-          client: this,
-        });
-        return await this.wsFallback.connect();
-      }
-
-      throw error;
-    }
+    return await this.wsConnection.connect(this.defaultWSTimeout);
   }
 
   /**
@@ -1320,21 +1352,6 @@ export class StreamChat extends ChatApi {
     this.state.updateUsers(data.users);
 
     return data;
-  }
-
-  /**
-   * Queries user bans.
-   *
-   * @param ...args - `[request, requestOptions]`. The optional `request.payload` accepts
-   *   MongoDB-style filter conditions, sort directions
-   *   (e.g. `[{ field: 'created_at', direction: 1 }]`), and options such as `limit`, `offset`,
-   *   and `exclude_expired_bans`. `requestOptions` carries per-request options such as an abort
-   *   `signal` and is never serialized into the request.
-   * @returns The ban query response.
-   */
-  async queryBannedUsers(...args: Parameters<ChatApi['queryBannedUsers']>) {
-    // Return a list of user bans
-    return await super.queryBannedUsers(...args);
   }
 
   /**
@@ -1535,9 +1552,16 @@ export class StreamChat extends ChatApi {
       const c = this.channel(channelState.channel.type, channelState.channel.id);
       const previousData = c.data;
       c.data = channelState.channel;
-      c._syncStateFromChannelData(c.data, previousData);
+      c.state.syncStateFromChannelData(c.data, previousData);
       c.offlineMode = offlineMode;
       c.initialized = !offlineMode;
+      // Same precedence `queryChannels` applies to the request: an explicit caller choice wins,
+      // otherwise we watch only if there is a connection to watch on. Offline hydration populates
+      // state without a live watch, so it never counts - and a query that did not watch leaves the
+      // status untouched (it neither starts nor ends a watch).
+      if (!offlineMode && (queryChannelsOptions?.watch ?? this._hasConnectionID())) {
+        c.watchStatus = ChannelWatchStatus.Watching;
+      }
       c.push_preferences = channelState.push_preferences;
 
       const willInitialize =
@@ -1557,8 +1581,12 @@ export class StreamChat extends ChatApi {
       // newest page to merge into that jumped interval across the gap (missing messages in the
       // middle). A cold paginator, or one still at the head (offline/at-latest), re-seeds normally so
       // cursors/hasMoreTail get (re)derived and pagination keeps working.
+      // Also skip the re-seed for an ACTIVE (on-screen) channel: its own `channel.reload()` owns the
+      // loaded window (up to 100 msgs), so a 25-msg list re-seed here is a redundant second update
+      // that could perturb the fuller window. (Inert until a UI SDK calls `channel.activate()`.)
       if (
         willInitialize &&
+        !c.active &&
         (!c.messagePaginator.isInitialized || c.messagePaginator.isActiveIntervalAtHead)
       ) {
         c.messagePaginator.seedFirstPageSync(
@@ -1610,25 +1638,6 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Sets the device info for the current client. It will be sent via the WS connection automatically.
-   *
-   * @param device - The device object.
-   * @param device.id - Device ID.
-   * @param device.push_provider - The push provider.
-   */
-  setLocalDevice(device: BaseDeviceFields) {
-    if (
-      (this.wsConnection?.isConnecting && this.wsPromise) ||
-      ((this.wsConnection?.isHealthy || this.wsFallback?.isHealthy()) &&
-        this._hasConnectionID())
-    ) {
-      throw new Error('Device cannot be set before opening a WebSocket connection');
-    }
-
-    this.options.device = device;
-  }
-
-  /**
    * Caches one channel's server configuration, read through {@link Channel.serverConfig}.
    *
    * Keyed by **cid** rather than by channel type: a channel's own `config_overrides` narrow its type's
@@ -1667,12 +1676,12 @@ export class StreamChat extends ChatApi {
    * @param custom - Custom data to attach to the channel (optional, defaults to `{}`).
    * @returns The channel object; initialize it using `channel.watch()`.
    */
-  channel(channelType: string, channelId?: string | null, custom?: ChannelData): Channel;
-  channel(channelType: string, custom?: ChannelData): Channel;
+  channel(channelType: string, channelId?: string | null, custom?: ChannelInput): Channel;
+  channel(channelType: string, custom?: ChannelInput): Channel;
   channel(
     channelType: string,
-    channelIdOrCustom?: string | ChannelData | null,
-    custom: ChannelData = {},
+    channelIdOrCustom?: string | ChannelInput | null,
+    custom: ChannelInput = {},
   ) {
     if (!this.userId) {
       throw Error('Call connectUser or connectAnonymousUser before creating a channel');
@@ -1719,7 +1728,7 @@ export class StreamChat extends ChatApi {
    * @param custom - Custom data to attach to the channel.
    * @returns The channel object; initialize it using `channel.watch()`.
    */
-  getChannelByMembers = (channelType: string, custom: ChannelData) => {
+  getChannelByMembers = (channelType: string, custom: ChannelInput) => {
     // Check if the channel already exists.
     // Only allow 1 channel object per cid
     const memberIds = (custom.members ?? []).map((member) =>
@@ -1739,7 +1748,7 @@ export class StreamChat extends ChatApi {
     //                        we will replace it with `cid`
     for (const key in this.activeChannels) {
       const channel = this.activeChannels[key];
-      if (channel.disconnected) {
+      if (channel.pendingDisposal) {
         continue;
       }
 
@@ -1783,7 +1792,7 @@ export class StreamChat extends ChatApi {
    * @param custom - Custom data to attach to the channel.
    * @returns The channel object; initialize it using `channel.watch()`.
    */
-  getChannelById = (channelType: string, channelId: string, custom: ChannelData) => {
+  getChannelById = (channelType: string, channelId: string, custom: ChannelInput) => {
     if (typeof channelId === 'string' && ~channelId.indexOf(':')) {
       throw Error(`Invalid channel id ${channelId}, can't contain the : character`);
     }
@@ -1793,7 +1802,7 @@ export class StreamChat extends ChatApi {
     if (
       cid in this.activeChannels &&
       this.activeChannels[cid] &&
-      !this.activeChannels[cid].disconnected
+      !this.activeChannels[cid].pendingDisposal
     ) {
       const channel = this.activeChannels[cid];
       // Only overwrite the existing channel's custom data when the caller actually provided some.
@@ -1805,7 +1814,7 @@ export class StreamChat extends ChatApi {
       if (custom.custom !== undefined) {
         const previousData = channel.data;
         channel.data = { ...channel.data, custom: custom.custom };
-        channel._syncStateFromChannelData(channel.data, previousData);
+        channel.state.syncStateFromChannelData(channel.data, previousData);
         channel._data = { ...channel._data, custom: custom.custom };
       }
       return channel;
@@ -1817,20 +1826,6 @@ export class StreamChat extends ChatApi {
 
     return channel;
   };
-
-  /**
-   * Bans a user from all channels.
-   *
-   * @param targetUserId - The user to ban.
-   * @param options - Ban options (optional).
-   * @returns The server response.
-   */
-  async banUser(targetUserId: string, options?: BanUserOptions) {
-    return await this.api.post<APIResponse>(this.baseURL + '/moderation/ban', {
-      target_user_id: targetUserId,
-      ...options,
-    });
-  }
 
   /**
    * Revoke a global ban for a user.
@@ -1846,33 +1841,6 @@ export class StreamChat extends ChatApi {
     });
   }
 
-  /**
-   * Shadow bans a user from all channels.
-   *
-   * @param targetUserId - The user to shadow ban.
-   * @param options - Ban options (optional).
-   * @returns The server response.
-   */
-  async shadowBan(targetUserId: string, options?: BanUserOptions) {
-    return await this.banUser(targetUserId, {
-      shadow: true,
-      ...options,
-    });
-  }
-
-  /**
-   * Revoke a global shadow ban for a user.
-   *
-   * @param targetUserId - The user to remove the shadow ban for.
-   * @param options - Unban options (optional).
-   * @returns The server response.
-   */
-  async removeShadowBan(targetUserId: string, options?: UnBanUserOptions) {
-    return await this.unbanUser(targetUserId, {
-      shadow: true,
-      ...options,
-    });
-  }
   async blockUser(blockedUserId: string, requestOptions?: StreamRequestOptions) {
     const result = await this.blockUsers(
       {
@@ -1914,32 +1882,6 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Mutes a user.
-   *
-   * @param targetId - The user to mute.
-   * @param options - UserMuteResponse options (optional, defaults to `{}`).
-   * @returns The server response.
-   */
-  async muteUser(targetId: string, options: MuteUserOptions = {}) {
-    return await this.api.post<MuteUserResponse>(this.baseURL + '/moderation/mute', {
-      target_id: targetId,
-      ...options,
-    });
-  }
-
-  /**
-   * Unmutes a user.
-   *
-   * @param targetId - The user to unmute.
-   * @returns The server response.
-   */
-  async unmuteUser(targetId: string) {
-    return await this.api.post<APIResponse>(this.baseURL + '/moderation/unmute', {
-      target_id: targetId,
-    });
-  }
-
-  /**
    * Checks whether a user is muted. Can be used after `connectUser()` is called.
    *
    * @param targetId - The user ID to check.
@@ -1954,75 +1896,6 @@ export class StreamChat extends ChatApi {
       if (this.mutedUsers[i].target?.id === targetId) return true;
     }
     return false;
-  }
-
-  /**
-   * Flag a message.
-   *
-   * @param targetMessageId - The message to flag.
-   * @param options - Flag options (optional, defaults to `{}`).
-   * @param options.reason - Reason for flagging (optional).
-   * @returns The server response.
-   */
-  async flagMessage(targetMessageId: string, options: { reason?: string } = {}) {
-    return await this.api.post<FlagMessageResponse>(this.baseURL + '/moderation/flag', {
-      target_message_id: targetMessageId,
-      ...options,
-    });
-  }
-
-  /**
-   * Flag a user.
-   *
-   * @param targetId - The user to flag.
-   * @param options - Flag options (optional, defaults to `{}`).
-   * @param options.reason - Reason for flagging (optional).
-   * @returns The server response.
-   */
-  async flagUser(targetId: string, options: { reason?: string } = {}) {
-    return await this.api.post<FlagUserResponse>(this.baseURL + '/moderation/flag', {
-      target_user_id: targetId,
-      ...options,
-    });
-  }
-
-  /**
-   * Unflag a message.
-   *
-   * @param targetMessageId - The message to unflag.
-   * @returns The server response.
-   */
-  async unflagMessage(targetMessageId: string) {
-    return await this.api.post<FlagMessageResponse>(this.baseURL + '/moderation/unflag', {
-      target_message_id: targetMessageId,
-    });
-  }
-
-  /**
-   * Unflag a user.
-   *
-   * @param targetId - The user to unflag.
-   * @returns The server response.
-   */
-  async unflagUser(targetId: string) {
-    return await this.api.post<FlagUserResponse>(this.baseURL + '/moderation/unflag', {
-      target_user_id: targetId,
-    });
-  }
-
-  /**
-   * Unblocks a message blocked by automod.
-   *
-   * @param targetMessageId - The message to unblock.
-   * @returns The server response.
-   */
-  async unblockMessage(targetMessageId: string) {
-    return await this.api.post<APIResponse>(
-      this.baseURL + '/moderation/unblock_message',
-      {
-        target_message_id: targetMessageId,
-      },
-    );
   }
 
   /**
@@ -2312,56 +2185,6 @@ export class StreamChat extends ChatApi {
     return new Thread({ client: this, threadData: response.thread });
   }
 
-  /**
-   * Updates the given thread.
-   *
-   * @param messageId - The ID of the thread message which needs to be updated.
-   * @param partialThreadObject - Should contain `set` or `unset` params for any of the thread's non-reserved fields.
-   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
-   *   into the request (optional).
-   * @returns The updated thread.
-   */
-  async partialUpdateThread(
-    messageId: string,
-    partialThreadObject: PartialThreadUpdate,
-    requestOptions?: StreamRequestOptions,
-  ) {
-    if (!messageId) {
-      throw Error('Please specify the message id when calling partialUpdateThread');
-    }
-
-    // check for reserved fields from ThreadResponse type within partialThreadObject's set and unset.
-    // Throw error if any of the reserved field is found.
-    const reservedThreadFields = [
-      'created_at',
-      'id',
-      'last_message_at',
-      'type',
-      'updated_at',
-      'user',
-      'reply_count',
-      'participants',
-      'channel',
-      'custom',
-    ];
-
-    for (const key in { ...partialThreadObject.set, ...partialThreadObject.unset }) {
-      if (reservedThreadFields.includes(key)) {
-        throw Error(
-          `You cannot set ${key} field on Thread object. ${key} is reserved for server-side use. Please omit ${key} from your set object.`,
-        );
-      }
-    }
-
-    return await this.updateThreadPartial(
-      {
-        message_id: messageId,
-        ...partialThreadObject,
-      },
-      requestOptions,
-    );
-  }
-
   getUserAgent = (): string => {
     // An explicit override (deprecated `setUserAgent`) always wins and is never cached.
     if (this.userAgent) {
@@ -2427,20 +2250,25 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Encodes the WS URL payload.
+   * Encodes the WebSocket auth message, sent as the first frame once the socket opens.
+   *
+   * `products` is not optional in practice: without `'chat'` the server treats the
+   * connection as video-only, which drops every chat event and unread count.
    *
    * @private
    *
-   * @param client_request_id - The client request ID (optional).
-   * @returns The JSON-encoded payload string.
+   * @returns The JSON-encoded auth message.
    */
-  _buildWSPayload = (client_request_id?: string) =>
+  _buildWSAuthMessage = () =>
     JSON.stringify({
-      user_id: this.userId,
-      user_details: this._user,
-      device: this.options.device,
-      client_request_id,
-    });
+      // The server requires a non-empty token even for anonymous connections, but
+      // skips JWT parsing for any string that is not shaped like one. Anonymous users
+      // have no token, so send a placeholder the server accepts and ignores.
+      token: this.tokenManager.getToken() || 'anonymous',
+      // `connect()` rejects before reaching this when `_user` is unset.
+      user_details: this._user as ConnectUserDetailsRequest,
+      products: ['chat'],
+    } satisfies WSAuthMessage);
 
   /**
    * Queries poll answers.
@@ -2469,58 +2297,39 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Uploads a file to the configured storage (defaults to Stream CDN).
+   * Uploads a file to the Stream CDN
    *
-   * @param uri - The file to upload.
-   * @param name - The name of the file (optional).
-   * @param contentType - MIME type; required for React Native URI uploads (optional).
-   * @param user - User information (optional).
-   * @param axiosRequestConfig - Axios config, e.g. `onUploadProgress` for progress tracking (optional).
+   * @param request - Upload payload. `request.file` is the file to upload.
+   * @param requestOptions - Per-request options, e.g. `onUploadProgress` or an abort `signal` (optional).
    * @returns Response containing the file URL.
    */
-  uploadFile_(
-    uri: string | File,
-    name?: string,
-    contentType?: string,
-    user?: UserResponse,
-    axiosRequestConfig?: AxiosRequestConfig,
+  override async uploadFile(
+    request?: Omit<FileUploadRequest, 'file'> & { file?: FileUploadInput },
+    requestOptions?: StreamRequestOptions,
   ) {
-    return this.api.sendFile(
-      `${this.baseURL}/uploads/file`,
-      uri,
-      name,
-      contentType,
-      user,
-      axiosRequestConfig,
+    return await super.uploadFile(
+      { ...request, file: normalizeUploadFile(request?.file) as unknown as string },
+      requestOptions,
     );
   }
 
   /**
-   * Uploads an image to the configured storage (defaults to Stream CDN).
+   * Uploads an image to Stream CDN
    *
-   * @param uri - The image to upload.
-   * @param name - The name of the image (optional).
-   * @param contentType - MIME type; required for React Native URI uploads (optional).
-   * @param user - User information (optional).
-   * @param axiosRequestConfig - Axios config, e.g. `onUploadProgress` for progress tracking (optional).
+   * @param request - Upload payload. `request.file` is the image to upload.
+   * @param requestOptions - Per-request options, e.g. `onUploadProgress` or an abort `signal` (optional).
    * @returns Response containing the image URL.
    */
-  uploadImage_(
-    uri: string | File,
-    name?: string,
-    contentType?: string,
-    user?: UserResponse,
-    axiosRequestConfig?: AxiosRequestConfig,
+  override async uploadImage(
+    request?: Omit<ImageUploadRequest, 'file'> & { file?: FileUploadInput },
+    requestOptions?: StreamRequestOptions,
   ) {
-    return this.api.sendFile(
-      `${this.baseURL}/uploads/image`,
-      uri,
-      name,
-      contentType,
-      user,
-      axiosRequestConfig,
+    return await super.uploadImage(
+      { ...request, file: normalizeUploadFile(request?.file) as unknown as string },
+      requestOptions,
     );
   }
+
   /**
    * Marks the channels as delivered for the given messages and the user.
    *

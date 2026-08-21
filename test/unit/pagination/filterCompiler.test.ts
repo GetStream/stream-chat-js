@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ChannelData,
+  ChannelInput,
   ChannelMemberResponse,
   ChannelResponse,
   ContainsOperator,
@@ -55,7 +55,7 @@ type CustomChannelFilters = QueryFilters<
   }
 >;
 
-type TestChannel = ChannelData & CustomChannelData;
+type TestChannel = ChannelInput & CustomChannelData;
 
 const filter: CustomChannelFilters = {
   $or: [

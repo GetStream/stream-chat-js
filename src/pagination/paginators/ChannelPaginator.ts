@@ -22,16 +22,16 @@ import type { Channel } from '../../channel';
 import type {
   ChannelFilters,
   ChannelOptions,
-  ChannelSort,
   ChannelStateOptions,
   ParsedPredefinedFilterResponse,
   QueryChannelsRequest,
+  SortParamRequest,
 } from '../../types';
 import type { FieldToDataResolver, PathResolver } from '../types.normalization';
 import { resolveDotPathValue } from '../utility.normalization';
 import { isEqual } from '../../utils/mergeWith/mergeWithCore';
 
-const DEFAULT_BACKEND_SORT: ChannelSort = [
+const DEFAULT_BACKEND_SORT: SortParamRequest[] = [
   { direction: -1, field: 'last_message_at' },
   { direction: -1, field: 'updated_at' },
 ];
@@ -57,7 +57,7 @@ export type ChannelPaginatorRequestOptions = Partial<
 
 export type ChannelSortComparatorFactoryParams = {
   /** Sort the comparator is being built for — the effective sort, so a backend-resolved sort template. */
-  sort: ChannelSort;
+  sort: SortParamRequest[];
   /**
    * The comparator `ChannelPaginator` would use for this sort. Delegate to it for the fields you do not
    * want to handle yourself instead of reimplementing channel field resolution and the cid tiebreaker.
@@ -82,7 +82,7 @@ export type ChannelPaginatorOptions = {
   id?: string;
   paginatorOptions?: PaginatorOptions<Channel, ChannelQueryShape>;
   requestOptions?: ChannelPaginatorRequestOptions;
-  sort?: ChannelSort;
+  sort?: SortParamRequest[];
   sortComparatorFactory?: ChannelSortComparatorFactory;
 };
 
@@ -253,7 +253,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   private readonly _id: string;
   private client: StreamChat;
   protected _staticFilters: ChannelFilters | undefined;
-  protected _sort: ChannelSort | undefined;
+  protected _sort: SortParamRequest[] | undefined;
   protected _options: ChannelPaginatorRequestOptions | undefined;
   protected _channelStateOptions: ChannelStateOptions | undefined;
   protected _nextQueryShape: ChannelQueryShape | undefined;
@@ -322,7 +322,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * supply `sortComparatorFactory` (it is consulted on every rebuild and may delegate to
    * `defaultComparator`), or override this method in a subclass.
    */
-  protected buildSortComparator(sort: ChannelSort) {
+  protected buildSortComparator(sort: SortParamRequest[]) {
     const defaultComparator = makeComparator<Channel>({
       sort,
       resolvePathValue: channelSortPathResolver,
@@ -350,7 +350,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     return this._staticFilters;
   }
 
-  get sort(): ChannelSort {
+  get sort(): SortParamRequest[] {
     return this._sort ?? DEFAULT_BACKEND_SORT;
   }
 
@@ -380,8 +380,8 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * backend-resolved predefined filter takes precedence over the requested sort, matching backend
    * precedence rules.
    */
-  get effectiveSort(): ChannelSort {
-    return (this._predefinedFilter?.sort as ChannelSort | undefined) ?? this.sort;
+  get effectiveSort(): SortParamRequest[] {
+    return (this._predefinedFilter?.sort as SortParamRequest[] | undefined) ?? this.sort;
   }
 
   get options(): ChannelOptions | undefined {
@@ -396,7 +396,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     this._staticFilters = filters;
   }
 
-  set sort(sort: ChannelSort | undefined) {
+  set sort(sort: SortParamRequest[] | undefined) {
     this._sort = sort;
     this.sortComparator = this.buildSortComparator(this.effectiveSort);
   }

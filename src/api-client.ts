@@ -1,21 +1,34 @@
 import type { AxiosRequestConfig, AxiosResponse, Method } from 'axios';
 import { AxiosError } from 'axios';
 
-import type {
-  APIError,
-  RateLimit,
-  RequestMetadata,
-  SendFileAPIResponse,
-  StreamRequestOptions,
-  UserResponse,
-} from './types';
+import type { APIError, RateLimit, RequestMetadata, StreamRequestOptions } from './types';
 import { StreamAPIError } from './types';
-import { addFileToFormData, chatCodes, randomId, retryInterval } from './utils';
+import { chatCodes, randomId, retryInterval } from './utils';
+import { toFormData } from './upload-utils';
 import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
 import { runWithRetry } from './utils/retryable';
 
 const logger = chatLoggerSystem.getLogger('api-client');
+
+const MULTIPART_CONTENT_TYPE = 'multipart/form-data';
+
+/**
+ * Upload requests must not inherit the axios instance timeout (3s by default) or the size
+ * caps - either would abort a large or slow upload.
+ *
+ * The body needs no `transformRequest` pin: for a `FormData` body axios' default transform is a
+ * no-op unless the resolved `Content-Type` contains `application/json`, and
+ * `populateRequestConfigWithDefaults` now lets this request's `multipart/form-data` win over an
+ * integrator's global `axiosRequestConfig.headers`. If that precedence is ever reversed, an
+ * upload turns into `JSON.stringify(formDataToJSON(form))` - the file silently disappears and
+ * the request still returns 2xx.
+ */
+const UPLOAD_REQUEST_DEFAULTS: AxiosRequestConfig = {
+  timeout: 0,
+  maxContentLength: Infinity,
+  maxBodyLength: Infinity,
+};
 
 export class ApiClient {
   client!: StreamChat;
@@ -25,8 +38,6 @@ export class ApiClient {
   }
 
   _getToken(): string | undefined {
-    if (this.client.getAuthType() === 'anonymous') return;
-
     return this.client.tokenManager.getToken();
   }
 
@@ -40,10 +51,19 @@ export class ApiClient {
     options?: StreamRequestOptions,
   ): Promise<{ body: T; metadata: RequestMetadata }> {
     const resolvedUrl = this.resolveUrl(url, pathParams);
+    const isMultipart = requestContentType === MULTIPART_CONTENT_TYPE;
 
-    return this._doRequest<T>(method, resolvedUrl, body, {
+    const requestBody =
+      isMultipart && body && typeof body === 'object'
+        ? toFormData(body as Record<string, unknown>)
+        : body;
+
+    return this._doRequest<T>(method, resolvedUrl, requestBody, {
       params: queryParams,
       headers: { 'Content-Type': requestContentType },
+      ...(isMultipart ? UPLOAD_REQUEST_DEFAULTS : {}),
+      // Keep this last so a caller-supplied signal wins - and keep it returning only the keys
+      // it owns, so it can never clobber the upload defaults above.
       ...toAxiosRequestConfig(options),
     });
   }
@@ -77,25 +97,6 @@ export class ApiClient {
     return this._doRequest<T>('delete', url, null, { params }).then((r) => r.body);
   }
 
-  sendFile(
-    url: string,
-    uri: string | File,
-    name?: string,
-    contentType?: string,
-    user?: UserResponse,
-    axiosRequestConfig?: AxiosRequestConfig,
-  ) {
-    const data = addFileToFormData(uri, name, contentType || 'multipart/form-data');
-    if (user != null) data.append('user', JSON.stringify(user));
-
-    return this._doRequest<SendFileAPIResponse>('post', url, data, {
-      timeout: 0,
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity,
-      ...axiosRequestConfig,
-    }).then((response) => response.body);
-  }
-
   // --- private ---
 
   private resolveUrl(url: string, pathParams?: Record<string, string>): string {
@@ -119,13 +120,11 @@ export class ApiClient {
     return {
       ...additonalConfig,
       headers: {
+        ...this.client.options.axiosRequestConfig?.headers,
+        ...additonalConfig.headers,
         Authorization: token,
         'stream-auth-type': this.client.getAuthType(),
         'x-stream-client': this.client.getUserAgent(),
-        ...additonalConfig.headers,
-        // TODO: figure out whether this is needed, setting these at a later time (client.options.axiosRequestConfig = {...}) should probably be a setter
-        // that updates existing axios instance options instead
-        ...this.client.options.axiosRequestConfig?.headers,
         'x-client-request-id':
           additonalConfig.headers?.['x-client-request-id'] || randomId(),
       },
@@ -173,6 +172,7 @@ export class ApiClient {
     additionalConfig: AxiosRequestConfig = {},
   ): Promise<{ body: T; metadata: RequestMetadata }> {
     const initialRequestConfig = this.populateRequestConfigWithDefaults(additionalConfig);
+
     const clientRequestId = initialRequestConfig.headers?.[
       'x-client-request-id'
     ] as string;
@@ -265,8 +265,12 @@ const isUsableAbortSignal = (signal: unknown): signal is AbortSignal =>
  */
 const toAxiosRequestConfig = ({
   signal,
+  onUploadProgress,
 }: StreamRequestOptions = {}): AxiosRequestConfig => ({
   signal: isUsableAbortSignal(signal) ? signal : undefined,
+  // Same reasoning as `isUsableAbortSignal`: an options object revived from a persisted
+  // offline-db task payload has lost its functions.
+  onUploadProgress: typeof onUploadProgress === 'function' ? onUploadProgress : undefined,
 });
 
 const errorIsApiError = (error: unknown): error is AxiosError<APIError> => {

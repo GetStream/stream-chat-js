@@ -1,5 +1,4 @@
-import type { AxiosRequestConfig } from 'axios';
-import { ChannelState } from './channel_state';
+import { ChannelState, ChannelWatchStatus } from './channel_state';
 import { CooldownTimer } from './CooldownTimer';
 import { isEphemeral } from './errors';
 import { applyReactionLocally } from './entityStore';
@@ -15,6 +14,7 @@ import {
   localMessageToNewMessagePayload,
   logChatPromiseExecution,
 } from './utils';
+import { normalizeUploadFile } from './upload-utils';
 import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
 import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
@@ -31,10 +31,9 @@ import {
 } from './configuration/utils/declarativeSlices';
 import type {
   AIState,
-  APIResponse,
   BanUserOptions,
-  ChannelData,
   ChannelGetOrCreateRequest,
+  ChannelInput,
   ChannelMemberResponse,
   ChannelResponse,
   ChannelStateResponseFields,
@@ -46,18 +45,15 @@ import type {
   EventHandler,
   EventPayload,
   EventType,
-  GetRepliesAPIResponse,
+  FileUploadInput,
   LocalMessage,
   MarkReadRequest,
   MarkReadResponse,
-  MessagePaginationOptions,
+  MessagePaginationParams,
   MessageRequest,
   MessageResponse,
   MessageSetType,
-  PinnedMessagePaginationOptions,
-  PinnedMessagesSort,
   QueryMembersPayload,
-  ReactionAPIResponse,
   ReactionRequest,
   SendMessageOptions,
   SendReactionRequest,
@@ -70,7 +66,7 @@ import type {
   UpdateMessageOptions,
   UserResponse,
 } from './types';
-import type { RoleName } from './permissions';
+import { AIStates } from './types';
 import type { StateStore } from './store';
 import type { Unsubscribe } from './store';
 import type {
@@ -78,6 +74,8 @@ import type {
   ChannelPushPreferencesResponse as Gen_ChannelPushPreferencesResponse,
   MuteChannelRequest as Gen_MuteChannelRequest,
   UnmuteChannelRequest as Gen_UnmuteChannelRequest,
+  UploadChannelFileRequest,
+  UploadChannelRequest,
   WSEvent,
 } from './gen/models';
 import type { ChatApi } from './gen/chat/ChatApi';
@@ -257,32 +255,18 @@ export const DEFAULT_CHANNEL_CONFIG: ChannelConfig = deepFreezeConfig({
 export class Channel extends ChannelApi {
   _client: StreamChat;
   data: Partial<ChannelResponse> | undefined;
-  _data: ChannelData;
+  _data: ChannelInput;
   cid: string;
   /**  */
   listeners: Map<EventType, Set<EventHandler>>;
   state: ChannelState;
-  /**
-   * This boolean is a vague indication of whether the channel exists on chat backend.
-   *
-   * If the value is true, then that means the channel has been initialized by either calling
-   * channel.create() or channel.query() or channel.watch().
-   *
-   * If the value is false, then channel may or may not exist on the backend. The only way to ensure
-   * is by calling channel.create() or channel.query() or channel.watch().
-   */
-  initialized: boolean;
-  /**
-   * Indicates whether channel has been initialized by manually populating the state with some messages, members etc.
-   * Static state indicates that channel exists on backend, but is not being watched yet.
-   */
-  offlineMode: boolean;
   lastKeyStroke?: Date;
   lastTypingEvent: Date | null;
   isTyping: boolean;
-  disconnected: boolean;
   /** Re-entrancy guard for {@link Channel.reload} (mirrors Thread.reload's isLoading guard). */
   private _reloading = false;
+  /** Refcount backing the reactive `active` flag (a shared Channel instance can have several consumers). */
+  private _activeRefCount = 0;
   push_preferences?: Gen_ChannelPushPreferencesResponse;
   /**
    * The shared configuration machinery. Owned rather than inherited — `Channel` already extends
@@ -323,7 +307,7 @@ export class Channel extends ChannelApi {
     client: StreamChat,
     type: string,
     id: string | undefined,
-    data: ChannelData,
+    data: ChannelInput,
   ) {
     const validTypeRe = /^[\w_-]+$/;
     const validIDRe = /^[\w!_-]+$/;
@@ -346,11 +330,8 @@ export class Channel extends ChannelApi {
     this.listeners = new Map();
     // perhaps the state variable should be private
     this.state = new ChannelState(this);
-    this.initialized = false;
-    this.offlineMode = false;
     this.lastTypingEvent = null;
     this.isTyping = false;
-    this.disconnected = false;
 
     // Read the declarative configuration *now*, so it can go into the sub-objects as constructor
     // options. Some of their fields are read once during construction (`unreadReferencePolicy`, the
@@ -456,6 +437,11 @@ export class Channel extends ChannelApi {
         },
       },
     });
+
+    // Seed the reactive mute state from the client's current `mutedChannels` (a channel created
+    // after connect may already be muted). Kept in sync afterwards by the client fan-out on
+    // `notification.channel_mutes_updated` / `health.check`.
+    this._syncMuteStatus();
 
     this.configController = new ConfigController<ChannelConfig>({
       defaults: DEFAULT_CHANNEL_CONFIG,
@@ -588,13 +574,16 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Returns the chat client for this channel. Throws if `client.disconnect()` was called.
+   * Returns the chat client for this channel. Throws if the channel is pending disposal — see
+   * {@link Channel.pendingDisposal}.
    *
    * @returns The chat client.
    */
   getClient(): StreamChat {
-    if (this.disconnected === true) {
-      throw Error(`You can't use a channel after client.disconnect() was called`);
+    if (this.pendingDisposal) {
+      throw Error(
+        `Channel ${this.cid} is pending disposal and cannot be used. Get a fresh instance via client.channel().`,
+      );
     }
     return this._client;
   }
@@ -810,58 +799,48 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Upload a file to this channel’s file endpoint (multipart). Forwards to the client’s `sendFile` implementation.
+   * Upload a file to this channel's file endpoint (multipart).
    *
-   * @param uri - File source: URL string, `File`, `Buffer`, or readable stream (Node).
-   * @param name - File name sent in the multipart body (optional).
-   * @param contentType - MIME type; required for React Native URI uploads (optional).
-   * @param user - User payload appended to the form as JSON (optional).
-   * @param axiosRequestConfig - Axios per-request config, merged after upload defaults, e.g. `onUploadProgress`, `signal` from `AbortController` (optional).
+   * @param request - Upload payload. `request.file` is the file to upload.
+   * @param requestOptions - Per-request options, e.g. `onUploadProgress` or an abort `signal` (optional).
    * @returns A promise resolving to `{ file: string, ... }` with the CDN URL.
    */
-  sendFile(
-    uri: string | File,
-    name?: string,
-    contentType?: string,
-    user?: UserResponse,
-    axiosRequestConfig?: AxiosRequestConfig,
+  override async uploadChannelFile(
+    request?: Omit<UploadChannelFileRequest, 'file'> & { file?: FileUploadInput },
+    requestOptions?: StreamRequestOptions,
   ) {
-    return this.getClient().api.sendFile(
-      `${this._channelURL()}/file`,
-      uri,
-      name,
-      contentType,
-      user,
-      axiosRequestConfig,
+    return await super.uploadChannelFile(
+      { ...request, file: normalizeUploadFile(request?.file) as unknown as string },
+      requestOptions,
     );
   }
 
   /**
-   * Upload an image to this channel's image endpoint (multipart). Uses the same transport as `sendFile`.
+   * Upload an image to this channel's image endpoint (multipart).
    *
-   * @param uri - Image source: URL string, `File`, or readable stream (Node). For `Buffer` uploads, use `sendFile` toward the channel file endpoint instead.
-   * @param name - File name sent in the multipart body (optional).
-   * @param contentType - MIME type; required for React Native URI uploads (optional).
-   * @param user - User payload appended to the form as JSON (optional).
-   * @param axiosRequestConfig - Axios per-request config, merged after upload defaults, e.g. `onUploadProgress`, `signal` (optional).
+   * @param request - Upload payload. `request.file` is the image to upload.
+   * @param requestOptions - Per-request options, e.g. `onUploadProgress` or an abort `signal` (optional).
    * @returns A promise resolving to `{ file: string, ... }` with the CDN URL.
    */
-  sendImage(
-    uri: string | File,
-    name?: string,
-    contentType?: string,
-    user?: UserResponse,
-    axiosRequestConfig?: AxiosRequestConfig,
+  override async uploadChannelImage(
+    request?: Omit<UploadChannelRequest, 'file'> & { file?: FileUploadInput },
+    requestOptions?: StreamRequestOptions,
   ) {
-    return this.getClient().api.sendFile(
-      `${this._channelURL()}/image`,
-      uri,
-      name,
-      contentType,
-      user,
-      axiosRequestConfig,
+    return await super.uploadChannelImage(
+      { ...request, file: normalizeUploadFile(request?.file) as unknown as string },
+      requestOptions,
     );
   }
+
+  /**
+   * Alias for {@link uploadChannelFile}, mirroring `client.uploadFile`.
+   */
+  uploadFile = (...args: Parameters<Channel['uploadChannelFile']>) =>
+    this.uploadChannelFile(...args);
+
+  /** Alias for {@link uploadChannelImage}, mirroring `client.uploadImage`. */
+  uploadImage = (...args: Parameters<Channel['uploadChannelImage']>) =>
+    this.uploadChannelImage(...args);
 
   deleteFile(url: string, requestOptions?: StreamRequestOptions) {
     return this.deleteChannelFile({ url }, requestOptions);
@@ -885,18 +864,6 @@ export class Channel extends ChannelApi {
   ) {
     this._checkInitialized();
     return await super.sendEvent(request, requestOptions);
-  }
-
-  /**
-   * Queries messages.
-   *
-   * @param ...args - `[request, requestOptions]`. The optional `request.payload` accepts
-   *   MongoDB-style filters and additional options such as `user_id`. `requestOptions` carries
-   *   per-request options such as an abort `signal` and is never serialized into the request.
-   * @returns The search messages response.
-   */
-  async search(...args: Parameters<ChatApi['search']>) {
-    return await this.getClient().search(...args);
   }
 
   /**
@@ -960,7 +927,7 @@ export class Channel extends ChannelApi {
       if (offlineDb) {
         // The optimistic reaction row is written by the local-update layer
         // (`applyReactionLocally`); here we only queue the request for replay.
-        return await offlineDb.queueTask<ReactionAPIResponse>({
+        return await offlineDb.queueTask<Awaited<ReturnType<ChatApi['sendReaction']>>>({
           task: {
             channelId: this.id as string,
             channelType: this.type,
@@ -992,7 +959,7 @@ export class Channel extends ChannelApi {
       if (offlineDb) {
         // The optimistic reaction-row removal is handled by the local-update layer
         // (`applyReactionLocally`); here we only queue the request for replay.
-        return await offlineDb.queueTask<ReactionAPIResponse>({
+        return await offlineDb.queueTask<Awaited<ReturnType<ChatApi['deleteReaction']>>>({
           task: {
             channelId: this.id as string,
             channelType: this.type,
@@ -1036,7 +1003,7 @@ export class Channel extends ChannelApi {
     const previousData = this.data;
     const data = await super.update(...args);
     this.data = data.channel;
-    this._syncStateFromChannelData(this.data, previousData);
+    this.state.syncStateFromChannelData(this.data, previousData);
     return data;
   }
 
@@ -1066,7 +1033,7 @@ export class Channel extends ChannelApi {
 
     const previousData = this.data;
     this.data = channel;
-    this._syncStateFromChannelData(this.data, previousData);
+    this.state.syncStateFromChannelData(this.data, previousData);
     // If the capabiltities are changed, we trigger the `capabilities.changed` event.
     if (capabilitiesChanged) {
       // `canSkipCooldown` is derived from `own_capabilities` and stored, so it has to be recomputed here.
@@ -1268,28 +1235,6 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Sets member roles in a channel.
-   *
-   * @param roles - List of role assignments.
-   * @param message - Message object for channel members notification (optional).
-   * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
-   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
-   *   into the request (optional).
-   * @returns The server response.
-   */
-  async assignRoles(
-    roles: { channel_role: RoleName; user_id: string }[],
-    message?: MessageRequest,
-    options: ChannelUpdateOptions = {},
-    requestOptions?: StreamRequestOptions,
-  ) {
-    return await this.update(
-      { assign_roles: roles, message, ...options },
-      requestOptions,
-    );
-  }
-
-  /**
    * Invite members to the channel.
    *
    * @param members - An array of members to invite to the channel.
@@ -1480,15 +1425,33 @@ export class Channel extends ChannelApi {
     return this.getClient()._muteStatus(this.cid);
   }
 
+  /**
+   * Recomputes this channel's reactive `state.muteStatus` from the client's current `mutedChannels`
+   * and publishes it only when it actually changed — so the frequent `health.check` fan-out does not
+   * churn subscribers. Called from the constructor and by the client whenever `mutedChannels`
+   * updates. Unlike `muteStatus()`, this does not require the channel to be initialized.
+   */
+  _syncMuteStatus() {
+    if (this.pendingDisposal) return;
+
+    const next = this.getClient()._muteStatus(this.cid);
+    const previous = this.state.getLatestValue().muteStatus;
+    const unchanged =
+      previous.muted === next.muted &&
+      (previous.createdAt?.getTime() ?? null) === (next.createdAt?.getTime() ?? null) &&
+      (previous.expiresAt?.getTime() ?? null) === (next.expiresAt?.getTime() ?? null);
+
+    if (unchanged) return;
+
+    this.state.partialNext({ muteStatus: next });
+  }
+
   sendAction(
     messageId: string,
     formData: Record<string, string>,
     requestOptions?: StreamRequestOptions,
   ) {
     this._checkInitialized();
-    if (!messageId) {
-      throw Error(`Message ID is missing`);
-    }
     return this.getClient().runMessageAction(
       {
         id: messageId,
@@ -1691,6 +1654,100 @@ export class Channel extends ChannelApi {
   }
 
   /**
+   * A vague indication of whether the channel exists on the chat backend — `true` once
+   * `create()`/`query()`/`watch()` has run. Store-backed and reactive: subscribe via
+   * `useStateStore(channel.state, (s) => ({ initialized: s.initialized }))`.
+   */
+  get initialized() {
+    return this.state.getLatestValue().initialized;
+  }
+
+  set initialized(initialized: boolean) {
+    this.state.partialNext({ initialized });
+  }
+
+  /**
+   * Whether the channel was initialized by manually populating its state (offline hydration) rather
+   * than a live watch. Store-backed and reactive.
+   */
+  get offlineMode() {
+    return this.state.getLatestValue().offlineMode;
+  }
+
+  set offlineMode(offlineMode: boolean) {
+    this.state.partialNext({ offlineMode });
+  }
+
+  /**
+   * Whether the channel has been torn down and is awaiting disposal (deleted, the current user
+   * removed, or the client disconnected). Store-backed and reactive.
+   *
+   * One-way and terminal — there is no counterpart that revives the instance. Its resources are
+   * already released ({@link Channel._disconnect} disposes the paginators and unregisters the
+   * subscriptions) and the client drops it from `activeChannels` right after, so nothing should
+   * touch it: it is skipped by the `client.activeChannels` lookups (so `client.channel(…)` mints a
+   * fresh instance), never re-watched on recovery, refused as a source of `channel.data` by the
+   * offline DB, and `getClient()` throws on it so a reference held across a `disconnectUser()`
+   * fails loudly instead of quietly requesting on a client with no user.
+   */
+  get pendingDisposal() {
+    return this.state.getLatestValue().pendingDisposal;
+  }
+
+  set pendingDisposal(pendingDisposal: boolean) {
+    this.state.partialNext({ pendingDisposal });
+  }
+
+  /**
+   * Whether this client holds a server-side watch on the channel, and if not, whether it should be
+   * restored — see {@link ChannelWatchStatus}. Store-backed and reactive: subscribe via
+   * `useStateStore(channel.state, (s) => ({ watchStatus: s.watchStatus }))`.
+   */
+  get watchStatus() {
+    return this.state.getLatestValue().watchStatus;
+  }
+
+  set watchStatus(watchStatus: ChannelWatchStatus) {
+    this.state.partialNext({ watchStatus });
+  }
+
+  /**
+   * Whether a consumer has declared this channel as the one it is currently consuming (see
+   * {@link Channel.activate}). Reactive — subscribe via
+   * `useStateStore(channel.state, (s) => ({ active: s.active }))`.
+   */
+  get active() {
+    return this.state.getLatestValue().active;
+  }
+
+  /**
+   * Declares that a consumer is now consuming this channel's own state (mirrors
+   * `thread.activate()`). Refcounted, as a single `Channel` instance can be held by several
+   * consumers at once, so it stays active until the last one deactivates.
+   *
+   * While active, the channel's own state takes precedence over bulk state writes: channel-list
+   * hydration does not re-seed its message list (its own `channel.reload()` owns that window).
+   */
+  activate = () => {
+    this._activeRefCount += 1;
+    if (this._activeRefCount === 1) {
+      this.state.partialNext({ active: true });
+    }
+  };
+
+  /**
+   * Declares that a consumer has stopped consuming this channel (mirrors `thread.deactivate()`).
+   * Only flips `active` back to `false` once the last holder deactivates.
+   */
+  deactivate = () => {
+    if (this._activeRefCount === 0) return;
+    this._activeRefCount -= 1;
+    if (this._activeRefCount === 0) {
+      this.state.partialNext({ active: false });
+    }
+  };
+
+  /**
    * Marks the channel as unread from `messageId`. Only works when the `read_events` setting is enabled.
    *
    * @param ...args - `[data, requestOptions]`. `data` holds the mark-unread options;
@@ -1753,6 +1810,15 @@ export class Channel extends ChannelApi {
     }
 
     this.state.clean();
+
+    // Clear a stuck AI indicator when we're offline (we'd miss the ending clear/stop). The cleaning
+    // interval keeps ticking through transient/internet drops; closeConnection stops it, and that
+    // path clears the indicator itself. Gate on health, not staleness — a healthy connection must
+    // never cut off a long-running response.
+    const client = this.getClient();
+    if (!client.wsConnection?.isHealthy) {
+      this.state.resetAIState();
+    }
   }
 
   /**
@@ -1780,7 +1846,7 @@ export class Channel extends ChannelApi {
     this.initialized = true;
     const previousData = this.data;
     this.data = state.channel;
-    this._syncStateFromChannelData(this.data, previousData);
+    this.state.syncStateFromChannelData(this.data, previousData);
 
     // The message paginator is seeded synchronously inside query() (before read-state hydration),
     // so a channel opened via watch() alone — a deep-link restore, a search result, a freshly
@@ -1843,62 +1909,12 @@ export class Channel extends ChannelApi {
   override async stopWatching(...args: Parameters<ChannelApi['stopWatching']>) {
     const response = await super.stopWatching(...args);
 
+    // Deliberate: unlike a connection loss this must NOT be restored on reconnect.
+    this.watchStatus = ChannelWatchStatus.NotWatching;
+
     logger.withExtraTags('stopWatching', this.cid).info('Stopped watching the channel.');
 
     return response;
-  }
-
-  /**
-   * List the message replies for a parent message.
-   *
-   * The recommended way of working with threads is to use the `Thread` class.
-   *
-   * @param ...args - `[request, requestOptions]`. `request` holds the parent message ID, pagination
-   *   params, and optional sort directions for `created_at`; `requestOptions` carries per-request
-   *   options such as an abort `signal` and is never serialized into the request.
-   * @returns A response with a list of messages.
-   */
-  async getReplies(...args: Parameters<ChatApi['getReplies']>) {
-    const data = await this.getClient().getReplies(...args);
-
-    // Thread reply state is owned by the Thread object (Thread.messagePaginator); the returned
-    // replies are consumed there. The channel message list is owned by channel.messagePaginator.
-    return data;
-  }
-
-  // TODO: find out v2 equivalent
-  /**
-   * List pinned messages of the channel.
-   *
-   * @param options - Pagination params, e.g. `{ limit: 10, id_lte: 10 }`.
-   * @param sort - Defines sorting direction of pinned messages (optional, defaults to `[]`).
-   * @returns A response with a list of messages.
-   */
-  async getPinnedMessages(
-    options: PinnedMessagePaginationOptions,
-    sort: PinnedMessagesSort = [],
-  ) {
-    return await this.getClient().api.get<GetRepliesAPIResponse>(
-      this._channelURL() + '/pinned_messages',
-      {
-        payload: {
-          ...options,
-          sort,
-        },
-      },
-    );
-  }
-
-  /**
-   * List the reactions; supports pagination.
-   *
-   * @param ...args - `[request, requestOptions]`. `request` holds the target message ID and
-   *   pagination options (`limit`, `offset`); `requestOptions` carries per-request options such as
-   *   an abort `signal` and is never serialized into the request.
-   * @returns The server response.
-   */
-  getReactions(...args: Parameters<ChatApi['getReactions']>) {
-    return this.getClient().getReactions(...args);
   }
 
   /**
@@ -2135,13 +2151,20 @@ export class Channel extends ChannelApi {
       );
     }
 
+    // The request carrying `watch: true` came back, so the server has registered this connection as
+    // a watcher. Only ever set here because a `watch: false` query does NOT unwatch server-side, so it
+    // must not clear the flag.
+    if (queryPayload.watch) {
+      this.watchStatus = ChannelWatchStatus.Watching;
+    }
+
     // Seed read/members/pinned/thread-cleanup state; the message list is in the paginator.
     this._initializeState(state);
     // The queried page is the latest set unless this was a jump/around query.
     const isLatestMessageSet =
       messageSetToAddToIfDoesNotExist === 'latest' &&
       !options?.messages?.id_around &&
-      !(options?.messages as MessagePaginationOptions | undefined)?.created_at_around;
+      !(options?.messages as MessagePaginationParams | undefined)?.created_at_around;
 
     this.getClient().polls.hydratePollCache(state.messages, true);
     this.getClient().reminders.hydrateState(state.messages);
@@ -2159,7 +2182,7 @@ export class Channel extends ChannelApi {
         .join();
     const previousData = this.data;
     this.data = channel;
-    this._syncStateFromChannelData(this.data, previousData);
+    this.state.syncStateFromChannelData(this.data, previousData);
     this.offlineMode = false;
     this.cooldownTimer.refresh();
 
@@ -2198,12 +2221,12 @@ export class Channel extends ChannelApi {
    * @param options - Ban options.
    * @returns The server response.
    */
-  async banUser(targetUserId: string, options: BanUserOptions) {
+  async banUser(targetUserId: string, options: Omit<BanUserOptions, 'channel_cid'>) {
     this._checkInitialized();
-    return await this.getClient().banUser(targetUserId, {
+    return await this.getClient().moderation.ban({
       ...options,
-      type: this.type,
-      id: this.id,
+      target_user_id: targetUserId,
+      channel_cid: this.cid,
     });
   }
 
@@ -2245,36 +2268,6 @@ export class Channel extends ChannelApi {
     this._checkInitialized();
     return await this.getClient().unbanUser(targetUserId, {
       ...options,
-      type: this.type,
-      id: this.id,
-    });
-  }
-
-  /**
-   * Shadow bans a user from a channel.
-   *
-   * @param targetUserId - The user to shadow ban.
-   * @param options - Ban options.
-   * @returns The server response.
-   */
-  async shadowBan(targetUserId: string, options: BanUserOptions) {
-    this._checkInitialized();
-    return await this.getClient().shadowBan(targetUserId, {
-      ...options,
-      type: this.type,
-      id: this.id,
-    });
-  }
-
-  /**
-   * Removes the shadow ban for a user on a channel.
-   *
-   * @param targetUserId - The user to remove the shadow ban for.
-   * @returns The server response.
-   */
-  async removeShadowBan(targetUserId: string) {
-    this._checkInitialized();
-    return await this.getClient().removeShadowBan(targetUserId, {
       type: this.type,
       id: this.id,
     });
@@ -2341,15 +2334,17 @@ export class Channel extends ChannelApi {
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
-        return (await offlineDb.queueTask<APIResponse>({
-          task: {
-            channelId: this.id as string,
-            channelType: this.type,
-            threadId: request?.parent_id,
-            payload: args,
-            type: 'delete-draft',
+        return (await offlineDb.queueTask<Awaited<ReturnType<ChannelApi['deleteDraft']>>>(
+          {
+            task: {
+              channelId: this.id as string,
+              channelType: this.type,
+              threadId: request?.parent_id,
+              payload: args,
+              type: 'delete-draft',
+            },
           },
-        })) as Awaited<ReturnType<ChannelApi['deleteDraft']>>;
+        )) as Awaited<ReturnType<ChannelApi['deleteDraft']>>;
       }
     } catch (error) {
       offlineDbLogger
@@ -2449,16 +2444,16 @@ export class Channel extends ChannelApi {
     let hasStateChanged = false;
     this.messageReceiptsTracker.setPendingReadStoreReconcileMeta(reconcileMeta);
 
-    this.state.readStore.next((currentReadStoreState) => {
-      const nextReadState = patch(currentReadStoreState.read);
+    this.state.next((currentState) => {
+      const nextReadState = patch(currentState.read);
 
-      if (nextReadState === currentReadStoreState.read) {
-        return currentReadStoreState;
+      if (nextReadState === currentState.read) {
+        return currentState;
       }
       hasStateChanged = true;
 
       return {
-        ...currentReadStoreState,
+        ...currentState,
         read: nextReadState,
       };
     });
@@ -2492,6 +2487,31 @@ export class Channel extends ChannelApi {
     return nextUserReadState;
   }
 
+  /**
+   * Sets the current user's unread count. The count lives in exactly one place — the reactive
+   * `read[userId].unread_messages`, which is what the unread badge reads and what
+   * `state.unreadCount` derives from — so channel-wide resets (`channel.truncated`, "all channels
+   * read") must route through here rather than writing a count of their own.
+   */
+  _setOwnUnreadCount(unreadCount: number) {
+    if (this.pendingDisposal) return;
+
+    const userId = this.getClient().userId;
+    if (!userId) return;
+
+    const currentUserReadState = this.state.read[userId];
+    // only reconcile an existing read entry; never fabricate one just to store a count
+    if (!currentUserReadState || currentUserReadState.unread_messages === unreadCount) {
+      return;
+    }
+
+    this._upsertReadState(
+      userId,
+      () => ({ ...currentUserReadState, unread_messages: unreadCount }),
+      { changedUserIds: [userId] },
+    );
+  }
+
   _handleChannelEvent(event: Event) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const channel = this;
@@ -2510,6 +2530,17 @@ export class Channel extends ChannelApi {
         if (event.user?.id) {
           channelState.removeTypingEvent(event.user.id);
         }
+        break;
+      case 'ai_indicator.update':
+        channelState.partialNext({
+          aiState: (event.ai_state as AIState) ?? AIStates.Idle,
+        });
+        break;
+      case 'ai_indicator.clear':
+        channelState.partialNext({ aiState: AIStates.Idle });
+        break;
+      case 'ai_indicator.stop':
+        channelState.partialNext({ aiState: AIStates.Stop });
         break;
       // `message.read_locally` is the client-only event dispatched by `markReadLocally()` when read
       // events are disabled (e.g. livestreams with `isLocalUnreadCountEnabled`). It reuses the exact
@@ -2560,7 +2591,6 @@ export class Channel extends ChannelApi {
           const isOwnEvent = event.user?.id === client.user?.id;
 
           if (isOwnEvent) {
-            channelState.unreadCount = 0;
             // Delivery reporting buffers a `markChannelsDelivered` network request; the local read
             // must not hit the backend, so only sync for the real server `message.read`.
             if (event.type === 'message.read') {
@@ -2690,15 +2720,26 @@ export class Channel extends ChannelApi {
           }
           if (preventUnreadCountUpdate) break;
 
+          // The own unread count IS `read[ownUserId].unread_messages` (see
+          // `ChannelState.unreadCount`), so the own row is what carries the own-unread gating: a
+          // message that does not count as unread (silent/shadowed/muted) never bumps it, and neither
+          // does one arriving while the user is viewing the latest messages — the SDK is about to mark
+          // it read itself, and the count/snapshot would flash until it does. The other users' rows
+          // are receipt bookkeeping and keep their blanket bump.
+          const countsAsOwnUnread =
+            !this.messagePaginator.isViewingLive &&
+            this._countMessageAsUnread(event.message);
+
           if (event.user?.id) {
             const eventUser = event.user;
             const eventUserId = eventUser.id;
             const createdAt = new Date(event.created_at ?? Date.now());
             const eventMessageId = event.message.id;
+            const ownUserId = client.userId;
             this._patchReadState(
               (currentReadState) => {
                 const userIds = Object.keys(currentReadState);
-                if (!userIds.length) return currentReadState;
+                if (!userIds.length && !countsAsOwnUnread) return currentReadState;
 
                 const nextReadState = { ...currentReadState };
 
@@ -2711,6 +2752,9 @@ export class Channel extends ChannelApi {
                       last_delivered_at: createdAt,
                       last_delivered_message_id: eventMessageId,
                     };
+                  } else if (userId === ownUserId && !countsAsOwnUnread) {
+                    // does not count towards the own unread count — leave the row untouched
+                    continue;
                   } else {
                     nextReadState[userId] = {
                       ...currentReadState[userId],
@@ -2720,22 +2764,26 @@ export class Channel extends ChannelApi {
                   }
                 }
 
+                // Seed the own row when the channel has none yet — an uninitialized channel (see
+                // regression #1732) or one queried with `state: false`, where `_initializeState`
+                // never ran to seed it. Without this the own count has nowhere to live and stops
+                // accumulating. `last_read` is epoch: nothing has been read, which is exactly how
+                // every "no last read" consumer already treats a missing value.
+                if (ownUserId && countsAsOwnUnread && !currentReadState[ownUserId]) {
+                  nextReadState[ownUserId] = {
+                    last_read: new Date(0),
+                    unread_messages: 1,
+                    user: (client.user ?? { id: ownUserId }) as UserResponse,
+                  };
+                }
+
                 return nextReadState;
               },
               { changedUserIds: Object.keys(channelState.read) },
             );
           }
 
-          // Skip the own-unread bump when the user is actively viewing the latest messages (app
-          // foregrounded + newest message on screen). Without this, a message read in real time
-          // momentarily bumps `unreadCount`/the snapshot — the "N new" separator/banner + the
-          // channel-list badge would flash until the SDK's mark-read resets it. The SDK reports the
-          // viewing state via `messagePaginator.setViewingLive` and marks the message read itself.
-          // Only the OWN unread accounting is gated; the per-user read/receipt tracking above is
-          // intentionally left intact.
-          const isViewingLive = this.messagePaginator.isViewingLive;
-          if (!isViewingLive && this._countMessageAsUnread(event.message)) {
-            channelState.unreadCount = channelState.unreadCount + 1;
+          if (countsAsOwnUnread) {
             this.messagePaginator.setUnreadSnapshot({
               unreadCount: channelState.unreadCount,
             });
@@ -2762,7 +2810,7 @@ export class Channel extends ChannelApi {
         if (event.channel?.truncated_at) {
           const truncatedAtDate = new Date(event.channel.truncated_at);
 
-          channelState.unreadCount = this.countUnread(truncatedAtDate);
+          this._setOwnUnreadCount(this.countUnread(truncatedAtDate));
           // Partial truncation: keep messages newer than the cutoff. clearStateAndCache would wipe
           // the whole paginator (readers now source from it), so use the partial truncate. The
           // channel-wide read/unread context is reset by the truncation, so drop the unread snapshot
@@ -2771,7 +2819,7 @@ export class Channel extends ChannelApi {
           this.messagePaginator.clearUnreadSnapshot();
           this.pinnedMessagesPaginator.truncate({ truncatedAt: truncatedAtDate });
         } else {
-          channelState.unreadCount = 0;
+          this._setOwnUnreadCount(0);
           this.messagePaginator.clearStateAndCache();
           this.pinnedMessagesPaginator.clearStateAndCache();
         }
@@ -2854,8 +2902,6 @@ export class Channel extends ChannelApi {
           lastReadMessageId: channelState.read[event.user.id].last_read_message_id,
           unreadCount,
         });
-
-        channelState.unreadCount = unreadCount;
         break;
       }
       case 'channel.updated':
@@ -2875,7 +2921,7 @@ export class Channel extends ChannelApi {
               event.channel?.own_capabilities ?? channel.data?.own_capabilities,
           };
           channel.data = newChannelData;
-          channel._syncStateFromChannelData(channel.data, previousChannelData);
+          channel.state.syncStateFromChannelData(channel.data, previousChannelData);
           this.cooldownTimer.refresh();
         }
         break;
@@ -2939,7 +2985,7 @@ export class Channel extends ChannelApi {
           blocked: event.channel?.blocked ?? false,
           hidden: true,
         };
-        channel._syncStateFromChannelData(channel.data, previousChannelData);
+        channel.state.syncStateFromChannelData(channel.data, previousChannelData);
         if (event.clear_history) {
           this.messagePaginator.clearStateAndCache();
           this.pinnedMessagesPaginator.clearStateAndCache();
@@ -2954,7 +3000,7 @@ export class Channel extends ChannelApi {
           blocked: event.channel?.blocked ?? false,
           hidden: false,
         };
-        channel._syncStateFromChannelData(channel.data, previousChannelData);
+        channel.state.syncStateFromChannelData(channel.data, previousChannelData);
         this.getClient().offlineDb?.handleChannelVisibilityEvent({ event });
         break;
       }
@@ -2995,34 +3041,12 @@ export class Channel extends ChannelApi {
     );
   };
 
-  /**
-   * Returns the channel url.
-   *
-   * @returns The channel url.
-   */
-  _channelURL = () => {
-    if (!this.id) {
-      throw new Error('channel id is not defined');
-    }
-    return `${this.getClient().baseURL}/channels/${encodeURIComponent(
-      this.type,
-    )}/${encodeURIComponent(this.id)}`;
-  };
-
   _checkInitialized() {
     if (!this.initialized && !this.offlineMode) {
       throw Error(
         `Channel ${this.cid} hasn't been initialized yet. Make sure to call .watch() and wait for it to resolve`,
       );
     }
-  }
-
-  _syncStateFromChannelData(
-    data: Channel['data'],
-    fallbackData: Channel['data'] = this.data,
-  ) {
-    this.state.syncOwnCapabilitiesFromChannelData(data, fallbackData);
-    this.state.syncMemberCountFromChannelData(data, fallbackData);
   }
 
   _initializeState(state: ChannelStateResponseFields) {
@@ -3099,10 +3123,6 @@ export class Channel extends ChannelApi {
           unread_messages: read.unread_messages ?? 0,
           user: read.user,
         };
-
-        if (read.user.id === user?.id) {
-          this.state.unreadCount = readUpdates[read.user.id].unread_messages;
-        }
       }
     }
 
@@ -3177,7 +3197,9 @@ export class Channel extends ChannelApi {
   _disconnect() {
     logger.withExtraTags('_disconnect', this.cid).info('Disconnecting the channel.');
 
-    this.disconnected = true;
+    // Tear down the channel.state subscriptions BEFORE flipping `pendingDisposal` — that setter
+    // now publishes to the store, so no subscriber handler runs against a half-torn-down channel.
+
     // Runs the `'channel'` setup function's teardown and removes this channel from the configuration
     // store's subscribers. Cleared so a repeated `_disconnect` cannot double-run it.
     this.unsubscribeConfiguration?.();
@@ -3185,10 +3207,13 @@ export class Channel extends ChannelApi {
     this.unsubscribeServerConfig?.();
     this.unsubscribeServerConfig = undefined;
     this.messageReceiptsTracker.unregisterSubscriptions();
+    // A deleted channel (or one the user was removed from) must not be re-watched — see #2599.
+    this.watchStatus = ChannelWatchStatus.NotWatching;
+    this.pendingDisposal = true;
     this.cooldownTimer.clearTimeout();
     // Release the store-backed paginators so the message store no longer pins this removed channel
     // (and its whole message graph) through its subscriber registry. The channel is being discarded
-    // here (disconnected + deleted from activeChannels, never reused), mirroring Thread teardown.
+    // here (pending disposal + deleted from activeChannels, never reused), mirroring Thread teardown.
     this.messagePaginator.dispose();
     this.pinnedMessagesPaginator.dispose();
   }

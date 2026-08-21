@@ -84,7 +84,6 @@ describe('StreamChat construction', () => {
       expect(client.setUserPromise).to.be.null;
 
       expect(client.anonymous).to.equal(false);
-      expect(client.defaultWSTimeoutWithFallback).to.equal(6000);
       expect(client.defaultWSTimeout).to.equal(15000);
     });
 

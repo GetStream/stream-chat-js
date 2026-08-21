@@ -6,7 +6,6 @@ import type {
   OwnUserResponse,
   ReactionGroupResponse,
   ReactionResponse,
-  UpdatedMessage,
   UserResponse,
 } from './types';
 import type { StreamChat } from './client';
@@ -53,26 +52,22 @@ export function isOwnUser(
   return (user as OwnUserResponse)?.total_unread_count !== undefined;
 }
 
-function isBlobWebAPI(uri: unknown): uri is Blob {
-  return typeof window !== 'undefined' && 'Blob' in window && uri instanceof Blob;
-}
-
 export function isOwnUserBaseProperty(property: string) {
   const ownUserBaseProperties: {
     [Property in keyof Required<OwnUserBase>]: boolean;
   } = {
     channel_mutes: true,
     devices: true,
+    invisible: true,
+    latest_hidden_channels: true,
     mutes: true,
+    privacy_settings: true,
+    push_preferences: true,
     total_unread_count: true,
+    total_unread_count_by_team: true,
     unread_channels: true,
     unread_count: true,
     unread_threads: true,
-    invisible: true,
-    privacy_settings: true,
-    roles: true,
-    push_preferences: true,
-    total_unread_count_by_team: true,
   };
 
   return ownUserBaseProperties[property as keyof OwnUserBase];
@@ -99,29 +94,6 @@ export const channelTracksReadLocally = (channel?: Channel) =>
  */
 export const userHasReadReceipts = (client: StreamChat) =>
   client.user?.privacy_settings?.read_receipts?.enabled ?? true;
-
-export function addFileToFormData(
-  uri: string | Blob,
-  name?: string,
-  contentType?: string,
-) {
-  const data = new FormData();
-
-  if (isBlobWebAPI(uri)) {
-    if (name) data.append('file', uri, name);
-    else data.append('file', uri);
-  } else {
-    // React Native path
-    data.append('file', {
-      uri,
-      name: name || uri.split('/').reverse()[0],
-      contentType: contentType || undefined,
-      type: contentType || undefined,
-    } as unknown as Blob);
-  }
-
-  return data;
-}
 
 /**
  * retryInterval - A retry interval which increases acc to number of failures
@@ -472,7 +444,7 @@ export const localMessageToNewMessagePayload = (
 
 export const toUpdatedMessagePayload = (
   message: LocalMessage | Partial<MessageResponse>,
-): UpdatedMessage => {
+): MessageRequest => {
   const reservedKeys = {
     ...RESERVED_UPDATED_MESSAGE_FIELDS,
     ...LOCAL_MESSAGE_FIELDS,
@@ -482,7 +454,7 @@ export const toUpdatedMessagePayload = (
     Object.entries(message).filter(
       ([key]) => !reservedKeys[key as keyof typeof reservedKeys],
     ),
-  ) as UpdatedMessage;
+  ) as MessageRequest;
 
   return {
     ...messageFields,

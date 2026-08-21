@@ -90,7 +90,7 @@ for (const [schemaName, schema] of Object.entries(schemas)) {
 
     const filterFields = propertyDef['x-stream-filter-fields'];
 
-    let typeName = `${schemaName}${snakeToCamelCase(propertyName)}`;
+    const typeName = `${schemaName}${snakeToCamelCase(propertyName)}`;
 
     const fieldEntries = Object.entries(filterFields).map(
       ([fieldName, fieldDefinition]) => {

@@ -372,7 +372,7 @@ describe('OfflineSupportApi', () => {
         const mockChannelData = { id: '123', type: 'messaging' };
         const mockChannel = {
           initialized: true,
-          disconnected: false,
+          pendingDisposal: false,
           data: mockChannelData,
         };
 
@@ -501,7 +501,7 @@ describe('OfflineSupportApi', () => {
         const mockChannelData = { id: '123', type: 'messaging' };
         const mockChannel = {
           initialized: true,
-          disconnected: false,
+          pendingDisposal: false,
           data: mockChannelData,
         };
 
@@ -548,7 +548,9 @@ describe('OfflineSupportApi', () => {
       beforeEach(() => {
         queriesWithChannelGuardSpy = vi.spyOn(offlineDb, 'queriesWithChannelGuard');
         vi.spyOn(offlineDb, 'channelExists').mockResolvedValue(true);
-        readResponse = generateReadResponse({ user: client.user });
+        readResponse = generateReadResponse({
+          user: { ...client.user, blocked_user_ids: [] },
+        });
         channelResponse = generateChannel({
           channel: { id: 'channel123', type: 'messaging' },
           read: [readResponse],
@@ -659,7 +661,7 @@ describe('OfflineSupportApi', () => {
               reads: expect.arrayContaining([
                 expect.objectContaining({
                   unread_messages: expect.any(Number),
-                  user: client.user,
+                  user: { ...client.user, blocked_user_ids: [] },
                 }),
               ]),
             }),
@@ -1406,7 +1408,7 @@ describe('OfflineSupportApi', () => {
           offlineDb.upsertReads.mockResolvedValue(['UPDATE * IN reads']);
 
           readResponse = generateReadResponse({
-            user: client.user,
+            user: { ...client.user, blocked_user_ids: [] },
             last_read: lastReadDate,
             last_read_message_id: lastReadMessageId,
             unread_messages: unreadMessagesCount,
@@ -1473,7 +1475,7 @@ describe('OfflineSupportApi', () => {
                 last_read: lastReadDate,
                 last_read_message_id: lastReadMessageId,
                 unread_messages: 2,
-                user: client.user,
+                user: { ...client.user, blocked_user_ids: [] },
               },
             ],
           });
@@ -1504,7 +1506,7 @@ describe('OfflineSupportApi', () => {
                 last_read: lastReadDate,
                 last_read_message_id: lastReadMessageId,
                 unread_messages: 0,
-                user: client.user,
+                user: { ...client.user, blocked_user_ids: [] },
               },
             ],
           });
@@ -1546,7 +1548,7 @@ describe('OfflineSupportApi', () => {
                 last_read: lastReadDate,
                 last_read_message_id: lastReadMessageId,
                 unread_messages: 0,
-                user: client.user,
+                user: { ...client.user, blocked_user_ids: [] },
               },
             ],
           });
@@ -1584,7 +1586,12 @@ describe('OfflineSupportApi', () => {
           expect(offlineDb.upsertReads).toHaveBeenCalledWith(
             expect.objectContaining({
               cid: localChannelResponse.channel.cid,
-              reads: [expect.objectContaining({ unread_messages: 3, user: client.user })],
+              reads: [
+                expect.objectContaining({
+                  unread_messages: 3,
+                  user: { ...client.user, blocked_user_ids: [] },
+                }),
+              ],
             }),
           );
         });

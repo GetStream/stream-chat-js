@@ -3,7 +3,20 @@ const uuidv4 = () =>
 	'test-' + Math.random().toString(36).substring(2, 15) + '-' + Date.now();
 const utils = require('../utils');
 const fs = require('fs');
-const url = require('url');
+const path = require('path');
+
+// v10 uploads take a `File`; `Buffer` and readable streams are no longer accepted.
+const fileFromDisk = (relativePath, type) => {
+	const absolute = path.resolve(relativePath);
+	return new File([fs.readFileSync(absolute)], path.basename(absolute), { type });
+};
+const testFile = () =>
+	fileFromDisk(
+		'./test/typescript/response-generators/index.js',
+		'application/javascript',
+	);
+const testImage = () =>
+	fileFromDisk('./test/typescript/response-generators/stream.png', 'image/png');
 
 const johnID = `john-${uuidv4()}`;
 
@@ -94,20 +107,14 @@ async function deleteChannel() {
 
 async function deleteFile() {
 	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
-	const rs = fs.createReadStream(
-		url.pathToFileURL('./test/typescript/response-generators/index.js'),
-	);
-	const file = await channel.sendFile(rs, 'testFile');
+	const file = await channel.uploadFile({ file: testFile() });
 	return channel.deleteFile(file.file);
 }
 
 async function deleteImage() {
 	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
 
-	const rs = fs.createReadStream(
-		url.pathToFileURL('./test/typescript/response-generators/stream.png'),
-	);
-	const image = await channel.sendImage(rs, 'testImage');
+	const image = await channel.uploadImage({ file: testImage() });
 	return channel.deleteImage(image.file);
 }
 
@@ -198,21 +205,14 @@ async function removeMembers() {
 	return await channel.removeMembers(newMembers);
 }
 
-async function sendFile() {
+async function uploadFile() {
 	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
-	const rs = fs.createReadStream(
-		url.pathToFileURL('./test/typescript/response-generators/index.js'),
-	);
-	return await channel.sendFile(rs, 'testFile');
+	return await channel.uploadFile({ file: testFile() });
 }
 
-async function sendImage() {
+async function uploadImage() {
 	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
-
-	const rs = fs.createReadStream(
-		url.pathToFileURL('./test/typescript/response-generators/stream.png'),
-	);
-	return await channel.sendImage(rs, 'testImage');
+	return await channel.uploadImage({ file: testImage() });
 }
 
 async function show() {
@@ -294,8 +294,8 @@ module.exports = {
 	rejectInvite,
 	removeMembers,
 	removeFilterTags,
-	sendFile,
-	sendImage,
+	uploadFile,
+	uploadImage,
 	show,
 	stopWatching,
 	truncateChannel,

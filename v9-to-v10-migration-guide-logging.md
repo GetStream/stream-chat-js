@@ -34,23 +34,22 @@ The default sink writes to `console.{trace,debug,info,warn,error}` (with a React
 
 Every internal module attaches to one of these scopes via `chatLoggerSystem.getLogger('<scope>')`:
 
-| Scope                 | Emitted by                                                                                            |
-| --------------------- | ----------------------------------------------------------------------------------------------------- |
-| `api-client`          | `src/api-client.ts` — HTTP request/response tracing                                                   |
-| `channel`             | `src/channel.ts`                                                                                      |
-| `channel-manager`     | `src/channel_manager.ts`                                                                              |
-| `client`              | `src/client.ts` — connection lifecycle, event dispatch                                                |
-| `connection`          | `src/connection.ts` — primary WS transport                                                            |
-| `connection-fallback` | `src/connection_fallback.ts` — long-poll transport                                                    |
-| `message-composer`    | `src/messageComposer/messageComposer.ts`                                                              |
-| `offline-db`          | `src/offline-support/*` **and** offline-DB paths in `client.ts` / `channel.ts` / `messageComposer.ts` |
-| `state-store`         | reserved — declared in the scope union, not yet emitted                                               |
-| `text-composer`       | `src/messageComposer/middleware/textComposer/*`                                                       |
-| `thread`              | `src/thread.ts`                                                                                       |
-| `thread-manager`      | `src/thread_manager.ts`                                                                               |
-| `token-manager`       | `src/token_manager.ts`                                                                                |
-| `upload-manager`      | `src/uploadManager.ts`                                                                                |
-| `utils`               | `src/utils.ts` — `logChatPromiseExecution`, `isOnline`, `messageSetPagination`, `runDetached`         |
+| Scope              | Emitted by                                                                                            |
+| ------------------ | ----------------------------------------------------------------------------------------------------- |
+| `api-client`       | `src/api-client.ts` — HTTP request/response tracing                                                   |
+| `channel`          | `src/channel.ts`                                                                                      |
+| `channel-manager`  | `src/channel_manager.ts`                                                                              |
+| `client`           | `src/client.ts` — connection lifecycle, event dispatch                                                |
+| `connection`       | `src/connection.ts` — primary WS transport                                                            |
+| `message-composer` | `src/messageComposer/messageComposer.ts`                                                              |
+| `offline-db`       | `src/offline-support/*` **and** offline-DB paths in `client.ts` / `channel.ts` / `messageComposer.ts` |
+| `state-store`      | reserved — declared in the scope union, not yet emitted                                               |
+| `text-composer`    | `src/messageComposer/middleware/textComposer/*`                                                       |
+| `thread`           | `src/thread.ts`                                                                                       |
+| `thread-manager`   | `src/thread_manager.ts`                                                                               |
+| `token-manager`    | `src/token_manager.ts`                                                                                |
+| `upload-manager`   | `src/uploadManager.ts`                                                                                |
+| `utils`            | `src/utils.ts` — `logChatPromiseExecution`, `isOnline`, `messageSetPagination`, `runDetached`         |
 
 Unknown scope names fall through to `'default'`. The `ChatLoggerScope` union narrows autocomplete but is not enforced at runtime.
 
@@ -149,7 +148,6 @@ chatLoggerSystem.configureLoggers({ default: { level: 'warn' } });
 ```ts
 chatLoggerSystem.configureLoggers({
   connection: { level: 'trace' },
-  'connection-fallback': { level: 'trace' },
 });
 // leaves `default` and every other scope at 'info'
 ```
