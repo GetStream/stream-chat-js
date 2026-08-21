@@ -123,18 +123,15 @@ const layer = <T extends object>(target: T, source?: Partial<T>): T => {
  * independently: freezing the defaults, deriving in a fixed layer order, skipping a write that changes
  * nothing, and re-applying read-once fields after a change.
  *
- * **Public, so a class registered under a custom key gets the same behaviour as a built-in one.**
- * `applyInstanceConfiguration` subscribes such a class to its key; this is what resolves the value once
- * the slice arrives. Without it, an outside class would hand-roll the derivation and be free to
- * reintroduce every bug this consolidated — leaking a shared default, publishing when nothing moved,
- * storing a read-once field without applying it.
+ * Not exported from the package. Every configurable class is one this package constructs, and the key
+ * space is closed, so there is no caller outside it — see `docs/instance-configuration.md` §6.
  *
- * The entity keeps the shape every configurable class exposes by forwarding:
+ * An entity keeps the shape every configurable class exposes by forwarding:
  *
  * ```ts
- * class MyWidget {
- *   private readonly configController = new ConfigController<MyWidgetConfig>({
- *     defaults: DEFAULT_MY_WIDGET_CONFIG,
+ * class MyEntity {
+ *   private readonly configController = new ConfigController<MyEntityConfig>({
+ *     defaults: DEFAULT_MY_ENTITY_CONFIG,
  *     onChanged: (next, previous) => {
  *       if (next.pollIntervalMs !== previous.pollIntervalMs) this.restartPolling();
  *     },
@@ -142,10 +139,12 @@ const layer = <T extends object>(target: T, source?: Partial<T>): T => {
  *
  *   get configState() { return this.configController.state; }
  *   get config() { return this.configController.value; }
- *   updateConfig(patch: Partial<MyWidgetConfig>) { this.configController.patch(patch); }
- *   initializeConfig(slice?: Partial<MyWidgetConfig>) { this.configController.initialize(slice); }
+ *   updateConfig(patch: Partial<MyEntityConfig>) { this.configController.patch(patch); }
+ *   initializeConfig(slice?: Partial<MyEntityConfig>) { this.configController.initialize(slice); }
  * }
  * ```
+ *
+ * @internal
  */
 export class ConfigController<
   TConfig extends Record<string, unknown>,

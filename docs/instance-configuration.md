@@ -809,6 +809,17 @@ Call it on **every** route that resolves configuration, not just at construction
 once at construction holds until the first update and then silently stops holding, which is exactly the
 defect this rule was extracted from.
 
+**Default a server-gated flag to `true`.** The two sides combine with AND, so `true` is the identity — it
+means "no opinion, let the server decide". `false` is absorbing: it silently vetoes a feature the server
+granted, and an integrator has no reason to suspect a second switch exists. Use `false` only for a feature
+with **no** server flag, that is genuinely opt-in. `linkPreviews.enabled` is the cautionary case: it
+defaulted to `false`, which overrode every app that had enabled `url_enrichment` server-side, and flipping
+it to `true` is one of this version's breaking changes.
+
+**Prefer a required boolean with a default over an optional one.** An optional flag's "off" value is
+`undefined`, and the merge skips `undefined` — so a field that defaults to absent can be switched on and
+never off again.
+
 **Guards at the point of use.** `typing_events`, `read_events`, `delivery_events`, `url_enrichment` and
 the channel's command list are checked where they are used, independently of your configuration — so
 those are already safe:
@@ -869,6 +880,22 @@ re-resolved, so reading it back after the server narrows a field does not tell y
 `composer.requestedConfig` is where the unnarrowed values live. When a declarative value is known to be
 narrowed by the server, the SDK logs it at debug level so the no-op is at least discoverable.
 
+**Which is why a setter must not guard on the effective value:**
+
+```ts
+// wrong
+set enabled(next: boolean) {
+  if (next === this.enabled) return; // `this.enabled` is post-authority
+  this.composer.updateConfig({ linkPreviews: { enabled: next } });
+}
+```
+
+Where the server masks the field the effective value never moves, so the guard skips recording a _request_
+that differs from the previous one — and the stale earlier request is honoured the moment the server
+relents, which is the opposite of the last instruction given. Drop the guard: `ConfigController` already
+declines to publish when the resolved value does not move, which is the same check against the right
+value.
+
 ---
 
 ## 6. The key space is closed
@@ -887,34 +914,18 @@ client.config.setSetupFunction('cahnnel', fn); // ✗ does not compile
 argument, a setter, or a registry of your own if you have several. Routing it through `client.config`
 would put a value the SDK can neither type nor apply into a tree whose only reader is the SDK.
 
-`ConfigController` stays exported for the part that _is_ worth reusing: the resolution itself — frozen
-defaults, one layer order, a skipped write when nothing moved, and a reactive `configState`. Own the
-class, own its configuration, and let the controller do the resolving:
-
-```ts
-import { ConfigController } from 'stream-chat';
-
-type MyWidgetConfig = { enabled: boolean; pollIntervalMs: number };
-
-class MyWidget {
-  private readonly configController = new ConfigController<MyWidgetConfig>({
-    defaults: { enabled: true, pollIntervalMs: 5_000 },
-  });
-
-  get configState() {
-    return this.configController.state;
-  }
-  get config() {
-    return this.configController.value;
-  }
-  updateConfig(patch: Partial<MyWidgetConfig>) {
-    this.configController.patch(patch);
-  }
-}
-```
+The machinery is internal too. `ConfigController`, which resolves a configuration, and
+`applyInstanceConfiguration`, which subscribes an instance to a key, are both unexported: every
+configurable class is one this package constructs, so neither has a caller outside it. `ConfigController`
+was exported while the key space was open; with the key space closed there is nothing left for an outside
+class to plug into.
 
 The runtime keeps a warning for a key it does not define with nothing subscribed to it — reachable only
 from JavaScript, or past a cast — so the mistake the compiler cannot see still surfaces.
+
+Adding a configurable class _inside_ this package is a different matter, and the contract is above: own a
+`ConfigController`, expose `configState` / `config` / `updateConfig` / `initializeConfig`, add the key to
+`InstanceConfigTree` and `shape.ts`, and subscribe with `applyInstanceConfiguration`.
 
 ---
 

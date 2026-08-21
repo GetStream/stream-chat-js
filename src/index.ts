@@ -6,8 +6,6 @@ export * from './channel_state';
 // break module augmentation (TS#46617). The configuration key types are deliberately *not* augmentable —
 // they are type aliases — so they are listed for the same mechanical reason, not to invite extension.
 // https://github.com/microsoft/TypeScript/issues/46617
-export { ConfigController } from './configuration/ConfigController';
-export type { ConfigControllerOptions } from './configuration/ConfigController';
 // Named in the signatures of `client.config.set` / `setConfig`, so a caller has to be able to write it.
 export type { DeepPartial } from './types.utility';
 export {
