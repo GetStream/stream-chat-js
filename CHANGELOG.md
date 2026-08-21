@@ -1,3 +1,24 @@
+## [10.0.0-rc.6](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.5...v10.0.0-rc.6) (2026-08-21)
+
+### ⚠ BREAKING CHANGES
+
+* remove hand-written types and API wrappers (#1836)
+* **i18n:** `Streami18n.init()` now rejects when i18next fails to
+initialize, where it previously logged and resolved. Callers that ignore
+the returned promise will see an unhandled rejection. The instance
+remains usable in its degraded English form either way.
+`Streami18n.brand` is removed; nothing in either UI SDK read it, and a
+custom integration that recognized instances through it should compare
+against its own marker or accept the instance it was handed.
+
+### Bug Fixes
+
+* **i18n:** reject from init() and drop the Streami18n brand static ([#1839](https://github.com/GetStream/stream-chat-js/issues/1839)) ([67bb1c7](https://github.com/GetStream/stream-chat-js/commit/67bb1c74b3a8054109220f6c050746f60da983a0))
+
+### Features
+
+* remove hand-written types and API wrappers ([#1836](https://github.com/GetStream/stream-chat-js/issues/1836)) ([dc49a78](https://github.com/GetStream/stream-chat-js/commit/dc49a78d9cff9ddec4bcc97a178c230fba97cdad))
+
 ## [10.0.0-rc.5](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.4...v10.0.0-rc.5) (2026-08-20)
 
 ### ⚠ BREAKING CHANGES
