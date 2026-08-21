@@ -699,11 +699,12 @@ state while notifying nobody — and points you at `updateConfig`. It does **not
 `composer.config.text.publishTypingEvents = false`, because `Readonly<T>` is shallow. Runtime freezing covers
 that gap, and how far it reaches differs by class:
 
-- **`MessageComposer`** deep-freezes each resolution, so _every_ nested write throws a `TypeError` at the
-  offending line. Relying on the frozen package defaults alone was not enough — the resolved value only
-  copies subtrees some layer touched, and `location` and `text` are copied on every single resolution
-  because the server's restrictions and upper bounds name them, which left the two most-configured subtrees
-  writable.
+- **`MessageComposer` and `Channel`** deep-freeze each resolution, so _every_ nested write throws a
+  `TypeError` at the offending line. Relying on the frozen package defaults alone was not enough — the
+  resolved value only copies subtrees some layer touched, and the subtrees the server's restrictions name
+  are copied on every single resolution: `location` and `text` on the composer, and on a channel the five
+  gates (`typingEvents`, `readEvents`, `replies`, `deliveryEvents`, `userMessageReminders`) that are the
+  whole point of reading `channel.config`. Those were the writable ones.
 - **Everywhere else** only the package defaults are frozen, so an untouched subtree throws and a copied one
   does not. Mutating a copied subtree still changes state without notifying anyone.
 

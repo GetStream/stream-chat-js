@@ -255,6 +255,62 @@ describe("the 'channel' configuration key", () => {
    * this is not a correctness gap being closed — it is the two things that were missing: an off-switch
    * for the integrator, and one reconciled value to read instead of the raw flag.
    */
+  /**
+   * `Readonly<ChannelConfig>` rejects `channel.config.availableCommands = []` but is shallow, so it accepts
+   * the nested form — which is the one that escapes the instance. The five gates below are copied on every
+   * derivation (the server's restrictions name them), so the frozen package defaults never covered them.
+   */
+  describe('the resolved config is frozen', () => {
+    it.each([
+      'deliveryEvents',
+      'readEvents',
+      'replies',
+      'typingEvents',
+      'userMessageReminders',
+    ] as const)('refuses a nested write to %s', (gate) => {
+      const channel = openChannel();
+
+      expect(() => {
+        (channel.config[gate] as { enabled: boolean }).enabled = false;
+      }).toThrow(TypeError);
+      expect(channel.config[gate].enabled).toBe(true);
+    });
+
+    it('refuses a write to availableCommands, and does not share the array with the cache', () => {
+      const channel = openChannel();
+      client.channelServerConfigsStore.partialNext({
+        configs: {
+          [channel.cid]: { commands: [{ name: 'giphy' }] } as never,
+        },
+      });
+
+      expect(channel.config.availableCommands).toEqual([{ name: 'giphy' }]);
+      expect(() => channel.config.availableCommands.push({ name: 'ban' })).toThrow(
+        TypeError,
+      );
+      // A copy, so freezing the resolved value cannot freeze the cache every channel of the type reads.
+      expect(channel.config.availableCommands).not.toBe(
+        client.channelServerConfigs[channel.cid]?.commands,
+      );
+      expect(Object.isFrozen(client.channelServerConfigs[channel.cid]?.commands)).toBe(
+        false,
+      );
+    });
+
+    it('leaves the declarative slice writable — only the resolved copy is frozen', () => {
+      // The order in `applyAuthority` matters: copy, then freeze. Freezing in place reached the subtree
+      // held by `client.config`, and a paginator resolving from that same object could no longer merge
+      // into it.
+      client.config.set({ channel: { messagePaginator: { pageSize: 50 } } });
+      const channel = openChannel();
+
+      expect(channel.messagePaginator.config.pageSize).toBe(50);
+      expect(Object.isFrozen(client.config.getConfig('channel')?.messagePaginator)).toBe(
+        false,
+      );
+    });
+  });
+
   describe('typing and read events', () => {
     const withServerConfig = (config: Record<string, unknown>, id = 'channel-id') => {
       client.channelServerConfigsStore.partialNext({

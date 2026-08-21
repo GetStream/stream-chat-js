@@ -19,6 +19,7 @@ import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
 import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
 import { ConfigController } from './configuration/ConfigController';
+import { copyConfigPatch } from './configuration/utils/copyConfigPatch';
 import { deepFreezeConfig } from './configuration/utils/deepFreezeConfig';
 import { mergeServerRestrictions } from './configuration/utils/serverAuthority';
 import type { ServerRestrictions } from './configuration/utils/serverAuthority';
@@ -428,13 +429,25 @@ export class Channel extends ChannelApi {
       initialSlice: declarativeConfig as Partial<ChannelConfig> | undefined,
       // Nested groups: naming `typingEvents.enabled` must not drop `readEvents`.
       mergeSlice: 'deep',
-      applyAuthority: (requested) => ({
-        ...(mergeServerRestrictions(requested, this.serverRestrictions) as ChannelConfig),
-        // Assigned rather than merged: `mergeServerRestrictions` treats an array as an interior node
-        // and hands it to the deep merge, which would combine the two lists. The server owns this one
-        // outright, so it replaces.
-        availableCommands: this.serverConfig?.commands ?? [],
-      }),
+      // Frozen so a nested write throws instead of changing state silently. Freezing
+      // DEFAULT_CHANNEL_CONFIG is not enough on its own: resolution rebuilds the gate subtrees every
+      // time, so the resolved config holds new unfrozen objects rather than the frozen defaults.
+      //
+      // Copied first, because a subtree of the resolved object and the matching subtree of the slice
+      // stored in `client.config` can be the same object — so freezing one freezes the other, and the
+      // paginators that resolve from that slice could no longer merge into it.
+      applyAuthority: (requested) =>
+        deepFreezeConfig(
+          copyConfigPatch({
+            ...(mergeServerRestrictions(
+              requested,
+              this.serverRestrictions,
+            ) as ChannelConfig),
+            // Assigned rather than merged: the deep merge would concatenate the two lists, and the
+            // server owns this one outright.
+            availableCommands: this.serverConfig?.commands ?? [],
+          }),
+        ) as ChannelConfig,
     });
 
     // The server's answer usually arrives *after* construction — a channel built before it has been
