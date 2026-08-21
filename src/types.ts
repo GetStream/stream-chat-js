@@ -321,14 +321,6 @@ export type UserFilters = QueryUsersPayload['filter_conditions'];
 
 export type MemberFilters = QueryMembersPayload['filter_conditions'];
 
-/**
- * Sort Types
- */
-
-/**
- * Base Types
- */
-
 export type OGAttachment = RequireLiteral<Attachment, 'og_scrape_url'>;
 
 export type PushProvider = CreateDeviceRequest['push_provider'];
