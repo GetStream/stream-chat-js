@@ -302,9 +302,7 @@ export class Channel extends ChannelApi {
    */
   getClient(): StreamChat {
     if (this.pendingDisposal) {
-      throw Error(
-        `Channel ${this.cid} is pending disposal and cannot be used. Get a fresh instance via client.channel().`,
-      );
+      throw Error(`Channel ${this.cid} is pending disposal and cannot be used`);
     }
     return this._client;
   }
