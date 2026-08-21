@@ -8,6 +8,7 @@ import { DEFAULT_MESSAGE_OPERATIONS_CONFIG } from '../../../src/messageOperation
 import { DEFAULT_NOTIFICATION_MANAGER_CONFIG } from '../../../src/notifications/configuration';
 import { DEFAULT_PAGINATION_OPTIONS } from '../../../src/pagination/paginators/BasePaginator';
 import { DEFAULT_REMINDER_MANAGER_CONFIG } from '../../../src/reminders/ReminderManager';
+import { DEFAULT_THREAD_CONFIG } from '../../../src/thread';
 import { DEFAULT_THREAD_MANAGER_CONFIG } from '../../../src/thread_manager';
 
 /**
@@ -35,6 +36,7 @@ describe('package default configurations are immutable', () => {
     DEFAULT_NOTIFICATION_MANAGER_CONFIG,
     DEFAULT_PAGINATION_OPTIONS,
     DEFAULT_REMINDER_MANAGER_CONFIG,
+    DEFAULT_THREAD_CONFIG,
     DEFAULT_THREAD_MANAGER_CONFIG,
   };
 

@@ -23,6 +23,67 @@ describe("the 'thread' configuration key", () => {
       threadData: generateThreadResponse(channelResponse, parentMessage),
     });
 
+  /**
+   * `Thread` was the last entity resolving configuration by hand — a bare `StateStore`, an open-coded
+   * no-op guard, no frozen defaults and no `updateConfig`. It now goes through `ConfigController` like
+   * everything else, so these pin the surface that migration is supposed to provide.
+   */
+  describe('the shared configuration surface', () => {
+    it('exposes configState, config and updateConfig', () => {
+      const thread = openThread();
+
+      expect(thread.configState.getLatestValue()).toBe(thread.config);
+      expect(typeof thread.updateConfig).toBe('function');
+    });
+
+    it('applies an imperative updateConfig', () => {
+      const thread = openThread();
+      const markReadRequest = vi.fn();
+
+      thread.updateConfig({ requestHandlers: { markReadRequest } });
+
+      expect(thread.config.requestHandlers?.markReadRequest).toBe(markReadRequest);
+    });
+
+    it('lets an imperative change outrank the declarative slice', () => {
+      const declarative = vi.fn();
+      const imperative = vi.fn();
+      client.config.set({
+        thread: { requestHandlers: { markReadRequest: declarative } },
+      });
+      const thread = openThread();
+      expect(thread.config.requestHandlers?.markReadRequest).toBe(declarative);
+
+      thread.updateConfig({ requestHandlers: { markReadRequest: imperative } });
+
+      expect(thread.config.requestHandlers?.markReadRequest).toBe(imperative);
+    });
+
+    it('skips the write when nothing moved', () => {
+      const markReadRequest = vi.fn();
+      client.config.set({ thread: { requestHandlers: { markReadRequest } } });
+      const thread = openThread();
+      const listener = vi.fn();
+      thread.configState.subscribe(listener);
+      listener.mockClear();
+
+      // Re-registering the same handler re-runs the derivation with a freshly allocated object, which
+      // `StateStore`'s `===` check cannot suppress on its own.
+      client.config.set({ thread: { requestHandlers: { markReadRequest } } });
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('carries only its own slice, not the keys it hands to its sub-objects', () => {
+      client.config.set({ thread: { messagePaginator: { pageSize: 25 } } });
+
+      const thread = openThread();
+
+      expect(thread.messagePaginator.config.pageSize).toBe(25);
+      expect(thread.config).not.toHaveProperty('messagePaginator');
+    });
+  });
+
   describe('declarative configuration', () => {
     it('reaches a thread created after registration', () => {
       client.config.set({ thread: { messagePaginator: { pageSize: 25 } } });

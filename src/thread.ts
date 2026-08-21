@@ -32,10 +32,11 @@ import type { CustomThreadData } from './custom_types';
 import { MessageComposer } from './messageComposer';
 import { MessageOperations } from './messageOperations';
 import { WithSubscriptions } from './utils/WithSubscriptions';
-import { isEqual } from './utils/mergeWith/mergeWithCore';
 import { MessagePaginator } from './pagination';
 import type { MergeNewestPageOptions } from './pagination';
 import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
+import { ConfigController } from './configuration/ConfigController';
+import { deepFreezeConfig } from './configuration/utils/deepFreezeConfig';
 import type { ThreadDeclarativeConfig } from './configuration/types';
 import {
   mergeDeclarativeMessageOperationsConfig,
@@ -93,8 +94,18 @@ export type ThreadConfig = {
   };
 };
 
+/**
+ * Empty because every field of `ThreadConfig` is optional — a thread's own configuration is one handler
+ * wide. Declared and frozen anyway, so the entity carries the same defaults layer as every other
+ * configurable class rather than a special case.
+ */
+export const DEFAULT_THREAD_CONFIG: ThreadConfig = deepFreezeConfig({});
+
 export class Thread extends WithSubscriptions {
-  public readonly configState = new StateStore<ThreadConfig>({});
+  /** The shared configuration machinery — see {@link ConfigController}. */
+  private readonly configController = new ConfigController<ThreadConfig>({
+    defaults: DEFAULT_THREAD_CONFIG,
+  });
   public readonly state: StateStore<ThreadState>;
   public readonly id: string;
   public readonly messageComposer: MessageComposer;
@@ -335,15 +346,15 @@ export class Thread extends WithSubscriptions {
    * `requestHandlers`; the paginator derives its own configuration.
    */
   initializeConfig(declarativeConfig?: ThreadDeclarativeConfig): void {
-    // Replaces rather than merges: a handler dropped from the declarative tree must disappear.
-    // Guarded against a no-op publish exactly as `Channel.initializeConfig` is — same freshly allocated
-    // object, same `alsoWatch` re-run, and `useThreadRequestHandlers` subscribes to this store too.
-    const nextRequestHandlers = declarativeConfig?.requestHandlers;
-    if (
-      !isEqual(this.configState.getLatestValue().requestHandlers, nextRequestHandlers)
-    ) {
-      this.configState.next({ requestHandlers: nextRequestHandlers });
-    }
+    // Only the thread's own slice goes in. The paginator and the operations keys are handed to those
+    // objects below, so putting them here too would publish them on `thread.config` as well.
+    //
+    // Replaces rather than merges: a handler dropped from the declarative tree must disappear. The
+    // controller skips a write that changes nothing, which matters because `alsoWatch` re-runs this for
+    // any of three keys and `useThreadRequestHandlers` subscribes to the store.
+    this.configController.initialize({
+      requestHandlers: declarativeConfig?.requestHandlers,
+    });
 
     this.messagePaginator.initializeConfig(
       toDeclarativePaginatorConfig(
@@ -364,9 +375,25 @@ export class Thread extends WithSubscriptions {
     );
   }
 
-  /** This thread's resolved configuration — the shape every configurable class exposes. */
+  /**
+   * Resolved configuration as a store, so consumers can react to it — the shape every configurable class
+   * exposes.
+   */
+  get configState(): StateStore<ThreadConfig> {
+    return this.configController.state;
+  }
+
+  /**
+   * This thread's resolved configuration. `Readonly` because the value is the store's live object —
+   * assigning to a field of it would change state without notifying anyone. Use {@link updateConfig}.
+   */
   get config(): Readonly<ThreadConfig> {
-    return this.configState.getLatestValue();
+    return this.configController.value;
+  }
+
+  /** Merges a partial configuration into the resolved config and notifies subscribers. */
+  updateConfig(config: Partial<ThreadConfig>): void {
+    this.configController.patch(config);
   }
 
   get channel() {

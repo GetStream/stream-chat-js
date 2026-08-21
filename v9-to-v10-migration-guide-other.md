@@ -544,6 +544,15 @@ The two are **not** interchangeable. Only six flags have a resolved counterpart 
 
 `DEFAULT_CHANNEL_CONFIG` is exported and deep-frozen, like every other default config constant.
 
+**`channel.config` holds only the channel's own fields.** The `channel` slice you register can also carry
+`messagePaginator`, `pinnedMessagesPaginator` and `messageOperations` — those are scoped overrides for the
+objects the channel owns, and they still work:
+
+```ts
+client.config.set({ channel: { messagePaginator: { pageSize: 50 } } });
+channel.messagePaginator.config.pageSize; // 50
+```
+
 ---
 
 ## Reminders — `messageId` → `message_id`

@@ -260,6 +260,48 @@ describe("the 'channel' configuration key", () => {
    * the nested form — which is the one that escapes the instance. The five gates below are copied on every
    * derivation (the server's restrictions name them), so the frozen package defaults never covered them.
    */
+  /**
+   * The `channel` slice also carries `messagePaginator`, `pinnedMessagesPaginator` and
+   * `messageOperations`. Those are handed to the sub-objects directly; the channel used to resolve them
+   * onto its own config as well, where nothing read them — `ChannelConfig` does not declare them — and a
+   * registration against one notified every `configState` subscriber for a change that did not concern
+   * the channel.
+   */
+  describe('resolves only its own fields', () => {
+    it('keeps the sub-object keys off channel.config', () => {
+      client.config.set({
+        channel: {
+          messageOperations: { optimisticUpdate: false } as never,
+          messagePaginator: { pageSize: 50 },
+          pinnedMessagesPaginator: { pageSize: 5 },
+        },
+      });
+
+      const channel = openChannel();
+
+      // The scoped overrides still reach the objects they are for.
+      expect(channel.messagePaginator.config.pageSize).toBe(50);
+      expect(channel.pinnedMessagesPaginator.config.pageSize).toBe(5);
+      // Asserted as absences rather than an exact key list, so adding a field to `ChannelConfig` does
+      // not fail this test for an unrelated reason.
+      expect(channel.config).not.toHaveProperty('messagePaginator');
+      expect(channel.config).not.toHaveProperty('pinnedMessagesPaginator');
+      expect(channel.config).not.toHaveProperty('messageOperations');
+    });
+
+    it('does not notify channel.configState when a sub-object key is registered', () => {
+      const channel = openChannel();
+      const listener = vi.fn();
+      channel.configState.subscribe(listener);
+      listener.mockClear();
+
+      client.config.set({ channel: { messagePaginator: { pageSize: 50 } } });
+
+      expect(channel.messagePaginator.config.pageSize).toBe(50);
+      expect(listener).not.toHaveBeenCalled();
+    });
+  });
+
   describe('the resolved config is frozen', () => {
     it.each([
       'deliveryEvents',

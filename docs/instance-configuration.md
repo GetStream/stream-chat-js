@@ -678,23 +678,17 @@ const unsubscribe = channel.messagePaginator.configState.subscribe(({ pageSize }
 });
 ```
 
-Every configurable object has all three — `MessageComposer`, every paginator, `MessageOperations`,
-`client.notifications`, `client.reminders`, `client.threads`, `client.messageDeliveryReporter`,
-`SearchController`, `LiveLocationManager` — with one exception:
+Every configurable object has all three — `Channel`, `Thread`, `MessageComposer`, every paginator,
+`MessageOperations`, `client.notifications`, `client.reminders`, `client.threads`,
+`client.messageDeliveryReporter`, `SearchController`, `LiveLocationManager`. There are no exceptions left.
 
-| entity          | `configState` | `config` | `updateConfig` |
-| --------------- | ------------- | -------- | -------------- |
-| everything else | yes           | yes      | yes            |
-| `Thread`        | yes           | —        | —              |
-
-`Channel` was an exception too, while the server-side getter was still called `channel.getConfig()`: a
-`channel.config` beside it would have read as the same thing in getter form while returning
-`{ requestHandlers }`, and nothing would have caught the confusion. Renaming the server side to
-`channel.serverConfig` removed the collision, so `Channel` now has `config` like everything else.
-
-`Thread` still has the store alone. Its instance configuration is one field wide (`requestHandlers`) and its
-only writer wants the store anyway, so the getter would exist purely to make this table square. Read it as
-`thread.configState.getLatestValue()`.
+`Channel` and `Thread` used to be two, for one reason that has since been removed: while the server-side
+getter was still called `channel.getConfig()`, a `channel.config` beside it would have read as the same
+thing in getter form while returning `{ requestHandlers }`, and nothing would have caught the confusion.
+Renaming the server side to `channel.serverConfig` removed the collision. `Thread` never had that name to
+collide with, and it resolves through the same `ConfigController` as everything else now, so it gets the
+frozen defaults, the single layer order and the skipped no-op write for free rather than hand-rolling
+them.
 
 Earlier versions kept several of these in plain objects that changed silently, so a subscriber that had
 already read a value never learned it had moved. That is no longer the case anywhere.

@@ -209,6 +209,39 @@ export type ChannelConfig = {
  * subtree no layer touches stays identical by reference and would otherwise be mutable through the
  * public `channel.config`. See `deepFreezeConfig`.
  */
+/**
+ * The fields of the declarative `channel` slice that a channel resolves for **itself**.
+ *
+ * The slice also carries `messagePaginator`, `pinnedMessagesPaginator` and `messageOperations`, which are
+ * handed to those objects directly (see {@link Channel.initializeConfig}). Passing the whole slice to the
+ * controller published them on `channel.config` as well, where nothing read them: `ChannelConfig` does not
+ * declare them, and a registration against one of them notified every `configState` subscriber for a change
+ * that did not concern the channel.
+ */
+const ownDeclarativeConfig = (
+  slice?: ChannelDeclarativeConfig,
+): Partial<ChannelConfig> | undefined => {
+  if (!slice) return undefined;
+
+  const {
+    deliveryEvents,
+    readEvents,
+    replies,
+    requestHandlers,
+    typingEvents,
+    userMessageReminders,
+  } = slice;
+
+  return {
+    deliveryEvents,
+    readEvents,
+    replies,
+    requestHandlers,
+    typingEvents,
+    userMessageReminders,
+  } as Partial<ChannelConfig>;
+};
+
 export const DEFAULT_CHANNEL_CONFIG: ChannelConfig = deepFreezeConfig({
   availableCommands: [],
   deliveryEvents: { enabled: true },
@@ -426,7 +459,7 @@ export class Channel extends ChannelApi {
 
     this.configController = new ConfigController<ChannelConfig>({
       defaults: DEFAULT_CHANNEL_CONFIG,
-      initialSlice: declarativeConfig as Partial<ChannelConfig> | undefined,
+      initialSlice: ownDeclarativeConfig(declarativeConfig),
       // Nested groups: naming `typingEvents.enabled` must not drop `readEvents`.
       mergeSlice: 'deep',
       // Frozen so a nested write throws instead of changing state silently. Freezing
@@ -526,7 +559,7 @@ export class Channel extends ChannelApi {
     // resolved value is deep-equal to the last one, which matters because this runs on every
     // `alsoWatch` key change too (a `messagePaginator` or `messageOperations` registration re-runs the
     // whole `channel` cycle), so the no-op publishes outnumber the real ones.
-    this.configController.initialize(declarativeConfig as Partial<ChannelConfig>);
+    this.configController.initialize(ownDeclarativeConfig(declarativeConfig));
 
     // The shared `messagePaginator` key applies to every MessagePaginator — this channel's list and
     // every thread's replies — and the per-parent slice overrides it.
