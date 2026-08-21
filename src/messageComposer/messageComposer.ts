@@ -596,7 +596,8 @@ export class MessageComposer extends WithSubscriptions {
    *
    * Worth the walk: `isEqual` over a resolved composer config measures ~1.7µs, against a resolution at
    * ~3.5µs plus every subscriber's work. The dominant source of no-op publishes is fixed upstream in
-   * `StreamChat._addChannelConfig`, which stops a repeated channel query from waking composers at all; this
+   * `StreamChat._addChannelConfig`, which stops a repeated channel query from waking that channel's
+   * composer at all; this
    * catches the rest — re-registering a declarative value that has not changed, a `reset` with nothing
    * registered, an empty `updateConfig({})`.
    */
@@ -812,15 +813,18 @@ export class MessageComposer extends WithSubscriptions {
     });
 
   /**
-   * The channel's server-side config (`client.channelConfigsByType[type]`) is populated by `query`/`watch`, which for
-   * a channel opened via `client.channel(type, id)` happens *after* this composer was constructed. Left
-   * unwatched, the composer would keep the defaults it derived when `serverConfig` was still undefined —
-   * so `location.enabled` would stay `true` for an app that disables `shared_locations` server-side.
-   * Re-deriving when the config lands keeps the server authoritative.
+   * The channel's server-side config (`client.channelServerConfigs[cid]`) is populated by `query`/`watch`,
+   * which for a channel opened via `client.channel(type, id)` happens *after* this composer was
+   * constructed. Left unwatched, the composer would keep the defaults it derived when `serverConfig` was
+   * still undefined — so `location.enabled` would stay `true` for an app that disables `shared_locations`
+   * server-side. Re-deriving when the config lands keeps the server authoritative.
+   *
+   * Selected by cid, matching the store's key space: `shared_locations` and `max_message_length` are both
+   * overridable per channel, so a sibling channel's config is not this composer's answer.
    */
   private subscribeChannelConfigChanged = () =>
-    this.client.channelConfigsByTypeStore.subscribeWithSelector(
-      ({ configs }) => ({ channelConfig: configs[this.channel.type] }),
+    this.client.channelServerConfigsStore.subscribeWithSelector(
+      ({ configs }) => ({ channelConfig: configs[this.channel.cid] }),
       () => this.applyServerRestrictions(),
     );
 

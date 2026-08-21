@@ -439,10 +439,15 @@ export class Channel extends ChannelApi {
 
     // The server's answer usually arrives *after* construction — a channel built before it has been
     // queried or watched reads `serverConfig` as undefined, so the restrictions state nothing and the
-    // defaults stand. Re-derive when the config for this channel type lands, or an app that disables
-    // `read_events` server-side would keep a channel that believes read receipts are on.
-    this.unsubscribeServerConfig = client.channelConfigsByTypeStore.subscribeWithSelector(
-      ({ configs }) => ({ channelConfig: configs[this.type] }),
+    // defaults stand. Re-derive when this channel's config lands, or an app that disables `read_events`
+    // server-side would keep a channel that believes read receipts are on.
+    //
+    // Selected by cid, and `this.cid` is read at selection time rather than captured: a channel created
+    // from members alone starts on a temporary cid and adopts the server's in `query()`, which assigns
+    // it *before* calling `_addChannelConfig`, so the write that carries the config is already selecting
+    // under the real key.
+    this.unsubscribeServerConfig = client.channelServerConfigsStore.subscribeWithSelector(
+      ({ configs }) => ({ channelConfig: configs[this.cid] }),
       () => this.configController.rederive(this.declarativeConfig),
     );
 
@@ -564,7 +569,7 @@ export class Channel extends ChannelApi {
   /**
    * This channel's **resolved** configuration — the shape every configurable class exposes.
    *
-   * Not to be confused with {@link serverConfig}, which is the channel *type's* configuration as the
+   * Not to be confused with {@link serverConfig}, which is this channel's configuration as the
    * server reports it. This one has already folded that in: `typingEvents.enabled` is the server's
    * `typing_events` ANDed with whatever the integrator registered, so it is the whole answer. The
    * near-collision is why the server side became `serverConfig`, a getter that says what it
@@ -575,8 +580,15 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * The channel **type's** configuration, as the server reports it — feature flags such as `uploads`,
+   * This channel's configuration as the server reports it — feature flags such as `uploads`,
    * `typing_events`, `read_events` and `commands`.
+   *
+   * Mostly a property of the channel *type*, but not only: a channel's own `config_overrides` narrow it
+   * for that channel alone, which is why the cache behind this is keyed by cid rather than by type. See
+   * `StreamChat._addChannelConfig`.
+   *
+   * `undefined` until this channel has been queried or watched — there is nothing to fall back on that
+   * would not be another channel's overrides. {@link config} covers that case with its defaults.
    *
    * Distinct from {@link config}, which is this instance's resolved configuration and already has the
    * relevant flags below folded into it. Prefer `config` when deciding whether a feature is available:
@@ -584,8 +596,7 @@ export class Channel extends ChannelApi {
    * already disabled.
    */
   get serverConfig() {
-    // Keyed by channel type — the config is a property of the type, not of this channel.
-    return this.getClient().channelConfigsByType[this.type];
+    return this.getClient().channelServerConfigs[this.cid];
   }
 
   _sendMessage(...args: Parameters<ChannelApi['sendMessage']>) {

@@ -257,8 +257,8 @@ describe("the 'channel' configuration key", () => {
    */
   describe('typing and read events', () => {
     const withServerConfig = (config: Record<string, unknown>, id = 'channel-id') => {
-      client.channelConfigsByTypeStore.partialNext({
-        configs: { messaging: config as never },
+      client.channelServerConfigsStore.partialNext({
+        configs: { [`messaging:${id}`]: config as never },
       });
       return openChannel(id);
     };
@@ -301,14 +301,14 @@ describe("the 'channel' configuration key", () => {
 
     it('re-derives when the server config arrives after construction', () => {
       // The case the subscription exists for: a channel built before it has been queried reads
-      // `getConfig()` as undefined, so the restriction states nothing and the defaults stand. Without
+      // `serverConfig` as undefined, so the restriction states nothing and the defaults stand. Without
       // re-deriving, an app that disables read events server-side keeps a channel that believes they
       // are on.
       const channel = openChannel();
       expect(channel.configState.getLatestValue().readEvents.enabled).toBe(true);
 
-      client.channelConfigsByTypeStore.partialNext({
-        configs: { messaging: { read_events: false } as never },
+      client.channelServerConfigsStore.partialNext({
+        configs: { [channel.cid]: { read_events: false } as never },
       });
 
       expect(channel.configState.getLatestValue().readEvents.enabled).toBe(false);

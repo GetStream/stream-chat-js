@@ -300,6 +300,7 @@ describe('narrowing and recovery, together', () => {
           ...mockChannelQueryResponse,
           channel: {
             ...mockChannelQueryResponse.channel,
+            cid: 'messaging:recovery-channel',
             id: 'recovery-channel',
             config: {
               ...mockChannelQueryResponse.channel.config,
@@ -314,6 +315,7 @@ describe('narrowing and recovery, together', () => {
           ...mockChannelQueryResponse,
           channel: {
             ...mockChannelQueryResponse.channel,
+            cid: 'messaging:recovery-channel',
             id: 'recovery-channel',
             config: {
               ...mockChannelQueryResponse.channel.config,
@@ -473,10 +475,9 @@ describe("the channel type's max_message_length caps the composer", () => {
 
 /**
  * `ChannelResponse.config` is optional — the `notification.message_new` payload is one route that can omit
- * it — and `_addChannelConfig` stored whatever it was handed. Keyed by cid that voided one channel's
- * config; keyed by **type** (DEC-26) it voids every channel of the type, and since the composer reads
- * `getConfig()` for `shared_locations` and `max_message_length`, the result is a restriction silently
- * lifted rather than a cache miss.
+ * it — and `_addChannelConfig` stored whatever it was handed, voiding a config already known for the
+ * channel. Since the composer reads `serverConfig` for `shared_locations` and `max_message_length`, the
+ * result is a restriction silently lifted rather than a cache miss.
  */
 describe('an absent server config cannot un-learn a known one', () => {
   it('ignores a response with no config instead of storing undefined', () => {
@@ -486,9 +487,9 @@ describe('an absent server config cannot un-learn a known one', () => {
     }).channel;
     client._addChannelConfig(response);
 
-    client._addChannelConfig({ type: response.type, config: undefined });
+    client._addChannelConfig({ cid: response.cid, config: undefined });
 
-    expect(client.channelConfigsByType[response.type]).toEqual(response.config);
+    expect(client.channelServerConfigs[response.cid]).toEqual(response.config);
   });
 
   it('keeps the server restriction in force on a live composer', () => {

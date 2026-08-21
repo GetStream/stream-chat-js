@@ -533,10 +533,12 @@ useStateStore(channel.configState, ({ readEvents }) => ({ enabled: readEvents.en
 
 | Before                | After                  | Returns                                                                             |
 | --------------------- | ---------------------- | ----------------------------------------------------------------------------------- |
-| `channel.getConfig()` | `channel.serverConfig` | The channel **type's** server configuration — `ChannelConfigWithInfo`, 37 fields    |
+| `channel.getConfig()` | `channel.serverConfig` | This channel's server configuration — `ChannelConfigWithInfo`, 37 fields            |
 | —                     | `channel.config`       | This channel's **resolved** configuration — 7 fields, server combined with your own |
 
 **`getConfig()` is removed, not deprecated.** `serverConfig` is a getter returning exactly what it returned, so migrating is dropping the parentheses.
+
+Most of `ChannelConfigWithInfo` is a channel-_type_ setting, but not all of it: a channel's own `config_overrides` narrow `uploads`, `url_enrichment`, `typing_events`, `replies`, `quotes`, `reactions`, `shared_locations`, `max_message_length`, `commands` and `user_message_reminders` for that channel alone. `serverConfig` therefore answers for **this channel**, and the cache behind it (`client.channelServerConfigs`, v9's `client.configs`) stays keyed by cid. It is `undefined` until the channel has been queried or watched — there is deliberately no type-level fallback, because the only thing available to fall back on is a sibling channel's overrides. `channel.config` covers that window with its defaults.
 
 The two are **not** interchangeable. Only six flags have a resolved counterpart on `config`: `typing_events`, `read_events`, `replies`, `user_message_reminders`, `delivery_events` and `commands`. Read those from `config` — it is the whole answer, server and client combined. Everything else (`automod`, `max_message_length`, `mutes`, `quotes`, `search`, …) is server-only and stays on `serverConfig`.
 

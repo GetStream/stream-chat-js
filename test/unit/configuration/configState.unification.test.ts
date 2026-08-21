@@ -167,7 +167,7 @@ describe('resolved configuration is reactive on the classes that were converted 
 
     expect(channel.configState).toBeDefined();
     expect(channel.config).toBe(channel.configState.getLatestValue());
-    expect(channel.serverConfig).toBe(client.channelConfigsByType.messaging);
+    expect(channel.serverConfig).toBe(client.channelServerConfigs[channel.cid]);
   });
 
   /**

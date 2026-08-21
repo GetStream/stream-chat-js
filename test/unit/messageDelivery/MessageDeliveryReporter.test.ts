@@ -57,7 +57,7 @@ describe('MessageDeliveryReporter', () => {
 
     channel = client.channel(channelType, channelId);
     channel.initialized = true;
-    client.channelConfigsByType[channel.type] = {
+    client.channelServerConfigs[channel.cid] = {
       created_at: '',
       delivery_events: true,
       read_events: false,
@@ -112,7 +112,7 @@ describe('MessageDeliveryReporter', () => {
       return channel;
     });
     channels.forEach((ch) => {
-      client.channelConfigsByType[ch.type] = {
+      client.channelServerConfigs[ch.cid] = {
         created_at: '',
         delivery_events: true,
         read_events: false,
@@ -157,7 +157,7 @@ describe('MessageDeliveryReporter', () => {
   });
 
   it('does nothing when delievry events are disabled in channel config', async () => {
-    // Through the store, not by mutating `channelConfigsByType`: the flag is reconciled into
+    // Through the store, not by mutating `channelServerConfigs`: the flag is reconciled into
     // `channel.config.deliveryEvents` by the channel's own derivation, and the store write is what
     // triggers it. A direct mutation changes the raw record and nothing else.
     stubServerConfig(channel, {
@@ -213,7 +213,7 @@ describe('MessageDeliveryReporter', () => {
     thread.channel.initialized = true;
     // Grant delivery permission so we exercise the thread branch of
     // `getNextDeliveryReportCandidate`, not the earlier permission gate.
-    client.channelConfigsByType[thread.channel.type] = {
+    client.channelServerConfigs[thread.channel.cid] = {
       created_at: '',
       delivery_events: true,
       read_events: false,
@@ -306,7 +306,7 @@ describe('MessageDeliveryReporter', () => {
     const ch2 = client.channel('messaging', 'ch2');
     ch2.initialized = true;
 
-    client.channelConfigsByType[ch1.type] = {
+    client.channelServerConfigs[ch1.cid] = {
       created_at: '',
       delivery_events: true,
       read_events: false,
@@ -314,7 +314,7 @@ describe('MessageDeliveryReporter', () => {
       updated_at: '',
     };
 
-    client.channelConfigsByType[ch2.type] = {
+    client.channelServerConfigs[ch2.cid] = {
       created_at: '',
       delivery_events: true,
       read_events: false,
@@ -457,7 +457,7 @@ describe('MessageDeliveryReporter', () => {
       return channel;
     });
     channels.forEach((ch) => {
-      client.channelConfigsByType[ch.type] = {
+      client.channelServerConfigs[ch.cid] = {
         created_at: '',
         delivery_events: true,
         read_events: false,

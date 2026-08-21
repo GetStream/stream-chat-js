@@ -179,7 +179,7 @@ export class StreamChat extends ChatApi {
   mutedChannels: ChannelMute[];
   readonly mutedUsersStore: StateStore<{ mutedUsers: UserMuteResponse[] }>;
   /**
-   * Reactive store behind {@link channelConfigsByType}. The only reactive way to observe server channel
+   * Reactive store behind {@link channelServerConfigs}. The only reactive way to observe server channel
    * configuration today, which is why `stream-chat-react` reads it — a public, per-channel feature
    * resolver is the intended replacement.
    *
@@ -188,7 +188,7 @@ export class StreamChat extends ChatApi {
    *
    * @internal
    */
-  readonly channelConfigsByTypeStore: StateStore<ChannelConfigsState>;
+  readonly channelServerConfigsStore: StateStore<ChannelConfigsState>;
   blockedUsers: StateStore<BlockedUsersState>;
   node: boolean;
   options: StreamChatOptions;
@@ -237,8 +237,8 @@ export class StreamChat extends ChatApi {
    * Configuration you register for instances the SDK creates on your behalf — channels, threads,
    * composers, and the client's own managers. See `InstanceConfigurationRegistry`.
    *
-   * Not to be confused with {@link channelConfigsByType}, which holds the **server-provided channel-type
-   * configs** keyed by channel type. This one is yours; that one is the backend's.
+   * Not to be confused with {@link channelServerConfigs}, which holds the **server-provided channel
+   * configs** keyed by cid. This one is yours; that one is the backend's.
    */
   readonly config = new InstanceConfigurationRegistry();
   /** Teardown for the `'client'` setup function, released by {@link disconnectUser}. */
@@ -280,7 +280,7 @@ export class StreamChat extends ChatApi {
     this.mutedUsersStore = new StateStore<{ mutedUsers: UserMuteResponse[] }>({
       mutedUsers: [],
     });
-    this.channelConfigsByTypeStore = new StateStore<{ configs: Configs }>({
+    this.channelServerConfigsStore = new StateStore<ChannelConfigsState>({
       configs: {},
     });
     this.blockedUsers = new StateStore<BlockedUsersState>({ userIds: [] });
@@ -327,8 +327,6 @@ export class StreamChat extends ChatApi {
     // keeps a reference to all the channels that are in use
     this.activeChannels = {};
 
-    // mapping between channel groups and configs
-    this.channelConfigsByType = {};
     this.persistUserOnConnectionFailure = this.options?.persistUserOnConnectionFailure;
 
     // If its a server-side client, then lets initialize the tokenManager, since token will be
@@ -413,28 +411,31 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Cache of server-provided channel configuration, keyed by **channel type** — the settings are
-   * defined per type, so one entry serves every channel of that type.
+   * Cache of server-provided channel configuration, keyed by **cid** — a channel's own
+   * `config_overrides` can make it differ from every other channel of its type, so one entry per
+   * channel is the only key space that can represent the answer. See {@link _addChannelConfig}.
    *
    * Read it through {@link Channel.serverConfig} rather than here. Not to be confused with
    * {@link config}, which is the configuration *you* register for SDK-created instances.
    *
-   * This was `client.configs` through v9, keyed by **cid**. There is deliberately no `configs` alias:
-   * the name survived but its key space did not, so an alias would make `client.configs[cid]` return
-   * `undefined` instead of failing. Removing the name turns a silent wrong lookup into an obvious one.
+   * This is `client.configs` from v9 under a name that says whose configuration it is — the key space is
+   * unchanged, so a v9 `client.configs[cid]` lookup translates directly. There is deliberately no
+   * `configs` alias: it read as a sibling of the integrator-facing {@link config} while holding the
+   * backend's answer, and the two being one letter apart is what made `channel.getConfig()` ambiguous
+   * enough to rename as well.
    *
    * Assigning through this setter notifies subscribers; mutating the returned record in place does not.
    * Prefer {@link _addChannelConfig}.
    *
    * @internal
    */
-  get channelConfigsByType() {
-    return this.channelConfigsByTypeStore.getLatestValue().configs;
+  get channelServerConfigs() {
+    return this.channelServerConfigsStore.getLatestValue().configs;
   }
 
   /** @internal */
-  set channelConfigsByType(configs: Configs) {
-    this.channelConfigsByTypeStore.next({ configs });
+  set channelServerConfigs(configs: Configs) {
+    this.channelServerConfigsStore.next({ configs });
   }
 
   /**
@@ -1628,37 +1629,26 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Caches a channel type's server configuration.
+   * Caches one channel's server configuration, read through {@link Channel.serverConfig}.
    *
-   * Keyed by **type**, not cid: every field in `ChannelConfigWithInfo` is a channel-*type* setting
-   * (`automod`, `commands`, `max_message_length`, the feature flags), and `config.name` is the type
-   * name. Keying by cid stored one identical copy per channel and left channels of an
-   * already-seen type reporting no config at all until they were themselves queried.
+   * Keyed by **cid** rather than by channel type: a channel's own `config_overrides` narrow its type's
+   * settings for that channel alone, so two channels of one type can disagree.
    *
-   * An absent `config` is ignored rather than stored. `ChannelResponse.config` is optional — the
-   * `notification.message_new` payload is one route that may omit it — and writing `undefined` would
-   * un-learn* a config already known for the type. Keyed by cid that voided one channel; keyed by type it
-   * voids every channel of the type, and since the composer reads `serverConfig` for `shared_locations` and
-   * `max_message_length`, the result is a server restriction silently lifted (**DV-16**).
-   *
-   * A config deep-equal to the one already stored is ignored too, which is what keeps a channel query from
-   * waking every live composer. The API returns a **fresh object** for the same channel type on every
-   * response, so the store's `===` no-op never applied and the by-type selector in
-   * `MessageComposer.subscribeChannelConfigChanged` fired on each one. Measured on a 10-channel
-   * `queryChannels` page with three open composers: 30 configuration re-resolutions and 30 subscriber runs,
-   * every one of them producing a value identical to the last. Comparing here rather than in the composer
-   * skips the work as well as the notification, and covers every other reader of this store too.
+   * Two writes are skipped. A response with no `config` — `notification.message_new` is one route that
+   * omits it — would otherwise un-learn a config already known for the channel. A config deep-equal to
+   * the stored one keeps a repeated query from waking that channel's subscribers, which matters because
+   * the API returns a fresh object every time and the store compares by reference.
    *
    * @internal
    */
-  _addChannelConfig({ config, type }: Pick<ChannelResponse, 'config' | 'type'>) {
+  _addChannelConfig({ cid, config }: Pick<ChannelResponse, 'cid' | 'config'>) {
     if (!config) return;
     if (!this._cacheEnabled()) return;
-    if (isEqual(this.channelConfigsByType[type], config)) return;
+    if (isEqual(this.channelServerConfigs[cid], config)) return;
 
-    this.channelConfigsByType = {
-      ...this.channelConfigsByType,
-      [type]: config,
+    this.channelServerConfigs = {
+      ...this.channelServerConfigs,
+      [cid]: config,
     };
   }
 

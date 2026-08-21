@@ -2729,7 +2729,7 @@ describe('Channel lastMessage', async () => {
 
 	it('should return last message - system message is ignored when skip_last_msg_update_for_system_msgs: true', () => {
 		client._addChannelConfig({
-			type: channel.type,
+			cid: channel.cid,
 			config: { skip_last_msg_update_for_system_msgs: true },
 		});
 		channel.state = new ChannelState(channel);
@@ -2951,11 +2951,15 @@ describe('Channel.query', async () => {
 		expect(channel.messageComposer.config.location.enabled).toBe(true);
 
 		const sendRequestStub = sinon.stub(client.api, 'sendRequest');
+		// `cid`/`id` are overridden to the channel under test: the server config cache is keyed by cid,
+		// so a response describing a different channel would land under that channel's key instead.
 		sendRequestStub.onFirstCall().resolves({
 			body: {
 				...mockChannelQueryResponse,
 				channel: {
 					...mockChannelQueryResponse.channel,
+					cid: channel.cid,
+					id: channel.id,
 					config: { ...mockChannelQueryResponse.channel.config, shared_locations: false },
 				},
 			},
@@ -2967,6 +2971,8 @@ describe('Channel.query', async () => {
 				...mockChannelQueryResponse,
 				channel: {
 					...mockChannelQueryResponse.channel,
+					cid: channel.cid,
+					id: channel.id,
 					config: { ...mockChannelQueryResponse.channel.config, shared_locations: true },
 				},
 			},

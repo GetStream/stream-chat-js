@@ -11,10 +11,11 @@ channels the SDK creates on your behalf.
 `client.config` is how you do that. It configures instances the SDK creates for you: channels, threads,
 message composers, and the client's own managers.
 
-> **`client.config` is not `client.channelConfigsByType`.** The latter is an internal cache of the
-> **server-provided channel-type configuration**, keyed by channel type. It is not part of the supported
-> surface — read server config through `channel.getConfig()`. `client.config` is yours: what you register
-> for the instances the SDK creates.
+> **`client.config` is not `client.channelServerConfigs`.** The latter is an internal cache of the
+> **server-provided channel configuration**, keyed by cid — a channel's own `config_overrides` can make it
+> differ from other channels of its type, so the cache holds one entry per channel. It is not part of the
+> supported surface — read server config through `channel.serverConfig`. `client.config` is yours: what you
+> register for the instances the SDK creates.
 
 ## Two ways in
 
@@ -671,20 +672,21 @@ const unsubscribe = channel.messagePaginator.configState.subscribe(({ pageSize }
 
 Every configurable object has all three — `MessageComposer`, every paginator, `MessageOperations`,
 `client.notifications`, `client.reminders`, `client.threads`, `client.messageDeliveryReporter`,
-`SearchController`, `LiveLocationManager` — with two exceptions:
+`SearchController`, `LiveLocationManager` — with one exception:
 
-| entity              | `configState` | `config` | `updateConfig` |
-| ------------------- | ------------- | -------- | -------------- |
-| everything else     | yes           | yes      | yes            |
-| `Channel`, `Thread` | yes           | —        | —              |
+| entity          | `configState` | `config` | `updateConfig` |
+| --------------- | ------------- | -------- | -------------- |
+| everything else | yes           | yes      | yes            |
+| `Thread`        | yes           | —        | —              |
 
-`Channel` and `Thread` are deliberately left with the store alone, because **`channel.getConfig()` already
-means something else** — it returns the channel _type_'s server-side configuration (`shared_locations`,
-`max_message_length`, the command list). A `channel.config` beside it would read as the same thing in getter
-form while returning `{ requestHandlers }`, and nothing would catch the confusion: both names resolve, both
-return a plausible object. Their instance configuration is one field wide and its only writer wants the store
-anyway, so the getter would exist purely to make this table square. Read it as
-`channel.configState.getLatestValue()`.
+`Channel` was an exception too, while the server-side getter was still called `channel.getConfig()`: a
+`channel.config` beside it would have read as the same thing in getter form while returning
+`{ requestHandlers }`, and nothing would have caught the confusion. Renaming the server side to
+`channel.serverConfig` removed the collision, so `Channel` now has `config` like everything else.
+
+`Thread` still has the store alone. Its instance configuration is one field wide (`requestHandlers`) and its
+only writer wants the store anyway, so the getter would exist purely to make this table square. Read it as
+`thread.configState.getLatestValue()`.
 
 Earlier versions kept several of these in plain objects that changed silently, so a subscriber that had
 already read a value never learned it had moved. That is no longer the case anywhere.
@@ -798,7 +800,7 @@ implementation, so a configurable object with its own server-gated field applies
 ```ts
 this.configState.partialNext(
   mergeServerRestrictions(requestedConfig, {
-    location: { enabled: this.channel.getConfig()?.shared_locations },
+    location: { enabled: this.channel.serverConfig?.shared_locations },
   }),
 );
 ```
@@ -1014,11 +1016,11 @@ deprecation exists to keep _released_ code compiling and no stable release ever 
 | ----------------------------------------- | ----------------------------------------- |
 | `client.setInstanceConfigurationFunction` | `client.config.setSetupFunction(key, fn)` |
 | `client.instanceConfigurationService`     | `client.config`                           |
-| `client.configsStore`                     | `channel.getConfig()`                     |
+| `client.configsStore`                     | `channel.serverConfig`                    |
 
-`client.configs` is also gone — it _did_ ship, but keyed by cid, and it is now keyed by channel type. An
-alias would let `client.configs[cid]` return `undefined` instead of failing, so the name was removed to
-keep the break loud. Read server channel configuration through `channel.getConfig()`.
+`client.configs` is also gone. It _did_ ship, and the key space is unchanged — still cid — but the name is
+now `client.channelServerConfigs`, which says whose configuration it holds: `client.config` beside it is
+the integrator's. Read server channel configuration through `channel.serverConfig` rather than either.
 
 ### Type aliases removed
 
@@ -1067,13 +1069,13 @@ reversible.
 [§5 The server has the last word](#5-the-server-has-the-last-word): they are ANDed with `attachments.enabled` and `polls.enabled`
 respectively, so either the server or the integrator can switch a feature off and neither can widen.
 
-**Read the resolved value, not the raw flag.** `channel.getConfig()?.uploads` answers only the server's
+**Read the resolved value, not the raw flag.** `channel.serverConfig?.uploads` answers only the server's
 half; `composer.config.attachments.enabled` is the whole answer. UI that gates on the raw flag will offer
 features the composer has already disabled — which is the bug this closed in `stream-chat-react`'s
 `AttachmentSelector`.
 
 `commands` is deliberately _not_ mirrored. The server sends a list, not a gate: there is nothing to AND
-and no integrator intent to express, so consumers keep reading it from `channel.getConfig()`.
+and no integrator intent to express, so consumers keep reading it from `channel.serverConfig`.
 
 ### `doUploadRequest` no longer implies a custom upload destination
 

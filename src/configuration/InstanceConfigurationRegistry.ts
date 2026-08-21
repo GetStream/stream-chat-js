@@ -2,7 +2,7 @@
  * Holds the configuration an integrator registers for classes the SDK constructs on their behalf —
  * `Channel`, `Thread`, `MessageComposer` and the client's own managers. Reached as `client.config`.
  *
- * Not to be confused with `client.channelConfigsByType`, which holds the **server-provided channel-type configs**.
+ * Not to be confused with `client.channelServerConfigs`, which holds the **server-provided channel configs**.
  *
  * There are two ways in, over one mechanism:
  *

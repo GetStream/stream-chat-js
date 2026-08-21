@@ -680,8 +680,9 @@ export type CommandVariants =
   | keyof CustomCommandData;
 
 /**
- * Server-provided channel configuration, keyed by **channel type** (`messaging`, `livestream`, …) —
- * every field in `ChannelConfigWithInfo` is a type-level setting. Read it via `channel.serverConfig`.
+ * Server-provided channel configuration, keyed by **cid** (`messaging:general`, …). Most of
+ * `ChannelConfigWithInfo` is a type-level setting, but a channel's `config_overrides` can narrow it for
+ * that channel alone, so the effective answer is per channel. Read it via `channel.serverConfig`.
  */
 export type Configs = Record<string, ChannelConfigWithInfo | undefined>;
 

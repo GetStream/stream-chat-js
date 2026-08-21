@@ -169,7 +169,7 @@ describe('the composer resolves through the shared controller', () => {
   it('retains an updateConfig request across a re-resolution (retainPatches)', () => {
     const client = getClientWithUser({ id: 'user' });
     client._addChannelConfig({
-      type: 'messaging',
+      cid: 'messaging:c-layer',
       config: { shared_locations: false } as never,
     });
     const composer = client.channel('messaging', 'c-layer').messageComposer;
@@ -184,7 +184,7 @@ describe('the composer resolves through the shared controller', () => {
     expect(composer.requestedConfig.location.enabled).toBe(true);
 
     client._addChannelConfig({
-      type: 'messaging',
+      cid: 'messaging:c-layer',
       config: { shared_locations: true } as never,
     });
 
@@ -249,7 +249,7 @@ describe('the composer resolves through the shared controller', () => {
   it('applies the server ceiling on every resolution (applyAuthority)', () => {
     const client = getClientWithUser({ id: 'user' });
     client._addChannelConfig({
-      type: 'messaging',
+      cid: 'messaging:c-bounds',
       config: { max_message_length: 100 } as never,
     });
     const composer = client.channel('messaging', 'c-bounds').messageComposer;

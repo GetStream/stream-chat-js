@@ -430,8 +430,8 @@ describe('LinkPreviewsManager', () => {
     const setup2 = (url_enrichment: boolean) => {
       const client = new StreamChat('apiKey');
       client.user = { id: 'user' } as never;
-      client.channelConfigsByTypeStore.partialNext({
-        configs: { channelType: { url_enrichment } as never },
+      client.channelServerConfigsStore.partialNext({
+        configs: { 'channelType:channelId': { url_enrichment } as never },
       });
       const channel = client.channel('channelType', 'channelId');
       const composer = new MessageComposer({
@@ -457,8 +457,8 @@ describe('LinkPreviewsManager', () => {
       composer.linkPreviewsManager.enabled = true;
       composer.linkPreviewsManager.enabled = false; // changed their mind, while masked
 
-      client.channelConfigsByTypeStore.partialNext({
-        configs: { channelType: { url_enrichment: true } as never },
+      client.channelServerConfigsStore.partialNext({
+        configs: { 'channelType:channelId': { url_enrichment: true } as never },
       });
 
       expect(composer.linkPreviewsManager.enabled).toBe(false);
@@ -469,8 +469,8 @@ describe('LinkPreviewsManager', () => {
 
       composer.linkPreviewsManager.enabled = true;
 
-      client.channelConfigsByTypeStore.partialNext({
-        configs: { channelType: { url_enrichment: true } as never },
+      client.channelServerConfigsStore.partialNext({
+        configs: { 'channelType:channelId': { url_enrichment: true } as never },
       });
 
       expect(composer.linkPreviewsManager.enabled).toBe(true);

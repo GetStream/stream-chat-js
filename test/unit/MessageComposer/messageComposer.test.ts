@@ -106,13 +106,15 @@ const setup = ({
   const mockClient = new StreamChat('test-api-key');
   mockClient.user = user;
   const channelType = 'messaging';
+  const channelId = 'test-channel-id';
   if (channelConfig) {
-    // Keyed by channel type, not cid — see `Configs`.
+    // Keyed by cid, not channel type — a channel's `config_overrides` make the effective config
+    // per channel. See `Configs`.
     // @ts-expect-error incomplete channel config object
-    mockClient.channelConfigsByType[channelType] = channelConfig;
+    mockClient.channelServerConfigs[`${channelType}:${channelId}`] = channelConfig;
   }
   // Create a proper Channel instance with only the necessary attributes mocked
-  const mockChannel = mockClient.channel('messaging', 'test-channel-id');
+  const mockChannel = mockClient.channel(channelType, channelId);
 
   // Mock the getClient method
   vi.spyOn(mockChannel, 'getClient').mockReturnValue(mockClient);

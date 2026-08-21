@@ -3,6 +3,7 @@ import { generateChannel } from '../test-utils/generateChannel';
 import { generateMsg } from '../test-utils/generateMessage';
 import { generateThreadResponse } from '../test-utils/generateThreadResponse';
 import { getClientWithUser } from '../test-utils/getClient';
+import { mockChannelQueryResponse } from '../test-utils/mockChannelQueryResponse';
 import { StreamChat } from '../../../src/client';
 import { Thread } from '../../../src/thread';
 import type { Channel } from '../../../src/channel';
@@ -35,7 +36,7 @@ describe('instance configuration — cross-instance', () => {
     });
   /** Populate the channel's server-side config, as `query`/`watch` would. */
   const setServerConfig = (channel: Channel, config: Record<string, unknown>) =>
-    client._addChannelConfig({ type: channel.type, config } as never);
+    client._addChannelConfig({ cid: channel.cid, config } as never);
 
   describe('every path in the tree lands on its real target', () => {
     it('applies the whole tree in one call', () => {
@@ -347,17 +348,41 @@ describe('instance configuration — cross-instance', () => {
     });
   });
 
-  describe('server channel configuration is cached by type', () => {
-    it('serves every channel of a type from one entry', () => {
+  /**
+   * Keyed by cid, not by channel type. Most of `ChannelConfigWithInfo` reads as a type-level setting, but
+   * a channel's own `config_overrides` narrow it for that channel alone — and this SDK can set them:
+   * `client.channel(type, id, { config_overrides })` sends them on `query`/`watch`, and
+   * `channel.update()` / `updatePartial()` reach the same state. `ConfigOverridesRequest` covers
+   * `shared_locations`, `uploads`, `typing_events`, `replies`, `max_message_length`, `commands` and more —
+   * exactly the fields `Channel.serverRestrictions` and `availableCommands` read.
+   *
+   * A type-keyed cache could not hold two disagreeing channels: they overwrote each other, and because
+   * every write woke every `Channel` and `MessageComposer` of the type, the whole set re-derived to a
+   * value correct for at most one of them.
+   */
+  describe('server channel configuration is cached by cid', () => {
+    it('does not serve one channel the config of its sibling', () => {
       const a = client.channel('messaging', 'a');
       const b = client.channel('messaging', 'b');
 
       setServerConfig(a, { shared_locations: false });
 
-      // `b` was never queried, but the config belongs to the *type* — keying by cid used to leave it
-      // reporting nothing until it was queried itself.
-      expect(b.serverConfig?.shared_locations).toBe(false);
-      expect(Object.keys(client.channelConfigsByType)).toEqual(['messaging']);
+      // `b` was never queried. There is deliberately no type-level fallback: the only thing available to
+      // fall back on is `a`'s effective config, overrides included.
+      expect(b.serverConfig).toBeUndefined();
+      expect(Object.keys(client.channelServerConfigs)).toEqual(['messaging:a']);
+    });
+
+    it('keeps two channels of one type independent', () => {
+      const a = client.channel('messaging', 'a');
+      const b = client.channel('messaging', 'b');
+
+      setServerConfig(a, { shared_locations: false });
+      setServerConfig(b, { shared_locations: true });
+
+      expect(a.serverConfig?.shared_locations).toBe(false);
+      expect(b.serverConfig?.shared_locations).toBe(true);
+      expect(a.config.availableCommands).toEqual([]);
     });
 
     it('does not leak across types', () => {
@@ -369,15 +394,108 @@ describe('instance configuration — cross-instance', () => {
       expect(livestream.serverConfig).toBeUndefined();
     });
 
-    it('reaches a composer built before the config arrived, for any channel of the type', () => {
+    it('reaches a composer built before its own channel config arrived', () => {
+      const channel = client.channel('messaging', 'a');
+      channel.messageComposer.registerSubscriptions();
+
+      setServerConfig(channel, { shared_locations: false });
+
+      expect(channel.messageComposer.config.location.enabled).toBe(false);
+    });
+
+    it('does not narrow a composer from a sibling channel config', () => {
       const a = client.channel('messaging', 'a');
       const b = client.channel('messaging', 'b');
       b.messageComposer.registerSubscriptions();
 
-      // Config arrives via `a`'s query; `b`'s composer is watching the same type entry.
+      // `a`'s override must not reach `b`'s composer — the leak this keying exists to prevent.
       setServerConfig(a, { shared_locations: false });
 
-      expect(b.messageComposer.config.location.enabled).toBe(false);
+      expect(b.messageComposer.config.location.enabled).toBe(true);
+    });
+
+    it('resolves different channel configs for two channels of one type', () => {
+      // The assertion that matters to consumers: not the raw cache, but the *resolved* gates they read.
+      // `typing_events` and `read_events` are both overridable per channel.
+      const a = client.channel('messaging', 'a');
+      const b = client.channel('messaging', 'b');
+
+      setServerConfig(a, { read_events: false, typing_events: false });
+      setServerConfig(b, { read_events: true, typing_events: true });
+
+      expect(a.config.typingEvents.enabled).toBe(false);
+      expect(a.config.readEvents.enabled).toBe(false);
+      expect(b.config.typingEvents.enabled).toBe(true);
+      expect(b.config.readEvents.enabled).toBe(true);
+    });
+
+    it('keeps two live composers of one type on their own server configs', () => {
+      const a = client.channel('messaging', 'a');
+      const b = client.channel('messaging', 'b');
+      a.messageComposer.registerSubscriptions();
+      b.messageComposer.registerSubscriptions();
+
+      setServerConfig(a, { max_message_length: 100, shared_locations: false });
+      setServerConfig(b, { max_message_length: 5000, shared_locations: true });
+
+      expect(a.messageComposer.config.location.enabled).toBe(false);
+      expect(a.messageComposer.config.text.maxLengthOnSend).toBe(100);
+      expect(b.messageComposer.config.location.enabled).toBe(true);
+      expect(b.messageComposer.config.text.maxLengthOnSend).toBe(5000);
+    });
+
+    it('keeps them apart when each is queried over HTTP', async () => {
+      // The same disagreement over the real transport, one `channel.query()` each: the cid the config is
+      // filed under is the one on the response, and each channel reads back only its own.
+      const restricted = client.channel('messaging', 'http-restricted');
+      const permissive = client.channel('messaging', 'http-permissive');
+
+      const responseFor = (channel: Channel, typing_events: boolean) => ({
+        body: {
+          ...mockChannelQueryResponse,
+          channel: {
+            ...mockChannelQueryResponse.channel,
+            cid: channel.cid,
+            id: channel.id,
+            type: channel.type,
+            config: { ...mockChannelQueryResponse.channel.config, typing_events },
+          },
+        },
+        metadata: {},
+      });
+
+      vi.spyOn(client.api, 'sendRequest')
+        .mockResolvedValueOnce(responseFor(restricted, false) as never)
+        .mockResolvedValueOnce(responseFor(permissive, true) as never);
+
+      await restricted.query();
+      await permissive.query();
+
+      expect(restricted.serverConfig?.typing_events).toBe(false);
+      expect(permissive.serverConfig?.typing_events).toBe(true);
+      expect(restricted.config.typingEvents.enabled).toBe(false);
+      expect(permissive.config.typingEvents.enabled).toBe(true);
+    });
+
+    it('keeps them apart through the queryChannels hydration path', () => {
+      // The realistic route, where the cid comes off `ChannelResponse.cid` rather than being handed in:
+      // one page of two same-type channels whose configs disagree. Keyed by type, the second entry
+      // overwrote the first and both channels ended up reporting the last one seen.
+      const restricted = generateChannel({
+        channel: { id: 'restricted', config: { typing_events: false } as never },
+      });
+      const permissive = generateChannel({
+        channel: { id: 'permissive', config: { typing_events: true } as never },
+      });
+
+      client.hydrateActiveChannels([restricted, permissive]);
+
+      expect(client.channel('messaging', 'restricted').config.typingEvents.enabled).toBe(
+        false,
+      );
+      expect(client.channel('messaging', 'permissive').config.typingEvents.enabled).toBe(
+        true,
+      );
     });
   });
 
