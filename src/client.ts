@@ -5394,7 +5394,7 @@ export class StreamChat {
    * Server-side only.
    *
    * @param {string} policy The policy type ('old-messages' or 'inactive-channels')
-   * @param {number} maxAgeHours Max age in hours (24-43800)
+   * @param {number} maxAgeHours Max age in hours (24-61320)
    * @returns {Promise<SetRetentionPolicyResponse>}
    */
   async setRetentionPolicy(policy: string, maxAgeHours: number) {
