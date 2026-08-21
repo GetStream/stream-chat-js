@@ -587,7 +587,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
           event_.channel_type,
           event_.channel_id,
         );
-        if (channelFromState.initialized && !channelFromState.disconnected) {
+        if (channelFromState.initialized && !channelFromState.pendingDisposal) {
           channelData = channelFromState.data as unknown as ChannelResponse;
         }
       }

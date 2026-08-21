@@ -650,6 +650,10 @@ export class StableWSConnection {
       return;
     }
 
+    // The server keys channel watches by connection ID, so they are gone the moment the socket is.
+    // Done here rather than off the `connection.changed` event below, which is debounced by 5s.
+    this.client._markActiveChannelsWatchInterrupted();
+
     // we're offline, wait few seconds and fire and event if still offline
     setTimeout(() => {
       if (this.isHealthy) return;

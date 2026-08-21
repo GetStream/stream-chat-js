@@ -5,6 +5,7 @@ import type { AxiosInstance } from 'axios';
 import axios from 'axios';
 
 import { Channel } from './channel';
+import { ChannelWatchStatus } from './channel_state';
 import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
 import { UploadManager } from './uploadManager';
@@ -508,6 +509,9 @@ export class StreamChat extends ChatApi {
    *   successful disconnection. See https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent (optional).
    */
   closeConnection = async (timeout?: number) => {
+    this._resetAIStateOnActiveChannels();
+    this._markActiveChannelsWatchInterrupted();
+
     if (this.cleaningIntervalRef != null) {
       clearInterval(this.cleaningIntervalRef);
       this.cleaningIntervalRef = undefined;
@@ -1014,6 +1018,7 @@ export class StreamChat extends ChatApi {
       client.user = event.me;
       client.state.updateUser(event.me);
       client.mutedChannels = event.me.channel_mutes;
+      client._reflectMutedChannelsToActiveChannels();
       client.mutedUsers = event.me.mutes;
       client.blockedUsers.partialNext({ userIds: event.me.blocked_user_ids ?? [] });
     }
@@ -1025,6 +1030,7 @@ export class StreamChat extends ChatApi {
 
     if (event.type === 'notification.channel_mutes_updated' && event.me?.channel_mutes) {
       this.mutedChannels = event.me.channel_mutes;
+      this._reflectMutedChannelsToActiveChannels();
     }
 
     if (event.type === 'notification.mutes_updated' && event.me?.mutes) {
@@ -1033,9 +1039,10 @@ export class StreamChat extends ChatApi {
 
     if (event.type === 'notification.mark_read' && event.unread_channels === 0) {
       const activeChannelKeys = Object.keys(this.activeChannels);
-      activeChannelKeys.forEach(
-        (activeChannelKey) =>
-          (this.activeChannels[activeChannelKey].state.unreadCount = 0),
+      activeChannelKeys.forEach((activeChannelKey) =>
+        // resets `read[userId].unread_messages`, which is what the unread badge reads, so it does
+        // not stay stale.
+        this.activeChannels[activeChannelKey]._setOwnUnreadCount(0),
       );
     }
 
@@ -1069,6 +1076,50 @@ export class StreamChat extends ChatApi {
     }
 
     return postListenerCallbacks;
+  }
+
+  /**
+   * Fans the client-owned `mutedChannels` out to every active channel's reactive `state.muteStatus`.
+   * Each channel republishes only when its own mute status actually changed, so this stays cheap on
+   * the frequent `health.check` path.
+   */
+  _reflectMutedChannelsToActiveChannels() {
+    for (const cid in this.activeChannels) {
+      this.activeChannels[cid]?._syncMuteStatus();
+    }
+  }
+
+  /**
+   * Resets the AI indicator state to `Idle` on every active channel. Invoked from `closeConnection`
+   * as it's a deliberate shutdown and will not natively trigger a WS event.
+   */
+  _resetAIStateOnActiveChannels() {
+    for (const cid in this.activeChannels) {
+      this.activeChannels[cid]?.state.resetAIState();
+    }
+  }
+
+  /**
+   * Demotes every actively-watched channel to `WasWatching`. The server keys watches by connection
+   * ID, so losing the socket ends every watch this client held — a reconnect issues a NEW id and the
+   * channels have to be re-queried to watch again. `WasWatching` is what records that they should be.
+   *
+   * Only `Watching` is demoted: a channel the consumer stopped on purpose, or one that was torn
+   * down, stays `NotWatching` and must not be resurrected by a reconnect.
+   *
+   * Invoked from two places, because neither covers the other: `StableWSConnection._setHealth(false)`
+   * for an abnormal close/error (immediately — NOT via the `connection.changed` event, which is
+   * 5s-debounced when going offline and is skipped entirely on a quick flap, both of which would
+   * leave the status lying), and `closeConnection()` for a deliberate shutdown (e.g. mobile
+   * backgrounding), which sets `isHealthy` directly and so never reaches `_setHealth`.
+   */
+  _markActiveChannelsWatchInterrupted() {
+    for (const cid in this.activeChannels) {
+      const channel = this.activeChannels[cid];
+      if (channel?.watchStatus === ChannelWatchStatus.Watching) {
+        channel.watchStatus = ChannelWatchStatus.WasWatching;
+      }
+    }
   }
 
   _muteStatus(cid: string) {
@@ -1410,9 +1461,16 @@ export class StreamChat extends ChatApi {
       const c = this.channel(channelState.channel.type, channelState.channel.id);
       const previousData = c.data;
       c.data = channelState.channel;
-      c._syncStateFromChannelData(c.data, previousData);
+      c.state.syncStateFromChannelData(c.data, previousData);
       c.offlineMode = offlineMode;
       c.initialized = !offlineMode;
+      // Same precedence `queryChannels` applies to the request: an explicit caller choice wins,
+      // otherwise we watch only if there is a connection to watch on. Offline hydration populates
+      // state without a live watch, so it never counts - and a query that did not watch leaves the
+      // status untouched (it neither starts nor ends a watch).
+      if (!offlineMode && (queryChannelsOptions?.watch ?? this._hasConnectionID())) {
+        c.watchStatus = ChannelWatchStatus.Watching;
+      }
       c.push_preferences = channelState.push_preferences;
 
       const willInitialize =
@@ -1432,8 +1490,12 @@ export class StreamChat extends ChatApi {
       // newest page to merge into that jumped interval across the gap (missing messages in the
       // middle). A cold paginator, or one still at the head (offline/at-latest), re-seeds normally so
       // cursors/hasMoreTail get (re)derived and pagination keeps working.
+      // Also skip the re-seed for an ACTIVE (on-screen) channel: its own `channel.reload()` owns the
+      // loaded window (up to 100 msgs), so a 25-msg list re-seed here is a redundant second update
+      // that could perturb the fuller window. (Inert until a UI SDK calls `channel.activate()`.)
       if (
         willInitialize &&
+        !c.active &&
         (!c.messagePaginator.isInitialized || c.messagePaginator.isActiveIntervalAtHead)
       ) {
         c.messagePaginator.seedFirstPageSync(
@@ -1580,7 +1642,7 @@ export class StreamChat extends ChatApi {
     //                        we will replace it with `cid`
     for (const key in this.activeChannels) {
       const channel = this.activeChannels[key];
-      if (channel.disconnected) {
+      if (channel.pendingDisposal) {
         continue;
       }
 
@@ -1634,7 +1696,7 @@ export class StreamChat extends ChatApi {
     if (
       cid in this.activeChannels &&
       this.activeChannels[cid] &&
-      !this.activeChannels[cid].disconnected
+      !this.activeChannels[cid].pendingDisposal
     ) {
       const channel = this.activeChannels[cid];
       // Only overwrite the existing channel's custom data when the caller actually provided some.
@@ -1646,7 +1708,7 @@ export class StreamChat extends ChatApi {
       if (custom.custom !== undefined) {
         const previousData = channel.data;
         channel.data = { ...channel.data, custom: custom.custom };
-        channel._syncStateFromChannelData(channel.data, previousData);
+        channel.state.syncStateFromChannelData(channel.data, previousData);
         channel._data = { ...channel._data, custom: custom.custom };
       }
       return channel;

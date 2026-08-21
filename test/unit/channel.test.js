@@ -7,7 +7,8 @@ import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
 import sinon from 'sinon';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 
-import { ChannelState, StreamChat } from '../../src';
+import { Channel, ChannelState, ChannelWatchStatus, StreamChat } from '../../src';
+import { StableWSConnection } from '../../src/connection';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
 import { formatMessage, generateUUIDv4 as uuidv4 } from '../../src/utils';
@@ -24,6 +25,21 @@ const seedLatestWindow = (channel, messages) =>
 		isTail: true,
 		setActive: true,
 	});
+
+// The own unread count is derived from `read[ownUserId].unread_messages` (there is no separate
+// counter to assign), so seed it through the own read row.
+const seedOwnUnreadCount = (channel, unread_messages) => {
+	const ownUser = channel.getClient().user;
+	channel.state.read = {
+		...channel.state.read,
+		[ownUser.id]: {
+			last_read: new Date(0),
+			user: ownUser,
+			...channel.state.read[ownUser.id],
+			unread_messages,
+		},
+	};
+};
 
 describe('Channel count unread', function () {
 	let lastRead;
@@ -119,9 +135,9 @@ describe('Channel count unread', function () {
 
 	it('countUnread should return state.unreadCount without lastRead', function () {
 		expect(channel.countUnread()).to.be.equal(channel.state.unreadCount);
-		channel.state.unreadCount = 10;
+		seedOwnUnreadCount(channel, 10);
 		expect(channel.countUnread()).to.be.equal(10);
-		channel.state.unreadCount = 0;
+		seedOwnUnreadCount(channel, 0);
 	});
 
 	it('countUnread should return correct count', function () {
@@ -243,7 +259,6 @@ describe('Channel isViewingLive (unread bump gating)', function () {
 		const channel = client.channel('messaging', 'live-mode-id');
 		channel.initialized = true;
 		channel.data = { ...channel.data, own_capabilities: ['read-events'] };
-		channel.state.unreadCount = 0;
 		return { channel };
 	};
 
@@ -292,6 +307,348 @@ describe('Channel isViewingLive (unread bump gating)', function () {
 	});
 });
 
+describe('Channel watch status (channel.state.watchStatus)', function () {
+	const user = { id: 'user' };
+	let client;
+	let channel;
+
+	const mockQueryResponse = (channelResponse) => {
+		client.api.sendRequest = () =>
+			Promise.resolve({
+				body: getOrCreateChannelApi(channelResponse).response.data,
+				metadata: {},
+			});
+	};
+
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client.user = user;
+		client.user = { id: user.id };
+		client.wsPromise = Promise.resolve();
+		// a connection id is what makes a watch possible at all
+		client._hasConnectionID = () => true;
+		client.connectionId = 'connection-id';
+		channel = client.channel('messaging', 'watching-id');
+		client.activeChannels[channel.cid] = channel;
+		mockQueryResponse(generateChannel({ channel: { id: 'watching-id' } }));
+	});
+
+	it('starts out NotWatching', () => {
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+		expect(channel.state.getLatestValue().watchStatus).to.equal(
+			ChannelWatchStatus.NotWatching,
+		);
+	});
+
+	it('is Watching after watch() resolves', async () => {
+		await channel.watch();
+
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.Watching);
+	});
+
+	it('is reactive via the store', async () => {
+		const seen = [];
+		const unsubscribe = channel.state.subscribeWithSelector(
+			(s) => ({ watchStatus: s.watchStatus }),
+			({ watchStatus }) => seen.push(watchStatus),
+		);
+
+		await channel.watch();
+		unsubscribe();
+
+		expect(seen).to.eql([ChannelWatchStatus.NotWatching, ChannelWatchStatus.Watching]);
+	});
+
+	it('stays NotWatching for a query that does not ask to watch', async () => {
+		await channel.query({ watch: false });
+
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+	});
+
+	it('is NOT demoted by a later non-watching query (a watch:false query does not unwatch)', async () => {
+		await channel.watch();
+
+		await channel.query({ watch: false });
+
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.Watching);
+	});
+
+	it('stays NotWatching when watch() downgrades for lack of a connection id', async () => {
+		client._hasConnectionID = () => false;
+
+		await channel.watch();
+
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+	});
+
+	it('goes to NotWatching on stopWatching() — a deliberate stop is not restored', async () => {
+		await channel.watch();
+
+		await channel.stopWatching();
+
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+	});
+
+	it('goes to NotWatching on teardown', async () => {
+		await channel.watch();
+
+		channel._disconnect();
+
+		expect(channel.state.getLatestValue().watchStatus).to.equal(
+			ChannelWatchStatus.NotWatching,
+		);
+	});
+
+	it('demotes Watching to WasWatching when the connection is interrupted', async () => {
+		await channel.watch();
+
+		client._markActiveChannelsWatchInterrupted();
+
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
+	});
+
+	it('leaves a deliberately-stopped channel NotWatching when the connection is interrupted', async () => {
+		await channel.watch();
+		await channel.stopWatching();
+
+		client._markActiveChannelsWatchInterrupted();
+
+		// the whole point of the third state: a reconnect must not resurrect this watch
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+	});
+
+	it('leaves a never-watched channel NotWatching when the connection is interrupted', () => {
+		client._markActiveChannelsWatchInterrupted();
+
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+	});
+
+	it('does not demote WasWatching any further on a second interruption', async () => {
+		await channel.watch();
+		client._markActiveChannelsWatchInterrupted();
+
+		client._markActiveChannelsWatchInterrupted();
+
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
+	});
+
+	it('returns to Watching when a re-watch succeeds after an interruption', async () => {
+		await channel.watch();
+		client._markActiveChannelsWatchInterrupted();
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
+
+		await channel.watch();
+
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.Watching);
+	});
+
+	it('is demoted across every active channel at once', async () => {
+		await channel.watch();
+		const other = client.channel('messaging', 'other-id');
+		client.activeChannels[other.cid] = other;
+		other.watchStatus = ChannelWatchStatus.Watching;
+
+		client._markActiveChannelsWatchInterrupted();
+
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
+		expect(other.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
+	});
+
+	it('is set by channel-list hydration, which watches by default', () => {
+		const response = generateChannel({ channel: { id: 'hydrated-id' } });
+
+		const [hydrated] = client.hydrateActiveChannels([response]);
+
+		expect(hydrated.watchStatus).to.equal(ChannelWatchStatus.Watching);
+	});
+
+	it('is NOT set by hydration when the caller opted out of watching', () => {
+		const response = generateChannel({ channel: { id: 'unwatched-id' } });
+
+		const [hydrated] = client.hydrateActiveChannels([response], {}, { watch: false });
+
+		expect(hydrated.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+	});
+
+	it('leaves WasWatching intact when hydration does not watch', async () => {
+		await channel.watch();
+		client._markActiveChannelsWatchInterrupted();
+		const response = generateChannel({ channel: { id: 'watching-id' } });
+
+		client.hydrateActiveChannels([response], {}, { watch: false });
+
+		// a non-watching hydrate neither starts nor ends a watch
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
+	});
+
+	it('is NOT set by hydration without a connection id', () => {
+		client._hasConnectionID = () => false;
+		const response = generateChannel({ channel: { id: 'no-connection-id' } });
+
+		const [hydrated] = client.hydrateActiveChannels([response]);
+
+		expect(hydrated.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+	});
+
+	it('is NOT set by offline hydration (state without a live watch)', () => {
+		const response = generateChannel({ channel: { id: 'offline-id' } });
+
+		const [hydrated] = client.hydrateActiveChannels([response], { offlineMode: true });
+
+		expect(hydrated.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+		expect(hydrated.offlineMode).to.equal(true);
+	});
+
+	it('is demoted via closeConnection (deliberate shutdown never reaches _setHealth)', async () => {
+		await channel.watch();
+
+		await client.closeConnection();
+
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
+	});
+
+	it('is demoted when the WS connection reports itself unhealthy', async () => {
+		await channel.watch();
+		const sweep = vi.spyOn(client, '_markActiveChannelsWatchInterrupted');
+		const connection = new StableWSConnection({ client });
+		connection.isHealthy = true;
+
+		connection._setHealth(false);
+
+		expect(sweep).toHaveBeenCalledTimes(1);
+	});
+
+	it('skips channels pending disposal when sweeping', async () => {
+		await channel.watch();
+		channel._disconnect();
+
+		expect(() => client._markActiveChannelsWatchInterrupted()).not.to.throw();
+		expect(channel.state.getLatestValue().watchStatus).to.equal(
+			ChannelWatchStatus.NotWatching,
+		);
+	});
+});
+
+describe('Channel AI indicator state (channel.state.aiState)', function () {
+	const setupChannel = () => {
+		const client = new StreamChat('apiKey');
+		client.user = { id: 'user' };
+		const channel = client.channel('messaging', 'ai-state-id');
+		channel.initialized = true;
+		return { channel };
+	};
+
+	it('defaults to AI_STATE_IDLE', () => {
+		const { channel } = setupChannel();
+		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_IDLE');
+	});
+
+	it('reflects ai_indicator.update into channel.state.aiState', () => {
+		const { channel } = setupChannel();
+		channel._handleChannelEvent({
+			type: 'ai_indicator.update',
+			ai_state: 'AI_STATE_GENERATING',
+		});
+		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_GENERATING');
+	});
+
+	it('resets to Idle on ai_indicator.clear', () => {
+		const { channel } = setupChannel();
+		channel._handleChannelEvent({
+			type: 'ai_indicator.update',
+			ai_state: 'AI_STATE_THINKING',
+		});
+		channel._handleChannelEvent({ type: 'ai_indicator.clear' });
+		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_IDLE');
+	});
+
+	it('sets AI_STATE_STOP on ai_indicator.stop', () => {
+		const { channel } = setupChannel();
+		channel._handleChannelEvent({
+			type: 'ai_indicator.update',
+			ai_state: 'AI_STATE_GENERATING',
+		});
+		channel._handleChannelEvent({ type: 'ai_indicator.stop' });
+		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_STOP');
+	});
+
+	it('is reactive via subscribeWithSelector', () => {
+		const { channel } = setupChannel();
+		const seen = [];
+		channel.state.subscribeWithSelector(
+			(s) => ({ aiState: s.aiState }),
+			({ aiState }) => seen.push(aiState),
+		);
+		channel._handleChannelEvent({
+			type: 'ai_indicator.update',
+			ai_state: 'AI_STATE_THINKING',
+		});
+		expect(seen).to.include('AI_STATE_THINKING');
+	});
+
+	it('clean() resets aiState to Idle when the WS connection is down', () => {
+		const { channel } = setupChannel();
+		channel.getClient().wsConnection = { isHealthy: false };
+		channel._handleChannelEvent({
+			type: 'ai_indicator.update',
+			ai_state: 'AI_STATE_GENERATING',
+		});
+		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_GENERATING');
+
+		channel.clean();
+
+		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_IDLE');
+	});
+
+	it('clean() leaves a live aiState untouched while the WS connection is healthy', () => {
+		const { channel } = setupChannel();
+		channel.getClient().wsConnection = { isHealthy: true };
+		channel._handleChannelEvent({
+			type: 'ai_indicator.update',
+			ai_state: 'AI_STATE_GENERATING',
+		});
+
+		channel.clean();
+
+		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_GENERATING');
+	});
+
+	it('closeConnection resets aiState to Idle across active channels', async () => {
+		const { channel } = setupChannel();
+		const client = channel.getClient();
+		client.activeChannels[channel.cid] = channel;
+		channel._handleChannelEvent({
+			type: 'ai_indicator.update',
+			ai_state: 'AI_STATE_GENERATING',
+		});
+		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_GENERATING');
+
+		await client.closeConnection();
+
+		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_IDLE');
+	});
+
+	it('resetAIState() is a no-op (no notify) when already Idle', () => {
+		const { channel } = setupChannel();
+		const seen = [];
+		channel.state.subscribeWithSelector(
+			(s) => ({ aiState: s.aiState }),
+			({ aiState }) => seen.push(aiState),
+		);
+		seen.length = 0; // drop the initial subscribe emission
+
+		channel.state.resetAIState();
+
+		expect(seen).to.have.length(0);
+	});
+
+	it('falls back to Idle when ai_indicator.update carries no ai_state', () => {
+		const { channel } = setupChannel();
+		channel._handleChannelEvent({ type: 'ai_indicator.update' });
+		expect(channel.state.getLatestValue().aiState).to.equal('AI_STATE_IDLE');
+	});
+});
+
 describe('Channel localized unread count (isLocalUnreadCountEnabled)', function () {
 	const user = { id: 'user' };
 	const otherUser = { id: 'other-user' };
@@ -320,7 +677,6 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 
 	it('message.new increments the unread count with read events off when the flag is set', function () {
 		const { channel } = setupChannel({ isLocalUnreadCountEnabled: true });
-		channel.state.unreadCount = 0;
 
 		channel._handleChannelEvent({
 			type: 'message.new',
@@ -337,9 +693,25 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 		expect(channel.countUnread()).to.be.equal(2);
 	});
 
+	it('seeds the own read row when a message counts as unread and the channel has none yet', function () {
+		const { channel } = setupChannel({ isLocalUnreadCountEnabled: true });
+		expect(channel.state.read[user.id]).to.be.undefined;
+
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user: otherUser,
+			message: generateMsg({ user: otherUser }),
+		});
+
+		// the count lives in the read row, so the row has to exist for it to be counted at all
+		expect(channel.state.read[user.id]).to.be.ok;
+		expect(channel.state.read[user.id].unread_messages).to.be.equal(1);
+		expect(channel.state.read[user.id].user.id).to.be.equal(user.id);
+		expect(channel.state.read[user.id].last_read.getTime()).to.be.equal(0);
+	});
+
 	it('message.new does not increment the unread count with read events off when the flag is not set', function () {
 		const { channel } = setupChannel({ isLocalUnreadCountEnabled: false });
-		channel.state.unreadCount = 0;
 
 		channel._handleChannelEvent({
 			type: 'message.new',
@@ -357,7 +729,6 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 			.mockResolvedValue({ body: {}, metadata: {} });
 		const lastMsg = generateMsg({ user: otherUser });
 		seedLatestWindow(channel, [lastMsg]);
-		channel.state.unreadCount = 5;
 		channel.state.read[user.id] = {
 			last_read: new Date('2020-01-01T00:00:00'),
 			unread_messages: 5,
@@ -411,7 +782,6 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 			.mockResolvedValue({ body: {}, metadata: {} });
 		const lastMsg = generateMsg({ user: otherUser });
 		seedLatestWindow(channel, [lastMsg]);
-		channel.state.unreadCount = 3;
 		delete channel.state.read[user.id];
 
 		channel.markReadLocally();
@@ -537,7 +907,7 @@ describe('Channel _handleChannelEvent', function () {
 
 	describe('message.new', () => {
 		it('message.new does not reset the unreadCount for current user messages', function () {
-			channel.state.unreadCount = 100;
+			seedOwnUnreadCount(channel, 100);
 			channel._handleChannelEvent({
 				type: 'message.new',
 				user,
@@ -548,7 +918,7 @@ describe('Channel _handleChannelEvent', function () {
 		});
 
 		it('message.new does not reset the unreadCount for own thread replies', function () {
-			channel.state.unreadCount = 100;
+			seedOwnUnreadCount(channel, 100);
 			channel._handleChannelEvent({
 				type: 'message.new',
 				user,
@@ -563,7 +933,7 @@ describe('Channel _handleChannelEvent', function () {
 		});
 
 		it('message.new does not reset the unreadCount for others thread replies', function () {
-			channel.state.unreadCount = 100;
+			seedOwnUnreadCount(channel, 100);
 			channel._handleChannelEvent({
 				type: 'message.new',
 				user: { id: 'id' },
@@ -606,7 +976,7 @@ describe('Channel _handleChannelEvent', function () {
 		});
 
 		it('message.new increment unreadCount properly', function () {
-			channel.state.unreadCount = 20;
+			seedOwnUnreadCount(channel, 20);
 			channel._handleChannelEvent({
 				type: 'message.new',
 				user: { id: 'id' },
@@ -622,7 +992,7 @@ describe('Channel _handleChannelEvent', function () {
 		});
 
 		it('message.new skip increment for silent/shadowed/muted messages', function () {
-			channel.state.unreadCount = 30;
+			seedOwnUnreadCount(channel, 30);
 			channel._handleChannelEvent({
 				type: 'message.new',
 				user: { id: 'id' },
@@ -956,6 +1326,27 @@ describe('Channel _handleChannelEvent', function () {
 			});
 
 			expect(channel.messagePaginator.headItems.length).to.be.equal(0);
+		});
+
+		it('resets read[userId].unread_messages together with unreadCount so the badge does not go stale (#29)', function () {
+			const userId = client.user.id;
+			channel.state.read = {
+				[userId]: {
+					unread_messages: 5,
+					last_read: new Date('2021-01-01T00:00:00.000Z'),
+					user: { id: userId },
+				},
+			};
+
+			channel._handleChannelEvent({
+				type: 'channel.truncated',
+				user: { id: userId },
+				channel: {},
+			});
+
+			expect(channel.state.unreadCount).to.equal(0);
+			// the badge reads read[userId].unread_messages — it must not stay at the stale 5
+			expect(channel.state.read[userId].unread_messages).to.equal(0);
 		});
 
 		it('message.truncate clears messagePaginator unread snapshot', function () {
@@ -1481,7 +1872,6 @@ describe('Channel _handleChannelEvent', function () {
 		});
 
 		it('should update channel read state produced for current user', () => {
-			channel.state.unreadCount = initialCountUnread;
 			channel.state.read[user.id] = initialReadState;
 			const event = notificationMarkUnreadEvent;
 
@@ -1530,7 +1920,6 @@ describe('Channel _handleChannelEvent', function () {
 		});
 
 		it('should not update channel read state produced for another user or user is missing', () => {
-			channel.state.unreadCount = initialCountUnread;
 			channel.state.read[user.id] = initialReadState;
 			const { user: excludedUser, ...eventMissingUser } = notificationMarkUnreadEvent;
 			const eventWithAnotherUser = {
@@ -1584,7 +1973,6 @@ describe('Channel _handleChannelEvent', function () {
 		});
 
 		it('should update channel read state produced for current user', () => {
-			channel.state.unreadCount = initialCountUnread;
 			channel.state.read[user.id] = initialReadState;
 			const event = messageReadEvent;
 
@@ -1612,7 +2000,7 @@ describe('Channel _handleChannelEvent', function () {
 
 		it('should update channel read state produced for another user', () => {
 			const anotherUser = { id: 'another-user' };
-			channel.state.unreadCount = initialCountUnread;
+			seedOwnUnreadCount(channel, initialCountUnread);
 			channel.state.read[anotherUser.id] = initialReadState;
 			const event = { ...messageReadEvent, user: anotherUser };
 
@@ -1638,13 +2026,16 @@ describe('Channel _handleChannelEvent', function () {
 		it('should emit readStore subscription updates for single-user message.read events', () => {
 			channel.state.read[user.id] = initialReadState;
 			const changes = [];
-			const unsubscribe = channel.state.readStore.subscribe((next, prev) => {
-				if (!prev) return;
-				changes.push({
-					next: next.read[user.id],
-					prev: prev.read[user.id],
-				});
-			});
+			const unsubscribe = channel.state.subscribeWithSelector(
+				(s) => ({ read: s.read }),
+				(next, prev) => {
+					if (!prev) return;
+					changes.push({
+						next: next.read[user.id],
+						prev: prev.read[user.id],
+					});
+				},
+			);
 
 			channel._handleChannelEvent(messageReadEvent);
 			unsubscribe();
@@ -1686,7 +2077,6 @@ describe('Channel _handleChannelEvent', function () {
 		});
 
 		it('should update channel read state produced for current user', () => {
-			channel.state.unreadCount = initialCountUnread;
 			channel.state.read[user.id] = initialReadState;
 
 			channel._handleChannelEvent(messageDeliveredEvent);
@@ -1734,7 +2124,7 @@ describe('Channel _handleChannelEvent', function () {
 
 		it('should update channel read state produced for another user', () => {
 			const anotherUser = { id: 'another-user' };
-			channel.state.unreadCount = initialCountUnread;
+			seedOwnUnreadCount(channel, initialCountUnread);
 			channel.state.read[anotherUser.id] = initialReadState;
 			const event = { ...messageDeliveredEvent, user: anotherUser };
 
@@ -2195,6 +2585,67 @@ describe('Uninitialized Channel', () => {
 	});
 });
 
+describe('reactive channel mute status', () => {
+	let client;
+	let channel;
+
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client.user = { id: 'me' };
+		channel = client.channel('messaging', 'mute-reactivity');
+	});
+
+	it('seeds state.muteStatus from client.mutedChannels at construction', () => {
+		const preMutedClient = new StreamChat('apiKey');
+		preMutedClient.user = { id: 'me' };
+		preMutedClient.mutedChannels = [
+			{
+				channel: { cid: 'messaging:premuted' },
+				created_at: '2024-01-01T00:00:00.000Z',
+			},
+		];
+
+		const preMuted = preMutedClient.channel('messaging', 'premuted');
+
+		expect(preMuted.state.getLatestValue().muteStatus.muted).to.be.true;
+	});
+
+	it('reactively reflects notification.channel_mutes_updated into state.muteStatus', () => {
+		expect(channel.state.getLatestValue().muteStatus.muted).to.be.false;
+
+		const seen = [];
+		const unsubscribe = channel.state.subscribeWithSelector(
+			(s) => ({ muted: s.muteStatus.muted }),
+			({ muted }) => {
+				seen.push(muted);
+			},
+		);
+
+		client.dispatchEvent({
+			type: 'notification.channel_mutes_updated',
+			me: {
+				channel_mutes: [
+					{
+						channel: { cid: channel.cid },
+						created_at: '2024-01-01T00:00:00.000Z',
+					},
+				],
+			},
+		});
+		expect(channel.state.getLatestValue().muteStatus.muted).to.be.true;
+
+		client.dispatchEvent({
+			type: 'notification.channel_mutes_updated',
+			me: { channel_mutes: [] },
+		});
+		unsubscribe();
+
+		expect(channel.state.getLatestValue().muteStatus.muted).to.be.false;
+		// the selector only fires on real transitions — no health.check churn
+		expect(seen).to.eql([false, true, false]);
+	});
+});
+
 describe('Channels - Constructor', function () {
 	const client = new StreamChat('key', 'secret');
 	// client.channel() now requires a connected user (userId derives from client.user).
@@ -2235,10 +2686,10 @@ describe('Channels - Constructor', function () {
 	it('undefined ID no options', function () {
 		const channel = client.channel('messaging', undefined);
 		expect(channel.id).to.eql(undefined);
-		// own_capabilities stays undefined ("not yet loaded") until the channel is
-		// hydrated; the reactive getter is still defined (hence enumerable).
+		// own_capabilities stays undefined ("not yet loaded") until the channel is hydrated,
+		// and no fields are fabricated onto an empty channel's data.
 		expect(channel.data.own_capabilities).to.be.undefined;
-		expect(Object.keys(channel.data)).to.eql(['own_capabilities']);
+		expect(Object.keys(channel.data)).to.eql([]);
 	});
 
 	it('short version with options', function () {
@@ -3600,5 +4051,53 @@ describe('Channel.reload', () => {
 		await inFlight;
 
 		expect(watchSpy).toHaveBeenCalledTimes(1);
+	});
+});
+describe('Channel active flag (mark-read stays UI-driven)', () => {
+	let client;
+	let channel;
+
+	beforeEach(() => {
+		client = getClientWithUser({ id: 'me' });
+		channel = new Channel(client, 'messaging', 'active-x', {});
+		client.activeChannels[channel.cid] = channel;
+	});
+
+	it('refcounts activate()/deactivate() behind the reactive active flag', () => {
+		expect(channel.active).to.equal(false);
+		expect(channel.state.getLatestValue().active).to.equal(false);
+
+		channel.activate();
+		expect(channel.active).to.equal(true);
+
+		channel.activate(); // a second mount holds another ref
+		expect(channel.active).to.equal(true);
+
+		channel.deactivate(); // one holder remains → still active
+		expect(channel.active).to.equal(true);
+
+		channel.deactivate(); // last holder leaves → inactive
+		expect(channel.active).to.equal(false);
+
+		channel.deactivate(); // underflow guard → stays inactive
+		expect(channel.active).to.equal(false);
+	});
+
+	it('does NOT auto-mark the channel read (mark-read is UI-driven, matching v10 destructive-reconciliation)', () => {
+		const spy = vi
+			.spyOn(client.messageDeliveryReporter, 'throttledMarkRead')
+			.mockImplementation(() => undefined);
+
+		// Activate an unread channel and put it at the live edge — the channel must NOT auto-mark-read.
+		// Read is owned by the UI layer (MessageList marks read on viewability / scroll-to-bottom,
+		// gated on isViewingLive). A channel-level auto-read here would wipe the scroll-to-bottom unread
+		// badge while scrolled up — the "flash then vanish" regression. Parity guard so it can't return.
+		channel.activate();
+		channel.messagePaginator.setViewingLive(true);
+		channel.state.read = {
+			me: { last_read: new Date(0), unread_messages: 3, user: { id: 'me' } },
+		};
+
+		expect(spy).not.toHaveBeenCalled();
 	});
 });

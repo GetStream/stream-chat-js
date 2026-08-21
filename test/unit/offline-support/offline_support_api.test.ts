@@ -372,7 +372,7 @@ describe('OfflineSupportApi', () => {
         const mockChannelData = { id: '123', type: 'messaging' };
         const mockChannel = {
           initialized: true,
-          disconnected: false,
+          pendingDisposal: false,
           data: mockChannelData,
         };
 
@@ -501,7 +501,7 @@ describe('OfflineSupportApi', () => {
         const mockChannelData = { id: '123', type: 'messaging' };
         const mockChannel = {
           initialized: true,
-          disconnected: false,
+          pendingDisposal: false,
           data: mockChannelData,
         };
 
