@@ -129,6 +129,129 @@ describe('LiveLocationManager', () => {
       expect(manager.hasSubscriptions).toBeFalsy();
     });
 
+    /**
+     * The configuration subscription is registered by the constructor, not by `registerSubscriptions`, and
+     * nothing re-registers it — so releasing it while another caller still holds the manager stops a
+     * still-live instance from ever seeing `client.config` again. `super.unregisterSubscriptions()` returns
+     * the same marker symbol on both paths, so only `hasSubscriptions` can tell a decrement from a real
+     * teardown.
+     */
+    describe('configuration subscription lifecycle', () => {
+      const makeManager = async (client: StreamChat) => {
+        vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
+          active_live_locations: [],
+          duration: '',
+        });
+        const manager = new LiveLocationManager({
+          client,
+          getDeviceId,
+          watchLocation,
+        });
+        await manager.init();
+        return manager;
+      };
+
+      it('survives a caller leaving while another still holds the manager', async () => {
+        const client = await getClientWithUser({ id: 'user-refcount' });
+        const manager = await makeManager(client);
+
+        // A second consumer joins, then leaves. The first is still holding on.
+        manager.registerSubscriptions();
+        manager.unregisterSubscriptions();
+
+        expect(manager.hasSubscriptions).toBeTruthy();
+
+        client.config.set({ liveLocationManager: { minUpdateThrottleMs: 7000 } });
+
+        expect(manager.config.minUpdateThrottleMs).toBe(7000);
+      });
+
+      it('still reaches the manager after several overlapping callers leave', async () => {
+        const client = await getClientWithUser({ id: 'user-refcount-many' });
+        const manager = await makeManager(client);
+
+        manager.registerSubscriptions();
+        manager.registerSubscriptions();
+        manager.unregisterSubscriptions();
+        manager.unregisterSubscriptions();
+
+        expect(manager.hasSubscriptions).toBeTruthy();
+
+        client.config.set({ liveLocationManager: { minUpdateThrottleMs: 9000 } });
+
+        expect(manager.config.minUpdateThrottleMs).toBe(9000);
+      });
+
+      it('keeps tracking config after a full unregister', async () => {
+        const client = await getClientWithUser({ id: 'user-last-caller' });
+        const manager = await makeManager(client);
+
+        // Event subscriptions are ref-counted and this releases them; configuration is not, and lives for
+        // the instance. A manager whose subscriptions are re-registered later is still configurable.
+        manager.unregisterSubscriptions();
+        expect(manager.hasSubscriptions).toBeFalsy();
+
+        client.config.set({ liveLocationManager: { minUpdateThrottleMs: 7000 } });
+
+        expect(manager.config.minUpdateThrottleMs).toBe(7000);
+      });
+
+      it('stops tracking config after dispose', async () => {
+        const client = await getClientWithUser({ id: 'user-dispose' });
+        const manager = await makeManager(client);
+        const before = manager.config.minUpdateThrottleMs;
+
+        manager.dispose();
+
+        client.config.set({ liveLocationManager: { minUpdateThrottleMs: 7000 } });
+
+        expect(manager.config.minUpdateThrottleMs).toBe(before);
+      });
+
+      it('is configurable again after dispose and re-registration', async () => {
+        const client = await getClientWithUser({ id: 'user-strictmode' });
+        const manager = await makeManager(client);
+
+        // React StrictMode runs mount → cleanup → mount against one instance. If dispose were
+        // unrecoverable, the re-mounted manager would be permanently deaf to `client.config`.
+        manager.unregisterSubscriptions();
+        manager.dispose();
+        manager.registerSubscriptions();
+
+        client.config.set({ liveLocationManager: { minUpdateThrottleMs: 7000 } });
+
+        expect(manager.config.minUpdateThrottleMs).toBe(7000);
+      });
+
+      it('re-runs the setup function when re-registered after dispose', async () => {
+        const client = await getClientWithUser({ id: 'user-strictmode-setup' });
+        const teardown = vi.fn();
+        const setup = vi.fn(() => teardown);
+        client.config.setSetupFunction('liveLocationManager', setup);
+
+        const manager = await makeManager(client);
+        expect(setup).toHaveBeenCalledTimes(1);
+
+        manager.dispose();
+        expect(teardown).toHaveBeenCalledTimes(1);
+
+        manager.registerSubscriptions();
+
+        expect(setup).toHaveBeenCalledTimes(2);
+      });
+
+      it('leaves event subscriptions alone on dispose', async () => {
+        const client = await getClientWithUser({ id: 'user-dispose-subs' });
+        const manager = await makeManager(client);
+
+        manager.dispose();
+
+        // `dispose` is the configuration teardown only — the ref-counted half stays with
+        // `unregisterSubscriptions`.
+        expect(manager.hasSubscriptions).toBeTruthy();
+      });
+    });
+
     describe('message addition or removal', () => {
       it('does not update active location if there are no active live locations', async () => {
         const client = await getClientWithUser({ id: 'user-abc' });

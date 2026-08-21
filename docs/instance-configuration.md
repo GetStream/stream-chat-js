@@ -179,8 +179,11 @@ new SearchController({ client, sources: [...] });
 Without a `client` the controller works exactly as before and `updateConfig` still applies; only the
 declarative key and its setup function go unheard. `stream-chat-react`'s `<Chat>` passes it for you.
 
-Release the subscription when you are done with the instance —
-`liveLocationManager.unregisterSubscriptions()` (which it already needs) or `searchController.dispose()`.
+Release the subscription when you are done with the instance — `liveLocationManager.dispose()` or
+`searchController.dispose()`. Both are the _configuration_ teardown and are separate from
+`unregisterSubscriptions()`, which is ref-counted: several callers can share one manager, so releasing
+configuration there would let the first one to leave stop a still-live instance from tracking
+`client.config`.
 
 ### Two setters, one open key space
 

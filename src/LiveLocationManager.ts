@@ -87,7 +87,7 @@ export class LiveLocationManager extends WithSubscriptions {
 
   /** The shared configuration machinery — see {@link ConfigController}. */
   private readonly configController: ConfigController<LiveLocationManagerConfig>;
-  /** Teardown for this manager's configuration subscription, released by {@link unregisterSubscriptions}. */
+  /** Teardown for this manager's configuration subscription, released by {@link dispose}. */
   private unsubscribeConfiguration?: Unsubscribe;
 
   /**
@@ -124,20 +124,32 @@ export class LiveLocationManager extends WithSubscriptions {
     });
 
     // Last statement of the constructor, so a setup function sees a whole object. Registered here rather
-    // than in `registerSubscriptions` — this manager is constructed by whoever needs it and `init()` is
-    // async, so gating configuration on registration would leave a window where a registered value did
+    // than only in `registerSubscriptions` — this manager is constructed by whoever needs it and `init()`
+    // is async, so gating configuration on registration would leave a window where a registered value did
     // not apply.
+    this.subscribeConfiguration();
+  }
+
+  /**
+   * Subscribes this instance to the `'liveLocationManager'` configuration key, if it is not subscribed
+   * already. Idempotent, which is what lets both the constructor and {@link registerSubscriptions} call
+   * it: the first gives a value registered before `init()` resolves somewhere to land, the second brings
+   * a manager back after {@link dispose}.
+   */
+  private subscribeConfiguration = () => {
+    if (this.unsubscribeConfiguration) return;
+
     this.unsubscribeConfiguration = applyInstanceConfiguration({
       args: { liveLocationManager: this },
-      config: client.config,
+      config: this.client.config,
       key: 'liveLocationManager',
       applyConfig: (config) => this.initializeConfig(config),
       reinitializeConfig: () =>
         this.initializeConfig(
-          client.config.getConfig('liveLocationManager') ?? undefined,
+          this.client.config.getConfig('liveLocationManager') ?? undefined,
         ),
     });
-  }
+  };
 
   /** The current resolved configuration. `Readonly` — change it through {@link updateConfig}. */
   get config(): Readonly<LiveLocationManagerConfig> {
@@ -161,19 +173,44 @@ export class LiveLocationManager extends WithSubscriptions {
 
   public registerSubscriptions = () => {
     this.incrementRefCount();
+    // Restores configuration after a {@link dispose}, so a manager that is torn down and then used again
+    // is configurable again — React StrictMode's mount/cleanup/mount runs exactly that sequence against
+    // one instance. A no-op in the ordinary case: the constructor already subscribed.
+    this.subscribeConfiguration();
+
     if (this.hasSubscriptions) return;
 
     this.addUnsubscribeFunction(this.subscribeLiveLocationSharingUpdates());
     this.addUnsubscribeFunction(this.subscribeTargetMessagesChange());
   };
 
-  public unregisterSubscriptions = () => {
-    const released = super.unregisterSubscriptions();
-    // Ref-counted: only the last caller actually tears down, and the configuration subscription is not
-    // one of the ref-counted ones — it was registered by the constructor, so it is released here.
+  /**
+   * Ref-counted, and deliberately does **not** touch the configuration subscription: several callers can
+   * share one manager, so an early caller leaving must not take anything the remaining ones still need.
+   * Use {@link dispose} for the instance-level teardown.
+   */
+  public unregisterSubscriptions = () => super.unregisterSubscriptions();
+
+  /**
+   * Releases the configuration subscription, running the `'liveLocationManager'` setup function's
+   * teardown. Call it when you are finished with the manager.
+   *
+   * Separate from {@link unregisterSubscriptions} because the two have different lifetimes. Event
+   * subscriptions are shared and ref-counted; configuration is registered once, by the constructor, for
+   * the life of the instance. Releasing it from the ref-counted call meant the first of two callers to
+   * leave silently stopped a still-live manager from tracking `client.config` — permanently, since
+   * nothing but the constructor registers it. Mirrors `SearchController.dispose` and the configuration
+   * half of `Channel._disconnect`.
+   *
+   * Until this is called, the client's configuration registry holds a handle to this manager, so a
+   * long-lived client and many short-lived managers need it to be called.
+   *
+   * Recoverable: a later {@link registerSubscriptions} re-subscribes, so disposing a manager that is
+   * then reused costs a re-run of the setup function rather than silence.
+   */
+  public dispose = () => {
     this.unsubscribeConfiguration?.();
     this.unsubscribeConfiguration = undefined;
-    return released;
   };
 
   get messages() {

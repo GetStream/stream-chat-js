@@ -55,7 +55,7 @@ describe('entities that register themselves', () => {
       );
     });
 
-    it('runs a setup function, and its teardown on unregister', () => {
+    it('runs a setup function, and its teardown on dispose', () => {
       const teardown = vi.fn();
       const setup = vi.fn(() => teardown);
       client.config.setSetupFunction('liveLocationManager', setup);
@@ -65,20 +65,27 @@ describe('entities that register themselves', () => {
 
       manager.registerSubscriptions();
       manager.unregisterSubscriptions();
+      // Ref-counted event subscriptions are a separate lifetime from configuration — an unregister does
+      // not end the manager, so the setup function's teardown has not run yet.
+      expect(teardown).not.toHaveBeenCalled();
+
+      manager.dispose();
 
       expect(teardown).toHaveBeenCalledTimes(1);
     });
 
-    it('stops hearing changes once unregistered', () => {
+    it('keeps hearing changes after unregistering, and stops after dispose', () => {
       const manager = makeLiveLocation();
       manager.registerSubscriptions();
       manager.unregisterSubscriptions();
 
       client.config.set({ liveLocationManager: { minUpdateThrottleMs: 7_000 } });
+      expect(manager.config.minUpdateThrottleMs).toBe(7_000);
 
-      expect(manager.config.minUpdateThrottleMs).toBe(
-        DEFAULT_LIVE_LOCATION_MANAGER_CONFIG.minUpdateThrottleMs,
-      );
+      manager.dispose();
+      client.config.set({ liveLocationManager: { minUpdateThrottleMs: 5_000 } });
+
+      expect(manager.config.minUpdateThrottleMs).toBe(7_000);
     });
   });
 
