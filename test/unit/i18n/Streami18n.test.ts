@@ -678,11 +678,8 @@ describe('Streami18n — a failed setLanguage rolls back', () => {
 });
 
 /**
- * A failed `init()` leaves the instance degraded but *safe*.
- *
- * Neither UI SDK awaits `init()`, so it must never reject. And `initialized` must stay false, because
- * it means "i18next is usable" -- `registerTranslation` and `setLanguage` both branch on it, and a
- * `true` there sends them into an instance whose own init rejected.
+ * A failed `init()` rejects, *and* leaves the instance usable. Both hold together: `initialized`
+ * means "i18next is usable", and `registerTranslation` / `setLanguage` branch on it.
  */
 describe('Streami18n — a failed init()', () => {
   beforeEach(() => {
@@ -695,35 +692,42 @@ describe('Streami18n — a failed init()', () => {
     return i18n;
   };
 
-  it('resolves rather than rejecting, and reports the failure', async () => {
+  it('rejects with the original error', async () => {
+    const i18n = failing();
+
+    await expect(i18n.init()).rejects.toThrow('i18next exploded');
+  });
+
+  /** Reported once, by whoever handles the rejection. */
+  it('does not log, leaving the report to the caller', async () => {
     const logger = vi.fn();
     const i18n = failing(logger);
 
-    await expect(i18n.init()).resolves.toBeDefined();
-    expect(logger).toHaveBeenCalledWith(
-      expect.stringContaining('initialization failed: i18next exploded'),
+    await expect(i18n.init()).rejects.toThrow();
+    expect(logger).not.toHaveBeenCalledWith(
+      expect.stringContaining('initialization failed'),
     );
   });
 
   it('leaves `initialized` false', async () => {
     const i18n = failing();
-    const state = await i18n.init();
 
-    expect(state.initialized).toBe(false);
+    await expect(i18n.init()).rejects.toThrow();
     expect(i18n.initialized).toBe(false);
+    expect(i18n.state.getLatestValue().initialized).toBe(false);
   });
 
   it('keeps rendering the inline English copy', async () => {
     const i18n = failing();
-    const { t } = await i18n.init();
 
-    expect(t('fixture.prose', 'Cancel')).toBe('Cancel');
+    await expect(i18n.init()).rejects.toThrow();
+    expect(i18n.state.getLatestValue().t('fixture.prose', 'Cancel')).toBe('Cancel');
   });
 
   /** The bug this guards: `addResources` on a dead instance threw out of `registerTranslation`. */
   it('does not throw from registerTranslation or setLanguage', async () => {
     const i18n = failing();
-    await i18n.init();
+    await expect(i18n.init()).rejects.toThrow();
 
     expect(() =>
       i18n.registerTranslation('de', { 'fixture.prose': 'Abbrechen' } as never),
@@ -731,20 +735,27 @@ describe('Streami18n — a failed init()', () => {
     await expect(i18n.setLanguage('de')).resolves.toBeUndefined();
   });
 
-  /**
-   * The one path that escapes, recorded rather than guarded.
-   *
-   * The logger is called from the `catch`, so a logger that throws rejects out of `init()`. Both UI
-   * SDKs call `init()` without awaiting it, so that surfaces as an unhandled rejection — worth knowing
-   * before supplying a logger that can throw.
-   */
-  it('rejects when the logger itself throws', async () => {
-    const i18n = failing(() => {
-      throw new Error('logger exploded');
-    });
+  /** Also the check that the internal bookkeeping `catch` does not swallow the rejection. */
+  it('retries on a later call, and can succeed', async () => {
+    const i18n = setup();
+    const spy = vi
+      .spyOn(i18n.i18nInstance, 'init')
+      .mockRejectedValueOnce(new Error('i18next exploded'));
 
-    await expect(i18n.init()).rejects.toThrow('logger exploded');
+    await expect(i18n.init()).rejects.toThrow('i18next exploded');
     expect(i18n.initialized).toBe(false);
+
+    spy.mockRestore();
+    await expect(i18n.init()).resolves.toBeDefined();
+    expect(i18n.initialized).toBe(true);
+  });
+
+  it('shares the in-flight promise with concurrent callers before failing', async () => {
+    const i18n = failing();
+    const first = i18n.init();
+
+    expect(i18n.init()).toBe(first);
+    await expect(first).rejects.toThrow('i18next exploded');
   });
 });
 
