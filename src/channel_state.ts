@@ -26,26 +26,42 @@ type ChannelReadStatus = Record<
 >;
 
 /**
+ * Whether this client holds a server-side watch on the channel — i.e. whether channel events are
+ * being delivered to it.
+ *
+ * Three values rather than a boolean, because "not watching" alone cannot say whether a re-watch is
+ * wanted: a watch lost to a dead socket should be restored on reconnect, one the consumer stopped
+ * deliberately must not be. The server keys watches by connection ID, so a dropped socket ends every
+ * watch this client held — even if it reconnects moments later with a fresh ID.
+ */
+export const ChannelWatchStatus = {
+  /** Never watched, or the consumer stopped watching on purpose — do NOT re-watch. */
+  NotWatching: 'notWatching',
+  /** Was watching until the connection dropped — the watch is gone and SHOULD be restored. */
+  WasWatching: 'wasWatching',
+  /** Holding a live watch: events are flowing. */
+  Watching: 'watching',
+} as const;
+
+export type ChannelWatchStatus =
+  (typeof ChannelWatchStatus)[keyof typeof ChannelWatchStatus];
+
+/**
  * Everything about watching this channel: who else is watching it, and whether *we* are.
  */
 export type ChannelWatchState = {
   watcherCount: number;
   watchers: Record<string, UserResponse>;
   /**
-   * Whether this client currently holds a server-side watch on the channel — i.e. whether channel
-   * events are being delivered to it. Set when a query carrying `watch: true` succeeds
-   * (`channel.watch()`, `channel.query({ watch: true })`, `client.queryChannels()`), cleared by
-   * `channel.stopWatching()`, by teardown, and by **any loss of the WS connection**.
-   *
-   * The server keys watches by connection ID, so a dropped socket ends every watch this client held
-   * — even if it reconnects moments later with a fresh ID. That is why this is not simply "did we
-   * ask to watch once": it answers "are events flowing right now", which is what a consumer needs
-   * in order to decide whether a channel has to be re-queried.
+   * See {@link ChannelWatchStatus}. Goes to `Watching` when a query carrying `watch: true` succeeds
+   * (`channel.watch()`, `channel.query({ watch: true })`, `client.queryChannels()`); to
+   * `WasWatching` when the WS connection is lost (only from `Watching` — a deliberate stop is never
+   * resurrected); and to `NotWatching` on `channel.stopWatching()` or teardown.
    *
    * Note `channel.watch()` silently downgrades to a non-watching query when the client has no
-   * connection ID; this flag is what makes that observable.
+   * connection ID; this is what makes that observable.
    */
-  watching: boolean;
+  watchStatus: ChannelWatchStatus;
 };
 
 export type TypingUsersState = {
@@ -191,7 +207,7 @@ export class ChannelState extends StateStore<ChannelStateData> {
     super({
       watcherCount: 0,
       watchers: {},
-      watching: false,
+      watchStatus: ChannelWatchStatus.NotWatching,
       typing: {},
       read: {},
       members: {},

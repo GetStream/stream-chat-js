@@ -7,7 +7,7 @@ import { getOrCreateChannelApi } from './test-utils/getOrCreateChannelApi';
 import sinon from 'sinon';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 
-import { Channel, ChannelState, StreamChat } from '../../src';
+import { Channel, ChannelState, ChannelWatchStatus, StreamChat } from '../../src';
 import { StableWSConnection } from '../../src/connection';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
@@ -307,7 +307,7 @@ describe('Channel isViewingLive (unread bump gating)', function () {
 	});
 });
 
-describe('Channel watching state (channel.state.watching)', function () {
+describe('Channel watch status (channel.state.watchStatus)', function () {
 	const user = { id: 'user' };
 	let client;
 	let channel;
@@ -333,79 +333,125 @@ describe('Channel watching state (channel.state.watching)', function () {
 		mockQueryResponse(generateChannel({ channel: { id: 'watching-id' } }));
 	});
 
-	it('defaults to false before anything is queried', () => {
-		expect(channel.watching).to.equal(false);
-		expect(channel.state.getLatestValue().watching).to.equal(false);
+	it('starts out NotWatching', () => {
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+		expect(channel.state.getLatestValue().watchStatus).to.equal(
+			ChannelWatchStatus.NotWatching,
+		);
 	});
 
-	it('is true after watch() resolves', async () => {
+	it('is Watching after watch() resolves', async () => {
 		await channel.watch();
 
-		expect(channel.watching).to.equal(true);
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.Watching);
 	});
 
 	it('is reactive via the store', async () => {
 		const seen = [];
 		const unsubscribe = channel.state.subscribeWithSelector(
-			(s) => ({ watching: s.watching }),
-			({ watching }) => seen.push(watching),
+			(s) => ({ watchStatus: s.watchStatus }),
+			({ watchStatus }) => seen.push(watchStatus),
 		);
 
 		await channel.watch();
 		unsubscribe();
 
-		expect(seen).to.eql([false, true]);
+		expect(seen).to.eql([ChannelWatchStatus.NotWatching, ChannelWatchStatus.Watching]);
 	});
 
-	it('stays false for a query that does not ask to watch', async () => {
+	it('stays NotWatching for a query that does not ask to watch', async () => {
 		await channel.query({ watch: false });
 
-		expect(channel.watching).to.equal(false);
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
 	});
 
-	it('is NOT cleared by a later non-watching query (a watch:false query does not unwatch)', async () => {
+	it('is NOT demoted by a later non-watching query (a watch:false query does not unwatch)', async () => {
 		await channel.watch();
-		expect(channel.watching).to.equal(true);
 
 		await channel.query({ watch: false });
 
-		expect(channel.watching).to.equal(true);
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.Watching);
 	});
 
-	it('stays false when watch() downgrades for lack of a connection id', async () => {
+	it('stays NotWatching when watch() downgrades for lack of a connection id', async () => {
 		client._hasConnectionID = () => false;
 
 		await channel.watch();
 
-		expect(channel.watching).to.equal(false);
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
 	});
 
-	it('is cleared by stopWatching()', async () => {
+	it('goes to NotWatching on stopWatching() — a deliberate stop is not restored', async () => {
 		await channel.watch();
 
 		await channel.stopWatching();
 
-		expect(channel.watching).to.equal(false);
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
 	});
 
-	it('is cleared on teardown', async () => {
+	it('goes to NotWatching on teardown', async () => {
 		await channel.watch();
 
 		channel._disconnect();
 
-		expect(channel.state.getLatestValue().watching).to.equal(false);
+		expect(channel.state.getLatestValue().watchStatus).to.equal(
+			ChannelWatchStatus.NotWatching,
+		);
 	});
 
-	it('is cleared on every active channel when the WS connection goes unhealthy', async () => {
+	it('demotes Watching to WasWatching when the connection is interrupted', async () => {
+		await channel.watch();
+
+		client._markActiveChannelsWatchInterrupted();
+
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
+	});
+
+	it('leaves a deliberately-stopped channel NotWatching when the connection is interrupted', async () => {
+		await channel.watch();
+		await channel.stopWatching();
+
+		client._markActiveChannelsWatchInterrupted();
+
+		// the whole point of the third state: a reconnect must not resurrect this watch
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+	});
+
+	it('leaves a never-watched channel NotWatching when the connection is interrupted', () => {
+		client._markActiveChannelsWatchInterrupted();
+
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+	});
+
+	it('does not demote WasWatching any further on a second interruption', async () => {
+		await channel.watch();
+		client._markActiveChannelsWatchInterrupted();
+
+		client._markActiveChannelsWatchInterrupted();
+
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
+	});
+
+	it('returns to Watching when a re-watch succeeds after an interruption', async () => {
+		await channel.watch();
+		client._markActiveChannelsWatchInterrupted();
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
+
+		await channel.watch();
+
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.Watching);
+	});
+
+	it('is demoted across every active channel at once', async () => {
 		await channel.watch();
 		const other = client.channel('messaging', 'other-id');
 		client.activeChannels[other.cid] = other;
-		other.watching = true;
+		other.watchStatus = ChannelWatchStatus.Watching;
 
-		client._markActiveChannelsUnwatched();
+		client._markActiveChannelsWatchInterrupted();
 
-		expect(channel.watching).to.equal(false);
-		expect(other.watching).to.equal(false);
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
+		expect(other.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
 	});
 
 	it('is set by channel-list hydration, which watches by default', () => {
@@ -413,7 +459,7 @@ describe('Channel watching state (channel.state.watching)', function () {
 
 		const [hydrated] = client.hydrateActiveChannels([response]);
 
-		expect(hydrated.watching).to.equal(true);
+		expect(hydrated.watchStatus).to.equal(ChannelWatchStatus.Watching);
 	});
 
 	it('is NOT set by hydration when the caller opted out of watching', () => {
@@ -421,7 +467,18 @@ describe('Channel watching state (channel.state.watching)', function () {
 
 		const [hydrated] = client.hydrateActiveChannels([response], {}, { watch: false });
 
-		expect(hydrated.watching).to.equal(false);
+		expect(hydrated.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+	});
+
+	it('leaves WasWatching intact when hydration does not watch', async () => {
+		await channel.watch();
+		client._markActiveChannelsWatchInterrupted();
+		const response = generateChannel({ channel: { id: 'watching-id' } });
+
+		client.hydrateActiveChannels([response], {}, { watch: false });
+
+		// a non-watching hydrate neither starts nor ends a watch
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
 	});
 
 	it('is NOT set by hydration without a connection id', () => {
@@ -430,7 +487,7 @@ describe('Channel watching state (channel.state.watching)', function () {
 
 		const [hydrated] = client.hydrateActiveChannels([response]);
 
-		expect(hydrated.watching).to.equal(false);
+		expect(hydrated.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
 	});
 
 	it('is NOT set by offline hydration (state without a live watch)', () => {
@@ -438,22 +495,21 @@ describe('Channel watching state (channel.state.watching)', function () {
 
 		const [hydrated] = client.hydrateActiveChannels([response], { offlineMode: true });
 
-		expect(hydrated.watching).to.equal(false);
+		expect(hydrated.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
 		expect(hydrated.offlineMode).to.equal(true);
 	});
 
-	it('is cleared via closeConnection (deliberate shutdown never reaches _setHealth)', async () => {
+	it('is demoted via closeConnection (deliberate shutdown never reaches _setHealth)', async () => {
 		await channel.watch();
-		expect(channel.watching).to.equal(true);
 
 		await client.closeConnection();
 
-		expect(channel.watching).to.equal(false);
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
 	});
 
-	it('is cleared when the WS connection reports itself unhealthy', async () => {
+	it('is demoted when the WS connection reports itself unhealthy', async () => {
 		await channel.watch();
-		const sweep = vi.spyOn(client, '_markActiveChannelsUnwatched');
+		const sweep = vi.spyOn(client, '_markActiveChannelsWatchInterrupted');
 		const connection = new StableWSConnection({ client });
 		connection.isHealthy = true;
 
@@ -466,9 +522,10 @@ describe('Channel watching state (channel.state.watching)', function () {
 		await channel.watch();
 		channel._disconnect();
 
-		// reading/writing state on a disposed channel must not resurrect it
-		expect(() => client._markActiveChannelsUnwatched()).not.to.throw();
-		expect(channel.state.getLatestValue().watching).to.equal(false);
+		expect(() => client._markActiveChannelsWatchInterrupted()).not.to.throw();
+		expect(channel.state.getLatestValue().watchStatus).to.equal(
+			ChannelWatchStatus.NotWatching,
+		);
 	});
 });
 

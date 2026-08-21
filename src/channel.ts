@@ -1,4 +1,4 @@
-import { ChannelState } from './channel_state';
+import { ChannelState, ChannelWatchStatus } from './channel_state';
 import { CooldownTimer } from './CooldownTimer';
 import { isEphemeral } from './errors';
 import { applyReactionLocally } from './entityStore';
@@ -1406,16 +1406,16 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Whether this client currently holds a server-side watch on the channel — see
-   * {@link ChannelWatchState.watching}. Store-backed and reactive: subscribe via
-   * `useStateStore(channel.state, (s) => ({ watching: s.watching }))`.
+   * Whether this client holds a server-side watch on the channel, and if not, whether it should be
+   * restored — see {@link ChannelWatchStatus}. Store-backed and reactive: subscribe via
+   * `useStateStore(channel.state, (s) => ({ watchStatus: s.watchStatus }))`.
    */
-  get watching() {
-    return this.state.getLatestValue().watching;
+  get watchStatus() {
+    return this.state.getLatestValue().watchStatus;
   }
 
-  set watching(watching: boolean) {
-    this.state.partialNext({ watching });
+  set watchStatus(watchStatus: ChannelWatchStatus) {
+    this.state.partialNext({ watchStatus });
   }
 
   /**
@@ -1614,7 +1614,8 @@ export class Channel extends ChannelApi {
   override async stopWatching(...args: Parameters<ChannelApi['stopWatching']>) {
     const response = await super.stopWatching(...args);
 
-    this.watching = false;
+    // Deliberate: unlike a connection loss this must NOT be restored on reconnect.
+    this.watchStatus = ChannelWatchStatus.NotWatching;
 
     logger.withExtraTags('stopWatching', this.cid).info('Stopped watching the channel.');
 
@@ -1909,7 +1910,7 @@ export class Channel extends ChannelApi {
     // a watcher. Only ever set here because a `watch: false` query does NOT unwatch server-side, so it
     // must not clear the flag.
     if (queryPayload.watch) {
-      this.watching = true;
+      this.watchStatus = ChannelWatchStatus.Watching;
     }
 
     // Seed read/members/pinned/thread-cleanup state; the message list is in the paginator.
@@ -2996,7 +2997,8 @@ export class Channel extends ChannelApi {
     // Tear down the channel.state subscriptions BEFORE flipping `pendingDisposal` — that setter
     // now publishes to the store, so no subscriber handler runs against a half-torn-down channel.
     this.messageReceiptsTracker.unregisterSubscriptions();
-    this.watching = false;
+    // A deleted channel (or one the user was removed from) must not be re-watched — see #2599.
+    this.watchStatus = ChannelWatchStatus.NotWatching;
     this.pendingDisposal = true;
     this.cooldownTimer.clearTimeout();
     // Release the store-backed paginators so the message store no longer pins this removed channel

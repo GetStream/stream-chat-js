@@ -5,6 +5,7 @@ import type { AxiosInstance } from 'axios';
 import axios from 'axios';
 
 import { Channel } from './channel';
+import { ChannelWatchStatus } from './channel_state';
 import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
 import { UploadManager } from './uploadManager';
@@ -515,7 +516,7 @@ export class StreamChat extends ChatApi {
    */
   closeConnection = async (timeout?: number) => {
     this._resetAIStateOnActiveChannels();
-    this._markActiveChannelsUnwatched();
+    this._markActiveChannelsWatchInterrupted();
 
     if (this.cleaningIntervalRef != null) {
       clearInterval(this.cleaningIntervalRef);
@@ -1105,21 +1106,24 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Clears `state.watching` on every active channel. The server keys watches by connection ID, so
-   * losing the socket ends every watch this client held — a reconnect issues a NEW id and the
-   * channels have to be re-queried to watch again.
+   * Demotes every actively-watched channel to `WasWatching`. The server keys watches by connection
+   * ID, so losing the socket ends every watch this client held — a reconnect issues a NEW id and the
+   * channels have to be re-queried to watch again. `WasWatching` is what records that they should be.
+   *
+   * Only `Watching` is demoted: a channel the consumer stopped on purpose, or one that was torn
+   * down, stays `NotWatching` and must not be resurrected by a reconnect.
    *
    * Invoked from two places, because neither covers the other: `StableWSConnection._setHealth(false)`
    * for an abnormal close/error (immediately — NOT via the `connection.changed` event, which is
    * 5s-debounced when going offline and is skipped entirely on a quick flap, both of which would
-   * leave this flag lying), and `closeConnection()` for a deliberate shutdown (e.g. mobile
+   * leave the status lying), and `closeConnection()` for a deliberate shutdown (e.g. mobile
    * backgrounding), which sets `isHealthy` directly and so never reaches `_setHealth`.
    */
-  _markActiveChannelsUnwatched() {
+  _markActiveChannelsWatchInterrupted() {
     for (const cid in this.activeChannels) {
       const channel = this.activeChannels[cid];
-      if (channel && !channel.pendingDisposal) {
-        channel.watching = false;
+      if (channel?.watchStatus === ChannelWatchStatus.Watching) {
+        channel.watchStatus = ChannelWatchStatus.WasWatching;
       }
     }
   }
@@ -1483,9 +1487,11 @@ export class StreamChat extends ChatApi {
       c.initialized = !offlineMode;
       // Same precedence `queryChannels` applies to the request: an explicit caller choice wins,
       // otherwise we watch only if there is a connection to watch on. Offline hydration populates
-      // state without a live watch, so it never counts.
-      c.watching =
-        !offlineMode && (queryChannelsOptions?.watch ?? this._hasConnectionID());
+      // state without a live watch, so it never counts - and a query that did not watch leaves the
+      // status untouched (it neither starts nor ends a watch).
+      if (!offlineMode && (queryChannelsOptions?.watch ?? this._hasConnectionID())) {
+        c.watchStatus = ChannelWatchStatus.Watching;
+      }
       c.push_preferences = channelState.push_preferences;
 
       const willInitialize =
