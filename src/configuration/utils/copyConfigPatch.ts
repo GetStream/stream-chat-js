@@ -21,25 +21,41 @@ import { isWalkableRecord } from '../../utils/objectPath';
  * structure the SDK merges into, and copying them would be wrong as well as impossible: a cloned
  * `ItemIndex` would not be the index the paginator loaded items into.
  *
+ * **Repeated objects are copied once.** Every object copied is remembered, so a graph that points back at
+ * itself terminates instead of overflowing the stack — reachable from `client.config.set()` and
+ * `updateConfig`, both of which take an object an integrator built. The same bookkeeping keeps two
+ * references to one object as two references to one copy, rather than duplicating it.
+ *
  * @internal
  */
-export const copyConfigPatch = <T>(value: T): T => {
+const copyInto = <T>(value: T, copies: WeakMap<object, unknown>): T => {
   if (Array.isArray(value)) {
-    return value.map((entry) => copyConfigPatch(entry)) as unknown as T;
+    if (copies.has(value)) return copies.get(value) as T;
+
+    const copy: unknown[] = [];
+    // Registered before the entries are walked, so an entry pointing back at this array finds the copy
+    // instead of recursing forever.
+    copies.set(value, copy);
+    for (const entry of value) copy.push(copyInto(entry, copies));
+    return copy as unknown as T;
   }
 
   // Plain objects only. A class instance, a Date or a RegExp is an opaque value here — see
   // `isWalkableRecord`, which draws the same line for dot-path access.
   if (typeof value === 'object' && value !== null) {
     if (!isWalkableRecord(value)) return value;
+    if (copies.has(value)) return copies.get(value) as T;
 
     const copy: Record<string | symbol, unknown> = {};
+    copies.set(value, copy);
     for (const key of Reflect.ownKeys(value)) {
       if (!Object.prototype.propertyIsEnumerable.call(value, key)) continue;
-      copy[key] = copyConfigPatch((value as Record<string | symbol, unknown>)[key]);
+      copy[key] = copyInto((value as Record<string | symbol, unknown>)[key], copies);
     }
     return copy as T;
   }
 
   return value;
 };
+
+export const copyConfigPatch = <T>(value: T): T => copyInto(value, new WeakMap());
