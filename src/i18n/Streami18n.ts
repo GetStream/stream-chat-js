@@ -253,51 +253,63 @@ export class Streami18n<
    * Memoized, so two independent consumers — a UI SDK's chat root and its overlay host — share one
    * initialization.
    *
-   * An i18next failure does **not** reject: neither UI SDK awaits this, so a rejection would surface
-   * as an unhandled rejection and the memo would latch it for the process lifetime. It is logged
-   * instead, leaving the instance *degraded but safe*: `state.initialized` stays false, which is what
-   * keeps the methods below off a dead i18next instance, and `t` remains the default translator, so
-   * every call site still renders its inline English. There is no retry — construct a new instance.
+   * **Rejects with the original error if initialization fails.** Nothing is caught or logged here, so
+   * the failure is reported once, by whoever handles it: an integrator awaiting this sees the real
+   * error rather than having to notice a log line, and a bug in i18next configuration is loud instead
+   * of silent.
    *
-   * One path does escape: an integrator `logger` that throws is called from the `catch` itself, so it
-   * rejects out of here. Rare enough not to guard, but it is why this is not an absolute guarantee.
+   * Rejecting does not mean the instance is unusable. It is left *degraded but safe*: `initialized`
+   * stays false, which is what keeps {@link Streami18n.registerTranslation} and
+   * {@link Streami18n.setLanguage} off a dead i18next instance, and `t` remains the default
+   * translator, so every call site still renders its inline English rather than a blank or a dotted
+   * key. The promise reports the failure; the store keeps the UI alive. Those are separate concerns.
+   *
+   * A caller that ignores the returned promise gets an unhandled rejection — which is the point. Both
+   * UI SDKs call this from an effect and catch it, reporting through {@link Streami18n.logger}.
+   *
+   * The memo is cleared on failure, so a later call retries rather than replaying one rejection for
+   * the lifetime of the instance. Concurrent callers still share the in-flight promise, which is what
+   * the memo is for.
    */
   init(): Promise<Streami18nState<C, Bundled>> {
-    this.initPromise ??= this.runInit();
-    return this.initPromise;
+    if (this.initPromise) return this.initPromise;
+
+    const pending = this.runInit();
+    this.initPromise = pending;
+
+    // Bookkeeping only. The handler attaches to a *derived* promise, so it does not mark `pending`
+    // itself as handled -- that one is returned bare and still reaches the caller's `catch`.
+    pending.catch(() => {
+      if (this.initPromise === pending) this.initPromise = undefined;
+    });
+
+    return pending;
   }
 
   private async runInit(): Promise<Streami18nState<C, Bundled>> {
-    // Everything is inside the `try` -- see `init()` for why an i18next failure must not reject.
-    try {
-      this.validateCurrentLanguage();
-      this.assertPluralRulesCoverage(this.currentLanguage);
+    this.validateCurrentLanguage();
+    this.assertPluralRulesCoverage(this.currentLanguage);
 
-      const dayjsLocale = this.dayjsLocales[this.currentLanguage];
-      if (dayjsLocale) this.addOrUpdateLocale(this.currentLanguage, dayjsLocale);
+    const dayjsLocale = this.dayjsLocales[this.currentLanguage];
+    if (dayjsLocale) this.addOrUpdateLocale(this.currentLanguage, dayjsLocale);
 
-      const t = await this.i18nInstance.init({
-        ...this.i18nextConfig,
-        lng: this.currentLanguage,
-        resources: this.i18nextResources(),
-      });
+    const t = await this.i18nInstance.init({
+      ...this.i18nextConfig,
+      lng: this.currentLanguage,
+      resources: this.i18nextResources(),
+    });
 
-      this.registerFormatters();
+    this.registerFormatters();
 
-      // After init, so post-processors attach to a live instance and buffered translators flush.
-      Object.entries(this.translationBuilderTopics).forEach(([topic, Topic]) => {
-        this.translationBuilder.registerTopic(topic, Topic);
-      });
+    // After init, so post-processors attach to a live instance and buffered translators flush.
+    Object.entries(this.translationBuilderTopics).forEach(([topic, Topic]) => {
+      this.translationBuilder.registerTopic(topic, Topic);
+    });
 
-      this.state.partialNext({
-        initialized: true,
-        ...(this.tOverridden
-          ? {}
-          : { t: t as unknown as StreamTFunctionFor<C, Bundled> }),
-      });
-    } catch (error) {
-      this.logger(`Streami18n: initialization failed: ${describeError(error)}`);
-    }
+    this.state.partialNext({
+      initialized: true,
+      ...(this.tOverridden ? {} : { t: t as unknown as StreamTFunctionFor<C, Bundled> }),
+    });
 
     return this.state.getLatestValue();
   }
