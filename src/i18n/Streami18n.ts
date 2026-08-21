@@ -105,9 +105,6 @@ export class Streami18n<
   C extends AnyTranslationCatalog = AnyTranslationCatalog,
   Bundled extends string = never,
 > {
-  /** Marks instances across bundle copies, where `instanceof` silently fails. */
-  static readonly brand = Symbol.for('stream-chat.Streami18n');
-
   readonly i18nInstance: I18nInstance = i18next.createInstance();
 
   readonly state: StateStore<Streami18nState<C, Bundled>>;
@@ -248,56 +245,51 @@ export class Streami18n<
   }
 
   /**
-   * Initializes i18next. Idempotent and safe to call concurrently.
+   * Initializes i18next. Memoized, so concurrent callers share one initialization.
    *
-   * Memoized, so two independent consumers — a UI SDK's chat root and its overlay host — share one
-   * initialization.
-   *
-   * An i18next failure does **not** reject: neither UI SDK awaits this, so a rejection would surface
-   * as an unhandled rejection and the memo would latch it for the process lifetime. It is logged
-   * instead, leaving the instance *degraded but safe*: `state.initialized` stays false, which is what
-   * keeps the methods below off a dead i18next instance, and `t` remains the default translator, so
-   * every call site still renders its inline English. There is no retry — construct a new instance.
-   *
-   * One path does escape: an integrator `logger` that throws is called from the `catch` itself, so it
-   * rejects out of here. Rare enough not to guard, but it is why this is not an absolute guarantee.
+   * **Rejects on failure**, so handle it. The instance stays usable either way: `initialized` stays
+   * false, keeping {@link Streami18n.registerTranslation} and {@link Streami18n.setLanguage} off a
+   * dead i18next instance, and `t` keeps returning each call site's inline English.
    */
   init(): Promise<Streami18nState<C, Bundled>> {
-    this.initPromise ??= this.runInit();
-    return this.initPromise;
+    if (this.initPromise) return this.initPromise;
+
+    const pending = this.runInit();
+    this.initPromise = pending;
+
+    // Clear the memo so a later call retries. Attached to a derived promise, so `pending` stays
+    // unhandled and still reaches the caller's `catch`.
+    pending.catch(() => {
+      if (this.initPromise === pending) this.initPromise = undefined;
+    });
+
+    return pending;
   }
 
   private async runInit(): Promise<Streami18nState<C, Bundled>> {
-    // Everything is inside the `try` -- see `init()` for why an i18next failure must not reject.
-    try {
-      this.validateCurrentLanguage();
-      this.assertPluralRulesCoverage(this.currentLanguage);
+    this.validateCurrentLanguage();
+    this.assertPluralRulesCoverage(this.currentLanguage);
 
-      const dayjsLocale = this.dayjsLocales[this.currentLanguage];
-      if (dayjsLocale) this.addOrUpdateLocale(this.currentLanguage, dayjsLocale);
+    const dayjsLocale = this.dayjsLocales[this.currentLanguage];
+    if (dayjsLocale) this.addOrUpdateLocale(this.currentLanguage, dayjsLocale);
 
-      const t = await this.i18nInstance.init({
-        ...this.i18nextConfig,
-        lng: this.currentLanguage,
-        resources: this.i18nextResources(),
-      });
+    const t = await this.i18nInstance.init({
+      ...this.i18nextConfig,
+      lng: this.currentLanguage,
+      resources: this.i18nextResources(),
+    });
 
-      this.registerFormatters();
+    this.registerFormatters();
 
-      // After init, so post-processors attach to a live instance and buffered translators flush.
-      Object.entries(this.translationBuilderTopics).forEach(([topic, Topic]) => {
-        this.translationBuilder.registerTopic(topic, Topic);
-      });
+    // After init, so post-processors attach to a live instance and buffered translators flush.
+    Object.entries(this.translationBuilderTopics).forEach(([topic, Topic]) => {
+      this.translationBuilder.registerTopic(topic, Topic);
+    });
 
-      this.state.partialNext({
-        initialized: true,
-        ...(this.tOverridden
-          ? {}
-          : { t: t as unknown as StreamTFunctionFor<C, Bundled> }),
-      });
-    } catch (error) {
-      this.logger(`Streami18n: initialization failed: ${describeError(error)}`);
-    }
+    this.state.partialNext({
+      initialized: true,
+      ...(this.tOverridden ? {} : { t: t as unknown as StreamTFunctionFor<C, Bundled> }),
+    });
 
     return this.state.getLatestValue();
   }

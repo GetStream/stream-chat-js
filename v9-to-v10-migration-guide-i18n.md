@@ -229,7 +229,10 @@ Notable if you are building custom UI directly on `stream-chat`:
   value, so there is no listener-registration ordering to get right.
 - `setLanguage()` returns `Promise<void>`. The new `t` is published to `state`; a returned translator
   would go stale on the next language change.
-- `init()` is idempotent and safe to call concurrently.
+- `init()` is idempotent, safe to call concurrently, and **rejects** if i18next fails to initialize.
+  Handle it: an unhandled rejection is what you get otherwise. The instance stays usable in a degraded
+  form either way — `initialized` stays `false` and `t` keeps returning each call site's inline English,
+  so the UI renders rather than blanking. A later `init()` retries.
 - The keys with no inline default at their call site are injected via the `runtimeDefaults` option,
   because the catalog belongs to the UI layer rather than to core.
 
