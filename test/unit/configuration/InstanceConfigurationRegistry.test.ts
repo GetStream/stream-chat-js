@@ -185,12 +185,22 @@ describe('InstanceConfigurationRegistry', () => {
       chatLoggerSystem.restoreDefaults();
     });
 
-    it('logs at debug for a custom key with no subscriber', () => {
-      service.setSetupFunction('cahnnel', noop);
+    it('warns for an unknown key with no subscriber', () => {
+      // A misspelling is a compile error now, so this can only be reached from JavaScript or past a
+      // cast — which is exactly when a warning is worth the noise.
+      service.setSetupFunction('cahnnel' as never, noop);
 
       expect(records).toHaveLength(1);
-      expect(records[0].level).toBe('debug');
-      expect(records[0].message).toContain('not built in and has no subscriber');
+      expect(records[0].level).toBe('warn');
+      expect(records[0].message).toContain('a key this package does not define');
+    });
+
+    it('stays silent for a configuration-only key', () => {
+      // `messagePaginator` takes configuration but no setup function, so it is absent from
+      // `BUILT_IN_INSTANCE_KEYS` — the guard has to read the config tree instead, or this warns.
+      service.setConfig('messagePaginator', { pageSize: 10 });
+
+      expect(records).toEqual([]);
     });
 
     it('stays silent for a built-in key', () => {
@@ -200,10 +210,12 @@ describe('InstanceConfigurationRegistry', () => {
       expect(records).toEqual([]);
     });
 
-    it('stays silent for a custom key that already has a subscriber', () => {
-      service.registerInstance('myWidget', { reinitializeConfig: noop });
+    it('stays silent for an unknown key that already has a subscriber', () => {
+      // What a downstream SDK's declared key looks like from in here: this class cannot see the
+      // augmentation, so a live instance is the only evidence the key is real.
+      service.registerInstance('myWidget' as never, { reinitializeConfig: noop });
 
-      service.setSetupFunction('myWidget', noop);
+      service.setSetupFunction('myWidget' as never, noop);
 
       expect(records).toEqual([]);
     });

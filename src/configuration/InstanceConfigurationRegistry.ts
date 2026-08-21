@@ -14,9 +14,9 @@
  * Declarative configuration is applied before the setup function, so a setup function always wins for
  * the same field.
  *
- * Keys are **open**: the four built-ins are typed for autocomplete, but any string works, so a
- * downstream SDK or an integrator can register a key for a class of its own. Stores are therefore
- * created lazily — a key must work whether the setter or the subscriber arrives first.
+ * The key space is **fixed** by this package: `InstanceConfigTree` and `InstanceSetupFunctionArgs` are type
+ * aliases, so a key can be neither misspelled into existence nor added by module augmentation. Stores are
+ * still created lazily, because for any key the setter and the subscriber can arrive in either order.
  *
  * One service per client, not a singleton: a process-global registry would leak configuration between
  * clients, which breaks tests and apps that connect as more than one user.
@@ -28,8 +28,9 @@ import { mergeWith } from '../utils/mergeWith';
 import { isEqual } from '../utils/mergeWith/mergeWithCore';
 import { copyConfigPatch } from './utils/copyConfigPatch';
 import { getPath, hasPath, isWalkableRecord } from '../utils/objectPath';
-import { BUILT_IN_INSTANCE_KEYS, CONSTRUCTION_ONLY_CONFIG_PATHS } from './keys';
+import { CONSTRUCTION_ONLY_CONFIG_PATHS, INSTANCE_CONFIG_TREE_KEYS } from './keys';
 import type {
+  InstanceConfigKey,
   InstanceConfigOf,
   InstanceConfigState,
   InstanceConfigTree,
@@ -62,7 +63,7 @@ export type ConfiguredInstance = {
 // Stores are keyed by an open string, so their value types cannot be correlated with the key at this
 // level. Callers narrow through `getSetupState` / `getConfigState`.
 type AnySetupStore = StateStore<InstanceSetupState<InstanceSetupKey>>;
-type AnyConfigStore = StateStore<InstanceConfigState<InstanceSetupKey>>;
+type AnyConfigStore = StateStore<InstanceConfigState<InstanceConfigKey>>;
 
 export class InstanceConfigurationRegistry {
   /**
@@ -140,10 +141,12 @@ export class InstanceConfigurationRegistry {
   }
 
   /** The declarative-configuration store for a key, created on first access. */
-  getConfigState<K extends InstanceSetupKey>(key: K): StateStore<InstanceConfigState<K>> {
+  getConfigState<K extends InstanceConfigKey>(
+    key: K,
+  ): StateStore<InstanceConfigState<K>> {
     let store = this.configStates.get(key);
     if (!store) {
-      store = new StateStore<InstanceConfigState<InstanceSetupKey>>({ config: null });
+      store = new StateStore<InstanceConfigState<InstanceConfigKey>>({ config: null });
       this.configStates.set(key, store);
     }
     return store as unknown as StateStore<InstanceConfigState<K>>;
@@ -161,7 +164,7 @@ export class InstanceConfigurationRegistry {
     key: K,
     setupFunction: InstanceSetupFunction<K> | null,
   ): void {
-    this.debugIfKeyLooksUnused(key);
+    this.warnIfKeyLooksUnknown(key);
     this.getSetupState(key).partialNext({ setupFunction });
   }
 
@@ -182,16 +185,19 @@ export class InstanceConfigurationRegistry {
       // Skip absent entries but keep going — one empty or unrecognized entry must never discard the
       // rest of the tree.
       if (subtree === undefined || subtree === null) continue;
-      this.setConfig(key, subtree as DeepPartial<InstanceConfigOf<string>>);
+      this.setConfig(
+        key as InstanceConfigKey,
+        subtree as DeepPartial<InstanceConfigOf<InstanceConfigKey>>,
+      );
     }
   }
 
   /** Registers declarative configuration for one key, deep-merged into what is already there. */
-  setConfig<K extends InstanceSetupKey>(
+  setConfig<K extends InstanceConfigKey>(
     key: K,
     config: DeepPartial<InstanceConfigOf<K>>,
   ): void {
-    this.debugIfKeyLooksUnused(key);
+    this.warnIfKeyLooksUnknown(key);
     this.warnAboutLateConstructionOnlyPaths(key, config);
 
     const store = this.getConfigState(key);
@@ -209,7 +215,9 @@ export class InstanceConfigurationRegistry {
     store.partialNext({ config: next });
   }
 
-  getConfig<K extends InstanceSetupKey>(key: K): DeepPartial<InstanceConfigOf<K>> | null {
+  getConfig<K extends InstanceConfigKey>(
+    key: K,
+  ): DeepPartial<InstanceConfigOf<K>> | null {
     return this.getConfigState(key).getLatestValue().config;
   }
 
@@ -225,15 +233,17 @@ export class InstanceConfigurationRegistry {
    * instead of "five empty subtrees". This is *registered intent*, not resolved values — for those, read
    * the instance's `config`.
    */
-  getTree(): DeepPartial<InstanceConfigTree> & Record<string, unknown> {
+  getTree(): DeepPartial<InstanceConfigTree> {
     const tree: Record<string, unknown> = {};
 
-    for (const key of this.configStates.keys()) {
+    // The store map is keyed by a plain string — every entry was created through a typed setter, so the
+    // cast recovers what the type system already guaranteed at the call site.
+    for (const key of this.configStates.keys() as Iterable<InstanceConfigKey>) {
       const config = this.getConfigState(key).getLatestValue().config;
       if (config && Object.keys(config).length > 0) tree[key] = config;
     }
 
-    return tree as DeepPartial<InstanceConfigTree> & Record<string, unknown>;
+    return tree as DeepPartial<InstanceConfigTree>;
   }
 
   // -------------------------------------------------------------------------
@@ -254,7 +264,7 @@ export class InstanceConfigurationRegistry {
    * middleware, added subscriptions. The contract is that configuration returns to its derived
    * baseline, not that the object returns to factory state.
    */
-  reset(key?: InstanceSetupKey): void {
+  reset(key?: InstanceConfigKey): void {
     const keys =
       key === undefined
         ? new Set([
@@ -267,11 +277,16 @@ export class InstanceConfigurationRegistry {
     this.resetting = true;
     try {
       for (const currentKey of keys) {
-        this.getConfigState(currentKey).partialNext({ config: null });
+        this.getConfigState(currentKey as InstanceConfigKey).partialNext({
+          config: null,
+        });
         // Clearing the setup function runs its teardown through the subscription in
         // `applyInstanceConfiguration`. Teardown first, re-derivation last, so a buggy teardown cannot
         // undo the re-derivation.
-        this.getSetupState(currentKey).partialNext({ setupFunction: null });
+        //
+        // Read rather than created: a configuration-only key such as `messagePaginator` has no setup
+        // function, and anything subscribed to one already has a store in this map.
+        this.setupStates.get(currentKey)?.partialNext({ setupFunction: null });
       }
     } finally {
       this.resetting = false;
@@ -326,7 +341,7 @@ export class InstanceConfigurationRegistry {
    *
    * @internal
    */
-  registerInstance(key: InstanceSetupKey, instance: ConfiguredInstance): () => void {
+  registerInstance(key: InstanceConfigKey, instance: ConfiguredInstance): () => void {
     let set = this.liveInstances.get(key);
     if (!set) {
       set = new Set();
@@ -343,7 +358,7 @@ export class InstanceConfigurationRegistry {
   }
 
   /** @internal */
-  hasLiveInstances(key: InstanceSetupKey): boolean {
+  hasLiveInstances(key: InstanceConfigKey): boolean {
     return (this.liveInstances.get(key)?.size ?? 0) > 0;
   }
 
@@ -352,18 +367,22 @@ export class InstanceConfigurationRegistry {
   // -------------------------------------------------------------------------
 
   /**
-   * An open key space means a typo — `'cahnnel'` — is a valid custom key that silently does nothing.
-   * It cannot be rejected without breaking extensibility, and a warning would fire on the legitimate
-   * "register before the instance subscribes" ordering, so the message stays at debug level.
+   * The key space is closed by the types, so a misspelling is a compile error — but a JavaScript caller, or
+   * a cast past the types, can still reach this with a key nothing will ever read.
+   *
+   * Warns rather than throwing, because a throw here would turn a no-op registration into a crash for a
+   * caller the types already warned. The live-instance check keeps it quiet for a key whose owner has not
+   * been constructed yet, which is the normal ordering.
    */
-  private debugIfKeyLooksUnused(key: InstanceSetupKey): void {
-    if ((BUILT_IN_INSTANCE_KEYS as readonly string[]).includes(key)) return;
+  private warnIfKeyLooksUnknown(key: InstanceConfigKey): void {
+    if ((INSTANCE_CONFIG_TREE_KEYS as readonly string[]).includes(key)) return;
     if (this.hasLiveInstances(key)) return;
     logger
       .withExtraTags(key)
-      .debug(
-        'Configuration registered for a key that is not built in and has no subscriber yet. This is ' +
-          'expected if the owning class subscribes later; otherwise check the key spelling.',
+      .warn(
+        'Configuration registered for a key this package does not define, with nothing subscribed to ' +
+          'it. Check the spelling; a key declared by a downstream SDK is expected here only if its ' +
+          'owner subscribes later.',
       );
   }
 
@@ -379,7 +398,7 @@ export class InstanceConfigurationRegistry {
    * `setConfig` calls, 100 warnings.
    */
   private warnAboutLateConstructionOnlyPaths(
-    key: InstanceSetupKey,
+    key: InstanceConfigKey,
     config: DeepPartial<InstanceConfigOf<InstanceSetupKey>>,
   ): void {
     if (!this.hasLiveInstances(key)) return; // nothing constructed yet — these will apply

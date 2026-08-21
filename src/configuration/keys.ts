@@ -7,8 +7,8 @@ import type { InstanceConfigTree, InstanceSetupFunctionArgs } from './types';
  */
 
 /**
- * The keys this package wires itself. Used to scope diagnostics — never to reject a caller's key,
- * which would defeat the point of an open key space.
+ * The keys this package wires itself, i.e. the ones that take a setup function. Used to scope
+ * diagnostics only; the key space is closed by the types, so there is nothing here to reject.
  *
  * Exported for the settings UI in `examples/vite`, which enumerates the tree. Diagnostics rather than
  * API: the contents track whatever this package happens to wire, so they can change in a minor.

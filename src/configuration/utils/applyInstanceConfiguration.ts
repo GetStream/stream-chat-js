@@ -4,6 +4,7 @@ import type {
   InstanceConfigurationRegistry,
 } from '../InstanceConfigurationRegistry';
 import type {
+  InstanceConfigKey,
   InstanceConfigOf,
   InstanceSetupFunctionArgsOf,
   InstanceSetupKey,
@@ -14,6 +15,7 @@ import type { Unsubscribe } from '../../store';
 
 const logger = chatLoggerSystem.getLogger('instance-configuration');
 
+/** @internal */
 export type ApplyInstanceConfigurationParams<K extends InstanceSetupKey> = {
   /** The instance's argument for its setup function — `{ channel }`, `{ composer }`, and so on. */
   args: InstanceSetupFunctionArgsOf<K>;
@@ -31,7 +33,7 @@ export type ApplyInstanceConfigurationParams<K extends InstanceSetupKey> = {
    * same late-registration warning the per-parent slices already got. And there is no longer a structural
    * store type needed to work around `StateStore`'s invariance.
    */
-  alsoWatch?: readonly InstanceSetupKey[];
+  alsoWatch?: readonly InstanceConfigKey[];
   /**
    * Applies a declarative configuration slice to the instance. Omit it if the instance has no
    * declarative surface and only wants the setup function.
@@ -53,9 +55,7 @@ export type ApplyInstanceConfigurationParams<K extends InstanceSetupKey> = {
  * Subscribes one instance to the configuration registered for its key, and returns the unsubscribe.
  *
  * This is the single place the *subscription* semantics live, so every configured instance behaves
- * identically — including one written outside this package for a custom key. Pair it with a
- * `ConfigController`, which is the single place the *resolution* semantics live; between them an outside
- * class gets exactly what a built-in one gets:
+ * identically:
  *
  * - applies whatever is already registered, immediately;
  * - re-applies on every change to either slot, declarative configuration first and the setup function
@@ -64,18 +64,11 @@ export type ApplyInstanceConfigurationParams<K extends InstanceSetupKey> = {
  * - contains errors — a throwing setup function, teardown or applier is logged and never propagates,
  *   so it cannot break `client.channel()` or a `Thread` construction.
  *
- * @example
- * ```ts
- * class MyWidget {
- *   private unsubscribe = applyInstanceConfiguration({
- *     config: client.config,
- *     key: 'myWidget',
- *     args: { widget: this },
- *     applyConfig: (next) => Object.assign(this.config, next),
- *     reinitializeConfig: () => this.initializeConfig(),
- *   });
- * }
- * ```
+ * Not exported from the package. It only does anything for a key in {@link InstanceSetupKey}, and those
+ * keys all belong to classes this package constructs, so there is no caller outside it. `ConfigController`
+ * _is_ exported, because resolution is reusable on its own — see `docs/instance-configuration.md` §6.
+ *
+ * @internal
  */
 export const applyInstanceConfiguration = <K extends InstanceSetupKey>({
   alsoWatch,

@@ -26,37 +26,40 @@ import type { DeepPartial } from '../types.utility';
 /**
  * Maps a configuration key to the argument its setup function receives.
  *
- * Augment this interface to register a key for a class this package does not know about — the same
- * module-augmentation pattern used by the `Custom*Data` interfaces in `custom_types.ts`:
- *
- * ```ts
- * declare module 'stream-chat' {
- *   interface InstanceSetupFunctionArgs {
- *     myWidget: { widget: MyWidget };
- *   }
- * }
- * ```
+ * A closed set, and deliberately not an `interface`: a type alias cannot be reached by module
+ * augmentation, so the key space cannot be extended from outside this package. Configuration for a class
+ * this package does not own belongs to whoever owns that class — a registry of its own, not a key in this
+ * one, which the SDK could neither type nor apply.
  */
-export interface InstanceSetupFunctionArgs {
+export type InstanceSetupFunctionArgs = {
   channel: { channel: Channel };
   client: { client: StreamChat };
   liveLocationManager: { liveLocationManager: LiveLocationManager };
   messageComposer: { composer: MessageComposer };
   searchController: { searchController: SearchController };
   thread: { thread: Thread };
-}
+};
 
-/** The six built-in keys, plus any key an integrator or a downstream SDK registers. */
-export type InstanceSetupKey = keyof InstanceSetupFunctionArgs | (string & {});
+/**
+ * The keys that take a **setup function** — every one names a class the setup function receives an
+ * instance of.
+ *
+ * Closed, and not extensible: an undeclared string is a compile error, and {@link
+ * InstanceSetupFunctionArgs} is a type alias rather than an interface, so a key cannot be added by module
+ * augmentation either. This key space describes what *this package* configures.
+ *
+ * A strict subset of {@link InstanceConfigKey}: `messagePaginator` and `messageOperations` take
+ * configuration but have no setup function, because they are not built one-per-key — a channel and every
+ * one of its threads each own one.
+ */
+export type InstanceSetupKey = keyof InstanceSetupFunctionArgs;
 
 // ---------------------------------------------------------------------------
 // Tier 2 — setup functions
 // ---------------------------------------------------------------------------
 
-export type InstanceSetupFunctionArgsOf<K extends string> =
-  K extends keyof InstanceSetupFunctionArgs
-    ? InstanceSetupFunctionArgs[K]
-    : Record<string, unknown>;
+export type InstanceSetupFunctionArgsOf<K extends InstanceSetupKey> =
+  InstanceSetupFunctionArgs[K];
 
 export type InstanceSetupTearDownFunction = () => void;
 
@@ -65,11 +68,11 @@ export type InstanceSetupTearDownFunction = () => void;
  * every one created afterwards. Return a function that undoes whatever you changed: it is invoked
  * before the setup function is re-applied, and when the instance is disposed of.
  */
-export type InstanceSetupFunction<K extends string = InstanceSetupKey> = (
+export type InstanceSetupFunction<K extends InstanceSetupKey = InstanceSetupKey> = (
   args: InstanceSetupFunctionArgsOf<K>,
 ) => void | InstanceSetupTearDownFunction;
 
-export type InstanceSetupState<K extends string = InstanceSetupKey> = {
+export type InstanceSetupState<K extends InstanceSetupKey = InstanceSetupKey> = {
   setupFunction: InstanceSetupFunction<K> | null;
 };
 
@@ -168,7 +171,7 @@ export type ClientDeclarativeConfig = {
  *   `channel` on the reasoning that a channel send and a thread reply are different operations — which made
  *   `thread.messageOperations` unconfigurable entirely (**DV-15**). Counting parents is the check.
  */
-export interface InstanceConfigTree {
+export type InstanceConfigTree = {
   channel: ChannelDeclarativeConfig;
   client: ClientDeclarativeConfig;
   /**
@@ -199,12 +202,19 @@ export interface InstanceConfigTree {
    */
   searchController: Partial<SearchControllerConfig>;
   thread: ThreadDeclarativeConfig;
-}
+};
 
-export type InstanceConfigOf<K extends string> = K extends keyof InstanceConfigTree
-  ? InstanceConfigTree[K]
-  : Record<string, unknown>;
+/**
+ * Every key that takes **declarative configuration** — {@link InstanceSetupKey} plus the two that are
+ * configuration-only.
+ *
+ * Closed for the same reason, and {@link InstanceConfigTree} is likewise a type alias, so this set is
+ * fixed by the package.
+ */
+export type InstanceConfigKey = keyof InstanceConfigTree;
 
-export type InstanceConfigState<K extends string = InstanceSetupKey> = {
+export type InstanceConfigOf<K extends InstanceConfigKey> = InstanceConfigTree[K];
+
+export type InstanceConfigState<K extends InstanceConfigKey = InstanceConfigKey> = {
   config: DeepPartial<InstanceConfigOf<K>> | null;
 };

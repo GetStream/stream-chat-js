@@ -185,12 +185,11 @@ Release the subscription when you are done with the instance — `liveLocationMa
 configuration there would let the first one to leave stop a still-live instance from tracking
 `client.config`.
 
-### Two setters, one open key space
+### Two setters, one declared key space
 
-`setConfig(key, subtree)` accepts **any** key, so a class of your own participates without changing
-this package. `set(tree)` is a typed contract and rejects top-level keys it does not know — which is
-what makes a typo in the whole-tree form a compile error rather than a silent no-op. To use a custom key
-with `set`, augment `InstanceConfigTree` (see [Custom keys](#6-custom-keys)).
+`set(tree)` takes the whole tree at once; `setConfig(key, subtree)` takes one key. Both are typed against
+the package's keys, so a typo is a compile error either way, and the key space cannot be extended — see
+[The key space is closed](#6-the-key-space-is-closed).
 
 ---
 
@@ -385,15 +384,15 @@ object read it.
 
 Two objects carry out the stages above, and neither object holds what the other holds.
 
-|                       | `InstanceConfigurationRegistry` — the registry                      | `ConfigController` — the resolver                            |
-| --------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Reached as            | `client.config` (public)                                            | nothing — the controller is internal                         |
-| Holds                 | what an integrator **asked for**                                    | what one instance **ended up with**                          |
-| How many exist        | one per client                                                      | one per configurable instance                                |
-| Keyed by              | the open key space (`'channel'`, `'messageComposer'`, a custom key) | nothing; the controller does not know the instance has a key |
-| Knows the defaults    | no                                                                  | yes, and freezes the defaults                                |
-| Knows other instances | yes — `reset()` and the late-registration warning both need that    | no                                                           |
-| Operations            | `set` / `setConfig` / `setSetupFunction` / `reset`                  | derive, re-derive, patch                                     |
+|                       | `InstanceConfigurationRegistry` — the registry                   | `ConfigController` — the resolver                            |
+| --------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------ |
+| Reached as            | `client.config` (public)                                         | nothing — the controller is internal                         |
+| Holds                 | what an integrator **asked for**                                 | what one instance **ended up with**                          |
+| How many exist        | one per client                                                   | one per configurable instance                                |
+| Keyed by              | one of the package's keys (`'channel'`, `'messageComposer'`, …)  | nothing; the controller does not know the instance has a key |
+| Knows the defaults    | no                                                               | yes, and freezes the defaults                                |
+| Knows other instances | yes — `reset()` and the late-registration warning both need that | no                                                           |
+| Operations            | `set` / `setConfig` / `setSetupFunction` / `reset`               | derive, re-derive, patch                                     |
 
 The registry is deliberately ignorant of resolution. The registry never reads a `DEFAULT_*_CONFIG`, never
 merges a layer, and never sees an instance's resolved value — reading a registry store answers "what was
@@ -401,7 +400,8 @@ registered", never "what is in effect". The resolver is the mirror image: the re
 the layer order, the server's authority and the no-op guard, and knows nothing about keys, registration, or
 any other instance.
 
-`applyInstanceConfiguration` is the bridge, and the only place that touches both:
+`applyInstanceConfiguration` is the bridge, and the only place that touches both. It is internal — every
+key belongs to a class this package constructs, so it has no caller outside:
 
 ```
 client.config.set({ messagePaginator: { pageSize: 30 } })
@@ -553,9 +553,6 @@ does **not** carry is default values, because an effective default depends on wh
 constructed — `pageSize` is 10 for a bare paginator and 100 for the channel message list — and a table of
 them would be a second source of truth that disagrees with the instances. Read current values from the
 instance (`channel.messagePaginator.config`) and registered values from `client.config.getTree()`.
-
-Built-in keys only: a key you registered through module augmentation has no entry, so merge in
-`client.config.getTree()` if you need those too.
 
 ### Declarative paths, and their defaults
 
@@ -719,8 +716,8 @@ client.config.getTree();
 // { messagePaginator: { pageSize: 50 }, client: { notifications: { durations: { error: 10_000 } } } }
 ```
 
-Custom keys are included. Keys with nothing registered are omitted, so `{}` means nothing is configured
-rather than "several empty subtrees". `INSTANCE_CONFIG_TREE_KEYS` is exported if you need the key list
+Keys with nothing registered are omitted, so `{}` means nothing is configured rather than "several empty
+subtrees". `INSTANCE_CONFIG_TREE_KEYS` is exported if you need the key list
 itself.
 
 ### Not declaratively configurable
@@ -874,63 +871,50 @@ narrowed by the server, the SDK logs it at debug level so the no-op is at least 
 
 ---
 
-## 6. Custom keys
+## 6. The key space is closed
 
-The key space is open, so a class of your own — or a downstream SDK's — can use the same mechanism.
-Augment both interfaces, then wire the class with the exported helper:
+The keys are this package's, and cannot be extended. `InstanceConfigTree` and
+`InstanceSetupFunctionArgs` are type aliases rather than interfaces, so a key can be neither misspelled
+into existence nor added by module augmentation:
 
 ```ts
-import { applyInstanceConfiguration, type StreamChat } from 'stream-chat';
+client.config.setConfig('myWidget', { pollIntervalMs: 1_000 }); // ✗ does not compile
+client.config.set({ myWidget: { pollIntervalMs: 1_000 } }); // ✗ does not compile
+client.config.setSetupFunction('cahnnel', fn); // ✗ does not compile
+```
+
+**Configuring a class of your own.** It belongs to you, so configure it directly — a constructor
+argument, a setter, or a registry of your own if you have several. Routing it through `client.config`
+would put a value the SDK can neither type nor apply into a tree whose only reader is the SDK.
+
+`ConfigController` stays exported for the part that _is_ worth reusing: the resolution itself — frozen
+defaults, one layer order, a skipped write when nothing moved, and a reactive `configState`. Own the
+class, own its configuration, and let the controller do the resolving:
+
+```ts
+import { ConfigController } from 'stream-chat';
+
+type MyWidgetConfig = { enabled: boolean; pollIntervalMs: number };
 
 class MyWidget {
-  config = { pollIntervalMs: 5_000, theme: 'light' as 'light' | 'dark' };
-  private unsubscribe: () => void;
+  private readonly configController = new ConfigController<MyWidgetConfig>({
+    defaults: { enabled: true, pollIntervalMs: 5_000 },
+  });
 
-  constructor(private client: StreamChat) {
-    this.unsubscribe = applyInstanceConfiguration({
-      args: { widget: this },
-      config: client.config,
-      key: 'myWidget',
-      applyConfig: (next) => Object.assign(this.config, next),
-      reinitializeConfig: () => this.initializeConfig(),
-    });
+  get configState() {
+    return this.configController.state;
   }
-
-  /** Re-derives from current inputs — what `client.config.reset()` calls. */
-  initializeConfig() {
-    this.config = { pollIntervalMs: 5_000, theme: 'light' };
-    Object.assign(this.config, this.client.config.getConfig('myWidget') ?? {});
+  get config() {
+    return this.configController.value;
   }
-
-  destroy() {
-    this.unsubscribe();
-  }
-}
-
-declare module 'stream-chat' {
-  interface InstanceSetupFunctionArgs {
-    myWidget: { widget: MyWidget };
-  }
-  interface InstanceConfigTree {
-    myWidget: { pollIntervalMs?: number; theme?: 'light' | 'dark' };
+  updateConfig(patch: Partial<MyWidgetConfig>) {
+    this.configController.patch(patch);
   }
 }
 ```
 
-Then configure it exactly like a built-in key:
-
-```ts
-client.config.set({ myWidget: { pollIntervalMs: 1_000 } });
-client.config.setSetupFunction('myWidget', ({ widget }) => widget.onUpdate(handler));
-```
-
-`applyInstanceConfiguration` gives you the same guarantees the built-ins have — immediate application,
-teardown before re-apply, error containment — so do not hand-roll the subscription.
-
-**The cost of an open key space:** a typo is a valid custom key. `setSetupFunction('cahnnel', fn)` cannot
-be rejected without breaking extensibility, so it silently does nothing. The SDK logs at debug level when
-a function is registered for a key that is neither built-in nor has a subscriber. Using `set(tree)`
-instead of `setConfig` gives you a compile error for the same mistake.
+The runtime keeps a warning for a key it does not define with nothing subscribed to it — reachable only
+from JavaScript, or past a cast — so the mistake the compiler cannot see still surfaces.
 
 ---
 
