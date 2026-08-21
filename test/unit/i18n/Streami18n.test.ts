@@ -678,12 +678,8 @@ describe('Streami18n — a failed setLanguage rolls back', () => {
 });
 
 /**
- * A failed `init()` rejects, and leaves the instance degraded but *safe*.
- *
- * Two separate guarantees, and the point is that they hold together. The promise rejects with the
- * real error, so a caller is told rather than left to notice a log line. And `initialized` stays
- * false, because it means "i18next is usable" -- `registerTranslation` and `setLanguage` both branch
- * on it, and a `true` there sends them into an instance whose own init rejected.
+ * A failed `init()` rejects, *and* leaves the instance usable. Both hold together: `initialized`
+ * means "i18next is usable", and `registerTranslation` / `setLanguage` branch on it.
  */
 describe('Streami18n — a failed init()', () => {
   beforeEach(() => {
@@ -702,7 +698,7 @@ describe('Streami18n — a failed init()', () => {
     await expect(i18n.init()).rejects.toThrow('i18next exploded');
   });
 
-  /** Reported once, by whoever handles the rejection -- so core must not also log it. */
+  /** Reported once, by whoever handles the rejection. */
   it('does not log, leaving the report to the caller', async () => {
     const logger = vi.fn();
     const i18n = failing(logger);
@@ -739,11 +735,7 @@ describe('Streami18n — a failed init()', () => {
     await expect(i18n.setLanguage('de')).resolves.toBeUndefined();
   });
 
-  /**
-   * The memo is cleared on failure, so the instance is retryable rather than latching one rejection
-   * for its lifetime. This is also the check that the internal bookkeeping `catch` does not swallow
-   * the rejection on its way to the caller.
-   */
+  /** Also the check that the internal bookkeeping `catch` does not swallow the rejection. */
   it('retries on a later call, and can succeed', async () => {
     const i18n = setup();
     const spy = vi

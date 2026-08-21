@@ -248,28 +248,11 @@ export class Streami18n<
   }
 
   /**
-   * Initializes i18next. Idempotent and safe to call concurrently.
+   * Initializes i18next. Memoized, so concurrent callers share one initialization.
    *
-   * Memoized, so two independent consumers — a UI SDK's chat root and its overlay host — share one
-   * initialization.
-   *
-   * **Rejects with the original error if initialization fails.** Nothing is caught or logged here, so
-   * the failure is reported once, by whoever handles it: an integrator awaiting this sees the real
-   * error rather than having to notice a log line, and a bug in i18next configuration is loud instead
-   * of silent.
-   *
-   * Rejecting does not mean the instance is unusable. It is left *degraded but safe*: `initialized`
-   * stays false, which is what keeps {@link Streami18n.registerTranslation} and
-   * {@link Streami18n.setLanguage} off a dead i18next instance, and `t` remains the default
-   * translator, so every call site still renders its inline English rather than a blank or a dotted
-   * key. The promise reports the failure; the store keeps the UI alive. Those are separate concerns.
-   *
-   * A caller that ignores the returned promise gets an unhandled rejection — which is the point. Both
-   * UI SDKs call this from an effect and catch it, reporting through {@link Streami18n.logger}.
-   *
-   * The memo is cleared on failure, so a later call retries rather than replaying one rejection for
-   * the lifetime of the instance. Concurrent callers still share the in-flight promise, which is what
-   * the memo is for.
+   * **Rejects on failure**, so handle it. The instance stays usable either way: `initialized` stays
+   * false, keeping {@link Streami18n.registerTranslation} and {@link Streami18n.setLanguage} off a
+   * dead i18next instance, and `t` keeps returning each call site's inline English.
    */
   init(): Promise<Streami18nState<C, Bundled>> {
     if (this.initPromise) return this.initPromise;
@@ -277,8 +260,8 @@ export class Streami18n<
     const pending = this.runInit();
     this.initPromise = pending;
 
-    // Bookkeeping only. The handler attaches to a *derived* promise, so it does not mark `pending`
-    // itself as handled -- that one is returned bare and still reaches the caller's `catch`.
+    // Clear the memo so a later call retries. Attached to a derived promise, so `pending` stays
+    // unhandled and still reaches the caller's `catch`.
     pending.catch(() => {
       if (this.initPromise === pending) this.initPromise = undefined;
     });
